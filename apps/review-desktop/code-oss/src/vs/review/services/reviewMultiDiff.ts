@@ -46,6 +46,8 @@ export class ReviewMultiDiffUIElementFactory
 {
 
   readonly bottomScrollPadding = reviewBottomScrollPadding;
+  alwaysShowScrollbars = false;
+  scrollbarBelowResourceHeader = false;
 
   get headerClickToCollapse(): boolean {
     return !this.hideResourceHeader;
