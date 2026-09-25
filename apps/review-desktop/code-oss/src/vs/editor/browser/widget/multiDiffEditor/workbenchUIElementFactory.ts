@@ -16,6 +16,8 @@ import type { IDiffCodeEditorWidgetOptions } from '../diffEditor/diffEditorWidge
  */
 export interface IWorkbenchUIElementFactory {
 	getResourceSectionId?(uris: Parameters<IResourceHeaderMetadata["setUris"]>[0]): string | undefined;
+	/** Keeps an item folded with no way to open it, e.g. a file with no text to diff. */
+	isResourceCollapseLocked?(uris: Parameters<IResourceHeaderMetadata["setUris"]>[0]): boolean;
 	createResourceSectionHeader?(element: HTMLElement, sticky?: boolean): IResourceHeaderMetadata & { readonly height: IObservable<number>; readonly bodyHidden: IObservable<boolean> };
 	createResourceLabel?(element: HTMLElement): IResourceLabel;
 	createResourceHeaderMetadata?(element: HTMLElement): IResourceHeaderMetadata;

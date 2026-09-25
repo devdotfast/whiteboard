@@ -33,7 +33,8 @@ import { IEditorService } from "../../workbench/services/editor/common/editorSer
 import { ITextFileService } from "../../workbench/services/textfile/common/textfiles.js";
 import { ReviewChangedFilesTree } from "../browser/reviewChangedFilesTree.js";
 import { REVIEW_COUNTS_PENDING_TOOLTIP, reviewChangesTooltip, reviewCountsTooltip, ReviewTooltip, type ReviewTooltipContent } from "../browser/reviewTooltip.js";
-import { type ReviewDiffFileWire, type StructuralLineCounts } from "../common/reviewProtocol.js";
+import { type ReviewDiffFileWire } from "../common/reviewProtocol.js";
+import { binarySizeLabel, isBinaryCounts, type ReviewFileCounts } from "../common/reviewStructuralDiff.js";
 import type { ReviewDiffLayoutSetting } from "./reviewDiffLayout.js";
 import { reviewMultiDiffLabelUris, ReviewMultiDiffUIElementFactory } from "./reviewMultiDiff.js";
 
@@ -183,7 +184,7 @@ export class ReviewFilesDiffView extends Disposable {
 	/** Full structural counts for views without persisted coverage. */
 	private readonly streamStats = new Map<
 		string,
-		{ counts: StructuralLineCounts; tooltip: ReviewTooltipContent }
+		{ counts: ReviewFileCounts; tooltip?: ReviewTooltipContent }
 	>();
 	private readonly headerFactory: ReviewMultiDiffUIElementFactory;
 	private readonly summary: HTMLElement;
@@ -229,8 +230,9 @@ export class ReviewFilesDiffView extends Disposable {
 					? this.input.entries.map((entry) => ({
 							original: entry.original,
 							modified: entry.modified,
-							additions: entry.file.status === "unchanged" ? undefined : this.entryProgress(entry)?.remaining.additions ?? (this.fileTreeContainer || this.document ? undefined : this.streamStats.get(entry.file.path)?.counts.added),
-							deletions: entry.file.status === "unchanged" ? undefined : this.entryProgress(entry)?.remaining.deletions ?? (this.fileTreeContainer || this.document ? undefined : this.streamStats.get(entry.file.path)?.counts.removed),
+							additions: entry.file.status === "unchanged" || entry.file.binary ? undefined : this.entryProgress(entry)?.remaining.additions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.added),
+							deletions: entry.file.status === "unchanged" || entry.file.binary ? undefined : this.entryProgress(entry)?.remaining.deletions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.removed),
+							collapseLocked: !!entry.file.binary,
 						countsTooltip: this.progressTooltip(entry) ?? this.streamStats.get(entry.file.path)?.tooltip,
 						viewedState: this.entryProgress(entry)?.state,
 						onToggleViewed: entry.file.status !== "unchanged" && this.onToggleViewed ? () => this.onToggleViewed!(entry.file.path, entry.sectionId) : undefined,
@@ -239,8 +241,11 @@ export class ReviewFilesDiffView extends Disposable {
 						onToggleSectionCollapsed: () => { if (entry.sectionId) { if (this.collapsedSections.has(entry.sectionId)) this.collapsedSections.delete(entry.sectionId); else this.collapsedSections.add(entry.sectionId); this.headerFactory.refreshHeaders(); } },
 						section: entry.sectionStart ? this.progress?.sections?.find(section => section.id === entry.sectionId) : undefined,
 						onToggleSection: () => entry.sectionId && this.onToggleSection?.(entry.sectionId),
-						note: entry.file.status === "unchanged" ? "Unchanged" : this.hiddenFiles.get(entry.file.path),
-							onDidOpen: () => {
+						// A binary is folded like a hidden file, with its size as the reason.
+						note: entry.file.status === "unchanged" ? "Unchanged" : entry.file.binary ? this.binaryNote(entry.file.path) : this.hiddenFiles.get(entry.file.path),
+						noteTooltip: entry.file.binary ? { label: "No text to show · binary files stay folded" } : undefined,
+							// A binary has no text to open.
+							onDidOpen: entry.file.binary ? undefined : () => {
 								if (document?.onDidOpen) { document.onDidOpen(); return; }
 								const target = this.widget.tryGetCodeEditor(entry.goToFileResource);
 								const change = isDiffEditor(target?.diffEditor) ? target.diffEditor.getDiffComputationResult()?.changes2[0] : undefined;
@@ -417,14 +422,27 @@ export class ReviewFilesDiffView extends Disposable {
 	}
 
 	/** Coverage counts are independent of fold state. */
-	fileCounts(path: string, counts: StructuralLineCounts): void {
+	fileCounts(path: string, counts: ReviewFileCounts): void {
 		this.streamStats.set(path, {
 			counts,
-			tooltip: reviewChangesTooltip(counts.added, counts.removed),
+			// A binary's header shows no counts, so it has no counts tooltip.
+			tooltip: isBinaryCounts(counts) ? undefined : reviewChangesTooltip(counts.added, counts.removed),
 		});
-		if (!this.fileTreeContainer) this.changedFilesTree?.setCounts(path, counts);
+		// Coverage owns line counts in a hosted tree; a binary's size has no other source.
+		if (!this.fileTreeContainer || isBinaryCounts(counts)) this.changedFilesTree?.setCounts(path, counts);
 		this.headerFactory.refreshHeaders();
 		this.renderSummary();
+	}
+
+	private lineCounts(path: string) {
+		const counts = this.streamStats.get(path)?.counts;
+		return isBinaryCounts(counts) ? undefined : counts;
+	}
+
+	private binaryNote(path: string): string {
+		const counts = this.streamStats.get(path)?.counts;
+		const size = isBinaryCounts(counts) ? binarySizeLabel(counts) : undefined;
+		return size ? `Binary file · ${size}` : "Binary file";
 	}
 
 	private renderSummary(): void {
@@ -433,7 +451,7 @@ export class ReviewFilesDiffView extends Disposable {
 		const complete = [...paths].every(path => this.streamStats.has(path));
 		const total = { added: 0, removed: 0 };
 		for (const path of paths) {
-			const counts = this.streamStats.get(path)?.counts;
+			const counts = this.lineCounts(path);
 			if (counts) { total.added += counts.added; total.removed += counts.removed; }
 		}
 		this.summary.replaceChildren();

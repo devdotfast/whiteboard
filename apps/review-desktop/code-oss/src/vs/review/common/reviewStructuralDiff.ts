@@ -6,9 +6,10 @@
 import { structuralRows } from "./reviewProtocol.js";
 export { structuralRows } from "./reviewProtocol.js";
 
+import { structuralChangeCounts } from "./reviewProtocol.js";
 import type {
 	StructuralPairing, StructuralFileRef, StructuralRegion, StructuralSource,
-	StructuralDiff,
+	StructuralDiff, StructuralLineCounts,
 } from "./reviewProtocol.js";
 export type {
 	StructuralPairing, StructuralProblem, StructuralPos, StructuralSpan,
@@ -22,6 +23,39 @@ export type StructuralLeaf = Extract<StructuralRegion, { kind: "leaf" }>;
 export type StructuralFold = Extract<StructuralRegion, { kind: "fold" }>;
 export type StructuralTextDiff = Extract<StructuralDiff, { type: "text" }>;
 export type StructuralBinaryDiff = Extract<StructuralDiff, { type: "binary" }>;
+
+/** What a file's count lane and header show: changed lines, or a binary file's byte sizes. */
+export type ReviewFileCounts =
+	| StructuralLineCounts
+	| { readonly binary: true; readonly baseSize?: number; readonly headSize?: number };
+
+export function isBinaryCounts(counts: ReviewFileCounts | undefined): counts is Extract<ReviewFileCounts, { binary: true }> {
+	return !!counts && "binary" in counts;
+}
+
+/** A diffr result's counts: its changed lines, or the sizes of a binary file's sides. */
+export function reviewFileCounts(diff: StructuralDiff): ReviewFileCounts {
+	return diff.type === "text"
+		? structuralChangeCounts(diff.structural_changes)
+		: { binary: true, baseSize: diff.lhs?.size, headSize: diff.rhs?.size };
+}
+
+/** "9.4 KB", or "66.1 KB → 14.7 KB" when both sides exist; undefined until a size is known. */
+export function binarySizeLabel(counts: { readonly baseSize?: number; readonly headSize?: number }): string | undefined {
+	const { baseSize, headSize } = counts;
+	if (baseSize !== undefined && headSize !== undefined) return `${formatByteSize(baseSize)} → ${formatByteSize(headSize)}`;
+	const size = headSize ?? baseSize;
+	return size === undefined ? undefined : formatByteSize(size);
+}
+
+function formatByteSize(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	const units = ["KB", "MB", "GB"];
+	let value = bytes / 1024;
+	let unit = 0;
+	while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
+	return `${value.toFixed(1)} ${units[unit]}`;
+}
 
 /** Review keys a file by its head path, or its base path for a deletion. */
 export function structuralFilePath(file: StructuralPairing<StructuralFileRef>): string {

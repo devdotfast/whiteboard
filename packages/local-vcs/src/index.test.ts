@@ -316,6 +316,7 @@ describe("local vcs", () => {
           status: "modified",
           additions: 0,
           deletions: 0,
+          binary: true,
         },
         {
           path: "src/deleted.ts",
@@ -486,6 +487,27 @@ describe("local vcs", () => {
     ]);
     expect(files[0]!.patch).toMatch(/^diff --git a\/old.ts b\/new.ts\n/);
     expect(files[1]!.patch).toContain("@@ -1 +0,0 @@");
+  });
+
+  it("marks binary files in a patch, which carry no line counts", () => {
+    const patch = [
+      "diff --git a/icon.png b/icon.png",
+      "new file mode 100644",
+      "index 0000000..9c2e1f3",
+      "Binary files /dev/null and b/icon.png differ",
+      "",
+    ].join("\n");
+
+    expect(splitGitPatchFiles(patch).map((entry) => entry.file)).toEqual([
+      {
+        path: "icon.png",
+        previousPath: undefined,
+        status: "added",
+        additions: 0,
+        deletions: 0,
+        binary: true,
+      },
+    ]);
   });
 
   it("refuses a diff whose counts arrive before its records", () => {
