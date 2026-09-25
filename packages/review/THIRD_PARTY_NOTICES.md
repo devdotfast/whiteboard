@@ -87,6 +87,7 @@ Direct third-party runtime/UI dependencies currently include:
 - `elkjs` (`EPL-2.0`)
 - `fuzzysort` (`MIT`)
 - `isomorphic-git` (`MIT`)
+- `mathjax-full` (`Apache-2.0`)
 - `react` and `react-dom` (`MIT`)
 - `semver` (`ISC`)
 - `zod` (`MIT`)

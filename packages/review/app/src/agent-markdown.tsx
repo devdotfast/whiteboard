@@ -22,6 +22,7 @@ import { documentStyles as doc } from "./document-styles";
 import { drawStyles } from "./draw-styles";
 import { HighlightedText } from "./highlighted-text";
 import { newTabLinkProps } from "./link-props";
+import { MarkdownMath } from "./markdown-math";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 
@@ -302,6 +303,14 @@ function renderMarkdownNode(
           compact={inChat}
         />
       );
+    case "math":
+      return <MarkdownMath key={key} tex={node.value ?? ""} display />;
+    case "inlineMath":
+      // Like Pandoc, a `$` that opens before or closes after a space is prose,
+      // so "$5 and $10" stays text.
+      if (/^\s|\s$/.test(node.value ?? "")) return `$${node.value}$`;
+
+      return <MarkdownMath key={key} tex={node.value ?? ""} display={false} />;
     case "break":
       return <br key={key} />;
     case "thematicBreak":
