@@ -202,6 +202,7 @@ const traceStatus: ReviewCliInstallStatus = {
       opencode: "opencode",
       pi: "pi",
       omp: "omp",
+      copilot: "copilot",
     },
     plugins: {
       claude: { label: "claude plugin", command: "claude command" },
@@ -210,6 +211,7 @@ const traceStatus: ReviewCliInstallStatus = {
       opencode: { label: "opencode plugin", command: "opencode command" },
       pi: { label: "pi plugin", command: "pi command" },
       omp: { label: "omp plugin", command: "omp command" },
+      copilot: { label: "copilot plugin", command: "copilot command" },
     },
   },
   legacySkills: [],

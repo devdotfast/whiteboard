@@ -42,6 +42,7 @@ const fresh: ReviewCliInstallStatus = {
       opencode: "opencode prompt",
       pi: "pi prompt",
       omp: "omp prompt",
+      copilot: "copilot prompt",
     },
     plugins: {
       claude: { label: "claude plugin", command: "claude command" },
@@ -50,6 +51,7 @@ const fresh: ReviewCliInstallStatus = {
       opencode: { label: "opencode plugin", command: "opencode command" },
       pi: { label: "pi plugin", command: "pi command" },
       omp: { label: "omp plugin", command: "omp command" },
+      copilot: { label: "copilot plugin", command: "copilot command" },
     },
   },
   legacySkills: [],

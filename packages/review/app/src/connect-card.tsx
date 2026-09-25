@@ -20,6 +20,7 @@ export const TARGET_LABELS: Record<ReviewCliInstallTarget, string> = {
   opencode: "OpenCode",
   pi: "Pi",
   omp: "oh-my-pi",
+  copilot: "Copilot CLI",
 };
 
 /** The rest share the Other menu. */

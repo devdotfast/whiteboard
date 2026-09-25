@@ -33,6 +33,7 @@ import {
 
 import {
   CLAUDE_WINDOWS_MCP_ADD,
+  COPILOT_WINDOWS_MCP_ADD,
   connectSetupPrompts,
   reviewMcpLaunch,
 } from "./connect-prompts";
@@ -464,6 +465,17 @@ function connectPlugins(
       label: "Install the oh-my-pi package",
       command: "omp install npm:@dev.fast/pi-whiteboard",
     },
+    copilot:
+      process.platform === "win32"
+        ? {
+            label: "Add the Copilot CLI MCP server",
+            command: COPILOT_WINDOWS_MCP_ADD,
+          }
+        : {
+            label: "Install the Copilot CLI plugin",
+            command:
+              "copilot plugin marketplace add devdotfast/whiteboard\ncopilot plugin install whiteboard@devfast",
+          },
   };
 }
 

@@ -7,7 +7,8 @@ export type InstallTarget =
   | "cursor"
   | "opencode"
   | "pi"
-  | "omp";
+  | "omp"
+  | "copilot";
 
 export const ALL_INSTALL_TARGETS: InstallTarget[] = [
   "claude",
@@ -16,6 +17,7 @@ export const ALL_INSTALL_TARGETS: InstallTarget[] = [
   "opencode",
   "pi",
   "omp",
+  "copilot",
 ];
 
 export function isInstallTarget(value: string): value is InstallTarget {

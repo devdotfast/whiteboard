@@ -41,6 +41,7 @@ const status: ReviewCliInstallStatus = {
       opencode: "OPENCODE PROMPT",
       pi: "PI PROMPT",
       omp: "OMP PROMPT",
+      copilot: "COPILOT PROMPT",
     },
     plugins: {
       claude: {
@@ -58,6 +59,10 @@ const status: ReviewCliInstallStatus = {
       },
       pi: { label: "Install the Pi package", command: "PI COMMAND" },
       omp: { label: "Install the oh-my-pi package", command: "OMP COMMAND" },
+      copilot: {
+        label: "Install the Copilot CLI plugin",
+        command: "COPILOT COMMAND",
+      },
     },
   },
   legacySkills: [],
@@ -170,7 +175,7 @@ describe("ConnectCard", () => {
       [...container.querySelectorAll("[role=menuitemradio]")].map(
         (item) => item.textContent,
       ),
-    ).toEqual(["Pi", "oh-my-pi"]);
+    ).toEqual(["Pi", "oh-my-pi", "Copilot CLI"]);
 
     await act(async () => button(container, "oh-my-pi")?.click());
     expect(container.querySelector("[role=menu]")).toBeNull();

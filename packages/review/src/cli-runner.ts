@@ -537,6 +537,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
           "opencode",
           "pi",
           "omp",
+          "copilot",
           "all",
         ]),
       ),
@@ -1020,6 +1021,7 @@ const TARGET_LABELS: Record<InstallTarget, string> = {
   opencode: "OpenCode",
   pi: "Pi",
   omp: "oh-my-pi",
+  copilot: "Copilot CLI",
 };
 
 function parseTargets(targets: readonly string[]): InstallTarget[] {

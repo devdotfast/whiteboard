@@ -86,6 +86,9 @@ function fffSteps(input: ConnectPromptInput, target: InstallTarget): string[] {
 /** The Claude plugin's sh launch cannot start on Windows, so register the server directly. */
 export const CLAUDE_WINDOWS_MCP_ADD = `claude mcp add -s user whiteboard -- ${WINDOWS_MCP_LAUNCH.command} ${WINDOWS_MCP_LAUNCH.args.join(" ")}`;
 
+/** Copilot CLI loads the Claude plugin, so on Windows it too registers the server directly. */
+export const COPILOT_WINDOWS_MCP_ADD = `copilot mcp add whiteboard -- ${WINDOWS_MCP_LAUNCH.command} ${WINDOWS_MCP_LAUNCH.args.join(" ")}`;
+
 function pluginSteps(
   target: Exclude<InstallTarget, "cursor">,
   platform: NodeJS.Platform,
@@ -107,6 +110,15 @@ function pluginSteps(
     case "opencode":
       return [
         "Run:\n\n```sh\nopencode plugin @dev.fast/opencode-whiteboard --global\n```",
+      ];
+    case "copilot":
+      if (platform === "win32")
+        return [
+          `Run:\n\n\`\`\`sh\ncopilot plugin uninstall whiteboard@devfast # its launch cannot start on Windows, if installed\ncopilot mcp remove whiteboard # old registration, if any\n${COPILOT_WINDOWS_MCP_ADD}\n\`\`\``,
+        ];
+
+      return [
+        "Run:\n\n```sh\ncopilot plugin marketplace add devdotfast/whiteboard\ncopilot plugin install whiteboard@devfast\ncopilot mcp remove whiteboard # old manual registration, if any\n```",
       ];
     case "pi":
     case "omp":
@@ -182,6 +194,7 @@ export function connectSetupPrompts(): Record<InstallTarget, string> {
     opencode: connectSetupPrompt("opencode"),
     pi: connectSetupPrompt("pi"),
     omp: connectSetupPrompt("omp"),
+    copilot: connectSetupPrompt("copilot"),
   };
 }
 
@@ -195,5 +208,6 @@ export function connectPrompts(
     opencode: connectPrompt("opencode", input),
     pi: connectPrompt("pi", input),
     omp: connectPrompt("omp", input),
+    copilot: connectPrompt("copilot", input),
   };
 }

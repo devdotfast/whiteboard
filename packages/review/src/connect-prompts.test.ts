@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   CLAUDE_WINDOWS_MCP_ADD,
+  COPILOT_WINDOWS_MCP_ADD,
   REVIEW_MCP_LAUNCH,
   WINDOWS_MCP_LAUNCH,
   connectPrompt,
@@ -54,14 +55,19 @@ describe("connectPrompt", () => {
     }
   });
 
-  it("registers Claude's MCP server directly on Windows instead of the plugin", () => {
-    const prompt = connectPrompt("claude", { ...input, platform: "win32" });
+  it("registers the Claude plugin's MCP server directly on Windows instead of the plugin", () => {
+    for (const [target, add] of [
+      ["claude", CLAUDE_WINDOWS_MCP_ADD],
+      ["copilot", COPILOT_WINDOWS_MCP_ADD],
+    ] as const) {
+      const prompt = connectPrompt(target, { ...input, platform: "win32" });
 
-    expect(prompt).toContain(CLAUDE_WINDOWS_MCP_ADD);
-    expect(prompt).not.toContain("claude plugin install");
-    expect(connectPrompt("claude", { ...input, platform: "darwin" })).toContain(
-      "claude plugin install whiteboard@devfast",
-    );
+      expect(prompt).toContain(add);
+      expect(prompt).not.toContain(`${target} plugin install`);
+      expect(connectPrompt(target, { ...input, platform: "darwin" })).toContain(
+        `${target} plugin install whiteboard@devfast`,
+      );
+    }
   });
 
   it("installs the Pi package in oh-my-pi and reloads its plugins", () => {
