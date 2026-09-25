@@ -18,6 +18,56 @@ button {
   display: contents;
 }
 
+/* One scrollbar for every native scroller in the canvas: a 6px pill centered
+   in a 10px lane, with no visible track. Chromium ignores these rules on an
+   element with a non-auto `scrollbar-width` or `scrollbar-color` (and the
+   latter inherits), so keep both unset except on the review document scroller,
+   which follows platform scrollbar visibility. Scoped to the canvas: it shares
+   the workbench document, and these variables exist only here. */
+:where(.review-canvas-root, .review-canvas-root *)::-webkit-scrollbar {
+  width: var(--review-scrollbar-size);
+  height: var(--review-scrollbar-size);
+}
+
+:where(.review-canvas-root, .review-canvas-root *)::-webkit-scrollbar-track,
+:where(.review-canvas-root, .review-canvas-root *)::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+:where(.review-canvas-root, .review-canvas-root *)::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--review-scrollbar-thumb) padding-box;
+}
+
+:where(
+    .review-canvas-root,
+    .review-canvas-root *
+  )::-webkit-scrollbar-thumb:vertical {
+  min-height: 32px;
+}
+
+:where(
+    .review-canvas-root,
+    .review-canvas-root *
+  )::-webkit-scrollbar-thumb:horizontal {
+  min-width: 32px;
+}
+
+:where(
+    .review-canvas-root,
+    .review-canvas-root *
+  )::-webkit-scrollbar-thumb:hover {
+  background: var(--review-scrollbar-thumb-hover) padding-box;
+}
+
+:where(
+    .review-canvas-root,
+    .review-canvas-root *
+  )::-webkit-scrollbar-thumb:active {
+  background: var(--review-scrollbar-thumb-active) padding-box;
+}
+
 .review-app::selection,
 .review-app *::selection {
   background-color: var(--text-selection-bg);

@@ -285,7 +285,6 @@
   min-width: 0;
   height: 100%;
   overflow-x: auto;
-  scrollbar-width: thin;
 }
 
 .review-topbar-actions > * {
@@ -778,7 +777,7 @@
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-color: var(--review-scrollbar-thumb) transparent;
+  /* Let macOS hide the document scrollbar when idle. */
   scrollbar-width: thin;
   /* --review-toc-tail is the room the contents rail adds so the last heading
      can scroll up to the top edge, measured by the rail itself. */
@@ -787,37 +786,6 @@
       max(120px, var(--review-bottom-scroll-padding, 0px)) +
         var(--review-toc-tail, 0px)
     );
-}
-
-/* A transparent track, so the thumb communicates position without drawing a
-   persistent gutter. Monaco renders its own slider elements. */
-
-.review-view-region--review::-webkit-scrollbar {
-  width: var(--review-scrollbar-size);
-  background: transparent;
-}
-
-.review-view-region--review::-webkit-scrollbar-track,
-.review-view-region--review::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-.review-view-region--review::-webkit-scrollbar-thumb {
-  min-height: 32px;
-  border: 3px solid transparent;
-  border-radius: 999px;
-  background: var(--review-scrollbar-thumb);
-  background-clip: padding-box;
-}
-
-.review-view-region--review::-webkit-scrollbar-thumb:hover {
-  background: var(--review-scrollbar-thumb-hover);
-  background-clip: padding-box;
-}
-
-.review-view-region--review::-webkit-scrollbar-thumb:active {
-  background: var(--review-scrollbar-thumb-active);
-  background-clip: padding-box;
 }
 
 .review-view-region--review.review-view-region--document-warning {
