@@ -65,7 +65,10 @@ export function withLens(instantiation: IInstantiationService, entries: readonly
 						}) ? { ...gap, collapsed: false } : gap)
 					};
 					const section = progress()?.sections?.find(section => section.id === entry.sectionId);
-					return lens && !lens.wholeFiles ? { ...diff, contextGaps: lensContextGaps(diff, original.getLineCount(), modified.getLineCount(), lensRanges(section ? { ...lens, ranges: section.sources } : lens, entry)) } : diff;
+					// An exact lens (a tour step, a code peek) is authored to show one chunk;
+					// diffr's structural scope expansion is right for the Diff tab, not here.
+					const scopedDiff = lens?.exact ? { ...diff, contextScopes: undefined } : diff;
+					return lens && !lens.wholeFiles ? { ...diff, contextGaps: lensContextGaps(scopedDiff, original.getLineCount(), modified.getLineCount(), lensRanges(section ? { ...lens, ranges: section.sources } : lens, entry)) } : diff;
 				},
 			};
 		},

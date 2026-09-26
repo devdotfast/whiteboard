@@ -200,6 +200,8 @@ export interface ReviewInlineEditorFactory {
 export interface ReviewDiffLens {
   /** Filter files while retaining ordinary diff context/folding within them. */
   wholeFiles?: boolean;
+  /** Show only the pinned range, ignoring diffr's structural scope expansion. */
+  exact?: boolean;
   id: string;
   title: string;
   reviewId: string;
