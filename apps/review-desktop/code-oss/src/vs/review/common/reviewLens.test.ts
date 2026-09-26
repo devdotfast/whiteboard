@@ -24,6 +24,20 @@ test('structural folds within the lens survive, overlapping folds do not', () =>
 	assert.ok(!gaps.includes(outside));
 });
 
+test('an exact document lens (tour step, code peek) clips an added file to its +/-3 window; without it, #502 fills the whole open run', () => {
+	const diff = {
+		...plain,
+		sourceLineAlignment: Array.from({ length: 300 }, (_, i) => [null, i] as const),
+		contextScopes: { original: [], modified: [[0, 300] as const] },
+	};
+	const ranges = [{ side: 'head' as const, file: 'new.ts', fromLine: 80, toLine: 87 }];
+	// #502 behavior (Diff tab): the added file is one open run, so contextScopes fills it whole.
+	assert.deepEqual(lensContextGaps(diff, 0, 300, ranges), []);
+	// exact document lens: withLens strips contextScopes before calling lensContextGaps.
+	const clipped = lensContextGaps({ ...diff, contextScopes: undefined }, 0, 300, ranges);
+	assert.deepEqual(clipped.map(gap => [gap.modifiedStart, gap.modifiedCount]), [[1, 76], [91, 210]]);
+});
+
 test('viewed folds never hide an unread counterpart, and do not overlap structural folds', async () => {
 	const { viewedContextGaps } = await import('./reviewLens.js');
 	const range = (side: 'base' | 'head', fromLine: number, toLine: number) => ({ side, file: 'a.ts', fromLine, toLine });
