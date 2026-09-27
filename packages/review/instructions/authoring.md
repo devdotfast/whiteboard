@@ -34,3 +34,4 @@ follow these first five steps in order, with no tool calls beyond what they need
 - keep whiteboards short and sweet when possible (esp. for small changes.) feel free to omit sections.
 - when something (a phrase in the prose, diagram node, etc.) describes actual code in the codebase, always default to attaching/hyperlink code.
 - Link repository code as `[label](review-source:head/src/file.ts#L10-L24)`; use `base` for old code. Use repository-relative paths and verified line numbers.
+- point each code reference (diagram step, call-stack frame, `code_peek`) at the smallest range that shows the claim, usually 3-15 lines: the call, the branch, the assignment. not the whole function. tour steps and peeks show only that range.
