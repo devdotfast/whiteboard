@@ -68,7 +68,6 @@ export interface ReviewAppLaunchEvent {
 
 export interface DesktopLaunchAttempt {
   method: string;
-  successfulExitIsExpected: boolean;
   completion: Promise<DesktopLaunchCompletion>;
 }
 
@@ -181,10 +180,7 @@ export async function runReviewAppLaunch(
     if (outcome.completion) {
       assertSuccessfulLaunchCompletion(attempt.method, outcome.completion);
 
-      if (!attempt.successfulExitIsExpected) {
-        unexpectedSuccessfulExitAt = runtime.now();
-      }
-
+      unexpectedSuccessfulExitAt = runtime.now();
       completion = undefined;
     }
   }
@@ -230,7 +226,6 @@ export function launchDesktopApplication(
   if (platform !== "darwin" && platform !== "linux") {
     return {
       method: `the ${platform} application launcher`,
-      successfulExitIsExpected: false,
       completion: Promise.reject(
         new Error("automatic launch is available only on macOS and Linux"),
       ),
@@ -294,8 +289,9 @@ export function launchDesktopApplication(
       ? `the macOS application at "${appPath}"`
       : `the macOS bundle identifier "${release.bundleId}"`;
 
-    // -n allows parallel profiles; --env carries Whiteboard's context.
-    args = ["-n", ...(focus ? [] : ["-g"]), ...target];
+    // -n allows parallel profiles; -W exits with Desktop, so a startup crash
+    // surfaces early; --env carries Whiteboard's context.
+    args = ["-n", "-W", ...(focus ? [] : ["-g"]), ...target];
 
     for (const [key, value] of Object.entries(env)) {
       if (value !== undefined && /^DEV_(REVIEW|FAST)_/.test(key))
@@ -335,7 +331,6 @@ export function launchDesktopApplication(
 
   return {
     method,
-    successfulExitIsExpected: platform === "darwin",
     completion,
   };
 }

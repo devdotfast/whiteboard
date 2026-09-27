@@ -233,7 +233,6 @@ describe("Review Desktop launcher", () => {
           fetch,
           launchDesktop: () => ({
             method: 'the macOS bundle identifier "dev.fast.review"',
-            successfulExitIsExpected: true,
             completion: Promise.resolve({ code: 1, signal: null }),
           }),
           now: () => 0,
@@ -265,7 +264,6 @@ describe("Review Desktop launcher", () => {
           fetch,
           launchDesktop: () => ({
             method: 'the Desktop-managed bundle at "/missing/Review"',
-            successfulExitIsExpected: false,
             completion: Promise.reject(new Error("spawn ENOENT")),
           }),
           now: () => 0,
@@ -288,7 +286,6 @@ describe("Review Desktop launcher", () => {
           fetch,
           launchDesktop: () => ({
             method: 'the Desktop-managed bundle at "/tmp/Review"',
-            successfulExitIsExpected: false,
             completion: Promise.resolve({ code: 0, signal: null }),
           }),
           now: () => now,
@@ -307,6 +304,7 @@ describe("Review Desktop launcher", () => {
       undefined,
       [
         "-n",
+        "-W",
         "-g",
         "-a",
         "/tmp/Review.app",
@@ -318,7 +316,14 @@ describe("Review Desktop launcher", () => {
     ],
     [
       true,
-      ["-n", "-a", "/tmp/Review.app", "--env", "DEV_REVIEW_HOME=/tmp/home"],
+      [
+        "-n",
+        "-W",
+        "-a",
+        "/tmp/Review.app",
+        "--env",
+        "DEV_REVIEW_HOME=/tmp/home",
+      ],
     ],
   ])(
     "opens the CLI's own bundle through LaunchServices with Review's env, focus=%s",
@@ -329,7 +334,7 @@ describe("Review Desktop launcher", () => {
         () => child,
       );
 
-      const attempt = launchDesktopApplication({
+      launchDesktopApplication({
         platform: "darwin",
         electron: true,
         execPath: "/tmp/Review.app/Contents/MacOS/Review",
@@ -348,7 +353,6 @@ describe("Review Desktop launcher", () => {
         args,
         expect.objectContaining({ detached: true, stdio: "ignore" }),
       );
-      expect(attempt.successfulExitIsExpected).toBe(true);
       expect(child.unref).toHaveBeenCalledOnce();
     },
   );
@@ -368,6 +372,7 @@ describe("Review Desktop launcher", () => {
     });
     expect(spawn.mock.calls[0]?.[1]).toEqual([
       "-n",
+      "-W",
       "-a",
       "/tmp/Review.app",
       "--env",
@@ -400,7 +405,7 @@ describe("Review Desktop launcher", () => {
         instance,
         spawn,
       });
-      expect(spawn.mock.calls[0]?.[1]).toEqual(["-n", ...target]);
+      expect(spawn.mock.calls[0]?.[1]).toEqual(["-n", "-W", ...target]);
     },
   );
 
@@ -416,7 +421,12 @@ describe("Review Desktop launcher", () => {
       env: {},
       spawn,
     });
-    expect(spawn.mock.calls[0]?.[1]).toEqual(["-n", "-b", "dev.fast.review"]);
+    expect(spawn.mock.calls[0]?.[1]).toEqual([
+      "-n",
+      "-W",
+      "-b",
+      "dev.fast.review",
+    ]);
   });
 
   it.each([
@@ -438,7 +448,7 @@ describe("Review Desktop launcher", () => {
         VSCODE_CLI: "1",
       };
 
-      const attempt = launchDesktopApplication({
+      launchDesktopApplication({
         platform: "linux",
         electron,
         execPath: "/usr/share/review/review",
@@ -460,7 +470,6 @@ describe("Review Desktop launcher", () => {
           detached: true,
         }),
       );
-      expect(attempt.successfulExitIsExpected).toBe(false);
       expect(environment.ELECTRON_RUN_AS_NODE).toBe("1");
     },
   );
@@ -494,13 +503,13 @@ describe("Review Desktop launcher", () => {
       "darwin",
       { key: "preview" },
       "/usr/bin/open",
-      ["-n", "-g", "-b", "dev.fast.review.preview"],
+      ["-n", "-W", "-g", "-b", "dev.fast.review.preview"],
     ],
     [
       "darwin",
       { key: "preview", appPath: "/Users/me/Apps/Review Preview.app" },
       "/usr/bin/open",
-      ["-n", "-g", "-a", "/Users/me/Apps/Review Preview.app"],
+      ["-n", "-W", "-g", "-a", "/Users/me/Apps/Review Preview.app"],
     ],
     ["linux", { key: "preview" }, "/usr/bin/review-preview-desktop", []],
   ] as const)(
@@ -593,7 +602,6 @@ function healthyResponse(): Response {
 function pendingAttempt() {
   return {
     method: 'the macOS bundle identifier "dev.fast.review"',
-    successfulExitIsExpected: true,
     completion: new Promise<never>(() => undefined),
   };
 }
