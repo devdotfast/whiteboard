@@ -283,13 +283,12 @@ disjoint, so both hostnames answer all of them and the Worker needs no
 host discrimination; the two names exist to give humans and Squirrel separate
 front doors.
 
-A browser `GET /` redirects to <https://dev.fast/install>, and `GET /preview`
-redirects to <https://dev.fast/install/preview>. Those pages detect the platform
-and start the matching download. Other clients, such as curl, get a redirect to
-the `releases/latest/darwin-arm64/Whiteboard.dmg` alias from `GET /` and to
-`releases/preview-latest/darwin-arm64/Whiteboard.dmg` from `GET /preview`. For
-example, `curl -fLOJ https://install.dev.fast` downloads the current disk image.
-The redirect deliberately does not read `latest.json` — the alias is uploaded with the
+`GET /` is the stable install landing: it redirects to the
+`releases/latest/darwin-arm64/Whiteboard.dmg` alias, while `GET /preview` redirects
+to `releases/preview-latest/darwin-arm64/Whiteboard.dmg`. Browsers go to
+<https://dev.fast/install> or <https://dev.fast/install/preview> instead. For example,
+`curl -fLOJ https://install.dev.fast` downloads the current disk image. It
+deliberately does not read `latest.json` — the alias is uploaded with the
 payloads, so the download keeps working while the manifest is mid-upload. The
 keys stay version-free for that reason, so the version rides on each object's
 `Content-Disposition` instead and the saved file names itself. Stable uses
