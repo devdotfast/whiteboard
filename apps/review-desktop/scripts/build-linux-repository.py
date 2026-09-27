@@ -98,8 +98,8 @@ def build_apt(packages, repos, snapshot_root, package_name, version, revision, f
 # Each channel is a separate package in a separate repository. Preview builds
 # use RPM's tilde form so they sort below the stable release they precede.
 CHANNELS = {
-    "stable": ("dev-fast-review", "repos", r"[0-9]+\.[0-9]+\.[0-9]+"),
-    "preview": ("dev-fast-review-preview", "repos/preview", r"[0-9]+\.[0-9]+\.[0-9]+~preview\.[0-9]{8}\.[0-9]+"),
+    "stable": ("whiteboard", "repos", r"[0-9]+\.[0-9]+\.[0-9]+"),
+    "preview": ("whiteboard-preview", "repos/preview", r"[0-9]+\.[0-9]+\.[0-9]+~preview\.[0-9]{8}\.[0-9]+"),
 }
 
 
@@ -148,7 +148,7 @@ def build(packages, output, version, revision, commit, fingerprint, channel="sta
     sign(snapshot / "repomd.xml", fingerprint)
     build_apt(packages, repos, repos / "snapshots" / generation, package_name, version, revision, fingerprint, channel)
     pointer = {
-        "schemaVersion": 1, "format": "rpm", "deb": True, "generation": generation, "version": version,
+        "schemaVersion": 1, "format": "rpm", "packageName": package_name, "deb": True, "generation": generation, "version": version,
         "commit": commit, "keyFingerprint": fingerprint,
     }
     (repos / "current.json").write_text(json.dumps(pointer) + "\n")

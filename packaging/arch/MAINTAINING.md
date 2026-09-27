@@ -6,10 +6,17 @@ registers those files with pacman. The app bundle is moved to `/opt/whiteboard`;
 the CLI, desktop entries, URL handler, metainfo, and icon keep their standard
 system paths.
 
-For each stable release, update `pkgver` and `sha256sums` in
+For each stable release, update `pkgver`, the RPM source filename, and `sha256sums` in
 `whiteboard-bin/PKGBUILD` to match the attached
-`dev-fast-review-<version>-1.x86_64.rpm`, then regenerate `.SRCINFO` from that
+`whiteboard-<version>-1.x86_64.rpm`, then regenerate `.SRCINFO` from that
 directory with `makepkg --printsrcinfo > .SRCINFO`. Build and inspect the
 package with `makepkg --syncdeps` and `namcap ./whiteboard-bin-*.pkg.tar.zst`,
 then push the updated `PKGBUILD` and `.SRCINFO` to the `whiteboard-bin` AUR Git
 repository.
+
+Keep the current recipe pinned to its published RPM until the first renamed
+release is available. Do not change the filename for an existing release.
+
+For the first renamed release, also update `package()` for the payload at
+`/usr/share/whiteboard` and the `whiteboard` launchers. Adjust compatibility links
+if relocating the payload to `/opt/whiteboard`.

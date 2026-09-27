@@ -2,6 +2,8 @@
 # Container entrypoint for verify-repository.sh. Never run on a user machine.
 set -euo pipefail
 : "${GENERATION:?}" "${FINGERPRINT:?}" "${PREFIX:?}" "${PACKAGE:?}" "${APP:?}" "${CHANNEL:?}"
+LEGACY_APP=${APP/whiteboard/review}
+LEGACY_PACKAGE=dev-fast-$LEGACY_APP
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends gnupg python3 desktop-file-utils apparmor xvfb xauth dbus-x11 procps
@@ -38,11 +40,12 @@ apt-get -o APT::Update::Error-Mode=any update
 apt-get install -y --no-install-recommends "$PACKAGE"
 if command -v node; then echo 'Ubuntu package unexpectedly requires system Node' >&2; exit 1; fi
 "$APP" --help >/dev/null
+"$LEGACY_APP" --help >/dev/null
 test "$(stat -c %u:%g:%a "/usr/share/$APP/chrome-sandbox")" = '0:0:4755'
-desktop-file-validate "/usr/share/applications/$PACKAGE.desktop"
-desktop-file-validate "/usr/share/applications/$PACKAGE-url-handler.desktop"
-test "$(xdg-mime query default "x-scheme-handler/$PACKAGE")" = "$PACKAGE-url-handler.desktop"
-apparmor_parser --skip-kernel-load --skip-read-cache "/etc/apparmor.d/$PACKAGE"
+desktop-file-validate "/usr/share/applications/$LEGACY_PACKAGE.desktop"
+desktop-file-validate "/usr/share/applications/$LEGACY_PACKAGE-url-handler.desktop"
+test "$(xdg-mime query default "x-scheme-handler/$LEGACY_PACKAGE")" = "$LEGACY_PACKAGE-url-handler.desktop"
+apparmor_parser --skip-kernel-load --skip-read-cache "/etc/apparmor.d/$LEGACY_PACKAGE"
 test ! -e /etc/apt/sources.list.d/vscode.sources
 # `set -e` ignores a negated pipeline, so fail explicitly.
 if update-alternatives --list editor 2>/dev/null | grep -qF "/usr/bin/$APP"; then
@@ -58,21 +61,26 @@ for SENTINEL in /home/tester/.dev/reviews/package-test /home/tester/.config/Revi
 done
 
 # Replace an older package and check removal of files owned only by that version.
-mkdir -p /tmp/older/DEBIAN "/tmp/older/usr/share/$APP"
-printf 'Package: %s\nVersion: 0.0.0-1\nArchitecture: amd64\nMaintainer: Test <test@example.test>\nDescription: Upgrade fixture\n' "$PACKAGE" > /tmp/older/DEBIAN/control
-printf 'older\n' > "/tmp/older/usr/share/$APP/upgrade-fixture"
+mkdir -p /tmp/older/DEBIAN "/tmp/older/usr/share/$LEGACY_APP"
+printf 'Package: %s\nVersion: 0.0.0-1\nArchitecture: amd64\nMaintainer: Test <test@example.test>\nDescription: Upgrade fixture\n' "$LEGACY_PACKAGE" > /tmp/older/DEBIAN/control
+printf 'older\n' > "/tmp/older/usr/share/$LEGACY_APP/upgrade-fixture"
 dpkg-deb --build /tmp/older /tmp/older.deb
+apt-get remove -y "$PACKAGE"
 dpkg -i /tmp/older.deb
-apt-get install -y --no-install-recommends --only-upgrade "$PACKAGE"
-test ! -e "/usr/share/$APP/upgrade-fixture"
+apt-get install -y --no-install-recommends "$PACKAGE"
+if dpkg-query -W -f='${db:Status-Status}' "$LEGACY_PACKAGE" 2>/dev/null | grep -qx installed; then
+  echo "Legacy DEB remains installed" >&2; exit 1
+fi
+test ! -e "/usr/share/$LEGACY_APP/upgrade-fixture"
 "$APP" --help >/dev/null
+"$LEGACY_APP" --help >/dev/null
 apt-get purge -y "$PACKAGE"
 for SENTINEL in /home/tester/.dev/reviews/package-test /home/tester/.config/Review/User/settings.json /home/tester/.claude/settings.json; do
   test "$(cat "$SENTINEL")" = 'keep me'
 done
 test ! -e "/usr/bin/$APP"
-test ! -e "/usr/share/applications/$PACKAGE.desktop"
-test ! -e "/etc/apparmor.d/$PACKAGE"
+test ! -e "/usr/share/applications/$LEGACY_PACKAGE.desktop"
+test ! -e "/etc/apparmor.d/$LEGACY_PACKAGE"
 
 # Reject modified package bytes even when the index remains correctly signed.
 printf tampered >> /repo/pool/main/*.deb

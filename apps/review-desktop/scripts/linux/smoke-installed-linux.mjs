@@ -8,8 +8,8 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const app = process.env.APP;
 
-if (!/^review(?:-preview)?$/.test(app ?? ""))
-  throw new Error("Set APP to review or review-preview");
+if (!/^whiteboard(?:-preview)?$/.test(app ?? ""))
+  throw new Error("Set APP to whiteboard or whiteboard-preview");
 
 const state = await mkdtemp(path.join(os.tmpdir(), "whiteboard-install-"));
 

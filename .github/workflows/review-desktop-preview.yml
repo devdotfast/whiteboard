@@ -40,7 +40,7 @@ jobs:
     steps:
       - run: echo "Release approved"
 
-  # Previews publish a signed dev-fast-review-preview package, so the Linux
+  # Previews publish a signed whiteboard-preview package, so the Linux
   # build signs with the production repository key rather than a CI key.
   linux:
     if: ${{ inputs.platforms == 'all' || inputs.platforms == 'linux' }}

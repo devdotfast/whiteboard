@@ -13,8 +13,8 @@ node "$APP_DIR/scripts/stage-review-runtime.mjs" --verify --packaged-root "$APP_
 npm --prefix "$CHECKOUT" run gulp -- vscode-linux-x64-prepare-rpm
 npm --prefix "$CHECKOUT" run gulp -- vscode-linux-x64-build-rpm
 mkdir -p "$DIST"
-cp "$CHECKOUT"/.build/linux/rpm/x86_64/dev-fast-review*.x86_64.rpm "$DIST/"
+cp "$CHECKOUT"/.build/linux/rpm/x86_64/whiteboard*.x86_64.rpm "$DIST/"
 npm --prefix "$CHECKOUT" run gulp -- vscode-linux-x64-prepare-deb
 npm --prefix "$CHECKOUT" run gulp -- vscode-linux-x64-build-deb
-cp "$CHECKOUT"/.build/linux/deb/amd64/dev-fast-review*_amd64.deb "$DIST/"
+cp "$CHECKOUT"/.build/linux/deb/amd64/whiteboard*_amd64.deb "$DIST/"
 echo "Fedora RPM and Ubuntu DEB are in $DIST"

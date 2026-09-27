@@ -23,13 +23,14 @@ class PublicationTests(unittest.TestCase):
         self.failure = None
         self.pointer_failure = False
         self.channel = None
+        self.whiteboard_supported = True
         self.seal("1.2.3", "a" * 40)
 
     def seal(self, version, commit, prefix="repos"):
         self.prefix = prefix
         self.pointer_key = f"{prefix}/current.json"
         self.package_key = f"{prefix}/package"
-        self.current = dict(schemaVersion=1, format="rpm", generation=f"{version}-1-{commit}",
+        self.current = dict(schemaVersion=1, format="rpm", packageName="whiteboard-preview" if prefix == "repos/preview" else "whiteboard", generation=f"{version}-1-{commit}",
                             version=version, commit=commit, keyFingerprint="B" * 40)
         (self.root / prefix).mkdir(parents=True, exist_ok=True)
         (self.root / self.pointer_key).write_text(json.dumps(self.current))
@@ -41,6 +42,8 @@ class PublicationTests(unittest.TestCase):
         url = url.full_url
         self.requests.append(url)
         body = {"schemaVersion": 1, "format": "rpm"} if url.endswith("/health") else {"version": self.current["commit"], "productVersion": self.current["version"]}
+        if url.endswith("/repos/whiteboard/health"):
+            body = {"schemaVersion": 1, "packageNames": ["whiteboard", "whiteboard-preview"] if self.whiteboard_supported else []}
         return io.BytesIO(json.dumps(body).encode())
 
     def aws(self, *args):
@@ -69,6 +72,21 @@ class PublicationTests(unittest.TestCase):
         self.publish()
         self.assertEqual([call[call.index("--key") + 1] for call in self.writes()], ["repos/package", "repos/current.json"])
         self.assertIn("--if-none-match", self.writes()[-1])
+
+    def test_unsupported_worker_is_rejected_before_uploads(self):
+        self.whiteboard_supported = False
+        with self.assertRaisesRegex(RuntimeError, "Whiteboard repository Worker"):
+            self.publish()
+        self.assertEqual(self.calls, [])
+
+    def test_package_name_must_match_channel(self):
+        self.current["packageName"] = "whiteboard-preview"
+        (self.root / self.pointer_key).write_text(json.dumps(self.current))
+        self.digests[self.pointer_key] = publisher.checksum(self.root / self.pointer_key)
+        (self.root / "sha256.json").write_text(json.dumps(self.digests))
+        with self.assertRaisesRegex(ValueError, "Invalid Linux package name"):
+            self.publish()
+        self.assertEqual(self.calls, [])
 
     def test_preview_channel_publishes_its_own_pointer_and_feed(self):
         self.seal("1.2.4~preview.20260922.7", "d" * 40, prefix="repos/preview")

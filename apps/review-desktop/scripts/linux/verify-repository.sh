@@ -6,8 +6,8 @@ TARGET="${2:-all}"
 case "$TARGET" in all|43|44|ubuntu) ;; *) echo "Unknown Linux test target: $TARGET" >&2; exit 2 ;; esac
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # A publication carries exactly one channel: stable under repos/, preview under repos/preview/.
-if [[ -f "$PUBLICATION/repos/preview/current.json" ]]; then PREFIX=repos/preview; PACKAGE=dev-fast-review-preview; APP=review-preview
-else PREFIX=repos; PACKAGE=dev-fast-review; APP=review; fi
+if [[ -f "$PUBLICATION/repos/preview/current.json" ]]; then PREFIX=repos/preview; PACKAGE=whiteboard-preview; APP=whiteboard-preview
+else PREFIX=repos; PACKAGE=whiteboard; APP=whiteboard; fi
 GENERATION="$(python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["format"] == "rpm"; print(p["generation"])' "$PUBLICATION/$PREFIX/current.json")"
 FINGERPRINT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["keyFingerprint"])' "$PUBLICATION/$PREFIX/current.json")"
 for VERSION in 43 44; do
@@ -28,7 +28,7 @@ done
 
 if [[ "$TARGET" == all || "$TARGET" == ubuntu ]]; then
   CHANNEL=stable
-  if [[ "$APP" == review-preview ]]; then CHANNEL=preview; fi
+  if [[ "$APP" == whiteboard-preview ]]; then CHANNEL=preview; fi
   # Docker's default seccomp policy blocks namespace creation by Chromium.
   # The app still runs as a normal user with its own sandbox enabled.
   docker run --rm --platform linux/amd64 --shm-size=1g --security-opt seccomp=unconfined \

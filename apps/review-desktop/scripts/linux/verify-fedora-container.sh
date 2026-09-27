@@ -2,6 +2,8 @@
 # Container entrypoint for verify-repository.sh. Never run on a user machine.
 set -euo pipefail
 [[ -n "${GENERATION:-}" && -n "${FINGERPRINT:-}" && -n "${PREFIX:-}" && -n "${PACKAGE:-}" && -n "${APP:-}" ]]
+LEGACY_APP=${APP/whiteboard/review}
+LEGACY_PACKAGE=dev-fast-$LEGACY_APP
 test -f "/publication/$PREFIX/current.json"
 # Channel layout: repos/ holds stable, repos/preview/ holds preview. Keys live in repos/keys/.
 cp -a "/publication/$PREFIX" /repo
@@ -22,10 +24,11 @@ EOF
 dnf -y --setopt=install_weak_deps=False install "$PACKAGE"
 if command -v node; then echo 'Fedora package unexpectedly requires system Node' >&2; exit 1; fi
 "$APP" --help >/dev/null
+"$LEGACY_APP" --help >/dev/null
 test "$(stat -c %u:%g:%a "/usr/share/$APP/chrome-sandbox")" = "0:0:4755"
-test -f "/usr/share/applications/$PACKAGE.desktop"
-desktop-file-validate "/usr/share/applications/$PACKAGE-url-handler.desktop"
-test "$(xdg-mime query default "x-scheme-handler/$PACKAGE")" = "$PACKAGE-url-handler.desktop"
+test -f "/usr/share/applications/$LEGACY_PACKAGE.desktop"
+desktop-file-validate "/usr/share/applications/$LEGACY_PACKAGE-url-handler.desktop"
+test "$(xdg-mime query default "x-scheme-handler/$LEGACY_PACKAGE")" = "$LEGACY_PACKAGE-url-handler.desktop"
 mkdir -p /root/.dev/reviews /root/.config/Review/User /root/.claude
 for SENTINEL in /root/.dev/reviews/package-test /root/.config/Review/User/settings.json /root/.claude/settings.json; do
   printf 'keep me\n' > "$SENTINEL"
@@ -35,7 +38,7 @@ done
 # This checks package upgrades, not migration from an older application version.
 mkdir -p /tmp/rpmbuild/SPECS
 cat > /tmp/rpmbuild/SPECS/older.spec <<EOF
-Name: $PACKAGE
+Name: $LEGACY_PACKAGE
 Version: 0
 Release: 0
 Summary: Review upgrade validation fixture
@@ -45,20 +48,23 @@ AutoReqProv: no
 %description
 Minimal older package for replacement and retained-data validation.
 %install
-mkdir -p %{buildroot}/usr/share/$APP
-printf 'older package\\n' > %{buildroot}/usr/share/$APP/upgrade-fixture
+mkdir -p %{buildroot}/usr/share/$LEGACY_APP
+printf 'older package\\n' > %{buildroot}/usr/share/$LEGACY_APP/upgrade-fixture
 %files
-/usr/share/$APP/upgrade-fixture
+/usr/share/$LEGACY_APP/upgrade-fixture
 EOF
 rpmbuild --define '_topdir /tmp/rpmbuild' --define '_binary_payload w3.zstdio' -bb /tmp/rpmbuild/SPECS/older.spec
 # Only this locally built test fixture bypasses a signature. DNF repository
 # package and metadata verification remain enabled for every repository action.
-rpm -U --oldpackage --nosignature "/tmp/rpmbuild/RPMS/x86_64/$PACKAGE-0-0.x86_64.rpm"
-test "$(rpm -q --qf '%{VERSION}' "$PACKAGE")" = 0
-dnf -y --setopt=install_weak_deps=False upgrade --refresh "$PACKAGE"
-test "$(rpm -q --qf '%{VERSION}' "$PACKAGE")" != 0
-test ! -e "/usr/share/$APP/upgrade-fixture"
+dnf -y remove "$PACKAGE"
+rpm -U --nosignature "/tmp/rpmbuild/RPMS/x86_64/$LEGACY_PACKAGE-0-0.x86_64.rpm"
+test "$(rpm -q --qf '%{VERSION}' "$LEGACY_PACKAGE")" = 0
+dnf -y --setopt=install_weak_deps=False upgrade --refresh "$LEGACY_PACKAGE"
+rpm -q "$PACKAGE"
+if rpm -q "$LEGACY_PACKAGE"; then echo "Legacy RPM remains installed" >&2; exit 1; fi
+test ! -e "/usr/share/$LEGACY_APP/upgrade-fixture"
 "$APP" --help >/dev/null
+"$LEGACY_APP" --help >/dev/null
 dnf -y remove "$PACKAGE"
 for SENTINEL in /root/.dev/reviews/package-test /root/.config/Review/User/settings.json /root/.claude/settings.json; do
   test "$(cat "$SENTINEL")" = 'keep me'

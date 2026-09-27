@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { execFileSync } from 'node:child_process';
-import { chmod, cp, mkdir, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, open, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { additionalDeps, recommendedDeps } from './rpm/dep-lists.ts';
 
@@ -16,9 +16,11 @@ export interface ReviewPackageProduct {
 }
 
 export interface ReviewPackage {
-	/** RPM package name: dev-fast-review or dev-fast-review-preview. */
+	/** System package name: whiteboard or whiteboard-preview. */
 	name: string;
-	/** Installed application directory and command name: review or review-preview. */
+	legacyName: string;
+	legacyApp: string;
+	/** Installed application directory and command name: whiteboard or whiteboard-preview. */
 	app: string;
 	appName: string;
 	appId: string;
@@ -42,10 +44,12 @@ export function reviewPackage(product: ReviewPackageProduct, version: string, re
 		throw new Error('Linux packages need a lowercase applicationName');
 	}
 	const rpmVersion = prerelease ? `${release}~${prerelease}` : release;
-	const name = `dev-fast-${product.applicationName}`;
+	const name = `whiteboard${prerelease ? '-preview' : ''}`;
 	return {
 		name,
-		app: product.applicationName,
+		legacyName: `dev-fast-review${prerelease ? '-preview' : ''}`,
+		legacyApp: `review${prerelease ? '-preview' : ''}`,
+		app: name,
 		appName: product.nameShort,
 		appId: product.darwinBundleIdentifier,
 		rpmVersion,
@@ -61,20 +65,23 @@ async function loadReviewPackage(appRoot: string) {
 	if (product.reviewVersion !== metadata.version || !/^[a-f0-9]{40}$/.test(product.commit ?? '')) {
 		throw new Error('Linux payload must carry the stamped Review version and source commit');
 	}
-	return { pkg: reviewPackage(product, metadata.version), source, urlProtocol: product.urlProtocol };
+	return { pkg: reviewPackage(product, metadata.version), source, product };
 }
 
 /** Stage the same desktop, CLI and bundled runtime for both system packages. */
 async function stageReviewPackage(codeRoot: string, destination: string) {
 	const appRoot = resolve(codeRoot, '..');
 	const monorepoRoot = resolve(appRoot, '../..');
-	const { pkg, source, urlProtocol } = await loadReviewPackage(appRoot);
-	const { name, app, appName, appId } = pkg;
+	const { pkg, source, product } = await loadReviewPackage(appRoot);
+	const { app, appName, appId, legacyApp, legacyName: name } = pkg;
+	const { urlProtocol } = product;
 	const share = `/usr/share/${app}`;
 
 	await rm(destination, { recursive: true, force: true });
 	await mkdir(destination, { recursive: true });
 	await cp(source, join(destination, share), { recursive: true, verbatimSymlinks: true });
+	await rename(join(destination, share, product.applicationName), join(destination, share, app));
+	await writeFile(join(destination, share, 'resources/app/product.json'), JSON.stringify({ ...product, applicationName: app }, null, '\t'));
 	// The Code OSS bin/<app> command opens editors. The public command is the
 	// Review agent CLI; keep the app executable behind a distinct desktop launcher.
 	await rm(join(destination, share, 'bin'), { recursive: true, force: true });
@@ -93,6 +100,15 @@ exec ${share}/${app} ${share}/resources/app/review-runtime/dist/cli.js "$@"
 unset ELECTRON_RUN_AS_NODE VSCODE_DEV VSCODE_CLI
 exec ${share}/${app} "$@"
 `, 0o755);
+	// Keep old commands and persisted CLI shim fallback paths working after upgrade.
+	const link = async (target: string, path: string) => {
+		await mkdir(dirname(join(destination, path)), { recursive: true });
+		await symlink(target, join(destination, path));
+	};
+	await link(app, `usr/bin/${legacyApp}`);
+	await link(`${app}-desktop`, `usr/bin/${legacyApp}-desktop`);
+	await link(`${share}/${app}`, `usr/share/${legacyApp}/${legacyApp}`);
+	await link(`${share}/resources/app/review-runtime/dist/cli.js`, `usr/share/${legacyApp}/resources/app/review-runtime/dist/cli.js`);
 	await write(`usr/share/applications/${name}.desktop`, `[Desktop Entry]
 Name=${appName}
 Comment=Guided code reviews with your coding agents
@@ -126,7 +142,7 @@ MimeType=x-scheme-handler/${urlProtocol};
 `);
 	const icon = join(destination, `usr/share/icons/hicolor/512x512/apps/${app}.png`);
 	await mkdir(dirname(icon), { recursive: true });
-	await cp(join(monorepoRoot, `packages/review/app/icons/${app}-square-512.png`), icon);
+	await cp(join(monorepoRoot, `packages/review/app/icons/${legacyApp}-square-512.png`), icon);
 	// Electron's packaged sandbox helper must be root-owned with setuid in the
 	// system package. Package creation sets ownership; no runtime chmod is needed.
 	await chmod(join(destination, share, 'chrome-sandbox'), 0o4755);
@@ -138,7 +154,7 @@ export async function prepareReviewRpmPackage(codeRoot: string, arch: string): P
 	if (arch !== 'x86_64') { throw new Error('Review Linux packages currently support x86_64 only'); }
 	const rpmRoot = join(codeRoot, '.build/linux/rpm/x86_64/rpmbuild');
 	const { pkg, share } = await stageReviewPackage(codeRoot, join(rpmRoot, 'BUILD'));
-	const { name, app, appName } = pkg;
+	const { name, app, appName, legacyName, legacyApp } = pkg;
 	const dependencies = [...additionalDeps.filter(dep => !dep.startsWith('rpmlib(')), 'git', 'libsecret-1.so.0()(64bit)', 'libkrb5.so.3()(64bit)', 'libnotify.so.4()(64bit)', '/bin/sh'];
 	await mkdir(join(rpmRoot, 'SPECS'), { recursive: true });
 	await writeFile(join(rpmRoot, 'SPECS/review.spec'), String.raw`Name: ${name}
@@ -151,6 +167,8 @@ Vendor: dev.fast
 Packager: dev.fast <support@dev.fast>
 BuildArch: x86_64
 Requires: ${dependencies.join(', ')}
+Provides: ${pkg.legacyName} = ${pkg.rpmVersion}-${pkg.revision}
+Obsoletes: ${pkg.legacyName} < ${pkg.rpmVersion}-${pkg.revision}
 Recommends: ${recommendedDeps.join(', ')}
 
 # Keep ELF dependency discovery, but do not require system Node for scripts
@@ -183,11 +201,14 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then gtk-update-icon-cache 
 %defattr(-,root,root)
 /usr/bin/${app}
 /usr/bin/${app}-desktop
+/usr/bin/${legacyApp}
+/usr/bin/${legacyApp}-desktop
+/usr/share/${legacyApp}/
 ${share}/
 %attr(4755,root,root) ${share}/chrome-sandbox
-/usr/share/applications/${name}.desktop
-/usr/share/applications/${name}-url-handler.desktop
-/usr/share/metainfo/${name}.metainfo.xml
+/usr/share/applications/${legacyName}.desktop
+/usr/share/applications/${legacyName}-url-handler.desktop
+/usr/share/metainfo/${legacyName}.metainfo.xml
 /usr/share/icons/hicolor/512x512/apps/${app}.png
 `);
 }
@@ -251,24 +272,27 @@ Installed-Size: ${installedSize}
 Maintainer: dev.fast <support@dev.fast>
 Homepage: https://dev.fast/
 Depends: ${dependencies}
+Provides: ${pkg.legacyName} (= ${pkg.rpmVersion}-${pkg.revision})
+Conflicts: ${pkg.legacyName}
+Replaces: ${pkg.legacyName}
 Description: ${pkg.appName} - guided code reviews with your coding agents
  Includes the desktop app, agent CLI and bundled runtime.
 `);
 	// Ubuntu restricts unprivileged user namespaces. Grant them only to our
 	// installed executable so Chromium can keep its sandbox enabled.
-	await write(`etc/apparmor.d/${pkg.name}`, `abi <abi/4.0>,
+	await write(`etc/apparmor.d/${pkg.legacyName}`, `abi <abi/4.0>,
 include <tunables/global>
-profile ${pkg.name} ${share}/${pkg.app} flags=(unconfined) {
+profile ${pkg.legacyName} ${share}/${pkg.app} flags=(unconfined) {
   userns,
-  include if exists <local/${pkg.name}>
+  include if exists <local/${pkg.legacyName}>
 }
 `);
-	await write('DEBIAN/conffiles', `/etc/apparmor.d/${pkg.name}\n`);
+	await write('DEBIAN/conffiles', `/etc/apparmor.d/${pkg.legacyName}\n`);
 	await write('DEBIAN/postinst', `#!/bin/sh
 set -e
 if [ "$1" = configure ]; then
   if command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then
-    apparmor_parser -r /etc/apparmor.d/${pkg.name}
+    apparmor_parser -r /etc/apparmor.d/${pkg.legacyName}
   fi
   if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database -q; fi
   if command -v gtk-update-icon-cache >/dev/null 2>&1; then gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor; fi
@@ -277,7 +301,7 @@ fi
 	await write('DEBIAN/prerm', `#!/bin/sh
 set -e
 if [ "$1" = remove ] && command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then
-  apparmor_parser -R /etc/apparmor.d/${pkg.name}
+  apparmor_parser -R /etc/apparmor.d/${pkg.legacyName}
 fi
 `, 0o755);
 	await write('DEBIAN/postrm', `#!/bin/sh

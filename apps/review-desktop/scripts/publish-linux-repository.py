@@ -75,6 +75,14 @@ def publish(directory, bucket, base_url, channel=None):
             or current.get("version") != identity[0] or current.get("commit") != identity[1]
             or not re.fullmatch(r"[A-F0-9]{40}", current.get("keyFingerprint", ""))):
         raise ValueError("Invalid repository pointer")
+    package_name = current.get("packageName")
+    if package_name:
+        expected = "whiteboard" + ("-preview" if channel == "preview" else "")
+        if package_name != expected:
+            raise ValueError("Invalid Linux package name")
+        supported = fetch_json(base_url + "/repos/whiteboard/health")
+        if package_name not in supported.get("packageNames", []):
+            raise RuntimeError("Deploy the Whiteboard repository Worker before publishing")
     if current.get("deb") is True:
         if fetch_json(base_url + "/repos/apt/health") != {"schemaVersion": 1, "format": "deb"}:
             raise RuntimeError("Deploy the Ubuntu repository Worker before publishing")
