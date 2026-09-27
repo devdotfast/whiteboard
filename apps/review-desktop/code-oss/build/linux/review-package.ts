@@ -16,11 +16,9 @@ export interface ReviewPackageProduct {
 }
 
 export interface ReviewPackage {
-	/** System package name: whiteboard or whiteboard-preview. */
 	name: string;
 	legacyName: string;
 	legacyApp: string;
-	/** Installed application directory and command name: whiteboard or whiteboard-preview. */
 	app: string;
 	appName: string;
 	appId: string;
@@ -100,7 +98,7 @@ exec ${share}/${app} ${share}/resources/app/review-runtime/dist/cli.js "$@"
 unset ELECTRON_RUN_AS_NODE VSCODE_DEV VSCODE_CLI
 exec ${share}/${app} "$@"
 `, 0o755);
-	// Keep old commands and persisted CLI shim fallback paths working after upgrade.
+	// Preserve existing CLI shims and scripts.
 	const link = async (target: string, path: string) => {
 		await mkdir(dirname(join(destination, path)), { recursive: true });
 		await symlink(target, join(destination, path));

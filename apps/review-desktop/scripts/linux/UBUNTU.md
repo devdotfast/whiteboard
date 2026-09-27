@@ -55,27 +55,6 @@ keys in `/etc/apt/keyrings`. Package installation does not add repositories,
 change editor alternatives, or edit user profiles. The app-specific AppArmor
 profile permits Chromium user namespaces without changing global policy.
 
-## Whiteboard package rename
-
-Deploy the companion download Worker before publishing renamed packages. The
-publisher checks `/repos/whiteboard/health` before uploading. The channel pointer
-includes `packageName`; old pointers continue to show Review package commands.
-Repository URLs, signing key paths, and AppArmor profile names stay unchanged.
-AppArmor rules follow the new executable paths. Old RPM and DEB download URLs
-remain available.
-
-The first renamed release must increase the version or package revision. The
-publisher rejects replacing an existing release with changed package metadata.
-
-Existing Ubuntu users switch with `sudo apt-get update` followed by
-`sudo apt-get install whiteboard` (or `whiteboard-preview`).
-The new package replaces the matching Review package. APT does not automatically
-switch package names during a normal upgrade. RPM packages declare the old name
-as provided and obsolete older versions, allowing DNF to replace them.
-
-Packages install `whiteboard` / `whiteboard-preview` and their `-desktop`
-launchers under `/usr/bin`, with payloads in `/usr/share/whiteboard` and
-`/usr/share/whiteboard-preview`. Compatibility commands retain the old names.
-The old executable and CLI entry paths forward to the new payload for existing
-user-installed shims. Saved-data locations, desktop IDs, and link protocols stay
-unchanged. Restart the desktop after upgrading.
+Existing Review installs switch with `sudo apt-get update` then
+`sudo apt-get install whiteboard` (or `whiteboard-preview`). APT does not rename
+packages automatically. The first renamed release needs a newer version or revision.
