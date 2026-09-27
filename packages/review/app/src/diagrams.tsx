@@ -37,7 +37,11 @@ import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
 import { appMarker, documentMarker } from "./markers.stylex";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
-import type { GuidedTour, PeekAnchor } from "./review-panel-model";
+import type {
+  GuidedTour,
+  PeekAnchor,
+  ReviewPeekContent,
+} from "./review-panel-model";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
@@ -97,7 +101,10 @@ export interface SequenceMessage {
   to: SequenceParticipant;
   label: string;
   style: Step["style"];
+  /** The first chunk, where a single selection is needed. */
   source?: DiffSelection;
+  /** Every chunk the step shows, in authored order. */
+  sources?: DiffSelection[];
   code?: Step["code"];
   explanation?: string;
 }
@@ -127,8 +134,16 @@ export function sequenceView(block: SequenceDiagramProps): SequenceView {
       style: step.style,
     };
 
-    if (step.source)
-      message.source = anchorSelection(step.source, step.pins ?? block.pins);
+    const anchors = step.sources ?? (step.source ? [step.source] : []);
+
+    const sources = anchors.map((anchor) =>
+      anchorSelection(anchor, step.pins ?? block.pins),
+    );
+
+    if (sources.length) {
+      message.source = sources[0];
+      message.sources = sources;
+    }
 
     if (step.code) message.code = step.code;
 
@@ -167,13 +182,20 @@ export function createSequenceTourEntry(sequence: SequenceView): GuidedTour {
       anchor: panelAnchor(message),
       label: message.label,
       detail: `${message.from.label} -> ${message.to.label}`,
-      content: message.code
-        ? { kind: "inline-code" as const, ...message.code }
-        : message.source
-          ? { kind: "source" as const, source: message.source }
-          : { kind: "explanation" as const, text: message.explanation },
+      content: sequenceStopContent(message),
     })),
   };
+}
+
+function sequenceStopContent(message: SequenceMessage): ReviewPeekContent {
+  if (message.code) return { kind: "inline-code", ...message.code };
+
+  if (message.sources && message.sources.length > 1)
+    return { kind: "sources", sources: message.sources };
+
+  if (message.source) return { kind: "source", source: message.source };
+
+  return { kind: "explanation", text: message.explanation };
 }
 
 function participantsForMessages(

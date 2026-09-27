@@ -81,6 +81,8 @@ export function documentText(
 
         if (element.source) detail(element.source);
 
+        if (element.sources) detail(element.sources.join(", "));
+
         if (detailed && element.explanation) detail(element.explanation);
 
         if (detailed && element.code) code(depth + 1, element.code);

@@ -12,6 +12,8 @@ import {
   text,
 } from "./definition.js";
 
+const maxStepSources = 10;
+
 export const stepSchema = z
   .strictObject({
     ...identity,
@@ -21,15 +23,24 @@ export const stepSchema = z
     label,
     style: z.enum(["call", "return", "async"]).default("call"),
     source: anchorSchema.optional(),
+    sources: z
+      .array(anchorSchema)
+      .min(1)
+      .max(maxStepSources)
+      .optional()
+      .describe(
+        "Several code chunks for one step, shown together in its tour stop. Chunks in the same file share one card.",
+      ),
     pins: elementPins,
     explanation: label.optional(),
     code: z.strictObject(codeFields).optional(),
   })
   .refine(
     (s) =>
-      [s.source, s.explanation, s.code].filter((v) => v !== undefined)
-        .length === 1,
-    "A step needs exactly one of source, explanation, or code.",
+      [s.source, s.sources, s.explanation, s.code].filter(
+        (v) => v !== undefined,
+      ).length === 1,
+    "A step needs exactly one of source, sources, explanation, or code.",
   );
 
 export type Step = z.infer<typeof stepSchema>;
