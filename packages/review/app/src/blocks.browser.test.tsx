@@ -3,7 +3,7 @@ import {
   type ReviewCanvasTutorialBridge,
   parseJsonText,
 } from "@dev.fast/review-protocol";
-import { act } from "react";
+import { type ReactNode, act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -27,7 +27,11 @@ import { defineSoftwareMap } from "../../src/software-map-model";
 import tutorialDocument from "../../tutorial/document.json";
 import tutorialModel from "../../tutorial/software-map.json";
 import tutorialTrace from "../../tutorial/trace.json";
-import { BlockErrorBoundary, blockComponents } from "./blocks";
+import {
+  BlockErrorBoundary,
+  type StoredBlock,
+  blockComponents,
+} from "./blocks";
 import { mountReviewCanvas as mount } from "./desktop-entry";
 import { fixtureReviewBridge, settled } from "./fixture-review-bridge";
 
@@ -529,13 +533,12 @@ describe("block components", () => {
 });
 
 describe("BlockErrorBoundary", () => {
+  const Broken = () => {
+    throw new Error("bad props reached render");
+  };
+
   it("contains one throwing block, reports it, and leaves its siblings rendered", async () => {
     const onError = vi.fn<(error: Error) => void>();
-
-    const Broken = () => {
-      throw new Error("bad props reached render");
-    };
-
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -544,10 +547,22 @@ describe("BlockErrorBoundary", () => {
     await act(async () => {
       root.render(
         <>
-          <BlockErrorBoundary type="markdown" onError={onError}>
+          <BlockErrorBoundary
+            block={{ id: "a", type: "markdown", markdown: "" }}
+            onError={onError}
+          >
             <p>Healthy sibling</p>
           </BlockErrorBoundary>
-          <BlockErrorBoundary type="database_lens" onError={onError}>
+          <BlockErrorBoundary
+            block={{
+              id: "b",
+              type: "flow_diagram",
+              title: "",
+              nodes: [],
+              edges: [],
+            }}
+            onError={onError}
+          >
             <Broken />
           </BlockErrorBoundary>
         </>,
@@ -556,12 +571,38 @@ describe("BlockErrorBoundary", () => {
 
     expect(text(container)).toContain("Healthy sibling");
     expect(
-      container.querySelector(
-        "[role='alert'][data-block-error='database_lens']",
-      )?.textContent,
+      container.querySelector("[role='alert'][data-block-error='flow_diagram']")
+        ?.textContent,
     ).toContain("bad props reached render");
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0]![0].message).toBe("bad props reached render");
+    await act(async () => root.unmount());
+    vi.restoreAllMocks();
+  });
+
+  it("renders the replacement once the failing block is edited", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const render = (block: StoredBlock, children: ReactNode) =>
+      act(async () => {
+        root.render(
+          <BlockErrorBoundary block={block} onError={() => {}}>
+            {children}
+          </BlockErrorBoundary>,
+        );
+      });
+
+    const broken: StoredBlock = { id: "a", type: "markdown", markdown: "" };
+    await render(broken, <Broken />);
+    await render(broken, <p>Unrelated rerender</p>);
+    expect(container.querySelector("[data-block-error]")).toBeTruthy();
+
+    await render({ ...broken, markdown: "fixed" }, <p>Fixed block</p>);
+    expect(container.querySelector("[data-block-error]")).toBeNull();
+    expect(text(container)).toContain("Fixed block");
     await act(async () => root.unmount());
     vi.restoreAllMocks();
   });

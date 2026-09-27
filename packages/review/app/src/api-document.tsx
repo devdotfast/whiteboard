@@ -406,7 +406,7 @@ export const DocumentNode = memo(function DocumentNode({
       }
     >
       <BlockErrorBoundary
-        type={block.type}
+        block={block}
         onError={(error) => reportReviewDocumentRenderError(session, error)}
       >
         {stale ? (
