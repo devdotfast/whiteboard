@@ -1,13 +1,13 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { createInterface } from "node:readline";
 
 import {
   STRUCTURAL_DIFF_WIRE_VERSION,
   type StructuralDiffEvent,
   type StructuralProblem,
   decodeStructuralDiffEvent,
+  ndjsonRecords,
 } from "@dev.fast/review-protocol";
 import { findReviewPackageRoot } from "@review/package-paths";
 
@@ -115,17 +115,11 @@ export async function* structuralDiff(
   let aborted: StructuralProblem | undefined;
   let failed = 0;
   let annotationFailed = false;
-  const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
 
   try {
-    for await (const line of lines) {
+    for await (const line of ndjsonRecords(child.stdout, RECORD_LIMIT)) {
       // Large comparisons may take minutes while continuing to make progress.
       idle.refresh();
-
-      // Bound individual records, not the entire streamed comparison: a
-      // directory move can legitimately contain thousands of small files.
-      if (Buffer.byteLength(line) > 64 * 1024 * 1024)
-        throw new Error("Structural diff record exceeded 64 MiB.");
 
       if (!line.trim()) continue;
       const event = decodeStructuralDiffEvent(line);
@@ -172,9 +166,15 @@ export async function* structuralDiff(
       throw exitError(code);
   } finally {
     clearTimeout(idle);
-    lines.close();
 
     if (child.exitCode === null) child.kill();
     await exited.catch(() => {});
   }
 }
+
+// Bound individual records, not the entire streamed comparison: a
+// directory move can legitimately contain thousands of small files.
+const RECORD_LIMIT = {
+  bytes: 64 * 1024 * 1024,
+  message: "Structural diff record exceeded 64 MiB.",
+};

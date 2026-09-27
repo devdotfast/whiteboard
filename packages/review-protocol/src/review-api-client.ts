@@ -1,5 +1,7 @@
 import type { JsonValue } from "@dev.fast/json";
 
+import { NdjsonFramer } from "./ndjson.js";
+
 /** List metadata for the authenticated local catalog; document contents stay in snapshots. */
 export interface ReviewApiSummary {
   reviewId: string;
@@ -132,9 +134,7 @@ export class ReviewApiClient {
       { signal },
     );
 
-    const reader = response
-      .body!.pipeThrough(new TextDecoderStream())
-      .getReader();
+    const reader = response.body!.getReader();
 
     const cancel = () => {
       void reader.cancel().catch(() => {});
@@ -143,21 +143,17 @@ export class ReviewApiClient {
     signal.addEventListener("abort", cancel, { once: true });
 
     if (signal.aborted) cancel();
-    let pending = "";
+    const framer = new NdjsonFramer();
 
     try {
       while (true) {
         const { value, done } = await reader.read();
 
         if (done) return;
-        pending += value;
-        let end: number;
 
-        while ((end = pending.indexOf("\n")) !== -1) {
+        for (const record of framer.push(value))
           // SAFETY: the authenticated host serializes the snapshot type requested by this caller.
-          yield JSON.parse(pending.slice(0, end)) as T;
-          pending = pending.slice(end + 1);
-        }
+          yield JSON.parse(record) as T;
       }
     } finally {
       signal.removeEventListener("abort", cancel);
