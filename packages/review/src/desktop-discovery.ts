@@ -328,13 +328,18 @@ export function reviewInstanceUnavailable(
     : " No Whiteboard is running.";
 
   if (selection.source === "fallback" && running.length > 1)
-    return new Error(
+    return new ReviewInstanceUnavailableError(
       `Several Whiteboard instances are running and none is selected.${others} Choose one with \`whiteboard instances use <key>\`, or \`export ${REVIEW_INSTANCE_ENV}=<key>\` for this shell.`,
     );
 
-  return new Error(
+  return new ReviewInstanceUnavailableError(
     `Whiteboard \`${selection.key}\` is not running. ${reviewInstanceStartHint(selection)}, or pick another instance with \`whiteboard instances\`.${others}`,
   );
+}
+
+/** A command could not reach the selected Desktop instance. */
+export class ReviewInstanceUnavailableError extends Error {
+  readonly name = "ReviewInstanceUnavailableError";
 }
 
 export function reviewInstanceStartHint(

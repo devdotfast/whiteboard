@@ -1,4 +1,5 @@
 import {
+  ReviewInstanceUnavailableError,
   healthyReviewInstance,
   reviewInstanceUnavailable,
   selectReviewInstance,
@@ -74,10 +75,15 @@ export async function connectReviewInstance(
   const selection = await selectReviewInstance({ env });
   const discovery = healthyReviewInstance(selection);
 
-  if (!discovery)
-    throw new Error(
-      `${reviewInstanceUnavailable(selection).message} For headless authoring, select a running server with --state-dir or DEV_REVIEW_SERVER_DIR.`,
-    );
+  if (!discovery) {
+    const unavailable = reviewInstanceUnavailable(selection);
+    const message = `${unavailable.message} For headless authoring, select a running server with --state-dir or DEV_REVIEW_SERVER_DIR.`;
+
+    if (unavailable instanceof ReviewInstanceUnavailableError)
+      throw new ReviewInstanceUnavailableError(message);
+
+    throw unavailable;
+  }
 
   return {
     client: new ReviewApiClient(

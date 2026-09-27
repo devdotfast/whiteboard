@@ -30,6 +30,8 @@ interface AgentCliInput {
   stderr: Writable;
   /** Awaited on the api path: the process exits right after the call. */
   onToolCall?: (call: ReviewToolCall) => Promise<void> | void;
+  /** Receives the failure so the parent CLI can classify its terminal event. */
+  onFailure?: (error: Error) => void;
 }
 
 export const reviewAgentCliHelp =
@@ -169,9 +171,10 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
 
     return 0;
   } catch (error) {
-    input.stderr.write(
-      (error instanceof Error ? error.message : String(error)) + "\n",
-    );
+    const failure = error instanceof Error ? error : new Error(String(error));
+
+    input.onFailure?.(failure);
+    input.stderr.write(failure.message + "\n");
 
     return 1;
   }

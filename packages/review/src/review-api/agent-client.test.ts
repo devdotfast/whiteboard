@@ -368,6 +368,36 @@ it("reports each api tool call with its outcome", async () => {
   }
 });
 
+it("returns API failures to the parent CLI for terminal-event classification", async () => {
+  const connection = vi
+    .spyOn(agentClient, "connectReviewApi")
+    .mockRejectedValue(new Error("controlled connection failure"));
+
+  const discard = new Writable({
+    write(_chunk, _encoding, done) {
+      done();
+    },
+  });
+
+  const onFailure = vi.fn<(error: Error) => void>();
+
+  try {
+    expect(
+      await runReviewAgentCli({
+        argv: ["api", "tools"],
+        stdout: discard,
+        stderr: discard,
+        onFailure,
+      }),
+    ).toBe(1);
+    expect(onFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "controlled connection failure" }),
+    );
+  } finally {
+    connection.mockRestore();
+  }
+});
+
 it("shows CLI help without requiring Desktop or touching review storage", async () => {
   let output = "";
 
