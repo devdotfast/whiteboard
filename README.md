@@ -7,10 +7,7 @@
   <h1>Whiteboard</h1>
   <p><strong>an open-source canvas for thoughtful software design</strong></p>
   <p>
-    <a href="https://install.dev.fast">Download for macOS</a> ·
-    <a href="https://install.dev.fast/windows">Windows</a> ·
-    <a href="https://install.dev.fast/linux/ubuntu">Ubuntu</a> ·
-    <a href="https://install.dev.fast/linux">Fedora</a> ·
+    <a href="https://dev.fast/install">Download for macOS, Windows, and Linux</a> ·
     <a href="https://dev.fast">Website</a> ·
     <a href="https://discord.gg/wYvd2cpMQg">Discord</a>
   </p>
@@ -32,7 +29,7 @@ Here’s a 1 min demo video explaining more: https://www.youtube.com/watch?v=ChP
 
 ## Quickstart
 
-1. [Download Whiteboard](https://install.dev.fast) and open the app.
+1. [Download Whiteboard](https://dev.fast/install) and open the app.
 2. Connect Claude Code, Codex, or another coding agent from the welcome screen.
 3. Ask your agent to review your current branch against up-to-date main and
    open the result in Whiteboard.
