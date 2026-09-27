@@ -31,6 +31,7 @@ import { IProductService } from '../../../platform/product/common/productService
 import { IStorageService, StorageScope, StorageTarget } from '../../../platform/storage/common/storage.js';
 import {
 	darwinFailedUpdateNoticeId,
+	isDarwinAuthorizationError,
 	isDarwinReadOnlyVolumeError,
 	DARWIN_FAILED_UPDATE_STORAGE_KEY,
 	parseDarwinFailedUpdate,
@@ -66,6 +67,7 @@ class ReviewUpdateNotifications extends Disposable {
 	/** Which commit `readyHandle` is about. */
 	private readyCommit: string | undefined;
 	private announcedReadOnlyVolume = false;
+	private announcedAuthorizationFailure = false;
 
 	constructor(
 		@IUpdateService private readonly updateService: IUpdateService,
@@ -166,6 +168,17 @@ class ReviewUpdateNotifications extends Disposable {
 	 * would add a download-progress story for a state that clears on its own.
 	 */
 	private onStateChange(state: State): void {
+		if (isMacintosh && state.type === StateType.Idle && isDarwinAuthorizationError(state.error)) {
+			if (!this.announcedAuthorizationFailure) {
+				this.announcedAuthorizationFailure = true;
+				this.notificationService.notify({
+					severity: Severity.Warning,
+					sticky: true,
+					message: localize('review.update.authorizationFailed', "Whiteboard couldn't install an update because macOS didn't get administrator approval. Choose Check for Updates and enter an administrator password when asked."),
+				});
+			}
+			return;
+		}
 		if (isMacintosh && state.type === StateType.Idle && isDarwinReadOnlyVolumeError(state.error)) {
 			if (!this.announcedReadOnlyVolume) {
 				this.announcedReadOnlyVolume = true;

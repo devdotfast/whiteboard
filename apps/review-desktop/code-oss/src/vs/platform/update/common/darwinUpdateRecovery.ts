@@ -131,3 +131,8 @@ function parseObject(raw: string | undefined): Record<string, unknown> | undefin
 export function isDarwinReadOnlyVolumeError(error: string | undefined): boolean {
 	return error?.startsWith('Cannot update while running on a read-only volume.') ?? false;
 }
+
+/** macOS Authorization Services denied or cancelled the install authorization request. */
+export function isDarwinAuthorizationError(error: string | undefined): boolean {
+	return error !== undefined && /(?:OSStatus(?:\s+error)?\s+-6000[56]|NSOSStatusErrorDomain\s+Code\s*=\s*-6000[56])/i.test(error);
+}
