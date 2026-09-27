@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
-import { type LocalVcsKind, parseGitRemoteSlug } from "@dev.fast/local-vcs";
+import { type LocalVcsKind, parseGitRemote } from "@dev.fast/local-vcs";
 import { errorMessage } from "@dev.fast/trace-core";
 import { z } from "zod";
 
@@ -21,6 +21,7 @@ export interface PullRequestDeps {
 
 /** What GitHub says about a PR; the commits are fetched separately. */
 export interface PullRequestRecord {
+  host: string;
   slug: string;
   number: number;
   title: string;
@@ -70,11 +71,12 @@ export const defaultPullRequestDeps: PullRequestDeps = {
   fetch: (input, init) => fetch(input, init),
 };
 
-/** owner/repo and number from a canonical PR URL (validated by the command schema). */
+/** Host, owner/repo and number from a canonical PR URL (validated by the command schema). */
 export function pullRequestAddress(url: string) {
-  const [, owner, repo, , number] = new URL(url).pathname.split("/");
+  const { hostname, pathname } = new URL(url);
+  const [, owner, repo, , number] = pathname.split("/");
 
-  return { slug: `${owner}/${repo}`, number: Number(number) };
+  return { host: hostname, slug: `${owner}/${repo}`, number: Number(number) };
 }
 
 const metadataSchema = z.object({
@@ -84,12 +86,13 @@ const metadataSchema = z.object({
   baseRefOid: z.string().optional(),
 });
 
-/** gh first (it carries the user's auth), then GitHub's public REST API. */
+/** gh first (it carries the user's auth), then, for github.com only, GitHub's
+ * public REST API: Enterprise hosts require gh. */
 export async function readPullRequest(
   url: string,
   deps: PullRequestDeps,
 ): Promise<PullRequestRecord> {
-  const { slug, number } = pullRequestAddress(url);
+  const { host, slug, number } = pullRequestAddress(url);
   let ghFailure: string;
 
   try {
@@ -100,17 +103,23 @@ export async function readPullRequest(
         "view",
         String(number),
         "--repo",
-        slug,
+        `${host}/${slug}`,
         "--json",
         "number,title,baseRefName,baseRefOid",
       ],
       { timeoutMs: GH_TIMEOUT_MS },
     );
 
-    return { slug, ...metadataSchema.parse(JSON.parse(stdout)) };
+    return { host, slug, ...metadataSchema.parse(JSON.parse(stdout)) };
   } catch (error) {
     ghFailure = firstLine(errorMessage(error));
   }
+
+  if (host !== "github.com")
+    throw new ReviewInputError(
+      `Could not read ${url}: gh failed (${ghFailure}). Run \`gh auth login --hostname ${host}\` with an account that can read the repository, then retry.`,
+      409,
+    );
 
   let response: Response;
 
@@ -168,6 +177,7 @@ export async function readPullRequest(
     throw unreadable(url, ghFailure, "the GitHub API response was malformed");
 
   return {
+    host,
     slug,
     number: parsed.data.number,
     title: parsed.data.title,
@@ -176,12 +186,12 @@ export async function readPullRequest(
   };
 }
 
-/** Remotes whose configured URL names a github.com repository, as owner/repo.
- * The configured URL, not the insteadOf rewrite: a mirror still names its repo. */
+/** Remotes by the host and owner/repo their configured URL names. The
+ * configured URL, not the insteadOf rewrite: a mirror still names its repo. */
 export async function githubRemotes(
   gitDir: string,
   deps: PullRequestDeps,
-): Promise<{ name: string; slug: string }[]> {
+): Promise<{ name: string; host: string; slug: string }[]> {
   const stdout = await deps
     .run(
       "git",
@@ -198,15 +208,23 @@ export async function githubRemotes(
 
   return stdout.split("\n").flatMap((line) => {
     const match = /^remote\.(.+)\.url\s+(\S+)/.exec(line.trim());
-    const slug = match && parseGitRemoteSlug(match[2]!);
+    const remote = match && parseGitRemote(match[2]!);
 
-    return match && slug ? [{ name: match[1]!, slug }] : [];
+    return match && remote
+      ? [{ name: match[1]!, host: remote.host, slug: remote.slug }]
+      : [];
   });
 }
 
 /** Refs Review owns for one PR; the user's branches and bookmarks never move. */
-export function pullRequestRefs(pr: { slug: string; number: number }) {
-  const prefix = `refs/review/github/${pr.slug.toLowerCase()}/pull/${pr.number}`;
+export function pullRequestRefs(pr: {
+  host: string;
+  slug: string;
+  number: number;
+}) {
+  // github.com keeps the host-less namespace existing checkouts already hold.
+  const repository = `${pr.host === "github.com" ? "" : `${pr.host}/`}${pr.slug}`;
+  const prefix = `refs/review/github/${repository.toLowerCase()}/pull/${pr.number}`;
 
   return {
     head: `${prefix}/head`,

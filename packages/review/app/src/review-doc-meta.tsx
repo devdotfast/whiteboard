@@ -89,7 +89,7 @@ export function ReviewDocumentMetaLine({
       : null;
 
   const repository = meta.pullRequestUrl?.match(
-    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\//,
+    /^https:\/\/[^/]+\/([^/]+)\/([^/]+)\/pull\//,
   );
 
   const branch = review.headBranch?.trim() ? review.headBranch : null;

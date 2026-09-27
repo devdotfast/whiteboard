@@ -89,7 +89,10 @@ describe("resolveReviewStackLayers", () => {
         relation: "later",
       },
     ]);
-    expect(run).toHaveBeenCalledWith("repos/o/r/stacks?pull_request=20");
+    expect(run).toHaveBeenCalledWith(
+      "github.com",
+      "repos/o/r/stacks?pull_request=20",
+    );
   });
 
   it("fails closed when stack discovery is unavailable or malformed", async () => {
@@ -111,7 +114,7 @@ describe("resolveReviewStackLayers", () => {
 
     for (const pullRequestUrl of [
       undefined,
-      "https://example.com/o/r/pull/20",
+      "https://github.com/o/r/issues/20",
     ]) {
       expect(
         await resolveReviewStackLayers({ pullRequestUrl }, [], run),
@@ -161,6 +164,43 @@ describe("resolveReviewStackLayers", () => {
         reviewTitle: null,
         relation: "current",
       },
+    ]);
+  });
+
+  it("asks a GitHub Enterprise PR's own host and keys its layers there", async () => {
+    const run = vi.fn<RunGitHubApi>(async () =>
+      JSON.stringify([
+        {
+          pull_requests: [
+            { number: 10, head: { ref: "a" } },
+            { number: 20, head: { ref: "b" } },
+          ],
+        },
+      ]),
+    );
+
+    const layers = await resolveReviewStackLayers(
+      { pullRequestUrl: "https://ghe.example.com/o/r/pull/20" },
+      [
+        publishedReview({
+          uuid: "github-com",
+          title: "Same repository name on github.com",
+          repoKey: "https://github.com/o/r",
+          pullRequestNumber: 10,
+        }),
+      ],
+      run,
+    );
+
+    expect(run).toHaveBeenCalledWith(
+      "ghe.example.com",
+      "repos/o/r/stacks?pull_request=20",
+    );
+    expect(
+      layers.map((layer) => [layer.pullRequestUrl, layer.reviewUuid]),
+    ).toEqual([
+      ["https://ghe.example.com/o/r/pull/10", null],
+      ["https://ghe.example.com/o/r/pull/20", null],
     ]);
   });
 });

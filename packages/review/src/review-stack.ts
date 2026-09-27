@@ -29,7 +29,7 @@ export interface ReviewStackCandidate {
   presentedDocumentRevision: string | null;
 }
 
-export type RunGitHubApi = (endpoint: string) => Promise<string>;
+export type RunGitHubApi = (host: string, endpoint: string) => Promise<string>;
 
 export async function resolveReviewStackLayers(
   subject: ReviewStackSubject,
@@ -37,19 +37,20 @@ export async function resolveReviewStackLayers(
   runGitHubApi: RunGitHubApi = defaultRunGitHubApi,
 ): Promise<ReviewStackLayer[]> {
   const binding = subject.pullRequestUrl?.match(
-    /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/([1-9]\d*)$/,
+    /^https:\/\/([a-z0-9.-]+)\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/([1-9]\d*)$/,
   );
 
   if (!binding) return [];
-  const [, owner, repository, number] = binding;
+  const [, host, owner, repository, number] = binding;
   const pullRequestNumber = Number(number);
-  const repoKey = `https://github.com/${owner}/${repository}`;
+  const repoKey = `https://${host}/${owner}/${repository}`;
   let stacks: z.infer<typeof GitHubStacksSchema>;
 
   try {
     stacks = GitHubStacksSchema.parse(
       JSON.parse(
         await runGitHubApi(
+          host!,
           `repos/${owner}/${repository}/stacks?pull_request=${number}`,
         ),
       ),
@@ -94,10 +95,13 @@ export async function resolveReviewStackLayers(
   });
 }
 
-async function defaultRunGitHubApi(endpoint: string): Promise<string> {
+async function defaultRunGitHubApi(
+  host: string,
+  endpoint: string,
+): Promise<string> {
   const { stdout } = await execFileAsync(
     "gh",
-    ["api", "--hostname", "github.com", endpoint],
+    ["api", "--hostname", host, endpoint],
     {
       env: { ...process.env, GH_PROMPT_DISABLED: "1" },
       encoding: "utf8",

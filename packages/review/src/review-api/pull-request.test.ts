@@ -61,6 +61,7 @@ describe("reading a pull request", () => {
     const using = deps(async () => JSON.stringify(record));
 
     await expect(readPullRequest(url, using)).resolves.toEqual({
+      host: "github.com",
       slug: "acme/widget",
       ...record,
     });
@@ -71,7 +72,7 @@ describe("reading a pull request", () => {
         "view",
         "7",
         "--repo",
-        "acme/widget",
+        "github.com/acme/widget",
         "--json",
         "number,title,baseRefName,baseRefOid",
       ],
@@ -88,6 +89,7 @@ describe("reading a pull request", () => {
     );
 
     await expect(readPullRequest(url, using)).resolves.toEqual({
+      host: "github.com",
       slug: "acme/widget",
       ...record,
     });
@@ -95,6 +97,28 @@ describe("reading a pull request", () => {
       "fetch",
       "https://api.github.com/repos/acme/widget/pulls/7",
     ]);
+  });
+
+  it("reads a GitHub Enterprise PR through gh on its host, never the public API", async () => {
+    const enterprise = "https://ghe.example.com/acme/widget/pull/7";
+    const using = deps(async () => JSON.stringify(record));
+
+    await expect(readPullRequest(enterprise, using)).resolves.toEqual({
+      host: "ghe.example.com",
+      slug: "acme/widget",
+      ...record,
+    });
+    expect(using.calls[0]).toContain("ghe.example.com/acme/widget");
+
+    const failing = deps(ghFails);
+
+    const error = await readPullRequest(enterprise, failing).catch(
+      (cause: unknown) => cause,
+    );
+
+    expect(error).toBeInstanceOf(ReviewInputError);
+    expect(String(error)).toMatch(/gh auth login --hostname ghe\.example\.com/);
+    expect(failing.calls.map(([file]) => file)).toEqual(["gh"]);
   });
 
   it("says a missing or private PR was not found, with gh's reason", async () => {
@@ -130,7 +154,7 @@ describe("creating a review from a pull request URL alone", () => {
   let local: ReturnType<typeof openLocalReviewStore>;
 
   /** What gh reports; the tests move the base as GitHub would. */
-  let pr: Omit<PullRequestRecord, "slug">;
+  let pr: Omit<PullRequestRecord, "host" | "slug">;
 
   let ghCalls: number;
 
@@ -150,13 +174,15 @@ describe("creating a review from a pull request URL alone", () => {
     return gitIn(cwd)("rev-parse", "HEAD");
   };
 
-  /** A local repository stands in for github.com/acme/widget. */
-  const pointAtUpstream = (gitDir: string) => {
+  /** A local repository stands in for acme/widget on the host. */
+  const pointAtUpstream = (gitDir: string, host = "github.com") => {
     const config = (...args: string[]) =>
       execFileSync("git", ["--git-dir", gitDir, "config", ...args]);
 
-    config("remote.origin.url", "https://github.com/acme/widget.git");
-    config(`url.${upstream}.insteadOf`, "https://github.com/acme/widget.git");
+    const remote = `https://${host}/acme/widget.git`;
+
+    config("remote.origin.url", remote);
+    config(`url.${upstream}.insteadOf`, remote);
   };
 
   let fork: string, trunk: string;
@@ -334,6 +360,29 @@ describe("creating a review from a pull request URL alone", () => {
       /Register a checkout of acme\/widget/,
     );
     expect(local.store.list()).toEqual([]);
+  });
+
+  it("resolves a GitHub Enterprise PR only from a remote on its host", async () => {
+    const enterprise = "https://ghe.example.com/acme/widget/pull/7";
+    const { id: repositoryId } = await local.data.register(checkout);
+
+    const create = () =>
+      local.store.execute(
+        command({ type: "create", pullRequestUrl: enterprise }),
+      );
+
+    await expect(create()).rejects.toThrow(
+      /Register a checkout of ghe\.example\.com\/acme\/widget/,
+    );
+    expect(ghCalls).toBe(0);
+
+    pointAtUpstream(path.join(checkout, ".git"), "ghe.example.com");
+    const { reviewId } = await create();
+
+    expect(local.store.read(reviewId)).toMatchObject({
+      pins: { repositoryId, base: fork, head: upstreamHead() },
+      origin: { pullRequestUrl: enterprise, pullRequestNumber: 7 },
+    });
   });
 
   it("uses an explicit target instead of asking GitHub", async () => {
