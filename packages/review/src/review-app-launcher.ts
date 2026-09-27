@@ -279,8 +279,7 @@ export function launchDesktopApplication(
 
     args = profileArgs;
   } else {
-    // Always through LaunchServices: an app exec'd directly from a sandboxed
-    // agent (Codex) aborts in AppKit, and would run in the agent's process tree.
+    // Direct app execs abort in AppKit under Codex's sandbox.
     const appPath = input.instance
       ? input.instance.appPath
       : electron
@@ -295,9 +294,7 @@ export function launchDesktopApplication(
       ? `the macOS application at "${appPath}"`
       : `the macOS bundle identifier "${release.bundleId}"`;
 
-    // -n starts a Desktop for this profile beside one running another; a
-    // second one on the same profile hands off and exits. open(1) drops the
-    // caller's env, so --env carries Review's own.
+    // -n allows parallel profiles; --env carries Whiteboard's context.
     args = ["-n", ...(focus ? [] : ["-g"]), ...target];
 
     for (const [key, value] of Object.entries(env)) {
