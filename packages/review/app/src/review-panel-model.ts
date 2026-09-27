@@ -2,6 +2,7 @@ import { type DiffSelection } from "../../src/lens-selection";
 
 export type ReviewPeekContent =
   | { kind: "source"; source: DiffSelection }
+  | { kind: "sources"; sources: DiffSelection[] }
   | { kind: "inline-code"; language?: string; text: string }
   | { kind: "explanation"; text?: string }
   | {

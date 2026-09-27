@@ -7,7 +7,12 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { selectSource, sourceAnchors } from "../../src/lens-selection";
-import { CodePeek, CodePeekCard, CodePeekGroup } from "./CodePeek";
+import {
+  CodePeek,
+  CodePeekCard,
+  CodePeekGroup,
+  CodePeekStack,
+} from "./CodePeek";
 import {
   type ReviewSession,
   ReviewSessionProvider,
@@ -213,6 +218,52 @@ describe("CodePeek native editor", () => {
         highlight: true,
         preserveFocus: false,
       },
+    });
+  });
+
+  it("shows same-file chunks in one editor and other files in their own", async () => {
+    const chunk = (file: string, fromLine: number, toLine: number) =>
+      selectSource({ side: "head", file, fromLine, toLine });
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () =>
+      renderWithSession(
+        <CodePeekStack
+          sources={[
+            chunk("src/a.ts", 1, 3),
+            chunk("src/b.ts", 5, 5),
+            chunk("src/a.ts", 20, 22),
+          ]}
+          heightMode="content"
+          lenses={testLenses}
+        />,
+      ),
+    );
+
+    await vi.waitFor(() => {
+      expect(created).toMatchObject([
+        {
+          path: "src/a.ts",
+          title: "src/a.ts:1-3, 20-22",
+          ranges: [
+            { startLine: 1, endLine: 3 },
+            { startLine: 20, endLine: 22 },
+          ],
+        },
+        { path: "src/b.ts", title: "src/b.ts:5" },
+      ]);
+    });
+
+    await act(async () => {
+      created[0]?.onDidOpen?.();
+    });
+
+    expect(posted.at(-1)).toMatchObject({
+      name: "reveal",
+      args: { path: "src/a.ts", startLine: 1, endLine: 3 },
     });
   });
 

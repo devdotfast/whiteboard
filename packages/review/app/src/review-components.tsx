@@ -9,7 +9,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import type { ReviewComponentProps } from "../../src/review-document-data";
 import { AuthoredCodeSurface } from "./authored-code-surface";
-import { CodePeekCard } from "./CodePeek";
+import { CodePeekCard, CodePeekStack } from "./CodePeek";
 import { findWhitespaceNormalizedSpan } from "./highlighted-text";
 import {
   useOptionalReviewSession,
@@ -613,7 +613,7 @@ function CodeReviewPeekPanel({
   anchor: PeekAnchor;
   content: Extract<
     ReviewPeekContent,
-    { kind: "source" | "inline-code" | "explanation" }
+    { kind: "source" | "sources" | "inline-code" | "explanation" }
   >;
   onClose: () => void;
 }) {
@@ -1030,6 +1030,18 @@ function ReviewPeekContentView({
     return (
       <CodePeekCard
         source={content.source}
+        active={active}
+        heightMode="content"
+        onNativeFocus={onNativeFocus}
+        reportOutcome={reportOutcome}
+      />
+    );
+  }
+
+  if (content.kind === "sources") {
+    return (
+      <CodePeekStack
+        sources={content.sources}
         active={active}
         heightMode="content"
         onNativeFocus={onNativeFocus}

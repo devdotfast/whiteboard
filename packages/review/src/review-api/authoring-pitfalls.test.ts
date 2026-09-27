@@ -254,10 +254,10 @@ describe("diagram rules", () => {
       "Unknown component name: cache",
     ));
 
-  it("rejects a step with none or two of source, explanation and code", async () => {
+  it("rejects a step with none or two of source, sources, explanation and code", async () => {
     await expectRejected(
       () => insert(sequence([{ from: "app", to: "db", label: "Write" }])),
-      "A step needs exactly one of source, explanation, or code.",
+      "A step needs exactly one of source, sources, explanation, or code.",
     );
     await expectRejected(
       () =>
@@ -272,7 +272,39 @@ describe("diagram rules", () => {
             },
           ]),
         ),
-      "A step needs exactly one of source, explanation, or code.",
+      "A step needs exactly one of source, sources, explanation, or code.",
+    );
+    await expectRejected(
+      () =>
+        insert(
+          sequence([
+            {
+              from: "app",
+              to: "db",
+              label: "Write",
+              source: selectSource(head("src/store.ts", 1)),
+              sources: [selectSource(head("src/store.ts", 2))],
+            },
+          ]),
+        ),
+      "A step needs exactly one of source, sources, explanation, or code.",
+    );
+  });
+
+  it("stores a step that carries several code chunks", async () => {
+    const sources = [
+      selectSource(head("src/store.ts", 1)),
+      selectSource(head("src/store.ts", 3)),
+      selectSource(head("order.ts", 1)),
+    ];
+
+    const result = await insert(
+      sequence([{ from: "app", to: "db", label: "Write", sources }]),
+    );
+
+    expect(result.status).toBe(200);
+    expect(elements(local.store.read(reviewId).document)).toContainEqual(
+      expect.objectContaining({ type: "step", sources }),
     );
   });
 
@@ -338,6 +370,26 @@ describe("source rules in every peek position", () => {
               to: "app",
               label: "Write",
               source: selectSource(blank),
+            },
+          ],
+        }),
+      message,
+    );
+    await expectRejected(
+      () =>
+        insert({
+          type: "sequence",
+          title: "Save",
+          actors: { app: "App" },
+          steps: [
+            {
+              from: "app",
+              to: "app",
+              label: "Write",
+              sources: [
+                selectSource(head("src/store.ts", 1)),
+                selectSource(blank),
+              ],
             },
           ],
         }),

@@ -286,6 +286,16 @@ function documentReferences(
         ),
       );
 
+    // Each chunk of a multi-chunk step is its own reference, so one stale
+    // chunk marks only itself.
+    if (element.type === "step" && element.sources)
+      return element.sources.map((source, index) => ({
+        id: `${element.id}:${index}`,
+        source,
+        label: element.label,
+        peek: true,
+      }));
+
     if (element.type === "call_stack_diff")
       return [...element.base, ...element.head].flatMap((frame) => [
         { ...frame, id: frame.id!, peek: true },

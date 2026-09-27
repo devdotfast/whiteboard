@@ -294,6 +294,53 @@ describe("sequence diagram guided tour", () => {
     ).toEqual(["request", "request--sequence-use-2"]);
   });
 
+  it("shows every chunk of a multi-chunk step in one tour stop", () => {
+    const chunk = (file: string, line: number) => ({
+      file,
+      start: { side: "head" as const, line },
+      end: { side: "head" as const, line: line + 2 },
+    });
+
+    const chunks = [chunk("src/a.ts", 10), chunk("src/a.ts", 40)];
+
+    const sequence = sequenceView({
+      id: "diagram-1",
+      title: "Save",
+      actors: { app: "App", db: "Database" },
+      steps: [
+        {
+          id: "step-1",
+          type: "step",
+          from: "app",
+          to: "db",
+          label: "write",
+          style: "call",
+          sources: chunks,
+        },
+        {
+          id: "step-2",
+          type: "step",
+          from: "db",
+          to: "app",
+          label: "ack",
+          style: "return",
+          sources: [chunk("src/b.ts", 5)],
+        },
+      ],
+    });
+
+    const [write, ack] = createSequenceTourEntry(sequence).stops;
+
+    expect(write).toMatchObject({
+      anchor: { id: "step-1", peek: chunks[0] },
+      content: { kind: "sources", sources: chunks },
+    });
+    expect(ack).toMatchObject({
+      anchor: { id: "step-2", peek: chunk("src/b.ts", 5) },
+      content: { kind: "source", source: chunk("src/b.ts", 5) },
+    });
+  });
+
   it("calculates scroll targets that reveal the active message participants", () => {
     const actors = defineActors({
       reviewer: { label: "Reviewer" },
