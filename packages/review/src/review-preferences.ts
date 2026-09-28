@@ -2,27 +2,20 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
-  DEFAULT_DISMISSED_RETENTION_DAYS,
   type JsonValue,
   isJsonObject,
-  jsonNumber,
   parseJsonText,
 } from "@dev.fast/review-protocol";
 import { writePrivateJsonAtomic } from "@dev.fast/trace-core";
 
 import { devReviewHome } from "./review-home-paths";
 
-/** `null` turns reaping off: a dismissed review then waits forever. */
-type DismissedRetentionDays = number | null;
-
 /**
  * Machine-wide Review preferences the server itself needs. Workbench settings
- * do not work here: the reaper runs in the review server, which never reads
- * the workbench configuration.
+ * do not work here: the review server never reads the workbench
+ * configuration.
  */
 export interface ReviewPreferences {
-  /** `null` means never reap. */
-  dismissedRetentionDays: DismissedRetentionDays;
   /**
    * Whether the scratchpad exists on this machine. Off, the server neither
    * makes nor lists it and Review's instructions do not offer it to agents.
@@ -31,7 +24,6 @@ export interface ReviewPreferences {
 }
 
 const DEFAULT_REVIEW_PREFERENCES: ReviewPreferences = {
-  dismissedRetentionDays: DEFAULT_DISMISSED_RETENTION_DAYS,
   scratchpadEnabled: false,
 };
 
@@ -49,7 +41,6 @@ export async function readReviewPreferences(
     );
 
     return {
-      dismissedRetentionDays: parseRetentionDays(raw),
       scratchpadEnabled: parseScratchpadEnabled(raw),
     };
   } catch {
@@ -62,9 +53,6 @@ export async function writeReviewPreferences(
   devHome?: string,
 ): Promise<ReviewPreferences> {
   const next: ReviewPreferences = {
-    dismissedRetentionDays: normalizeRetentionDays(
-      preferences.dismissedRetentionDays,
-    ),
     scratchpadEnabled: preferences.scratchpadEnabled === true,
   };
 
@@ -97,32 +85,4 @@ export async function writeScratchpadEnabled(
 
 function parseScratchpadEnabled(raw: JsonValue): boolean {
   return isJsonObject(raw) && raw.scratchpadEnabled === true;
-}
-
-function parseRetentionDays(raw: JsonValue): DismissedRetentionDays {
-  if (!isJsonObject(raw)) {
-    return DEFAULT_DISMISSED_RETENTION_DAYS;
-  }
-
-  const value = raw.dismissedRetentionDays;
-
-  if (value === null) return null;
-
-  return normalizeRetentionDays(jsonNumber(value));
-}
-
-/**
- * Guards the reaper against a hand-edited file: a zero or negative window would
- * delete every dismissed review on the next scan.
- */
-function normalizeRetentionDays(
-  value: number | null | undefined,
-): DismissedRetentionDays {
-  if (value === null) return null;
-
-  if (value === undefined || !Number.isFinite(value) || value < 1) {
-    return DEFAULT_DISMISSED_RETENTION_DAYS;
-  }
-
-  return Math.floor(value);
 }

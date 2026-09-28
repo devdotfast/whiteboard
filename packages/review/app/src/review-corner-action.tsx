@@ -19,8 +19,8 @@ export function ReviewCornerAction(): ReactElement | null {
   // A finished review has nothing left to submit or dismiss.
   if (submissionOutcome === "dismissed") return null;
 
-  /* The tutorial is not in the review store, so there is no list to leave and
-     nothing to reap. Closing the tab is the whole action, and it needs no
+  /* The tutorial is not in the review store, so there is no list to leave.
+     Closing the tab is the whole action, and it needs no
      confirmation. */
   if (tutorial) {
     return (

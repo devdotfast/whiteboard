@@ -444,13 +444,6 @@ export interface ReviewCanvasTutorialBridge {
 }
 
 /**
- * How long a dismissed review waits before the reaper deletes it. The server
- * owns the stored value, but the workbench needs the same default so the
- * Settings page can still show a truthful row when the read fails.
- */
-export const DEFAULT_DISMISSED_RETENTION_DAYS = 30;
-
-/**
  * Settings state and actions the workbench hands to the Settings canvas. Every
  * setter resolves with the value that actually landed, so a row re-renders from
  * the authoritative result instead of an optimistic one.
@@ -659,8 +652,8 @@ export type ReviewCanvasContent =
       // Deletes the review and closes its canvas. Absent when the host does
       // not support deletion.
       deleteReview?(uuid: string): Promise<void>;
-      // Dismissal is reversible: it stamps the review and starts the reap
-      // clock. Deletion is immediate and permanent. Absent when the host does
+      // Dismissal is reversible: it stamps the review. Deletion is immediate
+      // and permanent. Absent when the host does
       // not support them.
       dismissReview?(uuid: string): Promise<void>;
       restoreReview?(uuid: string): Promise<void>;

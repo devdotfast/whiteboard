@@ -725,8 +725,8 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	/**
 	 * Settings state and actions for the Settings page. Every value lives in
-	 * workbench configuration, apart from the retention window, which the review
-	 * server owns. Extensions reuse the existing quick pick.
+	 * workbench configuration, apart from the scratchpad, which the review server
+	 * owns. Extensions reuse the existing quick pick.
 	 */
 	private async resolveSettingsContent(): Promise<ReviewCanvasSettingsContent> {
 		// Settings must render even when the server preference cannot be read;

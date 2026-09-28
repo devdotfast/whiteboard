@@ -132,7 +132,6 @@ export const EXTENSION_INSTALL_PHASE = ["download", "install"] as const;
 export const SETTING_NAME = [
   "telemetry_enabled",
   "keymap",
-  "dismissed_retention_days",
   "software_map_enabled",
   "scratchpad_enabled",
   "diffr_config",

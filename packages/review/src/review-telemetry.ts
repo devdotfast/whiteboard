@@ -481,16 +481,6 @@ export class ReviewTelemetry {
   }
 
   /**
-   * The reaper deleted a dismissed review. No reader is present, so this is a
-   * server event rather than a UI one.
-   */
-  async captureReviewReaped(input: { retentionDays: number }): Promise<void> {
-    await this.captureEvent("review_review_reaped", {
-      retention_days: input.retentionDays,
-    });
-  }
-
-  /**
    * A tab dwell period ended. Time on the files tab is also the diff dwell,
    * so it doubles as `review_diff_viewed` without a second client beacon.
    */

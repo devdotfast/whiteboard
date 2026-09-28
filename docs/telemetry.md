@@ -321,11 +321,6 @@ set to `review_topbar`. `review_review_restored`'s `open` (the implicit undo,
 where opening a dismissed whiteboard brings it back) is allowlisted but not yet
 sent.
 
-### Reserved events
-
-The allowlist also defines `review_review_reaped`, but no current code sends
-it. If a future change sends it, it will update this page in the same change.
-
 ### Hangs
 
 - `review_hang_started` / `review_hang_ended`: Electron's window

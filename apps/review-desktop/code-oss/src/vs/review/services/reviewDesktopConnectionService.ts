@@ -154,11 +154,6 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		return { serverUrl: this.serverUrl, token, appSessionId };
 	}
 
-	/**
-	 * The dismissed review retention window. It is a server preference rather
-	 * than a workbench setting because the reaper runs inside the review server.
-	 * `null` means never reap.
-	 */
 	async readDiffrConfig(): Promise<ReviewDiffrConfig> {
 		await this.initialize();
 		const response = await fetch(`${this.serverUrl}/diffr-config`, {

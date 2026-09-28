@@ -22,10 +22,6 @@ it("reports loader and open contention as busy and allows migration after releas
   const home = await mkdtemp(path.join(tmpdir(), "review-busy-read-"));
   roots.push(home);
   vi.stubEnv("DEV_REVIEW_HOME", home);
-  await writeFile(
-    path.join(home, "preferences.json"),
-    JSON.stringify({ dismissedRetentionDays: null }),
-  );
   const root = path.join(home, "source");
   await mkdir(root);
 

@@ -611,13 +611,11 @@ describe("ReviewTelemetry", () => {
       commandRunId: "run-12345678",
       exitCode: 0,
     });
-    await telemetry.captureReviewReaped({ retentionDays: 30 });
     await telemetry.captureUiEvent("review_app_opened", {});
 
     expect(events.map((event) => event.event)).toEqual([
       "review_installation_created",
       "review_command_succeeded",
-      "review_review_reaped",
       "review_app_opened",
     ]);
 
