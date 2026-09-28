@@ -3,6 +3,8 @@ import { act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { testCanvasUi } from "./canvas-ui-test-utils";
+import { CanvasUiContext } from "./host/canvas-ui";
 import { ReviewHome, formatRelativeTime } from "./review-home-view";
 
 describe("ReviewHome", () => {
@@ -92,9 +94,12 @@ describe("ReviewHome", () => {
       async () => undefined,
     );
 
+    const host = testCanvasUi();
     await act(async () =>
       root.render(
-        <ReviewHome reviews={reviews} onOpen={onOpen} onDismiss={onDismiss} />,
+        <CanvasUiContext.Provider value={host.ui}>
+          <ReviewHome reviews={reviews} onOpen={onOpen} onDismiss={onDismiss} />
+        </CanvasUiContext.Provider>,
       ),
     );
 
@@ -106,26 +111,13 @@ describe("ReviewHome", () => {
       ].map((element) => element.textContent);
 
     const select = async (label: string, value: string) => {
-      const names = new Map([
-        ["updated", "Recently updated"],
-        ["oldest", "Oldest first"],
-        ["pr", "PR number"],
-        ["title", "Title A–Z"],
-      ]);
-
       await act(async () =>
         container
           .querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!
           .click(),
       );
 
-      const option = [
-        ...container.querySelectorAll<HTMLButtonElement>(
-          '[role="menuitemradio"]',
-        ),
-      ].find((element) => element.textContent === (names.get(value) ?? value));
-
-      await act(async () => option!.click());
+      await act(async () => host.select(value));
     };
 
     expect(titles()).toEqual(["Alpha", "Zulu"]);

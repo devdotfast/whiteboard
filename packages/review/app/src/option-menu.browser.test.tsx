@@ -52,36 +52,39 @@ async function render(ui?: ReviewCanvasUi) {
   };
 }
 
-it("delegates keyboard opening and selection to the host with checked state", async () => {
-  let request!: ReviewMenuRequest;
-  const dispose = vi.fn<() => void>();
+it.each(["ArrowDown", "ArrowUp"])(
+  "%s delegates opening and selection to the host with checked state",
+  async (key) => {
+    let request!: ReviewMenuRequest;
+    const dispose = vi.fn<() => void>();
 
-  const { trigger, change } = await render({
-    showMenu: (value) => {
-      request = value;
+    const { trigger, change } = await render({
+      showMenu: (value) => {
+        request = value;
 
-      return { dispose };
-    },
-  });
+        return { dispose };
+      },
+    });
 
-  await act(async () =>
-    trigger.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
-    ),
-  );
-  expect(request.anchor).toBe(trigger);
-  expect(request.items.find((item) => item.checked)?.id).toBe("new");
-  expect(trigger.getAttribute("aria-expanded")).toBe("true");
-  expect(container.querySelector('[role="menu"]')).toBeNull();
-  await act(async () => {
-    request.onHide();
-    await request.onSelect("old");
-  });
-  expect(change).toHaveBeenCalledExactlyOnceWith("old");
-  expect(trigger.getAttribute("aria-expanded")).toBe("false");
-  await act(async () => root.render(null));
-  expect(dispose).toHaveBeenCalledOnce();
-});
+    await act(async () =>
+      trigger.dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true }),
+      ),
+    );
+    expect(request.anchor).toBe(trigger);
+    expect(request.items.find((item) => item.checked)?.id).toBe("new");
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector('[role="menu"]')).toBeNull();
+    await act(async () => {
+      request.onHide();
+      await request.onSelect("old");
+    });
+    expect(change).toHaveBeenCalledExactlyOnceWith("old");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    await act(async () => root.render(null));
+    expect(dispose).toHaveBeenCalledOnce();
+  },
+);
 
 it("host cancellation leaves the selection unchanged", async () => {
   let request!: ReviewMenuRequest;
@@ -99,65 +102,6 @@ it("host cancellation leaves the selection unchanged", async () => {
   expect(change).not.toHaveBeenCalled();
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
 });
-
-it("hostless menus support selection focus, arrow navigation, typeahead and Escape", async () => {
-  const { trigger, change } = await render();
-  trigger.focus();
-  await act(async () => trigger.click());
-  const menu = container.querySelector<HTMLElement>('[role="menu"]')!;
-  const items = menu.querySelectorAll<HTMLButtonElement>("button");
-  expect(document.activeElement).toBe(items[0]);
-  await act(async () =>
-    menu.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
-    ),
-  );
-  expect(document.activeElement).toBe(items[1]);
-  await act(async () =>
-    menu.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "n", bubbles: true }),
-    ),
-  );
-  expect(document.activeElement).toBe(items[0]);
-  await act(async () =>
-    menu.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
-    ),
-  );
-  expect(document.activeElement).toBe(trigger);
-  expect(change).not.toHaveBeenCalled();
-  await act(async () => trigger.click());
-  await act(async () =>
-    container
-      .querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')[1]!
-      .click(),
-  );
-  expect(change).toHaveBeenCalledExactlyOnceWith("old");
-  expect(document.activeElement).toBe(trigger);
-});
-
-it.each(["ArrowDown", "ArrowUp"])(
-  "%s opens the fallback and re-enters it without toggling closed",
-  async (key) => {
-    const { trigger } = await render();
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      trigger.focus();
-      await act(async () =>
-        trigger.dispatchEvent(
-          new KeyboardEvent("keydown", { key, bubbles: true }),
-        ),
-      );
-      expect(trigger.getAttribute("aria-expanded")).toBe("true");
-      expect(document.activeElement).toBe(
-        container.querySelector('[role="menuitemradio"][aria-checked="true"]'),
-      );
-    }
-
-    await act(async () => trigger.click());
-    expect(trigger.getAttribute("aria-expanded")).toBe("false");
-  },
-);
 
 it("does not reopen an already open host menu", async () => {
   const showMenu = vi.fn<ReviewCanvasUi["showMenu"]>(() => ({ dispose() {} }));

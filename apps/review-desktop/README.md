@@ -471,10 +471,11 @@ the appropriate platform implementation; they do not always use OS-native UI.
 
 Keep rich document content, forms, and inline feedback in React. Add another UI
 library only for a concrete behavior the existing host or browser primitives
-do not cover. Preserve a functional fallback for supported hostless surfaces.
+do not cover. Menu controls use the Desktop host service; browser tests inject
+a test host instead of maintaining a second production menu implementation.
 Check keyboard navigation, cancellation, focus restoration, disposal, themes,
 zoom, and narrow layouts in the actual Desktop app when changing a host control;
-browser fallback tests alone do not validate the workbench integration.
+browser tests alone do not validate the workbench integration.
 
 ## Development and validation
 
