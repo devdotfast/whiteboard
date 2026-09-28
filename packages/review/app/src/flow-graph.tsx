@@ -55,7 +55,18 @@ export function FlowGraph({
 }) {
   const { theme } = useReviewDebugSettings();
   const [error, setError] = useState<string>();
-  const [layout, setLayout] = useState<Layout>();
+
+  const [computed, setLayout] = useState<{
+    block: FlowDiagramBlock;
+    direction: typeof direction;
+    layout: Layout;
+  }>();
+
+  const layout =
+    computed?.block === block && computed.direction === direction
+      ? computed.layout
+      : undefined;
+
   const frame = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,7 +74,7 @@ export function FlowGraph({
     setError(undefined);
     void layoutFlow(block, direction)
       .then((result) => {
-        if (!cancelled) setLayout(result);
+        if (!cancelled) setLayout({ block, direction, layout: result });
       })
       .catch((error) => {
         if (!cancelled) setError(String(error));
