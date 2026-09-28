@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a sealed signed RPM/DNF and DEB/APT publication without network writes."""
+"""Build a sealed signed RPM/DNF, DEB/APT and pacman publication without network writes."""
 
 import argparse
 from datetime import datetime, timezone
@@ -26,13 +26,14 @@ def digest(file):
     return result.hexdigest()
 
 
-def sign(file, fingerprint):
-    output = file.with_name(file.name + ".asc")
+def sign(file, fingerprint, armor=True):
+    # DNF reads armored .asc; pacman reads binary .sig.
+    output = file.with_name(file.name + (".asc" if armor else ".sig"))
     args = ["gpg", "--batch", "--yes", "--local-user", fingerprint]
     passphrase = os.environ.get("REVIEW_SIGNING_PASSPHRASE_FILE")
     if passphrase:
         args += ["--pinentry-mode", "loopback", "--passphrase-file", passphrase]
-    run(*args, "--armor", "--output", str(output), "--detach-sign", str(file))
+    run(*args, *(["--armor"] if armor else []), "--output", str(output), "--detach-sign", str(file))
     run("gpg", "--batch", "--verify", str(output), str(file))
 
 
@@ -95,6 +96,27 @@ def build_apt(packages, repos, snapshot_root, package_name, version, revision, f
     run("gpg", "--batch", "--verify", str(snapshot / "Release.gpg"), str(release))
 
 
+def build_arch(packages, repos, snapshot_root, package_name, version, revision, fingerprint):
+    name = f"{package_name}-{version}-{revision}-x86_64.pkg.tar.zst"
+    source = packages / name
+    info = run("tar", "--zstd", "-xOf", str(source), ".PKGINFO").decode()
+    fields = dict(line.split(" = ", 1) for line in info.splitlines() if " = " in line)
+    if [fields.get("pkgname"), fields.get("pkgver"), fields.get("arch")] != [package_name, f"{version}-{revision}", "x86_64"]:
+        raise ValueError("Arch package metadata does not match the release")
+    pool = repos / "arch/x86_64"
+    pool.mkdir(parents=True)
+    shutil.copyfile(source, pool / name)
+    sign(pool / name, fingerprint, armor=False)
+    # repo-add ran in the unprivileged build container. The databases name this
+    # exact package file, and the Worker redirects to them by generation.
+    snapshot = snapshot_root / "arch/x86_64"
+    snapshot.mkdir(parents=True)
+    for kind in ("db", "files"):
+        database = snapshot / f"{package_name}.{kind}"
+        shutil.copyfile(packages / f"{package_name}.{kind}.tar.gz", database)
+        sign(database, fingerprint, armor=False)
+
+
 # Each channel is a separate package in a separate repository. Preview builds
 # use RPM's tilde form so they sort below the stable release they precede.
 CHANNELS = {
@@ -147,8 +169,9 @@ def build(packages, output, version, revision, commit, fingerprint, channel="sta
     (rpm / "repodata/repomd.xml").rename(snapshot / "repomd.xml")
     sign(snapshot / "repomd.xml", fingerprint)
     build_apt(packages, repos, repos / "snapshots" / generation, package_name, version, revision, fingerprint, channel)
+    build_arch(packages, repos, repos / "snapshots" / generation, package_name, version, revision, fingerprint)
     pointer = {
-        "schemaVersion": 1, "format": "rpm", "packageName": package_name, "deb": True, "generation": generation, "version": version,
+        "schemaVersion": 1, "format": "rpm", "packageName": package_name, "deb": True, "arch": True, "generation": generation, "version": version,
         "commit": commit, "keyFingerprint": fingerprint,
     }
     (repos / "current.json").write_text(json.dumps(pointer) + "\n")
