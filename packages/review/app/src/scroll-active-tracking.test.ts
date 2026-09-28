@@ -23,6 +23,20 @@ describe("activeTargetForScroll", () => {
     ).toBe("a");
   });
 
+  it("counts a target a fraction of a pixel above the edge as reached", () => {
+    expect(
+      activeTargetForScroll(
+        [
+          { id: "a", top: -400 },
+          { id: "b", top: -0.4 },
+          { id: "c", top: 120 },
+        ],
+        0,
+        300,
+      ),
+    ).toBe("b");
+  });
+
   it("holds the first target at scroll zero and the last past every target", () => {
     expect(
       activeTargetForScroll(

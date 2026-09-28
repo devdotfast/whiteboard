@@ -35,7 +35,9 @@ export function activeTargetForScroll(
   for (let index = 0; index < targets.length; index += 1) {
     const target = targets[index]!;
 
-    if (target.top < scrollerTop) continue;
+    // Scroll positions snap to device pixels, so a target scrolled to the
+    // edge can sit a fraction above it.
+    if (target.top < scrollerTop - 1) continue;
 
     return target.top <= halfLine
       ? target.id

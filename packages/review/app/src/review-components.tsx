@@ -800,8 +800,14 @@ export function GuidedTourPanel({
     const frame = requestAnimationFrame(() => {
       const scrollerTop = scroller.getBoundingClientRect().top;
       const sectionTop = section.getBoundingClientRect().top;
+      // Land on the active line the tail spacer sizes for, clear of the
+      // scroll-spy's top edge.
       scroller.scrollTo({
-        top: scroller.scrollTop + sectionTop - scrollerTop,
+        top:
+          scroller.scrollTop +
+          sectionTop -
+          scrollerTop -
+          TOUR_ACTIVE_TOP_SLACK_PX,
       });
     });
 
