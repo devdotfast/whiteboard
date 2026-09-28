@@ -142,7 +142,7 @@ describe("DatabaseLens", () => {
         reviewSessionElement(
           testReviewSession({ wasmUrl }),
           <ReviewDebugSettingsProvider>
-            <ReviewPanelProvider detailRevision={0}>
+            <ReviewPanelProvider>
               <DatabaseLens {...block} />
             </ReviewPanelProvider>
           </ReviewDebugSettingsProvider>,

@@ -125,10 +125,12 @@ describe("Review navigation", () => {
     store.getState().showView("review");
     store.getState().openPeek({ kind: "peek", anchor, content });
 
-    store.getState().openLensDiff();
+    const lens = { id: "api", version: 3, mode: "structural" } as const;
+    store.getState().selectLens(lens);
     expect(store.getState()).toMatchObject({
       view: "diff",
       diffScope: null,
+      lens,
       active: { kind: "peek" },
     });
   });

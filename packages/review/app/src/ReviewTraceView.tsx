@@ -2,6 +2,7 @@ import { type ReviewAgentTraceSession } from "@dev.fast/review-protocol";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useReviewSession } from "./host/review-session";
+import type { TraceSelection } from "./review-panel-store";
 import { ChevronIcon, TraceDocument, formatDuration } from "./trace-document";
 import { TraceRuler } from "./trace-ruler";
 import {
@@ -11,12 +12,6 @@ import {
   useAgentTrace,
 } from "./use-agent-trace";
 import { type TraceListState, useTraceList } from "./use-trace-list";
-
-export interface TraceSelection {
-  sessionId: string;
-  trace?: string;
-  eventIndex?: number;
-}
 
 export function ReviewTraceView({
   initialSelection,

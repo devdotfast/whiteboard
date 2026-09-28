@@ -9,6 +9,7 @@ import {
   createRef,
   useContext,
   useEffect,
+  useLayoutEffect,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
@@ -93,7 +94,12 @@ export function ReviewFindProvider({
     return () => host?.attach(null);
   }, [controller, host]);
 
-  useEffect(() => controller.resetForDocument(), [controller, documentKey]);
+  // Layout, so a new document's editors never see the old query: their
+  // registrations queue a search that runs after this closes.
+  useLayoutEffect(
+    () => controller.resetForDocument(),
+    [controller, documentKey],
+  );
 
   return (
     <ReviewFindContext.Provider value={controller}>

@@ -31,6 +31,9 @@ import {
   scopedCoverage,
 } from "../../src/viewed-coverage";
 import { canvasQueryKeys } from "./canvas-query";
+import { useReviewSession } from "./host/review-session";
+import { useReviewPanel, useReviewPanelStore } from "./review-panel";
+import { captureUiEvent } from "./ui-telemetry";
 
 /** A resolved selection, tagged with the comparison its own pins name so its
  * changed lines are counted there and not in the document's comparison. */
@@ -83,7 +86,8 @@ export function ReviewLensesProvider({
   children: ReactNode;
 }) {
   const queryClient = useQueryClient();
-  const [activeId, setActiveId] = useState<string>();
+  const session = useReviewSession();
+  const panelStore = useReviewPanelStore();
   const [changedPaths, setChangedPaths] = useState<string[]>([]);
 
   const [unfoldRanges, setUnfoldRanges] = useState<readonly FileLineRange[]>(
@@ -96,6 +100,13 @@ export function ReviewLensesProvider({
   const mode = structuralDiffEnabled ? "structural" : "textual";
   const route = `/${snapshot.reviewId}/progress`;
   const progressKey = canvasQueryKeys.lensProgress(snapshot.version, mode);
+  const selectedLens = useReviewPanel((state) => state.lens);
+
+  // A lens chosen on another version or diff mode no longer applies.
+  const activeId =
+    selectedLens?.version === snapshot.version && selectedLens.mode === mode
+      ? selectedLens.id
+      : undefined;
 
   // Coverage events drive freshness, and a version or mode left behind is not
   // kept: returning to it reads again, as a first visit does.
@@ -147,7 +158,6 @@ export function ReviewLensesProvider({
     pending.current = false;
     refreshAfterMark.current = false;
     resetMark();
-    setActiveId(undefined);
     setChangedPaths([]);
     setUnfoldRanges([]);
 
@@ -252,7 +262,7 @@ export function ReviewLensesProvider({
       setChangedPaths(files.map((file) => file.path));
       setUnfoldRanges(viewed ? [] : files.flatMap((file) => file.sources));
 
-      if (collapseLens && viewed) setActiveId(undefined);
+      if (collapseLens && viewed) panelStore.getState().clearLens();
     } catch {
       // The mutation holds the error while this version is shown.
     } finally {
@@ -297,10 +307,16 @@ export function ReviewLensesProvider({
       error,
       structuralDiffEnabled,
       select: (id) => {
-        if (lenses.some((item) => item.id === id && !item.unavailable))
-          setActiveId(id);
+        if (!lenses.some((item) => item.id === id && !item.unavailable)) return;
+        captureUiEvent(session, "diff_opened", {
+          kind: structuralDiffEnabled ? "structural" : "file",
+          via: "lens",
+        });
+        panelStore
+          .getState()
+          .selectLens({ id, version: snapshot.version, mode });
       },
-      clear: () => setActiveId(undefined),
+      clear: () => panelStore.getState().clearLens(),
       resolve: (sources) =>
         sources.flatMap((source) =>
           (progress?.resolvedSelections[selectionKey(source)] ?? []).map(
@@ -352,6 +368,8 @@ export function ReviewLensesProvider({
       client,
       route,
       snapshot,
+      session,
+      panelStore,
     ],
   );
 

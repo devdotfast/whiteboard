@@ -10,7 +10,6 @@ import {
   type CSSProperties,
   type ComponentType,
   type ReactElement,
-  type ReactNode,
   type RefObject,
   useEffect,
   useLayoutEffect,
@@ -54,7 +53,6 @@ import {
 } from "./review-find";
 import { useReviewLenses } from "./review-lenses";
 import {
-  ReviewPanelProvider,
   useReviewPanel,
   useReviewPanelStore,
   useSuppressPanelMotionOnCanvasResume,
@@ -62,14 +60,9 @@ import {
 import type { ReviewDiffScope } from "./review-panel-store";
 import { ReviewRootsProvider } from "./review-root-context";
 import { ReviewToc } from "./review-toc";
-import {
-  type ReviewView,
-  normalizeReviewView,
-  reviewViewLabel,
-} from "./review-view-route";
+import { type ReviewView, reviewViewLabel } from "./review-view-route";
 import {
   ReviewViewStateProvider,
-  readPersistedReviewViewState,
   useReviewViewStateSync,
 } from "./review-view-state";
 import { ReviewCommitsView } from "./ReviewCommitsView";
@@ -243,8 +236,7 @@ function ReviewLayout({
     revision: documentRevision,
   } = resolved;
 
-  const session = useReviewSession();
-  const hasChangeRange = range.baseCommit !== range.headCommit;
+  const panelStore = useReviewPanelStore();
 
   const softwareMap =
     softwareMapState.state === "ready" ? softwareMapState.softwareMap : null;
@@ -267,75 +259,41 @@ function ReviewLayout({
         host={findHost}
       >
         <ReviewDebugSettingsProvider>
-          <ReviewPanelProvider
+          <ReviewProvider
             key={documentRoute}
-            detailRevision={documentRevision}
-            initialView={() =>
-              normalizeReviewView(
-                readPersistedReviewViewState(session.config).activeView ??
-                  "review",
-                softwareMapEnabled,
-                hasChangeRange,
-              )
-            }
+            documentRoute={documentRoute}
+            softwareMapEnabled={softwareMapEnabled}
+            openTraceSession={panelStore.getState().openTrace}
           >
-            <ReviewNavigationProvider
-              documentRoute={documentRoute}
-              softwareMapEnabled={softwareMapEnabled}
-            >
-              <AgentSelectionProvider revision={documentRevision}>
-                <ReviewLayoutContent
-                  appRef={appRef}
-                  shellRef={shellRef}
-                  scrollRegionRef={scrollRegionRef}
-                  articleRef={articleRef}
-                  documentState={documentState}
-                  documentRevision={documentRevision}
-                  softwareModels={[
-                    ...(softwareMap?.head ? [softwareMap.head] : []),
-                    ...(document?.documentSoftwareModels ?? []),
-                  ]}
-                  softwareMapState={softwareMapState}
-                  repoSoftwareMap={softwareMap?.head ?? null}
-                  baseSoftwareMap={softwareMap?.base ?? null}
-                  softwareMapTopologyDiff={
-                    softwareMap
-                      ? diffSoftwareMaps(softwareMap.base, softwareMap.head)
-                      : null
-                  }
-                  softwareMapEnabled={softwareMapEnabled}
-                  range={range}
-                  commits={commits}
-                />
-              </AgentSelectionProvider>
-            </ReviewNavigationProvider>
-          </ReviewPanelProvider>
+            <AgentSelectionProvider revision={documentRevision}>
+              <ReviewLayoutContent
+                appRef={appRef}
+                shellRef={shellRef}
+                scrollRegionRef={scrollRegionRef}
+                articleRef={articleRef}
+                documentState={documentState}
+                documentRevision={documentRevision}
+                softwareModels={[
+                  ...(softwareMap?.head ? [softwareMap.head] : []),
+                  ...(document?.documentSoftwareModels ?? []),
+                ]}
+                softwareMapState={softwareMapState}
+                repoSoftwareMap={softwareMap?.head ?? null}
+                baseSoftwareMap={softwareMap?.base ?? null}
+                softwareMapTopologyDiff={
+                  softwareMap
+                    ? diffSoftwareMaps(softwareMap.base, softwareMap.head)
+                    : null
+                }
+                softwareMapEnabled={softwareMapEnabled}
+                range={range}
+                commits={commits}
+              />
+            </AgentSelectionProvider>
+          </ReviewProvider>
         </ReviewDebugSettingsProvider>
       </ReviewFindProvider>
     </ReviewRootsProvider>
-  );
-}
-
-/** Routes trace links from the document into this canvas's navigation. */
-function ReviewNavigationProvider({
-  documentRoute,
-  softwareMapEnabled,
-  children,
-}: {
-  documentRoute: string;
-  softwareMapEnabled: boolean;
-  children: ReactNode;
-}): ReactElement {
-  const openTrace = useReviewPanel((state) => state.openTrace);
-
-  return (
-    <ReviewProvider
-      documentRoute={documentRoute}
-      softwareMapEnabled={softwareMapEnabled}
-      openTraceSession={openTrace}
-    >
-      {children}
-    </ReviewProvider>
   );
 }
 
@@ -455,15 +413,6 @@ function ReviewLayoutContent({
   }, [panelStore, reviewViews]);
 
   const lenses = useReviewLenses();
-  useEffect(() => {
-    if (lenses?.active) {
-      captureUiEvent(session, "diff_opened", {
-        kind: diffOpenedKind(null, Boolean(lenses.structuralDiffEnabled)),
-        via: "lens",
-      });
-      panelStore.getState().openLensDiff();
-    }
-  }, [lenses?.active, lenses?.structuralDiffEnabled, panelStore, session]);
 
   useReviewTabTelemetry(activeView);
 

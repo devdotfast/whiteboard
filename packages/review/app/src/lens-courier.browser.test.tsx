@@ -17,6 +17,7 @@ import { ReviewDiffView } from "./DiffView";
 import { type DrawQueueClock, DrawQueueProvider } from "./draw-queue-provider";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewLensesProvider } from "./review-lenses";
+import { ReviewPanelProvider } from "./review-panel";
 import { type ReviewRoots, ReviewRootsProvider } from "./review-root-context";
 import { testReviewSession } from "./review-session-test-utils";
 
@@ -190,10 +191,12 @@ const render = async (state: {
                   cursor={state.lensCursor}
                   clock={manualClock.clock}
                 >
-                  <ReviewLensesProvider client={client} snapshot={snapshot}>
-                    <AuthoringActivityBadge onLocate={onLocate} />
-                    <ReviewDiffView />
-                  </ReviewLensesProvider>
+                  <ReviewPanelProvider>
+                    <ReviewLensesProvider client={client} snapshot={snapshot}>
+                      <AuthoringActivityBadge onLocate={onLocate} />
+                      <ReviewDiffView />
+                    </ReviewLensesProvider>
+                  </ReviewPanelProvider>
                 </DrawQueueProvider>
               </AuthoringCursorContext.Provider>
             </AuthoringActivityContext.Provider>

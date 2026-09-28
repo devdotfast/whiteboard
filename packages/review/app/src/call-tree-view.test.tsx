@@ -65,7 +65,7 @@ describe("DocumentCallTree", () => {
       root!.render(
         reviewSessionElement(
           testReviewSession(),
-          <ReviewPanelProvider detailRevision={0}>
+          <ReviewPanelProvider>
             <PanelSpy />
             <DocumentCallTree
               block={{

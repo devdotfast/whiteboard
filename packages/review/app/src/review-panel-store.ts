@@ -12,11 +12,23 @@ import type {
   ReviewPanelMotion,
 } from "./review-panel-model";
 import { shouldCloseSidePeekForReviewView } from "./review-view-route";
-import type { TraceSelection } from "./ReviewTraceView";
 
 export interface ReviewPanelState {
   active: ReviewPanel | null;
   motion: ReviewPanelMotion;
+}
+
+export interface TraceSelection {
+  sessionId: string;
+  trace?: string;
+  eventIndex?: number;
+}
+
+/** A lens applies only to the version and diff mode it was chosen on. */
+export interface ReviewLensSelection {
+  id: string;
+  version: number;
+  mode: "structural" | "textual";
 }
 
 export interface ReviewDiffScope {
@@ -31,6 +43,7 @@ export interface ReviewNavigationState {
   availableViews: readonly ReviewView[];
   diffScope: ReviewDiffScope | null;
   traceSelection: TraceSelection | undefined;
+  lens: ReviewLensSelection | null;
 }
 
 export interface ReviewPanelActions {
@@ -40,14 +53,14 @@ export interface ReviewPanelActions {
   restoreTour: (tour: GuidedTour, activeAnchor: string) => void;
   activateTourAnchor: (anchorId: string, options: { reveal: boolean }) => void;
   close: () => void;
-  closeForDocumentChange: () => void;
 }
 
 export interface ReviewNavigationActions {
   showView: (view: ReviewView) => void;
   openCommitDiff: (scope: ReviewDiffScope) => void;
-  /** A lens opens the full diff alongside any open peek. */
-  openLensDiff: () => void;
+  /** A lens opens its diff alongside any open peek. */
+  selectLens: (lens: ReviewLensSelection) => void;
+  clearLens: () => void;
   openTrace: (selection: TraceSelection) => void;
   setAvailableViews: (views: readonly ReviewView[]) => void;
 }
@@ -59,9 +72,14 @@ export type ReviewPanelStoreState = ReviewPanelState &
 
 export type ReviewPanelStore = ReturnType<typeof createReviewPanelStore>;
 
+export type ReviewNavigationRestore = Partial<
+  Pick<ReviewNavigationState, "view" | "lens">
+>;
+
 export function createReviewPanelStore({
   view = "review",
-}: { view?: ReviewView } = {}) {
+  lens = null,
+}: ReviewNavigationRestore = {}) {
   return createStore<ReviewPanelStoreState>()((set) => ({
     active: null,
     motion: "live",
@@ -69,6 +87,7 @@ export function createReviewPanelStore({
     availableViews: reviewViewSchema.options,
     diffScope: null,
     traceSelection: undefined,
+    lens,
     suppressMotion: () => set({ motion: "restored" }),
     openPeek: (panel) => set({ active: panel, motion: "live" }),
     openTour: (tour, activeAnchor) => {
@@ -111,8 +130,6 @@ export function createReviewPanelStore({
       });
     },
     close: () => set({ active: null, motion: "live" }),
-    closeForDocumentChange: () =>
-      set((state) => (state.active ? { active: null, motion: "live" } : state)),
     showView: (next) => set((state) => viewTransition(state, next)),
     openCommitDiff: (scope) =>
       set((state) => {
@@ -122,27 +139,27 @@ export function createReviewPanelStore({
           ? { ...transition, diffScope: scope }
           : transition;
       }),
-    openLensDiff: () =>
+    selectLens: (lens) =>
       set((state) => ({
+        lens,
         view: state.availableViews.includes("diff") ? "diff" : "review",
         diffScope: null,
       })),
+    clearLens: () => set({ lens: null }),
     openTrace: (selection) =>
       set((state) => ({
         ...viewTransition(state, "trace"),
         traceSelection: selection,
       })),
     setAvailableViews: (views) =>
-      set((state) => {
-        if (sameViews(state.availableViews, views)) return state;
-
-        return views.includes(state.view)
+      set((state) =>
+        views.includes(state.view)
           ? { availableViews: views }
           : {
               ...viewTransition({ ...state, availableViews: views }, "review"),
               availableViews: views,
-            };
-      }),
+            },
+      ),
   }));
 }
 
@@ -158,14 +175,4 @@ function viewTransition(
     ...(shouldCloseSidePeekForReviewView(view) &&
       state.active && { active: null, motion: "live" }),
   };
-}
-
-function sameViews(
-  left: readonly ReviewView[],
-  right: readonly ReviewView[],
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every((view, index) => view === right[index])
-  );
 }

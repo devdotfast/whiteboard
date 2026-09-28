@@ -1,7 +1,4 @@
-import {
-  REVIEW_CANVAS_RESUME_EVENT,
-  type ReviewView,
-} from "@dev.fast/review-protocol";
+import { REVIEW_CANVAS_RESUME_EVENT } from "@dev.fast/review-protocol";
 import {
   type ReactNode,
   type RefObject,
@@ -14,6 +11,7 @@ import {
 import { useStore } from "zustand";
 
 import {
+  type ReviewNavigationRestore,
   type ReviewPanelStore,
   type ReviewPanelStoreState,
   createReviewPanelStore,
@@ -25,24 +23,14 @@ const fallbackReviewPanelStore = createReviewPanelStore();
 
 export function ReviewPanelProvider({
   children,
-  detailRevision,
-  initialView,
+  restore,
 }: {
   children: ReactNode;
-  detailRevision?: unknown;
-  /** Read once, when the provider mounts. */
-  initialView?: () => ReviewView;
+  /** Called once, when the provider mounts: the canvas re-renders often, and
+   * restoring reads storage. */
+  restore?: () => ReviewNavigationRestore;
 }) {
-  const [store] = useState(() =>
-    createReviewPanelStore({ view: initialView?.() }),
-  );
-
-  const previousDetailRevision = useRef(detailRevision);
-  useEffect(() => {
-    if (previousDetailRevision.current === detailRevision) return;
-    previousDetailRevision.current = detailRevision;
-    store.getState().closeForDocumentChange();
-  }, [detailRevision, store]);
+  const [store] = useState(() => createReviewPanelStore(restore?.()));
 
   return (
     <ReviewPanelContext.Provider value={store}>

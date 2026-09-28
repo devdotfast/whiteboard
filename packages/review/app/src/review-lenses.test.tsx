@@ -10,6 +10,7 @@ import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewDiffView } from "./DiffView";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewLensesProvider, useReviewLenses } from "./review-lenses";
+import { ReviewPanelProvider } from "./review-panel";
 import { testReviewSession } from "./review-session-test-utils";
 
 it("clears a lens without destroying the full comparison's native state", async () => {
@@ -71,9 +72,11 @@ it("clears a lens without destroying the full comparison's native state", async 
       root.render(
         <TestCanvasQuery>
           <ReviewSessionProvider session={session}>
-            <ReviewLensesProvider client={client} snapshot={snapshot}>
-              <ReviewDiffView />
-            </ReviewLensesProvider>
+            <ReviewPanelProvider>
+              <ReviewLensesProvider client={client} snapshot={snapshot}>
+                <ReviewDiffView />
+              </ReviewLensesProvider>
+            </ReviewPanelProvider>
           </ReviewSessionProvider>
         </TestCanvasQuery>,
       ),
@@ -142,6 +145,7 @@ function progressHarness() {
   );
 
   const queryClient = createCanvasQueryClient();
+  const session = testReviewSession();
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -162,13 +166,17 @@ function progressHarness() {
     act(async () =>
       root.render(
         <TestCanvasQuery client={queryClient}>
-          <ReviewLensesProvider
-            client={client}
-            snapshot={{ ...lensSnapshot, version }}
-            coverageRevision={coverageRevision}
-          >
-            <Probe />
-          </ReviewLensesProvider>
+          <ReviewSessionProvider session={session}>
+            <ReviewPanelProvider>
+              <ReviewLensesProvider
+                client={client}
+                snapshot={{ ...lensSnapshot, version }}
+                coverageRevision={coverageRevision}
+              >
+                <Probe />
+              </ReviewLensesProvider>
+            </ReviewPanelProvider>
+          </ReviewSessionProvider>
         </TestCanvasQuery>,
       ),
     );
