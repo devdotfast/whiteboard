@@ -1,0 +1,949 @@
+/* The app shell: its grid and side-panel resizers, the topbar, the view
+   regions, and the topbar and map settings popovers. */
+
+/* The Source tab's VS Code-like watermark: quiet text centered in the empty
+   editor area, next to the native file tree. */
+
+.review-source-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  color: var(--ink-faint);
+  font: 13px/1.55 var(--font-display);
+  user-select: none;
+}
+
+.review-source-empty p {
+  margin: 0;
+}
+
+.review-source-empty-hint {
+  font-size: 11px;
+}
+
+.review-canvas-shell {
+  width: min(760px, 100%);
+  margin: 0 auto;
+  padding: 32px;
+  color: var(--ink);
+  font: 13px/1.55 var(--font-display);
+}
+
+.review-canvas-shell h1 {
+  margin: 10px 0 6px;
+  font-size: 26px;
+}
+
+.review-canvas-shell h2 {
+  margin: 28px 0 8px;
+  color: var(--ink-muted);
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.review-canvas-shell p,
+.review-canvas-shell code {
+  color: var(--ink-muted);
+}
+
+.review-shell-brand {
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Status rows stack above the document; the document takes the remaining height. */
+
+.review-api-canvas {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.review-app--peek-open {
+  grid-template-columns: minmax(0, 1fr) 10px var(--side-peek-width, 560px);
+}
+
+@media (max-width: 720px) {
+  .review-app,
+  .review-app--peek-open {
+    grid-template-columns: minmax(0, 1fr) 0 0;
+  }
+}
+
+.review-app--resizing {
+  cursor: col-resize;
+  user-select: none;
+  transition: none;
+}
+
+.review-app--restored-panel {
+  transition: none;
+}
+
+.review-document-shell {
+  position: relative;
+  display: grid;
+  /* The explicit minmax(0, 1fr) column lets rows shrink below their
+     min-content width (e.g. wide diagrams) when the panel narrows the
+     shell, instead of overflowing under the side panel. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  container: review-content / inline-size;
+}
+
+.review-document-shell--historical {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.side-panel-resizer {
+  position: relative;
+  /* Keep the divider in normal stacking order. The side-peek host follows
+     this grid item, so its hover widgets can paint above the divider. */
+  width: 10px;
+  min-width: 10px;
+  cursor: col-resize;
+  background: var(--transparent);
+  border: 0;
+  touch-action: none;
+}
+
+.side-panel-resizer::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--rule);
+  transform: translateX(-50%);
+  content: "";
+}
+
+.side-panel-resizer:hover::before,
+.side-panel-resizer:focus-visible::before,
+.review-app--resizing .side-panel-resizer::before {
+  background: var(--ink-faint);
+}
+
+.side-panel-resizer:focus-visible {
+  outline: 1px solid var(--rule-soft);
+  outline-offset: -1px;
+}
+
+.side-peek-resizer {
+  height: 100%;
+  background: var(--transparent);
+  border-color: var(--transparent);
+}
+
+/* Horizontal twin of .side-panel-resizer for the narrow-layout bottom
+   sheet: a plain divider line that drags the sheet height. Hidden on wide
+   layouts, where the vertical divider owns resizing. */
+
+.side-panel-sheet-resizer {
+  position: relative;
+  display: none;
+  flex: 0 0 auto;
+  height: 10px;
+  min-height: 10px;
+  cursor: row-resize;
+  background: var(--transparent);
+  border: 0;
+  touch-action: none;
+}
+
+.side-panel-sheet-resizer::before {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--rule);
+  transform: translateY(-50%);
+  content: "";
+}
+
+.side-panel-sheet-resizer:hover::before,
+.side-panel-sheet-resizer:focus-visible::before {
+  background: var(--ink-faint);
+}
+
+.side-panel-sheet-resizer:focus-visible {
+  outline: 1px solid var(--rule-soft);
+  outline-offset: -1px;
+}
+
+.review-topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--review-debug-layer);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: var(--review-header-height);
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.review-topbar-left {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+/* The view tabs are words on the tray; the marker is drawn under the active
+   one. */
+
+.review-topbar-left .review-segmented {
+  gap: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--transparent);
+}
+
+.review-topbar-left .review-segment {
+  height: var(--review-header-height);
+  padding: 0;
+  border-radius: 0;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.review-topbar-left .review-segment--active {
+  background: var(--transparent);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+/* The Review tab while the agent writes (study 05, bar B): marker ink sweeps
+   through the word itself; when the document becomes ready while the reader
+   is elsewhere, an unread dot is tucked past the word's top right. Neither
+   touches the tab's layout: the dot is out of flow and only color moves. */
+
+.review-topbar-left .review-segment-word {
+  position: relative;
+}
+
+.review-topbar-left .review-segment-unread {
+  position: absolute;
+  top: 1px;
+  right: -7px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.review-topbar-left .review-segment-word[data-working] {
+  background: linear-gradient(
+    100deg,
+    var(--ink-muted) 0 40%,
+    var(--accent) 50%,
+    var(--ink-muted) 60% 100%
+  );
+  background-size: 240% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: var(--transparent);
+  animation: wb-shimmer 1.8s linear infinite;
+}
+
+.review-topbar-left .review-segment--active .review-segment-word[data-working] {
+  background-image: linear-gradient(
+    100deg,
+    var(--ink) 0 40%,
+    var(--accent) 50%,
+    var(--ink) 60% 100%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-topbar-left .review-segment-word[data-working] {
+    background: none;
+    color: var(--ink-muted);
+    animation: none;
+  }
+}
+
+.review-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.review-topbar-actions > * {
+  flex: 0 0 auto;
+}
+
+.review-topbar-context {
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  align-items: center;
+  margin-right: auto;
+}
+
+.review-topbar-context::before {
+  content: "";
+  flex: 0 0 1px;
+  height: 20px;
+  margin: 0 14px 0 16px;
+  background: var(--chrome-border);
+}
+
+/* The scratchpad has no source tree or pins to set apart, so no rule. */
+
+.review-topbar-context:empty::before {
+  display: none;
+}
+
+.review-topbar-actions [popover] {
+  position: fixed;
+  inset: auto;
+  top: calc(anchor(bottom) + 4px);
+  right: anchor(right);
+  margin: 0;
+  max-width: calc(100vw - 16px);
+  position-try-fallbacks: flip-inline, flip-block;
+  position-visibility: anchors-visible;
+}
+
+.review-open-source-tree {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  height: var(--chrome-control-height);
+  padding: 0 10px;
+  border: 0;
+  background: var(--transparent);
+  font-family: var(--chrome-font);
+  font-size: var(--chrome-font-size);
+  font-weight: var(--chrome-font-weight);
+  white-space: nowrap;
+}
+
+.review-open-source-tree:focus-visible {
+  outline: 2px solid var(--chrome-fg);
+  outline-offset: -1px;
+}
+
+.review-open-source-tree,
+.review-topbar-icon-button {
+  border-radius: var(--chrome-control-radius);
+  color: var(--ink-muted);
+}
+
+.review-open-source-tree:hover,
+.review-topbar-icon-button:hover {
+  background: var(--well);
+  color: var(--ink);
+}
+
+/* The topbar compacts against its own column (the shell container), not the
+   viewport: an open side panel narrows the column without resizing the
+   window. */
+
+@container review-content (max-width: 720px) {
+  .review-open-source-tree-label {
+    display: none;
+  }
+
+  .review-open-source-tree {
+    width: var(--chrome-control-height);
+    justify-content: center;
+    padding: 0;
+  }
+}
+
+.review-view-region {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.review-view-region--commits {
+  overflow: auto;
+}
+
+.review-document-view {
+  display: contents;
+}
+
+.review-document-view[hidden] {
+  display: none;
+}
+
+.review-map-view {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.review-diff-view {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Keep the full diff alive while another view is selected. It initializes in
+ * the review page's loading window, then the first Diff click and every return
+ * reuse the same file tree, editor models, selection, and scroll state. */
+
+.review-diff-view--preloaded {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.review-diff-view--scoped {
+  grid-template-rows: 30px minmax(0, 1fr);
+}
+
+.review-diff-view--scoped .review-diff-view-host {
+  grid-row: 2;
+}
+
+/* The workbench mounts its diff widgets here and sizes them from this box. */
+
+.review-diff-view-host {
+  position: relative;
+  grid-row: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.review-diff-view-error {
+  display: flex;
+  align-items: center;
+  grid-row: 1;
+  align-self: start;
+  padding: 0 10px;
+  background: var(--surface);
+  color: var(--ink-faint);
+  font: 11px/1 var(--font-mono);
+}
+
+.review-map-canvas-shell {
+  /* Anchors the floating map settings control. */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  grid-row: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.review-map-view .software-map {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  margin: 0;
+}
+
+.software-map-topology-unavailable {
+  flex: none;
+  margin: 0;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--tray);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.review-map-view .software-map-frame {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--bg);
+}
+
+.review-topbar-icon-button {
+  display: grid;
+  place-items: center;
+  width: var(--chrome-control-height);
+  height: var(--chrome-control-height);
+  padding: 0;
+  border: 0;
+  background: var(--transparent);
+  cursor: pointer;
+}
+
+.review-topbar-icon-button .ui-icon {
+  width: var(--chrome-icon-size);
+  height: var(--chrome-icon-size);
+}
+
+.review-topbar-icon-button:focus-visible {
+  outline: 1px solid var(--chrome-fg);
+  outline-offset: -1px;
+}
+
+.review-history-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--rule-soft);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--ink);
+  font-family: var(--chrome-font);
+  font-size: 12px;
+}
+
+.review-history-banner button {
+  padding: 2px 8px;
+  border: 1px solid var(--chrome-border);
+  border-radius: var(--chrome-control-radius);
+  background: var(--surface-raised);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.review-history-banner button:hover,
+.review-history-banner button:focus-visible {
+  border-color: var(--chrome-active-border);
+  outline: none;
+}
+
+.review-diff-settings {
+  position: relative;
+}
+
+.review-diff-settings-button {
+  display: grid;
+  align-items: center;
+  justify-content: center;
+  width: var(--chrome-control-height);
+  height: var(--chrome-control-height);
+  padding: 0;
+  border: 0;
+  border-radius: var(--chrome-control-radius);
+  background: var(--transparent);
+  color: var(--chrome-icon-fg);
+  cursor: pointer;
+}
+
+.review-diff-settings-button .ui-icon {
+  width: var(--chrome-icon-size);
+  height: var(--chrome-icon-size);
+}
+
+.review-diff-settings-button:hover,
+.review-diff-settings-button:focus-visible,
+.review-diff-settings-button[aria-expanded="true"] {
+  background: var(--chrome-hover-bg);
+  color: var(--chrome-fg);
+  outline: none;
+}
+
+/* Review actions — one deliberate decision control */
+
+.review-baton-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--chrome-font);
+  font-size: var(--chrome-font-size-small);
+  font-weight: var(--chrome-font-weight-strong);
+  line-height: 1;
+  letter-spacing: var(--chrome-tracking);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.review-baton-chip--dismissed {
+  color: var(--diff-removed);
+}
+
+.review-baton-glyph {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.review-baton-chip--dismissed .review-baton-glyph {
+  stroke-width: 1.4;
+}
+
+.topbar-actions-divider {
+  flex-shrink: 0;
+  width: 1px;
+  height: 16px;
+  background: var(--chrome-border);
+}
+
+/* The single end-of-review control, sized to fit inside the 35px topbar. */
+
+.review-corner-action {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Dismissal is terminal but reversible, so it reads as a quiet outline rather
+   than a destructive fill. It never uses a bare X: that reads as "close". */
+
+.review-corner-dismiss {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--chrome-control-height);
+  padding: 0 10px;
+  white-space: nowrap;
+  border: 1px solid var(--chrome-border);
+  background: var(--transparent);
+  color: var(--chrome-fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+}
+
+.review-corner-dismiss:not(:disabled):hover {
+  background: var(--chrome-hover-bg);
+}
+
+.review-corner-dismiss svg {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+}
+
+.review-corner-error {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--rule-soft);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  font: 400 11.5px var(--font-mono);
+  color: var(--change-removed);
+  white-space: nowrap;
+}
+
+.review-debug-trigger-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5px;
+}
+
+.review-debug-switch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 50px;
+  padding: 10px 13px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.review-debug-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.review-debug-switch i {
+  position: relative;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 22px;
+  border: 1px solid var(--rule-soft);
+  border-radius: 999px;
+  background: var(--control-bg);
+}
+
+.review-debug-switch i::before {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--ink-faint);
+  transition:
+    transform 140ms ease,
+    background 140ms ease;
+  content: "";
+}
+
+.review-debug-switch input:checked + i {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.review-debug-switch input:checked + i::before {
+  background: var(--accent);
+  transform: translateX(16px);
+}
+
+.review-debug-theme {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 10px;
+}
+
+.review-debug-theme--triple {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.review-debug-group-label {
+  grid-column: 1 / -1;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.review-debug-theme-option {
+  min-height: 32px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--tray);
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.review-debug-theme-option--active,
+.review-debug-theme-option:hover,
+.review-debug-theme-option:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  outline: none;
+}
+
+.review-detail-host {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.review-view-region--review {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: var(--review-scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+  /* --review-toc-tail is the room the contents rail adds so the last heading
+     can scroll up to the top edge, measured by the rail itself. */
+  padding: var(--review-page-top) 52px
+    calc(
+      max(120px, var(--review-bottom-scroll-padding, 0px)) +
+        var(--review-toc-tail, 0px)
+    );
+}
+
+/* A transparent track, so the thumb communicates position without drawing a
+   persistent gutter. Monaco renders its own slider elements. */
+
+.review-view-region--review::-webkit-scrollbar {
+  width: var(--review-scrollbar-size);
+  background: transparent;
+}
+
+.review-view-region--review::-webkit-scrollbar-track,
+.review-view-region--review::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.review-view-region--review::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--review-scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+.review-view-region--review::-webkit-scrollbar-thumb:hover {
+  background: var(--review-scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+.review-view-region--review::-webkit-scrollbar-thumb:active {
+  background: var(--review-scrollbar-thumb-active);
+  background-clip: padding-box;
+}
+
+.review-view-region--review.review-view-region--document-warning {
+  padding-top: calc(var(--review-page-top) + 72px);
+}
+
+@container review-content (max-width: 1180px) {
+  .review-view-region--review {
+    gap: 0;
+    padding: var(--review-page-top) 42px 120px;
+  }
+}
+
+@container review-content (max-width: 1080px) {
+  .review-view-region--review {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0;
+    padding: var(--review-page-top) 24px 120px;
+  }
+}
+
+/* Narrow layouts: the panel docks to the bottom half of the canvas as a
+   sheet behind a draggable divider — the horizontal twin of the side peek.
+   No backdrop: the document above stays readable and interactive. */
+
+@container review-canvas (max-width: 929px) {
+  .review-app,
+  .review-app--peek-open {
+    grid-template-columns: minmax(0, 1fr) 0 0;
+  }
+
+  .review-app--peek-open .side-panel-resizer {
+    display: none;
+  }
+
+  /* The host's own box lives in the collapsed third grid column; dissolving
+     it lets the sheet position against .review-app instead of a 0-width,
+     overflow-hidden ancestor. */
+  .review-detail-host {
+    display: contents;
+  }
+
+  .side-panel-sheet-resizer {
+    display: block;
+  }
+}
+
+@media (max-width: 720px) {
+  .review-app--peek-open {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .review-app--peek-open .side-panel-resizer {
+    display: none;
+  }
+
+  .review-view-region--review {
+    padding: 22px 8px calc(96px + var(--review-toc-tail, 0px));
+  }
+
+  /* The host's own box lives in the collapsed third grid column; dissolving
+     it lets the sheet position against .review-app instead of a 0-width,
+     overflow-hidden ancestor. */
+  .review-detail-host {
+    display: contents;
+  }
+}
+
+/* Map settings float over the map canvas instead of sitting behind a topbar
+   gear, so map-only controls stay with the map. */
+
+.map-settings-control {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.map-settings-trigger {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rule-soft);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--ink-muted);
+  box-shadow: 0 6px 18px var(--shadow-color-strong);
+}
+
+.map-settings-trigger:hover,
+.map-settings-trigger--active {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.map-settings-popover {
+  display: flex;
+  width: 268px;
+  flex-direction: column;
+  border: 1px solid var(--rule-soft);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: 0 12px 32px var(--shadow-color-strong);
+}
+
+/* Marker ink sweeping through the Review tab while the agent writes. */
+
+@keyframes wb-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+.canvas-error {
+  max-width: 72ch;
+  margin: 32px auto;
+  padding: 0 24px;
+  font: 15px/1.6 var(--font-display);
+}

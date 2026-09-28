@@ -10,8 +10,6 @@ import {
   type ReviewApiClient,
   ReviewApiError,
 } from "../../src/review-api/client";
-
-import "./share-control.css";
 import { canvasQueryKeys } from "./canvas-query";
 import { copyText } from "./copy-text";
 import { useOptionalReviewSession } from "./host/review-session";

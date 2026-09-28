@@ -151,18 +151,19 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   centre of each control returns an element inside `.review-topbar`.
 - **Notes:** measured in the workbench renderer (viewport 1200x800): the review
   canvas starts at y=74, `.review-topbar` is `position: sticky` from 74 to 109
-  with `z-index: var(--review-debug-layer)` (`styles.css:2318`), and the whole
+  with `z-index: var(--review-debug-layer)` (`review-shell.css`), and the whole
   review scroll region starts at 109. That token is `2147483000`
-  (`styles.css:140`) and five rules share it (`:1704`, `:1770`, `:2318`,
-  `:3137`, `:3896`), so a fix belongs on the token or on the overlays, not on a
+  (`theme.css`) and five rules share it (`review-shell.css`,
+  `tutorial-experience.css` twice, `diagrams.css`, `software-map/styles.css`),
+  so a fix belongs on the token or on the overlays, not on a
   literal; the prebuilt canvas CSS the staged runtime ships still carries an
   older `2147480000`, which is the number the measurement reports. Both
   overlays are laid out against a containing block whose top is y=40 — 34 px
   above the canvas — so they land inside that band: `.review-toc-toggle`
   (`position: fixed; top: calc(32px + var(--review-page-top))`,
-  `styles.css:4641-4646`) measures 92–124, and
+  `review-toc.css`) measures 92–124, and
   `.review-find-widget` (`position: absolute; top: 48px; z-index: 120`,
-  `styles.css:503-519`) puts its toggles at 95–115. The topbar's near-maximum
+  `review-find.css`) puts its toggles at 95–115. The topbar's near-maximum
   `z-index` beats both, so the covered part of each control is dead. The pill is
   the only way into the contents below a 1360 px shell (`review-toc.tsx:25`,
   `:216`), so in a normal window the reader has no working table of contents at

@@ -141,9 +141,6 @@ export type {
   SoftwareMapResolvedSnapshot,
 } from "./software-map-snapshot";
 
-import "@xyflow/react/dist/style.css";
-import "./styles.css";
-
 const DEFAULT_CODE_INSPECTOR_WIDTH = 420;
 
 const MIN_CODE_INSPECTOR_WIDTH = 340;

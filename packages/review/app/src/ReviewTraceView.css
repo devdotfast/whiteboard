@@ -1,0 +1,936 @@
+/* Agent trace view */
+
+.review-view-region--trace {
+  overflow: auto;
+  /* The trace view anchors scroll itself across elision changes; the
+     browser's own heuristic would otherwise adjust a second time. */
+  overflow-anchor: none;
+}
+
+.review-trace-view {
+  min-height: 100%;
+  /* The left inset clears the event ruler: 14px edge inset + 6px resting
+     tick + 28px gap, so the 30px hover comb stops just short of the text. */
+  padding: 36px 24px 96px 48px;
+}
+
+.review-trace-column {
+  width: min(980px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.review-trace-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.review-trace-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.review-trace-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.review-trace-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.review-trace-meta-sep {
+  color: var(--rule-soft);
+}
+
+.review-trace-picker {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 20px;
+}
+
+.review-trace-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(680px, 100%);
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12.5px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px var(--shadow-color);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.review-trace-picker-trigger:hover {
+  border-color: var(--rule-soft);
+  background: var(--tray);
+}
+
+.review-trace-picker-trigger[aria-expanded="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-wash);
+}
+
+.review-trace-picker-harness {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.review-trace-picker-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.review-trace-picker-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+  flex-shrink: 0;
+  color: var(--ink-faint);
+  transition: transform 0.15s ease;
+}
+
+.review-trace-picker-trigger[aria-expanded="true"]
+  .review-trace-picker-chevron {
+  transform: rotate(180deg);
+}
+
+.review-trace-picker-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  min-width: 320px;
+  max-width: min(640px, 90vw);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px var(--shadow-color-strong);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.review-trace-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.review-trace-picker-item:hover {
+  background: var(--tray);
+}
+
+.review-trace-picker-item--active {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.review-trace-picker-item--active:hover {
+  background: var(--accent-wash);
+}
+
+.review-trace-picker-item--subagent {
+  padding-left: 20px;
+}
+
+.review-trace-picker-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+}
+
+.review-trace-picker-item-harness {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  flex-shrink: 0;
+  min-width: 52px;
+}
+
+.review-trace-picker-item--active .review-trace-picker-item-harness {
+  color: var(--accent);
+}
+
+.review-trace-picker-item-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+}
+
+.review-trace-picker-item--active .review-trace-picker-item-title {
+  font-weight: 600;
+}
+
+.review-trace-picker-item-check {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+
+.review-trace-picker-item-badge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--tray);
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.review-trace-events {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 28px;
+}
+
+.review-trace-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.agent-chat-user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  margin-top: 14px;
+  margin-left: auto;
+  max-width: min(480px, 90%);
+  min-width: 0;
+}
+
+.agent-chat-user-bubble {
+  padding: 12px 14px;
+  background: var(--tray);
+  border-radius: 12px 12px 4px 12px;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 24px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.agent-chat-caption {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+
+.review-trace-prose .agent-markdown {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 26px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.review-trace-tool {
+  min-width: 0;
+}
+
+.review-trace-tool summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.review-trace-tool summary::-webkit-details-marker {
+  display: none;
+}
+
+.review-trace-tool-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 16px;
+  column-gap: 6px;
+  align-items: center;
+  min-height: 24px;
+}
+
+.review-trace-icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--ink-faint);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.review-trace-tool-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.review-trace-tool-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.review-trace-tool-verb {
+  color: var(--ink-faint);
+  flex-shrink: 0;
+}
+
+.review-trace-tool-title {
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.review-trace-tool-title--file {
+  color: var(--accent);
+  /* Ellipsize the FRONT of paths so the filename stays visible. */
+  direction: rtl;
+  text-align: left;
+}
+
+.review-trace-tool-title--file bdi {
+  unicode-bidi: plaintext;
+}
+
+.review-trace-added {
+  color: var(--change-added);
+  flex-shrink: 0;
+}
+
+.review-trace-removed {
+  color: var(--change-removed);
+  flex-shrink: 0;
+}
+
+.review-trace-error-flag {
+  color: var(--change-removed);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.review-trace-tool-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.review-trace-tool-chevron .review-trace-icon {
+  width: 12px;
+  height: 12px;
+  stroke: var(--rule-soft);
+  transform: rotate(-90deg);
+  transition: transform 120ms ease;
+}
+
+.review-trace-tool--expandable[open]
+  .review-trace-tool-chevron
+  .review-trace-icon {
+  transform: rotate(0deg);
+}
+
+.review-trace-figure {
+  margin: 10px 0 0 26px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.review-trace-figure-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--tray);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.review-trace-figure-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 14px 16px;
+  max-height: 420px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.review-trace-figure-body--thinking {
+  white-space: normal;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink-muted);
+}
+
+.review-trace-figure-body--thinking .agent-markdown {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
+.review-trace-figure-command {
+  color: var(--ink);
+}
+
+.review-trace-figure-output {
+  color: var(--ink-muted);
+}
+
+.review-trace-worked > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 0;
+  list-style: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.review-trace-worked > summary::-webkit-details-marker {
+  display: none;
+}
+
+.review-trace-worked > summary:hover {
+  color: var(--ink-muted);
+}
+
+.review-trace-worked-chevron {
+  display: inline-flex;
+  align-items: center;
+}
+
+.review-trace-worked-chevron .review-trace-icon {
+  width: 11px;
+  height: 11px;
+  stroke: var(--ink-faint);
+  transform: rotate(-90deg);
+  transition: transform 120ms ease;
+}
+
+.review-trace-worked[open] .review-trace-worked-chevron .review-trace-icon {
+  transform: rotate(0deg);
+}
+
+.review-trace-worked-line {
+  flex-grow: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
+.review-trace-worked-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+/* The embedded workbench Chromium does not hide closed details content. */
+
+.review-trace-worked:not([open]) > .review-trace-worked-body {
+  display: none;
+}
+
+.review-trace-tool--expandable:not([open]) > .review-trace-figure {
+  display: none;
+}
+
+.review-trace-toolgroup:not([open]) > .review-trace-toolgroup-body {
+  display: none;
+}
+
+/* Coalesced tool runs: one summary row per consecutive tool-call run */
+
+.review-trace-toolgroup {
+  min-width: 0;
+}
+
+.review-trace-toolgroup > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  list-style: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-muted);
+}
+
+.review-trace-toolgroup > summary::-webkit-details-marker {
+  display: none;
+}
+
+.review-trace-toolgroup-label {
+  color: var(--ink-muted);
+}
+
+.review-trace-toolgroup-count {
+  color: var(--ink-faint);
+  font-size: 11px;
+}
+
+.review-trace-toolgroup-chevron {
+  display: inline-flex;
+  align-items: center;
+}
+
+.review-trace-toolgroup-chevron .review-trace-icon {
+  width: 12px;
+  height: 12px;
+  stroke: var(--rule-soft);
+  transform: rotate(-90deg);
+  transition: transform 120ms ease;
+}
+
+.review-trace-toolgroup[open]
+  > summary
+  .review-trace-toolgroup-chevron
+  .review-trace-icon {
+  transform: rotate(0deg);
+}
+
+.review-trace-toolgroup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 2px 0 4px 26px;
+}
+
+.review-trace-note {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 19px;
+  color: var(--ink-faint);
+}
+
+.review-trace-note--error {
+  color: var(--change-removed);
+}
+
+.review-trace-empty,
+.review-trace-unconfigured {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 48px;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 26px;
+  color: var(--ink);
+}
+
+.review-trace-empty p,
+.review-trace-unconfigured p {
+  margin: 0;
+}
+
+/* Lens / peek scoped trace elements */
+
+.review-trace-events--scoped {
+  margin-top: 22px;
+}
+
+.review-trace-lens-gap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+}
+
+.review-trace-lens-gap-line {
+  flex-grow: 1;
+  height: 1px;
+  border-top: 1px dashed var(--rule-soft);
+}
+
+.review-trace-lens-gap-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px;
+  border: 1px dashed var(--rule-soft);
+  border-radius: 999px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.review-trace-lens-gap:hover .review-trace-lens-gap-chip {
+  color: var(--ink-muted);
+  border-color: var(--ink-faint);
+}
+
+/* Collapse rows bracket an expanded elision. Same geometry as the gap row,
+   but solid: dashed marks hidden content, solid marks the boundary of a
+   revealed span. */
+
+.review-trace-lens-collapse {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+}
+
+.review-trace-lens-collapse-line {
+  flex-grow: 1;
+  height: 1px;
+  border-top: 1px solid var(--rule-soft);
+}
+
+.review-trace-lens-collapse-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid var(--rule-soft);
+  border-radius: 999px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.review-trace-lens-collapse-chevron {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.review-trace-lens-collapse:hover .review-trace-lens-collapse-chip {
+  color: var(--ink-muted);
+  border-color: var(--ink-faint);
+}
+
+.review-trace-lens-collapse:hover .review-trace-lens-collapse-line {
+  border-color: var(--ink-faint);
+}
+
+.review-trace-user-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+}
+
+.review-trace-lens-elided {
+  display: inline;
+}
+
+.review-trace-lens-kept {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 26px;
+  color: var(--ink);
+}
+
+.agent-chat-user-bubble--elided .review-trace-lens-kept {
+  line-height: 24px;
+}
+
+/* Event-ruler scrollbar: a left-edge column of uniform dashes mapping the
+   whole session at even pitch. Brightness marks the events currently in the
+   viewport; hovering bulges nearby ticks toward the content and shows a
+   preview card. Strictly grayscale via the ink tokens. */
+
+.review-trace-ruler {
+  height: 0;
+  overflow: visible;
+}
+
+.review-trace-ruler-rail {
+  position: fixed;
+  width: 40px;
+  z-index: 3;
+}
+
+.review-trace-ruler-tick {
+  position: absolute;
+  /* Inset from the panel edge; the comb grows rightward from here. */
+  left: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ink-faint);
+  opacity: 0.55;
+  transition:
+    width 90ms ease,
+    opacity 90ms ease;
+  pointer-events: none;
+}
+
+.review-trace-ruler-tick--visible {
+  background: var(--ink);
+  opacity: 0.9;
+}
+
+.review-trace-ruler-tick--hovered {
+  background: var(--ink);
+  opacity: 1;
+}
+
+.review-trace-ruler-card {
+  position: absolute;
+  left: 52px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--tray);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+  pointer-events: none;
+}
+
+.review-trace-ruler-card-title {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 19px;
+  font-weight: 600;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.review-trace-ruler-card-snippet {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.review-trace-lens-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  margin: 0 6px;
+  padding: 0 7px;
+  border: 1px dashed var(--rule-soft);
+  border-radius: 999px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  cursor: pointer;
+  vertical-align: baseline;
+}
+
+.review-trace-lens-chip:hover {
+  color: var(--ink-muted);
+  border-color: var(--ink-faint);
+}
+
+.review-trace-prose--elided {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 26px;
+  color: var(--ink);
+}
+
+/* Quote links and marks */
+
+.review-trace-quote,
+.review-trace-quote:visited {
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.review-trace-quote:hover {
+  text-decoration: underline;
+}
+
+.review-trace-quote[data-review-anchor-open] {
+  background: var(--link-open-wash);
+}
+
+/* Faint curly quotes hug each trace quote so the reader can tell someone's
+   words from a code peek or file link without the link color changing.
+   inline-block keeps the hover underline off the marks themselves. */
+
+.review-trace-quote::before,
+.review-trace-quote::after {
+  display: inline-block;
+  color: var(--ink-faint);
+}
+
+.review-trace-quote::before {
+  content: "\201C";
+}
+
+.review-trace-quote::after {
+  content: "\201D";
+}
+
+.review-trace-quote--inert {
+  color: var(--ink-faint);
+  text-decoration: none;
+  cursor: default;
+}
+
+.review-trace-quote--inert:hover {
+  text-decoration: none;
+}
+
+.review-trace-quote-mark {
+  background: rgba(255, 230, 0, 0.35);
+  color: inherit;
+  border-radius: 2px;
+  padding: 1px 2px;
+}
+
+.review-trace-peek-open-full {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--rule-soft);
+  background: var(--surface);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.review-trace-peek-open-full:hover {
+  background: var(--accent-wash);
+}
+
+.review-trace-source {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+}
+
+.review-trace-source select {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--review-border, currentColor);
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+}

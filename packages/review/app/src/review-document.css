@@ -1,0 +1,758 @@
+/* The review document: the prose column, headings, links, sections, tables,
+   callouts and the review header with its stack selector. */
+
+.review-document {
+  position: relative;
+  --review-inline-diagram-max-width: 1120px;
+  --review-document-padding-inline: clamp(
+    20px,
+    calc((100cqi - 720px) * 0.122 + 20px),
+    64px
+  );
+  --review-document-padding-block-start: 28px;
+  --review-document-padding-block-end: 72px;
+  --review-prose-max-width: 720px;
+  flex: 1 1 860px;
+  width: 100%;
+  max-width: 860px;
+  min-width: 0;
+  margin: 0 auto 96px;
+  padding: var(--review-document-padding-block-start)
+    var(--review-document-padding-inline)
+    var(--review-document-padding-block-end);
+  border: 0;
+  border-radius: 0;
+  background: var(--transparent);
+  box-shadow: none;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+/* A heading jumped to from the contents lands this far below the scroll
+   edge: clear of the edge for scroll-synced highlighting, and the same slack
+   the contents rail leaves under the last heading. */
+
+.review-document h2,
+.review-document h3 {
+  scroll-margin-top: 24px;
+}
+
+.review-document p {
+  margin: 14px 0;
+}
+
+/* Links are just text in the link color — prose and code chips alike, no
+   visited distinction. Hover restores the browser's plain underline, and
+   the link whose peek is open carries a quiet wash of the same color. */
+
+.review-document a,
+.review-document a:visited {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.review-document a code {
+  color: var(--accent);
+}
+
+.review-document a:hover {
+  text-decoration: underline;
+}
+
+.review-document a[data-review-anchor-open],
+.review-document a[data-review-anchor-open] code {
+  background: var(--link-open-wash);
+}
+
+.review-document code {
+  padding: 2px 5px;
+  color: var(--ink);
+  border-radius: 3px;
+  background: var(--well);
+  font-size: 0.85em;
+}
+
+.review-document:has(.database-lens) {
+  width: min(1360px, calc(100% - 32px));
+}
+
+.review-app--peek-open .review-document:has(.database-lens) {
+  width: calc(100% - 24px);
+}
+
+.review-app--peek-open .review-document {
+  --review-inline-diagram-max-width: 1000px;
+  width: 100%;
+  max-width: 860px;
+}
+
+.review-document h1,
+.review-document h2,
+.review-document h3,
+.review-document p,
+.review-document li,
+.review-document blockquote {
+  font-family: var(--font-serif);
+}
+
+.review-document h1 {
+  width: min(100%, var(--review-prose-max-width));
+  /* Keep title headroom consistent as the contents switches between pill and rail. */
+  margin: 28px auto 18px;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-weight: 500;
+  text-align: left;
+  font-size: 34px;
+  line-height: 40px;
+  letter-spacing: -0.005em;
+}
+
+.review-doc-meta-branch {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.review-doc-meta-branch svg {
+  color: var(--ink-faint);
+}
+
+.review-doc-meta-branch > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.review-doc-meta-pr {
+  text-decoration: none;
+  color: var(--accent);
+  font-weight: 400;
+}
+
+a.review-doc-meta-pr:hover {
+  text-decoration: underline;
+}
+
+.review-stack-selector {
+  position: relative;
+  color: var(--ink-faint);
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+}
+
+.review-stack-selector > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink);
+  list-style: none;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.review-stack-selector > summary::-webkit-details-marker {
+  display: none;
+}
+
+.review-stack-selector > summary:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--rule-soft));
+  background: var(--control-bg);
+}
+
+.review-stack-position-marker {
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--ink-faint);
+  border-radius: 50%;
+  color: var(--ink-muted);
+  font-size: 9px;
+  font-weight: 500;
+  display: none;
+}
+
+.review-stack-position {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.review-stack-label {
+  color: var(--ink-faint);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.review-stack-selector > summary svg {
+  width: 12px;
+  height: 12px;
+  color: var(--ink-faint);
+  transition: transform 120ms ease-out;
+}
+
+.review-stack-selector > summary path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.25;
+}
+
+.review-stack-selector[open] > summary svg {
+  transform: rotate(180deg);
+}
+
+.review-stack-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  min-width: 340px;
+  padding: 7px;
+  flex-direction: column;
+  border: 1px solid var(--rule-soft);
+  border-radius: 9px;
+  background: var(--surface-raised);
+  box-shadow: 0 14px 32px var(--shadow-color);
+}
+
+.review-stack-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 7px 9px;
+  gap: 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+
+.review-stack-row.is-current {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised));
+}
+
+button.review-stack-row:not(:disabled) {
+  cursor: pointer;
+}
+
+button.review-stack-row:not(:disabled):hover {
+  background: var(--tray);
+}
+
+button.review-stack-row:disabled {
+  cursor: default;
+}
+
+button.review-stack-row:disabled .review-stack-layer-title,
+button.review-stack-row:disabled .review-stack-branch,
+button.review-stack-row:disabled .review-stack-position-marker,
+button.review-stack-row:disabled .review-stack-relation {
+  color: var(--ink-faint);
+}
+
+.review-stack-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  flex: 0 0 24px;
+}
+
+.review-stack-row.is-current .review-stack-position-marker {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--rule-soft));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.review-stack-layer-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.review-stack-layer-title,
+.review-stack-branch {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-stack-layer-title {
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.review-stack-row.is-current .review-stack-layer-title {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.review-stack-branch {
+  color: var(--ink-faint);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.review-stack-row.is-current .review-stack-branch {
+  color: var(--ink-muted);
+}
+
+.review-stack-row.is-current .review-stack-relation {
+  color: var(--accent);
+}
+
+.review-stack-relation {
+  width: 54px;
+  flex: 0 0 54px;
+  color: var(--ink-faint);
+  font-size: 8px;
+  letter-spacing: 0.02em;
+  line-height: 13px;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.review-document h2 {
+  margin: 40px auto 12px;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 32px;
+}
+
+.review-document h3 {
+  margin: 30px auto 10px;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  line-height: 23px;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.review-document p,
+.review-document li {
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.72;
+  text-align: left;
+}
+
+.review-document li + li {
+  margin-top: 8px;
+}
+
+.review-document li > p:first-child {
+  margin-top: 0;
+}
+
+.review-document li > p:last-child {
+  margin-bottom: 0;
+}
+
+.review-document > p,
+.review-document > h2,
+.review-document > h3,
+.review-document > ul,
+.review-document > ol,
+.review-document > blockquote,
+.review-document > pre,
+.review-document > .code-peek,
+.review-document > .review-trace-quote-container,
+.review-section-header,
+.review-section-body > p,
+.review-section-body > h3,
+.review-section-body > ul,
+.review-section-body > ol,
+.review-section-body > blockquote,
+.review-section-body > pre,
+.review-section-body > .code-peek,
+.review-section-body > .review-trace-quote-container {
+  width: min(100%, var(--review-prose-max-width));
+  max-width: calc(
+    100cqi - var(--review-document-padding-inline) -
+      var(--review-document-padding-inline)
+  );
+  margin-inline: auto;
+}
+
+/* Standalone quotes share the prose column; quotes inside prose stay inline. */
+
+.review-document > .review-trace-quote-container,
+.review-section-body > .review-trace-quote-container {
+  display: block;
+}
+
+/* Code peeks are sections, so unlike prose they have no browser block margin. */
+
+.review-document > .code-peek + .code-peek,
+.review-section-body > .code-peek + .code-peek {
+  margin-block-start: 14px;
+}
+
+.review-section {
+  position: relative;
+  width: 100%;
+}
+
+.review-section--collapsed .review-section-heading h2 {
+  color: var(--ghost);
+}
+
+.review-section-header {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  margin-block: 40px 12px;
+  gap: 12px;
+}
+
+.review-section-header h2 {
+  margin: 0;
+}
+
+.review-section-heading {
+  min-width: 0;
+}
+
+.review-section-toggle {
+  position: absolute;
+  top: 5px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: var(--transparent);
+  transition: opacity 120ms ease;
+  left: -28px;
+  /* Expanded sections keep a faint chevron so "this collapses" is legible
+     without hovering the header first. */
+  color: var(--ink-faint);
+  opacity: 1;
+}
+
+.review-section-header:hover .review-section-toggle,
+.review-section-toggle:focus-visible,
+.review-section--collapsed .review-section-toggle {
+  opacity: 1;
+}
+
+.review-section-toggle:hover,
+.review-section-toggle:focus-visible {
+  color: var(--ink-muted);
+  outline: none;
+}
+
+.review-section-meta {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--ink-faint);
+}
+
+.review-document code,
+.review-document pre,
+.review-document kbd,
+.review-document samp {
+  font-family: var(--font-mono);
+}
+
+.review-document table {
+  width: min(100%, 600px);
+  margin: 24px auto;
+  border-collapse: collapse;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  table-layout: fixed;
+}
+
+.review-document th,
+.review-document td {
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  overflow-wrap: anywhere;
+  text-align: left;
+  vertical-align: top;
+}
+
+.review-document th {
+  background: var(--tray);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+@container review-content (max-width: 1080px) {
+  .review-document {
+    flex: 0 1 auto;
+    width: 100%;
+    max-width: 860px;
+    min-width: 0;
+    margin: 0 auto;
+    padding: 28px var(--review-document-padding-inline);
+    border: none;
+    border-radius: 0;
+    background: var(--transparent);
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .review-document,
+  .review-app--peek-open .review-document,
+  .review-document:has(.database-lens),
+  .review-app--peek-open .review-document:has(.database-lens) {
+    --review-document-padding-inline: clamp(12px, 4vw, 20px);
+    --review-document-padding-block-start: 28px;
+    --review-document-padding-block-end: 48px;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+}
+
+/* The scratchpad has no title above its blocks, so its opening heading sits
+   at the page's top padding instead of carrying a section's headroom. */
+
+.review-document[data-kind="scratchpad"]
+  > .api-document-node:first-child
+  :is(h1, h2, h3):first-child {
+  margin-top: 0;
+}
+
+.review-document blockquote[data-tone] {
+  margin: 18px 0;
+  padding: 12px 16px;
+  border-left: 2px solid var(--ink-faint);
+  border-radius: 0 6px 6px 0;
+  background: var(--tray);
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.review-document blockquote[data-tone="info"] {
+  border-left-color: var(--accent);
+  background: var(--marker-tint);
+}
+
+.review-document blockquote[data-tone="warning"] {
+  border-left-color: var(--change-modified);
+  background: var(--diff-modified-bg);
+}
+
+.review-document blockquote[data-tone="danger"] {
+  border-left-color: var(--change-removed);
+  background: var(--diff-removed-bg);
+}
+
+.review-document blockquote[data-tone="success"] {
+  border-left-color: var(--change-added);
+  background: var(--diff-added-bg);
+}
+
+.review-document .review-document-header h1 {
+  margin: 0;
+  width: 100%;
+  max-width: 1000px;
+  font-size: 32px;
+  line-height: 38px;
+  letter-spacing: -0.015em;
+}
+
+.review-document:has(.review-document-header) {
+  --review-prose-max-width: 760px;
+  max-width: 900px;
+}
+
+/* Rendered in the workbench document so native Monaco and prose use one affordance. */
+
+.copy-for-agent-popover {
+  position: fixed;
+  z-index: 10002;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 9px;
+  border: 1px solid var(--vscode-editorWidget-border, #3b3b3b);
+  border-radius: 6px;
+  background: var(--vscode-editorWidget-background, #202020);
+  color: var(--vscode-editor-foreground, #eee);
+  box-shadow: 0 3px 12px #0004;
+  font:
+    13px/20px -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.copy-for-agent-popover:hover {
+  background: color-mix(
+    in srgb,
+    var(--vscode-editorWidget-background, #202020) 90%,
+    var(--vscode-editor-foreground, #eee) 10%
+  );
+}
+
+.copy-for-agent-popover:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder, #87baff);
+}
+
+.copy-for-agent-popover kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: #8882;
+  color: var(--vscode-descriptionForeground, #aaa);
+  font:
+    500 13px/20px -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  letter-spacing: 0;
+}
+
+.copy-for-agent-popover kbd span {
+  display: inline-block;
+}
+
+/* Paper's review header: identity, title, then source and diff metadata. */
+
+.review-document-header {
+  width: min(100%, var(--review-prose-max-width));
+  margin: 28px auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 28px;
+  font: 13px/18px var(--font-mono);
+  color: var(--ink-faint);
+}
+
+.review-header-top,
+.review-header-identity,
+.review-header-details,
+.review-header-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.review-header-top {
+  justify-content: space-between;
+  gap: 10px 24px;
+}
+
+.review-header-identity {
+  gap: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.review-header-separator {
+  color: var(--ink-faint);
+}
+
+.review-header-updated {
+  margin-left: auto;
+}
+
+.review-document-header .review-doc-meta-pr {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+}
+
+.review-document-header svg {
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.review-header-details {
+  gap: 8px 10px;
+  padding-top: 12px;
+}
+
+/* Facts in the details row are divided by small ink-faint dots. */
+
+.review-header-dot {
+  flex: 0 0 3px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+
+.review-document-header .review-doc-meta-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 26px;
+  max-width: 100%;
+  padding: 3px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--well);
+  color: var(--ink);
+  box-sizing: border-box;
+}
+
+.review-header-stats {
+  gap: 10px;
+}
+
+.review-header-stats .diff-counts {
+  font-size: 13px;
+  gap: 10px;
+}
+
+.review-header-change-bar {
+  display: flex;
+  flex: 0 0 42px;
+  gap: 2px;
+  height: 8px;
+}
+
+.review-header-change-bar > span {
+  min-width: 1px;
+  background: var(--change-added);
+  border-radius: 1px;
+}
+
+.review-header-change-bar > .is-removed {
+  background: var(--change-removed);
+}
+
+.review-document-header + .api-document-node .review-section-header {
+  margin-top: 40px;
+}

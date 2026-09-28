@@ -1,0 +1,503 @@
+/* The side panel: its header, code peeks, inline editors and the guided
+   tour feed, which becomes a bottom sheet on narrow shells. */
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  animation: side-panel-slide-in 200ms ease-out;
+}
+
+.side-panel--restored {
+  animation: none;
+}
+
+.review-detail-host > .side-panel {
+  grid-area: 1 / 1;
+}
+
+.review-panel-body {
+  padding-bottom: var(--review-bottom-scroll-padding, 0px);
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@keyframes side-panel-slide-in {
+  from {
+    opacity: 0.3;
+    transform: translateX(28px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side-panel {
+    animation: none;
+  }
+}
+
+.side-panel-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--review-header-height);
+  padding: 0 10px 0 16px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.side-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.side-panel-kicker {
+  flex: 0 0 auto;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.side-panel-title h2 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.side-panel-close {
+  flex: 0 0 auto;
+}
+
+.side-peek {
+  min-width: 0;
+}
+
+.side-peek-body {
+  min-width: 0;
+  padding: 12px;
+}
+
+.peek-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.peek-content {
+  min-width: 0;
+}
+
+.code-peek {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--ink);
+  font-family: var(--font-mono);
+}
+
+.review-inline-editor {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.review-inline-editor-error {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-color: var(--rule-soft);
+  background: var(--surface);
+  color: var(--ink-faint);
+  font: 11px/1 var(--font-mono);
+}
+
+.panel-code-block {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  background: var(--bg);
+}
+
+.panel-authored-code-surface {
+  position: relative;
+  min-width: 0;
+  background: var(--tray);
+}
+
+.panel-authored-code-block {
+  display: block;
+  min-width: 0;
+}
+
+.panel-static-code-surface {
+  min-width: 0;
+  margin: 0;
+  overflow: auto;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.panel-static-code-line {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 42px 14px minmax(0, 1fr);
+  min-height: 19px;
+  white-space: pre;
+}
+
+.panel-static-code-gutter {
+  padding: 0 5px 0 16px;
+  color: var(--ink-faint);
+  text-align: right;
+}
+
+.panel-static-code-marker {
+  color: var(--ink-faint);
+  text-align: center;
+}
+
+.side-peek--tour {
+  position: relative;
+  background: var(--bg);
+}
+
+.tour-feed-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.side-peek-body.tour-feed {
+  padding: 0 0 72px;
+  scroll-padding-top: 18px;
+  scroll-padding-bottom: 72px;
+}
+
+.tour-floating-footer {
+  position: absolute;
+  right: 0;
+  bottom: 12px;
+  left: 0;
+  z-index: 4;
+  display: flex;
+  justify-content: center;
+  padding: 0 12px;
+  pointer-events: none;
+}
+
+.tour-floating-footer .tour-pill {
+  pointer-events: auto;
+}
+
+/* Sized inline by GuidedTourPanel: exactly the scroll room the last stop
+   needs to reach the active line. A CSS percentage cannot reference the
+   scroller's height from inside the auto-height feed content. */
+
+.tour-scroll-tail {
+  flex-shrink: 0;
+}
+
+.tour-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 2px 10px var(--shadow-color-strong);
+  color: var(--on-accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tour-pill--intro {
+  gap: 7px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+
+.tour-pill-chevron {
+  color: var(--on-accent);
+}
+
+.tour-pill > button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--transparent);
+  box-shadow: none;
+  color: var(--on-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tour-pill > button:hover:not(:disabled),
+.tour-pill > button:focus-visible {
+  background: color-mix(in srgb, var(--on-accent) 16%, var(--transparent));
+}
+
+.tour-pill > button:disabled {
+  color: var(--on-accent-wash);
+  cursor: default;
+}
+
+.tour-end-cap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 16px 16px 52px;
+  padding: 12px 16px;
+  border: 1px dashed var(--rule-soft);
+  border-radius: 8px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tour-end-cap button {
+  padding: 0;
+  border: 0;
+  background: var(--transparent);
+  box-shadow: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tour-stop {
+  --tour-rail-breakout: 50px;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  padding-right: 16px;
+}
+
+.tour-stop-rail {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.tour-stop-rail::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 29px;
+  width: 2px;
+  background: var(--rule-soft);
+  content: "";
+}
+
+.tour-stop-rail div {
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-top: 18px;
+  border: 2px solid var(--rule-soft);
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: 0 0 0 4px var(--bg);
+  color: var(--ink-faint);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tour-stop.active .tour-stop-rail div {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.tour-stop-main {
+  min-width: 0;
+  padding: 16px 0 22px 4px;
+}
+
+.tour-stop-main > .peek-content {
+  position: relative;
+  z-index: 2;
+  width: calc(100% + var(--tour-rail-breakout));
+  margin-left: calc(-1 * var(--tour-rail-breakout));
+  background: var(--bg);
+}
+
+.tour-stop-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.tour-stop-count {
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tour-stop-header h3 {
+  margin: 3px 0 0;
+  color: var(--ink);
+  font-size: 19px;
+  line-height: 24px;
+}
+
+.tour-stop-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tour-stop-header p {
+  margin: 6px 0 0;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.tour-stop-header button {
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid var(--rule-soft);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.tour-stop-header .icon-button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: var(--transparent);
+  box-shadow: none;
+  color: var(--ink-faint);
+}
+
+.tour-stop-header .icon-button:hover,
+.tour-stop-header .icon-button:focus-visible {
+  background: var(--transparent);
+  color: var(--ink-muted);
+}
+
+.tour-stop.active .tour-stop-main {
+  border-radius: 9px;
+}
+
+.tour-stop.active .tour-stop-header h3 {
+  color: var(--accent);
+}
+
+@container review-canvas (max-width: 929px) {
+  .side-panel {
+    position: absolute;
+    inset: auto 0 0 0;
+    z-index: 50;
+    width: auto;
+    height: calc(var(--side-panel-bottom-fraction, 0.5) * 100%);
+    max-height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+  }
+}
+
+@media (max-width: 720px) {
+  .side-panel {
+    position: absolute;
+    inset: auto 0 0 0;
+    z-index: 50;
+    width: auto;
+    height: calc(var(--side-panel-bottom-fraction, 0.5) * 100%);
+    max-height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  .side-panel-sheet-resizer {
+    display: block;
+  }
+
+  .side-peek-body {
+    padding: 8px;
+  }
+
+  .tour-floating-footer {
+    bottom: 8px;
+    padding: 0 8px;
+  }
+
+  .tour-end-cap {
+    margin: 8px 8px 16px 38px;
+  }
+
+  .tour-stop {
+    --tour-rail-breakout: 30px;
+    grid-template-columns: 38px minmax(0, 1fr);
+    padding-right: 8px;
+  }
+
+  .tour-stop-rail::before {
+    left: 19px;
+  }
+
+  .tour-stop-main {
+    padding-left: 0;
+  }
+
+  .tour-stop-main > .peek-content {
+    width: calc(100% + var(--tour-rail-breakout));
+    margin-left: calc(-1 * var(--tour-rail-breakout));
+  }
+}
+
+@media (max-height: 560px) {
+  .side-panel {
+    inset: 0;
+    height: 100%;
+    max-height: none;
+  }
+}

@@ -8,8 +8,6 @@ import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { FlowGraph } from "./flow-graph";
 import type { GuidedTour, GuidedTourStop } from "./review-panel-model";
 
-import "./flow-diagram.css";
-
 /** Each attachment is a tour stop; selection still belongs to its graph node. */
 export function flowTourStops(
   block: FlowDiagramBlock,

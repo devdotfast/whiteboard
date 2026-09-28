@@ -33,8 +33,6 @@ import { cssIdentifier, scrollToReviewHeading } from "./review-heading-scroll";
 import { useReviewRoots } from "./review-root-context";
 import type { SoftwareMapResolvedDataPayload } from "./software-map/software-map-snapshot";
 
-import "./api-document.css";
-
 interface Trace {
   label: string;
   events: { id: string; role: string; text: string }[];

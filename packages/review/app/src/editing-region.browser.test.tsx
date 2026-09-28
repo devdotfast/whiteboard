@@ -18,7 +18,6 @@ import {
 } from "./review-session-test-utils";
 
 import "./styles.css";
-import "./whiteboard.css";
 
 const blocks: Block[] = [
   { id: "intro", type: "markdown", markdown: "Before the sections.\n" },

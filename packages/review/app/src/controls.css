@@ -1,0 +1,344 @@
+/* Shared controls: the drawn check, segmented choices, toasts, icon buttons,
+   the disclosure chevron and file status marks. */
+
+.review-drawn-check {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+
+.review-drawn-check path {
+  fill: none;
+  stroke: currentColor;
+  stroke-dasharray: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.2;
+  animation: review-drawn-check 360ms ease-out both;
+}
+
+@keyframes review-drawn-check {
+  from {
+    stroke-dashoffset: 1;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-drawn-check path {
+    animation: none;
+  }
+}
+
+/* Segmented choice controls: a tray-colored track, the chosen side raised
+   on a hairline. One part for every "pick one of a few" setting (diff
+   layout, theme, keymap). The surface tabs on the left of the top bar are
+   the exception: words on the tray with the marker under the current one.
+   (The diff settings popover also lives in the top bar, so the exception is
+   keyed on the left group, not the bar.) */
+
+.review-segmented {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0;
+  padding: 2px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--tray);
+}
+
+.review-segment {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: var(--transparent);
+  font-family: var(--chrome-font);
+  white-space: nowrap;
+  position: relative;
+  gap: 6px;
+  height: 20px;
+  padding: 0 10px;
+  border-radius: 4px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.review-segment:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.review-segment-count {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.ui-icon.ui-icon--discord {
+  fill: currentColor;
+  stroke: none;
+}
+
+.review-toast {
+  position: fixed;
+  z-index: 10001;
+  right: 18px;
+  bottom: 18px;
+  max-width: 380px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 5px;
+  padding: 10px 12px;
+  background: var(--vscode-notifications-background, var(--tray));
+  box-shadow: 0 8px 28px var(--shadow-color);
+  color: var(--vscode-notifications-foreground, var(--ink));
+  font: 11px/1.4 var(--font-mono);
+}
+
+.review-toast--success {
+  border-color: var(--diff-added);
+}
+
+.review-toast--error {
+  border-color: var(--diff-modified);
+}
+
+.peek-actions button,
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  min-height: 30px;
+  border: 1px solid var(--rule-soft);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.peek-actions button {
+  padding: 5px 10px;
+}
+
+.icon-button {
+  height: 30px;
+  width: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: var(--transparent);
+  box-shadow: none;
+  color: var(--ink-faint);
+}
+
+.peek-actions .icon-button {
+  padding: 0;
+  border: 0;
+  background: var(--transparent);
+  box-shadow: none;
+  color: var(--ink-faint);
+}
+
+.icon-button:hover {
+  background: var(--transparent);
+  color: var(--ink-muted);
+}
+
+.icon-button:focus-visible {
+  background: var(--transparent);
+  color: var(--ink-muted);
+  outline: 1px solid var(--rule-soft);
+  outline-offset: 2px;
+}
+
+.icon-button .ui-icon {
+  pointer-events: none;
+}
+
+.icon-button:disabled {
+  color: var(--ink-faint);
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.icon-button:disabled:hover {
+  color: var(--ink-faint);
+  outline: none;
+}
+
+.ui-icon {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7px;
+}
+
+.review-segment:hover:not(.review-segment--active) {
+  background: var(--transparent);
+  color: var(--ink);
+}
+
+.review-segmented .review-segment:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  border-radius: 4px;
+}
+
+.review-segment--active {
+  background: var(--raised);
+  box-shadow: 0 0 0 1px var(--rule-soft);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* The marker is drawn, not painted: the stroke is revealed left to right
+   by a clip that slides open, so the pen's progress is the same whatever
+   the tab's width (a dash offset would not be: the stroke keeps its 2px
+   width through non-scaling-stroke, and under that the dash is measured
+   before the SVG is stretched, so a wide tab's dash ends early). Hover
+   draws a lighter stroke under any other surface; the current one keeps a
+   full stroke. Leaving fades the ink and only then closes the clip, so the
+   pen never runs backwards. */
+
+.review-marker-underline {
+  position: absolute;
+  bottom: 6px;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  overflow: visible;
+  clip-path: inset(-2px 100% -2px 0);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 140ms ease,
+    clip-path 0s linear 140ms;
+}
+
+.review-marker-underline path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.review-segment:hover .review-marker-underline,
+.review-segment--active .review-marker-underline {
+  clip-path: inset(-2px 0 -2px 0);
+  transition:
+    opacity 0s,
+    clip-path 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.review-segment:hover .review-marker-underline {
+  opacity: 0.7;
+}
+
+.review-segment--active .review-marker-underline {
+  opacity: 1;
+}
+
+.review-topbar-left .review-segment--active .review-segment-count {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-marker-underline,
+  .review-segment:hover .review-marker-underline,
+  .review-segment--active .review-marker-underline {
+    transition: opacity 100ms ease;
+  }
+}
+
+/* Disclosure chevron: one glyph, shared by every surface. It rotates a
+   quarter turn when open. */
+
+.review-chevron {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin: 2px;
+  color: var(--ink-faint);
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition:
+    transform 120ms ease,
+    color 120ms ease;
+}
+
+.review-chevron[data-open] {
+  transform: rotate(90deg);
+}
+
+button:hover > .review-chevron,
+button:focus-visible > .review-chevron {
+  color: var(--ink);
+}
+
+/* File marks: status as one stroke in the chevron's 16px slot. Added and
+   deleted take the two change colors, modified the warn amber the diagrams use,
+   renamed ink-muted, referenced context a ghost file outline. */
+
+.review-file-mark {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.review-file-mark circle {
+  fill: currentcolor;
+  stroke: none;
+}
+
+.review-file-mark-added {
+  color: var(--change-added);
+}
+
+.review-file-mark-deleted {
+  color: var(--change-removed);
+}
+
+.review-file-mark-modified {
+  color: var(--change-modified);
+}
+
+.review-file-mark-renamed {
+  color: var(--ink-muted);
+}
+
+.review-file-mark-unchanged {
+  color: var(--ghost);
+}
+
+/* Single-choice menus: the trigger and its chevron; the options open in a
+   native menu. */
+.review-option-menu {
+  position: relative;
+}
+
+.review-option-menu-chevron {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

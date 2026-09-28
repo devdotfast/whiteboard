@@ -14,6 +14,8 @@ import { FlowGraph } from "./flow-graph";
 import { ReviewSessionProvider } from "./host/review-session";
 import { testReviewSession } from "./review-session-test-utils";
 
+import "./styles.css";
+
 it.each([0, 1, 2, "all"])("renders after removing edge %s", async (removed) => {
   const container = document.createElement("div");
   document.body.append(container);

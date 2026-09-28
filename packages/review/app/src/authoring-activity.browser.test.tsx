@@ -10,6 +10,8 @@ import {
 } from "./authoring-activity";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 
+import "./styles.css";
+
 const working: ActivitySnapshot = {
   workingCount: 1,
   expiresAt: null,

@@ -34,8 +34,6 @@ import type { GuidedTour, PeekAnchor } from "./review-panel-model";
 import { useTourPersist, useTourRestore } from "./review-view-state";
 import { captureUiEvent } from "./ui-telemetry";
 
-import "@xyflow/react/dist/style.css";
-
 type SequenceParticipantNodeData = {
   participant: SequenceParticipant;
   height: number;

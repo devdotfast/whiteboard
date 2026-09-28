@@ -169,7 +169,7 @@ export function MapPinIcon(): ReactElement {
 }
 
 /**
- * The whiteboard marker stroke, drawn under a top bar surface; whiteboard.css
+ * The whiteboard marker stroke, drawn under a top bar surface; controls.css
  * reveals it left to right with a clip.
  */
 export function MarkerUnderline(): ReactElement {

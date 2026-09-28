@@ -3,11 +3,8 @@ import { describe, expect, it } from "vitest";
 import { scopeReviewCanvasCss } from "../desktop-css-scope";
 import { softwareMapOverlayClassName } from "./software-map/software-map-keyboard-navigation";
 
-import mapCss from "./software-map/styles.css?raw";
-import canvasCss from "./styles.css?raw";
+import canvasCss from "./styles.css?inline";
 import "./styles.css";
-import "./api-document.css";
-import "./software-map/styles.css";
 
 describe("Review layout", () => {
   it("aligns standalone JSON trace quotes with prose while keeping nested quotes inline", () => {
@@ -56,7 +53,7 @@ describe("Review layout", () => {
 
   it("keeps an expanded software map inside the viewport and above the topbar", () => {
     const styles = document.createElement("style");
-    styles.textContent = scopeReviewCanvasCss(`${mapCss}\n${canvasCss}`);
+    styles.textContent = scopeReviewCanvasCss(canvasCss);
     const canvas = document.createElement("div");
     canvas.className = "review-canvas-root";
     canvas.style.cssText =

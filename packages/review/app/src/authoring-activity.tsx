@@ -13,8 +13,6 @@ import { DisplayedReviewVersionContext } from "./displayed-review-version-contex
 import { useReviewRoots } from "./review-root-context";
 import { useTooltip } from "./use-tooltip";
 
-import "./authoring-activity.css";
-
 export const AuthoringActivityContext = createContext<
   ActivitySnapshot | "unknown" | undefined
 >(undefined);

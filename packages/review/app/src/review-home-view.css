@@ -1,0 +1,725 @@
+/* Home page: the Sessions heading and search, the scratchpad card, the
+   sessions table and the dismissed list. Mono display type, serif titles. */
+
+.review-home {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--review-home-bg);
+  font: 12px/16px var(--font-mono);
+}
+
+.review-home-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 36px clamp(36px, calc(12.5cqw - 60px), 120px)
+    max(56px, var(--review-bottom-scroll-padding, 0px));
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.review-home-content {
+  display: flex;
+  flex-direction: column;
+  width: min(1200px, 100%);
+  margin: 0 auto;
+}
+
+.review-home-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 32px;
+}
+
+.review-home-page-header h1 {
+  margin: 0;
+  color: var(--ink);
+  font: 600 32px/42px var(--font-mono);
+  letter-spacing: -0.02em;
+}
+
+.review-home-page-header-tools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Fixed width, so the clear button appearing does not resize the field. */
+
+.review-home-search {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--surface);
+  width: 256px;
+  height: 38px;
+  padding: 0 14px;
+  color: var(--ink-faint);
+  font-size: 15px;
+  gap: 12px;
+}
+
+.review-home-search:focus-within {
+  color: var(--ink-muted);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--marker-tint);
+}
+
+.review-home-search svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.review-home-search circle,
+.review-home-search path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.5;
+}
+
+.review-home-search input {
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+  border: 0;
+  color: var(--ink);
+  background: var(--transparent);
+  font: inherit;
+  outline: none;
+}
+
+.review-home-search input::placeholder {
+  color: var(--review-home-meta);
+}
+
+/* The user agent draws its own clear button in a colour the page cannot
+   reach, so the page draws its own. */
+
+.review-home-search input::-webkit-search-cancel-button,
+.review-home-search input::-webkit-search-decoration {
+  appearance: none;
+}
+
+.review-home-search-clear {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  color: var(--review-home-meta);
+  background: var(--transparent);
+}
+
+.review-home-search-clear:hover {
+  color: var(--ink);
+}
+
+.review-home-search-clear:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.review-home-search-clear svg {
+  width: 11px;
+  height: 11px;
+}
+
+.review-home-search-empty {
+  margin: 20px 0 0;
+  color: var(--review-home-meta);
+}
+
+/* The user agent paints <mark> black on yellow, which is unreadable on the
+   canvas. Carry the mark on the background and inherit the text colour: on a
+   dark theme, recolouring the glyphs to the accent makes the matched word
+   dimmer than the words around it, which is the opposite of a highlight.
+   Inherit the weight too, so marking a run does not reflow its line. */
+
+.review-home mark {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 30%, var(--transparent));
+  color: inherit;
+  font-weight: inherit;
+}
+
+.review-home-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  grid-auto-rows: 1fr;
+  gap: 18px;
+  justify-content: start;
+  margin-top: 24px;
+}
+
+.review-home-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  color: inherit;
+  text-align: left;
+  min-height: 128px;
+  border-radius: 8px;
+  background: var(--surface);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+  height: 100%;
+  gap: 12px;
+  padding: 16px 16px 14px;
+  border: 1px solid var(--rule);
+}
+
+.review-home-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.review-home-card-shell {
+  position: relative;
+  min-width: 0;
+}
+
+/* The scratchpad's group sits first, above the sessions table. */
+
+.review-home-scratchpad {
+  padding-top: 14px;
+  margin-bottom: 16px;
+}
+
+.review-home-scratchpad .review-home-scratchpad-card .review-home-review-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.review-home-scratchpad .review-home-cards {
+  grid-template-columns: minmax(0, 336px);
+}
+
+.review-home-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ink-faint);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  background: var(--transparent);
+}
+
+.review-home-delete:hover:not(:disabled),
+.review-home-delete:focus-visible {
+  color: var(--change-removed);
+}
+
+.review-home-delete:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.review-home-delete svg {
+  width: 13px;
+  height: 13px;
+}
+
+.review-home-delete path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.2;
+}
+
+.review-home-dismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ink-faint);
+  background: var(--transparent);
+}
+
+.review-home-dismiss:hover:not(:disabled),
+.review-home-dismiss:focus-visible {
+  color: var(--ink);
+}
+
+.review-home-dismiss:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.review-home-dismiss svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linejoin: round;
+  stroke-width: 1.2;
+}
+
+.review-home-card-shell .review-home-dismiss {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 20px;
+  height: 20px;
+  opacity: 1;
+  background: transparent;
+}
+
+.review-home-card-shell:hover .review-home-dismiss,
+.review-home-card-shell:focus-within .review-home-dismiss {
+  opacity: 1;
+}
+
+.review-home-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.review-home-review-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font: 500 17px/22px var(--font-serif);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-home-card .review-home-review-title {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.review-home-card:hover:not(:disabled) {
+  border-color: var(--rule-soft);
+}
+
+.review-home-card:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--marker-tint);
+}
+
+.review-home-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+  row-gap: 3px;
+  color: var(--review-home-meta);
+  font-variant-numeric: tabular-nums;
+  font: 11px var(--font-mono);
+}
+
+/* Meta lines are one sentence of facts joined by a middle dot. */
+
+.review-home-card-meta > * + *::before {
+  content: "· ";
+  color: var(--ink-faint);
+  white-space: pre;
+}
+
+.review-home-empty {
+  margin: 48px 0 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.review-home-zero-hint {
+  margin: 0;
+  max-width: 560px;
+  color: var(--ink-muted);
+  font: 13px/20px var(--font-mono);
+}
+
+@container review-canvas (max-width: 980px) {
+  .review-home-scroll {
+    padding-right: 36px;
+    padding-left: 36px;
+  }
+}
+
+@container review-canvas (max-width: 660px) {
+  .review-home-scroll {
+    padding: 32px 24px max(56px, var(--review-bottom-scroll-padding, 0px));
+  }
+
+  .review-home-page-header {
+    align-items: center;
+  }
+}
+
+/* Dismissed reviews sit below the active list, collapsed. */
+
+.review-home-dismissed {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.review-home-dismissed-toggle {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border: 0;
+  background: var(--transparent);
+  font: 600 11px var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.review-home-dismissed-count {
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.review-home-dismissed-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.review-home-dismissed-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--rule-soft);
+  border-radius: 8px;
+}
+
+.review-home-dismissed-open {
+  overflow: hidden;
+  flex: 1 1 auto;
+  border: 0;
+  background: var(--transparent);
+  color: var(--ink-muted);
+  font-size: 14px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-home-dismissed-clock {
+  flex: 0 0 auto;
+  color: var(--ink-muted);
+  font: 400 11.5px var(--font-mono);
+  opacity: 0.75;
+}
+
+.review-home-restore {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border: 1px solid var(--rule-soft);
+  border-radius: 6px;
+  background: var(--transparent);
+  color: var(--accent);
+  font: 600 11.5px var(--font-mono);
+}
+
+.review-home-scratchpad-glyph {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--ink-faint);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Paper desktop table: fixed metadata lanes and a flexible title column. */
+
+.review-home-table-section {
+  margin-top: 24px;
+}
+
+.review-home-table-toolbar,
+.review-home-table-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.review-home-table-toolbar {
+  padding: 8px 0 12px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-muted);
+  font: 15px/24px var(--font-mono);
+}
+
+.review-home-table-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink-muted);
+  font: 13px/18px var(--font-mono);
+  cursor: pointer;
+}
+
+.review-home-table-menu-trigger strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.review-home-table-menu-trigger[aria-expanded="true"] {
+  background: var(--tray);
+  border-color: var(--ink-faint);
+}
+
+.review-home-table-menu-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.review-home-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+}
+
+.review-home-table {
+  width: 100%;
+  min-width: 840px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font: 12px/18px var(--font-mono);
+}
+
+.review-home-col-pr {
+  width: 88px;
+}
+
+.review-home-col-branch {
+  width: 296px;
+}
+
+.review-home-col-date {
+  width: 136px;
+}
+
+.review-home-col-action {
+  width: 56px;
+}
+
+.review-home-table th {
+  height: 36px;
+  background: var(--tray);
+  color: var(--ink-muted);
+  font: 600 11px/16px var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+}
+
+.review-home-table th,
+.review-home-table td {
+  padding: 0 8px;
+  border-bottom: 1px solid var(--rule);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-home-table th:first-child,
+.review-home-table td:first-child {
+  padding-left: 16px;
+}
+
+.review-home-table td {
+  height: 60px;
+  color: var(--ink-muted);
+}
+
+.review-home-table td:first-child,
+.review-home-table td:nth-child(5) {
+  color: var(--ink);
+}
+
+.review-home-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.review-home-table tbody tr {
+  cursor: pointer;
+}
+
+.review-home-table tbody tr:hover,
+.review-home-table tbody tr:focus-within {
+  background: var(--tray);
+}
+
+.review-home-table-open {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.review-home-table .review-home-review-title {
+  display: block;
+  width: 100%;
+  font: 500 17px/22px var(--font-serif);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.review-home-table-repository {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-faint);
+  font: 11px/14px var(--font-mono);
+}
+
+.review-home-table-repository strong {
+  font-weight: 400;
+}
+
+.review-home-table-repository > span[aria-hidden] {
+  padding-inline: 5px;
+}
+
+.review-home-table .review-home-dismiss {
+  position: static;
+  width: 20px;
+  height: 20px;
+  opacity: 0;
+}
+
+.review-home-table tr:hover .review-home-dismiss,
+.review-home-table tr:focus-within .review-home-dismiss {
+  opacity: 1;
+}
+
+.review-home-action-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+@container review-canvas (max-width: 660px) {
+  .review-home-table-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .review-home-table-controls {
+    flex-wrap: wrap;
+  }
+}
+
+.review-home-search > svg {
+  width: 18px;
+  height: 18px;
+}
+
+.review-home-table td:first-child {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.review-home-table td:nth-child(4),
+.review-home-table td:nth-child(5) {
+  font-size: 13px;
+}
+
+@container review-canvas (max-width: 1100px) {
+  .review-home-col-branch {
+    width: 200px;
+  }
+}
+
+.review-home-row-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.review-home-row-menu-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.review-home-row-menu-trigger svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.review-home-table tr:hover .review-home-row-menu-trigger,
+.review-home-table tr:focus-within .review-home-row-menu-trigger,
+.review-home-row-menu-trigger[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.review-home-row-menu-trigger:hover,
+.review-home-row-menu-trigger[aria-expanded="true"] {
+  background: var(--well);
+}

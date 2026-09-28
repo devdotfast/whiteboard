@@ -1,0 +1,160 @@
+/* Settings page: flat rows, no cards. One narrow column, a small-caps label per
+   section, and a fixed right lane so every control lines up. */
+
+.review-settings-page {
+  width: min(820px, 100%);
+}
+
+.review-settings-lede {
+  margin: 0 0 28px;
+  color: var(--review-home-meta);
+  font-size: 13px;
+}
+
+.review-settings-section {
+  margin-bottom: 28px;
+}
+
+.review-settings-section-label {
+  margin: 0 0 2px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--review-home-rule);
+  color: var(--review-home-meta);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.review-settings-row {
+  display: grid;
+  grid-template-columns: 1fr 200px;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--review-home-rule-soft);
+}
+
+.review-settings-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.review-settings-row-label {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.review-settings-row-description {
+  color: var(--review-home-meta);
+  font-size: 12px;
+}
+
+.review-settings-row-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.review-settings-button {
+  padding: 4px 10px;
+  border: 1px solid var(--review-home-rule-soft);
+  border-radius: 5px;
+  color: inherit;
+  background: var(--transparent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.review-settings-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.review-settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--review-home-meta);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.review-settings-toggle input {
+  cursor: pointer;
+}
+
+/* A box is the state of a thing (viewed, enabled); it is the same 14px
+   hairline box everywhere, filled with the accent when checked. */
+.review-settings-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 1px solid var(--rule-soft);
+  border-radius: 3px;
+  background: var(--surface) center / 10px 10px no-repeat;
+  appearance: none;
+  cursor: pointer;
+}
+
+.review-settings-toggle input[type="checkbox"]:checked {
+  border-color: var(--accent);
+  background-color: var(--accent);
+  background-image: var(--check-mark);
+}
+
+.review-settings-input {
+  min-width: 200px;
+  padding: 4px 8px;
+  border: 1px solid var(--review-home-rule-soft);
+  border-radius: 5px;
+  color: inherit;
+  background: var(--transparent);
+  font: inherit;
+}
+
+.review-settings-input:disabled {
+  opacity: 0.5;
+}
+
+.review-settings-diffr {
+  margin-top: 8px;
+  padding-left: 12px;
+  border-left: 2px solid var(--review-home-rule-soft);
+}
+
+.review-settings-unavailable {
+  color: var(--review-home-meta);
+  font-size: 12px;
+}
+
+.review-settings-error {
+  margin: 4px 0 0;
+  color: var(--change-removed);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.review-settings-diffr summary {
+  cursor: pointer;
+  padding-block: 8px;
+}
+
+.review-settings-summary-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.review-settings-summary-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.review-settings-summary-result {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
