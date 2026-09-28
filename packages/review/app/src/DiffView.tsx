@@ -6,6 +6,7 @@ import type {
 } from "@dev.fast/review-protocol";
 import {
   type CSSProperties,
+  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -34,6 +35,40 @@ import {
 } from "./side-panel-resizer";
 import { useTooltip } from "./use-tooltip";
 import { ViewedButton } from "./viewed-button";
+
+// An empty label shows no tooltip, so only a truncated name gets one.
+function LensName({ title }: { title: string }) {
+  const [truncated, setTruncated] = useState(false);
+
+  const tooltip = useTooltip<HTMLSpanElement>(truncated ? title : "", {
+    instant: true,
+  });
+
+  const ref = useCallback(
+    (name: HTMLSpanElement | null) => {
+      if (!name || typeof ResizeObserver === "undefined") return tooltip(name);
+
+      const observer = new ResizeObserver(() =>
+          setTruncated(name.scrollWidth > name.clientWidth),
+        ),
+        disposeTooltip = tooltip(name);
+
+      observer.observe(name);
+
+      return () => {
+        observer.disconnect();
+        disposeTooltip?.();
+      };
+    },
+    [tooltip],
+  );
+
+  return (
+    <span ref={ref} className="diff-lens-name">
+      {title}
+    </span>
+  );
+}
 
 export function DiffCounts({ progress }: { progress: CoverageProgress }) {
   const { remaining, total, folded } = progress;
@@ -265,31 +300,16 @@ export function ReviewDiffView({
                       }
                     >
                       {/* The title sits on the chip, not the toggle, so it
-                          never stacks on the counts' own tooltip. A truncated
-                          name shows in full on hover via .diff-lens-peek. */}
+                          never stacks on the counts' own tooltip. */}
                       <span
                         className="diff-lens-chip"
                         title={
                           item.unavailable ??
                           (selected ? "Clear lens filter" : undefined)
                         }
-                        onPointerEnter={(event) => {
-                          const name =
-                            event.currentTarget.querySelector<HTMLElement>(
-                              ".diff-lens-name",
-                            )!;
-
-                          name.toggleAttribute(
-                            "data-truncated",
-                            name.scrollWidth > name.clientWidth,
-                          );
-                        }}
                       >
                         <FilterIcon />
-                        <span className="diff-lens-name">{item.title}</span>
-                        <span className="diff-lens-peek" aria-hidden="true">
-                          {item.title}
-                        </span>
+                        <LensName title={item.title} />
                         {selected && (
                           <span className="diff-lens-clear" aria-hidden="true">
                             <svg width="10" height="10" viewBox="0 0 10 10">
