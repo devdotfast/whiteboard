@@ -193,18 +193,17 @@ class UninstallReviewDesktopAction extends Action2 {
 		}
 
 		if (isLinux) {
-			// Package names follow the channel; the AUR package ships stable only.
 			const preview = productService.quality === "preview";
 			await dialogService.info(
 				localize("review.uninstall.linuxDone", "Whiteboard’s user-installed integrations were removed."),
 				preview
 					? localize(
 						"review.uninstall.linuxFinishPreview",
-						"To remove the app, quit Whiteboard and run sudo apt remove dev-fast-review-preview on Ubuntu, or sudo dnf remove dev-fast-review-preview on Fedora. Your sessions and settings stay on disk.",
+						"To remove the app, quit Whiteboard and run sudo apt remove whiteboard-preview on Ubuntu, sudo dnf remove whiteboard-preview on Fedora, or sudo pacman -R whiteboard-preview on Arch. Your sessions and settings stay on disk.",
 					)
 					: localize(
 						"review.uninstall.linuxFinish",
-						"To remove the app, quit Whiteboard and run sudo apt remove dev-fast-review on Ubuntu, sudo dnf remove dev-fast-review on Fedora, or sudo pacman -R whiteboard-bin on Omarchy / Arch. Your sessions and settings stay on disk.",
+						"To remove the app, quit Whiteboard and run sudo apt remove whiteboard on Ubuntu, sudo dnf remove whiteboard on Fedora, or sudo pacman -R whiteboard on Arch. Your sessions and settings stay on disk.",
 					),
 			);
 			return;
