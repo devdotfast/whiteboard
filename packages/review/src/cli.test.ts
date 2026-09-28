@@ -811,7 +811,7 @@ it("emits one JSON error when a trace command needs repository authorization", a
         {
           error: {
             code: "repository_authorization_required",
-            message: "Run review login --traces.",
+            message: "Run whiteboard login --traces.",
           },
         },
         { status: 403 },
@@ -842,9 +842,9 @@ it("emits one JSON error when a trace command needs repository authorization", a
   expect(events[0]).toMatchObject({
     event: "error",
     error: {
-      message: "Run review login --traces.",
+      message: "Run whiteboard login --traces.",
       code: "repository_authorization_required",
-      remedy: "review login --traces",
+      remedy: "whiteboard login --traces",
     },
   });
 });

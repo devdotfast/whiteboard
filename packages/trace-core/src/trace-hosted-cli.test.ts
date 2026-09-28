@@ -963,7 +963,7 @@ describe("hosted trace commands", () => {
       cwd: repo,
       scope: traceScope({ homeDir: home, env }),
       harnessHooks: false,
-      verifyCommand: "review check",
+      verifyCommand: "whiteboard check",
       client: client(() => Response.json(STORE)),
       stdout: out.stream,
       stderr: out.stream,
@@ -971,7 +971,7 @@ describe("hosted trace commands", () => {
 
     expect(code).toBe(0);
     expect(out.text()).toBe(
-      `Traces from acme/app may be published to ${ORIGIN}. Run \`review check\` to verify.\n`,
+      `Traces from acme/app may be published to ${ORIGIN}. Run \`whiteboard check\` to verify.\n`,
     );
   });
 
@@ -1082,10 +1082,10 @@ describe("hosted trace commands", () => {
       event: "error",
       stage: "allow",
       message:
-        "This machine sends traces to a bucket. Run `review trace storage use hosted` first.",
+        "This machine sends traces to a bucket. Run `whiteboard trace storage use hosted` first.",
     });
     expect(err.text()).toBe(
-      "This machine sends traces to a bucket. Run `review trace storage use hosted` first.\n",
+      "This machine sends traces to a bucket. Run `whiteboard trace storage use hosted` first.\n",
     );
     expect((await readTraceUserConfig(devHome)).repositories).toEqual([]);
   });

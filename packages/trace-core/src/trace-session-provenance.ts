@@ -14,7 +14,6 @@ import { sessionIdSchema } from "@dev.fast/trace-protocol";
 import { z } from "zod";
 
 import { writePrivateJsonAtomic } from "./atomic-write";
-import { traceCommandPrefix } from "./trace-command";
 import { devReviewHome } from "./trace-home";
 import {
   type TraceRepositoryTarget,
@@ -177,7 +176,7 @@ export async function requireTraceSessionProvenance(
   if (records.length === 0) {
     throw new TraceProvenanceError(
       "provenance_missing",
-      `This session was not captured in ${target.name}. Start a new agent session there after \`${traceCommandPrefix()} allow .\`; a commit trailer does not authorize publication.`,
+      `This session was not captured in ${target.name}. Start a new agent session there after \`whiteboard trace allow .\`; a commit trailer does not authorize publication.`,
     );
   }
 

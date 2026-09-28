@@ -50,11 +50,11 @@ Run `pnpm desktop:build` without the flag for a full compile and typecheck.
 ### Launching without taking focus
 
 `pnpm dev:background` builds and launches the Desktop without bringing its
-window forward, the same way `review app launch` does without `--focus`. It
+window forward, the same way `whiteboard app launch` does without `--focus`. It
 sets `DEV_FAST_REVIEW_DESKTOP_BACKGROUND=1`, which `run.sh` passes through to
 the Electron process; set it yourself for a bare `pnpm desktop:run`. The
 window stays behind whatever is frontmost until you click it or run
-`review app launch --focus`. Computer-use and other screen-driven tests rely
+`whiteboard app launch --focus`. Computer-use and other screen-driven tests rely
 on this so the terminal that started the app keeps focus.
 
 To reset generated Code OSS artifacts and the local Desktop profile, run this
@@ -70,7 +70,7 @@ This does not remove authored reviews in `${DEV_REVIEW_HOME:-~/.dev}/reviews`.
 under `${DEV_REVIEW_HOME:-~/.dev}/review-desktop/`; discovery is the private,
 atomic `server.json`, and Code OSS profile state is under `state/`.
 
-The released macOS app uses `review app launch` as its command-line entry.
+The released macOS app uses `whiteboard app launch` as its command-line entry.
 The app-managed CLI removes `ELECTRON_RUN_AS_NODE` and starts its exact
 `process.execPath`. Thus, the app can live outside `/Applications`. A
 repository or standalone CLI asks macOS to open bundle identifier
@@ -79,8 +79,8 @@ an attached Desktop client before it reports readiness.
 Tests can set `DEV_FAST_REVIEW_DESKTOP_STATE_ROOT` to keep the Code OSS profile
 under an isolated directory.
 
-Run `review app pick [--review <uuid>]` to select a review. Bare `review app`
-starts the app. `review info` does not start it.
+Run `whiteboard app pick [--review <uuid>]` to select a review. Bare `whiteboard app`
+starts the app. `whiteboard info` does not start it.
 
 Home lists review descriptors derived from `review.json`. Missing worktrees or
 documents remain visible but disabled. Reopening creates a desktop-owned active

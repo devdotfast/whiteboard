@@ -82,7 +82,7 @@ it("discovers the live Desktop map preference without opening a review", async (
     expect(opened).toBe(false);
     await expect(
       connectReviewApi({ ...env, DEV_REVIEW_SERVER_DIR: home }),
-    ).rejects.toThrow(/review server start/);
+    ).rejects.toThrow(/whiteboard server start/g);
     relay.close();
     expect(await client.read("/capabilities")).toMatchObject({
       desktopAvailable: false,
@@ -93,7 +93,7 @@ it("discovers the live Desktop map preference without opening a review", async (
         ...env,
         DEV_REVIEW_SERVER_DIR: path.join(home, "missing"),
       }),
-    ).rejects.toThrow(/review server start/);
+    ).rejects.toThrow(/whiteboard server start/g);
   } finally {
     await server.close();
     await local.data.close();

@@ -228,7 +228,7 @@ export function mountSharingPublisher(
 
     if (!account)
       throw new ReviewInputError(
-        "Set DEV_REVIEW_SHARE_TOKEN for CI, or run review login before sharing.",
+        "Set DEV_REVIEW_SHARE_TOKEN for CI, or run whiteboard login before sharing.",
         409,
       );
 
@@ -309,7 +309,7 @@ export function mountSharingPublisher(
 
     if (!account)
       throw new ReviewInputError(
-        "Set DEV_REVIEW_SHARE_TOKEN for CI, or run review login first.",
+        "Set DEV_REVIEW_SHARE_TOKEN for CI, or run whiteboard login first.",
         409,
       );
     await new ShareClient(account.origin, account.token).revoke(shareId);

@@ -98,7 +98,7 @@ it("reads legacy failures without promising retry", async () => {
     status: "failed",
     error: "old failure",
     at: new Date().toISOString(),
-    retry: "review trace sync session-legacy",
+    retry: "whiteboard trace sync session-legacy",
   };
 
   await writeFile(

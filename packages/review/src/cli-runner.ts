@@ -229,7 +229,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     .description("Create and open dev.fast reviews.")
     .addHelpText("after", reviewTopLevelHelp());
 
-  // Tolerate the leading form (`review --json scaffold`) as well as the usual
+  // Tolerate the leading form (`whiteboard --json scaffold`) as well as the usual
   // trailing one. Never give this a .default(): optsWithGlobals merges globals
   // over locals, so a default would clobber a subcommand's own true.
   program.addOption(new Option("--json").hideHelp());
@@ -722,7 +722,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     stderr: input.stderr,
     configureOutput: (command) => configureOutput(command, "plain"),
     configureJsonOutput: (command) => configureJsonOutput(command, "plain"),
-    verifyCommand: "review trace status",
+    verifyCommand: "whiteboard trace status",
     setExitCode: (code) => {
       state.exitCode = code;
     },
@@ -992,7 +992,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         error.code === "repository_authorization_required"
       ) {
         serialized.code = error.code;
-        serialized.remedy = "review login --traces";
+        serialized.remedy = "whiteboard login --traces";
       }
 
       emitReviewEvent(input.stdout, { event: "error", error: serialized });

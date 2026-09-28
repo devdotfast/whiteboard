@@ -38,11 +38,11 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 
 - **Journey:** `legacy-import` · **Found:** 2026-09-17 · **Status:** fixed (#348)
 - **Repro:** with Review Desktop running and any review in the store, run
-  `review info --review <uuid> --json`.
+  `whiteboard info --review <uuid> --json`.
 - **Expected:** the command prints the review's summary and exits 0.
 - **Actual:** exits 1 with
   `{"name":"ReviewApiError","message":"Not found."}` thrown from
-  `ReviewApiClient.response`. `review info` with no `--review` fails the same way,
+  `ReviewApiClient.response`. `whiteboard info` with no `--review` fails the same way,
   so the verb is unusable.
 - **Notes:** `review-info.ts:33` calls `client.read("/")`, and
   `review-api-client.ts:75` builds `${serverUrl}/reviews-api${route}`, so the
@@ -56,7 +56,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 - **Journey:** `legacy-import`, `json-api-edit`, `home-multi-review` · **Found:** 2026-09-17 · **Status:** fixed (#348)
 - **Repro:** with Review Desktop running and a review whose snapshot
   `GET /reviews-api/<uuid>?full=true` returns 200, run
-  `review app pick --review <uuid> --json`.
+  `whiteboard app pick --review <uuid> --json`.
 - **Expected:** Desktop opens that review and the command exits 0.
 - **Actual:** exits 1 with
   `{"name":"ReviewApiError","message":"Review or version not found."}` thrown from
@@ -226,12 +226,12 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 - **Journey:** `cli-desktop-edges` · **Found:** 2026-09-17 · **Status:** fixed (#348)
 - **Repro:** put an unusable pointer in `<home>/review-desktop/instances/<key>.json` —
   `version: 999`, or unparseable text, or a url nothing listens on — and run
-  `review app pick --review <uuid>`.
-- **Expected:** the same message `review info` prints for that pointer:
+  `whiteboard app pick --review <uuid>`.
+- **Expected:** the same message `whiteboard info` prints for that pointer:
   "Review Desktop uses protocol 999, but this Review CLI needs protocol 3.
   Update Review and Review Desktop to compatible versions, then try again.",
   "Review Desktop discovery is unreadable at …", or "Review Desktop is not
-  ready. Run `review app launch`, then retry …".
+  ready. Run `whiteboard app launch`, then retry …".
 - **Actual:** the CLI prints none of them. It goes to the launcher, which runs
   `/usr/bin/open -b dev.fast.review` and then polls for up to 90 s for a pointer
   it can use. Measured with a 25 s cap and no intervention, the command produced
@@ -252,14 +252,14 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   pointer, and `review-app-launcher.ts:281-289` catches every discovery error on
   purpose ("Launch must recover from stale, malformed, and incompatible
   discovery") and returns `null`, which the launcher reads as "nothing is
-  running". Recovering by launching is right for `review app launch`, which the
+  running". Recovering by launching is right for `whiteboard app launch`, which the
   user asked to start something; for every other verb it turns a one-line
   diagnosis into a second Desktop and a 90 s wait. Reading the pointer first and
   rethrowing anything but `null` from `runReviewAppPick` would fix it. Two
   consequences beyond the message: the launched app inherits the caller's
   environment (`open`(1) propagates it), so it attaches to whichever
   `DEV_REVIEW_HOME` the CLI had; and the "Review Desktop is not ready. Run
-  `review app launch` and retry `review app pick`." throw at `review-app.ts:52-55`
+  `whiteboard app launch` and retry `whiteboard app pick`." throw at `review-app.ts:52-55`
   is unreachable, because a null pointer read means the launcher already gave up.
 
 ## One unreadable legacy `review.json` stops Review Desktop from starting
@@ -274,14 +274,14 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   `DEV_FAST_REVIEW_SERVER_PORT=0`, `DEV_FAST_REVIEW_APP_PID=<a live pid>`).
 - **Expected:** the host starts, the reviews it can read are available, and the
   one it cannot is reported to the reader with the command its own error text
-  names: "Invalid review.json; run `review migrate apply`"
+  names: "Invalid review.json; run `whiteboard migrate apply`"
   (`review-home.ts:364-366`, `:706-710`).
 - **Actual:** the host exits 1 before it ever listens, and nothing starts. It
   prints `Error: Review migration could not finish. The original database is
   unchanged. Report: <home>/.json-cutover-XXXXXX/report.json`, followed by the
   review's uuid and the raw Zod union failure — three alternatives, roughly 90
   lines of `"code": "invalid_type"` entries naming `repoKey`, `worktreePath`,
-  `baseRef` and the rest. The words `review migrate apply` do not appear. The
+  `baseRef` and the rest. The words `whiteboard migrate apply` do not appear. The
   journey asserts the exit code, the message and that absence before it records
   this bug; a host that started, or one that named the command, fails it
   instead.
@@ -305,8 +305,8 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   directory left behind by the JSON cutover", below.
 - **Recovery (2026-09-18):** a skipped record is recorded in
   `<home>/json-cutover.json` and never retried. Repairing one is manual: fix the
-  `review.json`, delete `<home>/json-cutover.json`, restart. A `review migrate`
-  verb that retries `skipped` records is out of scope; `review migrate apply`
+  `review.json`, delete `<home>/json-cutover.json`, restart. A `whiteboard migrate`
+  verb that retries `skipped` records is out of scope; `whiteboard migrate apply`
   reports a schema-1 record as unsupported and preserves it.
 
 ## Home says nothing about a legacy review directory left behind by the JSON cutover
@@ -322,7 +322,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   Review Desktop and open Home.
 - **Expected (by the plan):** Home lists the review as needing migration and
   names the command to run, from the `MIGRATION_REQUIRED` `ReviewHomeError`
-  whose message is "Invalid review.json; run `review migrate apply`: …"
+  whose message is "Invalid review.json; run `whiteboard migrate apply`: …"
   (`review-home.ts:364-366`, `:706-710`).
 - **Actual:** Home renders the empty-Home onboarding rail and mentions neither
   the review nor the command; `GET /reviews-api` answers 200 without it; the

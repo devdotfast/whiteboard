@@ -25,7 +25,7 @@ export async function run(ctx) {
 
   let page = ctx.page;
 
-  // Startup, not `review info`, migrates the legacy directories now; this only records whether the verb reaches them.
+  // Startup, not `whiteboard info`, migrates the legacy directories now; this only records whether the verb reaches them.
   const first = legacyFixtures[0];
 
   const info = await ctx.cliRaw(
@@ -33,7 +33,7 @@ export async function run(ctx) {
     first.worktreePath,
   );
 
-  assert.equal(info.code, 0, `review info: ${info.stdout}\n${info.stderr}`);
+  assert.equal(info.code, 0, `whiteboard info: ${info.stdout}\n${info.stderr}`);
   assert.match(info.stdout, new RegExp(first.metadata.sourceUuid));
 
   // Startup imports into the JSON store; `migrate apply` is what seals the presentation in the legacy record.

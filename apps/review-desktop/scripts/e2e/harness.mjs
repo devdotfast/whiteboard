@@ -723,7 +723,7 @@ export async function closeSourceWindow(source) {
   await closed;
 }
 
-/** Opens a review the way a reader does, with `review app pick --session`. */
+/** Opens a review the way a reader does, with `whiteboard app pick --session`. */
 export async function pickReview(ctx, reviewId, cwd = ctx.repo) {
   const picked = await ctx.cliRaw(
     ["app", "pick", "--session", reviewId, "--json"],

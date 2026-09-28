@@ -122,7 +122,7 @@ export function createReviewServerEnvironment(options: {
       ? undefined
       : "1",
     // The app's own Electron binary doubles as the CLI's Node runtime
-    // (ELECTRON_RUN_AS_NODE), so an installed `review` command never
+    // (ELECTRON_RUN_AS_NODE), so an installed `whiteboard` command never
     // depends on a system Node.
     DEV_FAST_REVIEW_CLI_RUNTIME: process.execPath,
     DEV_FAST_REVIEW_RUST_ANALYZER: options.rustAnalyzerSource,

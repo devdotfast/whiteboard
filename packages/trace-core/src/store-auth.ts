@@ -20,7 +20,6 @@ import {
 import { errorMessage } from "./error-message";
 import { StoreApiError, StoreClient } from "./store-client";
 import { normalizeStoreOrigin } from "./store-origin";
-import { traceCliName } from "./trace-command";
 import { devReviewHome } from "./trace-home";
 import { DEFAULT_HOSTED_ORIGIN } from "./trace-storage/config";
 
@@ -100,7 +99,7 @@ export async function requireStoreClient(
 ): Promise<StoreClient> {
   const auth = await readStoreAuth(env);
 
-  if (!auth) throw new Error(`Run \`${traceCliName()} login\` first.`);
+  if (!auth) throw new Error(`Run \`whiteboard login\` first.`);
 
   return new StoreClient({ origin: auth.origin, token: auth.token });
 }
@@ -235,7 +234,7 @@ export async function runStoreLogin(input: {
     return failWithJsonError(
       output,
       "login",
-      `The login expired. Run \`${traceCliName()} login\` again.`,
+      `The login expired. Run \`whiteboard login\` again.`,
     );
   }
 
@@ -300,7 +299,7 @@ export async function runStoreWhoami(input: {
     return failWithJsonError(
       output,
       "whoami",
-      `Run \`${traceCliName()} login\` first.`,
+      `Run \`whiteboard login\` first.`,
     );
   }
 

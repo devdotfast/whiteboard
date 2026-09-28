@@ -155,11 +155,11 @@ export async function run(ctx) {
     moved,
   );
 
-  assert.equal(info.code, 0, `review info: ${info.stdout}\n${info.stderr}`);
+  assert.equal(info.code, 0, `whiteboard info: ${info.stdout}\n${info.stderr}`);
   assert.match(
     info.stdout,
     new RegExp(review.reviewId),
-    `review info named no review: ${info.stdout}`,
+    `whiteboard info named no review: ${info.stdout}`,
   );
   ctx.check("info resolves a review whose worktree moved");
 

@@ -65,7 +65,6 @@ export {
   resolveTraceCommand,
   traceCommandExecutable,
   traceCliName,
-  traceCommandPrefix,
   traceHomeDir,
   traceScope,
 } from "./trace-command";

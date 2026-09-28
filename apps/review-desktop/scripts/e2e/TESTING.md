@@ -2,7 +2,7 @@
 
 Each journey in `journeys/` launches Whiteboard Desktop once against
 an isolated review home, profile, remote-debugging port and temp root, and drives
-it through the JSON review API, the installed `review` CLI and Playwright over
+it through the JSON review API, the installed `whiteboard` CLI and Playwright over
 CDP. Run `telemetry-contract` alone with
 `pnpm --filter @dev.fast/review-desktop test:e2e:telemetry`.
 `../e2e-runner.test.mjs` checks every journey exports `name`, `phase` and `run`.

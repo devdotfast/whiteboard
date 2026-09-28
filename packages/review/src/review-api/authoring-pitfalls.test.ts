@@ -42,7 +42,7 @@ interface Reply {
   body: { error?: string; targetId?: string; reviewId?: string };
 }
 
-/** Post a command the way `review mcp` does and return status and body. */
+/** Post a command the way `whiteboard mcp` does and return status and body. */
 async function post(route: string, body: JsonValue): Promise<Reply> {
   const response = await app.request(route, {
     method: "POST",

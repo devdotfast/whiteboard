@@ -151,7 +151,7 @@ export async function findReviewForRepair(
     throw new ReviewHomeScanError([
       reviewHomeError(dir, jsonObject(value), {
         code: "MIGRATION_REQUIRED",
-        message: `Invalid review.json; run \`review migrate apply\`: ${errorMessage(error)}`,
+        message: `Invalid review.json; run \`whiteboard migrate apply\`: ${errorMessage(error)}`,
       }),
     ]);
   }
@@ -239,7 +239,7 @@ export async function readStoredReview(
     if (!parsed.success) {
       return {
         error: reviewHomeError(dir, jsonObject(value), {
-          message: `Invalid review.json; run \`review migrate apply\`: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
+          message: `Invalid review.json; run \`whiteboard migrate apply\`: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
           code: "MIGRATION_REQUIRED",
         }),
       };

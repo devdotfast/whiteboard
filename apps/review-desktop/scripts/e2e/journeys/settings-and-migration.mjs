@@ -202,7 +202,7 @@ export async function run(ctx) {
   if (homeText.includes(LEGACY_UUID)) {
     assert.match(
       homeText,
-      /review migrate apply/,
+      /whiteboard migrate apply/g,
       "Home named the unreadable review but not the command to run",
     );
     ctx.check(
@@ -211,7 +211,7 @@ export async function run(ctx) {
   } else {
     assert.doesNotMatch(
       homeText,
-      /review migrate apply/,
+      /whiteboard migrate apply/g,
       "Home offered migration guidance without naming the review it is about",
     );
     ctx.check(
@@ -253,19 +253,19 @@ export async function run(ctx) {
     new RegExp(
       `${LEGACY_UUID}: current artifact migration failed: Unsupported Review schema; the record was preserved\\.`,
     ),
-    `review migrate apply did not report the record: ${output}`,
+    `whiteboard migrate apply did not report the record: ${output}`,
   );
   assert.equal(
     migrate.code,
     1,
-    `review migrate apply reported a blocker but exited ${migrate.code}: ${output}`,
+    `whiteboard migrate apply reported a blocker but exited ${migrate.code}: ${output}`,
   );
   assert.deepEqual(
     await storedRecord(legacyDir),
     LEGACY_RECORD,
-    "review migrate apply changed the record it reported as preserved",
+    "whiteboard migrate apply changed the record it reported as preserved",
   );
   ctx.check(
-    "`review migrate apply` is the one place the unreadable record is reported, and it preserves it",
+    "`whiteboard migrate apply` is the one place the unreadable record is reported, and it preserves it",
   );
 }

@@ -101,7 +101,7 @@ Before the first public Fedora release, record these additional results:
 - GNOME/Wayland on the latest Fedora Workstation release (44) with SELinux enforcing and Chromium
   sandboxing enabled. Check native/custom controls, F10/Escape, drag regions,
   fullscreen, narrow widths, light/dark themes, and fractional scaling.
-- Onboarding, tutorial, review publication, language tools, and `review app launch`
+- Onboarding, tutorial, review publication, language tools, and `whiteboard app launch`
   on a clean machine without the source checkout or system Node.
 - Real N to N+1 through the hosted DNF repository, including interrupted downloads
   and metadata/signature requests that straddle publication.

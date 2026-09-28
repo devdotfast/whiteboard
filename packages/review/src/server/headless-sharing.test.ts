@@ -261,7 +261,7 @@ for (const json of [false, true]) {
 
       expect(code).toBe(1);
       expect(diagnostic).toContain("Whiteboard server is not ready");
-      expect(diagnostic).toContain("review server start");
+      expect(diagnostic).toContain("whiteboard server start");
       expect(json ? JSON.parse(output) : output).toEqual(
         json
           ? { error: { code: "share_failed", message: diagnostic.trim() } }

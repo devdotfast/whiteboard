@@ -39,7 +39,7 @@ type TestRunProcess = (input: {
 
 afterEach(cleanupTempDirs);
 
-describe("review migrate apply", () => {
+describe("whiteboard migrate apply", () => {
   it("leaves retired draft MDX untouched without reporting authoring blockers", async () => {
     const { reviewHome, reviewDir } = await canonicalReview();
 

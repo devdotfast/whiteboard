@@ -439,7 +439,7 @@ const initialize = {
   clientInfo: { name: "test", version: "1" },
 };
 
-describe("review mcp instructions", () => {
+describe("whiteboard mcp instructions", () => {
   it("lists and answers while down, then serves guidance through a restart", async () => {
     let up = false;
     let connections = 0;

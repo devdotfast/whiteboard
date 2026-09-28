@@ -84,7 +84,7 @@ export async function seedLegacyFixtures(ctx) {
   return legacyFixtures;
 }
 
-/** Opens an imported fixture through the shared `review app pick` helper. */
+/** Opens an imported fixture through the shared `whiteboard app pick` helper. */
 export const openLegacyReview = (ctx, fixture) =>
   pickReview(ctx, fixture.metadata.sourceUuid, fixture.worktreePath);
 

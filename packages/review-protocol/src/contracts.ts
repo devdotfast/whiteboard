@@ -945,9 +945,9 @@ export const ReviewCliInstallStatusSchema = z.strictObject({
     .strictObject({ path: requiredString, version: requiredString })
     .nullable(),
   connect: z.strictObject({
-    // "sh", or "review" when Desktop has no built CLI.
+    // "sh", or "whiteboard" when Desktop has no built CLI.
     command: requiredString,
-    // ["-c", "exec \"$HOME/.local/bin/review\" mcp"], or ["mcp"].
+    // ["-c", "exec \"$HOME/.local/bin/whiteboard\" mcp"], or ["mcp"].
     args: z.array(z.string()),
     prompts: z.record(ReviewCliInstallTargetSchema, requiredString),
     // The published plugin per harness: an install command, or Cursor's link.

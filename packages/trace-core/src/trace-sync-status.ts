@@ -12,7 +12,6 @@ import { sessionIdSchema } from "@dev.fast/trace-protocol";
 import { z } from "zod";
 
 import { writePrivateJsonAtomic } from "./atomic-write";
-import { traceCommandPrefix } from "./trace-command";
 import { devReviewHome } from "./trace-home";
 import type { TraceProvenanceReason } from "./trace-session-provenance";
 
@@ -80,7 +79,7 @@ export async function recordTraceSyncFailure(input: {
     reason: input.reason ?? "sync_failed",
     retry: input.reason
       ? undefined
-      : `${traceCommandPrefix()} sync ${input.sessionId}`,
+      : `whiteboard trace sync ${input.sessionId}`,
   };
 
   await writePrivateJsonAtomic(

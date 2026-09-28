@@ -46,7 +46,7 @@ export async function readReviewServerDiscovery(
     return discoverySchema.parse(JSON.parse(source));
   } catch {
     throw new Error(
-      `Whiteboard server discovery in ${stateDir} is invalid or incompatible. Restart it with this version of review server start.`,
+      `Whiteboard server discovery in ${stateDir} is invalid or incompatible. Restart it with this version of whiteboard server start.`,
     );
   }
 }
@@ -72,6 +72,6 @@ export async function reviewServerIsHealthy(discovery: ReviewServerDiscovery) {
 
 export function serverNotReady(stateDir: string) {
   return new Error(
-    `Whiteboard server is not ready in ${stateDir}. Run review server start --state-dir ${JSON.stringify(stateDir)}, then retry.`,
+    `Whiteboard server is not ready in ${stateDir}. Run whiteboard server start --state-dir ${JSON.stringify(stateDir)}, then retry.`,
   );
 }
