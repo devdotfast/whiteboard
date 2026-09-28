@@ -191,8 +191,8 @@ jobs:
             ${{ runner.os }}-code-oss-deps-v2-
 
       # Linux owns every platform-independent build output and also downloads
-      # the pinned darwin-arm64 VSIX payloads. The macOS job packages this
-      # archive; it must not silently rebuild or omit anything transferred here.
+      # the pinned VSIX payloads for every Darwin target. Each macOS leg packages
+      # this archive; it must not silently rebuild or omit anything transferred here.
       - name: Compile Darwin payload on Linux
         env:
           # Embeds the PostHog project key into the review runtime build so
@@ -237,15 +237,22 @@ jobs:
           key: ${{ runner.os }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
 
   build:
-    name: Build, sign, publish preview
+    name: Build and sign macOS preview (${{ matrix.target }})
     needs: [version, compile]
-    runs-on: macos-15-xlarge
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-15-xlarge
+          - target: darwin-x64
+            runner: macos-15-large
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     env:
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
       RELEASE_COMMIT: ${{ needs.version.outputs.commit }}
-      # TODO(task 3.1): comes from the build matrix once it exists.
-      DARWIN_TARGET: darwin-arm64
+      DARWIN_TARGET: ${{ matrix.target }}
     steps:
       - name: Checkout resolved preview commit
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -295,9 +302,9 @@ jobs:
             apps/review-desktop/code-oss/.build/distro/npm/remote/web/node_modules
             apps/review-desktop/code-oss/.build/electron
             ~/.cache/node-gyp
-          key: ${{ runner.os }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
+          key: ${{ runner.os }}-${{ matrix.target }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-code-oss-deps-v2-
+            ${{ runner.os }}-${{ matrix.target }}-code-oss-deps-v2-
 
       - name: Download darwin payload
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -374,7 +381,7 @@ jobs:
         with:
           path: |
             apps/review-desktop/code-oss/node_modules
-          key: ${{ runner.os }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
+          key: ${{ runner.os }}-${{ matrix.target }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
           lookup-only: true
 
       - name: Save Code OSS dependencies
@@ -392,7 +399,7 @@ jobs:
             apps/review-desktop/code-oss/.build/distro/npm/remote/web/node_modules
             apps/review-desktop/code-oss/.build/electron
             ~/.cache/node-gyp
-          key: ${{ runner.os }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
+          key: ${{ runner.os }}-${{ matrix.target }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
 
       - name: Validate release artifacts
         run: |
@@ -414,10 +421,43 @@ jobs:
           node apps/review-desktop/scripts/smoke-telemetry-delivery.mjs --app "$APP"
           node apps/review-desktop/scripts/smoke-error-telemetry.mjs --app "$APP"
 
-      # Payloads first, manifest last: a client must never see a latest.json
-      # whose zip is not yet downloadable.
+      # publish-macos uploads both arches together once every leg has passed.
+      # This artifact also carries the DMG a tester downloads from the run.
+      - name: Upload macOS preview artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-${{ matrix.target }}
+          path: |
+            apps/review-desktop/dist/*-${{ matrix.target }}-${{ env.RELEASE_VERSION }}.zip
+            apps/review-desktop/dist/Whiteboard-${{ matrix.target }}-${{ env.RELEASE_VERSION }}.dmg
+            apps/review-desktop/dist/latest.json
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+
+      - name: Remove signing credentials
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/buildagent.keychain" || true
+          rm -f "$RUNNER_TEMP/notary-key.p8"
+
+  publish-macos:
+    name: Publish macOS preview
+    needs: [version, build]
+    if: ${{ !cancelled() && !inputs.dry_run && needs.version.result == 'success' && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ needs.version.outputs.version }}
+      RELEASE_COMMIT: ${{ needs.version.outputs.commit }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: macos-*
+          path: dist
+
+      # Payloads first, manifests last: a client must never see a latest.json
+      # whose zip is not yet downloadable, on either arch.
       - name: Upload preview to R2
-        if: ${{ !inputs.dry_run }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -425,29 +465,32 @@ jobs:
           AWS_REGION: auto
           R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
         run: |
-          DIST=apps/review-desktop/dist
-          RELEASE_PREFIX="s3://${R2_BUCKET}/releases/${RELEASE_VERSION}/darwin-arm64"
           DMG_DISPOSITION="attachment; filename=\"df-whiteboard-preview-${RELEASE_VERSION}.dmg\""
 
-          for zip in "$DIST"/*-darwin-arm64-"${RELEASE_VERSION}".zip; do
-            aws s3 cp "$zip" "${RELEASE_PREFIX}/$(basename "$zip")" \
-              --content-type application/zip
+          for target in darwin-arm64 darwin-x64; do
+            DIST="dist/macos-${target}"
+            RELEASE_PREFIX="s3://${R2_BUCKET}/releases/${RELEASE_VERSION}/${target}"
+            for zip in "$DIST"/*-"${target}"-"${RELEASE_VERSION}".zip; do
+              aws s3 cp "$zip" "${RELEASE_PREFIX}/$(basename "$zip")" \
+                --content-type application/zip
+            done
+            aws s3 cp "$DIST/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
+              "${RELEASE_PREFIX}/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
+              --content-type application/x-apple-diskimage \
+              --content-disposition "$DMG_DISPOSITION"
+            aws s3 cp "$DIST/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
+              "s3://${R2_BUCKET}/releases/preview-latest/${target}/Whiteboard.dmg" \
+              --content-type application/x-apple-diskimage \
+              --content-disposition "$DMG_DISPOSITION"
           done
-          aws s3 cp "$DIST/Whiteboard-darwin-arm64-${RELEASE_VERSION}.dmg" \
-            "${RELEASE_PREFIX}/Whiteboard-darwin-arm64-${RELEASE_VERSION}.dmg" \
-            --content-type application/x-apple-diskimage \
-            --content-disposition "$DMG_DISPOSITION"
-          aws s3 cp "$DIST/Whiteboard-darwin-arm64-${RELEASE_VERSION}.dmg" \
-            "s3://${R2_BUCKET}/releases/preview-latest/darwin-arm64/Whiteboard.dmg" \
-            --content-type application/x-apple-diskimage \
-            --content-disposition "$DMG_DISPOSITION"
 
-          aws s3 cp "$DIST/latest.json" \
-            "s3://${R2_BUCKET}/update/preview/darwin-arm64/latest.json" \
-            --content-type application/json
+          for target in darwin-arm64 darwin-x64; do
+            aws s3 cp "dist/macos-${target}/latest.json" \
+              "s3://${R2_BUCKET}/update/preview/${target}/latest.json" \
+              --content-type application/json
+          done
 
       - name: Verify preview update feed
-        if: ${{ !inputs.dry_run }}
         run: |
           echo "Feed for an outdated preview client (expect 200 with ${RELEASE_VERSION}):"
           RESPONSE=$(curl -sf "https://update.dev.fast/api/update/darwin-arm64/preview/0000000000000000000000000000000000000000")
@@ -465,8 +508,12 @@ jobs:
           echo "$STATUS"
           test "$STATUS" = "204"
 
+          echo "Intel preview feed (clients send plain darwin):"
+          curl -sf "https://update.dev.fast/api/update/darwin/preview/0000000000000000000000000000000000000000?bundle=Whiteboard%20Preview" \
+            | grep -F "/Whiteboard-darwin-x64-${RELEASE_VERSION}.zip"
+          test "$(curl -s -o /dev/null -w '%{http_code}' "https://update.dev.fast/api/update/darwin/preview/${RELEASE_COMMIT}")" = 204
+
       - name: Verify preview install landing
-        if: ${{ !inputs.dry_run }}
         run: |
           echo "install.dev.fast/preview (expect 302 to the preview disk image):"
           LOCATION=$(curl -s -o /dev/null -w "%{redirect_url}" https://install.dev.fast/preview)
@@ -477,19 +524,8 @@ jobs:
           curl -sfL -o /dev/null -w "%{http_code} %{content_type}\n" https://install.dev.fast/preview \
             | grep -F "200 application/x-apple-diskimage"
 
-      - name: Upload preview DMG artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: review-desktop-preview-${{ env.RELEASE_VERSION }}-dmg
-          path: apps/review-desktop/dist/Whiteboard-darwin-arm64-${{ env.RELEASE_VERSION }}.dmg
-          retention-days: 3
-          compression-level: 0
-
-      - name: Remove signing credentials
-        if: always()
-        run: |
-          security delete-keychain "$RUNNER_TEMP/buildagent.keychain" || true
-          rm -f "$RUNNER_TEMP/notary-key.p8"
+          echo "Intel preview disk image (expect a disk image):"
+          curl -sfI https://install.dev.fast/releases/preview-latest/darwin-x64/Whiteboard.dmg | grep -i "content-type: application/x-apple-diskimage"
 
   publish-linux:
     name: Publish Linux preview repository
@@ -572,12 +608,12 @@ jobs:
 
   # The one job here that can write to the repository, and it holds no signing
   # or R2 credentials. `needs: version` carries the initial approval
-  # gate transitively, and `needs: build`, `needs: publish-linux` and
+  # gate transitively, and `needs: publish-macos`, `needs: publish-linux` and
   # `needs: publish-windows` mean a tag only ever names a preview that published
   # on every platform, answered its update feeds, and served its installers.
   tag-preview:
     name: Tag published preview
-    needs: [version, build, publish-linux, publish-windows]
+    needs: [version, publish-macos, publish-linux, publish-windows]
     if: ${{ !inputs.dry_run && inputs.platforms == 'all' }}
     runs-on: review_big_boy
     permissions:

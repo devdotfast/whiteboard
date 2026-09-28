@@ -244,22 +244,25 @@ preview lands at the new application path; later preview updates retain it.
 
 The release is a split build. Linux is not only a cache warmer: it is the
 authoritative producer for everything that does not require a Darwin host.
-`scripts/compile-darwin-payload.sh` creates the archive, and
-`REVIEW_DESKTOP_PRECOMPILED=1 scripts/package-macos.sh` consumes it.
+`scripts/compile-darwin-payload.sh` creates one archive for both Darwin
+targets, and `REVIEW_DESKTOP_PRECOMPILED=1 scripts/package-macos.sh` consumes it
+on each macOS build leg (`darwin-arm64` and `darwin-x64`), packaging the target
+of the host it runs on.
 
 | Produced on Linux and transferred | Produced or assembled on macOS |
 | --- | --- |
 | Code OSS `out-build`, `out-vscode-min`, and `out` | Electron application bundle |
 | Compiled built-in extensions in `.build/extensions` | Darwin-native npm closure installed by `pnpm` |
-| Manifest-selected `darwin-arm64` VSIX payloads, including `ty`, Ruff, and rust-analyzer | Manifest-selected extensions copied into the final app |
+| Manifest-selected `darwin-arm64` and `darwin-x64` VSIX payloads, including `ty`, Ruff, and rust-analyzer | Manifest-selected extensions copied into the final app |
 | Review canvas/server and required workspace `dist` directories | App icon, signatures, notarization, ZIP, and DMG |
 
 The curated-extension handoff is manifest-driven. Linux materializes the
-target variants, copies them into
-`.build/review-curated-extensions/darwin-arm64`, and includes that directory in
-the archive. macOS requires that directory before packaging and verifies every
-manifest entry while copying it into the app. Release validation verifies the
-same complete set again after notarization and before upload.
+variants for every Darwin target, copies each into
+`.build/review-curated-extensions/<target>`, and includes those directories in
+the archive. Each macOS leg requires every target's directory before packaging,
+then verifies every manifest entry for its own target while copying that
+directory into the app. Release validation verifies the same complete set again
+after notarization and before upload.
 
 `scripts/darwin-payload-manifest.sh` is the source of truth for archive paths.
 Its required paths must exist before macOS packaging starts. Its archive-only
