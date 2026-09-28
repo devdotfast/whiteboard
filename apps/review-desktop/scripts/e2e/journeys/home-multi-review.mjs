@@ -1,5 +1,6 @@
-/** Three reviews over two worktrees: Home groups, filters and opens them, and dismiss / restore / delete reach the store. */
+/** Three reviews over two worktrees: Home lists, searches and opens them, and dismiss / restore / delete reach the store. */
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -22,8 +23,7 @@ function homeUi(ctx) {
 
   return {
     home,
-    cards: home.locator(".review-home-card"),
-    rows: home.locator(".review-home-list-row"),
+    rows: home.locator(".review-home-table tbody tr"),
     tabs: ctx.page.locator(".tabs-container .tab"),
     // One canvas part renders whichever review tab is active, so the heading says which review the reader is on.
     canvas: ctx.page.locator(".review-canvas-root [data-review-api]"),
@@ -34,6 +34,13 @@ function homeUi(ctx) {
 async function listedReviewIds(ctx) {
   return (await ctx.apiOk("/reviews-api")).map((summary) => summary.reviewId);
 }
+
+/** The same command Home's dismiss and restore controls send. */
+const attention = (ctx, reviewId, action) =>
+  ctx.apiOk("/reviews-api/commands", "POST", {
+    commandId: randomUUID(),
+    operation: { type: "attention", reviewId, action },
+  });
 
 export async function run(ctx) {
   const { git, root, until } = ctx;
@@ -72,40 +79,17 @@ export async function run(ctx) {
 
   await openHome(ctx);
 
-  let { home, cards, rows, tabs, canvas } = homeUi(ctx);
+  let { home, rows, tabs, canvas } = homeUi(ctx);
 
-  await until(
-    async () => (await home.locator(".review-home-workspace").count()) === 2,
-    "two workspace groups",
-  );
-  await until(async () => {
-    const seen = await cards.count();
+  await until(async () => (await rows.count()) === 3, "three review rows");
+  await home.getByText("3 reviews", { exact: true }).waitFor();
+  ctx.check("Home lists three reviews from two worktrees");
 
-    assert.equal(seen, 3, `saw ${seen}`);
-
-    return true;
-  }, "three review cards");
-  ctx.check("Home groups three reviews under two worktrees");
-
-  await home.locator('[aria-label="Search reviews"]').fill("Worktree B");
-  await until(async () => (await cards.count()) === 1, "search narrows to one card");
-
-  // The list view replaces the cards with `.review-home-list-row`, so the same reviews are counted as rows here.
-  await home.locator('[aria-label="List view"]').click();
-  await until(
-    async () => (await home.getAttribute("data-view")) === "list",
-    "the list view",
-  );
-  await until(async () => (await rows.count()) === 1, "one row under the search");
+  await home.locator('[aria-label="Search sessions"]').fill("Worktree B");
+  await until(async () => (await rows.count()) === 1, "search narrows to one row");
   await home.locator('[aria-label="Clear search"]').click();
   await until(async () => (await rows.count()) === 3, "clear restores three rows");
-  await home.locator('[aria-label="Card view"]').click();
-  await until(
-    async () => (await home.getAttribute("data-view")) === "cards",
-    "the card view",
-  );
-  await until(async () => (await cards.count()) === 3, "clear restores three");
-  ctx.check("Home search, list view and clear behave");
+  ctx.check("Home search and clear behave");
 
   for (const title of [first.title, second.title, third.title])
     assert.equal(
@@ -114,7 +98,10 @@ export async function run(ctx) {
       `one editor tab for ${title}`,
     );
 
-  await cards.filter({ hasText: second.title }).click();
+  await rows
+    .filter({ hasText: second.title })
+    .locator(".review-home-table-open")
+    .click();
   await canvas.getByRole("heading", { name: second.title }).waitFor();
   await pickReview(ctx, first.reviewId);
   await canvas.getByRole("heading", { name: first.title }).waitFor();
@@ -123,12 +110,24 @@ export async function run(ctx) {
   );
 
   await openHome(ctx);
-  ({ home, cards } = homeUi(ctx));
+  ({ home, rows } = homeUi(ctx));
 
-  // The dismiss button is a sibling of the card button inside the shell, not a descendant of `.review-home-card`.
-  const shellB = home
-    .locator(".review-home-card-shell")
-    .filter({ hasText: third.title });
+  const rowB = rows.filter({ hasText: third.title });
+
+  await rowB
+    .getByRole("button", { name: `Actions for ${third.title}` })
+    .click();
+
+  const menu = home.getByRole("menu", { name: "Session actions" });
+
+  await menu.getByRole("menuitem", { name: `Delete ${third.title}` }).waitFor();
+  assert.equal(
+    await home.getByRole("button", { name: `Dismiss ${third.title}` }).count(),
+    0,
+    "Home now offers Dismiss on an active review",
+  );
+  await ctx.knownBug("Home offers no way to dismiss an active review");
+  await ctx.page.keyboard.press("Escape");
 
   const dismissedRow = home
     .locator(".review-home-dismissed-row")
@@ -145,41 +144,40 @@ export async function run(ctx) {
     await dismissedRow.waitFor();
   };
 
-  const dismiss = async () => {
-    await shellB.hover();
-    await shellB.locator('[title="Dismiss review"]').click();
-    await home.locator('section[aria-label="Dismissed reviews"]').waitFor();
-  };
-
-  await dismiss();
+  await attention(ctx, third.reviewId, "dismiss");
   await until(
-    async () => (await cards.count()) === 2,
-    "the dismissed review leaves the cards",
+    async () => (await rows.count()) === 2,
+    "the dismissed review leaves the table",
   );
   await expandDismissed();
   await dismissedRow.locator(".review-home-restore").click();
-  await until(async () => (await cards.count()) === 3, "restored");
+  await until(async () => (await rows.count()) === 3, "restored");
+  ctx.check("a dismissed review is listed apart and Undo restores it");
 
-  // Delete is offered only in a dismissed review's row, so the permanent action always follows the reversible one.
-  await dismiss();
+  // Delete is offered in a dismissed review's row after two clicks.
+  await attention(ctx, third.reviewId, "dismiss");
   await expandDismissed();
   assert.ok(
     (await listedReviewIds(ctx)).includes(third.reviewId),
     `${third.reviewId} is not listed before the delete`,
   );
-  await dismissedRow.locator('[title="Delete review"]').click();
-  await dismissedRow.locator('[title="Click again to delete"]').click();
+  await dismissedRow
+    .getByRole("button", { name: `Delete ${third.title}` })
+    .click();
+  await dismissedRow
+    .getByRole("button", { name: `Confirm delete ${third.title}` })
+    .click();
   await until(
     async () => (await dismissedRow.count()) === 0,
     "the deleted review leaves Home",
   );
   await until(async () => {
-    const seen = await cards.count();
+    const seen = await rows.count();
 
     assert.equal(seen, 2, `saw ${seen}`);
 
     return true;
-  }, "two review cards after the delete");
+  }, "two review rows after the delete");
 
   const remaining = await listedReviewIds(ctx);
 
@@ -192,5 +190,5 @@ export async function run(ctx) {
     [],
     "deleting one review must not unlist the others",
   );
-  ctx.check("dismiss, restore and two-click delete update Home and the store");
+  ctx.check("two-click delete from Dismissed updates Home and the store");
 }

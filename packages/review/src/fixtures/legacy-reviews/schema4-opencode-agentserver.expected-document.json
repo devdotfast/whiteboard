@@ -56,10 +56,15 @@
               "id": "opencodeAgentServer",
               "title": "OpencodeAgentServer",
               "peek": {
-                "side": "head",
                 "file": "packages/progressive-review/src/native-agent/opencode.ts",
-                "fromLine": 50,
-                "toLine": 66
+                "start": {
+                  "side": "head",
+                  "line": 50
+                },
+                "end": {
+                  "side": "head",
+                  "line": 66
+                }
               },
               "softwareMapPath": "review.cliPackage.nativeAgents.opencodeServer"
             }
@@ -110,7 +115,7 @@
         },
         {
           "type": "text",
-          "value": " \u2014 the desktop-facing flow has not been run end to end."
+          "value": " — the desktop-facing flow has not been run end to end."
         }
       ]
     },
@@ -170,10 +175,15 @@
                       "id": "harnessUnion",
                       "title": "ReviewAgentHarness",
                       "peek": {
-                        "side": "head",
                         "file": "packages/progressive-review/src/authoring-session.ts",
-                        "fromLine": 1,
-                        "toLine": 1
+                        "start": {
+                          "side": "head",
+                          "line": 1
+                        },
+                        "end": {
+                          "side": "head",
+                          "line": 1
+                        }
                       },
                       "softwareMapPath": "review.cliPackage.authoring.authoringSession"
                     }
@@ -194,7 +204,7 @@
                 },
                 {
                   "type": "text",
-                  "value": " \u2014 the CLI-side type and its "
+                  "value": " — the CLI-side type and its "
                 },
                 {
                   "type": "element",
@@ -231,10 +241,15 @@
                       "id": "contractsEnum",
                       "title": "AuthoringAgentSessionSchema",
                       "peek": {
-                        "side": "head",
                         "file": "packages/review-protocol/src/contracts.ts",
-                        "fromLine": 1223,
-                        "toLine": 1226
+                        "start": {
+                          "side": "head",
+                          "line": 1223
+                        },
+                        "end": {
+                          "side": "head",
+                          "line": 1226
+                        }
                       },
                       "softwareMapPath": "review.protocolPackage.contracts"
                     }
@@ -270,7 +285,7 @@
                 },
                 {
                   "type": "text",
-                  "value": " \u2014 the zod wire contracts, mirrored in both "
+                  "value": " — the zod wire contracts, mirrored in both "
                 },
                 {
                   "type": "element",
@@ -322,10 +337,15 @@
                       "id": "desktopServer",
                       "title": "desktop-server harness table",
                       "peek": {
-                        "side": "head",
                         "file": "packages/progressive-review/src/server/desktop-server.ts",
-                        "fromLine": 283,
-                        "toLine": 284
+                        "start": {
+                          "side": "head",
+                          "line": 283
+                        },
+                        "end": {
+                          "side": "head",
+                          "line": 284
+                        }
                       },
                       "softwareMapPath": "review.cliPackage.serverSurface.desktopServer"
                     }
@@ -350,7 +370,7 @@
                 },
                 {
                   "type": "text",
-                  "value": " \u2014 the map handing each harness its "
+                  "value": " — the map handing each harness its "
                 },
                 {
                   "type": "element",
@@ -462,7 +482,7 @@
             },
             {
               "type": "text",
-              "value": " \u2014 not to the review checkout that made the request."
+              "value": " — not to the review checkout that made the request."
             }
           ]
         },
@@ -601,7 +621,7 @@
             },
             {
               "type": "text",
-              "value": ", not the review's pinned checkout \u2014 different from the other three harnesses."
+              "value": ", not the review's pinned checkout — different from the other three harnesses."
             }
           ]
         },
@@ -623,10 +643,15 @@
                   "id": "createOpencodeSession",
                   "title": "createOpencodeSession",
                   "peek": {
-                    "side": "head",
                     "file": "packages/progressive-review/src/native-agent/opencode.ts",
-                    "fromLine": 571,
-                    "toLine": 611
+                    "start": {
+                      "side": "head",
+                      "line": 571
+                    },
+                    "end": {
+                      "side": "head",
+                      "line": 611
+                    }
                   },
                   "softwareMapPath": "review.cliPackage.authoring.tutorialAuthoringSession"
                 }
@@ -720,10 +745,15 @@
                   "title": "opencode.test.ts",
                   "detail": "Fake `opencode serve` over a real HTTP server: session create/fork scoped by directory, message projection, and the SSE event stream.",
                   "peek": {
-                    "side": "head",
                     "file": "packages/progressive-review/src/native-agent/opencode.test.ts",
-                    "fromLine": 1,
-                    "toLine": 40
+                    "start": {
+                      "side": "head",
+                      "line": 1
+                    },
+                    "end": {
+                      "side": "head",
+                      "line": 40
+                    }
                   },
                   "softwareMapPath": "review.cliPackage.nativeAgents.opencodeServer"
                 }
@@ -842,7 +872,7 @@
               "children": [
                 {
                   "type": "text",
-                  "value": "The desktop flow end to end \u2014 asking a question through a real "
+                  "value": "The desktop flow end to end — asking a question through a real "
                 },
                 {
                   "type": "element",
@@ -1030,7 +1060,7 @@
               "children": [
                 {
                   "type": "text",
-                  "value": "OpenCode is server-first \u2014 Review should drive it through "
+                  "value": "OpenCode is server-first — Review should drive it through "
                 },
                 {
                   "type": "element",
@@ -1149,7 +1179,7 @@
                 },
                 {
                   "type": "text",
-                  "value": " session's directory, not the review's pinned checkout \u2014 accepted as a real behavior difference rather than something to paper over."
+                  "value": " session's directory, not the review's pinned checkout — accepted as a real behavior difference rather than something to paper over."
                 }
               ]
             },
@@ -1194,10 +1224,15 @@
       "id": "harnessUnion",
       "title": "ReviewAgentHarness",
       "peek": {
-        "side": "head",
         "file": "packages/progressive-review/src/authoring-session.ts",
-        "fromLine": 1,
-        "toLine": 1
+        "start": {
+          "side": "head",
+          "line": 1
+        },
+        "end": {
+          "side": "head",
+          "line": 1
+        }
       },
       "softwareMapPath": "review.cliPackage.authoring.authoringSession"
     },
@@ -1206,10 +1241,15 @@
       "id": "contractsEnum",
       "title": "AuthoringAgentSessionSchema",
       "peek": {
-        "side": "head",
         "file": "packages/review-protocol/src/contracts.ts",
-        "fromLine": 1223,
-        "toLine": 1226
+        "start": {
+          "side": "head",
+          "line": 1223
+        },
+        "end": {
+          "side": "head",
+          "line": 1226
+        }
       },
       "softwareMapPath": "review.protocolPackage.contracts"
     },
@@ -1218,10 +1258,15 @@
       "id": "opencodeAgentServer",
       "title": "OpencodeAgentServer",
       "peek": {
-        "side": "head",
         "file": "packages/progressive-review/src/native-agent/opencode.ts",
-        "fromLine": 50,
-        "toLine": 66
+        "start": {
+          "side": "head",
+          "line": 50
+        },
+        "end": {
+          "side": "head",
+          "line": 66
+        }
       },
       "softwareMapPath": "review.cliPackage.nativeAgents.opencodeServer"
     },
@@ -1230,10 +1275,15 @@
       "id": "launch",
       "title": "launch()",
       "peek": {
-        "side": "head",
         "file": "packages/progressive-review/src/native-agent/opencode.ts",
-        "fromLine": 67,
-        "toLine": 121
+        "start": {
+          "side": "head",
+          "line": 67
+        },
+        "end": {
+          "side": "head",
+          "line": 121
+        }
       },
       "softwareMapPath": "review.cliPackage.nativeAgents.opencodeServer"
     },
@@ -1242,10 +1292,15 @@
       "id": "clientSession",
       "title": "OpencodeClient.session()",
       "peek": {
-        "side": "head",
         "file": "packages/progressive-review/src/native-agent/opencode.ts",
-        "fromLine": 373,
-        "toLine": 401
+        "start": {
+          "side": "head",
+          "line": 373
+        },
+        "end": {
+          "side": "head",
+          "line": 401
+        }
       },
       "softwareMapPath": "review.cliPackage.nativeAgents.opencodeServe"
     },
@@ -1254,10 +1309,15 @@
       "id": "forkOpencodeSession",
       "title": "forkOpencodeSession",
       "peek": {
-        "side": "head",
         "file": "packages/progressive-review/src/native-agent/opencode.ts",
-        "fromLine": 538,
-        "toLine": 558
+        "start": {
+          "side": "head",
+          "line": 538
+        },
+        "end": {
+          "side": "head",
+          "line": 558
+        }
       },
       "softwareMapPath": "review.cliPackage.authoring.reviewSourceAgentSession"
     },
@@ -1266,10 +1326,15 @@
       "id": "createOpencodeSession",
       "title": "createOpencodeSession",
       "peek": {
-        "side": "head",
         "file": "packages/progressive-review/src/native-agent/opencode.ts",
-        "fromLine": 571,
-        "toLine": 611
+        "start": {
+          "side": "head",
+          "line": 571
+        },
+        "end": {
+          "side": "head",
+          "line": 611
+        }
       },
       "softwareMapPath": "review.cliPackage.authoring.tutorialAuthoringSession"
     },
@@ -1278,10 +1343,15 @@
       "id": "desktopServer",
       "title": "desktop-server harness table",
       "peek": {
-        "side": "head",
         "file": "packages/progressive-review/src/server/desktop-server.ts",
-        "fromLine": 283,
-        "toLine": 284
+        "start": {
+          "side": "head",
+          "line": 283
+        },
+        "end": {
+          "side": "head",
+          "line": 284
+        }
       },
       "softwareMapPath": "review.cliPackage.serverSurface.desktopServer"
     },
@@ -1291,10 +1361,15 @@
       "title": "opencode.test.ts",
       "detail": "Fake `opencode serve` over a real HTTP server: session create/fork scoped by directory, message projection, and the SSE event stream.",
       "peek": {
-        "side": "head",
         "file": "packages/progressive-review/src/native-agent/opencode.test.ts",
-        "fromLine": 1,
-        "toLine": 40
+        "start": {
+          "side": "head",
+          "line": 1
+        },
+        "end": {
+          "side": "head",
+          "line": 40
+        }
       },
       "softwareMapPath": "review.cliPackage.nativeAgents.opencodeServer"
     }

@@ -158,10 +158,15 @@
               "id": "placeOrder",
               "title": "Order service creates the order",
               "peek": {
-                "side": "head",
                 "file": "src/orders/order-service.ts",
-                "fromLine": 13,
-                "toLine": 29
+                "start": {
+                  "side": "head",
+                  "line": 13
+                },
+                "end": {
+                  "side": "head",
+                  "line": 29
+                }
               },
               "softwareMapPath": "orderService.application.orders"
             }
@@ -186,10 +191,15 @@
                   "id": "placeOrder",
                   "title": "Order service creates the order",
                   "peek": {
-                    "side": "head",
                     "file": "src/orders/order-service.ts",
-                    "fromLine": 13,
-                    "toLine": 29
+                    "start": {
+                      "side": "head",
+                      "line": 13
+                    },
+                    "end": {
+                      "side": "head",
+                      "line": 29
+                    }
                   },
                   "softwareMapPath": "orderService.application.orders"
                 }
@@ -377,10 +387,15 @@
               "id": "validateInventory",
               "title": "Inventory rejects invalid quantities",
               "peek": {
-                "side": "head",
                 "file": "src/inventory/inventory-service.ts",
-                "fromLine": 4,
-                "toLine": 8
+                "start": {
+                  "side": "head",
+                  "line": 4
+                },
+                "end": {
+                  "side": "head",
+                  "line": 8
+                }
               },
               "softwareMapPath": "orderService.application.orders"
             }
@@ -842,7 +857,7 @@
               "children": [
                 {
                   "type": "text",
-                  "value": "Preferences \u2192\nSettings"
+                  "value": "Preferences →\nSettings"
                 }
               ]
             },
@@ -857,7 +872,7 @@
               "children": [
                 {
                   "type": "text",
-                  "value": "Preferences \u2192\nGetting Started"
+                  "value": "Preferences →\nGetting Started"
                 }
               ]
             },
@@ -876,10 +891,15 @@
       "id": "checkout",
       "title": "Checkout API calls the order service",
       "peek": {
-        "side": "head",
         "file": "src/api/checkout-api.ts",
-        "fromLine": 12,
-        "toLine": 15
+        "start": {
+          "side": "head",
+          "line": 12
+        },
+        "end": {
+          "side": "head",
+          "line": 15
+        }
       },
       "softwareMapPath": "orderService.api.checkout"
     },
@@ -888,10 +908,15 @@
       "id": "placeOrder",
       "title": "Order service creates the order",
       "peek": {
-        "side": "head",
         "file": "src/orders/order-service.ts",
-        "fromLine": 13,
-        "toLine": 29
+        "start": {
+          "side": "head",
+          "line": 13
+        },
+        "end": {
+          "side": "head",
+          "line": 29
+        }
       },
       "softwareMapPath": "orderService.application.orders"
     },
@@ -900,10 +925,15 @@
       "id": "insertOrder",
       "title": "Repository writes and queues the order",
       "peek": {
-        "side": "head",
         "file": "src/orders/orders-repository.ts",
-        "fromLine": 9,
-        "toLine": 12
+        "start": {
+          "side": "head",
+          "line": 9
+        },
+        "end": {
+          "side": "head",
+          "line": 12
+        }
       },
       "softwareMapPath": "orderService.data.ordersRepository"
     },
@@ -912,10 +942,15 @@
       "id": "validateInventory",
       "title": "Inventory rejects invalid quantities",
       "peek": {
-        "side": "head",
         "file": "src/inventory/inventory-service.ts",
-        "fromLine": 4,
-        "toLine": 8
+        "start": {
+          "side": "head",
+          "line": 4
+        },
+        "end": {
+          "side": "head",
+          "line": 8
+        }
       },
       "softwareMapPath": "orderService.application.orders"
     },
@@ -924,10 +959,15 @@
       "id": "dequeue",
       "title": "Queue gives work to the fulfillment worker",
       "peek": {
-        "side": "head",
         "file": "src/fulfillment/fulfillment-worker.ts",
-        "fromLine": 13,
-        "toLine": 14
+        "start": {
+          "side": "head",
+          "line": 13
+        },
+        "end": {
+          "side": "head",
+          "line": 14
+        }
       },
       "softwareMapPath": "orderService.fulfillment.worker"
     },
@@ -936,10 +976,15 @@
       "id": "ship",
       "title": "Worker creates the shipment",
       "peek": {
-        "side": "head",
         "file": "src/fulfillment/fulfillment-worker.ts",
-        "fromLine": 17,
-        "toLine": 19
+        "start": {
+          "side": "head",
+          "line": 17
+        },
+        "end": {
+          "side": "head",
+          "line": 19
+        }
       },
       "softwareMapPath": "orderService.fulfillment.worker"
     },
@@ -948,10 +993,15 @@
       "id": "ordersTable",
       "title": "Orders table",
       "peek": {
-        "side": "head",
         "file": "src/database/schema.ts",
-        "fromLine": 1,
-        "toLine": 10
+        "start": {
+          "side": "head",
+          "line": 1
+        },
+        "end": {
+          "side": "head",
+          "line": 10
+        }
       },
       "softwareMapPath": "orderService.data.ordersDatabase"
     }

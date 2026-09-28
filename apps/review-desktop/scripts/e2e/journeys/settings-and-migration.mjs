@@ -40,7 +40,14 @@ const telemetryToggle = (settings) =>
     .filter({ hasText: "Share anonymous usage data" })
     .locator('input[type="checkbox"]');
 
-const themeSelect = (settings) => settings.getByLabel("Theme");
+/** The theme radio group's checked choice, lower-cased to match THEME_SETTINGS. */
+const themeChoice = async (settings) =>
+  (
+    await settings
+      .getByRole("radiogroup", { name: "Theme" })
+      .locator('[aria-checked="true"]')
+      .innerText()
+  ).toLowerCase();
 
 /** Writes the unreadable record into `<home>/reviews/<uuid>/review.json`. */
 async function seedLegacyReview(home) {
@@ -111,12 +118,14 @@ export async function run(ctx) {
     `review.telemetry.enabled to be ${!before} in the workbench settings`,
   );
 
-  const theme =
-    (await themeSelect(settings).inputValue()) === "light" ? "dark" : "light";
+  const theme = (await themeChoice(settings)) === "light" ? "dark" : "light";
 
-  await themeSelect(settings).selectOption(theme);
+  await settings
+    .getByRole("radiogroup", { name: "Theme" })
+    .getByRole("radio", { name: theme === "light" ? "Light" : "Dark" })
+    .click();
   await until(
-    async () => (await themeSelect(settings).inputValue()) === theme,
+    async () => (await themeChoice(settings)) === theme,
     `the theme control to read ${theme}`,
   );
   await until(() => {
@@ -136,7 +145,7 @@ export async function run(ctx) {
     "the telemetry toggle did not keep its value across the restart",
   );
   assert.equal(
-    await themeSelect(settings).inputValue(),
+    await themeChoice(settings),
     theme,
     "the theme control did not keep its value across the restart",
   );
@@ -171,7 +180,7 @@ export async function run(ctx) {
   const home = ctx.page.locator("main.review-home");
 
   // The onboarding rail is what an empty Home renders, so waiting for it makes the absences below mean "finished", not "slow".
-  await home.getByText("Create your first review").waitFor({ timeout: 60000 });
+  await home.getByText("Create your first session").waitFor({ timeout: 60000 });
 
   const summaries = await ctx.api("/reviews-api");
 

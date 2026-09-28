@@ -10,18 +10,21 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 
 ## Status
 
-- `review info --review <uuid>` always fails with `Not found.` — fix-pr #348
-- `review app pick --review <uuid>` never opens the review — fix-pr #348
-- The first-run telemetry notice disappears before it can be used — fix-pr #351
-- A community invitation dismissed before the first-run reload comes back — fix-pr #351
-- The modal editor opened by Go to Definition ignores the first Escape — fix-pr #352
-- The review topbar covers the Find widget and the contents pill — fix-pr #350
-- A review whose repository directory moves or is deleted renders `ReviewApiError: Review operation failed.` — fix-pr #355
-- `review app pick` goes to the launcher instead of reporting an unusable pointer — fix-pr #348
-- One unreadable legacy `review.json` stops Review Desktop from starting — fix-pr #349
+- `review info --review <uuid>` always fails with `Not found.` — fixed (#348)
+- `review app pick --review <uuid>` never opens the review — fixed (#348)
+- The first-run telemetry notice disappears before it can be used — fixed (#351)
+- A community invitation dismissed before the first-run reload comes back — fixed (#351)
+- The modal editor opened by Go to Definition ignores the first Escape — fixed (#352)
+- The review topbar covers the Find widget and the contents pill — fixed (#350)
+- A review whose repository directory moves or is deleted renders `ReviewApiError: Review operation failed.` — open (regressed after #355)
+- `review app pick` goes to the launcher instead of reporting an unusable pointer — fixed (#348)
+- One unreadable legacy `review.json` stops Review Desktop from starting — fixed (#349)
 - Home says nothing about a legacy review directory left behind by the JSON cutover — not-a-bug
-- Opening a Go file installs Go tools from the network without asking — fix-pr #354
+- Opening a Go file installs Go tools from the network without asking — fixed (#354)
 - A review's Rust language server never starts when the extension wins a race with the workspace folder — open
+- Home offers no way to dismiss an active review — open
+- The tutorial's live editor gets no hover or Go to Definition — open
+- Activating the Go extension opens its welcome page over the review — open
 
 ## Template (copy, do not edit)
 
@@ -33,7 +36,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 
 ## `review info --review <uuid>` always fails with `Not found.`
 
-- **Journey:** `legacy-import` · **Found:** 2026-09-17 · **Status:** fix-pr #348
+- **Journey:** `legacy-import` · **Found:** 2026-09-17 · **Status:** fixed (#348)
 - **Repro:** with Review Desktop running and any review in the store, run
   `review info --review <uuid> --json`.
 - **Expected:** the command prints the review's summary and exits 0.
@@ -50,7 +53,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 
 ## `review app pick --review <uuid>` never opens the review
 
-- **Journey:** `legacy-import`, `json-api-edit`, `home-multi-review` · **Found:** 2026-09-17 · **Status:** fix-pr #348
+- **Journey:** `legacy-import`, `json-api-edit`, `home-multi-review` · **Found:** 2026-09-17 · **Status:** fixed (#348)
 - **Repro:** with Review Desktop running and a review whose snapshot
   `GET /reviews-api/<uuid>?full=true` returns 200, run
   `review app pick --review <uuid> --json`.
@@ -68,7 +71,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 
 ## The first-run telemetry notice disappears before it can be used
 
-- **Journey:** `first-run` · **Found:** 2026-09-17 · **Status:** fix-pr #351
+- **Journey:** `first-run` · **Found:** 2026-09-17 · **Status:** fixed (#351)
 - **Repro:** launch Desktop on a fresh profile with telemetry live
   (`DEV_FAST_REVIEW_TELEMETRY_DISABLED` unset). The notification "Review sends
   anonymous usage data. You can change this in Settings." appears behind the
@@ -92,7 +95,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 
 ## A community invitation dismissed before the first-run reload comes back
 
-- **Journey:** `first-run` · **Found:** 2026-09-17 · **Status:** fix-pr #351
+- **Journey:** `first-run` · **Found:** 2026-09-17 · **Status:** fixed (#351)
 - **Repro:** on a fresh profile, tick "Don't show again" and click "Not now" on
   "Join the Review community" within the first two seconds, then wait for the
   automatic first-run reload.
@@ -112,7 +115,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 
 ## The modal editor opened by Go to Definition ignores the first Escape
 
-- **Journey:** `tutorial` · **Found:** 2026-09-17 · **Status:** fix-pr #352
+- **Journey:** `tutorial` · **Found:** 2026-09-17 · **Status:** fixed (#352)
 - **Repro:** open the tutorial, click `totalCents` in the Welcome inline editor
   (`src/orders/order-service.ts:13-29`), press `F12`, then press `Escape` once.
 - **Expected:** one `Escape` closes the modal editor and returns the reader to
@@ -136,7 +139,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 
 ## The review topbar covers the Find widget and the contents pill
 
-- **Journey:** `reader-navigation` · **Found:** 2026-09-17 · **Status:** fix-pr #350
+- **Journey:** `reader-navigation` · **Found:** 2026-09-17 · **Status:** fixed (#350)
 - **Repro:** open any JSON review with two or more headings in a 1200x800
   window. Click the contents pill at the top left; press `Cmd+F` and click
   `Match Whole Word` or `Use Regular Expression` in the Find widget.
@@ -169,7 +172,16 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 
 ## A review whose repository directory moves or is deleted renders `ReviewApiError: Review operation failed.`
 
-- **Journey:** `worktree-drift` · **Found:** 2026-09-17 · **Status:** fix-pr #355
+- **Journey:** `worktree-drift` · **Found:** 2026-09-17 · **Status:** open (fixed by #355, regressed)
+- **Regressed (2026-09-28), intermittently:** on origin/main (1 of 1 runs) and
+  on the housekeeping stack (3 of 4 runs; the fourth rendered normally and also
+  passed the delete path), opening the review after `mv <repo> <repo>-moved`
+  renders
+  `ReviewApiError: Review operation failed (Error). The server logged the
+  cause; …`, and the host logs `GET /reviews-api/<uuid>/commits failed: Error:
+  No Git or jj repository found for <repo>.` The delete path fails the same
+  way. The journey asserts that log line before it records this bug, and
+  accepts a normal render.
 - **Repro:** create a review with a `commits` target in a git repository, let it
   render, quit Review Desktop, `mv <repo> <repo>-moved` (or `rm -rf` it),
   relaunch Desktop and open the review from Home or with
@@ -211,7 +223,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 
 ## `review app pick` goes to the launcher instead of reporting an unusable pointer
 
-- **Journey:** `cli-desktop-edges` · **Found:** 2026-09-17 · **Status:** fix-pr #348
+- **Journey:** `cli-desktop-edges` · **Found:** 2026-09-17 · **Status:** fixed (#348)
 - **Repro:** put an unusable pointer in `<home>/review-desktop/instances/<key>.json` —
   `version: 999`, or unparseable text, or a url nothing listens on — and run
   `review app pick --review <uuid>`.
@@ -252,7 +264,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 
 ## One unreadable legacy `review.json` stops Review Desktop from starting
 
-- **Journey:** `settings-and-migration` · **Found:** 2026-09-17 · **Status:** fix-pr #349
+- **Journey:** `settings-and-migration` · **Found:** 2026-09-17 · **Status:** fixed (#349)
 - **Repro:** take a Review home that has not been through the JSON cutover (no
   `<home>/json-cutover.json`) and put one unreadable record in it —
   `<home>/reviews/11111111-1111-4111-8111-111111111111/review.json` holding
@@ -299,8 +311,8 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 
 ## Home says nothing about a legacy review directory left behind by the JSON cutover
 
-- **Journey:** `settings-and-migration` · **Found:** 2026-09-17 · **Status:**
-  not-a-bug — the JSON store is the catalog, and the cutover that fills it is a
+- **Journey:** `settings-and-migration` · **Found:** 2026-09-17 · **Status:** not-a-bug
+- **Reason:** the JSON store is the catalog, and the cutover that fills it is a
   one-time storage migration, not a Home refresh task. A directory left in
   `<home>/reviews` afterwards is dead data, and nothing writes one any more.
 - **Repro:** with a Review home that has already been through the cutover
@@ -317,7 +329,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   directory is left byte-for-byte as seeded. The journey asserts all three, and
   keeps the plan's assertion behind a branch that fires if a build grows the
   guidance, so the expectation is recorded rather than dropped.
-- **Notes:** `ensureJsonCutover` (`json-cutover.ts:238-270`) returns on its
+- **Notes:** `ensureJsonCutover` (`review-import/json-cutover.ts:254-289`) returns on its
   marker without reading `<home>/reviews` again, and Home lists from the JSON
   store (`review-api/store.ts:485`). The `MIGRATION_REQUIRED` error has no
   Desktop consumer at all: only tests read `review-home.ts`'s scan errors,
@@ -328,7 +340,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 
 ## Opening a Go file installs Go tools from the network without asking
 
-- **Journey:** `lsp-go` · **Found:** 2026-09-17 · **Status:** fix-pr #354
+- **Journey:** `lsp-go` · **Found:** 2026-09-17 · **Status:** fixed (#354)
 - **Repro:** launch Desktop with the curated `go` group materialized
   (`DEV_REVIEW_EXTENSIONS=go`) on a machine whose PATH and GOPATH have no
   `gopls`, then open a review with a `code_peek` over a `.go` file.
@@ -410,4 +422,56 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   materializes, and this group is installed from Settings at runtime, so the
   patch never reaches it. A fix therefore needs an install-time manifest patch
   that replaces the implicit event with a Review-owned one fired after
-  `addFolders`; see PR #353's description.
+  `addFolders`.
+
+## Home offers no way to dismiss an active review
+
+- **Journey:** `home-multi-review` · **Found:** 2026-09-28 · **Status:** open
+- **Repro:** in Whiteboard Desktop with two or more reviews, open Home and open
+  a row's `Actions for <title>` menu.
+- **Expected:** the row offers Dismiss, the reversible action the Dismissed
+  section and its Undo exist for.
+- **Actual:** the menu holds only `Delete <title>`, and no `Dismiss <title>`
+  button renders anywhere in the table. A review reaches Dismissed only through
+  the `attention` command (`POST /reviews-api/commands`), which is what the
+  journey sends before it tests Undo and delete.
+- **Notes:** `ReviewRowActions` in `review-home-view.tsx` renders
+  `DismissReviewButton` only when `onDelete` is absent, and the Desktop passes
+  both `onDelete` and `onDismiss` (`desktop-entry.tsx`, from
+  `reviewCanvasPart.ts`), so its `review_dismissed` `via: "home"` event can
+  never fire. The browser tests cover Dismiss only with no `onDelete`.
+
+## The tutorial's live editor gets no hover or Go to Definition
+
+- **Journey:** `tutorial` · **Found:** 2026-09-28 · **Status:** open
+- **Repro:** open the tutorial (`Whiteboard: Open Tutorial...`), pick a keymap,
+  then hover `totalCents` or any typed identifier in the Welcome section's
+  `src/orders/order-service.ts` editor and press `F12` on it.
+- **Expected:** tsserver's hover appears and completes the "Inspect a symbol"
+  step, and `F12` opens the definition in a Source window, as it does for a
+  TypeScript `code_peek` in any other review (`lsp-typescript` passes).
+- **Actual:** after a minute of hovers `.monaco-hover-content` is empty,
+  `showHover` stays unchecked in `review.tutorial.progress.v1`, and `F12` does
+  not check `gotoDefinition`. The extension host started TS Server
+  (`exthost/vscode.typescript-language-features/TypeScript.log` ends at
+  `<semantic> Starting...`). Reproduced with the Desktop built from origin/main
+  as well as the housekeeping stack. The journey asserts both absences, then
+  uses the guide's Next to go on.
+- **Notes:** the tutorial's checkout lives under
+  `<home>/tutorial/sample-service/.git/dev-fast/reviews/<uuid>/head/<sha>`;
+  whatever gives other reviews' peeks a file-backed model for tsserver does not
+  reach it. Not investigated further.
+
+## Activating the Go extension opens its welcome page over the review
+
+- **Journey:** `lsp-go` · **Found:** 2026-09-28 · **Status:** open
+- **Repro:** install the Go group through Settings → Tools → Extensions on a
+  fresh profile, then open a review with a `code_peek` over a `.go` file.
+- **Expected:** the review stays the active tab while the extension activates.
+- **Actual:** a `Go for VS Code v0.56.0` welcome tab opens and becomes active,
+  so the review, its peek and the reader's place in it are hidden. The journey
+  sees that tab active before it clicks back to the review.
+- **Notes:** `golang.go` shows the page on first activation unless
+  `go.showWelcome` is false. `reviewConfigurationDefaults.ts` already turns off
+  the extension's survey and update prompts (`go.survey.prompt`,
+  `go.toolsManagement.checkForUpdates`), but not this one.

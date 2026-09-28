@@ -1,7 +1,8 @@
-/** A fresh profile meets the community invitation, the telemetry notice and the onboarding rail, and keeps those choices. */
+/** A fresh profile meets the telemetry notice and the onboarding rail; a reader with two reviews meets the community invitation once. */
 import assert from "node:assert/strict";
 
 import { assertNoBlockedReviewRequests } from "../../review-network-policy.mjs";
+import { createReview, orderReviewBlocks } from "../harness.mjs";
 import { readApplicationStorage } from "../storage.mjs";
 
 export const name = "first-run";
@@ -9,7 +10,6 @@ export const name = "first-run";
 export const phase = 1;
 
 export const options = {
-  seedRepo: false,
   // Restore the real first-run telemetry notice, but point capture at a closed local port.
   env: {
     DEV_FAST_REVIEW_TELEMETRY_DISABLED: "",
@@ -17,6 +17,8 @@ export const options = {
   },
   disableCommunityHandler: true,
 };
+
+const COMMUNITY_TITLE = "Join the Whiteboard community";
 
 const COMMUNITY_DISMISSED_KEY = "review.community.dontShowAgain";
 
@@ -50,36 +52,9 @@ const storedValue = (ctx, key, timeout = 10000) =>
 export async function run(ctx) {
   const { page, until, userData } = ctx;
 
-  const dialog = page.getByText("Join the Review community", { exact: true });
-
-  const dismissDialog = async () => {
-    await page.getByRole("checkbox", { name: "Don't show again" }).check();
-    await page.getByRole("button", { name: "Not now", exact: true }).click();
-    await dialog.waitFor({ state: "hidden" });
-  };
-
-  await dialog.waitFor({ timeout: 30000 });
-  await dismissDialog();
-
-  // A fresh profile reloads the workbench about two seconds in; the invitation waits for it, so one dismissal is final.
-  assert.ok(
-    !(await appears(dialog, 20000)),
-    "the community invitation returned after the first-run reload",
-  );
-
-  const dismissed = await storedValue(ctx, COMMUNITY_DISMISSED_KEY);
-
-  assert.ok(
-    isStoredTrue(dismissed),
-    `${COMMUNITY_DISMISSED_KEY} was not stored (${dismissed})`,
-  );
-  ctx.check(
-    "community invitation shows once on a fresh profile and stays dismissed",
-  );
-
   // Exact, because the screen-reader alert repeats the text with an "Info: " prefix.
   const notice = page.getByText(
-    "Review sends anonymous usage data. You can change this in Settings.",
+    "Whiteboard sends anonymous usage data. You can change this in Settings.",
     { exact: true },
   );
 
@@ -101,35 +76,57 @@ export async function run(ctx) {
 
   const welcome = page.locator("main.review-home");
 
+  await welcome.getByText("Install the whiteboard command").waitFor();
   await welcome.getByText("Connect your agents").waitFor();
   await welcome.getByText("Take the tour").waitFor();
-  await welcome.getByText("Create your first review").waitFor();
-  // The rail renders only the open step's body, so the tutorial entry point is behind the second step's disclosure.
-  await welcome.getByRole("button", { name: "Expand Take the tour" }).click();
-  await welcome.getByRole("button", { name: "Open the tutorial" }).waitFor();
-  ctx.check("empty Home renders the three-step onboarding rail");
+  await welcome.getByText("Create your first session").waitFor();
+  // Later steps stay shut until the command is installed, so the install step is the one open.
+  await welcome.getByRole("button", { name: "Install whiteboard in PATH" }).waitFor();
+  ctx.check("empty Home renders the onboarding rail");
 
-  await until(
-    () =>
-      isStoredTrue(readApplicationStorage(userData, COMMUNITY_DISMISSED_KEY)),
-    "community dismissal persisted",
+  // The invitation waits for a reader with two reviews, so a fresh profile never sees it.
+  assert.equal(
+    await page.getByText(COMMUNITY_TITLE, { exact: true }).count(),
+    0,
+    "the community invitation showed on a fresh profile",
   );
+  ctx.check("a fresh profile gets no community invitation");
+
   await until(
     () => readApplicationStorage(userData, TELEMETRY_NOTICE_KEY) !== undefined,
     "telemetry notice marked shown",
   );
 
+  for (const title of ["First review", "Second review"])
+    await createReview(ctx, { title, blocks: orderReviewBlocks });
+
+  // The invitation is decided once per window, at startup.
   await ctx.restartDesktop();
-  await ctx.page.locator("main.review-home").waitFor({ timeout: 60000 });
+
+  const dialog = ctx.page.getByText(COMMUNITY_TITLE, { exact: true });
+
+  await dialog.waitFor({ timeout: 30000 });
+  // Any answer is final: the invitation has no "Don't show again" of its own.
+  await ctx.page.getByRole("button", { name: "Not now", exact: true }).click();
+  await dialog.waitFor({ state: "hidden" });
+
+  const dismissed = await storedValue(ctx, COMMUNITY_DISMISSED_KEY);
+
+  assert.ok(
+    isStoredTrue(dismissed),
+    `${COMMUNITY_DISMISSED_KEY} was not stored (${dismissed})`,
+  );
+  ctx.check("the community invitation shows once a reader has two reviews");
+
+  await ctx.restartDesktop();
+  await ctx.page.locator(".monaco-workbench").waitFor({ timeout: 60000 });
   await ctx.page.waitForTimeout(3000);
   assert.equal(
-    await ctx.page
-      .getByText("Join the Review community", { exact: true })
-      .count(),
+    await ctx.page.getByText(COMMUNITY_TITLE, { exact: true }).count(),
     0,
   );
   assert.equal(
-    await ctx.page.getByText("Review sends anonymous usage data").count(),
+    await ctx.page.getByText("Whiteboard sends anonymous usage data").count(),
     0,
   );
   ctx.check("dismissed dialog and notice stay hidden after a restart");

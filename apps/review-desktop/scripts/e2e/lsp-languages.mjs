@@ -16,9 +16,10 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import {
+  closeSourceWindow,
   createReview,
-  dismissModalEditor,
   installExtensionGroup,
+  sourceWindowFor,
 } from "./harness.mjs";
 
 const exec = promisify(execFile);
@@ -84,6 +85,7 @@ export const LANGUAGES = {
     hoverText: /func SaveOrder\(order OrderRecord\) OrderRecord/,
     needsToolchain: "go",
     installsTool: "gopls",
+    welcomeTab: "Go for VS Code",
     hoverTimeout: 300000, // gopls is built from source under a fresh HOME, so the caches start empty.
     // Unset, every Go install and cache path sits under the temp $HOME; an empty value is a deletion.
     env: {
@@ -339,7 +341,7 @@ export async function runLspJourney(ctx, id) {
   }
 }
 
-/** The reader's half: from the open review to the modal editor Go to Definition opens. */
+/** The reader's half: from the open review to the Source window Go to Definition opens. */
 async function hoverAndJump(ctx, id, language, canvas, lines, callLine) {
   const page = canvas.page();
 
@@ -349,11 +351,37 @@ async function hoverAndJump(ctx, id, language, canvas, lines, callLine) {
     )
     .first();
 
-  await editor.locator(".view-line").first().waitFor({ timeout: 60000 });
+  const welcome = page
+    .locator(".tabs-container .tab.active")
+    .filter({ hasText: language.welcomeTab });
+
+  // The Go extension opens its welcome page on first activation, over the review.
+  const leaveWelcome = async () => {
+    if (!language.welcomeTab || !(await welcome.count())) return;
+    await ctx.knownBug(
+      "Activating the Go extension opens its welcome page over the review",
+    );
+    await page
+      .locator(".tabs-container .tab")
+      .filter({ hasText: `${id} peek` })
+      .click();
+  };
+
+  await ctx.until(
+    async () => {
+      await leaveWelcome();
+
+      return editor.locator(".view-line").first().isVisible();
+    },
+    `the ${language.peekFile} peek`,
+    120000,
+  );
 
   // The peek opens the language's first document, so the extension activates only once it is on screen.
-  if (language.installsTool)
+  if (language.installsTool) {
     await provisionLanguageServer(ctx, language.installsTool);
+    await leaveWelcome();
+  }
 
   const callRow = editor
     .locator(".view-line")
@@ -410,20 +438,9 @@ async function hoverAndJump(ctx, id, language, canvas, lines, callLine) {
   await token.click({ position: await aim() });
   await page.keyboard.press("F12");
 
-  // Go to Definition opens the file in the modal editor, whose header carries the resolved label: the cross-file evidence.
-  const modalTitle = page
-    .locator(".monaco-modal-editor-block .modal-editor-title")
-    .first();
-
-  // The label is the file name, not its path in the repository.
-  const definitionName = path.basename(language.definitionFile);
-
-  await ctx.until(
-    async () => (await modalTitle.innerText().catch(() => "")).includes(definitionName),
-    `${id} Go to Definition to open ${language.definitionFile} in the modal editor`,
-    60000,
+  // Go to Definition opens the file in a Source window whose active tab names it: the cross-file evidence.
+  await closeSourceWindow(
+    await sourceWindowFor(ctx, path.basename(language.definitionFile)),
   );
   ctx.check(`${id}: go to definition crosses files`);
-
-  await dismissModalEditor(ctx, page);
 }

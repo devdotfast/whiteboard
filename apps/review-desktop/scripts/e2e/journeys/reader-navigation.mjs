@@ -50,7 +50,7 @@ export async function run(ctx) {
 
   const canvas = page.locator(".review-canvas-root [data-review-api]");
 
-  const views = page.locator('[aria-label="Review views"]');
+  const views = page.locator('[aria-label="Session views"]');
 
   const viewLabels = () =>
     views
@@ -70,7 +70,7 @@ export async function run(ctx) {
 
   // A two-commit range offers Commits and Diff, Map needs a software map this review has none of, Trace needs traces.
   const offered = [
-    "Review",
+    "Whiteboard",
     "Commits",
     "Diff",
     ...(traces.sessions.length > 0 ? ["Trace"] : []),
@@ -81,8 +81,8 @@ export async function run(ctx) {
     `the review views to settle on ${offered.join(", ")}`,
   );
 
-  // Review goes last so the reader ends on the document the rest of the journey reads.
-  for (const label of [...offered.slice(1), "Review"]) {
+  // Whiteboard goes last so the reader ends on the document the rest of the journey reads.
+  for (const label of [...offered.slice(1), "Whiteboard"]) {
     const button = views.locator(`button[aria-label="${label}"]`);
 
     await button.click();
@@ -94,22 +94,26 @@ export async function run(ctx) {
 
   ctx.check("all offered review views activate");
 
-  const find = page.locator('[role="search"][aria-label="Find in Review"]');
+  const find = page.locator('[role="search"][aria-label="Find in session"]');
 
   const input = find.locator('[aria-label="Find"]');
 
   const countText = async () =>
     (await find.locator(".review-find-count").innerText()).trim();
 
-  await page.keyboard.press("Meta+F");
+  await page.keyboard.press("ControlOrMeta+KeyF");
   await find.waitFor();
   await input.fill("stat");
 
+  // Code peeks report their matches after the prose, so the count is read once it holds still for a second.
   const plain = await until(async () => {
     const text = await countText();
 
-    return /^\d+ of \d+$/.test(text) ? text : null;
-  }, "a plain-text match count");
+    if (!/^\d+ of \d+$/.test(text)) return null;
+    await page.waitForTimeout(1000);
+
+    return (await countText()) === text ? text : null;
+  }, "a settled plain-text match count");
 
   const wholeWord = find.locator(".review-find-toggle--whole-word");
 
@@ -234,7 +238,7 @@ export async function run(ctx) {
 
   const after = await history();
 
-  // Every command seals a version, so the rename alone gives the history control a previous revision to open.
+  // Every command seals a version, so the rename alone adds one.
   assert.equal(
     after.length,
     before.length + 1,
@@ -251,34 +255,7 @@ export async function run(ctx) {
     "the version before the rename must keep the original title",
   );
 
+  // The version picker is gone (#389), so the rename is proved in the store and on the live canvas.
   await canvas.getByRole("heading", { name: RENAMED, exact: true }).waitFor();
-  await page.locator('button[aria-label="Version history"]').click();
-
-  const items = page.locator('ul[role="menu"] [role="menuitem"]');
-
-  await until(
-    async () => (await items.count()) === after.length,
-    `the version menu to list all ${after.length} versions`,
-  );
-
-  const previous = items.nth(after.length - 2);
-
-  assert.match(
-    await previous.innerText(),
-    new RegExp(`^Version ${after.at(-2).version} `),
-    "the second-to-last menu item is not the version before the rename",
-  );
-  await previous.click();
-
-  const banner = page.locator('.review-history-banner[role="status"]');
-
-  await banner
-    .getByText("You are viewing an older version of this review.")
-    .waitFor();
-  await canvas.getByRole("heading", { name: TITLE, exact: true }).waitFor();
-  await canvas.getByRole("heading", { name: "Overview", exact: true }).waitFor();
-  await banner.getByRole("button", { name: "Back to latest" }).click();
-  await banner.waitFor({ state: "hidden" });
-  await canvas.getByRole("heading", { name: RENAMED, exact: true }).waitFor();
-  ctx.check("version history opens the previous revision");
+  ctx.check("a rename seals a new version and the canvas shows it");
 }

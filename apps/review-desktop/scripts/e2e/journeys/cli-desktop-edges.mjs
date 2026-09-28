@@ -122,7 +122,7 @@ export async function run(ctx) {
   const probe = async (contents) => {
     await writeFile(pointer, contents);
 
-    return ctx.cliRaw(["info", "--review", review.reviewId]);
+    return ctx.cliRaw(["info", "--session", review.reviewId]);
   };
 
   const output = (result) => `${result.stdout}${result.stderr}`;
@@ -230,7 +230,7 @@ export async function run(ctx) {
     assert.equal(result.code, 0, `app launch: ${output(result)}`);
     assert.match(
       result.stdout,
-      /Review Desktop is already running\./,
+      /Whiteboard Desktop is already running\./,
       `app launch did not recognise the attached Desktop: ${output(result)}`,
     );
     // The instance record is written once on listen, so the same instanceId proves the attached Desktop answered.
@@ -270,7 +270,7 @@ export async function run(ctx) {
   const stray = async () => [...(await installedDesktopPids(probeHome))];
 
   const picked = await ctx.cliRaw(
-    ["app", "pick", "--review", review.reviewId],
+    ["app", "pick", "--session", review.reviewId],
     ctx.repo,
     {
       timeout: 25000,

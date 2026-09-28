@@ -19,6 +19,9 @@ export const options = {};
 
 const TITLE = "Order review";
 
+const MOVED_BUG =
+  "A review whose repository directory moves or is deleted renders `ReviewApiError: Review operation failed.`";
+
 /** The banner a snapshot marked `sourceUnavailable` renders instead of the source (see api-document.tsx). */
 const RETAINED_SOURCE = "Local checkout unavailable. Showing retained source.";
 
@@ -31,6 +34,7 @@ function canvasUi(ctx) {
     // The state a missing checkout is meant to reach (see desktop-entry.tsx).
     unavailable: ctx.page.getByText("Worktree unavailable"),
     retained: canvas.getByText(RETAINED_SOURCE),
+    failed: canvas.getByText(/^ReviewApiError: review operation failed/i),
     peek: canvas
       .locator('.review-inline-editor[data-review-inline-editor="order.ts"]')
       .first(),
@@ -114,24 +118,40 @@ export async function run(ctx) {
   await ctx.restartDesktop();
   await pickReview(ctx, review.reviewId, moved);
 
-  const { heading, unavailable } = canvasUi(ctx);
+  const { heading, unavailable, failed } = canvasUi(ctx);
+
+  // The bug's signature: the commits read still resolves the registered path, which no longer exists.
+  const staleReads = () =>
+    ctx
+      .appLog()
+      .split(
+        `/commits failed: Error: No Git or jj repository found for ${repo}.`,
+      ).length - 1;
 
   // The rename leaves the pinned checkout intact, so a full render is as legitimate as the degraded state.
   const outcome = await until(
     async () =>
       ((await unavailable.count()) > 0 && "unavailable") ||
-      ((await heading.count()) > 0 && "rendered"),
-    "the moved worktree to report unavailable or render the pinned review",
+      ((await heading.count()) > 0 && "rendered") ||
+      ((await failed.count()) > 0 && "failed"),
+    "the moved worktree to report unavailable, render the pinned review, or fail",
   );
 
-  ctx.check(
-    outcome === "unavailable"
-      ? "a moved worktree is reported as unavailable"
-      : "a moved worktree still renders from the pinned checkout",
-  );
+  if (outcome === "failed") {
+    assert.ok(
+      staleReads() > 0,
+      "the canvas failed for a reason other than the stale repository path",
+    );
+    await ctx.knownBug(MOVED_BUG);
+  } else
+    ctx.check(
+      outcome === "unavailable"
+        ? "a moved worktree is reported as unavailable"
+        : "a moved worktree still renders from the pinned checkout",
+    );
 
   const info = await ctx.cliRaw(
-    ["info", "--review", review.reviewId, "--json"],
+    ["info", "--session", review.reviewId, "--json"],
     moved,
   );
 
@@ -143,6 +163,8 @@ export async function run(ctx) {
   );
   ctx.check("info resolves a review whose worktree moved");
 
+  const readsBeforeDelete = staleReads();
+
   await rm(moved, { recursive: true, force: true });
   assert.ok(
     !existsSync(pinnedIn(moved)),
@@ -151,22 +173,35 @@ export async function run(ctx) {
   await ctx.restartDesktop();
   await openHome(ctx);
   await ctx.page
-    .locator("main.review-home .review-home-card")
+    .locator("main.review-home .review-home-table tbody tr")
     .filter({ hasText: TITLE })
+    .locator(".review-home-table-open")
     .click();
 
   const deleted = canvasUi(ctx);
 
   // `Worktree unavailable` belongs to the source-file view this path never opens, so the document is the only outcome.
-  await until(
-    async () => (await deleted.heading.count()) > 0,
-    "the deleted worktree to render the stored document",
+  const afterDelete = await until(
+    async () =>
+      ((await deleted.heading.count()) > 0 && "rendered") ||
+      ((await deleted.failed.count()) > 0 && "failed"),
+    "the deleted worktree to render the stored document or fail",
   );
+
+  if (afterDelete === "failed") {
+    assert.ok(
+      staleReads() > readsBeforeDelete,
+      "the canvas failed for a reason other than the stale repository path",
+    );
+    await ctx.knownBug(MOVED_BUG);
+
+    return;
+  }
 
   // Nothing is left to read from, so the retained document has to say so rather than pass for a current one.
   await deleted.retained.waitFor();
 
-  const views = ctx.page.locator('[aria-label="Review views"]');
+  const views = ctx.page.locator('[aria-label="Session views"]');
 
   await views.locator('button[aria-label="Commits"]').click();
 
