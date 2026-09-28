@@ -55,7 +55,7 @@ interface ReviewAppLauncherRuntime {
 
 export interface RunReviewAppLaunchInput {
   timeoutMs?: number;
-  /** Bring Review Desktop forward. */
+  /** Bring Whiteboard Desktop forward. */
   focus?: boolean;
 }
 
@@ -193,7 +193,7 @@ export async function runReviewAppLaunch(
   }
 
   throw new Error(
-    `Review Desktop did not become ready within ${Math.ceil((input.timeoutMs ?? DEFAULT_LAUNCH_TIMEOUT_MS) / 1_000)} seconds after ${attempt.method}. Open Review Desktop once, then run \`review app launch\` again.`,
+    `Whiteboard Desktop did not become ready within ${Math.ceil((input.timeoutMs ?? DEFAULT_LAUNCH_TIMEOUT_MS) / 1_000)} seconds after ${attempt.method}. Open Whiteboard Desktop once, then run \`review app launch\` again.`,
   );
 }
 
@@ -212,7 +212,7 @@ export async function focusReviewDesktop(
   if (!response.ok || !result.ok) {
     throw new Error(
       result.ok
-        ? `Review Desktop focus returned ${response.status}.`
+        ? `Whiteboard Desktop focus returned ${response.status}.`
         : result.error,
     );
   }

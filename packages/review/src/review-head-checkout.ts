@@ -100,7 +100,7 @@ async function materializeReviewPinnedCheckout(input: {
   // of code — and the graph would index that. Refuse with the remedy instead.
   if (await jjRevisionIsConflicted(input.rootPath, input.commit)) {
     throw new Error(
-      `Review cannot pin conflicted revision ${input.commit.slice(0, 12)}: the jj change has unresolved conflicts. Resolve them (jj resolve), then re-pin the review.`,
+      `Whiteboard cannot pin conflicted revision ${input.commit.slice(0, 12)}: the jj change has unresolved conflicts. Resolve them (jj resolve), then re-pin the review.`,
     );
   }
 

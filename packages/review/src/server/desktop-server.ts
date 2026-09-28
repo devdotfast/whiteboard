@@ -623,7 +623,7 @@ export function createGlobalReviewServer(
 
       return globalJson(409, {
         ok: false,
-        error: "A Review Desktop control client is already attached.",
+        error: "A Whiteboard Desktop control client is already attached.",
       });
     }
 
@@ -765,7 +765,7 @@ function listen(server: Server, port: number): Promise<number> {
       const address = server.address();
 
       if (!isTcpAddress(address)) {
-        reject(new Error("The Review server did not bind a TCP port."));
+        reject(new Error("The Whiteboard server did not bind a TCP port."));
 
         return;
       }

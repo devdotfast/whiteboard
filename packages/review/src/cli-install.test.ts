@@ -49,7 +49,7 @@ const temporaryDirectories: string[] = [];
 const packageRoot = path.resolve(import.meta.dirname, "..");
 
 const profileMarker =
-  "# Managed by Review Desktop: review command PATH. Do not edit.";
+  "# Managed by Whiteboard: review command PATH. Do not edit.";
 
 const profileExport = 'export PATH="$HOME/.local/bin:$PATH"';
 
@@ -507,7 +507,7 @@ describe("review command installation", () => {
 
     const removed = await removeCliInstall({ shim: true, homeDir, env });
 
-    expect(removed.output).toContain("removed Review PATH entry");
+    expect(removed.output).toContain("removed Whiteboard PATH entry");
     await expect(
       readFile(path.join(homeDir, ".local", "bin", "whiteboard"), "utf8"),
     ).rejects.toMatchObject({ code: "ENOENT" });

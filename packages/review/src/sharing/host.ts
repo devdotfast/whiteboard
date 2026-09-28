@@ -174,7 +174,7 @@ export function mountSharingHost(
             "error",
             error instanceof ReviewInputError
               ? error.message
-              : "This share is unavailable, revoked, or needs a newer Review version.",
+              : "This share is unavailable, revoked, or needs a newer Whiteboard version.",
           );
         })
         .finally(() => imports.delete(id));

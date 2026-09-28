@@ -209,7 +209,7 @@ export async function reportCrashDump(
   if (!dumpPath)
     return {
       status: 403,
-      body: { ok: false, error: "Not a Review crash dump." },
+      body: { ok: false, error: "Not a Whiteboard crash dump." },
     };
 
   const launch = crashedLaunchProperties(request.launch);

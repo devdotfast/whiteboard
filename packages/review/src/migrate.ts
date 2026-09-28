@@ -106,7 +106,7 @@ export async function runReviewMigration(input: {
   const blockers: string[] = [];
 
   const stored = await runMigrationPhase(
-    "Old Review cleanup",
+    "Old review cleanup",
     {
       documents: 0,
       droppedLegacyPeekReviews: 0,
@@ -136,7 +136,7 @@ export async function runReviewMigration(input: {
   );
 
   const managedCheckouts = await runMigrationPhase(
-    "Review-managed checkout migration",
+    "review-managed checkout migration",
     { checked: 0, created: 0, legacyRemoved: 0, blockers: [] },
     () =>
       runtime.migrateReviewManagedCheckouts({
@@ -178,9 +178,9 @@ export async function runReviewMigration(input: {
 
   human.write(
     [
-      `Review migration: ${count(stored.documents, "document")} checked;`,
-      `${count(stored.droppedReviews, "old Review")} dropped;`,
-      `${count(stored.droppedLegacyPeekReviews, "legacy-peek Review")} dropped;`,
+      `review migration: ${count(stored.documents, "document")} checked;`,
+      `${count(stored.droppedReviews, "old review")} dropped;`,
+      `${count(stored.droppedLegacyPeekReviews, "legacy-peek review")} dropped;`,
       `${count(jj.migrated, "jj repository", "jj repositories")} converted;`,
       `${count(managedCheckouts.created, "managed checkout")} created;`,
       `${count(stored.legacyCheckoutsRemoved + managedCheckouts.legacyRemoved, "legacy checkout")} removed;`,
@@ -191,7 +191,7 @@ export async function runReviewMigration(input: {
   );
 
   for (const blocker of blockers) {
-    input.stderr.write(`Review migration blocker: ${blocker}\n`);
+    input.stderr.write(`review migration blocker: ${blocker}\n`);
   }
 
   emitJsonEvent(input, {
@@ -272,7 +272,7 @@ export async function migrateReviewManagedCheckouts(input: {
         result.created += 1;
       }
 
-      input.log?.(`Created managed checkouts for Review ${review.uuid}.`);
+      input.log?.(`Created managed checkouts for review ${review.uuid}.`);
     } catch (error) {
       result.blockers.push(`${reviewDir}: ${errorMessage(error)}`);
     }
@@ -352,7 +352,7 @@ export async function migrateJjReviewRepositories(input: {
         (await reviewVcs.log(reviewDir)).length > 0
       ) {
         input.log?.(
-          `Preserved colocated Review history for ${parsed.uuid}; no repository reset is needed.`,
+          `Preserved colocated review history for ${parsed.uuid}; no repository reset is needed.`,
         );
         continue;
       }
@@ -363,7 +363,7 @@ export async function migrateJjReviewRepositories(input: {
         recordSource,
         force: input.force,
       });
-      input.log?.(`Converted jj Review repository ${reviewDir} to plain Git.`);
+      input.log?.(`Converted jj review repository ${reviewDir} to plain Git.`);
       result.migrated += 1;
     } catch (error) {
       result.blockers.push(`${reviewDir}: ${errorMessage(error)}`);
@@ -424,7 +424,7 @@ async function resetJjReviewRepository(input: {
 
     const revision = await reviewVcs.seal(
       input.reviewDir,
-      "Migrate Review history to plain Git",
+      "Migrate review history to plain Git",
     );
 
     await reviewVcs.resolve(input.reviewDir, revision);
@@ -500,7 +500,7 @@ export async function removeLegacyDesktopCatalog(input: {
 
     if (!isLegacyDesktopCatalogRecord(record, key)) {
       result.blockers.push(
-        `${filePath} is not a recognized Review catalog entry.`,
+        `${filePath} is not a recognized review catalog entry.`,
       );
       continue;
     }

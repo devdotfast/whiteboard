@@ -234,7 +234,7 @@ describe("review migrate apply", () => {
     });
 
     expect(code).toBe(1);
-    expect(io.out.join("")).toContain("1 old Review dropped");
+    expect(io.out.join("")).toContain("1 old review dropped");
     expect(io.out.join("")).toContain("1 jj repository converted");
     expect(io.out.join("")).toContain("1 blocker");
     expect(io.err.join("")).toContain(
@@ -281,7 +281,7 @@ describe("review migrate apply", () => {
     expect(catalogCleanup).toHaveBeenCalledOnce();
     expect(io.out.join("")).toContain("1 catalog entry removed");
     expect(io.err.join("")).toContain(
-      "Old Review cleanup failed: missing session.json",
+      "Old review cleanup failed: missing session.json",
     );
   });
 
@@ -324,9 +324,9 @@ describe("review migrate apply", () => {
     });
 
     expect(code).toBe(1);
-    expect(io.out.join("")).toContain("1 old Review dropped");
+    expect(io.out.join("")).toContain("1 old review dropped");
     expect(io.err.join("")).toContain(
-      "Review migration blocker: one legacy Review could not migrate",
+      "review migration blocker: one legacy Review could not migrate",
     );
   });
 });

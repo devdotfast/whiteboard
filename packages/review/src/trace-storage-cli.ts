@@ -129,7 +129,7 @@ export async function runTraceStorageUse(
 
       if (!setup.credentials && !isS3MockMode(scope.env)) {
         throw new TraceConfigurationError(
-          "No S3/R2 credentials are configured. Pass --endpoint, --bucket, --key, and --secret, or use Review Agent Setup.",
+          "No S3/R2 credentials are configured. Pass --endpoint, --bucket, --key, and --secret, or use Whiteboard Agent Setup.",
         );
       }
 
@@ -205,7 +205,7 @@ async function useHosted(
     } catch (error) {
       if (error instanceof StoreApiError && error.code === "upgrade_required") {
         throw new TraceConfigurationError(
-          `${origin} does not serve the trace store contract this Review needs. Hosted storage was not selected.`,
+          `${origin} does not serve the trace store contract this Whiteboard needs. Hosted storage was not selected.`,
         );
       }
 

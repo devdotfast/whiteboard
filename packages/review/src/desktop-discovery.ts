@@ -27,7 +27,7 @@ export class ReviewDesktopProtocolMismatchError extends Error {
     readonly expectedVersion = REVIEW_DESKTOP_DISCOVERY_VERSION,
   ) {
     super(
-      `Review Desktop uses protocol ${actualVersion}, but this Review CLI needs protocol ${expectedVersion}. Update Review and Review Desktop to compatible versions, then try again.`,
+      `Whiteboard Desktop uses protocol ${actualVersion}, but this Whiteboard CLI needs protocol ${expectedVersion}. Update the Whiteboard CLI and Whiteboard Desktop to compatible versions, then try again.`,
     );
   }
 }
@@ -37,7 +37,7 @@ export class ReviewDesktopDiscoveryUnreadableError extends Error {
 
   constructor(filePath: string, detail?: string) {
     super(
-      `Review Desktop discovery is unreadable at ${filePath}. Restart Review Desktop and try again.${detail ? ` ${detail}` : ""}`,
+      `Whiteboard Desktop discovery is unreadable at ${filePath}. Restart Whiteboard Desktop and try again.${detail ? ` ${detail}` : ""}`,
     );
   }
 }

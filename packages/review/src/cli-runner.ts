@@ -226,7 +226,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     .name("whiteboard")
     .enablePositionalOptions()
     .version(cliVersion)
-    .description("Create, publish, and open dev.fast Reviews.")
+    .description("Create and open dev.fast reviews.")
     .addHelpText("after", reviewTopLevelHelp());
 
   // Tolerate the leading form (`review --json scaffold`) as well as the usual
@@ -235,7 +235,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
   program.addOption(new Option("--json").hideHelp());
   program.option(
     "--state-dir <path>",
-    "select headless Review state for server, api, and mcp",
+    "select headless Whiteboard state for server, api, and mcp",
   );
   program.exitOverride();
 
@@ -249,7 +249,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
   const serverCommand = configureOutput(
     program
       .command("server")
-      .description("Run Review authoring without Desktop"),
+      .description("Run review authoring without Desktop"),
     "plain",
   );
 
@@ -310,7 +310,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
           input.stdout.write(
             options.json
               ? `${JSON.stringify({ event: "server.ready", url, serverPid, stateDir })}\n`
-              : `Review server ready at ${url}\nSaved reviews: ${stateDir}\n`,
+              : `Whiteboard server ready at ${url}\nSaved reviews: ${stateDir}\n`,
           );
         },
       });
@@ -344,14 +344,14 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     input.stdout.write(
       options.json
         ? `${JSON.stringify({ event: "server.status", ready: true, url, serverPid, stateDir })}\n`
-        : `Review server ready at ${url}\nSaved reviews: ${stateDir}\n`,
+        : `Whiteboard server ready at ${url}\nSaved reviews: ${stateDir}\n`,
     );
   });
 
   configureJsonOutput(
     program
       .command("version")
-      .description("Print Review package version")
+      .description("Print Whiteboard package version")
       .option("--verbose", "Show executing CLI paths and build identity"),
     "plain",
   ).action(async (options: { verbose?: boolean }, command: Command) => {
@@ -459,7 +459,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
   configureJsonOutput(
     app
       .command("pick")
-      .description("Select a Review (interactive picker without --session)")
+      .description("Select a review (interactive picker without --session)")
       .option("--session <uuid>", "review UUID")
       .option("--focus", "bring Whiteboard Desktop to the foreground"),
     "plain",
@@ -475,7 +475,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
   const instances = configureJsonOutput(
     program
       .command("instances")
-      .description("List running Reviews and the one commands use"),
+      .description("List running reviews and the one commands use"),
     "plain",
   ).action(async (_options: { json?: boolean }, command: Command) => {
     await listReviewInstancesCommand(instanceOutput(command));
@@ -504,12 +504,12 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
   });
 
   configureJsonOutput(
-    program.command("info").description("Print Review information"),
+    program.command("info").description("Print review information"),
     "plain",
   )
     .option("--all", "list active reviews for every worktree in this repo")
     .addOption(
-      new Option("--session <uuid>", "select a Review").conflicts("all"),
+      new Option("--session <uuid>", "select a review").conflicts("all"),
     )
     .action(async (options: ReviewInfoOptions) => {
       const event = await runtime.runReviewInfo({
@@ -588,14 +588,14 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
   });
 
   const migrate = configureOutput(
-    program.command("migrate").description("Migrate legacy Review data"),
+    program.command("migrate").description("Migrate legacy review data"),
     "plain",
   );
 
   configureJsonOutput(
     migrate
       .command("apply")
-      .description("Apply the legacy Review migration")
+      .description("Apply the legacy review migration")
       .option("--force", "restart an interrupted migration"),
     "plain",
   ).action(async (options: { force?: boolean; json?: boolean }) => {
@@ -616,7 +616,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       ),
     "plain",
   )
-    .option("--review <id>", "Review ID")
+    .option("--review <id>", "review ID")
     .option("--version <number>", "Saved version to share")
     .option("--preview", "Open the share link in Whiteboard Preview by default")
     .option(
@@ -658,10 +658,10 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
   // Hosted trace store login. Logging in authenticates a user; it selects
   // no storage by itself.
   configureJsonOutput(
-    program.command("login").description("Log in to Review with GitHub"),
+    program.command("login").description("Log in to Whiteboard with GitHub"),
     "plain",
   )
-    .option("--origin <url>", "Review service origin", DEFAULT_STORE_ORIGIN)
+    .option("--origin <url>", "Whiteboard service origin", DEFAULT_STORE_ORIGIN)
     .option("--traces", "Also authorize GitHub repositories for hosted traces")
     .option("--no-browser", "Print the URL instead of opening a browser")
     .action(
@@ -827,8 +827,8 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
   // share the top-level help, the leading `--json` form, and the telemetry
   // hooks without a separate parser.
   for (const [name, description] of [
-    ["api", "Call a JSON Review authoring tool on the running server"],
-    ["mcp", "Serve the JSON Review authoring tools over stdio MCP"],
+    ["api", "Call a JSON review authoring tool on the running server"],
+    ["mcp", "Serve the JSON review authoring tools over stdio MCP"],
   ] as const) {
     configureOutput(
       program
@@ -1075,18 +1075,17 @@ function reviewCliRuntime(
 function reviewTopLevelHelp(): string {
   return [
     "",
-    "Use `review info` to discover Review documents for this checkout.",
+    "Use `review info` to discover review documents for this checkout.",
     "Reviews are authored through the JSON API: `whiteboard api tools` lists the tools, and `whiteboard mcp` serves the same catalog to an agent.",
-    "Use `review app launch` to start Whiteboard Desktop. Use `review app pick --review <uuid>` to open one.",
+    "Use `review app launch` to start Whiteboard Desktop. Use `review app pick --session <uuid>` to open one.",
     "Use `review server start` for headless authoring, and `review server status --json` to check readiness.",
-    "Use `--view <review|commits|diff|map|trace>` with `review app pick` to choose the opened tab.",
     "",
     "Every command accepts --json. Stdout then carries only JSON events, one per line,",
     "human progress moves to stderr, and a failure prints a JSON error event too.",
     "",
     "Example agent prompt (for a repository that provides a CI/CD system):",
     "",
-    "  Can you use Review to explain this repository's CI/CD system to me?",
+    "  Can you use Whiteboard to explain this repository's CI/CD system to me?",
     "",
     "  My current understanding:",
     "",

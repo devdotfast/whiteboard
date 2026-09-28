@@ -187,7 +187,7 @@ describe("native Review picker", () => {
         },
       ),
     ).rejects.toThrow(
-      "Review Desktop uses protocol 999, but this Review CLI needs protocol 3.",
+      "Whiteboard Desktop uses protocol 999, but this Whiteboard CLI needs protocol 3.",
     );
     expect(launched).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();

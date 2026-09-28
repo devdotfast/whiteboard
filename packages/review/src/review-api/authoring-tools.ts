@@ -44,7 +44,7 @@ export function authoringTools(
     repin:
       "Update source pins or PR identity while preserving the document and component IDs. Returns warnings for retained source ranges to verify and resources that no longer match; fix them with review_edit. Previous pins and content remain in history. Omitted pullRequestUrl preserves PR identity within the same repository; changing repositories clears it. Supply a URL to replace it or null to detach.",
     restore:
-      "Restore title, source pins, PR identity and content from a saved version. Comments are not rolled back.",
+      "Restore title, source pins, PR identity and content from a saved version.",
     attention:
       "Mark a review viewed, dismissed or restored without changing its content.",
     delete: "Permanently delete this review and its history.",
@@ -80,12 +80,12 @@ export function authoringTools(
     ),
     tool(
       "get_instructions",
-      'Read Review\'s guidance before creating or editing a Review. The default topic gives the authoring workflow; "file-lenses" covers Diff-view file lenses.' +
+      'Read Whiteboard\'s guidance before creating or editing a review. The default topic gives the authoring workflow; "file-lenses" covers Diff-view file lenses.' +
         (traceEnabled
           ? ' Call review_get_instructions({topic:"trace-archaeology"}) for why code exists, what an agent was thinking, or whether an agent solved this before.'
           : "") +
         (scratchpadAvailable
-          ? ' When the user asks in conversation to be shown how code works or wants a diagram, without asking for a Review, draw it on the Review scratchpad rather than answering only in chat: call review_get_instructions({topic:"scratchpad"}) first. A request for a Review or to use Review means authoring a Review with the default topic.'
+          ? ' When the user asks in conversation to be shown how code works or wants a diagram, without asking for a review, draw it on the scratchpad rather than answering only in chat: call review_get_instructions({topic:"scratchpad"}) first. A request for a review or to use Whiteboard means authoring a review with the default topic.'
           : ""),
       instructionsQuerySchema.partial(),
       "GET",
@@ -154,7 +154,7 @@ export function authoringTools(
     ),
     tool(
       "workspace_cleanup",
-      "Inspect failed cleanup of retired Review-owned checkouts. Supply workspaceId to retry removal of that checkout. This does not remove active review checkouts.",
+      "Inspect failed cleanup of retired review-owned checkouts. Supply workspaceId to retry removal of that checkout. This does not remove active review checkouts.",
       z.strictObject({ workspaceId: id.optional() }),
       "POST",
       "/workspace-cleanup",

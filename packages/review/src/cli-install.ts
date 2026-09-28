@@ -61,7 +61,7 @@ function hasManagedShimMarker(source: string): boolean {
 }
 
 const PROFILE_MARKER =
-  "# Managed by Review Desktop: review command PATH. Do not edit.";
+  "# Managed by Whiteboard: review command PATH. Do not edit.";
 
 const PROFILE_EXPORT = 'export PATH="$HOME/.local/bin:$PATH"';
 
@@ -590,7 +590,7 @@ async function removeCliInstallUnlocked(
     }
 
     for (const profilePath of await removeShellProfilePath(homeDir)) {
-      chunks.push(`[ok] removed Review PATH entry from ${profilePath}\n`);
+      chunks.push(`[ok] removed Whiteboard PATH entry from ${profilePath}\n`);
     }
   }
 
@@ -696,7 +696,7 @@ export async function writePathShim(
   }
 
   const source = `#!/bin/sh
-# Managed by Whiteboard Desktop ("Review: Install CLI in PATH"). Do not edit.
+# Managed by Whiteboard Desktop ("Whiteboard: Install CLI in PATH"). Do not edit.
 FALLBACK_CLI=${shSingleQuote(cliPath)}
 FALLBACK_RUNTIME=${shSingleQuote(runtimePath ?? "")}
 DEFAULT_HOME=${shSingleQuote(devHome)}

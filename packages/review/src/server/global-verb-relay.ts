@@ -10,6 +10,8 @@ import {
 
 const DEFAULT_VERB_TIMEOUT_MS = 45_000;
 
+const NOT_ATTACHED = "No Whiteboard Desktop is attached.";
+
 interface PendingVerb {
   resolve(response: ReviewVerbResponse): void;
   timer: ReturnType<typeof setTimeout>;
@@ -44,7 +46,7 @@ export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
   attach(writer: GlobalReviewDesktopVerbWriter): boolean {
     if (this.controlWriter || writer.signal.aborted) return false;
     this.controlWriter = writer;
-    const detach = () => this.detach(writer, "No Review Desktop is attached.");
+    const detach = () => this.detach(writer, NOT_ATTACHED);
     this.controlAbortListener = detach;
     writer.signal.addEventListener("abort", detach, { once: true });
 
@@ -56,10 +58,7 @@ export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
     const control = this.controlWriter;
 
     if (!control) {
-      return Promise.resolve({
-        ok: false,
-        error: "No Review Desktop is attached.",
-      });
+      return Promise.resolve({ ok: false, error: NOT_ATTACHED });
     }
 
     const id = crypto.randomUUID();
@@ -67,7 +66,7 @@ export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
     return new Promise<ReviewVerbResponse>((resolve) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        resolve({ ok: false, error: "Review Desktop verb timed out." });
+        resolve({ ok: false, error: "Whiteboard Desktop verb timed out." });
       }, this.timeoutMs);
 
       timer.unref?.();
@@ -76,10 +75,10 @@ export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
 
       try {
         void Promise.resolve(control.write(frame)).catch(() => {
-          this.detach(control, "No Review Desktop is attached.");
+          this.detach(control, NOT_ATTACHED);
         });
       } catch {
-        this.detach(control, "No Review Desktop is attached.");
+        this.detach(control, NOT_ATTACHED);
       }
     });
   }
@@ -100,12 +99,12 @@ export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
     const control = this.controlWriter;
 
     if (!control) {
-      this.rejectPending("Review Desktop relay closed.");
+      this.rejectPending("Whiteboard Desktop relay closed.");
 
       return;
     }
 
-    this.detach(control, "Review Desktop relay closed.");
+    this.detach(control, "Whiteboard Desktop relay closed.");
     void Promise.resolve(control.close()).catch(() => undefined);
   }
 

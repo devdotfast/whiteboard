@@ -39,7 +39,7 @@ export function diffrExecutable(
 
 export function diffrMissingError(): Error {
   return new Error(
-    `Cannot find diffr at ${diffrExecutable()}. Review Desktop bundles it at bin/diffr under its runtime; in a checkout, run \`pnpm --filter @dev.fast/review ensure:diffr\` or install diffr on PATH, or set REVIEW_DIFFR_BINARY to its executable.`,
+    `Cannot find diffr at ${diffrExecutable()}. Whiteboard Desktop bundles it at bin/diffr under its runtime; in a checkout, run \`pnpm --filter @dev.fast/review ensure:diffr\` or install diffr on PATH, or set REVIEW_DIFFR_BINARY to its executable.`,
   );
 }
 

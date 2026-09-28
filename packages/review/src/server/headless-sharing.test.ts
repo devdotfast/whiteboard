@@ -260,7 +260,7 @@ for (const json of [false, true]) {
       });
 
       expect(code).toBe(1);
-      expect(diagnostic).toContain("Review server is not ready");
+      expect(diagnostic).toContain("Whiteboard server is not ready");
       expect(diagnostic).toContain("review server start");
       expect(json ? JSON.parse(output) : output).toEqual(
         json

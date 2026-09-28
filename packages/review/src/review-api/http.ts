@@ -57,7 +57,7 @@ export interface AuthoringCapabilities {
 }
 
 const SCRATCHPAD_DISABLED =
-  "The scratchpad is off. Turn it on in Review Desktop Settings.";
+  "The scratchpad is off. Turn it on in Whiteboard Desktop Settings.";
 
 /**
  * What the host reports about reviews, for telemetry. `onReviewCreated` fires
@@ -123,7 +123,7 @@ export function createReviewApi(
 
     return context.json(
       {
-        error: `Review operation failed (${failureKind(error)}). The server logged the cause; Whiteboard Desktop writes it to main.log in its logs folder.`,
+        error: `review operation failed (${failureKind(error)}). The server logged the cause; Whiteboard Desktop writes it to main.log in its logs folder.`,
       },
       500,
     );

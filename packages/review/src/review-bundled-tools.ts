@@ -82,7 +82,7 @@ async function ensureBundledTool(
 
       if ((await hashFile(stagedExecutable)) !== sha256) {
         throw new Error(
-          `The bundled ${input.tool} source changed while Review staged it.`,
+          `The bundled ${input.tool} source changed while Whiteboard staged it.`,
         );
       }
 
@@ -153,7 +153,7 @@ async function withInstallLock<T>(
 
       if (Date.now() >= deadline) {
         throw new Error(
-          `Timed out waiting for another Review process to install ${path.basename(destination)}.`,
+          `Timed out waiting for another Whiteboard process to install ${path.basename(destination)}.`,
         );
       }
 

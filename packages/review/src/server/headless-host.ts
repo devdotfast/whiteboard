@@ -63,7 +63,7 @@ export async function runHeadlessServer(input: HeadlessServerInput) {
 
   if (!outcome.acquired)
     throw new Error(
-      `A Review server already owns ${stateDir}. Stop it first, or choose another --state-dir.`,
+      `A Whiteboard server already owns ${stateDir}. Stop it first, or choose another --state-dir.`,
     );
 }
 
@@ -125,7 +125,7 @@ async function serve(input: HeadlessServerInput) {
     const address = server.address();
 
     if (!isObjectValue(address))
-      throw new Error("Review server did not bind a TCP port.");
+      throw new Error("Whiteboard server did not bind a TCP port.");
     discovery.url = `http://127.0.0.1:${address.port}`;
     await writePrivateJsonAtomic(
       reviewServerDiscoveryPath(input.stateDir),

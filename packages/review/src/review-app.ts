@@ -26,7 +26,7 @@ interface ReviewAppRuntime {
 export interface RunReviewAppInput {
   cwd: string;
   reviewUuid?: string;
-  /** Bring Review Desktop forward. */
+  /** Bring Whiteboard Desktop forward. */
   focus?: boolean;
   stdin: NodeJS.ReadStream;
   stdout: Writable;
@@ -87,7 +87,7 @@ export async function runReviewAppPick(
   } else {
     if (!input.stdin.isTTY)
       throw new Error(
-        "review app pick needs a terminal without --review. Pass --review <uuid> or run it in a terminal.",
+        "review app pick needs a terminal without --session. Pass --session <uuid> or run it in a terminal.",
       );
     const root = await runtime.resolveReviewRoot(input.cwd);
 

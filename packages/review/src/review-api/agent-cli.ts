@@ -130,7 +130,7 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
 
     if (!tool)
       throw new Error(
-        `Unknown Review tool: ${name}. Use whiteboard api tools.`,
+        `Unknown review tool: ${name}. Use whiteboard api tools.`,
       );
     let source = json ?? "{}";
 
