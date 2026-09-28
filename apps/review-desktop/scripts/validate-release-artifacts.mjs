@@ -10,7 +10,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  globSync,
   lstatSync,
   readFileSync,
   readdirSync,
@@ -19,7 +18,11 @@ import {
 import path from "node:path";
 import { parseArgs } from "node:util";
 
-import { verifyCuratedExtensions } from "./curated-extensions.mjs";
+import { parseGroupSelection } from "./curated-extensions.manifest.mjs";
+import {
+  selectExtensions,
+  verifyCuratedExtensions,
+} from "./curated-extensions.mjs";
 import {
   assertReleaseChannel,
   darwinTarget,
@@ -44,7 +47,7 @@ export function buildManifest({
   version,
   commit,
   payloads,
-  target = darwinTarget(),
+  target,
   now = new Date(),
 }) {
   const bundles = Object.fromEntries(
@@ -241,10 +244,16 @@ async function main() {
   );
 
   assertPackagedProduct(product, { commit, channel });
-  verifyCuratedExtensions({
-    root: path.join(app, "Contents", "Resources", "app", "extensions"),
-    target,
-  });
+
+  const extensionsDir = path.join(
+    app,
+    "Contents",
+    "Resources",
+    "app",
+    "extensions",
+  );
+
+  verifyCuratedExtensions({ root: extensionsDir, target });
 
   assertMachOArch(
     path.join(app, "Contents", "MacOS", sourceProduct.nameShort),
@@ -263,24 +272,24 @@ async function main() {
     arch,
   );
 
-  const [rustAnalyzerServer] = globSync(
-    path.join(
-      app,
-      "Contents",
-      "Resources",
-      "app",
-      "extensions",
-      "rust-lang.rust-analyzer*",
-      "server",
-      "rust-analyzer",
-    ),
-  );
+  // rust-analyzer is optional and downloaded at runtime, never packaged, so
+  // only the manifest's bundled extensions can be asserted here. Reuses
+  // selectExtensions so this never drifts from what verifyCuratedExtensions
+  // itself considers bundled for `target`.
+  for (const { extension, targetKey } of selectExtensions(
+    target,
+    parseGroupSelection(),
+  )) {
+    for (const relative of extension.executables) {
+      const executable = path.join(
+        extensionsDir,
+        extension.id,
+        targetKey.startsWith("win32-") ? `${relative}.exe` : relative,
+      );
 
-  if (!rustAnalyzerServer) {
-    throw new Error(`rust-analyzer server binary not found under ${app}`);
+      assertMachOArch(executable, arch);
+    }
   }
-
-  assertMachOArch(rustAnalyzerServer, arch);
 
   run("xcrun", ["stapler", "validate", app]);
   run("spctl", ["-a", "-vv", "--type", "exec", app]);

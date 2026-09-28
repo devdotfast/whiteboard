@@ -423,10 +423,12 @@ jobs:
         include:
           - target: darwin-arm64
             runner: macos-15-xlarge
+            timeout: 90
           - target: darwin-x64
             runner: macos-15-large
+            timeout: 150
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    timeout-minutes: ${{ matrix.timeout }}
     env:
       RELEASE_VERSION: ${{ needs.tag.outputs.version }}
       RELEASE_COMMIT: ${{ needs.tag.outputs.commit }}

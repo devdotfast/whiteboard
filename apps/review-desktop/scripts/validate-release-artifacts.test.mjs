@@ -36,6 +36,7 @@ test("buildManifest emits the schema the update Worker serves", () => {
   const manifest = buildManifest({
     version: "1.2.3",
     commit: "abc123",
+    target: "darwin-arm64",
     payloads: [
       { bundle: "Review", artifact: "Review", sha256: "cafe" },
       { bundle: "Whiteboard", artifact: "Whiteboard", sha256: "f00d" },

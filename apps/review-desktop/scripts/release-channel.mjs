@@ -94,7 +94,7 @@ export function darwinTarget(arch = process.arch) {
   return target;
 }
 
-export function updateZipName(artifact, version, target = darwinTarget()) {
+export function updateZipName(artifact, version, target) {
   return `${artifact}-${target}-${version}.zip`;
 }
 
