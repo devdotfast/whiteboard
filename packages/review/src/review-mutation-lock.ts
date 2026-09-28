@@ -2,11 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import path from "node:path";
 
-import {
-  type JsonValue,
-  type ReviewErrorResponse,
-  isJsonObject,
-} from "@dev.fast/review-protocol";
+import { type JsonValue, isJsonObject } from "@dev.fast/review-protocol";
 import { withFileLock } from "@dev.fast/trace-core";
 
 import type { StoredReviewRecord } from "./review-home";
@@ -41,17 +37,6 @@ export class ReviewBusyError extends Error {
     );
     this.reviewUuid = reviewUuid;
   }
-}
-
-export function reviewBusyResponse(
-  error: ReviewBusyError,
-): ReviewErrorResponse {
-  return {
-    ok: false,
-    code: "review_busy",
-    retryable: true,
-    error: error.message,
-  };
 }
 
 export function reviewMutationFingerprint<

@@ -1,4 +1,3 @@
-import { isNumberValue, isStringValue } from "@dev.fast/review-protocol";
 import {
   type ShjLanguage,
   type ShjToken,
@@ -7,8 +6,6 @@ import {
 import {
   type ComponentProps,
   type ReactElement,
-  type ReactNode,
-  isValidElement,
   useEffect,
   useState,
 } from "react";
@@ -131,39 +128,6 @@ interface HighlightedToken {
   token: ShjToken | undefined;
 }
 
-export function MarkdownCodeBlock({
-  children,
-  className,
-  ...props
-}: ComponentProps<"pre">): ReactElement {
-  const codeElement = isValidElement<ComponentProps<"code">>(children)
-    ? children
-    : null;
-
-  const codeClassName = codeElement?.props.className ?? "";
-
-  const language = codeClassName
-    .split(/\s+/)
-    .find((name) => name.startsWith("language-"))
-    ?.slice("language-".length);
-
-  const code = reactTextContent(codeElement?.props.children ?? children);
-
-  const preClassName = ["markdown-code-block", className]
-    .filter(Boolean)
-    .join(" ");
-
-  return (
-    <RenderedCodeBlock
-      {...props}
-      className={preClassName}
-      code={code}
-      language={language}
-      codeClassName={codeClassName}
-    />
-  );
-}
-
 function normalizeMarkdownCodeLanguage(language: string): ShjLanguage | null {
   const normalized = language.trim().toLowerCase();
 
@@ -227,19 +191,4 @@ function normalizeMarkdownCodeLanguage(language: string): ShjLanguage | null {
     default:
       return null;
   }
-}
-
-function reactTextContent(node: ReactNode): string {
-  if (Array.isArray(node)) return node.map(reactTextContent).join("");
-
-  if (isValidElement<{ children?: ReactNode }>(node)) {
-    return reactTextContent(node.props.children);
-  }
-
-  return isReactText(node) ? String(node) : "";
-}
-
-/** Text React renders verbatim; booleans, null and undefined render nothing. */
-function isReactText(node: ReactNode): node is string | number {
-  return isStringValue(node) || isNumberValue(node);
 }

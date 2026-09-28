@@ -50,8 +50,6 @@ export const flowNodeInsertSchema = flowNodeSchema.extend({
   link: flowLinkSchema.optional(),
 });
 
-export type FlowLink = z.infer<typeof flowLinkSchema>;
-
 export const flowDiagramSchema = defineBlock("flow_diagram", {
   title: label,
   description: z.string().optional(),

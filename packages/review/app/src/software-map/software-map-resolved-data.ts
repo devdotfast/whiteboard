@@ -1,8 +1,6 @@
 import type { NormalizedSoftwareModel } from "./model";
 import type { SoftwareMapCoverageClaim } from "./software-map-snapshot";
 
-const SOFTWARE_MAP_RESOLVED_DATA_VERSION = "resolved-data:v2";
-
 export interface SoftwareMapResolvedDataInput {
   codeElements: ReturnType<typeof createSoftwareMapCodeElements>;
   coverageClaims: SoftwareMapCoverageClaim[];
@@ -73,38 +71,6 @@ export function softwareMapModelKey({
   return signature.value(
     "model",
     model.elements.length + model.relationships.length,
-  );
-}
-
-export function softwareMapResolvedDataInputKey(
-  input: SoftwareMapResolvedDataInput,
-) {
-  const signature = createSoftwareMapSignature();
-  signature.add(SOFTWARE_MAP_RESOLVED_DATA_VERSION);
-  signature.add("code-elements");
-
-  for (const codeElement of input.codeElements) {
-    signature.add(codeElement.path);
-    signature.add(codeElement.label);
-    signature.add(codeElement.description ?? "");
-    signature.add(codeElement.changeStatus ?? "");
-
-    for (const range of codeElement.sourceRanges ?? []) {
-      signature.add(range.file);
-      signature.add(range.fromLine);
-      signature.add(range.toLine);
-    }
-  }
-
-  signature.add("coverage");
-
-  for (const claim of input.coverageClaims) {
-    addSoftwareMapCoverageClaimSignature(signature, claim);
-  }
-
-  return signature.value(
-    "resolved",
-    input.codeElements.length + input.coverageClaims.length,
   );
 }
 

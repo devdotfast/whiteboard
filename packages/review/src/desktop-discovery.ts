@@ -183,13 +183,6 @@ export interface ReviewInstanceDependencies {
   warn?: (message: string) => void;
 }
 
-/** Every recorded Desktop, healthy or not; malformed records are skipped. */
-export async function listReviewInstances(
-  dependencies: ReviewInstanceDependencies = {},
-): Promise<ReviewInstance[]> {
-  return (await readReviewInstances(dependencies)).instances;
-}
-
 /** Records by key, plus the files that could not be read, by key. */
 async function readReviewInstances(dependencies: ReviewInstanceDependencies) {
   const env = dependencies.env ?? process.env;

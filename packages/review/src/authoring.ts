@@ -81,8 +81,6 @@ export const actorInputSchema = z.strictObject({
   softwareMapPath: optionalNonEmptyStringSchema,
 });
 
-export type ActorInput = z.infer<typeof actorInputSchema>;
-
 export const actorInputMapSchema = z.record(
   nonEmptyStringSchema,
   actorInputSchema,
@@ -140,8 +138,6 @@ export const codePeekRangeInputSchema = z
     path: ["toLine"],
     message: "Must be greater than or equal to fromLine",
   });
-
-export type CodePeekRangeInput = z.infer<typeof codePeekRangeInputSchema>;
 
 export const codePeekPropsSchema = codePeekRangeInputSchema;
 
@@ -218,16 +214,6 @@ export const sequenceDiagramPropsSchema = z.strictObject({
 });
 
 export type SequenceDiagramProps = z.infer<typeof sequenceDiagramPropsSchema>;
-
-export function isAnchorRef(value: unknown): value is AnchorRef {
-  return anchorRefSchema.safeParse(value).success;
-}
-
-export function isPeekableAnchorRef(
-  value: unknown,
-): value is PeekableAnchorRef {
-  return peekableAnchorRefSchema.safeParse(value).success;
-}
 
 export type AnchorRefFor<T extends AnchorInputMap[string]> = AnchorRef &
   (T extends { peek: CodePeekProps } ? { peek: DiffSelection } : unknown);
@@ -363,8 +349,6 @@ export const dbOperationPropsSchema = z.union([
   dbReadPropsSchema,
   dbWritePropsSchema,
 ]);
-
-export type DbOperationProps = z.infer<typeof dbOperationPropsSchema>;
 
 // Only the identifying fields are parsed: `z.custom` keeps the store handle's
 // identity, and with it the collection refs hanging off it.

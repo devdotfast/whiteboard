@@ -1,6 +1,3 @@
-import type { JsonValue } from "@dev.fast/review-protocol";
-import { z } from "zod";
-
 import type { C4LayoutBox } from "./c4-map-flow-types";
 import type { C4Projection, ProjectedC4Relationship } from "./c4-projection";
 import type {
@@ -372,65 +369,6 @@ function inferSoftwareMapChangeStatus({
   }
 
   return "unchanged";
-}
-
-const softwareMapDiffCountsSchema = z.object({
-  additions: z.number(),
-  deletions: z.number(),
-});
-
-const softwareMapUnmappedDiffSummarySchema = softwareMapDiffCountsSchema.extend(
-  {
-    files: z.array(
-      softwareMapDiffCountsSchema.extend({
-        file: z.string(),
-        hunks: z.array(
-          z.object({
-            startLine: z.number(),
-            lines: z.array(
-              z.object({
-                kind: z.enum(["add", "remove"]),
-                oldLine: z.number().nullable(),
-                newLine: z.number().nullable(),
-                text: z.string(),
-              }),
-            ),
-          }),
-        ),
-      }),
-    ),
-  },
-);
-
-/** The `ok` body of the resolved-data route; any other body yields no data. */
-const softwareMapResolvedDataResponseSchema = z.object({
-  ok: z.literal(true),
-  countsByElementPath: z
-    .record(z.string(), softwareMapDiffCountsSchema)
-    .optional(),
-  unmappedByElementPath: z
-    .record(z.string(), softwareMapUnmappedDiffSummarySchema)
-    .optional(),
-});
-
-export function parseSoftwareMapResolvedDataResponse(
-  json: JsonValue,
-): SoftwareMapResolvedDataPayload {
-  const body = softwareMapResolvedDataResponseSchema.safeParse(json);
-
-  if (!body.success) {
-    return {
-      counts: new Map(),
-      unmappedByElementPath: new Map(),
-    };
-  }
-
-  return {
-    counts: new Map(Object.entries(body.data.countsByElementPath ?? {})),
-    unmappedByElementPath: new Map(
-      Object.entries(body.data.unmappedByElementPath ?? {}),
-    ),
-  };
 }
 
 export function softwareMapSnapshotFromInlineC4Projection({

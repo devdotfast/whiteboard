@@ -46,9 +46,6 @@ export class TraceObjectHttpError extends Error {
   }
 }
 
-/** One presigned upload from `beginUpload`. */
-export type TraceStoreUpload = PresignedUpload;
-
 /** One session as the store lists it, with presigned download URLs. */
 export type TraceStoreSession = ListSessionsResponse["sessions"][number];
 

@@ -137,11 +137,3 @@ export function resolveDiffSelection(
     })),
   );
 }
-
-/** Resolve authored references only. Exact coverage sent back by the server stays exact. */
-export function resolvedLensSources(
-  sources: readonly LensSource[],
-  resolved: Readonly<Record<string, FileLineRange[]>> | undefined,
-): FileLineRange[] {
-  return sources.flatMap((source) => resolved?.[selectionKey(source)] ?? []);
-}

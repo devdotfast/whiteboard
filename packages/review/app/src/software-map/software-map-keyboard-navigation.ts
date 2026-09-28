@@ -457,30 +457,6 @@ export function focusSoftwareMapKeyboardTarget(element: HTMLElement | null) {
   element.focus({ preventScroll: true });
 }
 
-export function observeSoftwareMapVisibility(
-  element: Element,
-  onVisible: () => void,
-) {
-  if (typeof IntersectionObserver === "undefined") {
-    onVisible();
-
-    return () => {};
-  }
-
-  const observer = new IntersectionObserver(
-    (entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return;
-      onVisible();
-      observer.disconnect();
-    },
-    { rootMargin: "200px" },
-  );
-
-  observer.observe(element);
-
-  return () => observer.disconnect();
-}
-
 export function softwareMapOverlayClassName({
   theme,
   nodeTint,

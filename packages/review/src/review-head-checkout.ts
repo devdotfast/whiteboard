@@ -1,5 +1,5 @@
 import { existsSync, rmSync } from "node:fs";
-import { mkdir, rm, rmdir } from "node:fs/promises";
+import { mkdir, rmdir } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -15,7 +15,6 @@ import {
   legacyReviewWorktreesDir,
   reviewManagedCheckoutDir,
   reviewManagedCheckoutRoot,
-  reviewManagedCheckoutsDir,
 } from "./review-checkout-paths";
 import { removeReviewPrepareArtifacts } from "./review-prepare.js";
 
@@ -158,34 +157,6 @@ export async function removeReviewPinnedCheckout(input: {
   return existed;
 }
 
-/** Remove all persistent checkouts for one deleted Review. */
-export async function removeReviewManagedCheckouts(input: {
-  rootPath: string;
-  reviewUuid: string;
-}): Promise<number> {
-  const commonDir = await gitCommonDir(input.rootPath);
-
-  if (!commonDir) return 0;
-  const reviewRoot = reviewManagedCheckoutRoot(commonDir, input.reviewUuid);
-  const worktrees = await listRegisteredWorktrees(input.rootPath);
-  let removed = 0;
-
-  for (const worktree of worktrees) {
-    if (!isInsideDirectory(worktree.worktreePath, reviewRoot)) continue;
-    await git(
-      input.rootPath,
-      ["worktree", "remove", "--force", worktree.worktreePath],
-      { allowFailure: true },
-    );
-    removed += 1;
-  }
-
-  await git(input.rootPath, ["worktree", "prune"], { allowFailure: true });
-  await rm(reviewRoot, { recursive: true, force: true });
-
-  return removed;
-}
-
 /** Remove commit-owned checkouts from releases before Review ownership. */
 export async function removeLegacyReviewCheckouts(input: {
   rootPath: string;
@@ -245,34 +216,6 @@ export async function removeLegacyReviewCheckouts(input: {
   });
 
   return removed;
-}
-
-/** Infer the owning Review from any path inside its managed checkout. */
-export async function reviewUuidForManagedCheckout(
-  cwd: string,
-): Promise<string | null> {
-  const commonDir = await gitCommonDir(cwd).catch(() => null);
-
-  if (!commonDir) return null;
-
-  const relative = path.relative(
-    reviewManagedCheckoutsDir(commonDir),
-    path.resolve(cwd),
-  );
-
-  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
-    return null;
-  }
-
-  const [reviewUuid, role, commit] = relative.split(path.sep);
-
-  if (!reviewUuid || !isReviewUuid(reviewUuid)) return null;
-
-  if (role !== "head" && role !== "base") return null;
-
-  if (!commit) return null;
-
-  return reviewUuid;
 }
 
 // Resolve a pinned ref to a commit. Prefer the jj-first local-vcs
@@ -369,12 +312,6 @@ function isManagedLegacyReviewWorktree(
   }
 
   return worktree.headCommit?.startsWith(relative.toLowerCase()) ?? false;
-}
-
-function isReviewUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    value,
-  );
 }
 
 function isInsideDirectory(filePath: string, directory: string): boolean {

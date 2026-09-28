@@ -26,13 +26,6 @@ export type TraceTurnEvent = Exclude<
   { kind: "separator" }
 >;
 
-export interface TraceTurnGroup {
-  user: Extract<TraceTurnEvent, { kind: "user" }> | null;
-  work: TraceTurnEvent[];
-  final: TraceTurnEvent[];
-  workedMs: number | null;
-}
-
 const TURN_ACTIVE_GAP_LIMIT_MS = 10 * 60 * 1000;
 
 export interface IndexedTraceTurnEvent {
@@ -104,17 +97,6 @@ export function buildIndexedTraceTurns(
   finish();
 
   return turns;
-}
-
-export function buildTraceTurns(
-  events: ReviewAgentTraceEvent[],
-): TraceTurnGroup[] {
-  return buildIndexedTraceTurns(events).map((t) => ({
-    user: t.user ? t.user.event : null,
-    work: t.work.map((w) => w.event),
-    final: t.final.map((f) => f.event),
-    workedMs: t.workedMs,
-  }));
 }
 
 function activeSpanMs(events: TraceTurnEvent[]): number | null {
@@ -545,10 +527,6 @@ export interface LensPickRange {
 
 export type LensPick = LensPickEvent | LensPickRange;
 
-export type LensDisplayItem =
-  | { type: "event"; index: number; keep: string[] | null }
-  | { type: "gap"; from: number; count: number };
-
 export function applyLensPicks(
   eventCount: number,
   lens: { picks: LensPick[] },
@@ -578,34 +556,6 @@ export function applyLensPicks(
   }
 
   return included;
-}
-
-export function buildLensDisplay(
-  eventCount: number,
-  included: Map<number, string[] | null>,
-): LensDisplayItem[] {
-  const items: LensDisplayItem[] = [];
-  let cursor = 0;
-
-  while (cursor < eventCount) {
-    if (included.has(cursor)) {
-      items.push({
-        type: "event",
-        index: cursor,
-        keep: included.get(cursor) ?? null,
-      });
-      cursor += 1;
-      continue;
-    }
-
-    let end = cursor;
-
-    while (end < eventCount && !included.has(end)) end += 1;
-    items.push({ type: "gap", from: cursor, count: end - cursor });
-    cursor = end;
-  }
-
-  return items;
 }
 
 export interface ElidedSegment {

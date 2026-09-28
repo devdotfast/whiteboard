@@ -5,7 +5,6 @@ import {
   isStringValue,
   parseJsonText,
 } from "@dev.fast/review-protocol";
-import type { ComponentType, ReactNode } from "react";
 import { z } from "zod";
 
 import {
@@ -95,8 +94,6 @@ export type ProseTag = z.infer<typeof proseTagSchema>;
 // this scalar, and the renderer turns it back into `style.textAlign`.
 export const tableAlignSchema = z.enum(["left", "center", "right"]);
 
-export type TableAlign = z.infer<typeof tableAlignSchema>;
-
 export const TABLE_CELL_TAGS = [
   "th",
   "td",
@@ -152,14 +149,6 @@ export type ReviewComponentNode = {
 
 export type ReviewComponentProps<Name extends ReviewDocumentComponentName> =
   ReviewComponentNodeOf<Name>["props"];
-
-/** The renderer registry: one component per document component, typed by the
- * props the sealed JSON carries. Prose children arrive positionally. */
-export type ReviewDocumentComponentRegistry = {
-  [Name in ReviewDocumentComponentName]: ComponentType<
-    ReviewComponentProps<Name> & { children?: ReactNode }
-  >;
-};
 
 export type ReviewNode =
   | ReviewTextNode

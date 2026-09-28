@@ -351,22 +351,6 @@ export const bundledGroups = Object.freeze(
   ),
 );
 
-/** Group tokens that require an explicit development selection. */
-export const optionalGroups = Object.freeze(
-  curatedGroups.filter((group) =>
-    optionalExtensions.some((extension) => extension.group === group),
-  ),
-);
-
-/** Groups represented by a primary or bundled extension in the management UI. */
-export const userFacingGroups = Object.freeze(
-  curatedGroups.filter((group) =>
-    curatedExtensions.some(
-      (extension) => extension.group === group && extension.role !== "support",
-    ),
-  ),
-);
-
 /** Keymaps conflict with each other, so at most one may be enabled at a time. */
 export const keymapGroups = Object.freeze(["vim", "emacs"]);
 

@@ -23,19 +23,7 @@ export type AgentTraceHarness = ReviewAgentTraceSession["harness"];
 
 export type AgentTraceEvent = ReviewAgentTraceEvent;
 
-export type AgentTraceUserEvent = Extract<AgentTraceEvent, { kind: "user" }>;
-
-export type AgentTraceAssistantEvent = Extract<
-  AgentTraceEvent,
-  { kind: "assistant" }
->;
-
 export type AgentTraceToolEvent = Extract<AgentTraceEvent, { kind: "tool" }>;
-
-export type AgentTraceSeparatorEvent = Extract<
-  AgentTraceEvent,
-  { kind: "separator" }
->;
 
 // The one text projection of an event. TraceQuote validation matches quotes
 // against this text, so any surface that shows event text for quote picking

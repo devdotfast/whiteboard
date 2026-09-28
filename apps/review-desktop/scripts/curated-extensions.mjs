@@ -449,13 +449,6 @@ function verifyEngine(directory, extension) {
   }
 }
 
-/** Directories that are materialized for `target` within `groups`. */
-export function materializedExtensionDirs(target, groups) {
-  return selectExtensions(target, groups)
-    .map(({ extension }) => path.join(EXTENSIONS_DIR, extension.id))
-    .filter((directory) => fs.existsSync(directory));
-}
-
 /** Verifies the complete manifest-selected extension set at an arbitrary root. */
 export function verifyCuratedExtensions({
   root,
