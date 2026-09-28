@@ -5645,10 +5645,10 @@ button.review-stack-row:disabled .review-stack-relation {
 }
 
 .sequence-diagram {
-  /* Natural height (header + canvas, no hardcoded header allowance), capped
-     to the viewport; past the cap the body scrolls vertically. */
+  /* Natural height; the document scrolls, not the diagram. The body scrolls
+     vertically only past about forty steps. */
   height: auto;
-  max-height: calc(100dvh - 160px);
+  max-height: 3200px;
 }
 
 .sequence-diagram.sequence-tour--active {

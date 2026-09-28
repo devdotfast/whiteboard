@@ -695,3 +695,42 @@ it("opens a flow node in a full-screen tour with all its code attachments", asyn
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   expect(container.querySelector(".flow-node")).not.toBeNull();
 });
+
+it("grows a tall, wide sequence diagram to its height instead of scrolling it vertically", async () => {
+  const actors = ["a", "b", "c", "d", "e", "f", "g", "h"];
+
+  const { container } = await mountFixture(
+    "sequence",
+    {
+      document: documentSchema.parse([
+        {
+          id: "diagram-1",
+          type: "sequence",
+          title: "Ten steps across eight actors",
+          actors: Object.fromEntries(actors.map((key) => [key, key])),
+          steps: Array.from({ length: 10 }, (_, index) => ({
+            id: `step-${index}`,
+            from: actors[index % 8]!,
+            to: actors[(index + 1) % 8]!,
+            label: `step ${index}`,
+            explanation: "One step.",
+          })),
+        },
+      ]),
+    },
+    undefined,
+    false,
+    "position: relative; height: 700px; overflow: hidden",
+  );
+
+  const body = await settled(() =>
+    container.querySelector<HTMLElement>(".sequence-diagram-body"),
+  );
+
+  await settled(() => body!.querySelector(".react-flow__node"));
+
+  // Eight lanes overflow sideways; ten steps stand 914px tall.
+  expect(body!.scrollWidth).toBeGreaterThan(body!.clientWidth);
+  expect(body!.clientHeight).toBeGreaterThanOrEqual(914);
+  expect(body!.scrollHeight).toBe(body!.clientHeight);
+});
