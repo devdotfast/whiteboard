@@ -1,4 +1,7 @@
-import { REVIEW_CANVAS_RESUME_EVENT } from "@dev.fast/review-protocol";
+import {
+  REVIEW_CANVAS_RESUME_EVENT,
+  type ReviewView,
+} from "@dev.fast/review-protocol";
 import {
   type ReactNode,
   type RefObject,
@@ -23,11 +26,17 @@ const fallbackReviewPanelStore = createReviewPanelStore();
 export function ReviewPanelProvider({
   children,
   detailRevision,
+  initialView,
 }: {
   children: ReactNode;
   detailRevision?: unknown;
+  /** Read once, when the provider mounts. */
+  initialView?: () => ReviewView;
 }) {
-  const [store] = useState(createReviewPanelStore);
+  const [store] = useState(() =>
+    createReviewPanelStore({ view: initialView?.() }),
+  );
+
   const previousDetailRevision = useRef(detailRevision);
   useEffect(() => {
     if (previousDetailRevision.current === detailRevision) return;

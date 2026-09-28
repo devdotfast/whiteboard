@@ -275,7 +275,6 @@ it("searches an offscreen peek without mounting Monaco", async () => {
         <ReviewRootsProvider roots={findRoots(article, scrollRegion)}>
           <ReviewFindProvider
             articleRef={{ current: article }}
-            scrollRegionRef={{ current: scrollRegion }}
             documentKey="test"
             host={host}
           >
@@ -346,7 +345,6 @@ it("finishes search when revealing a failed editor", async () => {
         <ReviewRootsProvider roots={findRoots(article, scrollRegion)}>
           <ReviewFindProvider
             articleRef={{ current: article }}
-            scrollRegionRef={{ current: scrollRegion }}
             documentKey="failed-editor"
             host={host}
           >

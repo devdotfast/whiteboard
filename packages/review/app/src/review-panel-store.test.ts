@@ -1,3 +1,4 @@
+import type { ReviewCommitSummary } from "@dev.fast/review-protocol";
 import { describe, expect, it } from "vitest";
 
 import type { AnchorRef } from "../../src/authoring";
@@ -92,5 +93,66 @@ describe("Review panel store", () => {
 
     store.getState().close();
     expect(store.getState().motion).toBe("live");
+  });
+});
+
+const commit = {
+  commit: "abc123",
+  subject: "Add startup",
+  fileCount: 2,
+} as ReviewCommitSummary;
+
+describe("Review navigation", () => {
+  it("scopes a commit diff until the reader leaves the diff", () => {
+    const store = createReviewPanelStore();
+    store.getState().openPeek({ kind: "peek", anchor, content });
+
+    store.getState().openCommitDiff({ commit, file: "src/start.ts" });
+    expect(store.getState()).toMatchObject({
+      view: "diff",
+      diffScope: { commit, file: "src/start.ts" },
+      active: null,
+    });
+
+    store.getState().showView("commits");
+    store.getState().showView("diff");
+    expect(store.getState().diffScope).toBeNull();
+  });
+
+  it("keeps a peek open beside a diff a lens opened", () => {
+    const store = createReviewPanelStore();
+    store.getState().openCommitDiff({ commit });
+    store.getState().showView("review");
+    store.getState().openPeek({ kind: "peek", anchor, content });
+
+    store.getState().openLensDiff();
+    expect(store.getState()).toMatchObject({
+      view: "diff",
+      diffScope: null,
+      active: { kind: "peek" },
+    });
+  });
+
+  it("opens a trace on the whiteboard when the canvas has no traces", () => {
+    const store = createReviewPanelStore();
+    store.getState().setAvailableViews(["review", "commits", "diff"]);
+
+    store.getState().openTrace({ sessionId: "session-1" });
+    expect(store.getState().view).toBe("review");
+
+    store.getState().setAvailableViews(["review", "trace"]);
+    store.getState().openTrace({ sessionId: "session-2" });
+    expect(store.getState()).toMatchObject({
+      view: "trace",
+      traceSelection: { sessionId: "session-2" },
+    });
+  });
+
+  it("returns to the whiteboard when the current view stops being offered", () => {
+    const store = createReviewPanelStore();
+    store.getState().openCommitDiff({ commit });
+
+    store.getState().setAvailableViews(["review", "map"]);
+    expect(store.getState()).toMatchObject({ view: "review", diffScope: null });
   });
 });

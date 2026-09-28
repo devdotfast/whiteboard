@@ -63,8 +63,6 @@ interface ReviewTourRestoreClaim {
 }
 
 interface ReviewViewStateSync {
-  initialActiveView: ReviewView | undefined;
-  persistActiveView(view: ReviewView): void;
   tourRestore: ReviewTourRestoreClaim;
   persistOverlayTour(
     open: { tourId: string; activeAnchor: string } | null,
@@ -153,13 +151,6 @@ export function useReviewViewStateSync({
     [key],
   );
 
-  const persistActiveView = useCallback(
-    (view: ReviewView) => {
-      persist({ ...persistedRef.current, activeView: view });
-    },
-    [persist],
-  );
-
   const persistOverlayTour = useCallback(
     (open: { tourId: string; activeAnchor: string } | null) => {
       persist({ ...persistedRef.current, overlayTour: open ?? undefined });
@@ -167,12 +158,18 @@ export function useReviewViewStateSync({
     [persist],
   );
 
-  useEffect(
+  // Layout, so navigation from a host event right after mount still persists.
+  useLayoutEffect(
     () =>
-      panelStore.subscribe((state) => {
+      panelStore.subscribe((state, previous) => {
+        if (state.active === previous.active && state.view === previous.view) {
+          return;
+        }
+
         persist({
           ...persistedRef.current,
           panel: persistedPanelState(state),
+          ...(state.view !== previous.view && { activeView: state.view }),
         });
       }),
     [panelStore, persist],
@@ -191,8 +188,6 @@ export function useReviewViewStateSync({
   );
 
   return {
-    initialActiveView: initialState.activeView,
-    persistActiveView,
     tourRestore,
     persistOverlayTour,
   };

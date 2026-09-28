@@ -298,6 +298,25 @@ describe("review view state", () => {
     });
   });
 
+  it("persists navigation without discarding a stored view the canvas could not offer", () => {
+    const session = testReviewSession();
+    storeState(session, { activeView: "map" });
+    // The canvas opened without a map, so it started on the whiteboard.
+    const store = createReviewPanelStore({ view: "review" });
+    renderViewState({ session, store });
+
+    act(() => store.getState().openTour(tour, "second"));
+    expect(readPersistedReviewViewState(session.config)).toMatchObject({
+      activeView: "map",
+      panel: { kind: "tour", tourId: "flow", activeAnchor: "second" },
+    });
+
+    act(() => store.getState().showView("diff"));
+    expect(readPersistedReviewViewState(session.config)).toEqual({
+      activeView: "diff",
+    });
+  });
+
   it("ignores a persisted Threads panel from an older build", () => {
     const legacySession = testReviewSession({ reviewId: "legacy-threads" });
     const legacyStore = createReviewPanelStore();

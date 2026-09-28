@@ -155,12 +155,207 @@ it("uses equal action controls and describes every Find option", async () => {
   );
 });
 
+it("keeps late editor results from reviving a closed search", async () => {
+  const slow = deferred<{ matchCount: number }>();
+  const handle = findHandle(() => slow.promise);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const host = createReviewFindHost();
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(<FindHarness host={host} handles={[handle]} />);
+  });
+  await act(async () => {
+    host.showFind("Alpha");
+  });
+  expect(container.querySelector(".review-find-count")?.textContent).toBe(
+    "Searching…",
+  );
+
+  await act(async () => button(container, "Close Find").click());
+  await act(async () => slow.resolve({ matchCount: 3 }));
+
+  expect(container.querySelector(".review-find-widget")).toBeNull();
+  expect(handle.revealFindMatch).not.toHaveBeenCalled();
+  expect(CSS.highlights.has("review-find-match")).toBe(false);
+});
+
+it("keeps late editor results from highlighting an unmounted canvas", async () => {
+  const slow = deferred<{ matchCount: number }>();
+  const handle = findHandle(() => slow.promise);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const host = createReviewFindHost();
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(<FindHarness host={host} handles={[handle]} />);
+  });
+  await act(async () => {
+    host.showFind("Alpha");
+  });
+
+  await act(async () => root?.unmount());
+  root = undefined;
+  await act(async () => slow.resolve({ matchCount: 3 }));
+
+  expect(CSS.highlights.has("review-find-match")).toBe(false);
+  expect(handle.revealFindMatch).not.toHaveBeenCalled();
+});
+
+it("drops a removed editor's matches", async () => {
+  const first = findHandle();
+  const second = findHandle();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const host = createReviewFindHost();
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(<FindHarness host={host} handles={[first, second]} />);
+  });
+  await act(async () => {
+    host.showFind("Alpha");
+  });
+  await vi.waitFor(() => {
+    expect(container.querySelector(".review-find-count")?.textContent).toBe(
+      "1 of 4",
+    );
+  });
+
+  await act(async () => {
+    root?.render(<FindHarness host={host} handles={[first]} />);
+  });
+  await vi.waitFor(() => {
+    expect(container.querySelector(".review-find-count")?.textContent).toBe(
+      "1 of 3",
+    );
+  });
+  expect(second.clearFind).toHaveBeenCalled();
+});
+
+it("reports an invalid expression and recovers when it becomes valid", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const host = createReviewFindHost();
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(<FindHarness host={host} handles={[findHandle()]} />);
+  });
+  await act(async () => {
+    host.showFind("Alpha");
+  });
+  await act(async () => button(container, "Use Regular Expression").click());
+  await setInput(container, "Alpha(");
+
+  const input = container.querySelector<HTMLInputElement>(
+    'input[aria-label="Find"]',
+  )!;
+
+  expect(container.querySelector(".review-find-count")?.textContent).toBe(
+    "Invalid expression",
+  );
+  expect(input.getAttribute("aria-invalid")).toBe("true");
+
+  await setInput(container, "Alpha (first|second)");
+  await vi.waitFor(() => {
+    expect(container.querySelector(".review-find-count")?.textContent).toBe(
+      "1 of 3",
+    );
+  });
+  expect(input.getAttribute("aria-invalid")).toBeNull();
+});
+
+it("closes and forgets the query when the document changes", async () => {
+  const focusTarget = document.createElement("button");
+  const container = document.createElement("div");
+  document.body.append(focusTarget, container);
+  focusTarget.focus();
+  const host = createReviewFindHost();
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(<FindHarness host={host} handles={[findHandle()]} />);
+  });
+  await act(async () => {
+    host.showFind("Alpha");
+  });
+  await vi.waitFor(() => {
+    expect(container.querySelector(".review-find-count")?.textContent).toBe(
+      "1 of 3",
+    );
+  });
+
+  await act(async () => {
+    root?.render(
+      <FindHarness host={host} handles={[findHandle()]} documentKey="next" />,
+    );
+  });
+  expect(container.querySelector(".review-find-widget")).toBeNull();
+  expect(CSS.highlights.has("review-find-match")).toBe(false);
+  expect(document.activeElement).toBe(focusTarget);
+
+  await act(async () => {
+    host.showFind();
+  });
+  expect(
+    container.querySelector<HTMLInputElement>('input[aria-label="Find"]')
+      ?.value,
+  ).toBe("");
+});
+
+it("does not re-render the document while the reader searches", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const host = createReviewFindHost();
+  let documentRenders = 0;
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(
+      <FindHarness
+        host={host}
+        handles={[findHandle()]}
+        onDocumentRender={() => {
+          documentRenders += 1;
+        }}
+      />,
+    );
+  });
+  const rendersBeforeFind = documentRenders;
+
+  await act(async () => {
+    host.showFind("Al");
+  });
+  await setInput(container, "Alp");
+  await setInput(container, "Alpha");
+  await vi.waitFor(() => {
+    expect(container.querySelector(".review-find-count")?.textContent).toBe(
+      "1 of 3",
+    );
+  });
+  await act(async () => button(container, "Next Match").click());
+  await act(async () => button(container, "Close Find").click());
+
+  expect(documentRenders).toBe(rendersBeforeFind);
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+
+  return { promise, resolve };
+}
+
 function FindHarness({
   host,
   handles,
+  documentKey = "test-document",
+  onDocumentRender,
 }: {
   host: ReviewFindHost;
   handles: ReviewInlineEditorHandle[];
+  documentKey?: string;
+  onDocumentRender?: () => void;
 }) {
   const articleRef = useRef<HTMLElement | null>(null);
   const scrollRef = useRef<HTMLElement | null>(null);
@@ -176,13 +371,13 @@ function FindHarness({
     <ReviewRootsProvider roots={roots}>
       <ReviewFindProvider
         articleRef={articleRef}
-        scrollRegionRef={scrollRef}
-        documentKey="test-document"
+        documentKey={documentKey}
         host={host}
       >
         <main ref={shellRef} className="review-document-shell">
           <section ref={scrollRef}>
             <article ref={articleRef} className="review-document">
+              <DocumentProbe onRender={onDocumentRender} />
               <p>Alpha first</p>
               <InlineRegistration handle={handles[0]!} />
               <p>Alpha second</p>
@@ -193,6 +388,13 @@ function FindHarness({
       </ReviewFindProvider>
     </ReviewRootsProvider>
   );
+}
+
+function DocumentProbe({ onRender }: { onRender?: () => void }) {
+  useReviewFindRegistration();
+  onRender?.();
+
+  return null;
 }
 
 function InlineRegistration({ handle }: { handle: ReviewInlineEditorHandle }) {
