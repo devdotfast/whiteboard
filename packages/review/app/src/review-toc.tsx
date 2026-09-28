@@ -262,9 +262,11 @@ export function ReviewToc({
   // contents glyph, anchored where the pill has always sat. Opening does not
   // summon a second card; the same box grows in place, its top-left corner
   // pinned and the glyph still in it, until it is the contents card. The rail
-  // on a wide shell is the same nav without the button.
+  // on a wide shell is the same nav without the button. The key remounts the
+  // nav, so a resize or zoom change swaps rail and pill without animating.
   return (
     <nav
+      key={showRail ? "rail" : "pill"}
       id="review-toc"
       className={
         (showRail ? "review-toc review-toc--rail" : "review-toc") +

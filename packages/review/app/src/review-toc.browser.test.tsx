@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type ReviewRoots, ReviewRootsProvider } from "./review-root-context";
 import { ReviewToc } from "./review-toc";
 
+import "./styles.css";
+
 const mountedRoots: Array<ReturnType<typeof createRoot>> = [];
 
 // The rail width effect only needs ResizeObserver to exist in these tests.
@@ -102,4 +104,54 @@ describe("ReviewToc", () => {
       document.querySelector(".review-toc-toggle")?.textContent,
     ).not.toContain("§");
   });
+  it.each([
+    { from: 1400, to: 1200, lands: "review-toc" },
+    {
+      from: 1200,
+      to: 1400,
+      lands: "review-toc review-toc--rail review-toc--open",
+    },
+  ])(
+    "switches between rail and pill without animating when the shell goes from $from to $to wide",
+    async ({ from, to, lands }) => {
+      shell.style.width = `${from}px`;
+      const article = renderArticle(["Interface change", "Scheduling"]);
+      region.append(article);
+      reviewRoots.articleRef.current = article;
+      const root = createRoot(mount);
+      mountedRoots.push(root);
+
+      await act(async () =>
+        root.render(
+          <ReviewRootsProvider roots={reviewRoots}>
+            <ReviewToc
+              entries={[
+                { id: "heading-0", level: "h2", text: "Interface change" },
+                { id: "heading-1", level: "h2", text: "Scheduling" },
+              ]}
+            />
+          </ReviewRootsProvider>,
+        ),
+      );
+
+      const settle = () =>
+        act(
+          async () =>
+            new Promise<void>((resolve) =>
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() => resolve()),
+              ),
+            ),
+        );
+
+      await settle();
+      shell.style.width = `${to}px`;
+      await settle();
+
+      const toc = document.querySelector(".review-toc")!;
+
+      expect(toc.className).toBe(lands);
+      expect(toc.getAnimations({ subtree: true })).toEqual([]);
+    },
+  );
 });
