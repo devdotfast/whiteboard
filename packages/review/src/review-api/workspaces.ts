@@ -126,6 +126,8 @@ export class ReviewWorkspaces {
     if (!released.length) return;
 
     const repositories = this.repositoryDirs();
+    // Each release awaits this only after earlier cleanup and logs its failure.
+    repositories.catch(() => undefined);
 
     for (const reviewId of released) this.release(reviewId, repositories);
   }
