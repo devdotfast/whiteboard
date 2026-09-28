@@ -10,10 +10,7 @@ import {
 import { useReviewSession } from "./host/review-session";
 import { captureUiEvent } from "./ui-telemetry";
 
-export type ReviewSubmissionOutcome =
-  | "approved"
-  | "changes-requested"
-  | "dismissed";
+export type ReviewSubmissionOutcome = "dismissed";
 
 export interface SoftwareMapFocusRequest {
   requestId: number;

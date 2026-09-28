@@ -18,7 +18,6 @@
     "onboarding.md",
     "dist",
     "docs",
-    "!docs/review-actions-redesign",
     "instructions",
     "tutorial",
     "!tutorial/.bundle",

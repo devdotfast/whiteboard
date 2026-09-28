@@ -948,52 +948,26 @@ function ReviewBatonChip({
 }: {
   outcome: ReviewSubmissionOutcome | null;
 }): ReactElement | null {
-  const tooltip = useTooltip<HTMLSpanElement>(
-    outcome === "changes-requested"
-      ? "Changes requested"
-      : outcome === "approved"
-        ? "Approved"
-        : "Dismissed",
-  );
+  const tooltip = useTooltip<HTMLSpanElement>("Dismissed");
 
   if (!outcome) return null;
-
-  const label =
-    outcome === "changes-requested"
-      ? "changes requested"
-      : outcome === "approved"
-        ? "approved"
-        : "dismissed";
 
   return (
     <span
       ref={tooltip}
       className={`review-baton-chip review-baton-chip--${outcome}`}
     >
-      {outcome === "approved" && (
-        <svg
-          className="review-baton-glyph"
-          viewBox="0 0 12 12"
-          width="12"
-          height="12"
-          aria-hidden="true"
-        >
-          <path d="m2 6.2 2.5 2.5L10 3.3" />
-        </svg>
-      )}
-      {outcome === "dismissed" && (
-        <svg
-          className="review-baton-glyph"
-          viewBox="0 0 16 16"
-          width="12"
-          height="12"
-          aria-hidden="true"
-        >
-          <rect x="1.6" y="2.6" width="12.8" height="3.4" rx="1" />
-          <path d="M3 6v6.2a1.2 1.2 0 0 0 1.2 1.2h7.6A1.2 1.2 0 0 0 13 12.2V6" />
-        </svg>
-      )}
-      <span>{label}</span>
+      <svg
+        className="review-baton-glyph"
+        viewBox="0 0 16 16"
+        width="12"
+        height="12"
+        aria-hidden="true"
+      >
+        <rect x="1.6" y="2.6" width="12.8" height="3.4" rx="1" />
+        <path d="M3 6v6.2a1.2 1.2 0 0 0 1.2 1.2h7.6A1.2 1.2 0 0 0 13 12.2V6" />
+      </svg>
+      <span>dismissed</span>
     </span>
   );
 }
