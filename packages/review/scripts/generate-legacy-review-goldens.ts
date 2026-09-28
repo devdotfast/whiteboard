@@ -70,6 +70,10 @@ for (const fixture of listLegacyReviewFixtures()) {
     if (!document) throw new Error(`${fixture.name} document did not convert`);
     const documentData = reviewDocumentBundleData(document);
     await writeGolden(fixture.name, "document", documentData);
+    // The committed blocks goldens predate native tutorial blocks, which this
+    // now emits. real-reviews.browser.test.tsx requires every block to render,
+    // and a tutorial feature block renders nothing outside the tutorial, so
+    // leave the blocks goldens out of a regeneration until that test allows it.
     await writeGolden(
       fixture.name,
       "blocks",
