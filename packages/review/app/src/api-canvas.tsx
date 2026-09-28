@@ -30,6 +30,7 @@ import {
   type CursorMemory,
   nextCursor,
 } from "./authoring-cursor";
+import { SaveMarkdown } from "./blocks";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { DrawQueueProvider } from "./draw-queue-provider";
 import {
@@ -325,6 +326,32 @@ export function ApiCanvas({
     };
   }, [baseSession, client, content.reviewId, data, version]);
 
+  // Only the latest version of a review this machine owns takes edits.
+  const editable =
+    version === undefined && data !== undefined && !data.snapshot.shared;
+
+  const saveMarkdown = useMemo(
+    () =>
+      editable
+        ? (blockId: string, markdown: string) =>
+            void client
+              .post("/commands", {
+                commandId: crypto.randomUUID(),
+                operation: {
+                  type: "edit",
+                  reviewId: content.reviewId,
+                  edit: {
+                    type: "update",
+                    targetId: blockId,
+                    changes: { markdown },
+                  },
+                },
+              })
+              .catch((cause) => setError(message(cause)))
+        : undefined,
+    [client, content.reviewId, editable],
+  );
+
   useEffect(() => {
     if (data) content.bridge.ready();
   }, [Boolean(data), content.bridge]);
@@ -395,13 +422,15 @@ export function ApiCanvas({
                       <MapEnabled.Provider
                         value={content.softwareMapEnabled === true}
                       >
-                        <CanvasDocument
-                          data={data}
-                          findHost={findHost}
-                          softwareMapEnabled={
-                            content.softwareMapEnabled === true
-                          }
-                        />
+                        <SaveMarkdown.Provider value={saveMarkdown}>
+                          <CanvasDocument
+                            data={data}
+                            findHost={findHost}
+                            softwareMapEnabled={
+                              content.softwareMapEnabled === true
+                            }
+                          />
+                        </SaveMarkdown.Provider>
                       </MapEnabled.Provider>
                     </DisplayedReviewVersionContext.Provider>
                   </DrawQueueProvider>

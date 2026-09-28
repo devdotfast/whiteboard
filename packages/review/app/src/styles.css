@@ -3391,9 +3391,37 @@ button {
   display: inline;
 }
 
-.agent-markdown li > input[type="checkbox"] {
-  margin: 0 6px 0 -1.35em;
-  vertical-align: -2px;
+/* The checkbox replaces the bullet, beside the item's first line. */
+.markdown-task {
+  display: flex;
+  gap: 0.5em;
+  list-style: none;
+}
+
+/* Centered on the first line of text. */
+.markdown-task > input {
+  flex: none;
+  width: 1em;
+  height: 1em;
+  margin: calc((1lh - 1em) / 2) 0 0;
+  font: inherit;
+  line-height: inherit;
+}
+
+.markdown-task > input:enabled {
+  cursor: pointer;
+}
+
+.markdown-task > div {
+  min-width: 0;
+}
+
+.markdown-task > div > p:first-child {
+  margin-top: 0;
+}
+
+.markdown-task > div > p:last-child {
+  margin-bottom: 0;
 }
 
 .agent-markdown a,

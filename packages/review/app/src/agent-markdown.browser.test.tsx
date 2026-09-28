@@ -83,4 +83,30 @@ describe("MarkdownContent", () => {
       container.querySelector("section[data-footnotes] li#fn-1")?.textContent,
     ).toContain("Native pipeline footnote.");
   });
+
+  it("ticks a task by rewriting its own marker", async () => {
+    const onChange = vi.fn<(source: string) => void>();
+    const source = "Plan:\n\n1. [ ] One\n2. [x] Two\n   - [ ] Nested\n";
+
+    await act(async () =>
+      root.render(<MarkdownContent source={source} onChange={onChange} />),
+    );
+
+    const boxes = container.querySelectorAll("input");
+    await act(async () => boxes[0]!.click());
+    await act(async () => boxes[1]!.click());
+    await act(async () => boxes[2]!.click());
+
+    expect(onChange.mock.calls.map(([next]) => next)).toEqual([
+      source.replace("1. [ ]", "1. [x]"),
+      source.replace("2. [x]", "2. [ ]"),
+      source.replace("- [ ]", "- [x]"),
+    ]);
+  });
+
+  it("leaves tasks disabled without a way to save them", async () => {
+    await render("- [ ] Task\n");
+
+    expect(container.querySelector("input")?.disabled).toBe(true);
+  });
 });
