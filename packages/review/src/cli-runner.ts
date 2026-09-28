@@ -1263,10 +1263,6 @@ function errorClassification(
     return { errorName: "review_state_error", errorCategory: "local_state" };
   }
 
-  if (command.startsWith("map.") || command.startsWith("cache.")) {
-    return { errorName: "repository_error", errorCategory: "local_state" };
-  }
-
   if (cause) {
     return { errorName: "unexpected_error", errorCategory: "internal" };
   }

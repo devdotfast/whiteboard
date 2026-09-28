@@ -113,7 +113,6 @@
   --review-home-rule: #262c37;
   --review-home-rule-soft: #39404d;
   --review-home-meta: #9199a8;
-  --review-home-comment: #5b7cff;
   --review-home-submitted: #c8a4f5;
   --review-home-view-toggle-bg: #1a1f29;
   --review-home-view-toggle-active-border: #39404d;
@@ -1895,7 +1894,6 @@ button {
   --review-home-rule: var(--rule);
   --review-home-rule-soft: var(--rule-soft);
   --review-home-meta: #5d6472;
-  --review-home-comment: var(--accent);
   --review-home-submitted: #6d43b3;
   --review-home-view-toggle-bg: #e9ebef;
   --review-home-view-toggle-active-border: #d8dbe1;

@@ -79,7 +79,6 @@ and source reference.
 Direct third-party runtime/UI dependencies currently include:
 
 - `@hono/node-server` and `hono` (`MIT`)
-- `@mdx-js/mdx` (`MIT`)
 - `@mr_mint/elkjs-libavoid` (`MIT`, with transitive `libavoid-js` under
   `LGPL-2.1-or-later`)
 - `@speed-highlight/core` (`CC0-1.0`)
@@ -88,9 +87,7 @@ Direct third-party runtime/UI dependencies currently include:
 - `elkjs` (`EPL-2.0`)
 - `fuzzysort` (`MIT`)
 - `isomorphic-git` (`MIT`)
-- `kysely` (`MIT`)
 - `react` and `react-dom` (`MIT`)
 - `semver` (`ISC`)
-- `write-file-atomic` (`ISC`)
 - `zod` (`MIT`)
 - `zustand` (`MIT`)

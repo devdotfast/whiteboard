@@ -55,7 +55,6 @@ packages/code-graph/canvas/public/snapshot*.json
 .codex/*
 !.codex/config.toml
 .dev/reviews/*
-!.dev/reviews/*.mdx
 .dev/profiles/
 .code-graph/
 packages/code-graph/.ci-tools/

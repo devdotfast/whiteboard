@@ -65,18 +65,8 @@ export function failWithJsonError(
 }
 
 // Flags that take a separate value. A value can look exactly like a flag, as in
-// `wait --review "--json"`, so the scan must skip it.
-const VALUE_FLAGS = new Set([
-  "--base",
-  "--head",
-  "--pr",
-  "--review",
-  "--session",
-  "--agent-session",
-  "--target",
-  "--thread-id",
-  "--timeout",
-]);
+// `share --review "--json"`, so the scan must skip it.
+const VALUE_FLAGS = new Set(["--review", "--session", "--agent-session"]);
 
 /**
  * Report whether the caller asked for JSON, by reading raw argv.
