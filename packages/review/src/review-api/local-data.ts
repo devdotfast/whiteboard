@@ -544,6 +544,22 @@ export class LocalReviewData {
     // fails this stream, and the reader's next request rebuilds the checkout.
     await this.workspaceManager?.released(reviewId);
 
+    if (pins.worktreeRevision) {
+      const input = await this.worktreeInput(pins);
+      yield* this.structuralComparisons.stream({
+        repositoryPath: input.rootPath,
+        comparison: {
+          kind: "worktree",
+          base: pins.base,
+          revision: pins.worktreeRevision,
+        },
+        paths: file === undefined ? undefined : [file],
+        signal,
+      });
+
+      return;
+    }
+
     const rootPath = await ensureReviewPinnedCheckout({
       rootPath: this.store.repositoryPath(pins.repositoryId),
       ref: pins.head,

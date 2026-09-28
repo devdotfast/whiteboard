@@ -9,12 +9,13 @@ import {
   type StructuralProblem,
   decodeStructuralDiffEvent,
 } from "@dev.fast/review-protocol";
-
-import { findReviewPackageRoot } from "../package-paths";
+import { findReviewPackageRoot } from "@review/package-paths";
 
 export type DiffComparison =
   | { kind: "trees"; base: string; head: string }
-  | { kind: "merge-base"; base: string; head: string };
+  | { kind: "merge-base"; base: string; head: string }
+  // The revision separates cached streams after a working-file save.
+  | { kind: "worktree"; base: string; revision: string };
 
 export interface StructuralDiffRequest {
   repositoryPath: string;
@@ -52,7 +53,7 @@ export async function* structuralDiff(
   input: StructuralDiffRequest,
 ): AsyncGenerator<StructuralDiffEvent> {
   input.signal.throwIfAborted();
-  const { base, head, kind } = input.comparison;
+  const comparison = input.comparison;
 
   const args = [
     "--repo",
@@ -62,7 +63,13 @@ export async function* structuralDiff(
     "--stream-annotations",
   ];
 
-  args.push(...(kind === "trees" ? [base, head] : [`${base}...${head}`]));
+  args.push(
+    ...(comparison.kind === "worktree"
+      ? [comparison.base]
+      : comparison.kind === "trees"
+        ? [comparison.base, comparison.head]
+        : [`${comparison.base}...${comparison.head}`]),
+  );
   args.push("--", ...(input.paths ?? []));
 
   const idleAbort = new AbortController();
