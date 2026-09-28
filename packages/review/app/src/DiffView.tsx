@@ -27,6 +27,7 @@ import { compactDiffCount } from "./diff-count";
 import { withErasedBlocks } from "./draw-queue";
 import { useMotionPhases } from "./draw-queue-provider";
 import { useReviewSession } from "./host/review-session";
+import { useReviewDiffFiles } from "./review-diff-files-context";
 import { useReviewLenses } from "./review-lenses";
 import {
   useBottomSheetResize,
@@ -409,6 +410,9 @@ function NativeDiffView({
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const handle = useRef<ReviewDiffViewHandle | null>(null);
+  // A save in a live checkout changes the comparison; a commit's never does.
+  const revision = useReviewDiffFiles().revision;
+  const liveRevision = scope ? undefined : revision;
 
   const current = useRef({ progress, onToggleViewed });
 
@@ -447,6 +451,7 @@ function NativeDiffView({
     scope?.commit,
     lens,
     treeContainer,
+    liveRevision,
   ]);
   useLayoutEffect(() => {
     if (progress) handle.current?.setProgress?.(progress);

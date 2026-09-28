@@ -240,19 +240,19 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 
 	canvas(view: () => ReviewSourceView, inline: ReviewEmbeddedEditors, diff: ReviewDiffViewService) {
 		const comparisonGeneration = diff.comparisonGeneration;
-		const lists = new Map<string, Promise<readonly ReviewDiffFileWire[]>>();
+		// A live checkout's saves change its generation; each comparison keeps only the latest.
+		const lists = new Map<string, { generation?: string; list: Promise<readonly ReviewDiffFileWire[]> }>();
 		const files = (current: ReviewSourceView) => {
 			const key = JSON.stringify(reviewSourceQuery(current));
-			let list = lists.get(key);
-			if (!list) {
-				list = this.read<ReviewDiffFileWire[]>(current.reviewId, "/diff", reviewSourceQuery(current));
-				list.catch(() => lists.delete(key));
-				lists.set(key, list);
-			}
+			const cached = lists.get(key);
+			if (cached && cached.generation === current.generation) return cached.list;
+			const list = this.read<ReviewDiffFileWire[]>(current.reviewId, "/diff", reviewSourceQuery(current));
+			list.catch(() => { if (lists.get(key)?.list === list) lists.delete(key); });
+			lists.set(key, { generation: current.generation, list });
 			return list;
 		};
 		const openComparison = (current: ReviewSourceView) => diff.openComparison(
-			JSON.stringify(reviewSourceQuery(current)), new StructuralDiffClient(this.session, current), comparisonGeneration,
+			JSON.stringify(reviewSourceQuery(current)), new StructuralDiffClient(this.session, current), comparisonGeneration, current.generation,
 		);
 		const makeSource = (getView: () => ReviewSourceView): ReviewDiffViewSource => ({
 			files: scope => files(reviewSourceComparison(getView(), scope?.commit)),

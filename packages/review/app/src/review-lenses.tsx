@@ -125,7 +125,14 @@ export function ReviewLensesProvider({
       });
 
     return () => abort.abort();
-  }, [client, route, snapshot.version, mode, coverageRevision]);
+  }, [
+    client,
+    route,
+    snapshot.version,
+    snapshot.pins?.worktreeRevision,
+    mode,
+    coverageRevision,
+  ]);
 
   const lenses: ReviewProgress["lenses"] = progress?.lenses ?? [
     ...(snapshot.lenses ?? []).map((lens) => ({

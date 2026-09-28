@@ -55,7 +55,7 @@ export class ReviewDiffViewService extends Disposable {
 	private overflowWidgetsDomNode: HTMLElement | undefined;
 	private readonly handles = new Set<DiffViewController>();
 	comparisonGeneration = 0;
-	private readonly sessions = new Map<string, StructuralDiffSession>();
+	private readonly sessions = new Map<string, { session: StructuralDiffSession; revision?: string }>();
 	readonly diffLayout: ReviewDiffLayoutSetting;
 	/**
 	 * Scroll and expansion state per session document. The Diff view is a
@@ -78,14 +78,14 @@ export class ReviewDiffViewService extends Disposable {
 	}
 
 	/** Shared by every view of this comparison; reset/dispose follows the canvas lifetime. */
-	openComparison(key: string, client: StructuralDiffStream, generation: number): StructuralDiffSession | undefined {
+	openComparison(key: string, client: StructuralDiffStream, generation: number, revision?: string): StructuralDiffSession | undefined {
 		if (generation !== this.comparisonGeneration || !this.structuralRenderingEnabled) return undefined;
-		let session = this.sessions.get(key);
-		if (!session) {
-			session = new StructuralDiffSession(client);
-			this.sessions.set(key, session);
-			void session.start();
-		}
+		const current = this.sessions.get(key);
+		if (current && current.revision === revision) return current.session;
+		current?.session.dispose();
+		const session = new StructuralDiffSession(client);
+		this.sessions.set(key, { session, revision });
+		void session.start();
 		return session;
 	}
 
@@ -197,7 +197,7 @@ export class ReviewDiffViewService extends Disposable {
 		for (const handle of [...this.handles]) handle.dispose();
 		this.handles.clear();
 		this.viewStates.clear();
-		for (const session of this.sessions.values()) session.dispose();
+		for (const { session } of this.sessions.values()) session.dispose();
 		this.sessions.clear();
 	}
 

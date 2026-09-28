@@ -16,7 +16,9 @@ export type ReviewDiffFilesState =
   | { status: "error"; error: string }
   | { status: "loaded"; files: ReviewDiffFileWire[] };
 
-const ReviewDiffFilesContext = createContext<ReviewDiffFilesState>({
+const ReviewDiffFilesContext = createContext<
+  ReviewDiffFilesState & { revision?: string }
+>({
   status: "loading",
 });
 
@@ -31,9 +33,12 @@ const LOADING_REVIEW_DIFF_FILES_STATE: ReviewDiffFilesState = {
 
 export function ReviewDiffFilesProvider({
   documentKey,
+  revision,
   children,
 }: {
   documentKey: string;
+  /** A live checkout's save generation: refetch, keeping the shown files. */
+  revision?: string;
   children: ReactNode;
 }) {
   const session = useReviewSession();
@@ -53,7 +58,7 @@ export function ReviewDiffFilesProvider({
   useEffect(() => {
     const controller = new AbortController();
     setSnapshot((current) =>
-      current.documentKey === documentKey && current.state.status === "loading"
+      current.documentKey === documentKey && current.state.status !== "error"
         ? current
         : {
             documentKey,
@@ -85,9 +90,9 @@ export function ReviewDiffFilesProvider({
       });
 
     return () => controller.abort();
-  }, [container, diffView, documentKey]);
+  }, [container, diffView, documentKey, revision]);
 
-  const value = useMemo(() => state, [state]);
+  const value = useMemo(() => ({ ...state, revision }), [state, revision]);
 
   return (
     <ReviewDiffFilesContext.Provider value={value}>
@@ -96,7 +101,9 @@ export function ReviewDiffFilesProvider({
   );
 }
 
-export function useReviewDiffFiles(): ReviewDiffFilesState {
+export function useReviewDiffFiles(): ReviewDiffFilesState & {
+  revision?: string;
+} {
   return useContext(ReviewDiffFilesContext);
 }
 

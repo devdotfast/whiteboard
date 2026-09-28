@@ -114,7 +114,10 @@ export function App({
   const resolved = useResolvedReviewDocument(documentState);
 
   return (
-    <ReviewDiffFilesProvider documentKey={resolved.diffDocumentKey}>
+    <ReviewDiffFilesProvider
+      documentKey={resolved.diffDocumentKey}
+      revision={range.worktreeRevision}
+    >
       <ReviewLayout
         resolved={resolved}
         documentState={documentState}
@@ -371,7 +374,9 @@ function ReviewLayoutContent({
   });
 
   const viewStateSync = useReviewViewStateSync({ scrollRegionRef, panelStore });
-  const hasChangeRange = range.live || range.baseCommit !== range.headCommit;
+
+  const hasChangeRange =
+    !!range.worktreeRevision || range.baseCommit !== range.headCommit;
 
   const [activeView, setActiveView] = useState<ReviewView>(() =>
     normalizeReviewView(
