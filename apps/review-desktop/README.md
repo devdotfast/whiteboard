@@ -103,9 +103,9 @@ built Desktop through the installed CLI and the JSON review API. See
 
 ## Packaging and releases
 
-macOS arm64 is the only packaged platform with release channels; Linux has a
-packaging script but no distribution. Signed builds auto-update from
-`https://update.dev.fast` on either the `stable` or `preview` channel.
+macOS (arm64 and x64) is the only packaged platform with release channels;
+Linux has a packaging script but no distribution. Signed builds auto-update
+from `https://update.dev.fast` on either the `stable` or `preview` channel.
 
 ### Local packaging
 
@@ -113,7 +113,7 @@ packaging script but no distribution. Signed builds auto-update from
 SKIP_NOTARIZE=1 pnpm --filter @dev.fast/review-desktop app:package:macos
 ```
 
-builds an unsigned `VSCode-darwin-arm64/Whiteboard.app` and skips
+builds an unsigned `VSCode-darwin-<arch>/Whiteboard.app` for the host arch and skips
 signing, notarization, and artifact creation. A full run needs the signing
 environment and produces the `.dmg` plus one Squirrel update zip per installed
 bundle folder name (`Whiteboard-…zip`, `Review-…zip`; see `release-channel.mjs`),
@@ -138,19 +138,21 @@ patch/minor/major bump. The workflow:
 1. bumps `apps/review-desktop/package.json`, commits `[skip ci]`, tags
    `vX.Y.Z`, and creates a draft GitHub release;
 2. compiles the platform-independent Code OSS, Review canvas, Review server,
-   workspace packages, and pinned `darwin-arm64` curated extensions on Linux,
-   then uploads one `darwin-payload` artifact;
-3. extracts that payload on `macos-15-xlarge`, performs only the native Darwin
+   workspace packages, and pinned `darwin-arm64` and `darwin-x64` curated
+   extensions on Linux, then uploads one `darwin-payload` artifact;
+3. extracts that payload on two matrix legs, `darwin-arm64` on `macos-15-xlarge`
+   and `darwin-x64` on `macos-15-large`, performs only the native Darwin
    package assembly, stages the runtime, tools, and extensions, then signs and
    notarizes via `app:package:macos`;
 4. gates the upload with `scripts/validate-release-artifacts.mjs` (curated
    extension closure, staple and Gatekeeper checks, and packaged `product.json`
    commit/quality/updateUrl assertions), which also emits the `latest.json`
-   feed manifest;
-5. uploads to R2 in two passes — zip and dmg payloads first, `latest.json`
-   last — so a client can never see a manifest whose payload is missing;
-6. curls the live feed to confirm the new release is served, attaches the dmg
-   to the GitHub release, and publishes it.
+   feed manifest for that arch;
+5. once both legs pass, `publish-macos` uploads to R2 in two passes — both
+   arches' zip and dmg payloads first, both `latest.json` files last — so a
+   client can never see a manifest whose payload is missing;
+6. curls both live feeds to confirm the new release is served, attaches both
+   dmgs to the GitHub release, and publishes it.
 
 The `platforms` input picks `all` (the default), `macos`, `linux` or `windows`.
 Windows builds in parallel with the Darwin payload and the Linux packages
@@ -300,21 +302,24 @@ keys stay version-free for that reason, so the version rides on each object's
 browser download always does.
 
 ```
-update/stable/darwin-arm64/latest.json     current-release manifest
-update/preview/darwin-arm64/latest.json    current-preview manifest
-releases/<version>/darwin-arm64/           Whiteboard-darwin-arm64-<version>.zip + .dmg
-                                           Review-darwin-arm64-<version>.zip (Review.app-named copy)
-releases/latest/darwin-arm64/Whiteboard.dmg
-                                           direct-download alias, saved as
-                                           df-whiteboard-<version>.dmg
-releases/preview-latest/darwin-arm64/Whiteboard.dmg
-                                           preview-download alias, saved as
-                                           df-whiteboard-preview-<preview-version>.dmg
+update/stable/<target>/latest.json        current-release manifest
+update/preview/<target>/latest.json       current-preview manifest
+releases/<version>/<target>/              Whiteboard-<target>-<version>.zip + .dmg
+                                          Review-<target>-<version>.zip (Review.app-named copy)
+releases/latest/<target>/Whiteboard.dmg
+                                          direct-download alias, saved as
+                                          df-whiteboard-<version>.dmg
+releases/preview-latest/<target>/Whiteboard.dmg
+                                          preview-download alias, saved as
+                                          df-whiteboard-preview-<preview-version>.dmg
 ```
+
+`<target>` is `darwin-arm64` or `darwin-x64`; every key exists for both.
 
 `GET /api/update/:platform/:quality/:commit` answers 204 when the caller's
 stamped commit matches the manifest (or no manifest exists yet) and Squirrel
-JSON otherwise; `GET /releases/*` streams payloads. Because the feed keys its
+JSON otherwise; `GET /releases/*` streams payloads. Intel clients request the
+plain `darwin` platform, which the Worker maps to `darwin-x64`. Because the feed keys its
 answer off the caller's commit, the fork's `doDownloadUpdate` sends the
 installed commit — not the target commit — when re-checking (see `UPSTREAM`).
 
