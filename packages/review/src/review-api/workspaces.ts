@@ -116,7 +116,9 @@ export class ReviewWorkspaces {
 
   /**
    * Frees a newly dismissed review's checkouts to save disk. The review itself
-   * stays; reopening it rebuilds them.
+   * stays; reopening it rebuilds them. Checkouts rebuilt by peeking at a
+   * dismissed review are kept until the next startup or dismissal, since
+   * the Desktop's canvas tabs and source windows may still show them.
    */
   private releaseDismissed() {
     const dismissed = new Set(this.store.dismissedIds());
@@ -174,7 +176,7 @@ export class ReviewWorkspaces {
   }
 
   private async releaseCheckouts(reviewId: string, repositories: string[]) {
-    // Reopened since the dismissal: its checkouts may be in use.
+    // Restored since the dismissal: its checkouts may be in use.
     if (!this.store.dismissedIds().includes(reviewId)) return;
 
     const environments = this.all().filter(

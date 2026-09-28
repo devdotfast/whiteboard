@@ -1543,11 +1543,11 @@ export class ReviewStore {
         // The saved command must remain successful if a viewer disconnects.
       }
   }
-  /** Dismissed reviews not viewed since; opening a review records a view. */
+  /** Dismissed reviews, as Home lists them; only a restore clears it, not a view. */
   dismissedIds(): string[] {
     return this.db
       .prepare(
-        "SELECT review_id FROM review_attention WHERE dismissed_at IS NOT NULL AND (viewed_at IS NULL OR viewed_at <= dismissed_at)",
+        "SELECT review_id FROM review_attention WHERE dismissed_at IS NOT NULL",
       )
       .all()
       .map((row) => String(row.review_id));

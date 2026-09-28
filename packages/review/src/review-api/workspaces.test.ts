@@ -441,18 +441,14 @@ it.skipIf(process.getuid?.() === 0)(
   },
 );
 
-it("keeps the checkouts of a dismissed review that was opened again", async () => {
-  const { rootPath } = await local.data.workspaces.source(
-    reviewId,
-    pins,
-    "head",
-  );
-
+const attentionWhileClosed = async (
+  ...actions: ("view" | "dismiss" | "restore")[]
+) => {
   await local.data.close();
   await local.store.close();
   const headless = openLocalReviewStore(database, { manageWorkspaces: false });
 
-  for (const action of ["dismiss", "view"] as const) {
+  for (const action of actions) {
     await headless.store.execute({
       commandId: randomUUID(),
       operation: { type: "attention", reviewId, action },
@@ -462,9 +458,32 @@ it("keeps the checkouts of a dismissed review that was opened again", async () =
 
   await headless.data.close();
   await headless.store.close();
-
   local = openLocalReviewStore(database);
   await local.data.workspaces.idle();
+};
+
+it("frees the checkouts of a dismissed review that was only peeked at", async () => {
+  const { rootPath } = await local.data.workspaces.source(
+    reviewId,
+    pins,
+    "head",
+  );
+
+  // Opening a review from Home's Dismissed list records a view, not a restore.
+  await attentionWhileClosed("dismiss", "view");
+  expect(local.store.summary(reviewId)?.dismissedAt).toBeTruthy();
+  expect(existsSync(rootPath!)).toBe(false);
+});
+
+it("keeps the checkouts of a restored review", async () => {
+  const { rootPath } = await local.data.workspaces.source(
+    reviewId,
+    pins,
+    "head",
+  );
+
+  await attentionWhileClosed("dismiss", "restore");
+  expect(local.store.summary(reviewId)?.dismissedAt).toBeNull();
   expect(existsSync(path.join(rootPath!, "value.ts"))).toBe(true);
 });
 
