@@ -1,9 +1,14 @@
-import type { ReviewDiffLayout } from "@dev.fast/review-protocol";
+import type {
+  ReviewCanvasUi,
+  ReviewDiffLayout,
+  ReviewMenuRequest,
+} from "@dev.fast/review-protocol";
 import { act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DiffLayoutControl } from "./diff-layout-control";
+import { CanvasUiContext } from "./host/canvas-ui";
 import { ReviewSessionProvider } from "./host/review-session";
 import { testReviewSession } from "./review-session-test-utils";
 
@@ -18,6 +23,7 @@ describe("DiffLayoutControl", () => {
   >;
 
   let posted: unknown[];
+  let session: ReturnType<typeof testReviewSession>;
 
   beforeEach(async () => {
     container = document.createElement("div");
@@ -34,7 +40,7 @@ describe("DiffLayoutControl", () => {
       },
     );
 
-    const session = testReviewSession(
+    session = testReviewSession(
       {},
       {
         currentDiffLayout: () => layout,
@@ -151,6 +157,52 @@ describe("DiffLayoutControl", () => {
       );
     });
     expect(popover()).toBeNull();
+  });
+
+  it("host radio menus preserve optimistic state, rollback and external setting updates", async () => {
+    let menu!: ReviewMenuRequest;
+
+    const ui: ReviewCanvasUi = Object.freeze<ReviewCanvasUi>({
+      showMenu: (request) => {
+        menu = request;
+
+        return { dispose() {} };
+      },
+    });
+
+    await act(async () =>
+      root.render(
+        <CanvasUiContext.Provider value={ui}>
+          <ReviewSessionProvider session={session}>
+            <DiffLayoutControl />
+          </ReviewSessionProvider>
+        </CanvasUiContext.Provider>,
+      ),
+    );
+    const write = Promise.withResolvers<void>();
+    setDiffLayout.mockImplementation(() => write.promise);
+    await act(async () => trigger().click());
+    expect(menu.items.find((item) => item.checked)?.id).toBe("split");
+    expect(popover()).toBeNull();
+    await act(async () => {
+      menu.onHide();
+      await menu.onSelect("unified");
+    });
+    expect(setDiffLayout).toHaveBeenCalledExactlyOnceWith("unified");
+    await act(async () => trigger().click());
+    expect(menu.items.find((item) => item.checked)?.id).toBe("unified");
+    await act(async () => {
+      menu.onHide();
+      write.reject(new Error("Read-only settings"));
+    });
+    await act(async () => trigger().click());
+    expect(menu.items.find((item) => item.checked)?.id).toBe("split");
+    await act(async () => {
+      menu.onHide();
+      confirm("unified");
+    });
+    await act(async () => trigger().click());
+    expect(menu.items.find((item) => item.checked)?.id).toBe("unified");
   });
 
   function trigger() {

@@ -726,6 +726,7 @@ export interface ReviewMenuRequest {
 }
 
 export interface ReviewCanvasUi {
+  confirmDelete?(title: string): Promise<boolean>;
   showMenu(request: ReviewMenuRequest): ReviewDisposable;
 }
 

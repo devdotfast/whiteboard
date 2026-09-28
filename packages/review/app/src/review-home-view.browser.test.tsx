@@ -1,4 +1,8 @@
-import type { ReviewApiSummary } from "@dev.fast/review-protocol";
+import type {
+  ReviewApiSummary,
+  ReviewCanvasUi,
+  ReviewMenuRequest,
+} from "@dev.fast/review-protocol";
 import { act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -264,6 +268,143 @@ describe("ReviewHome", () => {
     await act(async () => remove.click());
     expect(onDelete).toHaveBeenCalledWith(review);
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    "host deletion waits for confirmation and preserves the original target (confirmed: %s)",
+    async (confirmed) => {
+      const original = summary({ title: "Original session" });
+      const confirmation = Promise.withResolvers<boolean>();
+      const deletion = Promise.withResolvers<void>();
+
+      const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+        () => deletion.promise,
+      );
+
+      const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
+
+      const confirmDelete = vi.fn<(title: string) => Promise<boolean>>(
+        () => confirmation.promise,
+      );
+
+      let menu!: ReviewMenuRequest;
+
+      const ui: ReviewCanvasUi = Object.freeze<ReviewCanvasUi>({
+        confirmDelete,
+        showMenu: (request) => {
+          menu = request;
+
+          return { dispose() {} };
+        },
+      });
+
+      const render = async (reviews: ReviewApiSummary[]) =>
+        act(async () =>
+          root.render(
+            <CanvasUiContext.Provider value={ui}>
+              <ReviewHome
+                reviews={reviews}
+                onOpen={onOpen}
+                onDelete={onDelete}
+              />
+            </CanvasUiContext.Provider>,
+          ),
+        );
+
+      await render([original]);
+      await act(async () =>
+        container
+          .querySelector<HTMLButtonElement>(
+            '[aria-label="Actions for Original session"]',
+          )!
+          .click(),
+      );
+      let selected!: Promise<void>;
+      await act(async () => {
+        menu.onHide();
+        selected = Promise.resolve(menu.onSelect("delete"));
+      });
+      await act(async () => {
+        await menu.onSelect("delete");
+      });
+      expect(confirmDelete).toHaveBeenCalledExactlyOnceWith("Original session");
+      expect(onDelete).not.toHaveBeenCalled();
+      expect(container.textContent).toContain("Original session");
+      const other = summary({ reviewId: uuid(2), title: "Another session" });
+      await render([other, original]);
+      await act(async () => confirmation.resolve(confirmed));
+      expect(onOpen).not.toHaveBeenCalled();
+
+      expect(onDelete).toHaveBeenCalledTimes(confirmed ? 1 : 0);
+      expect(onDelete.mock.calls[0]?.[0]).toBe(
+        confirmed ? original : undefined,
+      );
+      expect(container.textContent?.includes("Original session")).toBe(
+        !confirmed,
+      );
+
+      if (confirmed) {
+        await act(async () => {
+          deletion.reject(new Error("Offline"));
+          await selected;
+        });
+      }
+
+      await selected;
+      expect(container.textContent).toContain("Original session");
+      expect(container.textContent?.includes("Could not delete")).toBe(
+        confirmed,
+      );
+
+      expect(container.textContent).toContain("Another session");
+    },
+  );
+
+  it("a dismissed session uses a single host confirmation without an arming click", async () => {
+    const review = summary({
+      title: "Dismissed session",
+      dismissedAt: "2026-09-01T00:00:00Z",
+    });
+
+    const confirmDelete = vi.fn<(title: string) => Promise<boolean>>(
+      async () => false,
+    );
+
+    const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+      async () => {},
+    );
+
+    const ui: ReviewCanvasUi = Object.freeze<ReviewCanvasUi>({
+      confirmDelete,
+      showMenu: () => ({ dispose() {} }),
+    });
+
+    await act(async () =>
+      root.render(
+        <CanvasUiContext.Provider value={ui}>
+          <ReviewHome
+            reviews={[review]}
+            onOpen={() => {}}
+            onDelete={onDelete}
+          />
+        </CanvasUiContext.Provider>,
+      ),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(".review-home-dismissed-toggle")!
+        .click(),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '[aria-label="Delete Dismissed session"]',
+        )!
+        .click(),
+    );
+    expect(confirmDelete).toHaveBeenCalledExactlyOnceWith("Dismissed session");
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Dismissed session");
   });
 
   it("deletes a review after an arming click without opening it", async () => {

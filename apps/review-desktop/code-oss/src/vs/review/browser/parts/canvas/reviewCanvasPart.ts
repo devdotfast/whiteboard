@@ -16,6 +16,7 @@ import type { ICursorPositionChangedEvent } from "../../../../editor/common/curs
 import { ICommandService } from "../../../../platform/commands/common/commands.js";
 import { ConfigurationTarget, IConfigurationService } from "../../../../platform/configuration/common/configuration.js";
 import { TextEditorSelectionSource, type IEditorOptions } from "../../../../platform/editor/common/editor.js";
+import { IDialogService } from "../../../../platform/dialogs/common/dialogs.js";
 import { IContextMenuService, IContextViewService } from "../../../../platform/contextview/browser/contextView.js";
 import { IHoverService } from "../../../../platform/hover/browser/hover.js";
 import { createDecorator, IInstantiationService } from "../../../../platform/instantiation/common/instantiation.js";
@@ -76,6 +77,7 @@ import {
 	REVIEW_TUTORIAL_STEP_IDS
 } from "../../../common/reviewProtocol.js";
 import { IReviewVerbsService } from "../../../contrib/verbs/reviewVerbs.js";
+import { confirmReviewDeletion } from "../../reviewDeleteConfirmation.js";
 import { showReviewCanvasMenu } from "../../reviewCanvasMenu.js";
 import { ReviewTooltip } from "../../reviewTooltip.js";
 import { IReviewApiCatalogService } from "../../../services/reviewApiCatalogService.js";
@@ -188,6 +190,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		@IHoverService private readonly hoverService: IHoverService,
 		@IContextMenuService private readonly contextMenuService: IContextMenuService,
 		@IContextViewService private readonly contextViewService: IContextViewService,
+		@IDialogService private readonly dialogService: IDialogService,
 		@INotificationService private readonly notificationService: INotificationService,
 		@IEditorProgressService editorProgressService: IEditorProgressService,
 		@ILifecycleService lifecycleService: ILifecycleService,
@@ -1004,6 +1007,11 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			this.canvas.value.update(content);
 		} else {
 			this.canvas.value = assets.mountReviewCanvas(this.canvasMount, content, {
+				confirmDelete: title => {
+					const openedGeneration = this.loadGeneration;
+					return confirmReviewDeletion(this.dialogService, title,
+						() => openedGeneration === this.loadGeneration && this.isVisible());
+				},
 				showMenu: request => {
 					const openedGeneration = this.loadGeneration;
 					const menu = showReviewCanvasMenu(this.contextMenuService, request,

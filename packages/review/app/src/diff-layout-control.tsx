@@ -9,6 +9,7 @@ import {
   useSyncExternalStore,
 } from "react";
 
+import { useCanvasMenu } from "./host/canvas-ui";
 import { useReviewSession } from "./host/review-session";
 import { SlidersIcon, SplitLayoutIcon, UnifiedLayoutIcon } from "./icons";
 import { captureClientError, captureUiEvent } from "./ui-telemetry";
@@ -25,13 +26,9 @@ const LAYOUT_OPTIONS: ReadonlyArray<{
   { layout: "split", label: "Split", Icon: SplitLayoutIcon },
 ];
 
-/**
- * The toolbar's diff settings popover. Today it holds one control, the
- * unified/split layout; the popover shape leaves room for the diff options
- * that follow it without spending more toolbar width.
- */
 export function DiffLayoutControl(): ReactElement {
   const tooltip = useTooltip("Diff settings");
+  const menu = useCanvasMenu();
   const session = useReviewSession();
   const bridge = session.bridge;
 
@@ -82,9 +79,29 @@ export function DiffLayoutControl(): ReactElement {
         className="review-diff-settings-button"
         aria-label="Diff settings"
         ref={tooltip}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        aria-haspopup={menu.available ? "menu" : "dialog"}
+        aria-expanded={menu.available ? menu.open : open}
+        onClick={(event) => {
+          if (menu.available)
+            menu.show({
+              anchor: event.currentTarget,
+              items: LAYOUT_OPTIONS.map((option) => ({
+                id: option.layout,
+                label: option.label,
+                checked: option.layout === shownLayout,
+              })),
+              onSelect: (id) => {
+                if (id === "unified" || id === "split") chooseLayout(id);
+              },
+            });
+          else setOpen((current) => !current);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            event.currentTarget.click();
+          }
+        }}
       >
         <SlidersIcon />
       </button>
