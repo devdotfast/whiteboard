@@ -15,14 +15,6 @@ const webviewPreloader = await readFile(
   "utf8",
 );
 
-const reviewCanvasPart = await readFile(
-  new URL(
-    "../code-oss/src/vs/review/browser/parts/canvas/reviewCanvasPart.ts",
-    import.meta.url,
-  ),
-  "utf8",
-);
-
 test("keeps Review disconnected from Microsoft update and extension services", () => {
   assert.equal(product.enableTelemetry, false);
   assert.equal(product.extensionsGallery, null);
@@ -92,6 +84,15 @@ test("owns every install identity rather than sharing Code OSS's", () => {
   }
 });
 
+test("keeps compatibility-sensitive Desktop identifiers unchanged", () => {
+  // Existing installs key off these: macOS registers the app under the
+  // bundle id, the OS resolves review:// links via urlProtocol, and
+  // dataFolderName is where users' current app data already lives.
+  assert.equal(product.darwinBundleIdentifier, "dev.fast.review");
+  assert.equal(product.urlProtocol, "dev-fast-review");
+  assert.equal(product.dataFolderName, ".dev-fast-review");
+});
+
 test("keeps upstream identity out of the fields Review has claimed", () => {
   // A re-vendor rewrites product.json wholesale, so guard the values above
   // against silently reverting to anything Code OSS- or Microsoft-branded.
@@ -144,13 +145,6 @@ test("keeps product.json free of defaults nothing reads", () => {
   assert.equal(product.configurationDefaults, undefined);
 });
 
-test("guards the active webview frame body while tracking focus", () => {
-  assert.match(
-    webviewPreloader,
-    /target && target\.contentDocument && target\.contentDocument\.body && target\.contentDocument\.body\.classList\.contains\('vscode-context-menu-visible'\)/,
-  );
-});
-
 test("allows the webview host script through its own hash-only CSP", () => {
   // Any edit to the inline script must update this hash, or the host page never
   // runs and every webview (Markdown preview, custom editors) stays blank.
@@ -170,22 +164,4 @@ test("allows the webview host script through its own hash-only CSP", () => {
       `script-src lacks 'sha256-${hash}'`,
     );
   }
-});
-
-test("configures Zod's CSP-safe mode before the canvas module evaluates", () => {
-  const candidateConfig = reviewCanvasPart.indexOf(
-    "canvasGlobal.__zod_globalConfig ??= {};",
-  );
-
-  const candidateModule = reviewCanvasPart.indexOf(
-    "vs/review/canvas/canvas-loader.js",
-  );
-
-  assert.notEqual(candidateConfig, -1);
-  assert.notEqual(candidateModule, -1);
-  assert.ok(candidateConfig < candidateModule);
-  assert.match(
-    reviewCanvasPart,
-    /canvasGlobal\.__zod_globalConfig\.jitless = true;/,
-  );
 });

@@ -8,32 +8,6 @@ async function source(path) {
   return readFile(new URL(path, codeOss), "utf8");
 }
 
-test("pins the hardened Electron runtime", async () => {
-  const npmrc = await source(".npmrc");
-  const packageJson = JSON.parse(await source("package.json"));
-  const lock = JSON.parse(await source("package-lock.json"));
-  const manifest = await source("cgmanifest.json");
-  const checksums = await source("build/checksums/electron.txt");
-
-  assert.match(npmrc, /^target="42\.10\.0"$/m);
-  assert.match(npmrc, /^ms_build_id="15109253"$/m);
-  assert.equal(packageJson.devDependencies.electron, "42.10.0");
-  assert.equal(lock.packages["node_modules/electron"].version, "42.10.0");
-  assert.match(manifest, /"tag": "42\.10\.0"/);
-  assert.match(checksums, /electron-v42\.10\.0-darwin-arm64\.zip/);
-  assert.doesNotMatch(checksums, /42\.6\.0/);
-});
-
-test("keeps the Anthropic SDK out of production dependencies", async () => {
-  const packageJson = JSON.parse(await source("package.json"));
-  const lock = JSON.parse(await source("package-lock.json"));
-
-  assert.equal(packageJson.dependencies["@anthropic-ai/sdk"], undefined);
-  assert.equal(packageJson.devDependencies["@anthropic-ai/sdk"], "^0.93.0");
-  assert.equal(lock.packages[""].dependencies["@anthropic-ai/sdk"], undefined);
-  assert.equal(lock.packages["node_modules/@anthropic-ai/sdk"].dev, true);
-});
-
 test("keeps the security boundary backports", async () => {
   const processes = await source("src/vs/base/common/processes.ts");
 

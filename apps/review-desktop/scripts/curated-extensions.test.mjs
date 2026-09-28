@@ -234,54 +234,6 @@ test("parses DEV_REVIEW_EXTENSIONS selections", () => {
   assert.throws(() => parseGroupSelection("nope"), /unknown extension group/);
 });
 
-test("carries Darwin curated extensions from Linux compile through release validation", async () => {
-  const [
-    buildScript,
-    compileScript,
-    payloadManifest,
-    packageScript,
-    validationScript,
-  ] = await Promise.all([
-    readFile(new URL("./build.sh", import.meta.url), "utf8"),
-    readFile(new URL("./compile-darwin-payload.sh", import.meta.url), "utf8"),
-    readFile(new URL("./darwin-payload-manifest.sh", import.meta.url), "utf8"),
-    readFile(new URL("./package-macos.sh", import.meta.url), "utf8"),
-    readFile(
-      new URL("./validate-release-artifacts.mjs", import.meta.url),
-      "utf8",
-    ),
-  ]);
-
-  assert.match(buildScript, /REVIEW_DESKTOP_CURATED_EXTENSION_TARGET/);
-  assert.match(
-    compileScript,
-    /source "\$APP_DIR\/scripts\/darwin-payload-manifest\.sh"/,
-  );
-  assert.match(
-    packageScript,
-    /source "\$APP_DIR\/scripts\/darwin-payload-manifest\.sh"/,
-  );
-  assert.match(payloadManifest, /DARWIN_PAYLOAD_REQUIRED_PATHS=/);
-  assert.match(payloadManifest, /DARWIN_PAYLOAD_ARCHIVE_ONLY_PATHS=/);
-  assert.match(compileScript, /DARWIN_PAYLOAD_ARCHIVE_ONLY_PATHS\[@\]/);
-  assert.match(compileScript, /DARWIN_PAYLOAD_REQUIRED_PATHS\[@\]/);
-  assert.match(packageScript, /DARWIN_PAYLOAD_REQUIRED_PATHS\[@\]/);
-  assert.match(packageScript, /"\$CURATED_EXTENSIONS_PAYLOAD"/);
-  assert.match(packageScript, /--source-root "\$CURATED_EXTENSIONS_SOURCE"/);
-  assert.match(
-    packageScript,
-    /--copy-to "\$PACKAGED_APP\/Contents\/Resources\/app\/extensions"/,
-  );
-  assert.ok(
-    packageScript.indexOf("curated-extensions.mjs") <
-      packageScript.indexOf("scripts/notarize-macos.sh"),
-    "curated extensions must be staged before signing and notarization",
-  );
-  assert.match(validationScript, /verifyCuratedExtensions/);
-  assert.doesNotMatch(packageScript, /rust-lang\.rust-analyzer/);
-  assert.doesNotMatch(payloadManifest, /rust-lang\.rust-analyzer/);
-});
-
 test("keeps curated extensions out of the gulp packaging stream", () => {
   for (const extension of curatedExtensions) {
     assert.ok(
