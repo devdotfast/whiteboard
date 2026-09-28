@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Exports the macOS release arch for the host. Sourced by the macOS-only scripts.
+# Sets DARWIN_ARCH/DARWIN_TARGET for the macOS host.
 case "$(uname -m)" in
   arm64) DARWIN_ARCH=arm64 ;;
   x86_64) DARWIN_ARCH=x64 ;;

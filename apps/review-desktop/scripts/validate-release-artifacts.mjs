@@ -272,10 +272,7 @@ async function main() {
     arch,
   );
 
-  // rust-analyzer is optional and downloaded at runtime, never packaged, so
-  // only the manifest's bundled extensions can be asserted here. Reuses
-  // selectExtensions so this never drifts from what verifyCuratedExtensions
-  // itself considers bundled for `target`.
+  // rust-analyzer is downloaded at runtime, so only the bundled extensions are checked here.
   for (const { extension, targetKey } of selectExtensions(
     target,
     parseGroupSelection(),

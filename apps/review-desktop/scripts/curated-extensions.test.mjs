@@ -255,10 +255,6 @@ test("carries Darwin curated extensions from Linux compile through release valid
   assert.match(buildScript, /REVIEW_DESKTOP_CURATED_EXTENSION_TARGET/);
   assert.match(
     compileScript,
-    /REVIEW_DESKTOP_CURATED_EXTENSION_TARGET=darwin-arm64/,
-  );
-  assert.match(
-    compileScript,
     /source "\$APP_DIR\/scripts\/darwin-payload-manifest\.sh"/,
   );
   assert.match(

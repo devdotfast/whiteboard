@@ -82,16 +82,12 @@ export function updateBundlesFor(channel) {
   return UPDATE_BUNDLES[channel];
 }
 
-const DARWIN_TARGETS = { arm64: "darwin-arm64", x64: "darwin-x64" };
-
 export function darwinTarget(arch = process.arch) {
-  const target = DARWIN_TARGETS[arch];
-
-  if (!target) {
+  if (arch !== "arm64" && arch !== "x64") {
     throw new Error(`unsupported macOS arch ${arch}`);
   }
 
-  return target;
+  return `darwin-${arch}`;
 }
 
 export function updateZipName(artifact, version, target) {

@@ -423,8 +423,7 @@ jobs:
           node apps/review-desktop/scripts/smoke-telemetry-delivery.mjs --app "$APP"
           node apps/review-desktop/scripts/smoke-error-telemetry.mjs --app "$APP"
 
-      # publish-macos uploads both arches together once every leg has passed.
-      # This artifact also carries the DMG a tester downloads from the run.
+      # Also carries the DMG a tester downloads from the run.
       - name: Upload macOS preview artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -469,25 +468,26 @@ jobs:
         run: |
           DMG_DISPOSITION="attachment; filename=\"df-whiteboard-preview-${RELEASE_VERSION}.dmg\""
 
-          for target in darwin-arm64 darwin-x64; do
-            DIST="dist/macos-${target}"
+          for dir in dist/macos-*; do
+            target="${dir#dist/macos-}"
             RELEASE_PREFIX="s3://${R2_BUCKET}/releases/${RELEASE_VERSION}/${target}"
-            for zip in "$DIST"/*-"${target}"-"${RELEASE_VERSION}".zip; do
+            for zip in "$dir"/*-"${target}"-"${RELEASE_VERSION}".zip; do
               aws s3 cp "$zip" "${RELEASE_PREFIX}/$(basename "$zip")" \
                 --content-type application/zip
             done
-            aws s3 cp "$DIST/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
+            aws s3 cp "$dir/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
               "${RELEASE_PREFIX}/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
               --content-type application/x-apple-diskimage \
               --content-disposition "$DMG_DISPOSITION"
-            aws s3 cp "$DIST/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
+            aws s3 cp "$dir/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
               "s3://${R2_BUCKET}/releases/preview-latest/${target}/Whiteboard.dmg" \
               --content-type application/x-apple-diskimage \
               --content-disposition "$DMG_DISPOSITION"
           done
 
-          for target in darwin-arm64 darwin-x64; do
-            aws s3 cp "dist/macos-${target}/latest.json" \
+          for dir in dist/macos-*; do
+            target="${dir#dist/macos-}"
+            aws s3 cp "$dir/latest.json" \
               "s3://${R2_BUCKET}/update/preview/${target}/latest.json" \
               --content-type application/json
           done

@@ -655,25 +655,26 @@ jobs:
           # rides along in the filename a client saves the download as.
           DMG_DISPOSITION="attachment; filename=\"df-whiteboard-${RELEASE_VERSION}.dmg\""
 
-          for target in darwin-arm64 darwin-x64; do
-            DIST="dist/macos-${target}"
+          for dir in dist/macos-*; do
+            target="${dir#dist/macos-}"
             RELEASE_PREFIX="s3://${R2_BUCKET}/releases/${RELEASE_VERSION}/${target}"
-            for zip in "$DIST"/*-"${target}"-"${RELEASE_VERSION}".zip; do
+            for zip in "$dir"/*-"${target}"-"${RELEASE_VERSION}".zip; do
               aws s3 cp "$zip" "${RELEASE_PREFIX}/$(basename "$zip")" \
                 --content-type application/zip
             done
-            aws s3 cp "$DIST/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
+            aws s3 cp "$dir/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
               "${RELEASE_PREFIX}/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
               --content-type application/x-apple-diskimage \
               --content-disposition "$DMG_DISPOSITION"
-            aws s3 cp "$DIST/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
+            aws s3 cp "$dir/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
               "s3://${R2_BUCKET}/releases/latest/${target}/Whiteboard.dmg" \
               --content-type application/x-apple-diskimage \
               --content-disposition "$DMG_DISPOSITION"
           done
 
-          for target in darwin-arm64 darwin-x64; do
-            aws s3 cp "dist/macos-${target}/latest.json" \
+          for dir in dist/macos-*; do
+            target="${dir#dist/macos-}"
+            aws s3 cp "$dir/latest.json" \
               "s3://${R2_BUCKET}/update/stable/${target}/latest.json" \
               --content-type application/json
           done

@@ -18,12 +18,12 @@ if (( $# > 0 )); then
   exit 2
 fi
 
-# The compile host is Linux, but curated extensions contain target-native
-# servers. build.sh recompiles unconditionally, so run it once for the
-# arm64 leg; the other Darwin targets are materialized directly below without
-# repeating the compile.
+first_target="${DARWIN_PAYLOAD_TARGETS[0]}"
+
+# build.sh always recompiles, so run it once here; the other targets are
+# materialized below without repeating the compile.
 REVIEW_DESKTOP_COMPILE_ONLY=1 \
-  REVIEW_DESKTOP_CURATED_EXTENSION_TARGET=darwin-arm64 \
+  REVIEW_DESKTOP_CURATED_EXTENSION_TARGET="$first_target" \
   bash "$APP_DIR/scripts/build.sh"
 
 if git -C "$MONOREPO_ROOT" rev-parse HEAD >/dev/null 2>&1; then
@@ -32,10 +32,8 @@ else
   BUILD_SOURCEVERSION="$(jj --repository "$MONOREPO_ROOT" --ignore-working-copy log --no-graph -r @ -T 'commit_id')"
 fi
 export BUILD_SOURCEVERSION
-# vscode-darwin-arm64-min-prepare produces the arch-independent out-vscode-min
-# (codicons, non-native extensions, media, esbuild bundle; see
-# gulpfile.vscode.ts:640-648). Both Darwin targets reuse this one output, so
-# the task name stays arm64-specific even though it isn't arch-bound.
+# The arm64-named prepare task produces the arch-independent out-vscode-min
+# that both targets reuse.
 npm --prefix "$CHECKOUT" run gulp -- vscode-darwin-arm64-min-prepare
 
 # Tags the bundles, so it must run before they are archived.
@@ -44,9 +42,8 @@ if [[ -n "${REVIEW_POSTHOG_KEY:-}" ]]; then
 fi
 
 for target in "${DARWIN_PAYLOAD_TARGETS[@]}"; do
-  if [[ "$target" != "darwin-arm64" ]]; then
-    # build.sh above only materialized curated extensions for darwin-arm64;
-    # materialize the remaining targets without recompiling.
+  if [[ "$target" != "$first_target" ]]; then
+    # build.sh above only materialized curated extensions for the first target.
     node "$APP_DIR/scripts/curated-extensions.mjs" "--target=$target"
   fi
 
