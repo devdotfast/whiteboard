@@ -2,6 +2,7 @@ import { RunOnceScheduler } from "../../base/common/async.js";
 import { observableValue, transaction, type IObservable, type ISettableObservable } from "../../base/common/observable.js";
 import { Emitter } from "../../base/common/event.js";
 import { Disposable } from "../../base/common/lifecycle.js";
+import { CancellationError } from "../../base/common/errors.js";
 import { structuralFilePath, STRUCTURAL_WIRE_VERSION, type StructuralEvent, type StructuralRegion, type StructuralTextDiff } from "../common/reviewStructuralDiff.js";
 import type { StructuralDiff } from "../common/reviewProtocol.js";
 import type { StructuralDiffStream } from "./reviewStructuralDiffClient.js";
@@ -46,6 +47,29 @@ export class StructuralDiffSession extends Disposable {
 
 	start(): Promise<void> { return this.task ??= this.consume(); }
 	getFileResult(path: string): StructuralFileResult | undefined { return this.results.get(path); }
+	/** Wait only for this file; a structural view can render while other files stream. */
+	fileResult(path: string): Promise<StructuralFileResult> {
+		const current = this.results.get(path);
+		if (current) return Promise.resolve(current);
+		if (this.disposed) return Promise.reject(new CancellationError());
+		if (this.finished) return Promise.reject(new Error(this.error ?? `diffr did not supply a result for ${path}.`));
+		return new Promise((resolve, reject) => {
+			const finish = () => {
+				const result = this.results.get(path);
+				if (!result && !this.finished && !this.disposed) return;
+				listener.dispose();
+				this.abort.signal.removeEventListener("abort", cancel);
+				if (result) resolve(result);
+				else reject(this.disposed ? new CancellationError() : new Error(this.error ?? `diffr did not supply a result for ${path}.`));
+			};
+			const cancel = () => finish();
+			const listener = this.onDidChange(change => {
+				if (change.files.has(path) || change.status) finish();
+			});
+			this.abort.signal.addEventListener("abort", cancel, { once: true });
+			finish();
+		});
+	}
 	getTextDiff(path: string): StructuralTextDiff | undefined {
 		const diff = this.results.get(path)?.diff;
 		return diff?.type === "text" ? diff : undefined;
