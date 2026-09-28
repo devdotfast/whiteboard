@@ -2626,49 +2626,6 @@ button:focus-visible > .review-chevron {
 .review-home-row-menu-trigger[aria-expanded="true"] {
   background: var(--well);
 }
-.review-home-row-menu {
-  position: fixed;
-  inset: auto;
-  top: calc(anchor(bottom) + 6px);
-  right: anchor(right);
-  position-try-fallbacks: flip-block;
-  margin: 0;
-  width: 168px;
-  padding: 6px;
-  border: 1px solid var(--rule);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
-}
-.review-home-menu-delete {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 32px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--change-removed);
-  font: 13px/18px var(--font-mono);
-  text-align: left;
-  cursor: pointer;
-}
-.review-home-menu-delete:hover {
-  background: var(--tray);
-}
-.review-home-menu-delete svg {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 /* Paper's review header: identity, title, then source and diff metadata. */
 .review-document-header {
   width: min(100%, var(--review-prose-max-width));

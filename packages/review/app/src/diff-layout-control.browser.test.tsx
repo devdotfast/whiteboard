@@ -1,18 +1,16 @@
-import type {
-  ReviewCanvasUi,
-  ReviewDiffLayout,
-  ReviewMenuRequest,
-} from "@dev.fast/review-protocol";
+import type { ReviewDiffLayout } from "@dev.fast/review-protocol";
 import { act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { testCanvasUi } from "./canvas-ui-test-utils";
 import { DiffLayoutControl } from "./diff-layout-control";
 import { CanvasUiContext } from "./host/canvas-ui";
 import { ReviewSessionProvider } from "./host/review-session";
 import { testReviewSession } from "./review-session-test-utils";
 
 describe("DiffLayoutControl", () => {
+  let host: ReturnType<typeof testCanvasUi>;
   let container: HTMLDivElement;
   let root: Root;
   let layout: ReviewDiffLayout;
@@ -26,6 +24,7 @@ describe("DiffLayoutControl", () => {
   let session: ReturnType<typeof testReviewSession>;
 
   beforeEach(async () => {
+    host = testCanvasUi();
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -61,9 +60,11 @@ describe("DiffLayoutControl", () => {
 
     await act(async () => {
       root.render(
-        <ReviewSessionProvider session={session}>
-          <DiffLayoutControl />
-        </ReviewSessionProvider>,
+        <CanvasUiContext.Provider value={host.ui}>
+          <ReviewSessionProvider session={session}>
+            <DiffLayoutControl />
+          </ReviewSessionProvider>
+        </CanvasUiContext.Provider>,
       );
     });
   });
@@ -80,60 +81,49 @@ describe("DiffLayoutControl", () => {
   });
 
   it.each(["ArrowDown", "ArrowUp"])(
-    "%s opens and re-enters the fallback without closing it",
+    "%s opens the host menu only once",
     async (key) => {
       for (let attempt = 0; attempt < 2; attempt++) {
-        trigger().focus();
         await act(async () =>
           trigger().dispatchEvent(
             new KeyboardEvent("keydown", { key, bubbles: true }),
           ),
         );
-        expect(trigger().getAttribute("aria-expanded")).toBe("true");
-        expect(document.activeElement).toBe(radio("Split"));
       }
 
+      expect(host.ui.showMenu).toHaveBeenCalledOnce();
+      expect(host.menu.items.find((item) => item.checked)?.id).toBe("split");
       expect(setDiffLayout).not.toHaveBeenCalled();
-      await act(async () => trigger().click());
-      expect(popover()).toBeNull();
     },
   );
 
-  it("shows the current layout and writes the chosen one", async () => {
+  it("writes the chosen layout and does not rewrite the current one", async () => {
     await act(async () => trigger().click());
-    expect(radio("Split").getAttribute("aria-checked")).toBe("true");
-    expect(radio("Unified").getAttribute("aria-checked")).toBe("false");
-
-    await act(async () => radio("Unified").click());
-    expect(setDiffLayout).toHaveBeenCalledWith("unified");
-    expect(radio("Unified").getAttribute("aria-checked")).toBe("true");
-    expect(radio("Split").getAttribute("aria-checked")).toBe("false");
+    await act(async () => host.select("split"));
+    expect(setDiffLayout).not.toHaveBeenCalled();
+    await act(async () => trigger().click());
+    await act(async () => host.select("unified"));
+    expect(setDiffLayout).toHaveBeenCalledExactlyOnceWith("unified");
+    await act(async () => trigger().click());
+    expect(host.menu.items.find((item) => item.checked)?.id).toBe("unified");
   });
 
-  it("shows the choice before the desktop confirms it", async () => {
-    let finishWrite = () => {};
-
-    setDiffLayout.mockImplementation(
-      () => new Promise<void>((resolve) => (finishWrite = resolve)),
-    );
+  it("preserves optimistic state, rollback and external setting updates", async () => {
+    const write = Promise.withResolvers<void>();
+    setDiffLayout.mockImplementation(() => write.promise);
     await act(async () => trigger().click());
-    await act(async () => radio("Unified").click());
-    expect(radio("Unified").getAttribute("aria-checked")).toBe("true");
+    expect(host.menu.items.find((item) => item.checked)?.id).toBe("split");
+    await act(async () => host.select("unified"));
+    expect(setDiffLayout).toHaveBeenCalledExactlyOnceWith("unified");
+    await act(async () => trigger().click());
+    expect(host.menu.items.find((item) => item.checked)?.id).toBe("unified");
     expect(layout).toBe("split");
-
     await act(async () => {
-      confirm("unified");
-      finishWrite();
+      host.menu.onHide();
+      write.reject(new Error("Read-only settings"));
     });
-    expect(radio("Unified").getAttribute("aria-checked")).toBe("true");
-  });
-
-  it("drops back and reports it when the write fails", async () => {
-    setDiffLayout.mockRejectedValue(new Error("settings.json is read-only"));
     await act(async () => trigger().click());
-    await act(async () => radio("Unified").click());
-    expect(radio("Split").getAttribute("aria-checked")).toBe("true");
-    expect(radio("Unified").getAttribute("aria-checked")).toBe("false");
+    expect(host.menu.items.find((item) => item.checked)?.id).toBe("split");
     expect(posted).toContainEqual(
       expect.objectContaining({
         name: "client_error",
@@ -143,86 +133,19 @@ describe("DiffLayoutControl", () => {
         }),
       }),
     );
-  });
-
-  it("does not rewrite the layout already in effect", async () => {
-    await act(async () => trigger().click());
-    await act(async () => radio("Split").click());
-    expect(setDiffLayout).not.toHaveBeenCalled();
-  });
-
-  it("follows a layout change made outside the popover", async () => {
-    await act(async () => trigger().click());
-    // The Toggle Inline View command changes the same setting.
     await act(async () => {
-      layout = "unified";
-
-      for (const listener of listeners) listener(layout);
-    });
-    expect(radio("Unified").getAttribute("aria-checked")).toBe("true");
-  });
-
-  it("closes on Escape and on a pointer outside", async () => {
-    await act(async () => trigger().click());
-    expect(popover()).not.toBeNull();
-    await act(async () => {
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-    });
-    expect(popover()).toBeNull();
-
-    await act(async () => trigger().click());
-    await act(async () => {
-      document.body.dispatchEvent(
-        new PointerEvent("pointerdown", { bubbles: true }),
-      );
-    });
-    expect(popover()).toBeNull();
-  });
-
-  it("host radio menus preserve optimistic state, rollback and external setting updates", async () => {
-    let menu!: ReviewMenuRequest;
-
-    const ui: ReviewCanvasUi = Object.freeze<ReviewCanvasUi>({
-      showMenu: (request) => {
-        menu = request;
-
-        return { dispose() {} };
-      },
-    });
-
-    await act(async () =>
-      root.render(
-        <CanvasUiContext.Provider value={ui}>
-          <ReviewSessionProvider session={session}>
-            <DiffLayoutControl />
-          </ReviewSessionProvider>
-        </CanvasUiContext.Provider>,
-      ),
-    );
-    const write = Promise.withResolvers<void>();
-    setDiffLayout.mockImplementation(() => write.promise);
-    await act(async () => trigger().click());
-    expect(menu.items.find((item) => item.checked)?.id).toBe("split");
-    expect(popover()).toBeNull();
-    await act(async () => {
-      menu.onHide();
-      await menu.onSelect("unified");
-    });
-    expect(setDiffLayout).toHaveBeenCalledExactlyOnceWith("unified");
-    await act(async () => trigger().click());
-    expect(menu.items.find((item) => item.checked)?.id).toBe("unified");
-    await act(async () => {
-      menu.onHide();
-      write.reject(new Error("Read-only settings"));
-    });
-    await act(async () => trigger().click());
-    expect(menu.items.find((item) => item.checked)?.id).toBe("split");
-    await act(async () => {
-      menu.onHide();
+      host.menu.onHide();
       confirm("unified");
     });
     await act(async () => trigger().click());
-    expect(menu.items.find((item) => item.checked)?.id).toBe("unified");
+    expect(host.menu.items.find((item) => item.checked)?.id).toBe("unified");
+  });
+
+  it("leaves the layout unchanged when the host cancels", async () => {
+    await act(async () => trigger().click());
+    await act(async () => host.menu.onHide());
+    expect(trigger().getAttribute("aria-expanded")).toBe("false");
+    expect(setDiffLayout).not.toHaveBeenCalled();
   });
 
   function trigger() {
@@ -233,21 +156,5 @@ describe("DiffLayoutControl", () => {
     if (!button) throw new Error("Diff settings button not found");
 
     return button;
-  }
-
-  function popover() {
-    return container.querySelector('[role="dialog"]');
-  }
-
-  function radio(label: string) {
-    const radios = [
-      ...container.querySelectorAll<HTMLButtonElement>('[role="radio"]'),
-    ];
-
-    const match = radios.find((candidate) => candidate.textContent === label);
-
-    if (!match) throw new Error(`${label} option not found`);
-
-    return match;
   }
 });

@@ -19,14 +19,12 @@ import { fuzzyMatches, fuzzySegments } from "../../src/fuzzy-match";
 import { CanvasUiContext, useCanvasMenu } from "./host/canvas-ui";
 import { OptionMenu } from "./option-menu";
 import { ArchiveIcon } from "./review-corner-action";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
-import { useTopbarPopover } from "./use-topbar-popover";
 import { WelcomePage } from "./welcome-page";
 
 interface ReviewHomeProps {
   reviews: readonly ReviewApiSummary[];
   onOpen(review: ReviewApiSummary): void;
-  // Deletion requires host confirmation, or an arming click without a host.
+  // Deletion requires host confirmation.
   // Absent when the host does not support deletion.
   onDelete?(review: ReviewApiSummary): Promise<void>;
   // Dismissal is reversible. Absent when the host does not
@@ -123,13 +121,17 @@ export function ReviewHome({
 
   const deleteReview = useCallback(
     async (review: ReviewApiSummary) => {
-      if (!onDelete || deleting.current.has(review.reviewId)) return;
+      if (
+        !onDelete ||
+        !ui?.confirmDelete ||
+        deleting.current.has(review.reviewId)
+      )
+        return;
       deleting.current.add(review.reviewId);
       setDeleteError(undefined);
 
       try {
-        if (ui?.confirmDelete && !(await ui.confirmDelete(reviewTitle(review))))
-          return;
+        if (!(await ui.confirmDelete(reviewTitle(review)))) return;
         setDeletions((current) =>
           new Map(current).set(review.reviewId, "pending"),
         );
@@ -569,66 +571,26 @@ function ReviewTable({
 function ReviewRowActions({ review }: { review: ReviewApiSummary }) {
   const { onDelete } = useContext(AttentionActionsContext);
   const ui = useContext(CanvasUiContext);
-  const menu = useCanvasMenu();
-  const [open, setOpen] = useState(false);
-  const control = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const popover = useTopbarPopover(open, control);
 
-  useDismissOnOutside(control, open, setOpen);
-
-  const focusAction = () =>
-    control.current
-      ?.querySelector<HTMLButtonElement>('[role="menuitem"]')
-      ?.focus();
-
-  useEffect(() => {
-    if (open) focusAction();
-  }, [open]);
+  const menu = useCanvasMenu({
+    items: [{ id: "delete", label: "Delete session" }],
+    onSelect: () => onDelete?.(review),
+  });
 
   if (!onDelete) return <DismissReviewButton review={review} />;
 
-  const showMenu = (anchor: HTMLButtonElement) =>
-    menu.show({
-      anchor,
-      items: [{ id: "delete", label: "Delete session" }],
-      onSelect: () => onDelete(review),
-    });
-
   return (
     <div
-      ref={control}
       className="review-home-row-actions"
       onClick={(event) => event.stopPropagation()}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          setOpen(false);
-          trigger.current?.focus();
-        }
-      }}
+      onKeyDown={(event) => event.stopPropagation()}
     >
       <button
-        ref={trigger}
         type="button"
         className="review-home-row-menu-trigger"
         aria-label={`Actions for ${reviewTitle(review)}`}
-        aria-haspopup="menu"
-        aria-expanded={ui?.confirmDelete ? menu.open : open}
-        onClick={(event) => {
-          if (ui?.confirmDelete) showMenu(event.currentTarget);
-          else setOpen(!open);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-            event.preventDefault();
-
-            if (ui?.confirmDelete) showMenu(event.currentTarget);
-            else {
-              setOpen(true);
-              focusAction();
-            }
-          }
-        }}
+        {...menu.triggerProps}
+        disabled={!ui?.confirmDelete}
       >
         <svg viewBox="0 0 20 20" aria-hidden="true">
           <circle cx="4.5" cy="10" r="1.6" />
@@ -636,17 +598,6 @@ function ReviewRowActions({ review }: { review: ReviewApiSummary }) {
           <circle cx="15.5" cy="10" r="1.6" />
         </svg>
       </button>
-      {open ? (
-        <div
-          ref={popover}
-          popover="manual"
-          role="menu"
-          aria-label="Session actions"
-          className="review-home-row-menu"
-        >
-          <DeleteReviewButton review={review} onDelete={onDelete} menu />
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -799,67 +750,33 @@ function DismissReviewButton({ review }: { review: ReviewApiSummary }) {
   );
 }
 
-/**
- * Hostless deletion needs an arming click; Desktop confirms through its dialog service.
- */
 function DeleteReviewButton({
   review,
   onDelete,
-  menu = false,
 }: {
   review: ReviewApiSummary;
   onDelete(review: ReviewApiSummary): Promise<void>;
-  menu?: boolean;
 }) {
   const ui = useContext(CanvasUiContext);
-  const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const title = reviewTitle(review);
 
   return (
     <button
       type="button"
-      className={
-        menu
-          ? "review-home-menu-delete"
-          : armed
-            ? "review-home-delete is-armed"
-            : "review-home-delete"
-      }
-      role={menu ? "menuitem" : undefined}
-      aria-label={armed ? `Confirm delete ${title}` : `Delete ${title}`}
-      title={armed ? "Confirm delete" : "Delete session"}
-      disabled={busy}
-      onBlur={() => setArmed(false)}
+      className="review-home-delete"
+      aria-label={`Delete ${reviewTitle(review)}`}
+      title="Delete session"
+      disabled={busy || !ui?.confirmDelete}
       onKeyDown={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.stopPropagation();
-
-        if (!ui?.confirmDelete && !armed) {
-          setArmed(true);
-
-          return;
-        }
-
         setBusy(true);
         void onDelete(review)
           .catch(() => undefined)
-          .finally(() => {
-            setBusy(false);
-            setArmed(false);
-          });
+          .finally(() => setBusy(false));
       }}
     >
-      {menu ? (
-        <>
-          <TrashIcon />
-          <span>{armed ? "Confirm delete" : "Delete session"}</span>
-        </>
-      ) : armed ? (
-        "Delete?"
-      ) : (
-        <TrashIcon />
-      )}
+      <TrashIcon />
     </button>
   );
 }
