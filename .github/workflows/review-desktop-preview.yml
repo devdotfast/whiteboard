@@ -561,8 +561,9 @@ jobs:
         env:
           RELEASE_VERSION: ${{ needs.version.outputs.version }}
         run: |
-          curl -fsS https://install.dev.fast/linux/preview | grep -F "Version ${RELEASE_VERSION/-preview./~preview.}"
+          curl -fsS "https://install.dev.fast/api/update/linux-x64/preview/$(printf '0%.0s' {1..40})" | grep -F "\"productVersion\":\"${RELEASE_VERSION/-preview./~preview.}\""
           curl -fsS https://install.dev.fast/repos/dev-fast-review-preview.repo | grep -F 'baseurl=https://install.dev.fast/repos/preview/rpm/x86_64/'
+          curl -fsSI "https://install.dev.fast/repos/preview/arch/x86_64/whiteboard-preview.db" | grep -q '^HTTP/[0-9.]* 302'
 
   publish-windows:
     name: Publish Windows preview installers

@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   linux:
-    name: Build and validate Fedora and Ubuntu packages
+    name: Build and validate Fedora, Ubuntu and Arch packages
     environment: ${{ inputs.release_signing && 'review-release' || 'review-linux-ci' }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 90
@@ -65,6 +65,7 @@ jobs:
             rpm createrepo-c zstd gnupg xvfb dbus-x11 unzip dpkg-dev apt-utils file
           docker pull --platform linux/amd64 fedora:43@sha256:a651ddf48ea28a06ed4e1e6519f51c9f47e7a5a138722ade87369b8fbb7e5b42
           docker pull --platform linux/amd64 fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
+          docker pull --platform linux/amd64 archlinux:base-devel@sha256:8745817f349ed24373341ddb92776209eeec3f0364ea48f7f645ac5800d30a50
       - name: Build and assemble Linux app
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -82,9 +83,12 @@ jobs:
         run: xvfb-run -a node apps/review-desktop/scripts/smoke-launch-packaged.mjs --app apps/review-desktop/VSCode-linux-x64
       # Preview versions build the dev-fast-review-preview package; see
       # code-oss/build/linux/review-package.ts for the channel mapping.
-      - name: Create Fedora RPM and Ubuntu DEB
+      - name: Create Fedora RPM, Ubuntu DEB and Arch package
         run: |
           pnpm --filter @dev.fast/review-desktop app:package:linux:distributions
+          CHANNEL=${{ contains(inputs.version, '-preview.') && 'preview' || 'stable' }}
+          VERSION=$(node -p "require('./apps/review-desktop/package.json').version.replace('-preview.', '~preview.')")
+          bash apps/review-desktop/scripts/linux/build-arch-package.sh apps/review-desktop/dist/linux "$CHANNEL" "$VERSION" "$REVIEW_LINUX_PACKAGE_REVISION"
       - name: Prepare repository signing key
         id: signing
         env:
