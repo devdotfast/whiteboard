@@ -68,9 +68,12 @@ export interface ReviewOptionalExtensionCatalogEntry {
 	readonly targets: Readonly<Record<string, ReviewOptionalExtensionTargetPin>>;
 }
 
-function supportedTarget(platform: string, arch: string): 'darwin-arm64' | 'linux-x64' | 'win32-x64' | undefined {
+function supportedTarget(platform: string, arch: string): 'darwin-arm64' | 'darwin-x64' | 'linux-x64' | 'win32-x64' | undefined {
 	if (platform === 'darwin' && arch === 'arm64') {
 		return 'darwin-arm64';
+	}
+	if (platform === 'darwin' && arch === 'x64') {
+		return 'darwin-x64';
 	}
 	if (platform === 'win32' && arch === 'x64') {
 		return 'win32-x64';

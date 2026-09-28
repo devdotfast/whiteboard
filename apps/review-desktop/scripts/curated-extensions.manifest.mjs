@@ -82,6 +82,12 @@ export const curatedExtensions = Object.freeze([
           "e068ebb88f705491856b91cdbf8b7ead40c22d50f2c24df70e345c889c2b0111",
         size: 15445156,
       },
+      "darwin-x64": {
+        url: "https://open-vsx.org/api/rust-lang/rust-analyzer/darwin-x64/0.4.2990/file/rust-lang.rust-analyzer-0.4.2990@darwin-x64.vsix",
+        sha256:
+          "00e0f18acff0ba954810d2234af3c2e3fd9703f8d44c6bc2ae705127fa2f6a65",
+        size: 15926469,
+      },
       "linux-x64": {
         url: "https://open-vsx.org/api/rust-lang/rust-analyzer/linux-x64/0.4.2990/file/rust-lang.rust-analyzer-0.4.2990@linux-x64.vsix",
         sha256:
@@ -162,6 +168,12 @@ export const curatedExtensions = Object.freeze([
           "93f61e8b6938cbe8ecda8768bfaf08abed9789db9461177d3d0ab59ccda2528d",
         size: 75096042,
       },
+      "darwin-x64": {
+        url: "https://open-vsx.org/api/muhammad-sammy/csharp/darwin-x64/2.145.21-g154a82fd27/file/muhammad-sammy.csharp-2.145.21-g154a82fd27@darwin-x64.vsix",
+        sha256:
+          "8164ff9ad9ceb849d13ee8c768c97861f0028f48f538ce9658731350e4b88b2d",
+        size: 78021251,
+      },
       "linux-x64": {
         url: "https://open-vsx.org/api/muhammad-sammy/csharp/linux-x64/2.145.21-g154a82fd27/file/muhammad-sammy.csharp-2.145.21-g154a82fd27@linux-x64.vsix",
         sha256:
@@ -232,6 +244,10 @@ export const curatedExtensions = Object.freeze([
         sha256:
           "3ac92b3f4b7ac848ea9a125a787a0b181879835d54b2e136e760161df414b08a",
       },
+      "darwin-x64": {
+        sha256:
+          "27d57df17fc3670b8c818b246f08cbb150ceaa2005273a06b23bc4b6241e66c1",
+      },
       "linux-x64": {
         sha256:
           "d64fc3104f07c4d47c3122a0fa9f2da3e593937c8b506b5f952b4283d877d212",
@@ -258,6 +274,10 @@ export const curatedExtensions = Object.freeze([
       "darwin-arm64": {
         sha256:
           "652cf695fbe11c4bcae85432b3baf70f8bc2520dc13bbc5dd95b3600c8b1f227",
+      },
+      "darwin-x64": {
+        sha256:
+          "9c780cad1d6a6f26593ecde22190cb04e4345ac512ca86104b697c04a6b005c1",
       },
       "linux-x64": {
         sha256:
@@ -298,6 +318,7 @@ export const curatedExtensions = Object.freeze([
 /** Build targets Review knows how to materialize platform-specific VSIXes for. */
 export const supportedTargets = Object.freeze([
   "darwin-arm64",
+  "darwin-x64",
   "linux-x64",
   "win32-x64",
 ]);

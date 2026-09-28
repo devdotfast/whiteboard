@@ -10,7 +10,7 @@ import { DisposableStore } from '../../../base/common/lifecycle.js';
 import { isLinux, isMacintosh, isWindows } from '../../../base/common/platform.js';
 import { ThemeIcon } from '../../../base/common/themables.js';
 import { URI } from '../../../base/common/uri.js';
-import { ipcRenderer } from '../../../base/parts/sandbox/electron-browser/globals.js';
+import { ipcRenderer, process } from '../../../base/parts/sandbox/electron-browser/globals.js';
 import { Action2, MenuId, MenuRegistry, registerAction2 } from '../../../platform/actions/common/actions.js';
 import { CommandsRegistry, ICommandService } from '../../../platform/commands/common/commands.js';
 import { IConfigurationService, ConfigurationTarget } from '../../../platform/configuration/common/configuration.js';
@@ -210,7 +210,7 @@ function findInstalled(installed: readonly ILocalExtension[], id: string): ILoca
 }
 
 function optionalDownloadSize(group: string, installed: readonly ILocalExtension[]): number {
-	const target = isMacintosh ? 'darwin-arm64' : isLinux ? 'linux-x64' : isWindows ? 'win32-x64' : undefined;
+	const target = isMacintosh ? (process.arch === 'x64' ? 'darwin-x64' : 'darwin-arm64') : isLinux ? 'linux-x64' : isWindows ? 'win32-x64' : undefined;
 	return reviewOptionalExtensionCatalog
 		.filter(extension => extension.group === group && !findInstalled(installed, extension.id))
 		.reduce((total, extension) => {
