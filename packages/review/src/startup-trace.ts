@@ -9,10 +9,9 @@
 // browser requests, parallel worktree creation) nests correctly. The whole
 // span tree is flushed as JSON on process exit.
 //
-// The directory form exists for the authoring-latency harness: an agent runs
-// many `review` commands (some delegated to a second process), and each one
-// must land in its own file that the harness can join back to the agent's
-// tool call by wall-clock (`timeOrigin`) and `argv`.
+// The directory form suits runs of many `review` commands (some delegated to a
+// second process): each one lands in its own file, which a caller can join
+// back to what launched it by wall-clock (`timeOrigin`) and `argv`.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
