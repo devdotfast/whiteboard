@@ -5,9 +5,10 @@
    name the pairs that depend on it. */
 
 /* Faces, React Flow's base styles, design tokens, element resets and the
-   controls every surface shares. */
+   controls every surface shares. React Flow sits in a layer, so any canvas
+   rule beats it whatever the selectors' specificity. */
 @import "./fonts/fonts.css";
-@import "@xyflow/react/dist/style.css";
+@import "@xyflow/react/dist/style.css" layer(vendor);
 @import "./theme.css";
 @import "./base.css";
 @import "./controls.css";
