@@ -248,7 +248,8 @@
     "node-gyp-build": "4.8.1",
     "serialize-javascript": "^7.0.3",
     "yauzl": "^3.3.1",
-    "braces": "^3.0.3"
+    "braces": "^3.0.3",
+    "postcss": "^8.5.28"
   },
   "repository": {
     "type": "git",
