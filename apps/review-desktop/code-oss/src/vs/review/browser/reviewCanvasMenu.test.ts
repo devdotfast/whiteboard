@@ -9,6 +9,8 @@ function setup() {
   let current = true;
   let connected = true;
   let hides = 0;
+  let owned = true;
+  let closed = 0;
   let focuses = 0;
   const selected: string[] = [];
   const doc = { body: {}, activeElement: undefined as unknown };
@@ -20,8 +22,11 @@ function setup() {
     onSelect: id => { selected.push(id); },
     onHide: () => { hides++; },
   };
-  const menu = showReviewCanvasMenu({ showContextMenu: value => { delegate = value as IContextMenuDelegate; } }, request, () => current);
-  return { menu, delegate, selected, request, doc, stale: () => { current = false; }, detach: () => { connected = false; }, counts: () => ({ hides, focuses }) };
+  const menu = showReviewCanvasMenu({ showContextMenu: value => { delegate = value as IContextMenuDelegate; } }, request, () => current, {
+    getContextViewElement: () => ({classList: {contains: () => owned}} as unknown as HTMLElement),
+    hideContextView: () => { closed++; delegate.onHide?.(true); },
+  });
+  return { menu, delegate, selected, request, doc, stale: () => { current = false; }, detach: () => { connected = false; }, replace: () => { owned = false; }, closed: () => closed, counts: () => ({ hides, focuses }) };
 }
 
 test("hide before selection dispatches once without stealing action focus", async () => {
@@ -65,7 +70,7 @@ test("disabled, detached, disposed and old-canvas actions are ignored", async ()
     await Promise.resolve();
     assert.deepEqual(s.selected, []);
     assert.equal(s.counts().focuses, 0);
-    assert.equal(s.counts().hides, invalidate === "dispose" ? 0 : 1);
+    assert.equal(s.counts().hides, 1);
   }
 });
 
@@ -73,4 +78,19 @@ test("an action failure reaches the host notification handler", async () => {
   const s = setup();
   s.request.onSelect = async () => { throw new Error("Failed action"); };
   await assert.rejects(async () => { await s.delegate.getActions()[0]!.run(); }, /Failed action/);
+});
+
+test("disposing closes its owned HTML menu once and resets open state", () => {
+  const s = setup();
+  s.menu.dispose();
+  s.menu.dispose();
+  assert.equal(s.closed(), 1);
+  assert.deepEqual(s.counts(), { hides: 1, focuses: 0 });
+});
+
+test("disposing never closes a replacement context view", () => {
+  const s = setup();
+  s.replace();
+  s.menu.dispose();
+  assert.equal(s.closed(), 0);
 });

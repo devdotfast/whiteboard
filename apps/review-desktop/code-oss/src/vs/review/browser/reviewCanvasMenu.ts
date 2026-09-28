@@ -1,12 +1,16 @@
 import type { IAction } from "../../base/common/actions.js";
-import type { IContextMenuService } from "../../platform/contextview/browser/contextView.js";
+import type { IContextMenuService, IContextViewService } from "../../platform/contextview/browser/contextView.js";
 import type { ReviewMenuRequest, ReviewDisposable } from "../common/reviewProtocol.js";
+
+let nextMenuId = 0;
 
 export function showReviewCanvasMenu(
   service: Pick<IContextMenuService, "showContextMenu">,
   request: ReviewMenuRequest,
   isCurrent: () => boolean,
+  views: Pick<IContextViewService, "getContextViewElement" | "hideContextView">,
 ): ReviewDisposable {
+  const menuClass = `review-canvas-menu-${++nextMenuId}`;
   let disposed = false;
   let hidden = false;
   let selected = false;
@@ -26,6 +30,7 @@ export function showReviewCanvasMenu(
   }));
   service.showContextMenu({
     getAnchor: () => request.anchor,
+    getMenuClassName: () => menuClass,
     getActions: () => actions,
     getCheckedActionsRepresentation: () => "radio",
     autoSelectFirstItem: true,
@@ -46,5 +51,18 @@ export function showReviewCanvasMenu(
       });
     },
   });
-  return { dispose: () => { disposed = true; } };
+  return {
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      if (!hidden) {
+        hidden = true;
+        request.onHide();
+        // Only close our HTML menu. Native menus have no close handle.
+        if (views.getContextViewElement().classList.contains(menuClass)) {
+          views.hideContextView(true);
+        }
+      }
+    },
+  };
 }
