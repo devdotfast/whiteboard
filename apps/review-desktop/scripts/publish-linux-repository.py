@@ -92,6 +92,15 @@ def publish(directory, bucket, base_url, channel=None):
         ]
         if any(name not in files for name in required):
             raise ValueError("Incomplete APT publication")
+    if current.get("arch") is True:
+        if fetch_json(base_url + "/repos/arch/health") != {"schemaVersion": 1, "format": "pacman"}:
+            raise RuntimeError("Deploy the Arch repository Worker before publishing")
+        required = [
+            f"{prefix}/snapshots/{current['generation']}/arch/x86_64/{package_name}.{name}"
+            for name in ["db", "db.sig", "files", "files.sig"]
+        ]
+        if not package_name or any(name not in files for name in required):
+            raise ValueError("Incomplete Arch publication")
     # Compare-and-swap prevents concurrent or stale workflow reruns from moving
     # the repository backwards after a newer release has already won.
     with tempfile.TemporaryDirectory(prefix="review-current-") as temporary:

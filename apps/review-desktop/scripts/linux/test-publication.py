@@ -189,6 +189,50 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(keys[-1], self.pointer_key)
         self.assertEqual(set(keys), set(self.digests))
 
+    def seal_arch(self):
+        self.current["arch"] = True
+        (self.root / self.pointer_key).write_text(json.dumps(self.current))
+        self.digests[self.pointer_key] = publisher.checksum(self.root / self.pointer_key)
+        for name in ["db", "db.sig", "files", "files.sig"]:
+            key = f"{self.prefix}/snapshots/{self.current['generation']}/arch/x86_64/{self.current['packageName']}.{name}"
+            path = self.root / key
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"sealed pacman database")
+            self.digests[key] = publisher.checksum(path)
+        (self.root / "sha256.json").write_text(json.dumps(self.digests))
+
+    def with_arch_worker(self):
+        original = self.request
+        def request(url, **kwargs):
+            if url.full_url.endswith("/arch/health"):
+                return io.BytesIO(b'{"schemaVersion":1,"format":"pacman"}')
+            return original(url, **kwargs)
+        self.request = request
+
+    def test_arch_publication_requires_worker_support_before_upload(self):
+        self.seal_arch()
+        with self.assertRaisesRegex(RuntimeError, "Deploy the Arch repository Worker"):
+            self.publish()
+        self.assertEqual(self.writes(), [])
+
+    def test_incomplete_arch_snapshot_cannot_be_promoted(self):
+        self.seal_arch()
+        missing = next(key for key in self.digests if key.endswith(".db.sig"))
+        del self.digests[missing]
+        (self.root / "sha256.json").write_text(json.dumps(self.digests))
+        self.with_arch_worker()
+        with self.assertRaisesRegex(ValueError, "Incomplete Arch publication"):
+            self.publish()
+        self.assertEqual(self.writes(), [])
+
+    def test_arch_promotes_with_the_pointer_after_all_uploads(self):
+        self.seal_arch()
+        self.with_arch_worker()
+        self.publish()
+        keys = [call[call.index("--key") + 1] for call in self.writes()]
+        self.assertEqual(keys[-1], self.pointer_key)
+        self.assertEqual(set(keys), set(self.digests))
+
     def test_changed_sealed_bytes_fail_before_upload(self):
         (self.root / "repos/package").write_bytes(b"changed")
         with self.assertRaisesRegex(ValueError, "checksum mismatch"):
