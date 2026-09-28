@@ -533,6 +533,8 @@ jobs:
 
   publish-linux:
     name: Publish Linux preview repository
+    permissions:
+      contents: write
     needs: [version, build, linux]
     if: ${{ !cancelled() && !inputs.dry_run && needs.version.result == 'success' && needs.linux.result == 'success' && (inputs.platforms == 'linux' || needs.build.result == 'success') }}
     uses: ./.github/workflows/review-linux-publish.yml
@@ -588,8 +590,8 @@ jobs:
           curl -sfL -o /dev/null -w "%{http_code} %{content_type}\n" https://install.dev.fast/windows/preview \
             | grep -F "200 application/vnd.microsoft.portable-executable"
 
-  # The one job here that can write to the repository, and it holds no signing
-  # or R2 credentials. `needs: version` carries the initial approval
+  # This tagging job holds no signing or R2 credentials.
+  # `needs: version` carries the initial approval
   # gate transitively, and `needs: publish-macos`, `needs: publish-linux` and
   # `needs: publish-windows` mean a tag only ever names a preview that published
   # on every platform, answered its update feeds, and served its installers.
