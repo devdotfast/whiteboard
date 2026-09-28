@@ -22,6 +22,7 @@ export interface IWorkbenchUIElementFactory {
 
 	/** Controls the outer multi-diff scroller for compact embedded hosts. */
 	readonly horizontalScrollbar?: 'auto' | 'hidden';
+	readonly bottomScrollPadding?: number;
 
 	/**
 	 * External host for the inner editors' overflowing widgets (hover,

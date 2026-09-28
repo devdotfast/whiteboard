@@ -278,7 +278,7 @@ export class MultiDiffEditorWidgetImpl extends Disposable {
 				height: height,
 				scrollHeight: scrollRange
 					? Math.max(0, Math.min(totalHeight, scrollRange.endExclusive) - scrollRange.start)
-					: totalHeight,
+					: totalHeight + (viewItems.length ? this._workbenchUIElementFactory.bottomScrollPadding ?? 0 : 0),
 				scrollWidth,
 			});
 

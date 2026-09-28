@@ -1,3 +1,4 @@
+import { reviewBottomScrollPadding } from "../browser/reviewScrollPadding.js";
 import { observableValue } from "../../base/common/observable.js";
 import type { ReviewDiffProgressState, ReviewDiffSection } from "../common/reviewProtocol.js";
 /*---------------------------------------------------------------------------------------------
@@ -43,6 +44,8 @@ export interface ReviewMultiDiffHeaderEntry {
 export class ReviewMultiDiffUIElementFactory
   implements IWorkbenchUIElementFactory
 {
+
+  readonly bottomScrollPadding = reviewBottomScrollPadding;
 
   get headerClickToCollapse(): boolean {
     return !this.hideResourceHeader;

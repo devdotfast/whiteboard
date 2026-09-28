@@ -797,7 +797,8 @@ button {
 .review-home-scroll {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 36px clamp(36px, calc(12.5cqw - 60px), 120px) 56px;
+  padding: 36px clamp(36px, calc(12.5cqw - 60px), 120px)
+    max(56px, var(--review-bottom-scroll-padding, 0px));
   overflow: auto;
   scrollbar-gutter: stable;
 }
@@ -1776,7 +1777,7 @@ button {
 
 @container review-canvas (max-width: 660px) {
   .review-home-scroll {
-    padding: 32px 24px 56px;
+    padding: 32px 24px max(56px, var(--review-bottom-scroll-padding, 0px));
   }
 
   .review-home-page-header {
@@ -3100,6 +3101,7 @@ button {
 }
 
 .review-panel-body {
+  padding-bottom: var(--review-bottom-scroll-padding, 0px);
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
@@ -4207,7 +4209,11 @@ button {
   scrollbar-width: thin;
   /* --review-toc-tail is the room the contents rail adds so the last heading
      can scroll up to the top edge, measured by the rail itself. */
-  padding: var(--review-page-top) 52px calc(120px + var(--review-toc-tail, 0px));
+  padding: var(--review-page-top) 52px
+    calc(
+      max(120px, var(--review-bottom-scroll-padding, 0px)) +
+        var(--review-toc-tail, 0px)
+    );
 }
 
 .review-view-region--review::-webkit-scrollbar {

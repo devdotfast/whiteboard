@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { reviewBottomScrollPadding } from "./reviewScrollPadding.js";
 import { buildTree, type ChangedFileElement, type ChangedTreeElement } from "../common/reviewChangedFilesModel.js";
 
 import { $, append } from "../../base/browser/dom.js";
@@ -257,6 +258,7 @@ export class ReviewChangedFilesTree extends Disposable {
           },
           alwaysConsumeMouseWheel: false,
           horizontalScrolling: false,
+          paddingBottom: reviewBottomScrollPadding,
           identityProvider: {
             getId: (element) =>
               element.kind === "file"

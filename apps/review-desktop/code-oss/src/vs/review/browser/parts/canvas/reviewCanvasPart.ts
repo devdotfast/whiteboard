@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { reviewBottomScrollPadding } from "../../reviewScrollPadding.js";
 import { $, addDisposableListener, getWindow, type Dimension } from "../../../../base/browser/dom.js";
 import type { IHoverOptions, IHoverWidget } from "../../../../base/browser/ui/hover/hover.js";
 import { HoverPosition } from "../../../../base/browser/ui/hover/hoverWidget.js";
@@ -261,6 +262,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		this.container = $(".review-canvas-host");
 		this.container.tabIndex = -1;
 		this.canvasMount = $(".review-canvas-surface");
+		this.canvasMount.style.setProperty("--review-bottom-scroll-padding", `${reviewBottomScrollPadding}px`);
 		this.container.appendChild(this.canvasMount);
 		outer.append(this.container);
 		parent.appendChild(outer);
