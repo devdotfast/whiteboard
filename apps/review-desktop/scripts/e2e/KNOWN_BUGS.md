@@ -191,10 +191,10 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   `<repo>-moved/.git/dev-fast/reviews/<uuid>/head/<sha>` and moved with the
   repository — or says which checkout it can no longer find.
 - **Actual:** the canvas renders only
-  `<p role="status">ReviewApiError: Review operation failed.</p>` inside
+  `<p role="status">ReviewApiError: Whiteboard operation failed (…).</p>` inside
   `.review-canvas-root [data-review-api]`, with no title, no document and no
   path. `GET /reviews-api/<uuid>/commits?version=<n>` answers 500 with
-  `{"error":"Review operation failed."}`; `GET /reviews-api/<uuid>?full=true`
+  `{"error":"Whiteboard operation failed (…). …"}`; `GET /reviews-api/<uuid>?full=true`
   and `GET /reviews-api` still answer 200 with the whole document, so the
   document is intact and only the source-backed read fails. A plain restart
   with the repository left in place renders the same review normally, so the
