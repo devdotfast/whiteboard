@@ -382,8 +382,7 @@ interface Layout {
 
 const SIZE = { width: 210, height: 62 };
 
-// The tour's fullscreen copy of an inline flow draws on its first render
-// instead of laying the same block out again.
+// So the tour's fullscreen copy draws on its first render.
 const cachedLayouts = new WeakMap<
   FlowDiagramBlock,
   Map<"down" | "right" | undefined, Layout>
