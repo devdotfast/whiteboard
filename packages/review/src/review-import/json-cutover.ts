@@ -140,7 +140,10 @@ export async function migrateJsonReviews(input: {
         source?.close();
       }
 
-      const { store, data } = openLocalReviewStore(candidate);
+      // An audit copy must never collect or free the real pinned checkouts.
+      const { store, data } = openLocalReviewStore(candidate, {
+        manageWorkspaces: false,
+      });
 
       try {
         for (const original of originals) {

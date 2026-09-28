@@ -540,6 +540,10 @@ export class LocalReviewData {
   }): AsyncGenerator<StructuralDiffEvent> {
     if (file !== undefined) checkRelativePath(file);
 
+    // Waiting covers a release already queued. One that starts mid-stream
+    // fails this stream, and the reader's next request rebuilds the checkout.
+    await this.workspaceManager?.released(reviewId);
+
     const rootPath = await ensureReviewPinnedCheckout({
       rootPath: this.store.repositoryPath(pins.repositoryId),
       ref: pins.head,

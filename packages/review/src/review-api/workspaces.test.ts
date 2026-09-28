@@ -391,3 +391,72 @@ it.skipIf(process.getuid?.() === 0)(
     ).toContain("42");
   },
 );
+
+it("keeps the checkouts of a dismissed review that was opened again", async () => {
+  const { rootPath } = await local.data.workspaces.source(
+    reviewId,
+    pins,
+    "head",
+  );
+
+  await local.data.close();
+  await local.store.close();
+  const headless = openLocalReviewStore(database, { manageWorkspaces: false });
+
+  for (const action of ["dismiss", "view"] as const) {
+    await headless.store.execute({
+      commandId: randomUUID(),
+      operation: { type: "attention", reviewId, action },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  await headless.data.close();
+  await headless.store.close();
+
+  local = openLocalReviewStore(database);
+  await local.data.workspaces.idle();
+  expect(existsSync(path.join(rootPath!, "value.ts"))).toBe(true);
+});
+
+it("rebuilds a checkout requested while its release is running", async () => {
+  // Each registered repository lengthens the release before it removes anything.
+  for (let index = 0; index < 8; index++) {
+    const extra = path.join(directory, `extra-${index}`);
+    execFileSync("git", ["init", "-q", extra]);
+    await local.data.register(extra);
+  }
+
+  await local.data.workspaces.source(reviewId, pins, "head");
+  await command({ type: "attention", reviewId, action: "dismiss" });
+  const requested = await local.data.workspaces.source(reviewId, pins, "head");
+  await local.data.workspaces.idle();
+
+  expect(
+    readFileSync(path.join(requested.rootPath!, "value.ts"), "utf8"),
+  ).toContain("42");
+  expect(local.data.workspaces.list(reviewId)).toContainEqual(requested);
+});
+
+it("reports a failed release and retries it", async () => {
+  const environment = await local.data.workspaces.source(
+    reviewId,
+    pins,
+    "head",
+  );
+
+  git("worktree", "lock", environment.rootPath!);
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  await command({ type: "attention", reviewId, action: "dismiss" });
+  await local.data.workspaces.idle();
+
+  expect(error).toHaveBeenCalled();
+  expect(local.data.workspaces.failures()).toMatchObject([
+    { id: environment.id, state: "cleanup-failed" },
+  ]);
+  expect(existsSync(path.join(environment.rootPath!, "value.ts"))).toBe(true);
+  git("worktree", "unlock", environment.rootPath!);
+  await local.data.workspaces.retryCleanup(environment.id);
+  expect(local.data.workspaces.failures()).toEqual([]);
+  expect(existsSync(environment.rootPath!)).toBe(false);
+});

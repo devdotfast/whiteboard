@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, realpathSync, rmSync } from "node:fs";
 import { mkdir, rm, rmdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -15,6 +15,7 @@ import {
   legacyReviewWorktreesDir,
   reviewManagedCheckoutDir,
   reviewManagedCheckoutRoot,
+  reviewManagedCheckoutsDir,
 } from "./review-checkout-paths";
 import { removeReviewPrepareArtifacts } from "./review-prepare.js";
 
@@ -157,15 +158,31 @@ export async function removeReviewPinnedCheckout(input: {
   return existed;
 }
 
-/** Remove every checkout one Review owns in a repository, with its registrations. */
+/**
+ * Remove every checkout one Review owns in a repository. Registrations go
+ * first, so an interrupted removal cannot leave a gutted tree that git still
+ * lists and a later ensure would reuse.
+ */
 export async function removeReviewManagedCheckouts(
   commonDir: string,
   reviewUuid: string,
 ): Promise<void> {
-  await rm(reviewManagedCheckoutRoot(commonDir, reviewUuid), {
-    recursive: true,
-    force: true,
-  });
+  const root = reviewManagedCheckoutRoot(commonDir, reviewUuid);
+
+  if (!isInsideDirectory(root, reviewManagedCheckoutsDir(commonDir)))
+    throw new Error(`Refusing to remove non-managed checkouts at ${root}.`);
+  const roots = [root, ...(existsSync(root) ? [realpathSync(root)] : [])];
+
+  for (const worktree of await listRegisteredWorktrees(commonDir))
+    if (roots.some((dir) => isInsideDirectory(worktree.worktreePath, dir)))
+      await git(commonDir, [
+        "worktree",
+        "remove",
+        "--force",
+        worktree.worktreePath,
+      ]);
+
+  await rm(root, { recursive: true, force: true });
   await git(commonDir, ["worktree", "prune"], { allowFailure: true });
 }
 

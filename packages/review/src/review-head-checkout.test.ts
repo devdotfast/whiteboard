@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { reviewManagedCheckoutDir } from "./review-checkout-paths";
 import {
   ensureReviewPinnedCheckout,
+  removeReviewManagedCheckouts,
   removeReviewPinnedCheckout,
 } from "./review-head-checkout";
 
@@ -321,6 +322,37 @@ describe("removeReviewPinnedCheckout", () => {
     expect(readFileSync(path.join(repo.rootPath, "README.md"), "utf8")).toBe(
       "base\n",
     );
+  });
+});
+
+describe("removeReviewManagedCheckouts", () => {
+  const cleanupPaths: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(
+      cleanupPaths
+        .splice(0)
+        .map((target) => rm(target, { recursive: true, force: true })),
+    );
+  });
+
+  it("refuses a review id that escapes the managed checkouts dir", async () => {
+    const repo = await createRepoWithFeature(cleanupPaths);
+
+    const checkoutPath = await ensureReviewPinnedCheckout({
+      rootPath: repo.rootPath,
+      ref: repo.headCommit,
+      reviewUuid: TEST_REVIEW_UUID,
+    });
+
+    for (const reviewUuid of ["..", "."])
+      await expect(
+        removeReviewManagedCheckouts(repo.commonDir, reviewUuid),
+      ).rejects.toThrow(/non-managed/);
+
+    expect(
+      readFileSync(path.join(checkoutPath ?? "", "README.md"), "utf8"),
+    ).toBe("head\n");
   });
 });
 
