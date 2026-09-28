@@ -73,6 +73,47 @@ it.each([0, 1, 2, "all"])("renders after removing edge %s", async (removed) => {
   }
 });
 
+it("draws a second copy of a laid-out flow without laying it out again", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const session = testReviewSession();
+
+  const block = flowDiagramSchema.parse({
+    type: "flow_diagram",
+    title: "Flow",
+    nodes: ["a", "b"].map((key) => ({ key, label: key, attachments: [] })),
+    edges: [{ from: "a", to: "b" }],
+  });
+
+  const render = (copies: number) =>
+    act(async () => {
+      root.render(
+        <ReviewSessionProvider session={session}>
+          <ReviewDebugSettingsProvider>
+            {Array.from({ length: copies }, (_, index) => (
+              <FlowGraph key={index} block={block} onSelect={() => {}} />
+            ))}
+          </ReviewDebugSettingsProvider>
+        </ReviewSessionProvider>,
+      );
+    });
+
+  try {
+    await render(1);
+    expect(
+      await settled(
+        () => container.querySelectorAll(".flow-node").length === 2,
+      ),
+    ).toBe(true);
+    await render(2);
+    expect(container.textContent).not.toContain("Laying out flow");
+    expect(container.querySelectorAll(".flow-node")).toHaveLength(4);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
 describe("zooming a flow by hand", () => {
   const unmounts: (() => Promise<void>)[] = [];
 

@@ -68,7 +68,7 @@ export function FlowGraph({
   const layout =
     computed?.block === block && computed.direction === direction
       ? computed.layout
-      : undefined;
+      : cachedLayouts.get(block)?.get(direction);
 
   const frame = useRef<HTMLDivElement>(null);
 
@@ -80,8 +80,14 @@ export function FlowGraph({
   useEffect(() => {
     let cancelled = false;
     setError(undefined);
+
+    if (cachedLayouts.get(block)?.has(direction)) return;
+
     void layoutFlow(block, direction)
       .then((result) => {
+        const byDirection = cachedLayouts.get(block) ?? new Map();
+        cachedLayouts.set(block, byDirection.set(direction, result));
+
         if (!cancelled) setLayout({ block, direction, layout: result });
       })
       .catch((error) => {
@@ -375,6 +381,13 @@ interface Layout {
 }
 
 const SIZE = { width: 210, height: 62 };
+
+// The tour's fullscreen copy of an inline flow draws on its first render
+// instead of laying the same block out again.
+const cachedLayouts = new WeakMap<
+  FlowDiagramBlock,
+  Map<"down" | "right" | undefined, Layout>
+>();
 
 // The label's 9px mono font, so ELK leaves room for it between layers.
 const LABEL = { charWidth: 5.4, height: 12, maxLength: 28 };
