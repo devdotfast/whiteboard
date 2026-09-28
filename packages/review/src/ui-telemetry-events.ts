@@ -137,6 +137,7 @@ export const SETTING_NAME = [
   "diffr_config",
   "structural_diff",
   "theme",
+  "ctrl_tab",
 ] as const;
 
 export const REVIEW_OPENED_VIA = ["home", "cli", "other"] as const;

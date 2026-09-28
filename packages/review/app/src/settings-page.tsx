@@ -1,6 +1,7 @@
 import type {
   ReviewCanvasSettingsContent,
   ReviewCliInstallStatus,
+  ReviewCtrlTabChoice,
   ReviewKeymapChoice,
   ReviewThemeChoice,
 } from "@dev.fast/review-protocol";
@@ -22,6 +23,11 @@ const KEYMAP_LABELS: Record<ReviewKeymapChoice, string> = {
   emacs: "Emacs",
 };
 
+const CTRL_TAB_LABELS: Record<ReviewCtrlTabChoice, string> = {
+  recent: "Last used tab",
+  next: "Next tab",
+};
+
 /**
  * The Settings page. It opens from the application menu (Preferences →
  * Settings...), the command palette, or ⌘,. Reuses the Home page shell so the
@@ -41,6 +47,7 @@ export function SettingsPage({
 
   const [theme, setTheme] = useState(settings.theme);
   const [keymap, setKeymap] = useState(settings.keymap);
+  const [ctrlTab, setCtrlTab] = useState(settings.ctrlTab);
 
   const [softwareMapEnabled, setSoftwareMapEnabled] = useState(
     settings.softwareMapEnabled,
@@ -196,6 +203,24 @@ export function SettingsPage({
                     setKeymap,
                   );
                 }}
+              />
+            </Row>
+            <Row
+              label="Ctrl+Tab"
+              description="Jump back to the last used tab, or step through the tab bar."
+            >
+              <Choice
+                label="Ctrl+Tab"
+                value={ctrlTab}
+                labels={CTRL_TAB_LABELS}
+                disabled={busy !== null}
+                onChange={(choice) =>
+                  void run(
+                    "ctrl-tab",
+                    () => settings.setCtrlTab(choice),
+                    setCtrlTab,
+                  )
+                }
               />
             </Row>
           </Section>

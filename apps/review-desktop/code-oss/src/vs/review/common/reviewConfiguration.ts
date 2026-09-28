@@ -20,7 +20,7 @@
 import { localize } from '../../nls.js';
 import { Registry } from '../../platform/registry/common/platform.js';
 import { ConfigurationScope, Extensions, type IConfigurationRegistry } from '../../platform/configuration/common/configurationRegistry.js';
-import { REVIEW_KEYMAPS, REVIEW_KEYMAP_SETTING, REVIEW_SOFTWARE_MAP_SETTING, REVIEW_STRUCTURAL_DIFF_SETTING, REVIEW_TELEMETRY_SETTING, curatedExtensionConfigurationDefaults, reviewConfigurationDefaults } from './reviewConfigurationDefaults.js';
+import { REVIEW_CTRL_TAB_CHOICES, REVIEW_CTRL_TAB_SETTING, REVIEW_KEYMAPS, REVIEW_KEYMAP_SETTING, REVIEW_SOFTWARE_MAP_SETTING, REVIEW_STRUCTURAL_DIFF_SETTING, REVIEW_TELEMETRY_SETTING, curatedExtensionConfigurationDefaults, reviewConfigurationDefaults } from './reviewConfigurationDefaults.js';
 
 const configurationRegistry = Registry.as<IConfigurationRegistry>(Extensions.Configuration);
 
@@ -35,6 +35,16 @@ configurationRegistry.registerConfiguration({
 			enum: [...REVIEW_KEYMAPS],
 			default: 'none',
 			description: localize('review.keymap', "Select the curated keymap extension Whiteboard enables."),
+		},
+		[REVIEW_CTRL_TAB_SETTING]: {
+			type: 'string',
+			enum: [...REVIEW_CTRL_TAB_CHOICES],
+			enumDescriptions: [
+				localize('review.tabs.ctrlTab.recent', "Switch to the last used tab. Press again to switch back."),
+				localize('review.tabs.ctrlTab.next', "Switch to the next tab in the tab bar. Ctrl+Shift+Tab switches to the previous one."),
+			],
+			default: 'recent',
+			description: localize('review.tabs.ctrlTab', "What Ctrl+Tab does."),
 		},
 		[REVIEW_TELEMETRY_SETTING]: {
 			type: 'boolean',

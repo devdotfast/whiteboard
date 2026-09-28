@@ -28,6 +28,8 @@ export const REVIEW_STRUCTURAL_DIFF_SETTING = 'review.experimental.structuralDif
 export const REVIEW_SOFTWARE_MAP_SETTING = 'review.experimental.softwareMap.enabled';
 export const REVIEW_KEYMAPS = ['none', 'vim', 'emacs'] as const;
 export type ReviewKeymap = typeof REVIEW_KEYMAPS[number];
+export const REVIEW_CTRL_TAB_SETTING = 'review.tabs.ctrlTab';
+export const REVIEW_CTRL_TAB_CHOICES = ['recent', 'next'] as const;
 
 export const reviewConfigurationDefaults = {
 	[REVIEW_SOFTWARE_MAP_SETTING]: false,

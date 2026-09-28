@@ -392,8 +392,8 @@ export interface ReviewCanvasOnboarding {
 }
 
 // The workbench owns the theme and the keymap; the canvas only names a choice.
-// Both lists mirror the workbench side (`reviewThemeChoice.ts` and
-// `REVIEW_KEYMAPS` in `reviewConfigurationDefaults.ts`).
+// These lists mirror the workbench side (`reviewThemeChoice.ts`, and
+// `REVIEW_KEYMAPS` and `REVIEW_CTRL_TAB_CHOICES` in `reviewConfigurationDefaults.ts`).
 export const REVIEW_THEME_CHOICES = ["dark", "light", "system"] as const;
 
 export type ReviewThemeChoice = (typeof REVIEW_THEME_CHOICES)[number];
@@ -401,6 +401,8 @@ export type ReviewThemeChoice = (typeof REVIEW_THEME_CHOICES)[number];
 export const REVIEW_KEYMAP_CHOICES = ["none", "vim", "emacs"] as const;
 
 export type ReviewKeymapChoice = (typeof REVIEW_KEYMAP_CHOICES)[number];
+
+export type ReviewCtrlTabChoice = "recent" | "next";
 
 export const REVIEW_TUTORIAL_STEP_IDS = [
   "openPeek",
@@ -500,6 +502,8 @@ export interface ReviewCanvasSettingsContent {
   // A keymap only takes effect after the extension host restarts, so the
   // workbench offers the window reload. The page never forces one.
   setKeymap(choice: ReviewKeymapChoice): Promise<ReviewKeymapChoice>;
+  ctrlTab: ReviewCtrlTabChoice;
+  setCtrlTab(choice: ReviewCtrlTabChoice): Promise<ReviewCtrlTabChoice>;
   softwareMapEnabled: boolean;
   setSoftwareMapEnabled(enabled: boolean): Promise<boolean>;
   structuralDiffEnabled: boolean;

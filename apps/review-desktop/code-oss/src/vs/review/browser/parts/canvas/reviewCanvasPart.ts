@@ -40,6 +40,7 @@ import { IHostService } from "../../../../workbench/services/host/browser/host.j
 import { ILifecycleService } from "../../../../workbench/services/lifecycle/common/lifecycle.js";
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import {
+	REVIEW_CTRL_TAB_SETTING,
 	REVIEW_KEYMAP_SETTING,
 	REVIEW_SOFTWARE_MAP_SETTING,
 	REVIEW_STRUCTURAL_DIFF_SETTING,
@@ -58,6 +59,7 @@ import type {
 	ReviewCanvasSetupActions,
 	ReviewCanvasTutorialBridge,
 	ReviewCliInstallStatus,
+	ReviewCtrlTabChoice,
 	ReviewKeymapChoice,
 	ReviewRuntimeConfig,
 	ReviewSurfaceEvent,
@@ -763,6 +765,15 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.commandService.executeCommand("review.setKeymap", choice);
 				return this.currentKeymap();
 			},
+			ctrlTab: this.currentCtrlTab(),
+			setCtrlTab: async (choice) => {
+				this.reviewTelemetryService.capture("setting_changed", {
+					setting: "ctrl_tab",
+					enabled: true,
+				});
+				await this.configurationService.updateValue(REVIEW_CTRL_TAB_SETTING, choice, ConfigurationTarget.USER);
+				return this.currentCtrlTab();
+			},
 			softwareMapEnabled: this.currentSoftwareMapEnabled(),
 			setSoftwareMapEnabled: async (enabled) => {
 				this.reviewTelemetryService.capture("setting_changed", {
@@ -812,6 +823,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	private currentKeymap(): ReviewKeymapChoice {
 		return this.configurationService.getValue<ReviewKeymapChoice>(REVIEW_KEYMAP_SETTING) ?? "none";
+	}
+
+	private currentCtrlTab(): ReviewCtrlTabChoice {
+		return this.configurationService.getValue<ReviewCtrlTabChoice>(REVIEW_CTRL_TAB_SETTING) === "next" ? "next" : "recent";
 	}
 
 	private currentStructuralDiffEnabled(): boolean {
