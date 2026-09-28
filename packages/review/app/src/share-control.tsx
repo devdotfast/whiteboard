@@ -57,7 +57,6 @@ export function ShareControl() {
   const client = context?.client;
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState<ShareTarget>();
-  const started = useRef(false);
   const [copyError, setCopyError] = useState<string>();
   const [copied, setCopied] = useState(false);
   const popover = useRef<HTMLDivElement>(null);
@@ -147,19 +146,16 @@ export function ShareControl() {
               ? { ...current, requestId: crypto.randomUUID() }
               : current,
           );
-
-        if (error.status === 401) started.current = false;
       },
     });
   };
 
   useDismissOnOutside(popover, open, setOpen);
 
+  // Upload once per opening; a failure waits for Retry or a new sign-in.
   useEffect(() => {
-    if (!open || !signedIn || !target || started.current) return;
-    started.current = true;
-    upload(target);
-  }, [open, signedIn]);
+    if (open && signedIn && target && publish.isIdle && !link) upload(target);
+  }, [open, signedIn, target, publish.isIdle, link]);
 
   useEffect(() => {
     if (!copied) return;
@@ -203,11 +199,6 @@ export function ShareControl() {
             !open &&
             !(publish.isPending && target?.version === context.version)
           ) {
-            // A version shared earlier in this canvas reuses its link.
-            started.current =
-              queryClient.getQueryData(
-                canvasQueryKeys.shareLink(context.version),
-              ) !== undefined;
             setTarget({
               version: context.version,
               requestId: crypto.randomUUID(),

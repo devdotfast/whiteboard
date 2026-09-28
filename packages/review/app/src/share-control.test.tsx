@@ -14,6 +14,7 @@ let dispose: (() => void) | undefined;
 afterEach(async () => {
   await act(async () => dispose?.());
   document.body.replaceChildren();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -364,21 +365,21 @@ it("keeps one upload when the popover is reopened while it is in flight", async 
 });
 
 it("polls only while sign-in is pending and stops when the control unmounts", async () => {
+  vi.useFakeTimers({
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+  });
   const harness = mount({ signedIn: false });
+  const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 
   await harness.render(1);
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 2200));
-  });
+  await wait(5000);
   expect(harness.accountReads()).toBe(1);
   await harness.click("Share review");
   await harness.click("Sign in to share");
-  await harness.settle();
+  await wait(10);
   expect(harness.container.textContent).toContain("Waiting for sign-in…");
   await act(async () => dispose?.());
   dispose = undefined;
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 2200));
-  });
+  await wait(5000);
   expect(harness.accountReads()).toBe(1);
 });

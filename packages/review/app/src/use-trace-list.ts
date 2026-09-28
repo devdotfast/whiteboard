@@ -71,7 +71,6 @@ export function useTraceList(
     queryFn: ({ signal }) =>
       readTraceList(session.fetch, storageOverride, signal),
     enabled: !usesProvided,
-    // Each view that mounts rereads; switching storage shows its last list.
     staleTime: 0,
   });
 

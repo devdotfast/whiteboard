@@ -63,7 +63,6 @@ export function ReviewDocumentMetaLine({
       ),
       queryFn: ({ signal }) => review.stack(signal),
       enabled: Boolean(meta.pullRequestNumber),
-      // Each header that mounts rereads, showing the last stack meanwhile.
       staleTime: 0,
     }).data ?? [];
 
