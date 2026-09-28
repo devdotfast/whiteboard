@@ -769,6 +769,10 @@
   overflow: hidden;
 }
 
+.review-detail-host > .side-panel {
+  grid-area: 1 / 1;
+}
+
 .review-view-region--review {
   display: flex;
   align-items: flex-start;

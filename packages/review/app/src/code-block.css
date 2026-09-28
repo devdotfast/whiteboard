@@ -13,10 +13,6 @@
   background: var(--surface);
 }
 
-.agent-markdown .rendered-code-block {
-  margin-block: 8px;
-}
-
 .rendered-code-block > .diagram-header {
   padding-right: 8px;
 }

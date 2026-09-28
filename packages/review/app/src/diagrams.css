@@ -344,47 +344,6 @@
   cursor: pointer;
 }
 
-.review-document :is(.sequence-diagram, .database-lens, .software-map) {
-  width: fit-content;
-  max-width: min(
-    var(--review-inline-diagram-max-width),
-    calc(
-      100cqi - var(--review-document-padding-inline) -
-        var(--review-document-padding-inline)
-    )
-  );
-  margin-inline: auto;
-}
-
-/* An inline diagram never renders narrower than the prose measure (clamped
-   to the container width so narrow viewports still fit). Sequence diagrams
-   get the same floor from their width: 100% rule below. */
-
-.review-document :is(.software-map, .database-lens) {
-  min-width: min(
-    var(--review-prose-max-width),
-    calc(
-      100cqi - var(--review-document-padding-inline) -
-        var(--review-document-padding-inline)
-    )
-  );
-}
-
-/* Sequence diagrams read as part of the prose: same measure as the text
-   column, with lanes spreading to fill it (see laneWidth in diagrams.tsx).
-   The fullscreen overlay is the escape hatch for more room. */
-
-.review-document .sequence-diagram {
-  width: 100%;
-  max-width: min(
-    var(--review-prose-max-width),
-    calc(
-      100cqi - var(--review-document-padding-inline) -
-        var(--review-document-padding-inline)
-    )
-  );
-}
-
 .sequence-diagram figcaption {
   position: sticky;
   top: 0;
@@ -595,16 +554,6 @@
     width: auto;
     min-width: 0;
     max-width: none;
-  }
-}
-
-@media (max-width: 720px) {
-  .review-document :is(.sequence-diagram, .database-lens, .software-map),
-  .review-app--peek-open
-    .review-document
-    :is(.sequence-diagram, .database-lens, .software-map) {
-    --review-inline-diagram-max-width: none;
-    width: calc(100cqi - 16px);
   }
 }
 

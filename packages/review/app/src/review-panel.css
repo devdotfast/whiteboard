@@ -15,10 +15,6 @@
   animation: none;
 }
 
-.review-detail-host > .side-panel {
-  grid-area: 1 / 1;
-}
-
 .review-panel-body {
   padding-bottom: var(--review-bottom-scroll-padding, 0px);
   flex: 1 1 auto;
