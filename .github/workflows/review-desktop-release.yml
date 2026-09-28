@@ -654,11 +654,11 @@ jobs:
           R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
         run: |
           # The releases/latest/ key is version-free by design, so the version
-          # rides along in the filename a client saves the download as.
-          DMG_DISPOSITION="attachment; filename=\"df-whiteboard-${RELEASE_VERSION}.dmg\""
-
+          # rides along in the filename a client saves the download as, with the
+          # arch so Apple silicon and Intel downloads are told apart.
           for dir in dist/macos-*; do
             target="${dir#dist/macos-}"
+            DMG_DISPOSITION="attachment; filename=\"df-whiteboard-${RELEASE_VERSION}-${target#darwin-}.dmg\""
             RELEASE_PREFIX="s3://${R2_BUCKET}/releases/${RELEASE_VERSION}/${target}"
             for zip in "$dir"/*-"${target}"-"${RELEASE_VERSION}".zip; do
               aws s3 cp "$zip" "${RELEASE_PREFIX}/$(basename "$zip")" \

@@ -468,10 +468,9 @@ jobs:
           AWS_REGION: auto
           R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
         run: |
-          DMG_DISPOSITION="attachment; filename=\"df-whiteboard-preview-${RELEASE_VERSION}.dmg\""
-
           for dir in dist/macos-*; do
             target="${dir#dist/macos-}"
+            DMG_DISPOSITION="attachment; filename=\"df-whiteboard-preview-${RELEASE_VERSION}-${target#darwin-}.dmg\""
             RELEASE_PREFIX="s3://${R2_BUCKET}/releases/${RELEASE_VERSION}/${target}"
             for zip in "$dir"/*-"${target}"-"${RELEASE_VERSION}".zip; do
               aws s3 cp "$zip" "${RELEASE_PREFIX}/$(basename "$zip")" \
