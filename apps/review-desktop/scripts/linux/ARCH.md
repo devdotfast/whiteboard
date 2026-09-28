@@ -2,22 +2,16 @@
 
 Target: Arch Linux (and derivatives such as Manjaro), x86-64. Stable and
 preview install separately as `whiteboard` and `whiteboard-preview`, side by
-side with the other Linux packages. The pacman package ships the RPM payload
-unchanged: `/usr/share/<app>`, `/usr/bin/<app>`, `/usr/bin/<app>-desktop`, the
-desktop and metainfo files, and the RPM's `review` compatibility links.
+side with the other Linux packages. All three formats use the same compiled
+app and staging code, including the `review` compatibility links.
 
 ## Build and check
 
-`build-arch-package.sh <packages-dir> stable|preview <rpm-version> <revision>`
-repackages the release RPM into a `.pkg.tar.zst` inside a pinned
-`archlinux:base-devel` container (`build-arch-container.sh`). `PKGBUILD`
-extracts the RPM payload with `rpm2cpio` and `bsdtar` rather than rebuilding
-from source; `pkgver` is the RPM version (preview uses the tilde form,
-`X.Y.Z~preview.YYYYMMDD.N`) and `pkgrel` is the package revision. The
-container disables pacman's own download sandbox, which fails under
-unprivileged Docker; `makepkg` runs as an unprivileged user inside it, and
-`repo-add` builds the package database there too, unsigned — private keys
-never enter the container.
+`bash apps/review-desktop/scripts/package-linux-distributions.sh arch` stages
+the shared app and packages it inside a pinned `archlinux:base-devel`
+container. `PKGBUILD` extracts the staged install tree without waiting for
+an RPM. `makepkg` runs as an unprivileged user; `repo-add` creates unsigned
+databases. Signing keys stay on the host.
 
 `build-linux-repository.py`'s `build_arch()` signs the package plus the
 `<name>.db` and `<name>.files` databases on the host, through `GNUPGHOME` and

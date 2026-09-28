@@ -1,4 +1,4 @@
-name: Review Desktop CI
+name: Whiteboard CI
 
 on:
   pull_request:
@@ -132,13 +132,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-code-oss-deps-v2-
 
-      - name: Build Review Desktop
+      - name: Build Whiteboard
         env:
           GITHUB_TOKEN: ${{ github.token }}
           REVIEW_DESKTOP_CI_FAST: "1"
         run: pnpm --filter @dev.fast/review-desktop app:build
 
-      - name: Validate Review Desktop build
+      - name: Validate Whiteboard build
         run: |
           test -d apps/review-desktop/code-oss/node_modules
           test -f apps/review-desktop/code-oss/out/main.js

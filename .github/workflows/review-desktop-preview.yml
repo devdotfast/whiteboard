@@ -1,4 +1,4 @@
-name: Review Desktop Preview
+name: Whiteboard Preview
 
 on:
   workflow_dispatch:
@@ -40,7 +40,7 @@ jobs:
     steps:
       - run: echo "Release approved"
 
-  # Previews publish a signed dev-fast-review-preview package, so the Linux
+  # Previews publish a signed whiteboard-preview package, so the Linux
   # build signs with the production repository key rather than a CI key.
   linux:
     if: ${{ inputs.platforms == 'all' || inputs.platforms == 'linux' }}
@@ -96,7 +96,7 @@ jobs:
           VERSION="${NEXT_PATCH}-preview.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
           COMMIT=$(git rev-parse HEAD)
 
-          echo "Building Review Desktop ${VERSION} from ${COMMIT}"
+          echo "Building Whiteboard ${VERSION} from ${COMMIT}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
 
@@ -533,37 +533,12 @@ jobs:
 
   publish-linux:
     name: Publish Linux preview repository
-    environment: review-release
     needs: [version, build, linux]
     if: ${{ !cancelled() && !inputs.dry_run && needs.version.result == 'success' && needs.linux.result == 'success' && (inputs.platforms == 'linux' || needs.build.result == 'success') }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ needs.version.outputs.commit }}
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          digest-mismatch: warn
-          name: linux-packages
-          path: linux-packages
-      - name: Publish verified snapshot
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_ENDPOINT_URL: ${{ vars.R2_ENDPOINT_URL }}
-          AWS_REGION: auto
-          R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
-        run: |
-          mkdir linux-repository
-          tar --zstd -xf linux-packages/linux-publication.tar.zst -C linux-repository
-          python3 apps/review-desktop/scripts/publish-linux-repository.py --directory linux-repository --bucket "$R2_BUCKET" --channel preview
-      - name: Check the preview channel is served
-        env:
-          RELEASE_VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          curl -fsS "https://install.dev.fast/api/update/linux-x64/preview/$(printf '0%.0s' {1..40})" | grep -F "\"productVersion\":\"${RELEASE_VERSION/-preview./~preview.}\""
-          curl -fsS https://install.dev.fast/repos/dev-fast-review-preview.repo | grep -F 'baseurl=https://install.dev.fast/repos/preview/rpm/x86_64/'
-          curl -fsSI "https://install.dev.fast/repos/preview/arch/x86_64/whiteboard-preview.db" | grep -q '^HTTP/[0-9.]* 302'
+    uses: ./.github/workflows/review-linux-publish.yml
+    with:
+      channel: preview
+    secrets: inherit
 
   publish-windows:
     name: Publish Windows preview installers

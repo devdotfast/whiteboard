@@ -61,12 +61,12 @@ async function loadReviewPackage(appRoot: string) {
 	const source = join(appRoot, 'VSCode-linux-x64');
 	const product = JSON.parse(await readFile(join(source, 'resources/app/product.json'), 'utf8'));
 	if (product.reviewVersion !== metadata.version || !/^[a-f0-9]{40}$/.test(product.commit ?? '')) {
-		throw new Error('Linux payload must carry the stamped Review version and source commit');
+		throw new Error('Linux payload must carry the stamped Whiteboard version and source commit');
 	}
 	return { pkg: reviewPackage(product, metadata.version), source, product };
 }
 
-/** Stage the same desktop, CLI and bundled runtime for both system packages. */
+/** Stage the same desktop, CLI and bundled runtime for every system package. */
 async function stageReviewPackage(codeRoot: string, destination: string) {
 	const appRoot = resolve(codeRoot, '..');
 	const monorepoRoot = resolve(appRoot, '../..');
@@ -135,7 +135,7 @@ MimeType=x-scheme-handler/${urlProtocol};
   <metadata_license>CC0-1.0</metadata_license><project_license>MIT</project_license>
   <launchable type="desktop-id">${name}.desktop</launchable>
   <url type="homepage">https://dev.fast/</url>
-  <description><p>Review turns code changes into guided, interactive reviews with code, traces, and agent discussions.</p></description>
+  <description><p>Whiteboard turns code changes into guided, interactive reviews with code, traces, and agent discussions.</p></description>
 </component>
 `);
 	const icon = join(destination, `usr/share/icons/hicolor/512x512/apps/${app}.png`);
@@ -181,7 +181,7 @@ Recommends: ${recommendedDeps.join(', ')}
 
 %description
 ${appName} turns code changes into guided, interactive reviews with code, traces,
-and agent discussions. Includes the Review CLI and its runtime.
+and agent discussions. Includes the Whiteboard CLI and its runtime.
 
 %install
 mkdir -p %{buildroot}
@@ -209,6 +209,11 @@ ${share}/
 /usr/share/metainfo/${legacyName}.metainfo.xml
 /usr/share/icons/hicolor/512x512/apps/${app}.png
 `);
+}
+
+/** Stage the same install tree for pacman without depending on an RPM. */
+export async function prepareReviewArchPackage(codeRoot: string): Promise<void> {
+	await stageReviewPackage(codeRoot, join(codeRoot, '.build/linux/arch/x86_64/package'));
 }
 
 /** Keep rpmbuild state under the package output directory without changing HOME. */

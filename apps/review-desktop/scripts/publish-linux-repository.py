@@ -50,7 +50,21 @@ def parse_generation(pointer):
     return (version, commit, date is not None), order
 
 
-def publish(directory, bucket, base_url, channel=None):
+def publication_format(name):
+    if "/keys/" in name or "/rpm/" in name:
+        return "rpm"
+    if "/apt/" in name:
+        return "deb"
+    if "/arch/" in name:
+        return "arch"
+    raise ValueError(f"Unknown publication format: {name}")
+
+
+def publish(directory, bucket, base_url, channel=None, upload_format=None, promote_only=False):
+    if upload_format and promote_only:
+        raise ValueError("Upload and promotion must be separate operations")
+    if upload_format and upload_format not in ("rpm", "deb", "arch"):
+        raise ValueError("Unknown upload format")
     if fetch_json(base_url + "/repos/health") != {"schemaVersion": 1, "format": "rpm"}:
         raise RuntimeError("Deploy the Linux repository Worker before publishing")
     files = json.loads((directory / "sha256.json").read_text())
@@ -125,6 +139,13 @@ def publish(directory, bucket, base_url, channel=None):
     for name, sha in files.items():
         if name == pointer_key:
             continue
+        if promote_only:
+            existing = aws("head-object", "--bucket", bucket, "--key", name)
+            if existing.get("Metadata", {}).get("sha256") != sha:
+                raise RuntimeError(f"Uploaded object differs: {name}")
+            continue
+        if upload_format and publication_format(name) != upload_format:
+            continue
         try:
             aws("put-object", "--bucket", bucket, "--key", name,
                 "--body", str(directory / name), "--if-none-match", "*",
@@ -135,6 +156,8 @@ def publish(directory, bucket, base_url, channel=None):
             existing = aws("head-object", "--bucket", bucket, "--key", name)
             if existing.get("Metadata", {}).get("sha256") != sha:
                 raise RuntimeError(f"Immutable object differs: {name}; increment the package revision") from error
+    if upload_format:
+        return
     aws("put-object", "--bucket", bucket, "--key", pointer_key, "--body", str(pointer),
         "--content-type", "application/json", "--cache-control", "no-store", *condition)
     latest = fetch_json(f"{base_url}/api/update/linux-x64/{channel}/" + "0" * 40)
@@ -148,5 +171,8 @@ if __name__ == "__main__":
     parser.add_argument("--bucket", required=True)
     parser.add_argument("--base-url", default="https://install.dev.fast")
     parser.add_argument("--channel", choices=sorted(CHANNELS), help="Refuse a publication built for another channel")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--upload-format", choices=["rpm", "deb", "arch"], help="Upload this format without promoting the shared pointer")
+    mode.add_argument("--promote-only", action="store_true", help="Verify all uploaded objects, then promote the shared pointer")
     args = parser.parse_args()
-    publish(args.directory.resolve(), args.bucket, args.base_url.rstrip("/"), args.channel)
+    publish(args.directory.resolve(), args.bucket, args.base_url.rstrip("/"), args.channel, args.upload_format, args.promote_only)

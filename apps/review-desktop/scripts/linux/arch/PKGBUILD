@@ -1,5 +1,5 @@
 # Maintainer: dev.fast <support@dev.fast>
-# Built by build-arch-package.sh from the release RPM for install.dev.fast.
+# Built by build-arch-package.sh from the shared install tree for install.dev.fast.
 case ${WHITEBOARD_CHANNEL:?} in
 	stable) pkgname=whiteboard ;;
 	preview) pkgname=whiteboard-preview ;;
@@ -19,22 +19,19 @@ depends=(
 	'libxfixes' 'libxkbcommon' 'libxkbfile' 'libxrandr' 'mesa' 'nspr' 'nss' 'pango'
 	'systemd-libs' 'vulkan-icd-loader' 'xdg-utils' 'zlib'
 )
-makedepends=('rpm-tools')
 optdepends=(
 	'bubblewrap: sandbox agent commands'
 	'python: run Python language extensions'
 	'socat: sandbox agent commands'
 )
-source=("$pkgname-$pkgver-$pkgrel.x86_64.rpm")
-noextract=("$pkgname-$pkgver-$pkgrel.x86_64.rpm")
-# The RPM is built and verified earlier in the same release job.
+source=("whiteboard-payload.tar.zst")
+noextract=("whiteboard-payload.tar.zst")
+# The install tree comes from the verified shared app artifact.
 sha256sums=('SKIP')
 
 package() {
 	set -o pipefail
-	# Ship the RPM payload as-is. Do not run RPM scriptlets; pacman hooks refresh
-	# the desktop and icon caches.
-	rpm2cpio "$srcdir/$pkgname-$pkgver-$pkgrel.x86_64.rpm" | bsdtar -xpf - -C "$pkgdir"
+	bsdtar -xpf "$srcdir/whiteboard-payload.tar.zst" -C "$pkgdir"
 	install -Dm644 "$pkgdir/usr/share/$pkgname/resources/app/LICENSE.txt" \
 		"$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

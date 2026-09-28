@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Build the pacman package and repository databases from the release RPM.
+# Build the pacman package and repository databases from the shared install tree.
 set -euo pipefail
-PACKAGES="$(cd "${1:?usage: build-arch-package.sh packages-dir stable|preview rpm-version revision}" && pwd -P)"
+PACKAGES="$(cd "${1:?usage: build-arch-package.sh packages-dir stable|preview package-version revision}" && pwd -P)"
 CHANNEL="${2:?}" VERSION="${3:?}" REVISION="${4:?}"
 case "$CHANNEL" in stable|preview) ;; *) echo "Unknown channel: $CHANNEL" >&2; exit 2 ;; esac
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"

@@ -1,4 +1,4 @@
-name: Review Linux packages
+name: Whiteboard Linux packages
 
 on:
   workflow_call:
@@ -27,15 +27,15 @@ permissions:
 
 jobs:
   linux:
-    name: Build and validate Fedora, Ubuntu and Arch packages
+    name: Build shared Linux app
+    outputs:
+      version: ${{ steps.archive.outputs.version }}
     environment: ${{ inputs.release_signing && 'review-release' || 'review-linux-ci' }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 90
     env:
       BUILD_SOURCEVERSION: ${{ inputs.commit }}
       REVIEW_LINUX_PACKAGE_REVISION: ${{ inputs.package_revision }}
-      GNUPGHOME: ${{ github.workspace }}/.linux-signing
-      REVIEW_SIGNING_PASSPHRASE_FILE: ${{ github.workspace }}/.linux-signing/passphrase
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -56,16 +56,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Test publication failure boundaries
         run: python3 apps/review-desktop/scripts/linux/test-publication.py
-      - name: Install native build and package tools
+      - name: Install native build tools
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libx11-dev libxkbfile-dev libkrb5-dev libsecret-1-dev \
             libgtk-3-0t64 libnss3 libasound2t64 libgbm1 libnotify4 \
-            rpm createrepo-c zstd gnupg xvfb dbus-x11 unzip dpkg-dev apt-utils file
-          docker pull --platform linux/amd64 fedora:43@sha256:a651ddf48ea28a06ed4e1e6519f51c9f47e7a5a138722ade87369b8fbb7e5b42
-          docker pull --platform linux/amd64 fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
-          docker pull --platform linux/amd64 archlinux:base-devel@sha256:8745817f349ed24373341ddb92776209eeec3f0364ea48f7f645ac5800d30a50
+            zstd xvfb dbus-x11 unzip
       - name: Build and assemble Linux app
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -81,14 +78,93 @@ jobs:
           sudo chmod 4755 apps/review-desktop/VSCode-linux-x64/chrome-sandbox
       - name: Smoke test the packaged app
         run: xvfb-run -a node apps/review-desktop/scripts/smoke-launch-packaged.mjs --app apps/review-desktop/VSCode-linux-x64
-      # Preview versions build the whiteboard-preview package (RPM, DEB and
-      # Arch); see code-oss/build/linux/review-package.ts for the channel mapping.
-      - name: Create Fedora RPM, Ubuntu DEB and Arch package
+      - name: Archive shared Linux app
+        id: archive
         run: |
-          pnpm --filter @dev.fast/review-desktop app:package:linux:distributions
-          CHANNEL=${{ contains(inputs.version, '-preview.') && 'preview' || 'stable' }}
-          VERSION=$(node -p "require('./apps/review-desktop/package.json').version.replace('-preview.', '~preview.')")
-          bash apps/review-desktop/scripts/linux/build-arch-package.sh apps/review-desktop/dist/linux "$CHANNEL" "$VERSION" "$REVIEW_LINUX_PACKAGE_REVISION"
+          echo "version=$(node -p "require('./apps/review-desktop/package.json').version")" >> "$GITHUB_OUTPUT"
+          tar --zstd -cf "$RUNNER_TEMP/linux-app.tar.zst" \
+            apps/review-desktop/VSCode-linux-x64 apps/review-desktop/package.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.artifact_name }}-app
+          path: ${{ runner.temp }}/linux-app.tar.zst
+          retention-days: 3
+          compression-level: 0
+
+  # Package the pinned app with the helpers from this workflow revision.
+  package:
+    name: Package Linux (${{ matrix.format }})
+    needs: linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        format: [rpm, deb, arch]
+    env:
+      REVIEW_LINUX_PACKAGE_REVISION: ${{ inputs.package_revision }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: apps/review-desktop/code-oss/.nvmrc
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ inputs.artifact_name }}-app
+          path: ${{ runner.temp }}/linux-app
+      - name: Extract shared Linux app
+        run: tar --zstd -xf "$RUNNER_TEMP/linux-app/linux-app.tar.zst"
+      - name: Install package tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            rpm zstd dpkg-dev libgtk-3-0t64 libnss3 libasound2t64 libgbm1 \
+            libnotify4 libsecret-1-0 libkrb5-3 libxkbfile1
+      - name: Build package
+        env:
+          FORMAT: ${{ matrix.format }}
+        run: bash apps/review-desktop/scripts/package-linux-distributions.sh "$FORMAT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.artifact_name }}-unsigned-${{ matrix.format }}
+          path: apps/review-desktop/dist/linux/*
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+
+  repository:
+    name: Sign Linux repositories
+    needs: [linux, package]
+    environment: ${{ inputs.release_signing && 'review-release' || 'review-linux-ci' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BUILD_SOURCEVERSION: ${{ inputs.commit }}
+      REVIEW_LINUX_PACKAGE_REVISION: ${{ inputs.package_revision }}
+      GNUPGHOME: ${{ github.workspace }}/.linux-signing
+      REVIEW_SIGNING_PASSPHRASE_FILE: ${{ github.workspace }}/.linux-signing/passphrase
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+      - name: Stamp release identity
+        env:
+          VERSION: ${{ needs.linux.outputs.version }}
+        run: |
+          QUALITY=stable
+          if [[ "$VERSION" == *-preview.* ]]; then QUALITY=preview; fi
+          node apps/review-desktop/scripts/stamp-release-channel.mjs --version "$VERSION" --quality "$QUALITY"
+      - name: Install signing tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rpm createrepo-c zstd gnupg apt-utils
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: ${{ inputs.artifact_name }}-unsigned-*
+          merge-multiple: true
+          path: apps/review-desktop/dist/linux
       - name: Prepare repository signing key
         id: signing
         env:
@@ -105,14 +181,14 @@ jobs:
             [[ "$SIGNING_FINGERPRINT" =~ ^[A-F0-9]{40}$ ]]
             printf '%s' "$SIGNING_KEY" | base64 --decode | gpg --batch --import
           else
-            gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key 'Review package CI <ci@dev.fast>' rsa3072 sign 1d
+            gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key 'Whiteboard package CI <ci@dev.fast>' rsa3072 sign 1d
             SIGNING_FINGERPRINT=$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "fpr" {print $10; exit}')
           fi
           echo "fingerprint=$SIGNING_FINGERPRINT" >> "$GITHUB_OUTPUT"
       - name: Build signed repository snapshot
         env:
           FINGERPRINT: ${{ steps.signing.outputs.fingerprint }}
-          CHANNEL: ${{ contains(inputs.version, '-preview.') && 'preview' || 'stable' }}
+          CHANNEL: ${{ contains(needs.linux.outputs.version, '-preview.') && 'preview' || 'stable' }}
         run: |
           # The RPM version is the tilde form of a preview version.
           VERSION=$(node -p "require('./apps/review-desktop/package.json').version.replace('-preview.', '~preview.')")
@@ -135,10 +211,33 @@ jobs:
             apps/review-desktop/dist/linux/*.sig
           retention-days: 7
           compression-level: 0
-      - name: Validate clean installs and rejected signatures
-        run: bash apps/review-desktop/scripts/linux/verify-repository.sh apps/review-desktop/dist/linux-repository
       - name: Remove signing credentials
         if: always()
         run: |
           gpgconf --kill gpg-agent || true
           rm -rf "$GNUPGHOME"
+
+  validate:
+    name: Validate Linux (${{ matrix.target }})
+    needs: repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ["43", "44", ubuntu, arch]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: linux-packages
+      - name: Validate clean installs and rejected signatures
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir linux-repository
+          tar --zstd -xf linux-packages/linux-publication.tar.zst -C linux-repository
+          bash apps/review-desktop/scripts/linux/verify-repository.sh linux-repository "$TARGET"

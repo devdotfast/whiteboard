@@ -1,4 +1,4 @@
-name: Review Windows packages
+name: Whiteboard Windows packages
 
 on:
   workflow_call:

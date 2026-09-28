@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Container entrypoint for build-arch-package.sh. Never run on a user machine.
 set -euo pipefail
-[[ -n "${WHITEBOARD_CHANNEL:-}" && -n "${WHITEBOARD_VERSION:-}" && -n "${WHITEBOARD_REVISION:-}" && -n "${HOST_UID:-}" ]]
+[[ -n "${WHITEBOARD_CHANNEL:-}" && -n "${WHITEBOARD_VERSION:-}" && -n "${WHITEBOARD_REVISION:-}" && -n "${HOST_UID:-}" && -n "${HOST_GID:-}" ]]
 NAME=whiteboard
 if [[ "$WHITEBOARD_CHANNEL" == preview ]]; then NAME=whiteboard-preview; fi
 # pacman's download sandbox fails in unprivileged Docker containers (observed
@@ -13,11 +13,11 @@ grep -qx DisableSandbox /etc/pacman.conf
 # The pinned image's archlinux-keyring can predate keys used to sign current
 # packages; refresh it before syncing, or -Syu fails on signature checks.
 pacman -Sy --noconfirm archlinux-keyring
-pacman -Syu --noconfirm --needed rpm-tools
+pacman -Syu --noconfirm
 useradd -m builder
 install -d -o builder /build
 cp /recipe/PKGBUILD /build/
-cp "/packages/$NAME-$WHITEBOARD_VERSION-$WHITEBOARD_REVISION.x86_64.rpm" /build/
+cp /packages/whiteboard-payload.tar.zst /build/
 chown -R builder /build
 # makepkg refuses to run as root. --nodeps: runtime depends are not needed to repackage.
 runuser -u builder -- env -C /build \
