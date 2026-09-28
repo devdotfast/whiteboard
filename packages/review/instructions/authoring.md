@@ -26,7 +26,7 @@ follow these first six steps exactly, without any extraneous tool calls.
 - before finishing, read the whole whiteboard back and fix any contradictions/unverified claims.
 
 **updating existing whiteboard**
-- repin the whiteboard. for a `worktree` target, call `session_set_target` with the same target to re-resolve its base after a rebase
+- repin the whiteboard
 - read the existing whiteboard (if you haven't already,) read the diff since last whiteboard, make any necessary updates to the whiteboard.
 
 **guidelines**

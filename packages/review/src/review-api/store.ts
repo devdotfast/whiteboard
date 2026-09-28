@@ -311,7 +311,7 @@ export class ReviewStore {
 
     const { pins } = await this.providers.resolveTarget!(
       snapshot.target,
-      snapshot.pins,
+      current.pins,
     );
 
     if (

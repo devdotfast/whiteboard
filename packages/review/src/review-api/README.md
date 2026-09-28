@@ -324,8 +324,8 @@ staged, unstaged and nonignored untracked files. `base` names the branch to
 compare against, by default the default branch (`origin/HEAD`, `origin/main`,
 `origin/master`, `main`, then `master`); an unborn repository compares with
 empty source. The comparison starts at the merge base of `base` and HEAD,
-resolved on acceptance and again on `set_target`; saves and commits move only
-the head. No checkout is created.
+resolved again whenever the checkout or its refs change, so it follows a rebase;
+if `base` stops resolving, the last merge base stays. No checkout is created.
 Source ranges default to the head side. File saves refresh source without changing
 authored history. All versions of a live target read the current checkout; authors
 maintain their source references. Use a commit target for fixed source.

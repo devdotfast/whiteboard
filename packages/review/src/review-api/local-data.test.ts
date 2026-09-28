@@ -2650,17 +2650,9 @@ it("reads current working source across authored versions, commits and retargeti
   git("commit", "-qm", "Save changes");
   await new Promise((resolve) => setTimeout(resolve, 50));
   await local.store.refreshWorktrees();
-  // Committing moves the head, not the base: the saved work stays in review.
-  expect(local.store.read(result.reviewId).pins!.base).toBe(
-    original.pins!.base,
-  );
   expect(
     await local.data.changes(local.store.read(result.reviewId).pins!),
-  ).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ path: "untracked.ts", status: "added" }),
-    ]),
-  );
+  ).toEqual([]);
   await local.store.execute(
     command({
       type: "set_target",
@@ -2756,28 +2748,30 @@ describe("worktree base", () => {
     expect(await changedPaths(reviewId)).not.toContain("deleted main-only.ts");
   });
 
-  it("keeps the base when the branch moves, and re-resolves it on retarget", async () => {
+  it("follows the fork point as the branch commits, rebases and loses its base", async () => {
     const { reviewId } = await create();
     const forkPoint = local.store.read(reviewId).pins!.base;
 
+    const refresh = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await local.store.refreshWorktrees();
+
+      return local.store.read(reviewId).pins!.base;
+    };
+
     run("add", ".");
     run("commit", "-qm", "Save");
-    await local.store.refreshWorktrees();
-    expect(local.store.read(reviewId).pins!.base).toBe(forkPoint);
+    expect(await refresh()).toBe(forkPoint);
     expect(await changedPaths(reviewId)).toContain("added untracked.ts");
 
     run("rebase", "-q", "main");
-    await local.store.execute(
-      command({
-        type: "set_target",
-        reviewId,
-        target: { kind: "worktree", repositoryId },
-      }),
-    );
-    expect(local.store.read(reviewId).pins!.base).toBe(
-      run("rev-parse", "main"),
-    );
+    const main = run("rev-parse", "main");
+    expect(await refresh()).toBe(main);
     expect(await changedPaths(reviewId)).not.toContain("added main-only.ts");
+    expect(await changedPaths(reviewId)).toContain("added untracked.ts");
+
+    run("branch", "-m", "main", "trunk");
+    expect(await refresh()).toBe(main);
   });
 
   it("names the branches it tried when there is no default branch", async () => {

@@ -589,6 +589,8 @@ export class LocalReviewData {
       watchers: FSWatcher[];
       healthy: boolean;
       inspection?: Awaited<ReturnType<typeof inspectWorktree>>;
+      /** Fork points by base ref, valid for the inspected epoch. */
+      forks: Map<string, Promise<{ ref: string; commit: string }>>;
     }
   >();
 
@@ -603,7 +605,13 @@ export class LocalReviewData {
     let entry = this.worktrees.get(repositoryId);
 
     if (!entry) {
-      entry = { epoch: 0, inspectedEpoch: -1, watchers: [], healthy: true };
+      entry = {
+        epoch: 0,
+        inspectedEpoch: -1,
+        watchers: [],
+        healthy: true,
+        forks: new Map(),
+      };
       this.worktrees.set(repositoryId, entry);
       const state = entry;
       const roots = new Set([vcs.rootPath]);
@@ -641,14 +649,15 @@ export class LocalReviewData {
       entry.healthy &&
       entry.watchers.length
     )
-      return entry.inspection;
+      return { ...entry.inspection, forks: entry.forks };
 
     const epoch = entry.epoch;
     const inspected = await inspectWorktree(repositoryId, vcs);
     entry.inspection = inspected;
     entry.inspectedEpoch = epoch;
+    entry.forks = new Map();
 
-    return inspected;
+    return { ...inspected, forks: entry.forks };
   }
 
   async close(): Promise<void> {
@@ -859,7 +868,8 @@ export class LocalReviewData {
     }
   }
 
-  /** `pinned` refreshes a stored worktree target's head, keeping its base. */
+  /** `pinned` refreshes a stored target: a worktree base ref resolves to its
+   * current fork point, and keeps the pinned one if the ref is gone. */
   async resolveTarget(
     target: ReviewTarget,
     pinned?: Pins,
@@ -894,27 +904,47 @@ export class LocalReviewData {
       };
     }
 
-    const { revision, commit } = await this.worktreeState(
+    const { revision, commit, forks } = await this.worktreeState(
       target.repositoryId,
       vcs,
     );
 
     const resolved = { ...target };
 
-    // A live refresh moves only the head. Targets stored without a base
-    // predate default-branch bases and compare against the current HEAD,
-    // except an unborn checkout's, which keep comparing with nothing.
-    const base = pinned
-      ? target.base === undefined && pinned.base !== EMPTY_SOURCE
-        ? commit
-        : pinned.base
-      : commit === EMPTY_SOURCE && target.base === undefined
-        ? EMPTY_SOURCE
-        : await this.worktreeBase(vcs, target.base, commit).then((found) => {
-            resolved.base = found.ref;
+    const fork = () => {
+      const key = `${target.base ?? ""}\0${commit}`;
+      let found = forks.get(key);
 
-            return found.commit;
-          });
+      if (!found) {
+        found = this.worktreeBase(vcs, target.base, commit);
+        forks.set(key, found);
+        found.catch(() => forks.delete(key));
+      }
+
+      return found;
+    };
+
+    // Stored targets without a base predate default-branch bases and compare
+    // against the current HEAD, or with nothing when created unborn.
+    const base =
+      pinned && target.base === undefined
+        ? pinned.base === EMPTY_SOURCE
+          ? EMPTY_SOURCE
+          : commit
+        : commit === EMPTY_SOURCE && target.base === undefined
+          ? EMPTY_SOURCE
+          : await fork().then(
+              (found) => {
+                resolved.base = found.ref;
+
+                return found.commit;
+              },
+              (error) => {
+                if (pinned && error instanceof ReviewInputError)
+                  return pinned.base;
+                throw error;
+              },
+            );
 
     return {
       target: resolved,
