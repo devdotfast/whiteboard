@@ -1,9 +1,9 @@
-import { z } from "zod";
-
 import {
   type TutorialAuthoringConversation,
   tutorialAuthoringConversationSchema,
-} from "../../tutorial-conversation.js";
+} from "@review/tutorial-conversation.js";
+import { z } from "zod";
+
 import { type BlockDefinition, defineBlock } from "./definition.js";
 import { type Block, blockSchema } from "./index.js";
 

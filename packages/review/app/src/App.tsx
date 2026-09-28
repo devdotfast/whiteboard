@@ -3,6 +3,10 @@ import {
   type ReviewCommitSummary,
 } from "@dev.fast/review-protocol";
 import {
+  type SoftwareMapTopologyDiff,
+  diffSoftwareMaps,
+} from "@review/software-map-topology-diff";
+import {
   type CSSProperties,
   type ComponentType,
   type ReactElement,
@@ -14,10 +18,6 @@ import {
   useState,
 } from "react";
 
-import {
-  type SoftwareMapTopologyDiff,
-  diffSoftwareMaps,
-} from "../../src/software-map-topology-diff";
 import { AgentSelectionProvider, useAgentSelection } from "./agent-selection";
 import { observeAgentTextSelection } from "./agent-text-selection";
 import {
@@ -140,7 +140,7 @@ export interface RenderedReviewDocument {
   filePath: string;
   anchors: ReadonlyMap<
     string,
-    import("../../src/review-document-data").DocumentAnchor
+    import("@review/review-document-data").DocumentAnchor
   >;
   documentSoftwareModels: NormalizedSoftwareModel[];
   tocEntries?: import("./review-document-headings").ReviewTocEntry[];

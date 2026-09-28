@@ -1,6 +1,5 @@
+import { ReviewInputError } from "@review/review-api/input-error.js";
 import { z } from "zod";
-
-import { ReviewInputError } from "../input-error.js";
 
 export const text = z.string();
 

@@ -1,8 +1,8 @@
 import { type JsonValue, jsonValueSchema } from "@dev.fast/review-protocol";
+import { lensSourceSchema } from "@review/lens-selection.js";
+import { ReviewInputError } from "@review/review-api/input-error.js";
 import { z } from "zod";
 
-import { lensSourceSchema } from "../../lens-selection.js";
-import { ReviewInputError } from "../input-error.js";
 import {
   type BlockDefinition,
   defineBlock,

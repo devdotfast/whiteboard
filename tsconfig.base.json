@@ -15,7 +15,10 @@
     "isolatedModules": true,
     "paths": {
       "@dev.fast/trace-core": ["./packages/trace-core/src/index.ts"],
-      "@dev.fast/*": ["./packages/*/src"]
+      "@dev.fast/*": ["./packages/*/src"],
+      // Source aliases; Vite and Vitest mirror them in packages/review/test-config.ts.
+      "@review/*": ["./packages/review/src/*"],
+      "@canvas/*": ["./packages/review/app/src/*"]
     }
   },
   "exclude": ["node_modules", "dist"]

@@ -1,6 +1,6 @@
+import { lensSourceSchema } from "@review/lens-selection.js";
 import { z } from "zod";
 
-import { lensSourceSchema } from "../../lens-selection.js";
 import { codeFields } from "./code.js";
 import {
   type BlockDefinition,

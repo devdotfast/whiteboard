@@ -4,6 +4,7 @@ import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+import { sourceAliases } from "../test-config";
 import { scopeReviewCanvasCss } from "./desktop-css-scope";
 import {
   hardenLibavoidForTrustedTypes,
@@ -54,6 +55,7 @@ export default defineConfig({
   resolve: {
     dedupe: ["react", "react-dom"],
     alias: {
+      ...sourceAliases,
       "decode-named-character-reference": decodeNamedCharacterReferenceIndex,
     },
   },
