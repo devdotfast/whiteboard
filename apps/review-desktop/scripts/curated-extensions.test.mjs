@@ -282,7 +282,6 @@ test("carries Darwin curated extensions from Linux compile through release valid
     "curated extensions must be staged before signing and notarization",
   );
   assert.match(validationScript, /verifyCuratedExtensions/);
-  assert.match(validationScript, /target: "darwin-arm64"/);
   assert.doesNotMatch(packageScript, /rust-lang\.rust-analyzer/);
   assert.doesNotMatch(payloadManifest, /rust-lang\.rust-analyzer/);
 });

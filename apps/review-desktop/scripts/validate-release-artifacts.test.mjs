@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import os, { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 
 import { releaseIdentityFor } from "./release-channel.mjs";
 import {
+  assertMachOArch,
   assertPackagedProduct,
   assertReleaseChannel,
   assertUpdaterCompatibleApp,
@@ -60,6 +63,38 @@ test("buildManifest emits the schema the update Worker serves", () => {
     },
   });
 });
+
+test("buildManifest points at the target's release folder", () => {
+  const manifest = buildManifest({
+    version: "1.2.3",
+    commit: "abc123",
+    target: "darwin-x64",
+    payloads: [
+      { bundle: "Whiteboard", artifact: "Whiteboard", sha256: "f00d" },
+    ],
+    now: new Date("2026-07-29T00:00:00.000Z"),
+  });
+
+  assert.equal(
+    manifest.url,
+    "https://update.dev.fast/releases/1.2.3/darwin-x64/Whiteboard-darwin-x64-1.2.3.zip",
+  );
+});
+
+test(
+  "assertMachOArch rejects a binary built for the other arch",
+  { skip: process.platform !== "darwin" },
+  () => {
+    const thin = path.join(mkdtempSync(path.join(tmpdir(), "macho-")), "true");
+    execFileSync("lipo", ["/usr/bin/true", "-thin", "arm64e", "-output", thin]);
+
+    assert.throws(
+      () => assertMachOArch(thin, "x64"),
+      /is arm64e, expected x86_64/,
+    );
+    assertMachOArch("/usr/bin/true", "x64");
+  },
+);
 
 test("assertPackagedProduct accepts a correctly stamped product", () => {
   assertPackagedProduct(PRODUCT, { commit: "abc123" });

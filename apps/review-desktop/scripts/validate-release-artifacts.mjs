@@ -9,18 +9,28 @@
 //     [--artifact-dir dist]
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstatSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  globSync,
+  lstatSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
 import { verifyCuratedExtensions } from "./curated-extensions.mjs";
 import {
   assertReleaseChannel,
+  darwinTarget,
   releaseIdentityFor,
   updateBundlesFor,
   updateZipName,
 } from "./release-channel.mjs";
-import { assertPackagedArtifacts } from "./stage-review-runtime.mjs";
+import {
+  RUNTIME_DIRECTORY_NAME,
+  assertPackagedArtifacts,
+} from "./stage-review-runtime.mjs";
 
 const APP_DIR = path.resolve(import.meta.dirname, "..");
 
@@ -30,12 +40,18 @@ export { assertReleaseChannel };
 
 // `payloads` is one entry per update zip, in updateBundlesFor() order: the
 // first is the default for clients that do not name their bundle folder.
-export function buildManifest({ version, commit, payloads, now = new Date() }) {
+export function buildManifest({
+  version,
+  commit,
+  payloads,
+  target = darwinTarget(),
+  now = new Date(),
+}) {
   const bundles = Object.fromEntries(
     payloads.map(({ bundle, artifact, sha256 }) => [
       bundle,
       {
-        url: `${UPDATE_URL}/releases/${version}/darwin-arm64/${updateZipName(artifact, version)}`,
+        url: `${UPDATE_URL}/releases/${version}/${target}/${updateZipName(artifact, version, target)}`,
         sha256hash: sha256,
       },
     ]),
@@ -145,6 +161,21 @@ export function assertUpdaterCompatibleApp(app) {
   }
 }
 
+const MACHO_ARCH = { arm64: "arm64", x64: "x86_64" };
+
+// Codesign accepts a binary of either arch; only running it on the wrong Mac fails.
+export function assertMachOArch(file, arch) {
+  const expected = MACHO_ARCH[arch];
+
+  const archs = execFileSync("lipo", ["-archs", file], { encoding: "utf8" })
+    .trim()
+    .split(/\s+/);
+
+  if (!archs.includes(expected)) {
+    throw new Error(`${file} is ${archs.join(" ")}, expected ${expected}`);
+  }
+}
+
 function sha256(file) {
   return createHash("sha256").update(readFileSync(file)).digest("hex");
 }
@@ -178,23 +209,26 @@ async function main() {
     values["artifact-dir"] ?? path.join(APP_DIR, "dist"),
   );
 
+  const target = darwinTarget();
+  const arch = target.slice("darwin-".length);
+
   const sourceProduct = JSON.parse(
     readFileSync(path.join(APP_DIR, "code-oss", "product.json"), "utf8"),
   );
 
   const app = path.join(
     APP_DIR,
-    "VSCode-darwin-arm64",
+    `VSCode-${target}`,
     `${sourceProduct.nameShort}.app`,
   );
 
   const zips = updateBundlesFor(channel).map(({ bundle, artifact }) => ({
     bundle,
     artifact,
-    file: path.join(artifactDir, updateZipName(artifact, version)),
+    file: path.join(artifactDir, updateZipName(artifact, version, target)),
   }));
 
-  const dmg = path.join(artifactDir, `Whiteboard-darwin-arm64-${version}.dmg`);
+  const dmg = path.join(artifactDir, `Whiteboard-${target}-${version}.dmg`);
 
   await assertPackagedArtifacts(app);
   assertUpdaterCompatibleApp(app);
@@ -209,8 +243,44 @@ async function main() {
   assertPackagedProduct(product, { commit, channel });
   verifyCuratedExtensions({
     root: path.join(app, "Contents", "Resources", "app", "extensions"),
-    target: "darwin-arm64",
+    target,
   });
+
+  assertMachOArch(
+    path.join(app, "Contents", "MacOS", sourceProduct.nameShort),
+    arch,
+  );
+  assertMachOArch(
+    path.join(
+      app,
+      "Contents",
+      "Resources",
+      "app",
+      RUNTIME_DIRECTORY_NAME,
+      "bin",
+      "diffr",
+    ),
+    arch,
+  );
+
+  const [rustAnalyzerServer] = globSync(
+    path.join(
+      app,
+      "Contents",
+      "Resources",
+      "app",
+      "extensions",
+      "rust-lang.rust-analyzer*",
+      "server",
+      "rust-analyzer",
+    ),
+  );
+
+  if (!rustAnalyzerServer) {
+    throw new Error(`rust-analyzer server binary not found under ${app}`);
+  }
+
+  assertMachOArch(rustAnalyzerServer, arch);
 
   run("xcrun", ["stapler", "validate", app]);
   run("spctl", ["-a", "-vv", "--type", "exec", app]);
@@ -221,7 +291,7 @@ async function main() {
   }
 
   const payloads = zips.map((zip) => ({ ...zip, sha256: sha256(zip.file) }));
-  const manifest = buildManifest({ version, commit, payloads });
+  const manifest = buildManifest({ version, commit, payloads, target });
   const manifestPath = path.join(artifactDir, "latest.json");
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
