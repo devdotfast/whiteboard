@@ -34,7 +34,7 @@ function canvasUi(ctx) {
     // The state a missing checkout is meant to reach (see desktop-entry.tsx).
     unavailable: ctx.page.getByText("Worktree unavailable"),
     retained: canvas.getByText(RETAINED_SOURCE),
-    failed: canvas.getByText(/^ReviewApiError: Whiteboard operation failed/),
+    failed: canvas.getByText(/^Whiteboard operation failed \(Error\)\./),
     peek: canvas
       .locator('.review-inline-editor[data-review-inline-editor="order.ts"]')
       .first(),
