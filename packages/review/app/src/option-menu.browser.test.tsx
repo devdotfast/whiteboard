@@ -135,3 +135,39 @@ it("hostless menus support selection focus, arrow navigation, typeahead and Esca
   expect(change).toHaveBeenCalledExactlyOnceWith("old");
   expect(document.activeElement).toBe(trigger);
 });
+
+it.each(["ArrowDown", "ArrowUp"])(
+  "%s opens the fallback and re-enters it without toggling closed",
+  async (key) => {
+    const { trigger } = await render();
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      trigger.focus();
+      await act(async () =>
+        trigger.dispatchEvent(
+          new KeyboardEvent("keydown", { key, bubbles: true }),
+        ),
+      );
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      expect(document.activeElement).toBe(
+        container.querySelector('[role="menuitemradio"][aria-checked="true"]'),
+      );
+    }
+
+    await act(async () => trigger.click());
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  },
+);
+
+it("does not reopen an already open host menu", async () => {
+  const showMenu = vi.fn<ReviewCanvasUi["showMenu"]>(() => ({ dispose() {} }));
+  const { trigger } = await render({ showMenu });
+  await act(async () => trigger.click());
+  await act(async () => trigger.click());
+  await act(async () =>
+    trigger.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+    ),
+  );
+  expect(showMenu).toHaveBeenCalledOnce();
+});

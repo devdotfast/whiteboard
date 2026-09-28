@@ -19,7 +19,7 @@ export function useCanvasMenu() {
     available: Boolean(ui),
     open,
     show(request: Omit<ReviewMenuRequest, "onHide">) {
-      if (!ui) return;
+      if (!ui || open) return;
       menu.current?.dispose();
       setOpen(true);
       menu.current = ui.showMenu({ ...request, onHide: () => setOpen(false) });

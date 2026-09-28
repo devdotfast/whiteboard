@@ -30,22 +30,25 @@ export function OptionMenu<T extends string>({
   const trigger = useRef<HTMLButtonElement>(null);
   const search = useRef({ text: "", time: 0 });
 
-  useEffect(() => {
-    if (fallbackOpen) {
-      const items = container.current?.querySelectorAll<HTMLButtonElement>(
-        '[role="menuitemradio"]',
-      );
+  const focusSelection = () => {
+    const items = container.current?.querySelectorAll<HTMLButtonElement>(
+      '[role="menuitemradio"]',
+    );
 
-      const selected = options.findIndex((option) => option.value === value);
-      items?.[Math.max(0, selected)]?.focus();
-    }
+    const selected = options.findIndex((option) => option.value === value);
+    items?.[Math.max(0, selected)]?.focus();
+  };
+
+  useEffect(() => {
+    if (fallbackOpen) focusSelection();
   }, [fallbackOpen]);
 
   useDismissOnOutside(container, fallbackOpen, setOpen);
 
   const show = () => {
     if (!menu.available) {
-      setOpen(!fallbackOpen);
+      setOpen(true);
+      focusSelection();
 
       return;
     }
@@ -84,7 +87,10 @@ export function OptionMenu<T extends string>({
         aria-label={ariaLabel}
         aria-expanded={open}
         aria-haspopup="menu"
-        onClick={show}
+        onClick={() => {
+          if (menu.available) show();
+          else setOpen((current) => !current);
+        }}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
