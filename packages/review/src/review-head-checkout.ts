@@ -124,40 +124,6 @@ async function materializeReviewPinnedCheckout(input: {
   ]);
 }
 
-// Remove one review's pinned checkout — and only that: the path must lie
-// under the dev-fast worktrees dir, so checkouts for other concurrent reviews
-// (and anything else on disk) are never touched. Returns whether a checkout
-// was actually removed.
-export async function removeReviewPinnedCheckout(input: {
-  rootPath: string;
-  reviewUuid: string;
-  checkoutPath: string;
-}): Promise<boolean> {
-  const commonDir = await gitCommonDir(input.rootPath);
-
-  if (!commonDir) return false;
-  const target = path.resolve(input.checkoutPath);
-
-  if (
-    !isInsideDirectory(
-      target,
-      reviewManagedCheckoutRoot(commonDir, input.reviewUuid),
-    )
-  ) {
-    return false;
-  }
-
-  const existed = existsSync(target);
-  await git(input.rootPath, ["worktree", "remove", "--force", target], {
-    allowFailure: true,
-  });
-  await git(input.rootPath, ["worktree", "prune"], { allowFailure: true });
-  rmSync(target, { recursive: true, force: true });
-  await removeReviewPrepareArtifacts(target);
-
-  return existed;
-}
-
 /**
  * Remove every checkout one Review owns in a repository. Registrations go
  * first, so an interrupted removal cannot leave a gutted tree that git still

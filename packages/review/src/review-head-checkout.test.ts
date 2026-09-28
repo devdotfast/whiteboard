@@ -10,7 +10,6 @@ import { reviewManagedCheckoutDir } from "./review-checkout-paths";
 import {
   ensureReviewPinnedCheckout,
   removeReviewManagedCheckouts,
-  removeReviewPinnedCheckout,
 } from "./review-head-checkout";
 
 const TEST_REVIEW_UUID = "00000000-0000-4000-8000-00000000dddd";
@@ -223,104 +222,6 @@ describe("ensureReviewPinnedCheckout", () => {
     // The jj working copy keeps its own (different) content.
     expect(readFileSync(path.join(rootPath, "README.md"), "utf8")).toBe(
       "working copy\n",
-    );
-  });
-});
-
-describe("removeReviewPinnedCheckout", () => {
-  const cleanupPaths: string[] = [];
-
-  afterEach(async () => {
-    await Promise.all(
-      cleanupPaths
-        .splice(0)
-        .map((target) => rm(target, { recursive: true, force: true })),
-    );
-  });
-
-  it("removes only the review's own checkout, leaving concurrent ones", async () => {
-    const repo = await createRepoWithFeature(cleanupPaths);
-    execGit(repo.rootPath, ["checkout", "-b", "feature-2", "main"]);
-    await writeFile(path.join(repo.rootPath, "README.md"), "head-2\n", "utf8");
-    execGit(repo.rootPath, ["commit", "-am", "head 2"]);
-    const otherCommit = gitOutput(repo.rootPath, ["rev-parse", "HEAD"]);
-    execGit(repo.rootPath, ["checkout", "main"]);
-
-    const first = await ensureReviewPinnedCheckout({
-      rootPath: repo.rootPath,
-      ref: repo.headCommit,
-      reviewUuid: TEST_REVIEW_UUID,
-    });
-
-    const other = await ensureReviewPinnedCheckout({
-      rootPath: repo.rootPath,
-      ref: otherCommit,
-      reviewUuid: TEST_REVIEW_UUID,
-    });
-
-    await expect(
-      removeReviewPinnedCheckout({
-        rootPath: repo.rootPath,
-        reviewUuid: TEST_REVIEW_UUID,
-        checkoutPath: first ?? "",
-      }),
-    ).resolves.toBe(true);
-
-    expect(existsSync(first ?? "")).toBe(false);
-    expect(readFileSync(path.join(other ?? "", "README.md"), "utf8")).toBe(
-      "head-2\n",
-    );
-
-    const worktrees = gitOutput(repo.rootPath, [
-      "worktree",
-      "list",
-      "--porcelain",
-    ]);
-
-    expect(worktrees).not.toContain(first ?? "");
-    expect(worktrees).toContain(other ?? "");
-  });
-
-  it("sweeps prepare markers an older install left beside the checkout", async () => {
-    const repo = await createRepoWithFeature(cleanupPaths);
-
-    const checkoutPath =
-      (await ensureReviewPinnedCheckout({
-        rootPath: repo.rootPath,
-        ref: repo.headCommit,
-        reviewUuid: TEST_REVIEW_UUID,
-      })) ?? "";
-
-    // Releases before the JSON API wrote these beside the worktree.
-    await writeFile(`${checkoutPath}.prepared`, "{}\n", "utf8");
-    await writeFile(`${checkoutPath}.prepare-log`, "prepared\n", "utf8");
-
-    await expect(
-      removeReviewPinnedCheckout({
-        rootPath: repo.rootPath,
-        reviewUuid: TEST_REVIEW_UUID,
-        checkoutPath,
-      }),
-    ).resolves.toBe(true);
-
-    expect(existsSync(checkoutPath)).toBe(false);
-    expect(existsSync(`${checkoutPath}.prepared`)).toBe(false);
-    expect(existsSync(`${checkoutPath}.prepare-log`)).toBe(false);
-  });
-
-  it("refuses paths outside the dev-fast worktrees dir", async () => {
-    const repo = await createRepoWithFeature(cleanupPaths);
-
-    await expect(
-      removeReviewPinnedCheckout({
-        rootPath: repo.rootPath,
-        reviewUuid: TEST_REVIEW_UUID,
-        checkoutPath: repo.rootPath,
-      }),
-    ).resolves.toBe(false);
-
-    expect(readFileSync(path.join(repo.rootPath, "README.md"), "utf8")).toBe(
-      "base\n",
     );
   });
 });
