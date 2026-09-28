@@ -1,5 +1,5 @@
 import { existsSync, rmSync } from "node:fs";
-import { mkdir, rmdir } from "node:fs/promises";
+import { mkdir, rm, rmdir } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -155,6 +155,18 @@ export async function removeReviewPinnedCheckout(input: {
   await removeReviewPrepareArtifacts(target);
 
   return existed;
+}
+
+/** Remove every checkout one Review owns in a repository, with its registrations. */
+export async function removeReviewManagedCheckouts(
+  commonDir: string,
+  reviewUuid: string,
+): Promise<void> {
+  await rm(reviewManagedCheckoutRoot(commonDir, reviewUuid), {
+    recursive: true,
+    force: true,
+  });
+  await git(commonDir, ["worktree", "prune"], { allowFailure: true });
 }
 
 /** Remove commit-owned checkouts from releases before Review ownership. */

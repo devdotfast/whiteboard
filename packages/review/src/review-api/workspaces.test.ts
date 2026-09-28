@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   readFileSync,
@@ -316,3 +317,77 @@ it("claims unowned workspaces before removing them", async () => {
     await third.store.close();
   }
 });
+
+it("removes a dismissed review's checkouts and rebuilds them on demand", async () => {
+  const other = (await command({ type: "create", title: "Other", pins }))
+    .reviewId;
+
+  const dismissed = await local.data.workspaces.source(reviewId, pins, "head");
+  const kept = await local.data.workspaces.source(other, pins, "head");
+
+  await command({ type: "attention", reviewId, action: "dismiss" });
+  await local.data.workspaces.idle();
+
+  expect(existsSync(dismissed.rootPath!)).toBe(false);
+  expect(local.data.workspaces.list(reviewId)).toEqual([]);
+  expect(git("worktree", "list")).not.toContain(dismissed.rootPath!);
+  expect(readFileSync(path.join(kept.rootPath!, "value.ts"), "utf8")).toContain(
+    "42",
+  );
+
+  const rebuilt = await local.data.workspaces.source(reviewId, pins, "head");
+  expect(rebuilt.rootPath).toBe(dismissed.rootPath);
+  expect(
+    readFileSync(path.join(rebuilt.rootPath!, "value.ts"), "utf8"),
+  ).toContain("42");
+});
+
+it("removes checkouts left by reviews dismissed while Desktop was closed", async () => {
+  const { rootPath } = await local.data.workspaces.source(
+    reviewId,
+    pins,
+    "head",
+  );
+
+  await local.data.close();
+  await local.store.close();
+  const headless = openLocalReviewStore(database, { manageWorkspaces: false });
+  await headless.store.execute({
+    commandId: randomUUID(),
+    operation: { type: "attention", reviewId, action: "dismiss" },
+  });
+  await headless.data.close();
+  await headless.store.close();
+  expect(existsSync(rootPath!)).toBe(true);
+
+  local = openLocalReviewStore(database);
+  await local.data.workspaces.idle();
+  expect(existsSync(rootPath!)).toBe(false);
+});
+
+it.skipIf(process.getuid?.() === 0)(
+  "keeps a dismissal when its checkout cannot be removed",
+  async () => {
+    const { rootPath } = await local.data.workspaces.source(
+      reviewId,
+      pins,
+      "head",
+    );
+
+    chmodSync(rootPath!, 0o500);
+
+    try {
+      await command({ type: "attention", reviewId, action: "dismiss" });
+      await local.data.workspaces.idle();
+      expect(local.store.summary(reviewId)?.dismissedAt).toBeTruthy();
+      expect(existsSync(path.join(rootPath!, "value.ts"))).toBe(true);
+    } finally {
+      chmodSync(rootPath!, 0o700);
+    }
+
+    const rebuilt = await local.data.workspaces.source(reviewId, pins, "head");
+    expect(
+      readFileSync(path.join(rebuilt.rootPath!, "value.ts"), "utf8"),
+    ).toContain("42");
+  },
+);

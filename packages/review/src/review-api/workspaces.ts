@@ -8,7 +8,10 @@ import { git, gitCommonDir } from "@dev.fast/local-vcs";
 import { errorMessage, processIsAlive } from "@dev.fast/trace-core";
 
 import { reviewManagedCheckoutRoot } from "../review-checkout-paths.js";
-import { ensureReviewPinnedCheckout } from "../review-head-checkout.js";
+import {
+  ensureReviewPinnedCheckout,
+  removeReviewManagedCheckouts,
+} from "../review-head-checkout.js";
 import {
   markerMatches,
   prepareReviewPinnedCheckout,
@@ -98,8 +101,79 @@ export class ReviewWorkspaces {
       throw error;
     }
 
-    this.stop = store.subscribeCatalog(() => this.collect());
+    this.stop = store.subscribeCatalog(() => {
+      this.collect();
+      this.releaseDismissed();
+    });
     this.collect();
+    this.releaseDismissed();
+  }
+
+  // Unset until the first scan, so startup also frees reviews dismissed
+  // while no Desktop was running.
+  private dismissed?: Set<string>;
+
+  /**
+   * Frees a newly dismissed review's checkouts to save disk. The review itself
+   * stays; reopening it rebuilds them. Best-effort: a failure leaves the
+   * checkout for the next startup to retry.
+   */
+  private releaseDismissed() {
+    const dismissed = new Set(this.store.dismissedIds());
+    const released = [...dismissed].filter((id) => !this.dismissed?.has(id));
+    this.dismissed = dismissed;
+
+    if (!released.length) return;
+
+    this.cleanup = this.cleanup
+      .then(async () => {
+        await Promise.all(this.requests.values());
+        const repositories = new Set(this.all().map((item) => item.repository));
+
+        for (const { path: root } of this.store.repositories()) {
+          const common = await gitCommonDir(root).catch(() => null);
+
+          if (common) repositories.add(common);
+        }
+
+        for (const reviewId of released) {
+          const environments = this.all().filter(
+            (item) => item.reviewId === reviewId,
+          );
+
+          const checkouts = [...repositories].filter(
+            (repository) =>
+              repository &&
+              existsSync(reviewManagedCheckoutRoot(repository, reviewId)),
+          );
+
+          if (
+            (!environments.length && !checkouts.length) ||
+            !this.claim(reviewId)
+          )
+            continue;
+
+          for (const environment of environments) {
+            const job = this.jobs.get(environment.id);
+            job?.abort.abort();
+            await job?.done;
+            this.db
+              .prepare("DELETE FROM pinned_environments WHERE id=?")
+              .run(environment.id);
+          }
+
+          for (const repository of checkouts)
+            await removeReviewManagedCheckouts(repository, reviewId).catch(
+              () => {},
+            );
+          this.db
+            .prepare(
+              "DELETE FROM workspace_leases WHERE review_id=? AND owner=?",
+            )
+            .run(reviewId, this.ownerId);
+        }
+      })
+      .catch(() => {});
   }
 
   private external?: {

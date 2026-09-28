@@ -652,8 +652,8 @@ export type ReviewCanvasContent =
       // Deletes the review and closes its canvas. Absent when the host does
       // not support deletion.
       deleteReview?(uuid: string): Promise<void>;
-      // Dismissal is reversible: it stamps the review. Deletion is immediate
-      // and permanent. Absent when the host does
+      // Dismissal is reversible: it stamps the review and frees its pinned
+      // checkouts. Deletion is immediate and permanent. Absent when the host does
       // not support them.
       dismissReview?(uuid: string): Promise<void>;
       restoreReview?(uuid: string): Promise<void>;
