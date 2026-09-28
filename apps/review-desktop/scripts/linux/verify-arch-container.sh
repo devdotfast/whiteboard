@@ -81,4 +81,7 @@ pacman-key --delete "$FINGERPRINT"
 if pacman -Syy </dev/null > /tmp/untrusted 2>&1; then
   cat /tmp/untrusted; echo 'pacman accepted an untrusted repository' >&2; exit 1
 fi
-grep -Eq "key \"$FINGERPRINT\" is unknown" /tmp/untrusted
+# pacman names the key that made the signature: the release key signs with a
+# subkey, so accept any fingerprint from the published key.
+SIGNING_KEYS="$(gpg --show-keys --with-colons "/publication/repos/keys/$FINGERPRINT.asc" | awk -F: '$1 == "fpr" {print $10}' | paste -sd '|')"
+grep -Eq "key \"($SIGNING_KEYS)\" is unknown" /tmp/untrusted
