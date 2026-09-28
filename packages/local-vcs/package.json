@@ -28,9 +28,9 @@
   "devDependencies": {
     "@types/node": "24.12.2",
     "@types/proper-lockfile": "4.1.4",
-    "tsdown": "^0.22.3",
+    "tsdown": "0.22.14",
     "typescript": "6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "4.1.11"
   },
   "engines": {
     "node": ">=22"

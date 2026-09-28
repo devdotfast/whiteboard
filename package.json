@@ -18,6 +18,7 @@
     "lint": "oxlint --disable-nested-config .",
     "ci": "pnpm --filter @dev.fast/review-desktop app:build && pnpm --filter @dev.fast/review check:tutorial && pnpm lint && pnpm format:check && pnpm typecheck && pnpm test",
     "test": "node --test \"scripts/**/*.test.mjs\" && pnpm -r --if-present test",
+    "pretypecheck": "pnpm --filter @dev.fast/review build:workspace-deps",
     "typecheck": "pnpm -r --workspace-concurrency=1 --if-present typecheck",
     "build": "pnpm -r --if-present build"
   },
@@ -26,7 +27,8 @@
     "@types/node": "24.12.2",
     "oxfmt": "0.48.0",
     "oxlint": "1.63.0",
-    "typescript": "npm:typescript@7.0.1-rc"
+    "typescript": "npm:typescript@7.0.2",
+    "zod": "4.4.3"
   },
   "engines": {
     "node": ">=24 <25",
