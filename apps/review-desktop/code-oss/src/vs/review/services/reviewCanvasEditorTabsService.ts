@@ -206,7 +206,11 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		await this.editorService.openEditor(input, { pinned: true, inactive: !active, revealIfVisible: true }, targetGroup);
 	}
 
+	/** Closes the review's tabs and its source windows. */
 	async closeReview(reviewUuid: string): Promise<void> {
+		void this.desktopConnection
+			.closeSourceWindows([reviewUuid])
+			.catch((error) => this.logService.warn("[Whiteboard] Could not close source windows:", error));
 		const keys = [...this.inputs.keys()].filter(
 			(key) =>
 				key === reviewUuid ||

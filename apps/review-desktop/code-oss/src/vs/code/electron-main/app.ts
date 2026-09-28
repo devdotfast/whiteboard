@@ -1247,7 +1247,7 @@ export class CodeApplication extends Disposable {
 		// Review Desktop hands the renderer its server endpoint over IPC rather
 		// than through bootstrap environment variables.
 		if (this.reviewDesktopHost) {
-			mainProcessElectronServer.registerChannel(REVIEW_DESKTOP_CHANNEL, new ReviewDesktopChannel(this.reviewDesktopHost));
+			mainProcessElectronServer.registerChannel(REVIEW_DESKTOP_CHANNEL, new ReviewDesktopChannel(this.reviewDesktopHost, accessor.get(IWindowsMainService)));
 		}
 
 		const launchChannel = ProxyChannel.fromService(accessor.get(ILaunchMainService), disposables, { disableMarshalling: true });

@@ -89,6 +89,10 @@ class ReviewCanvasEditorContribution extends Disposable implements IWorkbenchCon
 		await this.tabsService.openHome(!this.editorService.activeEditor);
 		await this.desktopConnection.initialize();
 		await this.apiCatalog.initialize();
+		// Windows restored for a review dismissed at quit, or while closed, show checkouts the host frees at startup.
+		await this.desktopConnection.closeSourceWindows(
+			this.apiCatalog.reviews.filter((review) => review.dismissedAt).map((review) => review.reviewId),
+		);
 	}
 
 	/** Restored API tabs may belong to reviews deleted or dismissed while the app was closed. */
