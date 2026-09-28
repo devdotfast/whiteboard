@@ -47,8 +47,8 @@ importers:
         version: link:../../packages/review-protocol
     devDependencies:
       '@dev.fast/diffr':
-        specifier: 0.1.3
-        version: 0.1.3(zod@4.4.3)
+        specifier: 0.1.4
+        version: 0.1.4(zod@4.4.3)
       '@dev.fast/review-canvas':
         specifier: workspace:*
         version: link:../../packages/review/app
