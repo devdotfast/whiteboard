@@ -40,7 +40,6 @@ const FORBIDDEN_MODULES = [
   "review-state-store.ts",
   "review-vcs.ts",
   "review-head-checkout.ts",
-  "review-worktree-target.ts",
   "server/cli-install.ts",
   "install.ts",
   "review-telemetry.ts",

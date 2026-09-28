@@ -5,17 +5,6 @@ import { describe, expect, it } from "vitest";
 
 const SOURCE_ROOTS = [path.resolve(import.meta.dirname)];
 
-const ALLOWLIST: ReadonlyArray<{
-  location: string;
-  justification: string;
-}> = [
-  {
-    location: "src/software-map-health.ts:308",
-    justification:
-      "readCommitTreeFilesSync builds its args with gitArgsSync one statement earlier so the same array can name the traceCommandSync span.",
-  },
-];
-
 describe("repo identity subprocesses", () => {
   it("pins every production git and gh invocation to an explicit repository", () => {
     const violations: string[] = [];
@@ -40,10 +29,7 @@ describe("repo identity subprocesses", () => {
                 invocation,
               );
 
-        if (
-          !explicitlyScoped &&
-          !ALLOWLIST.some((entry) => entry.location === location)
-        ) {
+        if (!explicitlyScoped) {
           violations.push(`${location} ${command}: ${firstLine(invocation)}`);
         }
       }

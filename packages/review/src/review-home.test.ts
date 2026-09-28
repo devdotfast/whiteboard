@@ -7,7 +7,6 @@ import { promisify } from "node:util";
 import { REVIEW_SCHEMA_VERSION } from "@dev.fast/review-protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { resolvePublishReview } from "./publish-preparation";
 import {
   readReviewDocumentBundle,
   reviewDocumentBundleData,
@@ -19,6 +18,7 @@ import {
   createReviewDir,
   findReview,
   findReviewForRepair,
+  findScopedReview,
   listReviews,
   materializeReviewRevision,
   parseAnyStoredReviewRecord,
@@ -440,7 +440,7 @@ describe("review home", () => {
             created.review.uuid,
           ]);
           await expect(
-            resolvePublishReview(root, created.review.uuid),
+            findScopedReview(created.review.uuid, { worktreePath: root }),
           ).resolves.toMatchObject({ dir: created.dir });
           expect(existsSync(staleLock)).toBe(true);
           expect(
