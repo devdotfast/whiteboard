@@ -604,3 +604,9 @@
   background-size: 12px 12px;
   text-overflow: ellipsis;
 }
+
+.database-diagram-canvas--c4 .software-map-frame {
+  height: 100%;
+  min-height: 0;
+  background: var(--transparent);
+}

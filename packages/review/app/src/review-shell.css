@@ -226,6 +226,9 @@
   box-shadow: none;
   font-weight: 600;
 }
+.review-topbar-left .review-segment--active .review-segment-count {
+  color: var(--accent);
+}
 
 /* The Review tab while the agent writes (study 05, bar B): marker ink sweeps
    through the word itself; when the document becomes ready while the reader
@@ -483,9 +486,6 @@
 
 .review-map-view .software-map-frame {
   height: 100%;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
   background: var(--bg);
 }
 

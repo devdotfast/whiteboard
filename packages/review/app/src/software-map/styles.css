@@ -32,6 +32,14 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
+/* Without its chrome the frame is embedded in a host surface: no border,
+   corner or shadow of its own. */
+.software-map-frame.software-map-frame--chrome-hidden {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .software-map-header {
   display: flex;
   justify-content: space-between;
@@ -1723,13 +1731,4 @@
 .software-map-c4-edge-highlight--active {
   stroke: var(--selection-shadow);
   stroke-width: 10px;
-}
-
-.database-diagram-canvas--c4 .software-map-frame {
-  height: 100%;
-  min-height: 0;
-  border: 0;
-  border-radius: 0;
-  background: var(--transparent);
-  box-shadow: none;
 }

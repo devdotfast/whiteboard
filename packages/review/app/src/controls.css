@@ -246,10 +246,6 @@
   opacity: 1;
 }
 
-.review-topbar-left .review-segment--active .review-segment-count {
-  color: var(--accent);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .review-marker-underline,
   .review-segment:hover .review-marker-underline,
