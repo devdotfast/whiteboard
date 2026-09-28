@@ -7926,6 +7926,36 @@ button.review-stack-row:disabled .review-stack-relation {
 .diff-lens-toggle > .diff-counts {
   margin-left: auto;
 }
+/* A truncated name expands in place on hover, over the counts and viewed box,
+   with its text sitting exactly on the clipped name's. */
+.diff-lens-row {
+  position: relative;
+  anchor-scope: --lens-name;
+}
+.diff-lens-chip .diff-lens-name {
+  anchor-name: --lens-name;
+}
+.diff-lens-peek {
+  display: none;
+  position: absolute;
+  position-anchor: --lens-name;
+  top: calc(anchor(top) - 3px);
+  left: calc(anchor(left) - 7px);
+  right: 4px;
+  z-index: 1;
+  width: fit-content;
+  padding: 2px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  box-shadow: 0 2px 10px var(--shadow-color-strong);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+.diff-lens-chip:hover .diff-lens-name[data-truncated] + .diff-lens-peek {
+  display: block;
+}
 .diff-lens-toggle.is-active {
   color: var(--accent);
 }
