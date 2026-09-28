@@ -10,8 +10,10 @@ import {
 } from "@dev.fast/review-protocol";
 import { writePrivateJsonAtomic } from "@dev.fast/trace-core";
 
-import type { DismissedRetentionDays } from "./review-attention";
 import { devReviewHome } from "./review-home-paths";
+
+/** `null` turns reaping off: a dismissed review then waits forever. */
+type DismissedRetentionDays = number | null;
 
 /**
  * Machine-wide Review preferences the server itself needs. Workbench settings

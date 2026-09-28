@@ -17,7 +17,6 @@
     "README.md",
     "onboarding.md",
     "dist",
-    "docs",
     "instructions",
     "tutorial",
     "!tutorial/.bundle",

@@ -5,11 +5,8 @@ import path from "node:path";
 
 import { afterEach, expect, it, vi } from "vitest";
 
-import {
-  createReviewDir,
-  readStoredReview,
-  sealReviewCandidate,
-} from "./review-home";
+import { readStoredReview, sealReviewCandidate } from "./review-home";
+import { createLegacyReviewDir } from "./review-test-utils";
 import { reviewVcs } from "./review-vcs";
 import { migrateStoredReview } from "./stored-review-migration";
 
@@ -78,7 +75,7 @@ async function fixture(broken = false) {
   git(["commit", "-qm", "source"]);
   const commit = git(["rev-parse", "HEAD"]);
 
-  const review = await createReviewDir({
+  const review = await createLegacyReviewDir({
     worktreePath: source,
     baseRef: "main",
     baseCommit: commit,

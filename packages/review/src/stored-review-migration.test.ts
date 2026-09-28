@@ -20,7 +20,6 @@ import {
   writeReviewDocumentBundle,
 } from "./review-bundle";
 import {
-  createReviewDir,
   materializeReviewRevision,
   parseStoredReviewRecord,
   sealReviewCandidate,
@@ -28,6 +27,7 @@ import {
 import { withReviewMutationLock } from "./review-mutation-lock";
 import {
   cleanupTempDirs,
+  createLegacyReviewDir,
   gitRepository,
   tempDir,
   writeLegacyDocument,
@@ -622,7 +622,7 @@ describe("migrateStoredReviewData", () => {
       { encoding: "utf8" },
     ).trim();
 
-    const created = await createReviewDir({
+    const created = await createLegacyReviewDir({
       reviewsHomePath: reviewHome,
       worktreePath: sourceRoot,
       baseRef: "main",
@@ -918,7 +918,7 @@ describe("migrateStoredReviewData", () => {
       { encoding: "utf8" },
     ).trim();
 
-    const created = await createReviewDir({
+    const created = await createLegacyReviewDir({
       reviewsHomePath: reviewHome,
       worktreePath: sourceRoot,
       baseRef: "main",
@@ -971,7 +971,7 @@ describe("migrateStoredReviewData", () => {
       { encoding: "utf8" },
     ).trim();
 
-    const created = await createReviewDir({
+    const created = await createLegacyReviewDir({
       reviewsHomePath: reviewHome,
       worktreePath: sourceRoot,
       baseRef: "main",
@@ -1126,7 +1126,7 @@ async function storedReview() {
     { encoding: "utf8" },
   ).trim();
 
-  const created = await createReviewDir({
+  const created = await createLegacyReviewDir({
     reviewsHomePath: reviewHome,
     worktreePath: sourceRoot,
     baseRef: "main",

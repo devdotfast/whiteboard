@@ -1,18 +1,29 @@
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import type {
-  JsonObject,
-  ReviewDesktopDiscovery,
+import {
+  type JsonObject,
+  REVIEW_SCHEMA_VERSION,
+  type ReviewDesktopDiscovery,
+  type ReviewSourceIdentity,
 } from "@dev.fast/review-protocol";
+import { writePrivateJsonAtomic } from "@dev.fast/trace-core";
 import { vi } from "vitest";
 
 import {
   type ReviewInstanceSelection,
   isHealthyReviewDesktop,
 } from "./desktop-discovery";
+import {
+  DISABLED_REVIEW_SOURCE_SESSION,
+  type StoredReview,
+  type StoredReviewRecord,
+  reviewsHomeDir,
+} from "./review-home";
+import { reviewVcs } from "./review-vcs";
 
 /**
  * One place for the filesystem scaffolding every Review test needs. Vitest runs
@@ -124,6 +135,64 @@ export async function writeLegacyDocument(
     path.join(target, "review-document.js"),
     options.code ?? DEFAULT_LEGACY_DOCUMENT_CODE,
   );
+}
+
+/**
+ * A review directory in the MDX-era layout (review.mdx, data.ts, package.json)
+ * with a current review.json, for the legacy migration and import tests.
+ */
+export async function createLegacyReviewDir(binding: {
+  reviewsHomePath?: string;
+  worktreePath: string;
+  baseRef: string;
+  baseCommit: string;
+  sourceCommit?: string;
+  sourceIdentity?: ReviewSourceIdentity;
+}): Promise<StoredReview> {
+  const uuid = randomUUID();
+  const dir = path.join(reviewsHomeDir(binding.reviewsHomePath), uuid);
+
+  const review: StoredReviewRecord = {
+    schemaVersion: REVIEW_SCHEMA_VERSION,
+    uuid,
+    repoKey: "repo",
+    worktreePath: path.resolve(binding.worktreePath),
+    baseRef: binding.baseRef,
+    baseCommit: binding.baseCommit,
+    sourceCommit: binding.sourceCommit ?? null,
+    sourceIdentity: binding.sourceIdentity ?? null,
+    pullRequestNumber: null,
+    pullRequestUrl: null,
+    title: "Progressive Review",
+    sourceSession: DISABLED_REVIEW_SOURCE_SESSION,
+    status: "draft",
+    presentedDocumentRevision: null,
+    presentedSoftwareMapRevision: null,
+    createdAt: new Date().toISOString(),
+    lastPublishedAt: null,
+  };
+
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await reviewVcs.init(dir);
+  await Promise.all([
+    writeFile(
+      path.join(dir, "review.mdx"),
+      `# ${review.title}\n\nThis review document is ready for repo-specific notes.\n`,
+    ),
+    writeFile(path.join(dir, "data.ts"), "export {};\n"),
+    writeFile(
+      path.join(dir, "package.json"),
+      `${JSON.stringify({ name: `review-${uuid}`, private: true, type: "module" }, null, 2)}\n`,
+    ),
+    // Legacy reviews kept build output and review.db out of their VCS.
+    writeFile(
+      path.join(dir, ".gitignore"),
+      ".build/\nreview.db\nreview.db-wal\nreview.db-shm\n",
+    ),
+  ]);
+  await writePrivateJsonAtomic(path.join(dir, "review.json"), review);
+
+  return { dir, review };
 }
 
 /** A selection over one record read; health still comes from `fetch`, as in production. */

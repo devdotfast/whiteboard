@@ -38,7 +38,6 @@ export default defineConfig({
     cli: "src/cli.ts",
     runtime: "src/runtime.ts",
     "server/desktop-host": "src/server/desktop-host.ts",
-    "software-map-model": "src/software-map-model.ts",
   },
   platform: "node",
   target: "node24",

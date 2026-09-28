@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdir, readFile, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -14,26 +13,18 @@ import {
 import {
   ReviewHomeScanError,
   type StoredReview,
-  computeSync,
-  createReviewDir,
   findReview,
   findReviewForRepair,
-  findScopedReview,
-  listReviews,
   materializeReviewRevision,
   parseAnyStoredReviewRecord,
-  parseStoredReviewRecord,
-  reviewDescriptor,
   reviewsHomeDir,
   sealReviewCandidate,
-  touchReviewAgentSession,
 } from "./review-home";
-import { withReviewMutationLock } from "./review-mutation-lock";
 import {
   cleanupTempDirs,
+  createLegacyReviewDir,
   gitRepository,
   reviewHome,
-  tempDir,
   writeLegacyDocument,
 } from "./review-test-utils";
 import { reviewVcs } from "./review-vcs";
@@ -144,94 +135,11 @@ describe("review home", () => {
     ).toThrow(/unexpected/);
   });
 
-  it("upserts agent roles and timestamps without changing the legacy field", async () => {
-    const root = await gitRepository();
-    await reviewHome();
-    const commit = await git(root, ["rev-parse", "HEAD"]);
-
-    const created = await createReviewDir({
-      worktreePath: root,
-      baseRef: "main",
-      baseCommit: commit,
-      sourceCommit: commit,
-      sourceIdentity: { kind: "git-branch", name: "main" },
-      sourceSession: "codex:creator",
-    });
-
-    const first = await touchReviewAgentSession(
-      created,
-      "codex:creator",
-      "publisher",
-      "2026-08-12T10:00:00.000Z",
-    );
-
-    const second = await touchReviewAgentSession(
-      first,
-      "codex:creator",
-      "publisher",
-      "2026-08-12T11:00:00.000Z",
-    );
-
-    expect(second.review.sourceSession).toBe("codex:creator");
-    expect(second.review.agentSessions?.["codex:creator"]).toMatchObject({
-      roles: ["author", "publisher"],
-      firstSeenAt: created.review.createdAt,
-      lastSeenAt: "2026-08-12T11:00:00.000Z",
-    });
-    const { agentSessions: _agentSessions, ...legacy } = second.review;
-    expect(parseStoredReviewRecord(legacy)).not.toHaveProperty("agentSessions");
-  });
-
-  it("creates a UUID review directory with a plain Git repository", async () => {
-    const root = await gitRepository();
-    await reviewHome();
-
-    const created = await createReviewDir({
-      worktreePath: root,
-      baseRef: "main",
-      baseCommit: await git(root, ["rev-parse", "HEAD"]),
-      sourceCommit: await git(root, ["rev-parse", "HEAD"]),
-      sourceIdentity: { kind: "git-branch", name: "main" },
-      title: "Checkout review",
-      sourceSession: "codex:agent-session",
-    });
-
-    expect(created.review).toMatchObject({
-      uuid: expect.stringMatching(/^[0-9a-f-]{36}$/),
-      worktreePath: root,
-      sourceIdentity: { kind: "git-branch", name: "main" },
-      title: "Checkout review",
-      sourceSession: "codex:agent-session",
-      status: "draft",
-      presentedDocumentRevision: null,
-      presentedSoftwareMapRevision: null,
-      lastPublishedAt: null,
-    });
-    expect(created.dir).toBe(path.join(reviewsHomeDir(), created.review.uuid));
-    expect(existsSync(path.join(created.dir, ".git"))).toBe(true);
-    await expect(
-      readFile(path.join(created.dir, "review.mdx"), "utf8"),
-    ).resolves.toContain("# Checkout review");
-    await expect(
-      readFile(path.join(created.dir, "data.ts"), "utf8"),
-    ).resolves.toBe("export {};\n");
-    await expect(
-      readFile(path.join(created.dir, ".gitignore"), "utf8"),
-    ).resolves.toBe(".build/\nreview.db\nreview.db-wal\nreview.db-shm\n");
-    expect(existsSync(path.join(created.dir, "review-test.mjs"))).toBe(false);
-    expect(existsSync(path.join(created.dir, "review.db"))).toBe(false);
-    expect(existsSync(path.join(created.dir, "comments.json"))).toBe(false);
-    expect(existsSync(path.join(created.dir, "questions.json"))).toBe(false);
-    await expect(
-      readFile(path.join(created.dir, "review.json"), "utf8"),
-    ).resolves.toContain(`"uuid": "${created.review.uuid}"`);
-  });
-
   it("ignores a legacy softwareMap key in review.json", async () => {
     const root = await gitRepository();
     await reviewHome();
 
-    const created = await createReviewDir({
+    const created = await createLegacyReviewDir({
       worktreePath: root,
       baseRef: "main",
       baseCommit: await git(root, ["rev-parse", "HEAD"]),
@@ -257,263 +165,6 @@ describe("review home", () => {
     expect(loaded?.review).not.toHaveProperty("softwareMap");
   });
 
-  it("records the source binding in the creation write", async () => {
-    const root = await gitRepository();
-    await reviewHome();
-
-    const created = await createReviewDir({
-      uuid: "11111111-1111-4111-8111-111111111111",
-      worktreePath: root,
-      baseRef: "main",
-      baseCommit: await git(root, ["rev-parse", "HEAD"]),
-      sourceCommit: "abcdef",
-      sourceIdentity: { kind: "git-branch", name: "HEAD" },
-    });
-
-    expect(created.review).toMatchObject({
-      sourceCommit: "abcdef",
-      sourceIdentity: { kind: "git-branch", name: "HEAD" },
-    });
-    await expect(
-      readFile(path.join(created.dir, "review.json"), "utf8"),
-    ).resolves.toContain('"sourceCommit": "abcdef"');
-  });
-
-  it("records explicit pull request identity in the creation write", async () => {
-    const root = await gitRepository();
-    await reviewHome();
-
-    const created = await createReviewDir({
-      uuid: "11111111-1111-4111-8111-111111111111",
-      worktreePath: root,
-      baseRef: "main",
-      baseCommit: await git(root, ["rev-parse", "HEAD"]),
-      sourceCommit: "abcdef",
-      sourceIdentity: { kind: "git-branch", name: "HEAD" },
-      pullRequestNumber: 673,
-      pullRequestUrl: "https://github.com/Fix-Fast/dev/pull/673",
-    });
-
-    expect(created.review).toMatchObject({
-      pullRequestNumber: 673,
-      pullRequestUrl: "https://github.com/Fix-Fast/dev/pull/673",
-    });
-    await expect(
-      readFile(path.join(created.dir, "review.json"), "utf8"),
-    ).resolves.toContain('"pullRequestNumber": 673');
-  });
-
-  it("describes pull request and diff metadata for the home view", async () => {
-    const root = await gitRepository();
-    await reviewHome();
-
-    const baseCommit = await git(root, ["rev-parse", "HEAD"]);
-    await writeFile(path.join(root, "feature.ts"), "export const value = 1;\n");
-    await git(root, ["add", "."]);
-    await git(root, ["commit", "-m", "add feature"]);
-    const sourceCommit = await git(root, ["rev-parse", "HEAD"]);
-
-    const created = await createReviewDir({
-      worktreePath: root,
-      baseRef: baseCommit,
-      baseCommit,
-      sourceCommit,
-      sourceIdentity: { kind: "git-branch", name: "feature/home" },
-      pullRequestNumber: 673,
-      pullRequestUrl: "https://github.com/Fix-Fast/dev/pull/673",
-    });
-
-    const documentUpdatedAt = (
-      await stat(path.join(created.dir, "review.mdx"))
-    ).mtime.toISOString();
-
-    await expect(reviewDescriptor(created)).resolves.toMatchObject({
-      baseRef: baseCommit,
-      headRef: "feature/home",
-      commits: [
-        {
-          commit: sourceCommit,
-          parentCommit: baseCommit,
-          subject: "add feature",
-          fileCount: 1,
-          additions: 1,
-          deletions: 0,
-        },
-      ],
-      pullRequestNumber: 673,
-      pullRequestUrl: "https://github.com/Fix-Fast/dev/pull/673",
-      diffStats: { fileCount: 1, additions: 1, deletions: 0 },
-      documentUpdatedAt,
-    });
-  });
-
-  it("describes the pinned diff even when the checkout moved elsewhere", async () => {
-    const root = await gitRepository();
-    await reviewHome();
-
-    const baseCommit = await git(root, ["rev-parse", "HEAD"]);
-    await git(root, ["checkout", "-b", "review-head"]);
-    await writeFile(
-      path.join(root, "reviewed.ts"),
-      "export const reviewed = true;\nexport const ready = true;\n",
-    );
-    await git(root, ["add", "."]);
-    await git(root, ["commit", "-m", "reviewed change"]);
-    const reviewHead = await git(root, ["rev-parse", "HEAD"]);
-
-    await git(root, ["checkout", "-b", "unrelated-checkout", baseCommit]);
-    await writeFile(
-      path.join(root, "unrelated.ts"),
-      Array.from({ length: 100 }, (_, index) => `line ${index}`).join("\n"),
-    );
-    await git(root, ["add", "."]);
-    await git(root, ["commit", "-m", "unrelated checkout"]);
-
-    const created = await createReviewDir({
-      worktreePath: root,
-      baseRef: baseCommit,
-      baseCommit,
-      sourceCommit: reviewHead,
-      sourceIdentity: { kind: "git-branch", name: "review-head" },
-      pullRequestNumber: 636,
-      pullRequestUrl: "https://github.com/Fix-Fast/dev/pull/636",
-    });
-
-    await expect(reviewDescriptor(created)).resolves.toMatchObject({
-      diffStats: { fileCount: 1, additions: 2, deletions: 0 },
-      commits: [
-        {
-          commit: reviewHead,
-          parentCommit: baseCommit,
-          subject: "reviewed change",
-        },
-      ],
-    });
-
-    const samePin = await createReviewDir({
-      worktreePath: root,
-      baseRef: baseCommit,
-      baseCommit,
-      sourceCommit: baseCommit,
-      sourceIdentity: { kind: "git-branch", name: "review-head" },
-    });
-
-    await expect(reviewDescriptor(samePin)).resolves.toMatchObject({
-      diffStats: null,
-      commits: [],
-    });
-  });
-
-  it("ignores active and stale locks and unrelated directories during discovery", async () => {
-    const root = await gitRepository();
-    await reviewHome();
-
-    const created = await createReviewDir({
-      worktreePath: root,
-      baseRef: "main",
-      baseCommit: await git(root, ["rev-parse", "HEAD"]),
-    });
-
-    const staleReviewDir = path.join(
-      reviewsHomeDir(),
-      "11111111-1111-4111-8111-111111111111",
-    );
-
-    const staleLock = `${staleReviewDir}.mutation-lock`;
-    const unrelated = path.join(reviewsHomeDir(), "notes");
-    await mkdir(staleLock);
-    await utimes(staleLock, new Date(0), new Date(0));
-    await mkdir(unrelated);
-    await writeFile(path.join(unrelated, "review.json"), "not a Review");
-    await withReviewMutationLock(created.dir, () =>
-      withReviewMutationLock(
-        path.join(reviewsHomeDir(), "tutorial-lifecycle"),
-        async () => {
-          const homeListing = await listReviews();
-          expect(homeListing.errors).toEqual([]);
-          expect(homeListing.reviews.map((entry) => entry.review.uuid)).toEqual(
-            [created.review.uuid],
-          );
-          const scoped = await listReviews({ worktreePath: root });
-          expect(scoped.errors).toEqual([]);
-          expect(scoped.reviews.map((entry) => entry.review.uuid)).toEqual([
-            created.review.uuid,
-          ]);
-          await expect(
-            findScopedReview(created.review.uuid, { worktreePath: root }),
-          ).resolves.toMatchObject({ dir: created.dir });
-          expect(existsSync(staleLock)).toBe(true);
-          expect(
-            await readFile(path.join(unrelated, "review.json"), "utf8"),
-          ).toBe("not a Review");
-        },
-      ),
-    );
-    await expect(
-      withReviewMutationLock(staleReviewDir, async () => "reclaimed"),
-    ).resolves.toBe("reclaimed");
-    expect(existsSync(staleLock)).toBe(false);
-  });
-
-  it("returns parse failures as explicit list errors", async () => {
-    await reviewHome();
-    const malformedUuid = "33333333-3333-4333-8333-333333333333";
-    const invalidUuid = "44444444-4444-4444-8444-444444444444";
-    const malformed = path.join(reviewsHomeDir(), malformedUuid);
-    const invalid = path.join(reviewsHomeDir(), invalidUuid);
-    const incompatibleUuid = "22222222-2222-4222-8222-222222222222";
-    const incompatible = path.join(reviewsHomeDir(), incompatibleUuid);
-    await mkdir(malformed, { recursive: true });
-    await mkdir(invalid, { recursive: true });
-    await mkdir(incompatible, { recursive: true });
-    await writeFile(path.join(malformed, "review.json"), "{nope", "utf8");
-    await writeFile(path.join(invalid, "review.json"), "{}", "utf8");
-    await writeFile(
-      path.join(incompatible, "review.json"),
-      JSON.stringify({
-        schemaVersion: 2,
-        uuid: incompatibleUuid,
-        title: "An incompatible Review",
-        worktreePath: "/tmp/incompatible",
-        lastPublishedAt: "2026-08-08T00:00:00.000Z",
-      }),
-      "utf8",
-    );
-
-    const result = await listReviews();
-    expect(result.reviews).toEqual([]);
-    expect(result.errors).toEqual(
-      expect.arrayContaining([
-        {
-          reviewDir: malformed,
-          reviewUuid: malformedUuid,
-          title: "",
-          worktreePath: malformed,
-          lastPublishedAt: null,
-          message: expect.stringContaining("Could not read review.json"),
-        },
-        {
-          reviewDir: invalid,
-          reviewUuid: invalidUuid,
-          title: "",
-          worktreePath: invalid,
-          lastPublishedAt: null,
-          code: "MIGRATION_REQUIRED",
-          message: expect.stringContaining("review migrate apply"),
-        },
-        {
-          reviewDir: incompatible,
-          reviewUuid: incompatibleUuid,
-          title: "An incompatible Review",
-          worktreePath: "/tmp/incompatible",
-          lastPublishedAt: "2026-08-08T00:00:00.000Z",
-          code: "MIGRATION_REQUIRED",
-          message: expect.stringContaining("review migrate apply"),
-        },
-      ]),
-    );
-  });
-
   it("distinguishes invalid UUIDs, missing reviews, and malformed records", async () => {
     await reviewHome();
     const malformedUuid = "22222222-2222-4222-8222-222222222222";
@@ -531,89 +182,6 @@ describe("review home", () => {
       ReviewHomeScanError,
     );
   });
-
-  it("filters scanned reviews and computes source-head sync", async () => {
-    const root = await gitRepository();
-    const otherRoot = await gitRepository();
-    await reviewHome();
-
-    const sourceCommit = await git(root, ["rev-parse", "HEAD"]);
-
-    const review = await createReviewDir({
-      worktreePath: root,
-      baseRef: "main",
-      baseCommit: sourceCommit,
-      sourceCommit,
-    });
-
-    await createReviewDir({
-      worktreePath: otherRoot,
-      baseRef: "main",
-      baseCommit: await git(otherRoot, ["rev-parse", "HEAD"]),
-      sourceCommit: await git(otherRoot, ["rev-parse", "HEAD"]),
-    });
-
-    await expect(listReviews({ worktreePath: root })).resolves.toMatchObject({
-      reviews: [{ dir: review.dir, review: { uuid: review.review.uuid } }],
-      errors: [],
-    });
-    await expect(computeSync(review.review, root)).resolves.toBe(true);
-    await writeFile(path.join(root, "next.txt"), "next\n", "utf8");
-    await git(root, ["add", "."]);
-    await git(root, ["commit", "-m", "next"]);
-    // computeSync compares the resolved head commit, not a time window: the
-    // new commit is observable the moment `git commit` returns.
-    await expect(computeSync(review.review, root)).resolves.toBe(false);
-  });
-
-  it("keeps system Reviews addressable but out of ordinary lists", async () => {
-    const root = await gitRepository();
-    await reviewHome();
-
-    const sourceCommit = await git(root, ["rev-parse", "HEAD"]);
-
-    const review = await createReviewDir({
-      visibility: "system",
-      worktreePath: root,
-      baseRef: "main",
-      baseCommit: sourceCommit,
-      sourceCommit,
-    });
-
-    await expect(listReviews()).resolves.toMatchObject({
-      reviews: [],
-      errors: [],
-    });
-    await expect(listReviews({ includeSystem: true })).resolves.toMatchObject({
-      reviews: [
-        {
-          dir: review.dir,
-          review: { uuid: review.review.uuid, visibility: "system" },
-        },
-      ],
-      errors: [],
-    });
-    await expect(findReview(review.review.uuid)).resolves.toMatchObject({
-      dir: review.dir,
-      review: { visibility: "system" },
-    });
-  });
-
-  it("reports an unresolvable worktree head instead of calling it out of sync", async () => {
-    const root = await tempDir("review-home-source-");
-    await reviewHome();
-
-    const review = await createReviewDir({
-      worktreePath: root,
-      baseRef: "main",
-      baseCommit: "base",
-      sourceCommit: "bound-head",
-    });
-
-    await expect(computeSync(review.review, root)).rejects.toThrow(
-      `Could not resolve the current source head at ${root}.`,
-    );
-  });
 });
 
 async function git(root: string, args: string[]): Promise<string> {
@@ -629,7 +197,7 @@ describe("legacy records on read", () => {
     const root = await gitRepository();
     await reviewHome();
 
-    const created = await createReviewDir({
+    const created = await createLegacyReviewDir({
       worktreePath: root,
       baseRef: "main",
       baseCommit: await git(root, ["rev-parse", "HEAD"]),
@@ -676,7 +244,7 @@ describe("legacy records on read", () => {
       const root = await gitRepository();
       await reviewHome();
 
-      const created = await createReviewDir({
+      const created = await createLegacyReviewDir({
         worktreePath: root,
         baseRef: "main",
         baseCommit: await git(root, ["rev-parse", "HEAD"]),
@@ -704,24 +272,21 @@ describe("legacy records on read", () => {
 
       await writeFile(recordPath, bytes);
       const refs = await git(created.dir, ["rev-parse", "HEAD"]);
-      const listed = await listReviews();
-      expect(listed.reviews).toEqual([]);
-      expect(listed.errors).toMatchObject([{ code: "MIGRATION_REQUIRED" }]);
-      await expect(findReview(created.review.uuid)).rejects.toBeInstanceOf(
-        ReviewHomeScanError,
-      );
+      await expect(findReview(created.review.uuid)).rejects.toMatchObject({
+        errors: [{ code: "MIGRATION_REQUIRED" }],
+      });
       expect(await readFile(recordPath, "utf8")).toBe(bytes);
       expect(await git(created.dir, ["rev-parse", "HEAD"])).toBe(refs);
     },
   );
 
   it.each([2, 3, 4] as const)(
-    "migrates a schema %s record on first read and lists it as current",
+    "migrates a schema %s record on first read",
     async (schemaVersion) => {
       const root = await gitRepository();
       const home = await reviewHome();
 
-      const created = await createReviewDir({
+      const created = await createLegacyReviewDir({
         worktreePath: root,
         baseRef: "main",
         baseCommit: await git(root, ["rev-parse", "HEAD"]),
@@ -740,10 +305,6 @@ describe("legacy records on read", () => {
         JSON.stringify(await legacyRecord(created, schemaVersion, revision)),
       );
 
-      const listed = await listReviews();
-
-      expect(listed.errors).toEqual([]);
-      expect(listed.reviews).toHaveLength(1);
       const stored = await findReview(created.review.uuid);
       expect(stored?.review).toMatchObject({
         schemaVersion: 5,
@@ -761,13 +322,9 @@ describe("legacy records on read", () => {
       );
       const bundle = await readReviewDocumentBundle(materialized, "/");
       expect(bundle && reviewDocumentBundleData(bundle).title).toBe("Sealed");
-      expect(await reviewDescriptor(stored!)).toMatchObject({
-        available: true,
-        status: "accepted",
-      });
 
       const bytes = await readFile(recordPath, "utf8");
-      await listReviews();
+      await findReview(created.review.uuid);
       expect(await readFile(recordPath, "utf8")).toBe(bytes);
     },
   );
@@ -776,7 +333,7 @@ describe("legacy records on read", () => {
     const root = await gitRepository();
     await reviewHome();
 
-    const created = await createReviewDir({
+    const created = await createLegacyReviewDir({
       worktreePath: root,
       baseRef: "main",
       baseCommit: await git(root, ["rev-parse", "HEAD"]),
@@ -804,7 +361,7 @@ describe("legacy records on read", () => {
     const root = await gitRepository();
     await reviewHome();
 
-    const created = await createReviewDir({
+    const created = await createLegacyReviewDir({
       worktreePath: root,
       baseRef: "main",
       baseCommit: await git(root, ["rev-parse", "HEAD"]),
@@ -819,16 +376,8 @@ describe("legacy records on read", () => {
     await writeFile(recordPath, bytes);
     const refs = await readFile(path.join(created.dir, ".git/refs/heads/main"));
 
-    const listed = await listReviews();
-
-    expect(listed.reviews).toEqual([]);
-    expect(listed.errors).toHaveLength(1);
-    expect(listed.errors[0]).toMatchObject({
-      code: "REPAIR_REQUIRED",
-      reviewUuid: created.review.uuid,
-    });
     await expect(findReview(created.review.uuid)).rejects.toMatchObject({
-      errors: [{ code: "REPAIR_REQUIRED" }],
+      errors: [{ code: "REPAIR_REQUIRED", reviewUuid: created.review.uuid }],
     });
     expect(await readFile(recordPath, "utf8")).toBe(bytes);
     expect(

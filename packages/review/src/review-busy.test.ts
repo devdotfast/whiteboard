@@ -5,8 +5,9 @@ import path from "node:path";
 
 import { afterEach, expect, it, vi } from "vitest";
 
-import { createReviewDir, readStoredReview } from "./review-home";
+import { readStoredReview } from "./review-home";
 import { withReviewMutationLock } from "./review-mutation-lock";
+import { createLegacyReviewDir } from "./review-test-utils";
 
 const roots: string[] = [];
 
@@ -39,7 +40,7 @@ it("reports loader and open contention as busy and allows migration after releas
   git(["commit", "-qm", "source"]);
   const sourceCommit = git(["rev-parse", "HEAD"]);
 
-  const review = await createReviewDir({
+  const review = await createLegacyReviewDir({
     worktreePath: root,
     baseRef: "main",
     baseCommit: sourceCommit,

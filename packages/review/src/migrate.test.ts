@@ -16,8 +16,13 @@ import {
   removeLegacyGlobalReviewInstalls,
   runReviewMigration,
 } from "./migrate";
-import { createReviewDir, sealReviewCandidate } from "./review-home";
-import { cleanupTempDirs, gitRepository, tempDir } from "./review-test-utils";
+import { sealReviewCandidate } from "./review-home";
+import {
+  cleanupTempDirs,
+  createLegacyReviewDir,
+  gitRepository,
+  tempDir,
+} from "./review-test-utils";
 
 type TestRunCommand = (
   command: string,
@@ -537,7 +542,7 @@ async function canonicalReview(): Promise<{
   const reviewHome = await tempDir("review-migrate-");
   const sourceRoot = await gitRepository();
 
-  const created = await createReviewDir({
+  const created = await createLegacyReviewDir({
     reviewsHomePath: reviewHome,
     worktreePath: sourceRoot,
     baseRef: "HEAD",

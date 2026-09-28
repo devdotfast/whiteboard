@@ -320,10 +320,8 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 - **Notes:** `ensureJsonCutover` (`json-cutover.ts:238-270`) returns on its
   marker without reading `<home>/reviews` again, and Home lists from the JSON
   store (`review-api/store.ts:485`). The `MIGRATION_REQUIRED` error has no
-  Desktop consumer at all: it reaches only `ListReviewsResult.errors`
-  (`review-home.ts:139-143`), `listReviews` has one non-test caller,
-  `publish-preparation.ts:24` — the only place that sets
-  `reportUnreadableReviews` — and `ReviewHomeError` appears nowhere in
+  Desktop consumer at all: only tests read `review-home.ts`'s scan errors,
+  and `ReviewHomeError` appears nowhere in
   `packages/review/app/src`. What is worth fixing is the path where such a
   directory still matters, which is the entry above: before the cutover has run,
   the same record stops the Desktop from starting.

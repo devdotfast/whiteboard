@@ -1,46 +1,19 @@
-import { randomUUID } from "node:crypto";
-import {
-  access,
-  mkdir,
-  readFile,
-  readdir,
-  realpath,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { currentHead, listCommitRange } from "@dev.fast/local-vcs";
 import {
-  DEFAULT_DISMISSED_RETENTION_DAYS,
   type JsonObject,
   type JsonValue,
   REVIEW_SCHEMA_VERSION,
-  type ReviewAgentSessionRole,
-  type ReviewSourceIdentity,
   isJsonObject,
   jsonObject,
   jsonString,
   parseJsonText,
-  summarizeReviewDiffFiles,
 } from "@dev.fast/review-protocol";
-import {
-  errorMessage,
-  withFileLock,
-  writePrivateJsonAtomic,
-} from "@dev.fast/trace-core";
+import { errorMessage } from "@dev.fast/trace-core";
 import { z } from "zod";
 
-import {
-  type SessionRef,
-  authoringSessionKey,
-  parseAuthoringSessionKey,
-} from "./agent-session-ref";
 import { isMissingFileError } from "./fs-utils";
-import { resolveReviewRepositoryIdentity } from "./repository-identity";
-import { type DismissedRetentionDays, reviewReapsAt } from "./review-attention";
-import { resolveReviewDiffFiles } from "./review-diff-files";
 import { devReviewHome } from "./review-home-paths";
 import {
   type ReviewRecord,
@@ -54,21 +27,6 @@ import { reviewVcs } from "./review-vcs";
 
 export const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export interface CreateReviewDirBinding {
-  uuid?: string;
-  reviewsHomePath?: string;
-  visibility?: "system";
-  worktreePath: string;
-  baseRef: string;
-  baseCommit: string;
-  sourceCommit?: string | null;
-  sourceIdentity?: ReviewSourceIdentity | null;
-  pullRequestNumber?: number | null;
-  pullRequestUrl?: string | null;
-  title?: string;
-  sourceSession?: string;
-}
 
 export const DISABLED_REVIEW_SOURCE_SESSION = "disabled:review";
 
@@ -118,15 +76,6 @@ export interface StoredReview {
   review: StoredReviewRecord;
 }
 
-export interface ListReviewsFilter {
-  worktreePath?: string;
-  repoKey?: string;
-  status?: ReviewRecord["status"];
-  includeSystem?: boolean;
-  /** Surface a review whose review.json cannot be read, instead of skipping it. */
-  reportUnreadableReviews?: boolean;
-}
-
 export interface ReviewHomeError {
   reviewDir: string;
   reviewUuid: string | null;
@@ -135,11 +84,6 @@ export interface ReviewHomeError {
   lastPublishedAt: string | null;
   message: string;
   code?: string;
-}
-
-export interface ListReviewsResult {
-  reviews: StoredReview[];
-  errors: ReviewHomeError[];
 }
 
 export class ReviewHomeScanError extends Error {
@@ -156,167 +100,11 @@ export function reviewsHomeDir(devHome = devReviewHome()): string {
   return path.join(devHome, "reviews");
 }
 
-export async function createReviewDir(
-  binding: CreateReviewDirBinding,
-): Promise<StoredReview> {
-  const uuid = binding.uuid ?? createReviewUuid();
-
-  if (!UUID_PATTERN.test(uuid)) {
-    throw new Error(`Review UUID is invalid: ${uuid}`);
-  }
-
-  const dir = path.join(reviewsHomeDir(binding.reviewsHomePath), uuid);
-  const worktreePath = path.resolve(binding.worktreePath);
-  const repository = await resolveReviewRepositoryIdentity(worktreePath);
-  const createdAt = new Date().toISOString();
-  const sourceSession = binding.sourceSession ?? DISABLED_REVIEW_SOURCE_SESSION;
-
-  const attributedAgentSession = parseAuthoringSessionKey(sourceSession)
-    ? sourceSession
-    : null;
-
-  const review: StoredReviewRecord = {
-    schemaVersion: REVIEW_SCHEMA_VERSION,
-    uuid,
-    repoKey: repository.repositoryId,
-    worktreePath,
-    baseRef: binding.baseRef,
-    baseCommit: binding.baseCommit,
-    sourceCommit: binding.sourceCommit ?? null,
-    sourceIdentity: binding.sourceIdentity ?? null,
-    pullRequestNumber: binding.pullRequestNumber ?? null,
-    pullRequestUrl: binding.pullRequestUrl ?? null,
-    title: binding.title ?? "Progressive Review",
-    sourceSession,
-    status: "draft",
-    presentedDocumentRevision: null,
-    presentedSoftwareMapRevision: null,
-    createdAt,
-    lastPublishedAt: null,
-  };
-
-  if (binding.visibility) review.visibility = binding.visibility;
-
-  if (attributedAgentSession) {
-    review.agentSessions = {
-      [attributedAgentSession]: {
-        roles: ["author"],
-        firstSeenAt: createdAt,
-        lastSeenAt: createdAt,
-      },
-    };
-  }
-
-  await mkdirReviewDir(dir);
-
-  try {
-    await reviewVcs.init(dir);
-    await Promise.all([
-      writeFile(path.join(dir, "review.mdx"), defaultReviewMdx(review), "utf8"),
-      writeFile(path.join(dir, "data.ts"), "export {};\n", "utf8"),
-      writeFile(
-        path.join(dir, "package.json"),
-        `${JSON.stringify(reviewPackageJson(uuid), null, 2)}\n`,
-        "utf8",
-      ),
-      writeFile(path.join(dir, ".gitignore"), reviewGitignore, "utf8"),
-    ]);
-    await writePrivateJsonAtomic(path.join(dir, "review.json"), review);
-  } catch (error) {
-    await rm(dir, { recursive: true, force: true });
-    throw error;
-  }
-
-  return { dir, review };
-}
-
-const AGENT_SESSION_LOCK_OPTIONS = {
-  retryMs: 10,
-  staleMs: 30_000,
-  timeoutMs: 2_000,
-  unownedGraceMs: 1_000,
-  heartbeatMs: 5_000,
-} as const;
-
-export async function touchReviewAgentSession(
-  review: StoredReview,
-  sessionKey: string,
-  role: ReviewAgentSessionRole,
-  now = new Date().toISOString(),
-): Promise<StoredReview> {
-  if (!parseAuthoringSessionKey(sessionKey)) {
-    throw new Error(`Review agent session key is invalid: ${sessionKey}`);
-  }
-
-  const recordPath = path.join(review.dir, "review.json");
-
-  const outcome = await withReviewMutationLock(review.dir, () =>
-    withFileLock(
-      path.join(review.dir, ".agent-sessions.lock"),
-      AGENT_SESSION_LOCK_OPTIONS,
-      async () => {
-        const current = parseStoredReviewRecord(
-          JSON.parse(await readFile(recordPath, "utf8")),
-        );
-
-        const prior = current.agentSessions?.[sessionKey];
-
-        const roles = prior?.roles.includes(role)
-          ? prior.roles
-          : [...(prior?.roles ?? []), role];
-
-        const updated: StoredReviewRecord = {
-          ...current,
-          agentSessions: {
-            ...current.agentSessions,
-            [sessionKey]: {
-              roles,
-              firstSeenAt: prior?.firstSeenAt ?? now,
-              lastSeenAt: now,
-            },
-          },
-        };
-
-        await writePrivateJsonAtomic(recordPath, updated);
-
-        return { dir: review.dir, review: updated };
-      },
-    ),
-  );
-
-  if (!outcome.acquired) {
-    throw new Error(
-      `Timed out while updating agent sessions for Review ${review.review.uuid}.`,
-    );
-  }
-
-  return outcome.result;
-}
-
 export async function sealReviewCandidate(
   dir: string,
   message: string,
 ): Promise<string> {
   return withReviewMutationLock(dir, () => reviewVcs.seal(dir, message));
-}
-
-export function createReviewUuid(): string {
-  return randomUUID();
-}
-
-/** The document's first ATX H1, used as the Review display title. */
-export async function reviewTitleFromDocument(
-  documentPath: string,
-): Promise<string | undefined> {
-  const document = await readFile(documentPath, "utf8");
-
-  for (const line of document.split(/\r?\n/)) {
-    const heading = /^#\s+(.+?)\s*#*\s*$/.exec(line);
-
-    if (heading) return heading[1].trim() || undefined;
-  }
-
-  return undefined;
 }
 
 export async function findReview(
@@ -378,47 +166,6 @@ export async function findReviewForRepair(
   return { dir, review };
 }
 
-/**
- * The one rule for "this UUID, in this checkout".
- *
- * Returns null for every out-of-scope answer — not found, bound elsewhere, already
- * terminal — and lets each caller decide between throwing and an empty result.
- */
-export async function findScopedReview(
-  uuid: string,
-  scope: {
-    worktreePath: string;
-    /** Accepted and rejected reviews are out of scope unless asked for. */
-    includeTerminal?: boolean;
-    /** Repair must reach reviews whose review.json predates the current schema. */
-    includeLegacySchema?: boolean;
-    /** Override the default Review storage home. */
-    devHome?: string;
-  },
-): Promise<StoredReview | null> {
-  const found = await (
-    scope.includeLegacySchema ? findReviewForRepair : findReview
-  )(uuid, scope.devHome);
-
-  if (!found) return null;
-
-  const [storedRoot, requestedRoot] = await Promise.all(
-    [found.review.worktreePath, scope.worktreePath].map((root) =>
-      realpath(root).catch(() => path.resolve(root)),
-    ),
-  );
-
-  if (storedRoot !== requestedRoot) return null;
-
-  if (
-    !scope.includeTerminal &&
-    (found.review.status === "accepted" || found.review.status === "rejected")
-  )
-    return null;
-
-  return found;
-}
-
 async function findReviewRecord(
   uuid: string,
   devHome?: string,
@@ -445,219 +192,6 @@ async function findReviewRecord(
   }
 
   return loaded;
-}
-
-export async function reviewDescriptor(
-  stored: StoredReview,
-  options: {
-    retentionDays?: DismissedRetentionDays;
-  } = {},
-) {
-  // `null` is a real retention setting (never reap), so only an absent key defaults.
-  const retentionDays =
-    options.retentionDays === undefined
-      ? DEFAULT_DISMISSED_RETENTION_DAYS
-      : options.retentionDays;
-
-  const documentPath = path.join(stored.dir, "review.mdx");
-
-  const [reviewDirExists, worktreeExists, documentStats] = await Promise.all([
-    pathExists(stored.dir),
-    pathExists(stored.review.worktreePath),
-    statIfExists(documentPath),
-  ]);
-
-  const documentExists = documentStats !== null;
-  const available = reviewDirExists && worktreeExists && documentExists;
-  /* Same diff target as the review document (resolveRequestDiffTarget):
-     the pinned baseCommit..sourceCommit from review.json. An empty diff
-     reports null so the views omit the numbers, as the document does. */
-  const headCommit = stored.review.sourceCommit ?? stored.review.baseCommit;
-
-  const [diffStats, commits] = await Promise.all([
-    worktreeExists && stored.review.sourceCommit
-      ? resolveReviewDiffFiles({
-          rootPath: stored.review.worktreePath,
-          baseRef: stored.review.baseCommit,
-          headRef: stored.review.sourceCommit,
-          includePatch: false,
-        })
-          .then(({ files }) =>
-            files.length ? summarizeReviewDiffFiles(files) : null,
-          )
-          .catch(() => null)
-      : null,
-    worktreeExists && headCommit !== stored.review.baseCommit
-      ? listCommitRange({
-          rootPath: stored.review.worktreePath,
-          baseRef: stored.review.baseCommit,
-          headRef: headCommit,
-        }).catch(() => [])
-      : [],
-  ]);
-
-  return {
-    uuid: stored.review.uuid,
-    title: stored.review.title,
-    status: stored.review.status,
-    worktreePath: stored.review.worktreePath,
-    repoKey: stored.review.repoKey,
-    sourceBranch: stored.review.sourceIdentity?.name ?? null,
-    baseRef: stored.review.baseRef,
-    headRef: stored.review.sourceIdentity?.name ?? headCommit.slice(0, 8),
-    commits,
-    pullRequestNumber: stored.review.pullRequestNumber ?? null,
-    pullRequestUrl: stored.review.pullRequestUrl ?? null,
-    diffStats,
-    documentUpdatedAt: documentStats?.mtime.toISOString() ?? null,
-    presentedDocumentRevision: stored.review.presentedDocumentRevision,
-    presentedSoftwareMapRevision: stored.review.presentedSoftwareMapRevision,
-    lastPublishedAt: stored.review.lastPublishedAt,
-    available,
-    viewedAt: stored.review.viewedAt ?? null,
-    dismissedAt: stored.review.dismissedAt ?? null,
-    reapsAt: reviewReapsAt(stored.review, retentionDays),
-  };
-}
-
-export async function listReviews(
-  filter: ListReviewsFilter = {},
-): Promise<ListReviewsResult> {
-  let loaded: Array<StoredReview | { error: ReviewHomeError } | null>;
-
-  try {
-    const entries = await readdir(reviewsHomeDir(), { withFileTypes: true });
-    loaded = await Promise.all(
-      entries
-        .filter((entry) => entry.isDirectory() && UUID_PATTERN.test(entry.name))
-        .map((entry) =>
-          readReviewForList(path.join(reviewsHomeDir(), entry.name), filter),
-        ),
-    );
-  } catch (error) {
-    if (isMissingFileError(error)) {
-      return { reviews: [], errors: [] };
-    }
-
-    throw error;
-  }
-
-  const result: ListReviewsResult = { reviews: [], errors: [] };
-
-  for (const entry of loaded) {
-    if (!entry) continue;
-
-    if ("error" in entry) {
-      result.errors.push(entry.error);
-      continue;
-    }
-
-    if (!reviewMatchesFilter(entry.review, filter)) continue;
-    result.reviews.push(entry);
-  }
-
-  return result;
-}
-
-async function readReviewForList(
-  dir: string,
-  filter: ListReviewsFilter,
-): Promise<StoredReview | { error: ReviewHomeError } | null> {
-  if (!filter.worktreePath && !filter.repoKey) return readStoredReview(dir);
-  let record: JsonObject | undefined;
-
-  try {
-    record = jsonObject(
-      parseJsonText(await readFile(path.join(dir, "review.json"), "utf8")),
-    );
-  } catch {
-    return unreadableReview(dir, filter);
-  }
-
-  const scope = {
-    worktreePath: jsonString(record?.worktreePath),
-    repoKey: jsonString(record?.repoKey),
-  };
-
-  // A record that cannot answer the scope question is not out of scope; the
-  // strict read decides whether it becomes a list error.
-  if (
-    (filter.worktreePath && !scope.worktreePath) ||
-    (filter.repoKey && !scope.repoKey)
-  )
-    return unreadableReview(dir, filter);
-
-  return reviewMatchesFilter(scope, {
-    worktreePath: filter.worktreePath,
-    repoKey: filter.repoKey,
-    includeSystem: true,
-  })
-    ? readStoredReview(dir)
-    : null;
-}
-
-/** Every scope test in one place, so the cheap JSON pre-pass and the final
- * pass answer the same question about the same fields. */
-function reviewMatchesFilter(
-  record: {
-    worktreePath?: string | undefined;
-    repoKey?: string | undefined;
-    status?: string | undefined;
-    visibility?: string | undefined;
-  },
-  filter: ListReviewsFilter,
-): boolean {
-  if (!filter.includeSystem && record.visibility === "system") return false;
-
-  if (
-    filter.worktreePath &&
-    (!record.worktreePath ||
-      path.resolve(record.worktreePath) !== path.resolve(filter.worktreePath))
-  )
-    return false;
-
-  if (filter.repoKey && record.repoKey !== filter.repoKey) return false;
-
-  if (filter.status && record.status !== filter.status) return false;
-
-  return true;
-}
-
-function unreadableReview(
-  dir: string,
-  filter: ListReviewsFilter,
-): Promise<StoredReview | { error: ReviewHomeError }> | null {
-  return filter.reportUnreadableReviews ? readStoredReview(dir) : null;
-}
-
-export async function computeSync(
-  review: ReviewRecord,
-  worktreePath: string,
-): Promise<boolean> {
-  if (!review.sourceCommit) return false;
-  const head = await currentHead(worktreePath);
-
-  if (!head) {
-    throw new Error(
-      `Could not resolve the current source head at ${worktreePath}.`,
-    );
-  }
-
-  return head.commit === review.sourceCommit;
-}
-
-async function mkdirReviewDir(dir: string): Promise<void> {
-  await mkdir(path.dirname(dir), { recursive: true, mode: 0o700 });
-
-  try {
-    await mkdir(dir, { recursive: false, mode: 0o700 });
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "EEXIST") {
-      throw new Error(`Review directory already exists: ${dir}`);
-    }
-
-    throw error;
-  }
 }
 
 export async function materializeReviewRevision(
@@ -878,46 +412,3 @@ function stripLegacySoftwareMap(value: JsonValue): JsonValue {
 
   return record;
 }
-
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await access(targetPath);
-
-    return true;
-  } catch (error) {
-    if (isMissingFileError(error)) return false;
-    throw error;
-  }
-}
-
-async function statIfExists(targetPath: string) {
-  try {
-    return await stat(targetPath);
-  } catch (error) {
-    if (isMissingFileError(error)) return null;
-    throw error;
-  }
-}
-
-function defaultReviewMdx(review: ReviewRecord): string {
-  return `# ${review.title}\n\nThis review document is ready for repo-specific notes.\n\n{/* Review source: ${review.sourceCommit ?? "unbound"} */}\n`;
-}
-
-function reviewPackageJson(uuid: string) {
-  return {
-    name: `review-${uuid}`,
-    private: true,
-    type: "module",
-  };
-}
-
-// Keep build output and any review.db left by older versions (and sqlite's
-// transient sidecars) out of the review VCS: sealed revisions would otherwise
-// capture nondeterministic binary state.
-const reviewGitignore = [
-  ".build/",
-  "review.db",
-  "review.db-wal",
-  "review.db-shm",
-  "",
-].join("\n");
