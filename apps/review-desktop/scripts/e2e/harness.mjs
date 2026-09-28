@@ -161,6 +161,8 @@ export async function createHarness({
 
   let appLog = "";
 
+  let launchLog = () => "";
+
   let app;
 
   let browser;
@@ -279,13 +281,16 @@ export async function createHarness({
       lifecycle(`Desktop exit: ${code}, ${signal}`),
     );
 
-    app.stdout.on("data", (chunk) => {
-      appLog = (appLog + chunk).slice(-200000);
-    });
+    // Each launch starts its own log, so a journey can search what this Desktop printed and nothing earlier.
+    let log = "";
 
-    app.stderr.on("data", (chunk) => {
-      appLog = (appLog + chunk).slice(-200000);
-    });
+    launchLog = () => log;
+
+    for (const stream of [app.stdout, app.stderr])
+      stream.on("data", (chunk) => {
+        appLog = (appLog + chunk).slice(-200000);
+        log = (log + chunk).slice(-200000);
+      });
   }
 
   async function attach() {
@@ -597,6 +602,7 @@ export async function createHarness({
   return Object.assign(ctx, {
     api,
     appLog: () => appLog,
+    launchLog: () => launchLog(),
     apiOk,
     apiCanvasFor,
     cli,
@@ -689,6 +695,12 @@ export function sourceWindowFor(ctx, fileName) {
       .contexts()
       .flatMap((context) => context.pages()))
       if (
+        // The review's own window hosts the canvas; closing it would end the journey.
+        candidate !== ctx.page &&
+        (await candidate
+          .locator(".review-canvas-root")
+          .count()
+          .catch(() => 1)) === 0 &&
         (
           await candidate
             .locator(".tabs-container .tab.active")

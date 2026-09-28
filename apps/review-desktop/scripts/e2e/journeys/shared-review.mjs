@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { assertNoBlockedReviewRequests } from "../../review-network-policy.mjs";
 import { sourcePackage } from "../harness.mjs";
 
 export const name = "shared-review";
@@ -81,4 +82,20 @@ export async function run(ctx) {
   ctx.check(
     "pinned source renders from the recipient checkout with the sender's repository gone",
   );
+
+  // A received share renders from what is on disk: nothing leaves the machine.
+  assertNoBlockedReviewRequests(ctx.requestUrls);
+  assert.deepEqual(
+    ctx.requestUrls.filter((url) => {
+      const { protocol, hostname } = new URL(url);
+
+      return (
+        /^(https?|wss?):$/.test(protocol) &&
+        !["127.0.0.1", "localhost", "[::1]"].includes(hostname)
+      );
+    }),
+    [],
+    "the shared review made an outbound request",
+  );
+  ctx.check("the shared review made no outbound request");
 }

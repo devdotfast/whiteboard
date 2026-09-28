@@ -23,7 +23,7 @@ jobs:
   review-desktop:
     name: Review Desktop
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -93,7 +93,7 @@ jobs:
           echo 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libx11-dev libxkbfile-dev libkrb5-dev libsecret-1-dev python3 xvfb
+            libx11-dev libxkbfile-dev libkrb5-dev libsecret-1-dev python3
 
       - name: Install Playwright Chromium system dependencies
         run: pnpm --filter @dev.fast/review-canvas exec playwright install-deps chromium
@@ -169,40 +169,6 @@ jobs:
       - name: Bundled diffr integration
         run: pnpm --filter @dev.fast/review test:integration:diffr
 
-      # The journeys launch this job's dev build, so they only run when the
-      # Desktop or a package it bundles changed. The runtime they drive is a
-      # production install of the packed CLI, as TESTING.md stages it.
-      - name: Decide whether to run the e2e journeys
-        id: e2e
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]] ||
-            git diff --name-only "$BASE_SHA...HEAD" | grep -qE '^(apps/review-desktop|packages)/'; then
-            echo "run=true" >>"$GITHUB_OUTPUT"
-          fi
-
-      - name: Stage the e2e runtime
-        if: steps.e2e.outputs.run == 'true'
-        run: |
-          pack="$RUNNER_TEMP/review-pack" runtime="$RUNNER_TEMP/review-runtime"
-          mkdir -p "$pack" "$runtime"
-          (cd packages/review && pnpm pack --pack-destination "$pack")
-          (cd "$runtime" && npm init -y >/dev/null && npm install --omit=dev "$pack"/dev.fast-review-*.tgz)
-          echo "REVIEW_E2E_RUNTIME=$runtime/node_modules/@dev.fast/review" >>"$GITHUB_ENV"
-
-      - name: Run the e2e journeys
-        if: steps.e2e.outputs.run == 'true'
-        run: xvfb-run -a node apps/review-desktop/scripts/e2e/run.mjs --runtime "$REVIEW_E2E_RUNTIME"
-
-      - name: Upload e2e journey artifacts
-        if: failure() && steps.e2e.outputs.run == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: e2e-journeys
-          path: /tmp/review-e2e-*
-          if-no-files-found: ignore
-
       - name: Upload browser test diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -212,4 +178,131 @@ jobs:
             packages/review/app/.vitest-attachments
             packages/review/**/__screenshots__
             packages/review/**/__traces__
+          if-no-files-found: ignore
+
+  # Not a required check: the journeys are slow and new to Linux, so a red run
+  # must not block merges. It builds its own Desktop from the same caches.
+  review-desktop-e2e:
+    name: Review Desktop E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether to run the e2e journeys
+        id: e2e
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]] ||
+            git diff --name-only "$BASE_SHA...HEAD" |
+              grep -qE '^(apps/review-desktop/|packages/|pnpm-lock\.yaml$|package\.json$|\.github/workflows/review-desktop-ci\.yml$)'; then
+            echo "run=true" >>"$GITHUB_OUTPUT"
+          fi
+
+      # legacy-import clones this checkout and fetches the fixture commits from it.
+      - name: Fetch legacy Review fixture commits
+        if: steps.e2e.outputs.run == 'true'
+        shell: bash
+        run: |
+          mapfile -t fixture_commits < <(
+            jq -r '
+              select(.sourceRepository == "devdotfast/review") |
+              .baseCommit, .sourceCommit
+            ' packages/review/src/fixtures/legacy-reviews/*.json |
+              sort -u
+          )
+          test "${#fixture_commits[@]}" -gt 0
+          git fetch --no-tags origin "${fixture_commits[@]}"
+
+      - name: Setup pnpm
+        if: steps.e2e.outputs.run == 'true'
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - name: Setup monorepo Node
+        if: steps.e2e.outputs.run == 'true'
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install monorepo dependencies
+        if: steps.e2e.outputs.run == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Code OSS native build prerequisites and xvfb
+        if: steps.e2e.outputs.run == 'true'
+        run: |
+          echo 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libx11-dev libxkbfile-dev libkrb5-dev libsecret-1-dev python3 xvfb
+
+      - name: Install Playwright Chromium system dependencies
+        if: steps.e2e.outputs.run == 'true'
+        run: pnpm --filter @dev.fast/review-canvas exec playwright install-deps chromium
+
+      - name: Setup Code OSS Node
+        if: steps.e2e.outputs.run == 'true'
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: apps/review-desktop/code-oss/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/review-desktop/code-oss/**/package-lock.json
+
+      # Restore only: the Review Desktop job owns saving this cache.
+      - name: Restore Code OSS dependencies
+        if: steps.e2e.outputs.run == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            apps/review-desktop/code-oss/node_modules
+            apps/review-desktop/code-oss/build/node_modules
+            apps/review-desktop/code-oss/extensions/node_modules
+            apps/review-desktop/code-oss/extensions/*/node_modules
+            apps/review-desktop/code-oss/extensions/*/server/node_modules
+            apps/review-desktop/code-oss/.build/distro/npm/node_modules
+            apps/review-desktop/code-oss/.build/distro/npm/remote/node_modules
+            apps/review-desktop/code-oss/.build/distro/npm/remote/web/node_modules
+            apps/review-desktop/code-oss/.build/electron
+            ~/.cache/node-gyp
+          key: ${{ runner.os }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-code-oss-deps-v2-
+
+      - name: Build Review Desktop
+        if: steps.e2e.outputs.run == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REVIEW_DESKTOP_CI_FAST: "1"
+        run: pnpm --filter @dev.fast/review-desktop app:build
+
+      # The journeys drive a production install of the packed CLI, as TESTING.md stages it.
+      - name: Stage the e2e runtime
+        if: steps.e2e.outputs.run == 'true'
+        run: |
+          pack="$RUNNER_TEMP/review-pack" runtime="$RUNNER_TEMP/review-runtime"
+          mkdir -p "$pack" "$runtime"
+          (cd packages/review && pnpm pack --pack-destination "$pack")
+          (cd "$runtime" && npm init -y >/dev/null && npm install --omit=dev "$pack"/dev.fast-review-*.tgz)
+          echo "REVIEW_E2E_RUNTIME=$runtime/node_modules/@dev.fast/review" >>"$GITHUB_ENV"
+
+      # The harness puts each journey's root under os.tmpdir(), so TMPDIR fixes where the artifacts land.
+      - name: Run the e2e journeys
+        if: steps.e2e.outputs.run == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TMPDIR: /tmp
+        run: xvfb-run -a node apps/review-desktop/scripts/e2e/run.mjs --runtime "$REVIEW_E2E_RUNTIME"
+
+      - name: Upload e2e journey artifacts
+        if: failure() && steps.e2e.outputs.run == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-journeys
+          path: /tmp/review-e2e-*
           if-no-files-found: ignore

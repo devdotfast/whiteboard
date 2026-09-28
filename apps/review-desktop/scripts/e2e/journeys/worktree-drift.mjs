@@ -120,13 +120,13 @@ export async function run(ctx) {
 
   const { heading, unavailable, failed } = canvasUi(ctx);
 
-  // The bug's signature: the commits read still resolves the registered path, which no longer exists.
-  const staleReads = () =>
+  // The bug's signature, in this launch's log: the commits read still resolves the registered path, which no longer exists.
+  const staleRead = () =>
     ctx
-      .appLog()
-      .split(
+      .launchLog()
+      .includes(
         `/commits failed: Error: No Git or jj repository found for ${repo}.`,
-      ).length - 1;
+      );
 
   // The rename leaves the pinned checkout intact, so a full render is as legitimate as the degraded state.
   const outcome = await until(
@@ -139,7 +139,7 @@ export async function run(ctx) {
 
   if (outcome === "failed") {
     assert.ok(
-      staleReads() > 0,
+      staleRead(),
       "the canvas failed for a reason other than the stale repository path",
     );
     await ctx.knownBug(MOVED_BUG);
@@ -162,8 +162,6 @@ export async function run(ctx) {
     `review info named no review: ${info.stdout}`,
   );
   ctx.check("info resolves a review whose worktree moved");
-
-  const readsBeforeDelete = staleReads();
 
   await rm(moved, { recursive: true, force: true });
   assert.ok(
@@ -190,7 +188,7 @@ export async function run(ctx) {
 
   if (afterDelete === "failed") {
     assert.ok(
-      staleReads() > readsBeforeDelete,
+      staleRead(),
       "the canvas failed for a reason other than the stale repository path",
     );
     await ctx.knownBug(MOVED_BUG);

@@ -6,9 +6,8 @@ import path from "node:path";
 import sharp from "sharp";
 
 import { openLocalReviewStore } from "../../../src/review-api/local-data.js";
-import { fetchPinnedRepository } from "../../../src/sharing/repository.js";
 
-export async function createShareFixture(root: string, github = false) {
+export async function createShareFixture(root: string) {
   const repo = path.join(root, "sender-repository");
   await mkdir(repo, { recursive: true });
 
@@ -19,47 +18,34 @@ export async function createShareFixture(root: string, github = false) {
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
 
-  let base: string;
-  let head: string;
+  const cloneUrl = "https://github.com/fixture/review.git";
 
-  const cloneUrl = github
-    ? "https://github.com/octocat/Hello-World.git"
-    : "https://github.com/fixture/review.git";
+  git("init");
+  git("config", "user.name", "Review fixture");
+  git("config", "user.email", "fixture@example.invalid");
+  await writeFile(
+    path.join(repo, "answer.ts"),
+    "export function answer() {\n  return 1;\n}\n",
+  );
+  await writeFile(
+    path.join(repo, "removed.ts"),
+    "export const obsolete = true;\n",
+  );
+  git("add", ".");
+  git("commit", "-m", "Initial answer");
+  const base = git("rev-parse", "HEAD");
+  await writeFile(
+    path.join(repo, "answer.ts"),
+    "export function answer() {\n  return 42;\n}\n",
+  );
+  await writeFile(path.join(repo, "new.ts"), "export const added = true;\n");
+  git("rm", "removed.ts");
+  git("add", ".");
+  git("commit", "-m", "Answer and cleanup");
+  const head = git("rev-parse", "HEAD");
 
-  if (github) {
-    head = git("ls-remote", cloneUrl, "HEAD").split(/\s+/)[0]!;
-    base = head;
-    await fetchPinnedRepository(repo, cloneUrl, { base, head });
-    git("checkout", "--detach", head);
-  } else {
-    git("init");
-    git("config", "user.name", "Review fixture");
-    git("config", "user.email", "fixture@example.invalid");
-    await writeFile(
-      path.join(repo, "answer.ts"),
-      "export function answer() {\n  return 1;\n}\n",
-    );
-    await writeFile(
-      path.join(repo, "removed.ts"),
-      "export const obsolete = true;\n",
-    );
-    git("add", ".");
-    git("commit", "-m", "Initial answer");
-    base = git("rev-parse", "HEAD");
-    await writeFile(
-      path.join(repo, "answer.ts"),
-      "export function answer() {\n  return 42;\n}\n",
-    );
-    await writeFile(path.join(repo, "new.ts"), "export const added = true;\n");
-    git("rm", "removed.ts");
-    git("add", ".");
-    git("commit", "-m", "Answer and cleanup");
-    head = git("rev-parse", "HEAD");
-  }
-
-  const sourceFile = github ? "README" : "answer.ts";
-  const sourceLines = github ? 1 : 3;
-  const sourceText = github ? "Hello World!" : "return 42;";
+  const sourceFile = "answer.ts";
+  const sourceText = "return 42;";
   const local = openLocalReviewStore(path.join(root, "sender.db"));
   const registered = await local.data.register(repo);
   const pins = { repositoryId: registered.id, base, head };
@@ -119,7 +105,7 @@ export async function createShareFixture(root: string, github = false) {
                   codeElements: {
                     compute: {
                       sourceRanges: [
-                        { file: sourceFile, fromLine: 1, toLine: sourceLines },
+                        { file: sourceFile, fromLine: 1, toLine: 3 },
                       ],
                     },
                   },
@@ -143,7 +129,7 @@ export async function createShareFixture(root: string, github = false) {
       source: {
         file: sourceFile,
         start: { side: "head", line: 1 },
-        end: { side: "head", line: sourceLines },
+        end: { side: "head", line: 3 },
       },
     },
     {
@@ -157,7 +143,7 @@ export async function createShareFixture(root: string, github = false) {
     {
       type: "code_peek",
       source: {
-        file: github ? sourceFile : "new.ts",
+        file: "new.ts",
         start: { side: "head", line: 1 },
         end: { side: "head", line: 1 },
       },
@@ -165,7 +151,7 @@ export async function createShareFixture(root: string, github = false) {
     {
       type: "code_peek",
       source: {
-        file: github ? sourceFile : "removed.ts",
+        file: "removed.ts",
         start: { side: "base", line: 1 },
         end: { side: "base", line: 1 },
       },

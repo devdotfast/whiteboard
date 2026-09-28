@@ -16,7 +16,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 - A community invitation dismissed before the first-run reload comes back — fixed (#351)
 - The modal editor opened by Go to Definition ignores the first Escape — fixed (#352)
 - The review topbar covers the Find widget and the contents pill — fixed (#350)
-- A review whose repository directory moves or is deleted renders `ReviewApiError: Review operation failed.` — open (regressed after #355)
+- A review whose repository directory moves or is deleted renders `ReviewApiError: Review operation failed.` — open
 - `review app pick` goes to the launcher instead of reporting an unusable pointer — fixed (#348)
 - One unreadable legacy `review.json` stops Review Desktop from starting — fixed (#349)
 - Home says nothing about a legacy review directory left behind by the JSON cutover — not-a-bug
@@ -172,16 +172,16 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 
 ## A review whose repository directory moves or is deleted renders `ReviewApiError: Review operation failed.`
 
-- **Journey:** `worktree-drift` · **Found:** 2026-09-17 · **Status:** open (fixed by #355, regressed)
-- **Regressed (2026-09-28), intermittently:** on origin/main (1 of 1 runs) and
-  on the housekeeping stack (3 of 4 runs; the fourth rendered normally and also
-  passed the delete path), opening the review after `mv <repo> <repo>-moved`
-  renders
-  `ReviewApiError: Review operation failed (Error). The server logged the
-  cause; …`, and the host logs `GET /reviews-api/<uuid>/commits failed: Error:
-  No Git or jj repository found for <repo>.` The delete path fails the same
-  way. The journey asserts that log line before it records this bug, and
-  accepts a normal render.
+- **Journey:** `worktree-drift` · **Found:** 2026-09-17 · **Status:** open
+- **Regressed (2026-09-28), intermittently, after its fix in #355:** on
+  origin/main (1 of 1 runs) and on the housekeeping stack (3 of 4 runs; the
+  fourth rendered normally and also passed the delete path), opening the review
+  after `mv <repo> <repo>-moved` renders `ReviewApiError: Review operation
+  failed (Error). The server logged the cause; …`, and the host logs
+  `GET /reviews-api/<uuid>/commits failed: Error: No Git or jj repository found
+  for <repo>.` The delete path fails the same way. The journey asserts that log
+  line in the current launch's output before it records this bug, and accepts
+  a normal render.
 - **Repro:** create a review with a `commits` target in a git repository, let it
   render, quit Review Desktop, `mv <repo> <repo>-moved` (or `rm -rf` it),
   relaunch Desktop and open the review from Home or with

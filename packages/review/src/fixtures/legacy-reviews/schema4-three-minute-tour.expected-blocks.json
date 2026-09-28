@@ -9,33 +9,33 @@
     "children": [
       {
         "type": "markdown",
-        "markdown": "## Welcome\n\nA Review is a guided, interactive explanation of a code change. The document\nkeeps the important code, system views, and feedback in one place.\n"
+        "markdown": "A Review is a guided, interactive explanation of a code change. The document\nkeeps the important code, system views, and feedback in one place.\n"
       },
       {
-        "type": "callout",
-        "tone": "info",
-        "title": "Tutorial",
-        "children": [
-          {
-            "type": "markdown",
-            "markdown": "This step used the interactive TutorialAuthoringConversation component.\n"
-          }
-        ]
+        "type": "tutorial",
+        "kind": "conversation",
+        "conversation": {
+          "version": 1,
+          "title": "How this Review was made",
+          "messages": [
+            {
+              "role": "user",
+              "body": "/dev-review I'd like to review the feature we just worked on."
+            },
+            {
+              "role": "assistant",
+              "body": "Ok, I'm on it..."
+            }
+          ]
+        }
       },
       {
         "type": "markdown",
         "markdown": "### Your keybindings\n\nChoose your editor keys. Review highlights the active choice and uses its\nexisting extension and reload flow for Vim and Emacs.\n"
       },
       {
-        "type": "callout",
-        "tone": "info",
-        "title": "Tutorial",
-        "children": [
-          {
-            "type": "markdown",
-            "markdown": "This step used the interactive TutorialKeymapPicker component.\n"
-          }
-        ]
+        "type": "tutorial",
+        "kind": "keymap"
       },
       {
         "type": "markdown",
@@ -68,11 +68,13 @@
     "children": [
       {
         "type": "markdown",
-        "markdown": "## Commits and diffs\n\nReview pins an exact base and head before the agent starts writing. Open\n**Commits** to see the change in author order. Expand the sample commit to see\nits files, then choose **Open diff** to inspect only that commit.\n\nThe **Diff** tab shows the complete change between the pinned base and head.\nChoose **Review** when you are ready to return to this tour.\n"
+        "markdown": "Review pins an exact base and head before the agent starts writing. Open\n**Commits** to see the change in author order. Expand the sample commit to see\nits files, then choose **Open diff** to inspect only that commit.\n\nThe **Diff** tab shows the complete change between the pinned base and head.\nChoose **Review** when you are ready to return to this tour.\n"
       },
       {
-        "type": "markdown",
-        "markdown": "Open the **Commits** tab.\n"
+        "type": "tutorial",
+        "kind": "view",
+        "view": "commits",
+        "label": "Explore the sample commits"
       }
     ]
   },
@@ -82,7 +84,7 @@
     "children": [
       {
         "type": "markdown",
-        "markdown": "## Comments are threads\n\nYou can attach a thread to any part of the canvas. Move the pointer over the\ncode below, select the comment control in the left gutter, and write a note.\n"
+        "markdown": "You can attach a thread to any part of the canvas. Move the pointer over the\ncode below, select the comment control in the left gutter, and write a note.\n"
       },
       {
         "type": "code_peek",
@@ -111,7 +113,7 @@
     "children": [
       {
         "type": "markdown",
-        "markdown": "## Interactive Diagrams\n\nThe sequence diagram connects the checkout request to fulfillment. Select any\nmessage to open its supporting code.\n"
+        "markdown": "The sequence diagram connects the checkout request to fulfillment. Select any\nmessage to open its supporting code.\n"
       },
       {
         "type": "sequence",
@@ -326,13 +328,19 @@
         ]
       },
       {
-        "type": "callout",
-        "tone": "info",
-        "title": "Tutorial",
+        "type": "tutorial",
+        "kind": "feature",
+        "feature": "softwareMap",
         "children": [
           {
             "type": "markdown",
-            "markdown": "This step used the interactive TutorialFeature component.\n"
+            "markdown": "The experimental **Map** moves from the order system to its components and\ncode. Select a node to explore the sample service.\n"
+          },
+          {
+            "type": "tutorial",
+            "kind": "view",
+            "view": "map",
+            "label": "Open the software map"
           }
         ]
       }
@@ -344,7 +352,7 @@
     "children": [
       {
         "type": "markdown",
-        "markdown": "## Get help\n\nTo manage the Review skills installed for your agents, open **Preferences \u2192\nSettings**. To revisit setup or take this tour again, open **Preferences \u2192\nGetting Started**.\n"
+        "markdown": "To manage the Review skills installed for your agents, open **Preferences →\nSettings**. To revisit setup or take this tour again, open **Preferences →\nGetting Started**.\n"
       }
     ]
   }
