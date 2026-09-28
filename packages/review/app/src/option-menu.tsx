@@ -1,5 +1,6 @@
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import { useCanvasMenu } from "./host/canvas-ui";
 import { useDismissOnOutside } from "./use-dismiss-on-outside";
 
 /** A single-choice menu; the caller renders the trigger's content. */
@@ -22,11 +23,48 @@ export function OptionMenu<T extends string>({
   triggerProps?: { "aria-pressed"?: boolean };
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const [fallbackOpen, setOpen] = useState(false);
+  const menu = useCanvasMenu();
+  const open = menu.available ? menu.open : fallbackOpen;
   const container = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const search = useRef({ text: "", time: 0 });
 
-  useDismissOnOutside(container, open, setOpen);
+  useEffect(() => {
+    if (fallbackOpen) {
+      const items = container.current?.querySelectorAll<HTMLButtonElement>(
+        '[role="menuitemradio"]',
+      );
+
+      const selected = options.findIndex((option) => option.value === value);
+      items?.[Math.max(0, selected)]?.focus();
+    }
+  }, [fallbackOpen]);
+
+  useDismissOnOutside(container, fallbackOpen, setOpen);
+
+  const show = () => {
+    if (!menu.available) {
+      setOpen(!fallbackOpen);
+
+      return;
+    }
+
+    if (trigger.current)
+      menu.show({
+        anchor: trigger.current,
+        items: options.map((option) => ({
+          id: option.value,
+          label: option.label,
+          checked: option.value === value,
+        })),
+        onSelect: (id) => {
+          const option = options.find((option) => option.value === id);
+
+          if (option) onChange(option.value);
+        },
+      });
+  };
 
   return (
     <div
@@ -46,7 +84,13 @@ export function OptionMenu<T extends string>({
         aria-label={ariaLabel}
         aria-expanded={open}
         aria-haspopup="menu"
-        onClick={() => setOpen(!open)}
+        onClick={show}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            show();
+          }
+        }}
         {...triggerProps}
       >
         {children}
@@ -58,11 +102,56 @@ export function OptionMenu<T extends string>({
           <path d={open ? "m5 12 5-5 5 5" : "m5 8 5 5 5-5"} />
         </svg>
       </button>
-      {open ? (
+      {!menu.available && fallbackOpen ? (
         <div
           role="menu"
+          tabIndex={-1}
           aria-label={ariaLabel}
           className="review-option-menu-options"
+          onKeyDown={(event) => {
+            const items = [
+              ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                '[role="menuitemradio"]',
+              ),
+            ];
+
+            const index = items.findIndex(
+              (item) =>
+                item === event.currentTarget.ownerDocument.activeElement,
+            );
+
+            let next: number | undefined;
+
+            if (event.key === "ArrowDown") next = (index + 1) % items.length;
+            else if (event.key === "ArrowUp")
+              next = (index + items.length - 1) % items.length;
+            else if (event.key === "Home") next = 0;
+            else if (event.key === "End") next = items.length - 1;
+            else if (
+              event.key.length === 1 &&
+              event.key !== " " &&
+              !event.ctrlKey &&
+              !event.metaKey &&
+              !event.altKey
+            ) {
+              const now = Date.now();
+              search.current.text =
+                (now - search.current.time < 500 ? search.current.text : "") +
+                event.key.toLowerCase();
+              search.current.time = now;
+              next = items.findIndex((item) =>
+                item.textContent
+                  ?.trim()
+                  .toLowerCase()
+                  .startsWith(search.current.text),
+              );
+            } else if (event.key === "Tab") setOpen(false);
+
+            if (next !== undefined && next >= 0) {
+              event.preventDefault();
+              items[next]?.focus();
+            }
+          }}
         >
           {options.map((option) => (
             <button

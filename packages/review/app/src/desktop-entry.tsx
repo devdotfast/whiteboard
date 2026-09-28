@@ -1,10 +1,12 @@
 import type {
   ReviewCanvasContent,
   ReviewCanvasHandle,
+  ReviewCanvasUi,
 } from "@dev.fast/review-protocol";
 import { createRoot } from "react-dom/client";
 
 import { ApiCanvas } from "./api-canvas";
+import { CanvasUiContext } from "./host/canvas-ui";
 import { type ReviewFindHost, createReviewFindHost } from "./review-find";
 import { ReviewHome } from "./review-home-view";
 import { ReviewContainerProvider } from "./review-root-context";
@@ -143,6 +145,7 @@ function workbenchColorTheme(container: HTMLElement): "dark" | "light" {
 export function mountReviewCanvas(
   container: HTMLElement,
   initialContent: ReviewCanvasContent,
+  ui?: ReviewCanvasUi,
 ): ReviewCanvasHandle {
   let content = initialContent;
 
@@ -195,7 +198,9 @@ export function mountReviewCanvas(
 
     root.render(
       <ReviewContainerProvider container={container}>
-        <ReviewCanvas content={content} findHost={findHost} />
+        <CanvasUiContext.Provider value={ui}>
+          <ReviewCanvas content={content} findHost={findHost} />
+        </CanvasUiContext.Provider>
       </ReviewContainerProvider>,
     );
   };

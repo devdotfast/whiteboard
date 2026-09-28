@@ -455,6 +455,27 @@ Known limits:
 - The Review canvas is an iframe, so Vim and Emacs keymaps apply to workbench
   file, diff, and multi-diff editors, not text fields inside the canvas.
 
+## UI controls
+
+Prefer existing VS Code workbench primitives for standard desktop interactions:
+`IContextMenuService` for action and selection menus, `IDialogService` for
+confirmations and simple prompts, `IQuickInputService` for searchable choices,
+`IHoverService` for tooltips, and `INotificationService` for notifications.
+Use the host's settings subscriptions for settings state.
+
+Expose the capability through a small typed canvas adapter; keep Code OSS
+imports out of the React canvas package. Canvas menus use the optional UI
+capability passed to `mountReviewCanvas`, including on Home and onboarding.
+Reuse the existing `setupTooltip` and `notify` bridges. Workbench services pick
+the appropriate platform implementation; they do not always use OS-native UI.
+
+Keep rich document content, forms, and inline feedback in React. Add another UI
+library only for a concrete behavior the existing host or browser primitives
+do not cover. Preserve a functional fallback for supported hostless surfaces.
+Check keyboard navigation, cancellation, focus restoration, disposal, themes,
+zoom, and narrow layouts in the actual Desktop app when changing a host control;
+browser fallback tests alone do not validate the workbench integration.
+
 ## Development and validation
 
 Canvas changes need `pnpm --filter @dev.fast/review-canvas build` and a

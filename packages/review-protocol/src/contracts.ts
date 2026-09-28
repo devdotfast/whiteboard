@@ -711,10 +711,29 @@ export interface ReviewCanvasHandle extends ReviewDisposable {
 
 export const REVIEW_CANVAS_RESUME_EVENT = "dev-fast-review-canvas-resume";
 
+export interface ReviewMenuItem {
+  id: string;
+  label: string;
+  checked?: boolean;
+  enabled?: boolean;
+}
+
+export interface ReviewMenuRequest {
+  anchor: HTMLElement;
+  items: readonly ReviewMenuItem[];
+  onSelect(id: string): void | Promise<void>;
+  onHide(): void;
+}
+
+export interface ReviewCanvasUi {
+  showMenu(request: ReviewMenuRequest): ReviewDisposable;
+}
+
 export interface ReviewCanvasModule {
   mountReviewCanvas(
     container: HTMLElement,
     content: ReviewCanvasContent,
+    ui?: ReviewCanvasUi,
   ): ReviewCanvasHandle;
 }
 

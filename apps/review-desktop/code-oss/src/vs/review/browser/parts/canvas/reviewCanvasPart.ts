@@ -16,6 +16,7 @@ import type { ICursorPositionChangedEvent } from "../../../../editor/common/curs
 import { ICommandService } from "../../../../platform/commands/common/commands.js";
 import { ConfigurationTarget, IConfigurationService } from "../../../../platform/configuration/common/configuration.js";
 import { TextEditorSelectionSource, type IEditorOptions } from "../../../../platform/editor/common/editor.js";
+import { IContextMenuService } from "../../../../platform/contextview/browser/contextView.js";
 import { IHoverService } from "../../../../platform/hover/browser/hover.js";
 import { createDecorator, IInstantiationService } from "../../../../platform/instantiation/common/instantiation.js";
 import { ILogService } from "../../../../platform/log/common/log.js";
@@ -75,6 +76,7 @@ import {
 	REVIEW_TUTORIAL_STEP_IDS
 } from "../../../common/reviewProtocol.js";
 import { IReviewVerbsService } from "../../../contrib/verbs/reviewVerbs.js";
+import { showReviewCanvasMenu } from "../../reviewCanvasMenu.js";
 import { ReviewTooltip } from "../../reviewTooltip.js";
 import { IReviewApiCatalogService } from "../../../services/reviewApiCatalogService.js";
 import { IReviewApiSourceService } from "../../../services/reviewApiSourceService.js";
@@ -183,6 +185,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		private readonly reviewTelemetryService: IReviewTelemetryService,
 		@ILogService private readonly logService: ILogService,
 		@IHoverService private readonly hoverService: IHoverService,
+		@IContextMenuService private readonly contextMenuService: IContextMenuService,
 		@INotificationService private readonly notificationService: INotificationService,
 		@IEditorProgressService editorProgressService: IEditorProgressService,
 		@ILifecycleService lifecycleService: ILifecycleService,
@@ -993,7 +996,13 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		if (this.canvas.value) {
 			this.canvas.value.update(content);
 		} else {
-			this.canvas.value = assets.mountReviewCanvas(this.canvasMount, content);
+			this.canvas.value = assets.mountReviewCanvas(this.canvasMount, content, {
+				showMenu: request => {
+					const openedGeneration = this.loadGeneration;
+					return showReviewCanvasMenu(this.contextMenuService, request,
+						() => openedGeneration === this.loadGeneration && this.isVisible());
+				},
+			});
 		}
 	}
 
