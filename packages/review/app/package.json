@@ -21,6 +21,7 @@
     "@dev.fast/review-protocol": "workspace:*",
     "@mr_mint/elkjs-libavoid": "0.5.0",
     "@speed-highlight/core": "1.2.15",
+    "@tanstack/react-query": "5.103.1",
     "@xyflow/react": "12.10.2",
     "decode-named-character-reference": "1.3.0",
     "elkjs": "0.11.1",

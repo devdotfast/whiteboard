@@ -1,9 +1,13 @@
-import type { ReviewCanvasBridge } from "@dev.fast/review-protocol";
+import type {
+  ReviewCanvasBridge,
+  ReviewStackLayer,
+} from "@dev.fast/review-protocol";
 import { act } from "react";
 import { type Root, createRoot, hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewDocumentMetaLine } from "./review-doc-meta";
@@ -34,11 +38,13 @@ describe("ReviewDocumentMetaLine", () => {
       session.review = { ...session.review!, headBranch };
       await act(async () =>
         root?.render(
-          <ReviewSessionProvider session={session}>
-            <DisplayedReviewVersionContext.Provider value={version}>
-              <ReviewDocumentMetaLine />
-            </DisplayedReviewVersionContext.Provider>
-          </ReviewSessionProvider>,
+          <TestCanvasQuery>
+            <ReviewSessionProvider session={session}>
+              <DisplayedReviewVersionContext.Provider value={version}>
+                <ReviewDocumentMetaLine />
+              </DisplayedReviewVersionContext.Provider>
+            </ReviewSessionProvider>
+          </TestCanvasQuery>,
         ),
       );
     };
@@ -64,9 +70,11 @@ describe("ReviewDocumentMetaLine", () => {
     session.review!.updatedAtMs = Date.UTC(2026, 6, 22, 12, 0);
 
     const tree = (
-      <ReviewSessionProvider session={session}>
-        <ReviewDocumentMetaLine />
-      </ReviewSessionProvider>
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={session}>
+          <ReviewDocumentMetaLine />
+        </ReviewSessionProvider>
+      </TestCanvasQuery>
     );
 
     const serverHtml = renderToString(tree);
@@ -122,11 +130,13 @@ describe("ReviewDocumentMetaLine", () => {
 
       await act(async () => {
         root?.render(
-          <ReviewSessionProvider session={session}>
-            <DisplayedReviewVersionContext.Provider value={version}>
-              <ReviewDocumentMetaLine />
-            </DisplayedReviewVersionContext.Provider>
-          </ReviewSessionProvider>,
+          <TestCanvasQuery>
+            <ReviewSessionProvider session={session}>
+              <DisplayedReviewVersionContext.Provider value={version}>
+                <ReviewDocumentMetaLine />
+              </DisplayedReviewVersionContext.Provider>
+            </ReviewSessionProvider>
+          </TestCanvasQuery>,
         );
       });
     };
@@ -197,9 +207,11 @@ describe("ReviewDocumentMetaLine", () => {
     root = createRoot(container);
     await act(async () => {
       root?.render(
-        <ReviewSessionProvider session={stackSession}>
-          <ReviewDocumentMetaLine />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={stackSession}>
+            <ReviewDocumentMetaLine />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       );
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
@@ -242,5 +254,54 @@ describe("ReviewDocumentMetaLine", () => {
       unavailable?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(post).toHaveBeenCalledTimes(1);
+  });
+  it("never shows a slower stack read from a version left behind", async () => {
+    const reads: ((layers: ReviewStackLayer[]) => void)[] = [];
+    const session = testReviewSession();
+    session.review!.pullRequestNumber = 20;
+    session.review!.stack = () =>
+      new Promise((resolve) => {
+        reads.push(resolve);
+      });
+
+    const layers = (title: string): ReviewStackLayer[] =>
+      [20, 30].map((pullRequestNumber, index) => ({
+        branch: `branch-${pullRequestNumber}`,
+        relation: index === 0 ? "current" : "later",
+        pullRequestNumber,
+        pullRequestUrl: `https://github.com/o/r/pull/${pullRequestNumber}`,
+        reviewUuid: null,
+        reviewTitle: `${title} ${pullRequestNumber}`,
+      }));
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    const render = (version: number) =>
+      act(async () => {
+        root?.render(
+          <TestCanvasQuery>
+            <ReviewSessionProvider session={session}>
+              <DisplayedReviewVersionContext.Provider value={version}>
+                <ReviewDocumentMetaLine />
+              </DisplayedReviewVersionContext.Provider>
+            </ReviewSessionProvider>
+          </TestCanvasQuery>,
+        );
+      });
+
+    await render(1);
+    await render(2);
+    expect(reads).toHaveLength(2);
+    await act(async () => reads[1]!(layers("Second")));
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Second 30"),
+    );
+    await act(async () => {
+      reads[0]!(layers("First"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(container.textContent).not.toContain("First");
   });
 });

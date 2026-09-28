@@ -1,11 +1,10 @@
 import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+  skipToken,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 import {
   type ReviewApiClient,
@@ -13,6 +12,7 @@ import {
 } from "../../src/review-api/client";
 
 import "./share-control.css";
+import { canvasQueryKeys } from "./canvas-query";
 import { copyText } from "./copy-text";
 import { useOptionalReviewSession } from "./host/review-session";
 import { ShareIcon } from "./icons";
@@ -35,36 +35,52 @@ interface SharingAccount {
   error?: string;
 }
 
+/** The version a popover shares, frozen when it opens, and the idempotency
+ * key the host deduplicates its upload by. */
+interface ShareTarget {
+  version: number;
+  requestId: string;
+}
+
 const POLL_WHILE_PENDING_MS = 2000;
 
-const linkKey = (reviewId: string, version: number) => `${reviewId}@${version}`;
+const actionError = (error: Error | null) =>
+  error &&
+  (error instanceof ReviewApiError && error.status < 500
+    ? error.message
+    : "Could not complete this action. Please retry.");
 
 export function ShareControl() {
   const context = useContext(SharingContext);
   const session = useOptionalReviewSession();
+  const queryClient = useQueryClient();
   const client = context?.client;
   const [open, setOpen] = useState(false);
-  // Read once while the review is open, refreshed on focus, polled while pending.
-  const [account, setAccount] = useState<SharingAccount>();
-  const [accountError, setAccountError] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const [link, setLink] = useState<string>();
+  const [target, setTarget] = useState<ShareTarget>();
+  const started = useRef(false);
+  const [copyError, setCopyError] = useState<string>();
   const [copied, setCopied] = useState(false);
-  // Links created this session, so reopening a shared version skips the upload.
-  const links = useRef(new Map<string, string>());
-
-  const frozen = useRef<{
-    version: number;
-    requestId: string;
-    started: boolean;
-  }>(undefined);
-
   const popover = useRef<HTMLDivElement>(null);
   const popoverRef = useTopbarPopover(open, popover);
   const shared = context?.reviewId.startsWith("shared-");
+  const accountKey = canvasQueryKeys.sharingAccount();
+
+  // Read while the review is open, refreshed on focus, polled while pending.
+  const accountQuery = useQuery({
+    queryKey: accountKey,
+    queryFn: client
+      ? ({ signal }) => client.read<SharingAccount>("/sharing/account", signal)
+      : skipToken,
+    enabled: !shared,
+    refetchInterval: (query) =>
+      query.state.data?.pending ? POLL_WHILE_PENDING_MS : false,
+    // Sign-in finishes in the browser, while this window is in the background.
+    refetchIntervalInBackground: true,
+  });
+
+  const { refetch: refetchAccount } = accountQuery;
+  const account = accountQuery.data;
   const signedIn = Boolean(account?.account);
-  const pending = Boolean(account?.pending);
 
   const label = shared
     ? `Shared${context?.sender ? ` by ${context.sender}` : " review"}`
@@ -72,93 +88,77 @@ export function ShareControl() {
 
   const tooltip = useTooltip(label);
 
-  const loadAccount = useCallback(async () => {
-    if (!client) return;
-
-    try {
-      setAccount(await client.read<SharingAccount>("/sharing/account"));
-      setAccountError(undefined);
-    } catch {
-      setAccountError("Could not read sign-in status.");
-    }
-  }, [client]);
-
+  // The library's focus refresh follows visibility; this follows window focus.
   useEffect(() => {
     if (!client || shared) return;
-    const load = () => void loadAccount();
+    const refresh = () => void refetchAccount();
 
-    load();
-    window.addEventListener("focus", load);
+    window.addEventListener("focus", refresh);
 
-    return () => window.removeEventListener("focus", load);
-  }, [client, shared, loadAccount]);
+    return () => window.removeEventListener("focus", refresh);
+  }, [client, shared, refetchAccount]);
 
-  useEffect(() => {
-    if (!pending) return;
+  // Links created this canvas, so reopening a shared version skips the upload.
+  const link = useQuery<string>({
+    queryKey: canvasQueryKeys.shareLink(target?.version),
+    queryFn: skipToken,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  }).data;
 
-    const interval = setInterval(
-      () => void loadAccount(),
-      POLL_WHILE_PENDING_MS,
-    );
+  const login = useMutation({
+    mutationFn: () => client!.post("/sharing/login", {}),
+    onSuccess: async () => {
+      // An older read must not end the wait this login starts.
+      await queryClient.cancelQueries({ queryKey: accountKey });
+      queryClient.setQueryData<SharingAccount>(accountKey, {
+        account: null,
+        pending: true,
+      });
+    },
+  });
 
-    return () => clearInterval(interval);
-  }, [pending, loadAccount]);
+  const publish = useMutation({
+    mutationFn: ({ version, requestId }: ShareTarget) =>
+      context!.client.post<{ url: string }>("/sharing/publish", {
+        reviewId: context!.reviewId,
+        version,
+        requestId,
+      }),
+    onSuccess: ({ url }, { version }) =>
+      queryClient.setQueryData(canvasQueryKeys.shareLink(version), url),
+    onError: (error) => {
+      // The host forgot a stale login; show sign-in and upload again after it.
+      if (error instanceof ReviewApiError && error.status === 401)
+        void queryClient.invalidateQueries({ queryKey: accountKey });
+    },
+  });
+
+  const upload = (next: ShareTarget) => {
+    login.reset();
+    publish.mutate(next, {
+      onError: (error) => {
+        if (!(error instanceof ReviewApiError)) return;
+
+        // Failed verification revokes the staged share; retry as a new one.
+        if (error.status === 422)
+          setTarget((current) =>
+            current?.requestId === next.requestId
+              ? { ...current, requestId: crypto.randomUUID() }
+              : current,
+          );
+
+        if (error.status === 401) started.current = false;
+      },
+    });
+  };
+
   useDismissOnOutside(popover, open, setOpen);
 
-  const run = async (operation: () => Promise<void>) => {
-    setBusy(true);
-    setError(undefined);
-
-    try {
-      await operation();
-    } catch (error) {
-      setError(
-        error instanceof ReviewApiError && error.status < 500
-          ? error.message
-          : "Could not complete this action. Please retry.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const login = async () => {
-    if (!client) return;
-    await client.post("/sharing/login", {});
-    setAccount({ account: null, pending: true });
-  };
-
-  const publish = () =>
-    run(async () => {
-      if (!context || !frozen.current) return;
-      const { version, requestId } = frozen.current;
-
-      try {
-        const result = await context.client.post<{ url: string }>(
-          "/sharing/publish",
-          { reviewId: context.reviewId, version, requestId },
-        );
-
-        links.current.set(linkKey(context.reviewId, version), result.url);
-        setLink(result.url);
-      } catch (error) {
-        if (error instanceof ReviewApiError && error.status === 422)
-          frozen.current.requestId = crypto.randomUUID();
-
-        // The host forgot a stale login; show sign-in and upload again after it.
-        if (error instanceof ReviewApiError && error.status === 401) {
-          frozen.current.started = false;
-          void loadAccount();
-        }
-
-        throw error;
-      }
-    });
-
   useEffect(() => {
-    if (!open || !signedIn || !frozen.current || frozen.current.started) return;
-    frozen.current.started = true;
-    void publish();
+    if (!open || !signedIn || !target || started.current) return;
+    started.current = true;
+    upload(target);
   }, [open, signedIn]);
 
   useEffect(() => {
@@ -170,9 +170,15 @@ export function ShareControl() {
 
   if (!context) return null;
 
+  const error = copyError ?? actionError(publish.error ?? login.error);
+
+  const accountError = accountQuery.isError
+    ? "Could not read sign-in status."
+    : undefined;
+
   const copy = async (url: string) => {
     if (!(await copyText(url))) {
-      setError("Copy the link below.");
+      setCopyError("Copy the link below.");
 
       return;
     }
@@ -192,19 +198,23 @@ export function ShareControl() {
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => {
-          if (!open) {
-            // A version shared earlier this session reuses its link.
-            const cached = links.current.get(
-              linkKey(context.reviewId, context.version),
-            );
-
-            frozen.current = {
+          // An upload of this version in flight keeps its request.
+          if (
+            !open &&
+            !(publish.isPending && target?.version === context.version)
+          ) {
+            // A version shared earlier in this canvas reuses its link.
+            started.current =
+              queryClient.getQueryData(
+                canvasQueryKeys.shareLink(context.version),
+              ) !== undefined;
+            setTarget({
               version: context.version,
               requestId: crypto.randomUUID(),
-              started: cached !== undefined,
-            };
-            setLink(cached);
-            setError(undefined);
+            });
+            publish.reset();
+            login.reset();
+            setCopyError(undefined);
             setCopied(false);
           }
 
@@ -256,7 +266,7 @@ export function ShareControl() {
               <button
                 type="button"
                 className="review-share-action"
-                onClick={() => void publish()}
+                onClick={() => target && upload(target)}
               >
                 Retry
               </button>
@@ -269,8 +279,13 @@ export function ShareControl() {
                 <button
                   type="button"
                   className="review-share-action"
-                  disabled={account.pending || busy}
-                  onClick={() => void run(login)}
+                  disabled={
+                    account.pending || login.isPending || publish.isPending
+                  }
+                  onClick={() => {
+                    publish.reset();
+                    login.mutate();
+                  }}
                 >
                   {account.pending
                     ? "Waiting for sign-in…"

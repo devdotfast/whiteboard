@@ -1,13 +1,11 @@
-import type { ReviewDiffFileWire } from "@dev.fast/review-protocol";
-import {
-  type ReactNode,
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import type {
+  ReviewCanvasBridge,
+  ReviewDiffFileWire,
+} from "@dev.fast/review-protocol";
+import { useQuery } from "@tanstack/react-query";
+import { type ReactNode, createContext, useContext, useMemo } from "react";
 
+import { canvasQueryKeys } from "./canvas-query";
 import { useReviewSession } from "./host/review-session";
 import { useReviewContainer } from "./review-root-context";
 
@@ -22,14 +20,19 @@ const ReviewDiffFilesContext = createContext<
   status: "loading",
 });
 
-interface ReviewDiffFilesSnapshot {
-  documentKey: string;
-  state: ReviewDiffFilesState;
-}
+// The canvas replaces its diff source when the pinned revision or diff mode
+// changes, so the source's identity names the files it answers with.
+const sourceIds = new WeakMap<ReviewCanvasBridge["diffView"], number>();
 
-const LOADING_REVIEW_DIFF_FILES_STATE: ReviewDiffFilesState = {
-  status: "loading",
-};
+let nextSourceId = 0;
+
+function sourceId(source: ReviewCanvasBridge["diffView"]): number {
+  let id = sourceIds.get(source);
+
+  if (id === undefined) sourceIds.set(source, (id = nextSourceId++));
+
+  return id;
+}
 
 export function ReviewDiffFilesProvider({
   documentKey,
@@ -45,54 +48,42 @@ export function ReviewDiffFilesProvider({
   const diffView = session.bridge.diffView;
   const container = useReviewContainer();
 
-  const [snapshot, setSnapshot] = useState<ReviewDiffFilesSnapshot>(() => ({
-    documentKey,
-    state: LOADING_REVIEW_DIFF_FILES_STATE,
-  }));
+  // The bridge read cannot be cancelled; a superseded result stays in its own key.
+  const query = useQuery({
+    queryKey: canvasQueryKeys.diffFiles(
+      documentKey,
+      sourceId(diffView),
+      revision,
+    ),
+    queryFn: async () => {
+      recordDiffSummaryRequest(container);
+      const files = [...(await diffView.files())];
+      recordDiffSummaryReady(container);
 
-  const state =
-    snapshot.documentKey === documentKey
-      ? snapshot.state
-      : LOADING_REVIEW_DIFF_FILES_STATE;
+      return files;
+    },
+    // A source never changes its answer; a replaced one is never asked again.
+    staleTime: Infinity,
+    gcTime: 0,
+    // A save refetches the same document and source; show its files meanwhile.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === documentKey &&
+      previousQuery.queryKey[2] === sourceId(diffView)
+        ? previous
+        : undefined,
+  });
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setSnapshot((current) =>
-      current.documentKey === documentKey && current.state.status !== "error"
-        ? current
-        : {
-            documentKey,
-            state: LOADING_REVIEW_DIFF_FILES_STATE,
-          },
-    );
-    recordDiffSummaryRequest(container);
-
-    const request = diffView.files().then((files) => [...files]);
-
-    request
-      .then((files) => {
-        if (controller.signal.aborted) return;
-        setSnapshot({
-          documentKey,
-          state: { status: "loaded", files },
-        });
-        recordDiffSummaryReady(container);
-      })
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted) return;
-        setSnapshot({
-          documentKey,
-          state: {
-            status: "error",
-            error: cause instanceof Error ? cause.message : String(cause),
-          },
-        });
-      });
-
-    return () => controller.abort();
-  }, [container, diffView, documentKey, revision]);
-
-  const value = useMemo(() => ({ ...state, revision }), [state, revision]);
+  const value = useMemo<ReviewDiffFilesState & { revision?: string }>(
+    () => ({
+      ...(query.status === "success"
+        ? { status: "loaded", files: query.data }
+        : query.status === "error"
+          ? { status: "error", error: query.error.message }
+          : { status: "loading" }),
+      revision,
+    }),
+    [query.status, query.data, query.error, revision],
+  );
 
   return (
     <ReviewDiffFilesContext.Provider value={value}>

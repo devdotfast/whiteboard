@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { ReviewApiClient } from "../../src/review-api/client";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewSessionProvider } from "./host/review-session";
 import { testReviewSession } from "./review-session-test-utils";
 import { ShareControl, SharingContext } from "./share-control";
@@ -114,11 +115,13 @@ function mount(options: {
     );
 
     return (
-      <ReviewSessionProvider session={session}>
-        <SharingContext.Provider value={value}>
-          <ShareControl />
-        </SharingContext.Provider>
-      </ReviewSessionProvider>
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={session}>
+          <SharingContext.Provider value={value}>
+            <ShareControl />
+          </SharingContext.Provider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>
     );
   }
 
@@ -170,6 +173,7 @@ it("asks a signed-out user to sign in, then uploads the version chosen before lo
   ).toEqual(["Sign in to share"]);
   expect(publishes(harness)).toHaveLength(0);
   await harness.click("Sign in to share");
+  await harness.settle();
   expect(container.textContent).toContain("Waiting for sign-in…");
   expect(container.querySelector("[role=dialog] a")).toBeNull();
   await harness.render(5);
@@ -331,4 +335,50 @@ it("uses a fresh request after failed verification revokes the staged share", as
   expect((requests[0]!.body as { requestId: string }).requestId).not.toBe(
     (requests[1]!.body as { requestId: string }).requestId,
   );
+});
+
+it("keeps one upload when the popover is reopened while it is in flight", async () => {
+  let release: (() => void) | undefined;
+
+  const harness = mount({
+    signedIn: true,
+    holdPublish: new Promise<void>((resolve) => {
+      release = resolve;
+    }),
+  });
+
+  await harness.render(3);
+  await harness.click("Share review");
+  await harness.settle();
+  await harness.click("Share review");
+  await harness.click("Share review");
+  await harness.settle();
+  expect(publishes(harness)).toHaveLength(1);
+  expect(harness.container.textContent).toContain("Uploading…");
+  release?.();
+  await harness.settle();
+  expect(harness.container.querySelector("input")?.value).toContain(
+    "#capability",
+  );
+  expect(publishes(harness)).toHaveLength(1);
+});
+
+it("polls only while sign-in is pending and stops when the control unmounts", async () => {
+  const harness = mount({ signedIn: false });
+
+  await harness.render(1);
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 2200));
+  });
+  expect(harness.accountReads()).toBe(1);
+  await harness.click("Share review");
+  await harness.click("Sign in to share");
+  await harness.settle();
+  expect(harness.container.textContent).toContain("Waiting for sign-in…");
+  await act(async () => dispose?.());
+  dispose = undefined;
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 2200));
+  });
+  expect(harness.accountReads()).toBe(1);
 });

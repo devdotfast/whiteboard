@@ -7,6 +7,7 @@ import { act, useState } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import {
   ReviewSessionProvider,
   createReviewSession,
@@ -105,9 +106,11 @@ describe("ReviewTraceView", () => {
 
     await act(async () =>
       root?.render(
-        <ReviewSessionProvider session={session}>
-          <Host />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <Host />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
     await act(async () => container.querySelector("button")!.click());
@@ -152,11 +155,13 @@ describe("ReviewTraceView", () => {
     ]);
     await act(async () => {
       root?.render(
-        <ReviewSessionProvider session={session}>
-          <ReviewTraceView
-            initialSelection={{ sessionId: "session-1", trace: "sub-1" }}
-          />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ReviewTraceView
+              initialSelection={{ sessionId: "session-1", trace: "sub-1" }}
+            />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       );
     });
     await vi.waitFor(() =>
@@ -209,9 +214,11 @@ describe("ReviewTraceView", () => {
 
       await act(async () => {
         root?.render(
-          <ReviewSessionProvider session={session}>
-            <ReviewTraceView />
-          </ReviewSessionProvider>,
+          <TestCanvasQuery>
+            <ReviewSessionProvider session={session}>
+              <ReviewTraceView />
+            </ReviewSessionProvider>
+          </TestCanvasQuery>,
         );
       });
 
@@ -262,9 +269,11 @@ describe("ReviewTraceView", () => {
 
     await act(async () => {
       root?.render(
-        <ReviewSessionProvider session={session}>
-          <ReviewTraceView />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ReviewTraceView />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       );
     });
     await vi.waitFor(() => {
@@ -335,9 +344,11 @@ describe("ReviewTraceView", () => {
     const session = testReviewSession({}, { request: requestMock });
     await act(async () => {
       root?.render(
-        <ReviewSessionProvider session={session}>
-          <ReviewTraceView />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ReviewTraceView />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       );
     });
     await vi.waitFor(() => {
@@ -376,9 +387,11 @@ describe("ReviewTraceView", () => {
 
     await act(async () => {
       root?.render(
-        <ReviewSessionProvider session={session}>
-          <ReviewTraceView />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ReviewTraceView />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       );
     });
 
@@ -459,9 +472,11 @@ describe("ReviewTraceView", () => {
 
     await act(async () => {
       root?.render(
-        <ReviewSessionProvider session={session}>
-          <ReviewTraceView />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ReviewTraceView />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       );
     });
 

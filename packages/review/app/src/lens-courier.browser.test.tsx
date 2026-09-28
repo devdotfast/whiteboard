@@ -11,6 +11,7 @@ import {
   AuthoringActivityContext,
 } from "./authoring-activity";
 import type { AuthoringCursor } from "./authoring-cursor";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { AuthoringCursorContext } from "./courier";
 import { ReviewDiffView } from "./DiffView";
 import { type DrawQueueClock, DrawQueueProvider } from "./draw-queue-provider";
@@ -175,28 +176,30 @@ const render = async (state: {
 
   await act(async () =>
     root.render(
-      <ReviewSessionProvider session={session}>
-        <ReviewRootsProvider roots={roots}>
-          <AuthoringActivityContext.Provider
-            value={state.activity ?? lensesOnly}
-          >
-            <AuthoringCursorContext.Provider
-              value={state.documentCursor ?? null}
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={session}>
+          <ReviewRootsProvider roots={roots}>
+            <AuthoringActivityContext.Provider
+              value={state.activity ?? lensesOnly}
             >
-              <DrawQueueProvider
-                scope="lenses"
-                cursor={state.lensCursor}
-                clock={manualClock.clock}
+              <AuthoringCursorContext.Provider
+                value={state.documentCursor ?? null}
               >
-                <ReviewLensesProvider client={client} snapshot={snapshot}>
-                  <AuthoringActivityBadge onLocate={onLocate} />
-                  <ReviewDiffView />
-                </ReviewLensesProvider>
-              </DrawQueueProvider>
-            </AuthoringCursorContext.Provider>
-          </AuthoringActivityContext.Provider>
-        </ReviewRootsProvider>
-      </ReviewSessionProvider>,
+                <DrawQueueProvider
+                  scope="lenses"
+                  cursor={state.lensCursor}
+                  clock={manualClock.clock}
+                >
+                  <ReviewLensesProvider client={client} snapshot={snapshot}>
+                    <AuthoringActivityBadge onLocate={onLocate} />
+                    <ReviewDiffView />
+                  </ReviewLensesProvider>
+                </DrawQueueProvider>
+              </AuthoringCursorContext.Provider>
+            </AuthoringActivityContext.Provider>
+          </ReviewRootsProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     ),
   );
 };

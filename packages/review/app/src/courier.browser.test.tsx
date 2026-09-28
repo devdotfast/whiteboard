@@ -10,6 +10,7 @@ import {
   AuthoringActivityContext,
 } from "./authoring-activity";
 import type { AuthoringCursor } from "./authoring-cursor";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { AuthoringCursorContext } from "./courier";
 import { ReviewSessionProvider } from "./host/review-session";
 import type { ReviewRoots } from "./review-root-context";
@@ -73,16 +74,18 @@ const render = async (
 
   await act(async () =>
     root.render(
-      <ReviewSessionProvider session={testReviewSession()}>
-        <ReviewRootsProvider roots={roots}>
-          <AuthoringActivityContext.Provider value={activity}>
-            <AuthoringCursorContext.Provider value={cursor}>
-              <AuthoringActivityBadge onLocate={onLocate} />
-              <ApiDocument data={data} />
-            </AuthoringCursorContext.Provider>
-          </AuthoringActivityContext.Provider>
-        </ReviewRootsProvider>
-      </ReviewSessionProvider>,
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={testReviewSession()}>
+          <ReviewRootsProvider roots={roots}>
+            <AuthoringActivityContext.Provider value={activity}>
+              <AuthoringCursorContext.Provider value={cursor}>
+                <AuthoringActivityBadge onLocate={onLocate} />
+                <ApiDocument data={data} />
+              </AuthoringCursorContext.Provider>
+            </AuthoringActivityContext.Provider>
+          </ReviewRootsProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     ),
   );
 };

@@ -3,6 +3,7 @@ import {
   type ReviewStackLayer,
   summarizeReviewDiffFiles,
 } from "@dev.fast/review-protocol";
+import { useQuery } from "@tanstack/react-query";
 import {
   Fragment,
   type MouseEvent,
@@ -14,6 +15,7 @@ import {
   useState,
 } from "react";
 
+import { canvasQueryKeys } from "./canvas-query";
 import { DiffCount } from "./diff-count";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { useReviewSession } from "./host/review-session";
@@ -37,7 +39,6 @@ export function ReviewDocumentMetaLine({
   children?: ReactNode;
 }): ReactElement {
   const session = useReviewSession();
-  const reviewFetch = session.fetch;
   const displayedVersion = useContext(DisplayedReviewVersionContext);
   const diffFiles = useReviewDiffFiles();
 
@@ -48,37 +49,23 @@ export function ReviewDocumentMetaLine({
     null,
   );
 
-  const [stackLayers, setStackLayers] = useState<ReviewStackLayer[]>([]);
-
   useEffect(() => {
     setRelativeTimeNowMs(Date.now());
   }, [displayedVersion]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-
-    if (!meta?.pullRequestNumber) {
-      setStackLayers([]);
-
-      return () => controller.abort();
-    }
-
-    const layers = review.stack(controller.signal);
-
-    layers
-      .then((next) => {
-        if (!controller.signal.aborted) setStackLayers(next);
-      })
-      .catch(() => {});
-
-    return () => controller.abort();
-  }, [
-    meta?.pullRequestNumber,
-    meta?.pullRequestUrl,
-    reviewFetch,
-    review,
-    displayedVersion,
-  ]);
+  // The pull request stack is optional context; a failed read is not shown.
+  const stackLayers =
+    useQuery({
+      queryKey: canvasQueryKeys.reviewStack(
+        displayedVersion,
+        meta.pullRequestNumber,
+        meta.pullRequestUrl,
+      ),
+      queryFn: ({ signal }) => review.stack(signal),
+      enabled: Boolean(meta.pullRequestNumber),
+      // Each header that mounts rereads, showing the last stack meanwhile.
+      staleTime: 0,
+    }).data ?? [];
 
   const diff =
     diffFiles.status === "loaded" ? reviewDiffStats(diffFiles) : null;

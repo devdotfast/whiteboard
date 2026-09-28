@@ -2,6 +2,7 @@ import { act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import {
   type ReviewSession,
   ReviewSessionProvider,
@@ -54,9 +55,11 @@ it("keeps dwell continuous through live review updates and sends the latest vers
   const render = (session: ReviewSession) =>
     act(() => {
       root!.render(
-        <ReviewSessionProvider session={session}>
-          <Telemetry />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <Telemetry />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       );
     });
 

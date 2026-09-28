@@ -6,6 +6,7 @@ import type { Block } from "../../src/review-api/document";
 import { ApiDocument } from "./api-document";
 import { AuthoringActivityContext } from "./authoring-activity";
 import type { AuthoringCursor } from "./authoring-cursor";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
 import type { DrawQueueClock } from "./draw-queue-provider";
 import { DrawQueueProvider } from "./draw-queue-provider";
@@ -133,19 +134,21 @@ const render = async (cursor: AuthoringCursor | null, shown = data) => {
 
   await act(async () =>
     root.render(
-      <ReviewSessionProvider session={testReviewSession()}>
-        <ReviewDebugSettingsProvider>
-          <ReviewPanelProvider>
-            <ReviewRootsProvider roots={roots}>
-              <AuthoringActivityContext.Provider value={working}>
-                <DrawQueueProvider cursor={cursor} clock={manualClock.clock}>
-                  <ApiDocument data={shown} />
-                </DrawQueueProvider>
-              </AuthoringActivityContext.Provider>
-            </ReviewRootsProvider>
-          </ReviewPanelProvider>
-        </ReviewDebugSettingsProvider>
-      </ReviewSessionProvider>,
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={testReviewSession()}>
+          <ReviewDebugSettingsProvider>
+            <ReviewPanelProvider>
+              <ReviewRootsProvider roots={roots}>
+                <AuthoringActivityContext.Provider value={working}>
+                  <DrawQueueProvider cursor={cursor} clock={manualClock.clock}>
+                    <ApiDocument data={shown} />
+                  </DrawQueueProvider>
+                </AuthoringActivityContext.Provider>
+              </ReviewRootsProvider>
+            </ReviewPanelProvider>
+          </ReviewDebugSettingsProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     ),
   );
 };
