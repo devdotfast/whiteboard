@@ -139,7 +139,7 @@ export async function migrateJsonReviews(input: {
         source?.close();
       }
 
-      // An audit copy must never collect or free the real pinned checkouts.
+      // The staging candidate must never collect or free the real pinned checkouts.
       const { store, data } = openLocalReviewStore(candidate, {
         manageWorkspaces: false,
       });
