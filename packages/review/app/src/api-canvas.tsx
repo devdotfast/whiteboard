@@ -183,7 +183,7 @@ export function ApiCanvas({
             // A failed resource or source fetch is a document problem. The
             // stream and the activity signal are still healthy, so do not
             // reconnect or report unknown activity.
-            if (!abort.signal.aborted) setError(String(cause));
+            if (!abort.signal.aborted) setError(message(cause));
           }
         },
         (cause) => {
@@ -351,7 +351,9 @@ export function ApiCanvas({
     return (
       error !== undefined && (
         <>
-          <p role="status">{error}</p>
+          <p className="canvas-error" role="status">
+            {error}
+          </p>
           {version !== undefined && (
             <button onClick={() => setVersion(undefined)}>
               Back to latest version
@@ -372,7 +374,11 @@ export function ApiCanvas({
             structuralDiffEnabled={content.structuralDiffEnabled}
           >
             <TutorialProvider tutorial={content.tutorial}>
-              {error && <p role="status">{error}</p>}
+              {error && (
+                <p className="canvas-error" role="status">
+                  {error}
+                </p>
+              )}
               <AuthoringActivityContext.Provider
                 value={version === undefined ? activity : undefined}
               >

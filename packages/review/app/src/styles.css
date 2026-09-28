@@ -8043,3 +8043,10 @@ button.review-stack-row:disabled .review-stack-relation {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.canvas-error {
+  max-width: 72ch;
+  margin: 32px auto;
+  padding: 0 24px;
+  font: 15px/1.6 var(--font-display);
+}
