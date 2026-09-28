@@ -147,9 +147,13 @@ describe("zooming a flow by hand", () => {
   const wheel = (flow: HTMLElement, y: number) =>
     act(async () => userEvent.wheel(flow, { delta: { y } }));
 
+  /**
+   * Zooms to the 2:1 limit. React Flow reads a Ctrl wheel ten times faster on
+   * macOS, so a smaller turn would land on a different zoom per platform.
+   */
   const zoomIn = async (flow: HTMLElement) => {
     await userEvent.keyboard("{Control>}");
-    await wheel(flow, -300);
+    await wheel(flow, -2000);
     await userEvent.keyboard("{/Control}");
   };
 
@@ -207,7 +211,7 @@ describe("zooming a flow by hand", () => {
   it("pans a zoomed inline flow by drag", async () => {
     const { flow, viewport } = await mountFlow();
     await zoomIn(flow);
-    expect(await settled(() => viewport().zoom > 1)).toBe(true);
+    expect(await settled(() => viewport().zoom === 2)).toBe(true);
     const before = viewport();
 
     await drag(flow, { x: 0, y: 40 });
