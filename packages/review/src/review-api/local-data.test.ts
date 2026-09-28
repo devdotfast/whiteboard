@@ -2719,7 +2719,7 @@ describe("worktree base", () => {
     run("checkout", "-q", "feature");
     writeFileSync(path.join(root, "staged.ts"), "export const staged = 1;\n");
     run("add", "staged.ts");
-    writeFileSync(path.join(root, "shared.ts"), "export const shared = 2;\n");
+    writeFileSync(path.join(root, "shared.ts"), "export const shared = 22;\n");
     writeFileSync(path.join(root, "untracked.ts"), "export const fresh = 1;\n");
     writeFileSync(path.join(root, ".gitignore"), "ignored.ts\n");
     writeFileSync(path.join(root, "ignored.ts"), "export const hidden = 1;\n");
@@ -2824,6 +2824,34 @@ it("reads symlink text and an unborn repository without following external links
       encoding: "utf8",
     }).match(/^worktree /gm),
   ).toHaveLength(1);
+
+  // The first commit moves the head; the review still starts from nothing.
+  execFileSync("git", ["-C", root, "add", "first.ts"]);
+  execFileSync("git", [
+    "-C",
+    root,
+    "-c",
+    "user.name=Review Test",
+    "-c",
+    "user.email=review-test@example.invalid",
+    "-c",
+    "commit.gpgsign=false",
+    "commit",
+    "-qm",
+    "First",
+  ]);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await local.store.refreshWorktrees();
+  expect(local.store.read(result.reviewId).pins!.head).not.toBe(
+    snapshot.pins!.head,
+  );
+  expect(
+    await local.data.changes(local.store.read(result.reviewId).pins!),
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ path: "first.ts", status: "added" }),
+    ]),
+  );
 });
 
 it("keeps authored coordinates fixed as live source changes and warns only on unavailable ranges", async () => {

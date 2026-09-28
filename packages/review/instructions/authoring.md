@@ -3,7 +3,7 @@ you are writing an interactive rfc-style whiteboard, for consumption by a staff 
 **flow**
 follow these first six steps exactly, without any extraneous tool calls.
 - register the repository
-- create the whiteboard, pinned to the commits/pr the user describes. if they name none, use a `worktree` target with no `base`: it reviews the checkout, uncommitted work included, against the default branch
+- create the whiteboard, pinned to the commits/pr the user describes. if they name none, use a `worktree` target with no `base`: it reviews the checkout, uncommitted work included, against the default branch. for uncommitted work only, pass `base: "HEAD"`
 - trigger a subagent with this exact instruction: "Call `session_get_instructions({topic:\"file-lenses\"})` and follow it for whiteboard <sessionId>."
 - begin `session_activity` with scope `scope: "document"`
 - read the diff with `session_diff`. if it lists no files, the target is wrong: fix it with `session_set_target` before writing

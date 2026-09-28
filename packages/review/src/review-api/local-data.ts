@@ -902,9 +902,10 @@ export class LocalReviewData {
     const resolved = { ...target };
 
     // A live refresh moves only the head. Targets stored without a base
-    // predate default-branch bases and compare against the current HEAD.
+    // predate default-branch bases and compare against the current HEAD,
+    // except an unborn checkout's, which keep comparing with nothing.
     const base = pinned
-      ? target.base === undefined
+      ? target.base === undefined && pinned.base !== EMPTY_SOURCE
         ? commit
         : pinned.base
       : commit === EMPTY_SOURCE && target.base === undefined
