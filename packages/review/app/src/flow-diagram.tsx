@@ -123,7 +123,10 @@ export function FlowDiagram({
         </div>
       </div>
       <footer>
-        <span>Select a node to explore its code</span>
+        <span>
+          Select a node to explore its code
+          {!fullscreen && " · pinch or ⌘/Ctrl + scroll to zoom"}
+        </span>
         <span className="flow-diagram-legend">
           <i className="flow-legend-added" />
           Added

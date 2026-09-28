@@ -1,15 +1,18 @@
 import {
   BaseEdge,
+  type CoordinateExtent,
   type Edge,
   type EdgeProps,
   Handle,
   MarkerType,
   type Node,
   type NodeProps,
+  Panel,
   Position,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  useStoreApi,
 } from "@xyflow/react";
 import ELK, { type ElkNode } from "elkjs/lib/elk.bundled.js";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
@@ -68,6 +71,11 @@ export function FlowGraph({
       : undefined;
 
   const frame = useRef<HTMLDivElement>(null);
+
+  // The layout the reader has zoomed or panned by hand. A new layout is a
+  // new drawing, so it starts from its fit again.
+  const [movedLayout, setMovedLayout] = useState<Layout>();
+  const moved = layout !== undefined && movedLayout === layout;
 
   useEffect(() => {
     let cancelled = false;
@@ -135,6 +143,19 @@ export function FlowGraph({
     [block, layout],
   );
 
+  // Inline, the drawing cannot be panned out of its frame: the view stops at
+  // the drawing's padded edge, and centres it along an axis it fits within.
+  const extent = useMemo<CoordinateExtent | undefined>(
+    () =>
+      layout && !interactive
+        ? [
+            [-PADDING, -PADDING],
+            [layout.width + PADDING, layout.height + PADDING],
+          ]
+        : undefined,
+    [layout, interactive],
+  );
+
   if (error) return <p role="alert">Could not lay out diagram: {error}</p>;
 
   if (!layout) return <p className="lens-diagram-note">Laying out flow…</p>;
@@ -153,8 +174,9 @@ export function FlowGraph({
           edges={edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          minZoom={0.1}
-          maxZoom={1}
+          minZoom={MIN_ZOOM}
+          maxZoom={MAX_ZOOM}
+          translateExtent={extent}
           onNodeClick={(_, node) => {
             if (node.type === "flowNode") node.data.select();
           }}
@@ -164,14 +186,38 @@ export function FlowGraph({
           edgesFocusable={false}
           elementsSelectable={false}
           panActivationKeyCode={null}
-          panOnDrag={interactive}
+          // Inline, a drag pans only a flow the reader has already zoomed.
+          panOnDrag={interactive || moved}
+          // A hand-made move carries its event; the fit's own does not.
+          onMove={(event) => {
+            if (event) setMovedLayout(layout);
+          }}
+          // Inline, a plain wheel belongs to the document: React Flow then
+          // zooms only on a pinch or Ctrl+wheel, and MetaWheelZoom adds Cmd.
           preventScrolling={interactive}
-          zoomOnScroll={interactive}
-          zoomOnPinch={interactive}
+          zoomOnScroll
+          zoomOnPinch
           zoomOnDoubleClick={false}
           proOptions={{ hideAttribution: true }}
         >
-          <FitToLayout layout={layout} frame={frame} />
+          {moved ? (
+            <Panel position="top-right">
+              <button
+                className="diagram-tour-button"
+                onClick={() => setMovedLayout(undefined)}
+              >
+                Reset view
+              </button>
+            </Panel>
+          ) : (
+            <FitToLayout layout={layout} frame={frame} />
+          )}
+          {!interactive && (
+            <MetaWheelZoom
+              frame={frame}
+              onZoom={() => setMovedLayout(layout)}
+            />
+          )}
         </ReactFlow>
       </ReactFlowProvider>
     </div>
@@ -179,6 +225,11 @@ export function FlowGraph({
 }
 
 const PADDING = 24;
+
+// The fit never enlarges past 1:1; a reader zooming by hand may.
+const MIN_ZOOM = 0.1;
+
+const MAX_ZOOM = 2;
 
 const ARROW = {
   type: MarkerType.ArrowClosed,
@@ -191,7 +242,9 @@ const ARROW = {
  * Fits the box to the layout: ELK reports the drawing's size, the frame
  * reports its own, so the viewport is set outright instead of asking React
  * Flow to measure nodes first. Refits on every layout and every resize,
- * animated once the first fit has landed. Never enlarges past 1:1.
+ * animated once the first fit has landed. Never enlarges past 1:1. Mounted
+ * only while the reader has not moved the view, so a zoom made by hand
+ * survives a resize and Reset view brings the fit back.
  */
 function FitToLayout({
   layout,
@@ -236,6 +289,75 @@ function FitToLayout({
 
     return () => observer.disconnect();
   }, [flow, frame, layout]);
+
+  return null;
+}
+
+/**
+ * Cmd+wheel zooms about the pointer, as Ctrl+wheel does. React Flow reads a
+ * wheel as a zoom only when it carries Ctrl, which is also how a pinch
+ * arrives, so Cmd is handled here.
+ */
+function MetaWheelZoom({
+  frame,
+  onZoom,
+}: {
+  frame: RefObject<HTMLDivElement | null>;
+  onZoom(): void;
+}) {
+  const store = useStoreApi();
+  const zoomed = useRef(onZoom);
+  zoomed.current = onZoom;
+
+  useEffect(() => {
+    const element = frame.current;
+
+    if (!element) return;
+
+    const zoom = (event: WheelEvent) => {
+      if (!event.metaKey || event.ctrlKey) return;
+
+      event.preventDefault();
+
+      const {
+        panZoom,
+        transform: [x, y, from],
+        width,
+        height,
+        translateExtent,
+      } = store.getState();
+
+      const box = element.getBoundingClientRect();
+
+      const pointer = {
+        x: event.clientX - box.left,
+        y: event.clientY - box.top,
+      };
+
+      const to = Math.min(
+        MAX_ZOOM,
+        Math.max(MIN_ZOOM, from * 2 ** (-event.deltaY * 0.002)),
+      );
+
+      void panZoom?.setViewportConstrained(
+        {
+          x: pointer.x - ((pointer.x - x) * to) / from,
+          y: pointer.y - ((pointer.y - y) * to) / from,
+          zoom: to,
+        },
+        [
+          [0, 0],
+          [width, height],
+        ],
+        translateExtent,
+      );
+      zoomed.current();
+    };
+
+    element.addEventListener("wheel", zoom, { passive: false });
+
+    return () => element.removeEventListener("wheel", zoom);
+  }, [store, frame]);
 
   return null;
 }

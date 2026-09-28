@@ -5,6 +5,7 @@
 
 // Native desktop services shared by both window types.
 import '../workbench/electron-browser/desktop.contribution.js';
+import './contrib/zoom/reviewZoomReset.contribution.js';
 import '../workbench/electron-browser/parts/dialogs/dialog.contribution.js';
 
 import '../workbench/services/textfile/electron-browser/nativeTextFileService.js';
