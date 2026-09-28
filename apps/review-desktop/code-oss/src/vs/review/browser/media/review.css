@@ -600,8 +600,11 @@ body
 .monaco-workbench
   .part.titlebar.review-chrome-overlay
   .review-titlebar-container
-  .review-traffic-light-inset {
+  .window-controls-container.review-traffic-light-inset {
   flex-shrink: 0;
+  /* macOS moves the traffic lights right as the zoom makes the row taller.
+     The doubled class outranks upstream's fixed 70px. */
+  width: calc(50px + 20px * var(--zoom-factor, 1));
   -webkit-app-region: drag;
 }
 

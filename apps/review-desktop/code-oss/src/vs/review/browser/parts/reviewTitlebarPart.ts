@@ -130,7 +130,6 @@ export class ReviewTitlebarPart extends Part implements ITitlebarPart {
 				const updateSpacer = () => {
 					const fullscreen = isFullscreen(mainWindow);
 					spacer.style.display = fullscreen ? 'none' : '';
-					spacer.style.width = fullscreen ? '0' : '70px';
 				};
 				updateSpacer();
 				this._register(onDidChangeFullscreen(windowId => {
@@ -254,6 +253,8 @@ export class MainReviewTitlebarPart extends ReviewTitlebarPart {
 			targetWindowId: getWindowId(mainWindow),
 			height: Math.round(REVIEW_CHROME_HEIGHT * getZoomFactor(mainWindow))
 		});
+		// A zoom change fires no ResizeObserver.
+		this.updateChromeWidths();
 	}
 
 	private readonly _onDidChangeChromeInsets = this._register(new Emitter<void>());
@@ -264,27 +265,30 @@ export class MainReviewTitlebarPart extends ReviewTitlebarPart {
 
 	protected override createContentArea(parent: HTMLElement): HTMLElement {
 		const element = super.createContentArea(parent);
-		// Written on this part, never the workbench root; see
-		// `publishReviewChromeInset` for why.
-		const updateChromeWidths = () => {
-			const left = this.leftContainer.getBoundingClientRect().width;
-			const right = this.rightContainer.getBoundingClientRect().width;
-			if (left === this.chromeInsets.left && right === this.chromeInsets.right) {
-				return;
-			}
-			this.chromeInsets.left = left;
-			this.chromeInsets.right = right;
-			this.element.style.setProperty('--review-chrome-left-width', `${left}px`);
-			this.element.style.setProperty('--review-chrome-right-width', `${right}px`);
-			this._onDidChangeChromeInsets.fire();
-		};
-		const observer = new ResizeObserver(updateChromeWidths);
+		const observer = new ResizeObserver(() => this.updateChromeWidths());
 		observer.observe(this.leftContainer);
 		observer.observe(this.rightContainer);
 		this._register(toDisposable(() => observer.disconnect()));
-		updateChromeWidths();
+		this.updateChromeWidths();
 
 		return element;
+	}
+
+	// Written on this part, never the workbench root; see
+	// `publishReviewChromeInset` for why.
+	private updateChromeWidths(): void {
+		// The clusters counter-zoom and report their own scale; the tab strip is at the page's.
+		const zoomFactor = getZoomFactor(mainWindow);
+		const left = this.leftContainer.getBoundingClientRect().width / zoomFactor;
+		const right = this.rightContainer.getBoundingClientRect().width / zoomFactor;
+		if (left === this.chromeInsets.left && right === this.chromeInsets.right) {
+			return;
+		}
+		this.chromeInsets.left = left;
+		this.chromeInsets.right = right;
+		this.element.style.setProperty('--review-chrome-left-width', `${left}px`);
+		this.element.style.setProperty('--review-chrome-right-width', `${right}px`);
+		this._onDidChangeChromeInsets.fire();
 	}
 
 	constructor(
