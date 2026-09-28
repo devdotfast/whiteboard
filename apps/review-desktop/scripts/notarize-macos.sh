@@ -108,6 +108,8 @@ TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/dev-fast-review-notarize.XXXXXX")"
 trap 'rm -rf -- "$TEMP_ROOT"' EXIT
 DMG_STAGE="$TEMP_ROOT/dmg"
 
+NOTARY_IDS=()
+
 submit_notarization() {
   local artifact="$1"
   local label="$2"
@@ -115,12 +117,26 @@ submit_notarization() {
 
   if ! xcrun notarytool submit "$artifact" \
     "${NOTARY_ARGS[@]}" \
-    --wait \
     --output-format json | tee "$response"; then
     echo "Apple notarization failed for $artifact" >&2
     return 1
   fi
 
+  local submission
+  submission=$(node --input-type=module -e '
+    import fs from "node:fs";
+    const response = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    if (!response.id) throw new Error("Missing notarization submission ID");
+    console.log(response.id);
+  ' "$response")
+  NOTARY_IDS+=("$submission")
+}
+
+wait_for_notarization() {
+  local submission="$1"
+  local response="$TEMP_ROOT/$submission-notary-result.json"
+  xcrun notarytool wait "$submission" "${NOTARY_ARGS[@]}" \
+    --output-format json | tee "$response"
   node --input-type=module -e '
     import fs from "node:fs";
     const response = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
@@ -158,21 +174,10 @@ elif [[ -n "${AGENT_TEMPDIRECTORY:-}" ]]; then
 fi
 codesign "${CODESIGN_DMG_ARGS[@]}" "$DMG"
 
-# One submission: notarizing the DMG also records tickets for the nested app,
-# so both artifacts staple from this single Apple round trip.
+# Submit the DMG and legacy bundle before waiting for either Apple ticket.
 submit_notarization "$DMG" dmg
-xcrun stapler staple "$DMG"
-xcrun stapler validate "$DMG"
-xcrun stapler staple "$PACKAGED_APP"
-xcrun stapler validate "$PACKAGED_APP"
-spctl -a -vv --type exec "$PACKAGED_APP"
-spctl -a -vv --type open --context context:primary-signature "$DMG"
 
-# One update zip per bundle name still installed (release-channel.mjs lists
-# them). Squirrel renames an install to the update's CFBundleExecutable, so a
-# zip meant for Review.app installs must carry an executable named Review:
-# copy the stapled app, rename the executable, re-sign the outer bundle (the
-# nested code keeps its signatures) and notarize that copy on its own.
+# Legacy updates need their original executable name and a separate ticket.
 UPDATE_ZIPS=()
 while IFS=$'\t' read -r bundle artifact; do
   staged="$TEMP_ROOT/zips/$artifact/$bundle.app"
@@ -187,12 +192,26 @@ while IFS=$'\t' read -r bundle artifact; do
     codesign --verify --deep --strict --verbose=2 "$staged"
     ditto -c -k --keepParent "$staged" "$TEMP_ROOT/zips/$artifact-notarize.zip"
     submit_notarization "$TEMP_ROOT/zips/$artifact-notarize.zip" "$artifact"
-    xcrun stapler staple "$staged"
-    xcrun stapler validate "$staged"
-    spctl -a -vv --type exec "$staged"
   fi
-  ditto -c -k --keepParent "$staged" "$zip"
   UPDATE_ZIPS+=("$zip")
+done < <(node "$APP_DIR/scripts/release-channel.mjs" "$QUALITY")
+
+for submission in "${NOTARY_IDS[@]}"; do
+  wait_for_notarization "$submission"
+done
+xcrun stapler staple "$DMG"
+xcrun stapler validate "$DMG"
+xcrun stapler staple "$PACKAGED_APP"
+xcrun stapler validate "$PACKAGED_APP"
+spctl -a -vv --type exec "$PACKAGED_APP"
+spctl -a -vv --type open --context context:primary-signature "$DMG"
+
+while IFS=$'\t' read -r bundle artifact; do
+  staged="$TEMP_ROOT/zips/$artifact/$bundle.app"
+  xcrun stapler staple "$staged"
+  xcrun stapler validate "$staged"
+  spctl -a -vv --type exec "$staged"
+  ditto -c -k --keepParent "$staged" "$ARTIFACT_DIR/$artifact-$DARWIN_TARGET-$VERSION.zip"
 done < <(node "$APP_DIR/scripts/release-channel.mjs" "$QUALITY")
 
 echo "Created notarized Whiteboard Desktop artifacts:"

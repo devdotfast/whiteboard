@@ -62,7 +62,7 @@ jobs:
     name: Tag release
     # Approval is handled by approve; this environment supplies credentials.
     environment: review-release
-    runs-on: review_big_boy
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.bump.outputs.version || steps.dryrun.outputs.version }}
       tag: ${{ steps.bump.outputs.tag }}
@@ -415,9 +415,8 @@ jobs:
 
   build:
     name: Build and sign macOS (${{ matrix.target }})
-    # Nothing publishes until every selected platform has built and validated.
-    needs: [tag, compile, linux, windows]
-    if: ${{ !cancelled() && needs.tag.result == 'success' && needs.compile.result == 'success' && (inputs.platforms != 'all' || (needs.linux.result == 'success' && needs.windows.result == 'success')) }}
+    needs: [tag, compile]
+    if: ${{ !cancelled() && needs.tag.result == 'success' && needs.compile.result == 'success' }}
     strategy:
       fail-fast: true
       matrix:
@@ -732,7 +731,7 @@ jobs:
     environment: review-release
     needs: [tag, build, linux, windows]
     if: ${{ !cancelled() && !inputs.dry_run && needs.tag.result == 'success' && needs.linux.result == 'success' && (inputs.platforms == 'linux' || (needs.build.result == 'success' && needs.windows.result == 'success')) }}
-    runs-on: review_big_boy
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -764,7 +763,7 @@ jobs:
     environment: review-release
     needs: [tag, build, linux, windows]
     if: ${{ !cancelled() && !inputs.dry_run && needs.tag.result == 'success' && needs.windows.result == 'success' && (inputs.platforms == 'windows' || (needs.build.result == 'success' && needs.linux.result == 'success')) }}
-    runs-on: review_big_boy
+    runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: ${{ needs.tag.outputs.version }}
       RELEASE_TAG: ${{ needs.tag.outputs.tag }}
@@ -821,7 +820,7 @@ jobs:
     name: Publish release
     needs: [tag, publish-macos, publish-linux, publish-windows]
     if: ${{ !cancelled() && !inputs.dry_run && needs.tag.result == 'success' && (inputs.platforms != 'all' && inputs.platforms != 'macos' || needs.publish-macos.result == 'success') && (inputs.platforms != 'all' && inputs.platforms != 'linux' || needs.publish-linux.result == 'success') && (inputs.platforms != 'all' && inputs.platforms != 'windows' || needs.publish-windows.result == 'success') }}
-    runs-on: review_big_boy
+    runs-on: ubuntu-latest
     steps:
       - name: Publish GitHub Release
         env:

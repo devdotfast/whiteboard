@@ -5,6 +5,23 @@ PUBLICATION="$(cd "${1:?usage: verify-repository.sh publication-directory [43|44
 TARGET="${2:-all}"
 case "$TARGET" in all|43|44|ubuntu|arch) ;; *) echo "Unknown Linux test target: $TARGET" >&2; exit 2 ;; esac
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+if [[ "$TARGET" == all ]]; then
+  pids=()
+  targets=(43 44 ubuntu arch)
+  for target in "${targets[@]}"; do
+    bash "$SCRIPT_DIR/verify-repository.sh" "$PUBLICATION" "$target" &
+    pids+=("$!")
+  done
+  result=0
+  for i in "${!pids[@]}"; do
+    if ! wait "${pids[$i]}"; then
+      echo "Linux validation failed: ${targets[$i]}" >&2
+      result=1
+    fi
+  done
+  exit "$result"
+fi
+
 ARCH_IMAGE='archlinux:base-devel@sha256:8745817f349ed24373341ddb92776209eeec3f0364ea48f7f645ac5800d30a50'
 # A publication carries exactly one channel: stable under repos/, preview under repos/preview/.
 if [[ -f "$PUBLICATION/repos/preview/current.json" ]]; then PREFIX=repos/preview; PACKAGE=whiteboard-preview; APP=whiteboard-preview
