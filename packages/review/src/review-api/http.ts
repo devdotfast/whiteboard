@@ -123,7 +123,7 @@ export function createReviewApi(
 
     return context.json(
       {
-        error: `review operation failed (${failureKind(error)}). The server logged the cause; Whiteboard Desktop writes it to main.log in its logs folder.`,
+        error: `Whiteboard operation failed (${failureKind(error)}). The server logged the cause; Whiteboard Desktop writes it to main.log in its logs folder.`,
       },
       500,
     );

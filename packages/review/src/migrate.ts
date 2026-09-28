@@ -136,7 +136,7 @@ export async function runReviewMigration(input: {
   );
 
   const managedCheckouts = await runMigrationPhase(
-    "review-managed checkout migration",
+    "Whiteboard-managed checkout migration",
     { checked: 0, created: 0, legacyRemoved: 0, blockers: [] },
     () =>
       runtime.migrateReviewManagedCheckouts({
@@ -178,7 +178,7 @@ export async function runReviewMigration(input: {
 
   human.write(
     [
-      `review migration: ${count(stored.documents, "document")} checked;`,
+      `Whiteboard migration: ${count(stored.documents, "document")} checked;`,
       `${count(stored.droppedReviews, "old review")} dropped;`,
       `${count(stored.droppedLegacyPeekReviews, "legacy-peek review")} dropped;`,
       `${count(jj.migrated, "jj repository", "jj repositories")} converted;`,
@@ -191,7 +191,7 @@ export async function runReviewMigration(input: {
   );
 
   for (const blocker of blockers) {
-    input.stderr.write(`review migration blocker: ${blocker}\n`);
+    input.stderr.write(`Whiteboard migration blocker: ${blocker}\n`);
   }
 
   emitJsonEvent(input, {

@@ -326,7 +326,7 @@ describe("review migrate apply", () => {
     expect(code).toBe(1);
     expect(io.out.join("")).toContain("1 old review dropped");
     expect(io.err.join("")).toContain(
-      "review migration blocker: one legacy Review could not migrate",
+      "Whiteboard migration blocker: one legacy Review could not migrate",
     );
   });
 });

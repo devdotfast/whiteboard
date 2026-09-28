@@ -1075,10 +1075,10 @@ function reviewCliRuntime(
 function reviewTopLevelHelp(): string {
   return [
     "",
-    "Use `review info` to discover review documents for this checkout.",
+    "Use `whiteboard info` to discover review documents for this checkout.",
     "Reviews are authored through the JSON API: `whiteboard api tools` lists the tools, and `whiteboard mcp` serves the same catalog to an agent.",
-    "Use `review app launch` to start Whiteboard Desktop. Use `review app pick --session <uuid>` to open one.",
-    "Use `review server start` for headless authoring, and `review server status --json` to check readiness.",
+    "Use `whiteboard app launch` to start Whiteboard Desktop. Use `whiteboard app pick --session <uuid>` to open one.",
+    "Use `whiteboard server start` for headless authoring, and `whiteboard server status --json` to check readiness.",
     "",
     "Every command accepts --json. Stdout then carries only JSON events, one per line,",
     "human progress moves to stderr, and a failure prints a JSON error event too.",

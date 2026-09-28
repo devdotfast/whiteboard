@@ -205,7 +205,7 @@ async function useHosted(
     } catch (error) {
       if (error instanceof StoreApiError && error.code === "upgrade_required") {
         throw new TraceConfigurationError(
-          `${origin} does not serve the trace store contract this Whiteboard needs. Hosted storage was not selected.`,
+          `${origin} does not serve the trace store contract this version of Whiteboard needs. Hosted storage was not selected.`,
         );
       }
 
