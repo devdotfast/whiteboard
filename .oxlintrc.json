@@ -115,6 +115,29 @@
       }
     },
     {
+      "files": ["packages/review/src/**", "packages/review/app/src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "../**",
+                  "!**/test/fixtures/**",
+                  "!**/test-config*",
+                  "!**/tutorial/*.json",
+                  "!**/desktop-css-scope",
+                  "!**/agent-plugins/**"
+                ],
+                "message": "Import through @review/* or @canvas/*; run scripts/rewrite-relative-imports.mjs."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["packages/trace-core/**"],
       "rules": {
         "no-restricted-imports": [

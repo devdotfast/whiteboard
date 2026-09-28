@@ -6,4 +6,4 @@ Do not add [Change Detector Tests](https://testing.googleblog.com/2015/01/testin
 
 ## Imports
 
-In `packages/review` and `packages/review/app`, import through `@review/*` (`packages/review/src`) and `@canvas/*` (`packages/review/app/src`) instead of `../` paths. Keep `./` for siblings. tsx reads the aliases from its working directory's tsconfig, so run it from `packages/review` or set `TSX_TSCONFIG_PATH`.
+In `packages/review` and `packages/review/app`, import through `@review/*` (`packages/review/src`) and `@canvas/*` (`packages/review/app/src`) instead of `../` paths. Keep `./` for siblings. tsx reads the aliases from its working directory's tsconfig, so run it from `packages/review` or set `TSX_TSCONFIG_PATH`. `scripts/rewrite-relative-imports.mjs` converts a branch that predates this.
