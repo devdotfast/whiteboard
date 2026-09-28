@@ -15,7 +15,9 @@ export const name = "home-multi-review";
 
 export const phase = 1;
 
-export const options = {};
+export const options = {
+  settings: { "window.menuStyle": "custom", "window.dialogStyle": "custom" },
+};
 
 /** Every locator this journey uses, rebuilt from the current `ctx.page` after each return to Home. */
 function homeUi(ctx) {
@@ -52,9 +54,7 @@ export async function run(ctx) {
 
   const second = await createReview(ctx, {
     title: "Second review",
-    blocks: [
-      { type: "markdown", markdown: "Second look at the same change." },
-    ],
+    blocks: [{ type: "markdown", markdown: "Second look at the same change." }],
   });
 
   // Home groups by checkout, not by repository, so a second worktree makes two groups out of three reviews.
@@ -86,9 +86,15 @@ export async function run(ctx) {
   ctx.check("Home lists three reviews from two worktrees");
 
   await home.locator('[aria-label="Search sessions"]').fill("Worktree B");
-  await until(async () => (await rows.count()) === 1, "search narrows to one row");
+  await until(
+    async () => (await rows.count()) === 1,
+    "search narrows to one row",
+  );
   await home.locator('[aria-label="Clear search"]').click();
-  await until(async () => (await rows.count()) === 3, "clear restores three rows");
+  await until(
+    async () => (await rows.count()) === 3,
+    "clear restores three rows",
+  );
   ctx.check("Home search and clear behave");
 
   for (const title of [first.title, second.title, third.title])
@@ -118,9 +124,11 @@ export async function run(ctx) {
     .getByRole("button", { name: `Actions for ${third.title}` })
     .click();
 
-  const menu = home.getByRole("menu", { name: "Session actions" });
+  const menu = ctx.page.getByRole("menu");
 
-  await menu.getByRole("menuitem", { name: `Delete ${third.title}` }).waitFor();
+  await menu
+    .getByRole("menuitem", { name: "Delete session", exact: true })
+    .waitFor();
   assert.equal(
     await home.getByRole("button", { name: `Dismiss ${third.title}` }).count(),
     0,
@@ -154,7 +162,7 @@ export async function run(ctx) {
   await until(async () => (await rows.count()) === 3, "restored");
   ctx.check("a dismissed review is listed apart and Undo restores it");
 
-  // Delete is offered in a dismissed review's row after two clicks.
+  // Cancellation preserves the review; confirmation deletes only that review.
   await attention(ctx, third.reviewId, "dismiss");
   await expandDismissed();
   assert.ok(
@@ -164,9 +172,16 @@ export async function run(ctx) {
   await dismissedRow
     .getByRole("button", { name: `Delete ${third.title}` })
     .click();
+  const dialog = ctx.page.getByRole("dialog");
+
+  await dialog.getByText(`Delete “${third.title}”?`, { exact: true }).waitFor();
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await dialog.waitFor({ state: "hidden" });
+  assert.ok((await listedReviewIds(ctx)).includes(third.reviewId));
   await dismissedRow
-    .getByRole("button", { name: `Confirm delete ${third.title}` })
+    .getByRole("button", { name: `Delete ${third.title}` })
     .click();
+  await dialog.getByRole("button", { name: "Delete", exact: true }).click();
   await until(
     async () => (await dismissedRow.count()) === 0,
     "the deleted review leaves Home",
@@ -190,5 +205,5 @@ export async function run(ctx) {
     [],
     "deleting one review must not unlist the others",
   );
-  ctx.check("two-click delete from Dismissed updates Home and the store");
+  ctx.check("confirmed deletion from Dismissed updates Home and the store");
 }
