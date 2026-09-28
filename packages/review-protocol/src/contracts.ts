@@ -694,6 +694,8 @@ export interface ReviewCanvasRange {
   headRef: string;
   baseCommit: string;
   headCommit: string;
+  /** Compares working files, which can differ from the head commit. */
+  live?: boolean;
 }
 
 export interface ReviewCanvasHandle extends ReviewDisposable {

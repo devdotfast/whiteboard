@@ -843,6 +843,53 @@ it("degrades to the retained document and an unavailable Commits tab when the ch
   }
 });
 
+it("offers the Diff view for a live worktree review whose base is its head", async () => {
+  const live = { ...pins, base: "head", worktreeRevision: "saved-edits" };
+
+  const worktree = new ReviewStore(path.join(directory, "worktree.db"), {
+    resolveTarget: async (target) => ({ target, pins: live }),
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+  });
+
+  try {
+    const { reviewId } = await worktree.execute({
+      commandId: randomUUID(),
+      operation: {
+        type: "create",
+        title: "Working files",
+        target: { kind: "worktree", repositoryId: pins.repositoryId },
+      },
+    });
+
+    const app = new Hono().route("/reviews-api", createReviewApi(worktree));
+    app.get("/reviews-api/:id/commits", (context) => context.json([]));
+
+    const bridge = testReviewBridge(
+      {},
+      { request: async (url, init) => app.request(url, init) },
+    );
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    await act(async () => {
+      canvas = mount(container, { kind: "api", reviewId, bridge });
+    });
+    await act(async () =>
+      vi.waitFor(() =>
+        expect(container.querySelector("h1")?.textContent).toBe(
+          "Working files",
+        ),
+      ),
+    );
+
+    expect(container.querySelector('button[aria-label="Diff"]')).not.toBeNull();
+  } finally {
+    await worktree.close();
+  }
+});
+
 it("leaves window errors to the workbench it shares a window with", async () => {
   const review = await command({ type: "create", title: "Errors", pins });
   const app = new Hono().route("/reviews-api", createReviewApi(store));

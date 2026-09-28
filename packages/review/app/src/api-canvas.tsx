@@ -494,6 +494,7 @@ const CanvasDocument = memo(function CanvasDocument({
         headRef: snapshot.pins?.head ?? "",
         baseCommit: snapshot.pins?.base ?? "",
         headCommit: snapshot.pins?.head ?? "",
+        live: !!snapshot.pins?.worktreeRevision,
       }}
       commits={data.commits}
       findHost={findHost}

@@ -232,6 +232,7 @@ export interface ReviewProviders {
   ): Promise<ResolvedPullRequest>;
   resolveTarget?(
     target: ReviewTarget,
+    pinned?: Pins,
   ): Promise<{ target: ReviewTarget; pins: Pins }>;
   /** Rejects with a 404 ReviewInputError when the snapshot's checkout is gone.
    * Resolves undefined for a document without default pins. */
@@ -308,7 +309,10 @@ export class ReviewStore {
       return projected;
     }
 
-    const { pins } = await this.providers.resolveTarget!(snapshot.target);
+    const { pins } = await this.providers.resolveTarget!(
+      snapshot.target,
+      snapshot.pins,
+    );
 
     if (
       JSON.stringify(current.pins) === JSON.stringify(pins) &&

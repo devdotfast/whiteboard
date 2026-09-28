@@ -371,7 +371,8 @@ function ReviewLayoutContent({
   });
 
   const viewStateSync = useReviewViewStateSync({ scrollRegionRef, panelStore });
-  const hasChangeRange = range.baseCommit !== range.headCommit;
+  const hasChangeRange =
+    range.live || range.baseCommit !== range.headCommit;
 
   const [activeView, setActiveView] = useState<ReviewView>(() =>
     normalizeReviewView(

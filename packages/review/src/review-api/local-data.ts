@@ -812,7 +812,7 @@ export class LocalReviewData {
    * for a document without default pins. */
   async sourcePins(snapshot: Snapshot): Promise<Pins | undefined> {
     if (snapshot.target?.kind === "worktree")
-      return (await this.resolveTarget(snapshot.target)).pins;
+      return (await this.resolveTarget(snapshot.target, snapshot.pins)).pins;
 
     if (!snapshot.pins) return undefined;
 
@@ -858,8 +858,10 @@ export class LocalReviewData {
     }
   }
 
+  /** `pinned` refreshes a stored worktree target's head, keeping its base. */
   async resolveTarget(
     target: ReviewTarget,
+    pinned?: Pins,
   ): Promise<{ target: ReviewTarget; pins: Pins }> {
     const vcs = await this.vcs(target.repositoryId);
 
@@ -891,14 +893,6 @@ export class LocalReviewData {
       };
     }
 
-    const base =
-      target.base === undefined
-        ? undefined
-        : await vcs.resolveRevision(target.base);
-
-    if (target.base !== undefined && !base)
-      throw new ReviewInputError("Base revision does not exist.");
-
     const { revision, commit } = await this.worktreeState(
       target.repositoryId,
       vcs,
@@ -906,17 +900,55 @@ export class LocalReviewData {
 
     const resolved = { ...target };
 
-    if (base) resolved.base = base.commit;
+    // A live refresh moves only the head. Targets stored without a base
+    // predate default-branch bases and compare against the current HEAD.
+    const base = pinned
+      ? target.base === undefined
+        ? commit
+        : pinned.base
+      : commit === EMPTY_SOURCE && target.base === undefined
+        ? EMPTY_SOURCE
+        : await this.worktreeBase(vcs, target.base, commit).then((found) => {
+            resolved.base = found.ref;
+
+            return found.commit;
+          });
 
     return {
       target: resolved,
       pins: {
         repositoryId: target.repositoryId,
-        base: base?.commit ?? commit,
+        base,
         head: commit,
         worktreeRevision: revision,
       },
     };
+  }
+  /** The fork point from `ref`, by default the repository's default branch. */
+  private async worktreeBase(
+    vcs: LocalVcs,
+    ref: string | undefined,
+    head: string,
+  ) {
+    const branch = ref ?? (await vcs.defaultBranch())?.ref;
+
+    if (!branch)
+      throw new ReviewInputError(
+        "No default branch found (tried origin/HEAD, origin/main, origin/master, main and master). Supply target.base.",
+      );
+
+    if (!(await vcs.resolveRevision(branch)))
+      throw new ReviewInputError("Base revision does not exist.");
+
+    const fork =
+      head === EMPTY_SOURCE ? null : await vcs.mergeBase(branch, head);
+
+    if (!fork)
+      throw new ReviewInputError(
+        `${branch} shares no history with the checkout's HEAD.`,
+      );
+
+    return { ref: branch, commit: fork.commit };
   }
   /** The PR's current comparison, fetched into a registered checkout of its repository. */
   async resolvePullRequest(
@@ -1709,7 +1741,7 @@ export function openLocalReviewStore(
 ) {
   const store: ReviewStore = new ReviewStore(databasePath, {
     projectSource: (snapshot, pins) => data.projectSource(snapshot, pins),
-    resolveTarget: (target) => data.resolveTarget(target),
+    resolveTarget: (target, pinned) => data.resolveTarget(target, pinned),
     resolvePullRequest: (url, repository) =>
       data.resolvePullRequest(url, repository),
     headBranch: (pins, headRef) => data.headBranch(pins, headRef),

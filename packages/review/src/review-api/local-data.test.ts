@@ -107,7 +107,7 @@ beforeEach(async () => {
   database = path.join(directory, "reviews.db");
   vi.stubEnv("DEV_REVIEW_HOME", directory);
   mkdirSync(repository);
-  git("init", "-q");
+  git("init", "-q", "-b", "main");
   git("config", "user.name", "Review Test");
   git("config", "user.email", "review-test@example.invalid");
   writeFileSync(
@@ -2650,9 +2650,15 @@ it("reads current working source across authored versions, commits and retargeti
   git("commit", "-qm", "Save changes");
   await new Promise((resolve) => setTimeout(resolve, 50));
   await local.store.refreshWorktrees();
+  // Committing moves the head, not the base: the saved work stays in review.
+  expect(local.store.read(result.reviewId).pins!.base).toBe(original.pins!.base);
   expect(
     await local.data.changes(local.store.read(result.reviewId).pins!),
-  ).toEqual([]);
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ path: "untracked.ts", status: "added" }),
+    ]),
+  );
   await local.store.execute(
     command({
       type: "set_target",
@@ -2664,6 +2670,119 @@ it("reads current working source across authored versions, commits and retargeti
   expect(
     (await local.data.file(original.pins!, "head", "example.ts")).text,
   ).toContain("live = 2");
+});
+
+describe("worktree base", () => {
+  let root: string;
+  let repositoryId: string;
+
+  const run = (...args: string[]) =>
+    execFileSync("git", ["-c", "commit.gpgsign=false", ...args], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim();
+
+  const commit = (file: string, text: string, message: string) => {
+    writeFileSync(path.join(root, file), text);
+    run("add", file);
+    run("commit", "-qm", message);
+  };
+
+  const create = (base?: string) =>
+    local.store.execute(
+      command({
+        type: "create",
+        title: "Branch work",
+        target: { kind: "worktree", repositoryId, base },
+      }),
+    );
+
+  const changedPaths = async (reviewId: string) =>
+    (await local.data.changes(local.store.read(reviewId).pins!))
+      .map(({ path, status }) => `${status} ${path}`)
+      .sort();
+
+  beforeEach(async () => {
+    root = path.join(directory, "branching");
+    mkdirSync(root);
+    run("init", "-q", "-b", "main");
+    run("config", "user.name", "Review Test");
+    run("config", "user.email", "review-test@example.invalid");
+    commit("shared.ts", "export const shared = 1;\n", "Root");
+    commit("removed.ts", "export const removed = 1;\n", "Removable");
+    run("checkout", "-qb", "feature");
+    commit("committed.ts", "export const committed = 1;\n", "Branch work");
+    run("checkout", "-q", "main");
+    commit("main-only.ts", "export const later = 1;\n", "Main moves on");
+    run("checkout", "-q", "feature");
+    writeFileSync(path.join(root, "staged.ts"), "export const staged = 1;\n");
+    run("add", "staged.ts");
+    writeFileSync(path.join(root, "shared.ts"), "export const shared = 2;\n");
+    writeFileSync(path.join(root, "untracked.ts"), "export const fresh = 1;\n");
+    writeFileSync(path.join(root, ".gitignore"), "ignored.ts\n");
+    writeFileSync(path.join(root, "ignored.ts"), "export const hidden = 1;\n");
+    rmSync(path.join(root, "removed.ts"));
+    repositoryId = (await local.data.register(root)).id;
+  });
+
+  it("compares everything in the checkout against the default branch's merge base", async () => {
+    const { reviewId } = await create();
+    const snapshot = local.store.read(reviewId);
+
+    expect(snapshot.target).toEqual({
+      kind: "worktree",
+      repositoryId,
+      base: "main",
+    });
+    expect(snapshot.pins?.base).toBe(run("merge-base", "main", "HEAD"));
+    expect(await changedPaths(reviewId)).toEqual([
+      "added .gitignore",
+      "added committed.ts",
+      "added staged.ts",
+      "added untracked.ts",
+      "deleted removed.ts",
+      "modified shared.ts",
+    ]);
+  });
+
+  it("treats a named base as the branch to compare against", async () => {
+    const { reviewId } = await create("main");
+
+    expect(local.store.read(reviewId).pins?.base).toBe(
+      run("merge-base", "main", "HEAD"),
+    );
+    expect(await changedPaths(reviewId)).not.toContain("deleted main-only.ts");
+  });
+
+  it("keeps the base when the branch moves, and re-resolves it on retarget", async () => {
+    const { reviewId } = await create();
+    const forkPoint = local.store.read(reviewId).pins!.base;
+
+    run("add", ".");
+    run("commit", "-qm", "Save");
+    await local.store.refreshWorktrees();
+    expect(local.store.read(reviewId).pins!.base).toBe(forkPoint);
+    expect(await changedPaths(reviewId)).toContain("added untracked.ts");
+
+    run("rebase", "-q", "main");
+    await local.store.execute(
+      command({
+        type: "set_target",
+        reviewId,
+        target: { kind: "worktree", repositoryId },
+      }),
+    );
+    expect(local.store.read(reviewId).pins!.base).toBe(run("rev-parse", "main"));
+    expect(await changedPaths(reviewId)).not.toContain("added main-only.ts");
+  });
+
+  it("names the branches it tried when there is no default branch", async () => {
+    run("branch", "-m", "main", "trunk");
+
+    await expect(create()).rejects.toThrow(
+      /No default branch.*origin\/HEAD.*main.*base/,
+    );
+  });
 });
 
 it("reads symlink text and an unborn repository without following external links or pinning", async () => {

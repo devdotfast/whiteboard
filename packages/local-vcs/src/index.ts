@@ -48,7 +48,7 @@ export interface LocalVcs {
   rootPath: string;
   currentHead(): Promise<ResolvedRevision | null>;
   resolveRevision(revision: string): Promise<ResolvedRevision | null>;
-  defaultBranch(): Promise<ResolvedRevision | null>;
+  defaultBranch(): Promise<DefaultBranch | null>;
   mergeBase(baseRef: string, headRef: string): Promise<ResolvedRevision | null>;
   listTrackedFiles(revision?: string): Promise<string[]>;
   readFileAtRef(ref: string, relativePath: string): Promise<string | null>;
@@ -74,6 +74,10 @@ export interface LocalVcs {
 
 export interface ResolvedRevision {
   commit: string;
+}
+
+export interface DefaultBranch extends ResolvedRevision {
+  ref: string;
 }
 
 export interface DiffNameStatus {
@@ -597,7 +601,7 @@ export function resolveRevisionSync(
 
 export async function defaultBranch(
   rootPath: string,
-): Promise<ResolvedRevision | null> {
+): Promise<DefaultBranch | null> {
   const vcs = await detectLocalVcs(rootPath);
 
   if (!vcs) return null;
@@ -687,7 +691,7 @@ function resolveRevisionForKindSync(
 async function defaultBranchForKind(
   rootPath: string,
   kind: LocalVcsKind,
-): Promise<ResolvedRevision | null> {
+): Promise<DefaultBranch | null> {
   const candidates = await defaultBranchCandidates(rootPath);
 
   for (const candidate of candidates) {
@@ -697,7 +701,7 @@ async function defaultBranchForKind(
       kind,
     );
 
-    if (commit) return { commit };
+    if (commit) return { ref: candidate, commit };
   }
 
   return null;
