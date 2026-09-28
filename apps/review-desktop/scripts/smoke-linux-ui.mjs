@@ -8,13 +8,13 @@ import { _electron as electron } from "playwright";
 
 if (process.platform !== "linux") throw new Error("Run this check on Linux");
 
-const packagedRoot = path.resolve(process.argv[2] ?? "apps/review-desktop/VSCode-linux-x64");
+const packagedRoot = path.resolve(process.argv[2] ?? path.join(import.meta.dirname, "../VSCode-linux-x64"));
 
 const { applicationName } = JSON.parse(
   await readFile(path.join(packagedRoot, "resources", "app", "product.json"), "utf8"),
 );
 
-const output = path.resolve(process.argv[3] ?? "apps/review-desktop/dist/linux-ui");
+const output = path.resolve(process.argv[3] ?? path.join(import.meta.dirname, "../dist/linux-ui"));
 
 await mkdir(output, { recursive: true });
 
@@ -47,7 +47,7 @@ for (const [controls, theme, scale] of [["native", "Review Dark", 1], ["custom",
     });
     const page = await app.firstWindow({ timeout: 90_000 });
     page.setDefaultTimeout(30_000);
-    const menu = page.getByRole("button", { name: "Review menu", exact: true });
+    const menu = page.getByRole("button", { name: "Whiteboard menu", exact: true });
     await menu.waitFor({ state: "visible" });
     await dismissStartupInvitations(page, menu);
     await page.locator(".review-onboarding-headline").waitFor({ state: "visible", timeout: 90_000 });
@@ -63,7 +63,7 @@ for (const [controls, theme, scale] of [["native", "Review Dark", 1], ["custom",
     await page.waitForFunction(() => document.querySelector(".review-application-menu")?.getAttribute("aria-expanded") === "false");
     await menu.click();
 
-    for (const name of [/^Manage Extensions/, /^Check for Updates/, /^About Review/, /^Quit Review/]) {
+    for (const name of [/^Manage Extensions/, /^Check for Updates/, /^About Whiteboard/, /^Quit Whiteboard/]) {
       await page.getByRole("menuitem", { name }).waitFor({ state: "visible" });
     }
 

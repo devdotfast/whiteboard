@@ -57,7 +57,6 @@ export interface CutoverReport {
  */
 export async function migrateJsonReviews(input: {
   home: string;
-  dryRun?: boolean;
   log?: (message: string) => void;
 }): Promise<CutoverReport> {
   await mkdir(input.home, { recursive: true, mode: 0o700 });
@@ -219,7 +218,7 @@ export async function migrateJsonReviews(input: {
       await chmod(candidate, 0o600);
       await writePrivateJsonAtomic(path.join(staging, "report.json"), report);
 
-      if (report.errors.length || input.dryRun) return report;
+      if (report.errors.length) return report;
 
       // No process has opened the live store yet. Retire its checkpointed WAL
       // alongside the main file, then install the fully verified candidate.

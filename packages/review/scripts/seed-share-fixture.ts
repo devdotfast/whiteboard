@@ -1,3 +1,4 @@
+/** Seeds a received share into `<home>` for the shared-review e2e journey; the sender's repository is renamed away afterwards. */
 import { randomUUID } from "node:crypto";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -5,26 +6,17 @@ import path from "node:path";
 import { openLocalReviewStore } from "../src/review-api/local-data.js";
 import { exportShare } from "../src/sharing/export.js";
 import { SharedReviewStore } from "../src/sharing/import.js";
-import {
-  fetchPinnedRepository,
-  sharedGit,
-  verifyShareRepository,
-} from "../src/sharing/repository.js";
+import { fetchPinnedRepository } from "../src/sharing/repository.js";
 import { createShareFixture } from "../test/fixtures/share/create.js";
 
-const root = path.resolve(process.argv[2]!);
+const [root, home] = process.argv.slice(2).map((arg) => path.resolve(arg));
 
-await mkdir(root, { recursive: true });
+if (!root || !home)
+  throw new Error("Usage: tsx scripts/seed-share-fixture.ts <root> <home>");
 
-const github = process.argv.includes("--github");
+await mkdir(home, { recursive: true });
 
-const fixture = await createShareFixture(root, github);
-
-if (github)
-  await verifyShareRepository(
-    fixture.repo,
-    fixture.store.read(fixture.reviewId).pins!,
-  );
+const fixture = await createShareFixture(root);
 
 const bundle = await exportShare({
   ...fixture,
@@ -32,19 +24,12 @@ const bundle = await exportShare({
 
 bundle.attribution = { login: "fixture-sender", sharedAt: Date.now() };
 
-const home = path.join(root, "recipient");
-
-await mkdir(home, { recursive: true });
-
 const recipient = openLocalReviewStore(path.join(home, "review-api.db"));
 
 const store = new SharedReviewStore(
   path.join(home, "shared-reviews"),
-  async (target, url, pins) => {
-    await fetchPinnedRepository(target, github ? url : fixture.repo, pins);
-
-    if (process.argv.includes("--lsp"))
-      await sharedGit(target, ["config", "devfast.prepare", "true"]);
+  async (target, _url, pins) => {
+    await fetchPinnedRepository(target, fixture.repo, pins);
   },
 );
 
@@ -72,10 +57,8 @@ await writeFile(
   path.join(root, "fixture.json"),
   JSON.stringify({
     reviewId,
-    home,
     version: bundle.manifest.version,
     sourceFile: fixture.sourceFile,
     sourceText: fixture.sourceText,
-    github,
   }),
 );

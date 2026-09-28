@@ -14,6 +14,7 @@
     "app:watch": "pnpm run protocol:sync && npm --prefix code-oss run watch",
     "protocol:sync": "node scripts/protocol-sync.mjs",
     "smoke:error-telemetry": "node scripts/smoke-error-telemetry.mjs",
+    "smoke:linux-ui": "node scripts/smoke-linux-ui.mjs",
     "smoke:telemetry-delivery": "node scripts/smoke-telemetry-delivery.mjs",
     "test:e2e:lsp": "node scripts/lsp-e2e.mjs",
     "test:e2e:telemetry": "node scripts/e2e/run.mjs --journey telemetry-contract --runtime \"${REVIEW_E2E_RUNTIME:?stage a runtime, see scripts/e2e/TESTING.md}\"",
