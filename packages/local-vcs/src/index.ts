@@ -1163,8 +1163,7 @@ async function withWorkingTreeIndex<T>(
       try {
         const copy = path.join(scratch, "index");
         await fs.promises.copyFile(index, copy);
-        // Git compares contents only for entries not older than the index
-        // file (its racy-index check); a fresh mtime would skip them.
+        // Keep the mtime so Git's racy-index check still compares contents.
         const { atime, mtime } = await fs.promises.stat(index);
         await fs.promises.utimes(copy, atime, mtime);
       } catch (error) {

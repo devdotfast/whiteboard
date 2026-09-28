@@ -2773,8 +2773,7 @@ describe("worktree base", () => {
     run("branch", "-m", "main", "trunk");
     expect(await refresh()).toBe(main);
 
-    // The missing ref is looked up again only when the checkout changes, not
-    // on every refresh. A late file event may still start one new epoch.
+    // Idle refreshes don't retry; a late file event may add one lookup.
     recordSpawns();
 
     for (let i = 0; i < 10; i++) await local.store.refreshWorktrees();

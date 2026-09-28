@@ -162,8 +162,7 @@ it("sees a same-size rewrite that only Git's racy-index check can catch", async 
   const git = (...args: string[]) =>
     execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
 
-  // One old timestamp for the file, its index entry and the index itself:
-  // the entry is racily clean, so Git must compare contents.
+  // File, index entry and index share one timestamp: racily clean.
   const stamp = (file: string) =>
     execFileSync("touch", ["-t", "202001010000", path.join(root, file)]);
 
