@@ -172,7 +172,10 @@ export async function run(ctx) {
   await dismissedRow
     .getByRole("button", { name: `Delete ${third.title}` })
     .click();
-  const dialog = ctx.page.getByRole("dialog");
+
+  const dialog = ctx.page.getByRole("dialog").filter({
+    hasText: `Delete “${third.title}”?`,
+  });
 
   await dialog.getByText(`Delete “${third.title}”?`, { exact: true }).waitFor();
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
