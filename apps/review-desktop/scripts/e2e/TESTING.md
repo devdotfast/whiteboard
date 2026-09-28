@@ -6,10 +6,6 @@ it through the JSON review API, the installed `review` CLI and Playwright over
 CDP. Run `telemetry-contract` alone with
 `pnpm --filter @dev.fast/review-desktop test:e2e:telemetry`.
 `../e2e-runner.test.mjs` checks every journey exports `name`, `phase` and `run`.
-The `Review Desktop E2E` job in the Review Desktop CI workflow runs the
-phase-1 journeys on Linux under `xvfb-run` for pushes to main and for pull
-requests that touch `apps/review-desktop`, `packages`, the lockfile, the root
-`package.json` or the workflow. It is not a required check.
 
 ## Prerequisites
 
