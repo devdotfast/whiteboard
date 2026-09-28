@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Validate a sealed Linux publication in clean, pinned Fedora and Ubuntu containers.
 set -euo pipefail
-PUBLICATION="$(cd "${1:?usage: verify-repository.sh publication-directory [43|44|ubuntu|all]}" && pwd -P)"
+PUBLICATION="$(cd "${1:?usage: verify-repository.sh publication-directory [43|44|ubuntu|arch|all]}" && pwd -P)"
 TARGET="${2:-all}"
-case "$TARGET" in all|43|44|ubuntu) ;; *) echo "Unknown Linux test target: $TARGET" >&2; exit 2 ;; esac
+case "$TARGET" in all|43|44|ubuntu|arch) ;; *) echo "Unknown Linux test target: $TARGET" >&2; exit 2 ;; esac
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+ARCH_IMAGE='archlinux:base-devel@sha256:8745817f349ed24373341ddb92776209eeec3f0364ea48f7f645ac5800d30a50'
 # A publication carries exactly one channel: stable under repos/, preview under repos/preview/.
 if [[ -f "$PUBLICATION/repos/preview/current.json" ]]; then PREFIX=repos/preview; PACKAGE=whiteboard-preview; APP=whiteboard-preview
 else PREFIX=repos; PACKAGE=whiteboard; APP=whiteboard; fi
@@ -39,4 +40,14 @@ if [[ "$TARGET" == all || "$TARGET" == ubuntu ]]; then
     ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3 \
     bash /test/verify-ubuntu-container.sh
   echo "Ubuntu 24.04 ($PACKAGE): install, sandboxed launch, upgrade, retention and rejected tampering passed"
+fi
+
+if [[ "$TARGET" == all || "$TARGET" == arch ]]; then
+  docker run --rm --platform linux/amd64 \
+    -v "$PUBLICATION:/publication:ro" -v "$SCRIPT_DIR:/test:ro" \
+    -e GENERATION="$GENERATION" -e FINGERPRINT="$FINGERPRINT" \
+    -e PREFIX="$PREFIX" -e PACKAGE="$PACKAGE" -e APP="$APP" \
+    -e DO_NOT_TRACK=1 \
+    "$ARCH_IMAGE" bash /test/verify-arch-container.sh
+  echo "Arch ($PACKAGE): signed install, dependency closure, retention and rejected tampering passed"
 fi

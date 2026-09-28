@@ -4,11 +4,10 @@ set -euo pipefail
 [[ -n "${WHITEBOARD_CHANNEL:-}" && -n "${WHITEBOARD_VERSION:-}" && -n "${WHITEBOARD_REVISION:-}" && -n "${HOST_UID:-}" ]]
 NAME=whiteboard
 if [[ "$WHITEBOARD_CHANNEL" == preview ]]; then NAME=whiteboard-preview; fi
-# pacman's per-download sandbox calls syscalls this emulated linux/amd64
-# kernel rejects with EINVAL, even with Docker's seccomp filter off
-# (`--security-opt seccomp=unconfined` alone does not fix it; verified). Disable
-# pacman's own sandbox instead; fail loudly if the setting didn't apply, since a
-# base-image config change would otherwise surface as the cryptic error later.
+# pacman's download sandbox fails in unprivileged Docker containers (observed
+# locally under emulation; CI runs natively). Disable pacman's own sandbox
+# instead; fail loudly if the setting didn't apply, since a base-image config
+# change would otherwise surface as the cryptic error later.
 sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf
 grep -qx DisableSandbox /etc/pacman.conf
 pacman -Syu --noconfirm --needed rpm-tools
