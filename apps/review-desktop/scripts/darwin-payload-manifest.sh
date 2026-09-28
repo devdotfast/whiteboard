@@ -4,12 +4,14 @@
 
 # Paths are relative to the monorepo root. macOS packaging checks every
 # required path after it extracts the Linux-built Darwin payload.
-DARWIN_PAYLOAD_CURATED_EXTENSIONS_PATH="apps/review-desktop/code-oss/.build/review-curated-extensions/darwin-arm64"
+DARWIN_PAYLOAD_CURATED_EXTENSIONS_ROOT="apps/review-desktop/code-oss/.build/review-curated-extensions"
+DARWIN_PAYLOAD_TARGETS=(darwin-arm64 darwin-x64)
 
 DARWIN_PAYLOAD_REQUIRED_PATHS=(
   "apps/review-desktop/code-oss/out-vscode-min"
   "apps/review-desktop/code-oss/.build/extensions"
-  "$DARWIN_PAYLOAD_CURATED_EXTENSIONS_PATH"
+  "$DARWIN_PAYLOAD_CURATED_EXTENSIONS_ROOT/darwin-arm64"
+  "$DARWIN_PAYLOAD_CURATED_EXTENSIONS_ROOT/darwin-x64"
   "packages/review/app/dist/desktop"
   "packages/review/dist"
   "packages/review/tutorial"

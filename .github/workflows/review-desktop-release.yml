@@ -423,6 +423,8 @@ jobs:
       RELEASE_VERSION: ${{ needs.tag.outputs.version }}
       RELEASE_COMMIT: ${{ needs.tag.outputs.commit }}
       RELEASE_TAG: ${{ needs.tag.outputs.tag }}
+      # TODO(task 3.1): comes from the build matrix once it exists.
+      DARWIN_TARGET: darwin-arm64
     steps:
       - name: Checkout resolved release commit
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -591,7 +593,7 @@ jobs:
       # and deliver them; the launch above only proves it starts.
       - name: Smoke telemetry delivery and error reporting
         run: |
-          APP="apps/review-desktop/VSCode-darwin-arm64/$(node -p "require('./apps/review-desktop/code-oss/product.json').nameShort").app"
+          APP="apps/review-desktop/VSCode-${DARWIN_TARGET}/$(node -p "require('./apps/review-desktop/code-oss/product.json').nameShort").app"
           node apps/review-desktop/scripts/smoke-telemetry-delivery.mjs --app "$APP"
           node apps/review-desktop/scripts/smoke-error-telemetry.mjs --app "$APP"
 

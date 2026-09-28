@@ -9,15 +9,6 @@ MONOREPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 APP_DIR="$MONOREPO_ROOT/apps/review-desktop"
 CHECKOUT="$APP_DIR/code-oss"
 PRODUCT_NAME="$(node -p "require('$CHECKOUT/product.json').nameShort")"
-PACKAGED_APP="$APP_DIR/VSCode-darwin-arm64/$PRODUCT_NAME.app"
-PACKAGED_BINARY="$PACKAGED_APP/Contents/MacOS/$PRODUCT_NAME"
-
-# shellcheck source=darwin-payload-manifest.sh
-source "$APP_DIR/scripts/darwin-payload-manifest.sh"
-CURATED_EXTENSIONS_PAYLOAD="$MONOREPO_ROOT/$DARWIN_PAYLOAD_CURATED_EXTENSIONS_PATH"
-
-# shellcheck source=code-oss-dependencies.sh
-source "$APP_DIR/scripts/code-oss-dependencies.sh"
 
 if (( $# > 0 )); then
   echo "usage: $0" >&2
@@ -27,10 +18,19 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "Review Desktop macOS packaging must run on macOS" >&2
   exit 1
 fi
-if [[ "$(uname -m)" != "arm64" ]]; then
-  echo "Review Desktop macOS packaging requires arm64" >&2
-  exit 1
-fi
+
+# shellcheck source=darwin-arch.sh
+source "$APP_DIR/scripts/darwin-arch.sh"
+
+PACKAGED_APP="$APP_DIR/VSCode-$DARWIN_TARGET/$PRODUCT_NAME.app"
+PACKAGED_BINARY="$PACKAGED_APP/Contents/MacOS/$PRODUCT_NAME"
+
+# shellcheck source=darwin-payload-manifest.sh
+source "$APP_DIR/scripts/darwin-payload-manifest.sh"
+CURATED_EXTENSIONS_PAYLOAD="$MONOREPO_ROOT/$DARWIN_PAYLOAD_CURATED_EXTENSIONS_ROOT/$DARWIN_TARGET"
+
+# shellcheck source=code-oss-dependencies.sh
+source "$APP_DIR/scripts/code-oss-dependencies.sh"
 
 PRECOMPILED="${REVIEW_DESKTOP_PRECOMPILED:-0}"
 if [[ "$PRECOMPILED" == "1" ]]; then
@@ -58,9 +58,9 @@ export BUILD_SOURCEVERSION
 
 if [[ "$PRECOMPILED" == "1" ]]; then
   ensure_code_oss_dependencies "$APP_DIR" "$CHECKOUT"
-  npm --prefix "$CHECKOUT" run gulp -- vscode-darwin-arm64-min-ci
+  npm --prefix "$CHECKOUT" run gulp -- "vscode-$DARWIN_TARGET-min-ci"
 else
-  npm --prefix "$CHECKOUT" run gulp -- vscode-darwin-arm64-min
+  npm --prefix "$CHECKOUT" run gulp -- "vscode-$DARWIN_TARGET-min"
 fi
 
 if [[ ! -x "$PACKAGED_BINARY" ]]; then
@@ -69,7 +69,7 @@ if [[ ! -x "$PACKAGED_BINARY" ]]; then
 fi
 node "$APP_DIR/scripts/copy-canvas.mjs" --packaged-root "$PACKAGED_APP"
 node "$APP_DIR/scripts/curated-extensions.mjs" \
-  --target=darwin-arm64 \
+  --target="$DARWIN_TARGET" \
   --source-root "$CURATED_EXTENSIONS_SOURCE" \
   --copy-to "$PACKAGED_APP/Contents/Resources/app/extensions"
 

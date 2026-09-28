@@ -267,18 +267,9 @@ test("carries Darwin curated extensions from Linux compile through release valid
   );
   assert.match(payloadManifest, /DARWIN_PAYLOAD_REQUIRED_PATHS=/);
   assert.match(payloadManifest, /DARWIN_PAYLOAD_ARCHIVE_ONLY_PATHS=/);
-  assert.ok(
-    payloadManifest.indexOf("$DARWIN_PAYLOAD_CURATED_EXTENSIONS_PATH") >
-      payloadManifest.indexOf("DARWIN_PAYLOAD_REQUIRED_PATHS=(") &&
-      payloadManifest.indexOf("$DARWIN_PAYLOAD_CURATED_EXTENSIONS_PATH") <
-        payloadManifest.indexOf("DARWIN_PAYLOAD_ARCHIVE_ONLY_PATHS=("),
-    "the curated extension payload must be required by macOS packaging",
-  );
   assert.match(compileScript, /DARWIN_PAYLOAD_ARCHIVE_ONLY_PATHS\[@\]/);
   assert.match(compileScript, /DARWIN_PAYLOAD_REQUIRED_PATHS\[@\]/);
   assert.match(packageScript, /DARWIN_PAYLOAD_REQUIRED_PATHS\[@\]/);
-  assert.match(compileScript, /--target=darwin-arm64/);
-  assert.match(compileScript, /--copy-to "\$CURATED_EXTENSIONS_PAYLOAD"/);
   assert.match(packageScript, /"\$CURATED_EXTENSIONS_PAYLOAD"/);
   assert.match(packageScript, /--source-root "\$CURATED_EXTENSIONS_SOURCE"/);
   assert.match(

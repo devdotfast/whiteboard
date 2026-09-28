@@ -27,6 +27,7 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
+import { darwinTarget } from "./release-channel.mjs";
 import { assertNoBlockedReviewRequests } from "./review-network-policy.mjs";
 
 const APP_DIR = path.resolve(import.meta.dirname, "..");
@@ -37,7 +38,7 @@ const PRODUCT_NAME = JSON.parse(
 
 const DEFAULT_APP = path.join(
   APP_DIR,
-  "VSCode-darwin-arm64",
+  `VSCode-${darwinTarget()}`,
   `${PRODUCT_NAME}.app`,
 );
 

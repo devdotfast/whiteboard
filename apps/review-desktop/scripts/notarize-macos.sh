@@ -5,11 +5,9 @@ MONOREPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 APP_DIR="$MONOREPO_ROOT/apps/review-desktop"
 CHECKOUT="$APP_DIR/code-oss"
 PRODUCT_NAME="$(node -p "require('$CHECKOUT/product.json').nameShort")"
-PACKAGED_APP="$APP_DIR/VSCode-darwin-arm64/$PRODUCT_NAME.app"
 VERSION="$(node -p "require('$APP_DIR/package.json').version")"
 ARTIFACT_DIR="${DEV_FAST_REVIEW_ARTIFACT_DIR:-$APP_DIR/dist}"
 QUALITY="$(node -p "require('$CHECKOUT/product.json').quality")"
-DMG="$ARTIFACT_DIR/Whiteboard-darwin-arm64-$VERSION.dmg"
 
 if (( $# > 0 )); then
   echo "usage: $0" >&2
@@ -19,10 +17,13 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "Review Desktop macOS notarization must run on macOS" >&2
   exit 1
 fi
-if [[ "$(uname -m)" != "arm64" ]]; then
-  echo "Review Desktop macOS notarization requires arm64" >&2
-  exit 1
-fi
+
+# shellcheck source=darwin-arch.sh
+source "$APP_DIR/scripts/darwin-arch.sh"
+
+PACKAGED_APP="$APP_DIR/VSCode-$DARWIN_TARGET/$PRODUCT_NAME.app"
+DMG="$ARTIFACT_DIR/Whiteboard-$DARWIN_TARGET-$VERSION.dmg"
+
 if [[ "${SKIP_NOTARIZE:-0}" == "1" ]]; then
   echo "SKIP_NOTARIZE=1: leaving Review Desktop unsigned and unnotarized"
   exit 0
@@ -130,14 +131,14 @@ submit_notarization() {
   ' "$response"
 }
 
-export VSCODE_ARCH=arm64
+export VSCODE_ARCH="$DARWIN_ARCH"
 node --experimental-strip-types "$CHECKOUT/build/darwin/sign.ts" "$APP_DIR"
 
 codesign --verify --deep --strict --verbose=2 "$PACKAGED_APP"
 codesign -dv --verbose=2 "$PACKAGED_APP"
 
 mkdir -p "$ARTIFACT_DIR"
-rm -f -- "$ARTIFACT_DIR"/*-darwin-arm64-"$VERSION".zip "$DMG"
+rm -f -- "$ARTIFACT_DIR"/*-"$DARWIN_TARGET"-"$VERSION".zip "$DMG"
 
 mkdir -p "$DMG_STAGE"
 ditto "$PACKAGED_APP" "$DMG_STAGE/$PRODUCT_NAME.app"
@@ -177,7 +178,7 @@ while IFS=$'\t' read -r bundle artifact; do
   staged="$TEMP_ROOT/zips/$artifact/$bundle.app"
   mkdir -p "$(dirname "$staged")"
   ditto "$PACKAGED_APP" "$staged"
-  zip="$ARTIFACT_DIR/$artifact-darwin-arm64-$VERSION.zip"
+  zip="$ARTIFACT_DIR/$artifact-$DARWIN_TARGET-$VERSION.zip"
   if [[ "$bundle" != "$PRODUCT_NAME" ]]; then
     mv "$staged/Contents/MacOS/$PRODUCT_NAME" "$staged/Contents/MacOS/$bundle"
     /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $bundle" "$staged/Contents/Info.plist"

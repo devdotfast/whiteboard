@@ -12,7 +12,6 @@ PAYLOAD="$APP_DIR/dist/darwin-payload.tar.zst"
 
 # shellcheck source=darwin-payload-manifest.sh
 source "$APP_DIR/scripts/darwin-payload-manifest.sh"
-CURATED_EXTENSIONS_PAYLOAD="$MONOREPO_ROOT/$DARWIN_PAYLOAD_CURATED_EXTENSIONS_PATH"
 
 if (( $# > 0 )); then
   echo "usage: $0" >&2
@@ -20,7 +19,9 @@ if (( $# > 0 )); then
 fi
 
 # The compile host is Linux, but curated extensions contain target-native
-# servers. Materialize the Darwin variants that the final app will execute.
+# servers. build.sh recompiles unconditionally, so run it once for the
+# arm64 leg; the other Darwin targets are materialized directly below without
+# repeating the compile.
 REVIEW_DESKTOP_COMPILE_ONLY=1 \
   REVIEW_DESKTOP_CURATED_EXTENSION_TARGET=darwin-arm64 \
   bash "$APP_DIR/scripts/build.sh"
@@ -31,6 +32,10 @@ else
   BUILD_SOURCEVERSION="$(jj --repository "$MONOREPO_ROOT" --ignore-working-copy log --no-graph -r @ -T 'commit_id')"
 fi
 export BUILD_SOURCEVERSION
+# vscode-darwin-arm64-min-prepare produces the arch-independent out-vscode-min
+# (codicons, non-native extensions, media, esbuild bundle; see
+# gulpfile.vscode.ts:640-648). Both Darwin targets reuse this one output, so
+# the task name stays arm64-specific even though it isn't arch-bound.
 npm --prefix "$CHECKOUT" run gulp -- vscode-darwin-arm64-min-prepare
 
 # Tags the bundles, so it must run before they are archived.
@@ -38,10 +43,19 @@ if [[ -n "${REVIEW_POSTHOG_KEY:-}" ]]; then
   node "$APP_DIR/scripts/upload-source-maps.mjs" --out "$CHECKOUT/out-vscode-min"
 fi
 
-rm -rf -- "$CURATED_EXTENSIONS_PAYLOAD"
-node "$APP_DIR/scripts/curated-extensions.mjs" \
-  --target=darwin-arm64 \
-  --copy-to "$CURATED_EXTENSIONS_PAYLOAD"
+for target in "${DARWIN_PAYLOAD_TARGETS[@]}"; do
+  if [[ "$target" != "darwin-arm64" ]]; then
+    # build.sh above only materialized curated extensions for darwin-arm64;
+    # materialize the remaining targets without recompiling.
+    node "$APP_DIR/scripts/curated-extensions.mjs" "--target=$target"
+  fi
+
+  target_payload="$MONOREPO_ROOT/$DARWIN_PAYLOAD_CURATED_EXTENSIONS_ROOT/$target"
+  rm -rf -- "$target_payload"
+  node "$APP_DIR/scripts/curated-extensions.mjs" \
+    --target="$target" \
+    --copy-to "$target_payload"
+done
 
 mkdir -p "$APP_DIR/dist"
 rm -f -- "$PAYLOAD"
