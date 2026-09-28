@@ -2772,6 +2772,17 @@ describe("worktree base", () => {
 
     run("branch", "-m", "main", "trunk");
     expect(await refresh()).toBe(main);
+
+    // The missing ref is looked up again only when the checkout changes, not
+    // on every refresh. A late file event may still start one new epoch.
+    recordSpawns();
+
+    for (let i = 0; i < 10; i++) await local.store.refreshWorktrees();
+
+    expect(
+      spawns.filter((spawn) => spawn.some((arg) => arg.startsWith("main")))
+        .length,
+    ).toBeLessThanOrEqual(2);
   });
 
   it("names the branches it tried when there is no default branch", async () => {

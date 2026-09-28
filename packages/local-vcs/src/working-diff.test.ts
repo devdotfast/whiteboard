@@ -155,3 +155,49 @@ it.each([false, true])(
     }
   },
 );
+
+it("sees a same-size rewrite that only Git's racy-index check can catch", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "working-diff-racy-"));
+
+  const git = (...args: string[]) =>
+    execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
+
+  // One old timestamp for the file, its index entry and the index itself:
+  // the entry is racily clean, so Git must compare contents.
+  const stamp = (file: string) =>
+    execFileSync("touch", ["-t", "202001010000", path.join(root, file)]);
+
+  try {
+    git("init", "-q", "-b", "main");
+    git("config", "core.trustctime", "false");
+    await writeFile(path.join(root, "value.ts"), "export const value = 1;\n");
+    stamp("value.ts");
+    git("add", "value.ts");
+    git(
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-qm",
+      "base",
+    );
+    await writeFile(path.join(root, "value.ts"), "export const value = 2;\n");
+    stamp("value.ts");
+    stamp(".git/index");
+    const baseRef = git("rev-parse", "HEAD");
+
+    expect(
+      await diffFileSummariesWorkingTree({
+        rootPath: root,
+        kind: "git",
+        baseRef,
+      }),
+    ).toEqual([expect.objectContaining({ path: "value.ts" })]);
+    expect(git("diff", "--numstat", "HEAD")).toContain("value.ts");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
