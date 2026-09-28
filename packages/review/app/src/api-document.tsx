@@ -390,15 +390,19 @@ export const DocumentNode = memo(function DocumentNode({
       data.snapshot.staleSources?.includes(reference.id),
     );
 
+  const prose = node.type === "markdown" || node.type === "trace_quote";
+
   return (
     <div
-      className="api-document-node"
+      className={
+        prose
+          ? "api-document-node api-document-node--prose"
+          : "api-document-node"
+      }
       data-review-node-id={node.id}
       data-motion={motion}
       data-region={region}
-      data-review-copy-prose={
-        node.type === "markdown" || node.type === "trace_quote" || undefined
-      }
+      data-review-copy-prose={prose || undefined}
     >
       <BlockErrorBoundary
         block={block}

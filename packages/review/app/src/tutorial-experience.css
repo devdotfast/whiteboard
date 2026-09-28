@@ -74,6 +74,15 @@
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
   gap: 10px;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.72;
+  text-align: left;
+}
+
+.tutorial-authoring-conversation li + li {
+  margin-top: 8px;
 }
 
 .tutorial-authoring-conversation li > span {
@@ -88,7 +97,7 @@
 }
 
 .tutorial-authoring-conversation p {
-  margin: 0;
+  margin: 14px 0 0;
 }
 
 .tutorial-keymap-picker button[aria-pressed="true"] {

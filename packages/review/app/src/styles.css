@@ -14,8 +14,9 @@
 @import "./controls.css";
 
 /* Components that also render inside documents and the tutorial. They come
-   before review-document.css, whose prose rules (.review-document p, code)
-   win inside a document. */
+   before review-document.css, whose heading and code rules (.review-document
+   h3, code) still reach into them and win inside a document, as does its
+   collapsed-section heading over the tutorial's active-chapter heading. */
 @import "./software-map/styles.css";
 @import "./flow-diagram.css";
 @import "./api-document.css";

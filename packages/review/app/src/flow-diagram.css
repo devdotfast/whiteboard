@@ -219,3 +219,14 @@
   stroke: var(--surface);
   stroke-width: 4px;
 }
+
+/* Inside a document, a flow's own paragraphs (the layout note and error) read
+   as document paragraphs; the description keeps its caption type. */
+.review-document .flow-diagram p {
+  margin: 14px 0;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.72;
+  text-align: left;
+}

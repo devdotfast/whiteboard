@@ -32,10 +32,6 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
-.software-map-frame--placeholder .software-map-node {
-  border-style: dashed;
-}
-
 .software-map-header {
   display: flex;
   justify-content: space-between;
@@ -569,6 +565,8 @@
   z-index: 1;
 }
 
+/* React Flow writes each node's z-index inline, so only !important can
+   restack groups beneath their members. */
 .software-map-c4-canvas .react-flow__node-softwareMapC4Group {
   z-index: 0 !important;
 }
@@ -678,11 +676,11 @@
   height: 100%;
   cursor: pointer;
   animation: software-map-c4-group-bloom 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  padding: 14px 16px !important;
-  border: 1px solid var(--rule) !important;
-  border-radius: 8px !important;
-  background: var(--surface) !important;
-  box-shadow: none !important;
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: none;
 }
 
 .software-map-c4-group-title {
@@ -696,9 +694,9 @@
   pointer-events: auto;
   -webkit-user-select: text;
   user-select: text;
-  top: 14px !important;
-  right: 16px !important;
-  left: 16px !important;
+  top: 14px;
+  right: 16px;
+  left: 16px;
 }
 
 .software-map-c4-group-title span {
@@ -710,9 +708,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--ink) !important;
-  font-size: 13px !important;
-  font-weight: 600 !important;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .software-map-c4-group-title .software-map-change-badge {
@@ -818,7 +816,6 @@
 }
 
 .software-map-node.boundary {
-  border-color: var(--rule);
   background: var(--surface);
 }
 
@@ -1013,36 +1010,16 @@
   --software-map-c4-code-current-border-width: 1.5px;
 }
 
-.software-map-node.software-map-node--added:hover,
-.software-map-node.software-map-node--added:focus-visible {
-  border-color: var(--change-added);
+.software-map-node--codeElement {
+  border-width: 0;
+  border-color: var(--transparent);
+  box-shadow: none;
 }
 
-.software-map-node.software-map-node--removed:hover,
-.software-map-node.software-map-node--removed:focus-visible {
-  border-color: var(--change-removed);
-}
-
-.software-map-node.software-map-node--modified:hover,
-.software-map-node.software-map-node--modified:focus-visible {
-  border-color: var(--change-modified);
-}
-
-.software-map-node.selected:hover,
-.software-map-node.selected:focus-visible {
-  border-color: var(--selection);
-}
-
-.software-map-node--codeElement,
 .software-map-node--codeElement.selected,
 .software-map-node--codeElement.software-map-node--added,
 .software-map-node--codeElement.software-map-node--removed,
-.software-map-node--codeElement.software-map-node--modified,
-.software-map-node--codeElement.selected.software-map-node--added,
-.software-map-node--codeElement.selected.software-map-node--removed,
-.software-map-node--codeElement.selected.software-map-node--modified {
-  border-width: 0;
-  border-color: var(--transparent);
+.software-map-node--codeElement.software-map-node--modified {
   box-shadow: none;
 }
 
@@ -1052,10 +1029,10 @@
   --software-map-c4-code-current-border-color: var(--selection);
 }
 
-.software-map-node--dataStore,
-.software-map-node--dataStore.software-map-node--added,
-.software-map-node--dataStore.software-map-node--removed,
-.software-map-node--dataStore.software-map-node--modified,
+.software-map-node--dataStore {
+  border-width: 0;
+}
+
 .software-map-node--dataStore.selected,
 .software-map-node--dataStore.selected.software-map-node--added,
 .software-map-node--dataStore.selected.software-map-node--removed,
@@ -1145,12 +1122,12 @@
   line-height: 15px;
   text-overflow: ellipsis;
   white-space: nowrap;
-  gap: 6px !important;
-  width: auto !important;
-  min-height: 0 !important;
-  padding: 0 !important;
-  border: 0 !important;
-  background: var(--transparent) !important;
+  gap: 6px;
+  width: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: var(--transparent);
   font-size: 11px !important;
   font-weight: 500 !important;
 }
@@ -1175,8 +1152,25 @@
   margin: 0;
   color: var(--ink-muted) !important;
   font-size: 12px !important;
-  font-weight: 400 !important;
+  font-weight: 400;
   line-height: 17px !important;
+}
+
+/* Inside a document, node paragraphs keep the document's serif face and
+   paragraph spacing. */
+.review-document .software-map-node p {
+  margin: 14px 0;
+  font-family: var(--font-serif);
+}
+
+/* Inside a document, the absence notice reads as document paragraphs. */
+.review-document .software-map-unavailable p {
+  margin: 14px 0;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.72;
+  text-align: left;
 }
 
 .software-map-node-meta {
@@ -1240,52 +1234,52 @@
 
 .software-map-c4-group-shell:hover,
 .software-map-c4-group-shell:focus-visible {
-  border: 1px solid var(--rule-soft) !important;
-  background: var(--marker-tint) !important;
-  box-shadow: none !important;
+  border: 1px solid var(--rule-soft);
+  background: var(--marker-tint);
+  box-shadow: none;
   outline: none;
 }
 
 .software-map-c4-group-shell--added {
-  border: 1px solid var(--change-added) !important;
+  border: 1px solid var(--change-added);
 }
 
 .software-map-c4-group-shell--removed {
-  border: 1px dashed var(--change-removed) !important;
+  border: 1px dashed var(--change-removed);
 }
 
 .software-map-c4-group-shell--modified {
-  border: 1px solid var(--change-modified) !important;
+  border: 1px solid var(--change-modified);
 }
 
 .software-map-c4-group-shell.selected,
 .software-map-c4-group-shell.selected.software-map-c4-group-shell--added,
 .software-map-c4-group-shell.selected.software-map-c4-group-shell--removed,
 .software-map-c4-group-shell.selected.software-map-c4-group-shell--modified {
-  border: 1px solid var(--accent) !important;
-  background: var(--marker-tint) !important;
-  box-shadow: 0 0 0 3px var(--marker-glow) !important;
+  border: 1px solid var(--accent);
+  background: var(--marker-tint);
+  box-shadow: 0 0 0 3px var(--marker-glow);
 }
 
 .software-map-c4-group-title span,
 .software-map-node-type {
   color: var(--ink-faint) !important;
   font-size: 10px !important;
-  font-weight: 500 !important;
+  font-weight: 500;
   letter-spacing: 0.08em !important;
   text-transform: uppercase;
 }
 
 .software-map-c4-group-shell--softwareSystem .software-map-c4-group-title {
-  top: 18px !important;
-  right: 22px !important;
-  left: 22px !important;
+  top: 18px;
+  right: 22px;
+  left: 22px;
 }
 
 .software-map-c4-group-shell--softwareSystem
   .software-map-c4-group-title
   strong {
-  font-size: 14px !important;
+  font-size: 14px;
 }
 
 .software-map-c4-group-shell--removed .software-map-c4-group-title strong,
@@ -1303,11 +1297,11 @@
   min-height: 104px;
   width: 100%;
   max-width: none;
-  padding: 12px 14px !important;
-  border: 1px solid var(--rule-soft) !important;
-  border-radius: 10px !important;
-  background: var(--surface) !important;
-  box-shadow: none !important;
+  padding: 12px 14px;
+  border: 1px solid var(--rule-soft);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: none;
 }
 
 .software-map-node--dataStoreShape-cylinder,
@@ -1317,53 +1311,53 @@
 .software-map-node--has-data-store-schema.software-map-node--dataStoreShape-bucket,
 .software-map-node--has-data-store-schema.software-map-node--dataStoreShape-folder {
   min-height: 104px !important;
-  padding: 12px 14px !important;
+  padding: 12px 14px;
 }
 
 .software-map-node-storage-outline,
 .software-map-node-storage-folder,
 .software-map-node--codeElement::before {
-  display: none !important;
+  display: none;
 }
 
 .software-map-node:hover,
 .software-map-node:focus-visible {
   transform: translateY(-1px);
-  border: 1px solid var(--rule-soft) !important;
+  border: 1px solid var(--rule-soft);
   background: var(--marker-tint) !important;
-  box-shadow: none !important;
+  box-shadow: none;
   outline: none;
 }
 
 .software-map-node.software-map-node--added {
   background: var(--surface);
-  border: 1px solid var(--change-added) !important;
+  border: 1px solid var(--change-added);
 }
 
 .software-map-node.software-map-node--removed {
   background: var(--surface);
-  border: 1px dashed var(--change-removed) !important;
+  border: 1px dashed var(--change-removed);
 }
 
 .software-map-node.software-map-node--modified {
   background: var(--surface);
-  border: 1px solid var(--change-modified) !important;
+  border: 1px solid var(--change-modified);
 }
 
 .software-map-node.selected,
 .software-map-node.selected.software-map-node--added,
 .software-map-node.selected.software-map-node--removed,
 .software-map-node.selected.software-map-node--modified {
-  border: 1px solid var(--accent) !important;
-  background: var(--marker-tint) !important;
-  box-shadow: 0 0 0 3px var(--marker-glow) !important;
+  border: 1px solid var(--accent);
+  background: var(--marker-tint);
+  box-shadow: 0 0 0 3px var(--marker-glow);
 }
 
 .software-map-node h4,
 .software-map-code-element-head code {
   color: var(--ink) !important;
   font-size: 15px !important;
-  font-weight: 600 !important;
+  font-weight: 600;
 }
 
 .software-map-node-meta span,
@@ -1391,6 +1385,8 @@
   color: var(--diff-removed);
 }
 
+/* The layout sets each edge's stroke inline; the map's own edge colors need
+   !important to replace it. */
 .software-map-c4-canvas .react-flow__edge-path,
 .software-map-c4-canvas .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--ink-faint) !important;
@@ -1405,36 +1401,36 @@
 
 .software-map-c4-edge-label,
 .software-map-c4-edge-label--active {
-  padding: 4px 10px !important;
-  border: 1px solid var(--rule) !important;
-  border-radius: 7px !important;
-  background: var(--surface) !important;
-  background-color: var(--surface) !important;
-  color: var(--ink-muted) !important;
-  font-size: 11px !important;
-  font-weight: 500 !important;
+  padding: 4px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--surface);
+  background-color: var(--surface);
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .software-map-c4-edge-label--selected-node {
-  border-color: var(--accent) !important;
+  border-color: var(--accent);
 }
 
 .software-map-c4-edge-endpoint {
   position: absolute;
   z-index: 39;
   box-sizing: border-box;
-  width: 11px !important;
-  height: 11px !important;
-  border: 1.5px solid var(--ink-faint) !important;
-  border-radius: 999px !important;
-  background: var(--surface) !important;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--ink-faint);
+  border-radius: 999px;
+  background: var(--surface);
   opacity: 1;
   pointer-events: none;
 }
 
 .software-map-c4-edge-endpoint--hovered {
-  border: 2px solid var(--surface) !important;
-  background: var(--accent) !important;
+  border: 2px solid var(--surface);
+  background: var(--accent);
   opacity: 1;
 }
 
@@ -1486,110 +1482,75 @@
 .software-map-c4-group-shell,
 .software-map-c4-node-shell > .software-map-node,
 .software-map-node {
-  border: 1px solid var(--rule-soft);
-  border-radius: 10px;
-  background: var(--surface);
-  box-shadow: none;
   font-family: var(--font-mono);
 }
 
-.software-map-c4-group-shell {
-  border-color: var(--rule);
-  border-radius: 12px;
-}
-
 .software-map-c4-group-shell--softwareSystem {
-  padding: 18px 22px;
-  border-color: var(--rule);
-  border-radius: 14px;
   background: var(--surface);
 }
 
-.software-map-c4-group-shell.selected,
-.software-map-node.selected {
-  border: 2px solid var(--accent);
-  background: var(--marker-tint);
+.software-map-c4-group-shell--added {
   box-shadow: none;
 }
 
-.software-map-node.selected:not(.software-map-node--added):not(
-    .software-map-node--removed
-  ):not(.software-map-node--modified) {
-  border-color: var(--accent);
-  background: var(--marker-tint);
-}
-
-.software-map-c4-group-shell--added,
-.software-map-node.software-map-node--added {
-  border: 1.5px solid var(--change-added);
-  box-shadow: none;
-}
-
-.software-map-c4-group-shell--removed,
-.software-map-node.software-map-node--removed {
-  border: 1.5px dashed var(--change-removed);
+.software-map-c4-group-shell--removed {
   opacity: 0.75;
   box-shadow: none;
 }
 
-.software-map-c4-group-shell--modified,
-.software-map-node.software-map-node--modified {
-  border: 1.5px solid var(--change-modified);
-  box-shadow: none;
+.software-map-node.software-map-node--removed {
+  opacity: 0.75;
 }
 
-.software-map-c4-group-shell.selected.software-map-c4-group-shell--added,
-.software-map-node.selected.software-map-node--added {
-  border: 2px solid var(--accent);
-  background: var(--marker-tint);
-  box-shadow: none;
-}
-
-.software-map-c4-group-shell.selected.software-map-c4-group-shell--removed,
-.software-map-node.selected.software-map-node--removed {
-  border: 2px solid var(--accent);
-  background: var(--marker-tint);
-  box-shadow: none;
-}
-
-.software-map-c4-group-shell.selected.software-map-c4-group-shell--modified,
-.software-map-node.selected.software-map-node--modified {
-  border: 2px solid var(--accent);
-  background: var(--marker-tint);
-  box-shadow: none;
-}
-
-.software-map-c4-node-shell > .software-map-node--codeElement {
-  border-width: 0;
-}
-
-.software-map-c4-node-shell > .software-map-node--codeElement,
-.software-map-c4-node-shell > .software-map-node--codeElement.selected,
-.software-map-c4-node-shell
-  > .software-map-node--codeElement.software-map-node--added,
-.software-map-c4-node-shell
-  > .software-map-node--codeElement.software-map-node--removed,
-.software-map-c4-node-shell
-  > .software-map-node--codeElement.software-map-node--modified,
-.software-map-c4-node-shell
-  > .software-map-node--codeElement.selected.software-map-node--added,
-.software-map-c4-node-shell
-  > .software-map-node--codeElement.selected.software-map-node--removed,
-.software-map-c4-node-shell
-  > .software-map-node--codeElement.selected.software-map-node--modified {
-  border-color: var(--transparent);
+.software-map-c4-group-shell--modified {
   box-shadow: none;
 }
 
 .software-map-node--dataStore,
 .software-map-c4-node-shell > .software-map-node--dataStore,
-.software-map-node--dataStore.software-map-node--added,
+.software-map-node--dataStore.software-map-node--added {
+  --software-map-storage-border: var(--rule-soft);
+  --software-map-storage-detail: var(--rule);
+  --software-map-storage-fill-detail: var(--transparent);
+  box-shadow: none;
+}
+
 .software-map-c4-node-shell
-  > .software-map-node--dataStore.software-map-node--added,
-.software-map-node--dataStore.software-map-node--removed,
+  > .software-map-node--dataStore.software-map-node--added {
+  --software-map-storage-border: var(--rule-soft);
+  --software-map-storage-detail: var(--rule);
+  --software-map-storage-fill-detail: var(--transparent);
+  border-width: 0;
+  border-color: var(--transparent);
+  background: var(--transparent);
+  box-shadow: none;
+}
+
+.software-map-node--dataStore.software-map-node--removed {
+  --software-map-storage-border: var(--rule-soft);
+  --software-map-storage-detail: var(--rule);
+  --software-map-storage-fill-detail: var(--transparent);
+  box-shadow: none;
+}
+
 .software-map-c4-node-shell
-  > .software-map-node--dataStore.software-map-node--removed,
-.software-map-node--dataStore.software-map-node--modified,
+  > .software-map-node--dataStore.software-map-node--removed {
+  --software-map-storage-border: var(--rule-soft);
+  --software-map-storage-detail: var(--rule);
+  --software-map-storage-fill-detail: var(--transparent);
+  border-width: 0;
+  border-color: var(--transparent);
+  background: var(--transparent);
+  box-shadow: none;
+}
+
+.software-map-node--dataStore.software-map-node--modified {
+  --software-map-storage-border: var(--rule-soft);
+  --software-map-storage-detail: var(--rule);
+  --software-map-storage-fill-detail: var(--transparent);
+  box-shadow: none;
+}
+
 .software-map-c4-node-shell
   > .software-map-node--dataStore.software-map-node--modified {
   --software-map-storage-border: var(--rule-soft);
@@ -1749,17 +1710,7 @@
 }
 
 .software-map-c4-edge-label--button {
-  padding: 2px 5px;
-  border: 1px solid var(--rule-soft);
-  border-radius: 3px;
   cursor: pointer;
-}
-
-.software-map-c4-edge-label--active {
-  border-color: var(--selection);
-  background: linear-gradient(var(--rpc-wash), var(--rpc-wash)), var(--surface);
-  background-color: var(--surface);
-  color: var(--selection);
 }
 
 .software-map-c4-edge-highlight {
@@ -1772,11 +1723,6 @@
 .software-map-c4-edge-highlight--active {
   stroke: var(--selection-shadow);
   stroke-width: 10px;
-}
-
-.software-map-c4-canvas .react-flow__edge-path {
-  stroke: var(--edge-muted);
-  stroke-width: 1.25px;
 }
 
 .database-diagram-canvas--c4 .software-map-frame {

@@ -39,7 +39,8 @@
   scroll-margin-top: 24px;
 }
 
-.review-document p {
+.review-document > p,
+.review-document :where(.api-document-node--prose) p {
   margin: 14px 0;
 }
 
@@ -91,8 +92,9 @@
 .review-document h1,
 .review-document h2,
 .review-document h3,
-.review-document p,
-.review-document li,
+.review-document > p,
+.review-document :where(.api-document-node--prose) p,
+.review-document :where(.api-document-node--prose) li,
 .review-document blockquote {
   font-family: var(--font-serif);
 }
@@ -348,8 +350,9 @@ button.review-stack-row:disabled .review-stack-relation {
   font-weight: 500;
 }
 
-.review-document p,
-.review-document li {
+.review-document > p,
+.review-document :where(.api-document-node--prose) p,
+.review-document :where(.api-document-node--prose) li {
   color: var(--ink);
   font-family: var(--font-serif);
   font-size: 15px;
@@ -357,15 +360,25 @@ button.review-stack-row:disabled .review-stack-relation {
   text-align: left;
 }
 
-.review-document li + li {
+/* The document's fallback message, shown when a block fails to render. */
+.review-document .review-empty-state p {
+  margin: 14px 0;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.72;
+  text-align: left;
+}
+
+.review-document :where(.api-document-node--prose) li + li {
   margin-top: 8px;
 }
 
-.review-document li > p:first-child {
+.review-document :where(.api-document-node--prose) li > p:first-child {
   margin-top: 0;
 }
 
-.review-document li > p:last-child {
+.review-document :where(.api-document-node--prose) li > p:last-child {
   margin-bottom: 0;
 }
 
