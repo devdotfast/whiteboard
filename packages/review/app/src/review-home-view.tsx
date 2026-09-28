@@ -577,7 +577,23 @@ function ReviewRowActions({ review }: { review: ReviewApiSummary }) {
 
   useDismissOnOutside(control, open, setOpen);
 
+  const focusAction = () =>
+    control.current
+      ?.querySelector<HTMLButtonElement>('[role="menuitem"]')
+      ?.focus();
+
+  useEffect(() => {
+    if (open) focusAction();
+  }, [open]);
+
   if (!onDelete) return <DismissReviewButton review={review} />;
+
+  const showMenu = (anchor: HTMLButtonElement) =>
+    menu.show({
+      anchor,
+      items: [{ id: "delete", label: "Delete session" }],
+      onSelect: () => onDelete(review),
+    });
 
   return (
     <div
@@ -599,18 +615,18 @@ function ReviewRowActions({ review }: { review: ReviewApiSummary }) {
         aria-haspopup="menu"
         aria-expanded={ui?.confirmDelete ? menu.open : open}
         onClick={(event) => {
-          if (ui?.confirmDelete)
-            menu.show({
-              anchor: event.currentTarget,
-              items: [{ id: "delete", label: "Delete session" }],
-              onSelect: () => onDelete(review),
-            });
+          if (ui?.confirmDelete) showMenu(event.currentTarget);
           else setOpen(!open);
         }}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
-            event.currentTarget.click();
+
+            if (ui?.confirmDelete) showMenu(event.currentTarget);
+            else {
+              setOpen(true);
+              focusAction();
+            }
           }
         }}
       >

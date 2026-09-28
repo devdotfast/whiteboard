@@ -79,6 +79,26 @@ describe("DiffLayoutControl", () => {
     container.remove();
   });
 
+  it.each(["ArrowDown", "ArrowUp"])(
+    "%s opens and re-enters the fallback without closing it",
+    async (key) => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        trigger().focus();
+        await act(async () =>
+          trigger().dispatchEvent(
+            new KeyboardEvent("keydown", { key, bubbles: true }),
+          ),
+        );
+        expect(trigger().getAttribute("aria-expanded")).toBe("true");
+        expect(document.activeElement).toBe(radio("Split"));
+      }
+
+      expect(setDiffLayout).not.toHaveBeenCalled();
+      await act(async () => trigger().click());
+      expect(popover()).toBeNull();
+    },
+  );
+
   it("shows the current layout and writes the chosen one", async () => {
     await act(async () => trigger().click());
     expect(radio("Split").getAttribute("aria-checked")).toBe("true");

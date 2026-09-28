@@ -236,6 +236,46 @@ describe("ReviewHome", () => {
     expect(container.querySelector('[title^="/repo/other"]')).not.toBeNull();
   });
 
+  it.each(["ArrowDown", "ArrowUp"])(
+    "%s opens and re-enters row actions without triggering the review",
+    async (key) => {
+      const review = summary({ title: "Arrow test" });
+      const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
+
+      const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+        async () => {},
+      );
+
+      await act(async () =>
+        root.render(
+          <ReviewHome reviews={[review]} onOpen={onOpen} onDelete={onDelete} />,
+        ),
+      );
+
+      const trigger = container.querySelector<HTMLButtonElement>(
+        '[aria-label="Actions for Arrow test"]',
+      )!;
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        trigger.focus();
+        await act(async () =>
+          trigger.dispatchEvent(
+            new KeyboardEvent("keydown", { key, bubbles: true }),
+          ),
+        );
+        expect(trigger.getAttribute("aria-expanded")).toBe("true");
+        expect(document.activeElement).toBe(
+          container.querySelector('[role="menuitem"]'),
+        );
+      }
+
+      expect(onOpen).not.toHaveBeenCalled();
+      expect(onDelete).not.toHaveBeenCalled();
+      await act(async () => trigger.click());
+      expect(container.querySelector('[role="menu"]')).toBeNull();
+    },
+  );
+
   it("opens the row menu without opening the review and requires confirmation to delete", async () => {
     const review = summary({ title: "Menu review" });
     const onOpen = vi.fn<(review: ReviewApiSummary) => void>();

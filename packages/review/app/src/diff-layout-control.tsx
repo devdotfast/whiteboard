@@ -72,6 +72,28 @@ export function DiffLayoutControl(): ReactElement {
     });
   };
 
+  const focusLayout = () =>
+    controlRef.current
+      ?.querySelector<HTMLButtonElement>('[role="radio"][aria-checked="true"]')
+      ?.focus();
+
+  useEffect(() => {
+    if (open) focusLayout();
+  }, [open]);
+
+  const showMenu = (anchor: HTMLButtonElement) =>
+    menu.show({
+      anchor,
+      items: LAYOUT_OPTIONS.map((option) => ({
+        id: option.layout,
+        label: option.label,
+        checked: option.layout === shownLayout,
+      })),
+      onSelect: (id) => {
+        if (id === "unified" || id === "split") chooseLayout(id);
+      },
+    });
+
   return (
     <div ref={controlRef} className="review-diff-settings">
       <button
@@ -82,24 +104,18 @@ export function DiffLayoutControl(): ReactElement {
         aria-haspopup={menu.available ? "menu" : "dialog"}
         aria-expanded={menu.available ? menu.open : open}
         onClick={(event) => {
-          if (menu.available)
-            menu.show({
-              anchor: event.currentTarget,
-              items: LAYOUT_OPTIONS.map((option) => ({
-                id: option.layout,
-                label: option.label,
-                checked: option.layout === shownLayout,
-              })),
-              onSelect: (id) => {
-                if (id === "unified" || id === "split") chooseLayout(id);
-              },
-            });
+          if (menu.available) showMenu(event.currentTarget);
           else setOpen((current) => !current);
         }}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
-            event.currentTarget.click();
+
+            if (menu.available) showMenu(event.currentTarget);
+            else {
+              setOpen(true);
+              focusLayout();
+            }
           }
         }}
       >
