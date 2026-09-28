@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -340,6 +341,52 @@ it("removes a dismissed review's checkouts and rebuilds them on demand", async (
   expect(
     readFileSync(path.join(rebuilt.rootPath!, "value.ts"), "utf8"),
   ).toContain("42");
+});
+
+it("dismissing a review frees only its own managed checkout, leaving a user's sibling worktree and the main checkout's uncommitted changes untouched", async () => {
+  const userWorktree = path.join(directory, "user-worktree");
+  git("worktree", "add", userWorktree, "-b", "user-branch");
+  writeFileSync(
+    path.join(userWorktree, "value.ts"),
+    "export const value = 'user-edit';\n",
+  );
+  writeFileSync(path.join(userWorktree, "scratch.txt"), "untracked\n");
+  writeFileSync(
+    path.join(repository, "value.ts"),
+    "export const value = 'main-edit';\n",
+  );
+  const mainStatusBefore = git("status", "--porcelain");
+
+  const dismissed = await local.data.workspaces.source(reviewId, pins, "head");
+  const managedRoot = path.dirname(path.dirname(dismissed.rootPath!));
+
+  const worktreesBefore = (
+    git("worktree", "list", "--porcelain").match(/^worktree /gm) ?? []
+  ).length;
+
+  await command({ type: "attention", reviewId, action: "dismiss" });
+  await local.data.workspaces.idle();
+
+  expect(existsSync(managedRoot)).toBe(false);
+  expect(existsSync(dismissed.rootPath!)).toBe(false);
+
+  const worktreesAfter = git("worktree", "list", "--porcelain");
+  // Only the review's own managed checkout was removed.
+  expect(worktreesAfter.match(/^worktree /gm)).toHaveLength(
+    worktreesBefore - 1,
+  );
+  expect(
+    worktreesAfter
+      .split("\n")
+      .filter((line) => line.startsWith("worktree "))
+      .map((line) => realpathSync(line.slice("worktree ".length))),
+  ).toContain(realpathSync(userWorktree));
+  expect(existsSync(userWorktree)).toBe(true);
+  expect(readFileSync(path.join(userWorktree, "value.ts"), "utf8")).toContain(
+    "user-edit",
+  );
+  expect(existsSync(path.join(userWorktree, "scratch.txt"))).toBe(true);
+  expect(git("status", "--porcelain")).toBe(mainStatusBefore);
 });
 
 it("removes checkouts left by reviews dismissed while Desktop was closed", async () => {
