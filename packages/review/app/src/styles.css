@@ -3299,6 +3299,13 @@ button {
   min-width: 0;
 }
 
+.code-peek-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
 .code-peek {
   min-width: 0;
   max-width: 100%;
