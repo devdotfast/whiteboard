@@ -10,6 +10,9 @@ if [[ "$WHITEBOARD_CHANNEL" == preview ]]; then NAME=whiteboard-preview; fi
 # change would otherwise surface as the cryptic error later.
 sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf
 grep -qx DisableSandbox /etc/pacman.conf
+# The pinned image's archlinux-keyring can predate keys used to sign current
+# packages; refresh it before syncing, or -Syu fails on signature checks.
+pacman -Sy --noconfirm archlinux-keyring
 pacman -Syu --noconfirm --needed rpm-tools
 useradd -m builder
 install -d -o builder /build

@@ -19,6 +19,9 @@ EOF
 # locally under emulation; CI runs natively).
 sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf
 grep -qx DisableSandbox /etc/pacman.conf
+# The pinned image's archlinux-keyring can predate keys used to sign current
+# packages; refresh it before syncing, or -Syu fails on signature checks.
+pacman -Sy --noconfirm archlinux-keyring
 # The databases carry no embedded signatures, so this install also proves pacman fetched <pkg>.sig.
 pacman -Syu --noconfirm "$PACKAGE"
 "$APP" --help >/dev/null

@@ -11,7 +11,7 @@ pkgdesc='Guided code reviews with coding agents'
 arch=('x86_64')
 url='https://dev.fast/'
 license=('MIT')
-options=('!debug' '!strip')
+options=('!debug' '!strip' '!purge' '!zipman' 'staticlibs' 'libtool')
 depends=(
 	'alsa-lib' 'at-spi2-core' 'ca-certificates' 'cairo' 'curl' 'dbus' 'expat'
 	'gcc-libs' 'glib2' 'glibc' 'gtk3' 'git' 'hicolor-icon-theme' 'krb5' 'libcups'

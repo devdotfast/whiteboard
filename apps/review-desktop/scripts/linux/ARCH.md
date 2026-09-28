@@ -36,12 +36,14 @@ checks:
   signature, since `repo-add` runs before signing).
 - The CLI runs, `chrome-sandbox` is `root:root 4755`, and the license file
   is installed.
-- The full runtime dependency closure resolves, via `lddtree` against the
+- The full runtime dependency closure resolves, via `ldd` against the
   hand-maintained `depends=` list.
-- Removal and reinstall retain user data under `~/.dev` and
-  `~/.config/Review`.
-- A tampered package, a tampered database, and an untrusted signing key are
-  all rejected.
+- Removal deletes the installed app but retains user data under `~/.dev` and
+  `~/.config/Review` (reinstall is not exercised).
+- A package with corrupted bytes fails the database's checksum check; a
+  package with an intact checksum but a tampered `.sig` separately fails its
+  PGP signature check; a tampered database fails `DatabaseRequired`; and an
+  untrusted signing key is rejected. All four are checked independently.
 
 ## Publication contract
 
@@ -61,7 +63,7 @@ and `https://dev.fast/install/preview#linux`. Users add the key, then the
 repository:
 
 ```
-sudo pacman-key --add <(curl -fsSL https://install.dev.fast/repos/keys/<FPR>.asc)
+curl -fsSL https://install.dev.fast/repos/keys/<FPR>.asc | sudo pacman-key --add -
 sudo pacman-key --lsign-key <FPR>
 ```
 
@@ -76,8 +78,10 @@ Server = https://install.dev.fast/repos/arch/$arch
 (preview: section `[whiteboard-preview]`,
 `Server = https://install.dev.fast/repos/preview/arch/$arch`), then
 `sudo pacman -Syu whiteboard` (or `whiteboard-preview`). The `.pkg.tar.zst`
-is also attached to the stable GitHub release next to the RPM and .deb, for
-`pacman -U <url>` installs.
+and its detached `.sig` are also attached to the stable GitHub release next to
+the RPM and .deb. `pacman -U <url>` only works after the key above has been
+added and lsigned; pacman's default `SigLevel` requires that signature, and
+the release asset has no embedded one.
 
 ## AUR
 

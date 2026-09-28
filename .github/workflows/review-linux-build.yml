@@ -81,8 +81,8 @@ jobs:
           sudo chmod 4755 apps/review-desktop/VSCode-linux-x64/chrome-sandbox
       - name: Smoke test the packaged app
         run: xvfb-run -a node apps/review-desktop/scripts/smoke-launch-packaged.mjs --app apps/review-desktop/VSCode-linux-x64
-      # Preview versions build the dev-fast-review-preview package; see
-      # code-oss/build/linux/review-package.ts for the channel mapping.
+      # Preview versions build the whiteboard-preview package (RPM, DEB and
+      # Arch); see code-oss/build/linux/review-package.ts for the channel mapping.
       - name: Create Fedora RPM, Ubuntu DEB and Arch package
         run: |
           pnpm --filter @dev.fast/review-desktop app:package:linux:distributions
@@ -122,6 +122,7 @@ jobs:
             --version "$VERSION" --revision "$REVIEW_LINUX_PACKAGE_REVISION" \
             --commit "$BUILD_SOURCEVERSION" --fingerprint "$FINGERPRINT" --channel "$CHANNEL"
           find apps/review-desktop/dist/linux-repository -name '*.rpm' -exec cp {} apps/review-desktop/dist/linux/ \;
+          find apps/review-desktop/dist/linux-repository -path '*/repos*/arch/x86_64/*.pkg.tar.zst.sig' -exec cp {} apps/review-desktop/dist/linux/ \;
           tar --zstd -cf apps/review-desktop/dist/linux/linux-publication.tar.zst -C apps/review-desktop/dist/linux-repository .
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -131,6 +132,7 @@ jobs:
             apps/review-desktop/dist/linux/*.rpm
             apps/review-desktop/dist/linux/*.deb
             apps/review-desktop/dist/linux/*.tar.zst
+            apps/review-desktop/dist/linux/*.sig
           retention-days: 7
           compression-level: 0
       - name: Validate clean installs and rejected signatures
