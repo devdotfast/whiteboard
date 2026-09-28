@@ -10,8 +10,9 @@ import {
   type ReactNode,
   createContext,
   createElement,
+  useCallback,
   useContext,
-  useMemo,
+  useRef,
 } from "react";
 
 import { type MarkdownNode, parseMarkdown } from "../../src/markdown";
@@ -72,16 +73,25 @@ export function MarkdownContent({
   // Ids are addressed by ordinal among the h2/h3 alone.
   let heading = 0;
 
-  const toggle = useMemo(
-    () =>
-      onChange && ((item: MarkdownNode) => onChange(toggleTask(source, item))),
+  // Ticks saved but not yet shown build on each other; any other source resets.
+  const sent = useRef<string[]>([]);
+
+  const toggle = useCallback(
+    (item: MarkdownNode) => {
+      if (!sent.current.includes(source)) sent.current = [source];
+      const next = toggleTask(sent.current.at(-1)!, item);
+
+      if (next === sent.current.at(-1)) return;
+      sent.current.push(next);
+      onChange?.(next);
+    },
     [onChange, source],
   );
 
   return (
     <DocumentLink.Provider value={renderLink}>
       <RemoteImages.Provider value={allowRemoteImages}>
-        <TaskToggle.Provider value={toggle}>
+        <TaskToggle.Provider value={onChange && toggle}>
           {body.map((node, index) =>
             node.type === "heading" && node.depth === 1 && Heading ? (
               <Heading key={index}>
@@ -275,7 +285,7 @@ function renderMarkdownNode(
           {renderMarkdownChildren(node.children ?? [], key, highlightQuote)}
         </li>
       ) : (
-        <TaskItem key={key} node={node} checked={node.checked}>
+        <TaskItem key={key} node={node}>
           {renderMarkdownChildren(node.children ?? [], key, highlightQuote)}
         </TaskItem>
       );
@@ -403,11 +413,9 @@ function cellAlignment(
 
 function TaskItem({
   node,
-  checked,
   children,
 }: {
   node: MarkdownNode;
-  checked: boolean;
   children: ReactNode;
 }) {
   const toggle = useContext(TaskToggle);
@@ -416,7 +424,7 @@ function TaskItem({
     <li className="markdown-task">
       <input
         type="checkbox"
-        checked={checked}
+        checked={node.checked === true}
         disabled={!toggle}
         onChange={() => toggle?.(node)}
       />

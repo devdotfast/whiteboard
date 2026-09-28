@@ -84,24 +84,46 @@ describe("MarkdownContent", () => {
     ).toContain("Native pipeline footnote.");
   });
 
-  it("ticks a task by rewriting its own marker", async () => {
+  it("ticks tasks by rewriting their own markers, keeping unsaved ticks", async () => {
     const onChange = vi.fn<(source: string) => void>();
     const source = "Plan:\n\n1. [ ] One\n2. [x] Two\n   - [ ] Nested\n";
 
-    await act(async () =>
-      root.render(<MarkdownContent source={source} onChange={onChange} />),
+    const show = (markdown: string) =>
+      act(async () =>
+        root.render(<MarkdownContent source={markdown} onChange={onChange} />),
+      );
+
+    await show(source);
+    const boxes = () => container.querySelectorAll("input");
+
+    // Clicked faster than the saved source comes back.
+    await act(async () => boxes()[0]!.click());
+    await act(async () => boxes()[1]!.click());
+    await act(async () => boxes()[2]!.click());
+
+    const one = source.replace("1. [ ]", "1. [x]");
+    const two = one.replace("2. [x]", "2. [ ]");
+    const nested = two.replace("- [ ]", "- [x]");
+    expect(onChange.mock.calls.map(([next]) => next)).toEqual([
+      one,
+      two,
+      nested,
+    ]);
+
+    // The first save comes back while the others are in flight.
+    await show(one);
+    await act(async () => boxes()[0]!.click());
+    expect(onChange).toHaveBeenLastCalledWith(
+      nested.replace("1. [x]", "1. [ ]"),
     );
 
-    const boxes = container.querySelectorAll("input");
-    await act(async () => boxes[0]!.click());
-    await act(async () => boxes[1]!.click());
-    await act(async () => boxes[2]!.click());
-
-    expect(onChange.mock.calls.map(([next]) => next)).toEqual([
-      source.replace("1. [ ]", "1. [x]"),
-      source.replace("2. [x]", "2. [ ]"),
-      source.replace("- [ ]", "- [x]"),
-    ]);
+    // A source written elsewhere starts afresh.
+    const agent = `${source}3. [ ] Three\n`;
+    await show(agent);
+    await act(async () => boxes()[3]!.click());
+    expect(onChange).toHaveBeenLastCalledWith(
+      agent.replace("3. [ ]", "3. [x]"),
+    );
   });
 
   it("leaves tasks disabled without a way to save them", async () => {

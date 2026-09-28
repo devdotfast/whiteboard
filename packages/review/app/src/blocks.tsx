@@ -1,4 +1,10 @@
-import { Component, type ReactNode, createContext, useContext } from "react";
+import {
+  Component,
+  type ReactNode,
+  createContext,
+  useContext,
+  useMemo,
+} from "react";
 
 import {
   type Block,
@@ -61,10 +67,15 @@ export const SaveMarkdown = createContext<
 function MarkdownBlock({ node, data }: BlockProps<"markdown">) {
   const save = useContext(SaveMarkdown);
 
+  const onChange = useMemo(
+    () => save && ((markdown: string) => save(node.id, markdown)),
+    [save, node.id],
+  );
+
   return (
     <MarkdownContent
       source={node.markdown}
-      onChange={save && ((markdown) => save(node.id, markdown))}
+      onChange={onChange}
       headingId={(index) => data.headings.get(node.id, index)}
       h1={ReviewDocumentTitle}
       renderLink={(href, children) => {
