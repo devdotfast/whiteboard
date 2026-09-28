@@ -49,7 +49,7 @@ const temporaryDirectories: string[] = [];
 const packageRoot = path.resolve(import.meta.dirname, "..");
 
 const profileMarker =
-  "# Managed by Whiteboard: review command PATH. Do not edit.";
+  "# Managed by Review Desktop: review command PATH. Do not edit.";
 
 const profileExport = 'export PATH="$HOME/.local/bin:$PATH"';
 

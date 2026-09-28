@@ -634,7 +634,7 @@ export async function removeLegacyGlobalReviewInstalls(input: {
         !input.desktopManagedCli
       ) {
         result.blockers.push(
-          `${packageRoot} is a legacy global Review CLI, but no separate Desktop-managed review command is available.`,
+          `${packageRoot} is a legacy global Whiteboard CLI, but no separate Desktop-managed review command is available.`,
         );
         continue;
       }
@@ -653,7 +653,7 @@ export async function removeLegacyGlobalReviewInstalls(input: {
         result.removed += 1;
       } else {
         result.blockers.push(
-          `${manager} could not remove the legacy Review CLI at ${packageRoot}.`,
+          `${manager} could not remove the legacy Whiteboard CLI at ${packageRoot}.`,
         );
       }
     }

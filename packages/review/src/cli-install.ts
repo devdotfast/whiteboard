@@ -61,7 +61,7 @@ function hasManagedShimMarker(source: string): boolean {
 }
 
 const PROFILE_MARKER =
-  "# Managed by Whiteboard: review command PATH. Do not edit.";
+  "# Managed by Review Desktop: review command PATH. Do not edit.";
 
 const PROFILE_EXPORT = 'export PATH="$HOME/.local/bin:$PATH"';
 
