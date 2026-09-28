@@ -224,7 +224,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add apps/review-desktop/package.json apps/review-desktop/code-oss/product.json
+          git add apps/review-desktop/package.json apps/review-desktop/code-oss/product.json packages/review/package.json
           git commit -m "chore(review-desktop): bump version to ${VERSION} [skip ci]"
 
           # The tag marks what shipped, which for a promotion is the commit the

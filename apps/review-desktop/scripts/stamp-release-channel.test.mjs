@@ -19,12 +19,17 @@ async function writeFixtures(product) {
   const root = await mkdtemp(path.join(os.tmpdir(), "review-release-stamp-"));
   temporaryRoots.push(root);
   const packagePath = path.join(root, "package.json");
+  const cliPackagePath = path.join(root, "cli-package.json");
   const productPath = path.join(root, "code-oss", "product.json");
   await mkdir(path.dirname(productPath), { recursive: true });
   await writeFile(packagePath, '{"name":"fixture","version":"1.2.3"}\n');
+  await writeFile(
+    cliPackagePath,
+    '{"name":"@dev.fast/review","version":"0.0.1"}\n',
+  );
   await writeFile(productPath, `${JSON.stringify(product, null, "\t")}\n`);
 
-  return { packagePath, productPath };
+  return { packagePath, productPath, cliPackagePath };
 }
 
 test("stamps the package version, review version, and release quality", async () => {
@@ -43,6 +48,8 @@ test("stamps the package version, review version, and release quality", async ()
   const pkg = JSON.parse(await readFile(paths.packagePath, "utf8"));
   const product = JSON.parse(await readFile(paths.productPath, "utf8"));
   assert.equal(pkg.version, "1.2.4-preview.20260901.42");
+  const cliPkg = JSON.parse(await readFile(paths.cliPackagePath, "utf8"));
+  assert.equal(cliPkg.version, pkg.version);
   assert.equal(product.reviewVersion, "1.2.4-preview.20260901.42");
   assert.equal(product.quality, "preview");
 
@@ -61,6 +68,8 @@ test("defaults to the stable release quality", async () => {
   stampReleaseChannel({ version: "1.2.4", ...paths });
 
   const product = JSON.parse(await readFile(paths.productPath, "utf8"));
+  const cliPkg = JSON.parse(await readFile(paths.cliPackagePath, "utf8"));
+  assert.equal(cliPkg.version, "1.2.4");
   assert.equal(product.reviewVersion, "1.2.4");
   assert.equal(product.quality, "stable");
 
