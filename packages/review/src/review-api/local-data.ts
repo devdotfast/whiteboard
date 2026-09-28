@@ -540,17 +540,14 @@ export class LocalReviewData {
   }): AsyncGenerator<StructuralDiffEvent> {
     if (file !== undefined) checkRelativePath(file);
 
-    // Waiting covers a release already queued. One that starts mid-stream
-    // fails this stream, and the reader's next request rebuilds the checkout.
-    await this.workspaceManager?.released(reviewId);
-
     if (pins.worktreeRevision) {
-      const input = await this.worktreeInput(pins);
+      const { rootPath, baseRef } = await this.worktreeInput(pins);
       yield* this.structuralComparisons.stream({
-        repositoryPath: input.rootPath,
+        repositoryPath: rootPath,
         comparison: {
           kind: "worktree",
-          base: pins.base,
+          // An unborn checkout compares with Git's empty tree.
+          base: baseRef ?? "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
           revision: pins.worktreeRevision,
         },
         paths: file === undefined ? undefined : [file],
@@ -559,6 +556,10 @@ export class LocalReviewData {
 
       return;
     }
+
+    // Waiting covers a release already queued. One that starts mid-stream
+    // fails this stream, and the reader's next request rebuilds the checkout.
+    await this.workspaceManager?.released(reviewId);
 
     const rootPath = await ensureReviewPinnedCheckout({
       rootPath: this.store.repositoryPath(pins.repositoryId),

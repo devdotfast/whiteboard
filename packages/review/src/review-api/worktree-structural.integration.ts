@@ -26,7 +26,7 @@ it.each([
         encoding: "utf8",
       }).trim();
 
-    git("init", "-q");
+    git("init", "-q", "-b", "main");
     writeFileSync(
       path.join(repository, "value.ts"),
       "export const value = 1;\n",
@@ -115,7 +115,9 @@ it.each([
         await local.store.refreshWorktrees();
         const snapshot = local.store.read(reviewId);
         expect(snapshot.pins!.base).toBe(base);
-        expect(snapshot.pins!.base === snapshot.pins!.head).toBe(!explicitBase);
+        expect(snapshot.pins!.head).toBe(
+          explicitBase ? git("rev-parse", "HEAD") : base,
+        );
         expect(snapshot.pins!.worktreeRevision).not.toBe(revision);
         revision = snapshot.pins!.worktreeRevision;
 
@@ -176,7 +178,7 @@ it("streams added, deleted, renamed and binary working files and respects path f
       encoding: "utf8",
     }).trim();
 
-  git("init", "-q");
+  git("init", "-q", "-b", "main");
   writeFileSync(
     path.join(repository, "gone.ts"),
     "export const gone = true;\n",
@@ -271,6 +273,48 @@ it("streams added, deleted, renamed and binary working files and respects path f
       diff: { rhs: { text: "export const added = 1;\n" } },
     });
     expect(git("diff", "--cached")).toBe(index);
+  } finally {
+    await local.data.close();
+    await local.store.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 30_000);
+
+it("compares a staged file in an unborn repository with empty source", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "worktree-unborn-"));
+  const repository = path.join(root, "repository");
+  mkdirSync(repository);
+  execFileSync("git", ["-C", repository, "init", "-q", "-b", "main"]);
+  writeFileSync(path.join(repository, "first.ts"), "export const first = 1;\n");
+  execFileSync("git", ["-C", repository, "add", "first.ts"]);
+  const local = openLocalReviewStore(path.join(root, "reviews.db"));
+
+  try {
+    const { id } = await local.data.register(repository);
+
+    const { reviewId } = await local.store.execute({
+      commandId: randomUUID(),
+      operation: {
+        type: "create",
+        title: "Unborn",
+        target: { kind: "worktree", repositoryId: id },
+      },
+    });
+
+    const response = await createReviewApi(local.store, local.data).request(
+      `/${reviewId}/structural-diff`,
+    );
+
+    const events = (await response.text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+
+    expect(events.at(-1)).toMatchObject({ type: "complete", failed: 0 });
+    expect(events.find((event) => event.type === "file")).toMatchObject({
+      file: { rhs: { path: "first.ts" } },
+      diff: { rhs: { text: "export const first = 1;\n" } },
+    });
   } finally {
     await local.data.close();
     await local.store.close();

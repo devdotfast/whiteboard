@@ -63,13 +63,17 @@ export async function* structuralDiff(
     "--stream-annotations",
   ];
 
-  args.push(
-    ...(comparison.kind === "worktree"
-      ? [comparison.base]
-      : comparison.kind === "trees"
-        ? [comparison.base, comparison.head]
-        : [`${comparison.base}...${comparison.head}`]),
-  );
+  switch (comparison.kind) {
+    case "worktree":
+      args.push(comparison.base);
+      break;
+    case "trees":
+      args.push(comparison.base, comparison.head);
+      break;
+    case "merge-base":
+      args.push(`${comparison.base}...${comparison.head}`);
+  }
+
   args.push("--", ...(input.paths ?? []));
 
   const idleAbort = new AbortController();

@@ -2651,7 +2651,9 @@ it("reads current working source across authored versions, commits and retargeti
   await new Promise((resolve) => setTimeout(resolve, 50));
   await local.store.refreshWorktrees();
   // Committing moves the head, not the base: the saved work stays in review.
-  expect(local.store.read(result.reviewId).pins!.base).toBe(original.pins!.base);
+  expect(local.store.read(result.reviewId).pins!.base).toBe(
+    original.pins!.base,
+  );
   expect(
     await local.data.changes(local.store.read(result.reviewId).pins!),
   ).toEqual(
@@ -2772,7 +2774,9 @@ describe("worktree base", () => {
         target: { kind: "worktree", repositoryId },
       }),
     );
-    expect(local.store.read(reviewId).pins!.base).toBe(run("rev-parse", "main"));
+    expect(local.store.read(reviewId).pins!.base).toBe(
+      run("rev-parse", "main"),
+    );
     expect(await changedPaths(reviewId)).not.toContain("added main-only.ts");
   });
 
