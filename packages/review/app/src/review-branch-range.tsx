@@ -1,6 +1,8 @@
+import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 
 import { copyText } from "./copy-text";
+import { tokens } from "./tokens.stylex";
 import { useTooltip } from "./use-tooltip";
 
 const fullHash = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i;
@@ -42,7 +44,7 @@ export function ReviewBranchRange({
 
   return (
     <div
-      className="review-branch-range"
+      {...stylex.props(styles.range)}
       role="group"
       aria-label={`Session commits: base ${shortRef(baseRef)}, head ${
         headRef === WORKING_TREE ? "working tree" : shortRef(headRef)
@@ -54,7 +56,7 @@ export function ReviewBranchRange({
         copied={copied === "base"}
         onCopy={() => void copy("base", baseRef)}
       />
-      <span className="review-branch-arrow" aria-hidden="true">
+      <span {...stylex.props(styles.arrow)} aria-hidden="true">
         ←
       </span>
       {headRef === WORKING_TREE ? (
@@ -87,15 +89,21 @@ function BranchRef({
   return (
     <button
       type="button"
-      className="review-branch-copy"
+      {...stylex.props(
+        styles.chip,
+        styles.copy,
+        label === "base" && styles.copyBase,
+      )}
       data-side={label}
       data-copied={copied || undefined}
       aria-label={`Copy ${label} commit hash ${name}`}
       ref={tooltip}
       onClick={onCopy}
     >
-      <span className="review-branch-name">{shortRef(name)}</span>
-      <span className="review-branch-feedback" role="status">
+      <span {...stylex.props(styles.name, copied && styles.nameCopied)}>
+        {shortRef(name)}
+      </span>
+      <span {...stylex.props(styles.feedback)} role="status">
         {copied ? "Copied" : ""}
       </span>
     </button>
@@ -108,8 +116,77 @@ function WorkingTreeRef(): ReactElement {
   });
 
   return (
-    <span className="review-branch-worktree" data-side="head" ref={tooltip}>
+    <span
+      {...stylex.props(styles.chip, styles.worktree)}
+      data-side="head"
+      ref={tooltip}
+    >
       Working tree
     </span>
   );
 }
+
+const styles = stylex.create({
+  range: {
+    display: "flex",
+    minWidth: 0,
+    alignItems: "center",
+    gap: "6px",
+    color: "inherit",
+    whiteSpace: "nowrap",
+  },
+  // Each pinned commit is a small mono chip that copies its full hash; a
+  // working-tree head wears the same chip but has nothing to copy.
+  chip: {
+    position: "relative",
+    display: "inline-flex",
+    minWidth: 0,
+    alignItems: "center",
+    margin: 0,
+    padding: "0 6px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.rule,
+    borderRadius: "4px",
+    backgroundColor: tokens.tray,
+    color: tokens.ink,
+    font: `12px/18px ${tokens.fontMono}`,
+    cursor: "pointer",
+  },
+  copy: {
+    backgroundColor: {
+      default: tokens.tray,
+      ":hover": tokens.chromeHoverBg,
+      ":focus-visible": tokens.chromeHoverBg,
+    },
+    outline: { default: null, ":hover": "none", ":focus-visible": "none" },
+    borderColor: { default: tokens.rule, ":focus-visible": tokens.accent },
+  },
+  copyBase: {
+    color: {
+      default: tokens.inkMuted,
+      ":hover": tokens.ink,
+      ":focus-visible": tokens.ink,
+    },
+  },
+  worktree: {
+    cursor: "default",
+  },
+  name: {
+    maxWidth: "150px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  nameCopied: {
+    visibility: "hidden",
+  },
+  feedback: {
+    position: "absolute",
+    inset: 0,
+    display: "grid",
+    placeItems: "center",
+  },
+  arrow: {
+    color: tokens.inkFaint,
+  },
+});

@@ -99,7 +99,10 @@ it("clears a lens without destroying the full comparison's native state", async 
     await act(async () => button.click());
     expect(full.style.display).toBe("none");
 
-    const selectedToggle = container.querySelector(".diff-lens-toggle");
+    const selectedToggle = container.querySelector(
+      "[data-lens-id] button[aria-pressed]",
+    );
+
     expect(selectedToggle?.getAttribute("aria-pressed")).toBe("true");
     expect(container.querySelectorAll(".review-diff-view-host")).toHaveLength(
       2,

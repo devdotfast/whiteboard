@@ -741,11 +741,6 @@ button.review-stack-row:disabled .review-stack-relation {
   gap: 10px;
 }
 
-.review-header-stats .diff-counts {
-  font-size: 13px;
-  gap: 10px;
-}
-
 .review-header-change-bar {
   display: flex;
   flex: 0 0 42px;

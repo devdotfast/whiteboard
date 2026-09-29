@@ -80,6 +80,7 @@ import type {
 import { SoftwareMapTopologyUnavailable } from "./software-map/software-map-absence";
 import { SoftwareMap } from "./software-map/SoftwareMap";
 import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 import { useTutorial } from "./tutorial-context";
 import { TutorialExperienceProvider } from "./tutorial-experience";
 import { captureUiEvent } from "./ui-telemetry";
@@ -878,17 +879,61 @@ function CommitDiffScopeBar({
   onBack: () => void;
 }) {
   return (
-    <div className="review-diff-scope-bar">
-      <button type="button" onClick={onBack}>
+    <div {...stylex.props(scopeBarStyles.bar)}>
+      <button
+        type="button"
+        {...stylex.props(scopeBarStyles.back)}
+        onClick={onBack}
+      >
         <span aria-hidden="true">←</span> Commits
       </button>
-      <code title={commit.commit}>{commit.commit.slice(0, 8)}</code>
-      <span className="review-diff-scope-subject" title={commit.subject}>
+      <code {...stylex.props(scopeBarStyles.sha)} title={commit.commit}>
+        {commit.commit.slice(0, 8)}
+      </code>
+      <span {...stylex.props(scopeBarStyles.subject)} title={commit.subject}>
         {commit.subject}
       </span>
     </div>
   );
 }
+
+const scopeBarStyles = stylex.create({
+  bar: {
+    display: "flex",
+    height: "30px",
+    flex: "0 0 30px",
+    alignItems: "center",
+    gap: "12px",
+    padding: "0 12px",
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.ruleSoft,
+    backgroundColor: tokens.surface,
+  },
+  back: {
+    height: "20px",
+    flex: "0 0 auto",
+    padding: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    backgroundColor: "transparent",
+    color: tokens.accent,
+    fontSize: "10px",
+  },
+  sha: {
+    color: tokens.inkMuted,
+    font: `10px ${tokens.fontMono}`,
+  },
+  subject: {
+    minWidth: 0,
+    overflow: "hidden",
+    color: tokens.ink,
+    fontSize: "11px",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+});
 
 /**
  * Reports where the baton sits after the reader acts. It renders nothing while

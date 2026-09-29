@@ -6,6 +6,7 @@ import {
   type CoverageProgress,
   coverageProgress,
 } from "@review/viewed-coverage";
+import * as stylex from "@stylexjs/stylex";
 import {
   BaseEdge,
   type CoordinateExtent,
@@ -29,6 +30,8 @@ import { useReviewDebugSettings } from "./debug-settings";
 import { useMotionPhase } from "./draw-queue-provider";
 import { ElementCountsText } from "./lens-counts";
 import { useReviewLenses } from "./review-lenses";
+import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 
 /**
  * Every flow surface: the document block, the Diff sidebar lens and the
@@ -164,12 +167,12 @@ export function FlowGraph({
 
   if (error) return <p role="alert">Could not lay out diagram: {error}</p>;
 
-  if (!layout) return <p className="lens-diagram-note">Laying out flow…</p>;
+  if (!layout) return <p {...stylex.props(styles.note)}>Laying out flow…</p>;
 
   return (
     <div
       ref={frame}
-      className="lens-flow"
+      {...withClass("lens-flow", styles.flow)}
       style={{ height }}
       aria-label={block.title}
     >
@@ -511,16 +514,19 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
 
   return (
     <div
-      className={[
-        "flow-node",
-        "lens-flow-node",
-        `lens-flow-node--${change(progress)}`,
-        `lens-flow-node--${node.kind ?? "process"}`,
-        selected ? "is-selected" : "",
-        progress.state === "viewed" ? "is-viewed" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      {...withClass(
+        [
+          "flow-node",
+          "lens-flow-node",
+          `lens-flow-node--${change(progress)}`,
+          `lens-flow-node--${node.kind ?? "process"}`,
+          selected ? "is-selected" : "",
+          progress.state === "viewed" ? "is-viewed" : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        styles.node,
+      )}
       style={{ width: SIZE.width, height: SIZE.height }}
       role="button"
       tabIndex={unavailable ? -1 : 0}
@@ -617,7 +623,7 @@ function FlowEdge({ id, data, markerEnd }: EdgeProps<FlowEdgeType>) {
       />
       {data.label && (
         <text
-          className="lens-flow-edge-label"
+          {...withClass("lens-flow-edge-label", styles.edgeLabel)}
           x={data.label.x}
           y={data.label.y}
           data-motion={motion}
@@ -632,3 +638,29 @@ function FlowEdge({ id, data, markerEnd }: EdgeProps<FlowEdgeType>) {
 const nodeTypes = { flowNode: FlowNode };
 
 const edgeTypes = { flowEdge: FlowEdge };
+
+const styles = stylex.create({
+  note: {
+    padding: "8px 12px",
+    // Document prose restyles the note inside a document's flow figure.
+    color: {
+      default: tokens.inkFaint,
+      ":where(.review-document .flow-diagram *)": tokens.ink,
+    },
+  },
+  flow: {
+    width: "100%",
+    display: "block",
+    font: `12px ${tokens.fontMono}`,
+  },
+  node: {
+    cursor: "pointer",
+  },
+  edgeLabel: {
+    fontSize: "9px",
+    fill: tokens.inkMuted,
+    paintOrder: "stroke",
+    stroke: tokens.tray,
+    strokeWidth: "4px",
+  },
+});

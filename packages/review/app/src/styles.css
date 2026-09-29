@@ -6,13 +6,13 @@
 @import "@xyflow/react/dist/style.css" layer(vendor);
 @import "./theme.css";
 @import "./base.css";
+@import "./vendor-overrides.css";
 
 /* Before review-document.css, whose h3 and code rules, and collapsed-section
    heading, must win inside documents and the tutorial. */
 @import "./software-map/styles.css";
 @import "./flow-diagram.css";
 @import "./api-document.css";
-@import "./ReviewCommitsView.css";
 @import "./review-find.css";
 @import "./tutorial-experience.css";
 
@@ -25,7 +25,6 @@
 @import "./review-panel.css";
 @import "./diagrams.css";
 
-@import "./DiffView.css";
 @import "./ReviewTraceView.css";
 @import "./review-home-view.css";
 @import "./welcome-page.css";
