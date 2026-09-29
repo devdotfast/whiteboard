@@ -308,17 +308,3 @@ button {
   inherits: false;
   initial-value: -20%;
 }
-
-/* MathJax's SVG output. */
-
-.markdown-math-inline svg {
-  display: inline-block;
-  overflow: visible;
-}
-
-.markdown-math-display {
-  display: block;
-  margin: 0.75em 0;
-  overflow-x: auto;
-  text-align: center;
-}

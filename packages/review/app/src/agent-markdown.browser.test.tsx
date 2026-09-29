@@ -38,6 +38,21 @@ describe("MarkdownContent", () => {
     ).toBe("right");
   });
 
+  it("typesets inline and display math", async () => {
+    await render("Euler: $e^{i\\pi} + 1 = 0$\n\n$$\n\\frac{n(n+1)}{2}\n$$\n");
+
+    expect(container.querySelectorAll(".katex")).toHaveLength(2);
+    expect(container.querySelectorAll(".katex-display")).toHaveLength(1);
+    expect(container.textContent).not.toContain("$");
+  });
+
+  it("renders no link from math", async () => {
+    await render('$\\href{javascript:alert("x")}{x}$\n');
+
+    expect(container.querySelector(".katex")).not.toBeNull();
+    expect(container.querySelector("a")).toBeNull();
+  });
+
   it("renders a remote image where the document allows one", async () => {
     // The image is phrasing content inside its paragraph, so a rendered image
     // must stay phrasing-level: React reports invalid nesting on the console.

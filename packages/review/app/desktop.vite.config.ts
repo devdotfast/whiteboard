@@ -38,6 +38,23 @@ export default defineConfig({
         };
       },
     },
+    {
+      // Chromium reads woff2, so KaTeX's woff and ttf fallbacks would ship
+      // unused.
+      name: "katex-woff2-only",
+      enforce: "pre",
+      transform(source, moduleId) {
+        if (!/[/\\]katex[/\\]dist[/\\]katex\.css$/.test(moduleId)) return;
+
+        return {
+          code: source.replaceAll(
+            /, url\([^)]+\) format\("(?:woff|truetype)"\)/g,
+            "",
+          ),
+          map: null,
+        };
+      },
+    },
     react(),
     {
       name: "scope-review-canvas-css",
@@ -70,6 +87,8 @@ export default defineConfig({
   // file, not the `vscode-file://vscode-app/` root.
   base: "./",
   build: {
+    // The workbench CSP refuses `data:` fonts, so a small one stays a file.
+    assetsInlineLimit: (file) => (file.endsWith(".woff2") ? false : undefined),
     copyPublicDir: false,
     emptyOutDir: true,
     manifest: true,
