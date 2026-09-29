@@ -8,14 +8,10 @@ import {
 } from "react";
 
 import { useReviewSession } from "./host/review-session";
+import { useOptionalReviewPanelStore } from "./review-panel";
 import { captureUiEvent } from "./ui-telemetry";
 
 export type ReviewSubmissionOutcome = "dismissed";
-
-export interface SoftwareMapFocusRequest {
-  requestId: number;
-  elementPath: string;
-}
 
 export interface ReviewActionsValue {
   softwareMapEnabled: boolean;
@@ -32,7 +28,6 @@ export interface ReviewStateValue {
   historicalRevision: string | null;
   resolvedBaseRef: string | null;
   resolvedHeadRef: string | null;
-  softwareMapFocusRequest: SoftwareMapFocusRequest | null;
   submissionOutcome: ReviewSubmissionOutcome | null;
 }
 
@@ -61,23 +56,17 @@ export function ReviewProvider({
   const reviewFetch = session.fetch;
   const review = session.review!;
 
-  const [softwareMapFocusRequest, setSoftwareMapFocusRequest] =
-    useState<SoftwareMapFocusRequest | null>(null);
-
   // Set once the review has been dismissed or reached a terminal decision, so
   // the canvas can show that state instead of a live-looking document.
   const [submissionOutcome, setSubmissionOutcome] =
     useState<ReviewSubmissionOutcome | null>(null);
 
+  const panelStore = useOptionalReviewPanelStore();
+
   const openSoftwareMapElement = useCallback(
-    (elementPath: string) => {
-      if (!softwareMapEnabled) return;
-      setSoftwareMapFocusRequest((current) => ({
-        requestId: (current?.requestId ?? 0) + 1,
-        elementPath,
-      }));
-    },
-    [softwareMapEnabled],
+    (elementPath: string) =>
+      panelStore?.getState().focusMapElement(elementPath),
+    [panelStore],
   );
 
   const dismissReview = useCallback(async () => {
@@ -106,10 +95,9 @@ export function ReviewProvider({
       historicalRevision: review.historicalRevision,
       resolvedBaseRef: review.pins?.base ?? null,
       resolvedHeadRef: review.pins?.head ?? null,
-      softwareMapFocusRequest,
       submissionOutcome,
     }),
-    [review, softwareMapFocusRequest, submissionOutcome],
+    [review, submissionOutcome],
   );
 
   return (

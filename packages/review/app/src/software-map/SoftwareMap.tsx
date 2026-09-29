@@ -173,6 +173,7 @@ interface SoftwareMapProps {
   title?: string;
   view?: string;
   focusRequest?: { requestId: number; elementPath: string } | null;
+  onFocusRequestHandled?: (requestId: number) => void;
   height?: number | string;
   snapshot?: SoftwareMapResolvedSnapshot | null;
   resolvedSnapshot?: SoftwareMapResolvedSnapshot | null;
@@ -307,6 +308,7 @@ function SoftwareMapWithModel({
   title,
   view,
   focusRequest,
+  onFocusRequestHandled,
   height = 520,
   snapshot,
   resolvedSnapshot,
@@ -428,6 +430,7 @@ function SoftwareMapWithModel({
       nodeId: targetPath,
       requireExpanded: false,
     });
+    onFocusRequestHandled?.(focusRequest.requestId);
   }, [focusRequest]);
 
   useEffect(() => {

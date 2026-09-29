@@ -355,6 +355,7 @@ function ReviewLayoutContent({
   const activeView = useReviewPanel((state) => state.view);
   const diffScope = useReviewPanel((state) => state.diffScope);
   const traceSelection = useReviewPanel((state) => state.traceSelection);
+  const mapFocus = useReviewPanel((state) => state.mapFocus);
   const showView = useReviewPanel((state) => state.showView);
 
   const debugSettings = useReviewDebugSettings();
@@ -427,11 +428,6 @@ function ReviewLayoutContent({
 
   useReviewTabTelemetry(activeView);
 
-  useEffect(() => {
-    if (!softwareMapEnabled || !review.softwareMapFocusRequest) return;
-    panelStore.getState().showView("map");
-  }, [panelStore, review.softwareMapFocusRequest, softwareMapEnabled]);
-
   const tutorial = useTutorial() !== null;
 
   const tocEntries =
@@ -454,9 +450,9 @@ function ReviewLayoutContent({
     () =>
       selectActiveSoftwareMapModel({
         softwareModels,
-        focusElementPath: review.softwareMapFocusRequest?.elementPath,
+        focusElementPath: mapFocus?.elementPath,
       }),
-    [review.softwareMapFocusRequest?.elementPath, softwareModels],
+    [mapFocus?.elementPath, softwareModels],
   );
 
   const activeSoftwareMap = useMemo(
@@ -789,7 +785,10 @@ function ReviewLayoutContent({
                             ? session.softwareMapData?.(activeSoftwareMapSource)
                             : undefined
                         }
-                        focusRequest={review.softwareMapFocusRequest}
+                        focusRequest={mapFocus?.pending ? mapFocus : null}
+                        onFocusRequestHandled={
+                          panelStore.getState().consumeMapFocus
+                        }
                         height="100%"
                         showChrome={false}
                         showFloatingActions={!activePanel}

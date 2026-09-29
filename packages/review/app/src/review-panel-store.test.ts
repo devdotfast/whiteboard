@@ -166,4 +166,34 @@ describe("Review navigation", () => {
     store.getState().setAvailableViews(["review", "map"]);
     expect(store.getState()).toMatchObject({ view: "review", diffScope: null });
   });
+
+  it("opens the map on a focused element once", () => {
+    const store = createReviewPanelStore();
+    store.getState().openPeek({ kind: "peek", anchor, content });
+
+    store.getState().focusMapElement("review.app");
+    const focus = store.getState().mapFocus!;
+    expect(store.getState()).toMatchObject({
+      view: "map",
+      active: null,
+      mapFocus: { elementPath: "review.app", pending: true },
+    });
+
+    store.getState().consumeMapFocus(focus.requestId);
+    store.getState().showView("review");
+    store.getState().showView("map");
+    // The map remounts here; the old request must not select its node again,
+    // but the model choice still follows the focused element.
+    expect(store.getState().mapFocus).toMatchObject({
+      elementPath: "review.app",
+      pending: false,
+    });
+  });
+
+  it("ignores a map focus on a canvas without a map", () => {
+    const store = createReviewPanelStore({ availableViews: ["review"] });
+
+    store.getState().focusMapElement("review.app");
+    expect(store.getState()).toMatchObject({ view: "review", mapFocus: null });
+  });
 });
