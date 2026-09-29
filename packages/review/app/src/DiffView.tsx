@@ -33,7 +33,11 @@ import { type MotionPhase, withErasedBlocks } from "./draw-queue";
 import { useMotionPhases } from "./draw-queue-provider";
 import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
-import { lensToggleMarker } from "./markers.stylex";
+import {
+  diffWorkspaceMarker,
+  lensToggleMarker,
+  scopedDiffMarker,
+} from "./markers.stylex";
 import { useReviewDiffFiles } from "./review-diff-files-context";
 import { useReviewLenses } from "./review-lenses";
 import { shellStyles } from "./shell-styles";
@@ -249,9 +253,12 @@ export function ReviewDiffView({
   const remaining = global.remaining.additions + global.remaining.deletions;
   const percent = total ? Math.round((100 * (total - remaining)) / total) : 0;
 
-  // diff-workspace is a marker: the courier and global.css key on it.
+  // diff-workspace is a marker global.css keys on.
   return (
-    <div {...withClass("diff-workspace", styles.workspace)} ref={workspaceRef}>
+    <div
+      {...withClass("diff-workspace", styles.workspace, diffWorkspaceMarker)}
+      ref={workspaceRef}
+    >
       <aside
         {...stylex.props(styles.sidebar)}
         style={{ width: sidebarResize.width }}
@@ -710,6 +717,8 @@ const relabel = stylex.keyframes({
   to: { opacity: 1, clipPath: "inset(0 0 0 0)" },
 });
 
+const inScopedDiff = () => stylex.when.ancestor(":is(*)", scopedDiffMarker);
+
 const styles = stylex.create({
   workspace: {
     display: "flex",
@@ -953,7 +962,7 @@ const styles = stylex.create({
   // The workbench mounts its diff widgets here and sizes them from this box.
   host: {
     position: "relative",
-    gridRow: { default: 1, ":is(.review-diff-view--scoped *)": 2 },
+    gridRow: { default: 1, [inScopedDiff()]: 2 },
     minHeight: 0,
     height: "100%",
   },

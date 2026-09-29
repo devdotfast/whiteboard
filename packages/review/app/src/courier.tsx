@@ -20,7 +20,7 @@ import {
 } from "./authoring-cursor";
 import { CourierFigure } from "./courier-figure";
 import { cursorElement } from "./cursor-element";
-import { courierMarker } from "./markers.stylex";
+import { courierMarker, diffWorkspaceMarker } from "./markers.stylex";
 import { useReviewRoots } from "./review-root-context";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
@@ -330,7 +330,8 @@ export function Courier({
 
 const REDUCED = "@media (prefers-reduced-motion: reduce)";
 
-const inDiffWorkspace = ":is(.diff-workspace *)";
+const inDiffWorkspace = () =>
+  stylex.when.ancestor(":is(*)", diffWorkspaceMarker);
 
 // The hop: the wrapper slides, the arc lifts, the body squashes on landing.
 
@@ -430,12 +431,12 @@ const styles = stylex.create({
       default: null,
       ":focus-visible": {
         default: `2px solid ${tokens.accent}`,
-        [inDiffWorkspace]: `1px solid ${tokens.accent}`,
+        [inDiffWorkspace()]: `1px solid ${tokens.accent}`,
       },
     },
     outlineOffset: {
       default: null,
-      ":focus-visible": { default: "4px", [inDiffWorkspace]: "-2px" },
+      ":focus-visible": { default: "4px", [inDiffWorkspace()]: "-2px" },
     },
   },
   figureSvg: {
