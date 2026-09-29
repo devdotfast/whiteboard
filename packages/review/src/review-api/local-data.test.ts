@@ -71,10 +71,18 @@ const recordSpawns = () => {
   });
 };
 
-const batchProcesses = () =>
-  spawnSync("pgrep", ["-P", String(process.pid), "-f", "cat-file"], {
-    encoding: "utf8",
-  })
+/** Batch readers of one repository; other test files share this worker. */
+const batchProcesses = (root: string) =>
+  spawnSync(
+    "pgrep",
+    [
+      "-P",
+      String(process.pid),
+      "-f",
+      `${root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} cat-file --batch`,
+    ],
+    { encoding: "utf8" },
+  )
     .stdout.split("\n")
     .filter(Boolean);
 
@@ -1753,10 +1761,11 @@ it.skipIf(spawnSync("pgrep", ["-P", String(process.pid)]).error !== undefined)(
     expect(await read).toMatchObject({
       text: "export const value = 2;\nexport const saved = true;\n",
     });
-    expect(spawns.filter((spawn) => spawn.includes("cat-file"))).toHaveLength(
-      1,
-    );
-    expect(batchProcesses()).toEqual([]);
+    const root = realpathSync.native(repository);
+    expect(spawns.filter((spawn) => spawn.includes("cat-file"))).toEqual([
+      ["git", "-C", root, "cat-file", "--batch"],
+    ]);
+    expect(batchProcesses(root)).toEqual([]);
   },
 );
 
