@@ -1,7 +1,7 @@
 {
   "name": "@dev.fast/pi-whiteboard",
   "version": "0.1.2",
-  "description": "Connect Pi before 0.99.0 to dev.fast Whiteboard; newer Pi and oh-my-pi use the Whiteboard MCP server",
+  "description": "Connect Pi before 0.99.0 to dev.fast Whiteboard",
   "keywords": [
     "pi-package"
   ],
