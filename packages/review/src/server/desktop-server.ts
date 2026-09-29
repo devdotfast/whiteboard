@@ -232,7 +232,6 @@ export function createGlobalReviewServer(
     instanceId,
     serverId: input.reviewStore.serverId(),
     relay,
-    health: () => ({}),
   });
 
   const callbacks = relayReviewCallbacks(relay);

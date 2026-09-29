@@ -1,13 +1,6 @@
-import path from "node:path";
-
+import type { ReviewServerHealth } from "@dev.fast/review-protocol";
 import {
-  type JsonValue,
-  type ReviewServerHealth,
-  jsonString,
-} from "@dev.fast/review-protocol";
-import { readBuildInfo } from "@review/cli-runtime-info.js";
-import {
-  findReviewPackageRoot,
+  readBuildCommit,
   readReviewPackageVersion,
 } from "@review/package-paths.js";
 import { ReviewInputError } from "@review/review-api/document.js";
@@ -30,11 +23,7 @@ import { HttpJsonError, ReviewServerError } from "./http-json";
 
 const version = readReviewPackageVersion(import.meta.url);
 
-const commit =
-  jsonString(
-    readBuildInfo(path.join(findReviewPackageRoot(import.meta.url), "dist"))
-      ?.commit,
-  ) ?? null;
+const commit = readBuildCommit(import.meta.url);
 
 /**
  * What every review server shares: CORS, an open /health, token auth, and
@@ -47,7 +36,6 @@ export function createReviewServerApp(input: {
   /** The review store's `serverId()`. */
   serverId: string;
   relay: ReviewDesktopVerbRelay;
-  health(): Record<string, JsonValue>;
 }): Hono<ReviewHonoEnv> {
   const app = new Hono<ReviewHonoEnv>();
   app.use("*", async (context, next) => {
@@ -57,7 +45,6 @@ export function createReviewServerApp(input: {
   app.options("*", (context) => corsPreflightResponse(context.req.raw));
   app.get("/health", () =>
     serverJson(200, {
-      ...input.health(),
       ok: true,
       instanceId: input.instanceId,
       serverId: input.serverId,

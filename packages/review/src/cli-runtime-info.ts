@@ -1,24 +1,8 @@
-import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import {
-  jsonObject,
-  jsonString,
-  parseJsonText,
-} from "@dev.fast/review-protocol";
+import { jsonString } from "@dev.fast/review-protocol";
 
-/** `build-info.json` in a built package's `dist`, when present. */
-export function readBuildInfo(distDirectory: string) {
-  try {
-    return jsonObject(
-      parseJsonText(
-        readFileSync(path.join(distDirectory, "build-info.json"), "utf8"),
-      ),
-    );
-  } catch {
-    return undefined;
-  }
-}
+import { readBuildInfo } from "./package-paths";
 
 /** Build identity belongs to the executable, never the current checkout. */
 export function cliRuntimeInfo(

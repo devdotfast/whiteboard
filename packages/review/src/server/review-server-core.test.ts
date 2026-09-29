@@ -101,17 +101,13 @@ describe.each(["desktop", "headless"] as const)("the %s server", (kind) => {
     const server = await start();
     const health = await (await fetch(`${server.url}/health`)).json();
 
-    const buildInfo = await readFile(
-      path.join(packageRoot, "dist", "build-info.json"),
-      "utf8",
-    ).catch(() => null);
-
     expect(health).toMatchObject({
       serverId: expect.stringMatching(uuid),
       version: JSON.parse(
         await readFile(path.join(packageRoot, "package.json"), "utf8"),
       ).version,
-      commit: buildInfo ? JSON.parse(buildInfo).commit : null,
+      // From source there is no build, whatever an old dist holds.
+      commit: null,
     });
     expect(health.instanceId).not.toBe(health.serverId);
   });
@@ -256,19 +252,15 @@ it("gives the Desktop and headless servers on one home one serverId, and another
 
   // Started together, so both race to create the id.
   const children = [
-    ["desktop", processes.desktop(root)],
-    ["headless", processes.headless(root, root)],
-    ["headless", processes.headless(other, other)],
+    ["desktop", processes.desktop(root), undefined],
+    ["headless", processes.headless(root, root), root],
+    ["headless", processes.headless(other, other), other],
   ] as const;
 
   try {
     const [desktop, headless, elsewhere] = await Promise.all(
-      children.map(async ([kind, child], index) => {
-        const server = await discovery(
-          kind,
-          child,
-          index === 1 ? root : index === 2 ? other : undefined,
-        );
+      children.map(async ([kind, child, stateDir]) => {
+        const server = await discovery(kind, child, stateDir);
 
         return (await (await fetch(`${server.url}/health`)).json()).serverId;
       }),

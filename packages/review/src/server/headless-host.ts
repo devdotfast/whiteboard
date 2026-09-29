@@ -90,7 +90,6 @@ async function serve(input: HeadlessServerInput) {
     instanceId: discovery.instanceId,
     serverId: local.store.serverId(),
     relay,
-    health: () => ({}),
   });
 
   const callbacks = relayReviewCallbacks(relay, input.softwareMapEnabled);
