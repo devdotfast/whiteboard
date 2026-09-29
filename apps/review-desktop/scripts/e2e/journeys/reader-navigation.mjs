@@ -99,7 +99,7 @@ export async function run(ctx) {
   const input = find.locator('[aria-label="Find"]');
 
   const countText = async () =>
-    (await find.locator(".review-find-count").innerText()).trim();
+    (await find.locator("[aria-live]").innerText()).trim();
 
   await page.keyboard.press("ControlOrMeta+KeyF");
   await find.waitFor();
@@ -115,7 +115,7 @@ export async function run(ctx) {
     return (await countText()) === text ? text : null;
   }, "a settled plain-text match count");
 
-  const wholeWord = find.locator(".review-find-toggle--whole-word");
+  const wholeWord = find.getByRole("button", { name: "Match Whole Word" });
 
   await wholeWord.click();
   await until(
@@ -132,7 +132,7 @@ export async function run(ctx) {
     `the plain count (${plain}) to come back`,
   );
 
-  await find.locator(".review-find-toggle--regex").click();
+  await find.getByRole("button", { name: "Use Regular Expression" }).click();
   await input.fill("stat(");
   // An uncompilable pattern reads "Invalid expression" in the count and marks the input.
   await until(
@@ -178,18 +178,22 @@ export async function run(ctx) {
 
   await toc.waitFor();
 
+  const toggle = toc.locator('[aria-controls="review-toc-body"]');
+
+  // The rail hides the toggle.
   const isDrawerOpen = async () =>
-    (await toc.getAttribute("class")).includes("review-toc--open");
+    (await toggle.isHidden()) ||
+    (await toggle.getAttribute("aria-expanded")) === "true";
 
   // The contents are an open rail only at the top of a wide shell; otherwise a shut drawer is `pointer-events: none`.
-  if (!(await isDrawerOpen())) await page.locator(".review-toc-toggle").click();
+  if (!(await isDrawerOpen())) await toggle.click();
   await until(isDrawerOpen, "the contents drawer to open");
 
   // Entries are buttons, not links with an `href`, so the target is found by its heading text.
-  const links = toc.locator(".review-toc-link");
+  const links = toc.locator("li > button");
 
   assert.deepEqual(
-    (await links.locator(".review-toc-text").allInnerTexts()).map((text) =>
+    (await links.locator("span:last-child").allInnerTexts()).map((text) =>
       text.trim(),
     ),
     ["Overview", "Rollout", "Risks"],

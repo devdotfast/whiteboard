@@ -6,6 +6,7 @@ import { act, useLayoutEffect, useMemo, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import { scopeReviewCanvasCss } from "../desktop-css-scope";
 import {
   type ReviewFindHost,
   ReviewFindProvider,
@@ -14,7 +15,12 @@ import {
 } from "./review-find";
 import { ReviewRootsProvider } from "./review-root-context";
 
+import canvasCss from "./styles.css?inline";
+
 let root: ReturnType<typeof createRoot> | undefined;
+
+const findCount = (container: HTMLElement) =>
+  container.querySelector('[role="search"] [aria-live]');
 
 beforeEach(() => {});
 
@@ -41,9 +47,7 @@ it("orders duplicate editors with MDX and wraps navigation", async () => {
     expect(host.showFind("Alpha")).toBe(true);
   });
   await vi.waitFor(() => {
-    expect(container.querySelector(".review-find-count")?.textContent).toBe(
-      "1 of 4",
-    );
+    expect(findCount(container)?.textContent).toBe("1 of 4");
   });
   // The shell is the widget's containing block.
   expect(
@@ -54,22 +58,16 @@ it("orders duplicate editors with MDX and wraps navigation", async () => {
   await vi.waitFor(() => {
     expect(first.revealFindMatch).toHaveBeenCalledWith(0);
   });
-  expect(container.querySelector(".review-find-count")?.textContent).toBe(
-    "2 of 4",
-  );
+  expect(findCount(container)?.textContent).toBe("2 of 4");
   await act(async () => next.click());
-  expect(container.querySelector(".review-find-count")?.textContent).toBe(
-    "3 of 4",
-  );
+  expect(findCount(container)?.textContent).toBe("3 of 4");
   expect(first.clearActiveFindMatch).toHaveBeenCalled();
   await act(async () => next.click());
   await vi.waitFor(() => {
     expect(second.revealFindMatch).toHaveBeenCalledWith(0);
   });
   await act(async () => next.click());
-  expect(container.querySelector(".review-find-count")?.textContent).toBe(
-    "1 of 4",
-  );
+  expect(findCount(container)?.textContent).toBe("1 of 4");
 
   await act(async () => button(container, "Close Find").click());
   expect(document.activeElement).toBe(focusTarget);
@@ -105,15 +103,11 @@ it("ignores results from an older query generation", async () => {
   });
   await setInput(container, "Alpha");
   await vi.waitFor(() => {
-    expect(container.querySelector(".review-find-count")?.textContent).toBe(
-      "1 of 3",
-    );
+    expect(findCount(container)?.textContent).toBe("1 of 3");
   });
   resolveSlow({ matchCount: 9 });
   await act(async () => Promise.resolve());
-  expect(container.querySelector(".review-find-count")?.textContent).toBe(
-    "1 of 3",
-  );
+  expect(findCount(container)?.textContent).toBe("1 of 3");
 });
 
 it("uses equal action controls and describes every Find option", async () => {
@@ -134,11 +128,6 @@ it("uses equal action controls and describes every Find option", async () => {
     button(container, "Close Find"),
   ];
 
-  expect(actions.map((action) => action.className)).toEqual([
-    "review-find-action",
-    "review-find-action",
-    "review-find-action",
-  ]);
   expect(
     actions.map((action) =>
       action.querySelector("svg")?.getAttribute("viewBox"),
@@ -168,9 +157,7 @@ it("keeps late editor results from reviving a closed search", async () => {
   await act(async () => {
     host.showFind("Alpha");
   });
-  expect(container.querySelector(".review-find-count")?.textContent).toBe(
-    "Searching…",
-  );
+  expect(findCount(container)?.textContent).toBe("Searching…");
 
   await act(async () => button(container, "Close Find").click());
   await act(async () => slow.resolve({ matchCount: 3 }));
@@ -216,18 +203,14 @@ it("drops a removed editor's matches", async () => {
     host.showFind("Alpha");
   });
   await vi.waitFor(() => {
-    expect(container.querySelector(".review-find-count")?.textContent).toBe(
-      "1 of 4",
-    );
+    expect(findCount(container)?.textContent).toBe("1 of 4");
   });
 
   await act(async () => {
     root?.render(<FindHarness host={host} handles={[first]} />);
   });
   await vi.waitFor(() => {
-    expect(container.querySelector(".review-find-count")?.textContent).toBe(
-      "1 of 3",
-    );
+    expect(findCount(container)?.textContent).toBe("1 of 3");
   });
   expect(second.clearFind).toHaveBeenCalled();
 });
@@ -250,16 +233,12 @@ it("reports an invalid expression and recovers when it becomes valid", async () 
     'input[aria-label="Find"]',
   )!;
 
-  expect(container.querySelector(".review-find-count")?.textContent).toBe(
-    "Invalid expression",
-  );
+  expect(findCount(container)?.textContent).toBe("Invalid expression");
   expect(input.getAttribute("aria-invalid")).toBe("true");
 
   await setInput(container, "Alpha (first|second)");
   await vi.waitFor(() => {
-    expect(container.querySelector(".review-find-count")?.textContent).toBe(
-      "1 of 3",
-    );
+    expect(findCount(container)?.textContent).toBe("1 of 3");
   });
   expect(input.getAttribute("aria-invalid")).toBeNull();
 });
@@ -278,9 +257,7 @@ it("closes and forgets the query when the document changes", async () => {
     host.showFind("Alpha");
   });
   await vi.waitFor(() => {
-    expect(container.querySelector(".review-find-count")?.textContent).toBe(
-      "1 of 3",
-    );
+    expect(findCount(container)?.textContent).toBe("1 of 3");
   });
 
   await act(async () => {
@@ -326,14 +303,98 @@ it("does not re-render the document while the reader searches", async () => {
   await setInput(container, "Alp");
   await setInput(container, "Alpha");
   await vi.waitFor(() => {
-    expect(container.querySelector(".review-find-count")?.textContent).toBe(
-      "1 of 3",
-    );
+    expect(findCount(container)?.textContent).toBe("1 of 3");
   });
   await act(async () => button(container, "Next Match").click());
   await act(async () => button(container, "Close Find").click());
 
   expect(documentRenders).toBe(rendersBeforeFind);
+});
+
+it("keeps the find widget below and above the topbar", async () => {
+  const styles = document.createElement("style");
+  styles.textContent = scopeReviewCanvasCss(canvasCss);
+  const canvas = document.createElement("div");
+  canvas.className = "review-canvas-root";
+  canvas.style.cssText =
+    "position: fixed; inset: 40px 0 0; height: auto; min-height: 0";
+  // A recoverable load error renders a status row above .review-app: the
+  // height that used to slide the topbar onto the find widget.
+  canvas.innerHTML = `
+    <div data-review-api class="review-api-canvas">
+      <p role="status" style="margin: 8px 24px; font-size: 12px">Could not refresh this review.</p>
+      <div class="review-app">
+        <main class="review-document-shell">
+          <header class="review-topbar">
+            <div class="review-topbar-left"></div>
+            <div class="review-topbar-actions"></div>
+          </header>
+          <section class="review-view-region review-view-region--review">
+            <div class="review-document-view">
+              <article class="review-document">
+                <h2 id="rollout">Rollout</h2><p>body</p>
+                <h2 id="risks">Risks</h2><p>body</p>
+              </article>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>`;
+  document.body.append(styles, canvas);
+
+  const roots = {
+    appRef: { current: null },
+    shellRef: {
+      current: canvas.querySelector<HTMLElement>(".review-document-shell"),
+    },
+    scrollRegionRef: { current: null },
+    articleRef: {
+      current: canvas.querySelector<HTMLElement>(".review-document"),
+    },
+  };
+
+  const host = createReviewFindHost();
+  root = createRoot(document.createElement("div"));
+  await act(async () => {
+    root?.render(
+      <ReviewRootsProvider roots={roots}>
+        <ReviewFindProvider
+          articleRef={roots.articleRef}
+          documentKey="layout"
+          host={host}
+        >
+          {null}
+        </ReviewFindProvider>
+      </ReviewRootsProvider>,
+    );
+  });
+  await act(async () => {
+    expect(host.showFind()).toBe(true);
+  });
+
+  const topbar = canvas
+    .querySelector(".review-topbar")!
+    .getBoundingClientRect();
+
+  const widget = canvas.querySelector('[role="search"]')!;
+  const wholeWord = button(canvas, "Match Whole Word");
+
+  // The widget starts below the topbar even with a status row above the app.
+  expect(widget.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    topbar.bottom,
+  );
+  // Its toggles keep the pointer rather than handing it to what the topbar
+  // stacks above them.
+  const rect = wholeWord.getBoundingClientRect();
+
+  expect(
+    wholeWord.contains(
+      document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      ),
+    ),
+  ).toBe(true);
 });
 
 function deferred<T>() {

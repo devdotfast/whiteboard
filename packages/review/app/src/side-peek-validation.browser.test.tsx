@@ -105,7 +105,7 @@ describe("side-peek validation boundary", () => {
     });
 
     expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(container.querySelector(".code-peek")).not.toBeNull();
+    expect(container.querySelector(".side-panel section")).not.toBeNull();
     expect(validatedRoots).toHaveLength(validationCountBeforeOpen);
 
     const codePeekFetches = vi

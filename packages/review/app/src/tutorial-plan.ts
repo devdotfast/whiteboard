@@ -54,7 +54,8 @@ const tutorialSteps: readonly TutorialStepDefinition[] = [
     instruction:
       "Move the pointer over a typed symbol in the live editor to see its type information.",
     completion: "inline-hover",
-    targetSelector: '[data-review-section="Welcome"] .review-inline-editor',
+    targetSelector:
+      '[data-review-section="Welcome"] [data-review-inline-editor]',
   },
   {
     id: "gotoDefinition",
@@ -63,7 +64,8 @@ const tutorialSteps: readonly TutorialStepDefinition[] = [
     instruction:
       "Use Go to Definition on a symbol—the same command you use in your editor.",
     completion: "inline-navigation",
-    targetSelector: '[data-review-section="Welcome"] .review-inline-editor',
+    targetSelector:
+      '[data-review-section="Welcome"] [data-review-inline-editor]',
   },
   {
     id: "openPeek",

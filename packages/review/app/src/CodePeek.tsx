@@ -10,12 +10,14 @@ import {
 } from "@review/lens-selection";
 import type { ReviewComponentProps } from "@review/review-document-data";
 import { type FileLineRange, codePeekSource } from "@review/source";
+import * as stylex from "@stylexjs/stylex";
 import { useEffect, useMemo, useRef } from "react";
 
 import { DocumentCodeView } from "./DocumentCodeView";
 import { useReviewSession } from "./host/review-session";
 import { peekResolutionOutcome } from "./peek-telemetry";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
+import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
 
 /** The software-map inspector's peek input: a range on one diff side. */
@@ -81,7 +83,7 @@ export function CodePeekGroup({
         return (
           <section
             key={group.key}
-            className="code-peek"
+            {...stylex.props(styles.peek)}
             data-code-rendering="inline-editor"
           >
             <DocumentCodeView
@@ -170,7 +172,7 @@ export function CodePeekCard({
 
   if (!ranges.length)
     return (
-      <section className="code-peek" role="status">
+      <section {...stylex.props(styles.peek)} role="status">
         {outcome === "failed"
           ? "Diff selection unavailable"
           : "Loading diff selection…"}
@@ -178,7 +180,7 @@ export function CodePeekCard({
     );
 
   return (
-    <section className="code-peek" data-code-rendering="inline-editor">
+    <section {...stylex.props(styles.peek)} data-code-rendering="inline-editor">
       <DocumentCodeView
         path={source.file}
         title={
@@ -231,7 +233,7 @@ function FileSnippetCard({
   onNativeFocusRef.current = onNativeFocus;
 
   return (
-    <section className="code-peek" data-code-rendering="inline-editor">
+    <section {...stylex.props(styles.peek)} data-code-rendering="inline-editor">
       <DocumentCodeView
         path={subject.file}
         title={subject.title}
@@ -353,3 +355,36 @@ function mergedCodePeekRanges(
 
   return merged;
 }
+
+const narrow = "@media (max-width: 720px)";
+
+// A block in a Review document shares the prose column.
+const inDocument = ":is(.review-document .api-document-node > *)";
+
+const inMapInspector = ":is(.software-map-code-inspector *)";
+
+const styles = stylex.create({
+  peek: {
+    width: {
+      default: null,
+      [inDocument]: `min(100%, ${tokens.reviewProseMaxWidth})`,
+    },
+    minWidth: 0,
+    maxWidth: {
+      default: "100%",
+      [inDocument]: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
+    },
+    marginInline: { default: null, [inDocument]: "auto" },
+    overflow: { default: null, [inMapInspector]: "visible" },
+    padding: {
+      default: null,
+      [inMapInspector]: { default: 0, [narrow]: "0 8px 8px" },
+    },
+    overscrollBehavior: {
+      default: null,
+      [inMapInspector]: { default: null, [narrow]: "contain" },
+    },
+    color: tokens.ink,
+    fontFamily: tokens.fontMono,
+  },
+});

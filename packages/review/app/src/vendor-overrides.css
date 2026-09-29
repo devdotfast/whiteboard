@@ -91,3 +91,13 @@
 .diff-workspace .is-viewed {
   opacity: 0.55;
 }
+
+/* Find matches painted through the CSS Custom Highlight API. */
+
+::highlight(review-find-match) {
+  background: var(--review-find-match-background);
+}
+
+::highlight(review-find-match-active) {
+  background: var(--review-find-match-active-background);
+}

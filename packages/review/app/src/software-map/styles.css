@@ -254,11 +254,6 @@
   scrollbar-color: var(--rule-soft) var(--surface);
 }
 
-.software-map-code-inspector .code-peek {
-  overflow: visible;
-  padding: 0;
-}
-
 .software-map-code-inspector-empty {
   padding: 16px;
   color: var(--ink-muted);
@@ -329,11 +324,6 @@
     z-index: 2;
     padding: 8px;
     border-bottom: 1px solid var(--rule);
-  }
-
-  .software-map-code-inspector .code-peek {
-    padding: 0 8px 8px;
-    overscroll-behavior: contain;
   }
 }
 

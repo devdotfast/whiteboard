@@ -13,16 +13,11 @@
 @import "./software-map/styles.css";
 @import "./flow-diagram.css";
 @import "./api-document.css";
-@import "./review-find.css";
 @import "./tutorial-experience.css";
 
 @import "./review-shell.css";
 @import "./review-document.css";
-@import "./review-toc.css";
-@import "./review-panel.css";
 @import "./diagrams.css";
-
-@import "./bug-report-dialog.css";
 
 /* Last, in this order: the courier's march outlasts the badge's
    reduced-motion rule, and authoring-motion restyles everything above while

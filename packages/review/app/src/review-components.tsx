@@ -36,6 +36,7 @@ import {
   scrollTailHeight,
 } from "./scroll-active-tracking";
 import { useBottomSheetResize } from "./side-panel-resizer";
+import { panelStyles, tourStyles } from "./side-panel-styles";
 import { withClass } from "./stylex-props";
 import { TraceDocument, extractEventText } from "./trace-document";
 import { traceStyles } from "./trace-styles";
@@ -61,7 +62,8 @@ function ReviewPanelFrame({
   floatingFooter,
   bodyRef,
   onBodyScroll,
-  className,
+  tour = false,
+  docked = false,
   children,
 }: {
   label: string;
@@ -72,7 +74,8 @@ function ReviewPanelFrame({
   floatingFooter?: ReactNode;
   bodyRef?: Ref<HTMLDivElement>;
   onBodyScroll?: () => void;
-  className?: string;
+  tour?: boolean;
+  docked?: boolean;
   children: ReactNode;
 }) {
   const appRef = useReviewRoots()?.appRef;
@@ -105,34 +108,38 @@ function ReviewPanelFrame({
 
   return (
     <aside
-      className={[
+      {...withClass(
         "side-panel",
-        className,
-        panelMotion === "restored" ? "side-panel--restored" : null,
-      ]
-        .filter(Boolean)
-        .join(" ")}
+        panelStyles.panel,
+        panelMotion === "restored" && panelStyles.restored,
+        tour && panelStyles.tour,
+        docked && panelStyles.docked,
+      )}
       role="complementary"
       aria-label={title ?? label}
       style={panelStyle}
     >
       <div className="side-panel-sheet-resizer" {...sheet.separatorProps} />
-      <header className="side-panel-header">
-        <div className="side-panel-title">
-          <span className="side-panel-kicker">{label}</span>
-          {title && <h2>{title}</h2>}
+      <header {...stylex.props(panelStyles.header)}>
+        <div {...stylex.props(panelStyles.title)}>
+          <span {...stylex.props(panelStyles.kicker)}>{label}</span>
+          {title && <h2 {...stylex.props(panelStyles.heading)}>{title}</h2>}
           {titleAccessory}
         </div>
         <button
           type="button"
-          {...withClass("side-panel-close", controlStyles.iconButton)}
+          {...stylex.props(controlStyles.iconButton, panelStyles.close)}
           onClick={onClose}
           aria-label={closeLabel}
         >
           <CloseIcon xstyle={controlStyles.inertIcon} />
         </button>
       </header>
-      <div ref={bodyRef} className="review-panel-body" onScroll={onBodyScroll}>
+      <div
+        ref={bodyRef}
+        {...stylex.props(panelStyles.body)}
+        onScroll={onBodyScroll}
+      >
         {children}
       </div>
       {floatingFooter}
@@ -497,7 +504,6 @@ function TraceQuotePeekPanel({
   if (data.status === "loading" || data.status === "idle") {
     return (
       <ReviewPanelFrame
-        className="side-peek trace-quote-panel"
         label="Agent trace"
         title={
           trace ? `${sessionId.slice(0, 8)} · ${trace}` : sessionId.slice(0, 8)
@@ -505,7 +511,7 @@ function TraceQuotePeekPanel({
         onClose={onClose}
         closeLabel="Close side peek"
       >
-        <div className="side-peek-body">
+        <div {...stylex.props(panelStyles.peekBody)}>
           <p {...stylex.props(traceStyles.note)}>Loading trace…</p>
         </div>
       </ReviewPanelFrame>
@@ -515,13 +521,12 @@ function TraceQuotePeekPanel({
   if (data.status === "error") {
     return (
       <ReviewPanelFrame
-        className="side-peek trace-quote-panel"
         label="Agent trace"
         title={sessionId.slice(0, 8)}
         onClose={onClose}
         closeLabel="Close side peek"
       >
-        <div className="side-peek-body">
+        <div {...stylex.props(panelStyles.peekBody)}>
           <p {...stylex.props(traceStyles.note, traceStyles.noteError)}>
             {data.error}
           </p>
@@ -552,7 +557,6 @@ function TraceQuotePeekPanel({
 
   return (
     <ReviewPanelFrame
-      className="side-peek trace-quote-panel"
       label="Agent trace"
       title={
         loadedTrace.title ??
@@ -562,7 +566,7 @@ function TraceQuotePeekPanel({
       onClose={onClose}
       closeLabel="Close side peek"
     >
-      <div className="side-peek-body">
+      <div {...stylex.props(panelStyles.peekBody)}>
         {targetEventIndex === -1 ? (
           <p {...stylex.props(traceStyles.note)}>
             Quote not found in this session transcript.
@@ -626,15 +630,14 @@ function CodeReviewPeekPanel({
 
   return (
     <ReviewPanelFrame
-      className="side-peek"
       label="Peek"
       title={anchor.title}
       onClose={onClose}
       closeLabel="Close side peek"
     >
-      <div className="side-peek-body">
+      <div {...stylex.props(panelStyles.peekBody)}>
         {softwareMapEnabled && anchor.softwareMapPath ? (
-          <div className="peek-actions">
+          <div {...stylex.props(panelStyles.peekActions)}>
             <button
               type="button"
               onClick={() => {
@@ -652,7 +655,7 @@ function CodeReviewPeekPanel({
           </div>
         ) : null}
 
-        <div className="peek-content">
+        <div {...stylex.props(panelStyles.peekContent)}>
           <ReviewPeekContentView
             anchor={anchor}
             content={content}
@@ -670,12 +673,15 @@ export function GuidedTourPanel({
   revealRequest,
   onActiveAnchorChange,
   onClose,
+  docked = false,
 }: {
   tour: GuidedTour;
   activeAnchor: string;
   revealRequest: number;
   onActiveAnchorChange: (anchor: string, options: { reveal: boolean }) => void;
   onClose: () => void;
+  /** Keeps the panel in its column at every width (a diagram tour's pane). */
+  docked?: boolean;
 }) {
   const session = useReviewSession();
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -861,32 +867,41 @@ export function GuidedTourPanel({
 
   return (
     <ReviewPanelFrame
-      className="side-peek side-peek--tour"
+      tour
+      docked={docked}
       label="Tour"
       title={tour.title ?? "Guided tour"}
       onClose={onClose}
       closeLabel="Close guided tour"
       floatingFooter={
         tour.stops.length > 0 ? (
-          <div className="tour-floating-footer">
+          <div {...stylex.props(tourStyles.floatingFooter)}>
             {showIntroPill ? (
               <button
                 type="button"
-                className="tour-pill tour-pill--intro"
+                {...stylex.props(tourStyles.pill, tourStyles.pillIntro)}
                 onClick={() => {
                   setHasScrolled(true);
                   stepTo(1);
                 }}
               >
                 <span>{tour.stops.length - 1} more steps</span>
-                <span className="tour-pill-chevron" aria-hidden="true">
+                <span
+                  {...stylex.props(tourStyles.pillChevron)}
+                  aria-hidden="true"
+                >
                   ↓
                 </span>
               </button>
             ) : (
-              <div className="tour-pill" role="group" aria-label="Tour steps">
+              <div
+                {...stylex.props(tourStyles.pill)}
+                role="group"
+                aria-label="Tour steps"
+              >
                 <button
                   type="button"
+                  {...stylex.props(tourStyles.pillButton)}
                   aria-label="Previous step"
                   disabled={displayIndex === 0}
                   onClick={() => stepTo(displayIndex - 1)}
@@ -898,6 +913,7 @@ export function GuidedTourPanel({
                 </span>
                 <button
                   type="button"
+                  {...stylex.props(tourStyles.pillButton)}
                   aria-label="Next step"
                   disabled={displayIndex === lastIndex}
                   onClick={() => stepTo(displayIndex + 1)}
@@ -912,8 +928,8 @@ export function GuidedTourPanel({
       bodyRef={scrollerRef}
       onBodyScroll={syncActiveStopToScroll}
     >
-      <div className="tour-feed-shell">
-        <div className="side-peek-body tour-feed">
+      <div {...stylex.props(tourStyles.feedShell)}>
+        <div {...stylex.props(panelStyles.peekBody, tourStyles.feed)}>
           {tour.stops.map((stop, index) => {
             const isActive = stop.anchor.id === activeAnchor;
 
@@ -924,11 +940,18 @@ export function GuidedTourPanel({
                   if (node) sectionRefs.current.set(stop.anchor.id, node);
                   else sectionRefs.current.delete(stop.anchor.id);
                 }}
-                className={isActive ? "tour-stop active" : "tour-stop"}
+                {...stylex.props(tourStyles.stop)}
                 data-review-anchor-id={stop.anchor.id}
               >
-                <div className="tour-stop-rail">
-                  <div>{index + 1}</div>
+                <div {...stylex.props(tourStyles.rail)}>
+                  <div
+                    {...stylex.props(
+                      tourStyles.railNumber,
+                      isActive && tourStyles.railNumberActive,
+                    )}
+                  >
+                    {index + 1}
+                  </div>
                 </div>
                 <GuidedTourStopMain
                   stop={stop}
@@ -946,15 +969,19 @@ export function GuidedTourPanel({
           })}
           {tour.stops.length > 0 && (
             <>
-              <div className="tour-end-cap">
+              <div {...stylex.props(tourStyles.endCap)}>
                 <span>End of tour</span>
-                <button type="button" onClick={() => stepTo(0)}>
+                <button
+                  type="button"
+                  {...stylex.props(tourStyles.endCapButton)}
+                  onClick={() => stepTo(0)}
+                >
                   ↑ Back to step 1
                 </button>
               </div>
               <div
                 ref={tailRef}
-                className="tour-scroll-tail"
+                {...stylex.props(tourStyles.scrollTail)}
                 style={{ height: tailHeight }}
                 aria-hidden="true"
               />
@@ -984,19 +1011,28 @@ function GuidedTourStopMain({
   const { softwareMapEnabled, openSoftwareMapElement } = useReviewActions();
 
   return (
-    <div className="tour-stop-main">
-      <header className="tour-stop-header">
+    <div {...stylex.props(tourStyles.main, active && tourStyles.mainActive)}>
+      <header {...stylex.props(tourStyles.header)}>
         <div>
-          <div className="tour-stop-count">
+          <div {...stylex.props(tourStyles.count)}>
             Step {index + 1} of {total}
           </div>
-          <div className="tour-stop-title-row">
-            <h3>{stop.label}</h3>
+          <div {...stylex.props(tourStyles.titleRow)}>
+            <h3
+              {...stylex.props(
+                tourStyles.title,
+                active && tourStyles.titleActive,
+              )}
+            >
+              {stop.label}
+            </h3>
           </div>
-          {stop.detail && <p>{stop.detail}</p>}
+          {stop.detail && (
+            <p {...stylex.props(tourStyles.detail)}>{stop.detail}</p>
+          )}
         </div>
         {softwareMapEnabled && stop.anchor.softwareMapPath ? (
-          <div className="peek-actions">
+          <div {...stylex.props(panelStyles.peekActions)}>
             <button
               type="button"
               {...stylex.props(controlStyles.iconButton)}
@@ -1012,7 +1048,7 @@ function GuidedTourStopMain({
         ) : null}
       </header>
 
-      <div className="peek-content">
+      <div {...stylex.props(panelStyles.peekContent, tourStyles.content)}>
         <ReviewPeekContentView
           anchor={stop.anchor}
           content={stop.content}

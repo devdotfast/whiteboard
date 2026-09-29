@@ -134,7 +134,10 @@ const rendered: Record<
   divider: (c) => has(c, "hr"),
   // The peek asked the host for an inline editor on the fixture's file.
   code_peek: (c) =>
-    has(c, ".code-peek .fixture-inline-editor[data-path='order.ts']"),
+    has(
+      c,
+      "[data-code-rendering] .fixture-inline-editor[data-path='order.ts']",
+    ),
   // Every step is laid out as a routed message once the diagram settles.
   sequence: (c) =>
     has(c, ".sequence-diagram-body") &&
@@ -633,7 +636,7 @@ describe("tutorial guide placement", () => {
 
     expect(await settled(() => has(container, ".tutorial-guide"))).toBe(true);
 
-    const contentsElement = container.querySelector(".review-toc")!;
+    const contentsElement = container.querySelector("#review-toc")!;
     const appElement = container.querySelector(".review-app")!;
 
     const contentsOffset =
@@ -651,7 +654,7 @@ describe("tutorial guide placement", () => {
     const status = statusRow.getBoundingClientRect();
 
     const contents = container
-      .querySelector(".review-toc")!
+      .querySelector("#review-toc")!
       .getBoundingClientRect();
 
     const guide = container
