@@ -688,35 +688,3 @@
   display: flex;
   justify-content: center;
 }
-
-.review-home-row-menu-trigger {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink);
-  opacity: 0;
-  cursor: pointer;
-}
-
-.review-home-row-menu-trigger svg {
-  width: 16px;
-  height: 16px;
-  fill: currentColor;
-}
-
-.review-home-table tr:hover .review-home-row-menu-trigger,
-.review-home-table tr:focus-within .review-home-row-menu-trigger,
-.review-home-row-menu-trigger[aria-expanded="true"] {
-  opacity: 1;
-}
-
-.review-home-row-menu-trigger:hover,
-.review-home-row-menu-trigger[aria-expanded="true"] {
-  background: var(--well);
-}

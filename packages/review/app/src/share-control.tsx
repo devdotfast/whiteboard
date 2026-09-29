@@ -1,3 +1,4 @@
+import * as stylex from "@stylexjs/stylex";
 import {
   type ReviewApiClient,
   ReviewApiError,
@@ -14,6 +15,7 @@ import { canvasQueryKeys } from "./canvas-query";
 import { copyText } from "./copy-text";
 import { useOptionalReviewSession } from "./host/review-session";
 import { ShareIcon } from "./icons";
+import { withClass } from "./stylex-props";
 import { captureUiEvent } from "./ui-telemetry";
 import { useDismissOnOutside } from "./use-dismiss-on-outside";
 import { useTooltip } from "./use-tooltip";
@@ -186,7 +188,7 @@ export function ShareControl() {
     <div ref={popover} style={{ position: "relative" }}>
       <button
         type="button"
-        className="review-topbar-icon-button review-share-button"
+        {...withClass("review-topbar-icon-button", open && styles.expanded)}
         ref={tooltip}
         aria-label={label}
         aria-haspopup="dialog"
@@ -218,17 +220,17 @@ export function ShareControl() {
           popover="manual"
           role="dialog"
           aria-label={shared ? "Shared review" : "Share review"}
-          className="review-share-popover"
+          {...stylex.props(styles.popover)}
         >
           {(error || accountError || account?.error) && (
-            <p className="review-share-error" role="alert">
+            <p {...stylex.props(styles.paragraph, styles.error)} role="alert">
               {error ?? accountError ?? account?.error}
             </p>
           )}
           {shared ? (
             <>
-              <p className="review-share-status">{label}</p>
-              <p className="review-share-status">
+              <p {...stylex.props(styles.paragraph, styles.status)}>{label}</p>
+              <p {...stylex.props(styles.paragraph, styles.status)}>
                 This is a read-only snapshot. Source files and traces are
                 available offline.
               </p>
@@ -237,7 +239,7 @@ export function ShareControl() {
             link ? (
               <>
                 <input
-                  className="review-share-link"
+                  {...stylex.props(styles.link)}
                   aria-label="Share link"
                   readOnly
                   value={link}
@@ -245,7 +247,7 @@ export function ShareControl() {
                 />
                 <button
                   type="button"
-                  className="review-share-action"
+                  {...stylex.props(styles.action)}
                   onClick={() => void copy(link)}
                 >
                   {copied ? "Copied" : "Copy link"}
@@ -254,20 +256,22 @@ export function ShareControl() {
             ) : error ? (
               <button
                 type="button"
-                className="review-share-action"
+                {...stylex.props(styles.action)}
                 onClick={() => target && upload(target)}
               >
                 Retry
               </button>
             ) : (
-              <p className="review-share-status">Uploading…</p>
+              <p {...stylex.props(styles.paragraph, styles.status)}>
+                Uploading…
+              </p>
             )
           ) : (
             account && (
               <>
                 <button
                   type="button"
-                  className="review-share-action"
+                  {...stylex.props(styles.action)}
                   disabled={
                     account.pending || login.isPending || publish.isPending
                   }
@@ -288,3 +292,84 @@ export function ShareControl() {
     </div>
   );
 }
+
+const styles = stylex.create({
+  // Hovered, the open button keeps the topbar button hover colors.
+  expanded: {
+    backgroundColor: {
+      default: "var(--chrome-hover-bg)",
+      ":hover": "var(--well)",
+    },
+    color: { default: "var(--chrome-fg)", ":hover": "var(--ink)" },
+  },
+  popover: {
+    position: "absolute",
+    zIndex: 30,
+    top: "calc(100% + 4px)",
+    right: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    width: "280px",
+    margin: 0,
+    padding: "10px 12px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: "var(--rule-soft)",
+    borderRadius: "8px",
+    backgroundColor: "var(--surface-raised)",
+    boxShadow: "0 8px 28px var(--shadow-color-strong)",
+    color: "var(--chrome-fg)",
+    fontFamily: "var(--chrome-font)",
+    fontSize: "var(--chrome-font-size)",
+  },
+  paragraph: {
+    margin: 0,
+  },
+  status: {
+    color: "var(--chrome-fg-muted)",
+  },
+  error: {
+    color: "var(--vscode-errorForeground, #f48771)",
+  },
+  link: {
+    width: "100%",
+    boxSizing: "border-box",
+    height: "26px",
+    padding: "0 8px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: {
+      default: "var(--rule-soft)",
+      ":focus-visible": "var(--chrome-active-border)",
+    },
+    borderRadius: "var(--chrome-control-radius)",
+    backgroundColor: "var(--surface)",
+    color: "var(--ink)",
+    font: "inherit",
+    outline: { default: null, ":focus-visible": "none" },
+  },
+  action: {
+    height: "26px",
+    padding: "0 12px",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    borderRadius: "var(--chrome-control-radius)",
+    backgroundColor: "var(--accent)",
+    color: "var(--on-accent)",
+    font: "inherit",
+    cursor: { default: "pointer", ":disabled": "default" },
+    filter: {
+      default: null,
+      ":hover:not(:disabled)": "brightness(1.1)",
+      ":focus-visible:not(:disabled)": "brightness(1.1)",
+    },
+    outline: {
+      default: null,
+      ":hover:not(:disabled)": "none",
+      ":focus-visible:not(:disabled)": "none",
+    },
+    opacity: { default: null, ":disabled": 0.6 },
+  },
+});

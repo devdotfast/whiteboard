@@ -13,7 +13,6 @@
 @import "./software-map/styles.css";
 @import "./flow-diagram.css";
 @import "./api-document.css";
-@import "./share-control.css";
 @import "./ReviewCommitsView.css";
 @import "./review-find.css";
 @import "./tutorial-experience.css";
@@ -31,7 +30,6 @@
 @import "./ReviewTraceView.css";
 @import "./review-home-view.css";
 @import "./welcome-page.css";
-@import "./settings-page.css";
 @import "./bug-report-dialog.css";
 
 /* Last, in this order: the courier's march outlasts the badge's

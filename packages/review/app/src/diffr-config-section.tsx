@@ -5,7 +5,10 @@ import {
   type ReviewDiffrSummarizerInput,
   isJsonObject,
 } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+
+import { settingsStyles as styles } from "./settings-styles";
 
 const displaySettings = [
   ["context.enabled", "Collapse unchanged lines"],
@@ -116,14 +119,17 @@ export function DiffrConfigSection({
   const hiddenTags = config ? setting(config, "hide-files.tags") : undefined;
 
   return (
-    <div className="review-settings-diffr">
+    <div {...stylex.props(styles.diffr)}>
       <details>
-        <summary onClick={() => setOpened(true)}>
+        <summary
+          {...stylex.props(styles.diffrSummary)}
+          onClick={() => setOpened(true)}
+        >
           Diff display and AI summaries
         </summary>
         {opened && (
           <>
-            <p className="review-settings-row-description">
+            <p {...stylex.props(styles.rowDescription)}>
               Shared with the diffr CLI. Applies to all repositories.
             </p>
             {!config && !error && <p role="status">Reading diffr settings…</p>}
@@ -152,7 +158,7 @@ export function DiffrConfigSection({
                       />
                     </SettingRow>
                     {setting(config, key) === undefined && (
-                      <p className="review-settings-unavailable">
+                      <p {...stylex.props(styles.unavailable)}>
                         Not available in this configuration.
                       </p>
                     )}
@@ -176,26 +182,26 @@ export function DiffrConfigSection({
                     )}
                     {key === "hide-files.enabled" &&
                       Array.isArray(hiddenTags) && (
-                        <p className="review-settings-row-description">
+                        <p {...stylex.props(styles.rowDescription)}>
                           Tags: {hiddenTags.join(", ")}
                         </p>
                       )}
                   </div>
                 ))}
                 <h3>AI summaries</h3>
-                <p className="review-settings-row-description">
+                <p {...stylex.props(styles.rowDescription)}>
                   Sends source-file contents to Gemini to summarize large new
                   functions and tests.
                 </p>
                 {unavailable && (
-                  <p className="review-settings-unavailable">
+                  <p {...stylex.props(styles.unavailable)}>
                     The summarizer is not available in this configuration.
                   </p>
                 )}
                 {draft && (
                   <fieldset
                     disabled={busy || unavailable}
-                    className="review-settings-summary-fields"
+                    {...stylex.props(styles.summaryFields)}
                   >
                     <SettingRow label="Enable summaries">
                       <input
@@ -209,7 +215,7 @@ export function DiffrConfigSection({
                     </SettingRow>
                     <SettingRow label="API key">
                       <input
-                        className="review-settings-input"
+                        {...stylex.props(styles.input)}
                         aria-label="API key"
                         type="password"
                         autoComplete="off"
@@ -220,7 +226,7 @@ export function DiffrConfigSection({
                         }
                       />
                     </SettingRow>
-                    <p className="review-settings-row-description">
+                    <p {...stylex.props(styles.rowDescription)}>
                       {config.credentialSource === "config"
                         ? "Saved key"
                         : config.credentialSource === "environment"
@@ -231,7 +237,7 @@ export function DiffrConfigSection({
                     </p>
                     <SettingRow label="Model">
                       <input
-                        className="review-settings-input"
+                        {...stylex.props(styles.input)}
                         aria-label="Model"
                         value={draft.model}
                         onChange={(event) =>
@@ -249,10 +255,10 @@ export function DiffrConfigSection({
                         }
                       />
                     </SettingRow>
-                    <div className="review-settings-summary-actions">
+                    <div {...stylex.props(styles.summaryActions)}>
                       <button
                         type="button"
-                        className="review-settings-button"
+                        {...stylex.props(styles.button)}
                         disabled={!summaryValid}
                         onClick={() =>
                           void run(async () => {
@@ -265,7 +271,7 @@ export function DiffrConfigSection({
                       </button>
                       <button
                         type="button"
-                        className="review-settings-button"
+                        {...stylex.props(styles.button)}
                         disabled={!summaryValid || !dirty}
                         onClick={() =>
                           void run(async () => {
@@ -280,7 +286,7 @@ export function DiffrConfigSection({
                         Save summaries
                       </button>
                     </div>
-                    <p className="review-settings-row-description">
+                    <p {...stylex.props(styles.rowDescription)}>
                       Test setup sends synthetic code without saving your
                       settings.
                     </p>
@@ -288,7 +294,7 @@ export function DiffrConfigSection({
                 )}
                 {summary && (
                   <pre
-                    className="review-settings-summary-result"
+                    {...stylex.props(styles.summaryResult)}
                     aria-label="Sample summary"
                   >
                     {summary}
@@ -301,7 +307,7 @@ export function DiffrConfigSection({
       </details>
       {busy && <p role="status">Working…</p>}
       {error && (
-        <p role="alert" className="review-settings-error">
+        <p role="alert" {...stylex.props(styles.error)}>
           {error}
         </p>
       )}
@@ -309,7 +315,7 @@ export function DiffrConfigSection({
         <p role="status">
           Reload the window to see changes.{" "}
           <button
-            className="review-settings-button"
+            {...stylex.props(styles.button)}
             disabled={busy}
             onClick={() => {
               if (dirty) setConfirmReload(true);
@@ -324,14 +330,14 @@ export function DiffrConfigSection({
         <div role="alertdialog" aria-label="Discard summary changes?">
           <p>Discard unsaved summary settings and reload?</p>
           <button
-            className="review-settings-button"
+            {...stylex.props(styles.button)}
             disabled={busy}
             onClick={() => void run(reloadWindow)}
           >
             Discard and reload
           </button>{" "}
           <button
-            className="review-settings-button"
+            {...stylex.props(styles.button)}
             onClick={() => setConfirmReload(false)}
           >
             Cancel
@@ -350,8 +356,8 @@ function SettingRow({
   children: ReactNode;
 }) {
   return (
-    <div className="review-settings-row">
-      <span className="review-settings-row-label">{label}</span>
+    <div {...stylex.props(styles.row)}>
+      <span {...stylex.props(styles.rowLabel)}>{label}</span>
       {children}
     </div>
   );
@@ -394,7 +400,7 @@ function ContextLines({
   return (
     <div>
       <input
-        className="review-settings-input"
+        {...stylex.props(styles.input)}
         aria-label="Context lines"
         type="number"
         min={0}

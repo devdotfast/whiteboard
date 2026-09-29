@@ -62,7 +62,8 @@ export async function run(ctx) {
   assert.ok(await appears(notice, 30000), "the telemetry notice never appeared");
   await page.getByRole("button", { name: "Open Settings" }).click();
   await page
-    .locator(".review-settings-page")
+    .locator(".review-home-content")
+    .filter({ has: page.getByRole("heading", { name: "Settings", level: 1 }) })
     .getByText("Share anonymous usage data")
     .waitFor();
   ctx.check("telemetry notice opens Settings at the Privacy row");

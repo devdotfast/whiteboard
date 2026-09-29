@@ -5,6 +5,7 @@ import type {
   ReviewCanvasSetupActions,
 } from "@dev.fast/review-protocol";
 import { fuzzyMatches, fuzzySegments } from "@review/fuzzy-match";
+import * as stylex from "@stylexjs/stylex";
 import {
   Fragment,
   createContext,
@@ -511,7 +512,11 @@ function ReviewTable({
           </thead>
           <tbody>
             {sorted.map((review) => (
-              <tr key={review.reviewId} onClick={() => onOpen(review)}>
+              <tr
+                key={review.reviewId}
+                {...stylex.props(stylex.defaultMarker())}
+                onClick={() => onOpen(review)}
+              >
                 <td>
                   {review.origin?.pullRequestNumber
                     ? `#${review.origin.pullRequestNumber}`
@@ -587,12 +592,19 @@ function ReviewRowActions({ review }: { review: ReviewApiSummary }) {
     >
       <button
         type="button"
-        className="review-home-row-menu-trigger"
+        {...stylex.props(
+          rowMenuStyles.trigger,
+          menu.open && rowMenuStyles.expanded,
+        )}
         aria-label={`Actions for ${reviewTitle(review)}`}
         {...menu.triggerProps}
         disabled={!ui?.confirmDelete}
       >
-        <svg viewBox="0 0 20 20" aria-hidden="true">
+        <svg
+          {...stylex.props(rowMenuStyles.icon)}
+          viewBox="0 0 20 20"
+          aria-hidden="true"
+        >
           <circle cx="4.5" cy="10" r="1.6" />
           <circle cx="10" cy="10" r="1.6" />
           <circle cx="15.5" cy="10" r="1.6" />
@@ -915,3 +927,35 @@ function TrashIcon() {
     </svg>
   );
 }
+
+const rowMenuStyles = stylex.create({
+  trigger: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "32px",
+    height: "32px",
+    padding: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    borderRadius: "6px",
+    backgroundColor: { default: "transparent", ":hover": "var(--well)" },
+    color: "var(--ink)",
+    opacity: {
+      default: 0,
+      [stylex.when.ancestor(":hover")]: 1,
+      [stylex.when.ancestor(":focus-within")]: 1,
+    },
+    cursor: "pointer",
+  },
+  expanded: {
+    backgroundColor: "var(--well)",
+    opacity: 1,
+  },
+  icon: {
+    width: "16px",
+    height: "16px",
+    fill: "currentColor",
+  },
+});

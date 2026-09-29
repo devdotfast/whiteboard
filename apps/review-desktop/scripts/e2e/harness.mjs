@@ -736,9 +736,9 @@ export async function pickReview(ctx, reviewId, cwd = ctx.repo) {
 
 /** Opens the Settings page on the current `ctx.page`; `ControlOrMeta+Comma` repeats because a fresh profile reloads the workbench. */
 export async function openSettings(ctx) {
-  const settings = ctx.page.locator(
-    ".review-home-content.review-settings-page",
-  );
+  const settings = ctx.page.locator(".review-home-content").filter({
+    has: ctx.page.getByRole("heading", { name: "Settings", level: 1 }),
+  });
 
   await ctx.until(
     async () => {
@@ -764,8 +764,7 @@ export async function installExtensionGroup(
   const settings = await openSettings(ctx);
 
   await settings
-    .locator(".review-settings-row")
-    .filter({ hasText: "Extensions" })
+    .getByRole("region", { name: "Tools" })
     .getByRole("button", { name: "Manage" })
     .click();
 

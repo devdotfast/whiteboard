@@ -33,12 +33,9 @@ const THEME_SETTINGS = {
   },
 };
 
-/** The telemetry checkbox, reached through its row: the row label is a `<span>`, so `getByLabel` matches nothing. */
+/** The telemetry checkbox, the only one in the Privacy section. */
 const telemetryToggle = (settings) =>
-  settings
-    .locator(".review-settings-row")
-    .filter({ hasText: "Share anonymous usage data" })
-    .locator('input[type="checkbox"]');
+  settings.getByRole("region", { name: "Privacy" }).getByRole("checkbox");
 
 /** The theme radio group's checked choice, lower-cased to match THEME_SETTINGS. */
 const themeChoice = async (settings) =>
