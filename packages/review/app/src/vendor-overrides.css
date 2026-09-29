@@ -1,0 +1,26 @@
+/* Rules for DOM the canvas does not render itself, so StyleX cannot reach it.
+   Keep them in their original order. */
+
+/* The workbench mounts its diff view and file tree into the diff workspace;
+   its buttons and viewed sections (and the shared viewed box, which the
+   workbench's review.css styles) take the workspace's type and fade. */
+.diff-workspace button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: transparent;
+}
+
+.diff-workspace button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.diff-native-tree > .review-files-editor-tree {
+  width: 100%;
+  height: 100%;
+}
+
+.diff-workspace .is-viewed {
+  opacity: 0.55;
+}

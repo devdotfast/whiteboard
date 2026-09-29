@@ -10,6 +10,7 @@ import {
   coverageProgress,
   coverageSources,
 } from "@review/viewed-coverage";
+import * as stylex from "@stylexjs/stylex";
 import {
   type CSSProperties,
   useCallback,
@@ -24,21 +25,24 @@ import {
 import { AuthoringActivityContext } from "./authoring-activity";
 import { scopeLive } from "./authoring-cursor";
 import { Courier, LensCursorContext, lensRowElement } from "./courier";
-import { compactDiffCount } from "./diff-count";
-import { withErasedBlocks } from "./draw-queue";
+import { compactDiffCount, diffCountStyles } from "./diff-count";
+import { type MotionPhase, withErasedBlocks } from "./draw-queue";
 import { useMotionPhases } from "./draw-queue-provider";
 import { useReviewSession } from "./host/review-session";
+import { lensToggleMarker } from "./markers.stylex";
 import { useReviewDiffFiles } from "./review-diff-files-context";
 import { useReviewLenses } from "./review-lenses";
 import {
   useBottomSheetResize,
   useRightPanelResize,
 } from "./side-panel-resizer";
+import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 import { useTooltip } from "./use-tooltip";
 import { ViewedButton } from "./viewed-button";
 
 // An empty label shows no tooltip, so only a truncated name gets one.
-function LensName({ title }: { title: string }) {
+function LensName({ title, phase }: { title: string; phase?: MotionPhase }) {
   const [truncated, setTruncated] = useState(false);
 
   const tooltip = useTooltip<HTMLSpanElement>(truncated ? title : "", {
@@ -65,13 +69,22 @@ function LensName({ title }: { title: string }) {
   );
 
   return (
-    <span ref={ref} className="diff-lens-name">
+    <span
+      ref={ref}
+      {...stylex.props(styles.name, phase === "relabel" && styles.nameRelabel)}
+    >
       {title}
     </span>
   );
 }
 
-export function DiffCounts({ progress }: { progress: CoverageProgress }) {
+export function DiffCounts({
+  progress,
+  xstyle,
+}: {
+  progress: CoverageProgress;
+  xstyle?: stylex.StyleXStyles;
+}) {
   const { remaining, total, folded } = progress;
 
   const tooltip = useTooltip<HTMLSpanElement>(
@@ -85,7 +98,12 @@ export function DiffCounts({ progress }: { progress: CoverageProgress }) {
   return (
     <span
       ref={tooltip}
-      className={`diff-counts ${progress.state === "viewed" || progress.state === "folded" ? "is-viewed" : ""}`}
+      {...stylex.props(
+        diffCountStyles.counts,
+        (progress.state === "viewed" || progress.state === "folded") &&
+          styles.faded,
+        xstyle,
+      )}
     >
       {progress.state === "viewed" ? (
         "Viewed"
@@ -93,10 +111,10 @@ export function DiffCounts({ progress }: { progress: CoverageProgress }) {
         "Folded"
       ) : (
         <>
-          <span className="diff-count-added">
+          <span {...stylex.props(diffCountStyles.added)}>
             +{compactDiffCount(remaining.additions)}
           </span>
-          <span className="diff-count-removed">
+          <span {...stylex.props(diffCountStyles.removed)}>
             −{compactDiffCount(remaining.deletions)}
           </span>
         </>
@@ -218,13 +236,13 @@ export function ReviewDiffView({
   const percent = total ? Math.round((100 * (total - remaining)) / total) : 0;
 
   return (
-    <div className="diff-workspace" ref={workspaceRef}>
+    <div {...withClass("diff-workspace", styles.workspace)} ref={workspaceRef}>
       <aside
-        className="diff-workspace-sidebar"
+        {...stylex.props(styles.sidebar)}
         style={{ width: sidebarResize.width }}
       >
-        <div className="diff-global-progress">
-          <span>
+        <div {...stylex.props(styles.progress)}>
+          <span {...stylex.props(styles.progressLabel)}>
             {lenses.error &&
             !(lenses.progress && lenses.progress.complete !== false) ? (
               "Counts unavailable"
@@ -234,7 +252,10 @@ export function ReviewDiffView({
                 {lenses.progress && lenses.progress.complete !== false ? (
                   <DiffCounts progress={global} />
                 ) : (
-                  <span className="diff-counts" aria-label="Counting changes">
+                  <span
+                    {...stylex.props(diffCountStyles.counts)}
+                    aria-label="Counting changes"
+                  >
                     …
                   </span>
                 )}
@@ -243,7 +264,7 @@ export function ReviewDiffView({
           </span>
           {lenses.progress && lenses.progress.complete !== false && (
             <span
-              className="diff-progress-ring"
+              {...stylex.props(styles.ring)}
               role="progressbar"
               aria-label="Changed lines viewed"
               aria-valuenow={percent}
@@ -252,8 +273,14 @@ export function ReviewDiffView({
               title={`${total - remaining} of ${total} changed lines viewed or folded`}
             >
               <svg width="18" height="18" viewBox="0 0 20 20">
-                <circle cx="10" cy="10" r="7" />
                 <circle
+                  {...stylex.props(styles.ringTrack)}
+                  cx="10"
+                  cy="10"
+                  r="7"
+                />
+                <circle
+                  {...stylex.props(styles.ringTrack, styles.ringValue)}
                   cx="10"
                   cy="10"
                   r="7"
@@ -265,15 +292,17 @@ export function ReviewDiffView({
             </span>
           )}
         </div>
-        <div className="diff-sidebar-cabinets" ref={cabinetsRef}>
+        <div {...stylex.props(styles.cabinets)} ref={cabinetsRef}>
           <div
-            className="diff-sidebar-lenses"
+            {...withClass("diff-sidebar-lenses", styles.lenses)}
             aria-label="Lenses"
             ref={setLensList}
             style={{ flexBasis: `${(1 - cabinetsResize.fraction) * 100}%` }}
           >
-            <div className="diff-sidebar-heading">Lenses</div>
-            <div className="diff-lens-hint">
+            <div {...stylex.props(styles.heading, styles.lensesHeading)}>
+              Lenses
+            </div>
+            <div {...stylex.props(styles.hint)}>
               Click any lens to filter the diff
             </div>
             {rows.items.map((item) => {
@@ -287,13 +316,29 @@ export function ReviewDiffView({
               return (
                 <section
                   key={item.id}
-                  className={`diff-lens-section ${selected ? "is-expanded" : ""}`}
+                  {...stylex.props(
+                    styles.section,
+                    selected && styles.sectionExpanded,
+                    phase && sectionMotionStyle(phase),
+                  )}
                   data-lens-id={item.id}
                   data-motion={phase}
                 >
-                  <div className="diff-lens-row">
+                  <div
+                    {...stylex.props(
+                      styles.row,
+                      phase === "landing" && styles.rowLanding,
+                      phase === "erasing" && styles.rowErasing,
+                    )}
+                  >
                     <button
-                      className={`diff-lens-toggle ${selected ? "is-active" : ""} ${stats.state === "viewed" ? "is-viewed" : ""} ${empty ? "is-empty" : ""}`}
+                      {...stylex.props(
+                        lensToggleMarker,
+                        styles.toggle,
+                        empty && styles.toggleEmpty,
+                        selected && styles.toggleActive,
+                        stats.state === "viewed" && !selected && styles.faded,
+                      )}
                       aria-pressed={selected}
                       disabled={!!item.unavailable || (empty && !selected)}
                       onClick={() =>
@@ -303,33 +348,61 @@ export function ReviewDiffView({
                       {/* The title sits on the chip, not the toggle, so it
                           never stacks on the counts' own tooltip. */}
                       <span
-                        className="diff-lens-chip"
+                        {...stylex.props(
+                          styles.chip,
+                          selected && styles.chipActive,
+                        )}
                         title={
                           item.unavailable ??
                           (selected ? "Clear lens filter" : undefined)
                         }
                       >
-                        <FilterIcon />
-                        <LensName title={item.title} />
+                        <FilterIcon
+                          xstyle={
+                            selected
+                              ? styles.iconActive
+                              : empty && styles.iconEmpty
+                          }
+                        />
+                        <LensName title={item.title} phase={phase} />
                         {selected && (
-                          <span className="diff-lens-clear" aria-hidden="true">
+                          <span
+                            {...stylex.props(styles.clear)}
+                            aria-hidden="true"
+                          >
                             <svg width="10" height="10" viewBox="0 0 10 10">
-                              <path d="M2 2l6 6M8 2L2 8" />
+                              <path
+                                {...stylex.props(styles.clearMark)}
+                                d="M2 2l6 6M8 2L2 8"
+                              />
                             </svg>
                           </span>
                         )}
                       </span>
                       {item.pending ? (
                         <span
-                          className="diff-counts"
+                          {...stylex.props(
+                            diffCountStyles.counts,
+                            styles.toggleCounts,
+                          )}
                           aria-label="Counting changes"
                         >
                           …
                         </span>
                       ) : empty ? (
-                        <span className="diff-counts">0 files</span>
+                        <span
+                          {...stylex.props(
+                            diffCountStyles.counts,
+                            styles.toggleCounts,
+                          )}
+                        >
+                          0 files
+                        </span>
                       ) : (
-                        <DiffCounts progress={stats} />
+                        <DiffCounts
+                          progress={stats}
+                          xstyle={styles.toggleCounts}
+                        />
                       )}
                     </button>
                     <ViewedButton
@@ -358,10 +431,14 @@ export function ReviewDiffView({
           </div>
           <div
             {...cabinetsResize.separatorProps}
-            className={`side-panel-sheet-resizer diff-cabinets-resizer ${cabinetsResize.isResizing ? "is-resizing" : ""}`}
+            {...withClass(
+              "side-panel-sheet-resizer",
+              styles.cabinetsResizer,
+              cabinetsResize.isResizing && styles.resizing,
+            )}
           />
-          <div className="diff-sidebar-files">
-            <div className="diff-sidebar-heading diff-files-heading">
+          <div {...stylex.props(styles.files)}>
+            <div {...stylex.props(styles.heading, styles.filesHeading)}>
               Files <span aria-hidden="true">·</span>{" "}
               {lenses.progress
                 ? lens
@@ -381,12 +458,12 @@ export function ReviewDiffView({
                 : "…"}
             </div>
             <div
-              className="diff-native-tree"
+              {...withClass("diff-native-tree", styles.nativeTree)}
               ref={setFullTree}
               style={lens ? { display: "none" } : undefined}
             />
             <div
-              className="diff-native-tree"
+              {...withClass("diff-native-tree", styles.nativeTree)}
               ref={setLensTree}
               style={!lens ? { display: "none" } : undefined}
             />
@@ -395,15 +472,20 @@ export function ReviewDiffView({
       </aside>
       <div
         {...sidebarResize.separatorProps}
-        className={`side-panel-resizer diff-sidebar-resizer ${sidebarResize.isResizing ? "is-resizing" : ""}`}
+        {...withClass(
+          "side-panel-resizer",
+          styles.sidebarResizer,
+          sidebarResize.isResizing && styles.resizing,
+        )}
       />
-      <div className="diff-workspace-editor">
+      <div {...stylex.props(styles.editor)}>
         {fullTree && (
           <NativeDiffView
             treeContainer={fullTree}
             progress={fullProgress}
             onToggleViewed={(path) => markFile(path, false)}
             hidden={!!lens}
+            inWorkspace
           />
         )}
         {lens && lensTree && (
@@ -412,10 +494,11 @@ export function ReviewDiffView({
             treeContainer={lensTree}
             progress={lensProgress}
             onToggleViewed={(path) => markFile(path, true)}
+            inWorkspace
           />
         )}
         {lenses.error && (
-          <div className="diff-workspace-error" role="alert">
+          <div {...stylex.props(styles.error)} role="alert">
             {lenses.error}
           </div>
         )}
@@ -432,6 +515,7 @@ function NativeDiffView({
   progress,
   onToggleViewed,
   hidden = false,
+  inWorkspace = false,
 }: {
   scope?: ReviewCommitScope;
   revealFile?: string;
@@ -440,6 +524,8 @@ function NativeDiffView({
   progress?: ReviewDiffProgress;
   onToggleViewed?(path: string): void;
   hidden?: boolean;
+  /** Fills the workspace's editor column. */
+  inWorkspace?: boolean;
 }) {
   const session = useReviewSession();
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
@@ -499,7 +585,10 @@ function NativeDiffView({
     <>
       <div
         ref={setContainer}
-        className="review-diff-view-host"
+        {...withClass(
+          "review-diff-view-host",
+          inWorkspace && styles.hostInWorkspace,
+        )}
         style={hidden ? { display: "none" } : undefined}
       />
       {!hidden && error && (
@@ -525,10 +614,10 @@ function useLensRows<Item extends { id: string }>(items: Item[]) {
   return { items: shown, phases };
 }
 
-function FilterIcon() {
+function FilterIcon({ xstyle }: { xstyle?: stylex.StyleXStyles }) {
   return (
     <svg
-      className="diff-lens-icon"
+      {...stylex.props(styles.icon, xstyle)}
       width="14"
       height="14"
       viewBox="0 0 16 16"
@@ -542,3 +631,360 @@ function FilterIcon() {
     </svg>
   );
 }
+
+// The lens list draws like the document: a new row lands in a slot and wipes
+// in, a retitle recomposes the name, a removed row is erased and the list
+// closes over it. Reduced motion shows each phase's finished frame. The wipe
+// and erase animate custom properties registered in authoring-motion.css,
+// so they use its keyframes.
+const EASE = "cubic-bezier(0.2, 0.7, 0.2, 1)";
+
+const REDUCED = "@media (prefers-reduced-motion: reduce)";
+
+const landSlot = stylex.keyframes({
+  "0%": {
+    outline: `1px dashed ${tokens.ruleSoft}`,
+    outlineOffset: "-1px",
+    backgroundColor: tokens.transparent,
+  },
+  "38%": {
+    outline: `1px solid ${tokens.accent}`,
+    outlineOffset: "-1px",
+    backgroundColor: tokens.markerTint,
+  },
+  "70%": {
+    outline: `1px solid ${tokens.accent}`,
+    backgroundColor: tokens.markerTint,
+  },
+  "100%": {
+    outline: `1px solid ${tokens.transparent}`,
+    outlineOffset: "-1px",
+    backgroundColor: tokens.transparent,
+  },
+});
+
+const attention = stylex.keyframes({
+  from: {
+    outlineColor: tokens.transparent,
+    backgroundColor: tokens.transparent,
+  },
+});
+
+const collapse = stylex.keyframes({
+  from: { height: "auto", marginBlock: 0 },
+  to: { height: 0, marginBlock: 0 },
+});
+
+const relabel = stylex.keyframes({
+  from: { opacity: 0, clipPath: "inset(0 100% 0 0)" },
+  to: { opacity: 1, clipPath: "inset(0 0 0 0)" },
+});
+
+const styles = stylex.create({
+  workspace: {
+    display: "flex",
+    minHeight: 0,
+    height: "100%",
+    color: tokens.ink,
+    font: `11px/1.5 ${tokens.fontMono}`,
+  },
+  // The sidebar is the tray.
+  sidebar: {
+    width: "320px",
+    minWidth: "250px",
+    flexShrink: 0,
+    overflow: "hidden",
+    display: "flex",
+    flexDirection: "column",
+    backgroundColor: tokens.tray,
+    borderRightWidth: "1px",
+    borderRightStyle: "solid",
+    borderRightColor: tokens.rule,
+  },
+  progress: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
+    flexShrink: 0,
+    minHeight: "52px",
+    padding: "0 14px 0 16px",
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.rule,
+    color: tokens.inkMuted,
+    fontSize: "11px",
+  },
+  progressLabel: {
+    display: "flex",
+    alignItems: "center",
+    gap: "9px",
+  },
+  ring: {
+    display: "flex",
+    alignItems: "center",
+    gap: "5px",
+    fontVariantNumeric: "tabular-nums",
+  },
+  ringTrack: {
+    fill: "none",
+    stroke: tokens.well,
+    strokeWidth: "2.5",
+  },
+  ringValue: {
+    transform: "rotate(-90deg)",
+    transformOrigin: "10px 10px",
+    stroke: tokens.accent,
+    strokeLinecap: "round",
+  },
+  cabinets: {
+    display: "flex",
+    flexDirection: "column",
+    flex: 1,
+    minHeight: 0,
+  },
+  // The courier stands on the row being written.
+  lenses: {
+    flex: "0 0 auto",
+    minHeight: 0,
+    overflow: "auto",
+    position: "relative",
+    paddingTop: { default: null, ":has(> .courier)": "14px" },
+  },
+  files: {
+    display: "flex",
+    flexDirection: "column",
+    flex: 1,
+    minHeight: 0,
+    overflow: "hidden",
+  },
+  heading: {
+    textTransform: "uppercase",
+    padding: "10px 14px 6px 16px",
+    color: tokens.inkFaint,
+    fontSize: "11px",
+    letterSpacing: tokens.wbCaps,
+  },
+  lensesHeading: {
+    paddingBottom: "2px",
+  },
+  filesHeading: {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  hint: {
+    padding: "0 14px 6px 16px",
+    color: tokens.inkFaint,
+    font: `11px/16px ${tokens.fontMono}`,
+  },
+  nativeTree: {
+    flex: 1,
+    minHeight: 0,
+    position: "relative",
+  },
+  section: {
+    borderBottomWidth: 0,
+    borderBottomStyle: "none",
+    borderBottomColor: "currentcolor",
+  },
+  // The section wears no wash; the pressed toggle already says open.
+  sectionExpanded: {
+    backgroundColor: tokens.transparent,
+  },
+  row: {
+    display: "flex",
+    alignItems: "center",
+    paddingRight: "10px",
+    gap: "7px",
+  },
+  rowLanding: {
+    maskImage: {
+      default:
+        "linear-gradient(90deg, #000 calc(var(--wb-wipe) - 8%), transparent var(--wb-wipe))",
+      [REDUCED]: "none",
+    },
+    animationName: { default: "wb-wipe", [REDUCED]: "none" },
+    animationDuration: { default: "340ms", [REDUCED]: "0s" },
+    animationTimingFunction: { default: EASE, [REDUCED]: "ease" },
+    animationDelay: { default: "180ms", [REDUCED]: "0s" },
+    animationFillMode: { default: "both", [REDUCED]: "none" },
+  },
+  rowErasing: {
+    animationName: { default: "wb-erase", [REDUCED]: "none" },
+    animationDuration: { default: "320ms", [REDUCED]: "0s" },
+    animationTimingFunction: { default: "linear", [REDUCED]: "ease" },
+    animationFillMode: { default: "forwards", [REDUCED]: "none" },
+    opacity: 0,
+  },
+  toggle: {
+    display: "flex",
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+    gap: "8px",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    textAlign: "left",
+    padding: "3px 4px 3px 8px",
+    font: "inherit",
+    color: "inherit",
+    cursor: "pointer",
+    backgroundColor: { default: "transparent", ":hover": tokens.well },
+    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
+    outlineOffset: { default: null, ":focus-visible": "-2px" },
+  },
+  // A lens with no changes (usually Uncategorized) has nothing to filter to.
+  toggleEmpty: {
+    color: tokens.inkFaint,
+    cursor: "default",
+    backgroundColor: "transparent",
+  },
+  toggleActive: {
+    color: tokens.ink,
+    fontWeight: 600,
+    backgroundColor: "transparent",
+  },
+  // The filter outranks the viewed fade; the checkbox beside it says viewed.
+  faded: {
+    opacity: 0.55,
+  },
+  toggleCounts: {
+    marginLeft: "auto",
+  },
+  // A selected lens is a filter chip around its funnel, name and clear mark;
+  // the counts stay outside it so they keep their column.
+  chip: {
+    display: "flex",
+    minWidth: 0,
+    alignItems: "center",
+    gap: "8px",
+    height: "24px",
+    padding: "0 8px",
+    borderRadius: "999px",
+  },
+  chipActive: {
+    paddingRight: "4px",
+    backgroundColor: tokens.markerTint,
+  },
+  icon: {
+    flexShrink: 0,
+    color: tokens.inkMuted,
+  },
+  iconActive: {
+    color: "inherit",
+    fill: "currentColor",
+  },
+  iconEmpty: {
+    color: "inherit",
+  },
+  name: {
+    minWidth: 0,
+    flex: "0 1 auto",
+    lineHeight: 1.5,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  nameRelabel: {
+    animationName: { default: relabel, [REDUCED]: "none" },
+    animationDuration: { default: "420ms", [REDUCED]: "0s" },
+    animationTimingFunction: { default: "steps(14)", [REDUCED]: "ease" },
+    animationFillMode: { default: "both", [REDUCED]: "none" },
+  },
+  clear: {
+    display: "inline-flex",
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "18px",
+    height: "18px",
+    borderRadius: "999px",
+    backgroundColor: {
+      default: null,
+      [stylex.when.ancestor(":hover", lensToggleMarker)]: tokens.markerGlow,
+    },
+  },
+  clearMark: {
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.4",
+    strokeLinecap: "round",
+  },
+  // The hit areas overlap adjacent panes; the visible dividers stay one
+  // pixel, aligned to the pane edge rather than straddling two pixels.
+  sidebarResizer: {
+    flex: "0 0 10px",
+    margin: "0 -5px",
+    zIndex: 2,
+    "::before": {
+      transform: "none",
+    },
+  },
+  cabinetsResizer: {
+    display: "block",
+    margin: "-5px 0",
+    zIndex: 2,
+  },
+  resizing: {
+    "::before": {
+      backgroundColor: tokens.inkFaint,
+    },
+  },
+  editor: {
+    position: "relative",
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    display: "flex",
+    flexDirection: "column",
+  },
+  hostInWorkspace: {
+    flex: 1,
+    height: "auto",
+  },
+  error: {
+    padding: "8px 12px",
+    color: tokens.changeRemoved,
+  },
+});
+
+const sectionMotion = stylex.create({
+  queued: {
+    visibility: "hidden",
+  },
+  landing: {
+    animationName: { default: landSlot, [REDUCED]: "none" },
+    animationDuration: { default: "520ms", [REDUCED]: "0s" },
+    animationTimingFunction: { default: EASE, [REDUCED]: "ease" },
+    animationFillMode: { default: "both", [REDUCED]: "none" },
+  },
+  attention: {
+    outline: `1px solid ${tokens.accent}`,
+    outlineOffset: "-1px",
+    backgroundColor: tokens.markerTint,
+    animationName: { default: attention, [REDUCED]: "none" },
+    animationDuration: { default: "250ms", [REDUCED]: "0s" },
+    animationTimingFunction: { default: "ease-out", [REDUCED]: "ease" },
+    animationFillMode: { default: "both", [REDUCED]: "none" },
+  },
+  erasing: {
+    overflow: "clip",
+    interpolateSize: "allow-keywords",
+    animationName: { default: collapse, [REDUCED]: "none" },
+    animationDuration: { default: "200ms", [REDUCED]: "0s" },
+    animationTimingFunction: { default: EASE, [REDUCED]: "ease" },
+    animationDelay: { default: "320ms", [REDUCED]: "0s" },
+    animationFillMode: { default: "both", [REDUCED]: "none" },
+    display: { default: null, [REDUCED]: "none" },
+  },
+});
+
+const sectionMotionStyle = (phase: MotionPhase) =>
+  phase === "queued" ||
+  phase === "landing" ||
+  phase === "attention" ||
+  phase === "erasing"
+    ? sectionMotion[phase]
+    : null;

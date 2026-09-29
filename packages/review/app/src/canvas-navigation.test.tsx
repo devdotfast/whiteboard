@@ -129,7 +129,7 @@ it("resumes the view and lens a reader left, on the version they left them", asy
 
   const lensToggle = () =>
     container.querySelector<HTMLButtonElement>(
-      '[data-lens-id="api"] .diff-lens-toggle',
+      '[data-lens-id="api"] button[aria-pressed]',
     );
 
   await open();

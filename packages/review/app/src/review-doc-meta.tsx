@@ -115,7 +115,11 @@ export function ReviewDocumentMetaLine({
       key: "changes",
       node: (
         <span className="review-header-stats">
-          <DiffCount additions={diff.additions} deletions={diff.deletions} />
+          <DiffCount
+            additions={diff.additions}
+            deletions={diff.deletions}
+            large
+          />
           {diff.additions + diff.deletions > 0 ? (
             <span className="review-header-change-bar" aria-hidden="true">
               {diff.additions > 0 ? (

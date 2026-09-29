@@ -1,13 +1,16 @@
 import type { DiffSelection } from "@review/lens-selection";
 import type { CallStackDiffBlock } from "@review/review-api/blocks/call_stack_diff";
+import * as stylex from "@stylexjs/stylex";
 import { useState } from "react";
 
 import { type CallTreeStop, callTreeStops } from "./call-tree";
 import { DiagramHeader } from "./diagram-header";
-import { compactDiffCount as compact } from "./diff-count";
+import { compactDiffCount as compact, diffCountStyles } from "./diff-count";
 import { useReviewSession } from "./host/review-session";
+import { callEdgeMarker } from "./markers.stylex";
 import { useReviewLenses } from "./review-lenses";
 import { useReviewPanel } from "./review-panel";
+import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
 
 // Presentation retained from review-experimental's DiffWorkspace.
@@ -29,11 +32,8 @@ export function CallTree({
   const active = currentStopId ?? clicked;
 
   return (
-    <nav
-      className="review-lens-sidebar review-lens-sidebar--callstack"
-      aria-label="Call tree"
-    >
-      <div className="review-call-tree">
+    <nav aria-label="Call tree">
+      <div {...stylex.props(styles.tree)}>
         {stops.map((stop, index) => {
           const availability = requireReady
             ? lenses?.availability(stop.sources)
@@ -52,10 +52,7 @@ export function CallTree({
                   : "unchanged";
 
           return (
-            <div
-              className={`review-call-entry ${stats?.state === "viewed" ? "is-viewed" : ""}`}
-              key={stop.id}
-            >
+            <div {...stylex.props(styles.entry)} key={stop.id}>
               <TreeConnectors
                 stop={stop}
                 parentDistance={
@@ -78,7 +75,10 @@ export function CallTree({
                   paddingLeft: 14 + (stop.depth + 1) * 16,
                   opacity: unavailable ? 0.45 : undefined,
                 }}
-                className={`review-call-row review-call-row--${change}`}
+                {...stylex.props(
+                  styles.row,
+                  stop.id === active && styles.rowCurrent,
+                )}
                 data-review-anchor-id={stop.anchorId}
                 aria-current={stop.id === active ? "true" : undefined}
                 aria-label={`${stop.label}, ${change}`}
@@ -94,15 +94,22 @@ export function CallTree({
                   onReveal(stop.source, stop.id, stop.anchorId);
                 }}
               >
-                <span className="review-call-name">{stop.label}</span>
+                <span
+                  {...stylex.props(
+                    styles.name,
+                    change !== "unchanged" && styles[change],
+                  )}
+                >
+                  {stop.label}
+                </span>
                 {unavailable && (
-                  <span className="review-lens-stats">
+                  <span {...stylex.props(styles.stats)}>
                     {availability === "pending" ? "…" : "Unavailable"}
                   </span>
                 )}
                 {!unavailable && stats && change !== "unchanged" && (
                   <span
-                    className="review-lens-stats"
+                    {...stylex.props(styles.stats)}
                     title={`Remaining +${stats.remaining.additions} −${stats.remaining.deletions} · Total +${stats.total.additions} −${stats.total.deletions}`}
                   >
                     {stats.state === "viewed" ? (
@@ -111,10 +118,10 @@ export function CallTree({
                       "Folded"
                     ) : (
                       <>
-                        <span className="diff-count-added">
+                        <span {...stylex.props(diffCountStyles.added)}>
                           +{compact(stats.remaining.additions)}
                         </span>
-                        <span className="diff-count-removed">
+                        <span {...stylex.props(diffCountStyles.removed)}>
                           −{compact(stats.remaining.deletions)}
                         </span>
                       </>
@@ -145,7 +152,7 @@ function TreeConnectors({
 
   return (
     <svg
-      className="review-call-connectors"
+      {...stylex.props(styles.connectors)}
       width={width}
       height="26"
       viewBox={`0 0 ${width} 26`}
@@ -154,18 +161,23 @@ function TreeConnectors({
         continues ? (
           <path
             key={index}
+            {...stylex.props(styles.path)}
             d={`M ${index === 0 ? 0.5 : index * 16 + 6} 0 V 26`}
           />
         ) : null,
       )}
-      {!stop.last ? <path d={`M ${branchX} 13 V 26`} /> : null}
+      {!stop.last ? (
+        <path {...stylex.props(styles.path)} d={`M ${branchX} 13 V 26`} />
+      ) : null}
       <g
         role={stop.callSite ? "button" : undefined}
         tabIndex={stop.callSite ? 0 : undefined}
         aria-label={
           stop.callSite ? `Go to call site of ${stop.label}` : undefined
         }
-        className={stop.callSite ? "review-call-edge" : undefined}
+        {...(stop.callSite
+          ? stylex.props(callEdgeMarker, styles.edge)
+          : undefined)}
         onClick={stop.callSite ? onCallSite : undefined}
         onKeyDown={
           stop.callSite
@@ -183,15 +195,18 @@ function TreeConnectors({
             ? `Go to call site of ${stop.label}`
             : "No call-site location recorded"}
         </title>
-        <path d={`M ${branchX} 0 V 13 H ${width}`} />
+        <path
+          {...stylex.props(styles.path)}
+          d={`M ${branchX} 0 V 13 H ${width}`}
+        />
         {stop.callSite ? (
           <>
             <path
-              className="review-call-edge-highlight"
+              {...stylex.props(styles.path, styles.edgeHighlight)}
               d={`M ${branchX} ${-(parentDistance - 1) * 26} V 13 H ${width}`}
             />
             <path
-              className="review-call-edge-hit"
+              {...stylex.props(styles.path, styles.edgeHit)}
               d={`M ${branchX} 0 V 13 H ${width}`}
             />
           </>
@@ -207,10 +222,7 @@ export function DocumentCallTree({ block }: { block: CallStackDiffBlock }) {
   const openPeek = useReviewPanel((state) => state.openPeek);
 
   return (
-    <figure
-      className="review-document-call-tree"
-      data-review-call-stack="ready"
-    >
+    <figure {...stylex.props(styles.figure)} data-review-call-stack="ready">
       <DiagramHeader kind="Call tree" title={block.title ?? "Call tree"} />
       <CallTree
         block={block}
@@ -235,3 +247,118 @@ export function DocumentCallTree({ block }: { block: CallStackDiffBlock }) {
     </figure>
   );
 }
+
+const styles = stylex.create({
+  figure: {
+    margin: "14px 0",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.rule,
+    borderRadius: "8px",
+    overflow: "hidden",
+    backgroundColor: tokens.surface,
+  },
+  tree: {
+    minWidth: "100%",
+    width: "100%",
+    padding: "6px 0 12px",
+  },
+  // A hovered or focused call-site edge paints over the rows below it.
+  entry: {
+    position: "relative",
+    zIndex: {
+      default: null,
+      [stylex.when.descendant(":hover", callEdgeMarker)]: 1,
+      [stylex.when.descendant(":focus-visible", callEdgeMarker)]: 1,
+    },
+  },
+  row: {
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    width: "100%",
+    height: "26px",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    padding: "0 12px 0 14px",
+    backgroundColor: {
+      default: "transparent",
+      ":hover:not(:disabled)": `color-mix(in srgb, ${tokens.ink} 3%, transparent)`,
+    },
+    font: `12px/26px ${tokens.fontMono}`,
+    textAlign: "left",
+    whiteSpace: "nowrap",
+  },
+  rowCurrent: {
+    backgroundColor: tokens.markerTint,
+    fontWeight: 600,
+  },
+  name: {
+    flex: "0 1 auto",
+    minWidth: "32px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  added: {
+    color: tokens.changeAdded,
+  },
+  removed: {
+    color: tokens.changeRemoved,
+    textDecorationLine: "line-through",
+    textDecorationColor: `color-mix(in srgb, ${tokens.changeRemoved} 50%, transparent)`,
+  },
+  modified: {
+    color: tokens.changeModified,
+  },
+  stats: {
+    display: "inline-flex",
+    gap: "5px",
+    fontVariantNumeric: "tabular-nums",
+    flexShrink: 0,
+    marginLeft: "auto",
+    paddingLeft: "12px",
+    fontSize: "10px",
+  },
+  connectors: {
+    flexShrink: 0,
+    alignSelf: "stretch",
+    position: "absolute",
+    left: "14px",
+    top: 0,
+    zIndex: 1,
+    pointerEvents: "none",
+    overflow: "visible",
+  },
+  path: {
+    stroke: tokens.ruleSoft,
+    fill: "none",
+    strokeWidth: "1",
+  },
+  edge: {
+    pointerEvents: "auto",
+    cursor: "pointer",
+  },
+  edgeHit: {
+    stroke: "transparent",
+    strokeWidth: "10px",
+  },
+  edgeHighlight: {
+    visibility: {
+      default: "hidden",
+      [stylex.when.ancestor(":hover", callEdgeMarker)]: "visible",
+      [stylex.when.ancestor(":focus-visible", callEdgeMarker)]: "visible",
+    },
+    pointerEvents: "none",
+    stroke: {
+      default: tokens.ruleSoft,
+      [stylex.when.ancestor(":hover", callEdgeMarker)]: tokens.ink,
+      [stylex.when.ancestor(":focus-visible", callEdgeMarker)]: tokens.ink,
+    },
+    strokeWidth: {
+      default: "1",
+      [stylex.when.ancestor(":hover", callEdgeMarker)]: "2px",
+      [stylex.when.ancestor(":focus-visible", callEdgeMarker)]: "2px",
+    },
+  },
+});
