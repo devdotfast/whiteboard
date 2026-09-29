@@ -349,7 +349,7 @@ export function sourceReferences(
   );
 }
 
-/** Includes lenses and software maps whose source ranges are not inline. */
+/** Includes lenses and maps without inline ranges. */
 export function hasCodeReferences(review: {
   document: Block[];
   lenses?: readonly Lens[];
