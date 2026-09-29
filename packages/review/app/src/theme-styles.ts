@@ -5,16 +5,10 @@ import { tokens } from "./tokens.stylex";
 // The palette for everything below the canvas root. The root's own box and
 // dark tokens stay in global.css: only :scope reaches the @scope root.
 export const themeStyles = stylex.create({
-  app: {
-    position: "relative",
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) 0 0",
-    height: "100%",
-    minHeight: "0",
-    overflow: "hidden",
-    color: tokens.ink,
-    backgroundColor: tokens.bg,
-    colorScheme: "dark",
+  // Custom properties every canvas surface reads. Applied wherever the
+  // light class can sit on the same element: .review-app and the Desktop
+  // entry host that renders home, settings and welcome.
+  vars: {
     "--tutorial-ring": "color-mix(in srgb, var(--accent) 82%, white)",
     "--tutorial-ring-glow":
       "color-mix(in srgb, var(--accent) 44%, transparent)",
@@ -72,7 +66,6 @@ export const themeStyles = stylex.create({
     "--diagram-border": "var(--rule)",
     "--diagram-surface": "var(--surface)",
     "--diagram-canvas-bg": "var(--bg)",
-    fontFamily: tokens.fontMono,
     "--review-page-top": "20px",
     // Chrome metrics. One size for every control in the topbar, the view
     // switcher included; two type sizes: the label size for anything you read,
@@ -84,6 +77,18 @@ export const themeStyles = stylex.create({
     "--chrome-hover-bg": "var(--well)",
     "--chrome-border": "var(--rule)",
     "--wb-caps": "0.08em",
+  },
+  app: {
+    position: "relative",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) 0 0",
+    height: "100%",
+    minHeight: "0",
+    overflow: "hidden",
+    color: tokens.ink,
+    backgroundColor: tokens.bg,
+    colorScheme: "dark",
+    fontFamily: tokens.fontMono,
   },
   light: {
     "--ghost": "#cdd1d8",

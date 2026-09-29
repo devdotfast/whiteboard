@@ -1147,6 +1147,7 @@ export function softwareMapOverlayProps(settings: {
 }) {
   return withClass(
     softwareMapOverlayClassName(settings),
+    themeStyles.vars,
     themeStyles.app,
     settings.theme === "light" && themeStyles.light,
     styles.overlay,

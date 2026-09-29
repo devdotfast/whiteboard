@@ -168,7 +168,8 @@ export function mountReviewCanvas(
   // must live on an in-scope descendant, so all content renders inside this
   // host element.
   const themeHost = container.ownerDocument.createElement("div");
-  themeHost.className = stylex.props(styles.themeHost).className ?? "";
+  themeHost.className =
+    stylex.props(themeStyles.vars, styles.themeHost).className ?? "";
 
   const lightClasses = [
     "review-app--theme-light",

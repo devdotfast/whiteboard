@@ -507,6 +507,7 @@ function ReviewLayoutContent({
       ref={appRef}
       {...withClass(
         appClassName,
+        themeStyles.vars,
         themeStyles.app,
         debugSettings.theme === "light" && themeStyles.light,
         rightPanelOpen && shellStyles.appPeekOpen,
