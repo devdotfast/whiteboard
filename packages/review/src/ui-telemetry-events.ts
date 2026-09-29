@@ -139,6 +139,7 @@ export const SETTING_NAME = [
   "structural_diff",
   "theme",
   "ctrl_tab",
+  "ready_notification",
 ] as const;
 
 export const REVIEW_OPENED_VIA = ["home", "cli", "other"] as const;

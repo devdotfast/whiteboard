@@ -20,7 +20,7 @@
 import { localize } from '../../nls.js';
 import { Registry } from '../../platform/registry/common/platform.js';
 import { ConfigurationScope, Extensions, type IConfigurationRegistry } from '../../platform/configuration/common/configurationRegistry.js';
-import { REVIEW_CTRL_TAB_CHOICES, REVIEW_CTRL_TAB_SETTING, REVIEW_KEYMAPS, REVIEW_KEYMAP_SETTING, REVIEW_SOFTWARE_MAP_SETTING, REVIEW_STRUCTURAL_DIFF_SETTING, REVIEW_TELEMETRY_SETTING, curatedExtensionConfigurationDefaults, reviewConfigurationDefaults } from './reviewConfigurationDefaults.js';
+import { REVIEW_CTRL_TAB_CHOICES, REVIEW_CTRL_TAB_SETTING, REVIEW_KEYMAPS, REVIEW_KEYMAP_SETTING, REVIEW_READY_NOTIFICATION_CHOICES, REVIEW_READY_NOTIFICATION_SETTING, REVIEW_SOFTWARE_MAP_SETTING, REVIEW_STRUCTURAL_DIFF_SETTING, REVIEW_TELEMETRY_SETTING, curatedExtensionConfigurationDefaults, reviewConfigurationDefaults } from './reviewConfigurationDefaults.js';
 
 const configurationRegistry = Registry.as<IConfigurationRegistry>(Extensions.Configuration);
 
@@ -45,6 +45,17 @@ configurationRegistry.registerConfiguration({
 			],
 			default: 'recent',
 			description: localize('review.tabs.ctrlTab', "What Ctrl+Tab does."),
+		},
+		[REVIEW_READY_NOTIFICATION_SETTING]: {
+			type: 'string',
+			enum: [...REVIEW_READY_NOTIFICATION_CHOICES],
+			enumDescriptions: [
+				localize('review.notifications.reviewReady.notificationAndBadge', "Show a notification and badge the Dock icon."),
+				localize('review.notifications.reviewReady.notification', "Show a notification only."),
+				localize('review.notifications.reviewReady.off', "Don't notify."),
+			],
+			default: 'notificationAndBadge',
+			description: localize('review.notifications.reviewReady', "How Whiteboard tells you an agent finished a review."),
 		},
 		[REVIEW_TELEMETRY_SETTING]: {
 			type: 'boolean',

@@ -409,6 +409,11 @@ export type ReviewKeymapChoice = (typeof REVIEW_KEYMAP_CHOICES)[number];
 
 export type ReviewCtrlTabChoice = "recent" | "next";
 
+export type ReviewReadyNotificationChoice =
+  | "notificationAndBadge"
+  | "notification"
+  | "off";
+
 export const REVIEW_TUTORIAL_STEP_IDS = [
   "openPeek",
   "gotoDefinition",
@@ -509,6 +514,10 @@ export interface ReviewCanvasSettingsContent {
   setKeymap(choice: ReviewKeymapChoice): Promise<ReviewKeymapChoice>;
   ctrlTab: ReviewCtrlTabChoice;
   setCtrlTab(choice: ReviewCtrlTabChoice): Promise<ReviewCtrlTabChoice>;
+  readyNotification: ReviewReadyNotificationChoice;
+  setReadyNotification(
+    choice: ReviewReadyNotificationChoice,
+  ): Promise<ReviewReadyNotificationChoice>;
   softwareMapEnabled: boolean;
   setSoftwareMapEnabled(enabled: boolean): Promise<boolean>;
   structuralDiffEnabled: boolean;

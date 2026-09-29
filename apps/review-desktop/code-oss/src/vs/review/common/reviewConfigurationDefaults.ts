@@ -30,6 +30,8 @@ export const REVIEW_KEYMAPS = ['none', 'vim', 'emacs', 'sublime'] as const;
 export type ReviewKeymap = typeof REVIEW_KEYMAPS[number];
 export const REVIEW_CTRL_TAB_SETTING = 'review.tabs.ctrlTab';
 export const REVIEW_CTRL_TAB_CHOICES = ['recent', 'next'] as const;
+export const REVIEW_READY_NOTIFICATION_SETTING = 'review.notifications.reviewReady';
+export const REVIEW_READY_NOTIFICATION_CHOICES = ['notificationAndBadge', 'notification', 'off'] as const;
 
 export const reviewConfigurationDefaults = {
 	[REVIEW_SOFTWARE_MAP_SETTING]: false,

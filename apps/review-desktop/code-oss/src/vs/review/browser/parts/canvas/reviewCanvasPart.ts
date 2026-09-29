@@ -46,6 +46,7 @@ import {
 	REVIEW_CTRL_TAB_SETTING,
 	REVIEW_KEYMAP_SETTING,
 	REVIEW_KEYMAPS,
+	REVIEW_READY_NOTIFICATION_SETTING,
 	REVIEW_SOFTWARE_MAP_SETTING,
 	REVIEW_STRUCTURAL_DIFF_SETTING,
 	REVIEW_TELEMETRY_SETTING,
@@ -65,6 +66,7 @@ import type {
 	ReviewCliInstallStatus,
 	ReviewCtrlTabChoice,
 	ReviewKeymapChoice,
+	ReviewReadyNotificationChoice,
 	ReviewRuntimeConfig,
 	ReviewSurfaceEvent,
 	ReviewTheme,
@@ -790,6 +792,15 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.configurationService.updateValue(REVIEW_CTRL_TAB_SETTING, choice, ConfigurationTarget.USER);
 				return this.currentCtrlTab();
 			},
+			readyNotification: this.currentReadyNotification(),
+			setReadyNotification: async (choice) => {
+				this.reviewTelemetryService.capture("setting_changed", {
+					setting: "ready_notification",
+					enabled: choice !== "off",
+				});
+				await this.configurationService.updateValue(REVIEW_READY_NOTIFICATION_SETTING, choice, ConfigurationTarget.USER);
+				return this.currentReadyNotification();
+			},
 			softwareMapEnabled: this.currentSoftwareMapEnabled(),
 			setSoftwareMapEnabled: async (enabled) => {
 				this.reviewTelemetryService.capture("setting_changed", {
@@ -843,6 +854,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	private currentCtrlTab(): ReviewCtrlTabChoice {
 		return this.configurationService.getValue<ReviewCtrlTabChoice>(REVIEW_CTRL_TAB_SETTING) === "next" ? "next" : "recent";
+	}
+
+	private currentReadyNotification(): ReviewReadyNotificationChoice {
+		return this.configurationService.getValue<ReviewReadyNotificationChoice>(REVIEW_READY_NOTIFICATION_SETTING) ?? "notificationAndBadge";
 	}
 
 	private currentStructuralDiffEnabled(): boolean {

@@ -5,6 +5,7 @@ import type {
   ReviewCliInstallStatus,
   ReviewCtrlTabChoice,
   ReviewKeymapChoice,
+  ReviewReadyNotificationChoice,
   ReviewThemeChoice,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
@@ -36,6 +37,13 @@ const CTRL_TAB_LABELS: Record<ReviewCtrlTabChoice, string> = {
   next: "Next tab",
 };
 
+const READY_NOTIFICATION_LABELS: Record<ReviewReadyNotificationChoice, string> =
+  {
+    notificationAndBadge: "Notification and badge",
+    notification: "Notification only",
+    off: "Off",
+  };
+
 /**
  * The Settings page. It opens from the application menu (Preferences →
  * Settings...), the command palette, or ⌘,. Reuses the Home page shell so the
@@ -56,6 +64,10 @@ export function SettingsPage({
   const [theme, setTheme] = useState(settings.theme);
   const [keymap, setKeymap] = useState(settings.keymap);
   const [ctrlTab, setCtrlTab] = useState(settings.ctrlTab);
+
+  const [readyNotification, setReadyNotification] = useState(
+    settings.readyNotification,
+  );
 
   const [softwareMapEnabled, setSoftwareMapEnabled] = useState(
     settings.softwareMapEnabled,
@@ -226,6 +238,27 @@ export function SettingsPage({
                     "ctrl-tab",
                     () => settings.setCtrlTab(choice),
                     setCtrlTab,
+                  )
+                }
+              />
+            </Row>
+          </Section>
+
+          <Section label="Notifications">
+            <Row
+              label="Review ready"
+              description="When an agent finishes a review you aren't looking at."
+            >
+              <Choice
+                label="Review ready"
+                value={readyNotification}
+                labels={READY_NOTIFICATION_LABELS}
+                disabled={busy !== null}
+                onChange={(choice) =>
+                  void run(
+                    "ready-notification",
+                    () => settings.setReadyNotification(choice),
+                    setReadyNotification,
                   )
                 }
               />
