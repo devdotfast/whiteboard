@@ -17,6 +17,7 @@ import {
   checkReferences,
   documentSchema,
   elements,
+  hasCodeReferences,
   resourceReference,
   resourceReferences,
   sourceReferences,
@@ -45,14 +46,7 @@ export function digestBytes(bytes: Uint8Array): string {
 export function validateShareSources(
   snapshot: Pick<Snapshot, "pins" | "document" | "lenses">,
 ) {
-  if (
-    !snapshot.pins &&
-    (sourceReferences(snapshot.document).length ||
-      snapshot.lenses?.length ||
-      resourceReferences(snapshot.document).some(
-        (block) => block.type === "software_map",
-      ))
-  )
+  if (!snapshot.pins && hasCodeReferences(snapshot))
     throw new ReviewInputError(
       "Reviews with code references need source pins before sharing.",
       409,
