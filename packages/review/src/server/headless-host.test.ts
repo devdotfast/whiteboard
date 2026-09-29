@@ -10,6 +10,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
+import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -748,42 +749,56 @@ it.each([false, true])(
   },
 );
 
+/** A registered repository with an uncommitted change, reviewed as a worktree and as commits. */
+async function reviewsOfBothKinds(client: ReviewApiClient) {
+  const repo = await repository();
+  await writeFile(
+    path.join(repo.directory, "example.ts"),
+    "export const value = 3;\n",
+  );
+
+  const { id: repositoryId } = await client.post<{ id: string }>(
+    "/repositories",
+    { path: repo.directory },
+  );
+
+  const create = async (target: JsonValue) =>
+    (
+      await client.post<Result>("/commands", {
+        commandId: randomUUID(),
+        operation: { type: "create", title: "Remote", target, open: false },
+      })
+    ).reviewId;
+
+  return {
+    repo,
+    root: await realpath(repo.directory),
+    worktree: await create({ kind: "worktree", repositoryId, base: repo.base }),
+    commits: await create({
+      kind: "commits",
+      repositoryId,
+      base: repo.base,
+      head: repo.head,
+    }),
+  };
+}
+
+const workspaceFiles = async () =>
+  (await readdir(root, { recursive: true })).filter((entry) =>
+    entry.endsWith(".code-workspace"),
+  );
+
 it("gives a remote caller no local paths and no source window", async () => {
   const server = await start();
   const desktop = await attachDesktop(server.discovery);
 
   try {
-    const repo = await repository();
-    await writeFile(
-      path.join(repo.directory, "example.ts"),
-      "export const value = 3;\n",
-    );
-
-    const { id: repositoryId } = await server.client.post<{ id: string }>(
-      "/repositories",
-      { path: repo.directory },
-    );
-
-    const create = async (target: JsonValue) =>
-      (
-        await server.client.post<Result>("/commands", {
-          commandId: randomUUID(),
-          operation: { type: "create", title: "Remote", target, open: false },
-        })
-      ).reviewId;
-
-    const worktree = await create({
-      kind: "worktree",
-      repositoryId,
-      base: repo.base,
-    });
-
-    const commits = await create({
-      kind: "commits",
-      repositoryId,
-      base: repo.base,
-      head: repo.head,
-    });
+    const {
+      repo,
+      root: checkout,
+      worktree,
+      commits,
+    } = await reviewsOfBothKinds(server.client);
 
     const call = (
       reviewId: string,
@@ -808,16 +823,29 @@ it("gives a remote caller no local paths and no source window", async () => {
 
     const file = "/file?side=head&file=example.ts";
     const context = "/language-context?side=head";
+    const hash = /^[0-9a-f]{64}$/;
     const home = await realpath(root);
 
-    expect(await read(worktree, file, false)).toHaveProperty("localPath");
-    expect(await read(worktree, context, false)).toHaveProperty("rootPath");
+    expect(await read(worktree, file, false)).toMatchObject({
+      text: "export const value = 3;\n",
+      localPath: path.join(checkout, "example.ts"),
+      localRoot: checkout,
+    });
+    expect(await read(commits, file, false)).toEqual({
+      file: "example.ts",
+      side: "head",
+      commit: repo.head,
+      text: "export const value = 2;\n",
+    });
+
+    const localContext = await read(worktree, context, false);
+    expect(localContext.rootPath).toBe(checkout);
+    expect(localContext.identity).not.toMatch(hash);
 
     // A headless server prepares no commit checkouts, so only the worktree
     // review has a language context here.
     const remoteContext = await read(worktree, context, true);
-    expect(remoteContext).toMatchObject({ identity: expect.any(String) });
-    expect(remoteContext).not.toHaveProperty("rootPath");
+    expect(remoteContext).toEqual({ identity: expect.stringMatching(hash) });
     expect(JSON.stringify(remoteContext)).not.toContain(home);
 
     for (const reviewId of [worktree, commits]) {
@@ -833,18 +861,54 @@ it("gives a remote caller no local paths and no source window", async () => {
       });
     }
 
-    const workspaces = (await readdir(root, { recursive: true })).filter(
-      (entry) => entry.endsWith(".code-workspace"),
-    );
-
-    expect(workspaces).toEqual([]);
+    expect(await workspaceFiles()).toEqual([]);
     expect(desktop.verbs).toEqual([]);
-    expect((await call(worktree, "/navigator", false, "POST")).status).toBe(
-      200,
-    );
+
+    // The same search finds the file an unmarked call writes.
+    const navigator = await call(worktree, "/navigator", false, "POST");
+    expect(navigator.status).toBe(200);
+    expect(await navigator.json()).toHaveProperty("workspacePath");
+    expect(await workspaceFiles()).toHaveLength(1);
   } finally {
     desktop.detach();
   }
+});
+
+it("treats a near-miss client header as a local caller", async () => {
+  const server = await start();
+  const { root: checkout, worktree } = await reviewsOfBothKinds(server.client);
+  const url = `${server.discovery.url}/reviews-api/${worktree}/file?side=head&file=example.ts`;
+
+  // Sent as two header lines; the server joins them as "remote, remote".
+  const twice = await new Promise<string>((resolve, reject) => {
+    const request = httpRequest(url, (response) => {
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => (body += chunk));
+      response.on("end", () => resolve(body));
+    });
+
+    request.setHeader("x-review-token", server.discovery.token);
+    request.setHeader(REVIEW_CLIENT_HEADER, [
+      REVIEW_CLIENT_REMOTE,
+      REVIEW_CLIENT_REMOTE,
+    ]);
+    request.on("error", reject);
+    request.end();
+  });
+
+  const capitalized = await fetch(url, {
+    headers: {
+      "x-review-token": server.discovery.token,
+      [REVIEW_CLIENT_HEADER]: "Remote",
+    },
+  });
+
+  for (const answer of [JSON.parse(twice), await capitalized.json()])
+    expect(answer).toMatchObject({
+      localPath: path.join(checkout, "example.ts"),
+      localRoot: checkout,
+    });
 });
 
 it("rejects a second owner and keeps separate CI job stores independent", async () => {
