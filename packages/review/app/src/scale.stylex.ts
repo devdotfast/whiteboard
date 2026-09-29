@@ -23,6 +23,8 @@ export const fontWeight = stylex.defineConsts({
 });
 
 export const radius = stylex.defineConsts({
+  // Highlights and thin bars.
+  hairline: "2px",
   // Tags, inputs and inline marks.
   small: "4px",
   // Buttons and controls; matches --chrome-control-radius.
@@ -38,6 +40,8 @@ export const radius = stylex.defineConsts({
 export const layer = stylex.defineConsts({
   sticky: "20",
   overlay: "40",
+  // A side panel docked over the canvas as a sheet on narrow screens.
+  sheet: "50",
   popover: "120",
   // A modal and its backdrop, over everything in the canvas but toasts.
   dialog: "10000",
@@ -46,9 +50,13 @@ export const layer = stylex.defineConsts({
 });
 
 export const motion = stylex.defineConsts({
+  // Reduced motion, and a change that should not animate.
+  instant: "0s",
   fast: "120ms",
   medium: "200ms",
   slow: "300ms",
+  // One breath of a looping attention pulse.
+  pulse: "1.6s",
   ease: "ease",
 });
 
@@ -65,4 +73,6 @@ export const tracking = stylex.defineConsts({
   caps: "0.08em",
   // Uppercase chrome labels; matches --chrome-tracking.
   chrome: "0.04em",
+  // Large headings.
+  tight: "-0.015em",
 });
