@@ -12,12 +12,13 @@ import {
   ReviewSessionProvider,
   createReviewSession,
 } from "./host/review-session";
+import type { TraceSelection } from "./review-panel-store";
 import {
   testReviewBridge,
   testReviewSession,
 } from "./review-session-test-utils";
 import { ReviewTraceView } from "./ReviewTraceView";
-import { useTraceList } from "./use-trace-list";
+import { type TraceListState, useTraceList } from "./use-trace-list";
 
 const mockListResponse: Extract<ReviewAgentTraceListResponse, { ok: true }> = {
   ok: true,
@@ -60,6 +61,32 @@ const mockTraceDetail: Extract<ReviewAgentTraceResponse, { ok: true }> = {
   ],
 };
 
+function ControlledHost({
+  list,
+  initiallyOpen = true,
+}: {
+  list: TraceListState;
+  initiallyOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(initiallyOpen);
+  const [selection, setSelection] = useState<TraceSelection>();
+
+  return (
+    <>
+      <button onClick={() => setOpen(!open)}>Toggle trace</button>
+      {open && (
+        <ReviewTraceView
+          storedList={list}
+          selection={selection}
+          onSelect={setSelection}
+        />
+      )}
+    </>
+  );
+}
+
+const noop = () => {};
+
 let root: Root | null = null;
 
 let container: HTMLDivElement;
@@ -94,14 +121,8 @@ describe("ReviewTraceView", () => {
 
     function Host() {
       const list = useTraceList();
-      const [open, setOpen] = useState(false);
 
-      return (
-        <>
-          <button onClick={() => setOpen(!open)}>Toggle trace</button>
-          {open && <ReviewTraceView storedList={list} />}
-        </>
-      );
+      return <ControlledHost list={list} initiallyOpen={false} />;
     }
 
     await act(async () =>
@@ -131,6 +152,68 @@ describe("ReviewTraceView", () => {
     ).toHaveLength(1);
   });
 
+  it("keeps the trace the reader picked when they leave and come back", async () => {
+    const request = vi.fn<ReviewCanvasBridge["request"]>(async (url) =>
+      Response.json({
+        ...mockTraceDetail,
+        session: {
+          ...mockTraceDetail.session,
+          sessionId: url.includes("session-2") ? "session-2" : "session-1",
+        },
+      }),
+    );
+
+    const session = testReviewSession({}, { request });
+
+    const list: TraceListState = {
+      status: "loaded",
+      configured: true,
+      storage: null,
+      sources: [],
+      storageError: null,
+      sessions: [
+        ...mockListResponse.sessions,
+        {
+          ...mockListResponse.sessions[0]!,
+          sessionId: "session-2",
+          subagents: [],
+        },
+      ],
+    };
+
+    await act(async () =>
+      root?.render(
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ControlledHost list={list} />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("User turn text"),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(".review-trace-picker-trigger")!
+        .click(),
+    );
+
+    const options = () => [
+      ...container.querySelectorAll<HTMLElement>('[role="option"]'),
+    ];
+
+    await act(async () => options().at(-1)!.click());
+    await act(async () => container.querySelector("button")!.click());
+    await act(async () => container.querySelector("button")!.click());
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(".review-trace-picker-trigger")!
+        .click(),
+    );
+    expect(options().at(-1)?.getAttribute("aria-selected")).toBe("true");
+  });
+
   it("renders retained subagent events without downloading them", async () => {
     const request = vi.fn<ReviewCanvasBridge["request"]>(async () => {
       throw new Error("offline");
@@ -158,7 +241,8 @@ describe("ReviewTraceView", () => {
         <TestCanvasQuery>
           <ReviewSessionProvider session={session}>
             <ReviewTraceView
-              initialSelection={{ sessionId: "session-1", trace: "sub-1" }}
+              selection={{ sessionId: "session-1", trace: "sub-1" }}
+              onSelect={noop}
             />
           </ReviewSessionProvider>
         </TestCanvasQuery>,
@@ -215,7 +299,7 @@ describe("ReviewTraceView", () => {
         root?.render(
           <TestCanvasQuery>
             <ReviewSessionProvider session={session}>
-              <ReviewTraceView />
+              <ReviewTraceView onSelect={noop} />
             </ReviewSessionProvider>
           </TestCanvasQuery>,
         );
@@ -270,7 +354,7 @@ describe("ReviewTraceView", () => {
       root?.render(
         <TestCanvasQuery>
           <ReviewSessionProvider session={session}>
-            <ReviewTraceView />
+            <ReviewTraceView onSelect={noop} />
           </ReviewSessionProvider>
         </TestCanvasQuery>,
       );
@@ -345,7 +429,7 @@ describe("ReviewTraceView", () => {
       root?.render(
         <TestCanvasQuery>
           <ReviewSessionProvider session={session}>
-            <ReviewTraceView />
+            <ReviewTraceView onSelect={noop} />
           </ReviewSessionProvider>
         </TestCanvasQuery>,
       );
@@ -388,7 +472,7 @@ describe("ReviewTraceView", () => {
       root?.render(
         <TestCanvasQuery>
           <ReviewSessionProvider session={session}>
-            <ReviewTraceView />
+            <ReviewTraceView onSelect={noop} />
           </ReviewSessionProvider>
         </TestCanvasQuery>,
       );
@@ -473,7 +557,7 @@ describe("ReviewTraceView", () => {
       root?.render(
         <TestCanvasQuery>
           <ReviewSessionProvider session={session}>
-            <ReviewTraceView />
+            <ReviewTraceView onSelect={noop} />
           </ReviewSessionProvider>
         </TestCanvasQuery>,
       );

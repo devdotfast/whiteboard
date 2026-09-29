@@ -852,7 +852,8 @@ function ReviewLayoutContent({
             )}
             {activeView === "trace" && (
               <ReviewTraceView
-                initialSelection={traceSelection}
+                selection={traceSelection}
+                onSelect={panelStore.getState().selectTrace}
                 storedList={storedList}
               />
             )}

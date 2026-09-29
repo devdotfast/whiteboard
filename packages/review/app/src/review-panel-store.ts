@@ -72,6 +72,7 @@ export interface ReviewNavigationActions {
   selectLens: (lens: ReviewLensSelection) => void;
   clearLens: () => void;
   openTrace: (selection: TraceSelection) => void;
+  selectTrace: (selection: TraceSelection) => void;
   setAvailableViews: (views: readonly ReviewView[]) => void;
   focusMapElement: (elementPath: string) => void;
   consumeMapFocus: (requestId: number) => void;
@@ -141,6 +142,7 @@ export function createReviewPanelStore({
         ...viewTransition(state, "trace"),
         traceSelection: selection,
       })),
+    selectTrace: (selection) => set({ traceSelection: selection }),
     focusMapElement: (elementPath) =>
       set((state) =>
         state.availableViews.includes("map")

@@ -16,19 +16,19 @@ import {
 import { type TraceListState, useTraceList } from "./use-trace-list";
 
 export function ReviewTraceView({
-  initialSelection,
+  selection,
+  onSelect,
   storedList: providedList,
 }: {
-  initialSelection?: TraceSelection;
+  selection?: TraceSelection;
+  onSelect: (selection: TraceSelection) => void;
   storedList?: TraceListState;
 }) {
   const session = useReviewSession();
 
-  const [selectedKey, setSelectedKey] = useState<string | null>(() =>
-    initialSelection
-      ? makeAgentTraceKey(initialSelection.sessionId, initialSelection.trace)
-      : null,
-  );
+  const selectedKey = selection
+    ? makeAgentTraceKey(selection.sessionId, selection.trace)
+    : null;
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement | null>(null);
@@ -56,14 +56,6 @@ export function ReviewTraceView({
 
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [pickerOpen]);
-
-  useEffect(() => {
-    if (initialSelection) {
-      setSelectedKey(
-        makeAgentTraceKey(initialSelection.sessionId, initialSelection.trace),
-      );
-    }
-  }, [initialSelection]);
 
   const storedList = useTraceList(storageOverride, providedList);
 
@@ -296,7 +288,10 @@ export function ReviewTraceView({
                       )}
                       disabled={!target.available}
                       onClick={() => {
-                        setSelectedKey(target.key);
+                        onSelect({
+                          sessionId: target.sessionId,
+                          trace: target.trace,
+                        });
                         setPickerOpen(false);
                       }}
                     >
@@ -356,13 +351,7 @@ export function ReviewTraceView({
               ) ?? detail.trace.session
             }
             targetEventIndex={
-              initialSelection &&
-              makeAgentTraceKey(
-                initialSelection.sessionId,
-                initialSelection.trace,
-              ) === activeKey
-                ? initialSelection.eventIndex
-                : undefined
+              selectedKey === activeKey ? selection?.eventIndex : undefined
             }
           />
         )}
