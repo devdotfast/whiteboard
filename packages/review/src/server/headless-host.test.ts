@@ -5,6 +5,8 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
+  realpath,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -14,6 +16,8 @@ import { PassThrough } from "node:stream";
 
 import {
   type JsonValue,
+  REVIEW_CLIENT_HEADER,
+  REVIEW_CLIENT_REMOTE,
   parseReviewDesktopVerbFrame,
 } from "@dev.fast/review-protocol";
 import { runReviewCli } from "@review/cli-runner.js";
@@ -604,6 +608,7 @@ async function attachDesktop(
 ) {
   const abort = new AbortController();
   const opened: JsonValue[] = [];
+  const verbs: string[] = [];
 
   const control = await fetch(`${discovery.url}/control`, {
     headers: { "x-review-token": discovery.token },
@@ -631,6 +636,8 @@ async function attachDesktop(
           JSON.parse(frame.slice("data: ".length)),
         );
 
+        verbs.push(request.name);
+
         if (request.name === "openApiReview") opened.push(request.args);
         await fetch(`${discovery.url}/control/result`, {
           method: "POST",
@@ -647,7 +654,7 @@ async function attachDesktop(
     }
   })().catch(() => {});
 
-  return { opened, detach: () => abort.abort() };
+  return { opened, verbs, detach: () => abort.abort() };
 }
 
 it("reports attached Desktops and sends each the reviews to open", async () => {
@@ -740,6 +747,105 @@ it.each([false, true])(
     }
   },
 );
+
+it("gives a remote caller no local paths and no source window", async () => {
+  const server = await start();
+  const desktop = await attachDesktop(server.discovery);
+
+  try {
+    const repo = await repository();
+    await writeFile(
+      path.join(repo.directory, "example.ts"),
+      "export const value = 3;\n",
+    );
+
+    const { id: repositoryId } = await server.client.post<{ id: string }>(
+      "/repositories",
+      { path: repo.directory },
+    );
+
+    const create = async (target: JsonValue) =>
+      (
+        await server.client.post<Result>("/commands", {
+          commandId: randomUUID(),
+          operation: { type: "create", title: "Remote", target, open: false },
+        })
+      ).reviewId;
+
+    const worktree = await create({
+      kind: "worktree",
+      repositoryId,
+      base: repo.base,
+    });
+
+    const commits = await create({
+      kind: "commits",
+      repositoryId,
+      base: repo.base,
+      head: repo.head,
+    });
+
+    const call = (
+      reviewId: string,
+      route: string,
+      remote: boolean,
+      method = "GET",
+    ) =>
+      fetch(`${server.discovery.url}/reviews-api/${reviewId}${route}`, {
+        method,
+        headers: {
+          "x-review-token": server.discovery.token,
+          ...(remote && { [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE }),
+        },
+      });
+
+    const read = async (reviewId: string, route: string, remote: boolean) => {
+      const response = await call(reviewId, route, remote);
+      expect(response.status).toBe(200);
+
+      return response.json();
+    };
+
+    const file = "/file?side=head&file=example.ts";
+    const context = "/language-context?side=head";
+    const home = await realpath(root);
+
+    expect(await read(worktree, file, false)).toHaveProperty("localPath");
+    expect(await read(worktree, context, false)).toHaveProperty("rootPath");
+
+    // A headless server prepares no commit checkouts, so only the worktree
+    // review has a language context here.
+    const remoteContext = await read(worktree, context, true);
+    expect(remoteContext).toMatchObject({ identity: expect.any(String) });
+    expect(remoteContext).not.toHaveProperty("rootPath");
+    expect(JSON.stringify(remoteContext)).not.toContain(home);
+
+    for (const reviewId of [worktree, commits]) {
+      const remoteFile = await read(reviewId, file, true);
+      expect(remoteFile).toMatchObject({ text: expect.any(String) });
+      expect(JSON.stringify(remoteFile)).not.toContain(home);
+
+      const navigator = await call(reviewId, "/navigator", true, "POST");
+      expect(navigator.status).toBe(409);
+      expect(await navigator.json()).toEqual({
+        error:
+          "Source windows are not available for a review on another machine.",
+      });
+    }
+
+    const workspaces = (await readdir(root, { recursive: true })).filter(
+      (entry) => entry.endsWith(".code-workspace"),
+    );
+
+    expect(workspaces).toEqual([]);
+    expect(desktop.verbs).toEqual([]);
+    expect((await call(worktree, "/navigator", false, "POST")).status).toBe(
+      200,
+    );
+  } finally {
+    desktop.detach();
+  }
+});
 
 it("rejects a second owner and keeps separate CI job stores independent", async () => {
   const first = await start();

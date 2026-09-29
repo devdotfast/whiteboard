@@ -1,5 +1,11 @@
+import { createHash } from "node:crypto";
+
 import { type JsonObject, isJsonObject } from "@dev.fast/json";
-import type { ReviewStructuralDiffEvent } from "@dev.fast/review-protocol";
+import {
+  REVIEW_CLIENT_HEADER,
+  REVIEW_CLIENT_REMOTE,
+  type ReviewStructuralDiffEvent,
+} from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
 import {
   type AgentSelection,
@@ -30,7 +36,7 @@ import type { SharedReviewStore } from "@review/sharing/import.js";
 import { SharedReviewData } from "@review/sharing/routes.js";
 import type { ReviewSessionAgent } from "@review/ui-telemetry-events.js";
 import { scopedCoverage } from "@review/viewed-coverage.js";
-import { Hono, type MiddlewareHandler } from "hono";
+import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import { authoringTools } from "./authoring-tools.js";
@@ -137,6 +143,10 @@ export interface ReviewApiHooks {
   }) => void;
   sharing?: SharingHostEvents;
 }
+
+/** A gateway forwarding from another machine; it gets no local paths. */
+const remoteCaller = (context: Context) =>
+  context.req.header(REVIEW_CLIENT_HEADER) === REVIEW_CLIENT_REMOTE;
 
 /** Both hosts mount this behind their token authentication. */
 export function createReviewApi(
@@ -726,6 +736,12 @@ export function createReviewApi(
       return context.json(result);
     });
     app.post("/:id/navigator", async (context) => {
+      if (remoteCaller(context))
+        throw new ReviewInputError(
+          "Source windows are not available for a review on another machine.",
+          409,
+        );
+
       const input = readQuerySchemas.file
         .extend({
           side: z.enum(["base", "head"]).default("head"),
@@ -858,14 +874,25 @@ export function createReviewApi(
 
       const snapshot = readReview(context.req.param("id"), input.version);
 
+      const environment = await data.languageEnvironment(
+        snapshot,
+        input.side,
+        input.commit,
+        false,
+        queryAnchor(input),
+      );
+
       return context.json(
-        await data.languageEnvironment(
-          snapshot,
-          input.side,
-          input.commit,
-          false,
-          queryAnchor(input),
-        ),
+        remoteCaller(context)
+          ? {
+              ...environment,
+              rootPath: undefined,
+              // A live checkout's identity names its path; keep only its equality.
+              identity: createHash("sha256")
+                .update(environment.identity)
+                .digest("hex"),
+            }
+          : environment,
       );
     });
     app.post("/:id/environment", async (context) => {
@@ -936,6 +963,7 @@ export function createReviewApi(
       }
 
       const local =
+        !remoteCaller(context) &&
         !input.commit &&
         !anchor &&
         input.side === "head" &&

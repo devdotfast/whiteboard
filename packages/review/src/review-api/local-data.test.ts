@@ -18,7 +18,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { setLocalVcsCommandObserver } from "@dev.fast/local-vcs";
-import type { JsonValue } from "@dev.fast/review-protocol";
+import {
+  type JsonValue,
+  REVIEW_CLIENT_HEADER,
+  REVIEW_CLIENT_REMOTE,
+} from "@dev.fast/review-protocol";
 import { selectSource } from "@review/lens-selection";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { Hono } from "hono";
@@ -941,6 +945,29 @@ it("serves a historical version's file at the pins that version was saved with",
     commit: later.head,
     text: "export const value = 3;\n",
   });
+});
+
+it("gives a remote caller a commit review's language context without its checkout path", async () => {
+  const { reviewId } = await local.store.execute(
+    command({ type: "create", title: "Remote", pins }),
+  );
+
+  await local.data.languageEnvironment(local.store.read(reviewId), "head");
+  await local.data.workspaces.idle();
+  const app = createReviewApi(local.store, local.data);
+
+  const read = async (headers: Record<string, string> = {}) =>
+    (
+      await app.request(`/${reviewId}/language-context?side=head`, { headers })
+    ).json();
+
+  const ownMachine = await read();
+  expect(ownMachine.rootPath).toEqual(expect.any(String));
+
+  const remote = await read({ [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE });
+  expect(remote).toEqual({ identity: expect.any(String) });
+  expect(JSON.stringify(remote)).not.toContain(directory);
+  expect(await read({ [REVIEW_CLIENT_HEADER]: "local" })).toEqual(ownMachine);
 });
 
 it("opens a stable native workspace on the Review's pinned checkout at the selected version", async () => {
