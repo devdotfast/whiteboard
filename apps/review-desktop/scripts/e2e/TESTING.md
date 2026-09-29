@@ -67,3 +67,38 @@ Product bugs the suite finds live in `KNOWN_BUGS.md` beside this file. Never
 weaken an assertion for one: assert the real behaviour, corroborate the bug's own
 signature, then call `ctx.knownBug("<heading>")`. The harness fails the journey
 when that heading is not in `KNOWN_BUGS.md`.
+
+## Remote hosts
+
+`remote/remote.mjs` gives a live check a real SSH server: a Docker container
+(`up`) or an AWS instance (`aws-up`). Each run keeps its key pair,
+`ssh_config`, `known_hosts` and `state.json` in `/tmp/wbt.<run id>/`. Nothing
+reads or writes `~/.ssh`. Run `remote.mjs` with no arguments for its commands;
+`04-test-environments.md` in the remote-servers plan specifies them.
+
+```sh
+R="node apps/review-desktop/scripts/e2e/remote/remote.mjs"
+trap '$R down --all; $R verify-clean' EXIT
+$R up a                      # prints wb-test-a; the first `up` prints the run id
+export WB_TEST_RUN=<run id>  # needed only when several runs exist
+$R install a
+$R ssh a -- whiteboard version
+port=$($R forward a 8000)    # ssh -L from a free loopback port
+$R logs a                    # the container's sshd log
+ssh -F /tmp/wbt.$WB_TEST_RUN/ssh_config wb-test-a
+```
+
+Every container, image, network, key pair, security group and instance is
+named `wb-test-...`; AWS resources also carry the tags `wb-test=1` and
+`wb-test-run=<run id>`. `down --all` removes every run's resources, or only
+`WB_TEST_RUN`'s when it is set, and `down <name>` removes one host.
+`verify-clean` looks for leftovers by name and tag, not through `state.json`,
+and fails when AWS cannot be checked. `aws-up` needs a valid
+`aws sso login` session, launches at most two instances at a time in the
+profile's default region, and each instance terminates itself after three
+hours.
+
+`--sealed` deletes the container's default route and checks that an outbound
+request fails. `--delay-ms` delays both directions with `netem`. Both run their
+network commands from a throwaway container, so the remote itself never holds
+`NET_ADMIN`.
