@@ -160,9 +160,18 @@ describe("blob batch reader", () => {
       "src/app.ts": Buffer.from("export const app = 1;\n"),
     };
 
-    await expect(
-      Promise.all(requests.map((file) => reader.read(commit, file))),
-    ).resolves.toEqual(requests.map((file) => expected[file]));
+    const results = await Promise.all(
+      requests.map((file) => reader.read(commit, file)),
+    );
+
+    for (const [index, file] of requests.entries()) {
+      const body = expected[file];
+
+      expect(
+        body === null ? results[index] === null : results[index]?.equals(body),
+      ).toBe(true);
+    }
+
     expect(batchSpawns()).toBe(0);
   });
 
