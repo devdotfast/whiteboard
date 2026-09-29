@@ -36,7 +36,7 @@ import {
   reviewUiStateKey,
   writeReviewUiState,
 } from "./review-ui-state";
-import { type ReviewView, normalizeReviewView } from "./review-view-route";
+import { type ReviewView, offeredReviewViews } from "./review-view-route";
 
 const REVIEW_VIEW_STATE_NAMESPACE = "view-state";
 
@@ -261,11 +261,13 @@ export function readReviewNavigationRestore(
   const stored = readPersistedReviewViewState(config);
 
   return {
-    view: normalizeReviewView(
-      stored.activeView ?? "review",
-      canvas.softwareMapEnabled,
-      canvas.hasChangeRange,
-    ),
+    view: stored.activeView ?? "review",
+    // Traces are listed after mount; the canvas narrows this once they are.
+    availableViews: offeredReviewViews({
+      hasChangeRange: canvas.hasChangeRange,
+      softwareMapEnabled: canvas.softwareMapEnabled,
+      hasTraceSessions: true,
+    }),
     lens:
       stored.lens?.version === canvas.version &&
       stored.lens.mode === canvas.lensMode

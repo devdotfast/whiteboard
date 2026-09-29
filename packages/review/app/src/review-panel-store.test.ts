@@ -150,6 +150,15 @@ describe("Review navigation", () => {
     });
   });
 
+  it("resumes on the whiteboard when the stored view is not offered", () => {
+    const store = createReviewPanelStore({
+      view: "map",
+      availableViews: ["review", "commits", "diff"],
+    });
+
+    expect(store.getState().view).toBe("review");
+  });
+
   it("returns to the whiteboard when the current view stops being offered", () => {
     const store = createReviewPanelStore();
     store.getState().openCommitDiff({ commit });

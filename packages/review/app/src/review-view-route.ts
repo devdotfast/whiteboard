@@ -2,21 +2,22 @@ import type { ReviewView } from "@dev.fast/review-protocol";
 
 export type { ReviewView } from "@dev.fast/review-protocol";
 
-export function normalizeReviewView(
-  view: ReviewView,
-  softwareMapEnabled: boolean,
-  hasChangeRange = true,
-  hasTraceSessions = true,
-): ReviewView {
-  if (view === "map" && !softwareMapEnabled) return "review";
-
-  if (view === "trace" && !hasTraceSessions) return "review";
-
-  if (!hasChangeRange && (view === "commits" || view === "diff")) {
-    return "review";
-  }
-
-  return view;
+/** The views a canvas offers, in switcher order. */
+export function offeredReviewViews({
+  hasChangeRange,
+  softwareMapEnabled,
+  hasTraceSessions,
+}: {
+  hasChangeRange: boolean;
+  softwareMapEnabled: boolean;
+  hasTraceSessions: boolean;
+}): readonly ReviewView[] {
+  return [
+    "review",
+    ...(hasChangeRange ? (["commits", "diff"] as const) : []),
+    ...(softwareMapEnabled ? (["map"] as const) : []),
+    ...(hasTraceSessions ? (["trace"] as const) : []),
+  ];
 }
 
 export function reviewViewLabel(view: ReviewView): string {

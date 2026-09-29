@@ -73,18 +73,19 @@ export type ReviewPanelStoreState = ReviewPanelState &
 export type ReviewPanelStore = ReturnType<typeof createReviewPanelStore>;
 
 export type ReviewNavigationRestore = Partial<
-  Pick<ReviewNavigationState, "view" | "lens">
+  Pick<ReviewNavigationState, "view" | "availableViews" | "lens">
 >;
 
 export function createReviewPanelStore({
   view = "review",
+  availableViews = reviewViewSchema.options,
   lens = null,
 }: ReviewNavigationRestore = {}) {
   return createStore<ReviewPanelStoreState>()((set) => ({
     active: null,
     motion: "live",
-    view,
-    availableViews: reviewViewSchema.options,
+    view: availableViews.includes(view) ? view : "review",
+    availableViews,
     diffScope: null,
     traceSelection: undefined,
     lens,

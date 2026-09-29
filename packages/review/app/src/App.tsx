@@ -60,7 +60,7 @@ import {
 import type { ReviewDiffScope } from "./review-panel-store";
 import { ReviewRootsProvider } from "./review-root-context";
 import { ReviewToc } from "./review-toc";
-import { type ReviewView, reviewViewLabel } from "./review-view-route";
+import { offeredReviewViews, reviewViewLabel } from "./review-view-route";
 import {
   ReviewViewStateProvider,
   useReviewViewStateSync,
@@ -398,13 +398,13 @@ function ReviewLayoutContent({
       ? diffFiles.files.length
       : null;
 
-  const reviewViews = useMemo<readonly ReviewView[]>(
-    () => [
-      "review",
-      ...(hasChangeRange ? (["commits", "diff"] as const) : []),
-      ...(softwareMapEnabled ? (["map"] as const) : []),
-      ...(hasTraceSessions ? (["trace"] as const) : []),
-    ],
+  const reviewViews = useMemo(
+    () =>
+      offeredReviewViews({
+        hasChangeRange,
+        softwareMapEnabled,
+        hasTraceSessions,
+      }),
     [hasChangeRange, hasTraceSessions, softwareMapEnabled],
   );
 
