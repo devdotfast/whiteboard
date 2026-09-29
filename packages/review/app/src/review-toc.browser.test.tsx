@@ -161,4 +161,62 @@ describe("ReviewToc", () => {
       expect(toc.getAnimations({ subtree: true })).toEqual([]);
     },
   );
+  it("keeps two-digit subsection numbers clear of their labels", async () => {
+    const app = document.createElement("div");
+    app.className = "review-canvas-root review-app";
+    const header = document.createElement("header");
+    header.className = "review-document-header";
+    app.append(header, shell);
+    document.body.append(app);
+    shell.style.width = "1600px";
+
+    const entries = [
+      { id: "notes", text: "Long notes", level: "h2" as const },
+      ...Array.from({ length: 12 }, (_, index) => ({
+        id: `note-${index + 1}`,
+        text: `Note ${index + 1}`,
+        level: "h3" as const,
+      })),
+    ];
+
+    const article = document.createElement("article");
+    article.innerHTML = entries
+      .map(
+        (entry) =>
+          `<${entry.level} id="${entry.id}">${entry.text}</${entry.level}>`,
+      )
+      .join("");
+    reviewRoots.articleRef.current = article;
+    view.append(article);
+    const root = createRoot(mount);
+    mountedRoots.push(root);
+    act(() => {
+      root.render(
+        <ReviewRootsProvider roots={reviewRoots}>
+          <ReviewToc entries={entries} />
+        </ReviewRootsProvider>,
+      );
+    });
+    await act(
+      async () =>
+        new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    );
+
+    const rows = [...document.querySelectorAll("#review-toc li > button")];
+    const labelLefts: number[] = [];
+
+    for (const row of rows.slice(1)) {
+      const [number, label] = row.querySelectorAll("span");
+      // Measure the digits, not the span box: they can overflow a fixed box.
+      const digits = document.createRange();
+      digits.selectNodeContents(number!);
+
+      expect(digits.getBoundingClientRect().right).toBeLessThanOrEqual(
+        label!.getBoundingClientRect().left,
+      );
+      labelLefts.push(label!.getBoundingClientRect().left);
+    }
+
+    expect(Math.max(...labelLefts) - Math.min(...labelLefts)).toBeLessThan(1);
+  });
 });
