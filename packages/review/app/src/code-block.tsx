@@ -344,7 +344,11 @@ const syntaxStyles = stylex.create({
   oper: { color: tokens.syntaxOperator },
   insert: { color: tokens.syntaxInserted },
   deleted: { color: tokens.syntaxDeleted },
-  err: { color: tokens.syntaxDeleted },
+  err: {
+    color: tokens.syntaxDeleted,
+    textDecorationLine: "underline",
+    textDecorationStyle: "wavy",
+  },
 });
 
 const syntaxByToken = new Map<string, stylex.StyleXStyles>(
