@@ -9,6 +9,11 @@ let root: Root | null = null;
 
 let container: HTMLDivElement;
 
+const collapseButtons = () =>
+  [...container.querySelectorAll("button")].filter((button) =>
+    button.textContent?.startsWith("collapse"),
+  );
+
 describe("TraceDocument", () => {
   beforeEach(() => {
     container = document.createElement("div");
@@ -105,19 +110,19 @@ describe("TraceDocument", () => {
       );
     });
 
-    const turns = container.querySelectorAll(".review-trace-turn");
+    const turns = container.firstElementChild!.children;
     expect(turns.length).toBe(2);
 
     // Turn 0 (non-target turn): 3 edit tools should coalesce into 1 TraceToolGroup
     const turn0 = turns[0];
-    const turn0ToolGroups = turn0.querySelectorAll(".review-trace-toolgroup");
+    const turn0ToolGroups = turn0.querySelectorAll("details[data-trace-event]");
     expect(turn0ToolGroups.length).toBe(1);
     expect(turn0ToolGroups[0].textContent).toContain("Edited 3 files");
 
     // Turn 1 (contains targetEventIndex 6): tools coalesce too, but the
     // group holding the target renders expanded so the target stays visible.
     const turn1 = turns[1];
-    const turn1ToolGroups = turn1.querySelectorAll(".review-trace-toolgroup");
+    const turn1ToolGroups = turn1.querySelectorAll("details[data-trace-event]");
     expect(turn1ToolGroups.length).toBe(1);
     expect(turn1ToolGroups[0].hasAttribute("open")).toBe(true);
     expect(turn1.textContent).toContain("pnpm build");
@@ -148,7 +153,7 @@ describe("TraceDocument", () => {
     });
 
     // Turn 0 is hidden -> gap chip for 5 hidden events
-    const initialGaps = container.querySelectorAll(".review-trace-lens-gap");
+    const initialGaps = container.querySelectorAll("button[data-trace-gap]");
     expect(initialGaps.length).toBe(1);
     expect(initialGaps[0].textContent).toContain("5 hidden events");
     // The chip carries its gap start so scroll anchoring can find it after a fold.
@@ -166,7 +171,7 @@ describe("TraceDocument", () => {
 
     // Tools coalesce in every turn: Turn 0's revealed run plus the target
     // turn's run (which renders open because it contains the target).
-    const toolGroups = container.querySelectorAll(".review-trace-toolgroup");
+    const toolGroups = container.querySelectorAll("details[data-trace-event]");
     expect(toolGroups.length).toBe(2);
     expect(toolGroups[0].textContent).toContain("Edited 3 files");
   });
@@ -188,7 +193,7 @@ describe("TraceDocument", () => {
     });
 
     const gapButton = container.querySelector(
-      ".review-trace-lens-gap",
+      "button[data-trace-gap]",
     ) as HTMLButtonElement;
 
     await act(async () => {
@@ -196,9 +201,7 @@ describe("TraceDocument", () => {
     });
 
     // The revealed span is bracketed by one collapse row at each end.
-    const collapseRows = container.querySelectorAll(
-      ".review-trace-lens-collapse",
-    );
+    const collapseRows = collapseButtons();
 
     expect(collapseRows.length).toBe(2);
     expect(collapseRows[0].textContent).toContain("collapse 5 events");
@@ -211,11 +214,9 @@ describe("TraceDocument", () => {
       );
     });
 
-    expect(
-      container.querySelectorAll(".review-trace-lens-collapse").length,
-    ).toBe(0);
+    expect(collapseButtons().length).toBe(0);
     expect(container.textContent).not.toContain("First turn question");
-    const gapsAfter = container.querySelectorAll(".review-trace-lens-gap");
+    const gapsAfter = container.querySelectorAll("button[data-trace-gap]");
     expect(gapsAfter.length).toBe(1);
     expect(gapsAfter[0].textContent).toContain("5 hidden events");
   });
@@ -236,7 +237,7 @@ describe("TraceDocument", () => {
 
     // Message is elided with a ⋯ chip
     const chipButton = container.querySelector(
-      ".review-trace-lens-chip",
+      'button[title="Show the hidden text"]',
     ) as HTMLButtonElement;
 
     expect(chipButton).not.toBeNull();
@@ -271,12 +272,13 @@ describe("TraceDocument", () => {
     });
 
     // Full text of the user message is visible without ellipsis chips
-    expect(container.querySelector(".review-trace-lens-chip")).toBeNull();
-    const userBubble = container.querySelector(".agent-chat-user-bubble");
-    expect(userBubble?.textContent).toBe("Second turn question");
     expect(
-      userBubble?.querySelector(".review-trace-quote-mark")?.textContent,
-    ).toBe("Second turn");
+      container.querySelector('button[title="Show the hidden text"]'),
+    ).toBeNull();
+    const quoteMark = container.querySelector(".review-trace-quote-mark");
+    expect(quoteMark?.textContent).toBe("Second turn");
+    // The mark sits in the user bubble, which holds the whole message.
+    expect(quoteMark?.parentElement?.textContent).toBe("Second turn question");
   });
 
   it("scrolls directly to the highlighted quote mark when available", async () => {

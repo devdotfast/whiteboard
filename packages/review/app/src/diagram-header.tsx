@@ -1,18 +1,25 @@
+import type * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
+
+import { withClass } from "./stylex-props";
 
 export function DiagramHeader({
   kind,
   title,
   meta,
   action,
+  xstyle,
+  metaStyle,
 }: {
   kind: string;
   title?: string;
   meta?: string;
   action?: ReactNode;
+  xstyle?: stylex.StaticStyles;
+  metaStyle?: stylex.StaticStyles;
 }) {
   return (
-    <figcaption className="diagram-header">
+    <figcaption {...withClass("diagram-header", xstyle)}>
       <div className="diagram-header-main">
         <span className="diagram-kind-badge">{kind}</span>
         {title && (
@@ -20,7 +27,9 @@ export function DiagramHeader({
             {title}
           </span>
         )}
-        {meta && <em className="diagram-header-meta">{meta}</em>}
+        {meta && (
+          <em {...withClass("diagram-header-meta", metaStyle)}>{meta}</em>
+        )}
       </div>
       {action}
     </figcaption>

@@ -19,13 +19,9 @@
 @import "./review-shell.css";
 @import "./review-document.css";
 @import "./review-toc.css";
-/* code-block.css overrides agent markdown's code rule. */
-@import "./agent-markdown.css";
-@import "./code-block.css";
 @import "./review-panel.css";
 @import "./diagrams.css";
 
-@import "./ReviewTraceView.css";
 @import "./bug-report-dialog.css";
 
 /* Last, in this order: the courier's march outlasts the badge's

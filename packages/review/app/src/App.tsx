@@ -81,6 +81,7 @@ import { SoftwareMapTopologyUnavailable } from "./software-map/software-map-abse
 import { SoftwareMap } from "./software-map/SoftwareMap";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
+import { traceStyles } from "./trace-styles";
 import { useTutorial } from "./tutorial-context";
 import { TutorialExperienceProvider } from "./tutorial-experience";
 import { captureUiEvent } from "./ui-telemetry";
@@ -666,7 +667,10 @@ function ReviewLayoutContent({
           )}
           <section
             ref={scrollRegionRef}
-            className={`review-view-region review-view-region--${activeView}`}
+            {...withClass(
+              `review-view-region review-view-region--${activeView}`,
+              activeView === "trace" && traceStyles.region,
+            )}
           >
             <div
               className="review-document-view"

@@ -39,8 +39,13 @@ it("renders a document's task list with each checkbox beside its text", async ()
   });
 
   const items = await settled(() =>
-    container.querySelectorAll<HTMLElement>("li.markdown-task").length === 4
-      ? [...container.querySelectorAll<HTMLElement>("li.markdown-task")]
+    container.querySelectorAll<HTMLElement>('li:has(> input[type="checkbox"])')
+      .length === 4
+      ? [
+          ...container.querySelectorAll<HTMLElement>(
+            'li:has(> input[type="checkbox"])',
+          ),
+        ]
       : undefined,
   );
 

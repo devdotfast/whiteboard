@@ -474,7 +474,7 @@ it.each([false, true])(
     await act(async () => {
       await vi.waitFor(() => expect(traceTab()).toBeTruthy());
     });
-    expect(container.querySelector(".review-trace-quote")).toBeTruthy();
+    expect(container.querySelector('a[href^="#trace-"]')).toBeTruthy();
 
     expect(container.querySelector("li")?.textContent).toBe(
       inline ? "Before source remains pinned after." : undefined,

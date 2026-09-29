@@ -479,16 +479,17 @@ describe("ReviewTraceView", () => {
       );
     });
 
+    const summaryDetails = (label: string) =>
+      [...container.querySelectorAll("details")].find((details) =>
+        details.querySelector("summary")?.textContent?.startsWith(label),
+      );
+
     await vi.waitFor(() => {
-      expect(
-        container.querySelector("details.review-trace-worked"),
-      ).not.toBeNull();
+      expect(summaryDetails("Worked")).toBeDefined();
     });
 
     // Expand the turn's worked section
-    const workedDetails = container.querySelector(
-      "details.review-trace-worked",
-    ) as HTMLDetailsElement;
+    const workedDetails = summaryDetails("Worked") as HTMLDetailsElement;
 
     expect(workedDetails).not.toBeNull();
     act(() => {
@@ -496,25 +497,19 @@ describe("ReviewTraceView", () => {
     });
 
     // Find the thinking details element
-    const thinkingDetails = Array.from(
-      container.querySelectorAll("details.review-trace-tool--expandable"),
-    ).find(
-      (el) =>
-        el.querySelector(".review-trace-tool-verb")?.textContent === "Thinking",
-    ) as HTMLDetailsElement | undefined;
+    const thinkingDetails = summaryDetails("Thinking");
 
     expect(thinkingDetails).toBeDefined();
     // Should be collapsed by default
     expect(thinkingDetails?.open).toBe(false);
+    expect(thinkingDetails?.querySelector("summary")?.textContent).toBe(
+      "Thinking",
+    );
+    expect(thinkingDetails?.querySelector("figcaption")?.textContent).toBe(
+      "Thinking",
+    );
     expect(
-      thinkingDetails?.querySelector(".review-trace-tool-verb")?.textContent,
-    ).toBe("Thinking");
-    expect(
-      thinkingDetails?.querySelector(".review-trace-figure-head")?.textContent,
-    ).toBe("Thinking");
-    expect(
-      thinkingDetails?.querySelector(".review-trace-figure-body--thinking")
-        ?.textContent,
+      thinkingDetails?.querySelector("figure > div")?.textContent,
     ).toContain("Let me think about how to solve this problem...");
   });
 });

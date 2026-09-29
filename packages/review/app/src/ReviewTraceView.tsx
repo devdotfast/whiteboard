@@ -1,10 +1,12 @@
 import { type ReviewAgentTraceSession } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useReviewSession } from "./host/review-session";
 import type { TraceSelection } from "./review-panel-store";
 import { ChevronIcon, TraceDocument, formatDuration } from "./trace-document";
 import { TraceRuler } from "./trace-ruler";
+import { traceStyles as styles } from "./trace-styles";
 import {
   type AgentTraceStorage,
   type LoadedAgentTrace,
@@ -181,23 +183,22 @@ export function ReviewTraceView({
   const activeTitle = activeTrace?.title ?? activeTarget?.title ?? "";
 
   return (
-    <div className="review-trace-view">
+    <div {...stylex.props(styles.view)}>
       {detail.status === "loaded" && (
         <TraceRuler events={detail.trace.events} />
       )}
-      <div className="review-trace-column">
+      <div {...stylex.props(styles.column)}>
         {list.status === "loading" && (
-          <p className="review-trace-note">Resolving agent sessions…</p>
+          <p {...stylex.props(styles.note)}>Resolving agent sessions…</p>
         )}
         {list.status === "error" && (
-          <p className="review-trace-note review-trace-note--error">
-            {list.error}
-          </p>
+          <p {...stylex.props(styles.note, styles.noteError)}>{list.error}</p>
         )}
         {sourceChoices.length > 1 && (
-          <label className="review-trace-source">
-            <span className="review-trace-kicker">Trace source</span>
+          <label {...stylex.props(styles.source)}>
+            <span {...stylex.props(styles.kicker)}>Trace source</span>
             <select
+              {...stylex.props(styles.sourceSelect)}
               aria-label="Trace source"
               value={activeSource ?? ""}
               onChange={(event) => {
@@ -217,14 +218,16 @@ export function ReviewTraceView({
         )}
         {list.status === "loaded" &&
           (list.storageError !== null || !list.configured) && (
-            <div className="review-trace-unconfigured">
-              <span className="review-trace-kicker">Agent trace</span>
+            <div {...stylex.props(styles.empty)}>
+              <span {...stylex.props(styles.kicker)}>Agent trace</span>
               {list.storageError !== null ? (
-                <p>{list.storageError}</p>
+                <p {...stylex.props(styles.flush)}>{list.storageError}</p>
               ) : (
                 <>
-                  <p>Agent traces are not configured.</p>
-                  <p className="review-trace-note">
+                  <p {...stylex.props(styles.flush)}>
+                    Agent traces are not configured.
+                  </p>
+                  <p {...stylex.props(styles.flush, styles.note)}>
                     Open Agent Setup in Whiteboard to enable trace capture.
                   </p>
                 </>
@@ -235,10 +238,12 @@ export function ReviewTraceView({
           list.configured &&
           list.storageError === null &&
           sessions.length === 0 && (
-            <div className="review-trace-empty">
-              <span className="review-trace-kicker">Agent trace</span>
-              <p>No agent sessions are recorded for this change range.</p>
-              <p className="review-trace-note">
+            <div {...stylex.props(styles.empty)}>
+              <span {...stylex.props(styles.kicker)}>Agent trace</span>
+              <p {...stylex.props(styles.flush)}>
+                No agent sessions are recorded for this change range.
+              </p>
+              <p {...stylex.props(styles.flush, styles.note)}>
                 Sessions attach automatically through{" "}
                 <code>Agent-Session:</code> commit trailers when an agent
                 commits with repository hooks installed.
@@ -246,24 +251,32 @@ export function ReviewTraceView({
             </div>
           )}
         {targets.length > 1 && activeTarget && (
-          <div className="review-trace-picker" ref={pickerRef}>
+          <div {...stylex.props(styles.picker)} ref={pickerRef}>
             <button
               type="button"
-              className="review-trace-picker-trigger"
+              {...stylex.props(
+                styles.pickerTrigger,
+                pickerOpen && styles.pickerTriggerOpen,
+              )}
               aria-haspopup="listbox"
               aria-expanded={pickerOpen}
               onClick={() => setPickerOpen((open) => !open)}
             >
-              <span className="review-trace-picker-harness">
+              <span {...stylex.props(styles.pickerHarness)}>
                 {harnessTag(activeHarness, activeTarget.isSubagent)}
               </span>
-              <span className="review-trace-picker-title">{activeTitle}</span>
-              <span className="review-trace-picker-chevron">
+              <span {...stylex.props(styles.pickerTitle)}>{activeTitle}</span>
+              <span
+                {...stylex.props(
+                  styles.pickerChevron,
+                  pickerOpen && styles.pickerChevronOpen,
+                )}
+              >
                 <ChevronIcon />
               </span>
             </button>
             {pickerOpen && (
-              <div className="review-trace-picker-menu" role="listbox">
+              <div {...stylex.props(styles.pickerMenu)} role="listbox">
                 {targets.map((target) => {
                   const isActive = target.key === activeKey;
                   const targetHarness = target.harness;
@@ -275,35 +288,42 @@ export function ReviewTraceView({
                       type="button"
                       role="option"
                       aria-selected={isActive}
-                      className={
+                      {...stylex.props(
+                        styles.pickerItem,
                         isActive
-                          ? "review-trace-picker-item review-trace-picker-item--active"
-                          : target.isSubagent
-                            ? "review-trace-picker-item review-trace-picker-item--subagent"
-                            : "review-trace-picker-item"
-                      }
+                          ? styles.pickerItemActive
+                          : target.isSubagent && styles.pickerItemSubagent,
+                      )}
                       disabled={!target.available}
                       onClick={() => {
                         setSelectedKey(target.key);
                         setPickerOpen(false);
                       }}
                     >
-                      <div className="review-trace-picker-item-left">
-                        <span className="review-trace-picker-item-harness">
+                      <div {...stylex.props(styles.pickerItemLeft)}>
+                        <span
+                          {...stylex.props(
+                            styles.pickerItemHarness,
+                            isActive && styles.pickerItemHarnessActive,
+                          )}
+                        >
                           {harnessTag(targetHarness, target.isSubagent)}
                         </span>
-                        <span className="review-trace-picker-item-title">
+                        <span
+                          {...stylex.props(
+                            styles.pickerItemTitle,
+                            isActive && styles.pickerItemTitleActive,
+                          )}
+                        >
                           {itemTitle}
                         </span>
                       </div>
                       {target.notSynced ? (
-                        <span className="review-trace-picker-item-badge">
+                        <span {...stylex.props(styles.pickerItemBadge)}>
                           not synced
                         </span>
                       ) : isActive ? (
-                        <span className="review-trace-picker-item-check">
-                          ✓
-                        </span>
+                        <span {...stylex.props(styles.pickerItemCheck)}>✓</span>
                       ) : null}
                     </button>
                   );
@@ -313,17 +333,15 @@ export function ReviewTraceView({
           </div>
         )}
         {detail.status === "loading" && (
-          <p className="review-trace-note">Loading trace…</p>
+          <p {...stylex.props(styles.note)}>Loading trace…</p>
         )}
         {detail.status === "error" && (
-          <p className="review-trace-note review-trace-note--error">
-            {detail.error}
-          </p>
+          <p {...stylex.props(styles.note, styles.noteError)}>{detail.error}</p>
         )}
         {detail.status === "loaded" &&
           detail.trace.cacheStatus &&
           detail.trace.cacheStatus !== "current" && (
-            <p className="review-trace-note">
+            <p {...stylex.props(styles.note)}>
               {detail.trace.cacheStatus === "offline"
                 ? "Showing a saved copy; the trace store did not answer."
                 : "Showing the last saved copy; the latest download failed."}
@@ -414,32 +432,32 @@ export function ReviewTraceDocument({
 
   return (
     <>
-      <header className="review-trace-header">
-        <span className="review-trace-kicker">Agent trace</span>
-        <h2 className="review-trace-title">
+      <header {...stylex.props(styles.header)}>
+        <span {...stylex.props(styles.kicker)}>Agent trace</span>
+        <h2 {...stylex.props(styles.title)}>
           {trace.title ??
             firstCommitSubject(session) ??
             (trace.trace ? `Subagent: ${trace.trace}` : "Agent session")}
         </h2>
-        <div className="review-trace-meta">
+        <div {...stylex.props(styles.meta)}>
           <span>{harnessLabel(trace.session.harness)}</span>
-          <span className="review-trace-meta-sep">·</span>
+          <span {...stylex.props(styles.metaSeparator)}>·</span>
           <span>{trace.session.sessionId.slice(0, 8)}</span>
           {trace.trace && (
             <>
-              <span className="review-trace-meta-sep">·</span>
+              <span {...stylex.props(styles.metaSeparator)}>·</span>
               <span>{trace.trace}</span>
             </>
           )}
-          <span className="review-trace-meta-sep">·</span>
+          <span {...stylex.props(styles.metaSeparator)}>·</span>
           <span>
             {trace.userTurns} {trace.userTurns === 1 ? "turn" : "turns"}
           </span>
-          <span className="review-trace-meta-sep">·</span>
+          <span {...stylex.props(styles.metaSeparator)}>·</span>
           <span>{trace.toolCalls} tool calls</span>
           {duration && (
             <>
-              <span className="review-trace-meta-sep">·</span>
+              <span {...stylex.props(styles.metaSeparator)}>·</span>
               <span>worked {duration}</span>
             </>
           )}
