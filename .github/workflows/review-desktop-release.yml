@@ -300,11 +300,25 @@ jobs:
           cache: pnpm
       - name: Install build dependencies
         run: pnpm install --frozen-lockfile
-      - name: Resolve dist-tag
+      # Read-only. A rerun finds this version already published from this
+      # commit and skips validation and publishing; from another commit only a
+      # dry run may go on, to build and retain the tarball.
+      - name: Resolve dist-tag and publication state
         id: npm
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           DIST_TAG=$(node scripts/review-cli-release.mjs dist-tag "$VERSION")
+          if PUBLISHED=$(node scripts/review-cli-release.mjs published "$VERSION" "$COMMIT"); then
+            :
+          elif [ "$DRY_RUN" = true ]; then
+            echo "::warning::@dev.fast/whiteboard@${VERSION} exists on npm from another commit, or the registry check failed (see above); this dry run skips publish validation."
+            PUBLISHED=true
+          else
+            exit 1
+          fi
           echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "published=$PUBLISHED" >> "$GITHUB_OUTPUT"
       - name: Build release tarball
         run: |
           jq -n --arg version "$VERSION" --arg commit "$COMMIT" '{$version, $commit}' > release-plan.json
@@ -312,6 +326,7 @@ jobs:
       - name: Test installed tarball without Desktop
         run: node scripts/smoke-review-cli.mjs "release-artifacts/dev.fast-whiteboard-${VERSION}.tgz" "$VERSION"
       - name: Validate npm publish command
+        if: ${{ steps.npm.outputs.published != 'true' }}
         env:
           DIST_TAG: ${{ steps.npm.outputs.dist_tag }}
         run: npm publish "./release-artifacts/dev.fast-whiteboard-${VERSION}.tgz" --dry-run --registry=https://registry.npmjs.org --access public --tag "$DIST_TAG" --ignore-scripts
@@ -322,19 +337,12 @@ jobs:
           path: release-artifacts/*.tgz
           if-no-files-found: error
       - name: Publish tested package
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && steps.npm.outputs.published != 'true' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           DIST_TAG: ${{ steps.npm.outputs.dist_tag }}
         run: |
           test -n "$NODE_AUTH_TOKEN" || { echo 'NPM_TOKEN secret is missing.' >&2; exit 1; }
-          # A rerun finds this version already published from this commit and
-          # stops there; from any other commit the check fails the job.
-          PUBLISHED=$(node scripts/review-cli-release.mjs published "$VERSION" "$COMMIT")
-          if [ "$PUBLISHED" = true ]; then
-            echo "@dev.fast/whiteboard@${VERSION} is already published from ${COMMIT}."
-            exit 0
-          fi
           npm publish "./release-artifacts/dev.fast-whiteboard-${VERSION}.tgz" --registry=https://registry.npmjs.org --access public --tag "$DIST_TAG" --provenance --ignore-scripts
 
   linux:

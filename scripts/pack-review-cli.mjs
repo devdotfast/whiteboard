@@ -5,13 +5,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { stageReviewDocs } from "../apps/review-desktop/scripts/stage-review-runtime.mjs";
-import { distTag, packageName } from "./review-cli-release.mjs";
+import { distTag } from "./review-cli-release.mjs";
 
 /** Pack from the workspace, then add the docs and version metadata shipped by Desktop. */
-export async function packReviewCli({ version, commit }, outputDirectory) {
+export async function packReviewCli(
+  { version, commit },
+  outputDirectory,
+  { packageDirectory = "packages/review", stdio = "inherit" } = {},
+) {
   distTag(version);
-  // npm names a scoped tarball <scope>-<name>-<version>.tgz.
-  const tarball = `${packageName.slice(1).replace("/", "-")}-${version}.tgz`;
 
   const actualCommit = execFileSync("git", ["rev-parse", "HEAD"], {
     encoding: "utf8",
@@ -22,18 +24,20 @@ export async function packReviewCli({ version, commit }, outputDirectory) {
   const output = path.resolve(outputDirectory);
   await mkdir(output, { recursive: true });
   const scratch = await mkdtemp(path.join(os.tmpdir(), "review-cli-pack-"));
-  const manifestPath = "packages/review/package.json";
+  const manifestPath = path.join(packageDirectory, "package.json");
   const original = await readFile(manifestPath, "utf8");
 
   try {
     const pkg = JSON.parse(original);
+    // npm names a scoped tarball <scope>-<name>-<version>.tgz.
+    const tarball = `${pkg.name.slice(1).replace("/", "-")}-${version}.tgz`;
     pkg.version = version;
     pkg.gitHead = commit;
     await writeFile(manifestPath, `${JSON.stringify(pkg, null, 2)}\n`);
     execFileSync(
       "pnpm",
-      ["--filter", packageName, "pack", "--pack-destination", scratch],
-      { stdio: "inherit" },
+      ["--dir", packageDirectory, "pack", "--pack-destination", scratch],
+      { stdio },
     );
     execFileSync("tar", [
       "-xzf",
@@ -47,7 +51,7 @@ export async function packReviewCli({ version, commit }, outputDirectory) {
     execFileSync(
       "npm",
       ["pack", "--ignore-scripts", "--pack-destination", output],
-      { cwd: staged, stdio: "inherit" },
+      { cwd: staged, stdio },
     );
 
     return path.join(output, tarball);
