@@ -632,7 +632,7 @@ export const traceStyles = stylex.create({
     backgroundColor: "transparent",
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: "var(--review-border, currentColor)",
+    borderColor: tokens.rule,
     borderRadius: "4px",
     padding: "0.15rem 0.4rem",
   },
