@@ -7,25 +7,25 @@ import {
   parseJsonText,
 } from "@dev.fast/review-protocol";
 
+/** `build-info.json` in a built package's `dist`, when present. */
+export function readBuildInfo(distDirectory: string) {
+  try {
+    return jsonObject(
+      parseJsonText(
+        readFileSync(path.join(distDirectory, "build-info.json"), "utf8"),
+      ),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
 /** Build identity belongs to the executable, never the current checkout. */
 export function cliRuntimeInfo(
   requestedPath: string,
   effectivePath = requestedPath,
 ) {
-  let metadata: ReturnType<typeof jsonObject>;
-
-  try {
-    metadata = jsonObject(
-      parseJsonText(
-        readFileSync(
-          path.join(path.dirname(effectivePath), "build-info.json"),
-          "utf8",
-        ),
-      ),
-    );
-  } catch {
-    metadata = undefined;
-  }
+  const metadata = readBuildInfo(path.dirname(effectivePath));
 
   return {
     event: "version" as const,

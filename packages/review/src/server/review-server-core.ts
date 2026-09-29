@@ -1,4 +1,15 @@
-import type { JsonValue } from "@dev.fast/review-protocol";
+import path from "node:path";
+
+import {
+  type JsonValue,
+  type ReviewServerHealth,
+  jsonString,
+} from "@dev.fast/review-protocol";
+import { readBuildInfo } from "@review/cli-runtime-info.js";
+import {
+  findReviewPackageRoot,
+  readReviewPackageVersion,
+} from "@review/package-paths.js";
 import { ReviewInputError } from "@review/review-api/document.js";
 import type { AuthoringCapabilities } from "@review/review-api/http.js";
 import { type Context, Hono } from "hono";
@@ -17,6 +28,14 @@ import {
 } from "./hono-http";
 import { HttpJsonError, ReviewServerError } from "./http-json";
 
+const version = readReviewPackageVersion(import.meta.url);
+
+const commit =
+  jsonString(
+    readBuildInfo(path.join(findReviewPackageRoot(import.meta.url), "dist"))
+      ?.commit,
+  ) ?? null;
+
 /**
  * What every review server shares: CORS, an open /health, token auth, and
  * the /control relay a Desktop attaches to, with errors answered as JSON.
@@ -25,6 +44,8 @@ import { HttpJsonError, ReviewServerError } from "./http-json";
 export function createReviewServerApp(input: {
   token: string;
   instanceId: string;
+  /** The review store's `serverId()`. */
+  serverId: string;
   relay: ReviewDesktopVerbRelay;
   health(): Record<string, JsonValue>;
 }): Hono<ReviewHonoEnv> {
@@ -39,9 +60,12 @@ export function createReviewServerApp(input: {
       ...input.health(),
       ok: true,
       instanceId: input.instanceId,
+      serverId: input.serverId,
       serverPid: process.pid,
       desktopAttached: input.relay.attached,
-    }),
+      version,
+      commit,
+    } satisfies ReviewServerHealth),
   );
   app.use("*", async (context, next) => {
     if (!isAuthorizedRequest(context.req.raw, input.token)) {
@@ -58,6 +82,7 @@ export function createReviewServerApp(input: {
 
     return serverJson(accepted ? 200 : 404, { ok: accepted });
   });
+  app.notFound(() => serverJson(404, { ok: false, error: "Not found." }));
   app.onError((error) => {
     const serverError = error instanceof ReviewServerError ? error : undefined;
 

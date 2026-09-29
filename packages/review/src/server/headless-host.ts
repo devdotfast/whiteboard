@@ -88,6 +88,7 @@ async function serve(input: HeadlessServerInput) {
   const app = createReviewServerApp({
     token: discovery.token,
     instanceId: discovery.instanceId,
+    serverId: local.store.serverId(),
     relay,
     health: () => ({}),
   });

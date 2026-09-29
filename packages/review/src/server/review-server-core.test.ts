@@ -16,6 +16,8 @@ import { runHeadlessServer } from "./headless-host.js";
 
 const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
 
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 let root: string;
 
 const stops: (() => Promise<void>)[] = [];
@@ -93,6 +95,44 @@ describe.each(["desktop", "headless"] as const)("the %s server", (kind) => {
       serverPid: process.pid,
       desktopAttached: false,
     });
+  });
+
+  it("says which store and build answer /health", async () => {
+    const server = await start();
+    const health = await (await fetch(`${server.url}/health`)).json();
+
+    const buildInfo = await readFile(
+      path.join(packageRoot, "dist", "build-info.json"),
+      "utf8",
+    ).catch(() => null);
+
+    expect(health).toMatchObject({
+      serverId: expect.stringMatching(uuid),
+      version: JSON.parse(
+        await readFile(path.join(packageRoot, "package.json"), "utf8"),
+      ).version,
+      commit: buildInfo ? JSON.parse(buildInfo).commit : null,
+    });
+    expect(health.instanceId).not.toBe(health.serverId);
+  });
+
+  it("answers an unknown path with a JSON 404", async () => {
+    const server = await start();
+    const headers = { "x-review-token": server.token };
+
+    for (const route of ["/nothing-here", "/reviews-api/nothing/here/at/all"]) {
+      const response = await fetch(`${server.url}${route}`, { headers });
+
+      expect({
+        route,
+        status: response.status,
+        body: await response.json(),
+      }).toEqual({
+        route,
+        status: 404,
+        body: { ok: false, error: "Not found." },
+      });
+    }
   });
 
   it("refuses every other route without the right token", async () => {
@@ -203,13 +243,52 @@ const processes = {
       DEV_FAST_REVIEW_SERVER_PORT: "0",
       DEV_FAST_REVIEW_APP_PID: String(process.pid),
     }),
-  headless: (home: string) =>
+  headless: (home: string, stateDir = path.join(home, "server")) =>
     spawnSource(
       "src/cli.ts",
-      ["server", "start", "--json", "--state-dir", path.join(home, "server")],
+      ["server", "start", "--json", "--state-dir", stateDir],
       { DEV_REVIEW_HOME: home },
     ),
 };
+
+it("gives the Desktop and headless servers on one home one serverId, and another home another", async () => {
+  const other = path.join(root, "other");
+
+  // Started together, so both race to create the id.
+  const children = [
+    ["desktop", processes.desktop(root)],
+    ["headless", processes.headless(root, root)],
+    ["headless", processes.headless(other, other)],
+  ] as const;
+
+  try {
+    const [desktop, headless, elsewhere] = await Promise.all(
+      children.map(async ([kind, child], index) => {
+        const server = await discovery(
+          kind,
+          child,
+          index === 1 ? root : index === 2 ? other : undefined,
+        );
+
+        return (await (await fetch(`${server.url}/health`)).json()).serverId;
+      }),
+    );
+
+    expect(desktop).toMatch(uuid);
+    expect(headless).toBe(desktop);
+    expect(elsewhere).toMatch(uuid);
+    expect(elsewhere).not.toBe(desktop);
+  } finally {
+    await Promise.all(
+      children.map(async ([, child]) => {
+        if (child.exitCode !== null) return;
+        const exited = once(child, "exit");
+        child.kill("SIGTERM");
+        await exited;
+      }),
+    );
+  }
+}, 30_000);
 
 it.each(["desktop", "headless"] as const)(
   "the %s server exits on SIGTERM with a /control client attached",
@@ -268,7 +347,11 @@ function spawnSource(
   });
 }
 
-async function discovery(kind: string, child: ChildProcess): Promise<Running> {
+async function discovery(
+  kind: string,
+  child: ChildProcess,
+  stateDir = path.join(root, "server"),
+): Promise<Running> {
   let output = "";
   let errors = "";
   const ready = Promise.withResolvers<void>();
@@ -296,9 +379,6 @@ async function discovery(kind: string, child: ChildProcess): Promise<Running> {
     );
 
   return JSON.parse(
-    await readFile(
-      reviewServerDiscoveryPath(path.join(root, "server")),
-      "utf8",
-    ),
+    await readFile(reviewServerDiscoveryPath(stateDir), "utf8"),
   );
 }

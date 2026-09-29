@@ -782,6 +782,17 @@ export type ReviewDesktopDiscovery = z.infer<
   typeof ReviewDesktopDiscoverySchema
 >;
 
+/** `GET /health` on every review server. No token. */
+export interface ReviewServerHealth {
+  ok: true;
+  instanceId: string; // new on every start
+  serverId: string; // stable, one per review store
+  serverPid: number;
+  desktopAttached: boolean;
+  version: string; // package version; equals the Desktop version in release builds
+  commit: string | null;
+}
+
 export const ReviewRepositoryIdentitySchema = z.strictObject({
   kind: z.enum(["git", "jj", "none"], {
     error: "must be git, jj, or none",
