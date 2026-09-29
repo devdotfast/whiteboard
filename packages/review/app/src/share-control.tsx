@@ -308,11 +308,16 @@ const styles = stylex.create({
     },
     color: { default: tokens.chromeFg, ":hover": tokens.ink },
   },
+  // In the topbar action row the shared anchoring (shellStyles.topbarPopover)
+  // places it; these are its own values anywhere else.
   popover: {
-    position: "absolute",
+    position: { default: "absolute", ":is(.review-topbar-actions *)": "fixed" },
     zIndex: 30,
-    top: "calc(100% + 4px)",
-    right: 0,
+    top: {
+      default: "calc(100% + 4px)",
+      ":is(.review-topbar-actions *)": "calc(anchor(bottom) + 4px)",
+    },
+    right: { default: 0, ":is(.review-topbar-actions *)": "anchor(right)" },
     display: "flex",
     flexDirection: "column",
     gap: "8px",
