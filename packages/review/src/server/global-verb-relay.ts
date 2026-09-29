@@ -17,9 +17,8 @@ const NOT_ATTACHED = "No Whiteboard Desktop is attached.";
 interface PendingVerb {
   resolve(response: ReviewVerbResponse): void;
   timer: ReturnType<typeof setTimeout>;
-  /** The clients the verb was sent to. */
-  sentTo: GlobalReviewDesktopVerbWriter[];
-  failures: number;
+  /** The clients yet to answer, by the frame id each was sent. */
+  waiting: Map<string, GlobalReviewDesktopVerbWriter>;
   lastFailure?: ReviewVerbResponse;
 }
 
@@ -39,16 +38,16 @@ export interface ReviewDesktopVerbRelay {
 }
 
 /**
- * Sends each verb to every attached client and resolves with the first
- * success. Results carry only the verb's id, so the relay cannot tell which
- * client answered: a verb fails once its failures reach the number of
- * clients it was sent to that are still attached.
+ * Sends each verb to every attached client, each with its own frame id, and
+ * resolves with the first success, or with the last failure once no client
+ * is left to answer.
  */
 export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
   private readonly clients = new Map<
     GlobalReviewDesktopVerbWriter,
     () => void
   >();
+  /** Each verb in flight, under every frame id it was sent with. */
   private readonly pending = new Map<string, PendingVerb>();
   private readonly timeoutMs: number;
   private readonly maxClients: number;
@@ -79,25 +78,42 @@ export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
 
   dispatch(value: JsonValue): Promise<ReviewVerbResponse> {
     const request: ReviewVerbRequest = parseReviewVerbRequest(value);
-    const sentTo = [...this.clients.keys()];
 
-    if (sentTo.length === 0) {
+    if (this.clients.size === 0) {
       return Promise.resolve({ ok: false, error: NOT_ATTACHED });
     }
 
-    const id = crypto.randomUUID();
-
     return new Promise<ReviewVerbResponse>((resolve) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        resolve({ ok: false, error: "Whiteboard Desktop verb timed out." });
-      }, this.timeoutMs);
+      const verb: PendingVerb = {
+        resolve,
+        waiting: new Map(
+          [...this.clients.keys()].map((client) => [
+            crypto.randomUUID(),
+            client,
+          ]),
+        ),
+        timer: setTimeout(
+          () =>
+            this.settle(
+              verb,
+              verb.lastFailure ?? {
+                ok: false,
+                error: "Whiteboard Desktop verb timed out.",
+              },
+            ),
+          this.timeoutMs,
+        ),
+      };
 
-      timer.unref?.();
-      this.pending.set(id, { resolve, timer, sentTo, failures: 0 });
-      const frame = `data: ${JSON.stringify({ event: "desktop-verb", id, request })}\n\n`;
+      verb.timer.unref?.();
 
-      for (const client of sentTo) {
+      // Every id is registered before the first write, which may detach its
+      // client at once.
+      for (const id of verb.waiting.keys()) this.pending.set(id, verb);
+
+      for (const [id, client] of [...verb.waiting]) {
+        const frame = `data: ${JSON.stringify({ event: "desktop-verb", id, request })}\n\n`;
+
         try {
           void Promise.resolve(client.write(frame)).catch(() => {
             this.detach(client);
@@ -111,29 +127,36 @@ export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
 
   acceptResult(value: JsonValue): boolean {
     const result = parseReviewDesktopVerbResult(value);
-    const pending = this.pending.get(result.id);
+    const verb = this.pending.get(result.id);
 
-    if (!pending) return false;
+    if (!verb) return false;
 
     if (result.response.ok) {
-      this.settle(result.id, result.response);
+      this.settle(verb, result.response);
     } else {
-      pending.failures += 1;
-      pending.lastFailure = result.response;
-      this.settleIfUnanswerable(result.id, pending);
+      verb.lastFailure = result.response;
+      this.stopWaiting(verb, result.id);
     }
 
     return true;
   }
 
   close(): void {
-    for (const id of this.pending.keys()) {
-      this.settle(id, { ok: false, error: "Whiteboard Desktop relay closed." });
+    for (const verb of new Set(this.pending.values())) {
+      this.settle(verb, {
+        ok: false,
+        error: "Whiteboard Desktop relay closed.",
+      });
     }
 
     for (const client of [...this.clients.keys()]) {
       this.detach(client);
-      void Promise.resolve(client.close()).catch(() => undefined);
+
+      try {
+        void Promise.resolve(client.close()).catch(() => undefined);
+      } catch {
+        // Already closed.
+      }
     }
   }
 
@@ -144,29 +167,24 @@ export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
     writer.signal.removeEventListener("abort", listener);
     this.clients.delete(writer);
 
-    for (const [id, pending] of this.pending) {
-      if (pending.sentTo.includes(writer))
-        this.settleIfUnanswerable(id, pending);
+    for (const [id, verb] of [...this.pending]) {
+      if (verb.waiting.get(id) === writer) this.stopWaiting(verb, id);
     }
   }
 
-  /** Fails the verb once no client it was sent to is left to answer. */
-  private settleIfUnanswerable(id: string, pending: PendingVerb): void {
-    const remaining = pending.sentTo.filter((client) =>
-      this.clients.has(client),
-    ).length;
+  /** Drops one client's id; with nobody left to answer, the verb fails. */
+  private stopWaiting(verb: PendingVerb, id: string): void {
+    verb.waiting.delete(id);
+    this.pending.delete(id);
 
-    if (pending.failures < remaining) return;
-
-    this.settle(id, pending.lastFailure ?? { ok: false, error: NOT_ATTACHED });
+    if (verb.waiting.size === 0)
+      this.settle(verb, verb.lastFailure ?? { ok: false, error: NOT_ATTACHED });
   }
 
-  private settle(id: string, response: ReviewVerbResponse): void {
-    const pending = this.pending.get(id);
-
-    if (!pending) return;
-    this.pending.delete(id);
-    clearTimeout(pending.timer);
-    pending.resolve(response);
+  private settle(verb: PendingVerb, response: ReviewVerbResponse): void {
+    for (const id of verb.waiting.keys()) this.pending.delete(id);
+    verb.waiting.clear();
+    clearTimeout(verb.timer);
+    verb.resolve(response);
   }
 }

@@ -68,6 +68,30 @@ describe("global Review Desktop verb relay", () => {
         event: "desktop-verb",
         request: openVerb,
       });
+
+    // Each client answers with its own id, so a result names its client.
+    expect(frameId(clients[0])).not.toBe(frameId(clients[1]));
+  });
+
+  it("sends to every client when the first one's write throws", async () => {
+    const relay = new GlobalReviewDesktopVerbRelay();
+    const broken = createWriter();
+    const working = createWriter();
+
+    broken.writer.write = () => {
+      throw new Error("closed");
+    };
+
+    relay.attach(broken.writer);
+    relay.attach(working.writer);
+
+    const result = settled(relay.dispatch(openVerb));
+
+    await vi.waitFor(() => expect(working.frames).toHaveLength(1));
+    await Promise.resolve();
+    expect(result.done).toBe(false);
+    relay.acceptResult({ id: frameId(working), response: { ok: true } });
+    await expect(result.promise).resolves.toEqual({ ok: true });
   });
 
   it("resolves with the first success without waiting for a silent client, and ignores later answers", async () => {
@@ -95,9 +119,14 @@ describe("global Review Desktop verb relay", () => {
         ok: true,
         result: { softwareMapEnabled: false },
       });
-      expect(
-        relay.acceptResult({ id, response: { ok: false, error: "late" } }),
-      ).toBe(false);
+
+      for (const late of [id, frameId(silent)])
+        expect(
+          relay.acceptResult({
+            id: late,
+            response: { ok: false, error: "late" },
+          }),
+        ).toBe(false);
     } finally {
       vi.useRealTimers();
     }
@@ -105,34 +134,82 @@ describe("global Review Desktop verb relay", () => {
 
   it("resolves with a success that follows a failure", async () => {
     const relay = new GlobalReviewDesktopVerbRelay();
-    const [first] = attachAll(relay, 2);
+    const [first, second] = attachAll(relay, 2);
 
     const result = relay.dispatch(openVerb);
 
-    await vi.waitFor(() => expect(first.frames).toHaveLength(1));
-
-    const id = frameId(first);
+    await vi.waitFor(() => expect(second.frames).toHaveLength(1));
 
     expect(
-      relay.acceptResult({ id, response: { ok: false, error: "first" } }),
+      relay.acceptResult({
+        id: frameId(first),
+        response: { ok: false, error: "first" },
+      }),
     ).toBe(true);
-    expect(relay.acceptResult({ id, response: { ok: true } })).toBe(true);
+    expect(
+      relay.acceptResult({ id: frameId(second), response: { ok: true } }),
+    ).toBe(true);
     await expect(result).resolves.toEqual({ ok: true });
   });
 
   it("resolves with the last failure when every client fails", async () => {
     const relay = new GlobalReviewDesktopVerbRelay();
-    const [first] = attachAll(relay, 2);
+    const [first, second] = attachAll(relay, 2);
 
     const result = relay.dispatch(openVerb);
 
-    await vi.waitFor(() => expect(first.frames).toHaveLength(1));
-
-    const id = frameId(first);
-
-    relay.acceptResult({ id, response: { ok: false, error: "first" } });
-    relay.acceptResult({ id, response: { ok: false, error: "second" } });
+    await vi.waitFor(() => expect(second.frames).toHaveLength(1));
+    relay.acceptResult({
+      id: frameId(first),
+      response: { ok: false, error: "first" },
+    });
+    relay.acceptResult({
+      id: frameId(second),
+      response: { ok: false, error: "second" },
+    });
     await expect(result).resolves.toEqual({ ok: false, error: "second" });
+  });
+
+  it("waits for a silent client after another fails and detaches", async () => {
+    const relay = new GlobalReviewDesktopVerbRelay();
+    const [failing, silent] = attachAll(relay, 2);
+
+    const result = settled(relay.dispatch(openVerb));
+
+    await vi.waitFor(() => expect(silent.frames).toHaveLength(1));
+    relay.acceptResult({
+      id: frameId(failing),
+      response: { ok: false, error: "A failed" },
+    });
+    failing.abort.abort();
+    await Promise.resolve();
+    expect(result.done).toBe(false);
+    expect(
+      relay.acceptResult({ id: frameId(silent), response: { ok: true } }),
+    ).toBe(true);
+    await expect(result.promise).resolves.toEqual({ ok: true });
+  });
+
+  it("counts one answer per client", async () => {
+    const relay = new GlobalReviewDesktopVerbRelay();
+    const [failing, silent] = attachAll(relay, 2);
+
+    const result = settled(relay.dispatch(openVerb));
+
+    await vi.waitFor(() => expect(silent.frames).toHaveLength(1));
+
+    const id = frameId(failing);
+
+    expect(
+      relay.acceptResult({ id, response: { ok: false, error: "A1" } }),
+    ).toBe(true);
+    expect(
+      relay.acceptResult({ id, response: { ok: false, error: "A2" } }),
+    ).toBe(false);
+    await Promise.resolve();
+    expect(result.done).toBe(false);
+    relay.acceptResult({ id: frameId(silent), response: { ok: true } });
+    await expect(result.promise).resolves.toEqual({ ok: true });
   });
 
   it("keeps a verb in flight when one client detaches, and the other's answer resolves it", async () => {
@@ -193,8 +270,15 @@ describe("global Review Desktop verb relay", () => {
     await vi.waitFor(() => expect(working.frames).toHaveLength(1));
     await Promise.resolve();
     expect(relay.attached).toBe(true);
-    relay.acceptResult({ id: frameId(working), response: { ok: true } });
-    await expect(result).resolves.toEqual({ ok: true });
+    // Only the working client is left to answer, so its failure is final.
+    relay.acceptResult({
+      id: frameId(working),
+      response: { ok: false, error: "working failed" },
+    });
+    await expect(result).resolves.toEqual({
+      ok: false,
+      error: "working failed",
+    });
   });
 
   it("refuses a client beyond its limit, 16 unless told otherwise", () => {
@@ -231,6 +315,23 @@ describe("global Review Desktop verb relay", () => {
         error: "Whiteboard Desktop verb timed out.",
       });
 
+      const [failing] = attachAll(timeoutRelay, 1);
+
+      const failedThenTimedOut = timeoutRelay.dispatch({
+        name: "focusCanvas",
+        args: {},
+      });
+
+      timeoutRelay.acceptResult({
+        id: frameId(failing),
+        response: { ok: false, error: "failed" },
+      });
+      await vi.advanceTimersByTimeAsync(25);
+      await expect(failedThenTimedOut).resolves.toEqual({
+        ok: false,
+        error: "failed",
+      });
+
       const disconnectRelay = new GlobalReviewDesktopVerbRelay();
       const disconnectWriter = createWriter();
       disconnectRelay.attach(disconnectWriter.writer);
@@ -247,7 +348,11 @@ describe("global Review Desktop verb relay", () => {
       });
 
       const closedRelay = new GlobalReviewDesktopVerbRelay();
-      const closedWriters = attachAll(closedRelay, 2);
+      const closedWriters = attachAll(closedRelay, 3);
+
+      closedWriters[0].close.mockImplementation(() => {
+        throw new Error("already closed");
+      });
 
       const closed = closedRelay.dispatch({
         name: "focusWindow",
