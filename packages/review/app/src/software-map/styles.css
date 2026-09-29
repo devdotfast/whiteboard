@@ -1,5 +1,3 @@
-/* Software map diagrams: the framed React Flow canvas, its nodes, edges and
-   change badges, the fullscreen overlay and the C4 levels. */
 .software-map {
   margin: 24px 0;
 }
@@ -32,8 +30,6 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
-/* Without its chrome the frame is embedded in a host surface: no border,
-   corner or shadow of its own. */
 .software-map-frame.software-map-frame--chrome-hidden {
   border: 0;
   border-radius: 0;
@@ -1164,14 +1160,12 @@
   line-height: 17px !important;
 }
 
-/* Inside a document, node paragraphs keep the document's serif face and
-   paragraph spacing. */
+/* Read as document paragraphs. */
 .review-document .software-map-node p {
   margin: 14px 0;
   font-family: var(--font-serif);
 }
 
-/* Inside a document, the absence notice reads as document paragraphs. */
 .review-document .software-map-unavailable p {
   margin: 14px 0;
   color: var(--ink);

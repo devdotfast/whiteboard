@@ -1,6 +1,3 @@
-/* Markdown from agent trace messages, set compactly: no block margins,
-   small headings, mono tables. */
-
 .agent-markdown {
   min-width: 0;
   overflow-wrap: anywhere;

@@ -1,6 +1,3 @@
-/* The in-document tutorial: its keymap picker and view buttons, the floating
-   guide card and pill, and the rings drawn around tutorial targets. */
-
 /* The same segmented control as the view switcher in the top bar: same
    tokens for the group, the resting and hover text, and the raised active
    segment. Inline-flex so the tutorial ring hugs the group. */

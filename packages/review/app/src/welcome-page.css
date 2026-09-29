@@ -1,6 +1,3 @@
-/* Welcome page: the first-run intro, the onboarding step accordion, and the
-   connect prompt card with its agent tabs and setup rows. */
-
 /* The prompt card sits inside an accordion step, which already draws the
    surface, so it adds no frame of its own. */
 

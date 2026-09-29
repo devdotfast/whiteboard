@@ -1,6 +1,3 @@
-/* In-canvas find: the match highlights and the floating find widget with
-   its input, match count, option toggles and step actions. */
-
 ::highlight(review-find-match) {
   background: var(--review-find-match-background);
 }

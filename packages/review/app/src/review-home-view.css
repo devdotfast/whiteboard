@@ -1,6 +1,3 @@
-/* Home page: the Sessions heading and search, the scratchpad card, the
-   sessions table and the dismissed list. Mono display type, serif titles. */
-
 .review-home {
   display: flex;
   flex-direction: column;

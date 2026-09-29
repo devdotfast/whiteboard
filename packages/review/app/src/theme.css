@@ -1,7 +1,4 @@
-/* Canvas theme tokens: the dark palette on .review-canvas-root, the chrome
-   bridge on .review-app, and the light palette class.
-
-   One board, one marker: chrome is the tray, content is the board, committed
+/* One board, one marker: chrome is the tray, content is the board, committed
    things are crisp vector, anything the agent is still thinking about is
    marker ink trailing one blue dot, and erased history lingers as ghost ink. */
 

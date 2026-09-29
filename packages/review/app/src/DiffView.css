@@ -1,6 +1,3 @@
-/* The diff workspace: the lens and file sidebar with its resizers, and the
-   call trees and lens flows it shares with document figures. */
-
 /* Call trees share their rows/connectors with the diff sidebar. */
 
 .review-document-call-tree {

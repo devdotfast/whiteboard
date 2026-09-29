@@ -1,22 +1,15 @@
-/* The canvas stylesheet, in cascade order. Vite inlines these imports into
-   one bundle and the desktop build scopes it to .review-canvas-root, so the
-   order below is the order of the rules. Where two files style the same
-   element with equally specific selectors, the later file wins; the notes
-   name the pairs that depend on it. */
+/* The canvas stylesheet. Order matters where noted: on equal specificity the
+   later file wins. */
 
-/* Faces, React Flow's base styles, design tokens, element resets and the
-   controls every surface shares. React Flow sits in a layer, so any canvas
-   rule beats it whatever the selectors' specificity. */
 @import "./fonts/fonts.css";
+/* In a layer, so any canvas rule beats React Flow. */
 @import "@xyflow/react/dist/style.css" layer(vendor);
 @import "./theme.css";
 @import "./base.css";
 @import "./controls.css";
 
-/* Components that also render inside documents and the tutorial. They come
-   before review-document.css, whose heading and code rules (.review-document
-   h3, code) still reach into them and win inside a document, as does its
-   collapsed-section heading over the tutorial's active-chapter heading. */
+/* Before review-document.css, whose h3 and code rules, and collapsed-section
+   heading, must win inside documents and the tutorial. */
 @import "./software-map/styles.css";
 @import "./flow-diagram.css";
 @import "./api-document.css";
@@ -25,17 +18,15 @@
 @import "./review-find.css";
 @import "./tutorial-experience.css";
 
-/* The shell and the document. */
 @import "./review-shell.css";
 @import "./review-document.css";
 @import "./review-toc.css";
-/* Rendered code blocks sit inside agent markdown and override its code rule. */
+/* code-block.css overrides agent markdown's code rule. */
 @import "./agent-markdown.css";
 @import "./code-block.css";
 @import "./review-panel.css";
 @import "./diagrams.css";
 
-/* Views and pages. */
 @import "./DiffView.css";
 @import "./ReviewTraceView.css";
 @import "./review-home-view.css";
@@ -43,10 +34,9 @@
 @import "./settings-page.css";
 @import "./bug-report-dialog.css";
 
-/* The agent at work: the top bar badge, the courier (whose march outlasts the
-   badge's reduced-motion rule), then the drawing animations, which restyle
-   blocks and diagram units from every file above while they carry
-   data-motion. */
+/* Last, in this order: the courier's march outlasts the badge's
+   reduced-motion rule, and authoring-motion restyles everything above while
+   data-motion is set. */
 @import "./authoring-activity.css";
 @import "./courier.css";
 @import "./authoring-motion.css";

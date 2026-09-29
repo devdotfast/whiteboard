@@ -1,5 +1,3 @@
-/* The share button and the popover it opens with the review link. */
-
 .review-share-button[aria-expanded="true"] {
   background: var(--chrome-hover-bg);
   color: var(--chrome-fg);

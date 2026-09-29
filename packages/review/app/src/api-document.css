@@ -30,8 +30,7 @@
   height: auto;
 }
 
-/* The source-context line above the blocks, and the stale-range notice a
-   node shows in place of its block, read as document paragraphs. */
+/* Read as document paragraphs. */
 .review-document .review-source-context,
 .review-document .api-document-node > p {
   margin: 14px 0;

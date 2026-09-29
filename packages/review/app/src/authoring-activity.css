@@ -1,6 +1,3 @@
-/* The authoring badge in the topbar. The mini courier says whether an agent
-   is here: he marches while one is, and goes grey and slumps otherwise. */
-
 .host-authoring-activity {
   display: inline-flex;
   flex: 0 1 auto;

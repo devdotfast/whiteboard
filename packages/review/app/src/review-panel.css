@@ -1,6 +1,3 @@
-/* The side panel: its header, code peeks, inline editors and the guided
-   tour feed, which becomes a bottom sheet on narrow shells. */
-
 .side-panel {
   display: flex;
   flex-direction: column;

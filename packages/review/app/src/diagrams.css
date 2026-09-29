@@ -1,6 +1,3 @@
-/* Diagram figures (sequence and database): the frame and header, the React
-   Flow canvases, and the fullscreen diagram tour. */
-
 .sequence-participant-label-anchor,
 .sequence-message-label-anchor {
   position: relative;

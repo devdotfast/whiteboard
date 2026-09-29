@@ -1,6 +1,3 @@
-/* Commit range view: a timeline down the left, each commit a crisp card on
-   the board, plus the diff scope bar and the copyable branch range. */
-
 .review-commits-view {
   min-height: 100%;
   padding: 32px 24px;

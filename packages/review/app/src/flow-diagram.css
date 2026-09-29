@@ -1,6 +1,3 @@
-/* Flow diagrams: the figure frame and legend footer, and the React Flow
-   nodes and edges drawn on its dotted canvas. */
-
 .flow-diagram {
   overflow: hidden;
   margin: 18px 0 4px;
@@ -220,8 +217,7 @@
   stroke-width: 4px;
 }
 
-/* Inside a document, a flow's own paragraphs (the layout note and error) read
-   as document paragraphs; the description keeps its caption type. */
+/* Read as document paragraphs; the description keeps its caption type. */
 .review-document .flow-diagram p {
   margin: 14px 0;
   color: var(--ink);

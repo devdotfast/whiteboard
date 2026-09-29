@@ -1,6 +1,3 @@
-/* Bug report dialog: the modal form, its screenshot attachment, and the
-   topbar button that opens it. */
-
 .bug-report-backdrop {
   position: fixed;
   z-index: 10000;

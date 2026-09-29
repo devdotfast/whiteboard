@@ -1,6 +1,3 @@
-/* Shared controls: the drawn check, segmented choices, toasts, icon buttons,
-   the disclosure chevron and file status marks. */
-
 .review-drawn-check {
   flex: none;
   width: 12px;
@@ -254,8 +251,7 @@
   }
 }
 
-/* Disclosure chevron: one glyph, shared by every surface. It rotates a
-   quarter turn when open. */
+/* Disclosure chevron; rotates a quarter turn when open. */
 
 .review-chevron {
   flex: none;
@@ -322,8 +318,6 @@ button:focus-visible > .review-chevron {
   color: var(--ghost);
 }
 
-/* Single-choice menus: the trigger and its chevron; the options open in a
-   native menu. */
 .review-option-menu {
   position: relative;
 }
