@@ -22,11 +22,8 @@ declare module "micromark-util-types" {
 const backslash = 92;
 
 /**
- * LaTeX's own math delimiters: `\(…\)` inline and `\[…\]` display.
- * CommonMark would read `\(` as an escaped parenthesis, so these constructs
- * run before character escapes; an unclosed opener still falls back to one.
- * `\[` and `\]` count only on lines of their own, because escaped brackets in
- * prose (`\[1\]`, as `escapeMarkdownText` writes them) must stay brackets.
+ * `\(…\)` inline and `\[…\]` display math, read ahead of character escapes.
+ * `\[` and `\]` count only on their own lines, so an escaped `\[1\]` stays prose.
  */
 export function latexMath(): Extension {
   return {
@@ -39,7 +36,7 @@ export function latexMath(): Extension {
   };
 }
 
-/** Builds `inlineMath` and `math` nodes, the ones `$` and `$$` produce. */
+/** Builds the nodes `$` and `$$` produce. */
 export function latexMathFromMarkdown(): FromMarkdownExtension {
   return {
     enter: {
@@ -75,7 +72,7 @@ const exitMath: Handle = function (token) {
 
 const lineEnding = (code: Code) => code !== null && code < -2;
 
-// Space, and the tab and virtual-space codes micromark splits tabs into.
+// Space, tab and micromark's virtual space.
 const lineSpace = (code: Code) => code === 32 || code === -2 || code === -1;
 
 function delimitedMath(
@@ -151,8 +148,7 @@ function delimitedMath(
       return data(code);
     }
 
-    // A TeX control sequence such as `\\` or `\{` stays one unit, so the
-    // `)` in `\\)` never closes.
+    // `\\` is one unit, so the `)` in `\\)` never closes.
     function escape(code: Code): State | undefined {
       effects.enter("latexMathData");
       effects.consume(code);

@@ -62,7 +62,7 @@ export default defineConfig({
       /^@dev\.fast\/review-share-protocol$/,
       /^@dev\.fast\/trace-protocol$/,
       /^isomorphic-git$/,
-      // Installed, it would bring the KaTeX its unused HTML compiler imports.
+      // Bundled to keep its KaTeX dependency out of the runtime.
       /^micromark-extension-math$/,
     ],
     // Re-inlining core's public declaration graph exhausts the default Node heap.

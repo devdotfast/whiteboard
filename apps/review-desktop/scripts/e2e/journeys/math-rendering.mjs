@@ -1,4 +1,4 @@
-/** TeX math in a Markdown block must typeset in the Desktop, inside the workbench's content security policy. */
+/** TeX math typesets in the Desktop under the workbench CSP. */
 import assert from "node:assert/strict";
 
 import { createReview } from "../harness.mjs";
@@ -11,7 +11,7 @@ export const options = {};
 
 const tex = String.raw;
 
-// Each sized delimiter draws from a font of its own, the smallest of them under Vite's inlining limit.
+// One font per delimiter size; Size3 is under Vite's inlining limit.
 const FONTS = [
   "KaTeX_Main",
   "KaTeX_Math",
@@ -65,7 +65,7 @@ export async function run(ctx) {
   await canvas.getByText("It costs $5 and $10, see [1].").waitFor();
   ctx.check("dollar, paren and bracket math typesets; prose stays prose");
 
-  // A font the policy refuses ends in "error" and never loads, so waiting on the loaded ones alone would only time out.
+  // A refused font ends in "error", never "loaded".
   const fonts = await ctx.until(async () => {
     const faces = await page.evaluate(() =>
       [...document.fonts].map((font) => ({

@@ -306,8 +306,7 @@ function renderMarkdownNode(
     case "math":
       return <MarkdownMath key={key} tex={node.value ?? ""} display />;
     case "inlineMath":
-      // Like Pandoc, a `$` that opens before or closes after a space is prose,
-      // so "$5 and $10" stays text.
+      // Like Pandoc: "$5 and $10" stays prose.
       if (/^\s|\s$/.test(node.value ?? "")) return `$${node.value}$`;
 
       return <MarkdownMath key={key} tex={node.value ?? ""} display={false} />;

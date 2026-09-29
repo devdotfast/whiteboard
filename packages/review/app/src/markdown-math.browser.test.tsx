@@ -32,7 +32,6 @@ const failures = () =>
     (error) => error.textContent,
   );
 
-// Notation agents write, grouped by the LaTeX package that defines it.
 const NOTATION: Array<[name: string, source: string]> = [
   [
     "fractions and roots",

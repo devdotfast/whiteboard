@@ -39,8 +39,7 @@ export default defineConfig({
       },
     },
     {
-      // Chromium reads woff2, so KaTeX's woff and ttf fallbacks would ship
-      // unused.
+      // Chromium reads woff2; drop KaTeX's woff and ttf fallbacks.
       name: "katex-woff2-only",
       enforce: "pre",
       transform(source, moduleId) {
@@ -87,7 +86,7 @@ export default defineConfig({
   // file, not the `vscode-file://vscode-app/` root.
   base: "./",
   build: {
-    // The workbench CSP refuses `data:` fonts, so a small one stays a file.
+    // The workbench CSP refuses `data:` fonts.
     assetsInlineLimit: (file) => (file.endsWith(".woff2") ? false : undefined),
     copyPublicDir: false,
     emptyOutDir: true,

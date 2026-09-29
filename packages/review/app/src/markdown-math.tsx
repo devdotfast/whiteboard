@@ -4,7 +4,7 @@ import katex from "katex";
 import "katex/dist/katex.css";
 import { type ReactElement, useLayoutEffect, useRef } from "react";
 
-/** TeX math typeset by KaTeX, which builds DOM nodes and injects no HTML. */
+/** KaTeX builds DOM nodes, so Trusted Types holds. */
 export function MarkdownMath({
   tex,
   display,
@@ -15,8 +15,7 @@ export function MarkdownMath({
   const ref = useRef<HTMLSpanElement>(null);
 
   useLayoutEffect(() => {
-    // TeX here is untrusted runtime text. KaTeX's defaults refuse the commands
-    // that emit links, images, classes or styles.
+    // Untrusted TeX: the defaults refuse links, images, classes and styles.
     katex.render(tex, ref.current!, {
       displayMode: display,
       throwOnError: false,
@@ -27,6 +26,5 @@ export function MarkdownMath({
 }
 
 const styles = stylex.create({
-  // A wide equation scrolls instead of widening the document.
   display: { display: "block", overflowX: "auto", overflowY: "hidden" },
 });
