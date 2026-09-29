@@ -10,11 +10,17 @@ import {
 
 const DEFAULT_VERB_TIMEOUT_MS = 45_000;
 
+const DEFAULT_MAX_CLIENTS = 16;
+
 const NOT_ATTACHED = "No Whiteboard Desktop is attached.";
 
 interface PendingVerb {
   resolve(response: ReviewVerbResponse): void;
   timer: ReturnType<typeof setTimeout>;
+  /** The clients the verb was sent to. */
+  sentTo: GlobalReviewDesktopVerbWriter[];
+  failures: number;
+  lastFailure?: ReviewVerbResponse;
 }
 
 export interface GlobalReviewDesktopVerbWriter {
@@ -32,22 +38,40 @@ export interface ReviewDesktopVerbRelay {
   close(): void;
 }
 
+/**
+ * Sends each verb to every attached client and resolves with the first
+ * success. Results carry only the verb's id, so the relay cannot tell which
+ * client answered: a verb fails once its failures reach the number of
+ * clients it was sent to that are still attached.
+ */
 export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
-  private controlWriter: GlobalReviewDesktopVerbWriter | null = null;
-  private controlAbortListener: (() => void) | null = null;
+  private readonly clients = new Map<
+    GlobalReviewDesktopVerbWriter,
+    () => void
+  >();
   private readonly pending = new Map<string, PendingVerb>();
+  private readonly timeoutMs: number;
+  private readonly maxClients: number;
 
-  constructor(private readonly timeoutMs = DEFAULT_VERB_TIMEOUT_MS) {}
+  constructor(options: { timeoutMs?: number; maxClients?: number } = {}) {
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_VERB_TIMEOUT_MS;
+    this.maxClients = options.maxClients ?? DEFAULT_MAX_CLIENTS;
+  }
 
   get attached(): boolean {
-    return this.controlWriter !== null;
+    return this.clients.size > 0;
   }
 
   attach(writer: GlobalReviewDesktopVerbWriter): boolean {
-    if (this.controlWriter || writer.signal.aborted) return false;
-    this.controlWriter = writer;
-    const detach = () => this.detach(writer, NOT_ATTACHED);
-    this.controlAbortListener = detach;
+    if (
+      this.clients.size >= this.maxClients ||
+      this.clients.has(writer) ||
+      writer.signal.aborted
+    )
+      return false;
+
+    const detach = () => this.detach(writer);
+    this.clients.set(writer, detach);
     writer.signal.addEventListener("abort", detach, { once: true });
 
     return true;
@@ -55,9 +79,9 @@ export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
 
   dispatch(value: JsonValue): Promise<ReviewVerbResponse> {
     const request: ReviewVerbRequest = parseReviewVerbRequest(value);
-    const control = this.controlWriter;
+    const sentTo = [...this.clients.keys()];
 
-    if (!control) {
+    if (sentTo.length === 0) {
       return Promise.resolve({ ok: false, error: NOT_ATTACHED });
     }
 
@@ -70,15 +94,17 @@ export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
       }, this.timeoutMs);
 
       timer.unref?.();
-      this.pending.set(id, { resolve, timer });
+      this.pending.set(id, { resolve, timer, sentTo, failures: 0 });
       const frame = `data: ${JSON.stringify({ event: "desktop-verb", id, request })}\n\n`;
 
-      try {
-        void Promise.resolve(control.write(frame)).catch(() => {
-          this.detach(control, NOT_ATTACHED);
-        });
-      } catch {
-        this.detach(control, NOT_ATTACHED);
+      for (const client of sentTo) {
+        try {
+          void Promise.resolve(client.write(frame)).catch(() => {
+            this.detach(client);
+          });
+        } catch {
+          this.detach(client);
+        }
       }
     });
   }
@@ -88,43 +114,59 @@ export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
     const pending = this.pending.get(result.id);
 
     if (!pending) return false;
-    this.pending.delete(result.id);
-    clearTimeout(pending.timer);
-    pending.resolve(result.response);
+
+    if (result.response.ok) {
+      this.settle(result.id, result.response);
+    } else {
+      pending.failures += 1;
+      pending.lastFailure = result.response;
+      this.settleIfUnanswerable(result.id, pending);
+    }
 
     return true;
   }
 
   close(): void {
-    const control = this.controlWriter;
-
-    if (!control) {
-      this.rejectPending("Whiteboard Desktop relay closed.");
-
-      return;
+    for (const id of this.pending.keys()) {
+      this.settle(id, { ok: false, error: "Whiteboard Desktop relay closed." });
     }
 
-    this.detach(control, "Whiteboard Desktop relay closed.");
-    void Promise.resolve(control.close()).catch(() => undefined);
-  }
-
-  private detach(writer: GlobalReviewDesktopVerbWriter, error: string): void {
-    if (this.controlWriter !== writer) return;
-
-    if (this.controlAbortListener) {
-      writer.signal.removeEventListener("abort", this.controlAbortListener);
+    for (const client of [...this.clients.keys()]) {
+      this.detach(client);
+      void Promise.resolve(client.close()).catch(() => undefined);
     }
-
-    this.controlAbortListener = null;
-    this.controlWriter = null;
-    this.rejectPending(error);
   }
 
-  private rejectPending(error: string): void {
+  private detach(writer: GlobalReviewDesktopVerbWriter): void {
+    const listener = this.clients.get(writer);
+
+    if (!listener) return;
+    writer.signal.removeEventListener("abort", listener);
+    this.clients.delete(writer);
+
     for (const [id, pending] of this.pending) {
-      clearTimeout(pending.timer);
-      pending.resolve({ ok: false, error });
-      this.pending.delete(id);
+      if (pending.sentTo.includes(writer))
+        this.settleIfUnanswerable(id, pending);
     }
+  }
+
+  /** Fails the verb once no client it was sent to is left to answer. */
+  private settleIfUnanswerable(id: string, pending: PendingVerb): void {
+    const remaining = pending.sentTo.filter((client) =>
+      this.clients.has(client),
+    ).length;
+
+    if (pending.failures < remaining) return;
+
+    this.settle(id, pending.lastFailure ?? { ok: false, error: NOT_ATTACHED });
+  }
+
+  private settle(id: string, response: ReviewVerbResponse): void {
+    const pending = this.pending.get(id);
+
+    if (!pending) return;
+    this.pending.delete(id);
+    clearTimeout(pending.timer);
+    pending.resolve(response);
   }
 }
