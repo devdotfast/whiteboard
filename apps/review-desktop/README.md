@@ -483,6 +483,23 @@ The canvas uses TanStack Query (`canvas-query.tsx`) for local API and bridge
 requests. Use `useQuery` or `useMutation` for new requests instead of
 hand-written fetch effects; keep local UI state out of it.
 
+## Canvas CSS
+
+Canvas styles are plain CSS in `packages/review/app/src`, bundled from the
+`@import` list in `styles.css` and scoped to the canvas.
+
+- Put rules in the owning component's stylesheet; add a new file to
+  `styles.css` rather than importing CSS from a component. Shared tokens,
+  resets and controls live in `theme.css`, `base.css` and `controls.css`.
+- Use `theme.css` tokens, not raw colors.
+- Style elements by their own classes. For a different look inside another
+  host, add a modifier class instead of a descendant selector from the host.
+- Avoid `!important`; third-party CSS sits in `layer(vendor)`, so ordinary
+  rules already win.
+- Keep the import order; its comments name the files that depend on it.
+- Check the built canvas in Desktop (light, dark, narrow, hover/focus, reduced
+  motion). Do not add tests that assert CSS text.
+
 ## Development and validation
 
 Canvas changes need `pnpm --filter @dev.fast/review-canvas build` and a
