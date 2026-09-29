@@ -195,7 +195,7 @@ describe("ReviewTraceView", () => {
     );
     await act(async () =>
       container
-        .querySelector<HTMLButtonElement>(".review-trace-picker-trigger")!
+        .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
         .click(),
     );
 
@@ -208,7 +208,7 @@ describe("ReviewTraceView", () => {
     await act(async () => container.querySelector("button")!.click());
     await act(async () =>
       container
-        .querySelector<HTMLButtonElement>(".review-trace-picker-trigger")!
+        .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
         .click(),
     );
     expect(options().at(-1)?.getAttribute("aria-selected")).toBe("true");
