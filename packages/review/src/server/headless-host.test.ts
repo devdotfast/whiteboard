@@ -650,9 +650,13 @@ async function attachDesktop(
   return { opened, detach: () => abort.abort() };
 }
 
-it("reports an attached Desktop and sends it the reviews to open", async () => {
+it("reports attached Desktops and sends each the reviews to open", async () => {
   const server = await start();
-  const desktop = await attachDesktop(server.discovery);
+
+  const desktops = [
+    await attachDesktop(server.discovery),
+    await attachDesktop(server.discovery),
+  ];
 
   try {
     expect(await server.client.read("/capabilities")).toMatchObject({
@@ -678,11 +682,14 @@ it("reports an attached Desktop and sends it the reviews to open", async () => {
     });
 
     await server.client.post(`/${created.reviewId}/open`, {});
-    expect(desktop.opened).toEqual([
-      { reviewId: created.reviewId, title: "Opened remotely" },
-    ]);
+
+    // The first answer resolves the open; the other's may still be on its way.
+    for (const desktop of desktops)
+      await expect
+        .poll(() => desktop.opened)
+        .toEqual([{ reviewId: created.reviewId, title: "Opened remotely" }]);
   } finally {
-    desktop.detach();
+    for (const desktop of desktops) desktop.detach();
   }
 
   await expect

@@ -174,25 +174,31 @@ describe.each(["desktop", "headless"] as const)("the %s server", (kind) => {
     ).toBe(origin);
   });
 
-  it("refuses a second /control client with a well-formed response", async () => {
+  // Each Desktop window attaches its own stream; the Desktop keeps one so a
+  // verb never opens in every window.
+  const limit = { desktop: 1, headless: 16 }[kind];
+
+  it(`refuses a /control client beyond ${limit} with a well-formed response`, async () => {
     const server = await start();
     const headers = { "x-review-token": server.token };
     const abort = new AbortController();
 
-    const first = await fetch(`${server.url}/control`, {
-      headers,
-      signal: abort.signal,
-    });
-
-    expect(first.status).toBe(200);
-
     try {
-      const second = await fetch(`${server.url}/control`, { headers });
+      for (let index = 0; index < limit; index++) {
+        const attached = await fetch(`${server.url}/control`, {
+          headers,
+          signal: abort.signal,
+        });
 
-      expect(second.status).toBe(409);
-      expect(await second.json()).toMatchObject({
+        expect(attached.status).toBe(200);
+      }
+
+      const refused = await fetch(`${server.url}/control`, { headers });
+
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toMatchObject({
         ok: false,
-        error: expect.stringContaining("already attached"),
+        error: expect.stringContaining("control clients"),
       });
 
       // Node's parser rejects a reply framed both ways.
@@ -282,25 +288,31 @@ it("gives the Desktop and headless servers on one home one serverId, and another
   }
 }, 30_000);
 
-it.each(["desktop", "headless"] as const)(
-  "the %s server exits on SIGTERM with a /control client attached",
-  async (kind) => {
+it.each([
+  ["desktop", 1],
+  ["headless", 1],
+  ["headless", 2],
+] as const)(
+  "the %s server exits on SIGTERM with %i /control clients attached",
+  async (kind, clients) => {
     const child = processes[kind](root);
     const exited = once(child, "exit");
 
     try {
       const server = await discovery(kind, child);
 
-      const control = await fetch(`${server.url}/control`, {
-        headers: { "x-review-token": server.token },
-      });
+      for (let index = 0; index < clients; index++) {
+        const control = await fetch(`${server.url}/control`, {
+          headers: { "x-review-token": server.token },
+        });
 
-      expect(control.status).toBe(200);
+        expect(control.status).toBe(200);
+      }
 
       child.kill("SIGTERM");
 
       // Under the headless server's 5 s force-close: the relay must end the
-      // stream itself.
+      // streams itself.
       let timer: NodeJS.Timeout | undefined;
 
       const [code] = await Promise.race([
