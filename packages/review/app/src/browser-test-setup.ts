@@ -1,4 +1,4 @@
-import { afterEach, beforeEach } from "vitest";
+import { afterEach, beforeAll } from "vitest";
 
 // SAFETY: React exposes this documented test-environment flag without adding
 // it to TypeScript's global declarations.
@@ -13,9 +13,10 @@ afterEach(() => {
 });
 
 // Vitest has no CSS asset for StyleX to append its rules to. Load them from
-// the plugin's dev endpoint once the test file's imports are transformed, last
-// in <head>, where the production build puts them.
-beforeEach(async () => {
+// the plugin's dev endpoint once per file, after its imports are transformed,
+// last in <head>, where the production build puts them. Reloading before every
+// test restyles the page each time and starves later tests of frames.
+beforeAll(async () => {
   const stale = document.querySelectorAll("link[data-stylex-dev]");
   const link = document.createElement("link");
 
