@@ -2,9 +2,8 @@
    written next to the component that renders it. */
 
 /* The scope root: the canvas container the workbench mounts into. Inside
-   @scope only :scope reaches it, so its box and the dark palette live here. */
-
-/* One board, one marker: chrome is the tray, content is the board, committed
+   @scope only :scope reaches it, so its box and the dark palette live here.
+   One board, one marker: chrome is the tray, content is the board, committed
    things are crisp vector, anything the agent is still thinking about is
    marker ink trailing one blue dot, and erased history lingers as ghost ink. */
 .review-canvas-root {
@@ -206,8 +205,8 @@ button {
   color: var(--text-selection-color);
 }
 
-/* Plain CSS for DOM the canvas does not render itself, so StyleX cannot
-   reach it. Keep the rules in their original order. */
+/* DOM the canvas does not render itself: the workbench's, React Flow's, and
+   the CSS Custom Highlight API's. */
 
 /* The workbench mounts its diff view and file tree into the diff workspace;
    its buttons and viewed sections (and the shared viewed box, which the

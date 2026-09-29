@@ -1,7 +1,7 @@
-/* The canvas stylesheet. Order matters where noted: on equal specificity the
-   later file wins. */
+/* The canvas stylesheet's plain part: faces, React Flow's base styles and
+   global.css. StyleX appends every component style after it. React Flow sits
+   in a layer, so any canvas rule beats it. */
 
 @import "./fonts/fonts.css";
-/* In a layer, so any canvas rule beats React Flow. */
 @import "@xyflow/react/dist/style.css" layer(vendor);
 @import "./global.css";
