@@ -159,11 +159,11 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   literal; the prebuilt canvas CSS the staged runtime ships still carries an
   older `2147480000`, which is the number the measurement reports. Both
   overlays are laid out against a containing block whose top is y=40 — 34 px
-  above the canvas — so they land inside that band: `.review-toc-toggle`
+  above the canvas — so they land inside that band: the contents toggle
   (`position: fixed; top: calc(32px + var(--review-page-top))`,
-  `review-toc.css`) measures 92–124, and
-  `.review-find-widget` (`position: absolute; top: 48px; z-index: 120`,
-  `review-find.css`) puts its toggles at 95–115. The topbar's near-maximum
+  `review-toc.tsx`) measures 92–124, and
+  the find widget (`position: absolute; top: 48px; z-index: 120`,
+  `review-find.tsx`) puts its toggles at 95–115. The topbar's near-maximum
   `z-index` beats both, so the covered part of each control is dead. The pill is
   the only way into the contents below a 1360 px shell (`review-toc.tsx:25`,
   `:216`), so in a normal window the reader has no working table of contents at

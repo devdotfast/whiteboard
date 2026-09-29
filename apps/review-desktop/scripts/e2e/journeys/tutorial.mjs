@@ -91,7 +91,7 @@ export async function run(ctx) {
   await waitChecked(ctx, "chooseKeymap");
 
   const editor = canvas
-    .locator('[data-review-section="Welcome"] .review-inline-editor')
+    .locator('[data-review-section="Welcome"] [data-review-inline-editor]')
     .first();
 
   await editor.locator(".view-line").first().waitFor();

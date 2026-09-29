@@ -1,0 +1,12 @@
+/* Rules for elements StyleX cannot reach: third-party markup and browser
+   APIs we do not render ourselves. */
+
+/* Find matches painted through the CSS Custom Highlight API. */
+
+::highlight(review-find-match) {
+  background: var(--review-find-match-background);
+}
+
+::highlight(review-find-match-active) {
+  background: var(--review-find-match-active-background);
+}

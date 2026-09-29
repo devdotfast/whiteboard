@@ -1,6 +1,8 @@
+import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
 import type { PeekAnchor } from "./review-panel-model";
+import { tokens } from "./tokens.stylex";
 
 /**
  * Authored inline code shown in a side peek or tour stop. Lines are numbered
@@ -18,23 +20,18 @@ export function AuthoredCodeSurface({
   const firstLine = anchor.peek?.start.line ?? 1;
 
   return (
-    <div className="panel-code-block">
-      <pre
-        className="panel-static-code-surface panel-authored-code-surface panel-authored-code-block"
-        data-language={language}
-      >
+    <div {...stylex.props(styles.block)}>
+      <pre {...stylex.props(styles.surface)} data-language={language}>
         {code
           .replace(/\r\n?/g, "\n")
           .split("\n")
           .map((text, index) => (
             <span
-              className="panel-static-code-line"
+              {...stylex.props(styles.line)}
               key={`line:${firstLine + index}`}
             >
-              <span className="panel-static-code-gutter">
-                {firstLine + index}
-              </span>
-              <span className="panel-static-code-marker" aria-hidden="true">
+              <span {...stylex.props(styles.gutter)}>{firstLine + index}</span>
+              <span {...stylex.props(styles.marker)} aria-hidden="true">
                 {" "}
               </span>
               <code>{text || " "}</code>
@@ -44,3 +41,41 @@ export function AuthoredCodeSurface({
     </div>
   );
 }
+
+const styles = stylex.create({
+  block: {
+    position: "relative",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    minWidth: 0,
+    backgroundColor: tokens.bg,
+  },
+  surface: {
+    position: "relative",
+    display: "block",
+    minWidth: 0,
+    margin: 0,
+    overflow: "auto",
+    backgroundColor: tokens.tray,
+    color: tokens.ink,
+    fontFamily: tokens.fontMono,
+    fontSize: "12px",
+    lineHeight: "19px",
+  },
+  line: {
+    display: "grid",
+    minWidth: 0,
+    gridTemplateColumns: "42px 14px minmax(0, 1fr)",
+    minHeight: "19px",
+    whiteSpace: "pre",
+  },
+  gutter: {
+    padding: "0 5px 0 16px",
+    color: tokens.inkFaint,
+    textAlign: "right",
+  },
+  marker: {
+    color: tokens.inkFaint,
+    textAlign: "center",
+  },
+});

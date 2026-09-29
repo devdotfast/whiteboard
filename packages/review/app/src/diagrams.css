@@ -124,17 +124,6 @@
   min-height: 0;
 }
 
-/* The narrow-layout rules dock a bare .side-panel to the bottom of the app;
-   inside the overlay the panel always keeps its column. */
-
-.diagram-tour-panel .side-panel {
-  position: static;
-  inset: auto;
-  width: 100%;
-  height: 100%;
-  max-height: none;
-}
-
 /* The stage is the inline figure filling the overlay: shed the document
    card chrome and let the figure body own the scroll. */
 

@@ -33,7 +33,7 @@ function renderArticle(headings: string[]): HTMLElement {
 
 function tocLabels(): string[] {
   // Entries render with their section number prefixed; compare the titles.
-  return [...document.querySelectorAll(".review-toc-link")].map((link) =>
+  return [...document.querySelectorAll("#review-toc li > button")].map((link) =>
     (link.textContent ?? "").trim().replace(/^[\d.]+/, ""),
   );
 }
@@ -98,22 +98,20 @@ describe("ReviewToc", () => {
     });
     expect(tocLabels()).toEqual(["Interface change", "Scheduling sequence"]);
     expect(
-      document.querySelector(".review-toc-number")?.textContent?.trim(),
+      document
+        .querySelector("#review-toc li > button > span")
+        ?.textContent?.trim(),
     ).toBe("1");
     expect(
-      document.querySelector(".review-toc-toggle")?.textContent,
+      document.querySelector('[aria-controls="review-toc-body"]')?.textContent,
     ).not.toContain("§");
   });
   it.each([
-    { from: 1400, to: 1200, lands: "review-toc" },
-    {
-      from: 1200,
-      to: 1400,
-      lands: "review-toc review-toc--rail review-toc--open",
-    },
+    { from: 1400, to: 1200, rail: false },
+    { from: 1200, to: 1400, rail: true },
   ])(
     "switches between rail and pill without animating when the shell goes from $from to $to wide",
-    async ({ from, to, lands }) => {
+    async ({ from, to, rail }) => {
       shell.style.width = `${from}px`;
       const article = renderArticle(["Interface change", "Scheduling"]);
       region.append(article);
@@ -148,9 +146,15 @@ describe("ReviewToc", () => {
       shell.style.width = `${to}px`;
       await settle();
 
-      const toc = document.querySelector(".review-toc")!;
+      const toc = document.querySelector("#review-toc")!;
 
-      expect(toc.className).toBe(lands);
+      // The rail has no toggle; the pill's starts shut.
+      const toggle = toc.querySelector<HTMLButtonElement>(
+        '[aria-controls="review-toc-body"]',
+      )!;
+
+      expect(toggle.hidden).toBe(rail);
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
       expect(toc.getAnimations({ subtree: true })).toEqual([]);
     },
   );

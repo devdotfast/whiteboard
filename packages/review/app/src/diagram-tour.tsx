@@ -77,6 +77,7 @@ export function DiagramTourOverlay({
           revealRequest={revealRequest}
           onActiveAnchorChange={onActiveAnchorChange}
           onClose={onClose}
+          docked
         />
       </div>
     </div>

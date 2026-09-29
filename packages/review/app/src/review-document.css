@@ -386,7 +386,6 @@ button.review-stack-row:disabled .review-stack-relation {
 .review-document > ol,
 .review-document > blockquote,
 .review-document > pre,
-.review-document > .code-peek,
 .review-document > .review-trace-quote-container,
 .review-section-header,
 .review-section-body > p,
@@ -395,7 +394,6 @@ button.review-stack-row:disabled .review-stack-relation {
 .review-section-body > ol,
 .review-section-body > blockquote,
 .review-section-body > pre,
-.review-section-body > .code-peek,
 .review-section-body > .review-trace-quote-container {
   width: min(100%, var(--review-prose-max-width));
   max-width: calc(
@@ -410,13 +408,6 @@ button.review-stack-row:disabled .review-stack-relation {
 .review-document > .review-trace-quote-container,
 .review-section-body > .review-trace-quote-container {
   display: block;
-}
-
-/* Code peeks are sections, so unlike prose they have no browser block margin. */
-
-.review-document > .code-peek + .code-peek,
-.review-section-body > .code-peek + .code-peek {
-  margin-block-start: 14px;
 }
 
 .review-section {

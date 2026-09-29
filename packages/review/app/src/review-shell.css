@@ -728,10 +728,6 @@
   overflow: hidden;
 }
 
-.review-detail-host > .side-panel {
-  grid-area: 1 / 1;
-}
-
 .review-view-region--review {
   display: flex;
   align-items: flex-start;
@@ -840,6 +836,10 @@
 
   .review-view-region--review {
     padding: 22px 8px calc(96px + var(--review-toc-tail, 0px));
+  }
+
+  .side-panel-sheet-resizer {
+    display: block;
   }
 
   /* The host's own box lives in the collapsed third grid column; dissolving

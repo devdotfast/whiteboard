@@ -347,7 +347,7 @@ async function hoverAndJump(ctx, id, language, canvas, lines, callLine) {
 
   const editor = canvas
     .locator(
-      `.review-inline-editor[data-review-inline-editor="${language.peekFile}"]`,
+      `[data-review-inline-editor="${language.peekFile}"]`,
     )
     .first();
 

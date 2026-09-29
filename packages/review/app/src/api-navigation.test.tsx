@@ -137,18 +137,19 @@ it("exposes JSON section and Markdown headings plus imported PR and stack naviga
     "details-2",
   ]);
 
-  const contents =
-    container.querySelector<HTMLButtonElement>(".review-toc-toggle")!;
+  const contents = container.querySelector<HTMLButtonElement>(
+    '[aria-controls="review-toc-body"]',
+  )!;
 
   expect(contents).toBeTruthy();
   await act(async () => contents.click());
 
   const links = [
-    ...container.querySelectorAll<HTMLButtonElement>(".review-toc-link"),
+    ...container.querySelectorAll<HTMLButtonElement>("#review-toc li > button"),
   ];
 
   expect(
-    links.map((link) => link.querySelector(".review-toc-text")?.textContent),
+    links.map((link) => link.querySelector("span:last-child")?.textContent),
   ).toEqual(headings.map((heading) => heading.textContent));
   const scroll = vi.fn<() => void>();
   container.querySelectorAll<HTMLElement>("*").forEach((element) => {

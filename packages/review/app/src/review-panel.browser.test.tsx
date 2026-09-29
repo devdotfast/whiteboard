@@ -20,6 +20,14 @@ let root: ReturnType<typeof createRoot> | undefined;
 
 const session = testReviewSession();
 
+// The scroller under the panel header.
+const panelBodySelector = ".side-panel > header + div";
+
+function entranceAnimation(container: HTMLElement) {
+  return getComputedStyle(container.querySelector(".side-panel")!)
+    .animationName;
+}
+
 function renderWithSession(node: ReactNode) {
   root!.render(
     <ReviewSessionProvider session={session}>{node}</ReviewSessionProvider>,
@@ -74,7 +82,7 @@ describe("Review panel host", () => {
     });
 
     expect(container.querySelectorAll(".side-panel")).toHaveLength(1);
-    expect(container.querySelectorAll(".review-panel-body")).toHaveLength(1);
+    expect(container.querySelectorAll(panelBodySelector)).toHaveLength(1);
     expect(
       container.querySelectorAll(".side-panel-sheet-resizer"),
     ).toHaveLength(1);
@@ -85,11 +93,13 @@ describe("Review panel host", () => {
     ).toHaveLength(1);
 
     await act(async () => {
-      container.querySelector<HTMLButtonElement>(".side-panel-close")!.click();
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Close side peek"]')!
+        .click();
     });
 
     expect(container.querySelectorAll(".side-panel")).toHaveLength(0);
-    expect(container.querySelectorAll(".review-panel-body")).toHaveLength(0);
+    expect(container.querySelectorAll(panelBodySelector)).toHaveLength(0);
   });
 
   it("marks a restored panel so its entrance motion can be suppressed", async () => {
@@ -111,7 +121,7 @@ describe("Review panel host", () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector(".side-panel--restored")).not.toBeNull();
+    expect(entranceAnimation(container)).toBe("none");
   });
 
   it("suppresses panel motion when the cached canvas resumes", async () => {
@@ -137,13 +147,13 @@ describe("Review panel host", () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector(".side-panel--restored")).toBeNull();
+    expect(entranceAnimation(container)).not.toBe("none");
 
     await act(async () => {
       canvas.dispatchEvent(new Event(REVIEW_CANVAS_RESUME_EVENT));
     });
 
-    expect(container.querySelector(".side-panel--restored")).not.toBeNull();
+    expect(entranceAnimation(container)).toBe("none");
   });
 
   it("activates the tour stop that crosses the panel reading line", async () => {
@@ -168,10 +178,12 @@ describe("Review panel host", () => {
 
     const scrollTo = vi.mocked(HTMLElement.prototype.scrollTo);
     scrollTo.mockClear();
-    const body = container.querySelector<HTMLElement>(".review-panel-body")!;
+    const body = container.querySelector<HTMLElement>(panelBodySelector)!;
 
     const [firstStop, secondStop] = [
-      ...container.querySelectorAll<HTMLElement>(".tour-stop"),
+      ...container.querySelectorAll<HTMLElement>(
+        "section[data-review-anchor-id]",
+      ),
     ];
 
     vi.spyOn(body, "getBoundingClientRect").mockReturnValue(
@@ -214,19 +226,17 @@ describe("Review panel host", () => {
       await Promise.resolve();
     });
 
-    const body = container.querySelector<HTMLElement>(".review-panel-body")!;
+    const body = container.querySelector<HTMLElement>(panelBodySelector)!;
 
     const floatingFooter = container.querySelector<HTMLElement>(
-      ".tour-floating-footer",
+      ".side-panel > :last-child",
     )!;
 
     expect(body.contains(floatingFooter)).toBe(false);
     expect(floatingFooter.textContent).toContain("1 more steps");
 
     await act(async () => {
-      floatingFooter
-        .querySelector<HTMLButtonElement>(".tour-pill--intro")!
-        .click();
+      floatingFooter.querySelector<HTMLButtonElement>("button")!.click();
     });
 
     expect(

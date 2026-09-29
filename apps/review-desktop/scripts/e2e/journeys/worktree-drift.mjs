@@ -36,7 +36,7 @@ function canvasUi(ctx) {
     retained: canvas.getByText(RETAINED_SOURCE),
     failed: canvas.getByText(/^Whiteboard operation failed \(Error\)\./),
     peek: canvas
-      .locator('.review-inline-editor[data-review-inline-editor="order.ts"]')
+      .locator('[data-review-inline-editor="order.ts"]')
       .first(),
   };
 }
