@@ -14,6 +14,15 @@ export const REVIEW_DESKTOP_DISCOVERY_VERSION = 3;
 // Version 5: document and software-map bundles are JSON.
 export const REVIEW_SCHEMA_VERSION = 5;
 
+// A gateway sets the client header on every call it forwards from another
+// machine; the server then leaves local paths out. The host header names the
+// machine that answered; absent means this one.
+export const REVIEW_CLIENT_HEADER = "x-review-client";
+
+export const REVIEW_CLIENT_REMOTE = "remote";
+
+export const REVIEW_HOST_HEADER = "x-review-host";
+
 const requiredString = z
   .string({ error: "must be a string" })
   .refine((value) => value.trim().length > 0, "must be a string");
@@ -538,7 +547,8 @@ export interface ReviewCanvasSettingsContent {
 
 /** Workspace attachment identity is independent of the displayed source generation. */
 export interface ReviewLanguageEnvironment {
-  readonly rootPath: string | null;
+  /** Absent for a caller on another machine. */
+  readonly rootPath?: string | null;
   readonly identity: string;
   /** Present only when the language checkout is unavailable, not while preparing. */
   readonly issue?: string;
