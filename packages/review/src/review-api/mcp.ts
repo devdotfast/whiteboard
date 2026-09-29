@@ -41,7 +41,7 @@ function mcpAuthoringGuidance(context: {
           'For why code exists, what an agent was thinking, or whether an agent solved something before, call session_get_instructions({topic:"trace-archaeology"}).',
         ]
       : []),
-    "Never read or write Whiteboard files or SQL. Reuse commandId and identical input after a lost response.",
+    "Never read or write Whiteboard files or SQL.",
   ].join(" ");
 }
 

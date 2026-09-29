@@ -104,11 +104,16 @@ export function authoringTools(
 
       return tool(
         type === "lens" ? "lens_edit" : type,
-        `${descriptions[type]} commandId must be a valid UUID (generate a fresh UUID for each new operation; reuse it with identical input when retrying). For content changes to an owned review, include the leaseId from review_activity.`,
+        `${descriptions[type]} For content changes to an owned review, include the leaseId from review_activity.`,
         z.strictObject({
           ...fields,
           ...(type === "create" && { open: z.boolean().optional() }),
-          commandId: z.uuid(),
+          commandId: z
+            .uuid()
+            .optional()
+            .describe(
+              "Idempotency key. Omit it; Whiteboard assigns one. Pass one only when an error tells you to.",
+            ),
           leaseId: commandSchema.shape.leaseId,
         }),
         "POST",

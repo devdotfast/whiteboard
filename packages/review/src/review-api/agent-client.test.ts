@@ -156,6 +156,52 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
   ).toContain("Updated through the reading view.");
 });
 
+it("assigns a command ID and names it when a reply is lost", async () => {
+  const tools = await client.read<AuthoringTool[]>("/authoring");
+
+  const tool = (name: string) =>
+    tools.find((t) => t.name === `review_${name}`)!;
+
+  let dropReply = false;
+
+  // The host applies the command, then the reply is lost on the way back.
+  const lossy = new ReviewApiClient(client.connection, async (url, init) => {
+    const response = await app.request(url.replace("/reviews-api", ""), init);
+
+    if (dropReply) {
+      dropReply = false;
+      throw new TypeError("fetch failed");
+    }
+
+    return response;
+  });
+
+  const { reviewId } = (await callAuthoringTool(lossy, tool("create"), {
+    title: "Minted",
+    pins: { repositoryId: "repo", base: "base", head: "head" },
+  })) as { reviewId: string };
+
+  const insert = {
+    reviewId,
+    edit: { type: "insert", content: { type: "markdown", markdown: "Once." } },
+  };
+
+  dropReply = true;
+
+  const error = await callAuthoringTool(lossy, tool("edit"), insert).catch(
+    (caught: Error) => caught,
+  );
+
+  expect(store.read(reviewId).version).toBe(1);
+
+  const commandId = String(error).match(/commandId "([^"]+)"/)![1];
+
+  expect(
+    await callAuthoringTool(lossy, tool("edit"), { ...insert, commandId }),
+  ).toMatchObject({ reviewId, version: 1 });
+  expect(store.read(reviewId).version).toBe(1);
+});
+
 it("serves MCP framing without stdout diagnostics and returns host errors as tool errors", async () => {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
@@ -219,7 +265,8 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
       ).inputSchema,
     ).toMatchObject({
       type: "object",
-      required: expect.arrayContaining(["sessionId", "commandId", "edit"]),
+      required: ["sessionId", "edit"],
+      properties: expect.objectContaining({ commandId: expect.anything() }),
     });
 
     const error = await request(3, "tools/call", {
