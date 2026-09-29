@@ -4,6 +4,8 @@ import { mathFromMarkdown } from "mdast-util-math";
 import { gfm } from "micromark-extension-gfm";
 import { math } from "micromark-extension-math";
 
+import { latexMath, latexMathFromMarkdown } from "./markdown-latex-math";
+
 export interface MarkdownNode {
   type: string;
   position?: { start: { offset?: number }; end: { offset?: number } };
@@ -36,8 +38,12 @@ export function markdownText(node: MarkdownNode): string {
 /** Shared syntax for submit-time source checks and safe Markdown rendering. */
 export function parseMarkdown(source: string): MarkdownNode {
   const tree: MarkdownNode = fromMarkdown(source, {
-    extensions: [gfm(), math()],
-    mdastExtensions: [gfmFromMarkdown(), mathFromMarkdown()],
+    extensions: [gfm(), math(), latexMath()],
+    mdastExtensions: [
+      gfmFromMarkdown(),
+      mathFromMarkdown(),
+      latexMathFromMarkdown(),
+    ],
   });
 
   const definitions = new Map<string, MarkdownNode>();

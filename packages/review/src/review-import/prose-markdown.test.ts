@@ -41,8 +41,8 @@ describe("proseToMarkdown", () => {
     ).toBe("# Title\n\nHello **bold** and *soft* ``x`y``\n");
   });
 
-  it("keeps dollar signs in prose out of math", () => {
-    const prose = "Set $HOME/$USER.";
+  it("keeps dollar signs and brackets in prose out of math", () => {
+    const prose = "Set $HOME/$USER, then read [1] and [2].";
 
     const nodes = [
       ...markdownNodes(
