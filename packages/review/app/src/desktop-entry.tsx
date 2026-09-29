@@ -172,7 +172,9 @@ export function mountReviewCanvas(
 
   const lightClasses = [
     "review-app--theme-light",
-    ...(stylex.props(themeStyles.light).className ?? "").split(" "),
+    ...(stylex.props(themeStyles.light).className ?? "")
+      .split(" ")
+      .filter(Boolean),
   ];
 
   container.appendChild(themeHost);

@@ -249,7 +249,8 @@ const eraser = {
 
 export const drawStyles = stylex.create({
   // Every element a block renders as its own: the content wipes in behind
-  // the dot, is erased and rewritten, or is erased for good.
+  // the dot, is erased and rewritten, or is erased for good. Opt-in: a new
+  // block type must apply it to its root element or it skips these phases.
   blockChild: {
     WebkitMaskImage: {
       default: null,
