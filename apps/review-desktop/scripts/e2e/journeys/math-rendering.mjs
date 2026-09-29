@@ -39,6 +39,8 @@ const MATH = [
   "$$",
   "",
   tex`It costs $5 and $10, see \[1\].`,
+  "",
+  "A plan is $5 for **pro** and $10 for team.",
 ].join("\n");
 
 export async function run(ctx) {
@@ -64,6 +66,21 @@ export async function run(ctx) {
   assert.equal(await canvas.locator(".katex-error").count(), 0);
   await canvas.getByText("It costs $5 and $10, see [1].").waitFor();
   ctx.check("dollar, paren and bracket math typesets; prose stays prose");
+
+  const plan = canvas.locator("p", { hasText: "A plan is" });
+
+  assert.equal(
+    await plan.innerText(),
+    "A plan is $5 for **pro** and $10 for team.",
+  );
+  assert.equal(
+    await plan.locator("strong").count(),
+    0,
+    "formatting between dollar amounts now renders",
+  );
+  await ctx.knownBug(
+    "Formatting between two dollar amounts shows as raw Markdown",
+  );
 
   // A refused font ends in "error", never "loaded".
   const fonts = await ctx.until(async () => {

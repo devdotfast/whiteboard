@@ -28,6 +28,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 - Peeks and tour stops never offer to show their element in the software map — open
 - A focus request that mounts the Map view loses to its default selection — fixed
 - The Trace view lists retained traces in the order they finish loading — open
+- Formatting between two dollar amounts shows as raw Markdown — open
 
 ## Template (copy, do not edit)
 
@@ -529,3 +530,17 @@ Server` cannot help — the captured workspace is never re-read. The fix
 - **Notes:** `api-document.tsx:149` fills `data.traces` as each resource read
   resolves inside a `Promise.all`, and `ReviewTraceView.tsx` takes the list and
   default from that map's insertion order.
+
+## Formatting between two dollar amounts shows as raw Markdown
+
+- **Journey:** `math-rendering` · **Found:** 2026-09-29 · **Status:** open
+- **Repro:** open a review whose Markdown block holds
+  `It costs $5 for **pro** and $10 for team.`
+- **Expected:** "pro" is bold, as it was before Markdown read math.
+- **Actual:** the paragraph shows `**pro**`, asterisks included. A link or a
+  code span between the two amounts shows as its source in the same way.
+- **Notes:** `micromark-extension-math` reads everything between the two `$` as
+  math. `agent-markdown.tsx:310` sees the space before the closing `$` and
+  prints the span back, but it has only the raw text. A `$` that opens and
+  closes without a space, as in `$FOO/$BAR`, is typeset. The fix is to apply
+  the rule while parsing, which the stock tokenizer has no option for.
