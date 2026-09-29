@@ -281,4 +281,70 @@ describe("ReviewDiffFilesProvider", () => {
     expect(container.textContent).toBe("loaded:src/third.ts");
     expect(files).toHaveBeenCalledTimes(3);
   });
+  it("keeps the shown files while a save refetches them", async () => {
+    let resolveSave!: (files: ReviewDiffFileWire[]) => void;
+
+    const file = (path: string) => ({
+      path,
+      status: "modified" as const,
+      additions: 1,
+      deletions: 0,
+    });
+
+    const files = vi
+      .fn<() => Promise<ReviewDiffFileWire[]>>()
+      .mockResolvedValueOnce([file("src/before.ts")])
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        }),
+      );
+
+    const session = testReviewSession(
+      {},
+      {
+        diffView: {
+          create: () => {
+            throw new Error("unused");
+          },
+          files,
+        },
+      },
+    );
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    function Probe() {
+      const state = useReviewDiffFiles();
+
+      return (
+        <span>
+          {state.status === "loaded" ? state.files[0]?.path : state.status}
+        </span>
+      );
+    }
+
+    const render = (revision: string) =>
+      act(async () => {
+        root!.render(
+          <TestCanvasQuery>
+            <ReviewSessionProvider session={session}>
+              <ReviewDiffFilesProvider documentKey="live" revision={revision}>
+                <Probe />
+              </ReviewDiffFilesProvider>
+            </ReviewSessionProvider>
+          </TestCanvasQuery>,
+        );
+      });
+
+    await render("first-save");
+    await vi.waitFor(() => expect(container.textContent).toBe("src/before.ts"));
+    await render("second-save");
+    expect(files).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toBe("src/before.ts");
+    await act(async () => resolveSave([file("src/after.ts")]));
+    await vi.waitFor(() => expect(container.textContent).toBe("src/after.ts"));
+  });
 });
