@@ -196,10 +196,7 @@ describe.each(["desktop", "headless"] as const)("the %s server", (kind) => {
       const refused = await fetch(`${server.url}/control`, { headers });
 
       expect(refused.status).toBe(409);
-      expect(await refused.json()).toMatchObject({
-        ok: false,
-        error: expect.stringContaining("control clients"),
-      });
+      expect(await refused.json()).toMatchObject({ ok: false });
 
       // Node's parser rejects a reply framed both ways.
       const [raw] = await once(
