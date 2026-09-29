@@ -5,16 +5,11 @@ import {
 } from "@dev.fast/review-protocol";
 import { createStore } from "zustand/vanilla";
 
-import type {
-  GuidedTour,
-  PeekPanel,
-  ReviewPanel,
-  ReviewPanelMotion,
-} from "./review-panel-model";
+import type { PeekPanel, ReviewPanelMotion } from "./review-panel-model";
 import { shouldCloseSidePeekForReviewView } from "./review-view-route";
 
 export interface ReviewPanelState {
-  active: ReviewPanel | null;
+  active: PeekPanel | null;
   motion: ReviewPanelMotion;
 }
 
@@ -43,6 +38,15 @@ export interface MapFocus {
   pending: boolean;
 }
 
+/** A fullscreen diagram tour. `kind` is absent on one restored from an
+ * older build's in-panel record. */
+export interface OverlayTour {
+  tourId: string;
+  kind?: "sequence" | "database";
+  anchor: string;
+  revealRequest: number;
+}
+
 /** Which canvas view is showing and what it is scoped to. */
 export interface ReviewNavigationState {
   view: ReviewView;
@@ -52,14 +56,12 @@ export interface ReviewNavigationState {
   traceSelection: TraceSelection | undefined;
   lens: ReviewLensSelection | null;
   mapFocus: MapFocus | null;
+  overlayTour: OverlayTour | null;
 }
 
 export interface ReviewPanelActions {
   suppressMotion: () => void;
   openPeek: (panel: PeekPanel) => void;
-  openTour: (tour: GuidedTour, activeAnchor: string) => void;
-  restoreTour: (tour: GuidedTour, activeAnchor: string) => void;
-  activateTourAnchor: (anchorId: string, options: { reveal: boolean }) => void;
   close: () => void;
 }
 
@@ -73,6 +75,12 @@ export interface ReviewNavigationActions {
   setAvailableViews: (views: readonly ReviewView[]) => void;
   focusMapElement: (elementPath: string) => void;
   consumeMapFocus: (requestId: number) => void;
+  openOverlayTour: (
+    tour: { tourId: string; kind: "sequence" | "database" },
+    anchor: string,
+  ) => void;
+  moveOverlayTour: (anchor: string, options: { reveal: boolean }) => void;
+  closeOverlayTour: () => void;
 }
 
 export type ReviewPanelStoreState = ReviewPanelState &
@@ -83,64 +91,32 @@ export type ReviewPanelStoreState = ReviewPanelState &
 export type ReviewPanelStore = ReturnType<typeof createReviewPanelStore>;
 
 export type ReviewNavigationRestore = Partial<
-  Pick<ReviewNavigationState, "view" | "availableViews" | "lens">
+  Pick<
+    ReviewNavigationState,
+    "view" | "availableViews" | "lens" | "overlayTour"
+  >
 >;
 
 export function createReviewPanelStore({
   view = "review",
   availableViews = reviewViewSchema.options,
   lens = null,
+  overlayTour = null,
 }: ReviewNavigationRestore = {}) {
+  const initialView = availableViews.includes(view) ? view : "review";
+
   return createStore<ReviewPanelStoreState>()((set) => ({
     active: null,
     motion: "live",
-    view: availableViews.includes(view) ? view : "review",
+    view: initialView,
     availableViews,
     diffScope: null,
     traceSelection: undefined,
     lens,
     mapFocus: null,
+    overlayTour: initialView === "review" ? overlayTour : null,
     suppressMotion: () => set({ motion: "restored" }),
     openPeek: (panel) => set({ active: panel, motion: "live" }),
-    openTour: (tour, activeAnchor) => {
-      set((state) => ({
-        active: {
-          kind: "tour",
-          tour,
-          activeAnchor,
-          revealRequest:
-            state.active?.kind === "tour" ? state.active.revealRequest + 1 : 1,
-        },
-        motion: "live",
-      }));
-    },
-    restoreTour: (tour, activeAnchor) => {
-      set({
-        active: {
-          kind: "tour",
-          tour,
-          activeAnchor,
-          revealRequest: 0,
-        },
-        motion: "restored",
-      });
-    },
-    activateTourAnchor: (anchorId, options) => {
-      set((state) => {
-        if (state.active?.kind !== "tour") return state;
-
-        return {
-          active: {
-            ...state.active,
-            activeAnchor: anchorId,
-            revealRequest: options.reveal
-              ? state.active.revealRequest + 1
-              : state.active.revealRequest,
-          },
-          motion: options.reveal ? "live" : state.motion,
-        };
-      });
-    },
     close: () => set({ active: null, motion: "live" }),
     showView: (next) => set((state) => viewTransition(state, next)),
     openCommitDiff: (scope) =>
@@ -184,6 +160,28 @@ export function createReviewPanelStore({
           ? { mapFocus: { ...state.mapFocus, pending: false } }
           : state,
       ),
+    openOverlayTour: (tour, anchor) =>
+      set((state) => ({
+        overlayTour: {
+          ...tour,
+          anchor,
+          // Counts on across tours: a use-case switch keeps the panel mounted.
+          revealRequest: (state.overlayTour?.revealRequest ?? 0) + 1,
+        },
+      })),
+    moveOverlayTour: (anchor, { reveal }) =>
+      set((state) =>
+        state.overlayTour
+          ? {
+              overlayTour: {
+                ...state.overlayTour,
+                anchor,
+                revealRequest: state.overlayTour.revealRequest + Number(reveal),
+              },
+            }
+          : state,
+      ),
+    closeOverlayTour: () => set({ overlayTour: null }),
     setAvailableViews: (views) =>
       set((state) =>
         views.includes(state.view)
@@ -209,6 +207,7 @@ function viewTransition(
       state.mapFocus?.pending && {
         mapFocus: { ...state.mapFocus, pending: false },
       }),
+    ...(view !== "review" && state.overlayTour && { overlayTour: null }),
     ...(shouldCloseSidePeekForReviewView(view) &&
       state.active && { active: null, motion: "live" }),
   };

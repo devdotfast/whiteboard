@@ -8,26 +8,21 @@ import {
   jsonString,
   parseJsonText,
 } from "@dev.fast/review-protocol";
-import type { ReactNode, RefObject } from "react";
+import type { RefObject } from "react";
 import {
-  createContext,
-  createElement,
   useCallback,
-  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 
 import type { ReviewClientConfig } from "./host/review-client";
 import { useReviewSession } from "./host/review-session";
-import type { GuidedTour } from "./review-panel-model";
 import type {
+  OverlayTour,
   ReviewLensSelection,
   ReviewNavigationRestore,
-  ReviewPanelState,
   ReviewPanelStore,
 } from "./review-panel-store";
 import {
@@ -47,9 +42,16 @@ export interface PersistedReviewViewState {
   activeView?: ReviewView;
   /** The lens applied to the diff; restored only on its own version. */
   lens?: ReviewLensSelection;
-  panel?: PersistedReviewPanel;
+  /** Written by older builds for an in-panel tour; read only as a fallback. */
+  panel?: PersistedTourPanel;
   /** A fullscreen diagram tour (sequence or database lens) that was open. */
-  overlayTour?: { tourId: string; activeAnchor: string };
+  overlayTour?: PersistedOverlayTour;
+}
+
+export interface PersistedOverlayTour {
+  tourId: string;
+  activeAnchor: string;
+  kind?: OverlayTour["kind"];
 }
 
 export interface PersistedTourPanel {
@@ -58,63 +60,13 @@ export interface PersistedTourPanel {
   activeAnchor: string;
 }
 
-export type PersistedReviewPanel = PersistedTourPanel;
-
-export interface ReviewTourRestore {
-  tour: GuidedTour;
-  activeAnchor: string;
-}
-
-interface ReviewTourRestoreClaim {
-  claim(tours: GuidedTour | readonly GuidedTour[]): ReviewTourRestore | null;
-}
-
-interface ReviewViewStateSync {
-  tourRestore: ReviewTourRestoreClaim;
-  persistOverlayTour(
-    open: { tourId: string; activeAnchor: string } | null,
-  ): void;
-}
-
-interface ReviewTourStateContextValue {
-  tourRestore: ReviewTourRestoreClaim;
-  persistOverlayTour(
-    open: { tourId: string; activeAnchor: string } | null,
-  ): void;
-}
-
-const ReviewTourStateContext =
-  createContext<ReviewTourStateContextValue | null>(null);
-
-export function ReviewViewStateProvider({
-  tourRestore,
-  persistOverlayTour,
-  children,
-}: {
-  tourRestore: ReviewTourRestoreClaim;
-  persistOverlayTour?: (
-    open: { tourId: string; activeAnchor: string } | null,
-  ) => void;
-  children: ReactNode;
-}) {
-  const value = useMemo(
-    () => ({
-      tourRestore,
-      persistOverlayTour: persistOverlayTour ?? (() => {}),
-    }),
-    [persistOverlayTour, tourRestore],
-  );
-
-  return createElement(ReviewTourStateContext.Provider, { value }, children);
-}
-
 export function useReviewViewStateSync({
   scrollRegionRef,
   panelStore,
 }: {
   scrollRegionRef: RefObject<HTMLElement | null>;
   panelStore: ReviewPanelStore;
-}): ReviewViewStateSync {
+}): void {
   const session = useReviewSession();
   const key = reviewViewStateKey(session.config);
 
@@ -124,22 +76,6 @@ export function useReviewViewStateSync({
   );
 
   const persistedRef = useRef(initialState);
-
-  // Overlay tours claim first; the panel slot keeps older in-panel tours
-  // restorable.
-  const tourRestore = useMemo(
-    () =>
-      createReviewTourRestoreClaim(
-        initialState.overlayTour ??
-          (initialState.panel?.kind === "tour"
-            ? {
-                tourId: initialState.panel.tourId,
-                activeAnchor: initialState.panel.activeAnchor,
-              }
-            : undefined),
-      ),
-    [initialState],
-  );
 
   const persist = useCallback(
     (next: PersistedReviewViewState) => {
@@ -158,32 +94,34 @@ export function useReviewViewStateSync({
     [key],
   );
 
-  const persistOverlayTour = useCallback(
-    (open: { tourId: string; activeAnchor: string } | null) => {
-      persist({ ...persistedRef.current, overlayTour: open ?? undefined });
-    },
-    [persist],
-  );
-
   // Layout, so navigation from a host event right after mount still persists.
   useLayoutEffect(
     () =>
       panelStore.subscribe((state, previous) => {
         if (
-          state.active === previous.active &&
           state.view === previous.view &&
-          state.lens === previous.lens
+          state.lens === previous.lens &&
+          state.overlayTour === previous.overlayTour
         ) {
           return;
         }
 
+        // The store holds the tour a legacy panel record restored, so the
+        // record is rewritten as an overlay tour, never as a panel.
         persist({
           ...persistedRef.current,
-          panel: persistedPanelState(state),
+          panel: undefined,
           ...(state.view !== previous.view && { activeView: state.view }),
           ...(state.lens !== previous.lens && {
             lens: state.lens ?? undefined,
           }),
+          overlayTour: state.overlayTour
+            ? {
+                tourId: state.overlayTour.tourId,
+                activeAnchor: state.overlayTour.anchor,
+                kind: state.overlayTour.kind,
+              }
+            : undefined,
         });
       }),
     [panelStore, persist],
@@ -200,55 +138,11 @@ export function useReviewViewStateSync({
     persistedRef,
     scrollRestorationPending,
   );
-
-  return {
-    tourRestore,
-    persistOverlayTour,
-  };
-}
-
-export function useTourRestore(
-  tours: GuidedTour | readonly GuidedTour[],
-): ReviewTourRestore | null {
-  const claim = useContext(ReviewTourStateContext)?.tourRestore;
-  const attemptedRef = useRef(false);
-  const [restore, setRestore] = useState<ReviewTourRestore | null>(null);
-  useLayoutEffect(() => {
-    if (attemptedRef.current) return;
-    attemptedRef.current = true;
-    setRestore(claim?.claim(tours) ?? null);
-  }, [claim, tours]);
-
-  return restore;
-}
-
-/** Keeps the persisted view state in step with a fullscreen diagram tour:
- * pass the open tour and its active anchor, or null when closed. An owner
- * that has not opened a tour in this mount never writes: a stored tour may
- * belong to another diagram that has yet to claim it. */
-export function useTourPersist(
-  tour: GuidedTour | null,
-  activeAnchor: string | null,
-): void {
-  const persistOverlayTour = useContext(
-    ReviewTourStateContext,
-  )?.persistOverlayTour;
-
-  const openedRef = useRef(false);
-
-  useEffect(() => {
-    const open =
-      tour && activeAnchor ? { tourId: tour.id, activeAnchor } : null;
-
-    if (open) openedRef.current = true;
-    else if (!openedRef.current) return;
-
-    persistOverlayTour?.(open);
-  }, [activeAnchor, persistOverlayTour, tour]);
 }
 
 /** The navigation a canvas resumes: its stored view where the canvas still
- * offers it, and its stored lens when that lens belongs to this version. */
+ * offers it, its stored lens when that lens belongs to this version, and the
+ * fullscreen tour that was open. */
 export function readReviewNavigationRestore(
   config: ReviewClientConfig,
   canvas: {
@@ -259,6 +153,13 @@ export function readReviewNavigationRestore(
   },
 ): ReviewNavigationRestore {
   const stored = readPersistedReviewViewState(config);
+
+  const tour: PersistedOverlayTour | undefined =
+    stored.overlayTour ??
+    (stored.panel && {
+      tourId: stored.panel.tourId,
+      activeAnchor: stored.panel.activeAnchor,
+    });
 
   return {
     view: stored.activeView ?? "review",
@@ -273,6 +174,14 @@ export function readReviewNavigationRestore(
       stored.lens.mode === canvas.lensMode
         ? stored.lens
         : null,
+    overlayTour: tour
+      ? {
+          tourId: tour.tourId,
+          kind: tour.kind,
+          anchor: tour.activeAnchor,
+          revealRequest: 0,
+        }
+      : null,
   };
 }
 
@@ -295,35 +204,6 @@ export function clearPersistedReviewViewState(
   config: ReviewClientConfig,
 ): void {
   removeReviewUiState("session", reviewViewStateKey(config));
-}
-
-export function createReviewTourRestoreClaim(
-  pending: { tourId: string; activeAnchor: string } | null | undefined,
-): ReviewTourRestoreClaim {
-  let claimed = false;
-
-  return {
-    claim(tours) {
-      if (claimed || !pending) return null;
-
-      const candidates: readonly GuidedTour[] = Array.isArray(tours)
-        ? tours
-        : [tours];
-
-      const tour = candidates.find(
-        (candidate) => candidate.id === pending.tourId,
-      );
-
-      if (!tour) return null;
-      claimed = true;
-
-      if (!tour.stops.some((stop) => stop.anchor.id === pending.activeAnchor)) {
-        return null;
-      }
-
-      return { tour, activeAnchor: pending.activeAnchor };
-    },
-  };
 }
 
 function useScrollRestoration(
@@ -490,20 +370,6 @@ function useScrollCapture(
   }, [persist, persistedRef, restorationPending, scrollRegionRef]);
 }
 
-function persistedPanelState(
-  state: ReviewPanelState,
-): PersistedReviewViewState["panel"] {
-  if (state.active?.kind === "tour") {
-    return {
-      kind: "tour",
-      tourId: state.active.tour.id,
-      activeAnchor: state.active.activeAnchor,
-    };
-  }
-
-  return undefined;
-}
-
 function parsePersistedReviewViewState(
   value: JsonValue | null,
 ): PersistedReviewViewState {
@@ -557,23 +423,32 @@ function parsePersistedLens(
 
 function parsePersistedPanel(
   panel: JsonObject | undefined,
-): PersistedReviewPanel | undefined {
+): PersistedTourPanel | undefined {
   if (!panel) return undefined;
   const kind = jsonString(jsonProperty(panel, "kind"));
   const tour = parsePersistedTourState(panel);
 
-  if (kind === "tour" && tour) return { kind: "tour", ...tour };
+  if (kind === "tour" && tour) {
+    return {
+      kind: "tour",
+      tourId: tour.tourId,
+      activeAnchor: tour.activeAnchor,
+    };
+  }
 
   return undefined;
 }
 
 function parsePersistedTourState(
   tour: JsonObject | undefined,
-): PersistedReviewViewState["overlayTour"] {
+): PersistedOverlayTour | undefined {
   const tourId = jsonString(tour && jsonProperty(tour, "tourId"));
   const activeAnchor = jsonString(tour && jsonProperty(tour, "activeAnchor"));
+  const kind = jsonString(tour && jsonProperty(tour, "kind"));
 
-  return tourId !== undefined && activeAnchor !== undefined
-    ? { tourId, activeAnchor }
-    : undefined;
+  if (tourId === undefined || activeAnchor === undefined) return undefined;
+
+  return kind === "sequence" || kind === "database"
+    ? { tourId, activeAnchor, kind }
+    : { tourId, activeAnchor };
 }

@@ -18,6 +18,7 @@ import {
   REVIEW_INTERACTION_EVENT,
   reviewInteractionDetail,
 } from "./review-interaction-event";
+import { useOptionalReviewPanel } from "./review-panel";
 import { tokens } from "./tokens.stylex";
 import { useTutorial } from "./tutorial-context";
 import {
@@ -31,8 +32,6 @@ import {
   type TutorialChapterState,
   TutorialSectionProvider,
 } from "./tutorial-section-context";
-
-type DiagramTourKind = "sequence" | "database" | "other";
 
 interface TutorialExperienceState {
   activeStep: TutorialStepDefinition | null;
@@ -78,8 +77,8 @@ export function TutorialExperienceProvider({
   }, [scrollRegionRef, shellRef]);
   const [targets, setTargets] = useState<readonly HTMLElement[]>([]);
 
-  const [diagramTourKind, setDiagramTourKind] =
-    useState<DiagramTourKind | null>(null);
+  const diagramTourKind =
+    useOptionalReviewPanel((state) => state.overlayTour?.kind) ?? null;
 
   const steps = useMemo(
     () => availableTutorialSteps(review.softwareMapEnabled),
@@ -111,34 +110,6 @@ export function TutorialExperienceProvider({
     },
     [checked, tutorial],
   );
-
-  useLayoutEffect(() => {
-    const root = shell;
-
-    const canvasRoot =
-      root?.closest<HTMLElement>(".review-canvas-root") ?? root?.parentElement;
-
-    if (!canvasRoot) return;
-
-    const update = () => {
-      const overlay = canvasRoot.querySelector(".diagram-tour-overlay");
-      setDiagramTourKind(
-        !overlay
-          ? null
-          : overlay.querySelector(".database-lens")
-            ? "database"
-            : overlay.querySelector(".sequence-diagram")
-              ? "sequence"
-              : "other",
-      );
-    };
-
-    update();
-    const observer = new MutationObserver(update);
-    observer.observe(canvasRoot, { childList: true, subtree: true });
-
-    return () => observer.disconnect();
-  }, [shell]);
 
   useEffect(() => {
     if (dismissed || !activeStep) {

@@ -21,8 +21,8 @@ import { diagramStyles } from "./diagram-styles";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
+import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type { GuidedTour, PeekAnchor } from "./review-panel-model";
-import { useTourPersist, useTourRestore } from "./review-view-state";
 import { formatSchemaExample } from "./software-map/c4-projection";
 import {
   type SoftwareMapDataStoreSchemaRowSnapshot,
@@ -263,11 +263,22 @@ export function DatabaseLens(block: DatabaseLensProps) {
 
   const session = useReviewSession();
 
+  const panelStore = useReviewPanelStore();
+
+  // An open tour of this lens picks the use case it walks.
+  const tourUseCase = useReviewPanel((state) =>
+    useCases.find(
+      (useCase) => tourIdFor(lensId, useCase.id) === state.overlayTour?.tourId,
+    ),
+  );
+
+  // Starts on a restored tour's use case, so closing it keeps that diagram.
   const [activeUseCaseId, setActiveUseCaseId] = useState<string | null>(
-    () => useCases[0]?.id ?? null,
+    () => tourUseCase?.id ?? useCases[0]?.id ?? null,
   );
 
   const activeUseCase =
+    tourUseCase ??
     useCases.find((useCase) => useCase.id === activeUseCaseId) ??
     useCases[0] ??
     null;
@@ -294,43 +305,42 @@ export function DatabaseLens(block: DatabaseLensProps) {
     [lensId, title, useCases],
   );
 
-  const restoredTour = useTourRestore(tourEntries);
-
-  // The tour IS the fullscreen mode, exactly as for sequence diagrams: the
-  // lens card becomes the stage and GuidedTourPanel docks beside it.
-  const [tourState, setTourState] = useState<{
-    anchor: string;
-    revealRequest: number;
-  } | null>(null);
-
-  const tourAnchor = tourState?.anchor ?? null;
-  const tourOpen = tourState !== null;
-
-  useEffect(() => {
-    if (!restoredTour) return;
-
-    const restoredUseCase = useCases.find(
-      (useCase) => tourIdFor(lensId, useCase.id) === restoredTour.tour.id,
-    );
-
-    if (restoredUseCase) setActiveUseCaseId(restoredUseCase.id);
-    setTourState({ anchor: restoredTour.activeAnchor, revealRequest: 0 });
-  }, [lensId, restoredTour, useCases]);
-
   const tourForUseCase = (useCase: ParsedUseCase) =>
     tourEntries.find((tour) => tour.id === tourIdFor(lensId, useCase.id)) ??
     null;
 
+  const activeTour = activeUseCase ? tourForUseCase(activeUseCase) : null;
+  const activeTourId = activeTour?.id ?? null;
+
+  // The tour IS the fullscreen mode, exactly as for sequence diagrams: the
+  // lens card becomes the stage and GuidedTourPanel docks beside it.
+  const tourState = useReviewPanel((state) =>
+    activeTour &&
+    state.overlayTour?.tourId === activeTour.id &&
+    activeTour.stops.some(
+      (stop) => stop.anchor.id === state.overlayTour!.anchor,
+    )
+      ? state.overlayTour
+      : null,
+  );
+
+  const tourAnchor = tourState?.anchor ?? null;
+  const tourOpen = tourState !== null;
+
   const openUseCase = (useCase: ParsedUseCase) => {
     setActiveUseCaseId(useCase.id);
     const firstAnchor = useCase.operations[0]?.id;
+
     // Inline, the select only switches the diagram; with the tour open it
     // stays fullscreen and steps onto the new use case's tour.
-    setTourState((state) =>
-      state && firstAnchor
-        ? { anchor: firstAnchor, revealRequest: state.revealRequest + 1 }
-        : state,
-    );
+    if (tourOpen && firstAnchor) {
+      panelStore
+        .getState()
+        .openOverlayTour(
+          { tourId: tourIdFor(lensId, useCase.id), kind: "database" },
+          firstAnchor,
+        );
+    }
   };
 
   const handleUseCaseChange = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -340,10 +350,6 @@ export function DatabaseLens(block: DatabaseLensProps) {
 
     if (nextUseCase) openUseCase(nextUseCase);
   };
-
-  const activeTour = activeUseCase ? tourForUseCase(activeUseCase) : null;
-  const activeTourId = activeTour?.id ?? null;
-  useTourPersist(tourOpen ? activeTour : null, tourAnchor);
 
   const openLensTour = useCallback(
     (anchor?: string) => {
@@ -364,31 +370,18 @@ export function DatabaseLens(block: DatabaseLensProps) {
         });
       }
 
-      setTourState((state) => ({
-        anchor: nextAnchor,
-        revealRequest: (state?.revealRequest ?? 0) + 1,
-      }));
+      panelStore
+        .getState()
+        .openOverlayTour(
+          { tourId: activeTour.id, kind: "database" },
+          nextAnchor,
+        );
     },
-    [activeTour, activeUseCase, session, tourAnchor, tourOpen],
+    [activeTour, activeUseCase, panelStore, session, tourAnchor, tourOpen],
   );
 
-  const closeTour = useCallback(() => setTourState(null), []);
-
-  const changeTourAnchor = useCallback(
-    (anchor: string, options: { reveal: boolean }) => {
-      setTourState((state) =>
-        state
-          ? {
-              anchor,
-              revealRequest: options.reveal
-                ? state.revealRequest + 1
-                : state.revealRequest,
-            }
-          : state,
-      );
-    },
-    [],
-  );
+  const { closeOverlayTour: closeTour, moveOverlayTour: changeTourAnchor } =
+    panelStore.getState();
 
   const {
     overlayRef,
@@ -466,12 +459,12 @@ export function DatabaseLens(block: DatabaseLensProps) {
   return (
     <>
       {renderLensFigure(false)}
-      {tourOpen && activeTour && tourAnchor && portalTarget
+      {tourOpen && activeTour && portalTarget
         ? createPortal(
             <DiagramTourOverlay
               tour={activeTour}
-              activeAnchor={tourAnchor}
-              revealRequest={tourState?.revealRequest ?? 0}
+              activeAnchor={tourState.anchor}
+              revealRequest={tourState.revealRequest}
               paneWidth={tourPaneResize.width}
               separatorProps={tourPaneResize.separatorProps}
               overlayRef={overlayRef}

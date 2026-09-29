@@ -2,7 +2,7 @@ import type { ReviewCommitSummary } from "@dev.fast/review-protocol";
 import type { AnchorRef } from "@review/authoring";
 import { describe, expect, it } from "vitest";
 
-import type { GuidedTour, ReviewPeekContent } from "./review-panel-model";
+import type { ReviewPeekContent } from "./review-panel-model";
 import { createReviewPanelStore } from "./review-panel-store";
 
 const anchor = {
@@ -15,71 +15,17 @@ const content: ReviewPeekContent = {
   text: "start();",
 };
 
-const tour: GuidedTour = {
-  id: "flow",
-  stops: [{ anchor, label: "Startup", content }],
-};
-
 describe("Review panel store", () => {
-  it("replaces the active panel instead of layering panels", () => {
+  it("replaces the open peek instead of layering peeks", () => {
     const store = createReviewPanelStore();
+    const next = { kind: "peek", content: { kind: "explanation" } } as const;
 
     store.getState().openPeek({ kind: "peek", anchor, content });
-    expect(store.getState().active).toEqual({
-      kind: "peek",
-      anchor,
-      content,
-    });
-
-    store.getState().openTour(tour, anchor.id);
-    expect(store.getState().active).toMatchObject({
-      kind: "tour",
-      tour,
-      activeAnchor: anchor.id,
-    });
-  });
-
-  it("closes the active panel without revealing an earlier panel", () => {
-    const store = createReviewPanelStore();
-
-    store.getState().openTour(tour, anchor.id);
-    store.getState().openPeek({ kind: "peek", anchor, content });
-    expect(store.getState().active?.kind).toBe("peek");
+    store.getState().openPeek(next);
+    expect(store.getState().active).toEqual(next);
 
     store.getState().close();
     expect(store.getState().active).toBeNull();
-  });
-
-  it("distinguishes explicit tour reveals from focus-only activation", () => {
-    const store = createReviewPanelStore();
-    store.getState().openTour(tour, anchor.id);
-    const initial = store.getState().active;
-    expect(initial?.kind).toBe("tour");
-    const initialReveal = initial?.kind === "tour" ? initial.revealRequest : -1;
-
-    store
-      .getState()
-      .activateTourAnchor("focused-without-reveal", { reveal: false });
-    expect(store.getState().active).toMatchObject({
-      activeAnchor: "focused-without-reveal",
-      revealRequest: initialReveal,
-    });
-
-    store.getState().activateTourAnchor("explicit-next", { reveal: true });
-    expect(store.getState().active).toMatchObject({
-      activeAnchor: "explicit-next",
-      revealRequest: initialReveal + 1,
-    });
-  });
-
-  it("suppresses restored panel motion until the next live interaction", () => {
-    const store = createReviewPanelStore();
-
-    store.getState().restoreTour(tour, anchor.id);
-    expect(store.getState().motion).toBe("restored");
-
-    store.getState().activateTourAnchor("explicit-next", { reveal: true });
-    expect(store.getState().motion).toBe("live");
   });
 
   it("suppresses a live panel when its cached canvas resumes", () => {
@@ -225,5 +171,53 @@ describe("Review navigation", () => {
 
     store.getState().focusMapElement("review.app");
     expect(store.getState()).toMatchObject({ view: "review", mapFocus: null });
+  });
+});
+
+describe("Fullscreen tours", () => {
+  const sequence = { tourId: "flow", kind: "sequence" } as const;
+
+  it("reveals each explicit step and closes when the reader leaves the whiteboard", () => {
+    const store = createReviewPanelStore();
+
+    store.getState().openOverlayTour(sequence, "first");
+    store.getState().moveOverlayTour("second", { reveal: false });
+    store.getState().moveOverlayTour("third", { reveal: true });
+    expect(store.getState().overlayTour).toEqual({
+      ...sequence,
+      anchor: "third",
+      revealRequest: 2,
+    });
+
+    store.getState().showView("diff");
+    expect(store.getState().overlayTour).toBeNull();
+  });
+
+  it("reveals the first stop when an open tour switches to another tour", () => {
+    const store = createReviewPanelStore();
+
+    const lens = (useCase: string) =>
+      ({ tourId: `orders:${useCase}`, kind: "database" }) as const;
+
+    store.getState().openOverlayTour(lens("create"), "insert");
+    const shown = store.getState().overlayTour!.revealRequest;
+
+    store.getState().openOverlayTour(lens("cancel"), "update");
+    expect(store.getState().overlayTour).toMatchObject({
+      tourId: "orders:cancel",
+      anchor: "update",
+    });
+    // The panel stays mounted across the switch, so only a new request
+    // scrolls it to the new tour's stop.
+    expect(store.getState().overlayTour!.revealRequest).toBeGreaterThan(shown);
+  });
+
+  it("does not resume a tour over another view", () => {
+    const store = createReviewPanelStore({
+      view: "diff",
+      overlayTour: { tourId: "flow", anchor: "first", revealRequest: 0 },
+    });
+
+    expect(store.getState().overlayTour).toBeNull();
   });
 });

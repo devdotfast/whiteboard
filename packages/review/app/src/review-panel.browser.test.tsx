@@ -1,12 +1,12 @@
 import { REVIEW_CANVAS_RESUME_EVENT } from "@dev.fast/review-protocol";
 import type { AnchorRef } from "@review/authoring";
-import { type ReactNode, act, useEffect, useRef } from "react";
+import { type ReactNode, act, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReviewDebugSettingsProvider } from "./debug-settings";
 import { ReviewSessionProvider } from "./host/review-session";
-import { ReviewPanelHost } from "./review-components";
+import { GuidedTourPanel, ReviewPanelHost } from "./review-components";
 import { ReviewProvider } from "./review-context";
 import {
   ReviewPanelProvider,
@@ -84,7 +84,7 @@ describe("Review panel host", () => {
     expect(container.querySelectorAll(".side-panel")).toHaveLength(1);
     expect(container.querySelectorAll(panelBodySelector)).toHaveLength(1);
     expect(container.querySelectorAll('[role="separator"]')).toHaveLength(1);
-    expect(container.textContent).not.toContain("Guided tour");
+    expect(container.textContent).not.toContain("Earlier detail");
     expect(container.textContent).toContain("Startup detail");
     expect(
       addEventListener.mock.calls.filter(([type]) => type === "keydown"),
@@ -110,7 +110,7 @@ describe("Review panel host", () => {
         <ReviewDebugSettingsProvider>
           <ReviewProvider>
             <ReviewPanelProvider>
-              <RestoreTourPanel />
+              <RestorePeekPanel />
               <ReviewPanelHost />
             </ReviewPanelProvider>
           </ReviewProvider>
@@ -135,7 +135,7 @@ describe("Review panel host", () => {
         <ReviewDebugSettingsProvider>
           <ReviewProvider>
             <ReviewPanelProvider>
-              <OpenTourPanel />
+              <OpenPeekPanel />
               <ResumeMotionListener />
               <ReviewPanelHost />
             </ReviewPanelProvider>
@@ -153,7 +153,9 @@ describe("Review panel host", () => {
 
     expect(entranceAnimation(container)).toBe("none");
   });
+});
 
+describe("Guided tour panel", () => {
   it("activates the tour stop that crosses the panel reading line", async () => {
     const container = document.createElement("div");
     document.body.append(container);
@@ -164,9 +166,7 @@ describe("Review panel host", () => {
         <ReviewDebugSettingsProvider>
           <ReviewProvider>
             <ReviewPanelProvider>
-              <OpenTourPanel />
-              <ActiveTourAnchor />
-              <ReviewPanelHost />
+              <TourPanel />
             </ReviewPanelProvider>
           </ReviewProvider>
         </ReviewDebugSettingsProvider>,
@@ -214,9 +214,7 @@ describe("Review panel host", () => {
         <ReviewDebugSettingsProvider>
           <ReviewProvider>
             <ReviewPanelProvider>
-              <OpenTourPanel />
-              <ActiveTourAnchor />
-              <ReviewPanelHost />
+              <TourPanel />
             </ReviewPanelProvider>
           </ReviewProvider>
         </ReviewDebugSettingsProvider>,
@@ -272,29 +270,42 @@ describe("Review panel host", () => {
 
 function OpenReplacingPanel() {
   const openPeek = useReviewPanel((state) => state.openPeek);
-  const openTour = useReviewPanel((state) => state.openTour);
   useEffect(() => {
-    openTour(tourFixture(), "first");
+    openPeek({
+      kind: "peek",
+      anchor: { id: "earlier", title: "Earlier detail" } as AnchorRef,
+      content: { kind: "inline-code", text: "earlier();" },
+    });
     openPeek({
       kind: "peek",
       anchor: { id: "startup", title: "Startup detail" } as AnchorRef,
       content: { kind: "inline-code", text: "start();" },
     });
-  }, [openPeek, openTour]);
+  }, [openPeek]);
 
   return null;
 }
 
-function OpenTourPanel() {
-  const openTour = useReviewPanel((state) => state.openTour);
-  useEffect(() => openTour(tourFixture(), "first"), [openTour]);
+const peekFixture = {
+  kind: "peek",
+  anchor: { id: "startup", title: "Startup detail" } as AnchorRef,
+  content: { kind: "inline-code", text: "start();" },
+} as const;
+
+function OpenPeekPanel() {
+  const openPeek = useReviewPanel((state) => state.openPeek);
+  useEffect(() => openPeek(peekFixture), [openPeek]);
 
   return null;
 }
 
-function RestoreTourPanel() {
-  const restoreTour = useReviewPanel((state) => state.restoreTour);
-  useEffect(() => restoreTour(tourFixture(), "first"), [restoreTour]);
+function RestorePeekPanel() {
+  const openPeek = useReviewPanel((state) => state.openPeek);
+  const suppressMotion = useReviewPanel((state) => state.suppressMotion);
+  useEffect(() => {
+    openPeek(peekFixture);
+    suppressMotion();
+  }, [openPeek, suppressMotion]);
 
   return null;
 }
@@ -327,12 +338,26 @@ function ResumeMotionListener() {
   return <div ref={appRef} />;
 }
 
-function ActiveTourAnchor() {
-  const activeAnchor = useReviewPanel((state) =>
-    state.active?.kind === "tour" ? state.active.activeAnchor : "",
-  );
+function TourPanel() {
+  const [tour, setTour] = useState({ anchor: "first", revealRequest: 1 });
 
-  return <output data-active-tour-anchor>{activeAnchor}</output>;
+  return (
+    <>
+      <GuidedTourPanel
+        tour={tourFixture()}
+        activeAnchor={tour.anchor}
+        revealRequest={tour.revealRequest}
+        onActiveAnchorChange={(anchor, { reveal }) =>
+          setTour((previous) => ({
+            anchor,
+            revealRequest: previous.revealRequest + Number(reveal),
+          }))
+        }
+        onClose={() => {}}
+      />
+      <output data-active-tour-anchor>{tour.anchor}</output>
+    </>
+  );
 }
 
 function domRect(overrides: Partial<DOMRect> = {}): DOMRect {

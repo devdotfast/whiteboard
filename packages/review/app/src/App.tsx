@@ -63,13 +63,10 @@ import {
   useSuppressPanelMotionOnCanvasResume,
 } from "./review-panel";
 import type { ReviewDiffScope } from "./review-panel-store";
-import { ReviewRootsProvider } from "./review-root-context";
+import { ReviewRootsProvider, useReviewContainer } from "./review-root-context";
 import { ReviewToc } from "./review-toc";
 import { offeredReviewViews, reviewViewLabel } from "./review-view-route";
-import {
-  ReviewViewStateProvider,
-  useReviewViewStateSync,
-} from "./review-view-state";
+import { useReviewViewStateSync } from "./review-view-state";
 import { ReviewCommitsView } from "./ReviewCommitsView";
 import { ReviewTraceView } from "./ReviewTraceView";
 import { ShareControl } from "./share-control";
@@ -372,7 +369,24 @@ function ReviewLayoutContent({
   });
 
   useDocumentEmbedScroll(scrollRegionRef);
-  const viewStateSync = useReviewViewStateSync({ scrollRegionRef, panelStore });
+  useReviewViewStateSync({ scrollRegionRef, panelStore });
+
+  // Diagrams only read the open tour, so a restored tour whose diagram is
+  // no longer in the document would sit in the store unrendered. The
+  // document and its tour overlay commit before this effect runs.
+  const canvasRoot = useReviewContainer();
+  const documentReady = documentState.state === "ready";
+  useEffect(() => {
+    const { overlayTour, closeOverlayTour } = panelStore.getState();
+
+    if (
+      documentReady &&
+      overlayTour &&
+      !canvasRoot?.querySelector(".diagram-tour-overlay")
+    ) {
+      closeOverlayTour();
+    }
+  }, [canvasRoot, documentReady, documentRevision, panelStore]);
 
   const hasChangeRange =
     !!range.worktreeRevision || range.baseCommit !== range.headCommit;
@@ -742,12 +756,7 @@ function ReviewLayoutContent({
                         reportReviewDocumentRenderError(session, error)
                       }
                     >
-                      <ReviewViewStateProvider
-                        tourRestore={viewStateSync.tourRestore}
-                        persistOverlayTour={viewStateSync.persistOverlayTour}
-                      >
-                        <documentState.document.render />
-                      </ReviewViewStateProvider>
+                      <documentState.document.render />
                     </ReviewDocumentBoundary>
                   </article>
                 </>

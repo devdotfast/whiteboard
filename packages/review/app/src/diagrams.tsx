@@ -32,9 +32,8 @@ import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { useMotionPhase } from "./draw-queue-provider";
 import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
-import { useReviewPanel } from "./review-panel";
+import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type { GuidedTour, PeekAnchor } from "./review-panel-model";
-import { useTourPersist, useTourRestore } from "./review-view-state";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
@@ -267,21 +266,19 @@ export function SequenceDiagram(block: SequenceDiagramProps) {
   const tour = useMemo(() => createSequenceTourEntry(sequence), [sequence]);
 
   // The tour IS the fullscreen mode: the inline figure becomes the stage
-  // and the standard GuidedTourPanel docks beside it.
-  const [tourState, setTourState] = useState<{
-    anchor: string;
-    revealRequest: number;
-  } | null>(null);
+  // and the standard GuidedTourPanel docks beside it. A stored anchor this
+  // tour no longer has leaves it closed.
+  const panelStore = useReviewPanelStore();
+
+  const tourState = useReviewPanel((state) =>
+    state.overlayTour?.tourId === tour.id &&
+    tour.stops.some((stop) => stop.anchor.id === state.overlayTour!.anchor)
+      ? state.overlayTour
+      : null,
+  );
 
   const tourAnchor = tourState?.anchor ?? null;
   const tourOpen = tourState !== null;
-  const restoredTour = useTourRestore(tour);
-  useTourPersist(tourOpen ? tour : null, tourAnchor);
-
-  useEffect(() => {
-    if (!restoredTour) return;
-    setTourState({ anchor: restoredTour.activeAnchor, revealRequest: 0 });
-  }, [restoredTour]);
 
   const openTour = useCallback(
     (anchor?: string) => {
@@ -297,31 +294,15 @@ export function SequenceDiagram(block: SequenceDiagramProps) {
         captureUiEvent(session, "tour_started", { steps: tour.stops.length });
       }
 
-      setTourState((state) => ({
-        anchor: nextAnchor,
-        revealRequest: (state?.revealRequest ?? 0) + 1,
-      }));
+      panelStore
+        .getState()
+        .openOverlayTour({ tourId: tour.id, kind: "sequence" }, nextAnchor);
     },
-    [session, tour, tourAnchor, tourOpen],
+    [panelStore, session, tour, tourAnchor, tourOpen],
   );
 
-  const closeTour = useCallback(() => setTourState(null), []);
-
-  const changeTourAnchor = useCallback(
-    (anchor: string, options: { reveal: boolean }) => {
-      setTourState((state) =>
-        state
-          ? {
-              anchor,
-              revealRequest: options.reveal
-                ? state.revealRequest + 1
-                : state.revealRequest,
-            }
-          : state,
-      );
-    },
-    [],
-  );
+  const { closeOverlayTour: closeTour, moveOverlayTour: changeTourAnchor } =
+    panelStore.getState();
 
   const {
     overlayRef,
@@ -342,8 +323,8 @@ export function SequenceDiagram(block: SequenceDiagramProps) {
         ? createPortal(
             <DiagramTourOverlay
               tour={tour}
-              activeAnchor={tourAnchor!}
-              revealRequest={tourState?.revealRequest ?? 0}
+              activeAnchor={tourState.anchor}
+              revealRequest={tourState.revealRequest}
               paneWidth={tourPaneResize.width}
               separatorProps={tourPaneResize.separatorProps}
               overlayRef={overlayRef}

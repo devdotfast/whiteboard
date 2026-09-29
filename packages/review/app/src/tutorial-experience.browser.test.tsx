@@ -13,6 +13,8 @@ import {
 } from "./host/review-session";
 import { ReviewSection } from "./review-components";
 import { ReviewProvider } from "./review-context";
+import { ReviewPanelProvider, useReviewPanelStore } from "./review-panel";
+import type { ReviewPanelStore } from "./review-panel-store";
 import { testReviewSession } from "./review-session-test-utils";
 import { shellStyles } from "./shell-styles";
 import { withClass } from "./stylex-props";
@@ -32,6 +34,8 @@ let session: ReviewSession;
 let root: ReturnType<typeof createRoot> | null = null;
 
 let canvasRoot: HTMLElement;
+
+let panelStore: ReviewPanelStore;
 
 beforeEach(() => {
   session = testReviewSession(
@@ -133,13 +137,22 @@ function render(
     root?.render(
       <ReviewSessionProvider session={session}>
         <ReviewProvider>
-          <TutorialProvider tutorial={tutorial}>
-            <Shell {...props} />
-          </TutorialProvider>
+          <ReviewPanelProvider>
+            <PanelStoreProbe />
+            <TutorialProvider tutorial={tutorial}>
+              <Shell {...props} />
+            </TutorialProvider>
+          </ReviewPanelProvider>
         </ReviewProvider>
       </ReviewSessionProvider>,
     );
   });
+}
+
+function PanelStoreProbe(): null {
+  panelStore = useReviewPanelStore();
+
+  return null;
 }
 
 function section(title: string): HTMLElement {
@@ -403,13 +416,10 @@ describe("TutorialExperience", () => {
     render(tutorial);
 
     expect(card()?.textContent).toContain("Walk the sequence");
-    const diagramTour = document.createElement("div");
-    diagramTour.className = "diagram-tour-overlay";
-    const sequence = document.createElement("div");
-    sequence.className = "sequence-diagram";
-    diagramTour.append(sequence);
     await act(async () => {
-      canvasRoot.append(diagramTour);
+      panelStore
+        .getState()
+        .openOverlayTour({ tourId: "t", kind: "sequence" }, "a");
       await Promise.resolve();
     });
 
@@ -431,13 +441,10 @@ describe("TutorialExperience", () => {
     render(tutorial);
 
     expect(card()?.textContent).toContain("Inspect the database flow");
-    const diagramTour = document.createElement("div");
-    diagramTour.className = "diagram-tour-overlay";
-    const database = document.createElement("div");
-    database.className = "database-lens";
-    diagramTour.append(database);
     await act(async () => {
-      canvasRoot.append(diagramTour);
+      panelStore
+        .getState()
+        .openOverlayTour({ tourId: "t", kind: "database" }, "a");
       await Promise.resolve();
     });
 

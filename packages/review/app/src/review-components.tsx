@@ -422,35 +422,19 @@ function keepAnchorLinkVisible(link: HTMLElement) {
   }, 240);
 }
 
-/** The only top-level renderer for Review's detail panel modes. */
+/** The only top-level renderer for Review's side peek. */
 export function ReviewPanelHost() {
   const activePanel = useReviewPanel((state) => state.active);
   const close = useReviewPanel((state) => state.close);
 
-  const activateTourAnchor = useReviewPanel(
-    (state) => state.activateTourAnchor,
-  );
-
   if (!activePanel) return null;
 
   return (
-    <>
-      {activePanel.kind === "peek" ? (
-        <ReviewPeekPanel
-          anchor={activePanel.anchor}
-          content={activePanel.content}
-          onClose={close}
-        />
-      ) : (
-        <GuidedTourPanel
-          tour={activePanel.tour}
-          activeAnchor={activePanel.activeAnchor}
-          revealRequest={activePanel.revealRequest}
-          onActiveAnchorChange={activateTourAnchor}
-          onClose={close}
-        />
-      )}
-    </>
+    <ReviewPeekPanel
+      anchor={activePanel.anchor}
+      content={activePanel.content}
+      onClose={close}
+    />
   );
 }
 

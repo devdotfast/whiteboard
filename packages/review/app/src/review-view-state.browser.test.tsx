@@ -10,19 +10,15 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReviewSessionProvider } from "./host/review-session";
-import type { GuidedTour } from "./review-panel-model";
 import { createReviewPanelStore } from "./review-panel-store";
 import { testReviewSession } from "./review-session-test-utils";
 import { writeReviewUiState } from "./review-ui-state";
 import {
-  ReviewViewStateProvider,
   clearPersistedReviewViewState,
-  createReviewTourRestoreClaim,
   readPersistedReviewViewState,
+  readReviewNavigationRestore,
   reviewViewStateKey,
   useReviewViewStateSync,
-  useTourPersist,
-  useTourRestore,
 } from "./review-view-state";
 
 type TestReviewSession = ReturnType<typeof testReviewSession>;
@@ -288,13 +284,15 @@ describe("review view state", () => {
         content: { kind: "inline-code", text: "start();" },
       }),
     );
-    expect(readPersistedReviewViewState(session.config).panel).toBeUndefined();
+    expect(readPersistedReviewViewState(session.config)).toEqual({});
 
-    act(() => store.getState().openTour(tour, "second"));
-    expect(readPersistedReviewViewState(session.config).panel).toEqual({
-      kind: "tour",
-      tourId: "flow",
-      activeAnchor: "second",
+    act(() =>
+      store
+        .getState()
+        .openOverlayTour({ tourId: "flow", kind: "sequence" }, "second"),
+    );
+    expect(readPersistedReviewViewState(session.config)).toEqual({
+      overlayTour: { tourId: "flow", activeAnchor: "second", kind: "sequence" },
     });
   });
 
@@ -305,10 +303,14 @@ describe("review view state", () => {
     const store = createReviewPanelStore({ view: "review" });
     renderViewState({ session, store });
 
-    act(() => store.getState().openTour(tour, "second"));
+    act(() =>
+      store
+        .getState()
+        .openOverlayTour({ tourId: "flow", kind: "sequence" }, "second"),
+    );
     expect(readPersistedReviewViewState(session.config)).toMatchObject({
       activeView: "map",
-      panel: { kind: "tour", tourId: "flow", activeAnchor: "second" },
+      overlayTour: { tourId: "flow", activeAnchor: "second" },
     });
 
     act(() => store.getState().showView("diff"));
@@ -331,57 +333,37 @@ describe("review view state", () => {
     );
   });
 
-  it("keeps a stored tour until the diagram that owns it mounts", () => {
+  it("restores the fullscreen tour a reader left open", () => {
     const session = testReviewSession();
-    const otherTour: GuidedTour = { ...tour, id: "other" };
     storeState(session, {
-      overlayTour: { tourId: "flow", activeAnchor: "second" },
+      activeView: "review",
+      overlayTour: { tourId: "flow", activeAnchor: "second", kind: "sequence" },
     });
 
-    const container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-
-    const render = (owners: readonly GuidedTour[]) =>
-      act(() => {
-        root?.render(
-          <ReviewSessionProvider session={session}>
-            <TourHarness owners={owners} />
-          </ReviewSessionProvider>,
-        );
-      });
-
-    // A diagram that does not own the stored tour mounts first (and closed).
-    render([otherTour]);
-    expect(container.querySelector("[data-tour=other]")?.textContent).toBe("");
-    expect(readPersistedReviewViewState(session.config).overlayTour).toEqual({
+    expect(
+      readReviewNavigationRestore(session.config, canvas).overlayTour,
+    ).toEqual({
       tourId: "flow",
-      activeAnchor: "second",
-    });
-
-    // The owner mounts later, claims the restore, and keeps persisting it.
-    render([otherTour, tour]);
-    expect(container.querySelector("[data-tour=flow]")?.textContent).toBe(
-      "second",
-    );
-    expect(readPersistedReviewViewState(session.config).overlayTour).toEqual({
-      tourId: "flow",
-      activeAnchor: "second",
+      kind: "sequence",
+      anchor: "second",
+      revealRequest: 0,
     });
   });
 
-  it("lets the matching tour owner claim a restore exactly once", () => {
-    const claim = createReviewTourRestoreClaim({
-      tourId: "flow",
-      activeAnchor: "second",
+  it("restores a tour an older build stored as a panel", () => {
+    const session = testReviewSession();
+    storeState(session, {
+      panel: { kind: "tour", tourId: "flow", activeAnchor: "second" },
     });
 
-    expect(claim.claim({ ...tour, id: "other" })).toBeNull();
-    expect(claim.claim(tour)).toEqual({
-      tour,
-      activeAnchor: "second",
+    expect(
+      readReviewNavigationRestore(session.config, canvas).overlayTour,
+    ).toEqual({
+      tourId: "flow",
+      kind: undefined,
+      anchor: "second",
+      revealRequest: 0,
     });
-    expect(claim.claim(tour)).toBeNull();
   });
 
   it("restores every view the switcher offers, and nothing else", () => {
@@ -413,21 +395,12 @@ describe("review view state", () => {
   });
 });
 
-const tour: GuidedTour = {
-  id: "flow",
-  stops: [
-    {
-      anchor: { id: "first", title: "First" } as AnchorRef,
-      label: "First",
-      content: { kind: "inline-code", text: "first();" },
-    },
-    {
-      anchor: { id: "second", title: "Second" } as AnchorRef,
-      label: "Second",
-      content: { kind: "inline-code", text: "second();" },
-    },
-  ],
-};
+const canvas = {
+  softwareMapEnabled: true,
+  hasChangeRange: true,
+  version: 1,
+  lensMode: "structural",
+} as const;
 
 function renderViewState({
   session,
@@ -465,35 +438,6 @@ function renderViewState({
   renderSession(session);
 
   return { element: element!, store, renderSession };
-}
-
-function TourOwner({ tour }: { tour: GuidedTour }) {
-  const restored = useTourRestore(tour);
-  useTourPersist(restored?.tour ?? null, restored?.activeAnchor ?? null);
-
-  return <span data-tour={tour.id}>{restored?.activeAnchor ?? ""}</span>;
-}
-
-function TourHarness({ owners }: { owners: readonly GuidedTour[] }) {
-  const scrollRegionRef = useRef<HTMLDivElement | null>(null);
-
-  const sync = useReviewViewStateSync({
-    scrollRegionRef: scrollRegionRef as RefObject<HTMLElement | null>,
-    panelStore: createReviewPanelStore(),
-  });
-
-  return (
-    <ReviewViewStateProvider
-      tourRestore={sync.tourRestore}
-      persistOverlayTour={sync.persistOverlayTour}
-    >
-      <div ref={scrollRegionRef}>
-        {owners.map((owner) => (
-          <TourOwner key={owner.id} tour={owner} />
-        ))}
-      </div>
-    </ReviewViewStateProvider>
-  );
 }
 
 function ViewStateHarness({

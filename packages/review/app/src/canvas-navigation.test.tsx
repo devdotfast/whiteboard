@@ -13,6 +13,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { mountReviewCanvas as mount } from "./desktop-entry";
 import { testReviewBridge } from "./review-session-test-utils";
+import { readReviewUiState, writeReviewUiState } from "./review-ui-state";
+import { reviewViewStateKey } from "./review-view-state";
 
 let store: ReviewStore, directory: string;
 
@@ -176,6 +178,89 @@ it("resumes the view and lens a reader left, on the version they left them", asy
   });
   expect(lensToggle()?.getAttribute("aria-pressed")).toBe("false");
   expect(diffLenses).not.toContain("api");
+});
+
+it("reopens a stored fullscreen tour only while its diagram is in the document", async () => {
+  const review = await command({
+    type: "create",
+    title: "Tour review",
+    pins: { repositoryId: "repo", base: "base", head: "head" },
+  });
+
+  await command({
+    type: "edit",
+    reviewId: review.reviewId,
+    edit: {
+      type: "insert",
+      content: {
+        type: "sequence",
+        title: "Startup",
+        actors: { app: "App", db: "Database" },
+        steps: [
+          {
+            from: "app",
+            to: "db",
+            label: "Load",
+            explanation: "Reads config.",
+          },
+        ],
+      },
+    },
+  });
+
+  const [sequence] = store
+    .read(review.reviewId)
+    .document.flatMap((block) => (block.type === "sequence" ? [block] : []));
+
+  const step = sequence!.steps[0]!.id!;
+
+  const app = new Hono();
+  app.route("/reviews-api", createReviewApi(store));
+  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+
+  const bridge = testReviewBridge(
+    {},
+    { request: async (url, init) => app.request(url, init) },
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const key = reviewViewStateKey(bridge.config);
+
+  const open = async (overlayTour: {
+    tourId: string;
+    activeAnchor: string;
+  }) => {
+    await act(async () => canvas?.dispose());
+    writeReviewUiState("session", key, {
+      overlayTour: { ...overlayTour, kind: "sequence" },
+    });
+    await act(async () => {
+      canvas = mount(container, {
+        kind: "api",
+        reviewId: review.reviewId,
+        bridge,
+      });
+    });
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(
+          container.querySelector(".review-document .sequence-diagram"),
+        ).toBeTruthy(),
+      );
+    });
+  };
+
+  await open({ tourId: sequence!.id!, activeAnchor: step });
+  expect(container.querySelector(".diagram-tour-overlay")).toBeTruthy();
+  expect(readReviewUiState("session", key)).toMatchObject({
+    overlayTour: { tourId: sequence!.id, activeAnchor: step },
+  });
+
+  // The diagram that owned this tour is gone: nothing reopens or keeps it.
+  await open({ tourId: "removed", activeAnchor: step });
+  expect(container.querySelector(".diagram-tour-overlay")).toBeNull();
+  expect(readReviewUiState("session", key)).not.toHaveProperty("overlayTour");
 });
 
 function tab(container: HTMLElement, label: string) {

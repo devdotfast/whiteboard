@@ -43,13 +43,4 @@ export interface PeekPanel {
   content: ReviewPeekContent;
 }
 
-export interface TourPanel {
-  kind: "tour";
-  tour: GuidedTour;
-  activeAnchor: string;
-  revealRequest: number;
-}
-
-export type ReviewPanel = PeekPanel | TourPanel;
-
 export type ReviewPanelMotion = "live" | "restored";
