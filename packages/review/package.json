@@ -67,6 +67,7 @@
     "@agentclientprotocol/claude-agent-acp": "0.84.0",
     "@agentclientprotocol/codex-acp": "2.0.0",
     "@agentclientprotocol/sdk": "1.5.1",
+    "@dev.fast/diffr": "0.1.10",
     "@hono/node-server": "2.0.12",
     "@img/sharp-wasm32": "0.35.4",
     "@modelcontextprotocol/sdk": "1.30.0",
@@ -86,7 +87,6 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@dev.fast/diffr": "0.1.10",
     "@dev.fast/json": "workspace:*",
     "@dev.fast/local-vcs": "^0.1.0",
     "@dev.fast/review-protocol": "workspace:*",

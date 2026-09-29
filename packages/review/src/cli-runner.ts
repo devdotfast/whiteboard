@@ -18,6 +18,7 @@ import {
   emitJsonEvent,
   humanStream,
   jsonRequestedInArgv,
+  processIsAlive,
   registerTraceCommands,
   resolveTraceCommand,
   runStoreLogin,
@@ -77,6 +78,7 @@ import {
   type ReviewTelemetryErrorName,
 } from "./review-telemetry";
 import {
+  type ReviewServerDiscovery,
   readReviewServerDiscovery,
   readReviewServerHealth,
   reviewServerIsHealthy,
@@ -277,6 +279,16 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         "--software-maps",
         "allow the authoring skill to generate optional software maps",
       )
+      .option(
+        "--detach",
+        "start the server in the background, logging to review-server/server.log",
+      )
+      .addOption(
+        new Option("--started-by <who>")
+          .choices(["user", "cli", "desktop"])
+          .default("user")
+          .hideHelp(),
+      )
       // Batch authoring was removed; name that instead of "unknown option".
       .addOption(new Option("--authoring-mode <mode>").hideHelp()),
     "plain",
@@ -285,6 +297,8 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       stateDir?: string;
       port: string;
       softwareMaps?: boolean;
+      detach?: boolean;
+      startedBy: "user" | "cli" | "desktop";
       authoringMode?: string;
       json?: boolean;
     }>();
@@ -298,6 +312,26 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     if (!Number.isInteger(port) || port < 0 || port > 65535)
       throw new Error("--port must be an integer between 0 and 65535.");
     const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
+
+    if (options.detach) {
+      const { ensureBackgroundServer } =
+        await import("./server/background-server.js");
+
+      const { discovery, started } = await ensureBackgroundServer({
+        stateDir,
+        env,
+        args: [
+          "--port",
+          `${port}`,
+          ...(options.softwareMaps ? ["--software-maps"] : []),
+        ],
+      });
+
+      await writeServerStatus(discovery, stateDir, options.json, { started });
+
+      return;
+    }
+
     const controller = new AbortController();
     const stop = () => controller.abort();
     process.once("SIGINT", stop);
@@ -309,6 +343,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         stateDir,
         port,
         softwareMapEnabled: options.softwareMaps,
+        startedBy: options.startedBy,
         signal: controller.signal,
         telemetry,
         onReady: ({ url, serverPid }) => {
@@ -342,15 +377,64 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
 
     const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
     const discovery = await readReviewServerDiscovery(stateDir);
+
+    if (!discovery) throw serverNotReady(stateDir);
+    await writeServerStatus(discovery, stateDir, options.json);
+  });
+
+  configureJsonOutput(
+    serverCommand
+      .command("stop")
+      .description(
+        "Stop a background server started by --detach, the CLI, or Desktop",
+      )
+      .option(
+        "--state-dir <path>",
+        "directory selected when starting the server",
+      ),
+    "plain",
+  ).action(async (_options, command: Command) => {
+    const options = command.optsWithGlobals<{
+      stateDir?: string;
+      json?: boolean;
+    }>();
+
+    const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
+    const discovery = await readReviewServerDiscovery(stateDir);
+    // Only the recorded instance's own answer proves the pid is still its.
     const health = discovery && (await readReviewServerHealth(discovery));
 
-    if (!discovery || !health) throw serverNotReady(stateDir);
-    const { url, serverPid } = discovery;
-    const { version, serverId } = health;
+    if (!discovery || health?.serverPid !== discovery.serverPid) {
+      input.stdout.write(
+        options.json
+          ? `${JSON.stringify({ event: "server.stop", stopped: false, stateDir })}\n`
+          : `No Whiteboard server is running in ${stateDir}.\n`,
+      );
+
+      return;
+    }
+
+    const { serverPid, startedBy } = discovery;
+
+    if (startedBy === "user")
+      throw new Error(
+        `The Whiteboard server in ${stateDir} (process ${serverPid}) runs in the foreground of \`whiteboard server start\`. Stop it there with Ctrl-C.`,
+      );
+    process.kill(serverPid, "SIGTERM");
+
+    // Shutdown force-closes open streams after 5 s.
+    for (let waited = 0; processIsAlive(serverPid); waited += 100) {
+      if (waited >= 10_000)
+        throw new Error(
+          `The Whiteboard server (process ${serverPid}) did not stop within 10 s.`,
+        );
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
     input.stdout.write(
       options.json
-        ? `${JSON.stringify({ event: "server.status", ready: true, url, serverPid, stateDir, version, serverId })}\n`
-        : `Whiteboard server ready at ${url}\nSaved reviews: ${stateDir}\n`,
+        ? `${JSON.stringify({ event: "server.stop", stopped: true, serverPid, stateDir })}\n`
+        : `Stopped the Whiteboard server (process ${serverPid}).\n`,
     );
   });
 
@@ -438,6 +522,63 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         : `New server id ${serverId}\nSaved reviews: ${stateDir}\n`,
     );
   });
+
+  const remote = configureOutput(
+    program
+      .command("remote")
+      .description("Serve reviews to Whiteboard Desktop over SSH"),
+    "plain",
+  );
+
+  configureJsonOutput(
+    remote
+      .command("attach")
+      .description(
+        "Start a background server if none is healthy and report how to reach it",
+      )
+      .option(
+        "--state-dir <path>",
+        "directory for saved reviews and server discovery",
+      ),
+    "plain",
+  ).action(async (_options, command: Command) => {
+    const options = command.optsWithGlobals<{
+      stateDir?: string;
+      json?: boolean;
+    }>();
+
+    const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
+
+    const { REMOTE_ATTACH_BEGIN, REMOTE_ATTACH_END, remoteAttach } =
+      await import("./remote-attach.js");
+
+    const attach = await remoteAttach({ stateDir, env, stderr: input.stderr });
+
+    // Sentinels let Desktop drop whatever the login shell prints around them.
+    input.stdout.write(
+      options.json
+        ? `${REMOTE_ATTACH_BEGIN}\n${JSON.stringify(attach)}\n${REMOTE_ATTACH_END}\n`
+        : `Whiteboard server ${attach.startedServer ? "started" : "already running"} at ${attach.url}\nStructural diff: ${attach.diffr ? "available" : "unavailable (no diffr)"}\n`,
+    );
+  });
+
+  async function writeServerStatus(
+    discovery: ReviewServerDiscovery,
+    stateDir: string,
+    json: boolean | undefined,
+    extra: { started?: boolean } = {},
+  ) {
+    const health = await readReviewServerHealth(discovery);
+
+    if (!health) throw serverNotReady(stateDir);
+    const { url, serverPid } = discovery;
+    const { version, serverId } = health;
+    input.stdout.write(
+      json
+        ? `${JSON.stringify({ event: "server.status", ready: true, url, serverPid, stateDir, version, serverId, ...extra })}\n`
+        : `Whiteboard server ${extra.started === false ? "already running" : "ready"} at ${url}\nSaved reviews: ${stateDir}\n`,
+    );
+  }
 
   configureJsonOutput(
     program

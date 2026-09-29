@@ -26,8 +26,9 @@ export interface StructuralDiffRequest {
 
 export function diffrExecutable(
   packageRoot = findReviewPackageRoot(import.meta.url),
+  env: NodeJS.ProcessEnv = process.env,
 ): string {
-  if (process.env.REVIEW_DIFFR_BINARY) return process.env.REVIEW_DIFFR_BINARY;
+  if (env.REVIEW_DIFFR_BINARY) return env.REVIEW_DIFFR_BINARY;
 
   const bundled = path.join(
     packageRoot,

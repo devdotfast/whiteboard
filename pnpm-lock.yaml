@@ -113,6 +113,9 @@ importers:
       '@agentclientprotocol/sdk':
         specifier: 1.5.1
         version: 1.5.1(zod@4.4.3)
+      '@dev.fast/diffr':
+        specifier: 0.1.10
+        version: 0.1.10(zod@4.4.3)
       '@hono/node-server':
         specifier: 2.0.12
         version: 2.0.12(hono@4.13.5)
@@ -165,9 +168,6 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
-      '@dev.fast/diffr':
-        specifier: 0.1.10
-        version: 0.1.10(zod@4.4.3)
       '@dev.fast/json':
         specifier: workspace:*
         version: link:../json

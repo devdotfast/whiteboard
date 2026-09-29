@@ -34,6 +34,7 @@ interface HeadlessServerInput {
   stateDir: string;
   port?: number;
   softwareMapEnabled?: boolean;
+  startedBy?: ReviewServerDiscovery["startedBy"];
   signal: AbortSignal;
   /** The CLI's instance, already on the `headless` surface. */
   telemetry?: Pick<ReviewTelemetryCapture, "captureUiEvent">;
@@ -93,6 +94,7 @@ async function serve(input: HeadlessServerInput) {
     url: "http://127.0.0.1:0",
     serverPid: process.pid,
     token: randomBytes(32).toString("base64url"),
+    startedBy: input.startedBy ?? "user",
   };
 
   const relay = new GlobalReviewDesktopVerbRelay();
