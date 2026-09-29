@@ -752,39 +752,3 @@ button.review-stack-row:disabled .review-stack-relation {
 .review-document-header + .api-document-node .review-section-header {
   margin-top: 40px;
 }
-
-/* A software map inside the document sits centered on the prose column, no
-   narrower than the prose measure. The other diagrams style this
-   themselves. */
-.review-document .software-map {
-  width: fit-content;
-  max-width: min(
-    var(--review-inline-diagram-max-width),
-    calc(
-      100cqi - var(--review-document-padding-inline) -
-        var(--review-document-padding-inline)
-    )
-  );
-  margin-inline: auto;
-}
-
-/* Never narrower than the prose measure (clamped to the container width so
-   narrow viewports still fit). */
-
-.review-document .software-map {
-  min-width: min(
-    var(--review-prose-max-width),
-    calc(
-      100cqi - var(--review-document-padding-inline) -
-        var(--review-document-padding-inline)
-    )
-  );
-}
-
-@media (max-width: 720px) {
-  .review-document .software-map,
-  .review-app--peek-open .review-document .software-map {
-    --review-inline-diagram-max-width: none;
-    width: calc(100cqi - 16px);
-  }
-}

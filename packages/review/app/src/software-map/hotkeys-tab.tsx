@@ -1,4 +1,5 @@
 import { MinusIcon, PlusIcon } from "@canvas/icons";
+import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import {
   type CSSProperties,
@@ -105,47 +106,40 @@ export function SoftwareMapHotkeysTab({
   return (
     <aside
       ref={rootRef}
-      className={[
-        "software-map-code-hotkeys",
-        open
-          ? "software-map-code-hotkeys--open"
-          : "software-map-code-hotkeys--collapsed",
-      ].join(" ")}
+      {...stylex.props(styles.tab, !open && styles.tabCollapsed)}
       aria-label={open ? ariaLabel : undefined}
       style={style}
       onKeyDown={stopSoftwareMapHotkeysKeyDown}
     >
-      <div className="software-map-code-hotkeys-panel" aria-hidden={!open}>
-        <div ref={stripRef} className="software-map-code-hotkeys-strip">
+      <div
+        {...stylex.props(styles.panel, !open && styles.panelCollapsed)}
+        aria-hidden={!open}
+      >
+        <div ref={stripRef} {...stylex.props(styles.strip)}>
           {groups.map((group) => (
-            <div
-              key={group.id}
-              className={[
-                "software-map-code-hotkeys-group",
-                group.id === activeGroupId
-                  ? "software-map-code-hotkeys-group--active"
-                  : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-            >
-              <span className="software-map-code-hotkeys-group-label">
+            <div key={group.id} {...stylex.props(styles.group)}>
+              <span
+                {...stylex.props(
+                  styles.groupLabel,
+                  group.id === activeGroupId && styles.groupLabelActive,
+                )}
+              >
                 {group.label}
               </span>
               {group.items.map((item) => (
                 <span
                   key={`${group.id}:${item.label}`}
-                  className="software-map-code-hotkeys-item"
+                  {...stylex.props(styles.item)}
                   title={item.label}
                 >
-                  <span className="software-map-code-hotkeys-keys">
+                  <span {...stylex.props(styles.keys)}>
                     {item.keys.map((key) => (
-                      <kbd key={key}>{key}</kbd>
+                      <kbd key={key} {...stylex.props(styles.key)}>
+                        {key}
+                      </kbd>
                     ))}
                   </span>
-                  <span className="software-map-code-hotkeys-item-label">
-                    {item.label}
-                  </span>
+                  <span {...stylex.props(styles.itemLabel)}>{item.label}</span>
                 </span>
               ))}
             </div>
@@ -154,7 +148,7 @@ export function SoftwareMapHotkeysTab({
         <button
           ref={toggleRef}
           type="button"
-          className="software-map-code-hotkeys-toggle"
+          {...stylex.props(styles.button, styles.toggle)}
           aria-label="Minimize software map hotkeys"
           aria-expanded="true"
           tabIndex={open ? 0 : -1}
@@ -166,7 +160,11 @@ export function SoftwareMapHotkeysTab({
       <button
         ref={collapsedButtonRef}
         type="button"
-        className="software-map-code-hotkeys-collapsed-button"
+        {...stylex.props(
+          styles.button,
+          styles.collapsedButton,
+          !open && styles.collapsedButtonShown,
+        )}
         aria-label="Show software map hotkeys"
         aria-expanded="false"
         tabIndex={open ? -1 : 0}
@@ -186,7 +184,181 @@ function stopSoftwareMapHotkeysKeyDown(event: KeyboardEvent<HTMLElement>) {
   event.stopPropagation();
 }
 
+const settle = "cubic-bezier(0.2, 0.8, 0.2, 1)";
+
+const reducedMotion = "@media (prefers-reduced-motion: reduce)";
+
 const styles = stylex.create({
+  // A tab docked to the bottom edge, sized to its content.
+  tab: {
+    position: "absolute",
+    bottom: 0,
+    left: "50%",
+    zIndex: 7,
+    display: "flex",
+    alignItems: "center",
+    width: {
+      default: "var(--software-map-hotkeys-width, max-content)",
+      "@media (max-width: 760px)": "calc(100% - 24px)",
+    },
+    maxWidth: {
+      default: "calc(100% - 24px)",
+      "@media (max-width: 760px)": "none",
+    },
+    height: "30px",
+    minWidth: 0,
+    overflow: "hidden",
+    borderWidth: "1px 1px 0",
+    borderStyle: "solid solid none",
+    borderColor: `${tokens.rule} ${tokens.rule} currentcolor`,
+    borderRadius: "8px 8px 0 0",
+    backgroundColor: tokens.surface,
+    color: tokens.ink,
+    boxShadow: `0 -8px 24px ${tokens.shadowColorStrong}`,
+    fontSize: "11px",
+    lineHeight: 1,
+    transform: "translateX(-50%)",
+    transition: {
+      default: `width 180ms ${settle}, box-shadow 180ms ease`,
+      [reducedMotion]: "none",
+    },
+    willChange: "width",
+  },
+  tabCollapsed: {
+    boxShadow: `0 -4px 14px ${tokens.shadowColorStrong}`,
+  },
+  panel: {
+    display: "flex",
+    alignItems: "center",
+    width: "100%",
+    height: "100%",
+    minWidth: 0,
+    opacity: 1,
+    transform: "translateY(0)",
+    transition: {
+      default: `opacity 140ms ease, transform 180ms ${settle}`,
+      [reducedMotion]: "none",
+    },
+  },
+  panelCollapsed: {
+    opacity: 0,
+    pointerEvents: "none",
+    transform: "translateY(4px)",
+  },
+  strip: {
+    display: "flex",
+    flex: "1 1 auto",
+    gap: "12px",
+    alignItems: "center",
+    minWidth: 0,
+    height: "100%",
+    padding: "0 8px 0 10px",
+    overflowX: "auto",
+    scrollbarWidth: "none",
+    "::-webkit-scrollbar": {
+      display: "none",
+    },
+  },
+  group: {
+    display: "flex",
+    flex: "0 0 auto",
+    gap: "6px",
+    alignItems: "center",
+    minWidth: 0,
+    whiteSpace: "nowrap",
+  },
+  groupLabel: {
+    color: tokens.inkFaint,
+    fontSize: "10px",
+    fontWeight: 650,
+    letterSpacing: 0,
+  },
+  groupLabelActive: {
+    color: tokens.accent,
+  },
+  item: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "3px",
+    color: tokens.inkMuted,
+  },
+  keys: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "2px",
+  },
+  key: {
+    display: "inline-grid",
+    placeItems: "center",
+    minWidth: "16px",
+    height: "17px",
+    padding: "0 4px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.ruleSoft,
+    borderRadius: "4px",
+    backgroundColor: tokens.bg,
+    color: tokens.ink,
+    fontFamily: tokens.fontMono,
+    fontSize: "10px",
+    lineHeight: 1,
+  },
+  itemLabel: {
+    color: tokens.inkFaint,
+  },
+  button: {
+    display: "inline-flex",
+    alignItems: "center",
+    height: "100%",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    backgroundColor: tokens.transparent,
+    color: {
+      default: tokens.inkFaint,
+      ":hover": tokens.ink,
+      ":focus-visible": tokens.ink,
+    },
+    cursor: "pointer",
+    outline: {
+      default: null,
+      ":focus-visible": `1px solid ${tokens.ruleSoft}`,
+    },
+    outlineOffset: { default: null, ":focus-visible": "-3px" },
+  },
+  toggle: {
+    flex: "0 0 28px",
+    justifyContent: "center",
+    width: "28px",
+    padding: 0,
+    borderLeftWidth: "1px",
+    borderLeftStyle: "solid",
+    borderLeftColor: tokens.ruleSoft,
+  },
+  collapsedButton: {
+    position: "absolute",
+    inset: "0 auto 0 0",
+    gap: "6px",
+    padding: "0 10px",
+    color: {
+      default: tokens.inkMuted,
+      ":hover": tokens.ink,
+      ":focus-visible": tokens.ink,
+    },
+    font: "inherit",
+    opacity: 0,
+    pointerEvents: "none",
+    transform: "translateY(-3px)",
+    transition: {
+      default: `opacity 140ms ease, transform 180ms ${settle}`,
+      [reducedMotion]: "none",
+    },
+  },
+  collapsedButtonShown: {
+    opacity: 1,
+    pointerEvents: "auto",
+    transform: "translateY(0)",
+  },
   icon: {
     width: "14px",
     height: "14px",

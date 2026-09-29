@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { UserOptions } from "@stylexjs/unplugin";
 
 // One option set for the production build and Vitest, so a style hashes to the
@@ -9,6 +11,9 @@ export const stylexOptions = {
   // otherwise dropped without a word.
   propertyValidationMode: "throw",
   unstable_moduleResolution: { type: "commonJS", rootDir: __dirname },
+  // The `@canvas/*` path, so modules in src/ subfolders can import tokens and
+  // markers without a relative parent path.
+  aliases: { "@canvas/*": [path.join(__dirname, "src/*")] },
   // Chromium 140 (Electron 42) is the runtime floor: nothing to lower.
   lightningcssOptions: { targets: { chrome: 140 << 16 }, minify: true },
 } satisfies Partial<UserOptions>;

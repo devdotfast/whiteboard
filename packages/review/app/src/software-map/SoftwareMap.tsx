@@ -1,12 +1,21 @@
 import { CodePeekGroup } from "@canvas/CodePeek";
-import { useReviewDebugSettings } from "@canvas/debug-settings";
+import {
+  type ReviewNodeTint,
+  type ReviewTheme,
+  useReviewDebugSettings,
+} from "@canvas/debug-settings";
+import { diagramStyles } from "@canvas/diagram-styles";
 import { hasTextSelectionWithin } from "@canvas/diagram-text-selection";
 import { useReviewSession } from "@canvas/host/review-session";
 import { CloseIcon, RefreshIcon } from "@canvas/icons";
+import { mapFrameMarker } from "@canvas/markers.stylex";
 import { useReviewContainer } from "@canvas/review-root-context";
 import { useRightPanelResize } from "@canvas/side-panel-resizer";
+import { withClass } from "@canvas/stylex-props";
+import { tokens } from "@canvas/tokens.stylex";
 import { captureUiEvent } from "@canvas/ui-telemetry";
 import { codePeekSource } from "@review/source";
+import * as stylex from "@stylexjs/stylex";
 import {
   Background,
   BaseEdge,
@@ -133,6 +142,7 @@ import {
   softwareMapSnapshotFromInlineC4Projection,
   visibleSoftwareMapChangeCount,
 } from "./software-map-snapshot";
+import { softwareMapRootProps } from "./software-map-styles";
 
 export type {
   SoftwareMapDataStoreSchemaRowSnapshot,
@@ -170,6 +180,8 @@ interface SoftwareMapProps {
   placeholderLabel?: string;
   showChrome?: boolean;
   showFloatingActions?: boolean;
+  /** "view" fills the map view's canvas shell. */
+  variant?: "view";
 }
 
 interface SoftwareMapFrameProps {
@@ -184,6 +196,8 @@ interface SoftwareMapFrameProps {
   expanded: boolean;
   showChrome: boolean;
   showFloatingActions: boolean;
+  /** "view" fills the map view; "lens" sits in a database lens canvas. */
+  variant?: "view" | "lens";
   interactionMode: C4MapInteractionMode;
   onRefresh?: () => void;
   onExpand?: () => void;
@@ -276,6 +290,7 @@ export function SoftwareMap(props: SoftwareMapProps) {
         title={props.title}
         height={props.height ?? 520}
         className={props.className}
+        variant={props.variant}
       />
     );
   }
@@ -299,6 +314,7 @@ function SoftwareMapWithModel({
   placeholderLabel = "Software map",
   showChrome = true,
   showFloatingActions = true,
+  variant,
 }: SoftwareMapProps) {
   const session = useReviewSession();
   const portalTarget = useReviewContainer();
@@ -589,11 +605,6 @@ function SoftwareMapWithModel({
 
   const errorMessage = error;
 
-  const overlayClassName = softwareMapOverlayClassName({
-    theme: debugSettings.theme,
-    nodeTint: debugSettings.nodeTint,
-  });
-
   const rememberChildNodeFocus = useCallback(
     (node: Pick<SoftwareMapNodeSnapshot, "id" | "parentId">) => {
       if (node.parentId) {
@@ -734,6 +745,7 @@ function SoftwareMapWithModel({
       expanded={false}
       showChrome={showChrome}
       showFloatingActions={showFloatingActions}
+      variant={variant}
       interactionMode={showChrome ? "inline" : "standalone"}
       onExpand={() => setExpanded(true)}
       onCloseCodeInspector={handleCloseCodeInspector}
@@ -758,7 +770,7 @@ function SoftwareMapWithModel({
   return (
     <section
       ref={mapRootRef}
-      className={["software-map", className].filter(Boolean).join(" ")}
+      {...softwareMapRootProps(className, variant)}
       aria-label={frameTitle}
     >
       {frame}
@@ -768,7 +780,7 @@ function SoftwareMapWithModel({
       {expanded && portalTarget
         ? createPortal(
             <div
-              className={overlayClassName}
+              {...softwareMapOverlayProps(debugSettings)}
               role="dialog"
               aria-modal="true"
               aria-label={`${frameTitle} expanded`}
@@ -824,6 +836,7 @@ export function SoftwareMapFrame({
   expanded,
   showChrome,
   showFloatingActions,
+  variant,
   interactionMode,
   onRefresh,
   onExpand,
@@ -913,37 +926,30 @@ export function SoftwareMapFrame({
   return (
     <figure
       ref={frameRef}
-      className={[
-        "software-map-frame",
-        expanded ? "software-map-frame--expanded" : "",
-        showChrome ? "" : "software-map-frame--chrome-hidden",
-        hasResolvedSnapshot ? "" : "software-map-frame--placeholder",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      {...softwareMapFrameProps({ expanded, showChrome, variant })}
       style={style}
     >
       {showChrome && (
-        <header className="software-map-header">
-          <div className="diagram-header-main software-map-title-block">
-            <span className="diagram-kind-badge software-map-kind-badge">
+        <header {...stylex.props(styles.header)}>
+          <div {...stylex.props(diagramStyles.headerMain, styles.titleBlock)}>
+            <span {...stylex.props(diagramStyles.kindBadge, styles.kindBadge)}>
               {VIEW_TYPE_LABELS[viewType]}
             </span>
-            <figcaption className="diagram-header-title" data-review-copy-prose>
+            <figcaption
+              {...stylex.props(diagramStyles.title, styles.title)}
+              data-review-copy-prose
+            >
               {title}
             </figcaption>
           </div>
-          <div className="software-map-actions">
+          <div {...stylex.props(styles.actions)}>
             {onRefresh ? (
               <button
                 type="button"
-                className={[
-                  "software-map-icon-button",
-                  "software-map-icon-button--visible",
-                  refreshing ? "software-map-refresh-button--active" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+                {...stylex.props(
+                  styles.iconButton,
+                  refreshing && styles.refreshing,
+                )}
                 onClick={onRefresh}
                 aria-label="Refresh software map"
                 title="Refresh software map"
@@ -954,7 +960,7 @@ export function SoftwareMapFrame({
             {expanded ? (
               <button
                 type="button"
-                className="software-map-icon-button software-map-icon-button--visible"
+                {...stylex.props(styles.iconButton)}
                 onClick={onClose}
                 aria-label="Close expanded software map"
               >
@@ -963,27 +969,24 @@ export function SoftwareMapFrame({
             ) : (
               <button
                 type="button"
-                className="software-map-icon-button software-map-expand-button"
+                {...stylex.props(styles.iconButton, styles.expandButton)}
                 onClick={onExpand}
                 aria-label="Expand software map"
               >
-                <span className="software-map-expand-icon" aria-hidden="true" />
+                <span {...stylex.props(styles.expandIcon)} aria-hidden="true" />
               </button>
             )}
           </div>
         </header>
       )}
       {showMapFloatingActions && onRefresh ? (
-        <div className="software-map-floating-actions">
+        <div {...stylex.props(styles.floatingActions)}>
           <button
             type="button"
-            className={[
-              "software-map-icon-button",
-              "software-map-icon-button--visible",
-              refreshing ? "software-map-refresh-button--active" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
+            {...stylex.props(
+              styles.iconButton,
+              refreshing && styles.refreshing,
+            )}
             onClick={onRefresh}
             aria-label="Refresh software map"
             title="Refresh software map"
@@ -994,21 +997,21 @@ export function SoftwareMapFrame({
       ) : null}
 
       <div
-        className={[
-          "software-map-body",
-          inspectedNode ? "software-map-body--with-inspector" : "",
-          codeInspectorResize.isResizing ? "software-map-body--resizing" : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
+        {...stylex.props(
+          styles.body,
+          inspectedNode && styles.bodyWithInspector,
+          codeInspectorResize.isResizing && styles.bodyResizing,
+        )}
         style={bodyStyle}
       >
-        <div className="software-map-canvas">
+        {/* The class is the block tests' hook for a drawn map. */}
+        <div {...withClass("software-map-canvas", styles.canvas)}>
           {(status || error || !hasResolvedSnapshot) && (
             <div
-              className={
-                error ? "software-map-status error" : "software-map-status"
-              }
+              {...stylex.props(
+                styles.status,
+                Boolean(error) && styles.statusError,
+              )}
             >
               {error ?? status ?? "Loading software map..."}
             </div>
@@ -1017,6 +1020,7 @@ export function SoftwareMapFrame({
           <C4MapCanvas
             snapshot={snapshot}
             expanded={expanded}
+            lens={variant === "lens"}
             interactionMode={interactionMode}
             onSelectNode={selectNodeWithTelemetry}
             onExpandNode={expandNodeWithTelemetry}
@@ -1035,12 +1039,12 @@ export function SoftwareMapFrame({
           <>
             <button
               type="button"
-              className="software-map-code-inspector-backdrop"
+              {...stylex.props(styles.inspectorBackdrop)}
               aria-label="Close code inspector"
               onClick={onCloseCodeInspector}
             />
             <div
-              className="side-panel-resizer software-map-code-inspector-resizer"
+              {...withClass("side-panel-resizer", styles.inspectorResizer)}
               {...codeInspectorResize.separatorProps}
             />
             <SoftwareMapCodeInspector
@@ -1076,29 +1080,35 @@ function SoftwareMapCodeInspector({
     : "Collapse all diffs";
 
   return (
+    // The class is the hook code peeks restyle themselves by in the inspector.
     <aside
-      className="software-map-code-inspector"
+      {...withClass("software-map-code-inspector", styles.inspector)}
       aria-label={`${node.label} diff`}
     >
-      <header className="software-map-code-inspector-header">
-        <div className="software-map-code-inspector-title">
-          <span>{softwareMapNodeTypeLabel(node)}</span>
-          <strong title={node.label}>{node.label}</strong>
+      <header {...stylex.props(styles.inspectorHeader)}>
+        <div {...stylex.props(styles.inspectorTitle)}>
+          <span {...stylex.props(styles.inspectorKind)}>
+            {softwareMapNodeTypeLabel(node)}
+          </span>
+          <strong {...stylex.props(styles.inspectorLabel)} title={node.label}>
+            {node.label}
+          </strong>
         </div>
-        <div className="software-map-code-inspector-actions">
+        <div {...stylex.props(styles.inspectorActions)}>
           {diffPeeks.length > 0 ? (
             <button
               type="button"
-              className="software-map-icon-button software-map-icon-button--visible"
+              {...stylex.props(styles.iconButton)}
               onClick={() => setDiffsCollapsed((current) => !current)}
               aria-expanded={!diffsCollapsed}
               aria-label={collapseActionLabel}
               title={collapseActionLabel}
             >
               <span
-                className={`codicon ${
-                  diffsCollapsed ? "codicon-unfold" : "codicon-fold"
-                }`}
+                {...withClass(
+                  `codicon ${diffsCollapsed ? "codicon-unfold" : "codicon-fold"}`,
+                  styles.codicon,
+                )}
                 aria-hidden="true"
               />
             </button>
@@ -1109,7 +1119,7 @@ function SoftwareMapCodeInspector({
           />
           <button
             type="button"
-            className="software-map-icon-button software-map-icon-button--visible"
+            {...stylex.props(styles.iconButton)}
             onClick={onClose}
             aria-label="Close code inspector"
           >
@@ -1117,16 +1127,40 @@ function SoftwareMapCodeInspector({
           </button>
         </div>
       </header>
-      <div className="software-map-code-inspector-diffs">
+      <div {...stylex.props(styles.inspectorDiffs)}>
         {diffPeeks.length > 0 ? (
           <CodePeekGroup peeks={diffPeekSources} collapsed={diffsCollapsed} />
         ) : (
-          <div className="software-map-code-inspector-empty">
+          <div {...stylex.props(styles.inspectorEmpty)}>
             No changed code is mapped to this node.
           </div>
         )}
       </div>
     </aside>
+  );
+}
+
+/** The expanded map's layer, which carries the review theme with it. */
+export function softwareMapOverlayProps(settings: {
+  theme: ReviewTheme;
+  nodeTint: ReviewNodeTint;
+}) {
+  return withClass(softwareMapOverlayClassName(settings), styles.overlay);
+}
+
+/** A map frame's style props. */
+export function softwareMapFrameProps({
+  expanded,
+  showChrome,
+  variant,
+}: Pick<SoftwareMapFrameProps, "expanded" | "showChrome" | "variant">) {
+  return stylex.props(
+    mapFrameMarker,
+    styles.frame,
+    expanded && styles.frameExpanded,
+    !showChrome && styles.frameChromeHidden,
+    variant === "view" && styles.frameView,
+    variant === "lens" && styles.frameLens,
   );
 }
 
@@ -1151,6 +1185,7 @@ function mapExpansionLevelForNode(
 function C4MapCanvas({
   snapshot,
   expanded,
+  lens,
   interactionMode,
   onSelectNode,
   onExpandNode,
@@ -1166,6 +1201,7 @@ function C4MapCanvas({
 }: {
   snapshot: SoftwareMapResolvedSnapshot;
   expanded: boolean;
+  lens?: boolean;
   interactionMode: C4MapInteractionMode;
   onSelectNode?: (node: SoftwareMapNodeSnapshot) => void;
   onExpandNode?: (node: SoftwareMapNodeSnapshot) => void;
@@ -1382,6 +1418,8 @@ function C4MapCanvas({
             nodeDimensions: nodeDimensions ?? undefined,
             relationshipStateById,
             onOpenRelationship,
+            nodeClassName: FLOW_NODE_CLASS_NAME,
+            edgeClassName: FLOW_EDGE_CLASS_NAME,
           })
         : null,
     [
@@ -1609,15 +1647,21 @@ function C4MapCanvas({
     [handleKeyDown],
   );
 
+  // The class is the block tests' hook for a map still laying out.
+  const codeStatusProps = withClass(
+    "software-map-code-status",
+    styles.codeStatus,
+  );
+
   return (
+    // The class scopes the React Flow internals in vendor-overrides.css.
     <div
       ref={keyboardTargetRef}
-      className={[
+      {...withClass(
         "software-map-c4-canvas",
-        expanded ? "software-map-c4-canvas--expanded" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+        styles.c4Canvas,
+        lens && styles.c4CanvasLens,
+      )}
       tabIndex={0}
       onKeyDownCapture={handleKeyDownCapture}
       onKeyDown={handleKeyDown}
@@ -1628,18 +1672,17 @@ function C4MapCanvas({
         onMeasure={handleMeasuredNodes}
       />
       {layoutError ? (
-        <div className="software-map-code-status">
-          Layout failed: {layoutError}
-        </div>
+        <div {...codeStatusProps}>Layout failed: {layoutError}</div>
       ) : (
         <>
           {layoutRefreshing ? (
-            <div className="software-map-code-status">Refreshing layout...</div>
+            <div {...codeStatusProps}>Refreshing layout...</div>
           ) : null}
           {flow ? (
             <>
               <C4HoveredNodeContext.Provider value={hoveredNodeId}>
                 <ReactFlow
+                  {...stylex.props(styles.flow)}
                   colorMode={theme}
                   proOptions={{ hideAttribution: true }}
                   nodes={flow.nodes}
@@ -1648,6 +1691,7 @@ function C4MapCanvas({
                   edgeTypes={c4EdgeTypes}
                   nodesDraggable={false}
                   nodesConnectable={false}
+                  elevateNodesOnSelect={false}
                   elementsSelectable
                   panActivationKeyCode={null}
                   fitView
@@ -1671,7 +1715,11 @@ function C4MapCanvas({
                     )
                   }
                 >
-                  <Background gap={24} color="var(--canvas-grid)" />
+                  <Background
+                    {...stylex.props(styles.background)}
+                    gap={24}
+                    color="var(--canvas-grid)"
+                  />
                   {expanded && (
                     <MiniMap
                       pannable
@@ -1703,9 +1751,7 @@ function C4MapCanvas({
               </C4HoveredNodeContext.Provider>
             </>
           ) : (
-            <div className="software-map-code-status">
-              Laying out software map...
-            </div>
+            <div {...codeStatusProps}>Laying out software map...</div>
           )}
         </>
       )}
@@ -1808,7 +1854,7 @@ function C4NodeMeasurementLayer({
   }, [measurementKey, onMeasure]);
 
   return (
-    <div className="software-map-c4-measure-layer" aria-hidden="true">
+    <div {...stylex.props(styles.measureLayer)} aria-hidden="true">
       {nodes.map((node) => (
         <div
           key={node.id}
@@ -1819,12 +1865,13 @@ function C4NodeMeasurementLayer({
               refs.current.delete(node.id);
             }
           }}
-          className={[
-            "software-map-c4-measure-node",
-            `software-map-c4-measure-node--${node.type}`,
-          ].join(" ")}
+          {...stylex.props(
+            styles.measureNode,
+            node.type === "dataStore" && styles.measureNodeStore,
+            node.type === "codeElement" && styles.measureNodeCode,
+          )}
         >
-          <SoftwareMapNodeCard node={node} selected={false} />
+          <SoftwareMapNodeCard node={node} selected={false} measured />
         </div>
       ))}
     </div>
@@ -1879,10 +1926,10 @@ function SoftwareMapC4Edge(
       {data?.operationState && data.operationState !== "inactive" ? (
         <path
           d={path}
-          className={[
-            "software-map-c4-edge-highlight",
-            `software-map-c4-edge-highlight--${data.operationState}`,
-          ].join(" ")}
+          {...stylex.props(
+            styles.edgeHighlight,
+            data.operationState === "active" && styles.edgeHighlightActive,
+          )}
         />
       ) : null}
       <BaseEdge
@@ -1894,7 +1941,7 @@ function SoftwareMapC4Edge(
       />
       <path
         d={path}
-        className="software-map-c4-edge-hit-area"
+        {...stylex.props(styles.edgeHitArea)}
         onClick={openRelationship}
       />
       <EdgeLabelRenderer>
@@ -1902,12 +1949,10 @@ function SoftwareMapC4Edge(
           <span
             key={bubble.endpoint}
             aria-hidden="true"
-            className={[
-              "software-map-c4-edge-endpoint",
-              bubble.hovered ? "software-map-c4-edge-endpoint--hovered" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
+            {...stylex.props(
+              styles.edgeEndpoint,
+              bubble.hovered && styles.edgeEndpointHovered,
+            )}
             data-endpoint={bubble.endpoint}
             style={{
               transform: `translate(-50%, -50%) translate(${bubble.x}px, ${bubble.y}px)`,
@@ -1915,7 +1960,7 @@ function SoftwareMapC4Edge(
           />
         ))}
         <div
-          className="software-map-c4-edge-label-anchor nodrag nopan"
+          {...withClass("nodrag nopan", styles.edgeLabelAnchor)}
           style={{
             transform: `translate(-50%, -50%) translate(${labelPoint.x}px, ${labelPoint.y}px)`,
           }}
@@ -1925,18 +1970,11 @@ function SoftwareMapC4Edge(
               <span
                 role="button"
                 tabIndex={0}
-                className={[
-                  "software-map-c4-edge-label",
-                  "software-map-c4-edge-label--button",
-                  data.selectedNodeAttached
-                    ? "software-map-c4-edge-label--selected-node"
-                    : "",
-                  data.operationState
-                    ? `software-map-c4-edge-label--${data.operationState}`
-                    : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+                {...stylex.props(
+                  styles.edgeLabel,
+                  styles.edgeLabelButton,
+                  data.selectedNodeAttached && styles.edgeLabelSelectedNode,
+                )}
                 data-review-anchor-id={relationshipId}
                 onClick={openRelationship}
                 onKeyDown={(event) => {
@@ -1948,14 +1986,10 @@ function SoftwareMapC4Edge(
               </span>
             ) : (
               <span
-                className={[
-                  "software-map-c4-edge-label",
-                  data?.selectedNodeAttached
-                    ? "software-map-c4-edge-label--selected-node"
-                    : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+                {...stylex.props(
+                  styles.edgeLabel,
+                  data?.selectedNodeAttached && styles.edgeLabelSelectedNode,
+                )}
               >
                 {label}
               </span>
@@ -1983,16 +2017,13 @@ function SoftwareMapC4GroupNode({
 }: ReactFlowNodeProps<C4MapFlowGroupNode>) {
   return (
     <div
-      className={[
-        "software-map-c4-group-shell",
-        `software-map-c4-group-shell--${data.node.type}`,
-        data.selected ? "selected" : "",
-        data.node.changeStatus && data.node.changeStatus !== "unchanged"
-          ? `software-map-c4-group-shell--${data.node.changeStatus}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      {...stylex.props(
+        styles.groupShell,
+        data.node.changeStatus === "added" && styles.groupAdded,
+        data.node.changeStatus === "removed" && styles.groupRemoved,
+        data.node.changeStatus === "modified" && styles.groupModified,
+        data.selected && styles.groupSelected,
+      )}
       onClick={(event) => {
         if (hasTextSelectionWithin(event.currentTarget)) {
           event.stopPropagation();
@@ -2014,58 +2045,74 @@ function SoftwareMapC4GroupNode({
         id="target-left"
         type="target"
         position={Position.Left}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
       <Handle
         id="source-left"
         type="source"
         position={Position.Left}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
       <Handle
         id="target-top"
         type="target"
         position={Position.Top}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
       <Handle
         id="source-top"
         type="source"
         position={Position.Top}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
-      <div className="software-map-c4-group-title software-map-c4-group-title--world">
-        <span>{softwareMapNodeTypeLabel(data.node)}</span>
-        <strong>{data.node.label}</strong>
+      <div
+        {...stylex.props(
+          styles.groupTitle,
+          data.node.type === "softwareSystem" && styles.groupTitleSystem,
+        )}
+      >
+        <span {...stylex.props(styles.groupKind)}>
+          {softwareMapNodeTypeLabel(data.node)}
+        </span>
+        <strong
+          {...stylex.props(
+            styles.groupLabel,
+            data.node.type === "softwareSystem" && styles.groupLabelSystem,
+            data.node.changeStatus === "removed" && styles.struck,
+          )}
+        >
+          {data.node.label}
+        </strong>
         <SoftwareMapChangeBadge
           status={data.node.changeStatus}
           additions={data.node.additions}
           deletions={data.node.deletions}
+          inGroupTitle
         />
       </div>
       <Handle
         id="source-right"
         type="source"
         position={Position.Right}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
       <Handle
         id="target-right"
         type="target"
         position={Position.Right}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
       <Handle
         id="source-bottom"
         type="source"
         position={Position.Bottom}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
       <Handle
         id="target-bottom"
         type="target"
         position={Position.Bottom}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
     </div>
   );
@@ -2074,9 +2121,7 @@ function SoftwareMapC4GroupNode({
 function SoftwareMapC4Node({ data }: ReactFlowNodeProps<C4MapFlowNode>) {
   return (
     <div
-      className={["software-map-c4-node-shell", "nodrag", "nopan"]
-        .filter(Boolean)
-        .join(" ")}
+      {...withClass("nodrag nopan", styles.nodeShell)}
       onDoubleClickCapture={(event) => {
         if (hasTextSelectionWithin(event.currentTarget)) {
           event.stopPropagation();
@@ -2098,25 +2143,25 @@ function SoftwareMapC4Node({ data }: ReactFlowNodeProps<C4MapFlowNode>) {
         id="target-left"
         type="target"
         position={Position.Left}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
       <Handle
         id="source-left"
         type="source"
         position={Position.Left}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
       <Handle
         id="target-top"
         type="target"
         position={Position.Top}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
       <Handle
         id="source-top"
         type="source"
         position={Position.Top}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
       <SoftwareMapNodeCard
         node={data.node}
@@ -2128,52 +2173,69 @@ function SoftwareMapC4Node({ data }: ReactFlowNodeProps<C4MapFlowNode>) {
         id="source-right"
         type="source"
         position={Position.Right}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
       <Handle
         id="target-right"
         type="target"
         position={Position.Right}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
       <Handle
         id="source-bottom"
         type="source"
         position={Position.Bottom}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
       <Handle
         id="target-bottom"
         type="target"
         position={Position.Bottom}
-        className="software-map-c4-handle"
+        {...stylex.props(styles.handle)}
       />
     </div>
   );
 }
 
+// The outline and folder shapes stay hidden; the card draws the store.
 function SoftwareMapDataStoreOutline({
   outline,
+  selected,
+  removed,
 }: {
   outline: SoftwareMapDataStoreOutlineKind;
+  selected: boolean;
+  removed: boolean;
 }) {
   if (outline === "folder") {
     return (
-      <span aria-hidden="true" className="software-map-node-storage-folder">
-        <span className="software-map-node-storage-folder-body" />
+      <span aria-hidden="true" {...stylex.props(styles.storageFolder)}>
+        <span
+          {...stylex.props(
+            styles.storageFolderBody,
+            removed && styles.storageDashed,
+            selected && styles.storageGlow,
+          )}
+        />
         <svg
-          className="software-map-node-storage-folder-tab"
+          {...stylex.props(
+            styles.storageFolderTab,
+            selected && styles.storageGlow,
+          )}
           focusable="false"
           preserveAspectRatio="none"
           viewBox="0 0 190 48"
         >
           <path
-            className="software-map-node-storage-folder-tab-fill"
+            {...stylex.props(styles.storageFill)}
             d="M2 46 V14 Q2 2 14 2 H148 L188 46 Z"
             vectorEffect="non-scaling-stroke"
           />
           <path
-            className="software-map-node-storage-folder-tab-border"
+            {...stylex.props(
+              styles.storageBorder,
+              removed && styles.storageDashed,
+            )}
             d="M2 46 V14 Q2 2 14 2 H148 L188 46"
             vectorEffect="non-scaling-stroke"
           />
@@ -2187,36 +2249,39 @@ function SoftwareMapDataStoreOutline({
   return (
     <svg
       aria-hidden="true"
-      className="software-map-node-storage-outline"
+      {...stylex.props(styles.storageOutline)}
       focusable="false"
       preserveAspectRatio="none"
       viewBox="0 0 280 140"
     >
       <path
-        className="software-map-node-storage-fill"
+        {...stylex.props(styles.storageFill)}
         d={geometry.fillPath}
         vectorEffect="non-scaling-stroke"
       />
       {geometry.fillDetailPath ? (
         <path
-          className="software-map-node-storage-fill-detail"
+          {...stylex.props(styles.storageFillDetail)}
           d={geometry.fillDetailPath}
           vectorEffect="non-scaling-stroke"
         />
       ) : null}
       <path
-        className="software-map-node-storage-selection"
+        {...stylex.props(
+          styles.storageSelection,
+          selected && styles.storageSelectionSelected,
+        )}
         d={geometry.outlinePath}
         vectorEffect="non-scaling-stroke"
       />
       <path
-        className="software-map-node-storage-border"
+        {...stylex.props(styles.storageBorder, removed && styles.storageDashed)}
         d={geometry.outlinePath}
         vectorEffect="non-scaling-stroke"
       />
       {geometry.detailPaths.map((path) => (
         <path
-          className="software-map-node-storage-detail"
+          {...stylex.props(styles.storageDetail)}
           d={path}
           key={path}
           vectorEffect="non-scaling-stroke"
@@ -2254,55 +2319,65 @@ function softwareMapDataStoreOutlineGeometry(
 function SoftwareMapNodeFrame({
   node,
   selected,
+  measured = false,
   as: Element = "div",
-  className,
   children,
   onSelect,
   onExpandNode,
 }: {
   node: SoftwareMapNodeSnapshot;
   selected: boolean;
+  /** Rendered off screen to measure, rather than on the canvas. */
+  measured?: boolean;
   as?: "button" | "div";
-  className?: string;
   children?: ReactNode;
   onSelect?: (node: SoftwareMapNodeSnapshot) => void;
   onExpandNode?: (node: SoftwareMapNodeSnapshot) => void;
 }) {
   const isCodeElement = node.type === "codeElement";
+  const isDataStore = node.type === "dataStore";
+  const isCollection = node.type === "dataStoreCollection";
 
-  const dataStoreOutline =
-    node.type === "dataStore"
-      ? softwareMapDataStoreOutlineKind(node.dataStoreKind)
-      : undefined;
+  const dataStoreOutline = isDataStore
+    ? softwareMapDataStoreOutlineKind(node.dataStoreKind)
+    : undefined;
 
   const hasExpandedDataStoreSchema =
-    (node.type === "dataStore" || node.type === "dataStoreCollection") &&
+    (isDataStore || isCollection) &&
     Boolean(node.dataStoreSchemaSections?.length);
 
+  const status =
+    node.changeStatus && node.changeStatus !== "unchanged"
+      ? node.changeStatus
+      : undefined;
+
+  // A data store's children stack above its storage shape.
+  const layer = isDataStore && styles.storeLayer;
+
+  const codeRing = selected ? "selected" : status;
+
   const props = {
-    className: [
-      "software-map-node",
-      "nodrag",
-      "nopan",
-      `software-map-node--${node.type}`,
-      node.type === "dataStore" && node.dataStoreKind
-        ? `software-map-node--dataStoreKind-${node.dataStoreKind}`
-        : "",
-      dataStoreOutline
-        ? `software-map-node--dataStoreShape-${dataStoreOutline}`
-        : "",
-      node.changeStatus && node.changeStatus !== "unchanged"
-        ? `software-map-node--${node.changeStatus}`
-        : "",
-      selected ? "selected" : "",
-      node.boundary ? "boundary" : "",
-      hasExpandedDataStoreSchema
-        ? "software-map-node--has-data-store-schema"
-        : "",
-      className ?? "",
-    ]
-      .filter(Boolean)
-      .join(" "),
+    ...withClass(
+      "nodrag nopan",
+      styles.node,
+      isCollection && styles.nodeTight,
+      isCodeElement && styles.nodeCode,
+      isDataStore && styles.nodeStore,
+      isDataStore && measured && !status && styles.nodeStoreHoverable,
+      measured && styles.nodeMeasured,
+      measured && isDataStore && styles.nodeMeasuredStore,
+      measured && isCodeElement && styles.nodeMeasuredCode,
+      status && nodeStatusStyles[status],
+      selected && styles.nodeSelected,
+      // On the canvas a changed or selected store drops its card for the
+      // storage shape's colors.
+      isDataStore &&
+        !measured &&
+        (status || selected) &&
+        styles.nodeStoreMarked,
+      isDataStore && selected && storeSelectedStyles[status ?? "unchanged"],
+      isCodeElement && codeRing && codeRingStyles[codeRing],
+    ),
     onClick: (event: ReactMouseEvent<HTMLElement>) => {
       if (hasTextSelectionWithin(event.currentTarget)) {
         event.stopPropagation();
@@ -2341,11 +2416,22 @@ function SoftwareMapNodeFrame({
           })}
     >
       {dataStoreOutline ? (
-        <SoftwareMapDataStoreOutline outline={dataStoreOutline} />
+        <SoftwareMapDataStoreOutline
+          outline={dataStoreOutline}
+          selected={selected}
+          removed={status === "removed"}
+        />
       ) : null}
       {isCodeElement ? (
-        <div className="software-map-code-element-head">
-          <code className="software-map-node-label--world">{node.label}</code>
+        <div {...stylex.props(styles.codeHead)}>
+          <code
+            {...stylex.props(
+              styles.codeLabel,
+              status === "removed" && styles.struck,
+            )}
+          >
+            {node.label}
+          </code>
           <SoftwareMapChangeBadge
             status={node.changeStatus}
             additions={node.additions}
@@ -2354,8 +2440,14 @@ function SoftwareMapNodeFrame({
         </div>
       ) : (
         <>
-          <div className="software-map-node-kicker">
-            <div className="software-map-node-type">
+          <div
+            {...stylex.props(
+              styles.kicker,
+              layer,
+              isCollection && styles.hidden,
+            )}
+          >
+            <div {...stylex.props(styles.nodeType)}>
               {softwareMapNodeTypeLabel(node)}
             </div>
             <SoftwareMapChangeBadge
@@ -2364,32 +2456,60 @@ function SoftwareMapNodeFrame({
               deletions={node.deletions}
             />
           </div>
-          <h4 className="software-map-node-label--world">{node.label}</h4>
+          <h4
+            {...stylex.props(
+              styles.label,
+              hasExpandedDataStoreSchema && styles.labelWithSchema,
+              status === "removed" && styles.struck,
+              layer,
+              isCollection && styles.hidden,
+            )}
+          >
+            {node.label}
+          </h4>
         </>
       )}
       {!isCodeElement && node.description && (
-        <p className="software-map-node-description--world">
+        <p
+          {...stylex.props(
+            styles.description,
+            layer,
+            (isCollection || hasExpandedDataStoreSchema) && styles.hidden,
+          )}
+        >
           {node.description}
         </p>
       )}
       {!isCodeElement && (
-        <div className="software-map-node-meta">
+        <div
+          {...stylex.props(
+            styles.meta,
+            layer,
+            (isCollection || hasExpandedDataStoreSchema) && styles.hidden,
+          )}
+        >
           {node.file && (
-            <span>
+            <span {...stylex.props(styles.metaItem)}>
               {node.file}
               {node.line === undefined ? "" : `:L${node.line}`}
             </span>
           )}
           {node.childCount !== undefined && node.childCount > 0 && (
-            <span>{node.childCount} children</span>
+            <span {...stylex.props(styles.metaItem)}>
+              {node.childCount} children
+            </span>
           )}
-          {node.boundary && <span>boundary</span>}
+          {node.boundary && (
+            <span {...stylex.props(styles.metaItem)}>boundary</span>
+          )}
         </div>
       )}
       {children}
       {hasExpandedDataStoreSchema && (
         <SoftwareMapDataStoreSchema
           sections={node.dataStoreSchemaSections ?? []}
+          collection={isCollection}
+          selected={selected}
         />
       )}
     </Element>
@@ -2398,40 +2518,41 @@ function SoftwareMapNodeFrame({
 
 function SoftwareMapDataStoreSchema({
   sections,
+  collection,
+  selected,
 }: {
   sections: SoftwareMapDataStoreSchemaSectionSnapshot[];
+  collection: boolean;
+  selected: boolean;
 }) {
   return (
-    <div className="software-map-data-store-schema">
+    <div {...stylex.props(styles.schema, collection && styles.schemaFlush)}>
       {sections.map((section) => (
         <section
           key={section.id}
-          className={`software-map-data-store-schema-section software-map-data-store-schema-section--${section.kind}`}
+          {...stylex.props(
+            styles.schemaSection,
+            collection && selected && styles.schemaSectionSelected,
+          )}
         >
-          <header className="software-map-data-store-schema-section-header">
-            <span>{section.kind}</span>
-            <strong>{section.label}</strong>
+          <header {...stylex.props(styles.schemaHeader)}>
+            <span {...stylex.props(styles.schemaKind)}>{section.kind}</span>
+            <strong {...stylex.props(styles.schemaLabel)}>
+              {section.label}
+            </strong>
           </header>
           {section.key && (
-            <div className="software-map-data-store-schema-key">
-              {section.key}
-            </div>
+            <div {...stylex.props(styles.schemaKey)}>{section.key}</div>
           )}
-          <div className="software-map-data-store-schema-rows">
+          <div>
             {section.rows.map((row) => (
               <div
                 key={row.id}
-                className={[
-                  "software-map-data-store-schema-row",
-                  row.primaryKey
-                    ? "software-map-data-store-schema-row--primary"
-                    : "",
-                  row.state && row.state !== "inactive"
-                    ? `software-map-data-store-schema-row--${row.state}`
-                    : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+                {...stylex.props(
+                  styles.schemaRow,
+                  row.primaryKey && styles.schemaRowPrimary,
+                  row.state === "active" && styles.schemaRowActive,
+                )}
                 style={
                   // SAFETY: React passes "--*" keys through to
                   // style.setProperty; CSSProperties only lacks an index
@@ -2441,14 +2562,23 @@ function SoftwareMapDataStoreSchema({
                   } as CSSProperties
                 }
               >
-                <span className="software-map-data-store-schema-row-name">
-                  {row.primaryKey && <strong>PK</strong>}
+                <span {...stylex.props(styles.schemaRowName)}>
+                  {row.primaryKey && (
+                    <strong {...stylex.props(styles.schemaKeyFlag)}>PK</strong>
+                  )}
                   {row.foreignKey && (
-                    <strong className="foreign-key">FK</strong>
+                    <strong
+                      {...stylex.props(
+                        styles.schemaKeyFlag,
+                        styles.schemaKeyFlagForeign,
+                      )}
+                    >
+                      FK
+                    </strong>
                   )}
                   {row.label}
                 </span>
-                <span className="software-map-data-store-schema-row-type">
+                <span {...stylex.props(styles.schemaRowType)}>
                   {row.type ?? row.example ?? "object"}
                 </span>
               </div>
@@ -2463,11 +2593,13 @@ function SoftwareMapDataStoreSchema({
 function SoftwareMapNodeCard({
   node,
   selected,
+  measured,
   onSelect,
   onExpandNode,
 }: {
   node: SoftwareMapNodeSnapshot;
   selected: boolean;
+  measured?: boolean;
   onSelect?: (node: SoftwareMapNodeSnapshot) => void;
   onExpandNode?: (node: SoftwareMapNodeSnapshot) => void;
 }) {
@@ -2475,6 +2607,7 @@ function SoftwareMapNodeCard({
     <SoftwareMapNodeFrame
       node={node}
       selected={selected}
+      measured={measured}
       onSelect={onSelect}
       onExpandNode={onExpandNode}
     />
@@ -2485,10 +2618,13 @@ function SoftwareMapChangeBadge({
   status,
   additions,
   deletions,
+  inGroupTitle = false,
 }: {
   status?: SoftwareChangeStatus;
   additions?: number;
   deletions?: number;
+  /** A group's title sets its counts as quiet capitals, pushed right. */
+  inGroupTitle?: boolean;
 }) {
   const visibleAdditions = visibleSoftwareMapChangeCount(additions);
   const visibleDeletions = visibleSoftwareMapChangeCount(deletions);
@@ -2500,21 +2636,37 @@ function SoftwareMapChangeBadge({
   if (!hasCounts) {
     return (
       <span
-        className="software-map-change-badge software-map-change-badge--empty"
+        {...stylex.props(
+          styles.badge,
+          inGroupTitle && styles.badgeInGroup,
+          styles.badgeEmpty,
+        )}
         aria-hidden="true"
       />
     );
   }
 
   return (
-    <span className="software-map-change-badge">
+    <span {...stylex.props(styles.badge, inGroupTitle && styles.badgeInGroup)}>
       {visibleAdditions ? (
-        <span className="software-map-change-count software-map-change-count--added">
+        <span
+          {...stylex.props(
+            styles.count,
+            styles.countAdded,
+            inGroupTitle && styles.countInGroup,
+          )}
+        >
           +{visibleAdditions}
         </span>
       ) : null}
       {visibleDeletions ? (
-        <span className="software-map-change-count software-map-change-count--removed">
+        <span
+          {...stylex.props(
+            styles.count,
+            styles.countRemoved,
+            inGroupTitle && styles.countInGroup,
+          )}
+        >
           -{visibleDeletions}
         </span>
       ) : null}
@@ -2579,3 +2731,1091 @@ function createPlaceholderSnapshot(
     ],
   };
 }
+
+const inDocument = ":is(.review-document *)";
+
+const peekOpen = ":is(.review-app--peek-open *)";
+
+const stacked = "@media (max-width: 900px)";
+
+const narrow = "@media (max-width: 720px)";
+
+const geistMono = '"Geist Mono", ui-monospace, monospace';
+
+const settle = "cubic-bezier(0.2, 0.8, 0.2, 1)";
+
+const groupBloom = stylex.keyframes({
+  from: { opacity: 0.72, transform: "scale(0.88)" },
+  to: { opacity: 1, transform: "scale(1)" },
+});
+
+const cardBloom = stylex.keyframes({
+  from: { opacity: 0, transform: "scale(0.86)" },
+  to: { opacity: 1, transform: "scale(1)" },
+});
+
+const noBorder = {
+  borderWidth: 0,
+  borderStyle: "none",
+  borderColor: "currentcolor",
+} as const;
+
+const styles = stylex.create({
+  // The expanded map: a fixed layer over the canvas. The layer variable lives
+  // on .review-app, outside this portal, so the fallback keeps it above the
+  // sticky topbar.
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: "var(--review-debug-layer, 2147483000)",
+    display: "grid",
+    boxSizing: "border-box",
+    minWidth: 0,
+    minHeight: 0,
+    overflow: "hidden",
+    padding: 0,
+    backgroundColor: tokens.bg,
+  },
+  frame: {
+    position: "relative",
+    display: "grid",
+    gridTemplateRows: "auto minmax(0, 1fr)",
+    height: "var(--software-map-height, 520px)",
+    minHeight: "340px",
+    margin: 0,
+    overflow: "hidden",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.rule,
+    borderRadius: "6px",
+    backgroundColor: tokens.surface,
+    boxShadow: "none",
+    fontFamily: tokens.fontMono,
+  },
+  frameExpanded: {
+    ...noBorder,
+    boxSizing: "border-box",
+    width: "100%",
+    height: "100%",
+    minWidth: 0,
+    minHeight: 0,
+  },
+  frameChromeHidden: {
+    ...noBorder,
+    gridTemplateRows: "minmax(0, 1fr)",
+    borderRadius: 0,
+  },
+  frameView: {
+    height: "100%",
+    backgroundColor: tokens.bg,
+  },
+  frameLens: {
+    height: "100%",
+    minHeight: 0,
+    backgroundColor: tokens.transparent,
+  },
+  header: {
+    ...noBorder,
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "16px",
+    minWidth: 0,
+    alignItems: "center",
+    minHeight: "36px",
+    padding: "0 12px",
+    backgroundColor: tokens.transparent,
+    boxShadow: "none",
+    fontFamily: tokens.fontMono,
+  },
+  titleBlock: {
+    position: "relative",
+  },
+  kindBadge: {
+    minWidth: 0,
+  },
+  title: {
+    margin: 0,
+    fontSize: "13px",
+    fontWeight: 650,
+  },
+  actions: {
+    display: "flex",
+    flex: "0 0 auto",
+    alignItems: "center",
+    minWidth: 0,
+    gap: "4px",
+  },
+  floatingActions: {
+    position: "absolute",
+    top: "10px",
+    right: "10px",
+    zIndex: 20,
+    display: { default: "flex", [peekOpen]: "none" },
+    gap: "8px",
+    padding: "2px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.rule,
+    borderRadius: "6px",
+    backgroundColor: tokens.surface,
+    boxShadow: `0 4px 18px ${tokens.shadowColor}`,
+  },
+  iconButton: {
+    ...noBorder,
+    position: "relative",
+    display: "grid",
+    placeItems: "center",
+    width: "26px",
+    height: "26px",
+    padding: 0,
+    borderRadius: "3px",
+    backgroundColor: tokens.transparent,
+    color: {
+      default: tokens.inkFaint,
+      ":hover": tokens.inkMuted,
+      ":focus-visible": tokens.inkMuted,
+    },
+    outline: {
+      default: null,
+      ":focus-visible": `1px solid ${tokens.ruleSoft}`,
+    },
+    outlineOffset: { default: null, ":focus-visible": "2px" },
+  },
+  refreshing: {
+    color: {
+      default: tokens.accent,
+      ":hover": tokens.inkMuted,
+      ":focus-visible": tokens.inkMuted,
+    },
+  },
+  // Shows while the pointer is over the map.
+  expandButton: {
+    opacity: {
+      default: 0,
+      ":focus-visible": 1,
+      [stylex.when.ancestor(":hover", mapFrameMarker)]: 1,
+    },
+    transition: "opacity 120ms ease, color 120ms ease",
+  },
+  // Two corner brackets.
+  expandIcon: {
+    position: "relative",
+    display: "block",
+    width: "14px",
+    height: "14px",
+    "::before": {
+      position: "absolute",
+      top: 0,
+      right: 0,
+      width: "7px",
+      height: "7px",
+      borderTopWidth: "2px",
+      borderTopStyle: "solid",
+      borderTopColor: "currentColor",
+      borderRightWidth: "2px",
+      borderRightStyle: "solid",
+      borderRightColor: "currentColor",
+      content: "''",
+    },
+    "::after": {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      width: "7px",
+      height: "7px",
+      borderBottomWidth: "2px",
+      borderBottomStyle: "solid",
+      borderBottomColor: "currentColor",
+      borderLeftWidth: "2px",
+      borderLeftStyle: "solid",
+      borderLeftColor: "currentColor",
+      content: "''",
+    },
+  },
+  body: {
+    display: "grid",
+    minWidth: 0,
+    minHeight: 0,
+    overflow: "hidden",
+  },
+  // Narrow layouts stack the inspector under the map, then float it over.
+  bodyWithInspector: {
+    position: { default: null, [narrow]: "relative" },
+    gridTemplateRows: {
+      default: null,
+      [stacked]: "minmax(0, 1fr) minmax(220px, 42%)",
+      [narrow]: "minmax(0, 1fr)",
+    },
+    gridTemplateColumns: {
+      default: "minmax(0, 1fr) 10px var(--software-map-inspector-width, 420px)",
+      [stacked]: "minmax(0, 1fr)",
+      [narrow]: "minmax(0, 1fr)",
+    },
+  },
+  bodyResizing: {
+    cursor: "col-resize",
+    userSelect: "none",
+  },
+  canvas: {
+    position: "relative",
+    display: "grid",
+    minWidth: 0,
+    minHeight: 0,
+    overflow: "hidden",
+    padding: 0,
+    backgroundColor: tokens.bg,
+    fontFamily: tokens.fontMono,
+  },
+  status: {
+    ...noBorder,
+    position: "absolute",
+    top: "14px",
+    left: "14px",
+    zIndex: 8,
+    width: "max-content",
+    maxWidth: "min(420px, calc(100% - 28px))",
+    margin: 0,
+    padding: "8px 10px",
+    borderRadius: "6px",
+    backgroundColor: tokens.transparent,
+    boxShadow: "none",
+    color: tokens.inkMuted,
+    fontSize: "12px",
+    lineHeight: "17px",
+  },
+  statusError: {
+    borderColor: tokens.diffRemoved,
+    backgroundColor: tokens.diffRemovedBg,
+    color: tokens.diffRemoved,
+  },
+  inspectorResizer: {
+    zIndex: 8,
+    minHeight: 0,
+    display: { default: null, [stacked]: "none" },
+  },
+  inspectorBackdrop: {
+    display: { default: "none", [narrow]: "block" },
+    position: { default: null, [narrow]: "absolute" },
+    inset: { default: null, [narrow]: 0 },
+    zIndex: { default: null, [narrow]: 48 },
+    padding: { default: null, [narrow]: 0 },
+    borderWidth: { default: null, [narrow]: 0 },
+    borderStyle: { default: null, [narrow]: "none" },
+    borderColor: { default: null, [narrow]: "currentcolor" },
+    backgroundColor: { default: null, [narrow]: tokens.backdrop },
+  },
+  inspector: {
+    ...noBorder,
+    position: { default: null, [narrow]: "absolute" },
+    right: { default: null, [narrow]: "8px" },
+    bottom: { default: null, [narrow]: "8px" },
+    left: { default: null, [narrow]: "8px" },
+    zIndex: { default: null, [narrow]: 49 },
+    display: "grid",
+    gridTemplateRows: "auto minmax(0, 1fr)",
+    minWidth: 0,
+    height: { default: null, [narrow]: "min(72%, 560px)" },
+    minHeight: { default: 0, [narrow]: "240px" },
+    overflow: "hidden",
+    borderRadius: { default: null, [narrow]: "12px" },
+    backgroundColor: tokens.bg,
+    boxShadow: "none",
+  },
+  inspectorHeader: {
+    position: { default: null, [narrow]: "sticky" },
+    top: { default: null, [narrow]: 0 },
+    zIndex: { default: null, [narrow]: 2 },
+    display: "flex",
+    gap: "10px",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minWidth: 0,
+    padding: { default: "7px 8px 3px", [narrow]: "8px" },
+    borderBottomWidth: { default: null, [narrow]: "1px" },
+    borderBottomStyle: { default: null, [narrow]: "solid" },
+    borderBottomColor: { default: null, [narrow]: tokens.rule },
+    backgroundColor: tokens.bg,
+  },
+  inspectorTitle: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "baseline",
+    minWidth: 0,
+    paddingLeft: "4px",
+    whiteSpace: "nowrap",
+  },
+  inspectorKind: {
+    flex: "none",
+    color: tokens.inkFaint,
+    fontSize: "10px",
+    fontWeight: 500,
+    letterSpacing: "0.08em",
+    lineHeight: "14px",
+    textTransform: "uppercase",
+  },
+  inspectorLabel: {
+    minWidth: 0,
+    overflow: "hidden",
+    color: tokens.ink,
+    fontSize: "13px",
+    fontWeight: 600,
+    lineHeight: "18px",
+    textOverflow: "ellipsis",
+  },
+  inspectorActions: {
+    display: "flex",
+    flex: "none",
+    gap: "4px",
+    alignItems: "center",
+  },
+  codicon: {
+    fontSize: "16px",
+  },
+  inspectorDiffs: {
+    minHeight: 0,
+    overflow: "auto",
+    backgroundColor: tokens.bg,
+    scrollbarColor: `${tokens.ruleSoft} ${tokens.surface}`,
+  },
+  inspectorEmpty: {
+    padding: "16px",
+    color: tokens.inkMuted,
+    fontSize: "12px",
+    lineHeight: "18px",
+  },
+  c4Canvas: {
+    ...noBorder,
+    position: "relative",
+    width: "100%",
+    height: "100%",
+    minHeight: 0,
+    overflow: "hidden",
+    borderRadius: 0,
+    backgroundColor: tokens.bg,
+    fontFamily: tokens.fontMono,
+  },
+  c4CanvasLens: {
+    minWidth: 0,
+  },
+  flow: {
+    backgroundColor: tokens.bg,
+    fontFamily: tokens.fontMono,
+  },
+  background: {
+    opacity: 0.45,
+  },
+  // React Flow's node wrapper. Its text reads like the prose around it.
+  flowNode: {
+    ...noBorder,
+    backgroundColor: tokens.transparent,
+    boxShadow: "none",
+    transition: `transform 220ms ${settle}, width 220ms ${settle}, height 220ms ${settle}, opacity 160ms ease`,
+    userSelect: "text",
+  },
+  flowEdge: {
+    zIndex: 1,
+  },
+  codeStatus: {
+    ...noBorder,
+    position: "absolute",
+    right: "14px",
+    bottom: "14px",
+    zIndex: 8,
+    maxWidth: "min(380px, calc(100% - 28px))",
+    padding: "8px 10px",
+    borderRadius: "6px",
+    backgroundColor: tokens.transparent,
+    boxShadow: "none",
+    color: tokens.inkMuted,
+    fontSize: "12px",
+    lineHeight: "17px",
+  },
+  edgeHighlight: {
+    fill: "none",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    pointerEvents: "none",
+  },
+  edgeHighlightActive: {
+    stroke: tokens.selectionShadow,
+    strokeWidth: "10px",
+  },
+  edgeHitArea: {
+    fill: "none",
+    stroke: tokens.transparent,
+    strokeWidth: "18px",
+    pointerEvents: "stroke",
+  },
+  edgeEndpoint: {
+    position: "absolute",
+    zIndex: 39,
+    boxSizing: "border-box",
+    width: "11px",
+    height: "11px",
+    borderWidth: "1.5px",
+    borderStyle: "solid",
+    borderColor: tokens.inkFaint,
+    borderRadius: "999px",
+    backgroundColor: tokens.surface,
+    opacity: 1,
+    pointerEvents: "none",
+  },
+  edgeEndpointHovered: {
+    borderWidth: "2px",
+    borderColor: tokens.surface,
+    backgroundColor: tokens.accent,
+  },
+  edgeLabelAnchor: {
+    position: "absolute",
+    zIndex: 40,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: "20px",
+    minHeight: "20px",
+    pointerEvents: "all",
+  },
+  edgeLabel: {
+    boxSizing: "border-box",
+    maxWidth: "132px",
+    padding: "4px 10px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.rule,
+    borderRadius: "7px",
+    backgroundColor: tokens.surface,
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontMono,
+    fontSize: "11px",
+    fontWeight: 500,
+    letterSpacing: 0,
+    lineHeight: "15px",
+    textAlign: "center",
+    whiteSpace: "normal",
+    overflowWrap: "anywhere",
+  },
+  edgeLabelButton: {
+    cursor: "pointer",
+  },
+  edgeLabelSelectedNode: {
+    borderColor: tokens.accent,
+  },
+  // Off screen, so the layout can size each card before placing it.
+  measureLayer: {
+    position: "absolute",
+    top: 0,
+    left: "-10000px",
+    zIndex: -1,
+    width: "280px",
+    visibility: "hidden",
+    pointerEvents: "none",
+  },
+  measureNode: {
+    width: "max-content",
+    minWidth: "188px",
+    maxWidth: "340px",
+    marginBottom: "16px",
+  },
+  measureNodeStore: {
+    width: "280px",
+    maxWidth: "280px",
+  },
+  measureNodeCode: {
+    width: "max-content",
+    minWidth: 0,
+    maxWidth: "none",
+  },
+  nodeShell: {
+    position: "relative",
+    width: "100%",
+    height: "100%",
+    animationName: cardBloom,
+    animationDuration: "180ms",
+    animationTimingFunction: settle,
+  },
+  groupShell: {
+    position: "relative",
+    boxSizing: "border-box",
+    width: "100%",
+    height: "100%",
+    padding: "14px 16px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: {
+      default: tokens.rule,
+      ":hover": tokens.ruleSoft,
+      ":focus-visible": tokens.ruleSoft,
+    },
+    borderRadius: "8px",
+    backgroundColor: {
+      default: tokens.surface,
+      ":hover": tokens.markerTint,
+      ":focus-visible": tokens.markerTint,
+    },
+    boxShadow: "none",
+    outline: { default: null, ":hover": "none", ":focus-visible": "none" },
+    cursor: "pointer",
+    fontFamily: tokens.fontMono,
+    animationName: groupBloom,
+    animationDuration: "220ms",
+    animationTimingFunction: settle,
+  },
+  // Hover outranks a change's border; selection outranks hover.
+  groupAdded: {
+    borderColor: {
+      default: tokens.changeAdded,
+      ":hover": tokens.ruleSoft,
+      ":focus-visible": tokens.ruleSoft,
+    },
+  },
+  groupRemoved: {
+    borderStyle: {
+      default: "dashed",
+      ":hover": "solid",
+      ":focus-visible": "solid",
+    },
+    borderColor: {
+      default: tokens.changeRemoved,
+      ":hover": tokens.ruleSoft,
+      ":focus-visible": tokens.ruleSoft,
+    },
+    opacity: 0.75,
+  },
+  groupModified: {
+    borderColor: {
+      default: tokens.changeModified,
+      ":hover": tokens.ruleSoft,
+      ":focus-visible": tokens.ruleSoft,
+    },
+  },
+  groupSelected: {
+    borderStyle: "solid",
+    borderColor: tokens.accent,
+    backgroundColor: tokens.markerTint,
+    boxShadow: `0 0 0 3px ${tokens.markerGlow}`,
+  },
+  groupTitle: {
+    position: "absolute",
+    top: "14px",
+    right: "16px",
+    left: "16px",
+    display: "flex",
+    gap: "8px",
+    alignItems: "baseline",
+    minWidth: 0,
+    color: tokens.inkMuted,
+    letterSpacing: 0,
+    pointerEvents: "auto",
+    userSelect: "text",
+  },
+  groupTitleSystem: {
+    top: "18px",
+    right: "22px",
+    left: "22px",
+  },
+  groupKind: {
+    flex: "0 0 auto",
+    color: tokens.inkFaint,
+    fontSize: "10px",
+    fontWeight: 500,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+  },
+  groupLabel: {
+    minWidth: 0,
+    overflow: "hidden",
+    color: tokens.ink,
+    fontSize: "13px",
+    fontWeight: 600,
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  groupLabelSystem: {
+    fontSize: "14px",
+  },
+  struck: {
+    textDecorationLine: "line-through",
+  },
+  hidden: {
+    display: "none",
+  },
+  handle: {
+    ...noBorder,
+    width: "1px",
+    height: "1px",
+    backgroundColor: tokens.transparent,
+    opacity: 0,
+    pointerEvents: "none",
+  },
+  node: {
+    position: "relative",
+    boxSizing: "border-box",
+    display: "grid",
+    gap: "7px",
+    width: "100%",
+    maxWidth: "none",
+    minHeight: "104px",
+    padding: "12px 14px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.ruleSoft,
+    borderRadius: "10px",
+    backgroundColor: {
+      default: tokens.surface,
+      ":hover": tokens.markerTint,
+      ":focus-visible": tokens.markerTint,
+    },
+    boxShadow: "none",
+    outline: { default: null, ":hover": "none", ":focus-visible": "none" },
+    transform: {
+      default: null,
+      ":hover": "translateY(-1px)",
+      ":focus-visible": "translateY(-1px)",
+    },
+    appearance: "none",
+    color: tokens.ink,
+    cursor: "pointer",
+    font: "inherit",
+    fontFamily: tokens.fontMono,
+    textAlign: "left",
+    transition:
+      "border-color 120ms ease, background 120ms ease, box-shadow 120ms ease, transform 120ms ease",
+  },
+  nodeTight: {
+    gap: 0,
+  },
+  // A code card draws its ring inset, above its content.
+  nodeCode: {
+    gap: 0,
+    "::before": {
+      position: "absolute",
+      inset: 0,
+      zIndex: 2,
+      display: "none",
+      borderRadius: "inherit",
+      boxShadow: `inset 0 0 0 0.75px ${tokens.rule}`,
+      content: "''",
+      pointerEvents: "none",
+    },
+  },
+  nodeStore: {
+    isolation: "isolate",
+    "--software-map-storage-fill": tokens.surface,
+    "--software-map-storage-border": tokens.ruleSoft,
+    "--software-map-storage-detail": tokens.rule,
+    "--software-map-storage-fill-detail": tokens.transparent,
+  },
+  nodeStoreHoverable: {
+    "--software-map-storage-border": {
+      default: tokens.ruleSoft,
+      ":hover": tokens.mapStorageBorder,
+      ":focus-visible": tokens.mapStorageBorder,
+    },
+  },
+  nodeMeasured: {
+    width: "max-content",
+    minWidth: "188px",
+    maxWidth: "340px",
+    minHeight: 0,
+  },
+  nodeMeasuredStore: {
+    width: "100%",
+    maxWidth: "none",
+    minHeight: "104px",
+  },
+  nodeMeasuredCode: {
+    width: "max-content",
+    minWidth: 0,
+  },
+  nodeSelected: {
+    borderStyle: "solid",
+    borderColor: tokens.accent,
+    backgroundColor: tokens.markerTint,
+    boxShadow: `0 0 0 3px ${tokens.markerGlow}`,
+  },
+  nodeStoreMarked: {
+    borderWidth: 0,
+    borderColor: tokens.transparent,
+    backgroundColor: {
+      default: tokens.transparent,
+      ":hover": tokens.markerTint,
+      ":focus-visible": tokens.markerTint,
+    },
+    boxShadow: "none",
+  },
+  storeLayer: {
+    position: "relative",
+    zIndex: 1,
+  },
+  kicker: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minWidth: 0,
+  },
+  nodeType: {
+    minWidth: 0,
+    overflow: "hidden",
+    color: tokens.inkFaint,
+    fontSize: "10px",
+    fontWeight: 500,
+    letterSpacing: "0.08em",
+    lineHeight: "14px",
+    textOverflow: "ellipsis",
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
+  },
+  label: {
+    margin: 0,
+    color: tokens.ink,
+    fontSize: "15px",
+    fontWeight: 600,
+    lineHeight: "19px",
+  },
+  labelWithSchema: {
+    lineHeight: "16px",
+  },
+  // In a document the description reads as a document paragraph.
+  description: {
+    margin: { default: 0, [inDocument]: "14px 0" },
+    color: tokens.inkMuted,
+    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
+    fontSize: "12px",
+    fontWeight: 400,
+    lineHeight: "17px",
+  },
+  meta: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "5px",
+    alignItems: "center",
+    minWidth: 0,
+  },
+  metaItem: {
+    ...noBorder,
+    maxWidth: "100%",
+    overflow: "hidden",
+    padding: 0,
+    borderRadius: 0,
+    backgroundColor: tokens.transparent,
+    color: tokens.inkFaint,
+    fontFamily: geistMono,
+    fontSize: "11px",
+    fontWeight: 400,
+    lineHeight: "15px",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  codeHead: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "center",
+    width: "max-content",
+    maxWidth: "100%",
+    minWidth: 0,
+  },
+  // A document's code chip keeps its own padding and wash here.
+  codeLabel: {
+    display: "block",
+    flex: "0 1 auto",
+    minWidth: 0,
+    overflow: "hidden",
+    color: tokens.ink,
+    fontFamily: { default: geistMono, [inDocument]: tokens.fontMono },
+    fontSize: "15px",
+    fontWeight: 600,
+    lineHeight: "18px",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  // Counts sit in the title row as plain text: the one +n −n pair, no pill.
+  badge: {
+    ...noBorder,
+    display: "inline-flex",
+    flex: "0 0 auto",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: "6px",
+    width: "auto",
+    maxWidth: "140px",
+    minHeight: 0,
+    overflow: "hidden",
+    padding: 0,
+    backgroundColor: tokens.transparent,
+    fontFamily: geistMono,
+    fontSize: "11px",
+    fontWeight: 500,
+    lineHeight: "15px",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  badgeEmpty: {
+    visibility: "hidden",
+  },
+  badgeInGroup: {
+    marginLeft: "auto",
+    color: tokens.inkFaint,
+    fontSize: "10px",
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+  },
+  count: {
+    minWidth: 0,
+    overflow: "hidden",
+    fontWeight: 500,
+    textOverflow: "ellipsis",
+  },
+  countAdded: {
+    color: tokens.diffAdded,
+  },
+  countRemoved: {
+    color: tokens.diffRemoved,
+  },
+  countInGroup: {
+    flex: "0 0 auto",
+    color: tokens.inkFaint,
+    fontSize: "10px",
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+  },
+  storageOutline: {
+    position: "absolute",
+    inset: 0,
+    zIndex: 0,
+    display: "none",
+    width: "100%",
+    height: "100%",
+    overflow: "visible",
+    pointerEvents: "none",
+  },
+  storageFill: {
+    fill: tokens.softwareMapStorageFill,
+    stroke: "none",
+  },
+  storageFillDetail: {
+    fill: tokens.softwareMapStorageFillDetail,
+    stroke: "none",
+  },
+  storageSelection: {
+    fill: "none",
+    stroke: tokens.transparent,
+    strokeLinejoin: "round",
+    strokeWidth: "7px",
+  },
+  storageSelectionSelected: {
+    stroke: tokens.selection,
+  },
+  storageBorder: {
+    fill: "none",
+    stroke: tokens.softwareMapStorageBorder,
+    strokeLinejoin: "round",
+    strokeWidth: "2px",
+  },
+  storageDetail: {
+    fill: "none",
+    stroke: tokens.softwareMapStorageDetail,
+    strokeLinejoin: "round",
+    strokeWidth: "1.25px",
+  },
+  storageDashed: {
+    strokeDasharray: "7 5",
+  },
+  storageGlow: {
+    filter: `drop-shadow(0 0 0 ${tokens.selection}) drop-shadow(0 0 3px ${tokens.selection})`,
+  },
+  storageFolder: {
+    position: "absolute",
+    inset: 0,
+    zIndex: 0,
+    display: "none",
+    pointerEvents: "none",
+    "::after": {
+      position: "absolute",
+      top: "46px",
+      right: "10px",
+      left: "min(190px, 68%)",
+      borderTopWidth: "2px",
+      borderTopStyle: "solid",
+      borderTopColor: tokens.softwareMapStorageBorder,
+      content: "''",
+    },
+  },
+  storageFolderBody: {
+    position: "absolute",
+    top: "46px",
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderWidth: "0 2px 2px",
+    borderStyle: "none solid solid",
+    borderColor: `currentcolor ${tokens.softwareMapStorageBorder} ${tokens.softwareMapStorageBorder}`,
+    borderRadius: "0 10px 10px 10px",
+    backgroundColor: tokens.softwareMapStorageFill,
+  },
+  storageFolderTab: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: "min(190px, 68%)",
+    height: "48px",
+    overflow: "visible",
+  },
+  schema: {
+    position: "relative",
+    zIndex: 1,
+    display: "grid",
+    gap: "8px",
+    margin: "12px -2px 0",
+  },
+  schemaFlush: {
+    margin: 0,
+  },
+  schemaSection: {
+    overflow: "hidden",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.rule,
+    borderRadius: "3px",
+    backgroundColor: tokens.surface,
+  },
+  schemaSectionSelected: {
+    borderColor: tokens.selection,
+    boxShadow: "none",
+  },
+  schemaHeader: {
+    display: "grid",
+    gridTemplateColumns: "auto minmax(0, 1fr)",
+    alignItems: "center",
+    gap: "8px",
+    padding: "7px 10px",
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.rule,
+    backgroundColor: tokens.tray,
+    textAlign: "left",
+  },
+  schemaKind: {
+    color: tokens.inkFaint,
+    fontFamily: tokens.fontMono,
+    fontSize: "10px",
+    fontWeight: 700,
+    lineHeight: "12px",
+    textTransform: "uppercase",
+  },
+  schemaLabel: {
+    minWidth: 0,
+    overflow: "hidden",
+    color: tokens.ink,
+    fontFamily: tokens.fontMono,
+    fontSize: "12px",
+    lineHeight: "15px",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  schemaKey: {
+    overflow: "hidden",
+    padding: "7px 10px",
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.rule,
+    backgroundColor: tokens.tray,
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontMono,
+    fontSize: "11px",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  schemaRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) minmax(68px, auto)",
+    alignItems: "center",
+    gap: "10px",
+    height: "30px",
+    padding:
+      "0 10px 0 calc(12px + var(--software-map-schema-row-depth, 0) * 18px)",
+    borderBottomWidth: { default: "1px", ":last-child": 0 },
+    borderBottomStyle: { default: "solid", ":last-child": "none" },
+    borderBottomColor: { default: tokens.rule, ":last-child": "currentcolor" },
+    backgroundColor: tokens.surface,
+    textAlign: "left",
+  },
+  schemaRowActive: {
+    outline: `2px solid ${tokens.selection}`,
+    outlineOffset: "-2px",
+    backgroundColor: tokens.rpcWash,
+  },
+  schemaRowPrimary: {
+    backgroundImage: `repeating-linear-gradient(135deg, ${tokens.accentStripe} 0, ${tokens.accentStripe} 7px, ${tokens.transparent} 7px, ${tokens.transparent} 14px)`,
+  },
+  schemaRowName: {
+    minWidth: 0,
+    overflow: "hidden",
+    color: tokens.ink,
+    fontFamily: tokens.fontMono,
+    fontSize: "12px",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  schemaKeyFlag: {
+    marginRight: "6px",
+    padding: "1px 4px",
+    borderRadius: "4px",
+    backgroundColor: tokens.diffModifiedBg,
+    color: tokens.diffModified,
+    fontSize: "10px",
+  },
+  schemaKeyFlagForeign: {
+    backgroundColor: tokens.rpcWash,
+    color: tokens.rpc,
+  },
+  schemaRowType: {
+    minWidth: 0,
+    overflow: "hidden",
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontMono,
+    fontSize: "11px",
+    textAlign: "right",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+});
+
+// A change's border replaces the card's hairline.
+const nodeStatusStyles = stylex.create({
+  added: { borderColor: tokens.changeAdded },
+  removed: {
+    borderStyle: "dashed",
+    borderColor: tokens.changeRemoved,
+    opacity: 0.75,
+  },
+  modified: { borderColor: tokens.changeModified },
+});
+
+// A selected store's shape takes the change color, or the selection's.
+const storeSelectedStyles = stylex.create({
+  unchanged: { "--software-map-storage-border": tokens.selection },
+  added: { "--software-map-storage-border": tokens.changeAdded },
+  removed: { "--software-map-storage-border": tokens.changeRemoved },
+  modified: { "--software-map-storage-border": tokens.changeModified },
+});
+
+const codeRingStyles = stylex.create({
+  selected: {
+    "::before": { boxShadow: `inset 0 0 0 1.5px ${tokens.selection}` },
+  },
+  added: {
+    "::before": { boxShadow: `inset 0 0 0 1.5px ${tokens.changeAdded}` },
+  },
+  removed: {
+    "::before": { boxShadow: `inset 0 0 0 1.5px ${tokens.changeRemoved}` },
+  },
+  modified: {
+    "::before": { boxShadow: `inset 0 0 0 1.5px ${tokens.changeModified}` },
+  },
+});
+
+// React Flow takes node and edge classes as strings.
+const FLOW_NODE_CLASS_NAME = stylex.props(styles.flowNode).className;
+
+const FLOW_EDGE_CLASS_NAME = stylex.props(styles.flowEdge).className;

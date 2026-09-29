@@ -8,15 +8,11 @@
 @import "./base.css";
 @import "./vendor-overrides.css";
 
-/* Before review-document.css, whose h3 and code rules, and collapsed-section
-   heading, must win inside documents and the tutorial. */
-@import "./software-map/styles.css";
 @import "./api-document.css";
 @import "./tutorial-experience.css";
 
 @import "./review-shell.css";
 @import "./review-document.css";
-@import "./diagrams.css";
 
 /* Last, in this order: the courier's march outlasts the badge's
    reduced-motion rule, and authoring-motion restyles everything above while

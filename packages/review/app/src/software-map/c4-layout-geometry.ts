@@ -217,6 +217,8 @@ export function createC4MapFlowFromLayout(
     nodeDimensions?: ReadonlyMap<string, C4NodeDimensions> | null;
     relationshipStateById?: ReadonlyMap<string, "active" | "inactive">;
     onOpenRelationship?: (relationshipId: string) => void;
+    nodeClassName?: string;
+    edgeClassName?: string;
   } = {},
 ): C4MapFlow {
   const latestNodesById = new Map(
@@ -245,6 +247,7 @@ export function createC4MapFlowFromLayout(
         },
         draggable: false,
         selectable: true,
+        className: options.nodeClassName,
         domAttributes: softwareMapKeyboardNodeDomAttributes(renderNode.id),
         style: { width: renderedWidth, height: renderedHeight },
       };
@@ -299,11 +302,6 @@ export function createC4MapFlowFromLayout(
       const relationshipId = relationship.id ?? edgeId;
       const operationState = options.relationshipStateById?.get(relationshipId);
 
-      const operationHighlightState =
-        operationState && operationState !== "inactive"
-          ? operationState
-          : undefined;
-
       const operationActive = operationState === "active";
 
       const color = attachedToSelectedNode
@@ -342,20 +340,15 @@ export function createC4MapFlowFromLayout(
           type: "softwareMapC4Edge",
           markerEnd: { type: MarkerType.ArrowClosed, color },
           label,
-          className: [
-            "software-map-c4-edge",
-            `software-map-c4-edge--${kind}`,
-            attachedToSelectedNode ? "software-map-c4-edge--selected-node" : "",
-            operationHighlightState
-              ? `software-map-c4-edge--operation-${operationHighlightState}`
-              : "",
-          ]
-            .filter(Boolean)
-            .join(" "),
+          className: options.edgeClassName,
           zIndex: operationActive ? 4 : attachedToSelectedNode ? 3 : 1,
+          // The line is quiet unless it touches the selected node; the
+          // arrowhead also marks an active operation.
           style: {
-            stroke: color,
-            strokeWidth: operationActive ? 3 : attachedToSelectedNode ? 2.5 : 2,
+            stroke: attachedToSelectedNode
+              ? "var(--accent)"
+              : "var(--ink-faint)",
+            strokeWidth: 1.5,
             strokeDasharray: c4EdgeDasharray(
               kind,
               sourceNodeType,

@@ -705,8 +705,13 @@ function ReviewLayoutContent({
               )}
             </div>
             {softwareMapEnabled && activeView === "map" && (
-              <div className="review-map-view">
-                <div className="review-map-canvas-shell">
+              <div {...withClass("review-map-view", mapViewStyles.view)}>
+                <div
+                  {...withClass(
+                    "review-map-canvas-shell",
+                    mapViewStyles.canvasShell,
+                  )}
+                >
                   {softwareMapState.state === "ready" ||
                   softwareMapState.state === "absent" ? (
                     <>
@@ -727,6 +732,7 @@ function ReviewLayoutContent({
                         height="100%"
                         showChrome={false}
                         showFloatingActions={!activePanel}
+                        variant="view"
                       />
                       <MapSettingsControl />
                     </>
@@ -1129,3 +1135,17 @@ export function applySoftwareMapTopologyStatuses(
     elementsByPath: new Map(elements.map((element) => [element.path, element])),
   };
 }
+
+const mapViewStyles = stylex.create({
+  view: {
+    backgroundColor: tokens.bg,
+  },
+  canvasShell: {
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    borderRadius: 0,
+    backgroundColor: tokens.bg,
+    boxShadow: "none",
+  },
+});

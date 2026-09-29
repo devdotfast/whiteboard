@@ -102,6 +102,27 @@
   background: var(--review-find-match-active-background);
 }
 
+/* The software map's React Flow layers: edges under the cards, edge labels
+   selectable like prose, and the map view's pane on the board grid. */
+
+.software-map-c4-canvas .react-flow__edges {
+  z-index: 1;
+}
+
+.software-map-c4-canvas .react-flow__edgelabel-renderer {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.review-map-view :is(.react-flow__renderer, .react-flow__pane) {
+  background: var(--bg);
+}
+
+.review-map-view .react-flow__pane {
+  background-image: var(--board-grid);
+  background-repeat: repeat;
+}
+
 /* React Flow's edge label layer: diagram text selects like the prose around
    it. */
 

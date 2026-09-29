@@ -434,13 +434,6 @@
   overflow: hidden;
 }
 
-.review-map-view .software-map {
-  flex: 1;
-  min-height: 0;
-  height: 100%;
-  margin: 0;
-}
-
 .software-map-topology-unavailable {
   flex: none;
   margin: 0;
@@ -451,11 +444,6 @@
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 16px;
-}
-
-.review-map-view .software-map-frame {
-  height: 100%;
-  background: var(--bg);
 }
 
 .review-topbar-icon-button {

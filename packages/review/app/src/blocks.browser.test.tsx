@@ -296,7 +296,7 @@ describe("block components", () => {
     },
     {
       kind: "software_map",
-      selector: ".diagram-header-title",
+      selector: "figure [data-review-copy-prose]",
       label: "map title",
     },
     {

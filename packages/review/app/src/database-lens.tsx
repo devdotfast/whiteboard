@@ -656,12 +656,7 @@ function DatabaseC4UseCaseDiagram({
   const relationshipStateById = highlights.operationStates;
 
   return (
-    <div
-      {...withClass(
-        "database-diagram-canvas database-diagram-canvas--c4",
-        styles.canvas,
-      )}
-    >
+    <div {...stylex.props(styles.canvas)}>
       <SoftwareMapFrame
         snapshot={frameSnapshot}
         hasResolvedSnapshot
@@ -670,6 +665,7 @@ function DatabaseC4UseCaseDiagram({
         expanded={false}
         showChrome={false}
         showFloatingActions={false}
+        variant="lens"
         interactionMode="inline"
         onSelectNode={handleSelectNode}
         onExpandNode={handleExpandNode}

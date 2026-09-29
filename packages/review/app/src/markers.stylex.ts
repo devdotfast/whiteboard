@@ -24,5 +24,8 @@ export const traceWorkedMarker = stylex.defineMarker();
 /** An agent trace gap or collapse row; its chip inks while it is hovered. */
 export const traceRowMarker = stylex.defineMarker();
 
+/** A software map frame; its expand button shows while it is hovered. */
+export const mapFrameMarker = stylex.defineMarker();
+
 /** A flow diagram node; its outline takes the marker while it has focus. */
 export const flowNodeMarker = stylex.defineMarker();

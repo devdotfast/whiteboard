@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { scopeReviewCanvasCss } from "../desktop-css-scope";
-import { softwareMapOverlayClassName } from "./software-map/software-map-keyboard-navigation";
+import {
+  softwareMapFrameProps,
+  softwareMapOverlayProps,
+} from "./software-map/SoftwareMap";
 
 import canvasCss from "./styles.css?inline";
 import "./styles.css";
@@ -49,12 +52,15 @@ describe("Review layout", () => {
     review.className = "review-app";
     canvas.append(review);
     const frame = document.createElement("figure");
-    frame.className = "software-map-frame software-map-frame--expanded";
+    frame.className = softwareMapFrameProps({
+      expanded: true,
+      showChrome: true,
+    }).className!;
     const overlay = document.createElement("div");
-    overlay.className = softwareMapOverlayClassName({
+    overlay.className = softwareMapOverlayProps({
       theme: "dark",
       nodeTint: "slate",
-    });
+    }).className!;
     const closeButton = document.createElement("button");
     closeButton.setAttribute("aria-label", "Close expanded software map");
     overlay.append(closeButton, frame);

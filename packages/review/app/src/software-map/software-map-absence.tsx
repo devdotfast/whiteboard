@@ -1,6 +1,9 @@
+import { tokens } from "@canvas/tokens.stylex";
+import * as stylex from "@stylexjs/stylex";
 import type { CSSProperties, ReactElement } from "react";
 
 import type { NormalizedSoftwareModel } from "./model";
+import { softwareMapRootProps } from "./software-map-styles";
 
 /** The CSS length for a size prop: bare numbers are pixel counts. */
 export function softwareMapCssLength(value: number | string): string {
@@ -11,10 +14,12 @@ export function SoftwareMapUnavailable({
   title,
   height,
   className,
+  variant,
 }: {
   title?: string;
   height?: number | string;
   className?: string;
+  variant?: "view";
 }): ReactElement {
   // SAFETY: React passes "--*" keys through to style.setProperty; CSSProperties
   // only lacks an index signature for custom properties.
@@ -25,22 +30,28 @@ export function SoftwareMapUnavailable({
           "--software-map-empty-height": softwareMapCssLength(height),
         } as CSSProperties);
 
+  const code = stylex.props(styles.code);
+
   return (
     <section
-      className={["software-map", className].filter(Boolean).join(" ")}
+      {...softwareMapRootProps(className, variant)}
       aria-label={title ?? "Software map unavailable"}
       style={style}
     >
-      <div className="software-map-unavailable">
-        <h3>No software map for this repo yet</h3>
-        <p>
+      <div {...stylex.props(styles.unavailable)}>
+        <h3 {...stylex.props(styles.heading)}>
+          No software map for this repo yet
+        </h3>
+        <p {...stylex.props(styles.paragraph)}>
           A software map adds a structural view of the systems, containers, and
           components in this repo.
         </p>
-        <p>
-          Author one with <code>whiteboard map</code>.
+        <p {...stylex.props(styles.paragraph)}>
+          Author one with <code {...code}>whiteboard map</code>.
         </p>
-        <p>The rest of the document works without it.</p>
+        <p {...stylex.props(styles.paragraph)}>
+          The rest of the document works without it.
+        </p>
       </div>
     </section>
   );
@@ -78,3 +89,46 @@ function softwareMapSideLabel(
 ): string {
   return ref ? `${side} ${ref}` : side;
 }
+
+const inDocument = ":is(.review-document *)";
+
+// The scratchpad's opening heading sits at the page's top padding.
+const scratchpadOpening =
+  ':is(.review-document[data-kind="scratchpad"] > .api-document-node:first-child *):first-child';
+
+const styles = stylex.create({
+  unavailable: {
+    boxSizing: "border-box",
+    display: "grid",
+    placeContent: "center",
+    minHeight: "var(--software-map-empty-height, 520px)",
+    padding: "32px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.rule,
+    borderRadius: "8px",
+    backgroundColor: tokens.tray,
+    color: tokens.inkMuted,
+    textAlign: "center",
+  },
+  // In a document the notice reads as the document's own heading and prose.
+  heading: {
+    margin: { default: "0 0 10px", [inDocument]: "30px auto 10px" },
+    marginTop: { default: null, [scratchpadOpening]: 0 },
+    color: tokens.ink,
+    fontSize: { default: "16px", [inDocument]: "20px" },
+  },
+  paragraph: {
+    maxWidth: "540px",
+    margin: { default: "4px auto", [inDocument]: "14px 0" },
+    color: { default: null, [inDocument]: tokens.ink },
+    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
+    fontSize: { default: "13px", [inDocument]: "15px" },
+    lineHeight: { default: "20px", [inDocument]: 1.72 },
+    textAlign: { default: null, [inDocument]: "left" },
+  },
+  code: {
+    color: tokens.ink,
+    fontWeight: 700,
+  },
+});
