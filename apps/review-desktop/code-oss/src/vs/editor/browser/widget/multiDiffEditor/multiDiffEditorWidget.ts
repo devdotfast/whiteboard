@@ -142,6 +142,10 @@ export class MultiDiffEditorWidget extends Disposable {
 		return this._widgetImpl.get().getViewState();
 	}
 
+	public clearPendingRestorationState(): void {
+		this._widgetImpl.get().clearPendingRestorationState();
+	}
+
 	public setViewState(viewState: IMultiDiffEditorViewState): void {
 		this._widgetImpl.get().setViewState(viewState);
 	}

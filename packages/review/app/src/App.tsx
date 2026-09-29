@@ -847,6 +847,7 @@ function ReviewLayoutContent({
                 <ReviewDiffView
                   scope={{ commit: diffScope.commit.commit }}
                   revealFile={diffScope.file}
+                  restoreFile={diffScope.restoreFile}
                 />
               </div>
             )}

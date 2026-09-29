@@ -4,6 +4,7 @@ import {
   type ReviewTheme,
   useReviewDebugSettings,
 } from "@canvas/debug-settings";
+import { createDiagramNavigationStore } from "@canvas/diagram-navigation-store";
 import { diagramStyles } from "@canvas/diagram-styles";
 import { hasTextSelectionWithin } from "@canvas/diagram-text-selection";
 import { useReviewSession } from "@canvas/host/review-session";
@@ -47,6 +48,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useStore } from "zustand";
 
 import {
   c4EdgeLabelPoint,
@@ -116,10 +118,7 @@ import {
   toggledSoftwareMapViewportFocusRequest,
 } from "./software-map-keyboard-navigation";
 import {
-  hasStoredSoftwareMapNavigationState,
   initialSoftwareMapExpandedNodeIds,
-  rememberSoftwareMapNavigationState,
-  restoreSoftwareMapNavigationState,
   seedSoftwareMapDefaultExpandedNodeIds,
   softwareMapAncestorPaths,
   softwareMapNavigationKey,
@@ -349,31 +348,33 @@ function SoftwareMapWithModel({
     placeholderLabel,
   });
 
-  const initialNavigation = restoreSoftwareMapNavigationState(
-    session,
+  const storageKey = session.storageKey(
+    "software-map-navigation",
     navigationKey,
-    modelKey,
   );
 
-  const hasInitialNavigation = hasStoredSoftwareMapNavigationState(
-    session,
-    navigationKey,
-    modelKey,
+  const navigation = useMemo(
+    () =>
+      createDiagramNavigationStore(
+        storageKey,
+        modelKey,
+        initialSoftwareMapExpandedNodeIds(model),
+        true,
+      ),
+    [storageKey, modelKey],
   );
 
-  const initialExpandedNodeIds = hasInitialNavigation
-    ? new Set(initialNavigation.expandedNodeIds)
-    : initialSoftwareMapExpandedNodeIds(model);
+  const expanded = useStore(navigation, (state) => state.expanded);
 
-  const [expanded, setExpanded] = useState(initialNavigation.expanded);
-
-  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(
-    () => initialExpandedNodeIds,
+  const expandedNodeIds = useStore(
+    navigation,
+    (state) => state.expandedNodeIds,
   );
 
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
-    initialNavigation.selectedNodeId,
-  );
+  const selectedNodeId = useStore(navigation, (state) => state.selectedNodeId);
+
+  const { setExpanded, setExpandedNodeIds, setSelectedNodeId } =
+    navigation.getState();
 
   const [inspectedNode, setInspectedNode] =
     useState<SoftwareMapNodeSnapshot | null>(null);
@@ -399,19 +400,13 @@ function SoftwareMapWithModel({
   };
 
   const mapRootRef = useRef<HTMLElement | null>(null);
-  const previousBaseView = useRef(view);
-  const defaultExpansionActiveRef = useRef(!hasInitialNavigation);
+
+  const defaultExpansionActiveRef = useMemo(
+    () => ({ current: !navigation.getState().restored }),
+    [navigation],
+  );
+
   const rememberedChildNodeIdsRef = useRef(new Map<string, string>());
-
-  useEffect(() => {
-    if (previousBaseView.current === view) {
-      return;
-    }
-
-    previousBaseView.current = view;
-    setSelectedNodeId(null);
-    setExpandedNodeIds(new Set());
-  }, [view]);
 
   useEffect(() => {
     if (!focusRequest) return;
@@ -430,23 +425,7 @@ function SoftwareMapWithModel({
       nodeId: targetPath,
       requireExpanded: false,
     });
-  }, [focusRequest]);
-
-  useEffect(() => {
-    rememberSoftwareMapNavigationState(session, navigationKey, {
-      modelKey,
-      expandedNodeIds: [...expandedNodeIds],
-      selectedNodeId,
-      expanded,
-    });
-  }, [
-    expanded,
-    expandedNodeIds,
-    modelKey,
-    navigationKey,
-    selectedNodeId,
-    session,
-  ]);
+  }, [focusRequest, navigation]);
 
   const resolvedDataReady = Boolean(pinnedData);
 
@@ -473,7 +452,7 @@ function SoftwareMapWithModel({
 
       return next;
     });
-  }, [projectionModel]);
+  }, [projectionModel, navigation]);
 
   const changeSummaries = useMemo(
     () =>
@@ -592,6 +571,8 @@ function SoftwareMapWithModel({
   }, [changeSummaries, inspectedNode, projectionModel, pinnedData?.side]);
 
   useEffect(() => {
+    if (!hasResolvedSnapshot) return;
+
     const nextSelectedNodeId = selectedSoftwareMapNodeIdForNodes({
       nodes: mapSnapshot.nodes ?? [],
       selectedNodeId,
@@ -603,7 +584,7 @@ function SoftwareMapWithModel({
         current === selectedNodeId ? nextSelectedNodeId : current,
       );
     }
-  }, [mapSnapshot.nodes, selectedNodeId]);
+  }, [hasResolvedSnapshot, mapSnapshot.nodes, selectedNodeId, navigation]);
 
   useEffect(() => {
     if (

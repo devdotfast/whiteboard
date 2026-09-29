@@ -128,10 +128,12 @@ export function DiffCounts({
 export function ReviewDiffView({
   scope,
   revealFile,
+  restoreFile,
 }: {
   scope?: ReviewCommitScope;
   /** The path of a file to scroll to once the diff loads. */
   revealFile?: string;
+  restoreFile?: boolean;
 }) {
   const workspaceRef = useRef<HTMLDivElement>(null);
   const cabinetsRef = useRef<HTMLDivElement>(null);
@@ -231,7 +233,13 @@ export function ReviewDiffView({
   };
 
   if (scope || !lenses)
-    return <NativeDiffView scope={scope} revealFile={revealFile} />;
+    return (
+      <NativeDiffView
+        scope={scope}
+        revealFile={revealFile}
+        restoreFile={restoreFile}
+      />
+    );
   const global = lenses.stats();
   const total = global.total.additions + global.total.deletions;
   const remaining = global.remaining.additions + global.remaining.deletions;
@@ -513,6 +521,7 @@ export function ReviewDiffView({
 function NativeDiffView({
   scope,
   revealFile,
+  restoreFile,
   lens,
   treeContainer,
   progress,
@@ -522,6 +531,7 @@ function NativeDiffView({
 }: {
   scope?: ReviewCommitScope;
   revealFile?: string;
+  restoreFile?: boolean;
   lens?: ReviewDiffLens;
   treeContainer?: HTMLElement;
   progress?: ReviewDiffProgress;
@@ -581,8 +591,12 @@ function NativeDiffView({
     if (progress) handle.current?.setProgress?.(progress);
   }, [progress]);
   useLayoutEffect(() => {
-    if (revealFile) handle.current?.revealFile?.(revealFile);
-  }, [revealFile, container, scope?.commit]);
+    if (!revealFile) return;
+
+    if (restoreFile)
+      handle.current?.revealFile?.(revealFile, { restore: true });
+    else handle.current?.revealFile?.(revealFile);
+  }, [revealFile, restoreFile, container, scope?.commit]);
 
   return (
     <>

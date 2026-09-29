@@ -13,11 +13,14 @@ import {
   lensUseCases,
 } from "./database-lens";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
+import { createDiagramNavigationStore } from "./diagram-navigation-store";
 import { ReviewPanelProvider } from "./review-panel";
 import {
   reviewSessionElement,
   testReviewSession,
 } from "./review-session-test-utils";
+import { softwareMapNavigationKey } from "./software-map/software-map-navigation-state";
+import { SoftwareMap } from "./software-map/SoftwareMap";
 
 // The lens mounts a live software-map canvas whose edge router loads the
 // libavoid wasm. The desktop serves it over the review API; the test hands the
@@ -102,6 +105,70 @@ afterEach(async () => {
 });
 
 describe("DatabaseLens", () => {
+  it("keeps a restored map selection while the resolved graph is loading", async () => {
+    localStorage.clear();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    const session = testReviewSession({ wasmUrl });
+
+    const key = session.storageKey(
+      "software-map-navigation",
+      softwareMapNavigationKey({ title: "Delayed" }),
+    );
+
+    createDiagramNavigationStore(key, "", new Set())
+      .getState()
+      .setSelectedNodeId("selected");
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    const render = (ready: boolean) =>
+      root!.render(
+        reviewSessionElement(
+          session,
+          <ReviewDebugSettingsProvider>
+            <ReviewPanelProvider>
+              <SoftwareMap
+                title="Delayed"
+                snapshot={
+                  ready
+                    ? {
+                        nodes: [
+                          { id: "first", label: "First", type: "component" },
+                          {
+                            id: "selected",
+                            label: "Selected",
+                            type: "component",
+                          },
+                        ],
+                      }
+                    : undefined
+                }
+              />
+            </ReviewPanelProvider>
+          </ReviewDebugSettingsProvider>,
+        ),
+      );
+
+    await act(async () => render(false));
+    expect(
+      createDiagramNavigationStore(key, "", new Set()).getState()
+        .selectedNodeId,
+    ).toBe("selected");
+    await act(async () => render(true));
+    expect(
+      createDiagramNavigationStore(key, "", new Set()).getState()
+        .selectedNodeId,
+    ).toBe("selected");
+  });
+
   it("resolves canonical operations to actors and store targets", () => {
     const [placeOrder, readOrder] = lensUseCases(block);
 
@@ -121,7 +188,8 @@ describe("DatabaseLens", () => {
     expect(readOrder?.operations[0]?.target.path).toEqual([]);
   });
 
-  it("renders the lens with its use cases and switches between them", async () => {
+  it("restores the chosen use case after remounting the lens", async () => {
+    localStorage.clear();
     (
       globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
     ).IS_REACT_ACT_ENVIRONMENT = true;
@@ -169,5 +237,23 @@ describe("DatabaseLens", () => {
     });
 
     expect(select?.value).toBe("read-order");
+    await act(async () => root!.render(null));
+    await act(async () => {
+      root!.render(
+        reviewSessionElement(
+          testReviewSession({ wasmUrl }),
+          <ReviewDebugSettingsProvider>
+            <ReviewPanelProvider>
+              <DatabaseLens {...block} />
+            </ReviewPanelProvider>
+          </ReviewDebugSettingsProvider>,
+        ),
+      );
+    });
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Database use case"]',
+      )?.value,
+    ).toBe("read-order");
   });
 });

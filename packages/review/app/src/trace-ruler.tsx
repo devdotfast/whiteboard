@@ -159,8 +159,10 @@ function collapseWhitespace(text: string): string {
 
 export function TraceRuler({
   events,
+  onSelectEvent,
 }: {
   events: readonly ReviewAgentTraceEvent[];
+  onSelectEvent?: (index: number) => void;
 }) {
   const anchorRef = useRef<HTMLDivElement | null>(null);
   const railRef = useRef<HTMLDivElement | null>(null);
@@ -290,6 +292,7 @@ export function TraceRuler({
       if (!container || tickCount === 0) return;
       const { start: turn } = rulerBucketRange(tick, tickCount, turnCount);
       const start = turnStarts[turn] ?? 0;
+      onSelectEvent?.(start);
 
       const wrappers = container
         .querySelectorAll<HTMLElement>("[data-trace-event]")
@@ -316,7 +319,7 @@ export function TraceRuler({
         (start / Math.max(1, eventCount)) *
         (container.scrollHeight - container.clientHeight);
     },
-    [tickCount, turnCount, turnStarts, eventCount],
+    [tickCount, turnCount, turnStarts, eventCount, onSelectEvent],
   );
 
   const preview = useMemo(() => {

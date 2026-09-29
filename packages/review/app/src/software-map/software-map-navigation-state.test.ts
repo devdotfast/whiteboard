@@ -1,13 +1,12 @@
+// @vitest-environment jsdom
+import { createDiagramNavigationStore } from "@canvas/diagram-navigation-store";
 import { testReviewSession } from "@canvas/review-session-test-utils";
 import { describe, expect, it } from "vitest";
 
 import { projectInlineC4 } from "./c4-projection";
 import { defineSoftwareModel } from "./model";
 import {
-  clearSoftwareMapNavigationStateForTests,
   initialSoftwareMapExpandedNodeIds,
-  rememberSoftwareMapNavigationState,
-  restoreSoftwareMapNavigationState,
   seedSoftwareMapDefaultExpandedNodeIds,
   softwareMapAncestorPaths,
   softwareMapNavigationKey,
@@ -28,29 +27,41 @@ describe("SoftwareMap navigation state", () => {
 
   it("persists selected node and expanded node ids by model identity", () => {
     const session = testReviewSession();
-    clearSoftwareMapNavigationStateForTests(session);
+    localStorage.clear();
 
     const key = softwareMapNavigationKey({
       title: "CI SoftwareMap",
       view: "inline",
     });
 
-    rememberSoftwareMapNavigationState(session, key, {
+    const storageKey = session.storageKey("software-map-navigation", key);
+
+    const first = createDiagramNavigationStore(
+      storageKey,
+      "model:a",
+      new Set(),
+    );
+
+    first.setState({
       modelKey: "model:a",
-      expandedNodeIds: ["devFastCi", "devFastCi.ciWorker"],
+      expandedNodeIds: new Set(["devFastCi", "devFastCi.ciWorker"]),
       selectedNodeId: "devFastCi.ciWorker",
       expanded: true,
     });
 
-    expect(restoreSoftwareMapNavigationState(session, key, "model:a")).toEqual({
+    expect(
+      createDiagramNavigationStore(storageKey, "model:a", new Set()).getState(),
+    ).toMatchObject({
       modelKey: "model:a",
-      expandedNodeIds: ["devFastCi", "devFastCi.ciWorker"],
+      expandedNodeIds: new Set(["devFastCi", "devFastCi.ciWorker"]),
       selectedNodeId: "devFastCi.ciWorker",
       expanded: true,
     });
-    expect(restoreSoftwareMapNavigationState(session, key, "model:b")).toEqual({
+    expect(
+      createDiagramNavigationStore(storageKey, "model:b", new Set()).getState(),
+    ).toMatchObject({
       modelKey: "model:b",
-      expandedNodeIds: [],
+      expandedNodeIds: new Set(),
       selectedNodeId: null,
       expanded: false,
     });

@@ -9,6 +9,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { scopeReviewCanvasCss } from "../desktop-css-scope";
 import { documentStyles } from "./document-styles";
+import { ReviewSessionProvider } from "./host/review-session";
 import {
   type ReviewFindHost,
   ReviewFindProvider,
@@ -16,6 +17,7 @@ import {
   useReviewFindRegistration,
 } from "./review-find";
 import { ReviewRootsProvider } from "./review-root-context";
+import { testReviewSession } from "./review-session-test-utils";
 import { shellStyles } from "./shell-styles";
 import { withClass } from "./stylex-props";
 
@@ -283,6 +285,44 @@ it("closes and forgets the query when the document changes", async () => {
     container.querySelector<HTMLInputElement>('input[aria-label="Find"]')
       ?.value,
   ).toBe("");
+});
+
+it("restores the review's find inputs after a fresh mount and recomputes matches", async () => {
+  localStorage.clear();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const session = testReviewSession({ reviewId: "find-resume" });
+  const host = createReviewFindHost();
+  root = createRoot(container);
+
+  const render = () =>
+    root?.render(
+      <ReviewSessionProvider session={session}>
+        <FindHarness host={host} handles={[findHandle()]} />
+      </ReviewSessionProvider>,
+    );
+
+  await act(async () => render());
+  await act(async () => host.showFind("Alpha"));
+  await act(async () => button(container, "Match Case").click());
+  await vi.waitFor(() => {
+    expect(findCount(container)?.textContent).toBe("1 of 3");
+  });
+  await act(async () => root?.render(null));
+  await act(async () => render());
+  expect(container.querySelector(".review-find-widget")).toBeNull();
+
+  await act(async () => host.showFind());
+  expect(
+    container.querySelector<HTMLInputElement>('input[aria-label="Find"]')
+      ?.value,
+  ).toBe("Alpha");
+  expect(button(container, "Match Case").getAttribute("aria-pressed")).toBe(
+    "true",
+  );
+  await vi.waitFor(() => {
+    expect(findCount(container)?.textContent).toBe("1 of 3");
+  });
 });
 
 it("does not re-render the document while the reader searches", async () => {

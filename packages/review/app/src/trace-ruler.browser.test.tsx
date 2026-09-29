@@ -190,4 +190,38 @@ describe("TraceRuler", () => {
     });
     expect(container.firstElementChild).not.toBe(null);
   });
+
+  it("reports the event chosen on the ruler for restoration", async () => {
+    container.style.height = "400px";
+    container.style.overflowY = "auto";
+    const selected: number[] = [];
+    await act(async () => {
+      root?.render(
+        <TraceRuler
+          events={[
+            userEvent("First"),
+            assistantEvent("Reply"),
+            userEvent("Second"),
+          ]}
+          onSelectEvent={(index) => selected.push(index)}
+        />,
+      );
+    });
+
+    const tick = container.querySelectorAll<HTMLElement>(
+      ".review-trace-ruler-tick",
+    )[1]!;
+
+    expect(tick).toBeTruthy();
+    const rect = tick.getBoundingClientRect();
+    await act(async () => {
+      tick.dispatchEvent(
+        new MouseEvent("click", {
+          bubbles: true,
+          clientY: (rect.top + rect.bottom) / 2,
+        }),
+      );
+    });
+    expect(selected).toEqual([2]);
+  });
 });

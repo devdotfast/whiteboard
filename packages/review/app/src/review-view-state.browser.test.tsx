@@ -82,6 +82,83 @@ afterEach(() => {
 });
 
 describe("review view state", () => {
+  it("restores a selected commit and file using current commit metadata", () => {
+    const session = testReviewSession();
+    const store = createReviewPanelStore();
+
+    const commit = {
+      commit: "a".repeat(40),
+      parentCommit: "b".repeat(40),
+      subject: "Original title",
+      author: "Author",
+      authoredAt: "2026-09-29",
+      fileCount: 1,
+      additions: 2,
+      deletions: 0,
+    };
+
+    renderViewState({ session, store });
+    act(() => store.getState().openCommitDiff({ commit, file: "file.ts" }));
+    unmount();
+
+    const restored = createReviewPanelStore(
+      readReviewNavigationRestore(session.config, {
+        ...canvas,
+        commits: [{ ...commit, subject: "Current metadata" }],
+      }),
+    );
+
+    expect(restored.getState().view).toBe("diff");
+    expect(restored.getState().diffScope).toEqual({
+      commit: { ...commit, subject: "Current metadata" },
+      file: "file.ts",
+      restoreFile: true,
+    });
+    expect(
+      readReviewNavigationRestore(session.config, { ...canvas, commits: [] })
+        .diffScope,
+    ).toBeNull();
+  });
+
+  it("restores trace identity and event without saving trace content", () => {
+    const session = testReviewSession();
+    const store = createReviewPanelStore();
+    renderViewState({ session, store });
+    act(() =>
+      store
+        .getState()
+        .openTrace({ sessionId: "agent-a", trace: "subagent", eventIndex: 7 }),
+    );
+    unmount();
+
+    const restored = createReviewPanelStore(
+      readReviewNavigationRestore(session.config, canvas),
+    );
+
+    expect(restored.getState().view).toBe("trace");
+    expect(restored.getState().traceSelection).toEqual({
+      sessionId: "agent-a",
+      trace: "subagent",
+      eventIndex: 7,
+    });
+    restored.getState().setAvailableViews(["review", "diff"]);
+    expect(restored.getState().view).toBe("review");
+  });
+
+  it("rejects malformed navigation identifiers", () => {
+    const session = testReviewSession();
+    storeState(session, {
+      diffScope: { commit: "invalid", file: "file.ts" },
+      trace: { sessionId: "agent", eventIndex: -5 },
+    });
+    expect(
+      readPersistedReviewViewState(session.config).diffScope,
+    ).toBeUndefined();
+    expect(
+      readPersistedReviewViewState(session.config).trace?.eventIndex,
+    ).toBeUndefined();
+  });
+
   it("does not restart scroll restoration when live session data changes", () => {
     const session = testReviewSession();
     storeState(session, { scrollTop: 100 });

@@ -1,7 +1,12 @@
 import type { ReviewFindQuery } from "@dev.fast/review-protocol";
-import { createStore } from "zustand/vanilla";
+import { z } from "zod";
+import { persist } from "zustand/middleware";
+import { type StateCreator, createStore } from "zustand/vanilla";
 
+import type { ReviewClientConfig } from "./host/review-client";
 import type { ReviewInlineFindRegistration } from "./review-find";
+import { reviewPersistence } from "./review-persistence";
+import { reviewUiStateKey } from "./review-ui-state";
 
 /** A match holds live DOM and editor handles, so it never outlives the
  * search that produced it. */
@@ -54,8 +59,17 @@ const emptyResults = {
   activeIndex: -1,
 } satisfies Partial<ReviewFindState>;
 
-export function createReviewFindStore() {
-  return createStore<ReviewFindState & ReviewFindActions>()((set, get) => ({
+const savedFindQuery = z.object({
+  text: z.string(),
+  matchCase: z.boolean(),
+  wholeWord: z.boolean(),
+  isRegex: z.boolean(),
+});
+
+type ReviewFindStoreState = ReviewFindState & ReviewFindActions;
+
+export function createReviewFindStore(config?: ReviewClientConfig) {
+  const initialize: StateCreator<ReviewFindStoreState> = (set, get) => ({
     open: false,
     query: { text: "", matchCase: false, wholeWord: false, isRegex: false },
     ...emptyResults,
@@ -123,5 +137,21 @@ export function createReviewFindStore() {
             : state.query,
         generation: state.generation + 1,
       })),
-  }));
+  });
+
+  if (!config) return createStore<ReviewFindStoreState>()(initialize);
+
+  return createStore<ReviewFindStoreState>()(
+    persist(
+      initialize,
+      reviewPersistence<ReviewFindStoreState, ReviewFindQuery>({
+        key: reviewUiStateKey(config, "session", "find"),
+        scope: "session",
+        version: 1,
+        partialize: (state) => state.query,
+        parse: (value) => savedFindQuery.safeParse(value).data,
+        restore: (query, current) => ({ ...current, query }),
+      }),
+    ),
+  );
 }

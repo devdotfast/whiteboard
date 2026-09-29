@@ -7,7 +7,6 @@ import {
   jsonObject,
   jsonProperty,
   jsonString,
-  parseJsonText,
   reviewViewSchema,
 } from "@dev.fast/review-protocol";
 import type { RefObject } from "react";
@@ -18,6 +17,8 @@ import {
   useMemo,
   useRef,
 } from "react";
+import { persist } from "zustand/middleware";
+import { createStore } from "zustand/vanilla";
 
 import type { ReviewClientConfig } from "./host/review-client";
 import { useReviewSession } from "./host/review-session";
@@ -26,13 +27,10 @@ import type {
   ReviewLensSelection,
   ReviewNavigationRestore,
   ReviewPanelStore,
+  TraceSelection,
 } from "./review-panel-store";
-import {
-  readReviewUiState,
-  removeReviewUiState,
-  reviewUiStateKey,
-  writeReviewUiState,
-} from "./review-ui-state";
+import { reviewPersistence } from "./review-persistence";
+import { removeReviewUiState, reviewUiStateKey } from "./review-ui-state";
 import { type ReviewView, offeredReviewViews } from "./review-view-route";
 
 const REVIEW_VIEW_STATE_NAMESPACE = "view-state";
@@ -50,7 +48,7 @@ export interface PersistedReviewViewState {
   overlayTour?: PersistedOverlayTour;
   /** The commit the diff was scoped to; restored while the version lists it. */
   diffScope?: { commit: string; file?: string };
-  trace?: { sessionId: string; trace?: string };
+  trace?: TraceSelection;
   /** The view `scrollTop` was taken on; absent on older records ("review"). */
   scrollView?: ReviewView;
 }
@@ -77,28 +75,12 @@ export function useReviewViewStateSync({
   const session = useReviewSession();
   const key = reviewViewStateKey(session.config);
 
-  const initialState = useMemo(
-    () => readPersistedReviewViewState(session.config),
-    [session.config],
-  );
-
-  const persistedRef = useRef(initialState);
+  const saved = useMemo(() => createReviewViewStateStore(key), [key]);
+  const initialState = useMemo(() => saved.getState(), [saved]);
 
   const persist = useCallback(
-    (next: PersistedReviewViewState) => {
-      // Normalise exactly as a stored value reads back.
-      const normalized = parsePersistedReviewViewState(
-        parseJsonText(JSON.stringify(next)),
-      );
-
-      if (JSON.stringify(normalized) === JSON.stringify(persistedRef.current)) {
-        return;
-      }
-
-      persistedRef.current = normalized;
-      writeReviewUiState("session", key, normalized);
-    },
-    [key],
+    (next: PersistedReviewViewState) => saved.setState(next, true),
+    [saved],
   );
 
   // Layout, so navigation from a host event right after mount still persists.
@@ -118,7 +100,7 @@ export function useReviewViewStateSync({
         // The store holds the tour a legacy panel record restored, so the
         // record is rewritten as an overlay tour, never as a panel.
         persist({
-          ...persistedRef.current,
+          ...saved.getState(),
           panel: undefined,
           ...(state.view !== previous.view && { activeView: state.view }),
           ...(state.lens !== previous.lens && {
@@ -137,6 +119,7 @@ export function useReviewViewStateSync({
               ? {
                   sessionId: state.traceSelection.sessionId,
                   trace: state.traceSelection.trace,
+                  eventIndex: state.traceSelection.eventIndex,
                 }
               : undefined,
           }),
@@ -149,7 +132,7 @@ export function useReviewViewStateSync({
             : undefined,
         });
       }),
-    [panelStore, persist],
+    [panelStore, persist, saved],
   );
 
   // A scroll position belongs to the view it was taken on.
@@ -171,7 +154,7 @@ export function useReviewViewStateSync({
     scrollRegionRef,
     panelStore,
     persist,
-    persistedRef,
+    saved,
     scrollRestorationPending,
   );
 }
@@ -220,7 +203,11 @@ export function readReviewNavigationRestore(
         ? stored.lens
         : null,
     diffScope: scopedCommit
-      ? { commit: scopedCommit, file: stored.diffScope!.file }
+      ? {
+          commit: scopedCommit,
+          file: stored.diffScope!.file,
+          restoreFile: true,
+        }
       : null,
     traceSelection: stored.trace,
     overlayTour: tour
@@ -241,18 +228,31 @@ export function reviewViewStateKey(config: ReviewClientConfig): string {
 export function readPersistedReviewViewState(
   config: ReviewClientConfig,
 ): PersistedReviewViewState {
-  const value = readReviewUiState<JsonValue>(
-    "session",
-    reviewViewStateKey(config),
-  );
-
-  return parsePersistedReviewViewState(value);
+  return createReviewViewStateStore(reviewViewStateKey(config)).getState();
 }
 
 export function clearPersistedReviewViewState(
   config: ReviewClientConfig,
 ): void {
   removeReviewUiState("session", reviewViewStateKey(config));
+}
+
+function createReviewViewStateStore(key: string) {
+  return createStore<PersistedReviewViewState>()(
+    persist(
+      () => ({}),
+      reviewPersistence<PersistedReviewViewState, PersistedReviewViewState>({
+        key,
+        scope: "session",
+        version: 1,
+        legacy: true,
+        migrate: (value) => value,
+        partialize: (state) => state,
+        parse: parsePersistedReviewViewState,
+        restore: (saved) => saved,
+      }),
+    ),
+  );
 }
 
 function useScrollRestoration(
@@ -387,7 +387,7 @@ function useScrollCapture(
   scrollRegionRef: RefObject<HTMLElement | null>,
   panelStore: ReviewPanelStore,
   persist: (state: PersistedReviewViewState) => void,
-  persistedRef: RefObject<PersistedReviewViewState>,
+  saved: ReturnType<typeof createReviewViewStateStore>,
   restorationPending: RefObject<boolean>,
 ): void {
   useEffect(() => {
@@ -405,7 +405,7 @@ function useScrollCapture(
 
       if (restorationPending.current) return;
       persist({
-        ...persistedRef.current,
+        ...saved.getState(),
         scrollTop: scrollRegion.scrollTop,
         scrollView: panelStore.getState().view,
       });
@@ -426,7 +426,7 @@ function useScrollCapture(
 
       if (dirty) write();
     };
-  }, [panelStore, persist, persistedRef, restorationPending, scrollRegionRef]);
+  }, [panelStore, persist, saved, restorationPending, scrollRegionRef]);
 }
 
 function parsePersistedReviewViewState(
@@ -446,7 +446,7 @@ function parsePersistedReviewViewState(
   const diffScope = jsonObject(jsonProperty(value, "diffScope"));
   const commit = jsonString(diffScope && jsonProperty(diffScope, "commit"));
 
-  if (commit !== undefined) {
+  if (commit && /^[0-9a-f]{40}$/i.test(commit)) {
     const file = jsonString(diffScope && jsonProperty(diffScope, "file"));
     state.diffScope = file === undefined ? { commit } : { commit, file };
   }
@@ -456,7 +456,17 @@ function parsePersistedReviewViewState(
 
   if (sessionId !== undefined) {
     const id = jsonString(trace && jsonProperty(trace, "trace"));
-    state.trace = id === undefined ? { sessionId } : { sessionId, trace: id };
+    const eventIndex = jsonNumber(trace?.eventIndex);
+    state.trace = {
+      sessionId,
+      trace: id,
+      eventIndex:
+        eventIndex !== undefined &&
+        Number.isInteger(eventIndex) &&
+        eventIndex >= 0
+          ? eventIndex
+          : undefined,
+    };
   }
 
   const lens = parsePersistedLens(jsonObject(jsonProperty(value, "lens")));

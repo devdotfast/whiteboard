@@ -6,8 +6,9 @@ import { Range } from "../../editor/common/core/range.js";
  *--------------------------------------------------------------------------------------------*/
 
 import "../browser/media/review.css";
-import { $, addDisposableListener, append, Dimension } from "../../base/browser/dom.js";
+import { $, addDisposableListener, append, Dimension, getWindow, scheduleAtNextAnimationFrame } from "../../base/browser/dom.js";
 import { Orientation, SplitView } from "../../base/browser/ui/splitview/splitview.js";
+import { disposableTimeout } from "../../base/common/async.js";
 import { Emitter, Event } from "../../base/common/event.js";
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from "../../base/common/lifecycle.js";
 import { autorun } from "../../base/common/observable.js";
@@ -176,6 +177,8 @@ export class ReviewFilesDiffView extends Disposable {
 	private readonly splitView: SplitView<number>;
 	private readonly changedFilesTree: ReviewChangedFilesTree | undefined;
 	private readonly widget: MultiDiffEditorWidget;
+	private readonly restoreHold = this._register(new MutableDisposable<DisposableStore>());
+	private pendingViewState: IMultiDiffEditorViewState | undefined;
 	private viewModel: MultiDiffEditorViewModel | undefined;
 	private input: ReviewFilesEditorInput | undefined;
 	private readonly readyFiles = new Set<string>();
@@ -355,6 +358,8 @@ export class ReviewFilesDiffView extends Disposable {
 
 	async setInput(input: ReviewFilesEditorInput, viewState: IMultiDiffEditorViewState | undefined): Promise<void> {
 		this.revealHold.clear();
+		this.restoreHold.clear();
+		this.pendingViewState = viewState;
 		this.input = input;
 		this.changedFilesTree?.setFiles(Array.from(new Map(input.entries.map(entry => [entry.file.path, entry.file])).values()));
 		const viewModel = await input.getViewModel();
@@ -363,6 +368,7 @@ export class ReviewFilesDiffView extends Disposable {
 		// The canvas mounts this view without a user gesture, so the widget's
 		// first-change navigation must never take keyboard focus.
 		this.widget.setViewModel(viewModel, { preserveFocus: true, viewState, initialScrollPosition: this.document ? "top" : "firstChange" });
+		if (viewState) this.restoreViewState(viewState);
 		this.changedFilesTree?.setFiles(Array.from(new Map(input.entries.map(entry => [entry.file.path, entry.file])).values()));
 		this.syncFileSelectionFromWidget();
 		this._register(
@@ -537,6 +543,7 @@ export class ReviewFilesDiffView extends Disposable {
 		}
 	}
 	revealSource(source: ReviewDiffLens['ranges'][number], sectionId?: string): void {
+		this.restoreHold.clear();
 		const entry = this.input?.entries.find(entry => (!sectionId || entry.sectionId === sectionId) && (!entry.sectionId || this.progress?.sections?.find(section => section.id === entry.sectionId)?.sources.some(range => range.file === source.file && range.side === source.side && range.fromLine <= source.fromLine && range.toLine >= source.fromLine)) && source.file === (source.side === 'base' ? entry.file.previousPath ?? entry.file.path : entry.file.path));
 		if (!entry) return;
 		if (entry.sectionId && this.collapsedSections.delete(entry.sectionId)) this.headerFactory.refreshHeaders();
@@ -549,6 +556,7 @@ export class ReviewFilesDiffView extends Disposable {
 
 	/** Scroll to a file, or to it once its diff has loaded. */
 	revealFile(path: string): void {
+		this.restoreHold.clear();
 		const entry = this.input?.entries.find((entry) => entry.file.path === path);
 		if (!entry) return;
 		this.pendingPath = this.fileStates.has(path) ? path : undefined;
@@ -606,7 +614,32 @@ export class ReviewFilesDiffView extends Disposable {
 	}
 
 	getViewState(): IMultiDiffEditorViewState | undefined {
-		return this.viewModel ? this.widget.getViewState() : undefined;
+		return this.pendingViewState ?? (this.viewModel ? this.widget.getViewState() : undefined);
+	}
+
+	private restoreViewState(state: IMultiDiffEditorViewState): void {
+		const hold = this.restoreHold.value = new DisposableStore();
+		const frame = hold.add(new MutableDisposable());
+		this.pendingViewState = state;
+		hold.add(toDisposable(() => {
+			this.pendingViewState = undefined;
+			this.widget.clearPendingRestorationState();
+		}));
+		// Streamed files and lazy editor measurements can move an offset after
+		// it first fits. Keep restoring until the reader takes over.
+		const schedule = () => {
+			if (frame.value) return;
+			frame.value = scheduleAtNextAnimationFrame(getWindow(this.root), () => {
+				this.widget.setViewState(state);
+				this.syncFileSelectionFromWidget();
+				frame.clear();
+			});
+		};
+		hold.add(this.widget.onDidChangeContentHeight(schedule));
+		for (const type of ["wheel", "pointerdown", "keydown", "touchstart"])
+			hold.add(addDisposableListener(this.root, type, () => this.restoreHold.clear(), { capture: true, passive: true }));
+		hold.add(disposableTimeout(() => this.restoreHold.clear(), 30_000));
+		schedule();
 	}
 
 	getActiveControl(): IDiffEditor | undefined {
@@ -614,6 +647,7 @@ export class ReviewFilesDiffView extends Disposable {
 	}
 
 	setCollapsed(collapsed: boolean): void {
+		this.restoreHold.clear();
 		this.documentCollapsed = collapsed;
 		for (const item of this.viewModel?.items.get() ?? []) item.collapsed.set(collapsed, undefined);
 	}
@@ -641,9 +675,16 @@ export class ReviewFilesDiffView extends Disposable {
 		// loading or measuring move the target; reveal it again as they settle,
 		// until the reader takes over or the input changes.
 		const hold = this.revealHold.value = new DisposableStore();
-		hold.add(this.widget.onDidChangeContentHeight(() => {
-			if (this.itemFor(resource)) this.widget.reveal(resource, { ...options, highlight: false });
-		}));
+		const frame = hold.add(new MutableDisposable());
+		const schedule = () => {
+			if (frame.value) return;
+			frame.value = scheduleAtNextAnimationFrame(getWindow(this.root), () => {
+				if (this.itemFor(resource)) this.widget.reveal(resource, { ...options, highlight: false });
+				frame.clear();
+			});
+		};
+		hold.add(this.widget.onDidChangeContentHeight(schedule));
+		schedule();
 		for (const type of ["wheel", "pointerdown", "keydown"])
 			hold.add(addDisposableListener(this.diffContainer, type, () => this.revealHold.clear(), { capture: true, passive: true }));
 	}

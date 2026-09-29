@@ -263,8 +263,8 @@ export interface ReviewDiffViewHandle extends ReviewDisposable {
     source: ReviewDiffLens["ranges"][number],
     sectionId?: string,
   ): void;
-  /** Scroll to a changed file, once its diff has loaded. */
-  revealFile?(path: string): void;
+  /** Scroll to a changed file once loaded. Restore requests defer to saved editor position. */
+  revealFile?(path: string, options?: { restore?: boolean }): void;
   onDidError(listener: (message: string) => void): ReviewDisposable;
   /** Fires when the diff scrolls or its topmost file changes. */
   onDidScroll?(

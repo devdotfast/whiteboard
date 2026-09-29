@@ -12,11 +12,16 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useStore } from "zustand";
 
+import { createDatabaseLensStore } from "./database-lens-store";
+import {
+  type DiagramNavigationStore,
+  createDiagramNavigationStore,
+} from "./diagram-navigation-store";
 import { diagramStyles } from "./diagram-styles";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { drawStyles } from "./draw-styles";
@@ -272,16 +277,47 @@ export function DatabaseLens(block: DatabaseLensProps) {
     ),
   );
 
-  // Starts on a restored tour's use case, so closing it keeps that diagram.
-  const [activeUseCaseId, setActiveUseCaseId] = useState<string | null>(
-    () => tourUseCase?.id ?? useCases[0]?.id ?? null,
+  const storageKey = session.storageKey("database-lens", lensId);
+  const useCaseIdsKey = JSON.stringify(useCases.map((useCase) => useCase.id));
+
+  const lensState = useMemo(
+    () =>
+      createDatabaseLensStore(
+        storageKey,
+        useCases.map((useCase) => useCase.id),
+        tourUseCase?.id,
+      ),
+    [storageKey, useCaseIdsKey],
   );
+
+  const activeUseCaseId = useStore(lensState, (state) => state.activeUseCaseId);
+  const { setActiveUseCaseId } = lensState.getState();
+
+  useEffect(() => {
+    if (tourUseCase) setActiveUseCaseId(tourUseCase.id);
+  }, [tourUseCase, setActiveUseCaseId]);
 
   const activeUseCase =
     tourUseCase ??
     useCases.find((useCase) => useCase.id === activeUseCaseId) ??
     useCases[0] ??
     null;
+
+  const diagramKey = session.storageKey(
+    "database-diagram",
+    lensId,
+    activeUseCase?.id,
+  );
+
+  const navigation = useMemo(
+    () =>
+      createDiagramNavigationStore(
+        diagramKey,
+        activeUseCase?.id,
+        initialDatabaseC4ExpandedNodeIds(activeUseCase?.operations ?? []),
+      ),
+    [diagramKey],
+  );
 
   const tourEntries: GuidedTour[] = useMemo(
     () =>
@@ -442,6 +478,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
       <div {...stylex.props(styles.diagram)}>
         {activeUseCase ? (
           <DatabaseUseCaseDiagram
+            navigation={navigation}
             useCase={activeUseCase}
             stores={stores}
             activeAnchor={stage ? tourAnchor : null}
@@ -493,11 +530,13 @@ function databaseUseCaseOptionLabel(useCase: ParsedUseCase) {
 }
 
 function DatabaseUseCaseDiagram({
+  navigation,
   useCase,
   stores,
   activeAnchor,
   onOpenAnchor,
 }: {
+  navigation: DiagramNavigationStore;
   useCase: ParsedUseCase;
   stores: LensStores;
   activeAnchor: string | null;
@@ -515,6 +554,7 @@ function DatabaseUseCaseDiagram({
 
   return (
     <DatabaseC4UseCaseDiagram
+      navigation={navigation}
       useCase={useCase}
       stores={stores}
       resolvedOperations={resolvedOperations}
@@ -525,31 +565,37 @@ function DatabaseUseCaseDiagram({
 }
 
 function DatabaseC4UseCaseDiagram({
+  navigation,
   useCase,
   stores,
   resolvedOperations,
   highlights,
   onOpenAnchor,
 }: {
+  navigation: DiagramNavigationStore;
   useCase: ParsedUseCase;
   stores: LensStores;
   resolvedOperations: ResolvedOperation[];
   highlights: ReturnType<typeof selectDatabaseOperationHighlights>;
   onOpenAnchor: (anchor: string) => void;
 }) {
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const selectedNodeId = useStore(navigation, (state) => state.selectedNodeId);
+
+  const expandedNodeIds = useStore(
+    navigation,
+    (state) => state.expandedNodeIds,
+  );
+
+  const { setSelectedNodeId, setExpandedNodeIds } = navigation.getState();
 
   const defaultExpandedNodeIds = useMemo(
     () => initialDatabaseC4ExpandedNodeIds(resolvedOperations),
     [resolvedOperations],
   );
 
-  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(
-    () => new Set(defaultExpandedNodeIds),
-  );
-
-  const seededDefaultNodeIdsRef = useRef<Set<string>>(
-    new Set(defaultExpandedNodeIds),
+  const seededDefaultNodeIdsRef = useMemo(
+    () => ({ current: new Set(defaultExpandedNodeIds) }),
+    [navigation],
   );
 
   const defaultExpandedNodeIdKey = useMemo(
@@ -575,7 +621,7 @@ function DatabaseC4UseCaseDiagram({
         ? current
         : next.expandedNodeIds;
     });
-  }, [defaultExpandedNodeIdKey, defaultExpandedNodeIds]);
+  }, [defaultExpandedNodeIdKey, defaultExpandedNodeIds, navigation]);
 
   const snapshot = useMemo(
     () =>

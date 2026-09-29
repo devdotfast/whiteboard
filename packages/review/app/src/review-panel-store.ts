@@ -29,6 +29,7 @@ export interface ReviewLensSelection {
 export interface ReviewDiffScope {
   commit: ReviewCommitSummary;
   file?: string;
+  restoreFile?: boolean;
 }
 
 export interface MapFocus {

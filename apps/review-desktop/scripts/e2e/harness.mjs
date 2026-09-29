@@ -538,7 +538,10 @@ export async function createHarness({
   /** Quits the way a reader does, through `workbench.action.quit` (Cmd/Ctrl+Q), then relaunches. */
   async function quitAndRelaunchDesktop() {
     lifecycle("Quitting through workbench.action.quit");
+    const closed = page.waitForEvent("close", { timeout: 30000 });
     await page.keyboard.press("ControlOrMeta+KeyQ");
+    await closed;
+    await closeBrowser();
     await waitForExit("Desktop quit");
     await relaunch();
   }

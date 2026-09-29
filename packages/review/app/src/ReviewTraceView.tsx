@@ -177,7 +177,17 @@ export function ReviewTraceView({
   return (
     <div {...stylex.props(styles.view)}>
       {detail.status === "loaded" && (
-        <TraceRuler events={detail.trace.events} />
+        <TraceRuler
+          events={detail.trace.events}
+          onSelectEvent={(eventIndex) => {
+            if (activeTarget)
+              onSelect({
+                sessionId: activeTarget.sessionId,
+                trace: activeTarget.trace,
+                eventIndex,
+              });
+          }}
+        />
       )}
       <div {...stylex.props(styles.column)}>
         {list.status === "loading" && (

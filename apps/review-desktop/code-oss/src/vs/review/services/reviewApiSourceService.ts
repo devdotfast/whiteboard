@@ -270,6 +270,7 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 
 				return {
 					session: openComparison(current),
+					stateKey: JSON.stringify([current.reviewId, reviewSourceQuery(current)]),
 					sourceUri: URI.from({ scheme: "review-api-diff", authority: current.reviewId, path: `/${current.version}/${current.generation ?? ""}`, query: comparisonQuery(current) }),
 					entries: await Promise.all(entries.map(async file => {
 						// A binary's sides read as empty: it stays folded, so nothing fetches its bytes.

@@ -13,8 +13,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { mountReviewCanvas as mount } from "./desktop-entry";
 import { testReviewBridge } from "./review-session-test-utils";
-import { readReviewUiState, writeReviewUiState } from "./review-ui-state";
-import { reviewViewStateKey } from "./review-view-state";
+import { writeReviewUiState } from "./review-ui-state";
+import {
+  readPersistedReviewViewState,
+  reviewViewStateKey,
+} from "./review-view-state";
 
 let store: ReviewStore, directory: string;
 
@@ -253,14 +256,16 @@ it("reopens a stored fullscreen tour only while its diagram is in the document",
 
   await open({ tourId: sequence!.id!, activeAnchor: step });
   expect(container.querySelector(".diagram-tour-overlay")).toBeTruthy();
-  expect(readReviewUiState("session", key)).toMatchObject({
+  expect(readPersistedReviewViewState(bridge.config)).toMatchObject({
     overlayTour: { tourId: sequence!.id, activeAnchor: step },
   });
 
   // The diagram that owned this tour is gone: nothing reopens or keeps it.
   await open({ tourId: "removed", activeAnchor: step });
   expect(container.querySelector(".diagram-tour-overlay")).toBeNull();
-  expect(readReviewUiState("session", key)).not.toHaveProperty("overlayTour");
+  expect(readPersistedReviewViewState(bridge.config)).not.toHaveProperty(
+    "overlayTour",
+  );
 });
 
 it("resumes a commit diff with its scope", async () => {

@@ -11,11 +11,14 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 
+import type { ReviewClientConfig } from "./host/review-client";
+import { useOptionalReviewSession } from "./host/review-session";
 import { compileReviewFindQuery } from "./review-find-query";
 import {
   type ReviewFindMatch,
@@ -87,7 +90,13 @@ export function ReviewFindProvider({
   host?: ReviewFindHost;
   children: ReactNode;
 }) {
-  const [controller] = useState(() => createFindController(articleRef));
+  const session = useOptionalReviewSession();
+
+  const [controller] = useState(() =>
+    createFindController(articleRef, session?.config),
+  );
+
+  const previousDocument = useRef(documentKey);
 
   useEffect(() => controller.connect(), [controller]);
 
@@ -99,10 +108,11 @@ export function ReviewFindProvider({
 
   // Layout, so a new document's editors never see the old query: their
   // registrations queue a search that runs after this closes.
-  useLayoutEffect(
-    () => controller.resetForDocument(),
-    [controller, documentKey],
-  );
+  useLayoutEffect(() => {
+    if (previousDocument.current === documentKey) return;
+    previousDocument.current = documentKey;
+    controller.resetForDocument();
+  }, [controller, documentKey]);
 
   return (
     <ReviewFindContext.Provider value={controller}>
@@ -116,8 +126,11 @@ type ReviewFindController = ReturnType<typeof createFindController>;
 
 /** Owns everything find touches outside React state: editor registrations,
  * highlights, focus, and scrolling. */
-function createFindController(articleRef: RefObject<HTMLElement | null>) {
-  const store = createReviewFindStore();
+function createFindController(
+  articleRef: RefObject<HTMLElement | null>,
+  config?: ReviewClientConfig,
+) {
+  const store = createReviewFindStore(config);
   const registrations = new Set<ReviewInlineFindRegistration>();
   const inputRef = createRef<HTMLInputElement>();
   let reviewActive = true;
