@@ -168,25 +168,27 @@ export function mountReviewCanvas(
   // must live on an in-scope descendant, so all content renders inside this
   // host element.
   const themeHost = container.ownerDocument.createElement("div");
-  themeHost.className =
-    stylex.props(themeStyles.vars, styles.themeHost).className ?? "";
 
-  const lightClasses = [
-    "review-app--theme-light",
-    ...(stylex.props(themeStyles.light).className ?? "")
-      .split(" ")
-      .filter(Boolean),
-  ];
+  // Recomposed on every change so StyleX settles vars against light.
+  const applyTheme = (theme: "dark" | "light") => {
+    const light = theme === "light";
 
+    container.dataset.reviewTheme = theme;
+    themeHost.className = [
+      light && "review-app--theme-light",
+      stylex.props(
+        themeStyles.vars,
+        styles.themeHost,
+        light && themeStyles.light,
+      ).className,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  };
+
+  applyTheme("dark");
   container.appendChild(themeHost);
   const root = createRoot(themeHost);
-
-  const applyTheme = (theme: "dark" | "light") => {
-    container.dataset.reviewTheme = theme;
-
-    for (const name of lightClasses)
-      themeHost.classList.toggle(name, theme === "light");
-  };
 
   const render = () => {
     themeSubscription?.dispose();

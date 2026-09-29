@@ -20,8 +20,6 @@ export function withClass(
   return {
     ...props,
     className:
-      className && props.className
-        ? `${className} ${props.className}`
-        : (className ?? props.className),
+      [className, props.className].filter(Boolean).join(" ") || undefined,
   };
 }
