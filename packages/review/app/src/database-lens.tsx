@@ -285,7 +285,6 @@ export function DatabaseLens(block: DatabaseLensProps) {
       createDatabaseLensStore(
         storageKey,
         useCases.map((useCase) => useCase.id),
-        tourUseCase?.id,
       ),
     [storageKey, useCaseIdsKey],
   );

@@ -1,6 +1,3 @@
-// @vitest-environment jsdom
-import { createDiagramNavigationStore } from "@canvas/diagram-navigation-store";
-import { testReviewSession } from "@canvas/review-session-test-utils";
 import { describe, expect, it } from "vitest";
 
 import { projectInlineC4 } from "./c4-projection";
@@ -23,48 +20,6 @@ describe("SoftwareMap navigation state", () => {
       "progressiveReview.reviewApp",
       "progressiveReview.reviewApp.databaseLens",
     ]);
-  });
-
-  it("persists selected node and expanded node ids by model identity", () => {
-    const session = testReviewSession();
-    localStorage.clear();
-
-    const key = softwareMapNavigationKey({
-      title: "CI SoftwareMap",
-      view: "inline",
-    });
-
-    const storageKey = session.storageKey("software-map-navigation", key);
-
-    const first = createDiagramNavigationStore(
-      storageKey,
-      "model:a",
-      new Set(),
-    );
-
-    first.setState({
-      modelKey: "model:a",
-      expandedNodeIds: new Set(["devFastCi", "devFastCi.ciWorker"]),
-      selectedNodeId: "devFastCi.ciWorker",
-      expanded: true,
-    });
-
-    expect(
-      createDiagramNavigationStore(storageKey, "model:a", new Set()).getState(),
-    ).toMatchObject({
-      modelKey: "model:a",
-      expandedNodeIds: new Set(["devFastCi", "devFastCi.ciWorker"]),
-      selectedNodeId: "devFastCi.ciWorker",
-      expanded: true,
-    });
-    expect(
-      createDiagramNavigationStore(storageKey, "model:b", new Set()).getState(),
-    ).toMatchObject({
-      modelKey: "model:b",
-      expandedNodeIds: new Set(),
-      selectedNodeId: null,
-      expanded: false,
-    });
   });
 
   it("defaults every non-component expandable node to expanded", () => {

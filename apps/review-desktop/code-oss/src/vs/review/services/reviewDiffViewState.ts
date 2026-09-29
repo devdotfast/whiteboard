@@ -56,7 +56,7 @@ function stableResource(uri: URI): URI {
 }
 
 /** Model generations change on refresh; the comparison and file identities do not. */
-export function stableDiffItemKey(key: string): string | undefined {
+function stableDiffItemKey(key: string): string | undefined {
 	try {
 		const resources = jsonArray(parseJsonText(key));
 		if (resources?.length !== 2 || resources.some(resource => resource !== null && jsonString(resource) === undefined)) return undefined;

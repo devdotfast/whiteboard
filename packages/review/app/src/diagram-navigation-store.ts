@@ -34,7 +34,6 @@ export function createDiagramNavigationStore(
   key: string,
   modelKey: string | undefined,
   expandedNodeIds: Set<string>,
-  legacyWindow = false,
 ) {
   return createStore<DiagramNavigation>()(
     persist(
@@ -61,9 +60,6 @@ export function createDiagramNavigationStore(
       reviewPersistence<DiagramNavigation, SavedDiagram>({
         key,
         scope: "session",
-        version: 1,
-        legacy: legacyWindow,
-        legacyScope: legacyWindow ? "window" : undefined,
         partialize: (state) => ({
           modelKey: state.modelKey,
           expandedNodeIds: [...state.expandedNodeIds],

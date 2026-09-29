@@ -16,80 +16,57 @@ import {
 interface ReviewPersistence<T, Saved> {
   key: string;
   scope: ReviewUiScope;
-  version: number;
   partialize(state: T): Saved;
   parse(value: JsonValue): Saved | undefined;
   restore?(saved: Saved, current: T): T;
-  migrate?(value: JsonValue, version: number): JsonValue;
-  /** Existing unwrapped JSON at this key is treated as version zero. */
+  /** Existing unwrapped JSON at this key is read as version zero. */
   legacy?: boolean;
-  legacyScope?: ReviewUiScope;
 }
+
+const VERSION = 1;
 
 /** Persist only resumable data; validate it before it can enter a live store. */
 export function reviewPersistence<T, Saved>({
   key,
   scope,
-  version,
   partialize,
   parse,
   restore = (saved, current) => ({ ...current, ...saved }),
-  migrate,
   legacy = false,
-  legacyScope,
 }: ReviewPersistence<T, Saved>): PersistOptions<T, unknown> {
   const storage: PersistStorage<unknown> = {
     getItem(name) {
-      const value =
-        readReviewUiState<JsonValue>(scope, name) ??
-        (legacyScope ? readReviewUiState<JsonValue>(legacyScope, name) : null);
+      const value = readReviewUiState<JsonValue>(scope, name);
 
       if (value === null) return null;
 
       if (isJsonObject(value) && "state" in value) {
-        const storedVersion = jsonNumber(value.version);
+        const version = jsonNumber(value.version);
 
-        if (
-          storedVersion === undefined ||
-          !Number.isInteger(storedVersion) ||
-          storedVersion < 0
-        ) {
-          return null;
-        }
-
-        return { state: value.state, version: storedVersion };
+        return version === undefined ? null : { state: value.state, version };
       }
 
       return legacy ? { state: value, version: 0 } : null;
     },
     setItem: (name, value) => writeReviewUiState(scope, name, value),
-    removeItem: (name) => {
-      removeReviewUiState(scope, name);
-
-      if (legacyScope) removeReviewUiState(legacyScope, name);
-    },
+    removeItem: (name) => removeReviewUiState(scope, name),
   };
 
   return {
     name: key,
     storage,
-    version,
+    version: VERSION,
     partialize,
+    // Zustand rewrites storage after a migration and swallows a throw, so an
+    // unreadable record is left in place rather than replaced by defaults.
     migrate: (value, previousVersion) => {
-      if (
-        previousVersion > version ||
-        (!migrate && !(legacy && previousVersion === 0))
-      ) {
+      const json = jsonValueSchema.parse(value);
+
+      if (previousVersion !== 0 || !legacy || parse(json) === undefined) {
         throw new Error(`Unsupported UI state version: ${previousVersion}`);
       }
 
-      const json = jsonValueSchema.parse(value);
-      const migrated = migrate ? migrate(json, previousVersion) : json;
-
-      if (parse(migrated) === undefined)
-        throw new Error("Invalid persisted UI state");
-
-      return migrated;
+      return json;
     },
     merge: (value, current) => {
       const json = jsonValueSchema.safeParse(value);

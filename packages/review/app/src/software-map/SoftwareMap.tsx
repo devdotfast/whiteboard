@@ -359,7 +359,6 @@ function SoftwareMapWithModel({
         storageKey,
         modelKey,
         initialSoftwareMapExpandedNodeIds(model),
-        true,
       ),
     [storageKey, modelKey],
   );

@@ -52,57 +52,6 @@ it("restores graph selection and expansion after window storage is lost", () => 
   });
 });
 
-it("migrates existing map choices out of window storage", () => {
-  sessionStorage.setItem(
-    "map",
-    JSON.stringify({
-      modelKey: "model",
-      selectedNodeId: "api",
-      expandedNodeIds: [],
-      expanded: false,
-    }),
-  );
-
-  const first = createDiagramNavigationStore(
-    "map",
-    "model",
-    new Set(["default"]),
-    true,
-  );
-
-  expect(first.getState().selectedNodeId).toBe("api");
-  sessionStorage.clear();
-  expect(
-    createDiagramNavigationStore(
-      "map",
-      "model",
-      new Set(["default"]),
-      true,
-    ).getState(),
-  ).toMatchObject({
-    selectedNodeId: "api",
-    expandedNodeIds: new Set(),
-  });
-});
-
-it("does not overwrite legacy choices while the map is still loading", () => {
-  sessionStorage.setItem(
-    "map",
-    JSON.stringify({
-      modelKey: "ready",
-      selectedNodeId: "api",
-      expandedNodeIds: [],
-      expanded: true,
-    }),
-  );
-  createDiagramNavigationStore("map", "loading", new Set(), true);
-  expect(localStorage.getItem("map")).toBeNull();
-  expect(
-    createDiagramNavigationStore("map", "ready", new Set(), true).getState()
-      .selectedNodeId,
-  ).toBe("api");
-});
-
 it("retains database use-case choices independently and falls back when removed", () => {
   const cases = ["place-order", "read-order"];
   const first = createDatabaseLensStore("review:database", cases);

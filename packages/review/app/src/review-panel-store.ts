@@ -29,6 +29,7 @@ export interface ReviewLensSelection {
 export interface ReviewDiffScope {
   commit: ReviewCommitSummary;
   file?: string;
+  /** `file` came from a reload; a saved diff position wins over it. */
   restoreFile?: boolean;
 }
 

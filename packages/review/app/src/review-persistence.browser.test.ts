@@ -32,7 +32,6 @@ function createSelection(key = "selection", scope: ReviewUiScope = "session") {
       reviewPersistence<State, { selected: string }>({
         key,
         scope,
-        version: 1,
         legacy: true,
         partialize: ({ selected }) => ({ selected }),
         parse: (value) => savedSchema.safeParse(value).data,

@@ -231,7 +231,6 @@ function createReviewViewStateStore(key: string) {
       reviewPersistence<PersistedReviewViewState, PersistedReviewViewState>({
         key,
         scope: "session",
-        version: 1,
         legacy: true,
         partialize: (state) => state,
         parse: parsePersistedReviewViewState,

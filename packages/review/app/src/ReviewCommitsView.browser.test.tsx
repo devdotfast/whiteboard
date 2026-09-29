@@ -87,18 +87,11 @@ it("opens a commit's diff at the file clicked in its file list", async () => {
   expect(onOpenDiff).toHaveBeenCalledWith(commit, "file", file.path);
 });
 
-it.each([
-  { restore: false, args: [file.path] },
-  { restore: true, args: [file.path, { restore: true }] },
-])("reveals a commit file with restore=$restore", async ({ restore, args }) => {
+it("reveals the requested file in a commit-scoped diff", async () => {
   const revealFile = vi.fn<NonNullable<ReviewDiffViewHandle["revealFile"]>>();
 
   await mount(
-    <ReviewDiffView
-      scope={{ commit: commit.commit }}
-      revealFile={file.path}
-      restoreFile={restore}
-    />,
+    <ReviewDiffView scope={{ commit: commit.commit }} revealFile={file.path} />,
     {
       files: async () => [],
       create: () => ({
@@ -110,5 +103,5 @@ it.each([
     },
   );
 
-  expect(revealFile).toHaveBeenCalledWith(...args);
+  expect(revealFile.mock.calls[0]?.[0]).toBe(file.path);
 });

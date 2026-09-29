@@ -147,7 +147,6 @@ export function createReviewFindStore(config?: ReviewClientConfig) {
       reviewPersistence<ReviewFindStoreState, ReviewFindQuery>({
         key: reviewUiStateKey(config, "session", "find"),
         scope: "session",
-        version: 1,
         partialize: (state) => state.query,
         parse: (value) => savedFindQuery.safeParse(value).data,
         restore: (query, current) => ({ ...current, query }),

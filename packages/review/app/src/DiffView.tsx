@@ -133,6 +133,7 @@ export function ReviewDiffView({
   scope?: ReviewCommitScope;
   /** The path of a file to scroll to once the diff loads. */
   revealFile?: string;
+  /** A saved diff position wins over `revealFile`. */
   restoreFile?: boolean;
 }) {
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -591,11 +592,8 @@ function NativeDiffView({
     if (progress) handle.current?.setProgress?.(progress);
   }, [progress]);
   useLayoutEffect(() => {
-    if (!revealFile) return;
-
-    if (restoreFile)
-      handle.current?.revealFile?.(revealFile, { restore: true });
-    else handle.current?.revealFile?.(revealFile);
+    if (revealFile)
+      handle.current?.revealFile?.(revealFile, { restore: restoreFile });
   }, [revealFile, restoreFile, container, scope?.commit]);
 
   return (
