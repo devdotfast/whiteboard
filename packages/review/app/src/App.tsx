@@ -1,5 +1,6 @@
 import { Button, IconButton } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
+import { textStyles } from "@canvas/ui/text";
 import {
   type ReviewCanvasRange,
   type ReviewCommitSummary,
@@ -1128,7 +1129,12 @@ function MapSettingsControl(): ReactElement {
             role="group"
             aria-label="Node tint"
           >
-            <span {...stylex.props(mapSettingsStyles.groupLabel)}>
+            <span
+              {...stylex.props(
+                textStyles.eyebrow,
+                mapSettingsStyles.groupLabel,
+              )}
+            >
               Map node tint
             </span>
             {(["none", "slate", "mineral"] as const).map((option) => (
@@ -1331,12 +1337,7 @@ const mapSettingsStyles = stylex.create({
   },
   groupLabel: {
     gridColumn: "1 / -1",
-    color: tokens.inkFaint,
     fontFamily: tokens.fontMono,
-    fontSize: "10px",
-    fontWeight: 800,
-    letterSpacing: "0.06em",
-    textTransform: "uppercase",
   },
   tint: {
     minHeight: "32px",

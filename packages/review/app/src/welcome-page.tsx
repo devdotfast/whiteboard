@@ -1,4 +1,5 @@
 import { Button } from "@canvas/ui/button";
+import { textStyles } from "@canvas/ui/text";
 import {
   REVIEW_DISCORD_URL,
   type ReviewCanvasInstallContent,
@@ -350,7 +351,7 @@ export function WelcomePage({
         <div {...stylex.props(homeStyles.content, styles.page)}>
           <div {...stylex.props(styles.columns)}>
             <div {...stylex.props(styles.intro)}>
-              <span {...stylex.props(styles.kicker)}>
+              <span {...stylex.props(textStyles.eyebrow, styles.kicker)}>
                 Welcome to Whiteboard
               </span>
               {updating ? (
@@ -589,9 +590,6 @@ const styles = stylex.create({
   },
   kicker: {
     color: tokens.reviewHomeMeta,
-    fontSize: "11px",
-    letterSpacing: "0.14em",
-    textTransform: "uppercase",
   },
   headline: {
     margin: 0,

@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 
+import { fontSize } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 // Controls shared across the canvas.
@@ -50,6 +51,12 @@ export const controlStyles = stylex.create({
     cursor: { default: null, ":disabled": "default" },
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: { default: null, ":focus-visible": "-1px" },
+  },
+  // Segments set in prose (the welcome and tutorial pages) grow a step.
+  segmentLarge: {
+    height: "26px",
+    padding: "0 12px",
+    fontSize: fontSize.ui,
   },
   segmentTopbar: {
     height: tokens.reviewHeaderHeight,

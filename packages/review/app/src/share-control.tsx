@@ -1,6 +1,7 @@
 import { layer } from "@canvas/scale.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
+import { TextField } from "@canvas/ui/text-field";
 import {
   type ReviewApiClient,
   ReviewApiError,
@@ -248,8 +249,8 @@ export function ShareControl() {
           ) : signedIn ? (
             link ? (
               <>
-                <input
-                  {...stylex.props(styles.link)}
+                <TextField
+                  xstyle={styles.link}
                   aria-label="Share link"
                   readOnly
                   value={link}
@@ -330,19 +331,5 @@ const styles = stylex.create({
   },
   link: {
     width: "100%",
-    boxSizing: "border-box",
-    height: "26px",
-    padding: "0 8px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: {
-      default: tokens.ruleSoft,
-      ":focus-visible": tokens.chromeActiveBorder,
-    },
-    borderRadius: tokens.chromeControlRadius,
-    backgroundColor: tokens.surface,
-    color: tokens.ink,
-    font: "inherit",
-    outline: { default: null, ":focus-visible": "none" },
   },
 });

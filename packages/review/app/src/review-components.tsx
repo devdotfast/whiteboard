@@ -1,4 +1,5 @@
 import { IconButton } from "@canvas/ui/button";
+import { textStyles } from "@canvas/ui/text";
 import type { ReviewComponentProps } from "@review/review-document-data";
 import * as stylex from "@stylexjs/stylex";
 import type {
@@ -130,7 +131,9 @@ function ReviewPanelFrame({
       />
       <header {...stylex.props(panelStyles.header)}>
         <div {...stylex.props(panelStyles.title)}>
-          <span {...stylex.props(panelStyles.kicker)}>{label}</span>
+          <span {...stylex.props(textStyles.eyebrow, panelStyles.kicker)}>
+            {label}
+          </span>
           {title && <h2 {...stylex.props(panelStyles.heading)}>{title}</h2>}
           {titleAccessory}
         </div>
@@ -1019,7 +1022,7 @@ function GuidedTourStopMain({
     <div {...stylex.props(tourStyles.main, active && tourStyles.mainActive)}>
       <header {...stylex.props(tourStyles.header)}>
         <div>
-          <div {...stylex.props(tourStyles.count)}>
+          <div {...stylex.props(textStyles.eyebrow, textStyles.count)}>
             Step {index + 1} of {total}
           </div>
           <div {...stylex.props(tourStyles.titleRow)}>

@@ -2,34 +2,14 @@ import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
 
-// The prompt card and the connect card: a row of tabs, the prompt quoted
-// under them, and the copy action.
+// The prompt card and the connect card: a segmented row of tabs, the prompt
+// quoted under them, and the copy action.
 export const promptStyles = stylex.create({
+  // A segmented control that hugs its tabs.
   tabs: {
-    display: "flex",
-    gap: "4px",
-    padding: "0 0 10px",
-  },
-  tab: {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    padding: "3px 10px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.transparent,
-    borderRadius: "8px",
-    color: { default: tokens.reviewHomeMeta, ":hover": tokens.inkMuted },
-    backgroundColor: tokens.transparent,
-    fontSize: "12px",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
-  },
-  tabActive: {
-    borderColor: tokens.reviewHomeViewToggleActiveBorder,
-    color: tokens.ink,
-    backgroundColor: tokens.reviewHomeViewToggleActiveBg,
-    boxShadow: `0 1px 2px ${tokens.reviewHomeViewToggleShadow}, inset 0 1px ${tokens.reviewHomeViewToggleHighlight}`,
+    width: "fit-content",
+    maxWidth: "100%",
+    marginBottom: "10px",
   },
   // The prompt is the artifact, not chrome: a quote rule separates it from
   // the step's own copy without putting the card frame back.

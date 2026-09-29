@@ -1,3 +1,4 @@
+import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCommitScope,
   ReviewDiffLens,
@@ -302,7 +303,13 @@ export function ReviewDiffView({
             ref={setLensList}
             style={{ flexBasis: `${(1 - cabinetsResize.fraction) * 100}%` }}
           >
-            <div {...stylex.props(styles.heading, styles.lensesHeading)}>
+            <div
+              {...stylex.props(
+                textStyles.eyebrow,
+                styles.heading,
+                styles.lensesHeading,
+              )}
+            >
               Lenses
             </div>
             <div {...stylex.props(styles.hint)}>
@@ -441,7 +448,13 @@ export function ReviewDiffView({
             )}
           />
           <div {...stylex.props(styles.files)}>
-            <div {...stylex.props(styles.heading, styles.filesHeading)}>
+            <div
+              {...stylex.props(
+                textStyles.eyebrow,
+                styles.heading,
+                styles.filesHeading,
+              )}
+            >
               Files <span aria-hidden="true">·</span>{" "}
               {lenses.progress
                 ? lens
@@ -762,11 +775,7 @@ const styles = stylex.create({
     overflow: "hidden",
   },
   heading: {
-    textTransform: "uppercase",
     padding: "10px 14px 6px 16px",
-    color: tokens.inkFaint,
-    fontSize: "11px",
-    letterSpacing: tokens.wbCaps,
   },
   lensesHeading: {
     paddingBottom: "2px",

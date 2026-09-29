@@ -86,10 +86,6 @@
   --review-home-rule: #262c37;
   --review-home-rule-soft: #39404d;
   --review-home-meta: #9199a8;
-  --review-home-view-toggle-active-border: #39404d;
-  --review-home-view-toggle-active-bg: #0c0f15;
-  --review-home-view-toggle-shadow: rgb(0 0 0 / 45%);
-  --review-home-view-toggle-highlight: rgb(255 255 255 / 4%);
   /* Code (Whiteboard Dark): ink at three strengths, the marker for keywords,
      sky and periwinkle for types and functions, straw strings, orchid
      numbers. Every value clears WCAG AA on the editor background. */

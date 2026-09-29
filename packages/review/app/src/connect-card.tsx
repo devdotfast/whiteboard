@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AGENT_LOGOS } from "./agent-logos";
 import { cliInstallReady } from "./cli-install-status";
+import { controlStyles } from "./controls-styles";
 import { CopyIcon, copyText } from "./copy-text";
 import { DrawnCheckIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
@@ -140,7 +141,11 @@ export function ConnectCard({
   return (
     <section aria-label="Connect your agents">
       <div
-        {...stylex.props(promptStyles.tabs, styles.agentTabs)}
+        {...stylex.props(
+          controlStyles.segmented,
+          promptStyles.tabs,
+          styles.agentTabs,
+        )}
         role="group"
         aria-label="Agent"
       >
@@ -152,8 +157,9 @@ export function ConnectCard({
               key={tab}
               type="button"
               {...stylex.props(
-                promptStyles.tab,
-                target === tab && promptStyles.tabActive,
+                controlStyles.segment,
+                controlStyles.segmentLarge,
+                target === tab && controlStyles.segmentActive,
               )}
               aria-pressed={target === tab}
               onClick={() => selectTarget(tab)}
@@ -169,7 +175,7 @@ export function ConnectCard({
         />
       </div>
       <div
-        {...stylex.props(promptStyles.tabs)}
+        {...stylex.props(controlStyles.segmented, promptStyles.tabs)}
         role="group"
         aria-label="Setup method"
       >
@@ -178,9 +184,8 @@ export function ConnectCard({
             key={tab}
             type="button"
             {...stylex.props(
-              promptStyles.tab,
-              styles.mode,
-              mode === tab && promptStyles.tabActive,
+              controlStyles.segment,
+              mode === tab && controlStyles.segmentActive,
             )}
             aria-pressed={mode === tab}
             onClick={() => selectMode(tab)}
@@ -296,9 +301,10 @@ function OtherAgentMenu({
       })}
       onChange={onSelect}
       triggerStyle={[
-        promptStyles.tab,
+        controlStyles.segment,
+        controlStyles.segmentLarge,
         styles.otherTrigger,
-        selected !== undefined && promptStyles.tabActive,
+        selected !== undefined && controlStyles.segmentActive,
       ]}
       triggerProps={{ "aria-pressed": selected !== undefined }}
     >
@@ -429,7 +435,7 @@ const styles = stylex.create({
   // The prompt card's tabs, one agent at a time.
   agentTabs: {
     flexWrap: "wrap",
-    paddingBottom: "6px",
+    marginBottom: "6px",
   },
   logo: {
     width: "14px",
@@ -437,10 +443,6 @@ const styles = stylex.create({
   },
   otherTrigger: {
     paddingRight: "6px",
-  },
-  mode: {
-    padding: "2px 8px",
-    fontSize: "11px",
   },
   bodyWrap: {
     position: "relative",

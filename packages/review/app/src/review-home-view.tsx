@@ -1,4 +1,5 @@
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
+import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewApiSummary,
   ReviewCanvasInstallContent,
@@ -374,7 +375,7 @@ function DismissedSection({
     >
       <button
         type="button"
-        {...stylex.props(styles.dismissedToggle)}
+        {...stylex.props(textStyles.eyebrow, styles.dismissedToggle)}
         aria-expanded={expanded}
         onClick={onToggle}
       >
@@ -1247,10 +1248,8 @@ const styles = stylex.create({
     borderStyle: "none",
     borderColor: "currentcolor",
     backgroundColor: tokens.transparent,
-    font: `600 11px ${tokens.fontMono}`,
-    letterSpacing: "0.1em",
-    textTransform: "uppercase",
     color: tokens.inkMuted,
+    fontFamily: tokens.fontMono,
   },
   dismissedCount: {
     fontWeight: 500,

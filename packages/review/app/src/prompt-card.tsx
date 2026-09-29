@@ -1,6 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useRef, useState } from "react";
 
+import { controlStyles } from "./controls-styles";
 import { CopyIcon, copyText } from "./copy-text";
 import { promptStyles } from "./prompt-styles";
 
@@ -74,7 +75,7 @@ export function PromptCard() {
   return (
     <section {...stylex.props(styles.card)} aria-label="Whiteboard prompt">
       <div
-        {...stylex.props(promptStyles.tabs)}
+        {...stylex.props(controlStyles.segmented, promptStyles.tabs)}
         role="group"
         aria-label="What to review"
       >
@@ -83,8 +84,9 @@ export function PromptCard() {
             key={tab}
             type="button"
             {...stylex.props(
-              promptStyles.tab,
-              kind === tab && promptStyles.tabActive,
+              controlStyles.segment,
+              controlStyles.segmentLarge,
+              kind === tab && controlStyles.segmentActive,
             )}
             aria-pressed={kind === tab}
             onClick={() => selectKind(tab)}

@@ -1,4 +1,5 @@
 import { Button } from "@canvas/ui/button";
+import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCanvasSettingsContent,
   ReviewCliInstallStatus,
@@ -331,7 +332,9 @@ export function SettingsPage({
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section {...stylex.props(styles.section)} aria-label={label}>
-      <h2 {...stylex.props(styles.sectionLabel)}>{label}</h2>
+      <h2 {...stylex.props(textStyles.eyebrow, styles.sectionLabel)}>
+        {label}
+      </h2>
       {children}
     </section>
   );

@@ -1,5 +1,6 @@
 import { IconButton } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
+import { textStyles } from "@canvas/ui/text";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useState } from "react";
 
@@ -305,7 +306,13 @@ export function ReviewToc({
           showRail && styles.bodyRail,
         )}
       >
-        <div {...stylex.props(styles.head, showRail && styles.headRail)}>
+        <div
+          {...stylex.props(
+            textStyles.eyebrow,
+            styles.head,
+            showRail && styles.headRail,
+          )}
+        >
           Contents
         </div>
         <ul {...stylex.props(styles.list, showRail && styles.listRail)}>
@@ -496,12 +503,7 @@ const styles = stylex.create({
     paddingLeft: "32px",
     fontFamily: tokens.fontMono,
     lineHeight: "32px",
-    textTransform: "uppercase",
     whiteSpace: "nowrap",
-    color: tokens.inkFaint,
-    fontSize: "11px",
-    fontWeight: 400,
-    letterSpacing: tokens.wbCaps,
   },
   headRail: {
     height: "auto",

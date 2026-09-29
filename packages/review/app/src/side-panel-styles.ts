@@ -99,12 +99,7 @@ export const panelStyles = stylex.create({
   },
   kicker: {
     flex: "0 0 auto",
-    color: tokens.inkFaint,
     fontFamily: tokens.fontMono,
-    fontSize: "10px",
-    fontWeight: 700,
-    letterSpacing: "0.08em",
-    textTransform: "uppercase",
   },
   heading: {
     overflow: "hidden",
@@ -308,13 +303,6 @@ export const tourStyles = stylex.create({
     justifyContent: "space-between",
     gap: "14px",
     marginBottom: "12px",
-  },
-  count: {
-    color: tokens.inkFaint,
-    fontSize: "11px",
-    fontWeight: 700,
-    letterSpacing: "0.08em",
-    textTransform: "uppercase",
   },
   titleRow: {
     display: "flex",

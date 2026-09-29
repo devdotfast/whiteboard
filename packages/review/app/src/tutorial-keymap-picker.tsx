@@ -3,8 +3,8 @@ import type { ReviewComponentProps } from "@review/review-document-data";
 import * as stylex from "@stylexjs/stylex";
 import { useState } from "react";
 
+import { controlStyles } from "./controls-styles";
 import { withClass } from "./stylex-props";
-import { tokens } from "./tokens.stylex";
 import { useTutorial } from "./tutorial-context";
 
 const choices: readonly { value: ReviewKeymapChoice; label: string }[] = [
@@ -23,7 +23,11 @@ export function TutorialKeymapPicker(
   return (
     // The class is the tutorial's target.
     <div
-      {...withClass("tutorial-keymap-picker", styles.group)}
+      {...withClass(
+        "tutorial-keymap-picker",
+        controlStyles.segmented,
+        styles.group,
+      )}
       role="group"
       aria-label="Keybindings"
     >
@@ -38,9 +42,9 @@ export function TutorialKeymapPicker(
             aria-pressed={pressed}
             disabled={disabled}
             {...stylex.props(
-              styles.button,
-              pressed && styles.pressed,
-              disabled && styles.disabled,
+              controlStyles.segment,
+              controlStyles.segmentLarge,
+              pressed && controlStyles.segmentActive,
             )}
             onClick={() => {
               if (!tutorial) return;
@@ -58,46 +62,10 @@ export function TutorialKeymapPicker(
   );
 }
 
-// The same segmented control as the view switcher in the top bar: same
-// tokens for the group, the resting and hover text, and the raised active
-// segment. Inline-flex so the tutorial ring hugs the group. Prose sits larger
-// than chrome, so the buttons grow a step: 28px tall, 13px type, wider
-// padding.
+// Inline-flex so the tutorial ring hugs the group.
 const styles = stylex.create({
   group: {
     display: "inline-flex",
-    gap: "2px",
     margin: "6px 0 12px",
-    padding: "2px",
-    borderRadius: `calc(${tokens.chromeControlRadius} + 2px)`,
-    backgroundColor: tokens.chromeHoverBg,
-  },
-  button: {
-    height: "28px",
-    padding: "0 14px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: tokens.chromeControlRadius,
-    backgroundColor: {
-      default: tokens.transparent,
-      ":hover:not(:disabled)": tokens.surface,
-    },
-    color: {
-      default: tokens.chromeFgMuted,
-      ":hover:not(:disabled)": tokens.chromeFg,
-    },
-    cursor: "pointer",
-    font: `${tokens.chromeFontWeight} 13px ${tokens.chromeFont}`,
-    whiteSpace: "nowrap",
-  },
-  pressed: {
-    backgroundColor: tokens.surfaceRaised,
-    color: tokens.chromeFg,
-    boxShadow: `0 0 0 1px ${tokens.ruleSoft}`,
-  },
-  disabled: {
-    cursor: "default",
-    opacity: 0.6,
   },
 });

@@ -1,6 +1,7 @@
-import { layer } from "@canvas/scale.stylex";
+import { fontSize, layer } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
+import { fieldStyles } from "@canvas/ui/text-field";
 import type {
   ReviewFindQuery,
   ReviewInlineEditorHandle,
@@ -356,6 +357,8 @@ function ReviewFindWidget({
     >
       <div
         {...stylex.props(
+          fieldStyles.box,
+          fieldStyles.shell,
           styles.inputShell,
           invalid ? styles.inputShellInvalid : null,
         )}
@@ -634,14 +637,8 @@ const styles = stylex.create({
     alignItems: "center",
     flex: 1,
     minWidth: "160px",
-    height: "26px",
     gap: "1px",
     padding: "0 2px 0 6px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: { default: tokens.ruleSoft, ":focus-within": tokens.accent },
-    borderRadius: "4px",
-    backgroundColor: tokens.controlBg,
   },
   inputShellInvalid: {
     borderColor: tokens.changeRemoved,
@@ -657,7 +654,7 @@ const styles = stylex.create({
     backgroundColor: "transparent",
     color: tokens.ink,
     fontFamily: tokens.chromeFont,
-    fontSize: "12px",
+    fontSize: fontSize.body,
     outline: "none",
   },
   options: {

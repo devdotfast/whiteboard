@@ -76,7 +76,6 @@ export const themeStyles = stylex.create({
     "--chrome-font-size-small": "11px",
     "--chrome-hover-bg": "var(--well)",
     "--chrome-border": "var(--rule)",
-    "--wb-caps": "0.08em",
   },
   app: {
     position: "relative",
@@ -174,10 +173,6 @@ export const themeStyles = stylex.create({
     "--review-home-rule": "var(--rule)",
     "--review-home-rule-soft": "var(--rule-soft)",
     "--review-home-meta": "#5d6472",
-    "--review-home-view-toggle-active-border": "#d8dbe1",
-    "--review-home-view-toggle-active-bg": "#ffffff",
-    "--review-home-view-toggle-shadow": "rgba(21, 24, 30, 0.06)",
-    "--review-home-view-toggle-highlight": "rgba(255, 255, 255, 0.8)",
     // Code (Whiteboard Light): petrol and navy for types and functions, sepia
     // strings, plum numbers; inserted and deleted sit one step deeper than the
     // change colors so they hold AA as text on white.

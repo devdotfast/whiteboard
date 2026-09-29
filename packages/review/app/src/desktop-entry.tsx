@@ -1,3 +1,4 @@
+import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCanvasContent,
   ReviewCanvasHandle,
@@ -131,7 +132,9 @@ function CanvasShell({
 }) {
   return (
     <main {...stylex.props(styles.shell)}>
-      <div {...stylex.props(styles.brand)}>/dev/fast Whiteboard</div>
+      <div {...stylex.props(textStyles.eyebrow, styles.brand)}>
+        /dev/fast Whiteboard
+      </div>
       <h1 {...stylex.props(styles.shellTitle)}>{title}</h1>
       {children}
     </main>
@@ -300,9 +303,5 @@ const styles = stylex.create({
   },
   brand: {
     color: tokens.inkMuted,
-    fontSize: "12px",
-    fontWeight: 650,
-    letterSpacing: "0.08em",
-    textTransform: "uppercase",
   },
 });

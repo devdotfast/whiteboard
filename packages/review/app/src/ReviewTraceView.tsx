@@ -1,5 +1,8 @@
 import { Button } from "@canvas/ui/button";
+import { Chip } from "@canvas/ui/chip";
 import { surfaceStyles } from "@canvas/ui/surface";
+import { textStyles } from "@canvas/ui/text";
+import { fieldStyles } from "@canvas/ui/text-field";
 import { type ReviewAgentTraceSession } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -190,9 +193,11 @@ export function ReviewTraceView({
         )}
         {sourceChoices.length > 1 && (
           <label {...stylex.props(styles.source)}>
-            <span {...stylex.props(styles.kicker)}>Trace source</span>
+            <span {...stylex.props(textStyles.eyebrow, styles.kicker)}>
+              Trace source
+            </span>
             <select
-              {...stylex.props(styles.sourceSelect)}
+              {...stylex.props(fieldStyles.box)}
               aria-label="Trace source"
               value={activeSource ?? ""}
               onChange={(event) => {
@@ -213,7 +218,9 @@ export function ReviewTraceView({
         {list.status === "loaded" &&
           (list.storageError !== null || !list.configured) && (
             <div {...stylex.props(styles.empty)}>
-              <span {...stylex.props(styles.kicker)}>Agent trace</span>
+              <span {...stylex.props(textStyles.eyebrow, styles.kicker)}>
+                Agent trace
+              </span>
               {list.storageError !== null ? (
                 <p {...stylex.props(styles.flush)}>{list.storageError}</p>
               ) : (
@@ -233,7 +240,9 @@ export function ReviewTraceView({
           list.storageError === null &&
           sessions.length === 0 && (
             <div {...stylex.props(styles.empty)}>
-              <span {...stylex.props(styles.kicker)}>Agent trace</span>
+              <span {...stylex.props(textStyles.eyebrow, styles.kicker)}>
+                Agent trace
+              </span>
               <p {...stylex.props(styles.flush)}>
                 No agent sessions are recorded for this change range.
               </p>
@@ -256,7 +265,7 @@ export function ReviewTraceView({
               aria-expanded={pickerOpen}
               onClick={() => setPickerOpen((open) => !open)}
             >
-              <span {...stylex.props(styles.pickerHarness)}>
+              <span {...stylex.props(textStyles.eyebrow, styles.pickerHarness)}>
                 {harnessTag(activeHarness, activeTarget.isSubagent)}
               </span>
               <span {...stylex.props(styles.pickerTitle)}>{activeTitle}</span>
@@ -303,6 +312,7 @@ export function ReviewTraceView({
                       <div {...stylex.props(styles.pickerItemLeft)}>
                         <span
                           {...stylex.props(
+                            textStyles.eyebrow,
                             styles.pickerItemHarness,
                             isActive && styles.pickerItemHarnessActive,
                           )}
@@ -319,9 +329,7 @@ export function ReviewTraceView({
                         </span>
                       </div>
                       {target.notSynced ? (
-                        <span {...stylex.props(styles.pickerItemBadge)}>
-                          not synced
-                        </span>
+                        <Chip xstyle={styles.pickerItemBadge}>not synced</Chip>
                       ) : isActive ? (
                         <span {...stylex.props(styles.pickerItemCheck)}>✓</span>
                       ) : null}
@@ -427,7 +435,9 @@ export function ReviewTraceDocument({
   return (
     <>
       <header {...stylex.props(styles.header)}>
-        <span {...stylex.props(styles.kicker)}>Agent trace</span>
+        <span {...stylex.props(textStyles.eyebrow, styles.kicker)}>
+          Agent trace
+        </span>
         <h2 {...stylex.props(styles.title)}>
           {trace.title ??
             firstCommitSubject(session) ??

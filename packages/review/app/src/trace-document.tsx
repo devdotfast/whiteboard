@@ -1,3 +1,5 @@
+import { Chip, chipStyles } from "@canvas/ui/chip";
+import { textStyles } from "@canvas/ui/text";
 import type { ReviewAgentTraceEvent } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -337,7 +339,9 @@ export function TraceEvent({
         >
           <ThinkingSummary />
           <figure {...stylex.props(styles.figure)}>
-            <figcaption {...stylex.props(styles.figureHead)}>
+            <figcaption
+              {...stylex.props(textStyles.eyebrow, styles.figureHead)}
+            >
               <span>Thinking</span>
             </figcaption>
             <div
@@ -398,7 +402,11 @@ export function TraceToolRow({
         {event.deletions !== undefined && event.deletions > 0 && (
           <span {...stylex.props(styles.removed)}>−{event.deletions}</span>
         )}
-        {event.error && <span {...stylex.props(styles.errorFlag)}>failed</span>}
+        {event.error && (
+          <span {...stylex.props(textStyles.eyebrow, styles.errorFlag)}>
+            failed
+          </span>
+        )}
       </span>
       {expandable && (
         <span {...stylex.props(styles.centered)} aria-hidden="true">
@@ -416,7 +424,7 @@ export function TraceToolRow({
     <details {...stylex.props(styles.tool, traceToolMarker)}>
       <summary {...stylex.props(styles.summary)}>{row}</summary>
       <figure {...stylex.props(styles.figure)}>
-        <figcaption {...stylex.props(styles.figureHead)}>
+        <figcaption {...stylex.props(textStyles.eyebrow, styles.figureHead)}>
           <span>{event.command ? "Shell" : event.tool}</span>
         </figcaption>
         <pre {...stylex.props(styles.figureBody)}>
@@ -669,7 +677,7 @@ export function ElidedMessage({
           <button
             key={index}
             type="button"
-            {...stylex.props(styles.lensChip)}
+            {...stylex.props(chipStyles.pill, styles.lensChip)}
             title="Show the hidden text"
             onClick={onExpand}
           >
@@ -695,7 +703,7 @@ export function ElidedMessage({
       <details {...stylex.props(styles.tool, traceToolMarker)} open>
         <ThinkingSummary />
         <figure {...stylex.props(styles.figure)}>
-          <figcaption {...stylex.props(styles.figureHead)}>
+          <figcaption {...stylex.props(textStyles.eyebrow, styles.figureHead)}>
             <span>Thinking</span>
           </figcaption>
           <div {...stylex.props(styles.figureBody, styles.figureBodyThinking)}>
@@ -727,9 +735,13 @@ export function TraceGapChip({
       onClick={onExpand}
     >
       <span {...stylex.props(styles.lensLine)} />
-      <span {...stylex.props(styles.lensRowChip)}>
+      <Chip
+        variant="pill"
+        size="large"
+        xstyle={[textStyles.eyebrow, styles.lensRowChip]}
+      >
         ⋯ {count} hidden {count === 1 ? "event" : "events"}
-      </span>
+      </Chip>
       <span {...stylex.props(styles.lensLine)} />
     </button>
   );
@@ -756,7 +768,15 @@ export function TraceCollapseRow({
       onClick={onCollapse}
     >
       <span {...stylex.props(styles.lensLine, styles.lensLineSolid)} />
-      <span {...stylex.props(styles.lensRowChip, styles.lensRowChipSolid)}>
+      <Chip
+        variant="pill"
+        size="large"
+        xstyle={[
+          textStyles.eyebrow,
+          styles.lensRowChip,
+          styles.lensRowChipSolid,
+        ]}
+      >
         <svg
           viewBox="0 0 16 16"
           {...stylex.props(styles.collapseChevron)}
@@ -769,7 +789,7 @@ export function TraceCollapseRow({
           )}
         </svg>
         collapse {span.count} {span.count === 1 ? "event" : "events"}
-      </span>
+      </Chip>
       <span {...stylex.props(styles.lensLine, styles.lensLineSolid)} />
     </button>
   );
@@ -1078,7 +1098,13 @@ export function TraceTurn({
 
       workElement = (
         <details {...stylex.props(traceWorkedMarker)} open={openWorked}>
-          <summary {...stylex.props(styles.summary, styles.workedSummary)}>
+          <summary
+            {...stylex.props(
+              styles.summary,
+              textStyles.eyebrow,
+              styles.workedSummary,
+            )}
+          >
             <span>{workedLabel}</span>
             <span {...stylex.props(styles.inlineCentered)} aria-hidden="true">
               <ChevronIcon xstyle={styles.workedChevronIcon} />

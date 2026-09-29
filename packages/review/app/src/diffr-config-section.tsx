@@ -1,4 +1,5 @@
 import { Button } from "@canvas/ui/button";
+import { TextField } from "@canvas/ui/text-field";
 import {
   type JsonValue,
   type ReviewDiffrConfig,
@@ -215,8 +216,8 @@ export function DiffrConfigSection({
                       />
                     </SettingRow>
                     <SettingRow label="API key">
-                      <input
-                        {...stylex.props(styles.input)}
+                      <TextField
+                        xstyle={styles.input}
                         aria-label="API key"
                         type="password"
                         autoComplete="off"
@@ -237,8 +238,8 @@ export function DiffrConfigSection({
                       blank to keep the current key.
                     </p>
                     <SettingRow label="Model">
-                      <input
-                        {...stylex.props(styles.input)}
+                      <TextField
+                        xstyle={styles.input}
                         aria-label="Model"
                         value={draft.model}
                         onChange={(event) =>
@@ -386,8 +387,8 @@ function ContextLines({
 
   return (
     <div>
-      <input
-        {...stylex.props(styles.input)}
+      <TextField
+        xstyle={styles.input}
         aria-label="Context lines"
         type="number"
         min={0}

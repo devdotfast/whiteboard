@@ -1,5 +1,6 @@
 import { Button, IconButton } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
+import { fieldStyles } from "@canvas/ui/text-field";
 import {
   type ReviewBugReportRequest,
   parseReviewBugReportResponse,
@@ -250,7 +251,11 @@ export function BugReportControl({
               <label {...stylex.props(styles.description)}>
                 <span>What happened? (optional)</span>
                 <textarea
-                  {...stylex.props(styles.textarea)}
+                  {...stylex.props(
+                    fieldStyles.box,
+                    fieldStyles.multiline,
+                    styles.textarea,
+                  )}
                   autoFocus
                   rows={7}
                   value={description}
@@ -391,15 +396,7 @@ const styles = stylex.create({
     fontWeight: 600,
   },
   textarea: {
-    boxSizing: "border-box",
     width: "100%",
-    resize: "vertical",
-    ...chromeBorder,
-    borderRadius: "5px",
-    padding: "9px",
-    backgroundColor: tokens.tray,
-    color: tokens.ink,
-    font: `12px/1.5 ${tokens.fontMono}`,
   },
   byteCount: {
     marginTop: "-10px",

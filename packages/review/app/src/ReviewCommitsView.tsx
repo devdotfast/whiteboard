@@ -1,4 +1,5 @@
 import { IconButton } from "@canvas/ui/button";
+import { textStyles } from "@canvas/ui/text";
 import {
   type ReviewCommitSummary,
   type ReviewDiffFileWire,
@@ -90,7 +91,9 @@ function CommitGroups({
         >
           <circle cx="7" cy="7" r="3" />
         </svg>
-        <h2 {...stylex.props(styles.dateHeading)}>Commits on {group.label}</h2>
+        <h2 {...stylex.props(textStyles.eyebrow, styles.dateHeading)}>
+          Commits on {group.label}
+        </h2>
       </div>
       <div {...stylex.props(styles.timeline)}>
         {group.commits.map((commit) => (
@@ -331,10 +334,6 @@ const styles = stylex.create({
     alignItems: "center",
     gap: "10px",
     padding: "8px 0",
-    color: tokens.inkFaint,
-    fontSize: "11px",
-    letterSpacing: tokens.wbCaps,
-    textTransform: "uppercase",
   },
   laterDate: {
     paddingTop: "10px",
@@ -349,11 +348,6 @@ const styles = stylex.create({
   },
   dateHeading: {
     margin: 0,
-    color: tokens.inkFaint,
-    fontSize: "10px",
-    fontWeight: 500,
-    letterSpacing: "0.06em",
-    textTransform: "uppercase",
   },
   timeline: {
     position: "relative",

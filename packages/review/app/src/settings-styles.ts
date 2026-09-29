@@ -24,10 +24,6 @@ export const settingsStyles = stylex.create({
     borderBottomStyle: "solid",
     borderBottomColor: tokens.reviewHomeRule,
     color: tokens.reviewHomeMeta,
-    fontSize: "11px",
-    fontWeight: 600,
-    letterSpacing: "0.09em",
-    textTransform: "uppercase",
   },
   row: {
     display: "grid",
@@ -86,15 +82,6 @@ export const settingsStyles = stylex.create({
   },
   input: {
     minWidth: "200px",
-    padding: "4px 8px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.reviewHomeRuleSoft,
-    borderRadius: "5px",
-    color: "inherit",
-    backgroundColor: tokens.transparent,
-    font: "inherit",
-    opacity: { default: null, ":disabled": 0.5 },
   },
   diffr: {
     marginTop: "8px",

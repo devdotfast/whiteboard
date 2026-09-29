@@ -1,6 +1,7 @@
 import { MinusIcon, PlusIcon } from "@canvas/icons";
 import { radius } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
+import { Kbd } from "@canvas/ui/kbd";
 import * as stylex from "@stylexjs/stylex";
 import {
   type CSSProperties,
@@ -135,9 +136,7 @@ export function SoftwareMapHotkeysTab({
                 >
                   <span {...stylex.props(styles.keys)}>
                     {item.keys.map((key) => (
-                      <kbd key={key} {...stylex.props(styles.key)}>
-                        {key}
-                      </kbd>
+                      <Kbd key={key}>{key}</Kbd>
                     ))}
                   </span>
                   <span {...stylex.props(styles.itemLabel)}>{item.label}</span>
@@ -288,22 +287,6 @@ const styles = stylex.create({
     display: "inline-flex",
     alignItems: "center",
     gap: "2px",
-  },
-  key: {
-    display: "inline-grid",
-    placeItems: "center",
-    minWidth: "16px",
-    height: "17px",
-    padding: "0 4px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.ruleSoft,
-    borderRadius: "4px",
-    backgroundColor: tokens.bg,
-    color: tokens.ink,
-    fontFamily: tokens.fontMono,
-    fontSize: "10px",
-    lineHeight: 1,
   },
   itemLabel: {
     color: tokens.inkFaint,

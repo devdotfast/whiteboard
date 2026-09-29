@@ -1,3 +1,4 @@
+import { Chip } from "@canvas/ui/chip";
 import { type JsonValue, isStringValue } from "@dev.fast/review-protocol";
 import type { DatabaseLensBlockProps } from "@review/database-lens-block";
 import { type DiffSelection } from "@review/lens-selection";
@@ -402,7 +403,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
     >
       <header {...stylex.props(diagramStyles.header, styles.header)}>
         <div {...stylex.props(diagramStyles.headerMain)}>
-          <span {...stylex.props(diagramStyles.kindBadge)}>DB</span>
+          <Chip>DB</Chip>
           <span {...stylex.props(diagramStyles.title)} data-review-copy-prose>
             {title ?? "Database lens"}
           </span>
