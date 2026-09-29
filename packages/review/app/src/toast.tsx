@@ -2,6 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useCallback, useEffect, useState } from "react";
 
 import { useOptionalReviewSession } from "./host/review-session";
+import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 
 type ToastMessage = { kind: "success" | "error"; text: string };
@@ -33,7 +34,14 @@ export function useToast(durationMs = 6_000) {
 
 function Toast({ message }: { message: ToastMessage }) {
   return (
-    <div {...stylex.props(styles.toast, styles[message.kind])} role="status">
+    <div
+      {...stylex.props(
+        shellStyles.topbarItem,
+        styles.toast,
+        styles[message.kind],
+      )}
+      role="status"
+    >
       {message.text}
     </div>
   );

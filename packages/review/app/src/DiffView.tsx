@@ -32,6 +32,7 @@ import { useReviewSession } from "./host/review-session";
 import { lensToggleMarker } from "./markers.stylex";
 import { useReviewDiffFiles } from "./review-diff-files-context";
 import { useReviewLenses } from "./review-lenses";
+import { shellStyles } from "./shell-styles";
 import {
   useBottomSheetResize,
   useRightPanelResize,
@@ -431,8 +432,8 @@ export function ReviewDiffView({
           </div>
           <div
             {...cabinetsResize.separatorProps}
-            {...withClass(
-              "side-panel-sheet-resizer",
+            {...stylex.props(
+              shellStyles.sheetResizer,
               styles.cabinetsResizer,
               cabinetsResize.isResizing && styles.resizing,
             )}
@@ -472,8 +473,8 @@ export function ReviewDiffView({
       </aside>
       <div
         {...sidebarResize.separatorProps}
-        {...withClass(
-          "side-panel-resizer",
+        {...stylex.props(
+          shellStyles.resizer,
           styles.sidebarResizer,
           sidebarResize.isResizing && styles.resizing,
         )}
@@ -587,12 +588,13 @@ function NativeDiffView({
         ref={setContainer}
         {...withClass(
           "review-diff-view-host",
+          styles.host,
           inWorkspace && styles.hostInWorkspace,
         )}
         style={hidden ? { display: "none" } : undefined}
       />
       {!hidden && error && (
-        <div role="alert" className="review-diff-view-error">
+        <div role="alert" {...stylex.props(styles.viewError)}>
           {error}
         </div>
       )}
@@ -940,9 +942,26 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
   },
+  // The workbench mounts its diff widgets here and sizes them from this box.
+  host: {
+    position: "relative",
+    gridRow: { default: 1, ":is(.review-diff-view--scoped *)": 2 },
+    minHeight: 0,
+    height: "100%",
+  },
   hostInWorkspace: {
     flex: 1,
     height: "auto",
+  },
+  viewError: {
+    display: "flex",
+    alignItems: "center",
+    gridRow: 1,
+    alignSelf: "start",
+    padding: "0 10px",
+    backgroundColor: tokens.surface,
+    color: tokens.inkFaint,
+    font: `11px/1 ${tokens.fontMono}`,
   },
   error: {
     padding: "8px 12px",

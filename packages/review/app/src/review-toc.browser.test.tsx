@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { documentStyles } from "./document-styles";
 import { type ReviewRoots, ReviewRootsProvider } from "./review-root-context";
 import { ReviewToc } from "./review-toc";
+import { shellStyles } from "./shell-styles";
 
 import "./styles.css";
 
@@ -50,11 +51,11 @@ describe("ReviewToc", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
     shell = document.createElement("main");
-    shell.className = "review-document-shell";
+    shell.className = stylex.props(shellStyles.documentShell).className!;
     region = document.createElement("div");
-    region.className = "review-view-region--review";
+    region.className = `review-view-region--review ${stylex.props(shellStyles.reviewRegion).className}`;
     view = document.createElement("div");
-    view.className = "review-document-view";
+    view.className = `review-document-view ${stylex.props(shellStyles.documentView).className}`;
     mount = document.createElement("div");
     view.append(mount);
     region.append(view);

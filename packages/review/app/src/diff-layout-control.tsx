@@ -1,4 +1,5 @@
 import type { ReviewDiffLayout } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
   useCallback,
@@ -11,6 +12,8 @@ import { controlStyles } from "./controls-styles";
 import { useCanvasMenu } from "./host/canvas-ui";
 import { useReviewSession } from "./host/review-session";
 import { SlidersIcon } from "./icons";
+import { shellStyles } from "./shell-styles";
+import { tokens } from "./tokens.stylex";
 import { captureClientError, captureUiEvent } from "./ui-telemetry";
 import { useTooltip } from "./use-tooltip";
 
@@ -73,10 +76,10 @@ export function DiffLayoutControl(): ReactElement {
   });
 
   return (
-    <div className="review-diff-settings">
+    <div {...stylex.props(shellStyles.topbarItem, styles.settings)}>
       <button
         type="button"
-        className="review-diff-settings-button"
+        {...stylex.props(styles.button)}
         aria-label="Diff settings"
         ref={tooltip}
         {...menu.triggerProps}
@@ -86,3 +89,42 @@ export function DiffLayoutControl(): ReactElement {
     </div>
   );
 }
+
+const expanded = ':is([aria-expanded="true"])';
+
+const styles = stylex.create({
+  settings: {
+    position: "relative",
+  },
+  button: {
+    display: "grid",
+    alignItems: "center",
+    justifyContent: "center",
+    width: tokens.chromeControlHeight,
+    height: tokens.chromeControlHeight,
+    padding: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    borderRadius: tokens.chromeControlRadius,
+    backgroundColor: {
+      default: tokens.transparent,
+      ":hover": tokens.chromeHoverBg,
+      ":focus-visible": tokens.chromeHoverBg,
+      [expanded]: tokens.chromeHoverBg,
+    },
+    color: {
+      default: tokens.chromeIconFg,
+      ":hover": tokens.chromeFg,
+      ":focus-visible": tokens.chromeFg,
+      [expanded]: tokens.chromeFg,
+    },
+    cursor: "pointer",
+    outline: {
+      default: null,
+      ":hover": "none",
+      ":focus-visible": "none",
+      [expanded]: "none",
+    },
+  },
+});

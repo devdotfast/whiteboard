@@ -8,11 +8,6 @@
 @import "./base.css";
 @import "./vendor-overrides.css";
 
-@import "./review-shell.css";
-
-/* Last, in this order: the courier's march outlasts the badge's
-   reduced-motion rule, and authoring-motion restyles everything above while
-   data-motion is set. */
-@import "./authoring-activity.css";
+/* Last: authoring-motion restyles everything above while data-motion is set. */
 @import "./courier.css";
 @import "./authoring-motion.css";

@@ -20,6 +20,7 @@ import {
 import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
 import { BugIcon } from "./icons";
+import { shellStyles } from "./shell-styles";
 import { useToast } from "./toast";
 import { tokens } from "./tokens.stylex";
 import { useTutorial } from "./tutorial-context";
@@ -201,7 +202,7 @@ export function BugReportControl({
     <>
       <button
         type="button"
-        {...stylex.props(styles.topbarButton)}
+        {...stylex.props(shellStyles.topbarItem, styles.topbarButton)}
         aria-label="Report a bug"
         ref={tooltip}
         disabled={tutorial !== null || capturing}
@@ -210,7 +211,10 @@ export function BugReportControl({
         <BugIcon xstyle={controlStyles.chromeIcon} />
       </button>
       {open && (
-        <div {...stylex.props(styles.backdrop)} onMouseDown={cancel}>
+        <div
+          {...stylex.props(shellStyles.topbarItem, styles.backdrop)}
+          onMouseDown={cancel}
+        >
           <section
             {...stylex.props(styles.dialog, dropActive && styles.dropTarget)}
             role="dialog"

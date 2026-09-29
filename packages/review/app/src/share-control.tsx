@@ -16,7 +16,7 @@ import { controlStyles } from "./controls-styles";
 import { copyText } from "./copy-text";
 import { useOptionalReviewSession } from "./host/review-session";
 import { ShareIcon } from "./icons";
-import { withClass } from "./stylex-props";
+import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
 import { useDismissOnOutside } from "./use-dismiss-on-outside";
@@ -187,10 +187,14 @@ export function ShareControl() {
   };
 
   return (
-    <div ref={popover} style={{ position: "relative" }}>
+    <div
+      ref={popover}
+      {...stylex.props(shellStyles.topbarItem)}
+      style={{ position: "relative" }}
+    >
       <button
         type="button"
-        {...withClass("review-topbar-icon-button", open && styles.expanded)}
+        {...stylex.props(shellStyles.topbarIconButton, open && styles.expanded)}
         ref={tooltip}
         aria-label={label}
         aria-haspopup="dialog"
@@ -222,7 +226,7 @@ export function ShareControl() {
           popover="manual"
           role="dialog"
           aria-label={shared ? "Shared review" : "Share review"}
-          {...stylex.props(styles.popover)}
+          {...stylex.props(shellStyles.topbarPopover, styles.popover)}
         >
           {(error || accountError || account?.error) && (
             <p {...stylex.props(styles.paragraph, styles.error)} role="alert">

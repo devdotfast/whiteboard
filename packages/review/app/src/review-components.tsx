@@ -36,6 +36,7 @@ import {
   activeTargetForScroll,
   scrollTailHeight,
 } from "./scroll-active-tracking";
+import { shellStyles } from "./shell-styles";
 import { useBottomSheetResize } from "./side-panel-resizer";
 import { panelStyles, tourStyles } from "./side-panel-styles";
 import { withClass } from "./stylex-props";
@@ -121,7 +122,10 @@ function ReviewPanelFrame({
       aria-label={title ?? label}
       style={panelStyle}
     >
-      <div className="side-panel-sheet-resizer" {...sheet.separatorProps} />
+      <div
+        {...stylex.props(shellStyles.sheetResizer)}
+        {...sheet.separatorProps}
+      />
       <header {...stylex.props(panelStyles.header)}>
         <div {...stylex.props(panelStyles.title)}>
           <span {...stylex.props(panelStyles.kicker)}>{label}</span>

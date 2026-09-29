@@ -15,6 +15,8 @@ import { chevronMarker } from "./markers.stylex";
 import { shortRef } from "./review-branch-range";
 import { ReviewUnavailable } from "./review-empty-state";
 import { countLabel } from "./review-home-view";
+import { shellStyles } from "./shell-styles";
+import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
 import { useTooltip } from "./use-tooltip";
@@ -164,13 +166,13 @@ function CommitRow({
           <CopyButton
             text={commit.commit}
             label="Copy commit SHA"
-            className="review-topbar-icon-button"
+            xstyle={shellStyles.topbarIconButton}
             iconStyle={controlStyles.chromeIcon}
           />
           <button
             ref={openTooltip}
             type="button"
-            className="review-topbar-icon-button review-commit-open"
+            {...withClass("review-commit-open", shellStyles.topbarIconButton)}
             aria-label="Open commit diff"
             onClick={() => onOpenDiff(commit, "row")}
           >

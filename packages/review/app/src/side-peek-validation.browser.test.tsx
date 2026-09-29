@@ -10,7 +10,9 @@ import { createTestReviewDefinitionSession } from "./review-definition-test-util
 import { ReviewDocumentBoundary } from "./review-document-boundary";
 import { ReviewPanelProvider } from "./review-panel";
 import { testReviewSession } from "./review-session-test-utils";
+import { shellStyles } from "./shell-styles";
 import { defineSoftwareModel } from "./software-map/model";
+import { withClass } from "./stylex-props";
 
 const roots: Array<ReturnType<typeof createRoot>> = [];
 
@@ -78,7 +80,9 @@ describe("side-peek validation boundary", () => {
                 >
                   <AnchorLink anchor={anchors.startup}>Startup</AnchorLink>
                 </ReviewDocumentBoundary>
-                <div className="review-detail-host">
+                <div
+                  {...withClass("review-detail-host", shellStyles.detailHost)}
+                >
                   <ReviewPanelHost />
                 </div>
               </ReviewPanelProvider>
