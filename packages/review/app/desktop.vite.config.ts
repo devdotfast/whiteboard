@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 
+import stylex from "@stylexjs/unplugin";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -10,6 +11,7 @@ import {
   hardenLibavoidForTrustedTypes,
   isLibavoidBrowserModule,
 } from "./desktop-trusted-types";
+import { stylexOptions } from "./stylex-options";
 
 const require = createRequire(import.meta.url);
 
@@ -21,6 +23,9 @@ const decodeNamedCharacterReferenceIndex = path.join(
 export default defineConfig({
   root: __dirname,
   plugins: [
+    // Appends the collected StyleX rules to the canvas CSS asset in its own
+    // generateBundle, which runs before the scoping plugin below.
+    stylex.vite(stylexOptions),
     {
       name: "harden-libavoid-trusted-types",
       enforce: "pre",
