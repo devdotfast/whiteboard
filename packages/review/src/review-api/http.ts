@@ -885,12 +885,17 @@ export function createReviewApi(
       return context.json(
         remoteCaller(context)
           ? {
-              ...environment,
+              // Undefined drops rootPath from the JSON.
               rootPath: undefined,
               // A live checkout's identity names its path; keep only its equality.
               identity: createHash("sha256")
                 .update(environment.identity)
                 .digest("hex"),
+              // An acquisition error can quote local paths.
+              ...(environment.issue && {
+                issue:
+                  "The checkout for language features is not available on the remote machine.",
+              }),
             }
           : environment,
       );

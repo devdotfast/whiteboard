@@ -970,6 +970,34 @@ it("gives a remote caller a commit review's language context without its checkou
   expect(await read({ [REVIEW_CLIENT_HEADER]: "local" })).toEqual(ownMachine);
 });
 
+it("gives a remote caller a fixed issue when a commit review's checkout fails", async () => {
+  const { reviewId } = await local.store.execute(
+    command({ type: "create", title: "Remote", pins }),
+  );
+
+  // A file where the managed checkouts directory belongs fails acquisition
+  // with an error that quotes the path.
+  mkdirSync(path.join(repository, ".git", "dev-fast"), { recursive: true });
+  writeFileSync(path.join(repository, ".git", "dev-fast", "reviews"), "");
+  await local.data.languageEnvironment(local.store.read(reviewId), "head");
+  await local.data.workspaces.idle();
+  const app = createReviewApi(local.store, local.data);
+
+  const read = async (headers: Record<string, string> = {}) =>
+    (
+      await app.request(`/${reviewId}/language-context?side=head`, { headers })
+    ).json();
+
+  expect((await read()).issue).toContain(directory);
+  const remote = await read({ [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE });
+  expect(JSON.stringify(remote)).not.toContain(directory);
+  expect(remote).toEqual({
+    identity: expect.any(String),
+    issue:
+      "The checkout for language features is not available on the remote machine.",
+  });
+});
+
 it("opens a stable native workspace on the Review's pinned checkout at the selected version", async () => {
   const { reviewId } = await local.store.execute(
     command({ type: "create", title: "Navigator", pins }),
