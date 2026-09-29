@@ -224,12 +224,32 @@ test("rejected credentials and empty summaries are safe failures with cleanup", 
   ).rejects.toThrow("No summary was produced");
 });
 
-test("a timed-out test cleans temporary files and releases the single-test guard", async () => {
+test("a cancelled test cleans temporary files and releases the single-test guard", async () => {
   const fake = await fakeDiffr("test-secret");
   vi.stubEnv("TEST_MODE", "hang");
-  await expect(
-    testDiffrSummarizer(draft, undefined, AbortSignal.timeout(300)),
-  ).rejects.toThrow("timed out or was cancelled");
+  const controller = new AbortController();
+
+  const cancelled = testDiffrSummarizer(
+    draft,
+    undefined,
+    controller.signal,
+  ).catch((error) => error);
+
+  try {
+    await expect
+      .poll(
+        () =>
+          readFile(path.join(fake.root, "test-path"), "utf8").catch(() => ""),
+        { timeout: 5_000 },
+      )
+      .not.toBe("");
+  } finally {
+    controller.abort();
+    await expect(cancelled).resolves.toMatchObject({
+      message: expect.stringContaining("timed out or was cancelled"),
+    });
+  }
+
   await expect(
     readFile(await readFile(path.join(fake.root, "test-path"), "utf8")),
   ).rejects.toThrow("ENOENT");
