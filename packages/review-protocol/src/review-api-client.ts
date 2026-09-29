@@ -43,6 +43,8 @@ export interface ReviewApiSummary {
   } | null;
   viewedAt: string | null;
   dismissedAt: string | null;
+  /** An agent holds a live lease; absent on shared reviews. */
+  working?: boolean;
 }
 
 export interface ReviewSourceEntry {

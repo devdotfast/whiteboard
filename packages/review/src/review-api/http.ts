@@ -476,6 +476,9 @@ export function createReviewApi(
             store.activity.subscribe((id) => {
               if (mark(id)) notify();
             }),
+            store.activity.subscribeWorking(() => {
+              if (mark(null)) notify();
+            }),
             shared?.subscribe(() => {
               if (mark(null)) notify();
             }) ?? (() => {}),
@@ -497,10 +500,12 @@ export function createReviewApi(
       () => catalog(coverageModeSchema.parse(context.req.query("mode"))),
       (notify) => {
         const local = store.subscribeCatalog(notify);
+        const activity = store.activity.subscribeWorking(notify);
         const imported = shared?.subscribe(notify);
 
         return () => {
           local();
+          activity();
           imported?.();
         };
       },
@@ -1345,8 +1350,11 @@ function watch<T>(
       return;
 
     try {
-      controller.enqueue(encoder.encode(JSON.stringify(read()) + "\n"));
+      const line = JSON.stringify(read()) + "\n";
+
+      // enqueue can pull synchronously; clear first so it doesn't resend.
       dirty = false;
+      controller.enqueue(encoder.encode(line));
     } catch (error) {
       // A review can be deleted while this stream is open. Do not throw into
       // the already-committed writer; close this reader and unsubscribe it.

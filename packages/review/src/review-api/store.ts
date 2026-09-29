@@ -867,6 +867,7 @@ export class ReviewStore {
             : (summary.pins?.repositoryId ?? ""),
           viewedAt: row.viewed_at ? String(row.viewed_at) : null,
           dismissedAt: row.dismissed_at ? String(row.dismissed_at) : null,
+          working: this.activity.isWorking(summary.reviewId),
         };
 
         if (summary.kind === "scratchpad")

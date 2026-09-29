@@ -57,3 +57,4 @@ registerSingleton(IReviewCanvasPartsService, ReviewCanvasParts, InstantiationTyp
 registerSingleton(IReviewExplorerPartsService, ReviewExplorerParts, InstantiationType.Eager);
 
 import "./contrib/sharing/reviewSharing.contribution.js";
+import "./contrib/notifications/reviewDoneNotification.contribution.js";

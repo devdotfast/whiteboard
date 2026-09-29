@@ -52,6 +52,8 @@ const SCOPES = leaseScopeSchema.options;
 export class ReviewActivity {
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly listeners = new Set<(reviewId: string) => void>();
+  private readonly working = new Set<string>();
+  private readonly workingListeners = new Set<() => void>();
 
   constructor(
     private readonly db: DatabaseSync,
@@ -63,8 +65,10 @@ export class ReviewActivity {
       .prepare(
         "SELECT DISTINCT review_id FROM authoring_sessions WHERE expires_at>?",
       )
-      .all(Date.now()))
+      .all(Date.now())) {
+      this.working.add(String(row.review_id));
       this.scheduleExpiry(String(row.review_id));
+    }
   }
   subscribe(listener: (reviewId: string) => void) {
     this.listeners.add(listener);
@@ -72,6 +76,35 @@ export class ReviewActivity {
     return () => {
       this.listeners.delete(listener);
     };
+  }
+  /** Fires only when a review starts or stops being authored, never on
+   * renewals or focus changes. */
+  subscribeWorking(listener: () => void) {
+    this.workingListeners.add(listener);
+
+    return () => {
+      this.workingListeners.delete(listener);
+    };
+  }
+  isWorking(reviewId: string) {
+    return this.working.has(reviewId);
+  }
+  private changed(reviewId: string) {
+    const working =
+      this.db
+        .prepare(
+          "SELECT 1 FROM authoring_sessions WHERE review_id=? AND expires_at>? LIMIT 1",
+        )
+        .get(reviewId, Date.now()) !== undefined;
+
+    if (working !== this.working.has(reviewId)) {
+      if (working) this.working.add(reviewId);
+      else this.working.delete(reviewId);
+
+      for (const notify of this.workingListeners) notify();
+    }
+
+    for (const notify of this.listeners) notify(reviewId);
   }
   private active(reviewId: string, scope: LeaseScope) {
     return this.db
@@ -233,7 +266,7 @@ export class ReviewActivity {
 
     this.scheduleExpiry(reviewId);
 
-    for (const notify of this.listeners) notify(reviewId);
+    this.changed(reviewId);
 
     return this.read(reviewId);
   }
@@ -254,8 +287,7 @@ export class ReviewActivity {
     const timer = setTimeout(
       () => {
         this.scheduleExpiry(reviewId);
-
-        for (const notify of this.listeners) notify(reviewId);
+        this.changed(reviewId);
       },
       Math.max(1, Number(next.expires_at) - Date.now()),
     );
@@ -277,8 +309,7 @@ export class ReviewActivity {
 
     for (const id of ids) {
       this.scheduleExpiry(id);
-
-      for (const notify of this.listeners) notify(id);
+      this.changed(id);
     }
   }
 
@@ -286,11 +317,11 @@ export class ReviewActivity {
   deleted(reviewId: string) {
     clearTimeout(this.timers.get(reviewId));
     this.timers.delete(reviewId);
-
-    for (const notify of this.listeners) notify(reviewId);
+    this.changed(reviewId);
   }
   close() {
     this.listeners.clear();
+    this.workingListeners.clear();
 
     for (const timer of this.timers.values()) clearTimeout(timer);
     this.timers.clear();
