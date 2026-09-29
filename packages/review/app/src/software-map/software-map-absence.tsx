@@ -76,7 +76,7 @@ export function SoftwareMapTopologyUnavailable({
   if (missingSides.length === 0) return null;
 
   return (
-    <p className="software-map-topology-unavailable" role="status">
+    <p {...stylex.props(styles.topologyUnavailable)} role="status">
       Structural diff unavailable: no software map at{" "}
       {missingSides.join(" or ")}.
     </p>
@@ -130,5 +130,18 @@ const styles = stylex.create({
   code: {
     color: tokens.ink,
     fontWeight: 700,
+  },
+  topologyUnavailable: {
+    flex: "none",
+    margin: 0,
+    padding: "7px 12px",
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.rule,
+    backgroundColor: tokens.tray,
+    color: tokens.inkFaint,
+    fontFamily: tokens.fontMono,
+    fontSize: "11px",
+    lineHeight: "16px",
   },
 });

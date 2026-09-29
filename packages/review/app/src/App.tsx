@@ -71,6 +71,7 @@ import {
 import { ReviewCommitsView } from "./ReviewCommitsView";
 import { ReviewTraceView } from "./ReviewTraceView";
 import { ShareControl } from "./share-control";
+import { shellStyles } from "./shell-styles";
 import { useRightPanelResize } from "./side-panel-resizer";
 import { selectActiveSoftwareMapModel } from "./software-map-selection";
 import type {
@@ -473,33 +474,42 @@ function ReviewLayoutContent({
       } as CSSProperties)
     : undefined;
 
+  // The peek and resizing classes are markers: descendants restyle on them.
   const appClassName = [
     "review-app",
     `review-app--theme-${debugSettings.theme}`,
     `review-app--tint-${debugSettings.nodeTint}`,
     rightPanelOpen ? "review-app--peek-open" : null,
     sidePeekResize.isResizing ? "review-app--resizing" : null,
-    panelMotion === "restored" ? "review-app--restored-panel" : null,
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
-    <div ref={appRef} className={appClassName} style={appStyle}>
+    <div
+      ref={appRef}
+      {...withClass(
+        appClassName,
+        rightPanelOpen && shellStyles.appPeekOpen,
+        sidePeekResize.isResizing && shellStyles.appResizing,
+        panelMotion === "restored" && shellStyles.appRestoredPanel,
+      )}
+      style={appStyle}
+    >
       <main
         ref={shellRef}
-        className={
-          review.historicalRevision
-            ? "review-document-shell review-document-shell--historical"
-            : "review-document-shell"
-        }
+        {...withClass(
+          "review-document-shell",
+          shellStyles.documentShell,
+          !!review.historicalRevision && shellStyles.documentShellHistorical,
+        )}
       >
         <TutorialExperienceProvider
           shellRef={shellRef}
           scrollRegionRef={scrollRegionRef}
         >
-          <header className="review-topbar">
-            <div className="review-topbar-left">
+          <header {...stylex.props(shellStyles.topbar)}>
+            <div {...withClass("review-topbar-left", shellStyles.topbarLeft)}>
               <div
                 {...stylex.props(
                   controlStyles.segmented,
@@ -578,12 +588,19 @@ function ReviewLayoutContent({
                 ))}
               </div>
             </div>
-            <div className="review-topbar-actions">
-              <div className="review-topbar-context">
+            <div
+              {...withClass("review-topbar-actions", shellStyles.topbarActions)}
+            >
+              <div
+                {...stylex.props(
+                  shellStyles.topbarItem,
+                  shellStyles.topbarContext,
+                )}
+              >
                 {!scratchpad && (
                   <button
                     type="button"
-                    className="review-open-source-tree"
+                    {...stylex.props(shellStyles.openSourceTree)}
                     aria-label="Source tree ↗"
                     ref={sourceTreeTooltip}
                     onClick={() => {
@@ -596,7 +613,7 @@ function ReviewLayoutContent({
                       });
                     }}
                   >
-                    <span className="review-open-source-tree-label">
+                    <span {...stylex.props(shellStyles.openSourceTreeLabel)}>
                       Source tree
                     </span>
                     <span aria-hidden="true">↗</span>
@@ -619,7 +636,10 @@ function ReviewLayoutContent({
               {!scratchpad && <ShareControl />}
               <button
                 type="button"
-                className="review-topbar-icon-button"
+                {...stylex.props(
+                  shellStyles.topbarItem,
+                  shellStyles.topbarIconButton,
+                )}
                 ref={discordTooltip}
                 aria-label="Join our Discord community"
                 onClick={() => {
@@ -637,7 +657,12 @@ function ReviewLayoutContent({
               {!scratchpad &&
                 !review.historicalRevision &&
                 !review.submissionOutcome && (
-                  <div className="topbar-actions-divider" />
+                  <div
+                    {...stylex.props(
+                      shellStyles.topbarItem,
+                      shellStyles.actionsDivider,
+                    )}
+                  />
                 )}
               {!scratchpad &&
               !review.historicalRevision &&
@@ -647,10 +672,11 @@ function ReviewLayoutContent({
             </div>
           </header>
           {review.historicalRevision ? (
-            <div className="review-history-banner" role="status">
+            <div {...stylex.props(shellStyles.historyBanner)} role="status">
               <span>You are viewing an older version of this session.</span>
               <button
                 type="button"
+                {...stylex.props(shellStyles.historyBannerButton)}
                 onClick={() =>
                   void session.surface.post({
                     name: "openReviewRevision",
@@ -669,11 +695,18 @@ function ReviewLayoutContent({
             ref={scrollRegionRef}
             {...withClass(
               `review-view-region review-view-region--${activeView}`,
+              shellStyles.viewRegion,
+              activeView === "commits" && shellStyles.commitsRegion,
+              activeView === "review" && shellStyles.reviewRegion,
               activeView === "trace" && traceStyles.region,
             )}
           >
             <div
-              className="review-document-view"
+              {...withClass(
+                "review-document-view",
+                shellStyles.documentView,
+                activeView !== "review" && shellStyles.hidden,
+              )}
               hidden={activeView !== "review"}
             >
               {documentState.state === "ready" ? (
@@ -705,10 +738,16 @@ function ReviewLayoutContent({
               )}
             </div>
             {softwareMapEnabled && activeView === "map" && (
-              <div {...withClass("review-map-view", mapViewStyles.view)}>
+              <div
+                {...withClass(
+                  "review-map-view",
+                  shellStyles.mapView,
+                  mapViewStyles.view,
+                )}
+              >
                 <div
-                  {...withClass(
-                    "review-map-canvas-shell",
+                  {...stylex.props(
+                    shellStyles.mapCanvasShell,
                     mapViewStyles.canvasShell,
                   )}
                 >
@@ -754,16 +793,22 @@ function ReviewLayoutContent({
             )}
             <div
               aria-hidden={activeView !== "diff" || diffScope !== null}
-              className={
-                activeView === "diff" && diffScope === null
-                  ? "review-diff-view"
-                  : "review-diff-view review-diff-view--preloaded"
-              }
+              {...stylex.props(
+                shellStyles.diffView,
+                (activeView !== "diff" || diffScope !== null) &&
+                  shellStyles.diffViewPreloaded,
+              )}
             >
               <ReviewDiffView />
             </div>
             {activeView === "diff" && diffScope !== null && (
-              <div className="review-diff-view review-diff-view--scoped">
+              <div
+                {...withClass(
+                  "review-diff-view--scoped",
+                  shellStyles.diffView,
+                  shellStyles.diffViewScoped,
+                )}
+              >
                 <CommitDiffScopeBar
                   commit={diffScope.commit}
                   onBack={() => showView("commits")}
@@ -785,11 +830,11 @@ function ReviewLayoutContent({
       </main>
       {rightPanelOpen && (
         <div
-          className="side-panel-resizer side-peek-resizer"
+          {...stylex.props(shellStyles.resizer, shellStyles.peekResizer)}
           {...sidePeekResize.separatorProps}
         />
       )}
-      <div className="review-detail-host">
+      <div {...withClass("review-detail-host", shellStyles.detailHost)}>
         <ReviewPanelHost />
       </div>
     </div>
@@ -962,10 +1007,10 @@ function ReviewBatonChip({
   return (
     <span
       ref={tooltip}
-      className={`review-baton-chip review-baton-chip--${outcome}`}
+      {...stylex.props(shellStyles.topbarItem, batonStyles.chip)}
     >
       <svg
-        className="review-baton-glyph"
+        {...stylex.props(batonStyles.glyph)}
         viewBox="0 0 16 16"
         width="12"
         height="12"
@@ -1026,16 +1071,12 @@ function MapSettingsControl(): ReactElement {
   }, [isOpen]);
 
   return (
-    <div
-      ref={controlRef}
-      className={
-        isOpen
-          ? "map-settings-control map-settings-control--open"
-          : "map-settings-control"
-      }
-    >
+    <div ref={controlRef} {...stylex.props(mapSettingsStyles.control)}>
       {isOpen && (
-        <section className="map-settings-popover" aria-label="Map settings">
+        <section
+          {...stylex.props(mapSettingsStyles.popover)}
+          aria-label="Map settings"
+        >
           <DebugSwitch
             label="Show modified nodes only"
             checked={showModifiedOnly}
@@ -1047,20 +1088,21 @@ function MapSettingsControl(): ReactElement {
             onChange={setShowRemovedNodes}
           />
           <div
-            className="review-debug-theme review-debug-theme--triple"
+            {...stylex.props(mapSettingsStyles.tints)}
             role="group"
             aria-label="Node tint"
           >
-            <span className="review-debug-group-label">Map node tint</span>
+            <span {...stylex.props(mapSettingsStyles.groupLabel)}>
+              Map node tint
+            </span>
             {(["none", "slate", "mineral"] as const).map((option) => (
               <button
                 key={option}
                 type="button"
-                className={
-                  nodeTint === option
-                    ? "review-debug-theme-option review-debug-theme-option--active"
-                    : "review-debug-theme-option"
-                }
+                {...stylex.props(
+                  mapSettingsStyles.tint,
+                  nodeTint === option && mapSettingsStyles.tintActive,
+                )}
                 aria-pressed={nodeTint === option}
                 onClick={() => setNodeTint(option)}
               >
@@ -1072,11 +1114,10 @@ function MapSettingsControl(): ReactElement {
       )}
       <button
         type="button"
-        className={
-          isOpen
-            ? "map-settings-trigger map-settings-trigger--active"
-            : "map-settings-trigger"
-        }
+        {...stylex.props(
+          mapSettingsStyles.trigger,
+          isOpen && mapSettingsStyles.triggerActive,
+        )}
         aria-label="Map settings"
         aria-expanded={isOpen}
         onClick={() => setIsOpen((open) => !open)}
@@ -1097,14 +1138,21 @@ function DebugSwitch({
   onChange: (checked: boolean) => void;
 }): ReactElement {
   return (
-    <label className="review-debug-switch">
+    <label {...stylex.props(mapSettingsStyles.switch)}>
       <span>{label}</span>
       <input
         type="checkbox"
+        {...stylex.props(mapSettingsStyles.switchInput)}
         checked={checked}
         onChange={(event) => onChange(event.currentTarget.checked)}
       />
-      <i aria-hidden="true" />
+      <i
+        {...stylex.props(
+          mapSettingsStyles.switchTrack,
+          checked && mapSettingsStyles.switchTrackOn,
+        )}
+        aria-hidden="true"
+      />
     </label>
   );
 }
@@ -1135,6 +1183,167 @@ export function applySoftwareMapTopologyStatuses(
     elementsByPath: new Map(elements.map((element) => [element.path, element])),
   };
 }
+
+const batonStyles = stylex.create({
+  chip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "7px",
+    color: tokens.diffRemoved,
+    fontFamily: tokens.chromeFont,
+    fontSize: tokens.chromeFontSizeSmall,
+    fontWeight: tokens.chromeFontWeightStrong,
+    lineHeight: 1,
+    letterSpacing: tokens.chromeTracking,
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
+  },
+  glyph: {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    strokeWidth: "1.4",
+  },
+});
+
+// Map settings float over the map canvas instead of sitting behind a topbar
+// gear, so map-only controls stay with the map.
+const mapSettingsStyles = stylex.create({
+  control: {
+    position: "absolute",
+    right: "16px",
+    bottom: "16px",
+    zIndex: 3,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: "8px",
+  },
+  trigger: {
+    display: "inline-flex",
+    width: "30px",
+    height: "30px",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: { default: tokens.ruleSoft, ":hover": tokens.accent },
+    borderRadius: "8px",
+    backgroundColor: tokens.surfaceRaised,
+    color: { default: tokens.inkMuted, ":hover": tokens.ink },
+    boxShadow: `0 6px 18px ${tokens.shadowColorStrong}`,
+  },
+  triggerActive: {
+    borderColor: tokens.accent,
+    color: tokens.ink,
+  },
+  popover: {
+    display: "flex",
+    width: "268px",
+    flexDirection: "column",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.ruleSoft,
+    borderRadius: "10px",
+    backgroundColor: tokens.surfaceRaised,
+    boxShadow: `0 12px 32px ${tokens.shadowColorStrong}`,
+  },
+  switch: {
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "14px",
+    minHeight: "50px",
+    padding: "10px 13px",
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.rule,
+    color: tokens.ink,
+    fontSize: "14px",
+  },
+  switchInput: {
+    position: "absolute",
+    opacity: 0,
+    pointerEvents: "none",
+  },
+  switchTrack: {
+    position: "relative",
+    flex: "0 0 auto",
+    width: "38px",
+    height: "22px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.ruleSoft,
+    borderRadius: "999px",
+    backgroundColor: tokens.controlBg,
+    "::before": {
+      position: "absolute",
+      top: "3px",
+      left: "3px",
+      width: "14px",
+      height: "14px",
+      borderRadius: "999px",
+      backgroundColor: tokens.inkFaint,
+      transition: "transform 140ms ease, background 140ms ease",
+      content: "''",
+    },
+  },
+  switchTrackOn: {
+    borderColor: tokens.accent,
+    backgroundColor: tokens.accentSoft,
+    "::before": {
+      backgroundColor: tokens.accent,
+      transform: "translateX(16px)",
+    },
+  },
+  tints: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: "6px",
+    padding: "10px",
+  },
+  groupLabel: {
+    gridColumn: "1 / -1",
+    color: tokens.inkFaint,
+    fontFamily: tokens.fontMono,
+    fontSize: "10px",
+    fontWeight: 800,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+  },
+  tint: {
+    minHeight: "32px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: {
+      default: tokens.rule,
+      ":hover": tokens.accent,
+      ":focus-visible": tokens.accent,
+    },
+    borderRadius: "6px",
+    backgroundColor: {
+      default: tokens.tray,
+      ":hover": tokens.accentSoft,
+      ":focus-visible": tokens.accentSoft,
+    },
+    color: {
+      default: tokens.inkMuted,
+      ":hover": tokens.accent,
+      ":focus-visible": tokens.accent,
+    },
+    fontSize: "12px",
+    fontWeight: 750,
+    outline: { default: null, ":hover": "none", ":focus-visible": "none" },
+  },
+  tintActive: {
+    borderColor: tokens.accent,
+    backgroundColor: tokens.accentSoft,
+    color: tokens.accent,
+    outline: "none",
+  },
+});
 
 const mapViewStyles = stylex.create({
   view: {

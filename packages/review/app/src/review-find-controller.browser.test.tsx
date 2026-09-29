@@ -2,6 +2,7 @@ import type {
   ReviewFindQuery,
   ReviewInlineEditorHandle,
 } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import { act, useLayoutEffect, useMemo, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -14,10 +15,15 @@ import {
   useReviewFindRegistration,
 } from "./review-find";
 import { ReviewRootsProvider } from "./review-root-context";
+import { shellStyles } from "./shell-styles";
+import { withClass } from "./stylex-props";
 
 import canvasCss from "./styles.css?inline";
 
 let root: ReturnType<typeof createRoot> | undefined;
+
+const cx = (...styles: stylex.StyleXArray<stylex.CompiledStyles | false>[]) =>
+  stylex.props(...styles).className;
 
 const findCount = (container: HTMLElement) =>
   container.querySelector('[role="search"] [aria-live]');
@@ -321,16 +327,16 @@ it("keeps the find widget below and above the topbar", async () => {
   // A recoverable load error renders a status row above .review-app: the
   // height that used to slide the topbar onto the find widget.
   canvas.innerHTML = `
-    <div data-review-api class="review-api-canvas">
+    <div data-review-api class="${cx(shellStyles.apiCanvas)}">
       <p role="status" style="margin: 8px 24px; font-size: 12px">Could not refresh this review.</p>
       <div class="review-app">
-        <main class="review-document-shell">
-          <header class="review-topbar">
-            <div class="review-topbar-left"></div>
-            <div class="review-topbar-actions"></div>
+        <main class="review-document-shell ${cx(shellStyles.documentShell)}">
+          <header class="${cx(shellStyles.topbar)}">
+            <div class="${cx(shellStyles.topbarLeft)}"></div>
+            <div class="${cx(shellStyles.topbarActions)}"></div>
           </header>
-          <section class="review-view-region review-view-region--review">
-            <div class="review-document-view">
+          <section class="${cx(shellStyles.viewRegion, shellStyles.reviewRegion)}">
+            <div class="${cx(shellStyles.documentView)}">
               <article class="review-document">
                 <h2 id="rollout">Rollout</h2><p>body</p>
                 <h2 id="risks">Risks</h2><p>body</p>
@@ -372,9 +378,7 @@ it("keeps the find widget below and above the topbar", async () => {
     expect(host.showFind()).toBe(true);
   });
 
-  const topbar = canvas
-    .querySelector(".review-topbar")!
-    .getBoundingClientRect();
+  const topbar = canvas.querySelector("header")!.getBoundingClientRect();
 
   const widget = canvas.querySelector('[role="search"]')!;
   const wholeWord = button(canvas, "Match Whole Word");
@@ -435,7 +439,10 @@ function FindHarness({
         documentKey={documentKey}
         host={host}
       >
-        <main ref={shellRef} className="review-document-shell">
+        <main
+          ref={shellRef}
+          {...withClass("review-document-shell", shellStyles.documentShell)}
+        >
           <section ref={scrollRef}>
             <article ref={articleRef} className="review-document">
               <DocumentProbe onRender={onDocumentRender} />

@@ -83,9 +83,7 @@ describe("Review panel host", () => {
 
     expect(container.querySelectorAll(".side-panel")).toHaveLength(1);
     expect(container.querySelectorAll(panelBodySelector)).toHaveLength(1);
-    expect(
-      container.querySelectorAll(".side-panel-sheet-resizer"),
-    ).toHaveLength(1);
+    expect(container.querySelectorAll('[role="separator"]')).toHaveLength(1);
     expect(container.textContent).not.toContain("Guided tour");
     expect(container.textContent).toContain("Startup detail");
     expect(

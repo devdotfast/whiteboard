@@ -10,6 +10,7 @@ import { useReviewSession } from "@canvas/host/review-session";
 import { CloseIcon, RefreshIcon } from "@canvas/icons";
 import { mapFrameMarker } from "@canvas/markers.stylex";
 import { useReviewContainer } from "@canvas/review-root-context";
+import { shellStyles } from "@canvas/shell-styles";
 import { useRightPanelResize } from "@canvas/side-panel-resizer";
 import { withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
@@ -1044,7 +1045,7 @@ export function SoftwareMapFrame({
               onClick={onCloseCodeInspector}
             />
             <div
-              {...withClass("side-panel-resizer", styles.inspectorResizer)}
+              {...stylex.props(shellStyles.resizer, styles.inspectorResizer)}
               {...codeInspectorResize.separatorProps}
             />
             <SoftwareMapCodeInspector
@@ -2991,7 +2992,17 @@ const styles = stylex.create({
   inspectorResizer: {
     zIndex: 8,
     minHeight: 0,
-    display: { default: null, [stacked]: "none" },
+    // Also hidden with the shell's divider when the side peek is open on a
+    // narrow canvas.
+    display: {
+      default: null,
+      [stacked]: "none",
+      [peekOpen]: {
+        default: null,
+        "@container review-canvas (max-width: 929px)": "none",
+        [narrow]: "none",
+      },
+    },
   },
   inspectorBackdrop: {
     display: { default: "none", [narrow]: "block" },

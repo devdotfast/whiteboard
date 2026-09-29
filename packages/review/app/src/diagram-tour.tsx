@@ -12,6 +12,7 @@ import { useReviewDebugSettings } from "./debug-settings";
 import { GuidedTourPanel } from "./review-components";
 import type { GuidedTour } from "./review-panel-model";
 import { useReviewContainer } from "./review-root-context";
+import { shellStyles } from "./shell-styles";
 import { useRightPanelResize } from "./side-panel-resizer";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
@@ -77,7 +78,7 @@ export function DiagramTourOverlay({
         {children}
       </div>
       <div
-        {...withClass("side-panel-resizer", styles.resizer)}
+        {...stylex.props(shellStyles.resizer, styles.resizer)}
         {...separatorProps}
       />
       <div {...stylex.props(styles.panel)}>

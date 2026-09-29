@@ -14,6 +14,7 @@ import {
 import { ReviewSection } from "./review-components";
 import { ReviewProvider } from "./review-context";
 import { testReviewSession } from "./review-session-test-utils";
+import { shellStyles } from "./shell-styles";
 import { withClass } from "./stylex-props";
 import { TutorialProvider } from "./tutorial-context";
 import { TutorialExperienceProvider } from "./tutorial-experience";
@@ -65,7 +66,10 @@ function Shell({
   const regionRef = useRef<HTMLElement | null>(null);
 
   return (
-    <main ref={shellRef} className="review-document-shell">
+    <main
+      ref={shellRef}
+      {...withClass("review-document-shell", shellStyles.documentShell)}
+    >
       <TutorialExperienceProvider
         shellRef={shellRef}
         scrollRegionRef={regionRef}
@@ -84,9 +88,16 @@ function Shell({
         >
           Explore the sample commits
         </button>
-        <section ref={regionRef} className="review-view-region">
+        <section
+          ref={regionRef}
+          {...withClass("review-view-region", shellStyles.viewRegion)}
+        >
           <div
-            className="review-document-view"
+            {...withClass(
+              "review-document-view",
+              shellStyles.documentView,
+              activeView !== "review" && shellStyles.hidden,
+            )}
             hidden={activeView !== "review"}
           >
             {CHAPTER_TITLES.map((title) => (
@@ -153,7 +164,7 @@ describe("TutorialExperience", () => {
     expect(card()?.textContent).toContain("Choose your keybindings");
     expect(canvasRoot.querySelectorAll(".tutorial-guide")).toHaveLength(1);
     expect(card()?.parentElement?.className).toBe("tutorial-experience");
-    expect(card()?.parentElement?.parentElement?.className).toBe(
+    expect(card()?.parentElement?.parentElement).toHaveClass(
       "review-document-shell",
     );
     expect(section("Welcome").dataset.tutorialChapterState).toBe("active");

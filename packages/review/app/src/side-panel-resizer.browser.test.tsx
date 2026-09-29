@@ -1,3 +1,4 @@
+import * as stylex from "@stylexjs/stylex";
 import { act, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -5,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reviewPreferenceKey } from "./host/review-client";
 import { ReviewSessionProvider } from "./host/review-session";
 import { testReviewSession } from "./review-session-test-utils";
+import { shellStyles } from "./shell-styles";
 import { useRightPanelResize } from "./side-panel-resizer";
 
 let root: ReturnType<typeof createRoot> | undefined;
@@ -39,13 +41,13 @@ function Panel({
 
   return (
     <section ref={containerRef} style={cramped ? { width: 0 } : undefined}>
-      <div className="side-panel-resizer" {...resize.separatorProps} />
+      <div {...stylex.props(shellStyles.resizer)} {...resize.separatorProps} />
     </section>
   );
 }
 
 function separator(): HTMLDivElement {
-  const element = host?.querySelector<HTMLDivElement>(".side-panel-resizer");
+  const element = host?.querySelector<HTMLDivElement>('[role="separator"]');
 
   if (!element) throw new Error("Separator not rendered.");
 

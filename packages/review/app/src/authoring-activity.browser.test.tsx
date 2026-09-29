@@ -53,10 +53,9 @@ async function show(state: {
   );
 }
 
-const unread = () => container.querySelector(".review-segment-unread") !== null;
+const unread = () => container.querySelector('[aria-hidden="true"]') !== null;
 
-const shimmering = () =>
-  container.querySelector(".review-segment-word[data-working]") !== null;
+const shimmering = () => container.querySelector("[data-working]") !== null;
 
 it("marks the review unread when the authoring lease ends while the reader is elsewhere", async () => {
   await show({ activity: working, version: 3 });
@@ -119,7 +118,7 @@ it("keeps a long update inside the badge and puts the whole of it in the tooltip
     ".host-authoring-activity",
   )!;
 
-  const text = badge.querySelector<HTMLElement>(".host-authoring-text")!;
+  const text = badge.querySelector<HTMLElement>(":scope > span")!;
 
   // The text is cut short rather than running past the badge's edge.
   expect(text.scrollWidth).toBeGreaterThan(text.clientWidth);

@@ -150,7 +150,7 @@ export function SettingsSlidersIcon(): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="review-debug-trigger-icon"
+      {...stylex.props(styles.settingsSliders)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -320,6 +320,15 @@ const styles = stylex.create({
     strokeLinecap: "round",
     strokeLinejoin: "round",
     strokeWidth: "1.7px",
+  },
+  settingsSliders: {
+    width: "16px",
+    height: "16px",
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    strokeWidth: "1.5px",
   },
   discord: {
     fill: "currentColor",

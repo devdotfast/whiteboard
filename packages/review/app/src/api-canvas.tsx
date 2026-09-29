@@ -6,6 +6,7 @@ import {
 import type { ActivitySnapshot } from "@review/review-api/activity";
 import { ReviewApiClient, ReviewApiError } from "@review/review-api/client";
 import type { Snapshot } from "@review/review-api/store";
+import * as stylex from "@stylexjs/stylex";
 import {
   createContext,
   memo,
@@ -46,6 +47,7 @@ import { ReviewLensesProvider } from "./review-lenses";
 import { ReviewPanelProvider } from "./review-panel";
 import { readReviewNavigationRestore } from "./review-view-state";
 import { SharingContext } from "./share-control";
+import { tokens } from "./tokens.stylex";
 import { TutorialProvider } from "./tutorial-context";
 
 type ApiContent = Extract<ReviewCanvasContent, { kind: "api" }>;
@@ -373,7 +375,7 @@ export function ApiCanvas({
       <CanvasQueryProvider client={client} reviewId={content.reviewId}>
         {error !== undefined && (
           <>
-            <p className="canvas-error" role="status">
+            <p {...stylex.props(styles.error)} role="status">
               {error}
             </p>
             {version !== undefined && (
@@ -415,7 +417,7 @@ export function ApiCanvas({
               >
                 <TutorialProvider tutorial={content.tutorial}>
                   {error && (
-                    <p className="canvas-error" role="status">
+                    <p {...stylex.props(styles.error)} role="status">
                       {error}
                     </p>
                   )}
@@ -515,4 +517,13 @@ const CanvasDocument = memo(function CanvasDocument({
       findHost={findHost}
     />
   );
+});
+
+const styles = stylex.create({
+  error: {
+    maxWidth: "72ch",
+    margin: "32px auto",
+    padding: "0 24px",
+    font: `15px/1.6 ${tokens.fontDisplay}`,
+  },
 });

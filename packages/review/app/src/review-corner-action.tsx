@@ -3,6 +3,8 @@ import { type ReactElement, useRef, useState } from "react";
 
 import type { IconProps } from "./icons";
 import { useReviewActions, useReviewState } from "./review-context";
+import { shellStyles } from "./shell-styles";
+import { tokens } from "./tokens.stylex";
 import { useTutorial } from "./tutorial-context";
 import { useTooltip } from "./use-tooltip";
 import { useTopbarPopover } from "./use-topbar-popover";
@@ -26,14 +28,14 @@ export function ReviewCornerAction(): ReactElement | null {
      confirmation. */
   if (tutorial) {
     return (
-      <div className="review-corner-action">
+      <div {...stylex.props(shellStyles.topbarItem, styles.action)}>
         <button
           type="button"
-          className="review-corner-dismiss"
+          {...stylex.props(styles.dismiss)}
           ref={closeTooltip}
           onClick={tutorial.close}
         >
-          <ArchiveIcon />
+          <ArchiveIcon xstyle={styles.icon} />
           <span>Close</span>
         </button>
       </div>
@@ -56,21 +58,21 @@ export function ReviewCornerAction(): ReactElement | null {
   };
 
   return (
-    <div ref={control} className="review-corner-action">
+    <div ref={control} {...stylex.props(shellStyles.topbarItem, styles.action)}>
       <button
         type="button"
-        className="review-corner-dismiss"
+        {...stylex.props(styles.dismiss)}
         disabled={busy}
         onClick={() => void dismiss()}
       >
-        <ArchiveIcon />
+        <ArchiveIcon xstyle={styles.icon} />
         <span>Dismiss</span>
       </button>
       {failed && (
         <span
           ref={errorPopover}
           popover="manual"
-          className="review-corner-error"
+          {...stylex.props(shellStyles.topbarPopover, styles.error)}
           role="alert"
         >
           Could not dismiss the review. Try again.
@@ -95,3 +97,52 @@ export function ArchiveIcon({ xstyle }: IconProps = {}): ReactElement {
     </svg>
   );
 }
+
+// The single end-of-review control, sized to fit inside the topbar.
+// Dismissal is terminal but reversible, so it reads as a quiet outline rather
+// than a destructive fill. It never uses a bare X: that reads as "close".
+const styles = stylex.create({
+  action: {
+    position: "relative",
+    display: "inline-flex",
+    alignItems: "center",
+  },
+  dismiss: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "8px",
+    height: tokens.chromeControlHeight,
+    padding: "0 10px",
+    whiteSpace: "nowrap",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.chromeBorder,
+    backgroundColor: {
+      default: tokens.transparent,
+      ":not(:disabled):hover": tokens.chromeHoverBg,
+    },
+    color: tokens.chromeFg,
+    fontFamily: tokens.fontMono,
+    fontSize: "12px",
+    fontWeight: 500,
+    borderRadius: "6px",
+  },
+  icon: {
+    fill: "none",
+    stroke: "currentcolor",
+    strokeWidth: "1.3",
+    strokeLinejoin: "round",
+  },
+  // Only rendered in the topbar, where the popover placement positions it.
+  error: {
+    padding: "8px 12px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.ruleSoft,
+    borderRadius: "6px",
+    backgroundColor: tokens.surfaceRaised,
+    color: tokens.changeRemoved,
+    font: `400 11.5px ${tokens.fontMono}`,
+    whiteSpace: "nowrap",
+  },
+});
