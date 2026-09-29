@@ -40,7 +40,8 @@ const selectedNodeIds = (container: HTMLElement) =>
     .values()
     .filter(
       (node) =>
-        node.classList.contains("selected") || node.querySelector(".selected"),
+        node.matches("[data-selected]") ||
+        node.querySelector("[data-selected]"),
     )
     .map((node) => node.dataset.id)
     .toArray();

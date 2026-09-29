@@ -2038,6 +2038,7 @@ function SoftwareMapC4GroupNode({
 }: ReactFlowNodeProps<C4MapFlowGroupNode>) {
   return (
     <div
+      data-selected={data.selected ? "true" : undefined}
       {...stylex.props(
         styles.groupShell,
         data.node.changeStatus === "added" && styles.groupAdded,
@@ -2378,6 +2379,7 @@ function SoftwareMapNodeFrame({
   const codeRing = selected ? "selected" : status;
 
   const props = {
+    "data-selected": selected ? "true" : undefined,
     ...withClass(
       "nodrag nopan",
       styles.node,
