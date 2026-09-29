@@ -19,7 +19,7 @@ interface ReviewPersistence<T, Saved> {
   version: number;
   partialize(state: T): Saved;
   parse(value: JsonValue): Saved | undefined;
-  restore(saved: Saved, current: T): T;
+  restore?(saved: Saved, current: T): T;
   migrate?(value: JsonValue, version: number): JsonValue;
   /** Existing unwrapped JSON at this key is treated as version zero. */
   legacy?: boolean;
@@ -33,7 +33,7 @@ export function reviewPersistence<T, Saved>({
   version,
   partialize,
   parse,
-  restore,
+  restore = (saved, current) => ({ ...current, ...saved }),
   migrate,
   legacy = false,
   legacyScope,
@@ -76,11 +76,20 @@ export function reviewPersistence<T, Saved>({
     version,
     partialize,
     migrate: (value, previousVersion) => {
-      if (!migrate || previousVersion > version) {
+      if (
+        previousVersion > version ||
+        (!migrate && !(legacy && previousVersion === 0))
+      ) {
         throw new Error(`Unsupported UI state version: ${previousVersion}`);
       }
 
-      return migrate(jsonValueSchema.parse(value), previousVersion);
+      const json = jsonValueSchema.parse(value);
+      const migrated = migrate ? migrate(json, previousVersion) : json;
+
+      if (parse(migrated) === undefined)
+        throw new Error("Invalid persisted UI state");
+
+      return migrated;
     },
     merge: (value, current) => {
       const json = jsonValueSchema.safeParse(value);

@@ -27,11 +27,14 @@ export function createDatabaseLensStore(
         scope: "session",
         version: 1,
         partialize: ({ activeUseCaseId }) => ({ activeUseCaseId }),
-        parse: (value) => savedUseCase.safeParse(value).data,
-        restore: (saved, current) =>
-          saved.activeUseCaseId && useCaseIds.includes(saved.activeUseCaseId)
-            ? { ...current, ...saved }
-            : current,
+        parse: (value) => {
+          const saved = savedUseCase.safeParse(value).data;
+
+          return saved?.activeUseCaseId &&
+            useCaseIds.includes(saved.activeUseCaseId)
+            ? saved
+            : undefined;
+        },
       }),
     ),
   );

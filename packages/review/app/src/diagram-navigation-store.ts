@@ -64,31 +64,23 @@ export function createDiagramNavigationStore(
         version: 1,
         legacy: legacyWindow,
         legacyScope: legacyWindow ? "window" : undefined,
-        migrate: (value) => {
-          const saved = savedDiagram.safeParse(value);
-
-          if (!saved.success || saved.data.modelKey !== modelKey) {
-            throw new Error("Diagram model is not ready to restore");
-          }
-
-          return value;
-        },
         partialize: (state) => ({
           modelKey: state.modelKey,
           expandedNodeIds: [...state.expandedNodeIds],
           selectedNodeId: state.selectedNodeId,
           expanded: state.expanded,
         }),
-        parse: (value) => savedDiagram.safeParse(value).data,
-        restore: (saved, current) =>
-          saved.modelKey === modelKey
-            ? {
-                ...current,
-                ...saved,
-                expandedNodeIds: new Set(saved.expandedNodeIds),
-                restored: true,
-              }
-            : current,
+        parse: (value) => {
+          const saved = savedDiagram.safeParse(value).data;
+
+          return saved?.modelKey === modelKey ? saved : undefined;
+        },
+        restore: (saved, current) => ({
+          ...current,
+          ...saved,
+          expandedNodeIds: new Set(saved.expandedNodeIds),
+          restored: true,
+        }),
       }),
     ),
   );

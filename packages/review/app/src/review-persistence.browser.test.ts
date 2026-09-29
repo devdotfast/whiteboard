@@ -34,10 +34,8 @@ function createSelection(key = "selection", scope: ReviewUiScope = "session") {
         scope,
         version: 1,
         legacy: true,
-        migrate: (value) => value,
         partialize: ({ selected }) => ({ selected }),
         parse: (value) => savedSchema.safeParse(value).data,
-        restore: (saved, current) => ({ ...current, ...saved }),
       }),
     ),
   );

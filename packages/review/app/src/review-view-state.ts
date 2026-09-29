@@ -10,13 +10,7 @@ import {
   reviewViewSchema,
 } from "@dev.fast/review-protocol";
 import type { RefObject } from "react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { persist } from "zustand/middleware";
 import { createStore } from "zustand/vanilla";
 
@@ -78,11 +72,6 @@ export function useReviewViewStateSync({
   const saved = useMemo(() => createReviewViewStateStore(key), [key]);
   const initialState = useMemo(() => saved.getState(), [saved]);
 
-  const persist = useCallback(
-    (next: PersistedReviewViewState) => saved.setState(next, true),
-    [saved],
-  );
-
   // Layout, so navigation from a host event right after mount still persists.
   useLayoutEffect(
     () =>
@@ -99,8 +88,7 @@ export function useReviewViewStateSync({
 
         // The store holds the tour a legacy panel record restored, so the
         // record is rewritten as an overlay tour, never as a panel.
-        persist({
-          ...saved.getState(),
+        saved.setState({
           panel: undefined,
           ...(state.view !== previous.view && { activeView: state.view }),
           ...(state.lens !== previous.lens && {
@@ -132,7 +120,7 @@ export function useReviewViewStateSync({
             : undefined,
         });
       }),
-    [panelStore, persist, saved],
+    [panelStore, saved],
   );
 
   // A scroll position belongs to the view it was taken on.
@@ -153,7 +141,6 @@ export function useReviewViewStateSync({
   useScrollCapture(
     scrollRegionRef,
     panelStore,
-    persist,
     saved,
     scrollRestorationPending,
   );
@@ -246,10 +233,8 @@ function createReviewViewStateStore(key: string) {
         scope: "session",
         version: 1,
         legacy: true,
-        migrate: (value) => value,
         partialize: (state) => state,
         parse: parsePersistedReviewViewState,
-        restore: (saved) => saved,
       }),
     ),
   );
@@ -386,7 +371,6 @@ function* layoutChildren(element: Element): Generator<Element> {
 function useScrollCapture(
   scrollRegionRef: RefObject<HTMLElement | null>,
   panelStore: ReviewPanelStore,
-  persist: (state: PersistedReviewViewState) => void,
   saved: ReturnType<typeof createReviewViewStateStore>,
   restorationPending: RefObject<boolean>,
 ): void {
@@ -404,8 +388,7 @@ function useScrollCapture(
       dirty = false;
 
       if (restorationPending.current) return;
-      persist({
-        ...saved.getState(),
+      saved.setState({
         scrollTop: scrollRegion.scrollTop,
         scrollView: panelStore.getState().view,
       });
@@ -426,7 +409,7 @@ function useScrollCapture(
 
       if (dirty) write();
     };
-  }, [panelStore, persist, saved, restorationPending, scrollRegionRef]);
+  }, [panelStore, saved, restorationPending, scrollRegionRef]);
 }
 
 function parsePersistedReviewViewState(
