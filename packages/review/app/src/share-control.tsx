@@ -237,8 +237,7 @@ export function ShareControl() {
             <>
               <p {...stylex.props(styles.paragraph, styles.status)}>{label}</p>
               <p {...stylex.props(styles.paragraph, styles.status)}>
-                This is a read-only snapshot. Source files and traces are
-                available offline.
+                This is a read-only snapshot, available offline.
               </p>
             </>
           ) : signedIn ? (

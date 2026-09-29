@@ -18,7 +18,7 @@ import { z } from "zod";
 
 import { readSharingAuth } from "./auth.js";
 import { ShareAuthError, ShareClient, SharePreflightError } from "./client.js";
-import { exportShare } from "./export.js";
+import { exportShare, validateShareSources } from "./export.js";
 import { SharedReviewStore, sharedReviewId } from "./import.js";
 import { readShareRepository, verifyShareRepository } from "./repository.js";
 
@@ -219,11 +219,7 @@ export function mountSharingPublisher(
         "Pin this review to commits before sharing it.",
       );
 
-    if (!snapshot.pins)
-      throw new ReviewInputError(
-        "A document without source pins of its own cannot be shared.",
-        409,
-      );
+    validateShareSources(snapshot);
     const account = await readSharingAuth();
 
     if (!account)
@@ -232,11 +228,13 @@ export function mountSharingPublisher(
         409,
       );
 
-    const root = store.repositoryPath(snapshot.pins.repositoryId);
+    const root = snapshot.pins
+      ? store.repositoryPath(snapshot.pins.repositoryId)
+      : undefined;
 
-    const repository = await (options.readRepository ?? readShareRepository)(
-      root,
-    );
+    const repository = root
+      ? await (options.readRepository ?? readShareRepository)(root)
+      : undefined;
 
     const bundle = await exportShare({
       store,
@@ -246,10 +244,13 @@ export function mountSharingPublisher(
       repository,
     });
 
-    const verification = verifyRepository(root, snapshot.pins, repository).then(
-      () => ({ ok: true as const }),
-      (error: Error) => ({ ok: false as const, error }),
-    );
+    const verification =
+      root && snapshot.pins && repository
+        ? verifyRepository(root, snapshot.pins, repository).then(
+            () => ({ ok: true as const }),
+            (error: Error) => ({ ok: false as const, error }),
+          )
+        : Promise.resolve({ ok: true as const });
 
     try {
       const result = await new ShareClient(

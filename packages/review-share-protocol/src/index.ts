@@ -102,7 +102,9 @@ export const shareManifestSchema = z
         }),
       )
       .max(MAX_SHARE_OBJECTS),
-    repository: z.strictObject({ cloneUrl: gitHubRepositoryUrlSchema }),
+    repository: z
+      .strictObject({ cloneUrl: gitHubRepositoryUrlSchema })
+      .optional(),
   })
   .superRefine((manifest, context) => {
     const ids = new Set(manifest.objects.map((object) => object.id));
