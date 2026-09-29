@@ -464,7 +464,7 @@ function connectPlugins(
     },
     omp: {
       label: "Add the oh-my-pi MCP server",
-      command: `Add ${JSON.stringify({ whiteboard: reviewMcpLaunch(hasShim) })}\nto "mcpServers" in ~/.omp/agent/mcp.json, then run /mcp reload in oh-my-pi.`,
+      command: `Add ${JSON.stringify({ whiteboard: reviewMcpLaunch(hasShim) })}\nto "mcpServers" in ~/.omp/agent/mcp.json, then run /mcp reload.`,
     },
     copilot:
       process.platform === "win32"

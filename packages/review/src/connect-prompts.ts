@@ -122,7 +122,7 @@ function pluginSteps(
       ];
     case "pi":
       return [
-        `Run \`pi --version\`. On Pi 0.99.0 or later, which has MCP, run:\n\n\`\`\`sh\npi mcp add whiteboard -- ${launchCommand(reviewMcpLaunch(true, platform))}\npi remove ${PI_WHITEBOARD_PACKAGE} # old package, if installed\n\`\`\`\n\nOn older Pi, run \`pi install ${PI_WHITEBOARD_PACKAGE}\`.`,
+        `On Pi 0.99.0 or later, run:\n\n\`\`\`sh\npi mcp add whiteboard -- ${launchCommand(reviewMcpLaunch(true, platform))}\npi remove ${PI_WHITEBOARD_PACKAGE} # if installed\n\`\`\`\n\nOn older Pi, run \`pi install ${PI_WHITEBOARD_PACKAGE}\`.`,
       ];
     case "omp": {
       const entry = JSON.stringify(
@@ -132,8 +132,8 @@ function pluginSteps(
       );
 
       return [
-        `Merge this entry into the mcpServers object in ~/.omp/agent/mcp.json without removing other servers or settings (create the file and object if missing):\n\n\`\`\`json\n${entry}\n\`\`\``,
-        `Run \`omp plugin uninstall @dev.fast/pi-whiteboard\` to remove the old package, if installed.`,
+        `Add this entry to mcpServers in ~/.omp/agent/mcp.json, keeping the rest of the file:\n\n\`\`\`json\n${entry}\n\`\`\``,
+        `Run \`omp plugin uninstall @dev.fast/pi-whiteboard\` if installed.`,
       ];
     }
   }
@@ -174,9 +174,9 @@ export function connectPrompt(
 
   const verify =
     target === "pi"
-      ? "Ask me to run /reload in Pi, then call `session_get_instructions` on the Whiteboard MCP server (on Pi before 0.99.0, run `whiteboard api session_get_instructions '{}'`) and confirm it answered. Do not author anything yet."
+      ? "Ask me to run /reload, then call `session_get_instructions` on the Whiteboard server (older Pi: `whiteboard api session_get_instructions '{}'`). Do not author anything yet."
       : target === "omp"
-        ? "Ask me to run /mcp reload in oh-my-pi, then call `session_get_instructions` on the Whiteboard MCP server and confirm it answered. Do not author anything yet."
+        ? "Ask me to run /mcp reload, then call `session_get_instructions` on the Whiteboard server. Do not author anything yet."
         : target === "opencode"
           ? "Stop and tell me to quit and reopen OpenCode: it loads plugins and MCP servers only at startup. After I reopen it, call `session_get_instructions` on the Whiteboard server to confirm the connection. Do not author anything yet."
           : "Reload your MCP tools and call `session_get_instructions` on the Whiteboard server. If a restart is needed, tell me and verify after it. Do not author anything yet.";
