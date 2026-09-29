@@ -1,12 +1,14 @@
 import {
   type JsonObject,
   type JsonValue,
+  type ReviewCommitSummary,
   isJsonObject,
   jsonNumber,
   jsonObject,
   jsonProperty,
   jsonString,
   parseJsonText,
+  reviewViewSchema,
 } from "@dev.fast/review-protocol";
 import type { RefObject } from "react";
 import {
@@ -46,6 +48,11 @@ export interface PersistedReviewViewState {
   panel?: PersistedTourPanel;
   /** A fullscreen diagram tour (sequence or database lens) that was open. */
   overlayTour?: PersistedOverlayTour;
+  /** The commit the diff was scoped to; restored while the version lists it. */
+  diffScope?: { commit: string; file?: string };
+  trace?: { sessionId: string; trace?: string };
+  /** The view `scrollTop` was taken on; absent on older records ("review"). */
+  scrollView?: ReviewView;
 }
 
 export interface PersistedOverlayTour {
@@ -101,7 +108,9 @@ export function useReviewViewStateSync({
         if (
           state.view === previous.view &&
           state.lens === previous.lens &&
-          state.overlayTour === previous.overlayTour
+          state.overlayTour === previous.overlayTour &&
+          state.diffScope === previous.diffScope &&
+          state.traceSelection === previous.traceSelection
         ) {
           return;
         }
@@ -115,6 +124,22 @@ export function useReviewViewStateSync({
           ...(state.lens !== previous.lens && {
             lens: state.lens ?? undefined,
           }),
+          ...(state.diffScope !== previous.diffScope && {
+            diffScope: state.diffScope
+              ? {
+                  commit: state.diffScope.commit.commit,
+                  file: state.diffScope.file,
+                }
+              : undefined,
+          }),
+          ...(state.traceSelection !== previous.traceSelection && {
+            trace: state.traceSelection
+              ? {
+                  sessionId: state.traceSelection.sessionId,
+                  trace: state.traceSelection.trace,
+                }
+              : undefined,
+          }),
           overlayTour: state.overlayTour
             ? {
                 tourId: state.overlayTour.tourId,
@@ -127,13 +152,23 @@ export function useReviewViewStateSync({
     [panelStore, persist],
   );
 
+  // A scroll position belongs to the view it was taken on.
+  const restoreScrollTop = useMemo(
+    () =>
+      (initialState.scrollView ?? "review") === panelStore.getState().view
+        ? initialState.scrollTop
+        : undefined,
+    [initialState, panelStore],
+  );
+
   const scrollRestorationPending = useScrollRestoration(
     scrollRegionRef,
-    initialState.scrollTop,
+    restoreScrollTop,
   );
 
   useScrollCapture(
     scrollRegionRef,
+    panelStore,
     persist,
     persistedRef,
     scrollRestorationPending,
@@ -141,8 +176,9 @@ export function useReviewViewStateSync({
 }
 
 /** The navigation a canvas resumes: its stored view where the canvas still
- * offers it, its stored lens when that lens belongs to this version, and the
- * fullscreen tour that was open. */
+ * offers it, its stored lens when that lens belongs to this version, the
+ * commit its diff was scoped to while this version lists it, the picked
+ * trace, and the fullscreen tour that was open. */
 export function readReviewNavigationRestore(
   config: ReviewClientConfig,
   canvas: {
@@ -150,6 +186,7 @@ export function readReviewNavigationRestore(
     hasChangeRange: boolean;
     version: number;
     lensMode: ReviewLensSelection["mode"];
+    commits: readonly ReviewCommitSummary[];
   },
 ): ReviewNavigationRestore {
   const stored = readPersistedReviewViewState(config);
@@ -160,6 +197,13 @@ export function readReviewNavigationRestore(
       tourId: stored.panel.tourId,
       activeAnchor: stored.panel.activeAnchor,
     });
+
+  const scopedCommit =
+    stored.activeView === "diff" && stored.diffScope
+      ? canvas.commits.find(
+          (summary) => summary.commit === stored.diffScope!.commit,
+        )
+      : undefined;
 
   return {
     view: stored.activeView ?? "review",
@@ -174,6 +218,10 @@ export function readReviewNavigationRestore(
       stored.lens.mode === canvas.lensMode
         ? stored.lens
         : null,
+    diffScope: scopedCommit
+      ? { commit: scopedCommit, file: stored.diffScope!.file }
+      : null,
+    traceSelection: stored.trace,
     overlayTour: tour
       ? {
           tourId: tour.tourId,
@@ -328,6 +376,7 @@ function* layoutChildren(element: Element): Generator<Element> {
 
 function useScrollCapture(
   scrollRegionRef: RefObject<HTMLElement | null>,
+  panelStore: ReviewPanelStore,
   persist: (state: PersistedReviewViewState) => void,
   persistedRef: RefObject<PersistedReviewViewState>,
   restorationPending: RefObject<boolean>,
@@ -349,6 +398,7 @@ function useScrollCapture(
       persist({
         ...persistedRef.current,
         scrollTop: scrollRegion.scrollTop,
+        scrollView: panelStore.getState().view,
       });
     };
 
@@ -367,7 +417,7 @@ function useScrollCapture(
 
       if (dirty) write();
     };
-  }, [persist, persistedRef, restorationPending, scrollRegionRef]);
+  }, [panelStore, persist, persistedRef, restorationPending, scrollRegionRef]);
 }
 
 function parsePersistedReviewViewState(
@@ -380,13 +430,24 @@ function parsePersistedReviewViewState(
   if (scrollTop !== undefined && scrollTop >= 0) state.scrollTop = scrollTop;
   const activeView = jsonString(jsonProperty(value, "activeView"));
 
-  if (
-    activeView === "review" ||
-    activeView === "commits" ||
-    activeView === "map" ||
-    activeView === "diff"
-  ) {
-    state.activeView = activeView;
+  if (isReviewView(activeView)) state.activeView = activeView;
+  const scrollView = jsonString(jsonProperty(value, "scrollView"));
+
+  if (isReviewView(scrollView)) state.scrollView = scrollView;
+  const diffScope = jsonObject(jsonProperty(value, "diffScope"));
+  const commit = jsonString(diffScope && jsonProperty(diffScope, "commit"));
+
+  if (commit !== undefined) {
+    const file = jsonString(diffScope && jsonProperty(diffScope, "file"));
+    state.diffScope = file === undefined ? { commit } : { commit, file };
+  }
+
+  const trace = jsonObject(jsonProperty(value, "trace"));
+  const sessionId = jsonString(trace && jsonProperty(trace, "sessionId"));
+
+  if (sessionId !== undefined) {
+    const id = jsonString(trace && jsonProperty(trace, "trace"));
+    state.trace = id === undefined ? { sessionId } : { sessionId, trace: id };
   }
 
   const lens = parsePersistedLens(jsonObject(jsonProperty(value, "lens")));
@@ -404,6 +465,10 @@ function parsePersistedReviewViewState(
   if (overlayTour) state.overlayTour = overlayTour;
 
   return state;
+}
+
+function isReviewView(value: string | undefined): value is ReviewView {
+  return reviewViewSchema.safeParse(value).success;
 }
 
 function parsePersistedLens(

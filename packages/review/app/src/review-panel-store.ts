@@ -94,13 +94,20 @@ export type ReviewPanelStore = ReturnType<typeof createReviewPanelStore>;
 export type ReviewNavigationRestore = Partial<
   Pick<
     ReviewNavigationState,
-    "view" | "availableViews" | "lens" | "overlayTour"
+    | "view"
+    | "availableViews"
+    | "diffScope"
+    | "traceSelection"
+    | "lens"
+    | "overlayTour"
   >
 >;
 
 export function createReviewPanelStore({
   view = "review",
   availableViews = reviewViewSchema.options,
+  diffScope = null,
+  traceSelection,
   lens = null,
   overlayTour = null,
 }: ReviewNavigationRestore = {}) {
@@ -111,8 +118,8 @@ export function createReviewPanelStore({
     motion: "live",
     view: initialView,
     availableViews,
-    diffScope: null,
-    traceSelection: undefined,
+    diffScope: initialView === "diff" ? diffScope : null,
+    traceSelection,
     lens,
     mapFocus: null,
     overlayTour: initialView === "review" ? overlayTour : null,

@@ -405,6 +405,7 @@ export function ApiCanvas({
                   content.structuralDiffEnabled === false
                     ? "textual"
                     : "structural",
+                commits: data.commits,
               })
             }
           >

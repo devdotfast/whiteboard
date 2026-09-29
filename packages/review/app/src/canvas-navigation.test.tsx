@@ -263,6 +263,195 @@ it("reopens a stored fullscreen tour only while its diagram is in the document",
   expect(readReviewUiState("session", key)).not.toHaveProperty("overlayTour");
 });
 
+it("resumes a commit diff with its scope", async () => {
+  const review = await command({
+    type: "create",
+    title: "Commit review",
+    pins: { repositoryId: "repo", base: "base", head: "head" },
+  });
+
+  const commit = {
+    commit: "a".repeat(40),
+    parentCommit: "b".repeat(40),
+    subject: "Add the API",
+    author: "Developer",
+    authoredAt: "2026-09-28T10:00:00Z",
+    fileCount: 1,
+    additions: 1,
+    deletions: 0,
+  };
+
+  let commits = [commit];
+  const app = new Hono();
+  app.get("/reviews-api/:id/commits", (context) => context.json(commits));
+  app.route("/reviews-api", createReviewApi(store));
+
+  const { container, open } = canvasHarness(app, review.reviewId);
+  const scopeBar = () => container.querySelector(".review-diff-scope-bar");
+
+  await open();
+  await act(async () => tab(container, "Commits")!.click());
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(
+        container.querySelector('button[aria-label="Open commit diff"]'),
+      ).toBeTruthy(),
+    );
+  });
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label="Open commit diff"]',
+      )!
+      .click(),
+  );
+  expect(scopeBar()?.textContent).toContain("Add the API");
+
+  await open();
+  expect(tab(container, "Diff")?.getAttribute("aria-pressed")).toBe("true");
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(scopeBar()?.textContent).toContain("Add the API"),
+    );
+  });
+
+  // A version that no longer lists the commit resumes the whole diff.
+  commits = [];
+  await command({
+    type: "edit",
+    reviewId: review.reviewId,
+    edit: {
+      type: "insert",
+      content: { type: "markdown", markdown: "A later version" },
+    },
+  });
+  await open();
+  expect(tab(container, "Diff")?.getAttribute("aria-pressed")).toBe("true");
+  expect(scopeBar()).toBeNull();
+});
+
+it("resumes the Trace view", async () => {
+  const { reviewId } = await traceReview();
+  const { container, open, show } = traceCanvas(reviewId, [traceSession]);
+
+  await open();
+  await act(async () => {
+    await vi.waitFor(() => expect(tab(container, "Trace")).toBeTruthy());
+  });
+  await show("trace");
+  expect(tab(container, "Trace")?.getAttribute("aria-pressed")).toBe("true");
+
+  await open();
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(tab(container, "Trace")?.getAttribute("aria-pressed")).toBe(
+        "true",
+      ),
+    );
+  });
+});
+
+it("lands a stored Trace view on the whiteboard once no traces are listed", async () => {
+  const { reviewId } = await traceReview();
+  const { container, open, show } = traceCanvas(reviewId, [traceSession]);
+
+  await open();
+  await act(async () => {
+    await vi.waitFor(() => expect(tab(container, "Trace")).toBeTruthy());
+  });
+  await show("trace");
+  expect(tab(container, "Trace")?.getAttribute("aria-pressed")).toBe("true");
+
+  const empty = traceCanvas(reviewId, []);
+  await empty.open();
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(
+        tab(empty.container, "Whiteboard")?.getAttribute("aria-pressed"),
+      ).toBe("true"),
+    );
+  });
+  expect(tab(empty.container, "Trace")).toBeNull();
+});
+
+const traceSession = {
+  sessionId: "session-1",
+  harness: "unknown",
+  available: true,
+  source: "r2",
+  commits: [{ sha: "commit-1", subject: "Initial commit subject" }],
+};
+
+const traceReview = () =>
+  command({
+    type: "create",
+    title: "Trace review",
+    pins: { repositoryId: "repo", base: "base", head: "head" },
+  });
+
+function traceCanvas(reviewId: string, sessions: (typeof traceSession)[]) {
+  const app = new Hono();
+  app.get("/reviews-api/:id/agent-traces", (context) =>
+    context.json({ ok: true, configured: true, sessions }),
+  );
+  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+  app.route("/reviews-api", createReviewApi(store));
+
+  return canvasHarness(app, reviewId);
+}
+
+function canvasHarness(app: Hono, reviewId: string) {
+  const listeners = new Set<Parameters<ReviewCanvasBridge["subscribe"]>[0]>();
+
+  const bridge = testReviewBridge(
+    {},
+    {
+      request: async (url, init) => app.request(url, init),
+      subscribe: (listener) => {
+        listeners.add(listener);
+
+        return { dispose: () => void listeners.delete(listener) };
+      },
+      diffView: {
+        files: async () => [],
+        create: () => ({
+          focus() {},
+          onDidError: () => ({ dispose() {} }),
+          dispose() {},
+        }),
+      },
+    },
+  );
+
+  document.body.querySelector("[data-canvas-harness]")?.remove();
+  const container = document.createElement("div");
+  container.dataset.canvasHarness = "";
+  document.body.append(container);
+
+  const open = async () => {
+    await act(async () => canvas?.dispose());
+    await act(async () => {
+      canvas = mount(container, { kind: "api", reviewId, bridge });
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(tab(container, "Diff")).toBeTruthy());
+    });
+  };
+
+  const show = async (
+    view: Extract<
+      Parameters<Parameters<ReviewCanvasBridge["subscribe"]>[0]>[0],
+      { event: "showReviewView" }
+    >["view"],
+  ) =>
+    act(async () => {
+      for (const listener of listeners)
+        listener({ event: "showReviewView", view });
+    });
+
+  return { container, open, show };
+}
+
 function tab(container: HTMLElement, label: string) {
   return container.querySelector<HTMLButtonElement>(
     `[aria-label="Session views"] button[aria-label="${label}"]`,
