@@ -281,9 +281,14 @@ it("resumes a commit diff with its scope", async () => {
     deletions: 0,
   };
 
-  let commits = [commit];
+  // Only the first version lists the commit.
+  const scopedVersion = store.read(review.reviewId).version;
   const app = new Hono();
-  app.get("/reviews-api/:id/commits", (context) => context.json(commits));
+  app.get("/reviews-api/:id/commits", (context) =>
+    context.json(
+      Number(context.req.query("version")) === scopedVersion ? [commit] : [],
+    ),
+  );
   app.route("/reviews-api", createReviewApi(store));
 
   const { container, open } = canvasHarness(app, review.reviewId);
@@ -316,7 +321,6 @@ it("resumes a commit diff with its scope", async () => {
   });
 
   // A version that no longer lists the commit resumes the whole diff.
-  commits = [];
   await command({
     type: "edit",
     reviewId: review.reviewId,
@@ -328,27 +332,56 @@ it("resumes a commit diff with its scope", async () => {
   await open();
   expect(tab(container, "Diff")?.getAttribute("aria-pressed")).toBe("true");
   expect(scopeBar()).toBeNull();
+
+  // The reader moved on to the whole diff, so the earlier version opens it too.
+  await act(async () => tab(container, "Whiteboard")!.click());
+  await act(async () => tab(container, "Diff")!.click());
+  await open(scopedVersion);
+  expect(tab(container, "Diff")?.getAttribute("aria-pressed")).toBe("true");
+  expect(scopeBar()).toBeNull();
 });
 
-it("resumes the Trace view", async () => {
+it("resumes the Trace view and the picked trace", async () => {
   const { reviewId } = await traceReview();
-  const { container, open, show } = traceCanvas(reviewId, [traceSession]);
+
+  const { container, open, show } = traceCanvas(reviewId, [
+    traceSession,
+    {
+      ...traceSession,
+      sessionId: "session-2",
+      commits: [{ sha: "commit-2", subject: "Second session" }],
+    },
+  ]);
+
+  const trigger = () =>
+    container.querySelector<HTMLButtonElement>(".review-trace-picker-trigger");
+
+  const option = (title: string) =>
+    [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(
+      (item) => item.textContent?.includes(title),
+    );
 
   await open();
   await act(async () => {
     await vi.waitFor(() => expect(tab(container, "Trace")).toBeTruthy());
   });
   await show("trace");
-  expect(tab(container, "Trace")?.getAttribute("aria-pressed")).toBe("true");
+  await act(async () => {
+    await vi.waitFor(() => expect(trigger()).toBeTruthy());
+  });
+  await act(async () => trigger()!.click());
+  await act(async () => option("Second session")!.click());
 
   await open();
   await act(async () => {
-    await vi.waitFor(() =>
-      expect(tab(container, "Trace")?.getAttribute("aria-pressed")).toBe(
-        "true",
-      ),
-    );
+    await vi.waitFor(() => expect(trigger()).toBeTruthy());
   });
+  expect(tab(container, "Trace")?.getAttribute("aria-pressed")).toBe("true");
+  await act(async () => trigger()!.click());
+  expect(option("Second session")?.getAttribute("aria-selected")).toBe("true");
+  expect(option("Initial commit subject")?.getAttribute("aria-selected")).toBe(
+    "false",
+  );
 });
 
 it("lands a stored Trace view on the whiteboard once no traces are listed", async () => {
@@ -428,10 +461,10 @@ function canvasHarness(app: Hono, reviewId: string) {
   container.dataset.canvasHarness = "";
   document.body.append(container);
 
-  const open = async () => {
+  const open = async (version?: number) => {
     await act(async () => canvas?.dispose());
     await act(async () => {
-      canvas = mount(container, { kind: "api", reviewId, bridge });
+      canvas = mount(container, { kind: "api", reviewId, version, bridge });
     });
     await act(async () => {
       await vi.waitFor(() => expect(tab(container, "Diff")).toBeTruthy());

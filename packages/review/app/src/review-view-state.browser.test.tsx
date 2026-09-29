@@ -176,6 +176,19 @@ describe("review view state", () => {
     expect(resumed.element.scrollTop).toBe(320);
   });
 
+  it("stops restoring the scroll once the reader switches view", () => {
+    const session = testReviewSession();
+    const metrics = { scrollHeight: 200, clientHeight: 200 };
+    storeState(session, { scrollTop: 320 });
+    const harness = renderViewState({ session, metrics });
+
+    act(() => harness.store.getState().showView("commits"));
+    metrics.scrollHeight = 700;
+    triggerResize();
+
+    expect(harness.element.scrollTop).toBe(0);
+  });
+
   it("keeps restoring after the old animation-frame retry window", () => {
     const session = testReviewSession();
     const metrics = { scrollHeight: 200, clientHeight: 200 };

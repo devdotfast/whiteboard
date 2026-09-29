@@ -124,14 +124,14 @@ export function useReviewViewStateSync({
           ...(state.lens !== previous.lens && {
             lens: state.lens ?? undefined,
           }),
-          ...(state.diffScope !== previous.diffScope && {
-            diffScope: state.diffScope
-              ? {
-                  commit: state.diffScope.commit.commit,
-                  file: state.diffScope.file,
-                }
-              : undefined,
-          }),
+          // Written on every change: a scope a restore dropped must not
+          // come back on another version.
+          diffScope: state.diffScope
+            ? {
+                commit: state.diffScope.commit.commit,
+                file: state.diffScope.file,
+              }
+            : undefined,
           ...(state.traceSelection !== previous.traceSelection && {
             trace: state.traceSelection
               ? {
@@ -163,6 +163,7 @@ export function useReviewViewStateSync({
 
   const scrollRestorationPending = useScrollRestoration(
     scrollRegionRef,
+    panelStore,
     restoreScrollTop,
   );
 
@@ -256,6 +257,7 @@ export function clearPersistedReviewViewState(
 
 function useScrollRestoration(
   scrollRegionRef: RefObject<HTMLElement | null>,
+  panelStore: ReviewPanelStore,
   scrollTop: number | undefined,
 ): RefObject<boolean> {
   const pendingRef = useRef(false);
@@ -273,6 +275,7 @@ function useScrollRestoration(
       scrollRegion.removeEventListener("pointerdown", abortForUserInput);
       scrollRegion.removeEventListener("touchstart", abortForUserInput);
       scrollRegion.removeEventListener("keydown", abortForNavigationKey);
+      unsubscribeView();
     };
 
     const finish = () => {
@@ -332,6 +335,12 @@ function useScrollRestoration(
       passive: true,
     });
     scrollRegion.addEventListener("keydown", abortForNavigationKey);
+
+    // The position belongs to the view it was taken on.
+    const unsubscribeView = panelStore.subscribe((state, previous) => {
+      if (state.view !== previous.view) finish();
+    });
+
     resizeObserver =
       typeof ResizeObserver === "undefined"
         ? null
@@ -354,7 +363,7 @@ function useScrollRestoration(
       removeUserListeners();
       pendingRef.current = false;
     };
-  }, [scrollRegionRef, scrollTop]);
+  }, [panelStore, scrollRegionRef, scrollTop]);
 
   return pendingRef;
 }
