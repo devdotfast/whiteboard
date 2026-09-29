@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
-// References to the canvas custom properties. theme.css (and, for layout
-// measurements, a few components) defines them; these are the names StyleX
+// References to the canvas custom properties. global.css and theme-styles.ts
+// (and, for layout measurements, a few components) define them; these are the names StyleX
 // rules read them by.
 export const tokens = stylex.defineConsts({
   accent: "var(--accent)",

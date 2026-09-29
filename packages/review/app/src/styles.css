@@ -4,6 +4,4 @@
 @import "./fonts/fonts.css";
 /* In a layer, so any canvas rule beats React Flow. */
 @import "@xyflow/react/dist/style.css" layer(vendor);
-@import "./theme.css";
-@import "./base.css";
 @import "./global.css";

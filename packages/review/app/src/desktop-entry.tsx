@@ -13,6 +13,7 @@ import { ReviewHome } from "./review-home-view";
 import { ReviewContainerProvider } from "./review-root-context";
 import { SettingsPage } from "./settings-page";
 import { shellStyles } from "./shell-styles";
+import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { WelcomePage } from "./welcome-page";
 
@@ -167,13 +168,21 @@ export function mountReviewCanvas(
   // must live on an in-scope descendant, so all content renders inside this
   // host element.
   const themeHost = container.ownerDocument.createElement("div");
-  themeHost.className = "review-theme-host";
+  themeHost.className = `review-theme-host ${stylex.props(styles.themeHost).className}`;
+
+  const lightClasses = [
+    "review-app--theme-light",
+    ...(stylex.props(themeStyles.light).className ?? "").split(" "),
+  ];
+
   container.appendChild(themeHost);
   const root = createRoot(themeHost);
 
   const applyTheme = (theme: "dark" | "light") => {
     container.dataset.reviewTheme = theme;
-    themeHost.classList.toggle("review-app--theme-light", theme === "light");
+
+    for (const name of lightClasses)
+      themeHost.classList.toggle(name, theme === "light");
   };
 
   const render = () => {
@@ -247,6 +256,10 @@ function resetSessionDiagnostics(container: HTMLElement): void {
 }
 
 const styles = stylex.create({
+  // Layout-neutral: it only carries the theme inside the scope boundary.
+  themeHost: {
+    display: "contents",
+  },
   // The Source tab's VS Code-like watermark: quiet text centered in the
   // empty editor area, next to the native file tree.
   sourceEmpty: {
