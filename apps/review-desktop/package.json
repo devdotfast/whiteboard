@@ -29,7 +29,7 @@
     "@dev.fast/review-protocol": "workspace:*"
   },
   "devDependencies": {
-    "@dev.fast/diffr": "0.1.5",
+    "@dev.fast/diffr": "0.1.7",
     "@dev.fast/review-canvas": "workspace:*",
     "@types/node": "24.12.2",
     "jsdom": "29.1.1",
