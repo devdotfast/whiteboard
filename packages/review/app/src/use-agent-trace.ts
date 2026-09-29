@@ -2,9 +2,10 @@ import {
   type ReviewAgentTraceResponse,
   parseReviewAgentTraceResponse,
 } from "@dev.fast/review-protocol";
-import { useEffect, useState } from "react";
+import { skipToken, useQuery } from "@tanstack/react-query";
 
-import { useReviewSession } from "./host/review-session";
+import { canvasQueryKeys } from "./canvas-query";
+import { type ReviewSession, useReviewSession } from "./host/review-session";
 
 export type LoadedAgentTrace = Extract<ReviewAgentTraceResponse, { ok: true }>;
 
@@ -41,6 +42,21 @@ export function makeAgentTraceUrl(
   return `/agent-traces/${encodeURIComponent(sessionId)}${query}`;
 }
 
+async function readAgentTrace(
+  reviewFetch: ReviewSession["fetch"],
+  url: `/${string}`,
+  signal: AbortSignal,
+): Promise<LoadedAgentTrace> {
+  const response = await reviewFetch(url, { signal });
+  const result = parseReviewAgentTraceResponse(await response.json());
+
+  if (!response.ok || !result.ok) {
+    throw new Error(result.ok ? "Unable to load trace." : result.error);
+  }
+
+  return result;
+}
+
 /** Loads the currently selected trace for this component instance. */
 export function useAgentTrace(
   sessionId?: string | null,
@@ -48,71 +64,36 @@ export function useAgentTrace(
   storage?: AgentTraceStorage | null,
 ): AgentTraceState {
   const session = useReviewSession();
-  const key = sessionId ? makeAgentTraceKey(sessionId, trace, storage) : null;
 
   const retained = sessionId
     ? session.review?.traces.get(makeAgentTraceKey(sessionId, trace))
     : undefined;
 
-  const [state, setState] = useState<{
-    key: string | null;
-    traceState: AgentTraceState;
-  }>(() => {
-    if (!key) return { key: null, traceState: { status: "idle" } };
-
-    return { key, traceState: { status: "loading" } };
+  // Full payloads can be large, so an unobserved trace leaves the cache soon
+  // after the view moves away from it.
+  const query = useQuery({
+    queryKey: canvasQueryKeys.agentTrace(sessionId, trace, storage),
+    queryFn:
+      sessionId && !retained
+        ? ({ signal }) =>
+            readAgentTrace(
+              session.fetch,
+              makeAgentTraceUrl(sessionId, trace, storage),
+              signal,
+            )
+        : skipToken,
+    staleTime: 0,
+    gcTime: 30_000,
   });
-
-  const activeState: AgentTraceState =
-    state.key === key
-      ? state.traceState
-      : key
-        ? { status: "loading" }
-        : { status: "idle" };
-
-  useEffect(() => {
-    if (retained) return;
-
-    if (!key || !sessionId) {
-      setState({ key: null, traceState: { status: "idle" } });
-
-      return;
-    }
-
-    const controller = new AbortController();
-    setState({ key, traceState: { status: "loading" } });
-    const url = makeAgentTraceUrl(sessionId, trace, storage);
-    session
-      .fetch(url, { signal: controller.signal })
-      .then(async (response) => {
-        const json = await response.json();
-        const result = parseReviewAgentTraceResponse(json);
-
-        if (!response.ok || !result.ok) {
-          throw new Error(result.ok ? "Unable to load trace." : result.error);
-        }
-
-        if (!controller.signal.aborted) {
-          setState({ key, traceState: { status: "loaded", trace: result } });
-        }
-      })
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted) return;
-        setState({
-          key,
-          traceState: {
-            status: "error",
-            error: cause instanceof Error ? cause.message : String(cause),
-          },
-        });
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [key, session, sessionId, trace, storage, retained]);
 
   if (retained) return { status: "loaded", trace: retained };
 
-  return activeState;
+  if (!sessionId) return { status: "idle" };
+
+  if (query.status === "error")
+    return { status: "error", error: query.error.message };
+
+  return query.data
+    ? { status: "loaded", trace: query.data }
+    : { status: "loading" };
 }

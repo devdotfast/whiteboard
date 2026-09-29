@@ -58,11 +58,6 @@ export function fixtureReviewBridge(api: FixtureReviewApi): ReviewCanvasBridge {
 
     if (route === `/${id}/commits`) return Response.json([]);
 
-    if (route === `/${id}/history`)
-      return Response.json([
-        { version: api.snapshot.version, createdAt: api.snapshot.createdAt },
-      ]);
-
     const map = /^\/[^/]+\/maps\/([^/]+)$/.exec(route);
 
     if (map && api.maps && Object.hasOwn(api.maps, map[1]!))

@@ -43,7 +43,6 @@ it("keeps dwell continuous through live review updates and sends the latest vers
     historicalRevision: null,
     updatedAtMs: 0,
     traces: new Map(),
-    listVersions: async () => [],
     stack: async () => [],
     dismiss: async () => {},
   };

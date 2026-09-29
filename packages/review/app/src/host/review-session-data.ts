@@ -1,8 +1,5 @@
 import type { LoadedAgentTrace } from "@canvas/use-agent-trace";
-import type {
-  ReviewDocumentVersionWire,
-  ReviewStackLayer,
-} from "@dev.fast/review-protocol";
+import type { ReviewStackLayer } from "@dev.fast/review-protocol";
 
 export interface ReviewSessionData {
   /** Absent for a review. The scratchpad hides review-only chrome. */
@@ -19,7 +16,6 @@ export interface ReviewSessionData {
   pullRequestNumber?: number;
   pullRequestUrl?: string;
   traces: ReadonlyMap<string, LoadedAgentTrace>;
-  listVersions(): Promise<ReviewDocumentVersionWire[]>;
   stack(signal: AbortSignal): Promise<ReviewStackLayer[]>;
   dismiss(): Promise<void>;
 }

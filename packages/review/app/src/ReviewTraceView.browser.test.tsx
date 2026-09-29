@@ -207,7 +207,6 @@ describe("ReviewTraceView", () => {
           historicalRevision: null,
           updatedAtMs: 0,
           traces: new Map(),
-          listVersions: async () => [],
           stack: async () => [],
           dismiss: async () => {},
         };

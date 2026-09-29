@@ -73,7 +73,6 @@ export function testReviewSession(
       historicalRevision: null,
       updatedAtMs: Date.now(),
       traces: new Map(),
-      listVersions: async () => [],
       stack: async () => [],
       dismiss: async () => {},
     },

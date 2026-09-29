@@ -839,18 +839,6 @@ export const ReviewCommitSummarySchema = z.strictObject({
 
 export type ReviewCommitSummary = z.infer<typeof ReviewCommitSummarySchema>;
 
-export const ReviewDocumentVersionSchema = z.strictObject({
-  // The native snapshot version displayed by the canvas.
-  revision: z.string().min(1),
-  /** Unix milliseconds when the version was sealed. */
-  sealedAt: positiveInteger,
-  isCurrent: z.boolean(),
-});
-
-export type ReviewDocumentVersionWire = z.infer<
-  typeof ReviewDocumentVersionSchema
->;
-
 /** The native agent session that authored the review. */
 export const AuthoringAgentSessionSchema = z.strictObject({
   harness: z.enum(["claude-code", "codex", "opencode", "pi"]),

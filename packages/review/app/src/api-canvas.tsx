@@ -298,17 +298,6 @@ export function ApiCanvas({
         traces: new Map(
           [...data.traces].map(([id, trace]) => [id, retainedTrace(id, trace)]),
         ),
-        listVersions: async () => {
-          const history = await client.read<
-            { version: number; createdAt: string }[]
-          >(`/${content.reviewId}/history`);
-
-          return history.map((item) => ({
-            revision: String(item.version),
-            sealedAt: Date.parse(item.createdAt),
-            isCurrent: item.version === snapshot.version,
-          }));
-        },
         stack: async (signal: AbortSignal) =>
           parseReviewStackResponse(
             await client.read(

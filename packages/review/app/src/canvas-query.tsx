@@ -38,6 +38,11 @@ export const canvasQueryKeys = {
     pins: { base: string; head: string } | undefined,
     storage: AgentTraceStorage | null,
   ) => ["agent-traces", version, pins?.base, pins?.head, storage] as const,
+  agentTrace: (
+    sessionId: string | null | undefined,
+    trace: string | null | undefined,
+    storage: AgentTraceStorage | null | undefined,
+  ) => ["agent-trace", sessionId, trace ?? null, storage ?? null] as const,
   diffFiles: (documentKey: string, source: number, revision?: string) =>
     ["diff-files", documentKey, source, revision] as const,
   reviewStack: (
