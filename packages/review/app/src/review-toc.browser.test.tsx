@@ -207,7 +207,7 @@ describe("ReviewToc", () => {
 
     for (const row of rows.slice(1)) {
       const [number, label] = row.querySelectorAll("span");
-      // Measure the digits, not the span box: they can overflow a fixed box.
+      // The digits can overflow the span box.
       const digits = document.createRange();
       digits.selectNodeContents(number!);
 

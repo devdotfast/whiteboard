@@ -496,7 +496,7 @@ const styles = stylex.create({
   body: {
     maxHeight: "min(488px, calc(100dvh - 196px))",
     overflow: "auto",
-    // Match the review document's scrollbar, which hides when idle on macOS.
+    // Same scrollbar as the review document.
     scrollbarWidth: "thin",
     opacity: 0,
     pointerEvents: "none",
@@ -602,7 +602,7 @@ const styles = stylex.create({
     minWidth: { default: "22px", [besideDocumentHeader]: "12px" },
     fontSize: { default: "11px", [besideDocumentHeader]: "12px" },
   },
-  // Room for "5.10" so two-digit subsections keep their labels in line.
+  // Fits "5.10".
   numberH3: {
     minWidth: "4ch",
   },
