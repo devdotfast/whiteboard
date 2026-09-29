@@ -1,4 +1,5 @@
 import { Button, IconButton } from "@canvas/ui/button";
+import { surfaceStyles } from "@canvas/ui/surface";
 import {
   type ReviewBugReportRequest,
   parseReviewBugReportResponse,
@@ -21,7 +22,7 @@ import {
 import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
 import { BugIcon } from "./icons";
-import { fontSize, fontWeight } from "./scale.stylex";
+import { fontSize, fontWeight, layer } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { useToast } from "./toast";
 import { tokens } from "./tokens.stylex";
@@ -217,7 +218,11 @@ export function BugReportControl({
           onMouseDown={cancel}
         >
           <section
-            {...stylex.props(styles.dialog, dropActive && styles.dropTarget)}
+            {...stylex.props(
+              surfaceStyles.dialog,
+              styles.dialog,
+              dropActive && styles.dropTarget,
+            )}
             role="dialog"
             aria-modal="true"
             aria-labelledby="bug-report-title"
@@ -356,7 +361,7 @@ const chromeBorder = {
 const styles = stylex.create({
   backdrop: {
     position: "fixed",
-    zIndex: 10000,
+    zIndex: layer.dialog,
     inset: 0,
     display: "grid",
     placeItems: "center",
@@ -365,11 +370,6 @@ const styles = stylex.create({
   },
   dialog: {
     width: "min(540px, 100%)",
-    ...chromeBorder,
-    borderRadius: "8px",
-    backgroundColor: tokens.bg,
-    boxShadow: `0 18px 60px ${tokens.shadowColorStrong}`,
-    color: tokens.ink,
   },
   dropTarget: {
     outline: `2px dashed ${tokens.accent}`,

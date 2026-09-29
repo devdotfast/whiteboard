@@ -1,4 +1,5 @@
 import { Button, IconButton } from "@canvas/ui/button";
+import { surfaceStyles } from "@canvas/ui/surface";
 import {
   type ReviewCanvasRange,
   type ReviewCommitSummary,
@@ -1109,7 +1110,7 @@ function MapSettingsControl(): ReactElement {
     <div ref={controlRef} {...stylex.props(mapSettingsStyles.control)}>
       {isOpen && (
         <section
-          {...stylex.props(mapSettingsStyles.popover)}
+          {...stylex.props(surfaceStyles.popover, mapSettingsStyles.popover)}
           aria-label="Map settings"
         >
           <DebugSwitch
@@ -1272,12 +1273,6 @@ const mapSettingsStyles = stylex.create({
     display: "flex",
     width: "268px",
     flexDirection: "column",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.ruleSoft,
-    borderRadius: "10px",
-    backgroundColor: tokens.surfaceRaised,
-    boxShadow: `0 12px 32px ${tokens.shadowColorStrong}`,
   },
   switch: {
     position: "relative",

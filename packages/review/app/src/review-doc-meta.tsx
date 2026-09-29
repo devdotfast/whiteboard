@@ -1,3 +1,6 @@
+// Aliased: review stacks call their entries layers.
+import { layer as stackingLayer } from "@canvas/scale.stylex";
+import { surfaceStyles } from "@canvas/ui/surface";
 import {
   type ReviewDiffStats,
   type ReviewStackLayer,
@@ -295,7 +298,7 @@ function ReviewStackSelector({
           <path d="m3 4.5 3 3 3-3" {...stylex.props(styles.stackChevronPath)} />
         </svg>
       </summary>
-      <div {...stylex.props(styles.stackMenu)}>
+      <div {...stylex.props(surfaceStyles.popover, styles.stackMenu)}>
         {layers.map((layer, index) => (
           <ReviewStackLayerRow
             key={layer.pullRequestNumber}
@@ -602,19 +605,13 @@ const styles = stylex.create({
   },
   stackMenu: {
     position: "absolute",
-    zIndex: 20,
+    zIndex: stackingLayer.popover,
     top: "calc(100% + 6px)",
     left: 0,
     display: "flex",
     flexDirection: "column",
     minWidth: "340px",
     padding: "7px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.ruleSoft,
-    borderRadius: "9px",
-    backgroundColor: tokens.surfaceRaised,
-    boxShadow: `0 14px 32px ${tokens.shadowColor}`,
   },
   stackRow: {
     display: "flex",

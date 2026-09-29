@@ -6,7 +6,7 @@ import {
   traceToolMarker,
   traceWorkedMarker,
 } from "./markers.stylex";
-import { elevation, fontWeight } from "./scale.stylex";
+import { elevation, fontWeight, layer } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 // The agent trace view, and the trace scoped into a side peek.
@@ -121,15 +121,9 @@ export const traceStyles = stylex.create({
     position: "absolute",
     top: "calc(100% + 4px)",
     left: 0,
-    zIndex: 50,
+    zIndex: layer.popover,
     minWidth: "320px",
     maxWidth: "min(640px, 90vw)",
-    backgroundColor: tokens.surface,
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    borderRadius: "6px",
-    boxShadow: `0 6px 20px ${tokens.shadowColorStrong}`,
     padding: "4px",
     display: "flex",
     flexDirection: "column",

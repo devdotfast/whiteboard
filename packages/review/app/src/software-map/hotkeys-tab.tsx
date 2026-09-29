@@ -1,4 +1,5 @@
 import { MinusIcon, PlusIcon } from "@canvas/icons";
+import { radius } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -211,9 +212,10 @@ const styles = stylex.create({
     borderWidth: "1px 1px 0",
     borderStyle: "solid solid none",
     borderColor: `${tokens.rule} ${tokens.rule} currentcolor`,
-    borderRadius: "8px 8px 0 0",
+    borderRadius: `${radius.surface} ${radius.surface} 0 0`,
     backgroundColor: tokens.surface,
     color: tokens.ink,
+    // Docked to the bottom edge, so it casts upward; elevation casts down.
     boxShadow: `0 -8px 24px ${tokens.shadowColorStrong}`,
     fontSize: "11px",
     lineHeight: 1,

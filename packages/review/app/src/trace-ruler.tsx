@@ -1,3 +1,4 @@
+import { surfaceStyles } from "@canvas/ui/surface";
 import type { ReviewAgentTraceEvent } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -391,7 +392,10 @@ export function TraceRuler({
       >
         {ticks}
         {preview && hoverTick !== null && (
-          <div {...stylex.props(styles.card)} style={{ top: cardTop }}>
+          <div
+            {...stylex.props(surfaceStyles.popover, styles.card)}
+            style={{ top: cardTop }}
+          >
             <span {...stylex.props(styles.cardTitle)}>{preview.title}</span>
             {preview.snippet && (
               <span {...stylex.props(styles.cardSnippet)}>
@@ -446,12 +450,6 @@ const styles = stylex.create({
     flexDirection: "column",
     gap: "6px",
     padding: "12px 14px",
-    backgroundColor: tokens.tray,
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    borderRadius: "12px",
-    boxShadow: "0 8px 24px rgb(0 0 0 / 0.25)",
     pointerEvents: "none",
   },
   cardTitle: {

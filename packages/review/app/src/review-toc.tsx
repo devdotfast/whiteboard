@@ -1,4 +1,5 @@
 import { IconButton } from "@canvas/ui/button";
+import { surfaceStyles } from "@canvas/ui/surface";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useState } from "react";
 
@@ -272,6 +273,7 @@ export function ReviewToc({
       key={showRail ? "rail" : "pill"}
       id="review-toc"
       {...stylex.props(
+        surfaceStyles.popover,
         styles.toc,
         showList && styles.tocOpen,
         showRail && styles.tocRail,
@@ -401,28 +403,21 @@ const styles = stylex.create({
     height: "32px",
     overflow: "hidden",
     padding: 0,
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    borderRadius: "8px",
-    boxShadow: `0 6px 18px ${tokens.shadowColor}`,
     color: tokens.inkMuted,
     fontFamily: tokens.fontSerif,
     interpolateSize: "allow-keywords",
     transition: {
       default:
-        "width 180ms cubic-bezier(0.2, 0.7, 0.2, 1) 80ms, height 180ms cubic-bezier(0.2, 0.7, 0.2, 1) 80ms, box-shadow 180ms ease 80ms",
+        "width 180ms cubic-bezier(0.2, 0.7, 0.2, 1) 80ms, height 180ms cubic-bezier(0.2, 0.7, 0.2, 1) 80ms",
       [reducedMotion]: "none",
     },
-    backgroundColor: tokens.surface,
   },
   tocOpen: {
     width: { default: "248px", [narrow]: "min(248px, calc(100cqi - 16px))" },
     height: "auto",
-    boxShadow: `0 1px 0 ${tokens.tocInnerShadow}, 0 18px 44px ${tokens.shadowColor}`,
     transition: {
       default:
-        "width 220ms cubic-bezier(0.2, 0.7, 0.2, 1), height 220ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 220ms ease",
+        "width 220ms cubic-bezier(0.2, 0.7, 0.2, 1), height 220ms cubic-bezier(0.2, 0.7, 0.2, 1)",
       [reducedMotion]: "none",
     },
   },

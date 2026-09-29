@@ -1,4 +1,6 @@
+import { layer } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
+import { surfaceStyles } from "@canvas/ui/surface";
 import type {
   ReviewFindQuery,
   ReviewInlineEditorHandle,
@@ -348,7 +350,7 @@ function ReviewFindWidget({
 
   return createPortal(
     <div
-      {...withClass("review-find-widget", styles.widget)}
+      {...withClass("review-find-widget", surfaceStyles.popover, styles.widget)}
       role="search"
       aria-label="Find in session"
     >
@@ -615,7 +617,7 @@ const button = {
 const styles = stylex.create({
   widget: {
     position: "absolute",
-    zIndex: 120,
+    zIndex: layer.popover,
     top: "48px",
     right: { default: "16px", [compact]: "8px" },
     left: { default: null, [compact]: "8px" },
@@ -626,12 +628,6 @@ const styles = stylex.create({
     height: "34px",
     gap: "3px",
     padding: "3px 4px 3px 6px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.ruleSoft,
-    borderRadius: "6px",
-    backgroundColor: tokens.surfaceRaised,
-    boxShadow: "0 5px 14px rgb(0 0 0 / 32%)",
   },
   inputShell: {
     display: "flex",

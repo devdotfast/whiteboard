@@ -39,6 +39,8 @@ export const layer = stylex.defineConsts({
   sticky: "20",
   overlay: "40",
   popover: "120",
+  // A modal and its backdrop, over everything in the canvas but toasts.
+  dialog: "10000",
   toast: "10001",
   agentSelection: "10002",
 });

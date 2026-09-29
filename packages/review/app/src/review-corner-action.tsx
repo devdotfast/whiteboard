@@ -1,4 +1,5 @@
 import { Button } from "@canvas/ui/button";
+import { surfaceStyles } from "@canvas/ui/surface";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useRef, useState } from "react";
 
@@ -63,7 +64,11 @@ export function ReviewCornerAction(): ReactElement | null {
         <span
           ref={errorPopover}
           popover="manual"
-          {...stylex.props(shellStyles.topbarPopover, styles.error)}
+          {...stylex.props(
+            shellStyles.topbarPopover,
+            surfaceStyles.popover,
+            styles.error,
+          )}
           role="alert"
         >
           Could not dismiss the review. Try again.
@@ -107,11 +112,6 @@ const styles = stylex.create({
   // Only rendered in the topbar, where the popover placement positions it.
   error: {
     padding: "8px 12px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.ruleSoft,
-    borderRadius: "6px",
-    backgroundColor: tokens.surfaceRaised,
     color: tokens.changeRemoved,
     font: `400 11.5px ${tokens.fontMono}`,
     whiteSpace: "nowrap",

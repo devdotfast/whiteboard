@@ -1,4 +1,5 @@
 import { Button } from "@canvas/ui/button";
+import { surfaceStyles } from "@canvas/ui/surface";
 import { type ReviewAgentTraceSession } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -269,7 +270,10 @@ export function ReviewTraceView({
               </span>
             </Button>
             {pickerOpen && (
-              <div {...stylex.props(styles.pickerMenu)} role="listbox">
+              <div
+                {...stylex.props(surfaceStyles.popover, styles.pickerMenu)}
+                role="listbox"
+              >
                 {targets.map((target) => {
                   const isActive = target.key === activeKey;
                   const targetHarness = target.harness;

@@ -170,7 +170,6 @@ export const themeStyles = stylex.create({
     "--accent-outline": "rgba(43, 85, 230, 0.32)",
     "--link-open-wash": "rgba(43, 85, 230, 0.12)",
     "--rpc-wash": "rgba(43, 85, 230, 0.08)",
-    "--toc-inner-shadow": "rgba(21, 24, 30, 0.02)",
     "--review-home-bg": "var(--bg)",
     "--review-home-rule": "var(--rule)",
     "--review-home-rule-soft": "var(--rule-soft)",

@@ -2,6 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useCallback, useEffect, useState } from "react";
 
 import { useOptionalReviewSession } from "./host/review-session";
+import { elevation, layer, radius } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 
@@ -48,9 +49,10 @@ function Toast({ message }: { message: ToastMessage }) {
 }
 
 const styles = stylex.create({
+  // Notification colors on purpose: it reads as the host's own toast.
   toast: {
     position: "fixed",
-    zIndex: 10001,
+    zIndex: layer.toast,
     right: "18px",
     bottom: "18px",
     maxWidth: "380px",
@@ -59,10 +61,10 @@ const styles = stylex.create({
     // has none.
     borderWidth: { default: 0, ":is(:scope .review-app *)": "1px" },
     borderStyle: { default: "none", ":is(:scope .review-app *)": "solid" },
-    borderRadius: "5px",
+    borderRadius: radius.surface,
     padding: "10px 12px",
     backgroundColor: "var(--vscode-notifications-background, var(--tray))",
-    boxShadow: `0 8px 28px ${tokens.shadowColor}`,
+    boxShadow: elevation.popover,
     color: "var(--vscode-notifications-foreground, var(--ink))",
     font: `11px/1.4 ${tokens.fontMono}`,
   },

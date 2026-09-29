@@ -20,7 +20,7 @@ import {
   reviewInteractionDetail,
 } from "./review-interaction-event";
 import { useOptionalReviewPanel } from "./review-panel";
-import { fontSize, fontWeight } from "./scale.stylex";
+import { elevation, fontSize, fontWeight, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { useTutorial } from "./tutorial-context";
 import {
@@ -652,10 +652,10 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.tutorialGuideBorder,
-    borderRadius: "10px",
+    borderRadius: radius.surface,
     backgroundColor: tokens.tutorialGuideBg,
     color: tokens.ink,
-    boxShadow: `0 10px 32px ${tokens.shadowColorStrong}`,
+    boxShadow: elevation.popover,
     pointerEvents: "auto",
     backdropFilter: "blur(16px)",
   },
@@ -735,10 +735,10 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.tutorialGuideBorder,
-    borderRadius: "50%",
+    borderRadius: radius.round,
     backgroundColor: tokens.tutorialGuideBg,
     color: { default: tokens.tutorialRing, ":hover": tokens.ink },
-    boxShadow: `0 6px 20px ${tokens.shadowColorStrong}`,
+    boxShadow: elevation.popover,
     cursor: "pointer",
     pointerEvents: "auto",
     backdropFilter: "blur(16px)",

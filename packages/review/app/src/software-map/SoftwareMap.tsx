@@ -10,7 +10,7 @@ import { useReviewSession } from "@canvas/host/review-session";
 import { CloseIcon, RefreshIcon } from "@canvas/icons";
 import { mapFrameMarker } from "@canvas/markers.stylex";
 import { useReviewContainer } from "@canvas/review-root-context";
-import { motion } from "@canvas/scale.stylex";
+import { motion, radius } from "@canvas/scale.stylex";
 import { shellStyles } from "@canvas/shell-styles";
 import { useRightPanelResize } from "@canvas/side-panel-resizer";
 import { withClass } from "@canvas/stylex-props";
@@ -18,6 +18,7 @@ import { themeStyles } from "@canvas/theme-styles";
 import { tokens } from "@canvas/tokens.stylex";
 import { captureUiEvent } from "@canvas/ui-telemetry";
 import { IconButton } from "@canvas/ui/button";
+import { surfaceStyles } from "@canvas/ui/surface";
 import { codePeekSource } from "@review/source";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -991,7 +992,7 @@ export function SoftwareMapFrame({
         </header>
       )}
       {showMapFloatingActions && onRefresh ? (
-        <div {...stylex.props(styles.floatingActions)}>
+        <div {...stylex.props(surfaceStyles.popover, styles.floatingActions)}>
           <IconButton
             xstyle={refreshing && styles.refreshing}
             onClick={onRefresh}
@@ -2861,12 +2862,8 @@ const styles = stylex.create({
     display: { default: "flex", [peekOpen]: "none" },
     gap: "8px",
     padding: "2px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    borderRadius: "6px",
-    backgroundColor: tokens.surface,
-    boxShadow: `0 4px 18px ${tokens.shadowColor}`,
+    // A toolbar: its corners follow the buttons inside.
+    borderRadius: radius.control,
   },
   refreshing: {
     color: tokens.accent,

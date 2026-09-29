@@ -1,4 +1,6 @@
+import { layer } from "@canvas/scale.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
+import { surfaceStyles } from "@canvas/ui/surface";
 import {
   type ReviewApiClient,
   ReviewApiError,
@@ -225,7 +227,11 @@ export function ShareControl() {
           popover="manual"
           role="dialog"
           aria-label={shared ? "Shared review" : "Share review"}
-          {...stylex.props(shellStyles.topbarPopover, styles.popover)}
+          {...stylex.props(
+            shellStyles.topbarPopover,
+            surfaceStyles.popover,
+            styles.popover,
+          )}
         >
           {(error || accountError || account?.error) && (
             <p {...stylex.props(styles.paragraph, styles.error)} role="alert">
@@ -297,7 +303,7 @@ const styles = stylex.create({
   // places it; these are its own values anywhere else.
   popover: {
     position: { default: "absolute", ":is(.review-topbar-actions *)": "fixed" },
-    zIndex: 30,
+    zIndex: layer.popover,
     top: {
       default: "calc(100% + 4px)",
       ":is(.review-topbar-actions *)": "calc(anchor(bottom) + 4px)",
@@ -309,12 +315,6 @@ const styles = stylex.create({
     width: "280px",
     margin: 0,
     padding: "10px 12px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.ruleSoft,
-    borderRadius: "8px",
-    backgroundColor: tokens.surfaceRaised,
-    boxShadow: `0 8px 28px ${tokens.shadowColorStrong}`,
     color: tokens.chromeFg,
     fontFamily: tokens.chromeFont,
     fontSize: tokens.chromeFontSize,
