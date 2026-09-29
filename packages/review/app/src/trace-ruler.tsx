@@ -1,3 +1,4 @@
+import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import { surfaceStyles } from "@canvas/ui/surface";
 import type { ReviewAgentTraceEvent } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
@@ -428,10 +429,10 @@ const styles = stylex.create({
     // Inset from the panel edge; the comb grows rightward from here.
     left: "8px",
     height: "2px",
-    borderRadius: "1px",
+    borderRadius: radius.hairline,
     backgroundColor: tokens.inkFaint,
     opacity: 0.55,
-    transition: "width 90ms ease, opacity 90ms ease",
+    transition: `width ${motion.fast} ${motion.ease}, opacity ${motion.fast} ${motion.ease}`,
     pointerEvents: "none",
   },
   tickVisible: {
@@ -454,9 +455,9 @@ const styles = stylex.create({
   },
   cardTitle: {
     fontFamily: tokens.fontSerif,
-    fontSize: "14px",
+    fontSize: fontSize.reading,
     lineHeight: "19px",
-    fontWeight: 600,
+    fontWeight: fontWeight.semibold,
     color: tokens.ink,
     display: "-webkit-box",
     WebkitLineClamp: 2,
@@ -465,7 +466,7 @@ const styles = stylex.create({
   },
   cardSnippet: {
     fontFamily: tokens.fontSerif,
-    fontSize: "13px",
+    fontSize: fontSize.ui,
     lineHeight: "18px",
     color: tokens.inkMuted,
     display: "-webkit-box",

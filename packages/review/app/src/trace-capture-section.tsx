@@ -1,3 +1,4 @@
+import { fontSize } from "@canvas/scale.stylex";
 import { TextField } from "@canvas/ui/text-field";
 import type {
   ReviewCanvasInstallContent,
@@ -252,7 +253,7 @@ const styles = stylex.create({
     flex: 1,
     minWidth: 0,
     color: tokens.reviewHomeMeta,
-    fontSize: "12px",
+    fontSize: fontSize.body,
   },
   // Enabled is the one state worth colouring.
   stateEnabled: {
@@ -260,7 +261,7 @@ const styles = stylex.create({
   },
   detail: {
     color: tokens.reviewHomeMeta,
-    fontSize: "12px",
+    fontSize: fontSize.body,
   },
   fields: {
     display: "grid",

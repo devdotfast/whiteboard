@@ -6,7 +6,14 @@ import {
   traceToolMarker,
   traceWorkedMarker,
 } from "./markers.stylex";
-import { elevation, fontWeight, layer } from "./scale.stylex";
+import {
+  elevation,
+  fontSize,
+  fontWeight,
+  layer,
+  motion,
+  radius,
+} from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 // The agent trace view, and the trace scoped into a side peek.
@@ -44,9 +51,9 @@ export const traceStyles = stylex.create({
   title: {
     margin: 0,
     fontFamily: tokens.fontSerif,
-    fontSize: "22px",
+    fontSize: fontSize.display,
     lineHeight: "28px",
-    fontWeight: 500,
+    fontWeight: fontWeight.medium,
     color: tokens.ink,
   },
   meta: {
@@ -55,7 +62,7 @@ export const traceStyles = stylex.create({
     flexWrap: "wrap",
     gap: "8px",
     fontFamily: tokens.fontMono,
-    fontSize: "11px",
+    fontSize: fontSize.small,
     color: tokens.inkFaint,
   },
   metaSeparator: {
@@ -91,7 +98,7 @@ export const traceStyles = stylex.create({
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
-    fontWeight: 500,
+    fontWeight: fontWeight.medium,
     color: tokens.ink,
   },
   pickerChevron: {
@@ -103,7 +110,7 @@ export const traceStyles = stylex.create({
     marginLeft: "2px",
     flexShrink: 0,
     color: tokens.inkFaint,
-    transition: "transform 0.15s ease",
+    transition: `transform ${motion.fast} ${motion.ease}`,
   },
   pickerChevronOpen: {
     transform: "rotate(180deg)",
@@ -127,16 +134,16 @@ export const traceStyles = stylex.create({
     gap: "10px",
     width: "100%",
     padding: "6px 10px",
-    borderRadius: "4px",
+    borderRadius: radius.small,
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "currentcolor",
     backgroundColor: { default: "transparent", ":hover": tokens.chromeHoverBg },
     color: tokens.ink,
-    fontSize: "12.5px",
+    fontSize: fontSize.body,
     textAlign: "left",
     cursor: "pointer",
-    transition: "background 0.1s ease",
+    transition: `background ${motion.fast} ${motion.ease}`,
   },
   pickerItemActive: {
     backgroundColor: tokens.accentWash,
@@ -166,14 +173,14 @@ export const traceStyles = stylex.create({
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
-    fontWeight: 400,
+    fontWeight: fontWeight.regular,
   },
   pickerItemTitleActive: {
-    fontWeight: 600,
+    fontWeight: fontWeight.semibold,
   },
   pickerItemCheck: {
-    fontSize: "12px",
-    fontWeight: 700,
+    fontSize: fontSize.body,
+    fontWeight: fontWeight.bold,
     color: tokens.accent,
     flexShrink: 0,
     marginLeft: "6px",
@@ -201,13 +208,13 @@ export const traceStyles = stylex.create({
   // An elided message sets its own prose; a whole one leaves it to markdown.
   proseElided: {
     fontFamily: tokens.fontSerif,
-    fontSize: "15px",
+    fontSize: fontSize.reading,
     lineHeight: "26px",
     color: tokens.ink,
   },
   proseMarkdown: {
     fontFamily: tokens.fontSerif,
-    fontSize: "15px",
+    fontSize: fontSize.reading,
     lineHeight: "26px",
     color: tokens.ink,
     overflowWrap: "anywhere",
@@ -250,7 +257,7 @@ export const traceStyles = stylex.create({
     gap: "6px",
     minWidth: 0,
     fontFamily: tokens.fontMono,
-    fontSize: "12px",
+    fontSize: fontSize.body,
     lineHeight: "19px",
   },
   toolVerb: {
@@ -292,7 +299,7 @@ export const traceStyles = stylex.create({
       default: "rotate(-90deg)",
       [stylex.when.ancestor(":is([open])", traceToolMarker)]: "rotate(0deg)",
     },
-    transition: "transform 120ms ease",
+    transition: `transform ${motion.fast} ${motion.ease}`,
   },
 
   // The embedded workbench Chromium does not hide closed details content.
@@ -305,7 +312,7 @@ export const traceStyles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
-    borderRadius: "8px",
+    borderRadius: radius.surface,
     backgroundColor: tokens.surface,
     overflow: "hidden",
   },
@@ -330,7 +337,7 @@ export const traceStyles = stylex.create({
     maxHeight: "420px",
     overflow: "auto",
     fontFamily: tokens.fontMono,
-    fontSize: "12.5px",
+    fontSize: fontSize.body,
     lineHeight: "20px",
     whiteSpace: "pre-wrap",
     overflowWrap: "break-word",
@@ -338,7 +345,7 @@ export const traceStyles = stylex.create({
   figureBodyThinking: {
     whiteSpace: "normal",
     fontFamily: tokens.fontSerif,
-    fontSize: "14px",
+    fontSize: fontSize.reading,
     lineHeight: "22px",
     color: tokens.inkMuted,
   },
@@ -375,7 +382,7 @@ export const traceStyles = stylex.create({
       default: "rotate(-90deg)",
       [stylex.when.ancestor(":is([open])", traceWorkedMarker)]: "rotate(0deg)",
     },
-    transition: "transform 120ms ease",
+    transition: `transform ${motion.fast} ${motion.ease}`,
   },
   line: {
     flexGrow: 1,
@@ -399,7 +406,7 @@ export const traceStyles = stylex.create({
     gap: "8px",
     minHeight: "24px",
     fontFamily: tokens.fontMono,
-    fontSize: "12.5px",
+    fontSize: fontSize.body,
     color: tokens.inkMuted,
   },
   toolGroupLabel: {
@@ -407,7 +414,7 @@ export const traceStyles = stylex.create({
   },
   toolGroupCount: {
     color: tokens.inkFaint,
-    fontSize: "11px",
+    fontSize: fontSize.small,
   },
   toolGroupChevronIcon: {
     width: "12px",
@@ -417,7 +424,7 @@ export const traceStyles = stylex.create({
       default: "rotate(-90deg)",
       [stylex.when.ancestor(":is([open])", traceGroupMarker)]: "rotate(0deg)",
     },
-    transition: "transform 120ms ease",
+    transition: `transform ${motion.fast} ${motion.ease}`,
   },
   toolGroupBody: {
     display: {
@@ -431,7 +438,7 @@ export const traceStyles = stylex.create({
 
   note: {
     fontFamily: tokens.fontMono,
-    fontSize: "12px",
+    fontSize: fontSize.body,
     lineHeight: "19px",
     color: tokens.inkFaint,
   },
@@ -514,7 +521,7 @@ export const traceStyles = stylex.create({
   },
   kept: {
     fontFamily: tokens.fontSerif,
-    fontSize: "15px",
+    fontSize: fontSize.reading,
     lineHeight: "26px",
     color: tokens.ink,
   },
@@ -538,14 +545,14 @@ export const traceStyles = stylex.create({
     alignItems: "center",
     gap: "4px",
     padding: "3px 8px",
-    borderRadius: "4px",
+    borderRadius: radius.small,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
     backgroundColor: { default: tokens.surface, ":hover": tokens.accentWash },
     color: tokens.accent,
     fontFamily: tokens.fontMono,
-    fontSize: "11px",
+    fontSize: fontSize.small,
     cursor: "pointer",
     whiteSpace: "nowrap",
     flexShrink: 0,
