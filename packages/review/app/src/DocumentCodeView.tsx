@@ -7,9 +7,9 @@ import type {
   ReviewInlineEditorRange,
   ReviewSourcePins,
 } from "@dev.fast/review-protocol";
+import { coverageProgress, coverageSources } from "@review/viewed-coverage";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
-import { coverageProgress, coverageSources } from "../../src/viewed-coverage";
 import { useReviewSession } from "./host/review-session";
 import { useReviewFindRegistration } from "./review-find";
 import { emitReviewInteraction } from "./review-interaction-event";

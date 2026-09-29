@@ -2,9 +2,9 @@ import type {
   ReviewCanvasBridge,
   ReviewRuntimeConfig,
 } from "@dev.fast/review-protocol";
+import type { Block } from "@review/review-api/document";
 import type { ReactNode } from "react";
 
-import type { Block } from "../../src/review-api/document";
 import type { ApiDocumentData } from "./api-document";
 import { apiHeadingIds } from "./api-document-headings";
 import { reviewFetchUrl } from "./host/review-client";

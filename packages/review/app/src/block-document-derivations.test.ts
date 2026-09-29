@@ -1,6 +1,6 @@
+import { selectSource } from "@review/lens-selection";
 import { describe, expect, it } from "vitest";
 
-import { selectSource } from "../../src/lens-selection";
 import { blockSectionSummary } from "./block-document-derivations";
 
 describe("blockSectionSummary", () => {

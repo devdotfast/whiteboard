@@ -4,8 +4,7 @@ import path from "node:path";
 
 import { gitAt } from "@dev.fast/local-vcs";
 import { normalizeGitHubRemote } from "@dev.fast/review-share-protocol";
-
-import { type Pins, ReviewInputError } from "../review-api/document.js";
+import { type Pins, ReviewInputError } from "@review/review-api/document.js";
 
 /** Keep credential helpers but prevent the calling shell from redirecting Git's object store. */
 export function sharedGit(cwd: string, args: string[]) {

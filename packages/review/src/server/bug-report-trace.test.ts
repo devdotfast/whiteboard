@@ -16,9 +16,9 @@ import {
   REVIEW_SCHEMA_VERSION,
 } from "@dev.fast/review-protocol";
 import { clearTraceEnvCache } from "@dev.fast/trace-core";
+import type { ReviewAgentHarness } from "@review/agent-session-ref";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { ReviewAgentHarness } from "../agent-session-ref";
 import {
   type AuthoringTraceAttachment,
   MAX_AUTHORING_TRACE_BYTES,

@@ -3,9 +3,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { openLocalReviewStore } from "@review/review-api/local-data.js";
 import sharp from "sharp";
-
-import { openLocalReviewStore } from "../../../src/review-api/local-data.js";
 
 export async function createShareFixture(root: string) {
   const repo = path.join(root, "sender-repository");

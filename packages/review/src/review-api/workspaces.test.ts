@@ -15,10 +15,10 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { runPrepareCommand } from "@review/review-prepare.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { z } from "zod";
 
-import { runPrepareCommand } from "../review-prepare.js";
 import type { Pins } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { openLocalReviewStore } from "./local-data.js";

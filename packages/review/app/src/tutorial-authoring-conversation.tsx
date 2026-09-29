@@ -1,6 +1,5 @@
+import type { ReviewComponentProps } from "@review/review-document-data";
 import type { ReactElement } from "react";
-
-import type { ReviewComponentProps } from "../../src/review-document-data";
 
 export function TutorialAuthoringConversation({
   conversation,

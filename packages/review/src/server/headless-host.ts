@@ -10,16 +10,16 @@ import {
   withFileLock,
   writePrivateJsonAtomic,
 } from "@dev.fast/trace-core";
-import { Hono } from "hono";
-
-import { createReviewApi } from "../review-api/http.js";
-import { openReviewProfile } from "../review-api/profile.js";
-import { readScratchpadEnabled } from "../review-preferences.js";
+import { createReviewApi } from "@review/review-api/http.js";
+import { openReviewProfile } from "@review/review-api/profile.js";
+import { readScratchpadEnabled } from "@review/review-preferences.js";
 import {
   type ReviewServerDiscovery,
   reviewServerDiscoveryPath,
-} from "../server-discovery.js";
-import { mountSharingPublisher } from "../sharing/host.js";
+} from "@review/server-discovery.js";
+import { mountSharingPublisher } from "@review/sharing/host.js";
+import { Hono } from "hono";
+
 import {
   type ReviewHonoEnv,
   createNodeRequestListener,

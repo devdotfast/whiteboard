@@ -1,3 +1,4 @@
+import type { AgentSelection } from "@review/agent-selection";
 import {
   type ReactNode,
   createContext,
@@ -10,7 +11,6 @@ import {
 import { createPortal } from "react-dom";
 import { z } from "zod";
 
-import type { AgentSelection } from "../../src/agent-selection";
 import { copyText } from "./copy-text";
 import { useReviewSession } from "./host/review-session";
 import { useToast } from "./toast";

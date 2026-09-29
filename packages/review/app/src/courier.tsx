@@ -1,3 +1,4 @@
+import type { LeaseScope } from "@review/review-api/activity";
 import {
   type Context,
   createContext,
@@ -8,7 +9,6 @@ import {
   useState,
 } from "react";
 
-import type { LeaseScope } from "../../src/review-api/activity";
 import { AuthoringActivityContext } from "./authoring-activity";
 import {
   type AuthoringCursor,

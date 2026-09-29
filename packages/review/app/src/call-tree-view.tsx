@@ -1,7 +1,7 @@
+import type { DiffSelection } from "@review/lens-selection";
+import type { CallStackDiffBlock } from "@review/review-api/blocks/call_stack_diff";
 import { useState } from "react";
 
-import type { DiffSelection } from "../../src/lens-selection";
-import type { CallStackDiffBlock } from "../../src/review-api/blocks/call_stack_diff";
 import { type CallTreeStop, callTreeStops } from "./call-tree";
 import { DiagramHeader } from "./diagram-header";
 import { compactDiffCount as compact } from "./diff-count";

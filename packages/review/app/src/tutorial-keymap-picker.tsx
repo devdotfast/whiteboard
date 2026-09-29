@@ -1,7 +1,7 @@
 import type { ReviewKeymapChoice } from "@dev.fast/review-protocol";
+import type { ReviewComponentProps } from "@review/review-document-data";
 import { useState } from "react";
 
-import type { ReviewComponentProps } from "../../src/review-document-data";
 import { useTutorial } from "./tutorial-context";
 
 const choices: readonly { value: ReviewKeymapChoice; label: string }[] = [

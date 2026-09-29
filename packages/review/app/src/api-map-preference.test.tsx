@@ -1,8 +1,8 @@
+import type { Block } from "@review/review-api/document";
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 
-import type { Block } from "../../src/review-api/document";
 import { ApiDocument } from "./api-document";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import {

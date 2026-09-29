@@ -1,9 +1,9 @@
+import { ReviewApiClient } from "@review/review-api/client";
+import type { Block } from "@review/review-api/document";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { ReviewApiClient } from "../../src/review-api/client";
-import type { Block } from "../../src/review-api/document";
 import { ApiDocument, createDocumentLoader } from "./api-document";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewSessionProvider } from "./host/review-session";

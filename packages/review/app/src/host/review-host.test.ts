@@ -1,10 +1,10 @@
+import { testReviewBridge } from "@canvas/review-session-test-utils";
 import type {
   ReviewSurfaceEvent,
   ReviewVerbRequest,
 } from "@dev.fast/review-protocol";
 import { describe, expect, it, vi } from "vitest";
 
-import { testReviewBridge } from "../review-session-test-utils";
 import { createReviewSurface } from "./review-host";
 
 describe("review surface", () => {

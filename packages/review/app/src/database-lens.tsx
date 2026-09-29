@@ -1,4 +1,11 @@
 import { type JsonValue, isStringValue } from "@dev.fast/review-protocol";
+import type { DatabaseLensBlockProps } from "@review/database-lens-block";
+import { type DiffSelection } from "@review/lens-selection";
+import type {
+  DatabaseField,
+  DatabaseOperation,
+  DatabaseStore,
+} from "@review/review-api/document";
 import {
   type ChangeEvent,
   useCallback,
@@ -9,13 +16,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import type { DatabaseLensBlockProps } from "../../src/database-lens-block";
-import { type DiffSelection } from "../../src/lens-selection";
-import type {
-  DatabaseField,
-  DatabaseOperation,
-  DatabaseStore,
-} from "../../src/review-api/document";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { useReviewSession } from "./host/review-session";
 import type { GuidedTour, PeekAnchor } from "./review-panel-model";

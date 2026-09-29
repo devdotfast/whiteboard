@@ -1,4 +1,5 @@
-import type { EditSummary } from "../../src/review-api/document";
+import type { EditSummary } from "@review/review-api/document";
+
 import type { AuthoringCursor } from "./authoring-cursor";
 
 /**

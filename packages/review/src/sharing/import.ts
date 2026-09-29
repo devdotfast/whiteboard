@@ -24,11 +24,9 @@ import {
   shareIdSchema,
   shareManifestSchema,
 } from "@dev.fast/review-share-protocol";
-import { z } from "zod";
-
-import { textIncludesQuote } from "../evidence.js";
-import { lensSchema } from "../review-api/diff-lenses.js";
-import { ReviewInputError } from "../review-api/document.js";
+import { textIncludesQuote } from "@review/evidence.js";
+import { lensSchema } from "@review/review-api/diff-lenses.js";
+import { ReviewInputError } from "@review/review-api/document.js";
 import {
   checkReferences,
   documentSchema,
@@ -36,18 +34,20 @@ import {
   resourceReference,
   resourceReferences,
   sourceReferences,
-} from "../review-api/document.js";
-import type { LocalReviewData } from "../review-api/local-data.js";
-import type { ReviewStore } from "../review-api/store.js";
-import { traceSchema } from "../review-api/trace-schema.js";
+} from "@review/review-api/document.js";
+import type { LocalReviewData } from "@review/review-api/local-data.js";
+import type { ReviewStore } from "@review/review-api/store.js";
+import { traceSchema } from "@review/review-api/trace-schema.js";
 import {
   normalizedSoftwareElementSchema,
   normalizedSoftwareRelationshipSchema,
-} from "../software-map-model.js";
+} from "@review/software-map-model.js";
 import {
   liftFileLenses,
   migrateStoredDocument,
-} from "../stored-document-migration.js";
+} from "@review/stored-document-migration.js";
+import { z } from "zod";
+
 import { type ShareBundle, digestBytes } from "./export.js";
 import {
   fetchPinnedRepository,

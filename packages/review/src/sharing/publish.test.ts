@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { readStoreAuth, writeStoreAuth } from "@dev.fast/trace-core";
+import { ReviewInputError } from "@review/review-api/document.js";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
-import { ReviewInputError } from "../review-api/document.js";
 import { mountSharingHost } from "./host.js";
 import { SharedReviewStore } from "./import.js";
 

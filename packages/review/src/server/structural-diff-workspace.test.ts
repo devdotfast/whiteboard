@@ -4,10 +4,9 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { createReviewApi as createJsonReviewApi } from "@review/review-api/http.js";
+import { openLocalReviewStore } from "@review/review-api/local-data.js";
 import { afterEach, expect, test, vi } from "vitest";
-
-import { createReviewApi as createJsonReviewApi } from "../review-api/http.js";
-import { openLocalReviewStore } from "../review-api/local-data.js";
 
 const roots: string[] = [];
 

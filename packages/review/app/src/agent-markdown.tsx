@@ -1,4 +1,5 @@
 import { isNumberValue, isStringValue } from "@dev.fast/review-protocol";
+import { type MarkdownNode, parseMarkdown } from "@review/markdown";
 // Deliberately separate from the MDX document pipeline: this renderer walks the
 // mdast of untrusted runtime strings (agent trace message bodies) and never
 // evaluates them, whereas MDX compilation produces executable code and must
@@ -15,7 +16,6 @@ import {
   useRef,
 } from "react";
 
-import { type MarkdownNode, parseMarkdown } from "../../src/markdown";
 import { RenderedCodeBlock } from "./code-block";
 import { HighlightedText } from "./highlighted-text";
 import { newTabLinkProps } from "./link-props";

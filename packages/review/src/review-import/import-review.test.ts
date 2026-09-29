@@ -2,12 +2,12 @@ import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { selectSource } from "@review/lens-selection";
+import type { Block } from "@review/review-api/document";
+import { openLocalReviewStore } from "@review/review-api/local-data";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
-import { selectSource } from "../lens-selection";
-import type { Block } from "../review-api/document";
-import { openLocalReviewStore } from "../review-api/local-data";
 import { importLegacyReview, isMapSection } from "./import-review";
 import {
   el,

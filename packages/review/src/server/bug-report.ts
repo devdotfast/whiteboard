@@ -8,10 +8,10 @@ import {
   type ReviewBugReportRequest,
   parseReviewBugReportResponse,
 } from "@dev.fast/review-protocol";
+import { readReviewPackageVersion } from "@review/package-paths";
+import { type PostHogCaptureProperties } from "@review/posthog-capture-client";
+import { type ReviewDiffFilesResult } from "@review/review-diff-files";
 
-import { readReviewPackageVersion } from "../package-paths";
-import { type PostHogCaptureProperties } from "../posthog-capture-client";
-import { type ReviewDiffFilesResult } from "../review-diff-files";
 import {
   type AuthoringTraceAttachment,
   type AuthoringTracePayload,

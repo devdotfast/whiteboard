@@ -1,8 +1,8 @@
 import type { JsonValue, ReviewCanvasBridge } from "@dev.fast/review-protocol";
+import type { ReviewProgress } from "@review/review-api/review-progress";
+import type { Snapshot } from "@review/review-api/store";
 import { act } from "react";
 
-import type { ReviewProgress } from "../../src/review-api/review-progress";
-import type { Snapshot } from "../../src/review-api/store";
 import { testReviewBridge } from "./review-session-test-utils";
 
 /** The subset of the review API a pinned-version canvas reads while mounting. */

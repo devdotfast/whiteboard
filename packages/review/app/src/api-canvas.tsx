@@ -3,6 +3,9 @@ import {
   parseReviewStackResponse,
   resolveReviewSourceView,
 } from "@dev.fast/review-protocol";
+import type { ActivitySnapshot } from "@review/review-api/activity";
+import { ReviewApiClient, ReviewApiError } from "@review/review-api/client";
+import type { Snapshot } from "@review/review-api/store";
 import {
   createContext,
   memo,
@@ -13,9 +16,6 @@ import {
   useState,
 } from "react";
 
-import type { ActivitySnapshot } from "../../src/review-api/activity";
-import { ReviewApiClient, ReviewApiError } from "../../src/review-api/client";
-import type { Snapshot } from "../../src/review-api/store";
 import {
   ApiDocument,
   type ApiDocumentData,

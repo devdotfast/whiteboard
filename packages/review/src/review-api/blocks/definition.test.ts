@@ -1,7 +1,7 @@
+import { ReviewInputError } from "@review/review-api/input-error.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { ReviewInputError } from "../input-error.js";
 import {
   type BlockDefinition,
   defineBlock,

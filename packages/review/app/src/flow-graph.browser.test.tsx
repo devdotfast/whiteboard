@@ -1,12 +1,12 @@
+import {
+  type FlowDiagramBlock,
+  flowDiagramSchema,
+} from "@review/review-api/blocks/flow_diagram";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 
-import {
-  type FlowDiagramBlock,
-  flowDiagramSchema,
-} from "../../src/review-api/blocks/flow_diagram";
 import { BlockErrorBoundary } from "./blocks";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
 import { settled } from "./fixture-review-bridge";

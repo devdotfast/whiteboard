@@ -1,6 +1,3 @@
-import { describe, expect, it } from "vitest";
-import { ZodError } from "zod";
-
 import {
   type StoreInput,
   type StoreRef,
@@ -8,10 +5,13 @@ import {
   defineCollections,
   resolveTargetRef,
   storeRefData,
-} from "../../src/authoring";
-import { databaseLensBlockFromLegacy } from "../../src/database-lens-block";
-import { selectSource } from "../../src/lens-selection";
-import type { DatabaseOperation } from "../../src/review-api/document";
+} from "@review/authoring";
+import { databaseLensBlockFromLegacy } from "@review/database-lens-block";
+import { selectSource } from "@review/lens-selection";
+import type { DatabaseOperation } from "@review/review-api/document";
+import { describe, expect, it } from "vitest";
+import { ZodError } from "zod";
+
 import {
   type LensStores,
   type ResolvedOperation,

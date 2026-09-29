@@ -1,7 +1,8 @@
 import {
   type CodePeekProps,
   createReviewDefinitionSession,
-} from "../../src/authoring";
+} from "@review/authoring";
+
 import { defineSoftwareModel } from "./software-map/model";
 
 export function createTestReviewDefinitionSession(

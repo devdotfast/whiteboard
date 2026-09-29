@@ -1,7 +1,7 @@
-import { frameIdentity } from "../../src/call-stack-frames";
-import { type DiffSelection } from "../../src/lens-selection";
-import { type LensSource } from "../../src/lens-selection";
-import type { CallStackDiffBlock } from "../../src/review-api/blocks/call_stack_diff";
+import { frameIdentity } from "@review/call-stack-frames";
+import { type DiffSelection } from "@review/lens-selection";
+import { type LensSource } from "@review/lens-selection";
+import type { CallStackDiffBlock } from "@review/review-api/blocks/call_stack_diff";
 
 export interface CallTreeStop {
   id: string;

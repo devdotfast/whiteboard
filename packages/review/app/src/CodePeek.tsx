@@ -3,15 +3,15 @@ import type {
   ReviewInlineEditorHeightMode,
   ReviewInlineEditorRange,
 } from "@dev.fast/review-protocol";
-import { useEffect, useMemo, useRef } from "react";
-
 import {
   type DiffSelection,
   selectionKey,
   sourceAnchor,
-} from "../../src/lens-selection";
-import type { ReviewComponentProps } from "../../src/review-document-data";
-import { type FileLineRange, codePeekSource } from "../../src/source";
+} from "@review/lens-selection";
+import type { ReviewComponentProps } from "@review/review-document-data";
+import { type FileLineRange, codePeekSource } from "@review/source";
+import { useEffect, useMemo, useRef } from "react";
+
 import { DocumentCodeView } from "./DocumentCodeView";
 import { useReviewSession } from "./host/review-session";
 import { peekResolutionOutcome } from "./peek-telemetry";

@@ -3,10 +3,10 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { type JsonValue, parseJsonText } from "@dev.fast/review-protocol";
 import { type HttpBindings, getRequestListener } from "@hono/node-server";
+import { REVIEW_APP_SESSION_ID_HEADER } from "@review/ui-telemetry-events";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
-import { REVIEW_APP_SESSION_ID_HEADER } from "../ui-telemetry-events";
 import { StreamLimitError, readBoundedStream } from "./bounded-stream.js";
 import { DEFAULT_MAX_REQUEST_BYTES, HttpJsonError } from "./http-json";
 

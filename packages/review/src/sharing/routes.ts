@@ -1,4 +1,5 @@
-import { ReviewInputError } from "../review-api/document.js";
+import { ReviewInputError } from "@review/review-api/document.js";
+
 import type { SharedReviewStore } from "./import.js";
 
 /** Snapshot-backed reads used by the same HTTP routes as local reviews. */

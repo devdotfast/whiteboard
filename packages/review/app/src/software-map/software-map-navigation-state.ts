@@ -1,3 +1,9 @@
+import type { ReviewSession } from "@canvas/host/review-session";
+import {
+  forgetReviewUiState,
+  readReviewUiState,
+  writeReviewUiState,
+} from "@canvas/review-ui-state";
 import {
   type JsonValue,
   isJsonObject,
@@ -6,12 +12,6 @@ import {
   jsonString,
 } from "@dev.fast/review-protocol";
 
-import type { ReviewSession } from "../host/review-session";
-import {
-  forgetReviewUiState,
-  readReviewUiState,
-  writeReviewUiState,
-} from "../review-ui-state";
 import { isInlineC4Expandable } from "./c4-projection";
 import type { NormalizedSoftwareModel } from "./model";
 

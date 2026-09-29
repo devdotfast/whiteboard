@@ -3,10 +3,10 @@ import {
   ReviewBugReportRequestSchema,
   parseZod,
 } from "@dev.fast/review-protocol";
+import type { ReviewTabTelemetryEvent } from "@review/telemetry";
+import { REVIEW_TELEMETRY_TABS } from "@review/ui-telemetry-events";
 import { z } from "zod";
 
-import type { ReviewTabTelemetryEvent } from "../telemetry";
-import { REVIEW_TELEMETRY_TABS } from "../ui-telemetry-events";
 import { HttpJsonError } from "./http-json";
 
 const MIN_REVIEW_TAB_DWELL_MS = 250;

@@ -1,19 +1,25 @@
 import type { JsonObject } from "@dev.fast/json";
 import type { ReviewStructuralDiffEvent } from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
+import {
+  AgentSelectionSchema,
+  selectionMarkdown,
+} from "@review/agent-selection.js";
+import { resolveReviewBranchLinks } from "@review/review-branch-links.js";
+import { resolveReviewStackLayers } from "@review/review-stack.js";
+import { readBoundedRequestJson } from "@review/server/hono-http.js";
+import { HttpJsonError } from "@review/server/http-json.js";
+import {
+  type SharingHostEvents,
+  mountSharingHost,
+} from "@review/sharing/host.js";
+import type { SharedReviewStore } from "@review/sharing/import.js";
+import { SharedReviewData } from "@review/sharing/routes.js";
+import type { ReviewSessionAgent } from "@review/ui-telemetry-events.js";
+import { scopedCoverage } from "@review/viewed-coverage.js";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
-import { AgentSelectionSchema, selectionMarkdown } from "../agent-selection.js";
-import { resolveReviewBranchLinks } from "../review-branch-links.js";
-import { resolveReviewStackLayers } from "../review-stack.js";
-import { readBoundedRequestJson } from "../server/hono-http.js";
-import { HttpJsonError } from "../server/http-json.js";
-import { type SharingHostEvents, mountSharingHost } from "../sharing/host.js";
-import type { SharedReviewStore } from "../sharing/import.js";
-import { SharedReviewData } from "../sharing/routes.js";
-import type { ReviewSessionAgent } from "../ui-telemetry-events.js";
-import { scopedCoverage } from "../viewed-coverage.js";
 import { authoringTools } from "./authoring-tools.js";
 import { documentText } from "./document-text.js";
 import { ReviewInputError, fileLineRangeSchema } from "./document.js";

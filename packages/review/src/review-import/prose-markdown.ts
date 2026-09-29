@@ -1,9 +1,9 @@
-import { type DiffSelection, sourceAnchor } from "../lens-selection";
+import { type DiffSelection, sourceAnchor } from "@review/lens-selection";
 import type {
   ReviewComponentNode,
   ReviewElementProps,
   ReviewNode,
-} from "../review-document-data";
+} from "@review/review-document-data";
 
 interface FileLineRange {
   side: "base" | "head";

@@ -1,6 +1,6 @@
+import type { ActivitySnapshot } from "@review/review-api/activity";
 import { createContext, useContext, useState } from "react";
 
-import type { ActivitySnapshot } from "../../src/review-api/activity";
 import { scopeLive } from "./authoring-cursor";
 import {
   AuthoringCursorContext,

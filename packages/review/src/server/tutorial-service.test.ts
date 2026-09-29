@@ -2,15 +2,15 @@ import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, expect, it, vi } from "vitest";
-
-import { selectSource } from "../lens-selection";
+import { selectSource } from "@review/lens-selection";
 import {
   elements,
   resourceReferences,
   sourceReferences,
-} from "../review-api/document";
-import { openLocalReviewStore } from "../review-api/local-data";
+} from "@review/review-api/document";
+import { openLocalReviewStore } from "@review/review-api/local-data";
+import { afterEach, expect, it, vi } from "vitest";
+
 import { createTutorialService } from "./tutorial-service";
 
 const packageRoot = path.resolve(import.meta.dirname, "../..");

@@ -1,4 +1,9 @@
 import {
+  type Block,
+  type BlockType,
+  traceQuoteLink,
+} from "@review/review-api/document";
+import {
   Component,
   type ReactNode,
   createContext,
@@ -6,11 +11,6 @@ import {
   useMemo,
 } from "react";
 
-import {
-  type Block,
-  type BlockType,
-  traceQuoteLink,
-} from "../../src/review-api/document";
 import { MarkdownContent } from "./agent-markdown";
 import type { ApiDocumentData } from "./api-document";
 import { blockSectionSummary } from "./block-document-derivations";

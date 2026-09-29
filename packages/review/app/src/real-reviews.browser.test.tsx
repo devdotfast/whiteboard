@@ -1,13 +1,13 @@
 import type { JsonValue } from "@dev.fast/review-protocol";
-import { act } from "react";
-import { afterEach, expect, it } from "vitest";
-
 import {
   assignFreshIds,
   documentSchema,
   elements,
-} from "../../src/review-api/document";
-import type { Snapshot } from "../../src/review-api/store";
+} from "@review/review-api/document";
+import type { Snapshot } from "@review/review-api/store";
+import { act } from "react";
+import { afterEach, expect, it } from "vitest";
+
 import { mountReviewCanvas as mount } from "./desktop-entry";
 import { fixtureReviewBridge, settled } from "./fixture-review-bridge";
 

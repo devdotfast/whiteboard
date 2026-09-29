@@ -1,4 +1,8 @@
 import {
+  type ReviewApiClient,
+  ReviewApiError,
+} from "@review/review-api/client";
+import {
   skipToken,
   useMutation,
   useQuery,
@@ -6,10 +10,6 @@ import {
 } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 
-import {
-  type ReviewApiClient,
-  ReviewApiError,
-} from "../../src/review-api/client";
 import { canvasQueryKeys } from "./canvas-query";
 import { copyText } from "./copy-text";
 import { useOptionalReviewSession } from "./host/review-session";

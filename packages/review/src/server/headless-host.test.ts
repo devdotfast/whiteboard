@@ -5,27 +5,27 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 
-import sharp from "sharp";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { z } from "zod";
-
-import { runReviewCli } from "../cli-runner.js";
+import { runReviewCli } from "@review/cli-runner.js";
 import {
   connectReviewApi,
   connectReviewInstance,
-} from "../review-api/agent-client.js";
-import { ReviewApiClient } from "../review-api/client.js";
-import type { Pins } from "../review-api/document.js";
-import { createReviewApi } from "../review-api/http.js";
-import { serveReviewMcp } from "../review-api/mcp.js";
-import { openReviewProfile } from "../review-api/profile.js";
-import type { Result, Snapshot } from "../review-api/store.js";
+} from "@review/review-api/agent-client.js";
+import { ReviewApiClient } from "@review/review-api/client.js";
+import type { Pins } from "@review/review-api/document.js";
+import { createReviewApi } from "@review/review-api/http.js";
+import { serveReviewMcp } from "@review/review-api/mcp.js";
+import { openReviewProfile } from "@review/review-api/profile.js";
+import type { Result, Snapshot } from "@review/review-api/store.js";
 import {
   type ReviewServerDiscovery,
   readReviewServerDiscovery,
   reviewServerDiscoveryPath,
   reviewServerIsHealthy,
-} from "../server-discovery.js";
+} from "@review/server-discovery.js";
+import sharp from "sharp";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { z } from "zod";
+
 import { runHeadlessServer } from "./headless-host.js";
 
 let root: string;

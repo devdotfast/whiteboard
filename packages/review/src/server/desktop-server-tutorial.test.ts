@@ -4,10 +4,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { type JsonObject, isJsonObject } from "@dev.fast/review-protocol";
+import { elements } from "@review/review-api/document";
+import { openLocalReviewStore } from "@review/review-api/local-data";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { elements } from "../review-api/document";
-import { openLocalReviewStore } from "../review-api/local-data";
 import { createGlobalReviewServer } from "./desktop-server";
 import { createTutorialService } from "./tutorial-service";
 

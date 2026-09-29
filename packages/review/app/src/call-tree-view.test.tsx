@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
+import type { Frame } from "@review/review-api/document";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { Frame } from "../../src/review-api/document";
 import { DocumentCallTree } from "./call-tree-view";
 import { ReviewPanelProvider, useReviewPanel } from "./review-panel";
 import type { ReviewPanelStoreState } from "./review-panel-store";

@@ -6,12 +6,12 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { type JsonObject, isJsonObject } from "@dev.fast/review-protocol";
+import { selectSource } from "@review/lens-selection";
+import { ReviewInputError } from "@review/review-api/document.js";
+import { createReviewApi } from "@review/review-api/http.js";
+import { openLocalReviewStore } from "@review/review-api/local-data.js";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { selectSource } from "../lens-selection";
-import { ReviewInputError } from "../review-api/document.js";
-import { createReviewApi } from "../review-api/http.js";
-import { openLocalReviewStore } from "../review-api/local-data.js";
 import { type ShareBundle, digestBytes, exportShare } from "./export.js";
 import { SharedReviewStore, validateShareBundle } from "./import.js";
 import { fetchPinnedRepository } from "./repository.js";

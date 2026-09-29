@@ -1,4 +1,5 @@
-import type { ReviewNodeTint, ReviewTheme } from "../debug-settings";
+import type { ReviewNodeTint, ReviewTheme } from "@canvas/debug-settings";
+
 import type {
   C4LayoutResult,
   C4MapAnyFlowNode,

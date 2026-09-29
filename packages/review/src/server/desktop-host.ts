@@ -3,14 +3,15 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
-import { reviewInstanceIdentity } from "../desktop-discovery";
-import { findReviewPackageRoot } from "../package-paths";
-import { openReviewProfile } from "../review-api/profile";
-import { ensureBundledRustAnalyzer } from "../review-bundled-tools";
-import { devReviewHome } from "../review-home-paths";
-import { ReviewTelemetry } from "../review-telemetry";
-import { SharedReviewStore } from "../sharing/import.js";
-import { reviewTelemetryChannel } from "../telemetry-config";
+import { reviewInstanceIdentity } from "@review/desktop-discovery";
+import { findReviewPackageRoot } from "@review/package-paths";
+import { openReviewProfile } from "@review/review-api/profile";
+import { ensureBundledRustAnalyzer } from "@review/review-bundled-tools";
+import { devReviewHome } from "@review/review-home-paths";
+import { ReviewTelemetry } from "@review/review-telemetry";
+import { SharedReviewStore } from "@review/sharing/import.js";
+import { reviewTelemetryChannel } from "@review/telemetry-config";
+
 import { listenForDesktopHostShutdown } from "./desktop-host-shutdown";
 import { createGlobalReviewServer } from "./desktop-server";
 import {

@@ -1,9 +1,9 @@
+import type { ActivitySnapshot } from "@review/review-api/activity";
+import type { Block } from "@review/review-api/document";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { ActivitySnapshot } from "../../src/review-api/activity";
-import type { Block } from "../../src/review-api/document";
 import { ApiDocument } from "./api-document";
 import {
   AuthoringActivityBadge,

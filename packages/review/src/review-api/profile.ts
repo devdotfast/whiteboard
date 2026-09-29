@@ -3,8 +3,8 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { withFileLock } from "@dev.fast/trace-core";
+import { ensureJsonCutover } from "@review/review-import/json-cutover.js";
 
-import { ensureJsonCutover } from "../review-import/json-cutover.js";
 import { openLocalReviewStore } from "./local-data.js";
 
 const lockOptions = {

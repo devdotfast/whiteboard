@@ -1,8 +1,8 @@
+import type { FlowDiagramBlock } from "@review/review-api/blocks/flow_diagram";
+import type { Snapshot } from "@review/review-api/store";
 import { useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
-import type { FlowDiagramBlock } from "../../src/review-api/blocks/flow_diagram";
-import type { Snapshot } from "../../src/review-api/store";
 import { DiagramHeader } from "./diagram-header";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { FlowGraph } from "./flow-graph";

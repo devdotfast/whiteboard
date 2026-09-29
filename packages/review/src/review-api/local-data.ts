@@ -31,25 +31,25 @@ import type {
   StructuralDiffEvent,
 } from "@dev.fast/review-protocol";
 import { writePrivateJsonAtomic } from "@dev.fast/trace-core";
-import { z } from "zod";
-
-import { textIncludesQuote } from "../evidence.js";
-import { isMissingFileError } from "../fs-utils.js";
-import { reviewManagedCheckoutRoot } from "../review-checkout-paths.js";
-import { ensureReviewPinnedCheckout } from "../review-head-checkout.js";
-import { StructuralComparisons } from "../server/structural-comparisons.js";
-import { resolveSoftwareMapDiffCounts } from "../software-map-diff-counts.js";
+import { textIncludesQuote } from "@review/evidence.js";
+import { isMissingFileError } from "@review/fs-utils.js";
+import { reviewManagedCheckoutRoot } from "@review/review-checkout-paths.js";
+import { ensureReviewPinnedCheckout } from "@review/review-head-checkout.js";
+import { StructuralComparisons } from "@review/server/structural-comparisons.js";
+import { resolveSoftwareMapDiffCounts } from "@review/software-map-diff-counts.js";
 import {
   type NormalizedSoftwareModel,
   SoftwareModelValidationError,
   defineSoftwareMap,
-} from "../software-map-model.js";
+} from "@review/software-map-model.js";
 import {
   SourceRangeError,
   checkSourcePath,
   requireVisibleSource,
   sliceSourceRange,
-} from "../source.js";
+} from "@review/source.js";
+import { z } from "zod";
+
 import { checkoutFs } from "./checkout-fs.js";
 import {
   type ComparisonCoverage,

@@ -1,12 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { ZodError } from "zod";
-
 import type {
   AuthoredTargetRef,
   CodePeekProps,
   SequenceDiagramProps,
   SequenceMessageInput,
-} from "../../src/authoring";
+} from "@review/authoring";
 import {
   anchorLinkPropsSchema,
   databaseLensPropsSchema,
@@ -20,7 +17,10 @@ import {
   tutorialAuthoringConversationPropsSchema,
   tutorialFeaturePropsSchema,
   tutorialViewButtonPropsSchema,
-} from "../../src/authoring";
+} from "@review/authoring";
+import { describe, expect, it } from "vitest";
+import { ZodError } from "zod";
+
 import { createTestReviewDefinitionSession } from "./review-definition-test-utils";
 
 const definitionSession = createTestReviewDefinitionSession();

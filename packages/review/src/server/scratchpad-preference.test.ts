@@ -3,10 +3,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { SCRATCHPAD_REVIEW_ID } from "@dev.fast/review-protocol";
+import { openLocalReviewStore } from "@review/review-api/local-data";
+import { readReviewPreferences } from "@review/review-preferences";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { openLocalReviewStore } from "../review-api/local-data";
-import { readReviewPreferences } from "../review-preferences";
 import { createGlobalReviewServer } from "./desktop-server";
 
 const token = "scratchpad-test-token";

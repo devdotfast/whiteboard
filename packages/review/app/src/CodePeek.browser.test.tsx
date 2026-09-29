@@ -2,11 +2,11 @@ import type {
   ReviewInlineEditorSpec,
   ReviewVerbRequest,
 } from "@dev.fast/review-protocol";
+import { selectSource, sourceAnchors } from "@review/lens-selection";
 import { type ReactNode, act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { selectSource, sourceAnchors } from "../../src/lens-selection";
 import { CodePeek, CodePeekCard, CodePeekGroup } from "./CodePeek";
 import {
   type ReviewSession,

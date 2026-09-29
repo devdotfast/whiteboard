@@ -1,4 +1,5 @@
-import { type LensSource } from "../lens-selection.js";
+import { type LensSource } from "@review/lens-selection.js";
+
 import { type Element, ReviewInputError, elements } from "./document.js";
 import type { Snapshot } from "./store.js";
 

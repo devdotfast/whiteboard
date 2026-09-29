@@ -7,8 +7,8 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import type { ReviewToolCall } from "@review/review-telemetry.js";
 
-import type { ReviewToolCall } from "../review-telemetry.js";
 import {
   type AuthoringTool,
   type ConnectedReview,

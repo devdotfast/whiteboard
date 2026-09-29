@@ -1,9 +1,9 @@
+import { testReviewSession } from "@canvas/review-session-test-utils";
 import type { ReviewVerbRequest } from "@dev.fast/review-protocol";
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { testReviewSession } from "../review-session-test-utils";
 import { ReviewSessionProvider, useReviewSession } from "./review-session";
 
 const roots: Array<ReturnType<typeof createRoot>> = [];

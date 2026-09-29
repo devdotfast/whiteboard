@@ -1,6 +1,6 @@
+import { selectSource } from "@review/lens-selection.js";
 import { expect, it } from "vitest";
 
-import { selectSource } from "../lens-selection.js";
 import { documentText } from "./document-text.js";
 import { documentSchema } from "./document.js";
 import type { Snapshot } from "./store.js";

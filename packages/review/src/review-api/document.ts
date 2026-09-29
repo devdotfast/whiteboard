@@ -1,17 +1,21 @@
-import { z } from "zod";
-
 import {
   type LensSource,
   selectSource,
   sourceAnchors,
-} from "../lens-selection.js";
-import { markdownNodes, markdownText, parseMarkdown } from "../markdown.js";
+} from "@review/lens-selection.js";
+import {
+  markdownNodes,
+  markdownText,
+  parseMarkdown,
+} from "@review/markdown.js";
 import {
   type FileLineRange,
   type SourcePins,
   fileLineRangeSchema,
   sourcePinsSchema,
-} from "../source.js";
+} from "@review/source.js";
+import { z } from "zod";
+
 import {
   type FlowDiagramEdge,
   type FlowDiagramNode,

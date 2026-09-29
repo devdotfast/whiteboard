@@ -8,9 +8,9 @@ import type {
   StructuralDiffEvent,
   StructuralRegion,
 } from "@dev.fast/review-protocol";
+import { coverageProgress, coverageSources } from "@review/viewed-coverage.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { coverageProgress, coverageSources } from "../viewed-coverage.js";
 import { ReviewApiClient } from "./client.js";
 import { foldedChanges } from "./comparison-coverage.js";
 import { UNCATEGORIZED_LENS_ID } from "./diff-lenses.js";

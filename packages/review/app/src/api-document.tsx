@@ -1,18 +1,18 @@
 import type { ReviewCommitSummary } from "@dev.fast/review-protocol";
-import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
-
-import { type DiffSelection } from "../../src/lens-selection";
-import type { ReviewApiClient } from "../../src/review-api/client";
+import { type DiffSelection } from "@review/lens-selection";
+import type { ReviewApiClient } from "@review/review-api/client";
 import {
   type Block,
   elements,
   resourceReferences,
   selectionReferences,
-} from "../../src/review-api/document";
-import type { LocalReviewData } from "../../src/review-api/local-data";
-import type { Snapshot } from "../../src/review-api/store";
-import type { DocumentPeekableAnchor } from "../../src/review-document-data";
-import type { NormalizedSoftwareModel } from "../../src/software-map-model";
+} from "@review/review-api/document";
+import type { LocalReviewData } from "@review/review-api/local-data";
+import type { Snapshot } from "@review/review-api/store";
+import type { DocumentPeekableAnchor } from "@review/review-document-data";
+import type { NormalizedSoftwareModel } from "@review/software-map-model";
+import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
+
 import { markdownHasTitle } from "./agent-markdown";
 import { type ApiHeadingIds, apiHeadingIds } from "./api-document-headings";
 import { AuthoringActivityContext } from "./authoring-activity";

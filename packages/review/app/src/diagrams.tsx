@@ -1,3 +1,4 @@
+import type { Step } from "@review/review-api/document";
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -22,7 +23,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import type { Step } from "../../src/review-api/document";
 import { useReviewDebugSettings } from "./debug-settings";
 import { DiagramHeader } from "./diagram-header";
 import { hasTextSelectionWithin } from "./diagram-text-selection";

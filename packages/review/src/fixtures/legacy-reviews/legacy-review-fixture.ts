@@ -19,8 +19,7 @@ import {
   jsonObject,
   parseJsonText,
 } from "@dev.fast/review-protocol";
-
-import { isDerivedReviewPath } from "../../review-derived-paths";
+import { isDerivedReviewPath } from "@review/review-derived-paths";
 
 const execFilePromise = promisify(execFile);
 

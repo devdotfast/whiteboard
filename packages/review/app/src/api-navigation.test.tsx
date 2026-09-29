@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { randomUUID } from "node:crypto";
 
+import { createReviewApi } from "@review/review-api/http";
+import { ReviewStore } from "@review/review-api/store";
 import { Hono } from "hono";
 import { act } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { createReviewApi } from "../../src/review-api/http";
-import { ReviewStore } from "../../src/review-api/store";
 import { mountReviewCanvas } from "./desktop-entry";
 import { testReviewBridge } from "./review-session-test-utils";
 

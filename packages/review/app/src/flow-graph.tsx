@@ -1,3 +1,11 @@
+import type {
+  FlowDiagramBlock,
+  FlowDiagramNode,
+} from "@review/review-api/blocks/flow_diagram";
+import {
+  type CoverageProgress,
+  coverageProgress,
+} from "@review/viewed-coverage";
 import {
   BaseEdge,
   type CoordinateExtent,
@@ -17,14 +25,6 @@ import {
 import ELK, { type ElkNode } from "elkjs/lib/elk.bundled.js";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
-import type {
-  FlowDiagramBlock,
-  FlowDiagramNode,
-} from "../../src/review-api/blocks/flow_diagram";
-import {
-  type CoverageProgress,
-  coverageProgress,
-} from "../../src/viewed-coverage";
 import { useReviewDebugSettings } from "./debug-settings";
 import { useMotionPhase } from "./draw-queue-provider";
 import { ElementCountsText } from "./lens-counts";

@@ -9,15 +9,15 @@ import type {
   ReviewInlineEditorSpec,
   ReviewSurfaceEvent,
 } from "@dev.fast/review-protocol";
+import { selectSource } from "@review/lens-selection";
+import { createReviewApi } from "@review/review-api/http";
+import { ReviewInputError } from "@review/review-api/input-error";
+import { LocalReviewData } from "@review/review-api/local-data";
+import { ReviewStore } from "@review/review-api/store";
 import { Hono } from "hono";
 import { act } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { selectSource } from "../../src/lens-selection";
-import { createReviewApi } from "../../src/review-api/http";
-import { ReviewInputError } from "../../src/review-api/input-error";
-import { LocalReviewData } from "../../src/review-api/local-data";
-import { ReviewStore } from "../../src/review-api/store";
 import * as clipboard from "./copy-text";
 import { mountReviewCanvas as mount } from "./desktop-entry";
 import { createSequenceTourEntry, sequenceView } from "./diagrams";

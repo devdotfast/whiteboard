@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { Writable } from "node:stream";
 
+import { connectReviewApi } from "@review/review-api/agent-client.js";
 import { z } from "zod";
-
-import { connectReviewApi } from "../review-api/agent-client.js";
 
 const resultSchema = z.strictObject({
   shareId: z.uuid(),

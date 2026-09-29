@@ -1,11 +1,11 @@
+import type { ActivitySnapshot } from "@review/review-api/activity";
+import { ReviewApiClient } from "@review/review-api/client";
+import type { Lens } from "@review/review-api/diff-lenses";
+import type { Snapshot } from "@review/review-api/store";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { ActivitySnapshot } from "../../src/review-api/activity";
-import { ReviewApiClient } from "../../src/review-api/client";
-import type { Lens } from "../../src/review-api/diff-lenses";
-import type { Snapshot } from "../../src/review-api/store";
 import {
   AuthoringActivityBadge,
   AuthoringActivityContext,

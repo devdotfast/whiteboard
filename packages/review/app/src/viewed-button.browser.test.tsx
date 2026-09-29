@@ -1,9 +1,9 @@
 import type { ReviewTooltipOptions } from "@dev.fast/review-protocol";
+import type { CoverageProgress } from "@review/viewed-coverage";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 
-import type { CoverageProgress } from "../../src/viewed-coverage";
 import { ReviewSessionProvider } from "./host/review-session";
 import { testReviewSession } from "./review-session-test-utils";
 import { ViewedButton } from "./viewed-button";

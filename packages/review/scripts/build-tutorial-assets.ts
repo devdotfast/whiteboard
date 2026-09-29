@@ -15,11 +15,10 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { parseJsonText } from "@dev.fast/review-protocol";
+import { sourceReferences } from "@review/review-api/document";
+import { openLocalReviewStore } from "@review/review-api/local-data";
+import { createNativeTutorial } from "@review/server/tutorial-service";
 import { z } from "zod";
-
-import { sourceReferences } from "../src/review-api/document";
-import { openLocalReviewStore } from "../src/review-api/local-data";
-import { createNativeTutorial } from "../src/server/tutorial-service";
 
 const execFilePromise = promisify(execFile);
 

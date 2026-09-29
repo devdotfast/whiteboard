@@ -1,6 +1,9 @@
-import type { PostHogCaptureProperties } from "../posthog-capture-client";
-import type { ReviewApiHooks } from "../review-api/http.js";
-import type { ReviewSessionAgent, ReviewTelemetry } from "../review-telemetry";
+import type { PostHogCaptureProperties } from "@review/posthog-capture-client";
+import type { ReviewApiHooks } from "@review/review-api/http.js";
+import type {
+  ReviewSessionAgent,
+  ReviewTelemetry,
+} from "@review/review-telemetry";
 
 /**
  * Review created, published and revoked, and agent authoring completed, as

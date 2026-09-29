@@ -1,3 +1,12 @@
+import { CodePeekGroup } from "@canvas/CodePeek";
+import { useReviewDebugSettings } from "@canvas/debug-settings";
+import { hasTextSelectionWithin } from "@canvas/diagram-text-selection";
+import { useReviewSession } from "@canvas/host/review-session";
+import { CloseIcon, RefreshIcon } from "@canvas/icons";
+import { useReviewContainer } from "@canvas/review-root-context";
+import { useRightPanelResize } from "@canvas/side-panel-resizer";
+import { captureUiEvent } from "@canvas/ui-telemetry";
+import { codePeekSource } from "@review/source";
 import {
   Background,
   BaseEdge,
@@ -28,15 +37,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { codePeekSource } from "../../../src/source";
-import { CodePeekGroup } from "../CodePeek";
-import { useReviewDebugSettings } from "../debug-settings";
-import { hasTextSelectionWithin } from "../diagram-text-selection";
-import { useReviewSession } from "../host/review-session";
-import { CloseIcon, RefreshIcon } from "../icons";
-import { useReviewContainer } from "../review-root-context";
-import { useRightPanelResize } from "../side-panel-resizer";
-import { captureUiEvent } from "../ui-telemetry";
 import {
   c4EdgeLabelPoint,
   c4EdgePointsFromSections,

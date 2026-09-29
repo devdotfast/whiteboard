@@ -1,6 +1,6 @@
+import { testReviewBridge } from "@canvas/review-session-test-utils";
 import { expect, it, vi } from "vitest";
 
-import { testReviewBridge } from "../review-session-test-utils";
 import { createReviewSession } from "./review-session";
 
 it("sends JSON requests to the displayed version with authentication, including beacon delivery", async () => {

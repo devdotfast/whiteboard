@@ -1,5 +1,5 @@
-import type { AlignmentRow } from "../lens-selection.js";
-import { parseUnifiedPatch } from "../unified-diff.js";
+import type { AlignmentRow } from "@review/lens-selection.js";
+import { parseUnifiedPatch } from "@review/unified-diff.js";
 
 /** Project the already-computed patch's runs, including unchanged gaps. */
 export function textualRows(

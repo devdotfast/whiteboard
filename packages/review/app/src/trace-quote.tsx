@@ -1,6 +1,6 @@
+import type { ReviewComponentProps } from "@review/review-document-data";
 import { type ReactNode, isValidElement } from "react";
 
-import type { ReviewComponentProps } from "../../src/review-document-data";
 import { isReactTextNode } from "./agent-markdown";
 import { ProsePeekAnchor } from "./review-components";
 import { useOptionalReviewPanel } from "./review-panel";

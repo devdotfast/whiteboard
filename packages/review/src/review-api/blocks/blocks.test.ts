@@ -1,9 +1,12 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  ReviewInputError,
+  documentSchema,
+} from "@review/review-api/document.js";
 import { describe, expect, it } from "vitest";
 
-import { ReviewInputError, documentSchema } from "../document.js";
 import {
   type BlockType,
   type Definitions,

@@ -19,12 +19,12 @@ import { fileURLToPath } from "node:url";
 
 import { setLocalVcsCommandObserver } from "@dev.fast/local-vcs";
 import type { JsonValue } from "@dev.fast/review-protocol";
+import { selectSource } from "@review/lens-selection";
+import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { Hono } from "hono";
 import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { selectSource } from "../lens-selection";
-import { createGlobalReviewServer } from "../server/desktop-server.js";
 import {
   type AuthoringTool,
   ToolText,

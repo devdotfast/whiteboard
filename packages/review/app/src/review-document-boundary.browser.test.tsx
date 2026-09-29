@@ -3,6 +3,7 @@ import {
   isJsonObject,
   parseJsonText,
 } from "@dev.fast/review-protocol";
+import { sequenceDiagramPropsSchema } from "@review/authoring";
 import { StrictMode, act } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -15,7 +16,6 @@ import {
   vi,
 } from "vitest";
 
-import { sequenceDiagramPropsSchema } from "../../src/authoring";
 import type { ReviewSession } from "./host/review-session";
 import { ReviewDocumentBoundary } from "./review-document-boundary";
 import { testReviewSession } from "./review-session-test-utils";

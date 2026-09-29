@@ -1,4 +1,24 @@
 import type { ReviewDiffLens } from "@dev.fast/review-protocol";
+import {
+  type LensSource,
+  comparisonKey,
+  selectionKey,
+} from "@review/lens-selection";
+import type { ReviewApiClient } from "@review/review-api/client";
+import {
+  type Lens,
+  UNCATEGORIZED_LENS_ID,
+} from "@review/review-api/diff-lenses";
+import type { ReviewProgress } from "@review/review-api/review-progress";
+import type { Snapshot } from "@review/review-api/store";
+import type { FileLineRange } from "@review/source";
+import {
+  type CoverageProgress,
+  coverageProgress,
+  coverageSources,
+  mergeCoverageProgress,
+  scopedCoverage,
+} from "@review/viewed-coverage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   type ReactNode,
@@ -10,26 +30,6 @@ import {
   useState,
 } from "react";
 
-import {
-  type LensSource,
-  comparisonKey,
-  selectionKey,
-} from "../../src/lens-selection";
-import type { ReviewApiClient } from "../../src/review-api/client";
-import {
-  type Lens,
-  UNCATEGORIZED_LENS_ID,
-} from "../../src/review-api/diff-lenses";
-import type { ReviewProgress } from "../../src/review-api/review-progress";
-import type { Snapshot } from "../../src/review-api/store";
-import type { FileLineRange } from "../../src/source";
-import {
-  type CoverageProgress,
-  coverageProgress,
-  coverageSources,
-  mergeCoverageProgress,
-  scopedCoverage,
-} from "../../src/viewed-coverage";
 import { canvasQueryKeys } from "./canvas-query";
 import { useReviewSession } from "./host/review-session";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";

@@ -1,7 +1,7 @@
 import type {
   ReviewTabTelemetryReason,
   ReviewTelemetryTab,
-} from "../../src/telemetry";
+} from "@review/telemetry";
 
 export type { ReviewTabTelemetryReason, ReviewTelemetryTab };
 

@@ -1,6 +1,6 @@
+import type { ReviewComponentProps } from "@review/review-document-data";
 import type { ReactElement, ReactNode } from "react";
 
-import type { ReviewComponentProps } from "../../src/review-document-data";
 import { useReviewActions } from "./review-context";
 import { useTutorial } from "./tutorial-context";
 import {

@@ -1,7 +1,7 @@
 import { jsonBoolean, jsonNumber, jsonString } from "@dev.fast/review-protocol";
+import { UI_TELEMETRY_EVENTS } from "@review/ui-telemetry-events";
+import type { UiTelemetryEventName } from "@review/ui-telemetry-events";
 
-import { UI_TELEMETRY_EVENTS } from "../../src/ui-telemetry-events";
-import type { UiTelemetryEventName } from "../../src/ui-telemetry-events";
 import type { ReviewSession } from "./host/review-session";
 
 type UiTelemetryPropertyValue = string | number | boolean;

@@ -21,12 +21,11 @@ import {
   indexCodexTraceFiles,
   listFilesRecursive,
 } from "@dev.fast/trace-core";
-
 import {
   type ReviewAgentHarness,
   parseAuthoringSessionKey,
-} from "../agent-session-ref";
-import { USER_DATA_REGEXES } from "../telemetry-clean-text";
+} from "@review/agent-session-ref";
+import { USER_DATA_REGEXES } from "@review/telemetry-clean-text";
 
 const MAX_SUBAGENT_TRACE_BYTES = 5 * 1024 * 1024;
 

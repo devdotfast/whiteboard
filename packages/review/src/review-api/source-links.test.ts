@@ -1,6 +1,6 @@
+import { selectSource } from "@review/lens-selection.js";
 import { expect, it } from "vitest";
 
-import { selectSource } from "../lens-selection.js";
 import { sourceReferences } from "./document.js";
 
 const sources = (markdown: string) =>

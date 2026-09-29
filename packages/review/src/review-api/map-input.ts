@@ -1,7 +1,6 @@
+import { softwareDataStoreCollectionInputSchema } from "@review/authoring.js";
+import type { SoftwareModelInput } from "@review/software-map-model.js";
 import { z } from "zod";
-
-import { softwareDataStoreCollectionInputSchema } from "../authoring.js";
-import type { SoftwareModelInput } from "../software-map-model.js";
 
 // Decode the existing map authoring format at the HTTP boundary. The existing
 // defineSoftwareMap normalizer remains responsible for relationships/coverage.

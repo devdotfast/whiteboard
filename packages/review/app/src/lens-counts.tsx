@@ -1,4 +1,5 @@
-import type { CoverageProgress } from "../../src/viewed-coverage";
+import type { CoverageProgress } from "@review/viewed-coverage";
+
 import { compactDiffCount as compact } from "./diff-count";
 
 /** The same counts for an HTML caption, outside SVG text. */

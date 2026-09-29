@@ -1,7 +1,7 @@
 import type { ReviewCommitSummary } from "@dev.fast/review-protocol";
+import type { AnchorRef } from "@review/authoring";
 import { describe, expect, it } from "vitest";
 
-import type { AnchorRef } from "../../src/authoring";
 import type { GuidedTour, ReviewPeekContent } from "./review-panel-model";
 import { createReviewPanelStore } from "./review-panel-store";
 

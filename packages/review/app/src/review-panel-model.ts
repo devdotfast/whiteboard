@@ -1,4 +1,4 @@
-import { type DiffSelection } from "../../src/lens-selection";
+import { type DiffSelection } from "@review/lens-selection";
 
 export type ReviewPeekContent =
   | { kind: "source"; source: DiffSelection }

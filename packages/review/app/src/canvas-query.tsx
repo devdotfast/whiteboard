@@ -1,7 +1,7 @@
+import type { ReviewApiClient } from "@review/review-api/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useMemo } from "react";
 
-import type { ReviewApiClient } from "../../src/review-api/client";
 import type { AgentTraceStorage } from "./use-agent-trace";
 
 /**

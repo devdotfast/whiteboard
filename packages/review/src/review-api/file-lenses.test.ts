@@ -1,6 +1,6 @@
+import { selectSource, sourceAnchors } from "@review/lens-selection.js";
 import { expect, it } from "vitest";
 
-import { selectSource, sourceAnchors } from "../lens-selection.js";
 import {
   matchesFileLens,
   resolveFileLens,

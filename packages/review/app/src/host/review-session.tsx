@@ -1,3 +1,6 @@
+import type { NormalizedSoftwareModel } from "@canvas/software-map/model";
+import type { PinnedSoftwareMapData } from "@canvas/software-map/SoftwareMap";
+import { createReviewAppSessionId } from "@canvas/tab-dwell-telemetry";
 import type {
   ReviewCanvasBridge,
   ReviewCanvasDiagnostic,
@@ -5,9 +8,6 @@ import type {
 } from "@dev.fast/review-protocol";
 import { type ReactNode, createContext, useContext } from "react";
 
-import type { NormalizedSoftwareModel } from "../software-map/model";
-import type { PinnedSoftwareMapData } from "../software-map/SoftwareMap";
-import { createReviewAppSessionId } from "../tab-dwell-telemetry";
 import {
   type ReviewRequestOptions,
   jsonReviewApiUrl,

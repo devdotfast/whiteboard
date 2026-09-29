@@ -1,3 +1,4 @@
+import { MinusIcon, PlusIcon } from "@canvas/icons";
 import {
   type CSSProperties,
   type KeyboardEvent,
@@ -7,8 +8,6 @@ import {
   useRef,
   useState,
 } from "react";
-
-import { MinusIcon, PlusIcon } from "../icons";
 
 export interface SoftwareMapHotkeyItem {
   keys: readonly string[];

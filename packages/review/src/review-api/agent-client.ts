@@ -2,13 +2,14 @@ import {
   healthyReviewInstance,
   reviewInstanceUnavailable,
   selectReviewInstance,
-} from "../desktop-discovery.js";
+} from "@review/desktop-discovery.js";
 import {
   readReviewServerDiscovery,
   reviewServerIsHealthy,
   reviewServerStateDir,
   serverNotReady,
-} from "../server-discovery.js";
+} from "@review/server-discovery.js";
+
 import { ReviewApiClient } from "./client.js";
 
 export interface AuthoringTool {

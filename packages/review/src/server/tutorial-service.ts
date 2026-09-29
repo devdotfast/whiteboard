@@ -4,12 +4,14 @@ import path from "node:path";
 
 import { resolveRevision } from "@dev.fast/local-vcs";
 import { writePrivateJsonAtomic } from "@dev.fast/trace-core";
+import {
+  documentSchema,
+  resourceReferences,
+} from "@review/review-api/document";
+import type { LocalReviewData } from "@review/review-api/local-data";
+import type { ReviewStore, Snapshot } from "@review/review-api/store";
+import { devReviewHome } from "@review/review-home-paths";
 import { z } from "zod";
-
-import { documentSchema, resourceReferences } from "../review-api/document";
-import type { LocalReviewData } from "../review-api/local-data";
-import type { ReviewStore, Snapshot } from "../review-api/store";
-import { devReviewHome } from "../review-home-paths";
 
 const authoredSchema = z.strictObject({
   title: z.string().min(1),

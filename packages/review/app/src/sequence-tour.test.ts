@@ -1,11 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { ZodError } from "zod";
-
 import {
   type SequenceDiagramProps as AuthoredSequenceProps,
   sequenceDiagramPropsSchema,
-} from "../../src/authoring";
-import { sequenceBlockFromProps } from "../../src/sequence-steps";
+} from "@review/authoring";
+import { sequenceBlockFromProps } from "@review/sequence-steps";
+import { describe, expect, it } from "vitest";
+import { ZodError } from "zod";
+
 import {
   createSequenceTourEntry,
   sequenceActiveMessageScrollTarget,

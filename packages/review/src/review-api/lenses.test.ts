@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { selectSource } from "@review/lens-selection.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { selectSource } from "../lens-selection.js";
 import { type AuthoringTool, callAuthoringTool } from "./agent-client.js";
 import { authoringTools } from "./authoring-tools.js";
 import { ReviewApiClient } from "./client.js";

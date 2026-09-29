@@ -1,8 +1,8 @@
+import type { Block } from "@review/review-api/document";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { Block } from "../../src/review-api/document";
 import { ApiDocument } from "./api-document";
 import { AuthoringActivityContext } from "./authoring-activity";
 import type { AuthoringCursor } from "./authoring-cursor";

@@ -8,12 +8,10 @@ import {
   type ShareManifest,
   shareManifestSchema,
 } from "@dev.fast/review-share-protocol";
-import { z } from "zod";
-
-import { sourceAnchors } from "../lens-selection.js";
-import { markdownNodes, parseMarkdown } from "../markdown.js";
-import { lensSelections } from "../review-api/diff-lenses.js";
-import { ReviewInputError } from "../review-api/document.js";
+import { sourceAnchors } from "@review/lens-selection.js";
+import { markdownNodes, parseMarkdown } from "@review/markdown.js";
+import { lensSelections } from "@review/review-api/diff-lenses.js";
+import { ReviewInputError } from "@review/review-api/document.js";
 import {
   anchorPins,
   checkReferences,
@@ -22,9 +20,10 @@ import {
   resourceReference,
   resourceReferences,
   sourceReferences,
-} from "../review-api/document.js";
-import type { LocalReviewData } from "../review-api/local-data.js";
-import type { ReviewStore } from "../review-api/store.js";
+} from "@review/review-api/document.js";
+import type { LocalReviewData } from "@review/review-api/local-data.js";
+import type { ReviewStore } from "@review/review-api/store.js";
+import { z } from "zod";
 
 export interface ShareBundle {
   manifest: ShareManifest;

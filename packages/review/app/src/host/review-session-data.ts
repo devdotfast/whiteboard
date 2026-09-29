@@ -1,9 +1,8 @@
+import type { LoadedAgentTrace } from "@canvas/use-agent-trace";
 import type {
   ReviewDocumentVersionWire,
   ReviewStackLayer,
 } from "@dev.fast/review-protocol";
-
-import type { LoadedAgentTrace } from "../use-agent-trace";
 
 export interface ReviewSessionData {
   /** Absent for a review. The scratchpad hides review-only chrome. */

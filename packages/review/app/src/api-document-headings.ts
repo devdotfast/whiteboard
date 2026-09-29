@@ -1,5 +1,6 @@
-import type { Block } from "../../src/review-api/document";
-import { documentHeadings } from "../../src/review-api/document-headings";
+import type { Block } from "@review/review-api/document";
+import { documentHeadings } from "@review/review-api/document-headings";
+
 import type { ReviewTocEntry } from "./review-document-headings";
 
 /** A snapshot's heading slugs, resolved once for the renderer. */

@@ -1,5 +1,6 @@
-import { markdownNodes, parseMarkdown } from "../../src/markdown";
-import type { Block } from "../../src/review-api/document";
+import { markdownNodes, parseMarkdown } from "@review/markdown";
+import type { Block } from "@review/review-api/document";
+
 import type { ReviewSectionSummary } from "./review-section-summary";
 
 export function blockSectionSummary(children: Block[]): ReviewSectionSummary {

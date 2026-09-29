@@ -1,7 +1,7 @@
+import type { Snapshot } from "@review/review-api/store";
 import { act } from "react";
 import { afterEach, expect, it } from "vitest";
 
-import type { Snapshot } from "../../src/review-api/store";
 import { mountReviewCanvas as mount } from "./desktop-entry";
 import { fixtureReviewBridge, settled } from "./fixture-review-bridge";
 

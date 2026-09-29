@@ -1,3 +1,4 @@
+import type { ReviewComponentProps } from "@review/review-document-data";
 import type {
   CSSProperties,
   ComponentPropsWithoutRef,
@@ -7,7 +8,6 @@ import type {
 } from "react";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
-import type { ReviewComponentProps } from "../../src/review-document-data";
 import { AuthoredCodeSurface } from "./authored-code-surface";
 import { CodePeekCard } from "./CodePeek";
 import { findWhitespaceNormalizedSpan } from "./highlighted-text";

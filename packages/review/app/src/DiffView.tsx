@@ -4,6 +4,12 @@ import type {
   ReviewDiffProgress,
   ReviewDiffViewHandle,
 } from "@dev.fast/review-protocol";
+import type { Lens } from "@review/review-api/diff-lenses";
+import {
+  type CoverageProgress,
+  coverageProgress,
+  coverageSources,
+} from "@review/viewed-coverage";
 import {
   type CSSProperties,
   useCallback,
@@ -15,12 +21,6 @@ import {
   useState,
 } from "react";
 
-import type { Lens } from "../../src/review-api/diff-lenses";
-import {
-  type CoverageProgress,
-  coverageProgress,
-  coverageSources,
-} from "../../src/viewed-coverage";
 import { AuthoringActivityContext } from "./authoring-activity";
 import { scopeLive } from "./authoring-cursor";
 import { Courier, LensCursorContext, lensRowElement } from "./courier";

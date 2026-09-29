@@ -1,9 +1,9 @@
 import { REVIEW_CANVAS_RESUME_EVENT } from "@dev.fast/review-protocol";
+import type { AnchorRef } from "@review/authoring";
 import { type ReactNode, act, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AnchorRef } from "../../src/authoring";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewPanelHost } from "./review-components";

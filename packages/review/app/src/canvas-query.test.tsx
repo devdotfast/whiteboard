@@ -1,3 +1,4 @@
+import { ReviewApiClient } from "@review/review-api/client";
 // @vitest-environment jsdom
 import {
   type QueryClient,
@@ -10,7 +11,6 @@ import { StrictMode, act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { ReviewApiClient } from "../../src/review-api/client";
 import { CanvasQueryProvider } from "./canvas-query";
 
 let root: Root | undefined;

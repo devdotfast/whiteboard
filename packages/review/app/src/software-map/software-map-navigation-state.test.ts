@@ -1,6 +1,6 @@
+import { testReviewSession } from "@canvas/review-session-test-utils";
 import { describe, expect, it } from "vitest";
 
-import { testReviewSession } from "../review-session-test-utils";
 import { projectInlineC4 } from "./c4-projection";
 import { defineSoftwareModel } from "./model";
 import {

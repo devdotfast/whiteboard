@@ -1,3 +1,4 @@
+import type { AnchorRef } from "@review/authoring";
 import {
   type ReactNode,
   type RefObject,
@@ -8,7 +9,6 @@ import {
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AnchorRef } from "../../src/authoring";
 import { ReviewSessionProvider } from "./host/review-session";
 import type { GuidedTour } from "./review-panel-model";
 import { createReviewPanelStore } from "./review-panel-store";

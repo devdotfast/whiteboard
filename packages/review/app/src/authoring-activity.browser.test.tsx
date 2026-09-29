@@ -1,8 +1,8 @@
+import type { ActivitySnapshot } from "@review/review-api/activity";
 import { act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
-import type { ActivitySnapshot } from "../../src/review-api/activity";
 import {
   AuthoringActivityBadge,
   AuthoringActivityContext,
