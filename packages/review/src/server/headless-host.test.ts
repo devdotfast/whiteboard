@@ -5,6 +5,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 
+import {
+  type JsonValue,
+  parseReviewDesktopVerbFrame,
+} from "@dev.fast/review-protocol";
 import { runReviewCli } from "@review/cli-runner.js";
 import {
   connectReviewApi,
@@ -571,7 +575,7 @@ it("authenticates clients, reports capabilities and readiness without exposing t
 
   await expect(
     server.client.post(`/${result.reviewId}/open`, {}),
-  ).rejects.toThrow(/desktop is not connected/);
+  ).rejects.toThrow(/No Whiteboard Desktop is attached/);
   await server.stop();
   const stopped = await cli(["server", "status", "--json"], server.env);
   expect(stopped.exitCode).toBe(1);
@@ -579,6 +583,90 @@ it("authenticates clients, reports capabilities and readiness without exposing t
   await expect(connectReviewApi(server.env)).rejects.toThrow(
     /whiteboard server start/g,
   );
+});
+
+it("reports an attached Desktop and sends it the reviews to open", async () => {
+  const server = await start();
+  const abort = new AbortController();
+  const opened: JsonValue[] = [];
+
+  const control = await fetch(`${server.discovery.url}/control`, {
+    headers: { "x-review-token": server.discovery.token },
+    signal: abort.signal,
+  });
+
+  expect(control.status).toBe(200);
+
+  // A stand-in Desktop: answers every verb the server relays to it.
+  void (async () => {
+    let buffered = "";
+
+    for await (const chunk of control.body!.pipeThrough(
+      new TextDecoderStream(),
+    )) {
+      buffered += chunk;
+      let end: number;
+
+      while ((end = buffered.indexOf("\n\n")) >= 0) {
+        const frame = buffered.slice(0, end);
+        buffered = buffered.slice(end + 2);
+
+        if (!frame.startsWith("data: ")) continue;
+
+        const { id, request } = parseReviewDesktopVerbFrame(
+          JSON.parse(frame.slice("data: ".length)),
+        );
+
+        if (request.name === "openApiReview") opened.push(request.args);
+        await fetch(`${server.discovery.url}/control/result`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-review-token": server.discovery.token,
+          },
+          body: JSON.stringify({
+            id,
+            response: { ok: true, result: { softwareMapEnabled: true } },
+          }),
+        });
+      }
+    }
+  })().catch(() => {});
+
+  try {
+    expect(await server.client.read("/capabilities")).toMatchObject({
+      desktopAvailable: true,
+      softwareMapEnabled: true,
+    });
+
+    const repo = await repository();
+
+    const registered = await server.client.post<{ id: string }>(
+      "/repositories",
+      { path: repo.directory },
+    );
+
+    const created = await server.client.post<Result>("/commands", {
+      commandId: randomUUID(),
+      operation: {
+        type: "create",
+        title: "Opened remotely",
+        pins: { repositoryId: registered.id, base: repo.base, head: repo.head },
+        open: false,
+      },
+    });
+
+    await server.client.post(`/${created.reviewId}/open`, {});
+    expect(opened).toEqual([
+      { reviewId: created.reviewId, title: "Opened remotely" },
+    ]);
+  } finally {
+    abort.abort();
+  }
+
+  await expect
+    .poll(() => server.client.read("/capabilities"))
+    .toMatchObject({ desktopAvailable: false });
 });
 
 it("rejects a second owner and keeps separate CI job stores independent", async () => {

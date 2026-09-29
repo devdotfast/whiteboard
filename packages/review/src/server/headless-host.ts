@@ -18,17 +18,17 @@ import {
   reviewServerDiscoveryPath,
 } from "@review/server-discovery.js";
 import { mountSharingPublisher } from "@review/sharing/host.js";
-import { Hono } from "hono";
 
-import {
-  type ReviewHonoEnv,
-  createNodeRequestListener,
-  isAuthorizedRequest,
-} from "./hono-http.js";
+import { GlobalReviewDesktopVerbRelay } from "./global-verb-relay.js";
+import { createNodeRequestListener } from "./hono-http.js";
 import {
   drainServerCrashReport,
   installProcessErrorTelemetry,
 } from "./process-error-telemetry.js";
+import {
+  createReviewServerApp,
+  relayReviewCallbacks,
+} from "./review-server-core.js";
 import type { ReviewTelemetryCapture } from "./ui-telemetry.js";
 
 interface HeadlessServerInput {
@@ -84,15 +84,16 @@ async function serve(input: HeadlessServerInput) {
     token: randomBytes(32).toString("base64url"),
   };
 
-  const app = new Hono<ReviewHonoEnv>();
-  app.use("*", async (context, next) => {
-    if (!isAuthorizedRequest(context.req.raw, discovery.token))
-      return context.json({ error: "Unauthorized" }, 401);
-    await next();
+  const relay = new GlobalReviewDesktopVerbRelay();
+
+  const app = createReviewServerApp({
+    token: discovery.token,
+    instanceId: discovery.instanceId,
+    relay,
+    health: () => ({}),
   });
-  app.get("/health", (context) =>
-    context.json({ ok: true, instanceId: discovery.instanceId }),
-  );
+
+  const callbacks = relayReviewCallbacks(relay, input.softwareMapEnabled);
 
   // Headless shares Desktop's database, so it lists the pad on the same
   // terms; a preference changed after start applies at the next start.
@@ -101,12 +102,9 @@ async function serve(input: HeadlessServerInput) {
   const api = createReviewApi(
     local.store,
     local.data,
+    callbacks.open,
     undefined,
-    undefined,
-    () => ({
-      desktopAvailable: false,
-      softwareMapEnabled: input.softwareMapEnabled ?? false,
-    }),
+    callbacks.capabilities,
     () => scratchpadEnabled,
     () => traceMachineEnabled(),
     () => ({ key: "headless", home: input.stateDir }),
@@ -148,6 +146,8 @@ async function serve(input: HeadlessServerInput) {
       if (published)
         await rm(reviewServerDiscoveryPath(input.stateDir), { force: true });
     } finally {
+      // An attached Desktop's stream would otherwise hold the close open.
+      relay.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       clearTimeout(forceClose);
 

@@ -1,0 +1,267 @@
+import { type ChildProcess, spawn } from "node:child_process";
+import { once } from "node:events";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { request } from "node:http";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { openLocalReviewStore } from "@review/review-api/local-data.js";
+import { ReviewTelemetry } from "@review/review-telemetry.js";
+import { reviewServerDiscoveryPath } from "@review/server-discovery.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { createGlobalReviewServer } from "./desktop-server.js";
+import { runHeadlessServer } from "./headless-host.js";
+
+const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
+
+let root: string;
+
+const stops: (() => Promise<void>)[] = [];
+
+beforeEach(async () => {
+  root = await mkdtemp(path.join(tmpdir(), "review-server-core-"));
+  vi.stubEnv("DEV_REVIEW_HOME", root);
+  vi.stubEnv("DEV_FAST_REVIEW_TELEMETRY_DISABLED", "1");
+});
+
+afterEach(async () => {
+  await Promise.all(stops.splice(0).map((stop) => stop()));
+  vi.unstubAllEnvs();
+  await rm(root, { recursive: true, force: true });
+});
+
+interface Running {
+  url: string;
+  token: string;
+}
+
+const servers = {
+  async desktop(): Promise<Running> {
+    const local = openLocalReviewStore(path.join(root, "review-api.db"));
+
+    const server = createGlobalReviewServer({
+      reviewStore: local.store,
+      reviewData: local.data,
+      appPid: process.pid,
+      packageRoot: root,
+      toolingRoot: root,
+      port: 0,
+      discoveryPath: path.join(root, "desktop-server.json"),
+      telemetry: ReviewTelemetry.fromEnv(process.env),
+    });
+
+    stops.push(async () => {
+      await server.close();
+      await local.data.close();
+      await local.store.close();
+    });
+    await server.listen();
+
+    return server.discovery;
+  },
+  async headless(): Promise<Running> {
+    const controller = new AbortController();
+    const ready = Promise.withResolvers<Running>();
+
+    const running = runHeadlessServer({
+      stateDir: path.join(root, "server"),
+      signal: controller.signal,
+      onReady: ready.resolve,
+    });
+
+    stops.push(async () => {
+      controller.abort();
+      await running;
+    });
+
+    return ready.promise;
+  },
+};
+
+describe.each(["desktop", "headless"] as const)("the %s server", (kind) => {
+  const start = servers[kind];
+
+  it("answers /health without a token", async () => {
+    const server = await start();
+    const response = await fetch(`${server.url}/health`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      ok: true,
+      serverPid: process.pid,
+      desktopAttached: false,
+    });
+  });
+
+  it("refuses every other route without the right token", async () => {
+    const server = await start();
+
+    for (const token of [undefined, "wrong"])
+      for (const [method, route] of [
+        ["GET", "/reviews-api"],
+        ["GET", "/control"],
+        ["POST", "/control/result"],
+      ] as const) {
+        const response = await fetch(`${server.url}${route}`, {
+          method,
+          headers: token ? { "x-review-token": token } : {},
+        });
+
+        expect(response.status, `${method} ${route}`).toBe(401);
+      }
+  });
+
+  it("answers a preflight from the Desktop's origin with CORS headers", async () => {
+    const server = await start();
+    const origin = "vscode-file://vscode-app";
+
+    const response = await fetch(`${server.url}/reviews-api`, {
+      method: "OPTIONS",
+      headers: {
+        origin,
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "x-review-token",
+      },
+    });
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-origin")).toBe(origin);
+    expect(response.headers.get("access-control-allow-headers")).toContain(
+      "x-review-token",
+    );
+    expect(
+      (
+        await fetch(`${server.url}/health`, { headers: { origin } })
+      ).headers.get("access-control-allow-origin"),
+    ).toBe(origin);
+  });
+
+  it("refuses a second /control client with a well-formed response", async () => {
+    const server = await start();
+    const headers = { "x-review-token": server.token };
+    const abort = new AbortController();
+
+    const first = await fetch(`${server.url}/control`, {
+      headers,
+      signal: abort.signal,
+    });
+
+    expect(first.status).toBe(200);
+
+    try {
+      const second = await fetch(`${server.url}/control`, { headers });
+
+      expect(second.status).toBe(409);
+      expect(await second.json()).toMatchObject({
+        ok: false,
+        error: expect.stringContaining("already attached"),
+      });
+
+      // Node's parser rejects a reply framed both ways.
+      const [raw] = await once(
+        request(`${server.url}/control`, { headers }).end(),
+        "response",
+      );
+
+      expect(raw.statusCode).toBe(409);
+      expect(
+        raw.headers["transfer-encoding"] && raw.headers["content-length"],
+      ).toBeFalsy();
+      await once(raw.resume(), "end");
+    } finally {
+      abort.abort();
+    }
+  });
+});
+
+// The servers as they run: the Desktop's host process and `server start`.
+const processes = {
+  desktop: (home: string) =>
+    spawnSource("src/server/desktop-host.ts", [], {
+      DEV_REVIEW_HOME: home,
+      DEV_FAST_REVIEW_SERVER_PORT: "0",
+      DEV_FAST_REVIEW_APP_PID: String(process.pid),
+    }),
+  headless: (home: string) =>
+    spawnSource(
+      "src/cli.ts",
+      ["server", "start", "--json", "--state-dir", path.join(home, "server")],
+      { DEV_REVIEW_HOME: home },
+    ),
+};
+
+it.each(["desktop", "headless"] as const)(
+  "the %s server exits on SIGTERM with a /control client attached",
+  async (kind) => {
+    const child = processes[kind](root);
+    const exited = once(child, "exit");
+
+    try {
+      const server = await discovery(kind, child);
+
+      const control = await fetch(`${server.url}/control`, {
+        headers: { "x-review-token": server.token },
+      });
+
+      expect(control.status).toBe(200);
+
+      child.kill("SIGTERM");
+
+      const [code] = await Promise.race([
+        exited,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("still running after 6 s")), 6_000),
+        ),
+      ]);
+
+      expect(code).toBe(0);
+    } finally {
+      if (child.exitCode === null) child.kill("SIGKILL");
+      await exited;
+    }
+  },
+  20_000,
+);
+
+function spawnSource(
+  entry: string,
+  args: string[],
+  env: Record<string, string>,
+): ChildProcess {
+  return spawn(process.execPath, ["--import", "tsx", entry, ...args], {
+    cwd: packageRoot,
+    env: {
+      ...process.env,
+      ...env,
+      DEV_FAST_REVIEW_TELEMETRY_DISABLED: "1",
+      DEV_FAST_REVIEW_CLI_NO_DELEGATE: "1",
+    },
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+}
+
+async function discovery(kind: string, child: ChildProcess): Promise<Running> {
+  let output = "";
+  const ready = Promise.withResolvers<void>();
+
+  child.stdout!.on("data", (chunk) => {
+    output += chunk;
+
+    if (/"(ready|server\.ready)"/.test(output)) ready.resolve();
+  });
+  await ready.promise;
+
+  if (kind === "desktop")
+    return JSON.parse(
+      output.split("\n").find((line) => line.includes('"ready"'))!,
+    );
+
+  return JSON.parse(
+    await readFile(
+      reviewServerDiscoveryPath(path.join(root, "server")),
+      "utf8",
+    ),
+  );
+}
