@@ -12,8 +12,6 @@ type EmptyStateProps = Omit<
   // A document reads it as its own heading and prose; inline is a quiet note
   // in a pane; boxed stands in for a figure.
   variant?: "document" | "inline" | "boxed";
-  // A boxed notice inside a review document reads as its heading and prose.
-  inDocument?: boolean;
   title?: ReactNode;
   message: ReactNode;
   // Defaults to alert in a document, status elsewhere.
@@ -25,7 +23,6 @@ type EmptyStateProps = Omit<
 
 export function EmptyState({
   variant = "inline",
-  inDocument = false,
   title,
   message,
   role = variant === "document" ? "alert" : "status",
@@ -45,7 +42,6 @@ export function EmptyState({
   }
 
   const boxed = variant === "boxed";
-  const documentBoxed = boxed && inDocument;
   const Title = boxed ? "h3" : "p";
 
   return (
@@ -55,23 +51,11 @@ export function EmptyState({
       {...withClass(className, styles[variant], xstyle)}
     >
       {title ? (
-        <Title
-          {...stylex.props(
-            styles.title,
-            boxed && styles.boxedTitle,
-            documentBoxed && styles.documentBoxedTitle,
-          )}
-        >
+        <Title {...stylex.props(styles.title, boxed && styles.boxedTitle)}>
           {title}
         </Title>
       ) : null}
-      <p
-        {...stylex.props(
-          styles.message,
-          boxed && styles.boxedMessage,
-          documentBoxed && styles.documentBoxedMessage,
-        )}
-      >
+      <p {...stylex.props(styles.message, boxed && styles.boxedMessage)}>
         {message}
       </p>
       {action}
@@ -121,16 +105,5 @@ const styles = stylex.create({
     maxWidth: "540px",
     fontSize: fontSize.ui,
     lineHeight: 1.55,
-  },
-  documentBoxedTitle: {
-    fontFamily: tokens.fontSerif,
-    fontSize: fontSize.heading,
-  },
-  documentBoxedMessage: {
-    color: tokens.ink,
-    fontFamily: tokens.fontSerif,
-    fontSize: fontSize.reading,
-    lineHeight: 1.72,
-    textAlign: "left",
   },
 });
