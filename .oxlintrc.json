@@ -99,6 +99,10 @@
     {
       "name": "anti-slop",
       "specifier": "./tools/oxlint/anti-slop/index.ts"
+    },
+    {
+      "name": "canvas-styles",
+      "specifier": "./tools/oxlint/canvas-styles/index.ts"
     }
   ],
   "overrides": [
@@ -147,6 +151,15 @@
             "patterns": ["@dev.fast/review/*", "**/review/**"]
           }
         ]
+      }
+    },
+    {
+      "files": [
+        "packages/review/app/src/**/*.ts",
+        "packages/review/app/src/**/*.tsx"
+      ],
+      "rules": {
+        "canvas-styles/scale-literals": "warn"
       }
     }
   ]
