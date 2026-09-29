@@ -200,8 +200,8 @@ export interface Result {
   target?: ReviewTarget;
   /** The requested head differs from the existing review's. */
   headMoved?: boolean;
-  /** A live authoring lease that is not the caller's. */
-  ownedBy?: "another session";
+  /** The live document lease on the existing review, whoever holds it. */
+  activeLeaseId?: string;
   /** Older reviews that also name the PR, newest first. */
   otherReviewIds?: string[];
   /** The component an edit landed on, its type, and — for an insert or
@@ -1061,7 +1061,6 @@ export class ReviewStore {
             found,
             others,
             resolvedTarget?.pins ?? op.pins!,
-            command.leaseId,
           );
 
           // Nothing is written but the receipt: a retry replays this answer,
@@ -1443,7 +1442,6 @@ export class ReviewStore {
     reviewId: string,
     others: string[],
     requested: Pins,
-    leaseId?: string,
   ): Result {
     const snapshot = this.read(reviewId);
 
@@ -1451,14 +1449,13 @@ export class ReviewStore {
       snapshot.pins?.repositoryId !== requested.repositoryId ||
       snapshot.pins?.head !== requested.head;
 
-    const ownedBy = this.activity.heldByAnother(reviewId, leaseId);
+    const activeLeaseId = this.activity.liveLeaseId(reviewId);
 
     const note = [
       "Returned the existing review for this PR instead of creating one; the requested title and target were not applied. Update it in place (read it with session_get first), or pass reuseExisting:false to create a separate review.",
       headMoved &&
         "The PR head moved since this review's target was set, and the target was NOT changed: call review_set_target to move it, then repair the source references it reports.",
-      ownedBy &&
-        "Another session is authoring it now; wait for its lease to end before editing.",
+      activeLeaseId && `Lease ${activeLeaseId} is currently authoring it.`,
       others.length > 0 &&
         "Older reviews also name this PR; see otherReviewIds.",
     ]
@@ -1472,7 +1469,7 @@ export class ReviewStore {
       version: snapshot.version,
       target: snapshot.target,
       headMoved,
-      ...(ownedBy && { ownedBy: "another session" as const }),
+      ...(activeLeaseId && { activeLeaseId }),
       ...(others.length > 0 && { otherReviewIds: others }),
     };
   }

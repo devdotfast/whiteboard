@@ -114,15 +114,14 @@ export class ReviewActivity {
     return snapshot;
   }
 
-  /** A live lease on `scope` that is not `leaseId`. */
-  heldByAnother(
+  /** The id of the live lease on `scope`, if any. */
+  liveLeaseId(
     reviewId: string,
-    leaseId?: string,
     scope: LeaseScope = "document",
-  ): boolean {
+  ): string | undefined {
     const active = this.active(reviewId, scope);
 
-    return active !== undefined && active.lease_id !== leaseId;
+    return active && String(active.lease_id);
   }
 
   /** Recheck inside the write transaction as validation may outlive the lease. */

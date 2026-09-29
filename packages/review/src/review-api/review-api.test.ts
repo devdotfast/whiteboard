@@ -1518,7 +1518,7 @@ describe("create for a pull request", () => {
       headMoved: false,
     });
     expect(again.note).toEqual(expect.any(String));
-    expect(again.ownedBy).toBeUndefined();
+    expect(again.activeLeaseId).toBeUndefined();
     expect(again.otherReviewIds).toBeUndefined();
     expect(store.list()).toHaveLength(1);
     expect(store.read(first.reviewId)).toMatchObject({
@@ -1609,7 +1609,7 @@ describe("create for a pull request", () => {
     expect(store.list()).toHaveLength(2);
   });
 
-  it("says when another session is authoring the review it returns", async () => {
+  it("names the live lease on the review it returns", async () => {
     const { reviewId } = await createFor(url);
     const leaseId = randomUUID();
     store.activity.update(reviewId, { action: "begin", leaseId });
@@ -1619,14 +1619,9 @@ describe("create for a pull request", () => {
     expect(found).toMatchObject({
       created: false,
       reviewId,
-      ownedBy: "another session",
+      activeLeaseId: leaseId,
     });
-    expect(
-      await store.execute({
-        ...request({ type: "create", title: "PR", pins, pullRequestUrl: url }),
-        leaseId,
-      }),
-    ).not.toHaveProperty("ownedBy");
+    expect(found.note).toContain(`Lease ${leaseId} is currently authoring it.`);
   });
 
   it("replays a found review for a repeated command and rejects a changed one", async () => {

@@ -378,8 +378,6 @@ it("keeps a live lease from before scopes as the document's", async () => {
     scopes: ["document"],
     focuses: [{ description: "Writing" }],
   });
-  expect(store.activity.heldByAnother("review", leaseId)).toBe(false);
-  expect(store.activity.heldByAnother("review", leaseId, "lenses")).toBe(false);
 });
 
 it("reports the changed lines no lens selects after each lens write", async () => {
