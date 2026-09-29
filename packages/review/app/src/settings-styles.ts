@@ -28,7 +28,8 @@ export const settingsStyles = stylex.create({
   },
   row: {
     display: "grid",
-    gridTemplateColumns: "1fr 200px",
+    // Wide segmented controls grow the lane instead of overlapping the text.
+    gridTemplateColumns: "minmax(0, 1fr) minmax(200px, max-content)",
     alignItems: "center",
     gap: "24px",
     padding: "14px 0",
