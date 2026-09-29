@@ -20,6 +20,7 @@ import { createReviewApi } from "@review/review-api/http.js";
 import { serveReviewMcp } from "@review/review-api/mcp.js";
 import { openReviewProfile } from "@review/review-api/profile.js";
 import type { Result, Snapshot } from "@review/review-api/store.js";
+import { writeScratchpadEnabled } from "@review/review-preferences.js";
 import {
   type ReviewServerDiscovery,
   readReviewServerDiscovery,
@@ -585,19 +586,18 @@ it("authenticates clients, reports capabilities and readiness without exposing t
   );
 });
 
-it("reports an attached Desktop and sends it the reviews to open", async () => {
-  const server = await start();
+/** A stand-in Desktop on `/control` that answers every verb relayed to it. */
+async function attachDesktop(discovery: ReviewServerDiscovery) {
   const abort = new AbortController();
   const opened: JsonValue[] = [];
 
-  const control = await fetch(`${server.discovery.url}/control`, {
-    headers: { "x-review-token": server.discovery.token },
+  const control = await fetch(`${discovery.url}/control`, {
+    headers: { "x-review-token": discovery.token },
     signal: abort.signal,
   });
 
   expect(control.status).toBe(200);
 
-  // A stand-in Desktop: answers every verb the server relays to it.
   void (async () => {
     let buffered = "";
 
@@ -618,11 +618,11 @@ it("reports an attached Desktop and sends it the reviews to open", async () => {
         );
 
         if (request.name === "openApiReview") opened.push(request.args);
-        await fetch(`${server.discovery.url}/control/result`, {
+        await fetch(`${discovery.url}/control/result`, {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            "x-review-token": server.discovery.token,
+            "x-review-token": discovery.token,
           },
           body: JSON.stringify({
             id,
@@ -632,6 +632,13 @@ it("reports an attached Desktop and sends it the reviews to open", async () => {
       }
     }
   })().catch(() => {});
+
+  return { opened, detach: () => abort.abort() };
+}
+
+it("reports an attached Desktop and sends it the reviews to open", async () => {
+  const server = await start();
+  const desktop = await attachDesktop(server.discovery);
 
   try {
     expect(await server.client.read("/capabilities")).toMatchObject({
@@ -657,17 +664,61 @@ it("reports an attached Desktop and sends it the reviews to open", async () => {
     });
 
     await server.client.post(`/${created.reviewId}/open`, {});
-    expect(opened).toEqual([
+    expect(desktop.opened).toEqual([
       { reviewId: created.reviewId, title: "Opened remotely" },
     ]);
   } finally {
-    abort.abort();
+    desktop.detach();
   }
 
   await expect
     .poll(() => server.client.read("/capabilities"))
     .toMatchObject({ desktopAvailable: false });
 });
+
+it.each([false, true])(
+  "never makes, lists or offers the scratchpad, with a Desktop attached: %s",
+  async (attached) => {
+    await writeScratchpadEnabled(true);
+    const server = await start();
+    const desktop = attached ? await attachDesktop(server.discovery) : null;
+
+    try {
+      expect(await server.client.read("/capabilities")).toMatchObject({
+        desktopAvailable: attached,
+        scratchpadEnabled: false,
+      });
+      expect(await server.client.read("")).toEqual([]);
+      // The offer is a pointer to the scratchpad topic.
+      const offer = 'topic:"scratchpad"';
+
+      expect(
+        (await server.client.read<{ description: string }[]>("/authoring"))
+          .map((tool) => tool.description)
+          .join("\n"),
+      ).not.toContain(offer);
+      expect(await server.client.read("/instructions")).not.toContain(offer);
+      expect(
+        await server.client.read("/instructions?topic=scratchpad"),
+      ).toMatch(/turned off/);
+    } finally {
+      desktop?.detach();
+    }
+
+    await server.stop();
+
+    const local = await openReviewProfile(server.stateDir, {
+      manageWorkspaces: false,
+    });
+
+    try {
+      expect(local.store.list()).toEqual([]);
+    } finally {
+      await local.data.close();
+      await local.store.close();
+    }
+  },
+);
 
 it("rejects a second owner and keeps separate CI job stores independent", async () => {
   const first = await start();

@@ -12,7 +12,6 @@ import {
 } from "@dev.fast/trace-core";
 import { createReviewApi } from "@review/review-api/http.js";
 import { openReviewProfile } from "@review/review-api/profile.js";
-import { readScratchpadEnabled } from "@review/review-preferences.js";
 import {
   type ReviewServerDiscovery,
   reviewServerDiscoveryPath,
@@ -95,17 +94,14 @@ async function serve(input: HeadlessServerInput) {
 
   const callbacks = relayReviewCallbacks(relay, input.softwareMapEnabled);
 
-  // Headless shares Desktop's database, so it lists the pad on the same
-  // terms; a preference changed after start applies at the next start.
-  const scratchpadEnabled = await readScratchpadEnabled();
-
   const api = createReviewApi(
     local.store,
     local.data,
     callbacks.open,
     undefined,
     callbacks.capabilities,
-    () => scratchpadEnabled,
+    // The scratchpad is the laptop's alone, even with a Desktop attached.
+    () => false,
     () => traceMachineEnabled(),
     () => ({ key: "headless", home: input.stateDir }),
   );

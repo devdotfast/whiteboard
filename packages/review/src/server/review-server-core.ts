@@ -15,10 +15,12 @@ import {
   jsonResponse,
   readBoundedRequestJson,
 } from "./hono-http";
+import { HttpJsonError, ReviewServerError } from "./http-json";
 
 /**
  * What every review server shares: CORS, an open /health, token auth, and
- * the /control relay a Desktop attaches to. Callers add their routes after.
+ * the /control relay a Desktop attaches to, with errors answered as JSON.
+ * Callers add their routes after.
  */
 export function createReviewServerApp(input: {
   token: string;
@@ -34,11 +36,11 @@ export function createReviewServerApp(input: {
   app.options("*", (context) => corsPreflightResponse(context.req.raw));
   app.get("/health", () =>
     serverJson(200, {
+      ...input.health(),
       ok: true,
       instanceId: input.instanceId,
       serverPid: process.pid,
       desktopAttached: input.relay.attached,
-      ...input.health(),
     }),
   );
   app.use("*", async (context, next) => {
@@ -55,6 +57,18 @@ export function createReviewServerApp(input: {
     );
 
     return serverJson(accepted ? 200 : 404, { ok: accepted });
+  });
+  app.onError((error) => {
+    const serverError = error instanceof ReviewServerError ? error : undefined;
+
+    const message = toError(error).message;
+
+    return serverJson(
+      serverError?.statusCode ?? httpJsonStatus(error),
+      serverError?.code
+        ? { ok: false, code: serverError.code, error: message }
+        : { ok: false, error: message },
+    );
   });
 
   return app;
@@ -163,12 +177,27 @@ function openControlEvents(
     });
   }
 
+  // Never reused: a kept-alive socket would hold shutdown open after the
+  // relay ends the stream.
+  response.headers.set("connection", "close");
   response.headers.set("cache-control", "no-cache, no-transform");
   response.headers.set("content-type", "text/event-stream; charset=utf-8");
 
   return response;
 }
 
-function serverJson<T>(status: ContentfulStatusCode, body: T): Response {
-  return jsonResponse(body, status, { cacheControl: "no-store" });
+export function serverJson<T>(status: number, body: T): Response {
+  // SAFETY: callers pass 2xx/4xx/5xx codes (literals, ReviewServerError and
+  // HttpJsonError statusCode); none is a bodyless 1xx/204/205/304 status.
+  return jsonResponse(body, status as ContentfulStatusCode, {
+    cacheControl: "no-store",
+  });
+}
+
+function httpJsonStatus(cause: unknown): number {
+  return cause instanceof HttpJsonError ? cause.statusCode : 400;
+}
+
+function toError(cause: unknown): Error {
+  return cause instanceof Error ? cause : new Error(String(cause));
 }

@@ -174,6 +174,25 @@ describe.each(["desktop", "headless"] as const)("the %s server", (kind) => {
       abort.abort();
     }
   });
+
+  it("answers a malformed /control/result with a JSON 400", async () => {
+    const server = await start();
+
+    const response = await fetch(`${server.url}/control/result`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-review-token": server.token,
+      },
+      body: "not json",
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      ok: false,
+      error: "Invalid JSON body.",
+    });
+  });
 });
 
 // The servers as they run: the Desktop's host process and `server start`.
@@ -209,12 +228,19 @@ it.each(["desktop", "headless"] as const)(
 
       child.kill("SIGTERM");
 
+      // Under the headless server's 5 s force-close: the relay must end the
+      // stream itself.
+      let timer: NodeJS.Timeout | undefined;
+
       const [code] = await Promise.race([
         exited,
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("still running after 6 s")), 6_000),
-        ),
-      ]);
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("still running after 3 s")),
+            3_000,
+          );
+        }),
+      ]).finally(() => clearTimeout(timer));
 
       expect(code).toBe(0);
     } finally {
@@ -238,12 +264,13 @@ function spawnSource(
       DEV_FAST_REVIEW_TELEMETRY_DISABLED: "1",
       DEV_FAST_REVIEW_CLI_NO_DELEGATE: "1",
     },
-    stdio: ["ignore", "pipe", "inherit"],
+    stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
 async function discovery(kind: string, child: ChildProcess): Promise<Running> {
   let output = "";
+  let errors = "";
   const ready = Promise.withResolvers<void>();
 
   child.stdout!.on("data", (chunk) => {
@@ -251,6 +278,16 @@ async function discovery(kind: string, child: ChildProcess): Promise<Running> {
 
     if (/"(ready|server\.ready)"/.test(output)) ready.resolve();
   });
+  child.stderr!.on("data", (chunk) => {
+    errors += chunk;
+  });
+  child.once("exit", (code, signal) =>
+    ready.reject(
+      new Error(
+        `The ${kind} server exited before ready (${signal ?? code}):\n${errors}`,
+      ),
+    ),
+  );
   await ready.promise;
 
   if (kind === "desktop")
