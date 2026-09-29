@@ -20,6 +20,7 @@ import {
 import { CanvasUiContext, useCanvasMenu } from "./host/canvas-ui";
 import { OptionMenu } from "./option-menu";
 import { ArchiveIcon } from "./review-corner-action";
+import { tokens } from "./tokens.stylex";
 import { WelcomePage } from "./welcome-page";
 
 interface ReviewHomeProps {
@@ -940,8 +941,8 @@ const rowMenuStyles = stylex.create({
     borderStyle: "none",
     borderColor: "currentcolor",
     borderRadius: "6px",
-    backgroundColor: { default: "transparent", ":hover": "var(--well)" },
-    color: "var(--ink)",
+    backgroundColor: { default: "transparent", ":hover": tokens.well },
+    color: tokens.ink,
     opacity: {
       default: 0,
       [stylex.when.ancestor(":hover")]: 1,
@@ -950,7 +951,7 @@ const rowMenuStyles = stylex.create({
     cursor: "pointer",
   },
   expanded: {
-    backgroundColor: "var(--well)",
+    backgroundColor: tokens.well,
     opacity: 1,
   },
   icon: {

@@ -1,8 +1,8 @@
-import * as stylex from "@stylexjs/stylex";
 import {
   type ReviewApiClient,
   ReviewApiError,
 } from "@review/review-api/client";
+import * as stylex from "@stylexjs/stylex";
 import {
   skipToken,
   useMutation,
@@ -16,6 +16,7 @@ import { copyText } from "./copy-text";
 import { useOptionalReviewSession } from "./host/review-session";
 import { ShareIcon } from "./icons";
 import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
 import { useDismissOnOutside } from "./use-dismiss-on-outside";
 import { useTooltip } from "./use-tooltip";
@@ -297,10 +298,10 @@ const styles = stylex.create({
   // Hovered, the open button keeps the topbar button hover colors.
   expanded: {
     backgroundColor: {
-      default: "var(--chrome-hover-bg)",
-      ":hover": "var(--well)",
+      default: tokens.chromeHoverBg,
+      ":hover": tokens.well,
     },
-    color: { default: "var(--chrome-fg)", ":hover": "var(--ink)" },
+    color: { default: tokens.chromeFg, ":hover": tokens.ink },
   },
   popover: {
     position: "absolute",
@@ -315,19 +316,19 @@ const styles = stylex.create({
     padding: "10px 12px",
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: "var(--rule-soft)",
+    borderColor: tokens.ruleSoft,
     borderRadius: "8px",
-    backgroundColor: "var(--surface-raised)",
+    backgroundColor: tokens.surfaceRaised,
     boxShadow: "0 8px 28px var(--shadow-color-strong)",
-    color: "var(--chrome-fg)",
-    fontFamily: "var(--chrome-font)",
-    fontSize: "var(--chrome-font-size)",
+    color: tokens.chromeFg,
+    fontFamily: tokens.chromeFont,
+    fontSize: tokens.chromeFontSize,
   },
   paragraph: {
     margin: 0,
   },
   status: {
-    color: "var(--chrome-fg-muted)",
+    color: tokens.chromeFgMuted,
   },
   error: {
     color: "var(--vscode-errorForeground, #f48771)",
@@ -340,12 +341,12 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: {
-      default: "var(--rule-soft)",
-      ":focus-visible": "var(--chrome-active-border)",
+      default: tokens.ruleSoft,
+      ":focus-visible": tokens.chromeActiveBorder,
     },
-    borderRadius: "var(--chrome-control-radius)",
-    backgroundColor: "var(--surface)",
-    color: "var(--ink)",
+    borderRadius: tokens.chromeControlRadius,
+    backgroundColor: tokens.surface,
+    color: tokens.ink,
     font: "inherit",
     outline: { default: null, ":focus-visible": "none" },
   },
@@ -355,9 +356,9 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "currentcolor",
-    borderRadius: "var(--chrome-control-radius)",
-    backgroundColor: "var(--accent)",
-    color: "var(--on-accent)",
+    borderRadius: tokens.chromeControlRadius,
+    backgroundColor: tokens.accent,
+    color: tokens.onAccent,
     font: "inherit",
     cursor: { default: "pointer", ":disabled": "default" },
     filter: {
