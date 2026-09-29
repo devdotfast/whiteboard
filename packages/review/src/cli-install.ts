@@ -35,6 +35,7 @@ import {
   CLAUDE_WINDOWS_MCP_ADD,
   COPILOT_WINDOWS_MCP_ADD,
   connectSetupPrompts,
+  launchCommand,
   reviewMcpLaunch,
 } from "./connect-prompts";
 import { cursorInstallDeeplink } from "./cursor-deeplink";
@@ -458,12 +459,12 @@ function connectPlugins(
         'Add "@dev.fast/opencode-whiteboard" to "plugin" in ~/.config/opencode/opencode.json,\nthen quit and reopen OpenCode to load it.',
     },
     pi: {
-      label: "Install the Pi package",
-      command: "pi install npm:@dev.fast/pi-whiteboard",
+      label: "Add the Pi MCP server (Pi 0.99+)",
+      command: `pi mcp add whiteboard -- ${launchCommand(reviewMcpLaunch(hasShim))}`,
     },
     omp: {
-      label: "Install the oh-my-pi package",
-      command: "omp install npm:@dev.fast/pi-whiteboard",
+      label: "Add the oh-my-pi MCP server",
+      command: `Add ${JSON.stringify({ whiteboard: reviewMcpLaunch(hasShim) })}\nto "mcpServers" in ~/.omp/agent/mcp.json, then run /mcp reload in oh-my-pi.`,
     },
     copilot:
       process.platform === "win32"
