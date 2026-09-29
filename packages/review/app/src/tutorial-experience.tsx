@@ -1,3 +1,4 @@
+import { documentType } from "@canvas/document-type.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -709,19 +710,19 @@ const styles = stylex.create({
   chapter: {
     margin: 0,
     color: tokens.tutorialRing,
-    font: `11px/16px ${tokens.fontMono}`,
+    font: `${fontSize.small}/16px ${tokens.fontMono}`,
     textAlign: "left",
   },
   step: {
     margin: 0,
     color: tokens.ink,
-    font: `500 17px/22px ${tokens.fontSerif}`,
+    font: `${fontWeight.medium} ${documentType.body}/22px ${tokens.fontSerif}`,
     textAlign: "left",
   },
   instruction: {
     margin: 0,
     color: tokens.inkMuted,
-    font: `12px/18px ${tokens.fontMono}`,
+    font: `${fontSize.body}/18px ${tokens.fontMono}`,
     textAlign: "left",
   },
   guideFooter: {

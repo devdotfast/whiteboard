@@ -1024,7 +1024,7 @@ const scopeBarStyles = stylex.create({
   },
   sha: {
     color: tokens.inkMuted,
-    font: `10px ${tokens.fontMono}`,
+    font: `${fontSize.micro} ${tokens.fontMono}`,
   },
   subject: {
     minWidth: 0,

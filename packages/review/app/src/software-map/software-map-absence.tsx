@@ -40,6 +40,7 @@ export function SoftwareMapUnavailable({
     >
       <EmptyState
         variant="boxed"
+        inDocument={variant !== "view"}
         xstyle={styles.unavailable}
         title="No software map for this repo yet"
         message={

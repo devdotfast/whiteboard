@@ -25,10 +25,19 @@ const radiusCheck: ScaleCheck = {
 
 const durationCheck: ScaleCheck = { scale: "motion", matches: (text) => duration.test(text) };
 
+// In the `font` shorthand, a size is the px word before any `/line-height`, and
+// a weight is a bare three-digit word.
+const fontCheck: ScaleCheck = {
+  scale: "fontSize or fontWeight",
+  matches: (text) =>
+    text.split(/\s+/).some((word) => /^\d+(\.\d+)?px(\/|$)/.test(word) || /^\d{3}$/.test(word)),
+};
+
 const checks = new Map<string, ScaleCheck>([
   // StyleX reads a bare number as px.
   ["fontSize", { scale: "fontSize", matches: (text) => px.test(text) || number.test(text) }],
   ["fontWeight", { scale: "fontWeight", matches: (text) => number.test(text) }],
+  ["font", fontCheck],
   ["borderRadius", radiusCheck],
   ["borderTopLeftRadius", radiusCheck],
   ["borderTopRightRadius", radiusCheck],

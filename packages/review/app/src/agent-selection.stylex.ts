@@ -5,3 +5,9 @@ import * as stylex from "@stylexjs/stylex";
 export const workbenchShadow = stylex.defineConsts({
   widget: "0 3px 12px #0004",
 });
+
+// It also sets the system font at the workbench's size, not the canvas scale.
+export const workbenchType = stylex.defineConsts({
+  size: "13px",
+  medium: "500",
+});

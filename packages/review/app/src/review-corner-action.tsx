@@ -1,3 +1,4 @@
+import { fontSize, fontWeight } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
 import * as stylex from "@stylexjs/stylex";
@@ -113,7 +114,7 @@ const styles = stylex.create({
   error: {
     padding: "8px 12px",
     color: tokens.changeRemoved,
-    font: `400 11.5px ${tokens.fontMono}`,
+    font: `${fontWeight.regular} ${fontSize.small} ${tokens.fontMono}`,
     whiteSpace: "nowrap",
   },
 });

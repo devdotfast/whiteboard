@@ -1,4 +1,4 @@
-import { workbenchShadow } from "@canvas/agent-selection.stylex";
+import { workbenchShadow, workbenchType } from "@canvas/agent-selection.stylex";
 import { layer, radius } from "@canvas/scale.stylex";
 import type { AgentSelection } from "@review/agent-selection";
 import * as stylex from "@stylexjs/stylex";
@@ -293,7 +293,7 @@ const styles = stylex.create({
     },
     color: "var(--vscode-editor-foreground, #eee)",
     boxShadow: workbenchShadow.widget,
-    font: `13px/20px ${systemFont}`,
+    font: `${workbenchType.size}/20px ${systemFont}`,
     whiteSpace: "nowrap",
     cursor: "pointer",
     outline: {
@@ -309,7 +309,7 @@ const styles = stylex.create({
     borderRadius: radius.small,
     backgroundColor: "#8882",
     color: "var(--vscode-descriptionForeground, #aaa)",
-    font: `500 13px/20px ${systemFont}`,
+    font: `${workbenchType.medium} ${workbenchType.size}/20px ${systemFont}`,
     letterSpacing: 0,
   },
   key: {

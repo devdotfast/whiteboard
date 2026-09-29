@@ -320,14 +320,14 @@ const styles = stylex.create({
   rangeCount: {
     color: tokens.ink,
     flexShrink: 0,
-    font: `600 15px/20px ${tokens.fontMono}`,
+    font: `${fontWeight.semibold} ${fontSize.reading}/20px ${tokens.fontMono}`,
     whiteSpace: "nowrap",
   },
   rangeRefs: {
     minWidth: 0,
     overflow: "hidden",
     color: tokens.inkMuted,
-    font: `11px ${tokens.fontMono}`,
+    font: `${fontSize.small} ${tokens.fontMono}`,
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
@@ -437,11 +437,11 @@ const styles = stylex.create({
   sha: {
     marginRight: "6px",
     color: tokens.inkFaint,
-    font: `11px ${tokens.fontMono}`,
+    font: `${fontSize.small} ${tokens.fontMono}`,
     fontVariantNumeric: "tabular-nums",
   },
   meta: {
-    font: `11px ${tokens.fontMono}`,
+    font: `${fontSize.small} ${tokens.fontMono}`,
     fontVariantNumeric: "tabular-nums",
     paddingLeft: "26px",
     color: tokens.inkMuted,

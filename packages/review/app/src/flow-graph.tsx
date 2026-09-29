@@ -702,7 +702,7 @@ const styles = stylex.create({
     width: "100%",
     minHeight: "120px",
     display: "block",
-    font: `12px ${tokens.fontMono}`,
+    font: `${fontSize.body} ${tokens.fontMono}`,
   },
   canvas: {
     backgroundColor: tokens.transparent,
@@ -714,7 +714,7 @@ const styles = stylex.create({
     position: "relative",
     boxSizing: "border-box",
     color: tokens.ink,
-    font: `12px/1.4 ${tokens.fontMono}`,
+    font: `${fontSize.body}/1.4 ${tokens.fontMono}`,
     cursor: "pointer",
     outline: { default: null, ":focus-visible": "none" },
   },
@@ -810,7 +810,7 @@ const styles = stylex.create({
     strokeWidth: 1.6,
   },
   edgeLabel: {
-    font: `9px ${tokens.fontMono}`,
+    font: `${fontSize.micro} ${tokens.fontMono}`,
     fill: tokens.inkMuted,
     paintOrder: "stroke",
     stroke: tokens.tray,

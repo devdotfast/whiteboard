@@ -291,7 +291,7 @@ const styles = stylex.create({
       default: "transparent",
       ":hover:not(:disabled)": `color-mix(in srgb, ${tokens.ink} 3%, transparent)`,
     },
-    font: `12px/26px ${tokens.fontMono}`,
+    font: `${fontSize.body}/26px ${tokens.fontMono}`,
     textAlign: "left",
     whiteSpace: "nowrap",
   },

@@ -716,7 +716,7 @@ const styles = stylex.create({
     minHeight: 0,
     height: "100%",
     color: tokens.ink,
-    font: `11px/1.5 ${tokens.fontMono}`,
+    font: `${fontSize.small}/1.5 ${tokens.fontMono}`,
   },
   // The sidebar is the tray.
   sidebar: {
@@ -802,7 +802,7 @@ const styles = stylex.create({
   hint: {
     padding: "0 14px 6px 16px",
     color: tokens.inkFaint,
-    font: `11px/16px ${tokens.fontMono}`,
+    font: `${fontSize.small}/16px ${tokens.fontMono}`,
   },
   nativeTree: {
     flex: 1,
@@ -969,7 +969,7 @@ const styles = stylex.create({
     padding: "0 10px",
     backgroundColor: tokens.surface,
     color: tokens.inkFaint,
-    font: `11px/1 ${tokens.fontMono}`,
+    font: `${fontSize.small}/1 ${tokens.fontMono}`,
   },
   error: {
     padding: "8px 12px",

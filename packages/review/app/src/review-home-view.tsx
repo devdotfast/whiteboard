@@ -1,3 +1,4 @@
+import { documentType } from "@canvas/document-type.stylex";
 import {
   fontSize,
   fontWeight,
@@ -1194,7 +1195,7 @@ const styles = stylex.create({
     minWidth: 0,
     overflow: "hidden",
     color: tokens.ink,
-    font: `500 17px/22px ${tokens.fontSerif}`,
+    font: `${fontWeight.medium} ${documentType.body}/22px ${tokens.fontSerif}`,
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
@@ -1217,7 +1218,7 @@ const styles = stylex.create({
     columnGap: "10px",
     rowGap: "3px",
     color: tokens.reviewHomeMeta,
-    font: `11px ${tokens.fontMono}`,
+    font: `${fontSize.small} ${tokens.fontMono}`,
   },
   // Meta lines are one sentence of facts joined by a middle dot.
   cardMetaNext: {
@@ -1292,7 +1293,7 @@ const styles = stylex.create({
   dismissedClock: {
     flex: "0 0 auto",
     color: tokens.inkMuted,
-    font: `400 11.5px ${tokens.fontMono}`,
+    font: `${fontWeight.regular} ${fontSize.small} ${tokens.fontMono}`,
     opacity: 0.75,
   },
   restore: {
@@ -1349,7 +1350,7 @@ const styles = stylex.create({
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
     color: tokens.inkMuted,
-    font: `15px/24px ${tokens.fontMono}`,
+    font: `${fontSize.reading}/24px ${tokens.fontMono}`,
   },
   controls: {
     display: "flex",
@@ -1397,7 +1398,7 @@ const styles = stylex.create({
     minWidth: "840px",
     borderCollapse: "collapse",
     tableLayout: "fixed",
-    font: `12px/18px ${tokens.fontMono}`,
+    font: `${fontSize.body}/18px ${tokens.fontMono}`,
   },
   colPr: {
     width: "88px",
@@ -1492,7 +1493,7 @@ const styles = stylex.create({
     overflow: "hidden",
     textOverflow: "ellipsis",
     color: tokens.inkFaint,
-    font: `11px/14px ${tokens.fontMono}`,
+    font: `${fontSize.small}/14px ${tokens.fontMono}`,
   },
   repositoryName: {
     fontWeight: fontWeight.regular,

@@ -1,4 +1,4 @@
-import { fontWeight, radius } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import {
   type ShjLanguage,
   type ShjToken,
@@ -276,7 +276,7 @@ const styles = stylex.create({
     margin: 0,
     overflowX: "auto",
     color: tokens.ink,
-    font: `13px/20px ${tokens.fontMono}`,
+    font: `${fontSize.ui}/20px ${tokens.fontMono}`,
     textAlign: "left",
   },
   code: {

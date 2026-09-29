@@ -2,6 +2,7 @@ import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { textStyles } from "@canvas/ui/text";
+import { welcomeType } from "@canvas/welcome-page.stylex";
 import {
   REVIEW_DISCORD_URL,
   type ReviewCanvasInstallContent,
@@ -596,7 +597,7 @@ const styles = stylex.create({
   headline: {
     margin: 0,
     color: tokens.ink,
-    font: `500 38px/46px ${tokens.fontSerif}`,
+    font: `${fontWeight.medium} ${welcomeType.headline}/46px ${tokens.fontSerif}`,
   },
   sub: {
     margin: 0,
@@ -721,7 +722,7 @@ const styles = stylex.create({
     margin: "0 0 14px",
     maxWidth: "560px",
     color: tokens.inkMuted,
-    font: `13px/20px ${tokens.fontMono}`,
+    font: `${fontSize.ui}/20px ${tokens.fontMono}`,
   },
   hintCode: {
     padding: "1px 5px",

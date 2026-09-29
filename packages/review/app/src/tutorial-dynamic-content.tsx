@@ -1,3 +1,4 @@
+import { fontSize } from "@canvas/scale.stylex";
 import type { ReviewComponentProps } from "@review/review-document-data";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement, ReactNode } from "react";
@@ -92,7 +93,7 @@ const styles = stylex.create({
     backgroundColor: tokens.transparent,
     color: tokens.accent,
     cursor: "pointer",
-    font: `12px ${tokens.fontMono}`,
+    font: `${fontSize.body} ${tokens.fontMono}`,
     textDecoration: { default: null, ":hover": "underline" },
   },
   arrow: {

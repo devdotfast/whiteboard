@@ -12,6 +12,8 @@ type EmptyStateProps = Omit<
   // A document reads it as its own heading and prose; inline is a quiet note
   // in a pane; boxed stands in for a figure.
   variant?: "document" | "inline" | "boxed";
+  // A boxed notice inside a review document reads as its heading and prose.
+  inDocument?: boolean;
   title?: ReactNode;
   message: ReactNode;
   // Defaults to alert in a document, status elsewhere.
@@ -23,6 +25,7 @@ type EmptyStateProps = Omit<
 
 export function EmptyState({
   variant = "inline",
+  inDocument = false,
   title,
   message,
   role = variant === "document" ? "alert" : "status",
@@ -42,6 +45,7 @@ export function EmptyState({
   }
 
   const boxed = variant === "boxed";
+  const documentBoxed = boxed && inDocument;
   const Title = boxed ? "h3" : "p";
 
   return (
@@ -51,20 +55,29 @@ export function EmptyState({
       {...withClass(className, styles[variant], xstyle)}
     >
       {title ? (
-        <Title {...stylex.props(styles.title, boxed && styles.boxedTitle)}>
+        <Title
+          {...stylex.props(
+            styles.title,
+            boxed && styles.boxedTitle,
+            documentBoxed && styles.documentBoxedTitle,
+          )}
+        >
           {title}
         </Title>
       ) : null}
-      <p {...stylex.props(styles.message, boxed && styles.boxedMessage)}>
+      <p
+        {...stylex.props(
+          styles.message,
+          boxed && styles.boxedMessage,
+          documentBoxed && styles.documentBoxedMessage,
+        )}
+      >
         {message}
       </p>
       {action}
     </div>
   );
 }
-
-// A boxed notice in a document reads as the document's heading and prose.
-const inDocument = ":is(.review-document *)";
 
 const styles = stylex.create({
   inline: {
@@ -101,16 +114,23 @@ const styles = stylex.create({
   },
   boxedTitle: {
     marginBottom: "8px",
-    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: fontSize.reading, [inDocument]: fontSize.heading },
+    fontSize: fontSize.reading,
     lineHeight: 1.3,
   },
   boxedMessage: {
     maxWidth: "540px",
-    color: { default: null, [inDocument]: tokens.ink },
-    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: fontSize.ui, [inDocument]: fontSize.reading },
-    lineHeight: { default: 1.55, [inDocument]: 1.72 },
-    textAlign: { default: null, [inDocument]: "left" },
+    fontSize: fontSize.ui,
+    lineHeight: 1.55,
+  },
+  documentBoxedTitle: {
+    fontFamily: tokens.fontSerif,
+    fontSize: fontSize.heading,
+  },
+  documentBoxedMessage: {
+    color: tokens.ink,
+    fontFamily: tokens.fontSerif,
+    fontSize: fontSize.reading,
+    lineHeight: 1.72,
+    textAlign: "left",
   },
 });

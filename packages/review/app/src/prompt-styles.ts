@@ -1,4 +1,4 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
@@ -21,7 +21,7 @@ export const promptStyles = stylex.create({
     borderLeftStyle: "solid",
     borderLeftColor: tokens.reviewHomeRuleSoft,
     color: tokens.ink,
-    font: `13px/22px ${tokens.fontMono}`,
+    font: `${fontSize.ui}/22px ${tokens.fontMono}`,
     // Prose, not code: keep a last word off its own line if the copy grows.
     textWrap: "pretty",
     whiteSpace: "pre-wrap",
@@ -43,7 +43,7 @@ export const promptStyles = stylex.create({
     borderRadius: radius.control,
     color: tokens.onAccent,
     backgroundColor: tokens.accent,
-    font: `500 12px/16px ${tokens.fontMono}`,
+    font: `${fontWeight.medium} ${fontSize.body}/16px ${tokens.fontMono}`,
     textDecoration: "none",
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: { default: null, ":focus-visible": "2px" },

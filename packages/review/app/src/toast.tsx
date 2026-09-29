@@ -2,7 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useCallback, useEffect, useState } from "react";
 
 import { useOptionalReviewSession } from "./host/review-session";
-import { elevation, layer, radius } from "./scale.stylex";
+import { elevation, fontSize, layer, radius } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 
@@ -66,7 +66,7 @@ const styles = stylex.create({
     backgroundColor: "var(--vscode-notifications-background, var(--tray))",
     boxShadow: elevation.popover,
     color: "var(--vscode-notifications-foreground, var(--ink))",
-    font: `11px/1.4 ${tokens.fontMono}`,
+    font: `${fontSize.small}/1.4 ${tokens.fontMono}`,
   },
   success: { borderColor: tokens.diffAdded },
   error: { borderColor: tokens.diffModified },

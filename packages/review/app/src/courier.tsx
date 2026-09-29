@@ -1,5 +1,5 @@
 import { courierMotion } from "@canvas/courier-motion.stylex";
-import { motion, radius } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import type { LeaseScope } from "@review/review-api/activity";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -452,7 +452,7 @@ const styles = stylex.create({
     borderRadius: radius.pill,
     backgroundColor: tokens.ink,
     color: tokens.surface,
-    font: `500 10px ${tokens.fontMono}`,
+    font: `${fontWeight.medium} ${fontSize.micro} ${tokens.fontMono}`,
     whiteSpace: "nowrap",
     transform: "translateX(-50%)",
     opacity: {

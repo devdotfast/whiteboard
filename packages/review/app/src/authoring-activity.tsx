@@ -1,5 +1,5 @@
 import { courierMotion } from "@canvas/courier-motion.stylex";
-import { fontWeight, motion, radius } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import type { ActivitySnapshot } from "@review/review-api/activity";
 import * as stylex from "@stylexjs/stylex";
 import { createContext, useContext, useState } from "react";
@@ -223,7 +223,7 @@ const styles = stylex.create({
     borderRadius: radius.pill,
     backgroundColor: tokens.transparent,
     color: tokens.inkMuted,
-    font: `500 11px ${tokens.fontMono}`,
+    font: `${fontWeight.medium} ${fontSize.small} ${tokens.fontMono}`,
     whiteSpace: "nowrap",
   },
   // While an agent works the badge is a button that locates the courier.

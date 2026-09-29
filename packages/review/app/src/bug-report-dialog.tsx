@@ -401,7 +401,7 @@ const styles = stylex.create({
   byteCount: {
     marginTop: "-10px",
     color: tokens.inkFaint,
-    font: `10px/1.3 ${tokens.fontMono}`,
+    font: `${fontSize.micro}/1.3 ${tokens.fontMono}`,
     textAlign: "right",
   },
   byteCountError: {
@@ -418,7 +418,7 @@ const styles = stylex.create({
     padding: "10px 12px 12px",
   },
   small: {
-    font: `11px/1.45 ${tokens.fontMono}`,
+    font: `${fontSize.small}/1.45 ${tokens.fontMono}`,
   },
   option: {
     display: "flex",

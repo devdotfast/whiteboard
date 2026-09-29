@@ -462,7 +462,7 @@ const styles = stylex.create({
     flexDirection: "column",
     gap: "12px",
     paddingBottom: "28px",
-    font: `13px/18px ${tokens.fontMono}`,
+    font: `${fontSize.ui}/18px ${tokens.fontMono}`,
     color: tokens.inkFaint,
   },
   row: {

@@ -489,6 +489,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
         ) : (
           <EmptyState
             variant="boxed"
+            inDocument
             xstyle={styles.empty}
             message="No database use-cases declared."
           />

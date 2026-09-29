@@ -40,7 +40,7 @@ export const diffCountStyles = stylex.create({
   counts: {
     display: "inline-flex",
     gap: "6px",
-    font: `11px ${tokens.fontMono}`,
+    font: `${fontSize.small} ${tokens.fontMono}`,
     fontVariantNumeric: "tabular-nums",
     whiteSpace: "nowrap",
     fontSize: fontSize.small,
