@@ -1,3 +1,4 @@
+import { radius } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 
@@ -147,7 +148,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
-    borderRadius: "4px",
+    borderRadius: radius.small,
     backgroundColor: tokens.tray,
     color: tokens.ink,
     font: `12px/18px ${tokens.fontMono}`,

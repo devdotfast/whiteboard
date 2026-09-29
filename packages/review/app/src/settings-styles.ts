@@ -1,3 +1,4 @@
+import { fontSize, radius } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
@@ -12,7 +13,7 @@ export const settingsStyles = stylex.create({
   lede: {
     margin: "0 0 28px",
     color: tokens.reviewHomeMeta,
-    fontSize: "13px",
+    fontSize: fontSize.ui,
   },
   section: {
     marginBottom: "28px",
@@ -43,11 +44,11 @@ export const settingsStyles = stylex.create({
   },
   rowLabel: {
     color: tokens.ink,
-    fontSize: "13px",
+    fontSize: fontSize.ui,
   },
   rowDescription: {
     color: tokens.reviewHomeMeta,
-    fontSize: "12px",
+    fontSize: fontSize.body,
   },
   rowControl: {
     display: "flex",
@@ -59,7 +60,7 @@ export const settingsStyles = stylex.create({
     alignItems: "center",
     gap: "8px",
     color: tokens.reviewHomeMeta,
-    fontSize: "12px",
+    fontSize: fontSize.body,
     cursor: "pointer",
   },
   // A box is the state of a thing (viewed, enabled); it is the same 14px
@@ -71,7 +72,7 @@ export const settingsStyles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: { default: tokens.ruleSoft, ":checked": tokens.accent },
-    borderRadius: "3px",
+    borderRadius: radius.small,
     backgroundColor: { default: tokens.surface, ":checked": tokens.accent },
     backgroundImage: { default: "none", ":checked": tokens.checkMark },
     backgroundPosition: "center",
@@ -96,12 +97,12 @@ export const settingsStyles = stylex.create({
   },
   unavailable: {
     color: tokens.reviewHomeMeta,
-    fontSize: "12px",
+    fontSize: fontSize.body,
   },
   error: {
     margin: "4px 0 0",
     color: tokens.changeRemoved,
-    fontSize: "12px",
+    fontSize: fontSize.body,
     whiteSpace: "pre-wrap",
   },
   summaryFields: {

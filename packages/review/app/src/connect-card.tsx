@@ -1,3 +1,4 @@
+import { fontSize, radius } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import {
   type ReviewCanvasInstallContent,
@@ -430,7 +431,7 @@ const styles = stylex.create({
   note: {
     margin: "0 0 8px",
     color: tokens.reviewHomeMeta,
-    fontSize: "12px",
+    fontSize: fontSize.body,
   },
   // The prompt card's tabs, one agent at a time.
   agentTabs: {
@@ -468,7 +469,7 @@ const styles = stylex.create({
       default: tokens.reviewHomeRuleSoft,
       ":hover": tokens.inkMuted,
     },
-    borderRadius: "999px",
+    borderRadius: radius.pill,
     backgroundColor: tokens.raised,
     color: tokens.ink,
     font: `12px/18px ${tokens.fontMono}`,
@@ -490,7 +491,7 @@ const styles = stylex.create({
     flexDirection: "column",
     alignItems: "flex-start",
     gap: "8px",
-    fontSize: "12px",
+    fontSize: fontSize.body,
   },
   legacyText: {
     margin: 0,

@@ -72,7 +72,13 @@ import { offeredReviewViews, reviewViewLabel } from "./review-view-route";
 import { useReviewViewStateSync } from "./review-view-state";
 import { ReviewCommitsView } from "./ReviewCommitsView";
 import { ReviewTraceView } from "./ReviewTraceView";
-import { elevation, radius } from "./scale.stylex";
+import {
+  elevation,
+  fontSize,
+  fontWeight,
+  motion,
+  radius,
+} from "./scale.stylex";
 import { ShareControl } from "./share-control";
 import { shellStyles } from "./shell-styles";
 import { useRightPanelResize } from "./side-panel-resizer";
@@ -1013,7 +1019,7 @@ const scopeBarStyles = stylex.create({
     borderColor: "currentcolor",
     backgroundColor: "transparent",
     color: tokens.accent,
-    fontSize: "10px",
+    fontSize: fontSize.micro,
   },
   sha: {
     color: tokens.inkMuted,
@@ -1023,7 +1029,7 @@ const scopeBarStyles = stylex.create({
     minWidth: 0,
     overflow: "hidden",
     color: tokens.ink,
-    fontSize: "11px",
+    fontSize: fontSize.small,
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
@@ -1294,7 +1300,7 @@ const mapSettingsStyles = stylex.create({
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
     color: tokens.ink,
-    fontSize: "14px",
+    fontSize: fontSize.ui,
   },
   switchInput: {
     position: "absolute",
@@ -1309,7 +1315,7 @@ const mapSettingsStyles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
-    borderRadius: "999px",
+    borderRadius: radius.pill,
     backgroundColor: tokens.controlBg,
     "::before": {
       position: "absolute",
@@ -1317,9 +1323,9 @@ const mapSettingsStyles = stylex.create({
       left: "3px",
       width: "14px",
       height: "14px",
-      borderRadius: "999px",
+      borderRadius: radius.pill,
       backgroundColor: tokens.inkFaint,
-      transition: "transform 140ms ease, background 140ms ease",
+      transition: `transform ${motion.fast} ${motion.ease}, background ${motion.fast} ${motion.ease}`,
       content: "''",
     },
   },
@@ -1350,7 +1356,7 @@ const mapSettingsStyles = stylex.create({
       ":hover": tokens.accent,
       ":focus-visible": tokens.accent,
     },
-    borderRadius: "6px",
+    borderRadius: radius.control,
     backgroundColor: {
       default: tokens.tray,
       ":hover": tokens.accentSoft,
@@ -1361,8 +1367,8 @@ const mapSettingsStyles = stylex.create({
       ":hover": tokens.accent,
       ":focus-visible": tokens.accent,
     },
-    fontSize: "12px",
-    fontWeight: 750,
+    fontSize: fontSize.body,
+    fontWeight: fontWeight.bold,
     outline: { default: null, ":hover": "none", ":focus-visible": "none" },
   },
   tintActive: {

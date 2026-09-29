@@ -1,3 +1,4 @@
+import { fontSize } from "@canvas/scale.stylex";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { textStyles } from "@canvas/ui/text";
 import type {
@@ -279,11 +280,11 @@ const styles = stylex.create({
     margin: "0 auto",
     padding: "32px",
     color: tokens.ink,
-    font: `13px/1.55 ${tokens.fontDisplay}`,
+    font: `${fontSize.ui}/1.55 ${tokens.fontDisplay}`,
   },
   shellTitle: {
     margin: "10px 0 6px",
-    fontSize: "26px",
+    fontSize: fontSize.display,
   },
   shellText: {
     color: tokens.inkMuted,

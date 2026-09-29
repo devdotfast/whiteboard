@@ -1,3 +1,4 @@
+import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { textStyles } from "@canvas/ui/text";
@@ -600,7 +601,7 @@ const styles = stylex.create({
   sub: {
     margin: 0,
     color: tokens.reviewHomeMeta,
-    fontSize: "13px",
+    fontSize: fontSize.ui,
     lineHeight: "21px",
   },
   dismiss: {
@@ -626,7 +627,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.reviewHomeRule,
-    borderRadius: "10px",
+    borderRadius: radius.surface,
   },
   stepOpen: {
     borderColor: tokens.reviewHomeRuleSoft,
@@ -641,7 +642,7 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "currentcolor",
-    borderRadius: { default: null, ":focus-visible": "10px" },
+    borderRadius: { default: null, ":focus-visible": radius.surface },
     color: "inherit",
     backgroundColor: tokens.transparent,
     cursor: { default: "pointer", ":disabled": "not-allowed" },
@@ -663,13 +664,13 @@ const styles = stylex.create({
     width: "22px",
     height: "22px",
     flexShrink: 0,
-    borderRadius: "50%",
+    borderRadius: radius.round,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.reviewHomeRuleSoft,
     color: tokens.reviewHomeMeta,
-    fontSize: "11px",
-    fontWeight: 500,
+    fontSize: fontSize.small,
+    fontWeight: fontWeight.medium,
   },
   badgeDone: {
     borderColor: tokens.transparent,
@@ -692,14 +693,14 @@ const styles = stylex.create({
   },
   stepTitle: {
     color: tokens.ink,
-    fontSize: "13px",
+    fontSize: fontSize.ui,
   },
   stepTitleDone: {
     color: tokens.reviewHomeMeta,
   },
   stepNote: {
     color: tokens.reviewHomeMeta,
-    fontSize: "12px",
+    fontSize: fontSize.body,
   },
   stepBody: {
     display: "flex",
@@ -727,7 +728,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.reviewHomeRuleSoft,
-    borderRadius: "4px",
+    borderRadius: radius.small,
     color: tokens.ink,
     backgroundColor: tokens.controlBg,
     fontFamily: tokens.fontMono,
@@ -736,7 +737,7 @@ const styles = stylex.create({
     margin: "auto 0 0",
     paddingTop: "48px",
     color: tokens.reviewHomeMeta,
-    fontSize: "12px",
+    fontSize: fontSize.body,
     lineHeight: "20px",
   },
   feedbackLink: {

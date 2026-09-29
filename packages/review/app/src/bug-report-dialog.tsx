@@ -23,7 +23,7 @@ import {
 import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
 import { BugIcon } from "./icons";
-import { fontSize, fontWeight, layer } from "./scale.stylex";
+import { fontSize, fontWeight, layer, radius } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { useToast } from "./toast";
 import { tokens } from "./tokens.stylex";
@@ -387,13 +387,13 @@ const styles = stylex.create({
   },
   title: {
     margin: 0,
-    fontSize: "18px",
+    fontSize: fontSize.heading,
   },
   description: {
     display: "grid",
     gap: "7px",
-    fontSize: "12px",
-    fontWeight: 600,
+    fontSize: fontSize.body,
+    fontWeight: fontWeight.semibold,
   },
   textarea: {
     width: "100%",
@@ -414,7 +414,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
-    borderRadius: "5px",
+    borderRadius: radius.small,
     padding: "10px 12px 12px",
   },
   small: {
@@ -433,7 +433,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "dashed",
     borderColor: tokens.ruleSoft,
-    borderRadius: "5px",
+    borderRadius: radius.small,
     padding: "8px",
   },
   screenshotImage: {
@@ -441,7 +441,7 @@ const styles = stylex.create({
     maxWidth: "calc(100% - 34px)",
     maxHeight: "72px",
     ...chromeBorder,
-    borderRadius: "4px",
+    borderRadius: radius.small,
   },
   screenshotRemove: {
     borderWidth: "1px",

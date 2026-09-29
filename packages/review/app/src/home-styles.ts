@@ -1,3 +1,4 @@
+import { tracking } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
@@ -48,6 +49,6 @@ export const homeStyles = stylex.create({
     margin: 0,
     color: tokens.ink,
     font: `600 32px/42px ${tokens.fontMono}`,
-    letterSpacing: "-0.02em",
+    letterSpacing: tracking.tight,
   },
 });

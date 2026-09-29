@@ -1,3 +1,4 @@
+import { fontSize, radius } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
@@ -39,7 +40,7 @@ export const promptStyles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "currentcolor",
-    borderRadius: "6px",
+    borderRadius: radius.control,
     color: tokens.onAccent,
     backgroundColor: tokens.accent,
     font: `500 12px/16px ${tokens.fontMono}`,
@@ -50,7 +51,7 @@ export const promptStyles = stylex.create({
   error: {
     margin: "10px 0 0",
     color: tokens.changeRemoved,
-    fontSize: "12px",
+    fontSize: fontSize.body,
     whiteSpace: "pre-wrap",
   },
 });

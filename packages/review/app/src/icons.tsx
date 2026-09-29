@@ -1,3 +1,4 @@
+import { motion } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
@@ -355,10 +356,10 @@ const styles = stylex.create({
     },
     pointerEvents: "none",
     transition: {
-      default: "opacity 140ms ease, clip-path 0s linear 140ms",
+      default: `opacity ${motion.fast} ${motion.ease}, clip-path ${motion.instant} linear ${motion.fast}`,
       [stylex.when.ancestor(":hover", segmentMarker)]:
-        "opacity 0s, clip-path 260ms cubic-bezier(0.2, 0.7, 0.2, 1)",
-      [reducedMotion]: "opacity 100ms ease",
+        `opacity ${motion.instant}, clip-path ${motion.slow} cubic-bezier(0.2, 0.7, 0.2, 1)`,
+      [reducedMotion]: `opacity ${motion.fast} ${motion.ease}`,
     },
   },
   underlineActive: {
@@ -368,8 +369,8 @@ const styles = stylex.create({
       [stylex.when.ancestor(":hover", segmentMarker)]: 0.7,
     },
     transition: {
-      default: "opacity 0s, clip-path 260ms cubic-bezier(0.2, 0.7, 0.2, 1)",
-      [reducedMotion]: "opacity 100ms ease",
+      default: `opacity ${motion.instant}, clip-path ${motion.slow} cubic-bezier(0.2, 0.7, 0.2, 1)`,
+      [reducedMotion]: `opacity ${motion.fast} ${motion.ease}`,
     },
   },
   underlineStroke: {
@@ -394,7 +395,7 @@ const styles = stylex.create({
     strokeWidth: "1.5",
     strokeLinecap: "round",
     strokeLinejoin: "round",
-    transition: "transform 120ms ease, color 120ms ease",
+    transition: `transform ${motion.fast} ${motion.ease}, color ${motion.fast} ${motion.ease}`,
   },
   chevronOpen: {
     transform: "rotate(90deg)",
@@ -412,7 +413,10 @@ const styles = stylex.create({
     strokeLinejoin: "round",
     strokeWidth: "1.2",
     animationName: { default: drawIn, [reducedMotion]: "none" },
-    animationDuration: { default: "360ms", [reducedMotion]: "0s" },
+    animationDuration: {
+      default: motion.slow,
+      [reducedMotion]: motion.instant,
+    },
     animationTimingFunction: { default: "ease-out", [reducedMotion]: "ease" },
     animationFillMode: { default: "both", [reducedMotion]: "none" },
   },

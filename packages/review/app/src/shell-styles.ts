@@ -1,3 +1,4 @@
+import { fontSize } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
@@ -253,7 +254,7 @@ export const shellStyles = stylex.create({
     backgroundColor: `color-mix(in srgb, ${tokens.accent} 12%, ${tokens.surface})`,
     color: tokens.ink,
     fontFamily: tokens.chromeFont,
-    fontSize: "12px",
+    fontSize: fontSize.body,
   },
 
   viewRegion: {

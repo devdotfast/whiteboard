@@ -1,3 +1,4 @@
+import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { textStyles } from "@canvas/ui/text";
@@ -370,7 +371,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
-    borderRadius: "8px",
+    borderRadius: radius.surface,
     backgroundColor: tokens.surface,
     boxShadow: "none",
   },
@@ -420,8 +421,8 @@ const styles = stylex.create({
   subject: {
     overflow: "hidden",
     color: tokens.ink,
-    fontSize: "12px",
-    fontWeight: 500,
+    fontSize: fontSize.body,
+    fontWeight: fontWeight.medium,
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
@@ -451,7 +452,7 @@ const styles = stylex.create({
   filesNote: {
     margin: "6px 12px",
     color: tokens.inkFaint,
-    fontSize: "11px",
+    fontSize: fontSize.small,
   },
   file: {
     display: "flex",
@@ -464,7 +465,7 @@ const styles = stylex.create({
     borderColor: "currentcolor",
     backgroundColor: { default: "transparent", ":hover": tokens.controlBg },
     color: tokens.ink,
-    fontSize: "11px",
+    fontSize: fontSize.small,
     textAlign: "left",
   },
   filePath: {
@@ -481,7 +482,7 @@ const styles = stylex.create({
     borderColor: "currentcolor",
     backgroundColor: "transparent",
     color: { default: tokens.inkFaint, ":hover": tokens.accent },
-    fontSize: "10px",
+    fontSize: fontSize.micro,
   },
   // The whole header is the toggle's hit area, so its chevron stays quiet on
   // hover.

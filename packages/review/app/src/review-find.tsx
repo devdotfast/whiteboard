@@ -672,7 +672,7 @@ const styles = stylex.create({
     padding: "0 3px",
     color: tokens.inkMuted,
     fontFamily: tokens.chromeFont,
-    fontSize: "12px",
+    fontSize: fontSize.body,
     lineHeight: "16px",
     textAlign: "center",
     whiteSpace: "nowrap",
@@ -690,7 +690,7 @@ const styles = stylex.create({
     },
     color: { default: tokens.inkMuted, ":hover:not(:disabled)": tokens.ink },
     fontFamily: tokens.chromeFont,
-    fontSize: "12px",
+    fontSize: fontSize.body,
     lineHeight: "16px",
   },
   togglePressed: {

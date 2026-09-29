@@ -1,3 +1,10 @@
+import {
+  fontSize,
+  fontWeight,
+  motion,
+  radius,
+  tracking,
+} from "@canvas/scale.stylex";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { textStyles } from "@canvas/ui/text";
@@ -1052,14 +1059,14 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: { default: tokens.rule, ":focus-within": tokens.accent },
-    borderRadius: "6px",
+    borderRadius: radius.control,
     backgroundColor: tokens.surface,
     boxShadow: {
       default: null,
       ":focus-within": `0 0 0 3px ${tokens.markerTint}`,
     },
     color: { default: tokens.inkFaint, ":focus-within": tokens.inkMuted },
-    fontSize: "15px",
+    fontSize: fontSize.reading,
     gap: "12px",
   },
   searchIcon: {
@@ -1106,7 +1113,7 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "currentcolor",
-    borderRadius: "4px",
+    borderRadius: radius.small,
     color: { default: tokens.reviewHomeMeta, ":hover": tokens.ink },
     backgroundColor: tokens.transparent,
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
@@ -1124,7 +1131,7 @@ const styles = stylex.create({
   // Inherit the weight too, so marking a run does not reflow its line.
   mark: {
     padding: "0 1px",
-    borderRadius: "3px",
+    borderRadius: radius.small,
     backgroundColor: `color-mix(in srgb, ${tokens.accent} 30%, ${tokens.transparent})`,
     color: "inherit",
     fontWeight: "inherit",
@@ -1164,11 +1171,11 @@ const styles = stylex.create({
       ":focus-visible": tokens.accent,
       ":hover:not(:disabled)": tokens.ruleSoft,
     },
-    borderRadius: "8px",
+    borderRadius: radius.surface,
     color: "inherit",
     backgroundColor: tokens.surface,
     textAlign: "left",
-    transition: "border-color 120ms ease, box-shadow 120ms ease",
+    transition: `border-color ${motion.fast} ${motion.ease}, box-shadow ${motion.fast} ${motion.ease}`,
     boxShadow: {
       default: null,
       ":focus-visible": `0 0 0 3px ${tokens.markerTint}`,
@@ -1251,7 +1258,7 @@ const styles = stylex.create({
     fontFamily: tokens.fontMono,
   },
   dismissedCount: {
-    fontWeight: 500,
+    fontWeight: fontWeight.medium,
     letterSpacing: 0,
   },
   dismissedRows: {
@@ -1267,7 +1274,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
-    borderRadius: "8px",
+    borderRadius: radius.surface,
   },
   dismissedOpen: {
     overflow: "hidden",
@@ -1277,7 +1284,7 @@ const styles = stylex.create({
     borderColor: "currentcolor",
     backgroundColor: tokens.transparent,
     color: tokens.inkMuted,
-    fontSize: "14px",
+    fontSize: fontSize.ui,
     textAlign: "left",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
@@ -1366,7 +1373,7 @@ const styles = stylex.create({
   },
   menuValue: {
     color: tokens.ink,
-    fontWeight: 500,
+    fontWeight: fontWeight.medium,
   },
   menuIcon: {
     width: "14px",
@@ -1383,7 +1390,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
-    borderRadius: "8px",
+    borderRadius: radius.surface,
   },
   table: {
     width: "100%",
@@ -1415,8 +1422,11 @@ const styles = stylex.create({
     borderBottomColor: tokens.rule,
     backgroundColor: tokens.tray,
     color: tokens.inkMuted,
-    font: `600 11px/16px ${tokens.fontMono}`,
-    letterSpacing: "0.04em",
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    fontWeight: fontWeight.semibold,
+    lineHeight: "16px",
+    letterSpacing: tracking.chrome,
     textTransform: "uppercase",
     textAlign: "left",
     overflow: "hidden",
@@ -1447,14 +1457,14 @@ const styles = stylex.create({
   },
   strongCell: {
     color: tokens.ink,
-    fontSize: "13px",
-    fontWeight: 500,
+    fontSize: fontSize.ui,
+    fontWeight: fontWeight.medium,
   },
   inkCell: {
     color: tokens.ink,
   },
   dateCell: {
-    fontSize: "13px",
+    fontSize: fontSize.ui,
   },
   lastRowCell: {
     borderBottomWidth: 0,
@@ -1485,7 +1495,7 @@ const styles = stylex.create({
     font: `11px/14px ${tokens.fontMono}`,
   },
   repositoryName: {
-    fontWeight: 400,
+    fontWeight: fontWeight.regular,
   },
   repositorySeparator: {
     paddingInline: "5px",
