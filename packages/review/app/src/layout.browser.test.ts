@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { scopeReviewCanvasCss } from "../desktop-css-scope";
 import { MarkdownContent } from "./agent-markdown";
 import { documentStyles } from "./document-styles";
+import { appMarker, documentMarker, proseMarker } from "./markers.stylex";
 import {
   softwareMapFrameProps,
   softwareMapOverlayProps,
@@ -21,10 +22,10 @@ describe("Review layout", () => {
       createElement(TraceQuote, { sessionId: "session" }, text);
 
     const documentView = document.createElement("article");
-    documentView.className = `review-document ${stylex.props(documentStyles.article).className}`;
+    documentView.className = `review-document ${stylex.props(documentStyles.article, documentMarker).className}`;
     documentView.style.width = "1000px";
     documentView.innerHTML = `
-      <div class="api-document-node api-document-node--prose">
+      <div class="${stylex.props(proseMarker).className}" data-review-node-id="node">
         ${renderToStaticMarkup(
           createElement(MarkdownContent, {
             source: "Prose with [an inline quote](#quote).",
@@ -32,7 +33,7 @@ describe("Review layout", () => {
           }),
         )}
       </div>
-      <div class="api-document-node api-document-node--prose">
+      <div class="${stylex.props(proseMarker).className}" data-review-node-id="node">
         ${renderToStaticMarkup(quote("A standalone quote"))}
       </div>
     `;
@@ -43,7 +44,7 @@ describe("Review layout", () => {
       const inline = prose.querySelector("span")!;
 
       const standalone = documentView.querySelector<HTMLElement>(
-        ".api-document-node > span",
+        "[data-review-node-id] > span",
       )!;
 
       const proseBounds = prose.getBoundingClientRect();
@@ -64,7 +65,7 @@ describe("Review layout", () => {
     canvas.style.cssText =
       "position: fixed; inset: 40px 0 0; height: auto; min-height: 0";
     const review = document.createElement("div");
-    review.className = "review-app";
+    review.className = `review-app ${stylex.props(appMarker).className}`;
     canvas.append(review);
     const frame = document.createElement("figure");
     frame.className = softwareMapFrameProps({

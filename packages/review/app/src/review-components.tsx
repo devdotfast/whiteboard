@@ -25,7 +25,7 @@ import {
 } from "./host/review-session";
 import { CloseIcon, DisclosureChevron, MapPinIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
-import { chevronMarker } from "./markers.stylex";
+import { chevronMarker, documentMarker } from "./markers.stylex";
 import { useReviewActions } from "./review-context";
 import { useOptionalReviewPanelStore, useReviewPanel } from "./review-panel";
 import type {
@@ -1109,7 +1109,7 @@ function ReviewPeekContentView({
   return null;
 }
 
-const inDocument = ":is(.review-document *)";
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
 const sectionStyles = stylex.create({
   section: {
@@ -1146,13 +1146,13 @@ const sectionStyles = stylex.create({
     minWidth: 0,
   },
   title: {
-    scrollMarginTop: { default: null, [inDocument]: "24px" },
+    scrollMarginTop: { default: null, [inDocument()]: "24px" },
     margin: 0,
-    color: { default: null, [inDocument]: tokens.ink },
-    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument]: documentType.h2 },
-    fontWeight: { default: null, [inDocument]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument]: "32px" },
+    color: { default: null, [inDocument()]: tokens.ink },
+    fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
+    fontSize: { default: null, [inDocument()]: documentType.h2 },
+    fontWeight: { default: null, [inDocument()]: fontWeight.medium },
+    lineHeight: { default: null, [inDocument()]: "32px" },
   },
   titleActive: {
     color: tokens.ink,

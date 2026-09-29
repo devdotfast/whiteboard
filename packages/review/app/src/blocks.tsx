@@ -25,6 +25,7 @@ import { documentStyles } from "./document-styles";
 import { useMotionPhase } from "./draw-queue-provider";
 import { drawStyles } from "./draw-styles";
 import { FlowDiagram } from "./flow-diagram";
+import { documentMarker } from "./markers.stylex";
 import { AnchorLink, ReviewSection } from "./review-components";
 import { ReviewDocumentTitle } from "./review-document-surface";
 import { SoftwareMap } from "./software-map/SoftwareMap";
@@ -385,37 +386,37 @@ export class BlockErrorBoundary extends Component<
   }
 }
 
-const inDocument = ":is(.review-document *)";
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
 const styles = stylex.create({
   callout: {
-    margin: { default: null, [inDocument]: "18px 0" },
-    padding: { default: null, [inDocument]: "12px 16px" },
-    borderLeftWidth: { default: null, [inDocument]: "2px" },
-    borderLeftStyle: { default: null, [inDocument]: "solid" },
-    borderLeftColor: { default: null, [inDocument]: tokens.inkFaint },
+    margin: { default: null, [inDocument()]: "18px 0" },
+    padding: { default: null, [inDocument()]: "12px 16px" },
+    borderLeftWidth: { default: null, [inDocument()]: "2px" },
+    borderLeftStyle: { default: null, [inDocument()]: "solid" },
+    borderLeftColor: { default: null, [inDocument()]: tokens.inkFaint },
     borderRadius: {
       default: null,
-      [inDocument]: `0 ${radius.control} ${radius.control} 0`,
+      [inDocument()]: `0 ${radius.control} ${radius.control} 0`,
     },
-    backgroundColor: { default: null, [inDocument]: tokens.tray },
-    fontSize: { default: null, [inDocument]: fontSize.reading },
-    lineHeight: { default: null, [inDocument]: "22px" },
+    backgroundColor: { default: null, [inDocument()]: tokens.tray },
+    fontSize: { default: null, [inDocument()]: fontSize.reading },
+    lineHeight: { default: null, [inDocument()]: "22px" },
   },
   info: {
-    borderLeftColor: { default: null, [inDocument]: tokens.accent },
-    backgroundColor: { default: null, [inDocument]: tokens.markerTint },
+    borderLeftColor: { default: null, [inDocument()]: tokens.accent },
+    backgroundColor: { default: null, [inDocument()]: tokens.markerTint },
   },
   warning: {
-    borderLeftColor: { default: null, [inDocument]: tokens.changeModified },
-    backgroundColor: { default: null, [inDocument]: tokens.diffModifiedBg },
+    borderLeftColor: { default: null, [inDocument()]: tokens.changeModified },
+    backgroundColor: { default: null, [inDocument()]: tokens.diffModifiedBg },
   },
   danger: {
-    borderLeftColor: { default: null, [inDocument]: tokens.changeRemoved },
-    backgroundColor: { default: null, [inDocument]: tokens.diffRemovedBg },
+    borderLeftColor: { default: null, [inDocument()]: tokens.changeRemoved },
+    backgroundColor: { default: null, [inDocument()]: tokens.diffRemovedBg },
   },
   success: {
-    borderLeftColor: { default: null, [inDocument]: tokens.changeAdded },
-    backgroundColor: { default: null, [inDocument]: tokens.diffAddedBg },
+    borderLeftColor: { default: null, [inDocument()]: tokens.changeAdded },
+    backgroundColor: { default: null, [inDocument()]: tokens.diffAddedBg },
   },
 });

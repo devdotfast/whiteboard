@@ -1,9 +1,10 @@
 import { drawStyles } from "@canvas/draw-styles";
+import { documentMarker } from "@canvas/markers.stylex";
 import { withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 
-const inDocument = ":is(.review-document *)";
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
 const narrow = "@media (max-width: 720px)";
 
@@ -30,20 +31,23 @@ const styles = stylex.create({
     // the prose measure.
     width: {
       default: null,
-      [inDocument]: { default: "fit-content", [narrow]: "calc(100cqi - 16px)" },
+      [inDocument()]: {
+        default: "fit-content",
+        [narrow]: "calc(100cqi - 16px)",
+      },
     },
     maxWidth: {
       default: null,
-      [inDocument]: {
+      [inDocument()]: {
         default: `min(${tokens.reviewInlineDiagramMaxWidth}, ${documentWidth})`,
         [narrow]: "none",
       },
     },
     minWidth: {
       default: null,
-      [inDocument]: `min(${tokens.reviewProseMaxWidth}, ${documentWidth})`,
+      [inDocument()]: `min(${tokens.reviewProseMaxWidth}, ${documentWidth})`,
     },
-    marginInline: { default: null, [inDocument]: "auto" },
+    marginInline: { default: null, [inDocument()]: "auto" },
   },
   // The map view fills its canvas shell.
   view: {

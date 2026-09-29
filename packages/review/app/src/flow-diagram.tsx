@@ -10,6 +10,7 @@ import { diagramStyles } from "./diagram-styles";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { drawStyles } from "./draw-styles";
 import { FlowGraph } from "./flow-graph";
+import { documentMarker } from "./markers.stylex";
 import type { GuidedTour, GuidedTourStop } from "./review-panel-model";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
@@ -186,6 +187,8 @@ export function FlowDiagram({
   );
 }
 
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
+
 const styles = stylex.create({
   figure: {
     overflow: "hidden",
@@ -217,7 +220,7 @@ const styles = stylex.create({
     padding: "0 16px 12px",
     color: tokens.inkMuted,
     font: `${fontSize.small}/1.6 ${tokens.fontMono}`,
-    textAlign: { default: null, ":is(.review-document *)": "left" },
+    textAlign: { default: null, [inDocument()]: "left" },
   },
   body: {
     display: "flex",

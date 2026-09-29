@@ -32,7 +32,7 @@ import { diagramStyles } from "./diagram-styles";
 import { useMotionPhase } from "./draw-queue-provider";
 import { drawStyles } from "./draw-styles";
 import { ElementCountsText } from "./lens-counts";
-import { flowNodeMarker } from "./markers.stylex";
+import { documentMarker, flowNodeMarker } from "./markers.stylex";
 import { useReviewLenses } from "./review-lenses";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
@@ -682,21 +682,21 @@ const nodeTypes = { flowNode: FlowNode };
 
 const edgeTypes = { flowEdge: FlowEdge };
 
-const inDocument = ":is(.review-document *)";
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
 const styles = stylex.create({
   // Read as document paragraphs inside a document.
   paragraph: {
-    margin: { default: null, [inDocument]: "14px 0" },
-    color: { default: null, [inDocument]: tokens.ink },
-    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument]: fontSize.reading },
-    lineHeight: { default: null, [inDocument]: 1.72 },
-    textAlign: { default: null, [inDocument]: "left" },
+    margin: { default: null, [inDocument()]: "14px 0" },
+    color: { default: null, [inDocument()]: tokens.ink },
+    fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
+    fontSize: { default: null, [inDocument()]: fontSize.reading },
+    lineHeight: { default: null, [inDocument()]: 1.72 },
+    textAlign: { default: null, [inDocument()]: "left" },
   },
   note: {
     padding: "8px 12px",
-    color: { default: tokens.inkFaint, [inDocument]: tokens.ink },
+    color: { default: tokens.inkFaint, [inDocument()]: tokens.ink },
   },
   flow: {
     width: "100%",

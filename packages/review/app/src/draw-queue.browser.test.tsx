@@ -13,6 +13,7 @@ import { documentStyles } from "./document-styles";
 import type { DrawQueueClock } from "./draw-queue-provider";
 import { DrawQueueProvider } from "./draw-queue-provider";
 import { ReviewSessionProvider } from "./host/review-session";
+import { documentMarker } from "./markers.stylex";
 import { ReviewPanelProvider } from "./review-panel";
 import type { ReviewRoots } from "./review-root-context";
 import { ReviewRootsProvider } from "./review-root-context";
@@ -111,7 +112,7 @@ let manualClock: ReturnType<typeof createManualClock>;
 
 beforeEach(() => {
   article = document.createElement("article");
-  article.className = `review-document ${stylex.props(documentStyles.article).className}`;
+  article.className = `review-document ${stylex.props(documentStyles.article, documentMarker).className}`;
   article.style.position = "relative";
   article.style.width = "900px";
   container = document.createElement("div");

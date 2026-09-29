@@ -9,6 +9,7 @@ import { ApiDocument, createDocumentLoader } from "./api-document";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { documentStyles } from "./document-styles";
 import { ReviewSessionProvider } from "./host/review-session";
+import { documentMarker } from "./markers.stylex";
 import type { ReviewRoots } from "./review-root-context";
 import { ReviewRootsProvider } from "./review-root-context";
 import {
@@ -42,7 +43,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
   window.localStorage.clear();
   article = document.createElement("article");
-  article.className = `review-document ${stylex.props(documentStyles.article).className}`;
+  article.className = `review-document ${stylex.props(documentStyles.article, documentMarker).className}`;
   container = document.createElement("div");
   article.append(container);
   document.body.append(article);

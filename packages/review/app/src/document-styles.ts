@@ -2,39 +2,39 @@ import { documentType } from "@canvas/document-type.stylex";
 import { fontSize, fontWeight, radius, tracking } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
+import { documentMarker, proseMarker } from "./markers.stylex";
 import { tokens } from "./tokens.stylex";
 
 // The review document: the article column and the prose it renders. Prose
 // styles hold only inside a document, so a renderer used elsewhere keeps the
-// browser's defaults; the `review-document`, `api-document-node` and
-// `api-document-node--prose` classes stay on the DOM as the markers.
+// browser's defaults. The article carries documentMarker, a block its
+// `data-review-node-id` and a Markdown or trace quote block proseMarker.
 
-const inDocument = ":is(.review-document *)";
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
 // A block's own element: it sits in the prose column.
-const inDocumentBlock = ":is(.review-document .api-document-node > *)";
+const inDocumentBlock = () => `${inDocument()}:is([data-review-node-id] > *)`;
 
 // Inside a Markdown or trace quote block.
-const inProse = ":is(.review-document .api-document-node--prose *)";
+const inProse = () =>
+  `${inDocument()}${stylex.when.ancestor(":is(*)", proseMarker)}`;
 
-// An element straight in the article.
-const inArticle = ":is(.review-document > *)";
+const inDocumentLink = () => `${inDocument()}:is(a *)`;
 
-const inDocumentLink = ":is(.review-document a *)";
+const inOpenDocumentLink = () =>
+  `${inDocument()}:is(a[data-review-anchor-open] *)`;
 
-const inOpenDocumentLink = ":is(.review-document a[data-review-anchor-open] *)";
-
-const afterProseItem = ":is(.review-document .api-document-node--prose li + *)";
+const afterProseItem = () => `${inProse()}:is(li + *)`;
 
 // The scratchpad has no title, so its opening heading sits at the top.
-const scratchpadOpening =
-  ':is(.review-document[data-kind="scratchpad"] > .api-document-node:first-child *):first-child';
+const scratchpadOpening = () =>
+  `${inDocument()}:is([data-kind="scratchpad"] > [data-review-node-id]:first-child *):first-child`;
 
 const narrow = "@media (max-width: 720px)";
 
 const compact = "@container review-content (max-width: 1080px)";
 
-const withHeader = ":has(.review-document-header)";
+const withHeader = ":has([data-review-document-header])";
 
 const withLens = ":has(.database-lens)";
 
@@ -102,154 +102,154 @@ export const documentStyles = stylex.create({
     },
   },
   h1: {
-    width: { default: null, [inDocument]: proseColumn },
-    margin: { default: null, [inDocument]: "28px auto 18px" },
-    marginTop: { default: null, [scratchpadOpening]: 0 },
-    color: { default: null, [inDocument]: tokens.ink },
-    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument]: documentType.h1 },
-    fontWeight: { default: null, [inDocument]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument]: "40px" },
-    letterSpacing: { default: null, [inDocument]: tracking.tight },
-    textAlign: { default: null, [inDocument]: "left" },
+    width: { default: null, [inDocument()]: proseColumn },
+    margin: { default: null, [inDocument()]: "28px auto 18px" },
+    marginTop: { default: null, [scratchpadOpening()]: 0 },
+    color: { default: null, [inDocument()]: tokens.ink },
+    fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
+    fontSize: { default: null, [inDocument()]: documentType.h1 },
+    fontWeight: { default: null, [inDocument()]: fontWeight.medium },
+    lineHeight: { default: null, [inDocument()]: "40px" },
+    letterSpacing: { default: null, [inDocument()]: tracking.tight },
+    textAlign: { default: null, [inDocument()]: "left" },
   },
   h2: {
     // A heading jumped to from the contents lands this far below the scroll
     // edge: clear of the edge for scroll-synced highlighting, and the same
     // slack the contents rail leaves under the last heading.
-    scrollMarginTop: { default: null, [inDocument]: "24px" },
-    width: { default: null, [inDocumentBlock]: proseColumn },
-    maxWidth: { default: null, [inDocumentBlock]: proseMaxWidth },
-    margin: { default: null, [inDocument]: "40px auto 12px" },
-    marginTop: { default: null, [scratchpadOpening]: 0 },
-    color: { default: null, [inDocument]: tokens.ink },
-    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument]: documentType.h2 },
-    fontWeight: { default: null, [inDocument]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument]: "32px" },
+    scrollMarginTop: { default: null, [inDocument()]: "24px" },
+    width: { default: null, [inDocumentBlock()]: proseColumn },
+    maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
+    margin: { default: null, [inDocument()]: "40px auto 12px" },
+    marginTop: { default: null, [scratchpadOpening()]: 0 },
+    color: { default: null, [inDocument()]: tokens.ink },
+    fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
+    fontSize: { default: null, [inDocument()]: documentType.h2 },
+    fontWeight: { default: null, [inDocument()]: fontWeight.medium },
+    lineHeight: { default: null, [inDocument()]: "32px" },
   },
   h3: {
-    scrollMarginTop: { default: null, [inDocument]: "24px" },
-    width: { default: null, [inDocumentBlock]: proseColumn },
-    maxWidth: { default: null, [inDocumentBlock]: proseMaxWidth },
-    margin: { default: null, [inDocument]: "30px auto 10px" },
-    marginTop: { default: null, [scratchpadOpening]: 0 },
-    color: { default: null, [inDocument]: tokens.ink },
-    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument]: documentType.h3 },
-    fontWeight: { default: null, [inDocument]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument]: "23px" },
+    scrollMarginTop: { default: null, [inDocument()]: "24px" },
+    width: { default: null, [inDocumentBlock()]: proseColumn },
+    maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
+    margin: { default: null, [inDocument()]: "30px auto 10px" },
+    marginTop: { default: null, [scratchpadOpening()]: 0 },
+    color: { default: null, [inDocument()]: tokens.ink },
+    fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
+    fontSize: { default: null, [inDocument()]: documentType.h3 },
+    fontWeight: { default: null, [inDocument()]: fontWeight.medium },
+    lineHeight: { default: null, [inDocument()]: "23px" },
   },
   // A block in the prose column: lists, quotes, images, tutorial controls.
   column: {
-    width: { default: null, [inDocumentBlock]: proseColumn },
-    maxWidth: { default: null, [inDocumentBlock]: proseMaxWidth },
-    marginInline: { default: null, [inDocumentBlock]: "auto" },
+    width: { default: null, [inDocumentBlock()]: proseColumn },
+    maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
+    marginInline: { default: null, [inDocumentBlock()]: "auto" },
   },
   serif: {
-    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
+    fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
   },
   paragraph: {
-    width: { default: null, [inDocumentBlock]: proseColumn },
-    maxWidth: { default: null, [inDocumentBlock]: proseMaxWidth },
-    margin: { default: null, [inProse]: "14px 0" },
-    marginInline: { default: null, [inDocumentBlock]: "auto" },
-    color: { default: null, [inProse]: tokens.ink },
-    fontFamily: { default: null, [inProse]: tokens.fontSerif },
-    fontSize: { default: null, [inProse]: fontSize.reading },
-    lineHeight: { default: null, [inProse]: 1.72 },
-    textAlign: { default: null, [inProse]: "left" },
+    width: { default: null, [inDocumentBlock()]: proseColumn },
+    maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
+    margin: { default: null, [inProse()]: "14px 0" },
+    marginInline: { default: null, [inDocumentBlock()]: "auto" },
+    color: { default: null, [inProse()]: tokens.ink },
+    fontFamily: { default: null, [inProse()]: tokens.fontSerif },
+    fontSize: { default: null, [inProse()]: fontSize.reading },
+    lineHeight: { default: null, [inProse()]: 1.72 },
+    textAlign: { default: null, [inProse()]: "left" },
   },
   // A list item's paragraphs sit flush with the item.
   itemParagraph: {
     marginTop: {
       default: null,
-      ":first-child": { default: null, [inProse]: 0 },
+      ":first-child": { default: null, [inProse()]: 0 },
     },
     marginBottom: {
       default: null,
-      ":last-child": { default: null, [inProse]: 0 },
+      ":last-child": { default: null, [inProse()]: 0 },
     },
   },
   item: {
-    marginTop: { default: null, [afterProseItem]: "8px" },
-    color: { default: null, [inProse]: tokens.ink },
-    fontFamily: { default: null, [inProse]: tokens.fontSerif },
-    fontSize: { default: null, [inProse]: fontSize.reading },
-    lineHeight: { default: null, [inProse]: 1.72 },
-    textAlign: { default: null, [inProse]: "left" },
+    marginTop: { default: null, [afterProseItem()]: "8px" },
+    color: { default: null, [inProse()]: tokens.ink },
+    fontFamily: { default: null, [inProse()]: tokens.fontSerif },
+    fontSize: { default: null, [inProse()]: fontSize.reading },
+    lineHeight: { default: null, [inProse()]: 1.72 },
+    textAlign: { default: null, [inProse()]: "left" },
   },
   // Document copy outside a Markdown block, read as its paragraphs: the
   // retained-source note, a stale block's notice, the fallback message.
   note: {
-    margin: { default: null, [inDocument]: "14px 0" },
-    color: { default: null, [inDocument]: tokens.ink },
-    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument]: fontSize.reading },
-    lineHeight: { default: null, [inDocument]: 1.72 },
-    textAlign: { default: null, [inDocument]: "left" },
+    margin: { default: null, [inDocument()]: "14px 0" },
+    color: { default: null, [inDocument()]: tokens.ink },
+    fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
+    fontSize: { default: null, [inDocument()]: fontSize.reading },
+    lineHeight: { default: null, [inDocument()]: 1.72 },
+    textAlign: { default: null, [inDocument()]: "left" },
   },
   // The retained-source note sits in the prose column, flush left.
   articleNote: {
-    width: { default: null, [inArticle]: proseColumn },
-    maxWidth: { default: null, [inArticle]: proseMaxWidth },
+    width: { default: null, [inDocument()]: proseColumn },
+    maxWidth: { default: null, [inDocument()]: proseMaxWidth },
   },
   // Links are just text in the link color, prose and code chips alike, with
   // no visited distinction. Hover restores the plain underline, and the link
   // whose peek is open carries a quiet wash of the same color.
   link: {
-    color: { default: null, [inDocument]: tokens.accent },
+    color: { default: null, [inDocument()]: tokens.accent },
     textDecoration: {
       default: null,
-      [inDocument]: { default: "none", ":hover": "underline" },
+      [inDocument()]: { default: "none", ":hover": "underline" },
     },
     backgroundColor: {
       default: null,
-      [inDocument]: {
+      [inDocument()]: {
         default: null,
         ":is([data-review-anchor-open])": tokens.linkOpenWash,
       },
     },
   },
   code: {
-    padding: { default: null, [inDocument]: "2px 5px" },
-    borderRadius: { default: null, [inDocument]: radius.small },
+    padding: { default: null, [inDocument()]: "2px 5px" },
+    borderRadius: { default: null, [inDocument()]: radius.small },
     backgroundColor: {
       default: null,
-      [inDocument]: tokens.well,
-      [inOpenDocumentLink]: tokens.linkOpenWash,
+      [inDocument()]: tokens.well,
+      [inOpenDocumentLink()]: tokens.linkOpenWash,
     },
     color: {
       default: null,
-      [inDocument]: tokens.ink,
-      [inDocumentLink]: tokens.accent,
+      [inDocument()]: tokens.ink,
+      [inDocumentLink()]: tokens.accent,
     },
-    fontFamily: { default: null, [inDocument]: tokens.fontMono },
-    fontSize: { default: null, [inDocument]: "0.85em" },
+    fontFamily: { default: null, [inDocument()]: tokens.fontMono },
+    fontSize: { default: null, [inDocument()]: "0.85em" },
   },
   table: {
-    width: { default: null, [inDocument]: "min(100%, 600px)" },
-    margin: { default: null, [inDocument]: "24px auto" },
-    borderCollapse: { default: null, [inDocument]: "collapse" },
-    color: { default: null, [inDocument]: tokens.ink },
-    fontFamily: { default: null, [inDocument]: tokens.fontMono },
-    fontSize: { default: null, [inDocument]: fontSize.ui },
-    lineHeight: { default: null, [inDocument]: 1.55 },
-    tableLayout: { default: null, [inDocument]: "fixed" },
+    width: { default: null, [inDocument()]: "min(100%, 600px)" },
+    margin: { default: null, [inDocument()]: "24px auto" },
+    borderCollapse: { default: null, [inDocument()]: "collapse" },
+    color: { default: null, [inDocument()]: tokens.ink },
+    fontFamily: { default: null, [inDocument()]: tokens.fontMono },
+    fontSize: { default: null, [inDocument()]: fontSize.ui },
+    lineHeight: { default: null, [inDocument()]: 1.55 },
+    tableLayout: { default: null, [inDocument()]: "fixed" },
   },
   cell: {
-    padding: { default: null, [inDocument]: "8px 10px" },
-    borderWidth: { default: null, [inDocument]: "1px" },
-    borderStyle: { default: null, [inDocument]: "solid" },
-    borderColor: { default: null, [inDocument]: tokens.rule },
-    overflowWrap: { default: null, [inDocument]: "anywhere" },
-    textAlign: { default: null, [inDocument]: "left" },
-    verticalAlign: { default: null, [inDocument]: "top" },
+    padding: { default: null, [inDocument()]: "8px 10px" },
+    borderWidth: { default: null, [inDocument()]: "1px" },
+    borderStyle: { default: null, [inDocument()]: "solid" },
+    borderColor: { default: null, [inDocument()]: tokens.rule },
+    overflowWrap: { default: null, [inDocument()]: "anywhere" },
+    textAlign: { default: null, [inDocument()]: "left" },
+    verticalAlign: { default: null, [inDocument()]: "top" },
   },
   headerCell: {
-    backgroundColor: { default: null, [inDocument]: tokens.tray },
-    color: { default: null, [inDocument]: tokens.ink },
-    fontWeight: { default: null, [inDocument]: fontWeight.semibold },
+    backgroundColor: { default: null, [inDocument()]: tokens.tray },
+    color: { default: null, [inDocument()]: tokens.ink },
+    fontWeight: { default: null, [inDocument()]: fontWeight.semibold },
   },
   // Phrasing content, so an <img> laid out like an image block.
   image: {

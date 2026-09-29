@@ -30,13 +30,12 @@ import { withErasedBlocks } from "./draw-queue";
 import { useMotionPhase, useMotionPhases } from "./draw-queue-provider";
 import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
-import { documentNodeMarker } from "./markers.stylex";
+import { documentNodeMarker, proseMarker } from "./markers.stylex";
 import { reportReviewDocumentRenderError } from "./review-document-error-report";
 import { ReviewDocumentTitle } from "./review-document-surface";
 import { cssIdentifier, scrollToReviewHeading } from "./review-heading-scroll";
 import { useReviewRoots } from "./review-root-context";
 import type { SoftwareMapResolvedDataPayload } from "./software-map/software-map-snapshot";
-import { withClass } from "./stylex-props";
 
 interface Trace {
   label: string;
@@ -397,15 +396,13 @@ export const DocumentNode = memo(function DocumentNode({
 
   const prose = node.type === "markdown" || node.type === "trace_quote";
 
-  // The classes are markers: document styles place a block's own elements
-  // and prose by them, and the drawing styles its children by its phase.
+  // Document and drawing styles find a block's own elements by its
+  // data-review-node-id, and its prose by proseMarker.
   return (
     <div
-      {...withClass(
-        prose
-          ? "api-document-node api-document-node--prose"
-          : "api-document-node",
+      {...stylex.props(
         documentNodeMarker,
+        prose && proseMarker,
         drawStyles.blockChild,
         motion === "queued" && drawStyles.queued,
         motion === "landing" && drawStyles.landing,

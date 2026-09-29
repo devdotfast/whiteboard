@@ -12,6 +12,7 @@ import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { AuthoringCursorContext } from "./courier";
 import { documentStyles } from "./document-styles";
 import { ReviewSessionProvider } from "./host/review-session";
+import { documentMarker } from "./markers.stylex";
 import type { ReviewRoots } from "./review-root-context";
 import { ReviewRootsProvider } from "./review-root-context";
 import {
@@ -55,7 +56,7 @@ let container: HTMLElement, article: HTMLElement, root: Root;
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   article = document.createElement("article");
-  article.className = `review-document ${stylex.props(documentStyles.article).className}`;
+  article.className = `review-document ${stylex.props(documentStyles.article, documentMarker).className}`;
   container = document.createElement("div");
   article.append(container);
   document.body.append(article);

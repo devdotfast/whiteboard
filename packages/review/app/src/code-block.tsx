@@ -15,6 +15,7 @@ import {
 import { CopyButton } from "./copy-text";
 import { DiagramHeader } from "./diagram-header";
 import { drawStyles } from "./draw-styles";
+import { documentMarker } from "./markers.stylex";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 
@@ -219,6 +220,11 @@ function normalizeMarkdownCodeLanguage(language: string): ShjLanguage | null {
   }
 }
 
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
+
+// A block's own element: a child of the block's node.
+const inDocumentBlock = () => `${inDocument()}:is([data-review-node-id] > *)`;
+
 // The same figure as a diagram: hairline frame, tray header with the language
 // as its kind, the caption as its title, a line count and an icon-only copy
 // button; then the code, scrolling sideways, never wrapping.
@@ -228,15 +234,15 @@ const styles = stylex.create({
     maxWidth: {
       default: "100%",
       // A document block sits in the prose column.
-      ":is(.review-document .api-document-node > *)": `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
+      [inDocumentBlock()]: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
     },
     width: {
       default: null,
-      ":is(.review-document .api-document-node > *)": `min(100%, ${tokens.reviewProseMaxWidth})`,
+      [inDocumentBlock()]: `min(100%, ${tokens.reviewProseMaxWidth})`,
     },
     marginInline: {
       default: null,
-      ":is(.review-document .api-document-node > *)": "auto",
+      [inDocumentBlock()]: "auto",
     },
     marginBlock: "24px",
     overflow: "hidden",

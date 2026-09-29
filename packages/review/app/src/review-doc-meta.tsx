@@ -33,7 +33,6 @@ import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
 import { ReviewBranchRange, WORKING_TREE } from "./review-branch-range";
 import { useReviewDiffFiles } from "./review-diff-files-context";
-import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 
 interface ReviewDocumentMetaState {
@@ -173,14 +172,11 @@ export function ReviewDocumentMetaLine({
   }
 
   return (
-    // The class is a marker: the document and the contents read whether
+    // The attribute is a marker: the document and the contents read whether
     // the document has a header.
     <header
-      {...withClass(
-        "review-document-header",
-        styles.header,
-        drawStyles.blockChild,
-      )}
+      {...stylex.props(styles.header, drawStyles.blockChild)}
+      data-review-document-header
     >
       <div {...stylex.props(styles.row, styles.top)} data-review-copy-ignore>
         <div {...stylex.props(styles.row, styles.identity)}>

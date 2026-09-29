@@ -23,22 +23,23 @@ const REDUCED = "@media (prefers-reduced-motion: reduce)";
 const ease = "cubic-bezier(0.2, 0.7, 0.2, 1)";
 
 // A block's own elements: the children of a block in a phase.
-const landingChild = ':is(.api-document-node[data-motion="landing"] > *)';
+const landingChild = ':is([data-review-node-id][data-motion="landing"] > *)';
 
-const rewritingChild = ':is(.api-document-node[data-motion="rewriting"] > *)';
+const rewritingChild =
+  ':is([data-review-node-id][data-motion="rewriting"] > *)';
 
-const erasingChild = ':is(.api-document-node[data-motion="erasing"] > *)';
+const erasingChild = ':is([data-review-node-id][data-motion="erasing"] > *)';
 
 // A top-level section wears the ring on its own box, not the block's outline.
 const ringOnSection = ":is([data-region]):has(> .review-section)";
 
 // The section a top-level block renders.
-const regionOff = ':is(.api-document-node[data-region="off"] > *)';
+const regionOff = ':is([data-review-node-id][data-region="off"] > *)';
 
 const regionOn =
-  ':is(.api-document-node:is([data-region="writing"], [data-region="idle"]) > *)';
+  ':is([data-review-node-id]:is([data-region="writing"], [data-region="idle"]) > *)';
 
-const regionWriting = ':is(.api-document-node[data-region="writing"] > *)';
+const regionWriting = ':is([data-review-node-id][data-region="writing"] > *)';
 
 // SAFETY: StyleX compiles custom properties in keyframes; only its types
 // omit them.

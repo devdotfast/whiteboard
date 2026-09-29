@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { DocumentCodeView } from "./DocumentCodeView";
 import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
+import { codeInspectorMarker, documentMarker } from "./markers.stylex";
 import { peekResolutionOutcome } from "./peek-telemetry";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
 import { withClass } from "./stylex-props";
@@ -369,32 +370,35 @@ function mergedCodePeekRanges(
 
 const narrow = "@media (max-width: 720px)";
 
-// A block in a Review document shares the prose column.
-const inDocumentBlock = ":is(.review-document .api-document-node > *)";
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
-const inMapInspector = ":is(.software-map-code-inspector *)";
+// A block in a Review document shares the prose column.
+const inDocumentBlock = () => `${inDocument()}:is([data-review-node-id] > *)`;
+
+const inMapInspector = () =>
+  stylex.when.ancestor(":is(*)", codeInspectorMarker);
 
 // Peeks keep the `code-peek` class: document-embed-scroll.ts finds embeds by it.
 const styles = stylex.create({
   peek: {
     width: {
       default: null,
-      [inDocumentBlock]: `min(100%, ${tokens.reviewProseMaxWidth})`,
+      [inDocumentBlock()]: `min(100%, ${tokens.reviewProseMaxWidth})`,
     },
     minWidth: 0,
     maxWidth: {
       default: "100%",
-      [inDocumentBlock]: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
+      [inDocumentBlock()]: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
     },
-    marginInline: { default: null, [inDocumentBlock]: "auto" },
-    overflow: { default: null, [inMapInspector]: "visible" },
+    marginInline: { default: null, [inDocumentBlock()]: "auto" },
+    overflow: { default: null, [inMapInspector()]: "visible" },
     padding: {
       default: null,
-      [inMapInspector]: { default: 0, [narrow]: "0 8px 8px" },
+      [inMapInspector()]: { default: 0, [narrow]: "0 8px 8px" },
     },
     overscrollBehavior: {
       default: null,
-      [inMapInspector]: { default: null, [narrow]: "contain" },
+      [inMapInspector()]: { default: null, [narrow]: "contain" },
     },
     color: tokens.ink,
     fontFamily: tokens.fontMono,
