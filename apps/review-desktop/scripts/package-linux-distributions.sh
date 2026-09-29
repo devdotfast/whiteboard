@@ -20,7 +20,7 @@ if [[ "$FORMAT" == deb || "$FORMAT" == all ]]; then
   cp "$CHECKOUT"/.build/linux/deb/amd64/whiteboard*_amd64.deb "$DIST/"
 fi
 if [[ "$FORMAT" == arch || "$FORMAT" == all ]]; then
-  tar --zstd -cf "$DIST/whiteboard-payload.tar.zst" -C "$CHECKOUT/.build/linux/arch/x86_64/package" usr
+  tar --zstd --owner=0 --group=0 -cf "$DIST/whiteboard-payload.tar.zst" -C "$CHECKOUT/.build/linux/arch/x86_64/package" usr
   CHANNEL=$(node -p "require('$APP_DIR/VSCode-linux-x64/resources/app/product.json').quality")
   VERSION=$(node -p "require('$APP_DIR/package.json').version.replace('-preview.', '~preview.')")
   bash "$APP_DIR/scripts/linux/build-arch-package.sh" "$DIST" "$CHANNEL" "$VERSION" "${REVIEW_LINUX_PACKAGE_REVISION:-1}"
