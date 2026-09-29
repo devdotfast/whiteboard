@@ -3,6 +3,7 @@ import {
   reviewInstanceUnavailable,
   selectReviewInstance,
 } from "@review/desktop-discovery.js";
+import { desktopApplicationInstalled } from "@review/review-app-launcher.js";
 import {
   readReviewServerDiscovery,
   reviewServerIsHealthy,
@@ -41,9 +42,17 @@ export async function connectReviewApi(
   return (await connectReviewInstance(env, headers)).client;
 }
 
+export interface ConnectReviewOptions {
+  /** The launcher's own check by default. */
+  desktopInstalled?: () => boolean;
+  /** The CLI that starts a background server; this process's by default. */
+  cli?: readonly string[];
+}
+
 export async function connectReviewInstance(
   env = process.env,
   headers: Record<string, string> = {},
+  options: ConnectReviewOptions = {},
 ): Promise<ConnectedReview> {
   const request: ConstructorParameters<typeof ReviewApiClient>[1] = (
     url,
@@ -73,6 +82,30 @@ export async function connectReviewInstance(
 
   const selection = await selectReviewInstance({ env });
   const discovery = healthyReviewInstance(selection);
+
+  // With no Desktop to start, the CLI keeps this machine's own server up.
+  if (
+    !discovery &&
+    !(
+      options.desktopInstalled ?? (() => desktopApplicationInstalled({ env }))
+    )()
+  ) {
+    const { ensureBackgroundServer } =
+      await import("@review/server/background-server.js");
+
+    const { discovery: server } = await ensureBackgroundServer({
+      stateDir: reviewServerStateDir(env),
+      env,
+      cli: options.cli,
+    });
+
+    return {
+      client: new ReviewApiClient(
+        { serverUrl: server.url, token: server.token },
+        request,
+      ),
+    };
+  }
 
   if (!discovery)
     throw new Error(

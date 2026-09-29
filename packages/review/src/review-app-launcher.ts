@@ -1,5 +1,12 @@
 import { type SpawnOptions, spawn } from "node:child_process";
-import { closeSync, fstatSync, mkdtempSync, openSync, readSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdtempSync,
+  openSync,
+  readSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -225,6 +232,32 @@ export async function focusReviewDesktop(
         : result.error,
     );
   }
+}
+
+/**
+ * Whether launchDesktopApplication has an installed app to start. Only a
+ * Linux launcher can be checked without launching; elsewhere, assume one.
+ */
+export function desktopApplicationInstalled(
+  input: Pick<
+    LaunchDesktopApplicationInput,
+    "platform" | "electron" | "env"
+  > & {
+    exists?: (path: string) => boolean;
+  } = {},
+): boolean {
+  const env = input.env ?? process.env;
+
+  if (
+    (input.platform ?? process.platform) !== "linux" ||
+    (input.electron ?? Boolean(process.versions.electron)) ||
+    env.DEV_FAST_REVIEW_DESKTOP_COMMAND?.trim()
+  )
+    return true;
+
+  return Object.values(RELEASE_APPS).some(({ linuxLauncher }) =>
+    (input.exists ?? existsSync)(linuxLauncher),
+  );
 }
 
 export function launchDesktopApplication(
