@@ -44,8 +44,7 @@ export function CourierFigure({
         {...stylex.props(
           styles.line,
           board && styles.still,
-          march && styles.marchLeft,
-          marching && styles.badgeMarchLeft,
+          (march || marching) && styles.marchLeft,
           sit && styles.sitLeft,
         )}
         d="M9 24v7h-4"
@@ -54,8 +53,7 @@ export function CourierFigure({
         {...stylex.props(
           styles.line,
           board && styles.still,
-          march && styles.marchRight,
-          marching && styles.badgeMarchRight,
+          (march || marching) && styles.marchRight,
           sit && styles.sitRight,
         )}
         d="M19 24v7h4"
@@ -155,20 +153,6 @@ const styles = stylex.create({
     animationDuration: { default: "480ms", [REDUCED]: "0s" },
     animationTimingFunction: { default: "ease-in-out", [REDUCED]: "ease" },
     animationIterationCount: { default: "infinite", [REDUCED]: 1 },
-  },
-  // The badge's legs keep marching under reduced motion. A known bug, kept
-  // as it was.
-  badgeMarchLeft: {
-    animationName: marchLeft,
-    animationDuration: "480ms",
-    animationTimingFunction: "ease-in-out",
-    animationIterationCount: "infinite",
-  },
-  badgeMarchRight: {
-    animationName: marchRight,
-    animationDuration: "480ms",
-    animationTimingFunction: "ease-in-out",
-    animationIterationCount: "infinite",
   },
   // Sitting eases in, reduced motion included.
   sitLeft: {

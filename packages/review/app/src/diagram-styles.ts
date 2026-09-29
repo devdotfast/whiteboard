@@ -92,11 +92,10 @@ export const diagramStyles = stylex.create({
     paddingRight: "26px",
     overflow: "hidden",
     appearance: "none",
-    // The hover wash replaces the whole background, chevron included.
-    backgroundImage: { default: tokens.chevronDown, ":hover": "none" },
-    backgroundRepeat: { default: "no-repeat", ":hover": "repeat" },
-    backgroundPosition: { default: "right 8px center", ":hover": "0% 0%" },
-    backgroundSize: { default: "12px 12px", ":hover": "auto" },
+    backgroundImage: tokens.chevronDown,
+    backgroundRepeat: "no-repeat",
+    backgroundPosition: "right 8px center",
+    backgroundSize: "12px 12px",
     textOverflow: "ellipsis",
   },
 });
