@@ -69,7 +69,8 @@ export function IconButton({
   );
 }
 
-const expanded = ':is([aria-expanded="true"])';
+// Only popup triggers: disclosure toggles also carry aria-expanded.
+const expanded = ':is([aria-haspopup][aria-expanded="true"])';
 
 // Exported only for a button another component renders (an OptionMenu trigger).
 export const buttonStyles = stylex.create({
