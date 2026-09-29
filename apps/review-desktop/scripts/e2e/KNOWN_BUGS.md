@@ -25,6 +25,9 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 - Home offers no way to dismiss an active review — open
 - The tutorial's live editor gets no hover or Go to Definition — open
 - Activating the Go extension opens its welcome page over the review — open
+- Peeks and tour stops never offer to show their element in the software map — open
+- A focus request that mounts the Map view loses to its default selection — open
+- The Trace view lists retained traces in the order they finish loading — open
 
 ## Template (copy, do not edit)
 
@@ -476,3 +479,50 @@ Server` cannot help — the captured workspace is never re-read. The fix
   `go.showWelcome` is false. `reviewConfigurationDefaults.ts` already turns off
   the extension's survey and update prompts (`go.survey.prompt`,
   `go.toolsManagement.checkForUpdates`), but not this one.
+
+## Peeks and tour stops never offer to show their element in the software map
+
+- **Journey:** `canvas-resume` · **Found:** 2026-09-28 · **Status:** open
+- **Repro:** open the tutorial with the software map enabled and start the
+  database lens tour under Interactive Diagrams; its actors name
+  `softwareMapPath`s such as `orderService.application.orders`.
+- **Expected:** a stop whose element is on the map shows its
+  "Show … in software map" button, as the side peek and tour stop render it.
+- **Actual:** no `button[aria-label$=" in software map"]` renders anywhere, so
+  the map focus request is unreachable from the UI. The journey reaches it
+  through the review action the button would call.
+- **Notes:** the buttons (`review-components.tsx:615`, `:974`) render only when
+  `PeekAnchor.softwareMapPath` is set, and nothing sets it; `database-lens.tsx`
+  copies the definition's `softwareMapPath` only into its own mini-map. Also on
+  `origin/main`.
+
+## A focus request that mounts the Map view loses to its default selection
+
+- **Journey:** `canvas-resume` · **Found:** 2026-09-28 · **Status:** open
+- **Repro:** in the tutorial, before the Map view has been opened, request the
+  map focus of `orderService.application.orders` (the review action the
+  "Show … in software map" button calls).
+- **Expected:** the Map view opens with `orderService.application.orders`
+  expanded to and selected.
+- **Actual:** the Map view opens with its first node, `orderService`, selected.
+  A second request, once the Map view has stored its navigation, selects the
+  element.
+- **Notes:** on the first mount `SoftwareMap.tsx` has no stored selection. The
+  focus effect (`:401`) sets the selection, then the normalization effect
+  (`:580`), still holding the render's `null`, replaces it with the first node
+  of the snapshot. The request is consumed once handled, so the focus is lost.
+  The same two effects are on `ca17c9a62` (by reading; not run there).
+
+## The Trace view lists retained traces in the order they finish loading
+
+- **Journey:** `canvas-resume` · **Found:** 2026-09-28 · **Status:** open
+- **Repro:** create a review with two `trace_quote` blocks that quote two
+  different retained traces, open it and open the Trace view's picker.
+- **Expected:** the picker lists the traces in document order and defaults to
+  the first.
+- **Actual:** the order, and so the default trace, changes from load to load.
+  The journey delays the second trace's resource by 1.5 s so the first trace is
+  always the default, then asserts the reader's pick over it.
+- **Notes:** `api-document.tsx:149` fills `data.traces` as each resource read
+  resolves inside a `Promise.all`, and `ReviewTraceView.tsx` takes the list and
+  default from that map's insertion order.
