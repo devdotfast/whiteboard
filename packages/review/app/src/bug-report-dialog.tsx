@@ -1,3 +1,4 @@
+import { Button, IconButton } from "@canvas/ui/button";
 import {
   type ReviewBugReportRequest,
   parseReviewBugReportResponse,
@@ -20,6 +21,7 @@ import {
 import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
 import { BugIcon } from "./icons";
+import { fontSize, fontWeight } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { useToast } from "./toast";
 import { tokens } from "./tokens.stylex";
@@ -200,16 +202,15 @@ export function BugReportControl({
 
   return (
     <>
-      <button
-        type="button"
-        {...stylex.props(shellStyles.topbarItem, styles.topbarButton)}
+      <IconButton
+        xstyle={shellStyles.topbarItem}
         aria-label="Report a bug"
         ref={tooltip}
         disabled={tutorial !== null || capturing}
         onClick={() => void openDialog()}
       >
         <BugIcon xstyle={controlStyles.chromeIcon} />
-      </button>
+      </IconButton>
       {open && (
         <div
           {...stylex.props(shellStyles.topbarItem, styles.backdrop)}
@@ -291,15 +292,14 @@ export function BugReportControl({
                         src={screenshot}
                         alt="Screenshot preview"
                       />
-                      <button
-                        type="button"
-                        {...stylex.props(styles.screenshotRemove)}
+                      <IconButton
+                        xstyle={styles.screenshotRemove}
                         aria-label="Remove screenshot"
                         title="Remove screenshot"
                         onClick={() => setScreenshot(null)}
                       >
                         ×
-                      </button>
+                      </IconButton>
                     </>
                   ) : (
                     <span {...stylex.props(styles.small, styles.faint)}>
@@ -315,21 +315,23 @@ export function BugReportControl({
                 remove it.
               </p>
               <div {...stylex.props(styles.actions)}>
-                <button
-                  type="button"
-                  {...stylex.props(styles.action)}
+                <Button
+                  size="large"
+                  xstyle={styles.action}
                   onClick={cancel}
                   disabled={sending}
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  {...stylex.props(styles.action, styles.submit)}
+                  variant="primary"
+                  size="large"
+                  xstyle={styles.action}
                   disabled={!canSend}
                 >
                   {sending ? "Sending..." : "Send"}
-                </button>
+                </Button>
               </div>
             </form>
           </section>
@@ -352,35 +354,6 @@ const chromeBorder = {
 } as const;
 
 const styles = stylex.create({
-  topbarButton: {
-    display: "grid",
-    alignItems: "center",
-    justifyContent: "center",
-    width: tokens.chromeControlHeight,
-    height: tokens.chromeControlHeight,
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: tokens.chromeControlRadius,
-    backgroundColor: {
-      default: tokens.transparent,
-      ":hover:not(:disabled)": tokens.chromeHoverBg,
-      ":focus-visible:not(:disabled)": tokens.chromeHoverBg,
-    },
-    color: {
-      default: tokens.chromeIconFg,
-      ":hover:not(:disabled)": tokens.chromeFg,
-      ":focus-visible:not(:disabled)": tokens.chromeFg,
-    },
-    cursor: { default: "pointer", ":disabled": "default" },
-    opacity: { default: null, ":disabled": 0.45 },
-    outline: {
-      default: null,
-      ":hover:not(:disabled)": "none",
-      ":focus-visible:not(:disabled)": "none",
-    },
-  },
   backdrop: {
     position: "fixed",
     zIndex: 10000,
@@ -474,27 +447,12 @@ const styles = stylex.create({
     borderRadius: "4px",
   },
   screenshotRemove: {
-    display: "grid",
-    width: "26px",
-    height: "26px",
-    placeItems: "center",
-    ...chromeBorder,
-    borderColor: {
-      default: tokens.chromeBorder,
-      ":hover": tokens.chromeActiveBorder,
-      ":focus-visible": tokens.chromeActiveBorder,
-    },
-    borderRadius: "4px",
-    padding: 0,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.chromeBorder,
     backgroundColor: tokens.tray,
-    color: {
-      default: tokens.inkFaint,
-      ":hover": tokens.ink,
-      ":focus-visible": tokens.ink,
-    },
-    font: { default: "inherit", [inApp]: `18px/1 ${tokens.chromeFont}` },
-    cursor: "pointer",
-    outline: { default: null, ":hover": "none", ":focus-visible": "none" },
+    fontSize: fontSize.heading,
+    fontWeight: fontWeight.regular,
   },
   faint: {
     color: tokens.inkFaint,
@@ -510,15 +468,5 @@ const styles = stylex.create({
   },
   action: {
     minWidth: "76px",
-    ...chromeBorder,
-    borderRadius: "4px",
-    padding: "7px 12px",
-    backgroundColor: tokens.tray,
-    color: tokens.ink,
-    cursor: { default: "pointer", ":disabled": "default" },
-    opacity: { default: null, ":disabled": 0.45 },
-  },
-  submit: {
-    borderColor: tokens.rpc,
   },
 });

@@ -1,3 +1,4 @@
+import { Button } from "@canvas/ui/button";
 import { type ReviewAgentTraceSession } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -244,12 +245,12 @@ export function ReviewTraceView({
           )}
         {targets.length > 1 && activeTarget && (
           <div {...stylex.props(styles.picker)} ref={pickerRef}>
-            <button
-              type="button"
-              {...stylex.props(
+            <Button
+              size="large"
+              xstyle={[
                 styles.pickerTrigger,
                 pickerOpen && styles.pickerTriggerOpen,
-              )}
+              ]}
               aria-haspopup="listbox"
               aria-expanded={pickerOpen}
               onClick={() => setPickerOpen((open) => !open)}
@@ -266,7 +267,7 @@ export function ReviewTraceView({
               >
                 <ChevronIcon />
               </span>
-            </button>
+            </Button>
             {pickerOpen && (
               <div {...stylex.props(styles.pickerMenu)} role="listbox">
                 {targets.map((target) => {

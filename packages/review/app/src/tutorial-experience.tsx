@@ -1,3 +1,4 @@
+import { Button, IconButton } from "@canvas/ui/button";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
@@ -19,6 +20,7 @@ import {
   reviewInteractionDetail,
 } from "./review-interaction-event";
 import { useOptionalReviewPanel } from "./review-panel";
+import { fontSize, fontWeight } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { useTutorial } from "./tutorial-context";
 import {
@@ -406,14 +408,13 @@ function TutorialGuide({
         <span {...stylex.props(styles.guideChapter)}>
           Chapter {chapterLabel} of {TUTORIAL_CHAPTERS.length}
         </span>
-        <button
-          type="button"
+        <IconButton
+          xstyle={styles.guideClose}
           onClick={experience.onDismiss}
           aria-label="Hide tutorial"
-          {...stylex.props(styles.guideClose)}
         >
           ×
-        </button>
+        </IconButton>
       </header>
       <div {...stylex.props(styles.progress)} aria-hidden="true">
         <span
@@ -434,38 +435,25 @@ function TutorialGuide({
         </p>
       </div>
       <footer {...stylex.props(styles.guideFooter)}>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           onClick={experience.onBack}
           disabled={activeIndex <= 0}
-          {...stylex.props(styles.footerButton)}
         >
           Back
-        </button>
+        </Button>
         {activeStep?.completion === "finish" ? (
-          <button
-            type="button"
-            onClick={experience.onFinish}
-            {...stylex.props(styles.footerButton)}
-          >
+          <Button variant="ghost" onClick={experience.onFinish}>
             Finish tour
-          </button>
+          </Button>
         ) : activeStep ? (
-          <button
-            type="button"
-            onClick={experience.onNext}
-            {...stylex.props(styles.footerButton)}
-          >
+          <Button variant="ghost" onClick={experience.onNext}>
             Next
-          </button>
+          </Button>
         ) : (
-          <button
-            type="button"
-            onClick={experience.onClose}
-            {...stylex.props(styles.footerButton)}
-          >
+          <Button variant="ghost" onClick={experience.onClose}>
             Close tutorial
-          </button>
+          </Button>
         )}
       </footer>
     </aside>
@@ -684,23 +672,8 @@ const styles = stylex.create({
     textTransform: "uppercase",
   },
   guideClose: {
-    display: "grid",
-    placeItems: "center",
-    width: "24px",
-    height: "24px",
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: "5px",
-    backgroundColor: {
-      default: tokens.transparent,
-      ":hover": tokens.controlBg,
-    },
-    color: { default: tokens.inkMuted, ":hover": tokens.ink },
-    fontFamily: tokens.fontMono,
-    fontSize: "17px",
-    fontWeight: 500,
+    fontSize: fontSize.heading,
+    fontWeight: fontWeight.medium,
   },
   progress: {
     height: "2px",
@@ -748,21 +721,6 @@ const styles = stylex.create({
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.ruleSoft,
-  },
-  footerButton: {
-    padding: "4px 7px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: "5px",
-    backgroundColor: {
-      default: tokens.transparent,
-      ":hover:not(:disabled)": tokens.controlBg,
-    },
-    color: { default: tokens.inkMuted, ":hover:not(:disabled)": tokens.ink },
-    cursor: { default: null, ":disabled": "default" },
-    font: `11px ${tokens.fontMono}`,
-    opacity: { default: null, ":disabled": 0.42 },
   },
   // The hidden tutorial: a small floating button in the same corner.
   pill: {

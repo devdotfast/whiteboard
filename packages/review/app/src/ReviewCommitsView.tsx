@@ -1,3 +1,4 @@
+import { IconButton } from "@canvas/ui/button";
 import {
   type ReviewCommitSummary,
   type ReviewDiffFileWire,
@@ -15,8 +16,6 @@ import { chevronMarker } from "./markers.stylex";
 import { shortRef } from "./review-branch-range";
 import { ReviewUnavailable } from "./review-empty-state";
 import { countLabel } from "./review-home-view";
-import { shellStyles } from "./shell-styles";
-import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
 import { useTooltip } from "./use-tooltip";
@@ -166,18 +165,16 @@ function CommitRow({
           <CopyButton
             text={commit.commit}
             label="Copy commit SHA"
-            xstyle={shellStyles.topbarIconButton}
             iconStyle={controlStyles.chromeIcon}
           />
-          <button
+          <IconButton
             ref={openTooltip}
-            type="button"
-            {...withClass("review-commit-open", shellStyles.topbarIconButton)}
+            className="review-commit-open"
             aria-label="Open commit diff"
             onClick={() => onOpenDiff(commit, "row")}
           >
             <CodeIcon xstyle={controlStyles.chromeIcon} />
-          </button>
+          </IconButton>
         </span>
         <span {...stylex.props(styles.meta)}>
           {commit.author} · {formatCommitTime(commit.authoredAt)} ·{" "}

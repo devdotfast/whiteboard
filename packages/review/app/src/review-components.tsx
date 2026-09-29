@@ -1,3 +1,4 @@
+import { IconButton } from "@canvas/ui/button";
 import type { ReviewComponentProps } from "@review/review-document-data";
 import * as stylex from "@stylexjs/stylex";
 import type {
@@ -133,14 +134,14 @@ function ReviewPanelFrame({
           {title && <h2 {...stylex.props(panelStyles.heading)}>{title}</h2>}
           {titleAccessory}
         </div>
-        <button
-          type="button"
-          {...stylex.props(controlStyles.iconButton, panelStyles.close)}
+        <IconButton
+          size="large"
+          xstyle={panelStyles.close}
           onClick={onClose}
           aria-label={closeLabel}
         >
           <CloseIcon xstyle={controlStyles.inertIcon} />
-        </button>
+        </IconButton>
       </header>
       <div
         ref={bodyRef}
@@ -230,15 +231,15 @@ export function ReviewSection({
           tutorialSection.state === "complete" && sectionStyles.complete,
         )}
       >
-        <button
-          type="button"
-          {...stylex.props(chevronMarker, sectionStyles.toggle)}
+        <IconButton
+          size="small"
+          xstyle={[chevronMarker, sectionStyles.toggle]}
           aria-expanded={!collapsed}
           aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
           onClick={toggleCollapsed}
         >
           <DisclosureChevron expanded={!collapsed} />
-        </button>
+        </IconButton>
         <div {...withClass("review-section-heading", sectionStyles.heading)}>
           <h2
             id={id}
@@ -648,20 +649,16 @@ function CodeReviewPeekPanel({
       <div {...stylex.props(panelStyles.peekBody)}>
         {softwareMapEnabled && anchor.softwareMapPath ? (
           <div {...stylex.props(panelStyles.peekActions)}>
-            <button
-              type="button"
+            <IconButton
+              size="large"
               onClick={() => {
                 openSoftwareMapElement(anchor.softwareMapPath!);
                 onClose();
               }}
-              {...stylex.props(
-                controlStyles.iconButton,
-                controlStyles.iconButtonPeek,
-              )}
               aria-label={`Show ${anchor.title} in software map`}
             >
               <MapPinIcon xstyle={controlStyles.inertIcon} />
-            </button>
+            </IconButton>
           </div>
         ) : null}
 
@@ -909,27 +906,25 @@ export function GuidedTourPanel({
                 role="group"
                 aria-label="Tour steps"
               >
-                <button
-                  type="button"
-                  {...stylex.props(tourStyles.pillButton)}
+                <IconButton
+                  xstyle={tourStyles.pillButton}
                   aria-label="Previous step"
                   disabled={displayIndex === 0}
                   onClick={() => stepTo(displayIndex - 1)}
                 >
                   ↑
-                </button>
+                </IconButton>
                 <span className="tour-pill-count" aria-live="polite">
                   {displayIndex + 1}/{tour.stops.length}
                 </span>
-                <button
-                  type="button"
-                  {...stylex.props(tourStyles.pillButton)}
+                <IconButton
+                  xstyle={tourStyles.pillButton}
                   aria-label="Next step"
                   disabled={displayIndex === lastIndex}
                   onClick={() => stepTo(displayIndex + 1)}
                 >
                   ↓
-                </button>
+                </IconButton>
               </div>
             )}
           </div>
@@ -1043,9 +1038,8 @@ function GuidedTourStopMain({
         </div>
         {softwareMapEnabled && stop.anchor.softwareMapPath ? (
           <div {...stylex.props(panelStyles.peekActions)}>
-            <button
-              type="button"
-              {...stylex.props(controlStyles.iconButton)}
+            <IconButton
+              size="large"
               aria-label={`Show ${stop.anchor.title} in software map`}
               onClick={() => {
                 openSoftwareMapElement(stop.anchor.softwareMapPath!);
@@ -1053,7 +1047,7 @@ function GuidedTourStopMain({
               }}
             >
               <MapPinIcon xstyle={controlStyles.inertIcon} />
-            </button>
+            </IconButton>
           </div>
         ) : null}
       </header>
@@ -1140,26 +1134,8 @@ const sectionStyles = stylex.create({
   // without hovering the header first.
   toggle: {
     position: "absolute",
-    top: "5px",
-    left: "-28px",
-    display: "grid",
-    placeItems: "center",
-    width: "18px",
-    height: "18px",
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: "4px",
-    backgroundColor: tokens.transparent,
-    color: {
-      default: tokens.inkFaint,
-      ":hover": tokens.inkMuted,
-      ":focus-visible": tokens.inkMuted,
-    },
-    outline: { default: null, ":hover": "none", ":focus-visible": "none" },
-    opacity: 1,
-    transition: "opacity 120ms ease",
+    top: "4px",
+    left: "-29px",
   },
   heading: {
     minWidth: 0,

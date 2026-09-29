@@ -1,3 +1,4 @@
+import { Button, IconButton } from "@canvas/ui/button";
 import {
   type ReviewCanvasRange,
   type ReviewCommitSummary,
@@ -69,6 +70,7 @@ import { offeredReviewViews, reviewViewLabel } from "./review-view-route";
 import { useReviewViewStateSync } from "./review-view-state";
 import { ReviewCommitsView } from "./ReviewCommitsView";
 import { ReviewTraceView } from "./ReviewTraceView";
+import { elevation, radius } from "./scale.stylex";
 import { ShareControl } from "./share-control";
 import { shellStyles } from "./shell-styles";
 import { useRightPanelResize } from "./side-panel-resizer";
@@ -625,9 +627,9 @@ function ReviewLayoutContent({
                 )}
               >
                 {!scratchpad && (
-                  <button
-                    type="button"
-                    {...stylex.props(shellStyles.openSourceTree)}
+                  <Button
+                    variant="ghost"
+                    xstyle={shellStyles.openSourceTree}
                     aria-label="Source tree ↗"
                     ref={sourceTreeTooltip}
                     onClick={() => {
@@ -644,7 +646,7 @@ function ReviewLayoutContent({
                       Source tree
                     </span>
                     <span aria-hidden="true">↗</span>
-                  </button>
+                  </Button>
                 )}
                 <AuthoringActivityBadge
                   onLocate={(view) => {
@@ -661,12 +663,8 @@ function ReviewLayoutContent({
                 />
               </div>
               <ShareControl />
-              <button
-                type="button"
-                {...stylex.props(
-                  shellStyles.topbarItem,
-                  shellStyles.topbarIconButton,
-                )}
+              <IconButton
+                xstyle={shellStyles.topbarItem}
                 ref={discordTooltip}
                 aria-label="Join our Discord community"
                 onClick={() => {
@@ -677,7 +675,7 @@ function ReviewLayoutContent({
                 }}
               >
                 <DiscordIcon xstyle={controlStyles.chromeIcon} />
-              </button>
+              </IconButton>
               <BugReportControl />
               <ReviewBatonChip outcome={review.submissionOutcome} />
               <DiffLayoutControl />
@@ -701,9 +699,7 @@ function ReviewLayoutContent({
           {review.historicalRevision ? (
             <div {...stylex.props(shellStyles.historyBanner)} role="status">
               <span>You are viewing an older version of this session.</span>
-              <button
-                type="button"
-                {...stylex.props(shellStyles.historyBannerButton)}
+              <Button
                 onClick={() =>
                   void session.surface.post({
                     name: "openReviewRevision",
@@ -712,7 +708,7 @@ function ReviewLayoutContent({
                 }
               >
                 Back to latest
-              </button>
+              </Button>
             </div>
           ) : null}
           {activeView === "review" && documentState.state === "ready" && (
@@ -1150,18 +1146,18 @@ function MapSettingsControl(): ReactElement {
           </div>
         </section>
       )}
-      <button
-        type="button"
-        {...stylex.props(
+      <IconButton
+        size="large"
+        xstyle={[
           mapSettingsStyles.trigger,
           isOpen && mapSettingsStyles.triggerActive,
-        )}
+        ]}
         aria-label="Map settings"
         aria-expanded={isOpen}
         onClick={() => setIsOpen((open) => !open)}
       >
         <SettingsSlidersIcon />
-      </button>
+      </IconButton>
     </div>
   );
 }
@@ -1258,19 +1254,14 @@ const mapSettingsStyles = stylex.create({
     alignItems: "flex-end",
     gap: "8px",
   },
+  // A floating corner control, so it keeps a border and lifts off the map.
   trigger: {
-    display: "inline-flex",
-    width: "30px",
-    height: "30px",
-    alignItems: "center",
-    justifyContent: "center",
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: { default: tokens.ruleSoft, ":hover": tokens.accent },
-    borderRadius: "8px",
+    borderRadius: radius.surface,
     backgroundColor: tokens.surfaceRaised,
-    color: { default: tokens.inkMuted, ":hover": tokens.ink },
-    boxShadow: `0 6px 18px ${tokens.shadowColorStrong}`,
+    boxShadow: elevation.popover,
   },
   triggerActive: {
     borderColor: tokens.accent,

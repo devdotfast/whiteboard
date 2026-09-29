@@ -6,6 +6,7 @@ import {
   traceToolMarker,
   traceWorkedMarker,
 } from "./markers.stylex";
+import { elevation, fontWeight } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 // The agent trace view, and the trace scoped into a side peek.
@@ -71,23 +72,16 @@ export const traceStyles = stylex.create({
     display: "inline-block",
     marginBottom: "20px",
   },
+  // A secondary Button that stands off the page like a select.
   pickerTrigger: {
-    display: "inline-flex",
-    alignItems: "center",
+    justifyContent: "flex-start",
     gap: "8px",
     maxWidth: "min(680px, 100%)",
-    height: "28px",
-    padding: "0 10px",
-    borderRadius: "6px",
-    borderWidth: "1px",
-    borderStyle: "solid",
     borderColor: { default: tokens.rule, ":hover": tokens.ruleSoft },
     backgroundColor: { default: tokens.surface, ":hover": tokens.tray },
     color: tokens.ink,
-    fontSize: "12.5px",
-    cursor: "pointer",
-    boxShadow: `0 1px 2px ${tokens.shadowColor}`,
-    transition: "border-color 0.15s ease, background 0.15s ease",
+    fontWeight: fontWeight.regular,
+    boxShadow: elevation.raised,
   },
   pickerTriggerOpen: {
     borderColor: tokens.accent,

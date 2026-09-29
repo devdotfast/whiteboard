@@ -1,3 +1,4 @@
+import { Button } from "@canvas/ui/button";
 import {
   REVIEW_DISCORD_URL,
   type ReviewCanvasInstallContent,
@@ -177,14 +178,10 @@ export function WelcomePage({
         </p>
         {installDone ? <StepDoneButton label="Installed" primary /> : null}
         {installOffered ? (
-          <button
-            type="button"
-            {...stylex.props(
-              styles.stepButton,
-              installDone && styles.stepButtonNext,
-              styles.primary,
-              styles.compact,
-            )}
+          <Button
+            variant="primary"
+            size="large"
+            xstyle={[styles.stepButton, installDone && styles.stepButtonNext]}
             disabled={setupBusy}
             onClick={() =>
               void runSetup(async () => {
@@ -194,23 +191,23 @@ export function WelcomePage({
             }
           >
             Install whiteboard in PATH
-          </button>
+          </Button>
         ) : null}
         {setupActions &&
         (!install ||
           cliBuildMissing ||
           (status?.shim.installed && !installed)) ? (
-          <button
-            type="button"
-            {...stylex.props(
+          <Button
+            size="large"
+            xstyle={[
               styles.stepButton,
               (installDone || installOffered) && styles.stepButtonNext,
-            )}
+            ]}
             disabled={setupBusy}
             onClick={() => void runSetup(refreshInstall)}
           >
             {setupBusy ? "Refreshing…" : "Refresh"}
-          </button>
+          </Button>
         ) : null}
         {setupError ? (
           <p role="alert" {...stylex.props(promptStyles.error)}>
@@ -287,20 +284,15 @@ export function WelcomePage({
       disabled: !canDismiss,
       done: updateFinished,
       body: (
-        <button
-          type="button"
-          {...stylex.props(
-            styles.dismiss,
-            styles.stepButton,
-            styles.primary,
-            styles.compact,
-            styles.dismissState,
-          )}
+        <Button
+          variant="primary"
+          size="large"
+          xstyle={styles.dismiss}
           disabled={setupBusy || !canDismiss}
           onClick={dismissUpdate}
         >
           Dismiss
-        </button>
+        </Button>
       ),
     });
 
@@ -319,13 +311,13 @@ export function WelcomePage({
               Explore a sample session in three minutes.
             </p>
             {onOpenTutorial ? (
-              <button
-                type="button"
-                {...stylex.props(styles.stepButton)}
+              <Button
+                size="large"
+                xstyle={styles.stepButton}
                 onClick={onOpenTutorial}
               >
                 {tourChecked > 0 ? "Reopen the tutorial" : "Open the tutorial"}
-              </button>
+              </Button>
             ) : null}
           </>
         ),
@@ -395,23 +387,21 @@ export function WelcomePage({
                 </>
               )}
               {(updating || showLegacyStep) && install ? (
-                <button
-                  type="button"
-                  {...stylex.props(styles.dismiss, styles.dismissState)}
+                <Button
+                  xstyle={styles.dismiss}
                   disabled={setupBusy || !canDismiss}
                   onClick={dismissUpdate}
                 >
                   Dismiss
-                </button>
+                </Button>
               ) : onClose ? (
-                <button
-                  type="button"
-                  {...stylex.props(styles.dismiss, styles.dismissState)}
+                <Button
+                  xstyle={styles.dismiss}
                   disabled={setupBusy || !canDismiss}
                   onClick={onClose}
                 >
                   Close
-                </button>
+                </Button>
               ) : null}
             </div>
             <ol {...stylex.props(styles.steps)}>
@@ -520,19 +510,15 @@ function StepDoneButton({
   primary?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      {...stylex.props(
-        styles.stepButton,
-        primary && styles.primary,
-        primary && styles.compact,
-        styles.stepDone,
-      )}
+    <Button
+      variant={primary ? "primary" : "secondary"}
+      size="large"
+      xstyle={[styles.stepButton, styles.stepDone]}
       disabled
     >
       <DrawnCheckIcon />
       {label}
-    </button>
+    </Button>
   );
 }
 
@@ -621,18 +607,6 @@ const styles = stylex.create({
   dismiss: {
     alignSelf: "flex-start",
     marginTop: "4px",
-    padding: "3px 10px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.reviewHomeRuleSoft,
-    borderRadius: "5px",
-    color: tokens.reviewHomeMeta,
-    backgroundColor: tokens.transparent,
-    fontSize: "12px",
-  },
-  dismissState: {
-    cursor: { default: "pointer", ":disabled": "not-allowed" },
-    opacity: { default: null, ":disabled": 0.5 },
   },
   steps: {
     display: "flex",
@@ -735,41 +709,13 @@ const styles = stylex.create({
   },
   stepButton: {
     alignSelf: "flex-start",
-    padding: "3px 10px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.reviewHomeRuleSoft,
-    borderRadius: "5px",
-    color: "inherit",
-    backgroundColor: tokens.transparent,
-    cursor: "pointer",
-    fontSize: "12px",
   },
   stepButtonNext: {
     marginLeft: "8px",
   },
-  primary: {
-    minHeight: "42px",
-    padding: "10px 24px",
-    borderColor: tokens.accent,
-    color: tokens.onAccent,
-    backgroundColor: tokens.accent,
-    fontSize: "14px",
-    fontWeight: 600,
-    filter: { default: null, ":hover:not(:disabled)": "brightness(1.1)" },
-    outline: { default: null, ":focus-visible": `2px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "3px" },
-  },
-  compact: {
-    minHeight: "30px",
-    padding: "5px 12px",
-    fontSize: "12px",
-  },
+  // A finished step's button stays at full strength.
   stepDone: {
-    display: "inline-flex",
-    gap: "6px",
-    alignItems: "center",
-    cursor: "default",
+    opacity: 1,
   },
   hint: {
     margin: "0 0 14px",

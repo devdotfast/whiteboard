@@ -10,12 +10,14 @@ import { useReviewSession } from "@canvas/host/review-session";
 import { CloseIcon, RefreshIcon } from "@canvas/icons";
 import { mapFrameMarker } from "@canvas/markers.stylex";
 import { useReviewContainer } from "@canvas/review-root-context";
+import { motion } from "@canvas/scale.stylex";
 import { shellStyles } from "@canvas/shell-styles";
 import { useRightPanelResize } from "@canvas/side-panel-resizer";
 import { withClass } from "@canvas/stylex-props";
 import { themeStyles } from "@canvas/theme-styles";
 import { tokens } from "@canvas/tokens.stylex";
 import { captureUiEvent } from "@canvas/ui-telemetry";
+import { IconButton } from "@canvas/ui/button";
 import { codePeekSource } from "@review/source";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -960,55 +962,44 @@ export function SoftwareMapFrame({
           </div>
           <div {...stylex.props(styles.actions)}>
             {onRefresh ? (
-              <button
-                type="button"
-                {...stylex.props(
-                  styles.iconButton,
-                  refreshing && styles.refreshing,
-                )}
+              <IconButton
+                xstyle={refreshing && styles.refreshing}
                 onClick={onRefresh}
                 aria-label="Refresh software map"
                 title="Refresh software map"
               >
                 <RefreshIcon />
-              </button>
+              </IconButton>
             ) : null}
             {expanded ? (
-              <button
-                type="button"
-                {...stylex.props(styles.iconButton)}
+              <IconButton
                 onClick={onClose}
                 aria-label="Close expanded software map"
               >
                 <CloseIcon />
-              </button>
+              </IconButton>
             ) : (
-              <button
-                type="button"
-                {...stylex.props(styles.iconButton, styles.expandButton)}
+              <IconButton
+                xstyle={styles.expandButton}
                 onClick={onExpand}
                 aria-label="Expand software map"
               >
                 <span {...stylex.props(styles.expandIcon)} aria-hidden="true" />
-              </button>
+              </IconButton>
             )}
           </div>
         </header>
       )}
       {showMapFloatingActions && onRefresh ? (
         <div {...stylex.props(styles.floatingActions)}>
-          <button
-            type="button"
-            {...stylex.props(
-              styles.iconButton,
-              refreshing && styles.refreshing,
-            )}
+          <IconButton
+            xstyle={refreshing && styles.refreshing}
             onClick={onRefresh}
             aria-label="Refresh software map"
             title="Refresh software map"
           >
             <RefreshIcon />
-          </button>
+          </IconButton>
         </div>
       ) : null}
 
@@ -1112,9 +1103,7 @@ function SoftwareMapCodeInspector({
         </div>
         <div {...stylex.props(styles.inspectorActions)}>
           {diffPeeks.length > 0 ? (
-            <button
-              type="button"
-              {...stylex.props(styles.iconButton)}
+            <IconButton
               onClick={() => setDiffsCollapsed((current) => !current)}
               aria-expanded={!diffsCollapsed}
               aria-label={collapseActionLabel}
@@ -1127,20 +1116,15 @@ function SoftwareMapCodeInspector({
                 )}
                 aria-hidden="true"
               />
-            </button>
+            </IconButton>
           ) : null}
           <SoftwareMapChangeBadge
             additions={node.additions}
             deletions={node.deletions}
           />
-          <button
-            type="button"
-            {...stylex.props(styles.iconButton)}
-            onClick={onClose}
-            aria-label="Close code inspector"
-          >
+          <IconButton onClick={onClose} aria-label="Close code inspector">
             <CloseIcon />
-          </button>
+          </IconButton>
         </div>
       </header>
       <div {...stylex.props(styles.inspectorDiffs)}>
@@ -2883,33 +2867,8 @@ const styles = stylex.create({
     backgroundColor: tokens.surface,
     boxShadow: `0 4px 18px ${tokens.shadowColor}`,
   },
-  iconButton: {
-    ...noBorder,
-    position: "relative",
-    display: "grid",
-    placeItems: "center",
-    width: "26px",
-    height: "26px",
-    padding: 0,
-    borderRadius: "3px",
-    backgroundColor: tokens.transparent,
-    color: {
-      default: tokens.inkFaint,
-      ":hover": tokens.inkMuted,
-      ":focus-visible": tokens.inkMuted,
-    },
-    outline: {
-      default: null,
-      ":focus-visible": `1px solid ${tokens.ruleSoft}`,
-    },
-    outlineOffset: { default: null, ":focus-visible": "2px" },
-  },
   refreshing: {
-    color: {
-      default: tokens.accent,
-      ":hover": tokens.inkMuted,
-      ":focus-visible": tokens.inkMuted,
-    },
+    color: tokens.accent,
   },
   // Shows while the pointer is over the map.
   expandButton: {
@@ -2918,7 +2877,7 @@ const styles = stylex.create({
       ":focus-visible": 1,
       [stylex.when.ancestor(":hover", mapFrameMarker)]: 1,
     },
-    transition: "opacity 120ms ease, color 120ms ease",
+    transition: `opacity ${motion.fast} ${motion.ease}, color ${motion.fast} ${motion.ease}`,
   },
   // Two corner brackets.
   expandIcon: {

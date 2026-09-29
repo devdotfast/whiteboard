@@ -1,3 +1,4 @@
+import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import type {
   ReviewApiSummary,
   ReviewCanvasInstallContent,
@@ -412,9 +413,8 @@ function RestoreReviewButton({ review }: { review: ReviewApiSummary }) {
   if (!onRestore) return null;
 
   return (
-    <button
-      type="button"
-      {...stylex.props(styles.restore)}
+    <Button
+      xstyle={styles.restore}
       disabled={busy}
       onClick={(event) => {
         event.stopPropagation();
@@ -425,7 +425,7 @@ function RestoreReviewButton({ review }: { review: ReviewApiSummary }) {
       }}
     >
       Undo
-    </button>
+    </Button>
   );
 }
 
@@ -648,12 +648,12 @@ function ReviewRowActions({ review }: { review: ReviewApiSummary }) {
       onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => event.stopPropagation()}
     >
-      <button
-        type="button"
-        {...stylex.props(
+      <IconButton
+        size="large"
+        xstyle={[
           rowMenuStyles.trigger,
-          menu.open && rowMenuStyles.expanded,
-        )}
+          menu.open && [buttonStyles.open, rowMenuStyles.expanded],
+        ]}
         aria-label={`Actions for ${reviewTitle(review)}`}
         {...menu.triggerProps}
         disabled={!ui?.confirmDelete}
@@ -667,7 +667,7 @@ function ReviewRowActions({ review }: { review: ReviewApiSummary }) {
           <circle cx="10" cy="10" r="1.6" />
           <circle cx="15.5" cy="10" r="1.6" />
         </svg>
-      </button>
+      </IconButton>
     </div>
   );
 }
@@ -691,7 +691,12 @@ function TableMenu<T extends string>({
       value={value}
       options={options}
       onChange={onChange}
-      triggerStyle={styles.menuTrigger}
+      triggerStyle={[
+        buttonStyles.base,
+        buttonStyles.secondary,
+        buttonStyles.large,
+        styles.menuTrigger,
+      ]}
     >
       <svg
         {...stylex.props(styles.menuIcon)}
@@ -801,9 +806,9 @@ function DismissReviewButton({ review }: { review: ReviewApiSummary }) {
   const title = reviewTitle(review);
 
   return (
-    <button
-      type="button"
-      {...stylex.props(styles.dismiss)}
+    <IconButton
+      size="small"
+      xstyle={styles.dismiss}
       aria-label={`Dismiss ${title}`}
       title="Dismiss session"
       disabled={busy}
@@ -817,7 +822,7 @@ function DismissReviewButton({ review }: { review: ReviewApiSummary }) {
       }}
     >
       <ArchiveIcon xstyle={styles.dismissIcon} />
-    </button>
+    </IconButton>
   );
 }
 
@@ -832,9 +837,9 @@ function DeleteReviewButton({
   const [busy, setBusy] = useState(false);
 
   return (
-    <button
-      type="button"
-      {...stylex.props(styles.delete)}
+    <IconButton
+      size="small"
+      xstyle={styles.delete}
       aria-label={`Delete ${reviewTitle(review)}`}
       title="Delete session"
       disabled={busy || !ui?.confirmDelete}
@@ -848,7 +853,7 @@ function DeleteReviewButton({
       }}
     >
       <TrashIcon />
-    </button>
+    </IconButton>
   );
 }
 
@@ -1008,28 +1013,15 @@ function TrashIcon() {
 }
 
 const rowMenuStyles = stylex.create({
+  // Waits for its row's hover or focus.
   trigger: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: "32px",
-    height: "32px",
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: "6px",
-    backgroundColor: { default: "transparent", ":hover": tokens.well },
-    color: tokens.ink,
     opacity: {
       default: 0,
       [stylex.when.ancestor(":hover")]: 1,
       [stylex.when.ancestor(":focus-within")]: 1,
     },
-    cursor: "pointer",
   },
   expanded: {
-    backgroundColor: tokens.well,
     opacity: 1,
   },
   icon: {
@@ -1302,40 +1294,13 @@ const styles = stylex.create({
     opacity: 0.75,
   },
   restore: {
-    flex: "0 0 auto",
-    padding: "4px 10px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.ruleSoft,
-    borderRadius: "6px",
-    backgroundColor: tokens.transparent,
     color: tokens.accent,
-    font: `600 11.5px ${tokens.fontMono}`,
   },
   delete: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: "22px",
-    height: "22px",
-    padding: "0 4px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: "4px",
     color: {
-      default: tokens.inkFaint,
+      default: tokens.chromeIconFg,
       ":hover:not(:disabled)": tokens.changeRemoved,
       ":focus-visible": tokens.changeRemoved,
-    },
-    fontSize: "10px",
-    fontWeight: 600,
-    lineHeight: "14px",
-    backgroundColor: tokens.transparent,
-    outline: { default: null, ":focus-visible": "none" },
-    boxShadow: {
-      default: null,
-      ":focus-visible": `0 0 0 1px ${tokens.accent}`,
     },
   },
   deleteIcon: {
@@ -1351,33 +1316,10 @@ const styles = stylex.create({
   },
   // In the table it waits for its row's hover or focus.
   dismiss: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "static",
-    minWidth: "22px",
-    width: "20px",
-    height: "20px",
-    padding: "0 4px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: "4px",
-    color: {
-      default: tokens.inkFaint,
-      ":hover:not(:disabled)": tokens.ink,
-      ":focus-visible": tokens.ink,
-    },
-    backgroundColor: tokens.transparent,
     opacity: {
       default: 0,
       [stylex.when.ancestor(":hover")]: 1,
       [stylex.when.ancestor(":focus-within")]: 1,
-    },
-    outline: { default: null, ":focus-visible": "none" },
-    boxShadow: {
-      default: null,
-      ":focus-visible": `0 0 0 1px ${tokens.accent}`,
     },
   },
   dismissIcon: {
@@ -1414,26 +1356,18 @@ const styles = stylex.create({
     justifyContent: "space-between",
     gap: "8px",
   },
+  // A secondary Button held down while its menu is open.
   menuTrigger: {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    height: "32px",
-    padding: "0 10px 0 12px",
-    borderWidth: "1px",
-    borderStyle: "solid",
     borderColor: {
       default: tokens.rule,
       ':is([aria-expanded="true"])': tokens.inkFaint,
     },
-    borderRadius: "6px",
     backgroundColor: {
       default: tokens.surface,
+      ":hover": tokens.tray,
       ':is([aria-expanded="true"])': tokens.tray,
     },
     color: tokens.inkMuted,
-    font: `13px/18px ${tokens.fontMono}`,
-    cursor: "pointer",
   },
   menuValue: {
     color: tokens.ink,

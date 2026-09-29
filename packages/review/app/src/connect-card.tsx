@@ -1,3 +1,4 @@
+import { Button } from "@canvas/ui/button";
 import {
   type ReviewCanvasInstallContent,
   type ReviewCliInstallStatus,
@@ -388,14 +389,14 @@ export function LegacySkillsRow({
               </li>
             ))}
           </ul>
-          <button
-            type="button"
-            {...stylex.props(styles.legacyButton)}
+          <Button
+            size="large"
+            xstyle={styles.legacyButton}
             disabled={busy}
             onClick={() => void removeSkills()}
           >
             Remove deprecated skills
-          </button>
+          </Button>
         </>
       ) : null}
       {removed.length > 0 ? (
@@ -502,21 +503,6 @@ const styles = stylex.create({
     fontFamily: tokens.fontMono,
   },
   legacyButton: {
-    flexShrink: 0,
     marginTop: "8px",
-    minHeight: "30px",
-    padding: "5px 12px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.reviewHomeRuleSoft,
-    borderRadius: "6px",
-    color: "inherit",
-    backgroundColor: tokens.transparent,
-    fontFamily: tokens.fontMono,
-    fontSize: "12px",
-    fontWeight: 500,
-    whiteSpace: "nowrap",
-    cursor: { default: "pointer", ":disabled": "default" },
-    opacity: { default: null, ":disabled": 0.5 },
   },
 });

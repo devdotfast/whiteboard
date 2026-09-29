@@ -1,3 +1,4 @@
+import { IconButton } from "@canvas/ui/button";
 import type {
   ReviewFindQuery,
   ReviewInlineEditorHandle,
@@ -482,9 +483,7 @@ function FindActionButton({
   icon: "previous" | "next" | "close";
 }) {
   return (
-    <button
-      type="button"
-      {...stylex.props(styles.action)}
+    <IconButton
       aria-label={label}
       title={description}
       disabled={disabled}
@@ -492,7 +491,7 @@ function FindActionButton({
       onClick={onClick}
     >
       <FindActionIcon icon={icon} />
-    </button>
+    </IconButton>
   );
 }
 
@@ -718,25 +717,6 @@ const styles = stylex.create({
   },
   regex: {
     fontFamily: tokens.fontMono,
-  },
-  action: {
-    ...button,
-    flex: "0 0 24px",
-    width: "24px",
-    height: "24px",
-    padding: "4px",
-    borderColor: "transparent",
-    borderRadius: "4px",
-    backgroundColor: {
-      default: "transparent",
-      ":hover:not(:disabled)": hoverBackground,
-    },
-    color: {
-      default: tokens.inkMuted,
-      ":hover:not(:disabled)": tokens.ink,
-      ":disabled": tokens.inkFaint,
-    },
-    cursor: { default: "pointer", ":disabled": "default" },
   },
   actionIcon: {
     width: "14px",

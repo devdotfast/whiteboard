@@ -224,48 +224,13 @@ export const shellStyles = stylex.create({
       backgroundColor: tokens.chromeBorder,
     },
   },
-  topbarIconButton: {
-    display: "grid",
-    placeItems: "center",
-    width: tokens.chromeControlHeight,
-    height: tokens.chromeControlHeight,
-    padding: 0,
-    ...noBorder,
-    borderRadius: tokens.chromeControlRadius,
-    backgroundColor: { default: tokens.transparent, ":hover": tokens.well },
-    color: { default: tokens.inkMuted, ":hover": tokens.ink },
-    cursor: "pointer",
-    outline: {
-      default: null,
-      ":focus-visible": `1px solid ${tokens.chromeFg}`,
-    },
-    outlineOffset: { default: null, ":focus-visible": "-1px" },
-  },
   // The top bar compacts against its own column (the shell container), not
   // the viewport: an open side panel narrows the column without resizing
-  // the window.
+  // the window. In a narrow column this ghost Button drops its label.
   openSourceTree: {
-    display: "inline-flex",
-    flex: "0 0 auto",
-    alignItems: "center",
     justifyContent: { default: null, [narrowContent]: "center" },
-    gap: "4px",
     width: { default: null, [narrowContent]: tokens.chromeControlHeight },
-    height: tokens.chromeControlHeight,
     padding: { default: "0 10px", [narrowContent]: 0 },
-    ...noBorder,
-    borderRadius: tokens.chromeControlRadius,
-    backgroundColor: { default: tokens.transparent, ":hover": tokens.well },
-    color: { default: tokens.inkMuted, ":hover": tokens.ink },
-    fontFamily: tokens.chromeFont,
-    fontSize: tokens.chromeFontSize,
-    fontWeight: tokens.chromeFontWeight,
-    whiteSpace: "nowrap",
-    outline: {
-      default: null,
-      ":focus-visible": `2px solid ${tokens.chromeFg}`,
-    },
-    outlineOffset: { default: null, ":focus-visible": "-1px" },
   },
   openSourceTreeLabel: {
     display: { default: null, [narrowContent]: "none" },
@@ -289,21 +254,6 @@ export const shellStyles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.chromeFont,
     fontSize: "12px",
-  },
-  historyBannerButton: {
-    padding: "2px 8px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: {
-      default: tokens.chromeBorder,
-      ":hover": tokens.chromeActiveBorder,
-      ":focus-visible": tokens.chromeActiveBorder,
-    },
-    borderRadius: tokens.chromeControlRadius,
-    backgroundColor: tokens.surfaceRaised,
-    color: tokens.ink,
-    cursor: "pointer",
-    outline: { default: null, ":hover": "none", ":focus-visible": "none" },
   },
 
   viewRegion: {

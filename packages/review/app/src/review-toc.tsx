@@ -1,3 +1,4 @@
+import { IconButton } from "@canvas/ui/button";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useState } from "react";
 
@@ -283,9 +284,9 @@ export function ReviewToc({
         }
       }}
     >
-      <button
-        type="button"
-        {...stylex.props(styles.toggle, showList && styles.toggleOpen)}
+      <IconButton
+        size="large"
+        xstyle={[styles.toggle, showList && styles.toggleOpen]}
         aria-label={isDrawerOpen ? "Close contents" : "Open contents"}
         aria-expanded={isDrawerOpen}
         aria-controls="review-toc-body"
@@ -293,7 +294,7 @@ export function ReviewToc({
         onClick={() => setIsDrawerOpen((open) => !open)}
       >
         <ContentsIcon xstyle={styles.toggleIcon} />
-      </button>
+      </IconButton>
       <div
         id="review-toc-body"
         {...stylex.props(
@@ -459,33 +460,9 @@ const styles = stylex.create({
   },
   toggle: {
     position: "absolute",
-    top: 0,
-    left: 0,
-    display: { default: "flex", ":is([hidden])": "none" },
-    alignItems: "center",
-    justifyContent: "center",
-    width: "32px",
-    height: "32px",
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: "7px",
-    backgroundColor: {
-      default: tokens.transparent,
-      ":hover": tokens.well,
-      ":focus-visible": tokens.well,
-    },
-    color: {
-      default: "inherit",
-      ":hover": tokens.ink,
-      ":focus-visible": tokens.ink,
-    },
-    outline: {
-      default: null,
-      ":focus-visible": `1px solid ${tokens.ruleSoft}`,
-    },
-    outlineOffset: { default: null, ":focus-visible": "-3px" },
+    top: "1px",
+    left: "1px",
+    display: { default: "inline-flex", ":is([hidden])": "none" },
   },
   toggleOpen: {
     color: tokens.ink,

@@ -1,3 +1,4 @@
+import { Button } from "@canvas/ui/button";
 import {
   type JsonValue,
   type ReviewDiffrConfig,
@@ -256,9 +257,7 @@ export function DiffrConfigSection({
                       />
                     </SettingRow>
                     <div {...stylex.props(styles.summaryActions)}>
-                      <button
-                        type="button"
-                        {...stylex.props(styles.button)}
+                      <Button
                         disabled={!summaryValid}
                         onClick={() =>
                           void run(async () => {
@@ -268,10 +267,8 @@ export function DiffrConfigSection({
                         }
                       >
                         Test setup
-                      </button>
-                      <button
-                        type="button"
-                        {...stylex.props(styles.button)}
+                      </Button>
+                      <Button
                         disabled={!summaryValid || !dirty}
                         onClick={() =>
                           void run(async () => {
@@ -284,7 +281,7 @@ export function DiffrConfigSection({
                         }
                       >
                         Save summaries
-                      </button>
+                      </Button>
                     </div>
                     <p {...stylex.props(styles.rowDescription)}>
                       Test setup sends synthetic code without saving your
@@ -314,8 +311,7 @@ export function DiffrConfigSection({
       {changed && (
         <p role="status">
           Reload the window to see changes.{" "}
-          <button
-            {...stylex.props(styles.button)}
+          <Button
             disabled={busy}
             onClick={() => {
               if (dirty) setConfirmReload(true);
@@ -323,25 +319,16 @@ export function DiffrConfigSection({
             }}
           >
             Reload window
-          </button>
+          </Button>
         </p>
       )}
       {confirmReload && (
         <div role="alertdialog" aria-label="Discard summary changes?">
           <p>Discard unsaved summary settings and reload?</p>
-          <button
-            {...stylex.props(styles.button)}
-            disabled={busy}
-            onClick={() => void run(reloadWindow)}
-          >
+          <Button disabled={busy} onClick={() => void run(reloadWindow)}>
             Discard and reload
-          </button>{" "}
-          <button
-            {...stylex.props(styles.button)}
-            onClick={() => setConfirmReload(false)}
-          >
-            Cancel
-          </button>
+          </Button>{" "}
+          <Button onClick={() => setConfirmReload(false)}>Cancel</Button>
         </div>
       )}
     </div>

@@ -1,8 +1,8 @@
+import { IconButton } from "@canvas/ui/button";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useState } from "react";
 
 import { CheckIcon, CopyIcon as CopyGlyph } from "./icons";
-import { withClass } from "./stylex-props";
 import { useTooltip } from "./use-tooltip";
 
 export async function copyText(text: string): Promise<boolean> {
@@ -83,7 +83,7 @@ export function CopyButton({
   text: string;
   label: string;
   className?: string;
-  xstyle?: stylex.StaticStyles;
+  xstyle?: stylex.StyleXStyles;
   iconStyle: stylex.StyleXStyles;
 }): ReactElement {
   const [copied, setCopied] = useState(false);
@@ -97,10 +97,10 @@ export function CopyButton({
   }, [copied]);
 
   return (
-    <button
+    <IconButton
       ref={tooltip}
-      type="button"
-      {...(className ? withClass(className, xstyle) : stylex.props(xstyle))}
+      className={className}
+      xstyle={xstyle}
       aria-label={label}
       data-copied={copied ? "" : undefined}
       onClick={() => {
@@ -116,7 +116,7 @@ export function CopyButton({
       ) : (
         <CopyGlyph xstyle={iconStyle} />
       )}
-    </button>
+    </IconButton>
   );
 }
 

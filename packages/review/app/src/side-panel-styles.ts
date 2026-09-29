@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 
+import { radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 const narrowCanvas = "@container review-canvas (max-width: 929px)";
@@ -194,25 +195,17 @@ export const tourStyles = stylex.create({
   pillChevron: {
     color: tokens.onAccent,
   },
+  // An IconButton on the accent pill.
   pillButton: {
-    display: "grid",
-    placeItems: "center",
-    width: "24px",
-    height: "24px",
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: "50%",
+    borderRadius: radius.round,
     backgroundColor: {
       default: tokens.transparent,
       ":hover:not(:disabled)": `color-mix(in srgb, ${tokens.onAccent} 16%, ${tokens.transparent})`,
       ":focus-visible": `color-mix(in srgb, ${tokens.onAccent} 16%, ${tokens.transparent})`,
     },
-    boxShadow: "none",
-    color: { default: tokens.onAccent, ":disabled": tokens.onAccentWash },
-    font: "inherit",
-    cursor: { default: "pointer", ":disabled": "default" },
+    color: tokens.onAccent,
+    fontSize: "inherit",
+    fontWeight: "inherit",
   },
   endCap: {
     display: "flex",

@@ -1,3 +1,4 @@
+import { Button } from "@canvas/ui/button";
 import type {
   ReviewCanvasSettingsContent,
   ReviewCliInstallStatus,
@@ -133,9 +134,7 @@ export function SettingsPage({
                 }
               >
                 {install.status.shim.installer ? null : (
-                  <button
-                    type="button"
-                    {...stylex.props(styles.button)}
+                  <Button
                     disabled={busy !== null}
                     onClick={() =>
                       void run(
@@ -149,7 +148,7 @@ export function SettingsPage({
                     }
                   >
                     {install.status.shim.installed ? "Remove" : "Install"}
-                  </button>
+                  </Button>
                 )}
               </Row>
             </Section>
@@ -237,13 +236,7 @@ export function SettingsPage({
               label="Extensions"
               description="Install or turn on language extensions."
             >
-              <button
-                type="button"
-                {...stylex.props(styles.button)}
-                onClick={settings.manageExtensions}
-              >
-                Manage…
-              </button>
+              <Button onClick={settings.manageExtensions}>Manage…</Button>
             </Row>
           </Section>
 

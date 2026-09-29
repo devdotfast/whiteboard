@@ -58,18 +58,6 @@ export const settingsStyles = stylex.create({
     alignItems: "center",
     justifyContent: "flex-end",
   },
-  button: {
-    padding: "4px 10px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.reviewHomeRuleSoft,
-    borderRadius: "5px",
-    color: "inherit",
-    backgroundColor: tokens.transparent,
-    font: "inherit",
-    cursor: { default: "pointer", ":disabled": "default" },
-    opacity: { default: null, ":disabled": 0.5 },
-  },
   toggle: {
     display: "flex",
     alignItems: "center",

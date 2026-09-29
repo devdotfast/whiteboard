@@ -1,3 +1,4 @@
+import { Button } from "@canvas/ui/button";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useRef, useState } from "react";
 
@@ -29,15 +30,10 @@ export function ReviewCornerAction(): ReactElement | null {
   if (tutorial) {
     return (
       <div {...stylex.props(shellStyles.topbarItem, styles.action)}>
-        <button
-          type="button"
-          {...stylex.props(styles.dismiss)}
-          ref={closeTooltip}
-          onClick={tutorial.close}
-        >
+        <Button ref={closeTooltip} onClick={tutorial.close}>
           <ArchiveIcon xstyle={styles.icon} />
           <span>Close</span>
-        </button>
+        </Button>
       </div>
     );
   }
@@ -59,15 +55,10 @@ export function ReviewCornerAction(): ReactElement | null {
 
   return (
     <div ref={control} {...stylex.props(shellStyles.topbarItem, styles.action)}>
-      <button
-        type="button"
-        {...stylex.props(styles.dismiss)}
-        disabled={busy}
-        onClick={() => void dismiss()}
-      >
+      <Button disabled={busy} onClick={() => void dismiss()}>
         <ArchiveIcon xstyle={styles.icon} />
         <span>Dismiss</span>
-      </button>
+      </Button>
       {failed && (
         <span
           ref={errorPopover}
@@ -106,26 +97,6 @@ const styles = stylex.create({
     position: "relative",
     display: "inline-flex",
     alignItems: "center",
-  },
-  dismiss: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "8px",
-    height: tokens.chromeControlHeight,
-    padding: "0 10px",
-    whiteSpace: "nowrap",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.chromeBorder,
-    backgroundColor: {
-      default: tokens.transparent,
-      ":not(:disabled):hover": tokens.chromeHoverBg,
-    },
-    color: tokens.chromeFg,
-    fontFamily: tokens.fontMono,
-    fontSize: "12px",
-    fontWeight: 500,
-    borderRadius: "6px",
   },
   icon: {
     fill: "none",

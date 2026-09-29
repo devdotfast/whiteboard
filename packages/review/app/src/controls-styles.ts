@@ -79,36 +79,6 @@ export const controlStyles = stylex.create({
     color: tokens.accent,
   },
 
-  iconButton: {
-    display: "inline-grid",
-    placeItems: "center",
-    minHeight: "30px",
-    height: "30px",
-    width: "30px",
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: "3px",
-    backgroundColor: tokens.transparent,
-    boxShadow: "none",
-    color: {
-      default: tokens.inkFaint,
-      ":hover": tokens.inkMuted,
-      ":focus-visible": tokens.inkMuted,
-    },
-    outline: {
-      default: null,
-      ":focus-visible": `1px solid ${tokens.ruleSoft}`,
-    },
-    outlineOffset: { default: null, ":focus-visible": "2px" },
-  },
-  // In the side peek's action row the button keeps the row's rounder corner
-  // and its faint ink on hover.
-  iconButtonPeek: {
-    borderRadius: "6px",
-    color: tokens.inkFaint,
-  },
   // The icon never takes the pointer from its button.
   inertIcon: {
     pointerEvents: "none",

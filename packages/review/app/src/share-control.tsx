@@ -1,3 +1,4 @@
+import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import {
   type ReviewApiClient,
   ReviewApiError,
@@ -192,9 +193,8 @@ export function ShareControl() {
       {...stylex.props(shellStyles.topbarItem)}
       style={{ position: "relative" }}
     >
-      <button
-        type="button"
-        {...stylex.props(shellStyles.topbarIconButton, open && styles.expanded)}
+      <IconButton
+        xstyle={open && buttonStyles.open}
         ref={tooltip}
         aria-label={label}
         aria-haspopup="dialog"
@@ -219,7 +219,7 @@ export function ShareControl() {
         }}
       >
         <ShareIcon xstyle={controlStyles.chromeIcon} />
-      </button>
+      </IconButton>
       {open && (
         <div
           ref={popoverRef}
@@ -250,22 +250,17 @@ export function ShareControl() {
                   value={link}
                   onFocus={(event) => event.target.select()}
                 />
-                <button
-                  type="button"
-                  {...stylex.props(styles.action)}
-                  onClick={() => void copy(link)}
-                >
+                <Button variant="primary" onClick={() => void copy(link)}>
                   {copied ? "Copied" : "Copy link"}
-                </button>
+                </Button>
               </>
             ) : error ? (
-              <button
-                type="button"
-                {...stylex.props(styles.action)}
+              <Button
+                variant="primary"
                 onClick={() => target && upload(target)}
               >
                 Retry
-              </button>
+              </Button>
             ) : (
               <p {...stylex.props(styles.paragraph, styles.status)}>
                 Uploading…
@@ -274,9 +269,8 @@ export function ShareControl() {
           ) : (
             account && (
               <>
-                <button
-                  type="button"
-                  {...stylex.props(styles.action)}
+                <Button
+                  variant="primary"
                   disabled={
                     account.pending || login.isPending || publish.isPending
                   }
@@ -288,7 +282,7 @@ export function ShareControl() {
                   {account.pending
                     ? "Waiting for sign-in…"
                     : "Sign in to share"}
-                </button>
+                </Button>
               </>
             )
           )}
@@ -300,13 +294,6 @@ export function ShareControl() {
 
 const styles = stylex.create({
   // Hovered, the open button keeps the topbar button hover colors.
-  expanded: {
-    backgroundColor: {
-      default: tokens.chromeHoverBg,
-      ":hover": tokens.well,
-    },
-    color: { default: tokens.chromeFg, ":hover": tokens.ink },
-  },
   // In the topbar action row the shared anchoring (shellStyles.topbarPopover)
   // places it; these are its own values anywhere else.
   popover: {
@@ -358,28 +345,5 @@ const styles = stylex.create({
     color: tokens.ink,
     font: "inherit",
     outline: { default: null, ":focus-visible": "none" },
-  },
-  action: {
-    height: "26px",
-    padding: "0 12px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: tokens.chromeControlRadius,
-    backgroundColor: tokens.accent,
-    color: tokens.onAccent,
-    font: "inherit",
-    cursor: { default: "pointer", ":disabled": "default" },
-    filter: {
-      default: null,
-      ":hover:not(:disabled)": "brightness(1.1)",
-      ":focus-visible:not(:disabled)": "brightness(1.1)",
-    },
-    outline: {
-      default: null,
-      ":hover:not(:disabled)": "none",
-      ":focus-visible:not(:disabled)": "none",
-    },
-    opacity: { default: null, ":disabled": 0.6 },
   },
 });
