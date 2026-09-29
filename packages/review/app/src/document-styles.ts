@@ -10,7 +10,7 @@ import { tokens } from "./tokens.stylex";
 const inDocument = ":is(.review-document *)";
 
 // A block's own element: it sits in the prose column.
-const inBlock = ":is(.review-document .api-document-node > *)";
+const inDocumentBlock = ":is(.review-document .api-document-node > *)";
 
 // Inside a Markdown or trace quote block.
 const inProse = ":is(.review-document .api-document-node--prose *)";
@@ -18,11 +18,11 @@ const inProse = ":is(.review-document .api-document-node--prose *)";
 // An element straight in the article.
 const inArticle = ":is(.review-document > *)";
 
-const inLink = ":is(.review-document a *)";
+const inDocumentLink = ":is(.review-document a *)";
 
-const inOpenLink = ":is(.review-document a[data-review-anchor-open] *)";
+const inOpenDocumentLink = ":is(.review-document a[data-review-anchor-open] *)";
 
-const afterItem = ":is(.review-document .api-document-node--prose li + *)";
+const afterProseItem = ":is(.review-document .api-document-node--prose li + *)";
 
 // The scratchpad has no title, so its opening heading sits at the top.
 const scratchpadOpening =
@@ -116,8 +116,8 @@ export const documentStyles = stylex.create({
     // edge: clear of the edge for scroll-synced highlighting, and the same
     // slack the contents rail leaves under the last heading.
     scrollMarginTop: { default: null, [inDocument]: "24px" },
-    width: { default: null, [inBlock]: proseColumn },
-    maxWidth: { default: null, [inBlock]: proseMaxWidth },
+    width: { default: null, [inDocumentBlock]: proseColumn },
+    maxWidth: { default: null, [inDocumentBlock]: proseMaxWidth },
     margin: { default: null, [inDocument]: "40px auto 12px" },
     marginTop: { default: null, [scratchpadOpening]: 0 },
     color: { default: null, [inDocument]: tokens.ink },
@@ -128,8 +128,8 @@ export const documentStyles = stylex.create({
   },
   h3: {
     scrollMarginTop: { default: null, [inDocument]: "24px" },
-    width: { default: null, [inBlock]: proseColumn },
-    maxWidth: { default: null, [inBlock]: proseMaxWidth },
+    width: { default: null, [inDocumentBlock]: proseColumn },
+    maxWidth: { default: null, [inDocumentBlock]: proseMaxWidth },
     margin: { default: null, [inDocument]: "30px auto 10px" },
     marginTop: { default: null, [scratchpadOpening]: 0 },
     color: { default: null, [inDocument]: tokens.ink },
@@ -140,18 +140,18 @@ export const documentStyles = stylex.create({
   },
   // A block in the prose column: lists, quotes, images, tutorial controls.
   column: {
-    width: { default: null, [inBlock]: proseColumn },
-    maxWidth: { default: null, [inBlock]: proseMaxWidth },
-    marginInline: { default: null, [inBlock]: "auto" },
+    width: { default: null, [inDocumentBlock]: proseColumn },
+    maxWidth: { default: null, [inDocumentBlock]: proseMaxWidth },
+    marginInline: { default: null, [inDocumentBlock]: "auto" },
   },
   serif: {
     fontFamily: { default: null, [inDocument]: tokens.fontSerif },
   },
   paragraph: {
-    width: { default: null, [inBlock]: proseColumn },
-    maxWidth: { default: null, [inBlock]: proseMaxWidth },
+    width: { default: null, [inDocumentBlock]: proseColumn },
+    maxWidth: { default: null, [inDocumentBlock]: proseMaxWidth },
     margin: { default: null, [inProse]: "14px 0" },
-    marginInline: { default: null, [inBlock]: "auto" },
+    marginInline: { default: null, [inDocumentBlock]: "auto" },
     color: { default: null, [inProse]: tokens.ink },
     fontFamily: { default: null, [inProse]: tokens.fontSerif },
     fontSize: { default: null, [inProse]: "15px" },
@@ -170,7 +170,7 @@ export const documentStyles = stylex.create({
     },
   },
   item: {
-    marginTop: { default: null, [afterItem]: "8px" },
+    marginTop: { default: null, [afterProseItem]: "8px" },
     color: { default: null, [inProse]: tokens.ink },
     fontFamily: { default: null, [inProse]: tokens.fontSerif },
     fontSize: { default: null, [inProse]: "15px" },
@@ -215,12 +215,12 @@ export const documentStyles = stylex.create({
     backgroundColor: {
       default: null,
       [inDocument]: tokens.well,
-      [inOpenLink]: tokens.linkOpenWash,
+      [inOpenDocumentLink]: tokens.linkOpenWash,
     },
     color: {
       default: null,
       [inDocument]: tokens.ink,
-      [inLink]: tokens.accent,
+      [inDocumentLink]: tokens.accent,
     },
     fontFamily: { default: null, [inDocument]: tokens.fontMono },
     fontSize: { default: null, [inDocument]: "0.85em" },

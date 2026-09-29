@@ -378,7 +378,7 @@ const reducedMotion = "@media (prefers-reduced-motion: reduce)";
 
 // Beside a review header the rail lines up with the left edge of a 1320px
 // page and gives each entry a taller row and larger type.
-const besideHeader = ":is(.review-app:has(.review-document-header) *)";
+const besideDocumentHeader = ":is(.review-app:has(.review-document-header) *)";
 
 // On a narrow shell the nav is the pill and the card in one: a 32px square at
 // the pill's anchor that grows in place, top-left corner pinned, into the
@@ -431,23 +431,26 @@ const styles = stylex.create({
     top: `calc(48px + ${tokens.reviewPageTop} + 40px)`,
     left: {
       default: "24px",
-      [besideHeader]: "max(24px, calc((100% - 1320px) / 2))",
+      [besideDocumentHeader]: "max(24px, calc((100% - 1320px) / 2))",
       [narrow]: {
         default: "8px",
-        [besideHeader]: "max(24px, calc((100% - 1320px) / 2))",
+        [besideDocumentHeader]: "max(24px, calc((100% - 1320px) / 2))",
       },
     },
     zIndex: 31,
     width: {
       default: "248px",
-      [besideHeader]: "240px",
+      [besideDocumentHeader]: "240px",
       [narrow]: {
         default: "min(248px, calc(100cqi - 16px))",
-        [besideHeader]: "240px",
+        [besideDocumentHeader]: "240px",
       },
     },
     overflow: "visible",
-    padding: { default: "20px 18px 22px 20px", [besideHeader]: "6px 0 0" },
+    padding: {
+      default: "20px 18px 22px 20px",
+      [besideDocumentHeader]: "6px 0 0",
+    },
     transition: "none",
     borderColor: tokens.transparent,
     backgroundColor: tokens.transparent,
@@ -528,8 +531,8 @@ const styles = stylex.create({
   headRail: {
     height: "auto",
     marginBottom: "14px",
-    paddingBottom: { default: null, [besideHeader]: "10px" },
-    paddingLeft: { default: 0, [besideHeader]: "14px" },
+    paddingBottom: { default: null, [besideDocumentHeader]: "10px" },
+    paddingLeft: { default: 0, [besideDocumentHeader]: "14px" },
     lineHeight: "normal",
   },
   list: {
@@ -541,7 +544,7 @@ const styles = stylex.create({
   },
   listRail: {
     padding: 0,
-    gap: { default: "6px", [besideHeader]: "4px" },
+    gap: { default: "6px", [besideDocumentHeader]: "4px" },
   },
   item: {
     margin: 0,
@@ -575,10 +578,10 @@ const styles = stylex.create({
     outline: { default: null, ":hover": "none", ":focus-visible": "none" },
   },
   linkRail: {
-    minHeight: { default: null, [besideHeader]: "30px" },
-    gap: { default: "10px", [besideHeader]: "12px" },
-    paddingBlock: { default: null, [besideHeader]: 0 },
-    fontSize: { default: "12px", [besideHeader]: "13px" },
+    minHeight: { default: null, [besideDocumentHeader]: "30px" },
+    gap: { default: "10px", [besideDocumentHeader]: "12px" },
+    paddingBlock: { default: null, [besideDocumentHeader]: 0 },
+    fontSize: { default: "12px", [besideDocumentHeader]: "13px" },
   },
   linkActive: {
     color: tokens.ink,
@@ -593,9 +596,9 @@ const styles = stylex.create({
     fontSize: "11px",
   },
   numberRail: {
-    flex: { default: "0 0 auto", [besideHeader]: "0 0 12px" },
-    minWidth: { default: "22px", [besideHeader]: "12px" },
-    fontSize: { default: "11px", [besideHeader]: "12px" },
+    flex: { default: "0 0 auto", [besideDocumentHeader]: "0 0 12px" },
+    minWidth: { default: "22px", [besideDocumentHeader]: "12px" },
+    fontSize: { default: "11px", [besideDocumentHeader]: "12px" },
   },
   numberActive: {
     color: tokens.ink,

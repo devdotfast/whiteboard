@@ -85,21 +85,21 @@ export function TraceQuote({
   );
 }
 
-const inBlock = ":is(.review-document .api-document-node > *)";
+const inDocumentBlock = ":is(.review-document .api-document-node > *)";
 
 const styles = stylex.create({
   // A quote block stands in the prose column; a quote in prose stays inline.
   container: {
-    display: { default: null, [inBlock]: "block" },
+    display: { default: null, [inDocumentBlock]: "block" },
     width: {
       default: null,
-      [inBlock]: `min(100%, ${tokens.reviewProseMaxWidth})`,
+      [inDocumentBlock]: `min(100%, ${tokens.reviewProseMaxWidth})`,
     },
     maxWidth: {
       default: null,
-      [inBlock]: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
+      [inDocumentBlock]: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
     },
-    marginInline: { default: null, [inBlock]: "auto" },
+    marginInline: { default: null, [inDocumentBlock]: "auto" },
   },
   quote: {
     color: tokens.accent,

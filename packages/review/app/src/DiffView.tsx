@@ -237,6 +237,7 @@ export function ReviewDiffView({
   const remaining = global.remaining.additions + global.remaining.deletions;
   const percent = total ? Math.round((100 * (total - remaining)) / total) : 0;
 
+  // diff-workspace is a marker: the courier and global.css key on it.
   return (
     <div {...withClass("diff-workspace", styles.workspace)} ref={workspaceRef}>
       <aside

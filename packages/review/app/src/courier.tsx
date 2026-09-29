@@ -261,6 +261,7 @@ export function Courier({
 
   // The classes are markers: the badge finds him by them, and tests read
   // his tag.
+  // courier is a marker: code, tests and the lens list's :has(> .courier) find it.
   return (
     <div
       ref={node}

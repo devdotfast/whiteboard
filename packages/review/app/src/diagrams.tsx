@@ -1034,6 +1034,7 @@ const inDocument = ":is(.review-document *)";
 
 // Where the theme defines --diagram-border (a .review-app inside the canvas
 // scope).
+// (:scope is the canvas root, so an app portaled out of it does not count.)
 const inApp = ":is(:scope .review-app *)";
 
 const labelHover = `0 0 0 2px ${tokens.accentShadow}, 0 6px 14px ${tokens.shadowColorStrong}`;

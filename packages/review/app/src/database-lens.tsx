@@ -396,6 +396,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
     paneResize: tourPaneResize,
   } = useDiagramTourShell(tourOpen, closeTour);
 
+  // database-lens is a marker: the tutorial and document-embed-scroll.ts find it.
   const renderLensFigure = (stage: boolean) => (
     <figure
       {...withClass(
@@ -1159,6 +1160,7 @@ const inDocument = ":is(.review-document *)";
 
 // Where the theme defines --diagram-border (a .review-app inside the canvas
 // scope).
+// (:scope is the canvas root, so an app portaled out of it does not count.)
 const inApp = ":is(:scope .review-app *)";
 
 const narrow = "@container review-content (max-width: 760px)";

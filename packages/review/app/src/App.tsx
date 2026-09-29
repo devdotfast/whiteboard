@@ -478,7 +478,8 @@ function ReviewLayoutContent({
       } as CSSProperties)
     : undefined;
 
-  // The peek and resizing classes are markers: descendants restyle on them.
+  // Bare markers: descendants' :is() style conditions key on review-app and
+  // on the peek and resizing classes.
   const appClassName = [
     "review-app",
     `review-app--theme-${debugSettings.theme}`,
@@ -515,7 +516,13 @@ function ReviewLayoutContent({
           scrollRegionRef={scrollRegionRef}
         >
           <header {...stylex.props(shellStyles.topbar)}>
-            <div {...withClass("review-topbar-left", shellStyles.topbarLeft)}>
+            <div
+              {...withClass(
+                // Marker class: other components' :is() style conditions key on it.
+                "review-topbar-left",
+                shellStyles.topbarLeft,
+              )}
+            >
               <div
                 {...stylex.props(
                   controlStyles.segmented,
@@ -595,7 +602,11 @@ function ReviewLayoutContent({
               </div>
             </div>
             <div
-              {...withClass("review-topbar-actions", shellStyles.topbarActions)}
+              {...withClass(
+                // Marker class: other components' :is() style conditions key on it.
+                "review-topbar-actions",
+                shellStyles.topbarActions,
+              )}
             >
               <div
                 {...stylex.props(
@@ -720,6 +731,7 @@ function ReviewLayoutContent({
                   <article
                     ref={articleRef}
                     {...withClass(
+                      // Marker class: other components' :is() style conditions key on it.
                       "review-document",
                       documentStyles.article,
                       rightPanelOpen && documentStyles.articlePeekOpen,
@@ -814,6 +826,7 @@ function ReviewLayoutContent({
             {activeView === "diff" && diffScope !== null && (
               <div
                 {...withClass(
+                  // Marker class: other components' :is() style conditions key on it.
                   "review-diff-view--scoped",
                   shellStyles.diffView,
                   shellStyles.diffViewScoped,
@@ -844,7 +857,13 @@ function ReviewLayoutContent({
           {...sidePeekResize.separatorProps}
         />
       )}
-      <div {...withClass("review-detail-host", shellStyles.detailHost)}>
+      <div
+        {...withClass(
+          // Marker class: other components' :is() style conditions key on it.
+          "review-detail-host",
+          shellStyles.detailHost,
+        )}
+      >
         <ReviewPanelHost />
       </div>
     </div>

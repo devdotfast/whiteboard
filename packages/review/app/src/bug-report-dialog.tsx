@@ -342,6 +342,7 @@ export function BugReportControl({
 
 // Only .review-app defines the chrome tokens, and the border and font came
 // from shorthands that drop out without them: outside the app there are none.
+// (:scope is the canvas root, so an app portaled out of it does not count.)
 const inApp = ":is(:scope .review-app *)";
 
 const chromeBorder = {

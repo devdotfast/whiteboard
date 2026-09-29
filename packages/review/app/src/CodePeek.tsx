@@ -370,7 +370,7 @@ function mergedCodePeekRanges(
 const narrow = "@media (max-width: 720px)";
 
 // A block in a Review document shares the prose column.
-const inDocument = ":is(.review-document .api-document-node > *)";
+const inDocumentBlock = ":is(.review-document .api-document-node > *)";
 
 const inMapInspector = ":is(.software-map-code-inspector *)";
 
@@ -379,14 +379,14 @@ const styles = stylex.create({
   peek: {
     width: {
       default: null,
-      [inDocument]: `min(100%, ${tokens.reviewProseMaxWidth})`,
+      [inDocumentBlock]: `min(100%, ${tokens.reviewProseMaxWidth})`,
     },
     minWidth: 0,
     maxWidth: {
       default: "100%",
-      [inDocument]: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
+      [inDocumentBlock]: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
     },
-    marginInline: { default: null, [inDocument]: "auto" },
+    marginInline: { default: null, [inDocumentBlock]: "auto" },
     overflow: { default: null, [inMapInspector]: "visible" },
     padding: {
       default: null,

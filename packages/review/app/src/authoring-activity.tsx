@@ -187,7 +187,7 @@ export function ReviewSurfaceLabel({
 const REDUCED = "@media (prefers-reduced-motion: reduce)";
 
 // The surface tab's word is styled only in the top bar's tabs.
-const inTabs = ":is(.review-topbar-left *)";
+const inTopbarTabs = ":is(.review-topbar-left *)";
 
 const shimmer = stylex.keyframes({
   from: { backgroundPosition: "120% 0" },
@@ -265,54 +265,57 @@ const styles = stylex.create({
   // Neither the ink nor the unread dot touches the tab's layout: the dot is
   // out of flow and only color moves.
   word: {
-    position: { default: null, [inTabs]: "relative" },
+    position: { default: null, [inTopbarTabs]: "relative" },
   },
   // Marker ink sweeps through the word while the agent writes.
   wordWorking: {
     backgroundImage: {
       default: null,
-      [inTabs]: { default: mutedInk, [REDUCED]: "none" },
+      [inTopbarTabs]: { default: mutedInk, [REDUCED]: "none" },
     },
     backgroundSize: {
       default: null,
-      [inTabs]: { default: "240% 100%", [REDUCED]: "auto" },
+      [inTopbarTabs]: { default: "240% 100%", [REDUCED]: "auto" },
     },
     backgroundClip: {
       default: null,
-      [inTabs]: { default: "text", [REDUCED]: "border-box" },
+      [inTopbarTabs]: { default: "text", [REDUCED]: "border-box" },
     },
     color: {
       default: null,
-      [inTabs]: { default: tokens.transparent, [REDUCED]: tokens.inkMuted },
+      [inTopbarTabs]: {
+        default: tokens.transparent,
+        [REDUCED]: tokens.inkMuted,
+      },
     },
     animationName: {
       default: null,
-      [inTabs]: { default: shimmer, [REDUCED]: "none" },
+      [inTopbarTabs]: { default: shimmer, [REDUCED]: "none" },
     },
     animationDuration: {
       default: null,
-      [inTabs]: { default: "1.8s", [REDUCED]: "0s" },
+      [inTopbarTabs]: { default: "1.8s", [REDUCED]: "0s" },
     },
     animationTimingFunction: {
       default: null,
-      [inTabs]: { default: "linear", [REDUCED]: "ease" },
+      [inTopbarTabs]: { default: "linear", [REDUCED]: "ease" },
     },
     animationIterationCount: {
       default: null,
-      [inTabs]: { default: "infinite", [REDUCED]: 1 },
+      [inTopbarTabs]: { default: "infinite", [REDUCED]: 1 },
     },
   },
   // The chosen tab inks darker, reduced motion included.
   wordWorkingActive: {
-    backgroundImage: { default: null, [inTabs]: strongInk },
+    backgroundImage: { default: null, [inTopbarTabs]: strongInk },
   },
   unread: {
-    position: { default: null, [inTabs]: "absolute" },
-    top: { default: null, [inTabs]: "1px" },
-    right: { default: null, [inTabs]: "-7px" },
-    width: { default: null, [inTabs]: "4px" },
-    height: { default: null, [inTabs]: "4px" },
-    borderRadius: { default: null, [inTabs]: "50%" },
-    backgroundColor: { default: null, [inTabs]: tokens.accent },
+    position: { default: null, [inTopbarTabs]: "absolute" },
+    top: { default: null, [inTopbarTabs]: "1px" },
+    right: { default: null, [inTopbarTabs]: "-7px" },
+    width: { default: null, [inTopbarTabs]: "4px" },
+    height: { default: null, [inTopbarTabs]: "4px" },
+    borderRadius: { default: null, [inTopbarTabs]: "50%" },
+    backgroundColor: { default: null, [inTopbarTabs]: tokens.accent },
   },
 });
