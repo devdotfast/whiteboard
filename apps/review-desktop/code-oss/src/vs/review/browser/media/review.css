@@ -46,6 +46,10 @@
   background-clip: padding-box;
 }
 
+.monaco-workbench.review-workbench .monaco-scrollable-element > .scrollbar {
+  overflow: hidden;
+}
+
 /* KEEP IN SYNC WITH REVIEW_CHROME_HEIGHT in review/common/reviewChrome.ts. The
    overlay must be as tall as the editor tab strip below it, or the window
    controls and the navigation arrows stop aligning with the tab pills. */
