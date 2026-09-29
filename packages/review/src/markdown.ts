@@ -46,6 +46,19 @@ export function parseMarkdown(source: string): MarkdownNode {
     ],
   });
 
+  // `$$x$$` alone in its paragraph is a display equation written on one line.
+  for (const node of markdownNodes(tree)) {
+    const [only, ...others] = node.children ?? [];
+
+    if (
+      node.type === "paragraph" &&
+      only?.type === "inlineMath" &&
+      others.length === 0 &&
+      source.startsWith("$$", only.position?.start.offset)
+    )
+      only.type = "math";
+  }
+
   const definitions = new Map<string, MarkdownNode>();
 
   for (const node of markdownNodes(tree))

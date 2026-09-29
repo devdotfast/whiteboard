@@ -146,6 +146,13 @@ describe("math in Markdown", () => {
     expect(container.textContent).not.toMatch(/[$\\]/);
   });
 
+  it("sets one-line dollar math alone in a paragraph as a display equation", async () => {
+    await render("Solve:\n\n$$x = 1$$\n\nHere $$y$$ stays inline.\n");
+
+    expect(equations()).toHaveLength(2);
+    expect(container.querySelectorAll(".katex-display")).toHaveLength(1);
+  });
+
   it("leaves prose and code that look like math alone", async () => {
     await render(
       [

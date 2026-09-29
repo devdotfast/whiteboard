@@ -28,6 +28,20 @@ describe("parseMarkdown math", () => {
     expect(mathIn(source)).toEqual([["math", "x = 1"]]);
   });
 
+  it.each([
+    ["a paragraph", "Solve:\n\n$$x = 1$$\n\nDone."],
+    ["a list item", "- $$x = 1$$"],
+  ])("reads one-line dollar math alone in %s as display math", (_, source) => {
+    expect(mathIn(source)).toEqual([["math", "x = 1"]]);
+  });
+
+  it.each([
+    ["double dollars inside a sentence", "Here $$x = 1$$ holds."],
+    ["single dollars alone in a paragraph", "$x = 1$"],
+  ])("keeps %s inline", (_, source) => {
+    expect(mathIn(source)).toEqual([["inlineMath", "x = 1"]]);
+  });
+
   it("reads inline math inside table cells, headings and emphasis", () => {
     expect(
       mathIn(

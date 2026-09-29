@@ -26,9 +26,7 @@ const FONTS = [
 const MATH = [
   tex`Dollar $e^{i\pi} + 1 = 0$ and paren \(\mathbb{R} \ni x\) inline.`,
   "",
-  "$$",
-  tex`\int_0^\infty e^{-x^2}\,dx = \Biggl( \biggl( \Bigl( \bigl( \frac{\sqrt{\pi}}{2} \bigr) \Bigr) \biggr) \Biggr)`,
-  "$$",
+  tex`$$\int_0^\infty e^{-x^2}\,dx = \Biggl( \biggl( \Bigl( \bigl( \frac{\sqrt{\pi}}{2} \bigr) \Bigr) \biggr) \Biggr)$$`,
   "",
   tex`\[`,
   tex`\mathcal{L} = \begin{pmatrix} a & b \\ c & d \end{pmatrix} \sum_{k=1}^{n} \braket{\psi_k | \phi}`,
