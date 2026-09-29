@@ -11,6 +11,7 @@ import {
 import {
   type CliInputStream,
   DEFAULT_STORE_ORIGIN,
+  DEV_REVIEW_HOME_ENV,
   emitJsonEvent,
   humanStream,
   jsonRequestedInArgv,
@@ -74,6 +75,7 @@ import {
 } from "./review-telemetry";
 import {
   readReviewServerDiscovery,
+  readReviewServerHealth,
   reviewServerIsHealthy,
   reviewServerStateDir,
   serverNotReady,
@@ -337,14 +339,69 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
 
     const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
     const discovery = await readReviewServerDiscovery(stateDir);
+    const health = discovery && (await readReviewServerHealth(discovery));
 
-    if (!discovery || !(await reviewServerIsHealthy(discovery)))
-      throw serverNotReady(stateDir);
+    if (!discovery || !health) throw serverNotReady(stateDir);
     const { url, serverPid } = discovery;
+    const { version, serverId } = health;
     input.stdout.write(
       options.json
-        ? `${JSON.stringify({ event: "server.status", ready: true, url, serverPid, stateDir })}\n`
+        ? `${JSON.stringify({ event: "server.status", ready: true, url, serverPid, stateDir, version, serverId })}\n`
         : `Whiteboard server ready at ${url}\nSaved reviews: ${stateDir}\n`,
+    );
+  });
+
+  configureJsonOutput(
+    serverCommand
+      .command("reset-id")
+      .description(
+        "Give this machine's saved reviews a new server id; stop the server first",
+      )
+      .option(
+        "--state-dir <path>",
+        "directory selected when starting the server",
+      ),
+    "plain",
+  ).action(async (_options, command: Command) => {
+    const options = command.optsWithGlobals<{
+      stateDir?: string;
+      json?: boolean;
+    }>();
+
+    const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
+    const discovery = await readReviewServerDiscovery(stateDir);
+
+    const desktops = await selectReviewInstance({
+      env: { ...env, [DEV_REVIEW_HOME_ENV]: stateDir },
+    });
+
+    if (
+      (discovery && (await reviewServerIsHealthy(discovery))) ||
+      desktops.instances.some((instance) => instance.healthy)
+    )
+      throw new Error(
+        `A Whiteboard server is using ${stateDir}. Stop it first, then run whiteboard server reset-id again.`,
+      );
+
+    const { openReviewProfile } = await import("./review-api/profile.js");
+
+    const local = await openReviewProfile(stateDir, {
+      manageWorkspaces: false,
+    });
+
+    let serverId: string;
+
+    try {
+      serverId = local.store.resetServerId();
+    } finally {
+      await local.data.close();
+      await local.store.close();
+    }
+
+    input.stdout.write(
+      options.json
+        ? `${JSON.stringify({ event: "server.reset-id", serverId, stateDir })}\n`
+        : `New server id ${serverId}\nSaved reviews: ${stateDir}\n`,
     );
   });
 

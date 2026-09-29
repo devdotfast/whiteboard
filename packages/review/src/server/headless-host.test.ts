@@ -21,6 +21,7 @@ import { serveReviewMcp } from "@review/review-api/mcp.js";
 import { openReviewProfile } from "@review/review-api/profile.js";
 import type { Result, Snapshot } from "@review/review-api/store.js";
 import { writeScratchpadEnabled } from "@review/review-preferences.js";
+import { ReviewTelemetry } from "@review/review-telemetry.js";
 import {
   type ReviewServerDiscovery,
   readReviewServerDiscovery,
@@ -31,6 +32,7 @@ import sharp from "sharp";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { z } from "zod";
 
+import { createGlobalReviewServer } from "./desktop-server.js";
 import { runHeadlessServer } from "./headless-host.js";
 
 let root: string;
@@ -549,6 +551,9 @@ it("authenticates clients, reports capabilities and readiness without exposing t
   expect(JSON.parse(status.output)).toMatchObject({
     event: "server.status",
     ready: true,
+    version: expect.any(String),
+    serverId: (await (await fetch(`${server.discovery.url}/health`)).json())
+      .serverId,
   });
   expect(status.output).not.toContain(server.discovery.token);
   const repo = await repository();
@@ -587,7 +592,9 @@ it("authenticates clients, reports capabilities and readiness without exposing t
 });
 
 /** A stand-in Desktop on `/control` that answers every verb relayed to it. */
-async function attachDesktop(discovery: ReviewServerDiscovery) {
+async function attachDesktop(
+  discovery: Pick<ReviewServerDiscovery, "url" | "token">,
+) {
   const abort = new AbortController();
   const opened: JsonValue[] = [];
 
@@ -780,6 +787,74 @@ it("does not connect to another instance through stale discovery", async () => {
     JSON.stringify({ ...original, instanceId: randomUUID() }),
   );
   await expect(connectReviewApi(server.env)).rejects.toThrow(/not ready/);
+});
+
+it("resets the server id only while no server holds the store", async () => {
+  const server = await start();
+
+  const serverId = async (url: string) =>
+    (await (await fetch(`${url}/health`)).json()).serverId;
+
+  const before = await serverId(server.discovery.url);
+
+  const reset = [
+    "--state-dir",
+    server.stateDir,
+    "server",
+    "reset-id",
+    "--json",
+  ];
+
+  const refused = await cli(reset, process.env);
+
+  expect(refused.exitCode).toBe(1);
+  expect(JSON.parse(refused.output).error.message).toMatch(/Stop it first/);
+  expect(await serverId(server.discovery.url)).toBe(before);
+
+  await server.stop();
+  const done = await cli(reset, process.env);
+
+  expect(done).toMatchObject({ exitCode: 0, errors: "" });
+  const { event, serverId: after } = JSON.parse(done.output);
+  expect(event).toBe("server.reset-id");
+  expect(after).not.toBe(before);
+
+  const restarted = await start(server.stateDir);
+  expect(await serverId(restarted.discovery.url)).toBe(after);
+});
+
+it("refuses to reset the id of a store a Desktop holds", async () => {
+  const local = await openReviewProfile(root, { manageWorkspaces: false });
+
+  const desktop = createGlobalReviewServer({
+    reviewStore: local.store,
+    reviewData: local.data,
+    appPid: process.pid,
+    packageRoot: root,
+    toolingRoot: root,
+    port: 0,
+    telemetry: ReviewTelemetry.fromEnv(process.env),
+  });
+
+  stops.push(async () => {
+    await desktop.close();
+    await local.data.close();
+    await local.store.close();
+  });
+  await desktop.listen();
+  const attached = await attachDesktop(desktop.discovery);
+
+  try {
+    const refused = await cli(
+      ["--state-dir", root, "server", "reset-id", "--json"],
+      process.env,
+    );
+
+    expect(refused.exitCode).toBe(1);
+    expect(JSON.parse(refused.output).error.message).toMatch(/Stop it first/);
+  } finally {
+    attached.detach();
+  }
 });
 
 it("refuses the removed batch authoring mode instead of ignoring it", async () => {
