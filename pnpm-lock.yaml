@@ -37,12 +37,12 @@ importers:
 
   apps/review-desktop:
     dependencies:
-      '@dev.fast/review':
-        specifier: workspace:*
-        version: link:../../packages/review
       '@dev.fast/review-protocol':
         specifier: workspace:*
         version: link:../../packages/review-protocol
+      '@dev.fast/whiteboard':
+        specifier: workspace:*
+        version: link:../../packages/review
     devDependencies:
       '@dev.fast/diffr':
         specifier: 0.1.10
@@ -251,15 +251,15 @@ importers:
 
   packages/review/app:
     dependencies:
-      '@dev.fast/review':
-        specifier: workspace:*
-        version: link:..
       '@dev.fast/review-protocol':
         specifier: workspace:*
         version: link:../../review-protocol
       '@dev.fast/trace-protocol':
         specifier: workspace:*
         version: link:../../trace-protocol
+      '@dev.fast/whiteboard':
+        specifier: workspace:*
+        version: link:..
       '@mr_mint/elkjs-libavoid':
         specifier: 0.5.0
         version: 0.5.0(elkjs@0.11.1)

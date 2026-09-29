@@ -476,7 +476,7 @@ The report payload contains these fields:
 | `diff.files[].deletions`         | Deleted line count                                                            |
 | `diff.files[].patch`             | Unified patch used to resolve the whiteboard's exact CodePeek ranges          |
 | `diagnostics.app_version`        | Whiteboard app version                                                        |
-| `diagnostics.cli_version`        | `@dev.fast/review` package version                                            |
+| `diagnostics.cli_version`        | `@dev.fast/whiteboard` package version                                            |
 | `diagnostics.platform`           | Node platform enum                                                            |
 | `diagnostics.app_session_id`     | Random identifier for the canvas window                                       |
 | `diagnostics.client_error_names` | Last 20 sanitized JavaScript error class names from that canvas session       |

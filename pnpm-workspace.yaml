@@ -22,7 +22,7 @@ minimumReleaseAgeExclude:
   - "pi-acp@0.0.34"
 
 overrides:
-  # @dev.fast/review declares a registry range; this override is what makes
+  # @dev.fast/whiteboard declares a registry range; this override is what makes
   # it resolve to the workspace package. Do not remove it.
   "@dev.fast/local-vcs": "workspace:0.1.0"
   esbuild: "0.28.1"

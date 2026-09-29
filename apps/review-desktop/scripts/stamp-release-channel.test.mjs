@@ -25,7 +25,7 @@ async function writeFixtures(product) {
   await writeFile(packagePath, '{"name":"fixture","version":"1.2.3"}\n');
   await writeFile(
     cliPackagePath,
-    '{"name":"@dev.fast/review","version":"0.0.1"}\n',
+    '{"name":"@dev.fast/whiteboard","version":"0.0.1"}\n',
   );
   await writeFile(productPath, `${JSON.stringify(product, null, "\t")}\n`);
 

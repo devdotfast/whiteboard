@@ -51,7 +51,7 @@ try {
   console.log(
     `Production dependency audit passed (${dependencyCount} unique packages).`,
   );
-  const pkgRoot = path.join(prefix, "node_modules/@dev.fast/review");
+  const pkgRoot = path.join(prefix, "node_modules/@dev.fast/whiteboard");
 
   const pkg = JSON.parse(
     await readFile(path.join(pkgRoot, "package.json"), "utf8"),
@@ -95,6 +95,12 @@ try {
       })
     ).stdout;
 
+  assert.equal((await run(["version"])).trim(), expectedVersion);
+  const alias = path.join(prefix, "node_modules/.bin/review");
+  assert.equal(
+    (await exec(alias, ["version"], { cwd: root, env })).stdout.trim(),
+    expectedVersion,
+  );
   await run(["connect", "codex"]);
 
   const api = async (name, value = {}) =>

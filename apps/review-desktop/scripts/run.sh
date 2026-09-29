@@ -75,7 +75,7 @@ fi
 # Check the pinned binary even when all compiled outputs are already current.
 # An explicit developer override supplies its own executable.
 if [[ -z "$PACKAGED_ROOT" && -z "${REVIEW_DIFFR_BINARY:-}" ]]; then
-  pnpm --dir "$MONOREPO_ROOT" --filter @dev.fast/review ensure:diffr --required
+  pnpm --dir "$MONOREPO_ROOT" --filter @dev.fast/whiteboard ensure:diffr --required
 fi
 
 rebuild_review_desktop_outputs "$MONOREPO_ROOT" "$REVIEW_PACKAGE"

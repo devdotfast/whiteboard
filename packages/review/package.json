@@ -1,11 +1,11 @@
 {
-  "name": "@dev.fast/review",
+  "name": "@dev.fast/whiteboard",
   "version": "0.2.0",
   "private": false,
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/devdotfast/review.git",
+    "url": "https://github.com/devdotfast/whiteboard.git",
     "directory": "packages/review"
   },
   "bin": {

@@ -465,6 +465,25 @@ describe("legacy global CLI cleanup", () => {
     );
   });
 
+  it("leaves a global install of the current package alone", async () => {
+    const fixture = await globalPackage("npm", "@dev.fast/whiteboard");
+    const runProcess = vi.fn<TestRunProcess>(async () => 0);
+
+    const result = await removeLegacyGlobalReviewInstalls({
+      packageRoot: await tempDir("review-migrate-"),
+      homeDir: fixture.homeDir,
+      env: {},
+      desktopManagedCli: true,
+      stdout: streams().stdout,
+      stderr: streams().stderr,
+      runCommand: fixture.runCommand,
+      runProcess,
+    });
+
+    expect(result).toMatchObject({ checked: 0, removed: 0, blockers: [] });
+    expect(runProcess).not.toHaveBeenCalled();
+  });
+
   it("does not remove the only working global CLI", async () => {
     const fixture = await globalPackage("npm");
     const runProcess = vi.fn<TestRunProcess>(async () => 0);
@@ -507,7 +526,10 @@ async function canonicalReview(): Promise<{
   return { reviewHome, reviewDir: created.dir };
 }
 
-async function globalPackage(manager: ReviewPackageManager): Promise<{
+async function globalPackage(
+  manager: ReviewPackageManager,
+  name = "@dev.fast/review",
+): Promise<{
   homeDir: string;
   packageRoot: string;
   runCommand: TestRunCommand;
@@ -524,14 +546,13 @@ async function globalPackage(manager: ReviewPackageManager): Promise<{
 
   const packageRoot = path.join(
     manager === "yarn" ? path.join(managerRoot, "node_modules") : managerRoot,
-    "@dev.fast",
-    "review",
+    ...name.split("/"),
   );
 
   await mkdir(packageRoot, { recursive: true });
   await writeFile(
     path.join(packageRoot, "package.json"),
-    `${JSON.stringify({ name: "@dev.fast/review", version: "0.1.0" })}\n`,
+    `${JSON.stringify({ name, version: "0.1.0" })}\n`,
   );
 
   const runCommand = vi.fn<TestRunCommand>(async (command: string) => {

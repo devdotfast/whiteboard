@@ -5,11 +5,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { stageReviewDocs } from "../apps/review-desktop/scripts/stage-review-runtime.mjs";
-import { parseVersion } from "./review-cli-release.mjs";
+import { distTag, packageName } from "./review-cli-release.mjs";
 
 /** Pack from the workspace, then add the docs and version metadata shipped by Desktop. */
 export async function packReviewCli({ version, commit }, outputDirectory) {
-  parseVersion(version);
+  distTag(version);
+  // npm names a scoped tarball <scope>-<name>-<version>.tgz.
+  const tarball = `${packageName.slice(1).replace("/", "-")}-${version}.tgz`;
 
   const actualCommit = execFileSync("git", ["rev-parse", "HEAD"], {
     encoding: "utf8",
@@ -30,12 +32,12 @@ export async function packReviewCli({ version, commit }, outputDirectory) {
     await writeFile(manifestPath, `${JSON.stringify(pkg, null, 2)}\n`);
     execFileSync(
       "pnpm",
-      ["--filter", "@dev.fast/review", "pack", "--pack-destination", scratch],
+      ["--filter", packageName, "pack", "--pack-destination", scratch],
       { stdio: "inherit" },
     );
     execFileSync("tar", [
       "-xzf",
-      path.join(scratch, `dev.fast-review-${version}.tgz`),
+      path.join(scratch, tarball),
       "-C",
       scratch,
     ]);
@@ -48,7 +50,7 @@ export async function packReviewCli({ version, commit }, outputDirectory) {
       { cwd: staged, stdio: "inherit" },
     );
 
-    return path.join(output, `dev.fast-review-${version}.tgz`);
+    return path.join(output, tarball);
   } finally {
     await writeFile(manifestPath, original);
     await rm(scratch, { recursive: true, force: true });

@@ -14,6 +14,7 @@ import { test } from "node:test";
 import {
   alreadyPublished,
   createTag,
+  distTag,
   nextVersion,
   parseVersion,
   registryMetadata,
@@ -42,6 +43,19 @@ test("bumps the highest stable version numerically and resets lower components",
   ])
     assert.throws(() => parseVersion(version));
   assert.throws(() => nextVersion(versions, "bogus"));
+});
+
+test("a stable Desktop version publishes as latest, a preview as preview", () => {
+  assert.equal(distTag("0.1.6"), "latest");
+  assert.equal(distTag("0.1.6-preview.20260929.12"), "preview");
+
+  for (const version of [
+    "0.1.6-preview.1",
+    "0.1.6-beta.20260929.1",
+    "v0.1.6",
+    "0.1.6-preview.20260929.1; echo nope",
+  ])
+    assert.throws(() => distTag(version));
 });
 
 test("registry errors stop planning; only a package 404 means no versions", async () => {

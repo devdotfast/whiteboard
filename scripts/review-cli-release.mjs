@@ -10,7 +10,10 @@ const registrySchema = z.object({
 
 const stable = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
-export const packageName = "@dev.fast/review";
+const preview =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-preview\.\d{8}\.[1-9]\d*$/;
+
+export const packageName = "@dev.fast/whiteboard";
 
 export function parseVersion(version) {
   if (!stable.test(version))
@@ -21,6 +24,15 @@ export function parseVersion(version) {
     throw new Error("Version component is too large");
 
   return parts;
+}
+
+/** The npm dist-tag for a Desktop version; a prerelease never becomes `latest`. */
+export function distTag(version) {
+  if (stable.test(version)) return "latest";
+
+  if (preview.test(version)) return "preview";
+
+  throw new Error(`Expected X.Y.Z or X.Y.Z-preview.YYYYMMDD.N, got ${version}`);
 }
 
 export function nextVersion(versions, bump) {
@@ -199,7 +211,18 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const mode = process.argv[2];
 
   if (mode === "plan") await resolveRelease();
+  else if (mode === "dist-tag") console.log(distTag(process.argv[3]));
+  else if (mode === "published")
+    console.log(
+      alreadyPublished(
+        await registryMetadata(),
+        process.argv[3],
+        process.argv[4],
+      ),
+    );
   else if (mode === "tag")
     createTag(JSON.parse(readFileSync("release-plan.json", "utf8")));
-  else throw new Error("Usage: review-cli-release.mjs plan|tag");
+  else throw new Error(
+      "Usage: review-cli-release.mjs plan|tag|dist-tag <version>|published <version> <commit>",
+    );
 }

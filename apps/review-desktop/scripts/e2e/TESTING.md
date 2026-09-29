@@ -21,8 +21,8 @@ only for the phase-2 journeys.
 ```sh
 pnpm --filter @dev.fast/review-desktop app:build
 (cd packages/review && pnpm pack --pack-destination /tmp/review-pack)
-mkdir -p /tmp/review-runtime && (cd /tmp/review-runtime && npm init -y >/dev/null && npm install --omit=dev /tmp/review-pack/dev.fast-review-*.tgz)
-export REVIEW_E2E_RUNTIME=/tmp/review-runtime/node_modules/@dev.fast/review
+mkdir -p /tmp/review-runtime && (cd /tmp/review-runtime && npm init -y >/dev/null && npm install --omit=dev /tmp/review-pack/dev.fast-whiteboard-*.tgz)
+export REVIEW_E2E_RUNTIME=/tmp/review-runtime/node_modules/@dev.fast/whiteboard
 ```
 
 ## Running
