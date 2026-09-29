@@ -45,6 +45,7 @@ import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/l
 import {
 	REVIEW_CTRL_TAB_SETTING,
 	REVIEW_KEYMAP_SETTING,
+	REVIEW_KEYMAPS,
 	REVIEW_SOFTWARE_MAP_SETTING,
 	REVIEW_STRUCTURAL_DIFF_SETTING,
 	REVIEW_TELEMETRY_SETTING,
@@ -903,7 +904,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			dismiss: () => onChange({ ...this.readTutorialProgress(), dismissed: true }),
 			reopen: () => onChange({ ...this.readTutorialProgress(), dismissed: false }),
 			selectKeymap: async (keymap) => {
-				if (keymap !== "none" && keymap !== "vim" && keymap !== "emacs") {
+				if (!REVIEW_KEYMAPS.includes(keymap)) {
 					throw new Error("Unsupported tutorial keymap choice.");
 				}
 				setStep("chooseKeymap", true);

@@ -11,6 +11,7 @@ const choices: readonly { value: ReviewKeymapChoice; label: string }[] = [
   { value: "none", label: "VS Code default" },
   { value: "vim", label: "Vim" },
   { value: "emacs", label: "Emacs" },
+  { value: "sublime", label: "Sublime Text" },
 ];
 
 export function TutorialKeymapPicker(
