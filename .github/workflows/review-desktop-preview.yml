@@ -172,6 +172,12 @@ jobs:
           cache: npm
           cache-dependency-path: apps/review-desktop/code-oss/**/package-lock.json
 
+      - name: Compute Code OSS dependency key
+        id: code-oss-inputs
+        run: |
+          DIGEST=$(node apps/review-desktop/scripts/code-oss-bootstrap.mjs digest apps/review-desktop/code-oss)
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
       - name: Restore Code OSS dependencies
         id: code-oss-deps
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
@@ -186,9 +192,9 @@ jobs:
             apps/review-desktop/code-oss/.build/distro/npm/remote/node_modules
             apps/review-desktop/code-oss/.build/distro/npm/remote/web/node_modules
             ~/.cache/node-gyp
-          key: ${{ runner.os }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
+          key: ${{ runner.os }}-code-oss-deps-v3-${{ steps.code-oss-inputs.outputs.digest }}
           restore-keys: |
-            ${{ runner.os }}-code-oss-deps-v2-
+            ${{ runner.os }}-code-oss-deps-v3-
 
       # Linux owns every platform-independent build output and also downloads
       # the pinned VSIX payloads for every Darwin target. Each macOS leg packages
@@ -210,18 +216,8 @@ jobs:
           retention-days: 3
           compression-level: 0
 
-      - name: Check for existing Code OSS dependency cache
-        if: steps.code-oss-deps.outputs.cache-hit != 'true'
-        id: code-oss-deps-lookup
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: |
-            apps/review-desktop/code-oss/node_modules
-          key: ${{ runner.os }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
-          lookup-only: true
-
       - name: Save Code OSS dependencies
-        if: steps.code-oss-deps.outputs.cache-hit != 'true' && steps.code-oss-deps-lookup.outputs.cache-hit != 'true'
+        if: steps.code-oss-deps.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
@@ -234,7 +230,7 @@ jobs:
             apps/review-desktop/code-oss/.build/distro/npm/remote/node_modules
             apps/review-desktop/code-oss/.build/distro/npm/remote/web/node_modules
             ~/.cache/node-gyp
-          key: ${{ runner.os }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
+          key: ${{ steps.code-oss-deps.outputs.cache-primary-key }}
 
   build:
     name: Build and sign macOS preview (${{ matrix.target }})
@@ -289,6 +285,12 @@ jobs:
           cache: npm
           cache-dependency-path: apps/review-desktop/code-oss/**/package-lock.json
 
+      - name: Compute Code OSS dependency key
+        id: code-oss-inputs
+        run: |
+          DIGEST=$(node apps/review-desktop/scripts/code-oss-bootstrap.mjs digest apps/review-desktop/code-oss)
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
       - name: Restore Code OSS dependencies
         id: code-oss-deps
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
@@ -304,9 +306,9 @@ jobs:
             apps/review-desktop/code-oss/.build/distro/npm/remote/web/node_modules
             apps/review-desktop/code-oss/.build/electron
             ~/.cache/node-gyp
-          key: ${{ runner.os }}-${{ matrix.target }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
+          key: ${{ runner.os }}-${{ matrix.target }}-code-oss-deps-v3-${{ steps.code-oss-inputs.outputs.digest }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.target }}-code-oss-deps-v2-
+            ${{ runner.os }}-${{ matrix.target }}-code-oss-deps-v3-
 
       - name: Download darwin payload
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -377,18 +379,8 @@ jobs:
             "$RUNNER_TEMP/buildagent.keychain"
           pnpm --filter @dev.fast/review-desktop app:package:macos
 
-      - name: Check for existing Code OSS dependency cache
-        if: steps.code-oss-deps.outputs.cache-hit != 'true'
-        id: code-oss-deps-lookup
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: |
-            apps/review-desktop/code-oss/node_modules
-          key: ${{ runner.os }}-${{ matrix.target }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
-          lookup-only: true
-
       - name: Save Code OSS dependencies
-        if: steps.code-oss-deps.outputs.cache-hit != 'true' && steps.code-oss-deps-lookup.outputs.cache-hit != 'true'
+        if: steps.code-oss-deps.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
@@ -402,7 +394,7 @@ jobs:
             apps/review-desktop/code-oss/.build/distro/npm/remote/web/node_modules
             apps/review-desktop/code-oss/.build/electron
             ~/.cache/node-gyp
-          key: ${{ runner.os }}-${{ matrix.target }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
+          key: ${{ steps.code-oss-deps.outputs.cache-primary-key }}
 
       - name: Validate release artifacts
         run: |

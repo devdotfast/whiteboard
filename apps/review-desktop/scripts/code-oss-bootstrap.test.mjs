@@ -141,3 +141,21 @@ test("the bootstrap command runs through a symlinked script path", async () => {
 
   assert.match(digest, /^[a-f0-9]{64}$/);
 });
+
+test("installed dependency lockfiles do not change the cache fingerprint", async () => {
+  const { directory, installDirs } = await fixture();
+  const originalDigest = await lockfileDigest(directory, installDirs);
+  const dependency = path.join(directory, "node_modules", "dependency");
+  await mkdir(dependency);
+  await writeFile(
+    path.join(dependency, "package-lock.json"),
+    "generated lockfile",
+  );
+  assert.equal(await lockfileDigest(directory, installDirs), originalDigest);
+
+  await writeFile(
+    path.join(directory, "extensions", "git", "package-lock.json"),
+    "updated lockfile",
+  );
+  assert.notEqual(await lockfileDigest(directory, installDirs), originalDigest);
+});
