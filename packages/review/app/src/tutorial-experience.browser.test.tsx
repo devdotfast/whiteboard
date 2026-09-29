@@ -187,8 +187,6 @@ describe("TutorialExperience", () => {
         .querySelector(".tutorial-keymap-picker")
         ?.getAttribute("data-tutorial-target"),
     ).toBe("chooseKeymap");
-    expect(canvasRoot.querySelector(".tutorial-scrim")).toBeNull();
-    expect(canvasRoot.querySelector(".tutorial-spotlight")).toBeNull();
   });
 
   it("draws target rings in a layer inside the scroll region", () => {
@@ -206,6 +204,7 @@ describe("TutorialExperience", () => {
       vi.unstubAllGlobals();
     }
 
+    expect(card()).not.toBeNull();
     expect(regionLayer()?.children).toHaveLength(1);
     expect(shellRings()).toHaveLength(0);
   });

@@ -101,12 +101,8 @@ describe("agent markdown", () => {
     expect(html).not.toContain("href=");
     expect(html).not.toContain("file://");
     expect(html).not.toContain("/Users/ketanagrawal");
-    expect(html).toMatch(
-      /<code class="agent-markdown-code-reference[^"]*">App\.test\.ts:49<\/code>/,
-    );
-    expect(html).toMatch(
-      /<code class="agent-markdown-code-reference[^"]*">styles\.css<\/code>/,
-    );
+    expect(html).toMatch(/<code[^>]*>App\.test\.ts:49<\/code>/);
+    expect(html).toMatch(/<code[^>]*>styles\.css<\/code>/);
   });
 
   it("highlights quote spans inside markdown paragraphs and inline code", () => {
@@ -117,9 +113,7 @@ describe("agent markdown", () => {
       }),
     );
 
-    expect(html).toMatch(
-      /<mark class="review-trace-quote-mark[^"]*">optimize database queries<\/mark>/,
-    );
+    expect(html).toMatch(/<mark[^>]*>optimize database queries<\/mark>/);
   });
 
   it("decodes named character references without using DOM innerHTML", () => {

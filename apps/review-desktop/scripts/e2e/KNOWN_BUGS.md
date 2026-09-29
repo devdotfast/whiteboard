@@ -151,7 +151,7 @@ pointer events` for the toggles, and `document.elementFromPoint` at the
   centre of each control returns an element inside `.review-topbar`.
 - **Notes:** measured in the workbench renderer (viewport 1200x800): the review
   canvas starts at y=74, `.review-topbar` is `position: sticky` from 74 to 109
-  with `z-index: var(--review-debug-layer)` (`review-shell.css`), and the whole
+  with `z-index: var(--review-debug-layer)` (the shell's StyleX), and the whole
   review scroll region starts at 109. That token is `2147483000`
   (`global.css`) and five StyleX styles share it (the shell, the tutorial
   twice, the diagram tour and the software map),

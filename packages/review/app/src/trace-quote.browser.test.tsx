@@ -39,7 +39,7 @@ describe("TraceQuote", () => {
       </TraceQuote>,
     );
 
-    expect(html).toMatch(/^<span [^>]*><span [^>]*>Optimize/);
+    expect(html).not.toContain("<a ");
     expect(html).toContain("Optimize database queries");
   });
 

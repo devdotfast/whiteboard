@@ -329,7 +329,7 @@ const styles = stylex.create({
     borderColor: tokens.ruleSoft,
     borderRadius: "8px",
     backgroundColor: tokens.surfaceRaised,
-    boxShadow: "0 8px 28px var(--shadow-color-strong)",
+    boxShadow: `0 8px 28px ${tokens.shadowColorStrong}`,
     color: tokens.chromeFg,
     fontFamily: tokens.chromeFont,
     fontSize: tokens.chromeFontSize,

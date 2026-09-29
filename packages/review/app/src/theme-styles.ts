@@ -30,9 +30,9 @@ export const themeStyles = stylex.create({
     // class on this same element -- a custom property is substituted where it is
     // declared, so declaring them further up would freeze the dark values.
     // The workbench has no font custom property to bridge to -- it hardcodes a
-    // stack per platform and per language -- so the desktop overrides this one
-    // from review.css and the browser build keeps the canvas's own mono face.
-    "--chrome-font": "var(--font-mono)",
+    // stack per platform and per language -- so Desktop's review.css publishes
+    // --review-chrome-font; the browser build keeps the canvas's mono face.
+    "--chrome-font": "var(--review-chrome-font, var(--font-mono))",
     // The workbench publishes a font-weight ramp, so the weights bridge like the
     // color tokens below. The sizes are fixed at the end of this rule.
     "--chrome-font-weight": "var(--vscode-fontWeight-regular, 400)",

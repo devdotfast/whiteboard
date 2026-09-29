@@ -719,17 +719,6 @@ body
   height: 100%;
 }
 
-/* The canvas topbar dresses itself as workbench chrome and reads its colors and
-   its type ramp straight from the --vscode-* theme variables, but there is no
-   such variable for the workbench UI font: style.css hardcodes a stack per
-   platform and per language. `system-ui` resolves to the same platform UI face
-   without copying that matrix. The selector outranks the canvas stylesheet's own
-   default, which keeps the standalone browser build on its mono face. Every text
-   item in the topbar reads this token, so the bar shows one face throughout. */
-.review-canvas-host .review-app {
-  --chrome-font: var(--review-chrome-font, var(--font-mono));
-}
-
 /* Whiteboard: every label on the tray is set in the same mono face as the
    canvas chrome. The faces ship with the canvas stylesheet, whose @font-face
    rules are hoisted out of its @scope so they apply document-wide. */

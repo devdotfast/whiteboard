@@ -1,6 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
-/** `stylex.props` for an element that keeps a class the plain CSS still styles. */
+/** `stylex.props` plus a plain class: a marker that code, tests, style
+ * conditions or global.css look up, kept alongside the StyleX classes. */
 export function withClass(
   className: string,
   ...styles: stylex.StyleXArray<
