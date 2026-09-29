@@ -19,6 +19,14 @@ store when Home lists them or when they are opened.
   libraries, and browser tests. It builds separately and is not included in npm.
 - `@dev.fast/review-desktop`: installs the Node runtime and copies the built canvas.
 
+### Imports
+
+Import through `@review/*` (`src`) and `@canvas/*` (`app/src`) instead of
+`../` paths; keep `./` for siblings. `pnpm lint` enforces this. tsx reads the
+aliases from its working directory's tsconfig, so run it from this package or
+set `TSX_TSCONFIG_PATH`. `node scripts/rewrite-relative-imports.mjs` (from the
+repository root) converts a branch that predates the aliases.
+
 ## Migration
 
 To migrate stored reviews with a compatible `whiteboard` command, run:
