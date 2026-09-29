@@ -1,6 +1,6 @@
 # dev.fast Whiteboard
 
-The `@dev.fast/review` package provides the `whiteboard` CLI for headless review
+The `@dev.fast/whiteboard` package provides the `whiteboard` CLI for headless review
 authoring, sharing, and agent trace capture. It requires Node 24. An npm install
 also provides `review` as an alias for `whiteboard`.
 `whiteboard server` and `whiteboard trace` run without installing or starting Desktop.
@@ -12,7 +12,7 @@ store when Home lists them or when they are opened.
 
 ## Workspace packages
 
-- `@dev.fast/review`: Node runtime, CLI, and authoring tools. Its
+- `@dev.fast/whiteboard`: Node runtime, CLI, and authoring tools. Its
   production dependencies are the external libraries used by the compiled Node
   code; workspace libraries bundled by tsdown are development dependencies.
 - `@dev.fast/review-canvas` ([app](app/README.md)): private browser UI, layout
