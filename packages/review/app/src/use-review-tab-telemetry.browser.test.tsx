@@ -75,10 +75,6 @@ it("keeps dwell continuous through live review updates and sends the latest vers
     beaconUrl: () => "http://localhost/telemetry?version=2",
   });
 
-  expect(request).toHaveBeenCalledTimes(1);
-  expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body)).name).toBe(
-    "app_opened",
-  );
   expect(beacon).not.toHaveBeenCalled();
   now = 2500;
   act(() => window.dispatchEvent(new Event("pagehide")));

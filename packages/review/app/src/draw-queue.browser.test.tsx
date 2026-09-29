@@ -172,6 +172,18 @@ const motion = (selector: string) =>
 
 const courier = () => article.querySelector<HTMLElement>(".courier");
 
+/** The courier re-measures a frame after the document reflows, so wait for
+ * him to catch up with the element. */
+const expectCourierOn = (selector: string) =>
+  vi.waitFor(() => {
+    const target = article.querySelector(selector)!.getBoundingClientRect();
+    const base = article.getBoundingClientRect();
+    expect(parseFloat(courier()!.style.top)).toBeCloseTo(
+      target.top - base.top,
+      0,
+    );
+  });
+
 it("traces a new flow node, then fills it, with the courier on it, and settles", async () => {
   await render(null);
   await vi.waitFor(() =>
@@ -187,25 +199,13 @@ it("traces a new flow node, then fills it, with the courier on it, and settles",
   expect(motion('[data-review-unit-id="n2"]')).toBeUndefined();
 
   // The courier is still on the node once the queue is empty.
-  const node = article
-    .querySelector('[data-review-unit-id="n2"]')!
-    .getBoundingClientRect();
-
-  const base = article.getBoundingClientRect();
-  expect(parseFloat(courier()!.style.top)).toBeCloseTo(node.top - base.top, 0);
+  await expectCourierOn('[data-review-unit-id="n2"]');
 });
 
 it("stands on an edit already on the board when the reader arrives, drawing nothing", async () => {
   await render({ ...insert("b1"), source: "standing" });
   expect(motion('[data-review-node-id="b1"]')).toBeUndefined();
-  await vi.waitFor(() => expect(courier()).toBeTruthy());
-
-  const block = article
-    .querySelector('[data-review-node-id="b1"]')!
-    .getBoundingClientRect();
-
-  const base = article.getBoundingClientRect();
-  expect(parseFloat(courier()!.style.top)).toBeCloseTo(block.top - base.top, 0);
+  await expectCourierOn('[data-review-node-id="b1"]');
   expect(motion('[data-review-node-id="b1"]')).toBeUndefined();
 
   // The agent's next edit is drawn as usual.
