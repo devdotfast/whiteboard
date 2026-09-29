@@ -292,7 +292,9 @@ it("resumes a commit diff with its scope", async () => {
   app.route("/reviews-api", createReviewApi(store));
 
   const { container, open } = canvasHarness(app, review.reviewId);
-  const scopeBar = () => container.querySelector(".review-diff-scope-bar");
+
+  const scopeBar = () =>
+    container.querySelector(".review-diff-view--scoped > div:first-child");
 
   await open();
   await act(async () => tab(container, "Commits")!.click());
@@ -354,7 +356,9 @@ it("resumes the Trace view and the picked trace", async () => {
   ]);
 
   const trigger = () =>
-    container.querySelector<HTMLButtonElement>(".review-trace-picker-trigger");
+    container.querySelector<HTMLButtonElement>(
+      'button[aria-haspopup="listbox"]',
+    );
 
   const option = (title: string) =>
     [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(

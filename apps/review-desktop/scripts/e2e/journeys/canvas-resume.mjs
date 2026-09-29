@@ -63,7 +63,7 @@ const waitPressed = (ctx, page, label) =>
 
 const scopeSubject = (page) =>
   page
-    .locator(".review-diff-scope-bar .review-diff-scope-subject")
+    .locator(".review-diff-view--scoped > div:first-child span[title]")
     .innerText({ timeout: 1000 })
     .catch(() => null);
 
@@ -75,8 +75,8 @@ const selectedNodes = (page) =>
       nodes
         .filter(
           (node) =>
-            node.classList.contains("selected") ||
-            node.querySelector(".selected"),
+            node.matches("[data-selected]") ||
+            node.querySelector("[data-selected]"),
         )
         .map((node) => node.dataset.id),
     );
@@ -136,9 +136,9 @@ export async function run(ctx) {
 
   await activate(ctx, page, "Commits");
   await page
-    .locator(".review-commit-card")
+    .locator("article")
     .filter({ has: page.getByText("Queue", { exact: true }) })
-    .locator(".review-commit-open")
+    .getByRole("button", { name: "Open commit diff" })
     .click();
   await waitPressed(ctx, page, "Diff");
   await until(
@@ -179,23 +179,26 @@ export async function run(ctx) {
   await waitPressed(ctx, page, "Diff");
   await page.locator(".review-diff-view-host").waitFor();
   assert.equal(
-    await page.locator(".review-diff-scope-bar").count(),
+    await page.locator(".review-diff-view--scoped").count(),
     0,
     "the dropped commit's scope bar is still shown",
   );
-  assert.equal(await page.locator(".canvas-error").count(), 0);
+  assert.equal(
+    await page.locator('[data-review-api] > p[role="status"]').count(),
+    0,
+  );
   assert.deepEqual(ctx.pageErrors, []);
   ctx.check(
     "a new version keeps a listed commit's scope and drops an unlisted one",
   );
 
-  const picker = page.locator(".review-trace-picker");
+  const trigger = page.locator('button[aria-haspopup="listbox"]');
 
   const option = (label) =>
-    picker.getByRole("option").filter({ hasText: label });
+    page.getByRole("listbox").getByRole("option").filter({ hasText: label });
 
   await activate(ctx, page, "Trace");
-  await picker.locator(".review-trace-picker-trigger").click();
+  await trigger.click();
   assert.equal(
     await option("Trace 1").getAttribute("aria-selected"),
     "true",
@@ -205,22 +208,16 @@ export async function run(ctx) {
   await until(
     async () =>
       (
-        await picker.locator(".review-trace-picker-title").innerText()
+        await trigger.locator("span").nth(1).innerText()
       ).trim() === "Trace 2",
     "the picked trace to show",
   );
   await reloadWindow(ctx, page);
   await waitPressed(ctx, page, "Trace");
-  await page
-    .locator(".review-trace-picker .review-trace-picker-trigger")
-    .click();
+  await trigger.click();
   await until(
     async () =>
-      (await page
-        .locator(".review-trace-picker")
-        .getByRole("option")
-        .filter({ hasText: "Trace 2" })
-        .getAttribute("aria-selected")) === "true",
+      (await option("Trace 2").getAttribute("aria-selected")) === "true",
     "the picked trace to resume after the reload",
   );
   ctx.check("a picked trace resumes after a reload");
@@ -246,7 +243,10 @@ export async function run(ctx) {
 
   const tour = page.locator('[role="dialog"][aria-label$=" tour"]');
 
-  await tour.locator(".tour-stop-main").first().waitFor();
+  await tour
+    .getByText(/^Step \d+ of \d+$/)
+    .first()
+    .waitFor();
   assert.equal(
     await tour.locator('button[aria-label$=" in software map"]').count(),
     0,
@@ -326,7 +326,7 @@ export async function run(ctx) {
 
   const overlay = page.locator(".diagram-tour-overlay");
 
-  await overlay.locator(".tour-pill--intro").click();
+  await overlay.getByRole("button", { name: / more steps$/ }).click();
 
   const count = () =>
     page
