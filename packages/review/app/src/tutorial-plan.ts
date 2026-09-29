@@ -133,7 +133,7 @@ const tutorialSteps: readonly TutorialStepDefinition[] = [
     instruction:
       "Select the trace quote to read it in context. Enable capture for your own sessions in Settings → Experimental Features → Trace capture.",
     completion: "click",
-    targetSelector: '[data-review-section="Agent traces"] .review-trace-quote',
+    targetSelector: '[data-review-section="Agent traces"] a[href^="#trace-"]',
   },
   {
     id: "getHelp",

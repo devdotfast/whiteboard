@@ -13,6 +13,7 @@ import { useReviewContainer } from "@canvas/review-root-context";
 import { shellStyles } from "@canvas/shell-styles";
 import { useRightPanelResize } from "@canvas/side-panel-resizer";
 import { withClass } from "@canvas/stylex-props";
+import { themeStyles } from "@canvas/theme-styles";
 import { tokens } from "@canvas/tokens.stylex";
 import { captureUiEvent } from "@canvas/ui-telemetry";
 import { codePeekSource } from "@review/source";
@@ -1146,7 +1147,12 @@ export function softwareMapOverlayProps(settings: {
   theme: ReviewTheme;
   nodeTint: ReviewNodeTint;
 }) {
-  return withClass(softwareMapOverlayClassName(settings), styles.overlay);
+  return withClass(
+    softwareMapOverlayClassName(settings),
+    themeStyles.app,
+    settings.theme === "light" && themeStyles.light,
+    styles.overlay,
+  );
 }
 
 /** A map frame's style props. */
