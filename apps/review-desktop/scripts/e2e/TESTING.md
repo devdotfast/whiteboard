@@ -78,9 +78,9 @@ reads or writes `~/.ssh`. Run `remote.mjs` with no arguments for its commands;
 
 ```sh
 R="node apps/review-desktop/scripts/e2e/remote/remote.mjs"
+export WB_TEST_RUN=task0-$$  # before the first `up`, when more than one check may run
 trap '$R down --all; $R verify-clean' EXIT
-$R up a                      # prints wb-test-a; the first `up` prints the run id
-export WB_TEST_RUN=<run id>  # needed only when several runs exist
+$R up a                      # prints wb-test-a
 $R install a
 $R ssh a -- whiteboard version
 port=$($R forward a 8000)    # ssh -L from a free loopback port
@@ -90,8 +90,11 @@ ssh -F /tmp/wbt.$WB_TEST_RUN/ssh_config wb-test-a
 
 Every container, image, network, key pair, security group and instance is
 named `wb-test-...`; AWS resources also carry the tags `wb-test=1` and
-`wb-test-run=<run id>`. `down --all` removes every run's resources, or only
-`WB_TEST_RUN`'s when it is set, and `down <name>` removes one host.
+`wb-test-run=<run id>`. Without `WB_TEST_RUN`, a command uses the only run
+there is and says so, so set `WB_TEST_RUN` before the first `up` when more
+than one check may run. `down --all` removes the selected run, `down <name>`
+one host, and `down --every-run` every run under `/tmp/wbt.*`, to recover
+after a crash.
 `verify-clean` looks for leftovers by name and tag, not through `state.json`,
 and fails when AWS cannot be checked. `aws-up` needs a valid
 `aws sso login` session, launches at most two instances at a time in the
@@ -99,6 +102,7 @@ profile's default region, and each instance terminates itself after three
 hours.
 
 `--sealed` deletes the container's default route and checks that an outbound
-request fails. `--delay-ms` delays both directions with `netem`. Both run their
+request fails; `install` gives the route back only while `npm` runs, then
+checks again. `--delay-ms` delays both directions with `netem`. Both run their
 network commands from a throwaway container, so the remote itself never holds
 `NET_ADMIN`.

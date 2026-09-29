@@ -7,7 +7,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 
-import { sshConfigBlock } from "./remote.mjs";
+import { sshConfigBlock } from "./ssh.mjs";
 
 const exec = promisify(execFile);
 
@@ -74,6 +74,21 @@ test("down --all with an empty state.json exits 0", async () => {
 
   assert.equal(code, 0, stderr);
   assert.equal(existsSync(runDir), false);
+});
+
+test("a host name or run id outside [a-z0-9-] is refused before any work", async () => {
+  const id = `t${randomBytes(4).toString("hex")}`;
+
+  const badName = await run(["up", "a,b"], { WB_TEST_RUN: id });
+
+  assert.equal(badName.code, 1);
+  assert.match(badName.stderr, /host name must match/);
+  assert.equal(existsSync(`/tmp/wbt.${id}`), false);
+
+  const badRun = await run(["down", "--all"], { WB_TEST_RUN: "../x" });
+
+  assert.equal(badRun.code, 1);
+  assert.match(badRun.stderr, /WB_TEST_RUN must match/);
 });
 
 test(
