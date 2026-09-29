@@ -159,7 +159,7 @@
         "packages/review/app/src/**/*.tsx"
       ],
       "rules": {
-        "canvas-styles/scale-literals": "warn"
+        "canvas-styles/scale-literals": "error"
       }
     }
   ]
