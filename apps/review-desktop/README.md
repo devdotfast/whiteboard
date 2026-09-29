@@ -477,6 +477,12 @@ Check keyboard navigation, cancellation, focus restoration, disposal, themes,
 zoom, and narrow layouts in the actual Desktop app when changing a host control;
 browser tests alone do not validate the workbench integration.
 
+## Canvas data
+
+The canvas uses TanStack Query (`canvas-query.tsx`) for local API and bridge
+requests. Use `useQuery` or `useMutation` for new requests instead of
+hand-written fetch effects; keep local UI state out of it.
+
 ## Development and validation
 
 Canvas changes need `pnpm --filter @dev.fast/review-canvas build` and a
