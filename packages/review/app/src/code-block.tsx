@@ -3,6 +3,7 @@ import {
   type ShjToken,
   tokenize,
 } from "@speed-highlight/core";
+import * as stylex from "@stylexjs/stylex";
 import {
   type ComponentProps,
   type ReactElement,
@@ -81,7 +82,12 @@ export function RenderedCodeBlock({
         title={caption}
         meta={`${lineCount} ${lineCount === 1 ? "line" : "lines"}`}
         action={
-          <CopyButton text={code} label="Copy" className="rendered-code-copy" />
+          <CopyButton
+            text={code}
+            label="Copy"
+            className="rendered-code-copy"
+            iconStyle={styles.copyIcon}
+          />
         }
       />
       <pre {...props} className="rendered-code-body">
@@ -192,3 +198,11 @@ function normalizeMarkdownCodeLanguage(language: string): ShjLanguage | null {
       return null;
   }
 }
+
+const styles = stylex.create({
+  copyIcon: {
+    width: "14px",
+    height: "14px",
+    strokeWidth: "1.5px",
+  },
+});

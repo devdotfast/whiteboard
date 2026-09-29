@@ -9,6 +9,7 @@ import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
+import { controlStyles } from "./controls-styles";
 import { DiffrConfigSection } from "./diffr-config-section";
 import { settingsStyles as styles } from "./settings-styles";
 import { withClass } from "./stylex-props";
@@ -379,7 +380,11 @@ function Choice<T extends string>({
   const choices = Object.keys(labels) as T[];
 
   return (
-    <div className="review-segmented" role="radiogroup" aria-label={label}>
+    <div
+      {...stylex.props(controlStyles.segmented)}
+      role="radiogroup"
+      aria-label={label}
+    >
       {choices.map((choice) => (
         <button
           key={choice}
@@ -387,11 +392,10 @@ function Choice<T extends string>({
           role="radio"
           aria-checked={choice === value}
           disabled={disabled}
-          className={
-            choice === value
-              ? "review-segment review-segment--active"
-              : "review-segment"
-          }
+          {...stylex.props(
+            controlStyles.segment,
+            choice === value && controlStyles.segmentActive,
+          )}
           onClick={() => onChange(choice)}
         >
           {labels[choice]}

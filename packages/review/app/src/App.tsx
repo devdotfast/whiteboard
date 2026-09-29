@@ -6,6 +6,7 @@ import {
   type SoftwareMapTopologyDiff,
   diffSoftwareMaps,
 } from "@review/software-map-topology-diff";
+import * as stylex from "@stylexjs/stylex";
 import {
   type CSSProperties,
   type ComponentType,
@@ -25,6 +26,7 @@ import {
   ReviewSurfaceLabel,
 } from "./authoring-activity";
 import { BugReportControl } from "./bug-report-dialog";
+import { controlStyles } from "./controls-styles";
 import {
   ReviewDebugSettingsProvider,
   type ReviewNodeTint,
@@ -34,6 +36,7 @@ import { DiffLayoutControl } from "./diff-layout-control";
 import { ReviewDiffView } from "./DiffView";
 import { useReviewSession } from "./host/review-session";
 import { DiscordIcon, MarkerUnderline, SettingsSlidersIcon } from "./icons";
+import { segmentMarker } from "./markers.stylex";
 import { ReviewPanelHost } from "./review-components";
 import {
   ReviewProvider,
@@ -76,6 +79,7 @@ import type {
 } from "./software-map/model";
 import { SoftwareMapTopologyUnavailable } from "./software-map/software-map-absence";
 import { SoftwareMap } from "./software-map/SoftwareMap";
+import { withClass } from "./stylex-props";
 import { useTutorial } from "./tutorial-context";
 import { TutorialExperienceProvider } from "./tutorial-experience";
 import { captureUiEvent } from "./ui-telemetry";
@@ -495,7 +499,10 @@ function ReviewLayoutContent({
           <header className="review-topbar">
             <div className="review-topbar-left">
               <div
-                className="review-segmented"
+                {...stylex.props(
+                  controlStyles.segmented,
+                  controlStyles.segmentedTopbar,
+                )}
                 role="group"
                 aria-label="Session views"
               >
@@ -510,11 +517,14 @@ function ReviewLayoutContent({
                     }
                     aria-pressed={activeView === view}
                     title={view === "map" ? "Map (Experimental)" : undefined}
-                    className={
-                      activeView === view
-                        ? "review-segment review-segment--active"
-                        : "review-segment"
-                    }
+                    {...withClass(
+                      "review-segment",
+                      segmentMarker,
+                      controlStyles.segment,
+                      controlStyles.segmentTopbar,
+                      activeView === view && controlStyles.segmentActive,
+                      activeView === view && controlStyles.segmentTopbarActive,
+                    )}
                     onClick={() => {
                       if (view === "diff")
                         captureUiEvent(session, "diff_opened", {
@@ -540,16 +550,28 @@ function ReviewLayoutContent({
                       <span>{reviewViewLabel(view)}</span>
                     )}
                     {view === "diff" && filesTabFileCount !== null && (
-                      <span className="review-segment-count">
+                      <span
+                        {...stylex.props(
+                          controlStyles.segmentCount,
+                          activeView === view &&
+                            controlStyles.segmentCountActive,
+                        )}
+                      >
                         {filesTabFileCount}
                       </span>
                     )}
                     {view === "commits" && (
-                      <span className="review-segment-count">
+                      <span
+                        {...stylex.props(
+                          controlStyles.segmentCount,
+                          activeView === view &&
+                            controlStyles.segmentCountActive,
+                        )}
+                      >
                         {commits.length}
                       </span>
                     )}
-                    <MarkerUnderline />
+                    <MarkerUnderline active={activeView === view} />
                   </button>
                 ))}
               </div>
@@ -605,7 +627,7 @@ function ReviewLayoutContent({
                   session.surface.post({ name: "joinDiscord", args: {} });
                 }}
               >
-                <DiscordIcon />
+                <DiscordIcon xstyle={controlStyles.chromeIcon} />
               </button>
               <BugReportControl />
               <ReviewBatonChip outcome={review.submissionOutcome} />

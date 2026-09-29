@@ -1,10 +1,17 @@
+import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
-export function CloseIcon(): ReactElement {
+import { chevronMarker, segmentMarker } from "./markers.stylex";
+import { tokens } from "./tokens.stylex";
+
+/** Styles a parent adds to an icon for its context. */
+export type IconProps = { xstyle?: stylex.StyleXStyles };
+
+export function CloseIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="ui-icon ui-icon--close"
+      {...stylex.props(styles.icon, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -13,11 +20,11 @@ export function CloseIcon(): ReactElement {
   );
 }
 
-export function SlidersIcon(): ReactElement {
+export function SlidersIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="ui-icon ui-icon--sliders"
+      {...stylex.props(styles.icon, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -28,11 +35,11 @@ export function SlidersIcon(): ReactElement {
   );
 }
 
-export function UnifiedLayoutIcon(): ReactElement {
+export function UnifiedLayoutIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="ui-icon ui-icon--layout"
+      {...stylex.props(styles.icon, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -42,11 +49,11 @@ export function UnifiedLayoutIcon(): ReactElement {
   );
 }
 
-export function SplitLayoutIcon(): ReactElement {
+export function SplitLayoutIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="ui-icon ui-icon--layout"
+      {...stylex.props(styles.icon, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -56,11 +63,11 @@ export function SplitLayoutIcon(): ReactElement {
   );
 }
 
-export function BugIcon(): ReactElement {
+export function BugIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="ui-icon ui-icon--bug"
+      {...stylex.props(styles.icon, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -71,11 +78,11 @@ export function BugIcon(): ReactElement {
   );
 }
 
-export function ContentsIcon(): ReactElement {
+export function ContentsIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="ui-icon ui-icon--contents"
+      {...stylex.props(styles.icon, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -85,11 +92,11 @@ export function ContentsIcon(): ReactElement {
   );
 }
 
-export function TutorialIcon(): ReactElement {
+export function TutorialIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="ui-icon ui-icon--tutorial"
+      {...stylex.props(styles.icon, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -99,11 +106,11 @@ export function TutorialIcon(): ReactElement {
   );
 }
 
-export function PlusIcon(): ReactElement {
+export function PlusIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="ui-icon ui-icon--plus"
+      {...stylex.props(styles.icon, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -112,11 +119,11 @@ export function PlusIcon(): ReactElement {
   );
 }
 
-export function MinusIcon(): ReactElement {
+export function MinusIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="ui-icon ui-icon--minus"
+      {...stylex.props(styles.icon, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -125,11 +132,11 @@ export function MinusIcon(): ReactElement {
   );
 }
 
-export function RefreshIcon(): ReactElement {
+export function RefreshIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="ui-icon ui-icon--refresh"
+      {...stylex.props(styles.icon, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -154,11 +161,11 @@ export function SettingsSlidersIcon(): ReactElement {
   );
 }
 
-export function MapPinIcon(): ReactElement {
+export function MapPinIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="ui-icon ui-icon--map-pin"
+      {...stylex.props(styles.icon, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -169,18 +176,21 @@ export function MapPinIcon(): ReactElement {
 }
 
 /**
- * The whiteboard marker stroke, drawn under a top bar surface; controls.css
- * reveals it left to right with a clip.
+ * The whiteboard marker stroke, drawn under a top bar surface; it is revealed
+ * left to right with a clip. Its tab carries `segmentMarker`.
  */
-export function MarkerUnderline(): ReactElement {
+export function MarkerUnderline({ active }: { active: boolean }): ReactElement {
   return (
     <svg
-      className="review-marker-underline"
+      {...stylex.props(styles.underline, active && styles.underlineActive)}
       viewBox="0 0 48 3"
       preserveAspectRatio="none"
       aria-hidden="true"
     >
-      <path d="M1 1.6 C 12 0.5, 30 2.5, 47 1.2" />
+      <path
+        {...stylex.props(styles.underlineStroke)}
+        d="M1 1.6 C 12 0.5, 30 2.5, 47 1.2"
+      />
     </svg>
   );
 }
@@ -190,15 +200,17 @@ export function MarkerUnderline(): ReactElement {
  * right when closed and rotates to point down when open; every section
  * header, lens row, tree row, commit card and dropdown chip uses this, and the
  * workbench restyles its codicon twisties to the same path (review.css).
+ * Its button carries `chevronMarker`.
  */
 export function DisclosureChevron({
   expanded,
-}: {
+  xstyle,
+}: IconProps & {
   expanded: boolean;
 }): ReactElement {
   return (
     <svg
-      className="review-chevron"
+      {...stylex.props(styles.chevron, expanded && styles.chevronOpen, xstyle)}
       viewBox="0 0 12 12"
       aria-hidden="true"
       data-open={expanded || undefined}
@@ -208,10 +220,10 @@ export function DisclosureChevron({
   );
 }
 
-export function DiscordIcon(): ReactElement {
+export function DiscordIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
-      className="ui-icon ui-icon--discord"
+      {...stylex.props(styles.icon, styles.discord, xstyle)}
       viewBox="0 0 24 24"
       aria-hidden="true"
       focusable="false"
@@ -221,10 +233,10 @@ export function DiscordIcon(): ReactElement {
   );
 }
 
-export function ShareIcon(): ReactElement {
+export function ShareIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
-      className="ui-icon"
+      {...stylex.props(styles.icon, xstyle)}
       viewBox="0 0 24 24"
       aria-hidden="true"
       focusable="false"
@@ -234,11 +246,11 @@ export function ShareIcon(): ReactElement {
   );
 }
 
-export function CopyIcon(): ReactElement {
+export function CopyIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="ui-icon ui-icon--copy"
+      {...stylex.props(styles.icon, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -248,11 +260,11 @@ export function CopyIcon(): ReactElement {
   );
 }
 
-export function CodeIcon(): ReactElement {
+export function CodeIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="ui-icon"
+      {...stylex.props(styles.icon, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -261,11 +273,11 @@ export function CodeIcon(): ReactElement {
   );
 }
 
-export function CheckIcon(): ReactElement {
+export function CheckIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="ui-icon ui-icon--check"
+      {...stylex.props(styles.icon, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -279,11 +291,120 @@ export function DrawnCheckIcon(): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="review-drawn-check"
+      {...stylex.props(styles.drawnCheck)}
       focusable="false"
       viewBox="0 0 12 12"
     >
-      <path d="M2.5 6.5 5 9l4.5-6" pathLength={1} />
+      <path
+        {...stylex.props(styles.drawnCheckStroke)}
+        d="M2.5 6.5 5 9l4.5-6"
+        pathLength={1}
+      />
     </svg>
   );
 }
+
+const drawIn = stylex.keyframes({
+  from: { strokeDashoffset: 1 },
+  to: { strokeDashoffset: 0 },
+});
+
+const reducedMotion = "@media (prefers-reduced-motion: reduce)";
+
+const styles = stylex.create({
+  icon: {
+    width: "15px",
+    height: "15px",
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    strokeWidth: "1.7px",
+  },
+  discord: {
+    fill: "currentColor",
+    stroke: "none",
+  },
+  // The marker is drawn, not painted: a clip slides open, so the pen's
+  // progress is the same whatever the tab's width (a dash offset would not
+  // be under non-scaling-stroke). Hover draws a lighter stroke; leaving fades
+  // the ink and only then closes the clip, so the pen never runs backwards.
+  underline: {
+    position: "absolute",
+    bottom: "6px",
+    left: 0,
+    width: "100%",
+    height: "3px",
+    overflow: "visible",
+    clipPath: {
+      default: "inset(-2px 100% -2px 0)",
+      [stylex.when.ancestor(":hover", segmentMarker)]: "inset(-2px 0 -2px 0)",
+    },
+    opacity: {
+      default: 0,
+      [stylex.when.ancestor(":hover", segmentMarker)]: 0.7,
+    },
+    pointerEvents: "none",
+    transition: {
+      default: "opacity 140ms ease, clip-path 0s linear 140ms",
+      [stylex.when.ancestor(":hover", segmentMarker)]:
+        "opacity 0s, clip-path 260ms cubic-bezier(0.2, 0.7, 0.2, 1)",
+      [reducedMotion]: "opacity 100ms ease",
+    },
+  },
+  underlineActive: {
+    clipPath: "inset(-2px 0 -2px 0)",
+    opacity: {
+      default: 1,
+      [stylex.when.ancestor(":hover", segmentMarker)]: 0.7,
+    },
+    transition: {
+      default: "opacity 0s, clip-path 260ms cubic-bezier(0.2, 0.7, 0.2, 1)",
+      [reducedMotion]: "opacity 100ms ease",
+    },
+  },
+  underlineStroke: {
+    fill: "none",
+    stroke: tokens.accent,
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    vectorEffect: "non-scaling-stroke",
+  },
+  chevron: {
+    flex: "none",
+    width: "12px",
+    height: "12px",
+    margin: "2px",
+    color: {
+      default: tokens.inkFaint,
+      [stylex.when.ancestor(":hover", chevronMarker)]: tokens.ink,
+      [stylex.when.ancestor(":focus-visible", chevronMarker)]: tokens.ink,
+    },
+    fill: "none",
+    stroke: "currentcolor",
+    strokeWidth: "1.5",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    transition: "transform 120ms ease, color 120ms ease",
+  },
+  chevronOpen: {
+    transform: "rotate(90deg)",
+  },
+  drawnCheck: {
+    flex: "none",
+    width: "12px",
+    height: "12px",
+  },
+  drawnCheckStroke: {
+    fill: "none",
+    stroke: "currentColor",
+    strokeDasharray: "1",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    strokeWidth: "1.2",
+    animationName: { default: drawIn, [reducedMotion]: "none" },
+    animationDuration: { default: "360ms", [reducedMotion]: "0s" },
+    animationTimingFunction: { default: "ease-out", [reducedMotion]: "ease" },
+    animationFillMode: { default: "both", [reducedMotion]: "none" },
+  },
+});

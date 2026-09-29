@@ -1,3 +1,4 @@
+import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useState } from "react";
 
 import { ContentsIcon } from "./icons";
@@ -289,7 +290,7 @@ export function ReviewToc({
         hidden={showRail || undefined}
         onClick={() => setIsDrawerOpen((open) => !open)}
       >
-        <ContentsIcon />
+        <ContentsIcon xstyle={styles.toggleIcon} />
       </button>
       <div id="review-toc-body" className="review-toc-body">
         <div className="review-toc-head">Contents</div>
@@ -347,3 +348,9 @@ function isVisibleHeadingForActiveTracking(heading: HTMLElement): boolean {
 
   return rect.width !== 0 || rect.height !== 0;
 }
+
+const styles = stylex.create({
+  toggleIcon: {
+    flex: "0 0 auto",
+  },
+});

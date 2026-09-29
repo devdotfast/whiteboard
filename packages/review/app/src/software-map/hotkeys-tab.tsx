@@ -1,4 +1,5 @@
 import { MinusIcon, PlusIcon } from "@canvas/icons";
+import * as stylex from "@stylexjs/stylex";
 import {
   type CSSProperties,
   type KeyboardEvent,
@@ -159,7 +160,7 @@ export function SoftwareMapHotkeysTab({
           tabIndex={open ? 0 : -1}
           onClick={() => onOpenChange(false)}
         >
-          <MinusIcon />
+          <MinusIcon xstyle={styles.icon} />
         </button>
       </div>
       <button
@@ -172,7 +173,7 @@ export function SoftwareMapHotkeysTab({
         onClick={() => onOpenChange(true)}
       >
         <span>Hotkeys</span>
-        <PlusIcon />
+        <PlusIcon xstyle={styles.icon} />
       </button>
     </aside>
   );
@@ -184,3 +185,11 @@ function stopSoftwareMapHotkeysKeyDown(event: KeyboardEvent<HTMLElement>) {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   event.stopPropagation();
 }
+
+const styles = stylex.create({
+  icon: {
+    width: "14px",
+    height: "14px",
+    pointerEvents: "none",
+  },
+});

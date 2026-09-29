@@ -172,11 +172,6 @@
   cursor: pointer;
 }
 
-.topbar-report-bug-button .ui-icon {
-  width: var(--chrome-icon-size);
-  height: var(--chrome-icon-size);
-}
-
 .topbar-report-bug-button:hover:not(:disabled),
 .topbar-report-bug-button:focus-visible:not(:disabled) {
   background: var(--chrome-hover-bg);

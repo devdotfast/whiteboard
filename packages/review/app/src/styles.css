@@ -6,7 +6,6 @@
 @import "@xyflow/react/dist/style.css" layer(vendor);
 @import "./theme.css";
 @import "./base.css";
-@import "./controls.css";
 
 /* Before review-document.css, whose h3 and code rules, and collapsed-section
    heading, must win inside documents and the tutorial. */

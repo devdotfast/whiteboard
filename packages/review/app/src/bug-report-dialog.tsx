@@ -16,6 +16,7 @@ import {
   imageFileFromDataTransfer,
   normalizeScreenshot,
 } from "./bug-report-screenshot";
+import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
 import { BugIcon } from "./icons";
 import { useToast } from "./toast";
@@ -204,7 +205,7 @@ export function BugReportControl({
         disabled={tutorial !== null || capturing}
         onClick={() => void openDialog()}
       >
-        <BugIcon />
+        <BugIcon xstyle={controlStyles.chromeIcon} />
       </button>
       {open && (
         <div className="bug-report-backdrop" onMouseDown={cancel}>

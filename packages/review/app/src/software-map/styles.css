@@ -533,12 +533,6 @@
   outline-offset: -3px;
 }
 
-.software-map-code-hotkeys .ui-icon {
-  width: 14px;
-  height: 14px;
-  pointer-events: none;
-}
-
 @media (max-width: 760px) {
   .software-map-code-hotkeys {
     width: calc(100% - 24px);

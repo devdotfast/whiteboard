@@ -144,19 +144,6 @@
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-.review-commit-toggle .review-chevron {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-}
-
-/* The whole header is the toggle's hit area, so its chevron stays quiet on
-   hover. */
-
-.review-commit-toggle:hover > .review-chevron {
-  color: var(--ink-faint);
-}
-
 .review-commit-toggle strong {
   overflow: hidden;
   color: var(--ink);

@@ -1,4 +1,5 @@
 import type { ReviewComponentProps } from "@review/review-document-data";
+import * as stylex from "@stylexjs/stylex";
 import type {
   CSSProperties,
   ComponentPropsWithoutRef,
@@ -10,6 +11,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import { AuthoredCodeSurface } from "./authored-code-surface";
 import { CodePeekCard } from "./CodePeek";
+import { controlStyles } from "./controls-styles";
 import { findWhitespaceNormalizedSpan } from "./highlighted-text";
 import {
   useOptionalReviewSession,
@@ -17,6 +19,7 @@ import {
 } from "./host/review-session";
 import { CloseIcon, DisclosureChevron, MapPinIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
+import { chevronMarker } from "./markers.stylex";
 import { useReviewActions } from "./review-context";
 import { useOptionalReviewPanelStore, useReviewPanel } from "./review-panel";
 import type {
@@ -33,6 +36,7 @@ import {
   scrollTailHeight,
 } from "./scroll-active-tracking";
 import { useBottomSheetResize } from "./side-panel-resizer";
+import { withClass } from "./stylex-props";
 import { TraceDocument, extractEventText } from "./trace-document";
 import { useTutorialSection } from "./tutorial-section-context";
 import { captureUiEvent } from "./ui-telemetry";
@@ -120,11 +124,11 @@ function ReviewPanelFrame({
         </div>
         <button
           type="button"
-          className="icon-button side-panel-close"
+          {...withClass("side-panel-close", controlStyles.iconButton)}
           onClick={onClose}
           aria-label={closeLabel}
         >
-          <CloseIcon />
+          <CloseIcon xstyle={controlStyles.inertIcon} />
         </button>
       </header>
       <div ref={bodyRef} className="review-panel-body" onScroll={onBodyScroll}>
@@ -203,7 +207,7 @@ export function ReviewSection({
       <div className="review-section-header">
         <button
           type="button"
-          className="review-section-toggle"
+          {...withClass("review-section-toggle", chevronMarker)}
           aria-expanded={!collapsed}
           aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
           onClick={toggleCollapsed}
@@ -636,10 +640,13 @@ function CodeReviewPeekPanel({
                 openSoftwareMapElement(anchor.softwareMapPath!);
                 onClose();
               }}
-              className="icon-button icon-button--map"
+              {...stylex.props(
+                controlStyles.iconButton,
+                controlStyles.iconButtonPeek,
+              )}
               aria-label={`Show ${anchor.title} in software map`}
             >
-              <MapPinIcon />
+              <MapPinIcon xstyle={controlStyles.inertIcon} />
             </button>
           </div>
         ) : null}
@@ -991,14 +998,14 @@ function GuidedTourStopMain({
           <div className="peek-actions">
             <button
               type="button"
-              className="icon-button icon-button--map"
+              {...stylex.props(controlStyles.iconButton)}
               aria-label={`Show ${stop.anchor.title} in software map`}
               onClick={() => {
                 openSoftwareMapElement(stop.anchor.softwareMapPath!);
                 onClose();
               }}
             >
-              <MapPinIcon />
+              <MapPinIcon xstyle={controlStyles.inertIcon} />
             </button>
           </div>
         ) : null}

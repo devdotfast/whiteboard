@@ -198,13 +198,6 @@
   outline-offset: 2px;
 }
 
-.tutorial-guide-pill .ui-icon {
-  width: 22px;
-  height: 22px;
-  pointer-events: none;
-  stroke-width: 1.6px;
-}
-
 /* Target rings are their own elements, drawn in a layer nothing clips:
    inside the scroll region for document content (so they travel with it),
    in the shell overlay for toolbar controls. Each ring follows its target's

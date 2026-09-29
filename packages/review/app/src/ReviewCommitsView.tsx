@@ -2,16 +2,21 @@ import {
   type ReviewCommitSummary,
   type ReviewDiffFileWire,
 } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import { useMemo, useState } from "react";
 
+import { controlStyles } from "./controls-styles";
 import { CopyButton } from "./copy-text";
 import { DiffCount } from "./diff-count";
 import { FileMark } from "./file-mark";
 import { useReviewSession } from "./host/review-session";
 import { CodeIcon, DisclosureChevron } from "./icons";
+import { chevronMarker } from "./markers.stylex";
 import { shortRef } from "./review-branch-range";
 import { ReviewUnavailable } from "./review-empty-state";
 import { countLabel } from "./review-home-view";
+import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
 import { useTooltip } from "./use-tooltip";
 
@@ -144,12 +149,12 @@ function CommitRow({
       <div className="review-commit-card-header">
         <button
           type="button"
-          className="review-commit-toggle"
+          {...withClass("review-commit-toggle", chevronMarker)}
           aria-expanded={expanded}
           onClick={toggleExpanded}
           title={commit.subject}
         >
-          <DisclosureChevron expanded={expanded} />
+          <DisclosureChevron expanded={expanded} xstyle={styles.chevron} />
           <strong>{commit.subject}</strong>
         </button>
         <span className="review-commit-actions">
@@ -158,6 +163,7 @@ function CommitRow({
             text={commit.commit}
             label="Copy commit SHA"
             className="review-topbar-icon-button"
+            iconStyle={controlStyles.chromeIcon}
           />
           <button
             ref={openTooltip}
@@ -166,7 +172,7 @@ function CommitRow({
             aria-label="Open commit diff"
             onClick={() => onOpenDiff(commit, "row")}
           >
-            <CodeIcon />
+            <CodeIcon xstyle={controlStyles.chromeIcon} />
           </button>
         </span>
         <span className="review-commit-meta">
@@ -285,3 +291,18 @@ function formatCommitTime(value: string): string {
     minute: "2-digit",
   }).format(new Date(value));
 }
+
+const styles = stylex.create({
+  // The whole header is the toggle's hit area, so its chevron stays quiet on
+  // hover.
+  chevron: {
+    width: "16px",
+    height: "16px",
+    margin: 0,
+    color: {
+      default: tokens.inkFaint,
+      [stylex.when.ancestor(":focus-visible:not(:hover)", chevronMarker)]:
+        tokens.ink,
+    },
+  },
+});

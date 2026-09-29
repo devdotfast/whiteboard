@@ -1,6 +1,8 @@
+import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
 
 import { useCanvasMenu } from "./host/canvas-ui";
+import { withClass } from "./stylex-props";
 
 /** A single-choice menu; the caller renders the trigger's content. */
 export function OptionMenu<T extends string>({
@@ -36,7 +38,7 @@ export function OptionMenu<T extends string>({
   });
 
   return (
-    <div className={`review-option-menu ${className}`}>
+    <div {...withClass(className, styles.menu)}>
       <button
         className={triggerClassName}
         type="button"
@@ -46,7 +48,7 @@ export function OptionMenu<T extends string>({
       >
         {children}
         <svg
-          className="review-option-menu-chevron"
+          {...stylex.props(styles.chevron)}
           viewBox="0 0 20 20"
           aria-hidden="true"
         >
@@ -56,3 +58,19 @@ export function OptionMenu<T extends string>({
     </div>
   );
 }
+
+const styles = stylex.create({
+  menu: {
+    position: "relative",
+  },
+  chevron: {
+    width: "12px",
+    height: "12px",
+    flexShrink: 0,
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  },
+});

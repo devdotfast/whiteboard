@@ -7,6 +7,7 @@ import {
   useSyncExternalStore,
 } from "react";
 
+import { controlStyles } from "./controls-styles";
 import { useCanvasMenu } from "./host/canvas-ui";
 import { useReviewSession } from "./host/review-session";
 import { SlidersIcon } from "./icons";
@@ -80,7 +81,7 @@ export function DiffLayoutControl(): ReactElement {
         ref={tooltip}
         {...menu.triggerProps}
       >
-        <SlidersIcon />
+        <SlidersIcon xstyle={controlStyles.chromeIcon} />
       </button>
     </div>
   );

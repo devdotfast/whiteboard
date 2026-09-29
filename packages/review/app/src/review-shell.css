@@ -199,34 +199,6 @@
   align-items: center;
 }
 
-/* The view tabs are words on the tray; the marker is drawn under the active
-   one. */
-
-.review-topbar-left .review-segmented {
-  gap: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: var(--transparent);
-}
-
-.review-topbar-left .review-segment {
-  height: var(--review-header-height);
-  padding: 0;
-  border-radius: 0;
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.review-topbar-left .review-segment--active {
-  background: var(--transparent);
-  box-shadow: none;
-  font-weight: 600;
-}
-.review-topbar-left .review-segment--active .review-segment-count {
-  color: var(--accent);
-}
-
 /* The Review tab while the agent writes (study 05, bar B): marker ink sweeps
    through the word itself; when the document becomes ready while the reader
    is elsewhere, an unread dot is tucked past the word's top right. Neither
@@ -260,7 +232,7 @@
   animation: wb-shimmer 1.8s linear infinite;
 }
 
-.review-topbar-left .review-segment--active .review-segment-word[data-working] {
+.review-topbar-left [aria-pressed="true"] .review-segment-word[data-working] {
   background-image: linear-gradient(
     100deg,
     var(--ink) 0 40%,
@@ -497,11 +469,6 @@
   cursor: pointer;
 }
 
-.review-topbar-icon-button .ui-icon {
-  width: var(--chrome-icon-size);
-  height: var(--chrome-icon-size);
-}
-
 .review-topbar-icon-button:focus-visible {
   outline: 1px solid var(--chrome-fg);
   outline-offset: -1px;
@@ -551,11 +518,6 @@
   background: var(--transparent);
   color: var(--chrome-icon-fg);
   cursor: pointer;
-}
-
-.review-diff-settings-button .ui-icon {
-  width: var(--chrome-icon-size);
-  height: var(--chrome-icon-size);
 }
 
 .review-diff-settings-button:hover,

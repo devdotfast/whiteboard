@@ -391,32 +391,6 @@
   line-height: 15px;
 }
 
-.tour-stop-header button {
-  min-height: 30px;
-  padding: 5px 10px;
-  border: 1px solid var(--rule-soft);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--ink);
-}
-
-.tour-stop-header .icon-button {
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 0;
-  border-radius: 3px;
-  background: var(--transparent);
-  box-shadow: none;
-  color: var(--ink-faint);
-}
-
-.tour-stop-header .icon-button:hover,
-.tour-stop-header .icon-button:focus-visible {
-  background: var(--transparent);
-  color: var(--ink-muted);
-}
-
 .tour-stop.active .tour-stop-main {
   border-radius: 9px;
 }

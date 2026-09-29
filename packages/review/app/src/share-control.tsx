@@ -12,6 +12,7 @@ import {
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 import { canvasQueryKeys } from "./canvas-query";
+import { controlStyles } from "./controls-styles";
 import { copyText } from "./copy-text";
 import { useOptionalReviewSession } from "./host/review-session";
 import { ShareIcon } from "./icons";
@@ -213,7 +214,7 @@ export function ShareControl() {
           setOpen(!open);
         }}
       >
-        <ShareIcon />
+        <ShareIcon xstyle={controlStyles.chromeIcon} />
       </button>
       {open && (
         <div

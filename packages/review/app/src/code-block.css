@@ -37,12 +37,6 @@
   cursor: pointer;
 }
 
-.rendered-code-copy > .ui-icon {
-  width: 14px;
-  height: 14px;
-  stroke-width: 1.5px;
-}
-
 .rendered-code-copy:hover,
 .rendered-code-copy[data-copied] {
   background: var(--well);

@@ -5,13 +5,17 @@ import {
   type ReviewCanvasSetupActions,
   type ReviewCliInstallStatus,
 } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { cliInstallReady } from "./cli-install-status";
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
 import { DisclosureChevron, DrawnCheckIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
+import { chevronMarker } from "./markers.stylex";
 import { PromptCard } from "./prompt-card";
+import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 
 export const REVIEW_CONNECT_COPIED_STORAGE_KEY =
   "dev.fast.review.connectCopied";
@@ -387,7 +391,10 @@ export function WelcomePage({
                   >
                     <button
                       type="button"
-                      className="review-onboarding-step-header"
+                      {...withClass(
+                        "review-onboarding-step-header",
+                        chevronMarker,
+                      )}
                       disabled={step.disabled}
                       aria-expanded={open}
                       aria-label={`${open ? "Collapse" : "Expand"} ${step.label ?? step.title}`}
@@ -402,7 +409,10 @@ export function WelcomePage({
                           {step.note}
                         </span>
                       ) : null}
-                      <DisclosureChevron expanded={open} />
+                      <DisclosureChevron
+                        expanded={open}
+                        xstyle={styles.stepChevron}
+                      />
                     </button>
                     {open ? (
                       <div className="review-onboarding-step-body">
@@ -496,3 +506,11 @@ function pathHint(shimPath: string): string {
 
   return `Add ${directory || "~/.local/bin"} to PATH, then refresh.`;
 }
+
+const styles = stylex.create({
+  // The chevron closes the row: it sits in the trailing lane, after the note.
+  stepChevron: {
+    margin: "2px 2px 2px auto",
+    stroke: tokens.reviewHomeMeta,
+  },
+});

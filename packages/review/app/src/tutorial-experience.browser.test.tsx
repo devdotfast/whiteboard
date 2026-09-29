@@ -6,6 +6,7 @@ import { type ReactElement, act, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { controlStyles } from "./controls-styles";
 import {
   type ReviewSession,
   ReviewSessionProvider,
@@ -13,6 +14,7 @@ import {
 import { ReviewSection } from "./review-components";
 import { ReviewProvider } from "./review-context";
 import { testReviewSession } from "./review-session-test-utils";
+import { withClass } from "./stylex-props";
 import { TutorialProvider } from "./tutorial-context";
 import { TutorialExperienceProvider } from "./tutorial-experience";
 
@@ -68,7 +70,11 @@ function Shell({
         shellRef={shellRef}
         scrollRegionRef={regionRef}
       >
-        <button type="button" className="review-segment" aria-label="Commits">
+        <button
+          type="button"
+          {...withClass("review-segment", controlStyles.segment)}
+          aria-label="Commits"
+        >
           Commits
         </button>
         <button
@@ -536,7 +542,7 @@ describe("TutorialExperience", () => {
     );
 
     expect(pill?.getAttribute("aria-label")).toBe("Show tutorial");
-    expect(pill?.querySelector(".ui-icon--tutorial")).not.toBeNull();
+    expect(pill?.querySelector("svg")).not.toBeNull();
     expect(card()).toBeNull();
     act(() => pill?.click());
     expect(tutorial.reopen).toHaveBeenCalledOnce();

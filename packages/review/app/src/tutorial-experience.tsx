@@ -1,3 +1,4 @@
+import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
   type ReactNode,
@@ -387,7 +388,7 @@ export function TutorialExperienceProvider({
               title="Show tutorial"
               onClick={tutorial.reopen}
             >
-              <TutorialIcon />
+              <TutorialIcon xstyle={styles.pillIcon} />
             </button>
           ) : (
             <TutorialGuide experience={experience} />
@@ -633,3 +634,12 @@ function TutorialTargetRing({ ring }: { ring: TutorialRing }): ReactElement {
     </>
   );
 }
+
+const styles = stylex.create({
+  pillIcon: {
+    width: "22px",
+    height: "22px",
+    pointerEvents: "none",
+    strokeWidth: "1.6px",
+  },
+});

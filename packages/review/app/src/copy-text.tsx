@@ -1,3 +1,4 @@
+import type * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useState } from "react";
 
 import { CheckIcon, CopyIcon as CopyGlyph } from "./icons";
@@ -64,10 +65,12 @@ export function CopyButton({
   text,
   label,
   className,
+  iconStyle,
 }: {
   text: string;
   label: string;
   className: string;
+  iconStyle: stylex.StyleXStyles;
 }): ReactElement {
   const [copied, setCopied] = useState(false);
   const tooltip = useTooltip(label);
@@ -94,7 +97,11 @@ export function CopyButton({
         });
       }}
     >
-      {copied ? <CheckIcon /> : <CopyGlyph />}
+      {copied ? (
+        <CheckIcon xstyle={iconStyle} />
+      ) : (
+        <CopyGlyph xstyle={iconStyle} />
+      )}
     </button>
   );
 }

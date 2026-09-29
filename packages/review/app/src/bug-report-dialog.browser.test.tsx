@@ -84,7 +84,7 @@ describe("BugReportControl", () => {
             ? "Bug report was sent."
             : "The report could not be sent. Try again.",
       });
-      expect(container.querySelector(".review-toast")).toBeNull();
+      expect(container.querySelector('[role="status"]')).toBeNull();
       expect(container.querySelector('[role="dialog"]') !== null).toBe(
         status !== 200,
       );

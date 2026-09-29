@@ -63,10 +63,6 @@
   display: none;
 }
 
-.review-toc-toggle .ui-icon {
-  flex: 0 0 auto;
-}
-
 .review-toc-toggle:hover,
 .review-toc-toggle:focus-visible,
 .review-toc--open .review-toc-toggle {
