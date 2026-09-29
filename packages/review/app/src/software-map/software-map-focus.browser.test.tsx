@@ -1,11 +1,11 @@
+import { ReviewDebugSettingsProvider } from "@canvas/debug-settings";
+import { settled } from "@canvas/fixture-review-bridge";
+import { ReviewSessionProvider } from "@canvas/host/review-session";
+import { testReviewSession } from "@canvas/review-session-test-utils";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { ReviewDebugSettingsProvider } from "../debug-settings";
-import { settled } from "../fixture-review-bridge";
-import { ReviewSessionProvider } from "../host/review-session";
-import { testReviewSession } from "../review-session-test-utils";
 import { defineSoftwareModel } from "./model";
 import { SoftwareMap } from "./SoftwareMap";
 
