@@ -597,7 +597,7 @@ function SoftwareMapWithModel({
       selectedNodeId,
     });
 
-    // Leave a selection made after this render, such as a focus request's, for the snapshot that shows it.
+    // Keep a selection made after this render (e.g. a focus request's).
     if (nextSelectedNodeId !== selectedNodeId) {
       setSelectedNodeId((current) =>
         current === selectedNodeId ? nextSelectedNodeId : current,

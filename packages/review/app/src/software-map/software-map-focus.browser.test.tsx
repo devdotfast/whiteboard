@@ -74,8 +74,11 @@ it("selects the element a focus request asks for when it mounts the map", async 
     ),
   );
 
-  await settled(() => selectedNodeIds(container).length > 0);
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 200)));
+  await settled(
+    () =>
+      handled.mock.calls.length > 0 && selectedNodeIds(container).length > 0,
+  );
+  await act(async () => {});
 
   expect(selectedNodeIds(container)).toEqual(["shop.app.orders.create"]);
   expect(handled).toHaveBeenCalledWith(1);

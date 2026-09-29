@@ -190,6 +190,18 @@ describe("Review navigation", () => {
     });
   });
 
+  it("drops a map focus the map never applied once the reader leaves Map", () => {
+    const store = createReviewPanelStore();
+
+    store.getState().focusMapElement("review.missing");
+    store.getState().showView("review");
+    store.getState().showView("map");
+    expect(store.getState().mapFocus).toMatchObject({
+      elementPath: "review.missing",
+      pending: false,
+    });
+  });
+
   it("ignores a map focus on a canvas without a map", () => {
     const store = createReviewPanelStore({ availableViews: ["review"] });
 

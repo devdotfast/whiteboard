@@ -203,6 +203,10 @@ function viewTransition(
   return {
     view,
     ...(view !== "diff" && { diffScope: null }),
+    ...(view !== "map" &&
+      state.mapFocus?.pending && {
+        mapFocus: { ...state.mapFocus, pending: false },
+      }),
     ...(shouldCloseSidePeekForReviewView(view) &&
       state.active && { active: null, motion: "live" }),
   };
