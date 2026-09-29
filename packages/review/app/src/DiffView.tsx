@@ -28,6 +28,7 @@ import { Courier, LensCursorContext, lensRowElement } from "./courier";
 import { compactDiffCount, diffCountStyles } from "./diff-count";
 import { type MotionPhase, withErasedBlocks } from "./draw-queue";
 import { useMotionPhases } from "./draw-queue-provider";
+import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
 import { lensToggleMarker } from "./markers.stylex";
 import { useReviewDiffFiles } from "./review-diff-files-context";
@@ -328,8 +329,8 @@ export function ReviewDiffView({
                   <div
                     {...stylex.props(
                       styles.row,
-                      phase === "landing" && styles.rowLanding,
-                      phase === "erasing" && styles.rowErasing,
+                      phase === "landing" && drawStyles.rowLanding,
+                      phase === "erasing" && drawStyles.rowErasing,
                     )}
                   >
                     <button
@@ -636,9 +637,8 @@ function FilterIcon({ xstyle }: { xstyle?: stylex.StyleXStyles }) {
 
 // The lens list draws like the document: a new row lands in a slot and wipes
 // in, a retitle recomposes the name, a removed row is erased and the list
-// closes over it. Reduced motion shows each phase's finished frame. The wipe
-// and erase animate custom properties registered in authoring-motion.css,
-// so they use its keyframes.
+// closes over it. Reduced motion shows each phase's finished frame. The row's
+// wipe and erase share the document's keyframes in draw-styles.ts.
 const EASE = "cubic-bezier(0.2, 0.7, 0.2, 1)";
 
 const REDUCED = "@media (prefers-reduced-motion: reduce)";
@@ -799,25 +799,6 @@ const styles = stylex.create({
     alignItems: "center",
     paddingRight: "10px",
     gap: "7px",
-  },
-  rowLanding: {
-    maskImage: {
-      default:
-        "linear-gradient(90deg, #000 calc(var(--wb-wipe) - 8%), transparent var(--wb-wipe))",
-      [REDUCED]: "none",
-    },
-    animationName: { default: "wb-wipe", [REDUCED]: "none" },
-    animationDuration: { default: "340ms", [REDUCED]: "0s" },
-    animationTimingFunction: { default: EASE, [REDUCED]: "ease" },
-    animationDelay: { default: "180ms", [REDUCED]: "0s" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
-  },
-  rowErasing: {
-    animationName: { default: "wb-erase", [REDUCED]: "none" },
-    animationDuration: { default: "320ms", [REDUCED]: "0s" },
-    animationTimingFunction: { default: "linear", [REDUCED]: "ease" },
-    animationFillMode: { default: "forwards", [REDUCED]: "none" },
-    opacity: 0,
   },
   toggle: {
     display: "flex",

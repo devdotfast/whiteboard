@@ -13,6 +13,7 @@ import {
 
 import { CopyButton } from "./copy-text";
 import { DiagramHeader } from "./diagram-header";
+import { drawStyles } from "./draw-styles";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 
@@ -75,12 +76,13 @@ export function RenderedCodeBlock({
   const lineCount = countLines(code);
 
   return (
-    // The class scopes the token colors in vendor-overrides.css.
+    // The class scopes the token colors in global.css.
     <figure
       {...withClass(
         className ? `rendered-code-block ${className}` : "rendered-code-block",
         styles.block,
         compact && styles.compact,
+        drawStyles.blockChild,
       )}
       data-language={displayLanguage}
     >

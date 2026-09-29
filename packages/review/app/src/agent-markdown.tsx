@@ -19,6 +19,7 @@ import {
 
 import { RenderedCodeBlock } from "./code-block";
 import { documentStyles as doc } from "./document-styles";
+import { drawStyles } from "./draw-styles";
 import { HighlightedText } from "./highlighted-text";
 import { newTabLinkProps } from "./link-props";
 import { withClass } from "./stylex-props";
@@ -124,7 +125,10 @@ export function MarkdownContent({
                     node.depth === 2 || node.depth === 3
                       ? headingId(heading++)
                       : undefined,
-                  ...stylex.props(headingStyle(node.depth)),
+                  ...stylex.props(
+                    headingStyle(node.depth),
+                    drawStyles.blockChild,
+                  ),
                 },
                 renderMarkdownChildren(
                   node.children ?? [],
@@ -176,7 +180,10 @@ function renderFootnotes(
   const inChat = context.chat;
 
   return (
-    <section data-footnotes="" className="footnotes">
+    <section
+      data-footnotes=""
+      {...withClass("footnotes", !inChat && drawStyles.blockChild)}
+    >
       <ol {...stylex.props(inChat && chat.block, inChat && chat.list)}>
         {footnotes.map((definition, index) => (
           <li
@@ -233,7 +240,10 @@ function renderMarkdownNode(
       return (
         <p
           key={key}
-          {...stylex.props(inChat ? chat.block : doc.paragraph, paragraph)}
+          {...stylex.props(
+            inChat ? chat.block : [doc.paragraph, drawStyles.blockChild],
+            paragraph,
+          )}
         >
           {renderMarkdownChildren(node.children ?? [], key, context)}
         </p>
@@ -295,14 +305,21 @@ function renderMarkdownNode(
     case "break":
       return <br key={key} />;
     case "thematicBreak":
-      return <hr key={key} {...stylex.props(inChat && chat.rule)} />;
+      return (
+        <hr
+          key={key}
+          {...stylex.props(inChat ? chat.rule : drawStyles.blockChild)}
+        />
+      );
     case "heading":
       return createElement(
         headingTag(node.depth),
         {
           key,
           ...stylex.props(
-            inChat ? [chat.block, chat.heading] : headingStyle(node.depth),
+            inChat
+              ? [chat.block, chat.heading]
+              : [headingStyle(node.depth), drawStyles.blockChild],
           ),
         },
         renderMarkdownChildren(node.children ?? [], key, context),
@@ -312,7 +329,9 @@ function renderMarkdownNode(
         <blockquote
           key={key}
           {...stylex.props(
-            inChat ? [chat.block, chat.quote] : [doc.serif, doc.column],
+            inChat
+              ? [chat.block, chat.quote]
+              : [doc.serif, doc.column, drawStyles.blockChild],
           )}
         >
           {renderMarkdownChildren(node.children ?? [], key, context)}
@@ -326,7 +345,11 @@ function renderMarkdownNode(
         {
           key,
           start: node.ordered ? (node.start ?? undefined) : undefined,
-          ...stylex.props(inChat ? [chat.block, chat.list] : doc.column),
+          ...stylex.props(
+            inChat
+              ? [chat.block, chat.list]
+              : [doc.column, drawStyles.blockChild],
+          ),
         },
         renderMarkdownChildren(node.children ?? [], key, context),
       );
@@ -446,7 +469,9 @@ function renderTable(
   return (
     <table
       key={key}
-      {...stylex.props(inChat ? [chat.block, chat.table] : doc.table)}
+      {...stylex.props(
+        inChat ? [chat.block, chat.table] : [doc.table, drawStyles.blockChild],
+      )}
     >
       {header && (
         <thead>

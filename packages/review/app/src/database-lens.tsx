@@ -19,6 +19,7 @@ import { createPortal } from "react-dom";
 
 import { diagramStyles } from "./diagram-styles";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
+import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
 import type { GuidedTour, PeekAnchor } from "./review-panel-model";
 import { useTourPersist, useTourRestore } from "./review-view-state";
@@ -397,7 +398,12 @@ export function DatabaseLens(block: DatabaseLensProps) {
 
   const renderLensFigure = (stage: boolean) => (
     <figure
-      {...withClass("database-lens", styles.figure, stage && styles.stage)}
+      {...withClass(
+        "database-lens",
+        styles.figure,
+        stage && styles.stage,
+        drawStyles.blockChild,
+      )}
       style={{ height: stage ? "100%" : height }}
     >
       <header {...stylex.props(diagramStyles.header, styles.header)}>

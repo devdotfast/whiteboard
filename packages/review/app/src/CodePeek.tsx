@@ -14,6 +14,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useEffect, useMemo, useRef } from "react";
 
 import { DocumentCodeView } from "./DocumentCodeView";
+import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
 import { peekResolutionOutcome } from "./peek-telemetry";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
@@ -172,7 +173,10 @@ export function CodePeekCard({
 
   if (!ranges.length)
     return (
-      <section {...stylex.props(styles.peek)} role="status">
+      <section
+        {...stylex.props(styles.peek, drawStyles.blockChild)}
+        role="status"
+      >
         {outcome === "failed"
           ? "Diff selection unavailable"
           : "Loading diff selection…"}
@@ -180,7 +184,10 @@ export function CodePeekCard({
     );
 
   return (
-    <section {...stylex.props(styles.peek)} data-code-rendering="inline-editor">
+    <section
+      {...stylex.props(styles.peek, drawStyles.blockChild)}
+      data-code-rendering="inline-editor"
+    >
       <DocumentCodeView
         path={source.file}
         title={
@@ -233,7 +240,10 @@ function FileSnippetCard({
   onNativeFocusRef.current = onNativeFocus;
 
   return (
-    <section {...stylex.props(styles.peek)} data-code-rendering="inline-editor">
+    <section
+      {...stylex.props(styles.peek, drawStyles.blockChild)}
+      data-code-rendering="inline-editor"
+    >
       <DocumentCodeView
         path={subject.file}
         title={subject.title}

@@ -3,6 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, isValidElement } from "react";
 
 import { isReactTextNode } from "./agent-markdown";
+import { drawStyles } from "./draw-styles";
 import { ProsePeekAnchor } from "./review-components";
 import { useOptionalReviewPanel } from "./review-panel";
 import { tokens } from "./tokens.stylex";
@@ -44,7 +45,7 @@ export function TraceQuote({
   const href = `#trace-${sessionId}${trace ? `-${trace}` : ""}${event !== undefined ? `-event-${event}` : ""}`;
 
   return (
-    <span {...stylex.props(styles.container)}>
+    <span {...stylex.props(styles.container, drawStyles.blockChild)}>
       <ProsePeekAnchor
         href={href}
         xstyle={[styles.quote, isOpen && styles.open]}

@@ -19,6 +19,7 @@ import {
 import { canvasQueryKeys } from "./canvas-query";
 import { DiffCount } from "./diff-count";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
+import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
 import { ReviewBranchRange, WORKING_TREE } from "./review-branch-range";
 import { useReviewDiffFiles } from "./review-diff-files-context";
@@ -164,7 +165,13 @@ export function ReviewDocumentMetaLine({
   return (
     // The class is a marker: the document and the contents read whether
     // the document has a header.
-    <header {...withClass("review-document-header", styles.header)}>
+    <header
+      {...withClass(
+        "review-document-header",
+        styles.header,
+        drawStyles.blockChild,
+      )}
+    >
       <div {...stylex.props(styles.row, styles.top)} data-review-copy-ignore>
         <div {...stylex.props(styles.row, styles.identity)}>
           {repository ? (

@@ -97,9 +97,8 @@ export function AuthoringActivityBadge({
         : "Agent working…")
     : "Activity unknown";
 
-  // Markers: courier.css draws the mini courier's poses under these.
+  // The class is a marker for tests.
   const badge = "host-authoring-activity";
-  const courier = "host-authoring-courier";
 
   if (!working)
     return (
@@ -109,9 +108,7 @@ export function AuthoringActivityBadge({
         aria-live="polite"
         ref={tooltip}
       >
-        <CourierFigure
-          className={withClass(courier, styles.courier).className}
-        />
+        <CourierFigure xstyle={styles.courier} />
         <span {...stylex.props(styles.text)}>{text}</span>
       </span>
     );
@@ -126,11 +123,7 @@ export function AuthoringActivityBadge({
       ref={tooltip}
       onClick={locate}
     >
-      <CourierFigure
-        className={
-          withClass(courier, styles.courier, styles.courierActive).className
-        }
-      />
+      <CourierFigure xstyle={[styles.courier, styles.courierActive]} marching />
       <span {...stylex.props(styles.text)} role="status" aria-live="polite">
         {text}
       </span>

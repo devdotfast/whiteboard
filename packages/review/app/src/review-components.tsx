@@ -13,6 +13,7 @@ import { AuthoredCodeSurface } from "./authored-code-surface";
 import { CodePeekCard } from "./CodePeek";
 import { controlStyles } from "./controls-styles";
 import { documentStyles } from "./document-styles";
+import { drawStyles } from "./draw-styles";
 import { findWhitespaceNormalizedSpan } from "./highlighted-text";
 import {
   useOptionalReviewSession,
@@ -208,7 +209,7 @@ export function ReviewSection({
     };
   }, []);
 
-  // The classes are markers: find, the code view and authoring motion look
+  // The classes are markers: find, the code view and the section ring look
   // for a (collapsed) section, and the tutorial targets a section's body.
   return (
     <section
@@ -217,6 +218,8 @@ export function ReviewSection({
           ? "review-section review-section--collapsed"
           : "review-section",
         sectionStyles.section,
+        drawStyles.blockChild,
+        drawStyles.sectionRing,
       )}
       data-review-section={title}
       data-tutorial-chapter-state={tutorialSection.state ?? undefined}
@@ -244,6 +247,7 @@ export function ReviewSection({
               sectionStyles.title,
               tutorialSection.state === "active" && sectionStyles.titleActive,
               collapsed && sectionStyles.titleCollapsed,
+              drawStyles.retitledHeading,
             )}
           >
             {title}

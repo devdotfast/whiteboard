@@ -21,6 +21,8 @@ import { CodePeekCard } from "./CodePeek";
 import { DatabaseLens } from "./database-lens";
 import { SequenceDiagram } from "./diagrams";
 import { documentStyles } from "./document-styles";
+import { useMotionPhase } from "./draw-queue-provider";
+import { drawStyles } from "./draw-styles";
 import { FlowDiagram } from "./flow-diagram";
 import { AnchorLink, ReviewSection } from "./review-components";
 import { ReviewDocumentTitle } from "./review-document-surface";
@@ -124,7 +126,7 @@ function CodeBlock({ node }: BlockProps<"code">) {
 }
 
 function DividerBlock() {
-  return <hr />;
+  return <hr {...stylex.props(drawStyles.blockChild)} />;
 }
 
 function SectionBlock({ node, data, children }: BlockProps<"section">) {
@@ -142,6 +144,8 @@ function SectionBlock({ node, data, children }: BlockProps<"section">) {
 }
 
 function CalloutBlock({ node, children }: BlockProps<"callout">) {
+  const retitled = useMotionPhase(node.id) === "retitle";
+
   return (
     <blockquote
       data-tone={node.tone}
@@ -150,9 +154,17 @@ function CalloutBlock({ node, children }: BlockProps<"callout">) {
         styles.callout,
         styles[node.tone],
         documentStyles.column,
+        drawStyles.blockChild,
       )}
     >
-      {node.title && <strong data-review-copy-prose>{node.title}</strong>}
+      {node.title && (
+        <strong
+          data-review-copy-prose
+          {...stylex.props(retitled && drawStyles.retitle)}
+        >
+          {node.title}
+        </strong>
+      )}
       {children(node.children)}
     </blockquote>
   );
@@ -191,7 +203,7 @@ function DatabaseLensBlock({ node }: BlockProps<"database_lens">) {
 
 function ImageBlock({ node, data }: BlockProps<"image">) {
   return (
-    <figure {...stylex.props(documentStyles.column)}>
+    <figure {...stylex.props(documentStyles.column, drawStyles.blockChild)}>
       <img
         src={data.images.get(node.assetId)}
         alt={node.alt}
@@ -214,7 +226,11 @@ function TraceQuoteBlock({ node, data }: BlockProps<"trace_quote">) {
     return (
       <blockquote
         data-unavailable="trace"
-        {...stylex.props(documentStyles.serif, documentStyles.column)}
+        {...stylex.props(
+          documentStyles.serif,
+          documentStyles.column,
+          drawStyles.blockChild,
+        )}
       >
         {node.text}
       </blockquote>
@@ -245,19 +261,19 @@ function TutorialBlock({ node, children }: BlockProps<"tutorial">) {
   switch (node.kind) {
     case "keymap":
       return (
-        <div {...stylex.props(documentStyles.column)}>
+        <div {...stylex.props(documentStyles.column, drawStyles.blockChild)}>
           <TutorialKeymapPicker />
         </div>
       );
     case "conversation":
       return (
-        <div {...stylex.props(documentStyles.column)}>
+        <div {...stylex.props(documentStyles.column, drawStyles.blockChild)}>
           <TutorialAuthoringConversation conversation={node.conversation} />
         </div>
       );
     case "view":
       return (
-        <div {...stylex.props(documentStyles.column)}>
+        <div {...stylex.props(documentStyles.column, drawStyles.blockChild)}>
           <TutorialViewButton view={node.view}>{node.label}</TutorialViewButton>
         </div>
       );
@@ -354,7 +370,11 @@ export class BlockErrorBoundary extends Component<
 
     if (error)
       return (
-        <div role="alert" data-block-error={type}>
+        <div
+          role="alert"
+          data-block-error={type}
+          {...stylex.props(drawStyles.blockChild)}
+        >
           This {type.replaceAll("_", " ")} block could not be rendered:{" "}
           {error.message}
         </div>

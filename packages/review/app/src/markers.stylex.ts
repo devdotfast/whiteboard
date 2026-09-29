@@ -29,3 +29,9 @@ export const mapFrameMarker = stylex.defineMarker();
 
 /** A flow diagram node; its outline takes the marker while it has focus. */
 export const flowNodeMarker = stylex.defineMarker();
+
+/** A review document block; its heading recomposes while it is retitled. */
+export const documentNodeMarker = stylex.defineMarker();
+
+/** The board courier's button; his tag shows while it is hovered or focused. */
+export const courierMarker = stylex.defineMarker();

@@ -1,3 +1,4 @@
+import { drawStyles } from "@canvas/draw-styles";
 import { withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
@@ -17,6 +18,7 @@ export function softwareMapRootProps(className?: string, variant?: "view") {
     ["software-map", className].filter(Boolean).join(" "),
     styles.root,
     variant === "view" && styles.view,
+    drawStyles.blockChild,
   );
 }
 

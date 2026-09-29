@@ -30,6 +30,7 @@ import { diagramStyles } from "./diagram-styles";
 import { hasTextSelectionWithin } from "./diagram-text-selection";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { useMotionPhase } from "./draw-queue-provider";
+import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
 import { useReviewPanel } from "./review-panel";
 import type { GuidedTour, PeekAnchor } from "./review-panel-model";
@@ -582,6 +583,7 @@ function SequenceDiagramFigure({
           stage && styles.stage,
           Boolean(activeTourAnchor) &&
             (stage ? styles.stageActive : styles.active),
+          drawStyles.blockChild,
         )}
         style={style}
         tabIndex={-1}
@@ -777,7 +779,8 @@ function SequenceMessageEdge(
             ? undefined
             : props.markerEnd
         }
-        // The class carries the draw queue's motion rules.
+        // The class is a marker for tests. The stroke color is the edge's
+        // inline style, so it holds while the line is drawn.
         className={
           withClass(
             "sequence-message",
@@ -785,6 +788,9 @@ function SequenceMessageEdge(
             data.active && styles.messageActive,
             (stepMotion === "outline" || stepMotion === "stroke") &&
               styles.messageDrawing,
+            stepMotion === "queued" && drawStyles.hidden,
+            stepMotion === "stroke" && drawStyles.traceQuick,
+            stepMotion === "outline" && drawStyles.traceLine,
           ).className
         }
         style={props.style}
@@ -803,13 +809,14 @@ function SequenceMessageEdge(
       <EdgeLabelRenderer>
         <button
           type="button"
-          {...withClass(
-            "sequence-message-dot",
+          {...stylex.props(
             styles.dot,
-            stepMotion === "attention" && styles.dotAttention,
             data.active && styles.dotActive,
             stage && styles.stopBadge,
             stage && data.active && styles.stopBadgeActive,
+            stepMotion === "attention" && styles.dotAttention,
+            stepMotion === "queued" && drawStyles.hidden,
+            stepMotion === "fill" && drawStyles.stepPop,
           )}
           style={{
             transform: `translate(-50%, -50%) translate(${props.sourceX}px,${props.sourceY}px)`,
@@ -825,7 +832,12 @@ function SequenceMessageEdge(
           {data.stepNumber}
         </button>
         <div
-          {...withClass("sequence-message-label-anchor", styles.labelAnchor)}
+          {...stylex.props(
+            styles.labelAnchor,
+            stepMotion === "queued" && drawStyles.hidden,
+            (stepMotion === "outline" || stepMotion === "stroke") &&
+              drawStyles.labelStep,
+          )}
           data-motion={stepMotion}
           style={{
             transform: `translate(-50%, -100%) translate(${labelX}px,${labelY}px)`,
@@ -1200,6 +1212,7 @@ const styles = stylex.create({
   },
   dotAttention: {
     borderColor: tokens.accent,
+    boxShadow: `0 0 0 3px ${tokens.markerGlow}`,
   },
   dotActive: {
     borderColor: tokens.accent,

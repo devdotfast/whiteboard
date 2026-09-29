@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { DiagramHeader } from "./diagram-header";
 import { diagramStyles } from "./diagram-styles";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
+import { drawStyles } from "./draw-styles";
 import { FlowGraph } from "./flow-graph";
 import type { GuidedTour, GuidedTourStop } from "./review-panel-model";
 import { withClass } from "./stylex-props";
@@ -90,7 +91,11 @@ export function FlowDiagram({
 
   const figure = (fullscreen: boolean) => (
     <figure
-      {...stylex.props(styles.figure, fullscreen && styles.stage)}
+      {...stylex.props(
+        styles.figure,
+        fullscreen && styles.stage,
+        drawStyles.blockChild,
+      )}
       aria-label={node.title}
     >
       <DiagramHeader

@@ -29,6 +29,7 @@ import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { useReviewDebugSettings } from "./debug-settings";
 import { diagramStyles } from "./diagram-styles";
 import { useMotionPhase } from "./draw-queue-provider";
+import { drawStyles } from "./draw-styles";
 import { ElementCountsText } from "./lens-counts";
 import { flowNodeMarker } from "./markers.stylex";
 import { useReviewLenses } from "./review-lenses";
@@ -526,13 +527,13 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
 
   return (
     <div
-      // The class carries the draw queue's motion rules.
+      // The class is a marker for tests.
       {...withClass(
         "lens-flow-node",
         flowNodeMarker,
         styles.node,
-        // Queued, the motion rule hides it.
-        progress.state === "viewed" && motion !== "queued" && styles.viewed,
+        progress.state === "viewed" && styles.viewed,
+        motion === "queued" && drawStyles.hidden,
       )}
       style={{ width: SIZE.width, height: SIZE.height }}
       role="button"
@@ -567,7 +568,7 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
         {...stylex.props(styles.handle)}
       />
       <svg
-        {...withClass("flow-node-shape", styles.drawing)}
+        {...stylex.props(styles.drawing)}
         viewBox={`0 0 ${SIZE.width} ${SIZE.height}`}
         preserveAspectRatio="none"
         aria-hidden="true"
@@ -578,8 +579,13 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
             changeOutline[change(progress)],
             selected && styles.outlineSelected,
             node.kind === "decision" && !motion && styles.outlineDecision,
-            motion === "stroke" && styles.outlineTracing,
-            motion === "outline" && styles.outlineOnly,
+            motion === "stroke" && [
+              styles.outlineTracing,
+              drawStyles.traceQuick,
+            ],
+            motion === "outline" && [styles.outlineOnly, drawStyles.traceNode],
+            motion === "fill" && drawStyles.fill,
+            motion === "relabel" && drawStyles.refill,
             motion === "attention" && styles.outlineAttention,
           )}
           pathLength={1}
@@ -590,7 +596,14 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
           rx={node.kind === "terminal" ? SIZE.height / 2 : 6}
         />
       </svg>
-      <div {...withClass("flow-node-text", styles.text)}>
+      <div
+        {...stylex.props(
+          styles.text,
+          motion === "stroke" && drawStyles.labelQuick,
+          motion === "outline" && drawStyles.hidden,
+          (motion === "fill" || motion === "relabel") && drawStyles.labelFill,
+        )}
+      >
         <span {...stylex.props(styles.label)}>
           {node.label.length > 26 ? `${node.label.slice(0, 25)}…` : node.label}
         </span>
@@ -627,10 +640,12 @@ function FlowEdge({ id, data, markerEnd }: EdgeProps<FlowEdgeType>) {
         id={id}
         path={path}
         className={
-          withClass(
-            "lens-flow-edge",
+          stylex.props(
             styles.edge,
             (motion === "outline" || motion === "stroke") && styles.edgeTracing,
+            motion === "queued" && drawStyles.hidden,
+            motion === "stroke" && drawStyles.traceQuick,
+            motion === "outline" && drawStyles.traceLine,
           ).className
         }
         // The arrowhead is the last stroke.
@@ -645,7 +660,12 @@ function FlowEdge({ id, data, markerEnd }: EdgeProps<FlowEdgeType>) {
       />
       {data.label && (
         <text
-          {...withClass("lens-flow-edge-label", styles.edgeLabel)}
+          {...stylex.props(
+            styles.edgeLabel,
+            motion === "queued" && drawStyles.hidden,
+            motion === "stroke" && drawStyles.labelEdgeQuick,
+            motion === "outline" && drawStyles.labelEdge,
+          )}
           x={data.label.x}
           y={data.label.y}
           data-motion={motion}
@@ -745,8 +765,7 @@ const styles = stylex.create({
     stroke: tokens.inkMuted,
     strokeDasharray: "0.0075 0.0057",
   },
-  // While drawn, the trace strokes it in the marker (the motion rules
-  // carry the dashes and the animation).
+  // While drawn, the trace strokes it in the marker.
   outlineTracing: {
     stroke: tokens.accent,
     strokeWidth: 1.6,

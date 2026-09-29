@@ -1,5 +1,6 @@
-/* Plain CSS for DOM the canvas does not render itself, so StyleX cannot
-   reach it. Keep the rules in their original order. */
+/* Plain CSS that StyleX cannot express: rules for DOM the canvas does not
+   render itself, and custom property registrations. Keep the rules in their
+   original order. */
 
 /* Code block syntax tokens (@speed-highlight/core). The Whiteboard palette:
    ink at three strengths, the marker for keywords, two more blues for types
@@ -136,4 +137,19 @@
 .lens-flow .react-flow__pane,
 .lens-flow .react-flow__viewport {
   background: var(--transparent);
+}
+
+/* The drawing's wipe and eraser sweep (draw-styles.ts) animate these. StyleX
+   typed variables (stylex.types) always register as inheriting. */
+
+@property --wb-wipe {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
+@property --wb-sweep {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: -20%;
 }

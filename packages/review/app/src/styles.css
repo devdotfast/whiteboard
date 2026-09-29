@@ -6,8 +6,4 @@
 @import "@xyflow/react/dist/style.css" layer(vendor);
 @import "./theme.css";
 @import "./base.css";
-@import "./vendor-overrides.css";
-
-/* Last: authoring-motion restyles everything above while data-motion is set. */
-@import "./courier.css";
-@import "./authoring-motion.css";
+@import "./global.css";

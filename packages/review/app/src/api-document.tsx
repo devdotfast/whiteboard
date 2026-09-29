@@ -28,12 +28,15 @@ import { AuthoringCursorContext, Courier } from "./courier";
 import { documentStyles } from "./document-styles";
 import { withErasedBlocks } from "./draw-queue";
 import { useMotionPhase, useMotionPhases } from "./draw-queue-provider";
+import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
+import { documentNodeMarker } from "./markers.stylex";
 import { reportReviewDocumentRenderError } from "./review-document-error-report";
 import { ReviewDocumentTitle } from "./review-document-surface";
 import { cssIdentifier, scrollToReviewHeading } from "./review-heading-scroll";
 import { useReviewRoots } from "./review-root-context";
 import type { SoftwareMapResolvedDataPayload } from "./software-map/software-map-snapshot";
+import { withClass } from "./stylex-props";
 
 interface Trace {
   label: string;
@@ -395,14 +398,27 @@ export const DocumentNode = memo(function DocumentNode({
   const prose = node.type === "markdown" || node.type === "trace_quote";
 
   // The classes are markers: document styles place a block's own elements
-  // and prose by them, and authoring motion draws on the node.
+  // and prose by them, and the drawing styles its children by its phase.
   return (
     <div
-      className={
+      {...withClass(
         prose
           ? "api-document-node api-document-node--prose"
-          : "api-document-node"
-      }
+          : "api-document-node",
+        documentNodeMarker,
+        drawStyles.blockChild,
+        motion === "queued" && drawStyles.queued,
+        motion === "landing" && drawStyles.landing,
+        motion === "rewriting" && drawStyles.rewriting,
+        motion === "erasing" && drawStyles.erasing,
+        region && drawStyles.region,
+        (region === "writing" || region === "idle") && drawStyles.regionOn,
+        region === "writing"
+          ? drawStyles.blockPulse
+          : motion === "erasing"
+            ? drawStyles.blockCollapse
+            : motion === "landing" && drawStyles.blockLand,
+      )}
       data-review-node-id={node.id}
       data-motion={motion}
       data-region={region}
@@ -415,7 +431,11 @@ export const DocumentNode = memo(function DocumentNode({
         {stale ? (
           <p
             role="status"
-            {...stylex.props(documentStyles.note, documentStyles.column)}
+            {...stylex.props(
+              documentStyles.note,
+              documentStyles.column,
+              drawStyles.blockChild,
+            )}
           >
             This source range changed. Update the reference to view it.
           </p>

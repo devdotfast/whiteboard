@@ -6,6 +6,7 @@ import { useState } from "react";
 import { type CallTreeStop, callTreeStops } from "./call-tree";
 import { DiagramHeader } from "./diagram-header";
 import { compactDiffCount as compact, diffCountStyles } from "./diff-count";
+import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
 import { callEdgeMarker } from "./markers.stylex";
 import { useReviewLenses } from "./review-lenses";
@@ -222,7 +223,10 @@ export function DocumentCallTree({ block }: { block: CallStackDiffBlock }) {
   const openPeek = useReviewPanel((state) => state.openPeek);
 
   return (
-    <figure {...stylex.props(styles.figure)} data-review-call-stack="ready">
+    <figure
+      {...stylex.props(styles.figure, drawStyles.blockChild)}
+      data-review-call-stack="ready"
+    >
       <DiagramHeader kind="Call tree" title={block.title ?? "Call tree"} />
       <CallTree
         block={block}
