@@ -726,11 +726,20 @@ export class ReviewStore {
   }
   /** Stable across restarts; the first host on a new store chooses it. */
   serverId(): string {
-    this.db
-      .prepare("INSERT OR IGNORE INTO server_identity(one,id) VALUES(1,?)")
-      .run(randomUUID());
+    const read = () =>
+      this.db.prepare("SELECT id FROM server_identity").get()?.id;
 
-    return String(this.db.prepare("SELECT id FROM server_identity").get()!.id);
+    let id = read();
+
+    if (id === undefined) {
+      // Another host may insert first; its id wins.
+      this.db
+        .prepare("INSERT OR IGNORE INTO server_identity(one,id) VALUES(1,?)")
+        .run(randomUUID());
+      id = read();
+    }
+
+    return String(id);
   }
   resetServerId(): string {
     const id = randomUUID();
