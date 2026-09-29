@@ -650,10 +650,7 @@ function ReviewRowActions({ review }: { review: ReviewApiSummary }) {
     >
       <IconButton
         size="large"
-        xstyle={[
-          rowMenuStyles.trigger,
-          menu.open && [buttonStyles.open, rowMenuStyles.expanded],
-        ]}
+        xstyle={[rowMenuStyles.trigger, menu.open && rowMenuStyles.expanded]}
         aria-label={`Actions for ${reviewTitle(review)}`}
         {...menu.triggerProps}
         disabled={!ui?.confirmDelete}

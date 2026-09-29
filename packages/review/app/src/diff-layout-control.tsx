@@ -1,4 +1,4 @@
-import { IconButton, buttonStyles } from "@canvas/ui/button";
+import { IconButton } from "@canvas/ui/button";
 import type { ReviewDiffLayout } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -78,7 +78,6 @@ export function DiffLayoutControl(): ReactElement {
   return (
     <div {...stylex.props(shellStyles.topbarItem, styles.settings)}>
       <IconButton
-        xstyle={menu.open && buttonStyles.open}
         aria-label="Diff settings"
         ref={tooltip}
         {...menu.triggerProps}

@@ -69,8 +69,9 @@ export function IconButton({
   );
 }
 
-// Exported for buttons rendered elsewhere (an OptionMenu trigger) and for
-// `open`, the held-down look of a trigger whose menu is showing.
+const expanded = ':is([aria-expanded="true"])';
+
+// Exported only for a button another component renders (an OptionMenu trigger).
 export const buttonStyles = stylex.create({
   base: {
     display: "inline-flex",
@@ -84,9 +85,11 @@ export const buttonStyles = stylex.create({
     borderStyle: "none",
     borderColor: "currentcolor",
     borderRadius: radius.control,
+    // A trigger whose menu or popover is showing stays held down.
     backgroundColor: {
       default: tokens.transparent,
       ":hover:not(:disabled)": tokens.chromeHoverBg,
+      [expanded]: tokens.chromeHoverBg,
     },
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
@@ -102,6 +105,7 @@ export const buttonStyles = stylex.create({
     color: {
       default: tokens.chromeFgMuted,
       ":hover:not(:disabled)": tokens.chromeFg,
+      [expanded]: tokens.chromeFg,
     },
   },
   secondary: {
@@ -126,6 +130,7 @@ export const buttonStyles = stylex.create({
       default: tokens.chromeIconFg,
       ":hover:not(:disabled)": tokens.chromeFg,
       ":focus-visible": tokens.chromeFg,
+      [expanded]: tokens.chromeFg,
     },
   },
   iconSmall: {
@@ -136,9 +141,5 @@ export const buttonStyles = stylex.create({
   iconLarge: {
     width: "30px",
     height: "30px",
-  },
-  open: {
-    backgroundColor: tokens.chromeHoverBg,
-    color: tokens.chromeFg,
   },
 });

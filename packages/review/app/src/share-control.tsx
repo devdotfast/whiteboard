@@ -1,4 +1,4 @@
-import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
+import { Button, IconButton } from "@canvas/ui/button";
 import {
   type ReviewApiClient,
   ReviewApiError,
@@ -194,7 +194,6 @@ export function ShareControl() {
       style={{ position: "relative" }}
     >
       <IconButton
-        xstyle={open && buttonStyles.open}
         ref={tooltip}
         aria-label={label}
         aria-haspopup="dialog"
