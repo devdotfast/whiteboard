@@ -466,7 +466,9 @@ export function createReviewApi(
               subscriptions.forEach((item, index) => {
                 if (item.reviewId !== null) dirty.add(index);
               });
-              notify();
+
+              // Coverage never changes the catalog; don't send an all-null line.
+              if (dirty.size > 0) notify();
             }) ?? (() => {}),
             store.subscribe((result) => {
               if (mark(result.reviewId)) notify();
