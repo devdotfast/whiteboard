@@ -202,6 +202,24 @@ describe("Review navigation", () => {
     });
   });
 
+  it("drops a map focus the map never applied when a lens leaves Map, keeping the peek", () => {
+    const store = createReviewPanelStore();
+
+    store.getState().focusMapElement("review.missing");
+    store.getState().openPeek({ kind: "peek", anchor, content });
+    store.getState().selectLens({ id: "api", version: 3, mode: "structural" });
+    expect(store.getState()).toMatchObject({
+      view: "diff",
+      active: { kind: "peek" },
+    });
+
+    store.getState().showView("map");
+    expect(store.getState().mapFocus).toMatchObject({
+      elementPath: "review.missing",
+      pending: false,
+    });
+  });
+
   it("ignores a map focus on a canvas without a map", () => {
     const store = createReviewPanelStore({ availableViews: ["review"] });
 

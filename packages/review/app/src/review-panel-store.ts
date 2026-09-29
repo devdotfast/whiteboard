@@ -153,8 +153,10 @@ export function createReviewPanelStore({
       }),
     selectLens: (lens) =>
       set((state) => ({
+        ...viewTransition(state, "diff"),
+        active: state.active,
+        motion: state.motion,
         lens,
-        view: state.availableViews.includes("diff") ? "diff" : "review",
         diffScope: null,
       })),
     clearLens: () => set({ lens: null }),
