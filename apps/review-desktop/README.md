@@ -251,12 +251,12 @@ targets, and `REVIEW_DESKTOP_PRECOMPILED=1 scripts/package-macos.sh` consumes it
 on each macOS build leg (`darwin-arm64` and `darwin-x64`), packaging the target
 of the host it runs on.
 
-| Produced on Linux and transferred | Produced or assembled on macOS |
-| --- | --- |
-| Code OSS `out-build`, `out-vscode-min`, and `out` | Electron application bundle |
-| Compiled built-in extensions in `.build/extensions` | Darwin-native npm closure installed by `pnpm` |
+| Produced on Linux and transferred                                                                        | Produced or assembled on macOS                         |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Code OSS `out-build`, `out-vscode-min`, and `out`                                                        | Electron application bundle                            |
+| Compiled built-in extensions in `.build/extensions`                                                      | Darwin-native npm closure installed by `pnpm`          |
 | Manifest-selected `darwin-arm64` and `darwin-x64` VSIX payloads, including `ty`, Ruff, and rust-analyzer | Manifest-selected extensions copied into the final app |
-| Review canvas/server and required workspace `dist` directories | App icon, signatures, notarization, ZIP, and DMG |
+| Review canvas/server and required workspace `dist` directories                                           | App icon, signatures, notarization, ZIP, and DMG       |
 
 The curated-extension handoff is manifest-driven. Linux materializes the
 variants for every Darwin target, copies each into
@@ -363,10 +363,10 @@ version, target, size, and SHA-256 hash in
 The build fetches bundled extensions from Open VSX. It checks each hash and
 unpacks the extension into `code-oss/extensions/`.
 
-| Extension | Notes |
-| --- | --- |
-| ty, ruff | Same; `ms-python.python` rides along as their extension dependency |
-| Go | Bundles nothing and prompts to `go install gopls` against your own Go toolchain |
+| Extension  | Notes                                                                                        |
+| ---------- | -------------------------------------------------------------------------------------------- |
+| ty, ruff   | Same; `ms-python.python` rides along as their extension dependency                           |
+| Go         | Bundles nothing and prompts to `go install gopls` against your own Go toolchain              |
 | Vim, Emacs | Adopted from the host VS Code install on first launch; otherwise off, and mutually exclusive |
 
 ### Optional extensions
@@ -375,11 +375,11 @@ Review downloads an optional group only after the user selects it in
 **Manage Extensions...**. Review checks the downloaded VSIX before installation.
 The application reloads once after a successful change.
 
-| Group | Requirements |
-| --- | --- |
-| Rust | rust-analyzer includes its server. Rust moved from bundled to optional. |
+| Group | Requirements                                                                                           |
+| ----- | ------------------------------------------------------------------------------------------------------ |
+| Rust  | rust-analyzer includes its server. Rust moved from bundled to optional.                                |
 | Swift | Install a Swift toolchain and expose `swift` on the shell `PATH`. The group includes LLDB DAP support. |
-| C# | Install a system .NET SDK and expose `dotnet` on the shell `PATH`. Review does not download .NET. |
+| C#    | Install a system .NET SDK and expose `dotnet` on the shell `PATH`. Review does not download .NET.      |
 
 Review updates installed optional groups to the catalog pins in the background.
 The update does not reload the window. A new pin takes effect on the next reload.
@@ -394,12 +394,12 @@ host restarts.
 **Preferences ▸ Settings...** (⌘,) opens the Settings tab. It is a canvas tab
 like Home and Agent Setup, not the stock VS Code settings editor. It holds:
 
-| Section | Setting |
-| --- | --- |
-| Privacy | Share anonymous usage data — see [docs/telemetry.md](../../docs/telemetry.md) |
-| Editor | Theme, Keymap |
-| Tools | Extensions |
-| Experimental Features | Software Map, Trace capture |
+| Section               | Setting                                                                       |
+| --------------------- | ----------------------------------------------------------------------------- |
+| Privacy               | Share anonymous usage data — see [docs/telemetry.md](../../docs/telemetry.md) |
+| Editor                | Theme, Keymap                                                                 |
+| Tools                 | Extensions                                                                    |
+| Experimental Features | Software Map, Trace capture                                                   |
 
 Software Map defaults to off. Enable it to add the Map tab to reviews.
 Disable it to remove Map entry points. This preference persists in the
@@ -485,20 +485,20 @@ hand-written fetch effects; keep local UI state out of it.
 
 ## Canvas CSS
 
-Canvas styles are plain CSS in `packages/review/app/src`, bundled from the
-`@import` list in `styles.css` and scoped to the canvas.
+Canvas styles are StyleX, written with `stylex.create` next to the component
+that renders the element (`packages/review/app/src`). Shared pieces:
+`tokens.stylex.ts` (typed references to the theme's custom properties),
+`theme-styles.ts`, `controls-styles.ts` and `markers.stylex.ts`.
 
-- Put rules in the owning component's stylesheet; add a new file to
-  `styles.css` rather than importing CSS from a component. Shared tokens,
-  resets and controls live in `theme.css`, `base.css` and `controls.css`.
-- Use `theme.css` tokens, not raw colors.
-- Style elements by their own classes. For a different look inside another
-  host, add a modifier class instead of a descendant selector from the host.
-- Avoid `!important`; third-party CSS sits in `layer(vendor)`, so ordinary
-  rules already win.
-- Keep the import order; its comments name the files that depend on it.
-- Check the built canvas in Desktop (light, dark, narrow, hover/focus, reduced
-  motion). Do not add tests that assert CSS text.
+- Use `tokens.*`, not raw colors.
+- For a different look inside another component, pass a variant or use
+  `stylex.when.ancestor` with a marker, not a descendant selector.
+- `global.css` holds only what StyleX cannot reach: the scope root, element
+  resets, and DOM the canvas does not render (workbench-mounted views, React
+  Flow internals, `::highlight()`). Don't add component styles there.
+- StyleX rules outrank the workbench's own CSS, which the browser tests don't
+  load, so check changes in the built canvas in Desktop (light, dark, narrow,
+  hover/focus, reduced motion). Do not add tests that assert CSS text.
 
 ## Development and validation
 
@@ -535,7 +535,7 @@ fast monorepo tier.
 `code-oss/src/main.ts` runs in the Electron main process before anything else.
 Its `startup()` calls `bootstrapESM()` — which installs
 `globalThis._VSCODE_NLS_MESSAGES` — and only then dynamically imports
-`vs/code/electron-main/main.js`. Every *static* import at the top of `main.ts`,
+`vs/code/electron-main/main.js`. Every _static_ import at the top of `main.ts`,
 and everything those pull in transitively, is evaluated before that message
 table exists.
 
