@@ -1,0 +1,68 @@
+/* Plain CSS for DOM the canvas cannot give StyleX classes to. */
+
+/* Code block syntax tokens (@speed-highlight/core). The Whiteboard palette:
+   ink at three strengths, the marker for keywords, two more blues for types
+   and functions, one warm pencil for strings and one plum for numbers.
+   Comments are quiet and italic. Diff green and red are reserved for the
+   diff language. The editor themes carry the same values. */
+
+.rendered-code-block .shj-syn-kwd {
+  color: var(--accent);
+}
+
+.rendered-code-block .shj-syn-type {
+  color: var(--syntax-type);
+}
+
+.rendered-code-block .shj-syn-class {
+  color: var(--syntax-type);
+  font-weight: 500;
+}
+
+.rendered-code-block .shj-syn-func {
+  color: var(--syntax-function);
+}
+
+.rendered-code-block .shj-syn-section {
+  color: var(--syntax-function);
+  font-weight: 600;
+}
+
+.rendered-code-block .shj-syn-var {
+  color: var(--ink);
+}
+
+.rendered-code-block .shj-syn-str {
+  color: var(--syntax-string);
+}
+
+.rendered-code-block .shj-syn-num {
+  color: var(--syntax-number);
+}
+
+.rendered-code-block .shj-syn-bool {
+  color: var(--syntax-number);
+  font-weight: 500;
+}
+
+.rendered-code-block .shj-syn-cmnt {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+.rendered-code-block .shj-syn-oper {
+  color: var(--syntax-operator);
+}
+
+.rendered-code-block .shj-syn-insert {
+  color: var(--syntax-inserted);
+}
+
+.rendered-code-block .shj-syn-deleted {
+  color: var(--syntax-deleted);
+}
+
+.rendered-code-block .shj-syn-err {
+  color: var(--syntax-deleted);
+  text-decoration: wavy underline;
+}

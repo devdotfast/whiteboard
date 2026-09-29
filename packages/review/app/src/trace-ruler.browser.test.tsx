@@ -181,13 +181,13 @@ describe("TraceRuler", () => {
     await act(async () => {
       root?.render(<TraceRuler events={[]} />);
     });
-    expect(container.querySelector(".review-trace-ruler")).toBe(null);
+    expect(container.firstElementChild).toBe(null);
   });
 
   it("renders the ruler anchor for a populated trace", async () => {
     await act(async () => {
       root?.render(<TraceRuler events={[userEvent("hi")]} />);
     });
-    expect(container.querySelector(".review-trace-ruler")).not.toBe(null);
+    expect(container.firstElementChild).not.toBe(null);
   });
 });

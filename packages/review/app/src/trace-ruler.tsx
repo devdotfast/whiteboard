@@ -1,4 +1,5 @@
 import type { ReviewAgentTraceEvent } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import {
   type ReactNode,
   useCallback,
@@ -8,6 +9,8 @@ import {
   useState,
 } from "react";
 
+import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 import {
   type IndexedTraceTurnGroup,
   buildIndexedTraceTurns,
@@ -346,20 +349,18 @@ export function TraceRuler({
 
     const width = rulerCombWidth(tick, hoverTick);
 
-    const className = [
-      "review-trace-ruler-tick",
-      // While the comb is active only the hover treatment shows; the
-      // viewport run returns when the pointer leaves.
-      isVisible && hoverTick === null ? "review-trace-ruler-tick--visible" : "",
-      tick === hoverTick ? "review-trace-ruler-tick--hovered" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-
     ticks.push(
       <div
         key={tick}
-        className={className}
+        // The class is how pointer hit-testing finds the ticks.
+        {...withClass(
+          "review-trace-ruler-tick",
+          styles.tick,
+          // While the comb is active only the hover treatment shows; the
+          // viewport run returns when the pointer leaves.
+          isVisible && hoverTick === null && styles.tickVisible,
+          tick === hoverTick && styles.tickHovered,
+        )}
         style={{ top: tickTop(tick), width }}
       />,
     );
@@ -371,10 +372,10 @@ export function TraceRuler({
       : 0;
 
   return (
-    <div ref={anchorRef} className="review-trace-ruler" aria-hidden="true">
+    <div ref={anchorRef} {...stylex.props(styles.ruler)} aria-hidden="true">
       <div
         ref={railRef}
-        className="review-trace-ruler-rail"
+        {...stylex.props(styles.rail)}
         style={{
           height: railHeight,
           top: rect?.top ?? 0,
@@ -390,12 +391,10 @@ export function TraceRuler({
       >
         {ticks}
         {preview && hoverTick !== null && (
-          <div className="review-trace-ruler-card" style={{ top: cardTop }}>
-            <span className="review-trace-ruler-card-title">
-              {preview.title}
-            </span>
+          <div {...stylex.props(styles.card)} style={{ top: cardTop }}>
+            <span {...stylex.props(styles.cardTitle)}>{preview.title}</span>
             {preview.snippet && (
-              <span className="review-trace-ruler-card-snippet">
+              <span {...stylex.props(styles.cardSnippet)}>
                 {preview.snippet}
               </span>
             )}
@@ -405,3 +404,75 @@ export function TraceRuler({
     </div>
   );
 }
+
+// A left-edge column of uniform dashes mapping the whole session at even
+// pitch. Brightness marks the events currently in the viewport; hovering
+// bulges nearby ticks toward the content and shows a preview card. Strictly
+// grayscale via the ink tokens.
+const styles = stylex.create({
+  ruler: {
+    height: 0,
+    overflow: "visible",
+  },
+  rail: {
+    position: "fixed",
+    width: "40px",
+    zIndex: 3,
+  },
+  tick: {
+    position: "absolute",
+    // Inset from the panel edge; the comb grows rightward from here.
+    left: "8px",
+    height: "2px",
+    borderRadius: "1px",
+    backgroundColor: tokens.inkFaint,
+    opacity: 0.55,
+    transition: "width 90ms ease, opacity 90ms ease",
+    pointerEvents: "none",
+  },
+  tickVisible: {
+    backgroundColor: tokens.ink,
+    opacity: 0.9,
+  },
+  tickHovered: {
+    backgroundColor: tokens.ink,
+    opacity: 1,
+  },
+  card: {
+    position: "absolute",
+    left: "52px",
+    width: "300px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+    padding: "12px 14px",
+    backgroundColor: tokens.tray,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.rule,
+    borderRadius: "12px",
+    boxShadow: "0 8px 24px rgb(0 0 0 / 0.25)",
+    pointerEvents: "none",
+  },
+  cardTitle: {
+    fontFamily: tokens.fontSerif,
+    fontSize: "14px",
+    lineHeight: "19px",
+    fontWeight: 600,
+    color: tokens.ink,
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+  },
+  cardSnippet: {
+    fontFamily: tokens.fontSerif,
+    fontSize: "13px",
+    lineHeight: "18px",
+    color: tokens.inkMuted,
+    display: "-webkit-box",
+    WebkitLineClamp: 3,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+  },
+});

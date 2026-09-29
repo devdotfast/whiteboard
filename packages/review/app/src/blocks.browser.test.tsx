@@ -149,7 +149,7 @@ const rendered: Record<
     has(c, "figure.review-image img[src^='blob:']") &&
     text(c).includes("An image"),
   trace_quote: (c) =>
-    has(c, ".review-trace-quote") && text(c).includes("queue the order"),
+    has(c, 'a[href^="#trace-"]') && text(c).includes("queue the order"),
   // The map has drawn its system and is neither refreshing nor failed.
   flow_diagram: (c) =>
     has(c, ".flow-node") &&
@@ -298,12 +298,12 @@ describe("block components", () => {
     },
     {
       kind: "code",
-      selector: ".rendered-code-body code",
+      selector: "pre > code[data-review-copy-prose]",
       label: "authored code",
     },
     {
       kind: "markdown",
-      selector: ".rendered-code-body code",
+      selector: "pre > code[data-review-copy-prose]",
       label: "fenced Markdown code",
     },
   ] as const)(

@@ -38,6 +38,7 @@ import {
 import { useBottomSheetResize } from "./side-panel-resizer";
 import { withClass } from "./stylex-props";
 import { TraceDocument, extractEventText } from "./trace-document";
+import { traceStyles } from "./trace-styles";
 import { useTutorialSection } from "./tutorial-section-context";
 import { captureUiEvent } from "./ui-telemetry";
 import { useAgentTrace } from "./use-agent-trace";
@@ -505,7 +506,7 @@ function TraceQuotePeekPanel({
         closeLabel="Close side peek"
       >
         <div className="side-peek-body">
-          <p className="review-trace-note">Loading trace…</p>
+          <p {...stylex.props(traceStyles.note)}>Loading trace…</p>
         </div>
       </ReviewPanelFrame>
     );
@@ -521,7 +522,7 @@ function TraceQuotePeekPanel({
         closeLabel="Close side peek"
       >
         <div className="side-peek-body">
-          <p className="review-trace-note review-trace-note--error">
+          <p {...stylex.props(traceStyles.note, traceStyles.noteError)}>
             {data.error}
           </p>
         </div>
@@ -535,7 +536,7 @@ function TraceQuotePeekPanel({
   const headerAccessory = (
     <button
       type="button"
-      className="review-trace-peek-open-full"
+      {...stylex.props(traceStyles.peekOpenFull)}
       onClick={() => {
         openTraceSession?.({
           sessionId,
@@ -563,7 +564,7 @@ function TraceQuotePeekPanel({
     >
       <div className="side-peek-body">
         {targetEventIndex === -1 ? (
-          <p className="review-trace-note">
+          <p {...stylex.props(traceStyles.note)}>
             Quote not found in this session transcript.
           </p>
         ) : (
@@ -573,7 +574,7 @@ function TraceQuotePeekPanel({
             targetEventIndex={targetEventIndex}
             highlightQuote={quote}
             picks={picks}
-            className="review-trace-events--scoped"
+            scoped
           />
         )}
       </div>

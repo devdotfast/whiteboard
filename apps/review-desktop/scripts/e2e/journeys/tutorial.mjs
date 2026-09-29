@@ -221,7 +221,7 @@ export async function run(ctx) {
   await page.keyboard.press("Escape");
 
   await canvas
-    .locator('[data-review-section="Agent traces"] .review-trace-quote')
+    .locator('[data-review-section="Agent traces"] a[href^="#trace-"]')
     .first()
     .click();
   await waitChecked(ctx, "openTraceQuote");

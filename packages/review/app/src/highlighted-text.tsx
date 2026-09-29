@@ -1,4 +1,7 @@
+import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
+
+import { withClass } from "./stylex-props";
 
 export function findWhitespaceNormalizedSpan(
   text: string,
@@ -62,10 +65,26 @@ export function HighlightedText({
   return (
     <>
       {text.slice(0, span.start)}
-      <mark className="review-trace-quote-mark">
-        {text.slice(span.start, span.end)}
-      </mark>
+      <QuoteMark>{text.slice(span.start, span.end)}</QuoteMark>
       {text.slice(span.end)}
     </>
   );
 }
+
+/** A quoted run of trace text. Scrolling to a quote looks for its class. */
+export function QuoteMark({ children }: { children: ReactNode }) {
+  return (
+    <mark {...withClass("review-trace-quote-mark", styles.mark)}>
+      {children}
+    </mark>
+  );
+}
+
+const styles = stylex.create({
+  mark: {
+    backgroundColor: "rgba(255, 230, 0, 0.35)",
+    color: "inherit",
+    borderRadius: "2px",
+    padding: "1px 2px",
+  },
+});

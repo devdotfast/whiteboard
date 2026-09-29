@@ -62,10 +62,10 @@ describe("agent markdown", () => {
     );
 
     expect(html).toContain("<strong>Done</strong>");
-    expect(html).toContain("<ul>");
-    expect(html).toContain("<li><p>one</p></li>");
-    expect(html).toContain("<table>");
-    expect(html).toContain("<code>App.tsx</code>");
+    expect(html).toMatch(/<ul[ >]/);
+    expect(html).toMatch(/<li><p[^>]*>one<\/p><\/li>/);
+    expect(html).toMatch(/<table[ >]/);
+    expect(html).toMatch(/<code[^>]*>App\.tsx<\/code>/);
     expect(html).toContain('data-language="ts"');
     expect(html).toContain("const answer = true;");
     expect(html).toContain('href="https://example.com/docs"');
@@ -101,11 +101,11 @@ describe("agent markdown", () => {
     expect(html).not.toContain("href=");
     expect(html).not.toContain("file://");
     expect(html).not.toContain("/Users/ketanagrawal");
-    expect(html).toContain(
-      '<code class="agent-markdown-code-reference">App.test.ts:49</code>',
+    expect(html).toMatch(
+      /<code class="agent-markdown-code-reference[^"]*">App\.test\.ts:49<\/code>/,
     );
-    expect(html).toContain(
-      '<code class="agent-markdown-code-reference">styles.css</code>',
+    expect(html).toMatch(
+      /<code class="agent-markdown-code-reference[^"]*">styles\.css<\/code>/,
     );
   });
 
@@ -117,8 +117,8 @@ describe("agent markdown", () => {
       }),
     );
 
-    expect(html).toContain(
-      '<mark class="review-trace-quote-mark">optimize database queries</mark>',
+    expect(html).toMatch(
+      /<mark class="review-trace-quote-mark[^"]*">optimize database queries<\/mark>/,
     );
   });
 

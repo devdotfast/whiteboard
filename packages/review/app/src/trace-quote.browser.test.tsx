@@ -3,6 +3,7 @@ import { type Root, createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { QuoteMark } from "./highlighted-text";
 import { ReviewPanelProvider, useReviewPanelStore } from "./review-panel";
 import type { ReviewPanelStore } from "./review-panel-store";
 import { TraceQuote } from "./trace-quote";
@@ -38,7 +39,7 @@ describe("TraceQuote", () => {
       </TraceQuote>,
     );
 
-    expect(html).toContain("review-trace-quote--inert");
+    expect(html).toMatch(/^<span [^>]*><span [^>]*>Optimize/);
     expect(html).toContain("Optimize database queries");
   });
 
@@ -51,9 +52,8 @@ describe("TraceQuote", () => {
       </ReviewPanelProvider>,
     );
 
-    expect(html).toContain('class="review-trace-quote"');
+    expect(html).toContain('<a href="#trace-');
     expect(html).toContain("Optimize database queries");
-    expect(html).not.toContain("review-trace-quote--inert");
   });
 
   it("replaces the active panel when opened", async () => {
@@ -81,7 +81,7 @@ describe("TraceQuote", () => {
 
     await act(async () => {
       container
-        .querySelector<HTMLElement>(".review-trace-quote")
+        .querySelector<HTMLElement>('a[href^="#trace-"]')
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
@@ -105,10 +105,10 @@ describe("TraceQuote", () => {
 
     const targetTurn = document.createElement("div");
     targetTurn.id = "review-trace-target-event";
-    const quoteMark = document.createElement("mark");
-    quoteMark.className = "review-trace-quote-mark";
-    targetTurn.append(quoteMark);
     document.body.append(targetTurn);
+    const markRoot = createRoot(targetTurn);
+    await act(async () => markRoot.render(<QuoteMark>{null}</QuoteMark>));
+    const quoteMark = targetTurn.firstElementChild!;
 
     let storeRef: ReturnType<typeof useReviewPanelStore> | null = null;
 
@@ -140,7 +140,7 @@ describe("TraceQuote", () => {
       });
     });
 
-    const link = container.querySelector(".review-trace-quote") as HTMLElement;
+    const link = container.querySelector('a[href^="#trace-"]') as HTMLElement;
     expect(link).not.toBeNull();
 
     // Click while already open
