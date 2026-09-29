@@ -97,12 +97,10 @@ describe("WelcomePage", () => {
   const buttons = (label: string) =>
     [...container.querySelectorAll("button")].filter(
       (button) =>
-        button.textContent === label &&
-        !button.classList.contains("review-onboarding-step-header"),
+        button.textContent === label && button.parentElement?.tagName !== "LI",
     );
 
-  const step = (index: number) =>
-    container.querySelectorAll(".review-onboarding-step")[index];
+  const step = (index: number) => container.querySelectorAll("ol > li")[index];
 
   const stepState = (index: number) => step(index)?.getAttribute("data-state");
 
@@ -167,9 +165,7 @@ describe("WelcomePage", () => {
     });
 
     await act(async () => root.render(<WelcomePage install={install} />));
-    expect(container.querySelectorAll(".review-onboarding-step")).toHaveLength(
-      3,
-    );
+    expect(container.querySelectorAll("ol > li")).toHaveLength(3);
     expect(container.textContent).not.toContain(
       "Install the whiteboard command",
     );
@@ -179,9 +175,7 @@ describe("WelcomePage", () => {
     await act(async () => buttons("Remove deprecated skills")[0]?.click());
     await waitForStepAdvance();
     expect(install.removeLegacySkills).toHaveBeenCalledOnce();
-    expect(container.querySelectorAll(".review-onboarding-step")).toHaveLength(
-      3,
-    );
+    expect(container.querySelectorAll("ol > li")).toHaveLength(3);
     expect(stepOpen(0)).toBe("false");
     expect(stepOpen(1)).toBe("true");
     expect(stepState(0)).toBe("done");
@@ -399,7 +393,7 @@ describe("WelcomePage", () => {
     );
     await act(async () => buttons("Dismiss")[0]?.click());
     expect(install.finishUpdate).toHaveBeenCalledOnce();
-    expect(container.querySelector(".review-welcome-page")).toBeNull();
+    expect(container.querySelector("ol")).toBeNull();
     expect(container.querySelector("h1")?.textContent).toBe("Sessions");
   });
 

@@ -2,7 +2,6 @@ import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
 
 import { useCanvasMenu } from "./host/canvas-ui";
-import { withClass } from "./stylex-props";
 
 /** A single-choice menu; the caller renders the trigger's content. */
 export function OptionMenu<T extends string>({
@@ -10,8 +9,7 @@ export function OptionMenu<T extends string>({
   value,
   options,
   onChange,
-  className,
-  triggerClassName,
+  triggerStyle,
   triggerProps,
   children,
 }: {
@@ -19,8 +17,7 @@ export function OptionMenu<T extends string>({
   value: T | undefined;
   options: { value: T; label: string; icon?: ReactNode }[];
   onChange(value: T): void;
-  className: string;
-  triggerClassName: string;
+  triggerStyle?: stylex.StyleXStyles;
   triggerProps?: { "aria-pressed"?: boolean };
   children: ReactNode;
 }) {
@@ -38,9 +35,9 @@ export function OptionMenu<T extends string>({
   });
 
   return (
-    <div {...withClass(className, styles.menu)}>
+    <div {...stylex.props(styles.menu)}>
       <button
-        className={triggerClassName}
+        {...stylex.props(triggerStyle)}
         type="button"
         aria-label={ariaLabel}
         {...menu.triggerProps}

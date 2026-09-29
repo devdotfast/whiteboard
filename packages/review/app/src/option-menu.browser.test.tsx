@@ -37,8 +37,6 @@ async function render(ui?: ReviewCanvasUi) {
             { value: "old", label: "Oldest" },
           ]}
           onChange={change}
-          className="sort"
-          triggerClassName="sort-trigger"
         >
           Sort
         </OptionMenu>

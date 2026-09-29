@@ -736,7 +736,7 @@ export async function pickReview(ctx, reviewId, cwd = ctx.repo) {
 
 /** Opens the Settings page on the current `ctx.page`; `ControlOrMeta+Comma` repeats because a fresh profile reloads the workbench. */
 export async function openSettings(ctx) {
-  const settings = ctx.page.locator(".review-home-content").filter({
+  const settings = ctx.page.locator("main.review-home").filter({
     has: ctx.page.getByRole("heading", { name: "Settings", level: 1 }),
   });
 

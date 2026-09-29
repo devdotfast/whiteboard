@@ -1,5 +1,7 @@
+import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useRef, useState } from "react";
 
+import type { IconProps } from "./icons";
 import { useReviewActions, useReviewState } from "./review-context";
 import { useTutorial } from "./tutorial-context";
 import { useTooltip } from "./use-tooltip";
@@ -78,9 +80,15 @@ export function ReviewCornerAction(): ReactElement | null {
   );
 }
 
-export function ArchiveIcon(): ReactElement {
+export function ArchiveIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
-    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+    <svg
+      {...stylex.props(xstyle)}
+      viewBox="0 0 16 16"
+      width="13"
+      height="13"
+      aria-hidden="true"
+    >
       <rect x="1.6" y="2.6" width="12.8" height="3.4" rx="1" />
       <path d="M3 6v6.2a1.2 1.2 0 0 0 1.2 1.2h7.6A1.2 1.2 0 0 0 13 12.2V6" />
       <path d="M6.4 9h3.2" />

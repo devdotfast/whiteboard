@@ -25,7 +25,9 @@ function homeUi(ctx) {
 
   return {
     home,
-    rows: home.locator(".review-home-table tbody tr"),
+    rows: home
+      .getByRole("region", { name: "Sessions", exact: true })
+      .locator("tbody tr"),
     tabs: ctx.page.locator(".tabs-container .tab"),
     // One canvas part renders whichever review tab is active, so the heading says which review the reader is on.
     canvas: ctx.page.locator(".review-canvas-root [data-review-api]"),
@@ -106,7 +108,7 @@ export async function run(ctx) {
 
   await rows
     .filter({ hasText: second.title })
-    .locator(".review-home-table-open")
+    .getByTitle(second.title, { exact: true })
     .click();
   await canvas.getByRole("heading", { name: second.title }).waitFor();
   await pickReview(ctx, first.reviewId);
@@ -138,12 +140,13 @@ export async function run(ctx) {
   await ctx.page.keyboard.press("Escape");
 
   const dismissedRow = home
-    .locator(".review-home-dismissed-row")
+    .getByRole("region", { name: "Dismissed sessions", exact: true })
+    .locator("div > div")
     .filter({ hasText: third.title });
 
   // Dismissed rows sit behind a disclosure that keeps its state across re-renders, so only open it when it is shut.
   const expandDismissed = async () => {
-    const toggle = home.locator(".review-home-dismissed-toggle");
+    const toggle = home.getByRole("button", { name: /^Dismissed/ });
 
     await toggle.waitFor();
 
@@ -158,7 +161,7 @@ export async function run(ctx) {
     "the dismissed review leaves the table",
   );
   await expandDismissed();
-  await dismissedRow.locator(".review-home-restore").click();
+  await dismissedRow.getByRole("button", { name: "Undo", exact: true }).click();
   await until(async () => (await rows.count()) === 3, "restored");
   ctx.check("a dismissed review is listed apart and Undo restores it");
 

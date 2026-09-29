@@ -84,9 +84,9 @@ describe("TraceCaptureSection", () => {
     await act(async () =>
       root.render(<TraceCaptureSection install={install} />),
     );
-    expect(
-      container.querySelector(".review-agent-setup-state")?.textContent,
-    ).toBe("enabled (hosted)");
+    expect(container.querySelector("[data-installed]")?.textContent).toBe(
+      "enabled (hosted)",
+    );
     expect(
       container.querySelector('[data-testid="trace-storage"]')?.textContent,
     ).toContain("hosted trace store selected");

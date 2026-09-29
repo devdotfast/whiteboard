@@ -73,7 +73,7 @@ describe("ReviewHome", () => {
       renderWithHost(<ReviewHome reviews={reviews} onOpen={() => {}} />),
     );
     expect(
-      [...container.querySelectorAll(".review-home-review-title")].map(
+      [...container.querySelectorAll("tbody button > span:first-child")].map(
         (el) => el.textContent,
       ),
     ).toEqual(["Newest shared", "Recent local", "Week", "Old"]);
@@ -119,11 +119,9 @@ describe("ReviewHome", () => {
     );
 
     const titles = () =>
-      [
-        ...container.querySelectorAll(
-          ".review-home-table-open .review-home-review-title",
-        ),
-      ].map((element) => element.textContent);
+      [...container.querySelectorAll("tbody button > span:first-child")].map(
+        (element) => element.textContent,
+      );
 
     const select = async (label: string, value: string) => {
       await act(async () =>
@@ -155,7 +153,7 @@ describe("ReviewHome", () => {
     expect(onOpen).not.toHaveBeenCalled();
     await act(async () =>
       container
-        .querySelector<HTMLButtonElement>(".review-home-table-open")!
+        .querySelector<HTMLButtonElement>("td:nth-child(2) > button")!
         .click(),
     );
     expect(onOpen).toHaveBeenCalledWith(reviews[0]);
@@ -193,7 +191,7 @@ describe("ReviewHome", () => {
     expect(padIndex).toBeLessThan(
       labels.findIndex((text) => text.includes("A review")),
     );
-    expect(container.querySelectorAll(".review-home-table")).toHaveLength(1);
+    expect(container.querySelectorAll("table")).toHaveLength(1);
     expect(container.textContent).not.toContain("Dismiss Scratchpad");
     expect(container.textContent).toContain("6 blocks");
     expect(container.textContent).toContain("2 diagrams");
@@ -239,10 +237,8 @@ describe("ReviewHome", () => {
       renderWithHost(<ReviewHome reviews={reviews} onOpen={() => {}} />),
     );
 
-    expect(container.querySelectorAll(".review-home-table")).toHaveLength(1);
-    expect(
-      container.querySelectorAll(".review-home-table tbody tr"),
-    ).toHaveLength(3);
+    expect(container.querySelectorAll("table")).toHaveLength(1);
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(3);
     expect(container.querySelector('[title^="/repo/dev"]')).not.toBeNull();
     expect(container.querySelector('[title^="/repo/other"]')).not.toBeNull();
   });
@@ -404,7 +400,9 @@ describe("ReviewHome", () => {
     );
     await act(async () =>
       container
-        .querySelector<HTMLButtonElement>(".review-home-dismissed-toggle")!
+        .querySelector<HTMLButtonElement>(
+          '[aria-label="Dismissed sessions"] > button',
+        )!
         .click(),
     );
     await act(async () =>
@@ -441,7 +439,7 @@ describe("ReviewHome", () => {
     );
 
     const dismissed = container.querySelector<HTMLButtonElement>(
-      ".review-home-dismissed-toggle",
+      '[aria-label="Dismissed sessions"] > button',
     );
 
     await act(async () => dismissed?.click());
@@ -484,7 +482,7 @@ describe("ReviewHome", () => {
         container
           .querySelector<HTMLButtonElement>(
             isDismissed
-              ? ".review-home-dismissed-toggle"
+              ? '[aria-label="Dismissed sessions"] > button'
               : '[aria-label="Actions for Pending review"]',
           )!
           .click(),
@@ -607,18 +605,22 @@ describe("ReviewHome", () => {
     await render(dismissed);
     await act(async () =>
       container
-        .querySelector<HTMLButtonElement>(".review-home-dismissed-toggle")!
+        .querySelector<HTMLButtonElement>(
+          '[aria-label="Dismissed sessions"] > button',
+        )!
         .click(),
     );
     await act(async () =>
       container
-        .querySelector<HTMLButtonElement>(".review-home-restore")!
+        .querySelectorAll("button")
+        .values()
+        .find((button) => button.textContent === "Undo")!
         .click(),
     );
     expect(onRestore).toHaveBeenCalledWith(dismissed);
     await render({ ...dismissed, dismissedAt: null });
     expect(
-      container.querySelector(".review-home-table-open")?.textContent,
+      container.querySelector("td:nth-child(2) > button")?.textContent,
     ).toContain("Native review");
   });
 
@@ -664,7 +666,9 @@ describe("ReviewHome", () => {
     await act(async () =>
       renderWithHost(<ReviewHome reviews={[summary()]} onOpen={() => {}} />),
     );
-    expect(container.querySelector(".review-home-delete")).toBeNull();
+    expect(
+      container.querySelector('button[title="Delete session"]'),
+    ).toBeNull();
   });
 
   it("shows the native snapshot update time in the table", async () => {

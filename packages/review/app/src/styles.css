@@ -27,8 +27,6 @@
 
 @import "./DiffView.css";
 @import "./ReviewTraceView.css";
-@import "./review-home-view.css";
-@import "./welcome-page.css";
 @import "./bug-report-dialog.css";
 
 /* Last, in this order: the courier's march outlasts the badge's

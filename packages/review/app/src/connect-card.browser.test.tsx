@@ -120,17 +120,17 @@ function button(container: HTMLElement, label: string) {
 }
 
 function body(container: HTMLElement) {
-  return container.querySelector(".review-home-prompt-body")?.textContent;
+  return container.querySelector("pre")?.textContent;
 }
 
 function otherTrigger(container: HTMLElement) {
   return container.querySelector<HTMLButtonElement>(
-    ".review-connect-other-trigger",
+    'button[aria-label="Other agent"]',
   );
 }
 
 function copyButton(container: HTMLElement) {
-  return container.querySelector<HTMLButtonElement>(".review-home-prompt-copy");
+  return container.querySelector<HTMLButtonElement>("[aria-live]");
 }
 
 describe("ConnectCard", () => {
@@ -189,7 +189,7 @@ describe("ConnectCard", () => {
     expect(otherTrigger(container)?.textContent).toBe("oh-my-pi");
     expect(otherTrigger(container)?.getAttribute("aria-pressed")).toBe("true");
     expect(
-      otherTrigger(container)?.querySelector(".review-agent-logo--omp"),
+      otherTrigger(container)?.querySelector("#review-agent-logo-omp-gradient"),
     ).not.toBeNull();
     expect(button(container, "Claude Code")?.getAttribute("aria-pressed")).toBe(
       "false",
@@ -326,16 +326,14 @@ describe("ConnectCard", () => {
     const body = container.querySelector("pre");
     expect(body?.dataset.collapsed).toBe("true");
 
-    const toggle = container.querySelector(
-      ".review-connect-body-wrap [aria-expanded]",
-    );
+    const toggle = container.querySelector("pre + [aria-expanded]");
 
     expect(toggle?.textContent).toBe("Show full prompt");
     await act(async () => (toggle as HTMLButtonElement).click());
     expect(body?.dataset.collapsed).toBe("false");
-    expect(
-      container.querySelector(".review-connect-collapse")?.textContent,
-    ).toBe("Show less");
+    expect(container.querySelector('[aria-expanded="true"]')?.textContent).toBe(
+      "Show less",
+    );
 
     const copy = [...container.querySelectorAll("button")].find(
       (b) => b.textContent === "Copy prompt",
@@ -346,9 +344,7 @@ describe("ConnectCard", () => {
 
     const short = await mount(<ConnectCard install={content()} />);
     expect(short.querySelector("pre")?.dataset.collapsed).toBe("false");
-    expect(
-      short.querySelector(".review-connect-body-wrap [aria-expanded]"),
-    ).toBeNull();
+    expect(short.querySelector("pre + [aria-expanded]")).toBeNull();
   });
 
   it("shows the setup error from the status", async () => {
@@ -356,7 +352,7 @@ describe("ConnectCard", () => {
       <ConnectCard install={content({ error: "boom" })} />,
     );
 
-    expect(container.querySelector(".review-connect-error")?.textContent).toBe(
+    expect(container.querySelector("section > p:last-child")?.textContent).toBe(
       "boom",
     );
   });

@@ -2,7 +2,11 @@ import type {
   ReviewCanvasInstallContent,
   ReviewCliInstallStatus,
 } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import { useEffect, useState } from "react";
+
+import { promptStyles } from "./prompt-styles";
+import { tokens } from "./tokens.stylex";
 
 type InstallApplyRequest = Parameters<ReviewCanvasInstallContent["apply"]>[0];
 
@@ -95,11 +99,14 @@ export function TraceCaptureSection({
   };
 
   return (
-    <div className="review-agent-setup-terminal review-agent-setup-trace">
-      <div className="review-agent-setup-terminal-info">
-        <span className="review-agent-setup-name">Trace capture</span>
+    <div {...stylex.props(styles.section)}>
+      <div {...stylex.props(styles.info)}>
+        <span {...stylex.props(styles.name)}>Trace capture</span>
         <span
-          className="review-agent-setup-state"
+          {...stylex.props(
+            styles.state,
+            status.trace.enabled && styles.stateEnabled,
+          )}
           data-installed={status.trace.enabled}
           title={status.trace.envPath}
         >
@@ -113,34 +120,38 @@ export function TraceCaptureSection({
               ? "ready to enable"
               : "off"}
         </span>
-        <span className="review-agent-setup-cli">
+        <span {...stylex.props(styles.detail)}>
           {traceDestinationCopy(status.trace)}
         </span>
-        <span className="review-agent-setup-cli" data-testid="trace-storage">
+        <span {...stylex.props(styles.detail)} data-testid="trace-storage">
           {traceStorageSummary(status.trace)}
         </span>
       </div>
       {hosted ? null : (
-        <div className="review-agent-setup-trace-fields">
+        <div {...stylex.props(styles.fields)}>
           <input
+            {...stylex.props(styles.field)}
             aria-label="S3/R2 endpoint URL"
             placeholder="S3/R2 endpoint URL"
             value={traceEndpoint}
             onChange={(event) => setTraceEndpoint(event.currentTarget.value)}
           />
           <input
+            {...stylex.props(styles.field)}
             aria-label="S3/R2 bucket"
             placeholder="S3/R2 bucket"
             value={traceBucket}
             onChange={(event) => setTraceBucket(event.currentTarget.value)}
           />
           <input
+            {...stylex.props(styles.field)}
             aria-label="S3/R2 region"
             placeholder="Region (auto for R2)"
             value={traceRegion}
             onChange={(event) => setTraceRegion(event.currentTarget.value)}
           />
           <input
+            {...stylex.props(styles.field)}
             aria-label="S3/R2 access key ID"
             placeholder={
               status.trace.accessKeyIdPrefix
@@ -151,6 +162,7 @@ export function TraceCaptureSection({
             onChange={(event) => setTraceKey(event.currentTarget.value)}
           />
           <input
+            {...stylex.props(styles.field)}
             aria-label="S3/R2 secret access key"
             type="password"
             placeholder={
@@ -210,7 +222,64 @@ export function TraceCaptureSection({
               : "Enable"}
         </button>
       )}
-      {error ? <p className="review-agent-setup-error">{error}</p> : null}
+      {error ? <p {...stylex.props(promptStyles.error)}>{error}</p> : null}
     </div>
   );
 }
+
+const styles = stylex.create({
+  section: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "flex-start",
+    gap: "10px",
+    marginTop: "12px",
+    paddingTop: "10px",
+    borderTopWidth: "1px",
+    borderTopStyle: "solid",
+    borderTopColor: tokens.reviewHomeRuleSoft,
+  },
+  info: {
+    display: "flex",
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: "100%",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    gap: "10px",
+    minWidth: 0,
+  },
+  name: {
+    minWidth: "110px",
+  },
+  state: {
+    flex: 1,
+    minWidth: 0,
+    color: tokens.reviewHomeMeta,
+    fontSize: "12px",
+  },
+  // Enabled is the one state worth colouring.
+  stateEnabled: {
+    color: tokens.changeAdded,
+  },
+  detail: {
+    color: tokens.reviewHomeMeta,
+    fontSize: "12px",
+  },
+  fields: {
+    display: "grid",
+    flex: 1,
+    gridTemplateColumns: "repeat(2, minmax(160px, 1fr))",
+    gap: "6px",
+  },
+  field: {
+    minWidth: 0,
+    padding: "5px 8px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.reviewHomeRuleSoft,
+    borderRadius: "5px",
+    color: "inherit",
+    backgroundColor: tokens.controlBg,
+  },
+});

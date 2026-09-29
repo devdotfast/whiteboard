@@ -10,10 +10,12 @@ import { type ReactNode, useEffect, useState } from "react";
 
 import { cliInstallReady } from "./cli-install-status";
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
+import { homeStyles } from "./home-styles";
 import { DisclosureChevron, DrawnCheckIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
 import { chevronMarker } from "./markers.stylex";
 import { PromptCard } from "./prompt-card";
+import { promptStyles } from "./prompt-styles";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 
@@ -141,38 +143,48 @@ export function WelcomePage({
   const tourChecked = onboarding?.tutorialChecked ?? 0;
   const tourTotal = onboarding?.tutorialTotal ?? 0;
 
+  const installDone = finishing?.from === "Install the whiteboard command";
+
+  const installOffered =
+    setupActions !== undefined && !installed && !cliBuildMissing;
+
   const installStep: WelcomeStep = {
     title: "Install the whiteboard command",
     disabled: hasLegacySkills,
     done: installed,
     body: (
       <>
-        <p className="review-home-zero-hint">
+        <p {...stylex.props(styles.hint)}>
           {installed ? (
             `Installed at ${status?.shim.path ?? "~/.local/bin/whiteboard"}.`
           ) : cliBuildMissing ? (
             <>
               CLI build missing. If you’re running from source, run{" "}
-              <code>pnpm --filter @dev.fast/review build</code> from the
-              repository root, then restart Whiteboard. Otherwise, reinstall
-              Whiteboard.
+              <code {...stylex.props(styles.hintCode)}>
+                pnpm --filter @dev.fast/review build
+              </code>{" "}
+              from the repository root, then restart Whiteboard. Otherwise,
+              reinstall Whiteboard.
             </>
           ) : status?.shim.installed ? (
             pathHint(status.shim.path)
           ) : (
             <>
-              The <code>whiteboard</code> CLI lets your agents talk to
-              Whiteboard
+              The <code {...stylex.props(styles.hintCode)}>whiteboard</code> CLI
+              lets your agents talk to Whiteboard
             </>
           )}
         </p>
-        {finishing?.from === "Install the whiteboard command" ? (
-          <StepDoneButton label="Installed" primary />
-        ) : null}
-        {setupActions && !installed && !cliBuildMissing ? (
+        {installDone ? <StepDoneButton label="Installed" primary /> : null}
+        {installOffered ? (
           <button
             type="button"
-            className="review-onboarding-primary review-onboarding-install"
+            {...stylex.props(
+              styles.stepButton,
+              installDone && styles.stepButtonNext,
+              styles.primary,
+              styles.compact,
+            )}
             disabled={setupBusy}
             onClick={() =>
               void runSetup(async () => {
@@ -190,6 +202,10 @@ export function WelcomePage({
           (status?.shim.installed && !installed)) ? (
           <button
             type="button"
+            {...stylex.props(
+              styles.stepButton,
+              (installDone || installOffered) && styles.stepButtonNext,
+            )}
             disabled={setupBusy}
             onClick={() => void runSetup(refreshInstall)}
           >
@@ -197,7 +213,7 @@ export function WelcomePage({
           </button>
         ) : null}
         {setupError ? (
-          <p role="alert" className="review-agent-setup-error">
+          <p role="alert" {...stylex.props(promptStyles.error)}>
             {setupError}
           </p>
         ) : null}
@@ -260,7 +276,7 @@ export function WelcomePage({
             onCopied={markConnectCopied}
           />
         ) : (
-          <p className="review-home-empty">Agent setup is unavailable.</p>
+          <p {...stylex.props(styles.empty)}>Agent setup is unavailable.</p>
         ),
     },
   ];
@@ -273,7 +289,13 @@ export function WelcomePage({
       body: (
         <button
           type="button"
-          className="review-welcome-dismiss review-onboarding-primary"
+          {...stylex.props(
+            styles.dismiss,
+            styles.stepButton,
+            styles.primary,
+            styles.compact,
+            styles.dismissState,
+          )}
           disabled={setupBusy || !canDismiss}
           onClick={dismissUpdate}
         >
@@ -293,11 +315,15 @@ export function WelcomePage({
           : "a three-minute sample session",
         body: (
           <>
-            <p className="review-home-zero-hint">
+            <p {...stylex.props(styles.hint)}>
               Explore a sample session in three minutes.
             </p>
             {onOpenTutorial ? (
-              <button type="button" onClick={onOpenTutorial}>
+              <button
+                type="button"
+                {...stylex.props(styles.stepButton)}
+                onClick={onOpenTutorial}
+              >
                 {tourChecked > 0 ? "Reopen the tutorial" : "Open the tutorial"}
               </button>
             ) : null}
@@ -327,20 +353,25 @@ export function WelcomePage({
     setConnectOpened(true);
 
   return (
-    <main className="review-home">
-      <div className="review-home-scroll">
-        <div className="review-home-content review-welcome-page">
-          <div className="review-onboarding-columns">
-            <div className="review-onboarding-intro">
-              <span className="review-onboarding-kicker">
+    <main {...withClass("review-home", homeStyles.page)}>
+      <div {...stylex.props(homeStyles.scroll)}>
+        <div {...stylex.props(homeStyles.content, styles.page)}>
+          <div {...stylex.props(styles.columns)}>
+            <div {...stylex.props(styles.intro)}>
+              <span {...stylex.props(styles.kicker)}>
                 Welcome to Whiteboard
               </span>
               {updating ? (
                 <>
-                  <h1 className="review-onboarding-headline">
+                  <h1
+                    {...withClass(
+                      "review-onboarding-headline",
+                      styles.headline,
+                    )}
+                  >
                     Whiteboard now connects to your agents over MCP
                   </h1>
-                  <p className="review-onboarding-sub">
+                  <p {...stylex.props(styles.sub)}>
                     Whiteboard (fka. Review) no longer installs skills. Your
                     agents connect via MCP which makes updating and lifecycle
                     simpler! To continue using Whiteboard, axe the skills,
@@ -350,10 +381,15 @@ export function WelcomePage({
                 </>
               ) : (
                 <>
-                  <h1 className="review-onboarding-headline">
+                  <h1
+                    {...withClass(
+                      "review-onboarding-headline",
+                      styles.headline,
+                    )}
+                  >
                     Your codebase, explained by your agent.
                   </h1>
-                  <p className="review-onboarding-sub">
+                  <p {...stylex.props(styles.sub)}>
                     Install the command then setup the MCP to get started.
                   </p>
                 </>
@@ -361,7 +397,7 @@ export function WelcomePage({
               {(updating || showLegacyStep) && install ? (
                 <button
                   type="button"
-                  className="review-welcome-dismiss"
+                  {...stylex.props(styles.dismiss, styles.dismissState)}
                   disabled={setupBusy || !canDismiss}
                   onClick={dismissUpdate}
                 >
@@ -370,7 +406,7 @@ export function WelcomePage({
               ) : onClose ? (
                 <button
                   type="button"
-                  className="review-welcome-dismiss"
+                  {...stylex.props(styles.dismiss, styles.dismissState)}
                   disabled={setupBusy || !canDismiss}
                   onClick={onClose}
                 >
@@ -378,34 +414,40 @@ export function WelcomePage({
                 </button>
               ) : null}
             </div>
-            <ol className="review-onboarding-steps">
+            <ol {...stylex.props(styles.steps)}>
               {steps.map((step, index) => {
                 const open = openStep === step.title && !step.disabled;
 
                 return (
                   <li
                     key={step.title}
-                    className="review-onboarding-step"
+                    {...stylex.props(styles.step, open && styles.stepOpen)}
                     data-state={step.done ? "done" : "todo"}
                     data-open={open}
                   >
                     <button
                       type="button"
-                      {...withClass(
-                        "review-onboarding-step-header",
-                        chevronMarker,
-                      )}
+                      {...stylex.props(chevronMarker, styles.stepHeader)}
                       disabled={step.disabled}
                       aria-expanded={open}
                       aria-label={`${open ? "Collapse" : "Expand"} ${step.label ?? step.title}`}
                       onClick={() => setOpenStep(open ? undefined : step.title)}
                     >
-                      <StepBadge done={step.done} label={String(index + 1)} />
-                      <span className="review-onboarding-step-title">
+                      <StepBadge
+                        done={step.done}
+                        open={open}
+                        label={String(index + 1)}
+                      />
+                      <span
+                        {...stylex.props(
+                          styles.stepTitle,
+                          step.done && !open && styles.stepTitleDone,
+                        )}
+                      >
                         {step.label ?? step.title}
                       </span>
                       {step.note ? (
-                        <span className="review-onboarding-step-note">
+                        <span {...stylex.props(styles.stepNote)}>
                           {step.note}
                         </span>
                       ) : null}
@@ -415,28 +457,33 @@ export function WelcomePage({
                       />
                     </button>
                     {open ? (
-                      <div className="review-onboarding-step-body">
-                        {step.body}
-                      </div>
+                      <div {...stylex.props(styles.stepBody)}>{step.body}</div>
                     ) : null}
                   </li>
                 );
               })}
             </ol>
           </div>
-          <p className="review-welcome-feedback">
+          <p {...stylex.props(styles.feedback)}>
             {updating || showLegacyStep
               ? "Thoughts on the rename or product direction?"
               : "Questions about getting started? Suggestions for new features?"}{" "}
             Ask us on{" "}
             <a
+              {...stylex.props(styles.feedbackLink)}
               href={REVIEW_DISCORD_URL}
               {...newTabLinkProps(REVIEW_DISCORD_URL)}
             >
               Discord
             </a>{" "}
             or ping us at{" "}
-            <a href="mailto:founders@dev.fast">founders@dev.fast</a>.
+            <a
+              {...stylex.props(styles.feedbackLink)}
+              href="mailto:founders@dev.fast"
+            >
+              founders@dev.fast
+            </a>
+            .
           </p>
         </div>
       </div>
@@ -475,7 +522,12 @@ function StepDoneButton({
   return (
     <button
       type="button"
-      className={`review-onboarding-step-done${primary ? " review-onboarding-primary review-onboarding-install" : ""}`}
+      {...stylex.props(
+        styles.stepButton,
+        primary && styles.primary,
+        primary && styles.compact,
+        styles.stepDone,
+      )}
       disabled
     >
       <DrawnCheckIcon />
@@ -484,11 +536,30 @@ function StepDoneButton({
   );
 }
 
-function StepBadge({ done, label }: { done: boolean; label: string }) {
+function StepBadge({
+  done,
+  open,
+  label,
+}: {
+  done: boolean;
+  open: boolean;
+  label: string;
+}) {
   return (
-    <span className="review-onboarding-step-badge" data-done={done}>
+    <span
+      {...stylex.props(
+        styles.badge,
+        done && styles.badgeDone,
+        open && styles.badgeOpen,
+      )}
+      data-done={done}
+    >
       {done ? (
-        <svg viewBox="0 0 10 10" aria-hidden="true">
+        <svg
+          {...stylex.props(styles.badgeCheck)}
+          viewBox="0 0 10 10"
+          aria-hidden="true"
+        >
           <path d="M1.5 5.5 4 8l4.5-6" fill="none" strokeWidth="1.6" />
         </svg>
       ) : (
@@ -507,10 +578,230 @@ function pathHint(shimPath: string): string {
   return `Add ${directory || "~/.local/bin"} to PATH, then refresh.`;
 }
 
+// Below this the fixed intro column would squeeze the steps until the agent
+// rows overflow; stack the intro above them instead.
+const stacked = "@media (max-width: 960px)";
+
+// An intro column beside the step rail that owns the whole first-run flow.
 const styles = stylex.create({
+  page: {
+    minHeight: "100%",
+  },
+  columns: {
+    display: "flex",
+    flexDirection: { default: null, [stacked]: "column" },
+    gap: { default: "72px", [stacked]: "32px" },
+    alignItems: "flex-start",
+    paddingTop: "48px",
+  },
+  intro: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "20px",
+    width: { default: "380px", [stacked]: "auto" },
+    flexShrink: 0,
+  },
+  kicker: {
+    color: tokens.reviewHomeMeta,
+    fontSize: "11px",
+    letterSpacing: "0.14em",
+    textTransform: "uppercase",
+  },
+  headline: {
+    margin: 0,
+    color: tokens.ink,
+    font: `500 38px/46px ${tokens.fontSerif}`,
+  },
+  sub: {
+    margin: 0,
+    color: tokens.reviewHomeMeta,
+    fontSize: "13px",
+    lineHeight: "21px",
+  },
+  dismiss: {
+    alignSelf: "flex-start",
+    marginTop: "4px",
+    padding: "3px 10px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.reviewHomeRuleSoft,
+    borderRadius: "5px",
+    color: tokens.reviewHomeMeta,
+    backgroundColor: tokens.transparent,
+    fontSize: "12px",
+  },
+  dismissState: {
+    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    opacity: { default: null, ":disabled": 0.5 },
+  },
+  steps: {
+    display: "flex",
+    flex: 1,
+    flexDirection: "column",
+    alignSelf: { default: null, [stacked]: "stretch" },
+    gap: "12px",
+    minWidth: 0,
+    margin: 0,
+    padding: 0,
+    listStyle: "none",
+  },
+  // One accordion item per step. The header is always visible; only the open
+  // step renders a body, so a single step asks for attention at a time.
+  step: {
+    display: "flex",
+    flexDirection: "column",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.reviewHomeRule,
+    borderRadius: "10px",
+  },
+  stepOpen: {
+    borderColor: tokens.reviewHomeRuleSoft,
+    backgroundColor: tokens.tray,
+  },
+  stepHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    width: "100%",
+    padding: "16px 20px",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    borderRadius: { default: null, ":focus-visible": "10px" },
+    color: "inherit",
+    backgroundColor: tokens.transparent,
+    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    opacity: { default: null, ":disabled": 0.5 },
+    textAlign: "left",
+    font: "inherit",
+    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
+    outlineOffset: { default: null, ":focus-visible": "-2px" },
+  },
   // The chevron closes the row: it sits in the trailing lane, after the note.
   stepChevron: {
     margin: "2px 2px 2px auto",
     stroke: tokens.reviewHomeMeta,
+  },
+  badge: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "22px",
+    height: "22px",
+    flexShrink: 0,
+    borderRadius: "50%",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.reviewHomeRuleSoft,
+    color: tokens.reviewHomeMeta,
+    fontSize: "11px",
+    fontWeight: 500,
+  },
+  badgeDone: {
+    borderColor: tokens.transparent,
+    backgroundColor: `color-mix(in srgb, ${tokens.changeAdded} 18%, ${tokens.transparent})`,
+  },
+  badgeOpen: {
+    borderColor: tokens.transparent,
+    color: tokens.onAccent,
+    backgroundColor: tokens.accent,
+  },
+  badgeCheck: {
+    width: "10px",
+    height: "10px",
+    flexShrink: 0,
+    fill: "none",
+    stroke: tokens.changeAdded,
+    strokeWidth: "1.5px",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  },
+  stepTitle: {
+    color: tokens.ink,
+    fontSize: "13px",
+  },
+  stepTitleDone: {
+    color: tokens.reviewHomeMeta,
+  },
+  stepNote: {
+    color: tokens.reviewHomeMeta,
+    fontSize: "12px",
+  },
+  stepBody: {
+    display: "flex",
+    flexDirection: "column",
+    padding: "0 20px 18px",
+  },
+  stepButton: {
+    alignSelf: "flex-start",
+    padding: "3px 10px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.reviewHomeRuleSoft,
+    borderRadius: "5px",
+    color: "inherit",
+    backgroundColor: tokens.transparent,
+    cursor: "pointer",
+    fontSize: "12px",
+  },
+  stepButtonNext: {
+    marginLeft: "8px",
+  },
+  primary: {
+    minHeight: "42px",
+    padding: "10px 24px",
+    borderColor: tokens.accent,
+    color: tokens.onAccent,
+    backgroundColor: tokens.accent,
+    fontSize: "14px",
+    fontWeight: 600,
+    filter: { default: null, ":hover:not(:disabled)": "brightness(1.1)" },
+    outline: { default: null, ":focus-visible": `2px solid ${tokens.accent}` },
+    outlineOffset: { default: null, ":focus-visible": "3px" },
+  },
+  compact: {
+    minHeight: "30px",
+    padding: "5px 12px",
+    fontSize: "12px",
+  },
+  stepDone: {
+    display: "inline-flex",
+    gap: "6px",
+    alignItems: "center",
+    cursor: "default",
+  },
+  hint: {
+    margin: "0 0 14px",
+    maxWidth: "560px",
+    color: tokens.inkMuted,
+    font: `13px/20px ${tokens.fontMono}`,
+  },
+  hintCode: {
+    padding: "1px 5px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.reviewHomeRuleSoft,
+    borderRadius: "4px",
+    color: tokens.ink,
+    backgroundColor: tokens.controlBg,
+    fontFamily: tokens.fontMono,
+  },
+  empty: {
+    margin: "48px 0 0",
+    color: tokens.inkMuted,
+    fontSize: "13px",
+  },
+  feedback: {
+    margin: "auto 0 0",
+    paddingTop: "48px",
+    color: tokens.reviewHomeMeta,
+    fontSize: "12px",
+    lineHeight: "20px",
+  },
+  feedbackLink: {
+    color: tokens.accent,
+    textDecoration: "underline",
+    textUnderlineOffset: "3px",
   },
 });

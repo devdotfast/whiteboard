@@ -11,6 +11,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
 import { controlStyles } from "./controls-styles";
 import { DiffrConfigSection } from "./diffr-config-section";
+import { homeStyles } from "./home-styles";
 import { settingsStyles as styles } from "./settings-styles";
 import { withClass } from "./stylex-props";
 import { TraceCaptureSection } from "./trace-capture-section";
@@ -100,11 +101,11 @@ export function SettingsPage({
   };
 
   return (
-    <main className="review-home">
-      <div className="review-home-scroll">
-        <div {...withClass("review-home-content", styles.page)}>
-          <div className="review-home-page-header">
-            <h1>Settings</h1>
+    <main {...withClass("review-home", homeStyles.page)}>
+      <div {...stylex.props(homeStyles.scroll)}>
+        <div {...stylex.props(homeStyles.content, styles.page)}>
+          <div {...stylex.props(homeStyles.header)}>
+            <h1 {...stylex.props(homeStyles.heading)}>Settings</h1>
           </div>
           <p {...stylex.props(styles.lede)}>
             Settings apply to Whiteboard on this machine.
