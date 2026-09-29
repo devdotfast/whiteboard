@@ -20,7 +20,14 @@ import {
   reviewInteractionDetail,
 } from "./review-interaction-event";
 import { useOptionalReviewPanel } from "./review-panel";
-import { elevation, fontSize, fontWeight, radius } from "./scale.stylex";
+import {
+  elevation,
+  fontSize,
+  fontWeight,
+  motion,
+  radius,
+  tracking,
+} from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { useTutorial } from "./tutorial-context";
 import {
@@ -667,8 +674,9 @@ const styles = stylex.create({
   },
   guideChapter: {
     color: tokens.inkMuted,
-    font: `11px ${tokens.fontMono}`,
-    letterSpacing: "0.04em",
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    letterSpacing: tracking.chrome,
     textTransform: "uppercase",
   },
   guideClose: {
@@ -679,7 +687,7 @@ const styles = stylex.create({
     height: "2px",
     marginInline: "12px",
     overflow: "hidden",
-    borderRadius: "999px",
+    borderRadius: radius.pill,
     backgroundColor: tokens.ruleSoft,
   },
   progressBar: {
@@ -687,7 +695,10 @@ const styles = stylex.create({
     height: "100%",
     borderRadius: "inherit",
     backgroundColor: tokens.tutorialRing,
-    transition: { default: "width 220ms ease", [reducedMotion]: "none" },
+    transition: {
+      default: `width ${motion.medium} ${motion.ease}`,
+      [reducedMotion]: "none",
+    },
   },
   copy: {
     display: "flex",
@@ -770,7 +781,10 @@ const styles = stylex.create({
     boxShadow: `0 0 0 4px ${tokens.tutorialRingGlow}`,
     pointerEvents: "none",
     animationName: { default: targetPulse, [reducedMotion]: "none" },
-    animationDuration: { default: "1.6s", [reducedMotion]: "0s" },
+    animationDuration: {
+      default: motion.pulse,
+      [reducedMotion]: motion.instant,
+    },
     animationTimingFunction: {
       default: "ease-in-out",
       [reducedMotion]: "ease",
@@ -782,7 +796,7 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "currentcolor",
-    borderRadius: "5px",
+    borderRadius: radius.small,
     backgroundColor: tokens.tutorialRingGlow,
     boxShadow: "none",
     animationName: { default: linkPulse, [reducedMotion]: "none" },

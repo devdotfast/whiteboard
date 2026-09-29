@@ -1,3 +1,4 @@
+import { fontSize, fontWeight, radius, tracking } from "@canvas/scale.stylex";
 import type { ReviewComponentProps } from "@review/review-document-data";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
@@ -44,7 +45,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.reviewHomeRuleSoft,
-    borderRadius: "8px",
+    borderRadius: radius.surface,
     backgroundColor: `color-mix(in srgb, ${tokens.surfaceRaised} 76%, transparent)`,
   },
   summary: {
@@ -54,12 +55,12 @@ const styles = stylex.create({
     gap: "16px",
     padding: "12px 14px",
     cursor: "pointer",
-    fontWeight: 600,
+    fontWeight: fontWeight.semibold,
   },
   summaryNote: {
     color: tokens.reviewHomeMeta,
-    fontSize: "11px",
-    fontWeight: 400,
+    fontSize: fontSize.small,
+    fontWeight: fontWeight.regular,
   },
   messages: {
     display: "grid",
@@ -74,7 +75,7 @@ const styles = stylex.create({
     gap: "10px",
     color: tokens.ink,
     fontFamily: tokens.fontSerif,
-    fontSize: "15px",
+    fontSize: fontSize.reading,
     lineHeight: 1.72,
     textAlign: "left",
   },
@@ -83,8 +84,9 @@ const styles = stylex.create({
   },
   role: {
     color: tokens.reviewHomeMeta,
-    fontSize: "11px",
-    fontWeight: 600,
+    fontSize: fontSize.small,
+    fontWeight: fontWeight.semibold,
+    letterSpacing: tracking.chrome,
     textTransform: "uppercase",
   },
   assistant: {

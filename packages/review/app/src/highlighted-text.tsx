@@ -1,3 +1,4 @@
+import { radius } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
 
@@ -84,7 +85,7 @@ const styles = stylex.create({
   mark: {
     backgroundColor: "rgba(255, 230, 0, 0.35)",
     color: "inherit",
-    borderRadius: "2px",
+    borderRadius: radius.hairline,
     padding: "1px 2px",
   },
 });

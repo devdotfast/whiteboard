@@ -1,3 +1,4 @@
+import { fontSize, radius } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement, ReactNode } from "react";
 
@@ -39,9 +40,9 @@ const styles = stylex.create({
   bubble: {
     padding: "12px 14px",
     backgroundColor: tokens.tray,
-    borderRadius: "12px 12px 4px 12px",
+    borderRadius: `${radius.surface} ${radius.surface} ${radius.small} ${radius.surface}`,
     fontFamily: tokens.fontSerif,
-    fontSize: "15px",
+    fontSize: fontSize.reading,
     lineHeight: "24px",
     color: tokens.ink,
     whiteSpace: "pre-wrap",
@@ -51,7 +52,7 @@ const styles = stylex.create({
   },
   caption: {
     fontFamily: tokens.fontMono,
-    fontSize: "10.5px",
+    fontSize: fontSize.micro,
     color: tokens.inkFaint,
   },
 });

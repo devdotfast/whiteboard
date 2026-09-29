@@ -1,3 +1,4 @@
+import { radius } from "@canvas/scale.stylex";
 import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { type JsonValue, isStringValue } from "@dev.fast/review-protocol";
@@ -1197,7 +1198,7 @@ const styles = stylex.create({
     borderWidth: { default: null, [inApp]: "1px" },
     borderStyle: { default: null, [inApp]: "solid" },
     borderColor: { default: null, [inApp]: tokens.diagramBorder },
-    borderRadius: "6px",
+    borderRadius: radius.control,
     backgroundColor: tokens.diagramSurface,
     boxShadow: "none",
   },

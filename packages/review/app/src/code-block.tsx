@@ -1,3 +1,4 @@
+import { fontWeight, radius } from "@canvas/scale.stylex";
 import {
   type ShjLanguage,
   type ShjToken,
@@ -242,7 +243,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
-    borderRadius: "8px",
+    borderRadius: radius.surface,
     backgroundColor: tokens.surface,
   },
   compact: {
@@ -310,13 +311,13 @@ const styles = stylex.create({
 const syntaxStyles = stylex.create({
   kwd: { color: tokens.accent },
   type: { color: tokens.syntaxType },
-  class: { color: tokens.syntaxType, fontWeight: 500 },
+  class: { color: tokens.syntaxType, fontWeight: fontWeight.medium },
   func: { color: tokens.syntaxFunction },
-  section: { color: tokens.syntaxFunction, fontWeight: 600 },
+  section: { color: tokens.syntaxFunction, fontWeight: fontWeight.semibold },
   var: { color: tokens.ink },
   str: { color: tokens.syntaxString },
   num: { color: tokens.syntaxNumber },
-  bool: { color: tokens.syntaxNumber, fontWeight: 500 },
+  bool: { color: tokens.syntaxNumber, fontWeight: fontWeight.medium },
   cmnt: { color: tokens.syntaxComment, fontStyle: "italic" },
   oper: { color: tokens.syntaxOperator },
   insert: { color: tokens.syntaxInserted },

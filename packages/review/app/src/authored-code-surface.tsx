@@ -1,3 +1,4 @@
+import { fontSize } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
@@ -59,7 +60,7 @@ const styles = stylex.create({
     backgroundColor: tokens.tray,
     color: tokens.ink,
     fontFamily: tokens.fontMono,
-    fontSize: "12px",
+    fontSize: fontSize.body,
     lineHeight: "19px",
   },
   line: {

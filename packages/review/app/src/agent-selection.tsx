@@ -1,3 +1,5 @@
+import { workbenchShadow } from "@canvas/agent-selection.stylex";
+import { layer, radius } from "@canvas/scale.stylex";
 import type { AgentSelection } from "@review/agent-selection";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -275,7 +277,7 @@ const systemFont = "-apple-system, BlinkMacSystemFont, sans-serif";
 const styles = stylex.create({
   popover: {
     position: "fixed",
-    zIndex: 10002,
+    zIndex: layer.agentSelection,
     display: "inline-flex",
     alignItems: "center",
     gap: "8px",
@@ -283,14 +285,14 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: "var(--vscode-editorWidget-border, #3b3b3b)",
-    borderRadius: "6px",
+    borderRadius: radius.control,
     backgroundColor: {
       default: "var(--vscode-editorWidget-background, #202020)",
       ":hover":
         "color-mix(in srgb, var(--vscode-editorWidget-background, #202020) 90%, var(--vscode-editor-foreground, #eee) 10%)",
     },
     color: "var(--vscode-editor-foreground, #eee)",
-    boxShadow: "0 3px 12px #0004",
+    boxShadow: workbenchShadow.widget,
     font: `13px/20px ${systemFont}`,
     whiteSpace: "nowrap",
     cursor: "pointer",
@@ -304,7 +306,7 @@ const styles = stylex.create({
     alignItems: "center",
     gap: "3px",
     padding: "0 5px",
-    borderRadius: "4px",
+    borderRadius: radius.small,
     backgroundColor: "#8882",
     color: "var(--vscode-descriptionForeground, #aaa)",
     font: `500 13px/20px ${systemFont}`,

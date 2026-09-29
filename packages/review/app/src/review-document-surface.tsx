@@ -1,3 +1,5 @@
+import { documentType } from "@canvas/document-type.stylex";
+import { fontWeight, tracking } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ComponentProps, ReactElement } from "react";
 
@@ -26,10 +28,10 @@ const styles = stylex.create({
     margin: { default: null, [inDocument]: 0 },
     color: { default: null, [inDocument]: tokens.ink },
     fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument]: "32px" },
-    fontWeight: { default: null, [inDocument]: 500 },
+    fontSize: { default: null, [inDocument]: documentType.title },
+    fontWeight: { default: null, [inDocument]: fontWeight.medium },
     lineHeight: { default: null, [inDocument]: "38px" },
-    letterSpacing: { default: null, [inDocument]: "-0.015em" },
+    letterSpacing: { default: null, [inDocument]: tracking.tight },
     textAlign: { default: null, [inDocument]: "left" },
   },
 });

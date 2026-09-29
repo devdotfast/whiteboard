@@ -1,3 +1,5 @@
+import { courierMotion } from "@canvas/courier-motion.stylex";
+import { fontWeight, motion, radius } from "@canvas/scale.stylex";
 import type { ActivitySnapshot } from "@review/review-api/activity";
 import * as stylex from "@stylexjs/stylex";
 import { createContext, useContext, useState } from "react";
@@ -218,7 +220,7 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "currentcolor",
-    borderRadius: "999px",
+    borderRadius: radius.pill,
     backgroundColor: tokens.transparent,
     color: tokens.inkMuted,
     font: `500 11px ${tokens.fontMono}`,
@@ -232,7 +234,7 @@ const styles = stylex.create({
       ":hover": tokens.markerGlow,
     },
     color: tokens.accent,
-    fontWeight: 600,
+    fontWeight: fontWeight.semibold,
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: { default: null, ":focus-visible": "1px" },
   },
@@ -255,7 +257,10 @@ const styles = stylex.create({
     color: tokens.accent,
     transform: "none",
     animationName: { default: courierArrive, [REDUCED]: "none" },
-    animationDuration: { default: "380ms", [REDUCED]: "0s" },
+    animationDuration: {
+      default: courierMotion.arrive,
+      [REDUCED]: motion.instant,
+    },
     animationTimingFunction: {
       default: "cubic-bezier(0.2, 0.7, 0.2, 1)",
       [REDUCED]: "ease",
@@ -294,7 +299,7 @@ const styles = stylex.create({
     },
     animationDuration: {
       default: null,
-      [inTopbarTabs]: { default: "1.8s", [REDUCED]: "0s" },
+      [inTopbarTabs]: { default: motion.pulse, [REDUCED]: motion.instant },
     },
     animationTimingFunction: {
       default: null,
@@ -315,7 +320,7 @@ const styles = stylex.create({
     right: { default: null, [inTopbarTabs]: "-7px" },
     width: { default: null, [inTopbarTabs]: "4px" },
     height: { default: null, [inTopbarTabs]: "4px" },
-    borderRadius: { default: null, [inTopbarTabs]: "50%" },
+    borderRadius: { default: null, [inTopbarTabs]: radius.round },
     backgroundColor: { default: null, [inTopbarTabs]: tokens.accent },
   },
 });

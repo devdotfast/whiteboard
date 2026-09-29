@@ -1,3 +1,4 @@
+import { fontSize, radius } from "@canvas/scale.stylex";
 import {
   type Block,
   type BlockType,
@@ -393,9 +394,12 @@ const styles = stylex.create({
     borderLeftWidth: { default: null, [inDocument]: "2px" },
     borderLeftStyle: { default: null, [inDocument]: "solid" },
     borderLeftColor: { default: null, [inDocument]: tokens.inkFaint },
-    borderRadius: { default: null, [inDocument]: "0 6px 6px 0" },
+    borderRadius: {
+      default: null,
+      [inDocument]: `0 ${radius.control} ${radius.control} 0`,
+    },
     backgroundColor: { default: null, [inDocument]: tokens.tray },
-    fontSize: { default: null, [inDocument]: "15px" },
+    fontSize: { default: null, [inDocument]: fontSize.reading },
     lineHeight: { default: null, [inDocument]: "22px" },
   },
   info: {

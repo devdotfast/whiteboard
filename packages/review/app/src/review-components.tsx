@@ -1,3 +1,5 @@
+import { documentType } from "@canvas/document-type.stylex";
+import { fontSize, fontWeight } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { textStyles } from "@canvas/ui/text";
 import type { ReviewComponentProps } from "@review/review-document-data";
@@ -1148,8 +1150,8 @@ const sectionStyles = stylex.create({
     margin: 0,
     color: { default: null, [inDocument]: tokens.ink },
     fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument]: "26px" },
-    fontWeight: { default: null, [inDocument]: 500 },
+    fontSize: { default: null, [inDocument]: documentType.h2 },
+    fontWeight: { default: null, [inDocument]: fontWeight.medium },
     lineHeight: { default: null, [inDocument]: "32px" },
   },
   titleActive: {
@@ -1162,7 +1164,7 @@ const sectionStyles = stylex.create({
     flex: "0 0 auto",
     color: tokens.inkFaint,
     fontFamily: tokens.fontMono,
-    fontSize: "11px",
+    fontSize: fontSize.small,
     whiteSpace: "nowrap",
   },
 });

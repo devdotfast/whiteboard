@@ -1,3 +1,5 @@
+import { documentType } from "@canvas/document-type.stylex";
+import { fontSize, fontWeight, radius, tracking } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
@@ -78,7 +80,7 @@ export const documentStyles = stylex.create({
     backgroundColor: tokens.transparent,
     color: tokens.ink,
     fontFamily: tokens.fontSerif,
-    fontSize: "17px",
+    fontSize: documentType.body,
     lineHeight: 1.6,
   },
   // Beside an open side peek the column narrows its inline diagrams, and a
@@ -105,10 +107,10 @@ export const documentStyles = stylex.create({
     marginTop: { default: null, [scratchpadOpening]: 0 },
     color: { default: null, [inDocument]: tokens.ink },
     fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument]: "34px" },
-    fontWeight: { default: null, [inDocument]: 500 },
+    fontSize: { default: null, [inDocument]: documentType.h1 },
+    fontWeight: { default: null, [inDocument]: fontWeight.medium },
     lineHeight: { default: null, [inDocument]: "40px" },
-    letterSpacing: { default: null, [inDocument]: "-0.005em" },
+    letterSpacing: { default: null, [inDocument]: tracking.tight },
     textAlign: { default: null, [inDocument]: "left" },
   },
   h2: {
@@ -122,8 +124,8 @@ export const documentStyles = stylex.create({
     marginTop: { default: null, [scratchpadOpening]: 0 },
     color: { default: null, [inDocument]: tokens.ink },
     fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument]: "26px" },
-    fontWeight: { default: null, [inDocument]: 500 },
+    fontSize: { default: null, [inDocument]: documentType.h2 },
+    fontWeight: { default: null, [inDocument]: fontWeight.medium },
     lineHeight: { default: null, [inDocument]: "32px" },
   },
   h3: {
@@ -134,8 +136,8 @@ export const documentStyles = stylex.create({
     marginTop: { default: null, [scratchpadOpening]: 0 },
     color: { default: null, [inDocument]: tokens.ink },
     fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument]: "20px" },
-    fontWeight: { default: null, [inDocument]: 500 },
+    fontSize: { default: null, [inDocument]: documentType.h3 },
+    fontWeight: { default: null, [inDocument]: fontWeight.medium },
     lineHeight: { default: null, [inDocument]: "23px" },
   },
   // A block in the prose column: lists, quotes, images, tutorial controls.
@@ -154,7 +156,7 @@ export const documentStyles = stylex.create({
     marginInline: { default: null, [inDocumentBlock]: "auto" },
     color: { default: null, [inProse]: tokens.ink },
     fontFamily: { default: null, [inProse]: tokens.fontSerif },
-    fontSize: { default: null, [inProse]: "15px" },
+    fontSize: { default: null, [inProse]: fontSize.reading },
     lineHeight: { default: null, [inProse]: 1.72 },
     textAlign: { default: null, [inProse]: "left" },
   },
@@ -173,7 +175,7 @@ export const documentStyles = stylex.create({
     marginTop: { default: null, [afterProseItem]: "8px" },
     color: { default: null, [inProse]: tokens.ink },
     fontFamily: { default: null, [inProse]: tokens.fontSerif },
-    fontSize: { default: null, [inProse]: "15px" },
+    fontSize: { default: null, [inProse]: fontSize.reading },
     lineHeight: { default: null, [inProse]: 1.72 },
     textAlign: { default: null, [inProse]: "left" },
   },
@@ -183,7 +185,7 @@ export const documentStyles = stylex.create({
     margin: { default: null, [inDocument]: "14px 0" },
     color: { default: null, [inDocument]: tokens.ink },
     fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument]: "15px" },
+    fontSize: { default: null, [inDocument]: fontSize.reading },
     lineHeight: { default: null, [inDocument]: 1.72 },
     textAlign: { default: null, [inDocument]: "left" },
   },
@@ -211,7 +213,7 @@ export const documentStyles = stylex.create({
   },
   code: {
     padding: { default: null, [inDocument]: "2px 5px" },
-    borderRadius: { default: null, [inDocument]: "3px" },
+    borderRadius: { default: null, [inDocument]: radius.small },
     backgroundColor: {
       default: null,
       [inDocument]: tokens.well,
@@ -231,7 +233,7 @@ export const documentStyles = stylex.create({
     borderCollapse: { default: null, [inDocument]: "collapse" },
     color: { default: null, [inDocument]: tokens.ink },
     fontFamily: { default: null, [inDocument]: tokens.fontMono },
-    fontSize: { default: null, [inDocument]: "13px" },
+    fontSize: { default: null, [inDocument]: fontSize.ui },
     lineHeight: { default: null, [inDocument]: 1.55 },
     tableLayout: { default: null, [inDocument]: "fixed" },
   },
@@ -247,7 +249,7 @@ export const documentStyles = stylex.create({
   headerCell: {
     backgroundColor: { default: null, [inDocument]: tokens.tray },
     color: { default: null, [inDocument]: tokens.ink },
-    fontWeight: { default: null, [inDocument]: 600 },
+    fontWeight: { default: null, [inDocument]: fontWeight.semibold },
   },
   // Phrasing content, so an <img> laid out like an image block.
   image: {

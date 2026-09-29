@@ -1,3 +1,5 @@
+import { drawMotion } from "@canvas/draw-motion.stylex";
+import { motion, radius } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { documentNodeMarker } from "./markers.stylex";
@@ -280,7 +282,7 @@ export const drawStyles = stylex.create({
   // the slot takes the marker wash and a solid outline; both fade on settle.
   landing: {
     position: "relative",
-    borderRadius: "8px",
+    borderRadius: radius.surface,
     "::after": {
       content: "''",
       position: "absolute",
@@ -289,13 +291,16 @@ export const drawStyles = stylex.create({
       width: "8px",
       height: "8px",
       margin: "-4px 0 0 -4px",
-      borderRadius: "50%",
+      borderRadius: radius.round,
       backgroundColor: tokens.accent,
       boxShadow: `0 0 0 3px ${tokens.markerGlow}`,
       pointerEvents: "none",
       display: { default: null, [REDUCED]: "none" },
       animationName: { default: `${wipe}, ${dotFade}`, [REDUCED]: "none" },
-      animationDuration: { default: "420ms, 150ms", [REDUCED]: "0s" },
+      animationDuration: {
+        default: `${drawMotion.stroke}, ${drawMotion.dotFade}`,
+        [REDUCED]: motion.instant,
+      },
       animationTimingFunction: { default: `${ease}, ease`, [REDUCED]: "ease" },
       animationDelay: { default: "260ms, 680ms", [REDUCED]: "0s" },
       animationFillMode: { default: "both, both", [REDUCED]: "none" },
@@ -313,7 +318,10 @@ export const drawStyles = stylex.create({
     position: "relative",
     "::before": {
       ...eraser,
-      animationDuration: { default: "200ms, 400ms, 200ms", [REDUCED]: "0s" },
+      animationDuration: {
+        default: `${drawMotion.beat}, ${drawMotion.pass}, ${drawMotion.beat}`,
+        [REDUCED]: motion.instant,
+      },
       animationDelay: { default: "0s, 200ms, 600ms", [REDUCED]: "0s" },
     },
   },
@@ -325,7 +333,10 @@ export const drawStyles = stylex.create({
     interpolateSize: "allow-keywords",
     "::before": {
       ...eraser,
-      animationDuration: { default: "120ms, 400ms, 120ms", [REDUCED]: "0s" },
+      animationDuration: {
+        default: `${drawMotion.tick}, ${drawMotion.pass}, ${drawMotion.tick}`,
+        [REDUCED]: motion.instant,
+      },
       animationDelay: { default: "0s, 0s, 400ms", [REDUCED]: "0s" },
     },
   },
@@ -334,13 +345,13 @@ export const drawStyles = stylex.create({
   // While the agent writes only its color breathes; idle, it holds; when the
   // agent moves on or the lease ends, it fades.
   region: {
-    borderRadius: "8px",
+    borderRadius: radius.surface,
     outline: {
       default: `1px solid ${tokens.transparent}`,
       [ringOnSection]: "none",
     },
     outlineOffset: "12px",
-    transition: "outline-color 250ms ease",
+    transition: `outline-color ${drawMotion.ring} ${motion.ease}`,
   },
   regionOn: {
     outline: { default: `1px solid ${tokens.accent}`, [ringOnSection]: "none" },
@@ -355,9 +366,9 @@ export const drawStyles = stylex.create({
       ...childAnimationName,
     },
     animationDuration: {
-      default: "680ms",
-      [ringOnSection]: "0s",
-      [REDUCED]: "0s",
+      default: drawMotion.land,
+      [ringOnSection]: motion.instant,
+      [REDUCED]: motion.instant,
       ...childAnimationDuration,
     },
     animationTimingFunction: {
@@ -385,9 +396,9 @@ export const drawStyles = stylex.create({
       ...childAnimationName,
     },
     animationDuration: {
-      default: "260ms",
-      [ringOnSection]: "0s",
-      [REDUCED]: "0s",
+      default: drawMotion.collapse,
+      [ringOnSection]: motion.instant,
+      [REDUCED]: motion.instant,
       ...childAnimationDuration,
     },
     animationTimingFunction: {
@@ -420,9 +431,9 @@ export const drawStyles = stylex.create({
       ...childAnimationName,
     },
     animationDuration: {
-      default: "1.6s",
-      [ringOnSection]: "0s",
-      [REDUCED]: "0s",
+      default: motion.pulse,
+      [ringOnSection]: motion.instant,
+      [REDUCED]: motion.instant,
       ...childAnimationDuration,
     },
     animationTimingFunction: {
@@ -469,7 +480,11 @@ export const drawStyles = stylex.create({
         [regionOff]: tokens.transparent,
         [regionOn]: tokens.accent,
       },
-      borderRadius: { default: null, [regionOff]: "8px", [regionOn]: "8px" },
+      borderRadius: {
+        default: null,
+        [regionOff]: radius.surface,
+        [regionOn]: radius.surface,
+      },
       pointerEvents: {
         default: null,
         [regionOff]: "none",
@@ -477,8 +492,8 @@ export const drawStyles = stylex.create({
       },
       transition: {
         default: null,
-        [regionOff]: "border-color 250ms ease",
-        [regionOn]: "border-color 250ms ease",
+        [regionOff]: `border-color ${drawMotion.ring} ${motion.ease}`,
+        [regionOn]: `border-color ${drawMotion.ring} ${motion.ease}`,
       },
       animationName: {
         default: null,
@@ -486,7 +501,7 @@ export const drawStyles = stylex.create({
       },
       animationDuration: {
         default: null,
-        [regionWriting]: { default: "1.6s", [REDUCED]: "0s" },
+        [regionWriting]: { default: motion.pulse, [REDUCED]: motion.instant },
       },
       animationTimingFunction: {
         default: null,
@@ -512,7 +527,7 @@ export const drawStyles = stylex.create({
       [stylex.when.ancestor(
         ':is([data-motion="retitle"])',
         documentNodeMarker,
-      )]: { default: "420ms", [REDUCED]: "0s" },
+      )]: { default: drawMotion.stroke, [REDUCED]: motion.instant },
     },
     animationTimingFunction: {
       default: null,
@@ -532,7 +547,10 @@ export const drawStyles = stylex.create({
   // A callout's title, while its block is retitled.
   retitle: {
     animationName: { default: label, [REDUCED]: "none" },
-    animationDuration: { default: "420ms", [REDUCED]: "0s" },
+    animationDuration: {
+      default: drawMotion.stroke,
+      [REDUCED]: motion.instant,
+    },
     animationTimingFunction: { default: "steps(14)", [REDUCED]: "ease" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },
@@ -545,21 +563,24 @@ export const drawStyles = stylex.create({
   traceQuick: {
     strokeDasharray: "1",
     animationName: { default: trace, [REDUCED]: "none" },
-    animationDuration: { default: "220ms", [REDUCED]: "0s" },
+    animationDuration: { default: drawMotion.quick, [REDUCED]: motion.instant },
     animationTimingFunction: { default: "linear", [REDUCED]: "ease" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },
   traceNode: {
     strokeDasharray: "1",
     animationName: { default: trace, [REDUCED]: "none" },
-    animationDuration: { default: "420ms", [REDUCED]: "0s" },
+    animationDuration: {
+      default: drawMotion.stroke,
+      [REDUCED]: motion.instant,
+    },
     animationTimingFunction: { default: ease, [REDUCED]: "ease" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },
   traceLine: {
     strokeDasharray: "1",
     animationName: { default: trace, [REDUCED]: "none" },
-    animationDuration: { default: "450ms", [REDUCED]: "0s" },
+    animationDuration: { default: drawMotion.line, [REDUCED]: motion.instant },
     animationTimingFunction: { default: ease, [REDUCED]: "ease" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },
@@ -567,48 +588,51 @@ export const drawStyles = stylex.create({
   // relabeled.
   fill: {
     animationName: { default: nodeFill, [REDUCED]: "none" },
-    animationDuration: { default: "330ms", [REDUCED]: "0s" },
+    animationDuration: { default: drawMotion.fill, [REDUCED]: motion.instant },
     animationTimingFunction: { default: "ease-out", [REDUCED]: "ease" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },
   refill: {
     animationName: { default: nodeFill, [REDUCED]: "none" },
-    animationDuration: { default: "420ms", [REDUCED]: "0s" },
+    animationDuration: {
+      default: drawMotion.stroke,
+      [REDUCED]: motion.instant,
+    },
     animationTimingFunction: { default: "ease-out", [REDUCED]: "ease" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },
   // Labels compose left to right once their unit is drawn.
   labelQuick: {
     animationName: { default: label, [REDUCED]: "none" },
-    animationDuration: { default: "160ms", [REDUCED]: "0s" },
+    animationDuration: { default: drawMotion.label, [REDUCED]: motion.instant },
     animationTimingFunction: { default: "steps(8)", [REDUCED]: "ease" },
     animationDelay: { default: "60ms", [REDUCED]: "0s" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },
   labelFill: {
     animationName: { default: label, [REDUCED]: "none" },
-    animationDuration: { default: "330ms", [REDUCED]: "0s" },
+    animationDuration: { default: drawMotion.fill, [REDUCED]: motion.instant },
     animationTimingFunction: { default: "steps(12)", [REDUCED]: "ease" },
     animationDelay: { default: "90ms", [REDUCED]: "0s" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },
   labelEdgeQuick: {
     animationName: { default: label, [REDUCED]: "none" },
-    animationDuration: { default: "120ms", [REDUCED]: "0s" },
+    animationDuration: { default: drawMotion.tick, [REDUCED]: motion.instant },
     animationTimingFunction: { default: "steps(6)", [REDUCED]: "ease" },
     animationDelay: { default: "100ms", [REDUCED]: "0s" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },
   labelEdge: {
     animationName: { default: label, [REDUCED]: "none" },
-    animationDuration: { default: "200ms", [REDUCED]: "0s" },
+    animationDuration: { default: drawMotion.beat, [REDUCED]: motion.instant },
     animationTimingFunction: { default: "steps(8)", [REDUCED]: "ease" },
     animationDelay: { default: "300ms", [REDUCED]: "0s" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },
   labelStep: {
     animationName: { default: label, [REDUCED]: "none" },
-    animationDuration: { default: "160ms", [REDUCED]: "0s" },
+    animationDuration: { default: drawMotion.label, [REDUCED]: motion.instant },
     animationTimingFunction: { default: "steps(8)", [REDUCED]: "ease" },
     animationDelay: { default: "120ms", [REDUCED]: "0s" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
@@ -617,14 +641,20 @@ export const drawStyles = stylex.create({
   rowLanding: {
     maskImage: { default: wipeMask, [REDUCED]: "none" },
     animationName: { default: wipe, [REDUCED]: "none" },
-    animationDuration: { default: "340ms", [REDUCED]: "0s" },
+    animationDuration: {
+      default: drawMotion.rowLand,
+      [REDUCED]: motion.instant,
+    },
     animationTimingFunction: { default: ease, [REDUCED]: "ease" },
     animationDelay: { default: "180ms", [REDUCED]: "0s" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },
   rowErasing: {
     animationName: { default: erase, [REDUCED]: "none" },
-    animationDuration: { default: "320ms", [REDUCED]: "0s" },
+    animationDuration: {
+      default: drawMotion.rowErase,
+      [REDUCED]: motion.instant,
+    },
     animationTimingFunction: { default: "linear", [REDUCED]: "ease" },
     animationFillMode: { default: "forwards", [REDUCED]: "none" },
     opacity: 0,
@@ -632,7 +662,7 @@ export const drawStyles = stylex.create({
   // A sequence step's dot pops once its line is drawn.
   stepPop: {
     animationName: { default: stepPop, [REDUCED]: "none" },
-    animationDuration: { default: "450ms", [REDUCED]: "0s" },
+    animationDuration: { default: drawMotion.line, [REDUCED]: motion.instant },
     animationTimingFunction: { default: ease, [REDUCED]: "ease" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },

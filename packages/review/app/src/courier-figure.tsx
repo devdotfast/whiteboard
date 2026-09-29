@@ -1,3 +1,5 @@
+import { courierMotion } from "@canvas/courier-motion.stylex";
+import { motion } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
@@ -144,13 +146,19 @@ const styles = stylex.create({
   // Idle: march in place, then sit.
   marchLeft: {
     animationName: { default: marchLeft, [REDUCED]: "none" },
-    animationDuration: { default: "480ms", [REDUCED]: "0s" },
+    animationDuration: {
+      default: courierMotion.march,
+      [REDUCED]: motion.instant,
+    },
     animationTimingFunction: { default: "ease-in-out", [REDUCED]: "ease" },
     animationIterationCount: { default: "infinite", [REDUCED]: 1 },
   },
   marchRight: {
     animationName: { default: marchRight, [REDUCED]: "none" },
-    animationDuration: { default: "480ms", [REDUCED]: "0s" },
+    animationDuration: {
+      default: courierMotion.march,
+      [REDUCED]: motion.instant,
+    },
     animationTimingFunction: { default: "ease-in-out", [REDUCED]: "ease" },
     animationIterationCount: { default: "infinite", [REDUCED]: 1 },
   },
@@ -158,23 +166,29 @@ const styles = stylex.create({
   sitLeft: {
     transform: "rotate(-80deg)",
     transformOrigin: "9px 24px",
-    transition: "transform 300ms ease",
+    transition: `transform ${motion.slow} ${motion.ease}`,
   },
   sitRight: {
     transform: "rotate(80deg)",
     transformOrigin: "19px 24px",
-    transition: "transform 300ms ease",
+    transition: `transform ${motion.slow} ${motion.ease}`,
   },
   dozing: {
     animationName: { default: doze, [REDUCED]: "none" },
-    animationDuration: { default: "5s", [REDUCED]: "0s" },
+    animationDuration: {
+      default: courierMotion.doze,
+      [REDUCED]: motion.instant,
+    },
     animationTimingFunction: { default: "steps(1)", [REDUCED]: "ease" },
     animationIterationCount: { default: "infinite", [REDUCED]: 1 },
   },
   // Happy eyes on a jump.
   happy: {
     animationName: { default: happy, [REDUCED]: "none" },
-    animationDuration: { default: "520ms", [REDUCED]: "0s" },
+    animationDuration: {
+      default: courierMotion.bounce,
+      [REDUCED]: motion.instant,
+    },
     animationTimingFunction: { default: "steps(1)", [REDUCED]: "ease" },
     animationFillMode: { default: "forwards", [REDUCED]: "none" },
   },

@@ -1,3 +1,5 @@
+import { drawMotion } from "@canvas/draw-motion.stylex";
+import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCommitScope,
@@ -729,7 +731,7 @@ const styles = stylex.create({
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
     color: tokens.inkMuted,
-    fontSize: "11px",
+    fontSize: fontSize.small,
   },
   progressLabel: {
     display: "flex",
@@ -836,7 +838,7 @@ const styles = stylex.create({
   },
   toggleActive: {
     color: tokens.ink,
-    fontWeight: 600,
+    fontWeight: fontWeight.semibold,
     backgroundColor: "transparent",
   },
   // The filter outranks the viewed fade; the checkbox beside it says viewed.
@@ -855,7 +857,7 @@ const styles = stylex.create({
     gap: "8px",
     height: "24px",
     padding: "0 8px",
-    borderRadius: "999px",
+    borderRadius: radius.pill,
   },
   chipActive: {
     paddingRight: "4px",
@@ -882,7 +884,10 @@ const styles = stylex.create({
   },
   nameRelabel: {
     animationName: { default: relabel, [REDUCED]: "none" },
-    animationDuration: { default: "420ms", [REDUCED]: "0s" },
+    animationDuration: {
+      default: drawMotion.stroke,
+      [REDUCED]: motion.instant,
+    },
     animationTimingFunction: { default: "steps(14)", [REDUCED]: "ease" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },
@@ -893,7 +898,7 @@ const styles = stylex.create({
     justifyContent: "center",
     width: "18px",
     height: "18px",
-    borderRadius: "999px",
+    borderRadius: radius.pill,
     backgroundColor: {
       default: null,
       [stylex.when.ancestor(":hover", lensToggleMarker)]: tokens.markerGlow,
@@ -966,7 +971,10 @@ const sectionMotion = stylex.create({
   },
   landing: {
     animationName: { default: landSlot, [REDUCED]: "none" },
-    animationDuration: { default: "520ms", [REDUCED]: "0s" },
+    animationDuration: {
+      default: drawMotion.lensLand,
+      [REDUCED]: motion.instant,
+    },
     animationTimingFunction: { default: EASE, [REDUCED]: "ease" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },
@@ -975,7 +983,7 @@ const sectionMotion = stylex.create({
     outlineOffset: "-1px",
     backgroundColor: tokens.markerTint,
     animationName: { default: attention, [REDUCED]: "none" },
-    animationDuration: { default: "250ms", [REDUCED]: "0s" },
+    animationDuration: { default: drawMotion.ring, [REDUCED]: motion.instant },
     animationTimingFunction: { default: "ease-out", [REDUCED]: "ease" },
     animationFillMode: { default: "both", [REDUCED]: "none" },
   },
@@ -983,7 +991,7 @@ const sectionMotion = stylex.create({
     overflow: "clip",
     interpolateSize: "allow-keywords",
     animationName: { default: collapse, [REDUCED]: "none" },
-    animationDuration: { default: "200ms", [REDUCED]: "0s" },
+    animationDuration: { default: drawMotion.beat, [REDUCED]: motion.instant },
     animationTimingFunction: { default: EASE, [REDUCED]: "ease" },
     animationDelay: { default: "320ms", [REDUCED]: "0s" },
     animationFillMode: { default: "both", [REDUCED]: "none" },

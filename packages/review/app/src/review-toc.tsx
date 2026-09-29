@@ -1,3 +1,5 @@
+import { tocLayer } from "@canvas/review-toc.stylex";
+import { fontSize, fontWeight, motion } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
@@ -403,7 +405,7 @@ const styles = stylex.create({
     // Sits 16px above the content top so it clears the page title.
     top: `calc(32px + ${tokens.reviewPageTop})`,
     left: { default: "24px", [narrow]: "8px" },
-    zIndex: 32,
+    zIndex: tocLayer.card,
     display: "block",
     flex: "none",
     width: "32px",
@@ -414,8 +416,7 @@ const styles = stylex.create({
     fontFamily: tokens.fontSerif,
     interpolateSize: "allow-keywords",
     transition: {
-      default:
-        "width 180ms cubic-bezier(0.2, 0.7, 0.2, 1) 80ms, height 180ms cubic-bezier(0.2, 0.7, 0.2, 1) 80ms",
+      default: `width ${motion.medium} cubic-bezier(0.2, 0.7, 0.2, 1) ${motion.fast}, height ${motion.medium} cubic-bezier(0.2, 0.7, 0.2, 1) ${motion.fast}`,
       [reducedMotion]: "none",
     },
   },
@@ -423,8 +424,7 @@ const styles = stylex.create({
     width: { default: "248px", [narrow]: "min(248px, calc(100cqi - 16px))" },
     height: "auto",
     transition: {
-      default:
-        "width 220ms cubic-bezier(0.2, 0.7, 0.2, 1), height 220ms cubic-bezier(0.2, 0.7, 0.2, 1)",
+      default: `width ${motion.medium} cubic-bezier(0.2, 0.7, 0.2, 1), height ${motion.medium} cubic-bezier(0.2, 0.7, 0.2, 1)`,
       [reducedMotion]: "none",
     },
   },
@@ -441,7 +441,7 @@ const styles = stylex.create({
         [besideDocumentHeader]: "max(24px, calc((100% - 1320px) / 2))",
       },
     },
-    zIndex: 31,
+    zIndex: tocLayer.rail,
     width: {
       default: "248px",
       [besideDocumentHeader]: "240px",
@@ -480,16 +480,16 @@ const styles = stylex.create({
     opacity: 0,
     pointerEvents: "none",
     transition: {
-      default: "opacity 80ms ease",
-      [reducedMotion]: "opacity 140ms ease",
+      default: `opacity ${motion.fast} ${motion.ease}`,
+      [reducedMotion]: `opacity ${motion.fast} ${motion.ease}`,
     },
   },
   bodyOpen: {
     opacity: 1,
     pointerEvents: "auto",
     transition: {
-      default: "opacity 140ms ease 100ms",
-      [reducedMotion]: "opacity 140ms ease",
+      default: `opacity ${motion.fast} ${motion.ease} ${motion.fast}`,
+      [reducedMotion]: `opacity ${motion.fast} ${motion.ease}`,
     },
   },
   bodyRail: {
@@ -538,7 +538,7 @@ const styles = stylex.create({
     borderStyle: "none",
     borderColor: "currentcolor",
     backgroundColor: tokens.transparent,
-    fontWeight: 400,
+    fontWeight: fontWeight.regular,
     textAlign: "left",
     position: "relative",
     gap: "10px",
@@ -550,7 +550,7 @@ const styles = stylex.create({
       ":focus-visible": tokens.ink,
     },
     fontFamily: tokens.fontMono,
-    fontSize: "12px",
+    fontSize: fontSize.body,
     lineHeight: "18px",
     outline: { default: null, ":hover": "none", ":focus-visible": "none" },
   },
@@ -558,11 +558,11 @@ const styles = stylex.create({
     minHeight: { default: null, [besideDocumentHeader]: "30px" },
     gap: { default: "10px", [besideDocumentHeader]: "12px" },
     paddingBlock: { default: null, [besideDocumentHeader]: 0 },
-    fontSize: { default: "12px", [besideDocumentHeader]: "13px" },
+    fontSize: { default: fontSize.body, [besideDocumentHeader]: fontSize.ui },
   },
   linkActive: {
     color: tokens.ink,
-    fontWeight: 600,
+    fontWeight: fontWeight.semibold,
     outline: "none",
   },
   number: {
@@ -570,11 +570,14 @@ const styles = stylex.create({
     color: tokens.inkFaint,
     fontFamily: tokens.fontMono,
     minWidth: "22px",
-    fontSize: "11px",
+    fontSize: fontSize.small,
   },
   numberRail: {
     minWidth: { default: "22px", [besideDocumentHeader]: "12px" },
-    fontSize: { default: "11px", [besideDocumentHeader]: "12px" },
+    fontSize: {
+      default: fontSize.small,
+      [besideDocumentHeader]: fontSize.body,
+    },
   },
   // Fits "5.10".
   numberH3: {

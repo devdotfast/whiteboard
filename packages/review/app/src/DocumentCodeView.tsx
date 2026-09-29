@@ -1,3 +1,4 @@
+import { radius } from "@canvas/scale.stylex";
 import type {
   ReviewDiffProgress,
   ReviewDiffSide,
@@ -350,7 +351,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
-    borderRadius: "6px",
+    borderRadius: radius.control,
     backgroundColor: tokens.bg,
   },
   error: {
