@@ -42,7 +42,15 @@ import { useDocumentEmbedScroll } from "./document-embed-scroll";
 import { documentStyles } from "./document-styles";
 import { useReviewSession } from "./host/review-session";
 import { DiscordIcon, MarkerUnderline, SettingsSlidersIcon } from "./icons";
-import { segmentMarker } from "./markers.stylex";
+import {
+  appMarker,
+  detailHostMarker,
+  documentMarker,
+  scopedDiffMarker,
+  segmentMarker,
+  topbarActionsMarker,
+  topbarTabsMarker,
+} from "./markers.stylex";
 import { ReviewPanelHost } from "./review-components";
 import {
   ReviewProvider,
@@ -498,23 +506,18 @@ function ReviewLayoutContent({
       } as CSSProperties)
     : undefined;
 
-  // Bare markers: descendants' :is() style conditions key on review-app and
-  // on the peek and resizing classes.
   const appClassName = [
     "review-app",
     `review-app--theme-${debugSettings.theme}`,
     `review-app--tint-${debugSettings.nodeTint}`,
-    rightPanelOpen ? "review-app--peek-open" : null,
-    sidePeekResize.isResizing ? "review-app--resizing" : null,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  ].join(" ");
 
   return (
     <div
       ref={appRef}
       {...withClass(
         appClassName,
+        appMarker,
         themeStyles.vars,
         themeStyles.app,
         debugSettings.theme === "light" && themeStyles.light,
@@ -523,6 +526,8 @@ function ReviewLayoutContent({
         panelMotion === "restored" && shellStyles.appRestoredPanel,
       )}
       style={appStyle}
+      data-peek-open={rightPanelOpen || undefined}
+      data-resizing={sidePeekResize.isResizing || undefined}
     >
       <main
         ref={shellRef}
@@ -537,13 +542,7 @@ function ReviewLayoutContent({
           scrollRegionRef={scrollRegionRef}
         >
           <header {...stylex.props(shellStyles.topbar)}>
-            <div
-              {...withClass(
-                // Marker class: other components' :is() style conditions key on it.
-                "review-topbar-left",
-                shellStyles.topbarLeft,
-              )}
-            >
+            <div {...stylex.props(shellStyles.topbarLeft, topbarTabsMarker)}>
               <div
                 {...stylex.props(
                   controlStyles.segmented,
@@ -623,11 +622,7 @@ function ReviewLayoutContent({
               </div>
             </div>
             <div
-              {...withClass(
-                // Marker class: other components' :is() style conditions key on it.
-                "review-topbar-actions",
-                shellStyles.topbarActions,
-              )}
+              {...stylex.props(shellStyles.topbarActions, topbarActionsMarker)}
             >
               <div
                 {...stylex.props(
@@ -746,9 +741,9 @@ function ReviewLayoutContent({
                   <article
                     ref={articleRef}
                     {...withClass(
-                      // Marker class: other components' :is() style conditions key on it.
                       "review-document",
                       documentStyles.article,
+                      documentMarker,
                       rightPanelOpen && documentStyles.articlePeekOpen,
                     )}
                     data-kind={scratchpad ? "scratchpad" : undefined}
@@ -839,10 +834,10 @@ function ReviewLayoutContent({
             {activeView === "diff" && diffScope !== null && (
               <div
                 {...withClass(
-                  // Marker class: other components' :is() style conditions key on it.
                   "review-diff-view--scoped",
                   shellStyles.diffView,
                   shellStyles.diffViewScoped,
+                  scopedDiffMarker,
                 )}
               >
                 <CommitDiffScopeBar
@@ -872,13 +867,7 @@ function ReviewLayoutContent({
           {...sidePeekResize.separatorProps}
         />
       )}
-      <div
-        {...withClass(
-          // Marker class: other components' :is() style conditions key on it.
-          "review-detail-host",
-          shellStyles.detailHost,
-        )}
-      >
+      <div {...stylex.props(shellStyles.detailHost, detailHostMarker)}>
         <ReviewPanelHost />
       </div>
     </div>

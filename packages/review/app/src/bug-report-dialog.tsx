@@ -23,6 +23,7 @@ import {
 import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
 import { BugIcon } from "./icons";
+import { appMarker } from "./markers.stylex";
 import { fontSize, fontWeight, layer, radius } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { useToast } from "./toast";
@@ -352,16 +353,16 @@ export function BugReportControl({
   );
 }
 
-// Only .review-app defines the chrome tokens, and the border and font came
+// Only the app root defines the chrome tokens, and the border and font came
 // from shorthands that drop out without them: outside the app there are none.
-// (:scope is the canvas root, so an app portaled out of it does not count.)
-const inApp = ":is(:scope .review-app *)";
+const inApp = () => stylex.when.ancestor(":is(*)", appMarker);
 
-const chromeBorder = {
-  borderWidth: { default: 0, [inApp]: "1px" },
-  borderStyle: { default: "none", [inApp]: "solid" },
-  borderColor: tokens.chromeBorder,
-} as const;
+const chromeBorder = () =>
+  ({
+    borderWidth: { default: 0, [inApp()]: "1px" },
+    borderStyle: { default: "none", [inApp()]: "solid" },
+    borderColor: tokens.chromeBorder,
+  }) as const;
 
 const styles = stylex.create({
   backdrop: {
@@ -440,7 +441,7 @@ const styles = stylex.create({
     display: "block",
     maxWidth: "calc(100% - 34px)",
     maxHeight: "72px",
-    ...chromeBorder,
+    ...chromeBorder(),
     borderRadius: radius.small,
   },
   screenshotRemove: {

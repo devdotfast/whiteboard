@@ -1,6 +1,7 @@
 import { fontSize } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
+import { appMarker, topbarActionsMarker } from "./markers.stylex";
 import { tokens } from "./tokens.stylex";
 
 // The app shell: grid, side-panel dividers, top bar and view regions.
@@ -10,11 +11,12 @@ const narrowViewport = "@media (max-width: 720px)";
 
 const narrowContent = "@container review-content (max-width: 720px)";
 
-const peekOpen = ":is(.review-app--peek-open *)";
+const peekOpen = () => stylex.when.ancestor("[data-peek-open]", appMarker);
 
-const peekResizing = ":is(.review-app--resizing *)";
+const peekResizing = () => stylex.when.ancestor("[data-resizing]", appMarker);
 
-const inTopbarActions = ":is(.review-topbar-actions *)";
+const inTopbarActions = () =>
+  stylex.when.ancestor(":is(*)", topbarActionsMarker);
 
 const noBorder = {
   borderWidth: 0,
@@ -85,7 +87,7 @@ export const shellStyles = stylex.create({
     position: "relative",
     display: {
       default: null,
-      [peekOpen]: {
+      [peekOpen()]: {
         default: null,
         [narrowCanvas]: "none",
         [narrowViewport]: "none",
@@ -112,7 +114,7 @@ export const shellStyles = stylex.create({
         default: tokens.rule,
         ":hover": tokens.inkFaint,
         ":focus-visible": tokens.inkFaint,
-        [peekResizing]: tokens.inkFaint,
+        [peekResizing()]: tokens.inkFaint,
       },
       transform: "translateX(-50%)",
       content: "''",
@@ -189,25 +191,28 @@ export const shellStyles = stylex.create({
     height: "100%",
     overflowX: "auto",
   },
-  // Every direct child of the action row keeps its size.
+  // Every item in the action row keeps its size.
   topbarItem: {
-    flex: { default: null, ":is(.review-topbar-actions > *)": "0 0 auto" },
+    flex: { default: null, [inTopbarActions()]: "0 0 auto" },
   },
   // Popovers in the action row hang below their control, anchored by
   // useTopbarPopover.
   topbarPopover: {
-    position: { default: null, [inTopbarActions]: "fixed" },
-    top: { default: null, [inTopbarActions]: "calc(anchor(bottom) + 4px)" },
-    right: { default: null, [inTopbarActions]: "anchor(right)" },
-    bottom: { default: null, [inTopbarActions]: "auto" },
-    left: { default: null, [inTopbarActions]: "auto" },
-    margin: { default: null, [inTopbarActions]: 0 },
-    maxWidth: { default: null, [inTopbarActions]: "calc(100vw - 16px)" },
+    position: { default: null, [inTopbarActions()]: "fixed" },
+    top: { default: null, [inTopbarActions()]: "calc(anchor(bottom) + 4px)" },
+    right: { default: null, [inTopbarActions()]: "anchor(right)" },
+    bottom: { default: null, [inTopbarActions()]: "auto" },
+    left: { default: null, [inTopbarActions()]: "auto" },
+    margin: { default: null, [inTopbarActions()]: 0 },
+    maxWidth: { default: null, [inTopbarActions()]: "calc(100vw - 16px)" },
     positionTryFallbacks: {
       default: null,
-      [inTopbarActions]: "flip-inline, flip-block",
+      [inTopbarActions()]: "flip-inline, flip-block",
     },
-    positionVisibility: { default: null, [inTopbarActions]: "anchors-visible" },
+    positionVisibility: {
+      default: null,
+      [inTopbarActions()]: "anchors-visible",
+    },
   },
   // The scratchpad has no source tree or pins to set apart, so no rule.
   topbarContext: {

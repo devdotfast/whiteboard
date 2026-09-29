@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 
+import { detailHostMarker } from "./markers.stylex";
 import {
   elevation,
   fontSize,
@@ -19,7 +20,7 @@ const short = "@media (max-height: 560px)";
 const reducedMotion = "@media (prefers-reduced-motion: reduce)";
 
 // The panel's own grid cell in App's detail host.
-const inDetailHost = ":is(.review-detail-host > *)";
+const inDetailHost = () => stylex.when.ancestor(":is(*)", detailHostMarker);
 
 // Narrow layouts dock the panel to the bottom of the canvas as a sheet; a
 // short canvas gives the sheet its whole height.
@@ -62,7 +63,7 @@ export const panelStyles = stylex.create({
       [narrow]: { default: "100%", [short]: "none" },
       [short]: "none",
     },
-    gridArea: { default: null, [inDetailHost]: "1 / 1" },
+    gridArea: { default: null, [inDetailHost()]: "1 / 1" },
     overflow: "hidden",
     backgroundColor: tokens.bg,
     animationName: { default: slideIn, [reducedMotion]: "none" },

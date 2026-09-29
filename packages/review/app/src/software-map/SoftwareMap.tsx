@@ -10,7 +10,12 @@ import { hasTextSelectionWithin } from "@canvas/diagram-text-selection";
 import { flowLayer } from "@canvas/flow-layers.stylex";
 import { useReviewSession } from "@canvas/host/review-session";
 import { CloseIcon, RefreshIcon } from "@canvas/icons";
-import { mapFrameMarker } from "@canvas/markers.stylex";
+import {
+  appMarker,
+  codeInspectorMarker,
+  documentMarker,
+  mapFrameMarker,
+} from "@canvas/markers.stylex";
 import { useReviewContainer } from "@canvas/review-root-context";
 import {
   fontSize,
@@ -1076,9 +1081,9 @@ function SoftwareMapCodeInspector({
     : "Collapse all diffs";
 
   return (
-    // The class is the hook code peeks restyle themselves by in the inspector.
+    // The marker is the hook code peeks restyle themselves by in the inspector.
     <aside
-      {...withClass("software-map-code-inspector", styles.inspector)}
+      {...stylex.props(styles.inspector, codeInspectorMarker)}
       aria-label={`${node.label} diff`}
     >
       <header {...stylex.props(styles.inspectorHeader)}>
@@ -1137,6 +1142,7 @@ export function softwareMapOverlayProps(settings: {
 }) {
   return withClass(
     softwareMapOverlayClassName(settings),
+    appMarker,
     themeStyles.vars,
     themeStyles.app,
     settings.theme === "light" && themeStyles.light,
@@ -2730,9 +2736,9 @@ function createPlaceholderSnapshot(
   };
 }
 
-const inDocument = ":is(.review-document *)";
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
-const peekOpen = ":is(.review-app--peek-open *)";
+const peekOpen = () => stylex.when.ancestor("[data-peek-open]", appMarker);
 
 const stacked = "@media (max-width: 900px)";
 
@@ -2848,7 +2854,7 @@ const styles = stylex.create({
     top: "10px",
     right: "10px",
     zIndex: flowLayer.actions,
-    display: { default: "flex", [peekOpen]: "none" },
+    display: { default: "flex", [peekOpen()]: "none" },
     gap: "8px",
     padding: "2px",
     // A toolbar: its corners follow the buttons inside.
@@ -2965,7 +2971,7 @@ const styles = stylex.create({
     display: {
       default: null,
       [stacked]: "none",
-      [peekOpen]: {
+      [peekOpen()]: {
         default: null,
         "@container review-canvas (max-width: 929px)": "none",
         [narrow]: "none",
@@ -3438,9 +3444,9 @@ const styles = stylex.create({
   },
   // In a document the description reads as a document paragraph.
   description: {
-    margin: { default: 0, [inDocument]: "14px 0" },
+    margin: { default: 0, [inDocument()]: "14px 0" },
     color: tokens.inkMuted,
-    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
+    fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: fontSize.body,
     fontWeight: fontWeight.regular,
     lineHeight: "17px",
@@ -3481,11 +3487,11 @@ const styles = stylex.create({
     flex: "0 1 auto",
     minWidth: 0,
     overflow: "hidden",
-    padding: { default: null, [inDocument]: "2px 5px" },
-    borderRadius: { default: null, [inDocument]: radius.small },
-    backgroundColor: { default: null, [inDocument]: tokens.well },
+    padding: { default: null, [inDocument()]: "2px 5px" },
+    borderRadius: { default: null, [inDocument()]: radius.small },
+    backgroundColor: { default: null, [inDocument()]: tokens.well },
     color: tokens.ink,
-    fontFamily: { default: geistMono, [inDocument]: tokens.fontMono },
+    fontFamily: { default: geistMono, [inDocument()]: tokens.fontMono },
     fontSize: fontSize.reading,
     fontWeight: fontWeight.semibold,
     lineHeight: "18px",

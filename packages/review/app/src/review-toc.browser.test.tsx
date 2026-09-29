@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { documentStyles } from "./document-styles";
+import { appMarker, documentMarker } from "./markers.stylex";
 import { type ReviewRoots, ReviewRootsProvider } from "./review-root-context";
 import { ReviewToc } from "./review-toc";
 import { shellStyles } from "./shell-styles";
@@ -23,7 +24,7 @@ globalThis.ResizeObserver ??= NoopResizeObserver as never;
 
 function renderArticle(headings: string[]): HTMLElement {
   const article = document.createElement("article");
-  article.className = `review-document ${stylex.props(documentStyles.article).className}`;
+  article.className = `review-document ${stylex.props(documentStyles.article, documentMarker).className}`;
   article.innerHTML = headings
     .map(
       (heading, index) =>
@@ -163,9 +164,9 @@ describe("ReviewToc", () => {
   );
   it("keeps two-digit subsection numbers clear of their labels", async () => {
     const app = document.createElement("div");
-    app.className = "review-canvas-root review-app";
+    app.className = `review-canvas-root review-app ${stylex.props(appMarker).className}`;
     const header = document.createElement("header");
-    header.className = "review-document-header";
+    header.dataset.reviewDocumentHeader = "";
     app.append(header, shell);
     document.body.append(app);
     shell.style.width = "1600px";

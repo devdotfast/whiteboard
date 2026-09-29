@@ -1,9 +1,11 @@
+import * as stylex from "@stylexjs/stylex";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReviewDebugSettingsProvider } from "./debug-settings";
 import { ReviewSessionProvider } from "./host/review-session";
+import { detailHostMarker } from "./markers.stylex";
 import { AnchorLink, ReviewPanelHost } from "./review-components";
 import { ReviewProvider } from "./review-context";
 import { createTestReviewDefinitionSession } from "./review-definition-test-utils";
@@ -12,7 +14,6 @@ import { ReviewPanelProvider } from "./review-panel";
 import { testReviewSession } from "./review-session-test-utils";
 import { shellStyles } from "./shell-styles";
 import { defineSoftwareModel } from "./software-map/model";
-import { withClass } from "./stylex-props";
 
 const roots: Array<ReturnType<typeof createRoot>> = [];
 
@@ -81,7 +82,7 @@ describe("side-peek validation boundary", () => {
                   <AnchorLink anchor={anchors.startup}>Startup</AnchorLink>
                 </ReviewDocumentBoundary>
                 <div
-                  {...withClass("review-detail-host", shellStyles.detailHost)}
+                  {...stylex.props(shellStyles.detailHost, detailHostMarker)}
                 >
                   <ReviewPanelHost />
                 </div>

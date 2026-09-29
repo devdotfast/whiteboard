@@ -29,6 +29,7 @@ import { diagramStyles } from "./diagram-styles";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
+import { appMarker, documentMarker } from "./markers.stylex";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type { GuidedTour, PeekAnchor } from "./review-panel-model";
 import { formatSchemaExample } from "./software-map/c4-projection";
@@ -1199,12 +1200,10 @@ function tourIdFor(lensId: string, useCaseId: string): string {
   return `${lensId}-${useCaseId}`;
 }
 
-const inDocument = ":is(.review-document *)";
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
-// Where the theme defines --diagram-border (a .review-app inside the canvas
-// scope).
-// (:scope is the canvas root, so an app portaled out of it does not count.)
-const inApp = ":is(:scope .review-app *)";
+// Where the theme defines --diagram-border: inside the app root.
+const inApp = () => stylex.when.ancestor(":is(*)", appMarker);
 
 const narrow = "@container review-content (max-width: 760px)";
 
@@ -1217,32 +1216,32 @@ const styles = stylex.create({
     gridTemplateRows: "auto minmax(0, 1fr)",
     width: {
       default: "100%",
-      [inDocument]: "fit-content",
+      [inDocument()]: "fit-content",
       "@media (max-width: 720px)": {
         default: "100%",
-        [inDocument]: "calc(100cqi - 16px)",
+        [inDocument()]: "calc(100cqi - 16px)",
       },
     },
     minWidth: {
       default: null,
-      [inDocument]: `min(${tokens.reviewProseMaxWidth}, calc(100cqi - ${tokens.reviewDocumentPaddingInline} - ${tokens.reviewDocumentPaddingInline}))`,
+      [inDocument()]: `min(${tokens.reviewProseMaxWidth}, calc(100cqi - ${tokens.reviewDocumentPaddingInline} - ${tokens.reviewDocumentPaddingInline}))`,
     },
     maxWidth: {
       default: "100%",
-      [inDocument]: `min(${tokens.reviewInlineDiagramMaxWidth}, calc(100cqi - ${tokens.reviewDocumentPaddingInline} - ${tokens.reviewDocumentPaddingInline}))`,
+      [inDocument()]: `min(${tokens.reviewInlineDiagramMaxWidth}, calc(100cqi - ${tokens.reviewDocumentPaddingInline} - ${tokens.reviewDocumentPaddingInline}))`,
       "@media (max-width: 720px)": {
         default: "100%",
-        [inDocument]: "none",
+        [inDocument()]: "none",
       },
     },
     marginBlock: "24px",
-    marginInline: { default: 0, [inDocument]: "auto" },
+    marginInline: { default: 0, [inDocument()]: "auto" },
     overflow: "hidden",
     // Without --diagram-border the border drops out whole, as the shorthand
     // it replaces did.
-    borderWidth: { default: null, [inApp]: "1px" },
-    borderStyle: { default: null, [inApp]: "solid" },
-    borderColor: { default: null, [inApp]: tokens.diagramBorder },
+    borderWidth: { default: null, [inApp()]: "1px" },
+    borderStyle: { default: null, [inApp()]: "solid" },
+    borderColor: { default: null, [inApp()]: tokens.diagramBorder },
     borderRadius: radius.control,
     backgroundColor: tokens.diagramSurface,
     boxShadow: "none",

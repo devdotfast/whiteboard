@@ -11,6 +11,12 @@ import { scopeReviewCanvasCss } from "../desktop-css-scope";
 import { documentStyles } from "./document-styles";
 import { ReviewSessionProvider } from "./host/review-session";
 import {
+  appMarker,
+  documentMarker,
+  topbarActionsMarker,
+  topbarTabsMarker,
+} from "./markers.stylex";
+import {
   type ReviewFindHost,
   ReviewFindProvider,
   createReviewFindHost,
@@ -370,15 +376,15 @@ it("keeps the find widget below and above the topbar", async () => {
   canvas.innerHTML = `
     <div data-review-api class="${cx(shellStyles.apiCanvas)}">
       <p role="status" style="margin: 8px 24px; font-size: 12px">Could not refresh this review.</p>
-      <div class="review-app">
+      <div class="review-app ${stylex.props(appMarker).className}">
         <main class="review-document-shell ${cx(shellStyles.documentShell)}">
           <header class="${cx(shellStyles.topbar)}">
-            <div class="${cx(shellStyles.topbarLeft)}"></div>
-            <div class="${cx(shellStyles.topbarActions)}"></div>
+            <div class="${cx(shellStyles.topbarLeft)} ${stylex.props(topbarTabsMarker).className}"></div>
+            <div class="${cx(shellStyles.topbarActions)} ${stylex.props(topbarActionsMarker).className}"></div>
           </header>
           <section class="${cx(shellStyles.viewRegion, shellStyles.reviewRegion)}">
             <div class="${cx(shellStyles.documentView)}">
-              <article class="review-document ${cx(documentStyles.article)}">
+              <article class="review-document ${cx(documentStyles.article)} ${stylex.props(documentMarker).className}">
                 <h2 id="rollout">Rollout</h2><p>body</p>
                 <h2 id="risks">Risks</h2><p>body</p>
               </article>
@@ -487,7 +493,11 @@ function FindHarness({
           <section ref={scrollRef}>
             <article
               ref={articleRef}
-              {...withClass("review-document", documentStyles.article)}
+              {...withClass(
+                "review-document",
+                documentStyles.article,
+                documentMarker,
+              )}
             >
               <DocumentProbe onRender={onDocumentRender} />
               <p>Alpha first</p>

@@ -20,6 +20,7 @@ import { controlStyles } from "./controls-styles";
 import { copyText } from "./copy-text";
 import { useOptionalReviewSession } from "./host/review-session";
 import { ShareIcon } from "./icons";
+import { topbarActionsMarker } from "./markers.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
@@ -298,18 +299,21 @@ export function ShareControl() {
   );
 }
 
+const inTopbarActions = () =>
+  stylex.when.ancestor(":is(*)", topbarActionsMarker);
+
 const styles = stylex.create({
   // Hovered, the open button keeps the topbar button hover colors.
   // In the topbar action row the shared anchoring (shellStyles.topbarPopover)
   // places it; these are its own values anywhere else.
   popover: {
-    position: { default: "absolute", ":is(.review-topbar-actions *)": "fixed" },
+    position: { default: "absolute", [inTopbarActions()]: "fixed" },
     zIndex: layer.popover,
     top: {
       default: "calc(100% + 4px)",
-      ":is(.review-topbar-actions *)": "calc(anchor(bottom) + 4px)",
+      [inTopbarActions()]: "calc(anchor(bottom) + 4px)",
     },
-    right: { default: 0, ":is(.review-topbar-actions *)": "anchor(right)" },
+    right: { default: 0, [inTopbarActions()]: "anchor(right)" },
     display: "flex",
     flexDirection: "column",
     gap: "8px",

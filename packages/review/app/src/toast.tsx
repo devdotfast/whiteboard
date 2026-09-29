@@ -2,6 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useCallback, useEffect, useState } from "react";
 
 import { useOptionalReviewSession } from "./host/review-session";
+import { appMarker } from "./markers.stylex";
 import { elevation, fontSize, layer, radius } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
@@ -48,6 +49,8 @@ function Toast({ message }: { message: ToastMessage }) {
   );
 }
 
+const inApp = () => stylex.when.ancestor(":is(*)", appMarker);
+
 const styles = stylex.create({
   // Notification colors on purpose: it reads as the host's own toast.
   toast: {
@@ -56,11 +59,11 @@ const styles = stylex.create({
     right: "18px",
     bottom: "18px",
     maxWidth: "380px",
-    // Only .review-app defines --chrome-border, and the border came from a
+    // Only the app root defines --chrome-border, and the border came from a
     // shorthand that drops out without it: a toast portaled outside the app
     // has none.
-    borderWidth: { default: 0, ":is(:scope .review-app *)": "1px" },
-    borderStyle: { default: "none", ":is(:scope .review-app *)": "solid" },
+    borderWidth: { default: 0, [inApp()]: "1px" },
+    borderStyle: { default: "none", [inApp()]: "solid" },
     borderRadius: radius.surface,
     padding: "10px 12px",
     backgroundColor: "var(--vscode-notifications-background, var(--tray))",
