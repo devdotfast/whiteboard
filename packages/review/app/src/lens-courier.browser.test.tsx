@@ -238,11 +238,15 @@ it("lands a new lens row with the courier on it, without listing its files, and 
   expect(row(docs.id)?.dataset.motion).toBe("landing");
   await vi.waitFor(() => expect(courier()).toBeTruthy());
 
+  // The courier re-measures a frame later, once the list makes room for him.
   const list = app.querySelector<HTMLElement>(".diff-sidebar-lenses")!;
-  const box = list.getBoundingClientRect();
-  expect(parseFloat(courier()!.style.top)).toBeCloseTo(
-    row(docs.id)!.getBoundingClientRect().top - box.top + list.scrollTop,
-    0,
+  await vi.waitFor(() =>
+    expect(parseFloat(courier()!.style.top)).toBeCloseTo(
+      row(docs.id)!.getBoundingClientRect().top -
+        list.getBoundingClientRect().top +
+        list.scrollTop,
+      0,
+    ),
   );
 
   // The row lands and settles; the files it groups are never listed under it.
