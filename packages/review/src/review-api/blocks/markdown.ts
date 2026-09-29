@@ -6,7 +6,7 @@ export const markdown = {
   type: "markdown",
   schema: defineBlock("markdown", {
     markdown: text.describe(
-      "Safe Markdown. Repository file links must use [label](review-source:head/path#L10-L24) or review-source:base/path#L10-L24, with a repository-relative path and verified line numbers. Relative paths, absolute filesystem paths, and file/editor URLs are rejected. External links use https://, http://, or mailto:; document anchors use #heading.",
+      "Safe Markdown with LaTeX math. Repository file links must use [label](review-source:head/path#L10-L24) or review-source:base/path#L10-L24, with a repository-relative path and verified line numbers. Relative paths, absolute filesystem paths, and file/editor URLs are rejected. External links use https://, http://, or mailto:; document anchors use #heading.",
     ),
     pins: sourcePinsSchema
       .optional()
