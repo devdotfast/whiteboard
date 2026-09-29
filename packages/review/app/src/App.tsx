@@ -1,4 +1,5 @@
 import { Button, IconButton } from "@canvas/ui/button";
+import { EmptyState } from "@canvas/ui/empty-state";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
 import {
@@ -53,7 +54,6 @@ import { useReviewDiffFiles } from "./review-diff-files-context";
 import { ReviewDiffFilesProvider } from "./review-diff-files-context";
 import { ReviewDocumentBoundary } from "./review-document-boundary";
 import { reportReviewDocumentRenderError } from "./review-document-error-report";
-import { ReviewUnavailable } from "./review-empty-state";
 import {
   type ReviewFindHost,
   ReviewFindProvider,
@@ -888,7 +888,8 @@ function ReviewDocumentLoadState({
       return null;
     case "unavailable":
       return (
-        <ReviewUnavailable
+        <EmptyState
+          variant="document"
           title="Session unavailable"
           message={state.message}
           action={
@@ -920,7 +921,8 @@ function ReviewSoftwareMapLoadState({
       return null;
     case "unavailable":
       return (
-        <ReviewUnavailable
+        <EmptyState
+          variant="document"
           message={`Software map unavailable: ${state.message}`}
           action={
             state.currentReviewUuid ? (

@@ -1,9 +1,9 @@
+import { EmptyState } from "@canvas/ui/empty-state";
 import * as stylex from "@stylexjs/stylex";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
 import { documentStyles } from "./document-styles";
 import type { ReviewSession } from "./host/review-session";
-import { ReviewUnavailable } from "./review-empty-state";
 import { captureClientError } from "./ui-telemetry";
 
 interface ReviewDocumentBoundaryProps {
@@ -55,7 +55,8 @@ export class ReviewDocumentBoundary extends Component<
   render(): ReactNode {
     if (this.state.hasError) {
       return (
-        <ReviewUnavailable
+        <EmptyState
+          variant="document"
           role="status"
           message={
             <>

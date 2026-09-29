@@ -1,4 +1,5 @@
 import { IconButton } from "@canvas/ui/button";
+import { EmptyState } from "@canvas/ui/empty-state";
 import { textStyles } from "@canvas/ui/text";
 import {
   type ReviewCommitSummary,
@@ -15,7 +16,6 @@ import { useReviewSession } from "./host/review-session";
 import { CodeIcon, DisclosureChevron } from "./icons";
 import { chevronMarker } from "./markers.stylex";
 import { shortRef } from "./review-branch-range";
-import { ReviewUnavailable } from "./review-empty-state";
 import { countLabel } from "./review-home-view";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
@@ -43,7 +43,8 @@ export function ReviewCommitsView({
 }) {
   if (range.sourceUnavailable) {
     return (
-      <ReviewUnavailable
+      <EmptyState
+        variant="document"
         role="status"
         title="Commits unavailable"
         message={range.sourceUnavailable}

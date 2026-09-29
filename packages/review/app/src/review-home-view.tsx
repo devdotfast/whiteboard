@@ -1,4 +1,5 @@
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
+import { EmptyState } from "@canvas/ui/empty-state";
 import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewApiSummary,
@@ -245,11 +246,13 @@ export function ReviewHome({
               only dismissed reviews empties the main area, and the collapsed
               Dismissed count alone does not explain why. */}
           {needle && active.length === 0 && !scratchpadShown ? (
-            <p {...stylex.props(styles.searchEmpty)}>
-              {dismissed.length > 0
-                ? `No active reviews match “${needle}”. Look in Dismissed below.`
-                : `No reviews match “${needle}”.`}
-            </p>
+            <EmptyState
+              message={
+                dismissed.length > 0
+                  ? `No active reviews match “${needle}”. Look in Dismissed below.`
+                  : `No reviews match “${needle}”.`
+              }
+            />
           ) : null}
           <SearchQueryContext.Provider value={needle}>
             <AttentionActionsContext.Provider value={actions}>
@@ -1113,10 +1116,6 @@ const styles = stylex.create({
     width: "11px",
     height: "11px",
     flex: "0 0 auto",
-  },
-  searchEmpty: {
-    margin: "20px 0 0",
-    color: tokens.reviewHomeMeta,
   },
   // The user agent paints <mark> black on yellow, which is unreadable on the
   // canvas. Carry the mark on the background and inherit the text colour: on

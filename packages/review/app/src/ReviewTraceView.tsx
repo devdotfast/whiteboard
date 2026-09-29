@@ -1,5 +1,6 @@
 import { Button } from "@canvas/ui/button";
 import { Chip } from "@canvas/ui/chip";
+import { EmptyState } from "@canvas/ui/empty-state";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
 import { fieldStyles } from "@canvas/ui/text-field";
@@ -217,41 +218,34 @@ export function ReviewTraceView({
         )}
         {list.status === "loaded" &&
           (list.storageError !== null || !list.configured) && (
-            <div {...stylex.props(styles.empty)}>
-              <span {...stylex.props(textStyles.eyebrow, styles.kicker)}>
-                Agent trace
-              </span>
-              {list.storageError !== null ? (
-                <p {...stylex.props(styles.flush)}>{list.storageError}</p>
-              ) : (
-                <>
-                  <p {...stylex.props(styles.flush)}>
-                    Agent traces are not configured.
-                  </p>
-                  <p {...stylex.props(styles.flush, styles.note)}>
-                    Open Agent Setup in Whiteboard to enable trace capture.
-                  </p>
-                </>
-              )}
-            </div>
+            <EmptyState
+              xstyle={styles.empty}
+              title={
+                list.storageError === null
+                  ? "Agent traces are not configured."
+                  : undefined
+              }
+              message={
+                list.storageError ??
+                "Open Agent Setup in Whiteboard to enable trace capture."
+              }
+            />
           )}
         {list.status === "loaded" &&
           list.configured &&
           list.storageError === null &&
           sessions.length === 0 && (
-            <div {...stylex.props(styles.empty)}>
-              <span {...stylex.props(textStyles.eyebrow, styles.kicker)}>
-                Agent trace
-              </span>
-              <p {...stylex.props(styles.flush)}>
-                No agent sessions are recorded for this change range.
-              </p>
-              <p {...stylex.props(styles.flush, styles.note)}>
-                Sessions attach automatically through{" "}
-                <code>Agent-Session:</code> commit trailers when an agent
-                commits with repository hooks installed.
-              </p>
-            </div>
+            <EmptyState
+              xstyle={styles.empty}
+              title="No agent sessions are recorded for this change range."
+              message={
+                <>
+                  Sessions attach automatically through{" "}
+                  <code>Agent-Session:</code> commit trailers when an agent
+                  commits with repository hooks installed.
+                </>
+              }
+            />
           )}
         {targets.length > 1 && activeTarget && (
           <div {...stylex.props(styles.picker)} ref={pickerRef}>

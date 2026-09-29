@@ -1,4 +1,5 @@
 import { Button } from "@canvas/ui/button";
+import { EmptyState } from "@canvas/ui/empty-state";
 import { textStyles } from "@canvas/ui/text";
 import {
   REVIEW_DISCORD_URL,
@@ -274,7 +275,7 @@ export function WelcomePage({
             onCopied={markConnectCopied}
           />
         ) : (
-          <p {...stylex.props(styles.empty)}>Agent setup is unavailable.</p>
+          <EmptyState message="Agent setup is unavailable." />
         ),
     },
   ];
@@ -730,11 +731,6 @@ const styles = stylex.create({
     color: tokens.ink,
     backgroundColor: tokens.controlBg,
     fontFamily: tokens.fontMono,
-  },
-  empty: {
-    margin: "48px 0 0",
-    color: tokens.inkMuted,
-    fontSize: "13px",
   },
   feedback: {
     margin: "auto 0 0",

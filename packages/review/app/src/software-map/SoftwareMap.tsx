@@ -19,6 +19,7 @@ import { tokens } from "@canvas/tokens.stylex";
 import { captureUiEvent } from "@canvas/ui-telemetry";
 import { IconButton } from "@canvas/ui/button";
 import { Chip } from "@canvas/ui/chip";
+import { EmptyState } from "@canvas/ui/empty-state";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
 import { codePeekSource } from "@review/source";
@@ -1132,9 +1133,10 @@ function SoftwareMapCodeInspector({
         {diffPeeks.length > 0 ? (
           <CodePeekGroup peeks={diffPeekSources} collapsed={diffsCollapsed} />
         ) : (
-          <div {...stylex.props(styles.inspectorEmpty)}>
-            No changed code is mapped to this node.
-          </div>
+          <EmptyState
+            xstyle={styles.inspectorEmpty}
+            message="No changed code is mapped to this node."
+          />
         )}
       </div>
     </aside>
@@ -3063,10 +3065,7 @@ const styles = stylex.create({
     scrollbarColor: `${tokens.ruleSoft} ${tokens.surface}`,
   },
   inspectorEmpty: {
-    padding: "16px",
-    color: tokens.inkMuted,
-    fontSize: "12px",
-    lineHeight: "18px",
+    paddingInline: "16px",
   },
   c4Canvas: {
     ...noBorder,

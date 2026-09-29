@@ -438,18 +438,9 @@ export const traceStyles = stylex.create({
   noteError: {
     color: tokens.changeRemoved,
   },
+  // The empty notice starts where a trace's header would.
   empty: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
     paddingTop: "48px",
-    fontFamily: tokens.fontSerif,
-    fontSize: "15px",
-    lineHeight: "26px",
-    color: tokens.ink,
-  },
-  flush: {
-    margin: 0,
   },
 
   // Lens rows. A gap row marks hidden events with dashes; a collapse row,

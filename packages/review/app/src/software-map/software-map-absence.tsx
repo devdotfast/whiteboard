@@ -1,4 +1,5 @@
 import { tokens } from "@canvas/tokens.stylex";
+import { EmptyState } from "@canvas/ui/empty-state";
 import * as stylex from "@stylexjs/stylex";
 import type { CSSProperties, ReactElement } from "react";
 
@@ -30,29 +31,25 @@ export function SoftwareMapUnavailable({
           "--software-map-empty-height": softwareMapCssLength(height),
         } as CSSProperties);
 
-  const code = stylex.props(styles.code);
-
   return (
     <section
       {...softwareMapRootProps(className, variant)}
       aria-label={title ?? "Software map unavailable"}
       style={style}
     >
-      <div {...stylex.props(styles.unavailable)}>
-        <h3 {...stylex.props(styles.heading)}>
-          No software map for this repo yet
-        </h3>
-        <p {...stylex.props(styles.paragraph)}>
-          A software map adds a structural view of the systems, containers, and
-          components in this repo.
-        </p>
-        <p {...stylex.props(styles.paragraph)}>
-          Author one with <code {...code}>whiteboard map</code>.
-        </p>
-        <p {...stylex.props(styles.paragraph)}>
-          The rest of the document works without it.
-        </p>
-      </div>
+      <EmptyState
+        variant="boxed"
+        xstyle={styles.unavailable}
+        title="No software map for this repo yet"
+        message={
+          <>
+            A software map adds a structural view of the systems, containers,
+            and components in this repo. Author one with{" "}
+            <code {...stylex.props(styles.code)}>whiteboard map</code>. The rest
+            of the document works without it.
+          </>
+        }
+      />
     </section>
   );
 }
@@ -92,44 +89,9 @@ function softwareMapSideLabel(
 
 const inDocument = ":is(.review-document *)";
 
-// The scratchpad's opening heading sits at the page's top padding.
-const scratchpadOpening =
-  ':is(.review-document[data-kind="scratchpad"] > .api-document-node:first-child *):first-child';
-
 const styles = stylex.create({
   unavailable: {
-    boxSizing: "border-box",
-    display: "grid",
-    placeContent: "center",
     minHeight: "var(--software-map-empty-height, 520px)",
-    padding: "32px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    borderRadius: "8px",
-    backgroundColor: tokens.tray,
-    color: tokens.inkMuted,
-    textAlign: "center",
-  },
-  // In a document the notice reads as the document's own heading and prose.
-  heading: {
-    scrollMarginTop: { default: null, [inDocument]: "24px" },
-    margin: { default: "0 0 10px", [inDocument]: "30px auto 10px" },
-    marginTop: { default: null, [scratchpadOpening]: 0 },
-    color: tokens.ink,
-    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: "16px", [inDocument]: "20px" },
-    fontWeight: { default: null, [inDocument]: 500 },
-    lineHeight: { default: null, [inDocument]: "23px" },
-  },
-  paragraph: {
-    maxWidth: "540px",
-    margin: { default: "4px auto", [inDocument]: "14px 0" },
-    color: { default: null, [inDocument]: tokens.ink },
-    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: "13px", [inDocument]: "15px" },
-    lineHeight: { default: "20px", [inDocument]: 1.72 },
-    textAlign: { default: null, [inDocument]: "left" },
   },
   code: {
     padding: { default: null, [inDocument]: "2px 5px" },

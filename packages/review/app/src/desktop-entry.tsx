@@ -1,3 +1,4 @@
+import { EmptyState } from "@canvas/ui/empty-state";
 import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCanvasContent,
@@ -45,24 +46,20 @@ function ReviewCanvas({
   if (content.kind === "source") {
     if (content.error) {
       return (
-        <div {...stylex.props(styles.sourceEmpty)}>
-          <p {...stylex.props(styles.sourceEmptyLine)}>Worktree unavailable</p>
-          <p {...stylex.props(styles.sourceEmptyLine, styles.sourceEmptyHint)}>
-            {content.error}
-          </p>
-        </div>
+        <EmptyState
+          xstyle={styles.sourceEmpty}
+          title="Worktree unavailable"
+          message={content.error}
+        />
       );
     }
 
     return (
-      <div {...stylex.props(styles.sourceEmpty)}>
-        <p {...stylex.props(styles.sourceEmptyLine)}>
-          Select a file in the source tree
-        </p>
-        <p {...stylex.props(styles.sourceEmptyLine, styles.sourceEmptyHint)}>
-          ⌘B toggles the tree
-        </p>
-      </div>
+      <EmptyState
+        xstyle={styles.sourceEmpty}
+        title="Select a file in the source tree"
+        message="⌘B toggles the tree"
+      />
     );
   }
 
@@ -271,21 +268,11 @@ const styles = stylex.create({
   // The Source tab's VS Code-like watermark: quiet text centered in the
   // empty editor area, next to the native file tree.
   sourceEmpty: {
-    display: "flex",
-    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: "6px",
     height: "100%",
-    color: tokens.inkFaint,
-    font: `13px/1.55 ${tokens.fontDisplay}`,
+    textAlign: "center",
     userSelect: "none",
-  },
-  sourceEmptyLine: {
-    margin: 0,
-  },
-  sourceEmptyHint: {
-    fontSize: "11px",
   },
   shell: {
     width: "min(760px, 100%)",

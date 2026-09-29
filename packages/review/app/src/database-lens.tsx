@@ -1,4 +1,5 @@
 import { Chip } from "@canvas/ui/chip";
+import { EmptyState } from "@canvas/ui/empty-state";
 import { type JsonValue, isStringValue } from "@dev.fast/review-protocol";
 import type { DatabaseLensBlockProps } from "@review/database-lens-block";
 import { type DiffSelection } from "@review/lens-selection";
@@ -449,9 +450,11 @@ export function DatabaseLens(block: DatabaseLensProps) {
             onOpenAnchor={(anchor) => openLensTour(anchor)}
           />
         ) : (
-          <div {...stylex.props(styles.empty)}>
-            No database use-cases declared.
-          </div>
+          <EmptyState
+            variant="boxed"
+            xstyle={styles.empty}
+            message="No database use-cases declared."
+          />
         )}
       </div>
     </figure>
@@ -1253,15 +1256,6 @@ const styles = stylex.create({
     backgroundColor: tokens.diagramCanvasBg,
   },
   empty: {
-    display: "grid",
-    placeItems: "center",
     height: "100%",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    borderRadius: "6px",
-    backgroundColor: tokens.surface,
-    color: tokens.inkMuted,
-    fontSize: "13px",
   },
 });
