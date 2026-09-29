@@ -27,7 +27,8 @@ import { IHoverService } from "../../platform/hover/browser/hover.js";
 import { IInstantiationService } from "../../platform/instantiation/common/instantiation.js";
 import { WorkbenchCompressibleObjectTree } from "../../platform/list/browser/listService.js";
 import { registerColor } from "../../platform/theme/common/colorRegistry.js";
-import type { ReviewDiffFileWire, ReviewDiffProgressFile, StructuralLineCounts } from "../common/reviewProtocol.js";
+import type { ReviewDiffFileWire, ReviewDiffProgressFile } from "../common/reviewProtocol.js";
+import { binarySizeLabel, isBinaryCounts, type ReviewFileCounts } from "../common/reviewStructuralDiff.js";
 import { REVIEW_COUNTS_PENDING_TOOLTIP, reviewCountsTooltip, ReviewTooltip, type ReviewTooltipHoverService } from "./reviewTooltip.js";
 
 registerColor(
@@ -104,7 +105,7 @@ export class ChangedFilesTreeRenderer
   static readonly TEMPLATE_ID = "review.changedFiles.entry";
   readonly templateId = ChangedFilesTreeRenderer.TEMPLATE_ID;
 
-	constructor(private readonly counts: Map<string, StructuralLineCounts>, private readonly progress: Map<string, ReviewDiffProgressFile>, private readonly states: Map<string, { status: "loading" | "error"; message?: string }>, private readonly hoverService: ReviewTooltipHoverService) { }
+	constructor(private readonly counts: Map<string, ReviewFileCounts>, private readonly progress: Map<string, ReviewDiffProgressFile>, private readonly states: Map<string, { status: "loading" | "error"; message?: string }>, private readonly hoverService: ReviewTooltipHoverService) { }
 
   renderTemplate(container: HTMLElement): ChangedFilesTreeTemplate {
     const row = append(container, $(".review-changed-files-row"));
@@ -146,7 +147,8 @@ export class ChangedFilesTreeRenderer
 		const done = isFile ? this.progress.get(element.file.path)?.state : undefined;
 		// Folded files read as done, like viewed ones: greyed, with the reason in place of counts.
 		template.row.classList.toggle("review-file-viewed", done === "viewed");
-		template.row.classList.toggle("review-file-folded", done === "folded");
+		// A binary stays folded: nothing in it can be read, so it looks and counts like a folded file.
+		template.row.classList.toggle("review-file-folded", done === "folded" || (isFile && !!element.file.binary && done !== "viewed"));
     template.icon.hidden = !isFile;
     template.icon.className = isFile
       ? `review-changed-files-icon review-changed-files-icon-${element.file.status} ${ThemeIcon.asClassName(fileStatusIcon(element.file.status))}`
@@ -157,17 +159,25 @@ export class ChangedFilesTreeRenderer
 		if (isFile) {
 			const progress = this.progress.get(element.file.path);
 			const compact = (n: number) => new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(n).toLowerCase();
-			const additions = progress?.remaining.additions ?? this.counts.get(element.file.path)?.added;
-			const deletions = progress?.remaining.deletions ?? this.counts.get(element.file.path)?.removed;
-			if (element.file.status === 'unchanged') template.counts.textContent = 'Unchanged';
+			const stored = this.counts.get(element.file.path);
+			const lines = isBinaryCounts(stored) ? undefined : stored;
+			const additions = progress?.remaining.additions ?? lines?.added;
+			const deletions = progress?.remaining.deletions ?? lines?.removed;
+			if (element.file.binary) {
+				// Where a folded file says "Folded", a binary says its size, or "Binary" until diffr reports it.
+				const size = isBinaryCounts(stored) ? binarySizeLabel(stored) : undefined;
+				template.counts.textContent = progress?.state === 'viewed' ? 'Viewed' : progress?.state === 'folded' ? 'Folded' : size ?? 'Binary';
+				template.countsTooltip.content = { label: 'No text to show · binary files stay folded', detail: size };
+			}
+			else if (element.file.status === 'unchanged') template.counts.textContent = 'Unchanged';
 			else if (progress?.state === 'viewed') template.counts.textContent = 'Viewed';
 			else if (progress?.state === 'folded') template.counts.textContent = 'Folded';
 			else if (additions !== undefined && deletions !== undefined) {
 				const added = append(template.counts, $('span.review-tree-added')); added.textContent = `+${compact(additions)}`;
 				const removed = append(template.counts, $('span.review-tree-removed')); removed.textContent = `−${compact(deletions)}`;
 			}
-			const total = progress?.total ?? { additions: this.counts.get(element.file.path)?.added ?? 0, deletions: this.counts.get(element.file.path)?.removed ?? 0 };
-			template.countsTooltip.content = element.file.status === "unchanged"
+			const total = progress?.total ?? { additions: lines?.added ?? 0, deletions: lines?.removed ?? 0 };
+			if (!element.file.binary) template.countsTooltip.content = element.file.status === "unchanged"
 				? { label: "Referenced context; no changed lines" }
 				: additions === undefined || deletions === undefined
 					? REVIEW_COUNTS_PENDING_TOOLTIP
@@ -201,11 +211,11 @@ export class ReviewChangedFilesTree extends Disposable {
   private files: readonly ReviewDiffFileWire[] = [];
 	private readonly states = new Map<string, { status: "loading" | "error"; message?: string }>();
   private activePath: string | undefined;
-	private readonly counts = new Map<string, StructuralLineCounts>();
-	setCounts(path: string, counts: StructuralLineCounts): void {
+	private readonly counts = new Map<string, ReviewFileCounts>();
+	setCounts(path: string, counts: ReviewFileCounts): void {
 		const previous = this.counts.get(path);
 		this.counts.set(path, counts);
-		if (previous?.added !== counts.added || previous?.removed !== counts.removed) this.refreshFile(path);
+		if (JSON.stringify(previous) !== JSON.stringify(counts)) this.refreshFile(path);
 	}
 	private readonly progress = new Map<string, ReviewDiffProgressFile>();
 	setProgressFiles(files: readonly ReviewDiffProgressFile[]): void {

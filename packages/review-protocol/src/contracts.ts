@@ -1017,6 +1017,8 @@ export const ReviewDiffFileSchema = z.strictObject({
   status: z.enum(["added", "modified", "deleted", "renamed", "unchanged"]),
   additions: nonNegativeInteger,
   deletions: nonNegativeInteger,
+  /** Git reports no line counts: the file's contents are binary. */
+  binary: z.literal(true).optional(),
   patch: requiredString.optional(),
 });
 

@@ -101,6 +101,7 @@ it.each([false, true])(
             path: "binary",
             status: "modified",
             additions: 0,
+            binary: true,
           }),
           expect.objectContaining({ path: "delete.ts", status: "deleted" }),
           expect.objectContaining({ path: "link", status: "added" }),

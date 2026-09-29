@@ -90,8 +90,10 @@ export function FlowDiagram({
   };
 
   const figure = (fullscreen: boolean) => (
+    // The class is how document-embed-scroll.ts recognizes the embed.
     <figure
-      {...stylex.props(
+      {...withClass(
+        "flow-diagram",
         styles.figure,
         fullscreen && styles.stage,
         drawStyles.blockChild,

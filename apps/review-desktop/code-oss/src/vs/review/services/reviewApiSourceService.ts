@@ -109,18 +109,22 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 					if (existing) return existing;
 					const query = new URLSearchParams(resource.query);
 					const target = sourceLocation(resource);
-					const body = query.has("empty")
+					const body: { text: string; localPath?: string; binary?: false } | { binary: true } = query.has("empty")
 						? { text: "" }
-						: await this.read<{ text: string; localPath?: string }>(target.view.reviewId, "/file", { ...reviewSourceQuery(target.view), side: target.side, file: target.file });
+						: await this.read(target.view.reviewId, "/file", { ...reviewSourceQuery(target.view), side: target.side, file: target.file, binary: "describe" });
+					// Opening a binary from the source tree shows this notice instead of
+					// its bytes; the diff never asks, since binary entries read as empty.
+					// Authoring still refuses binaries as code references.
+					const text = body.binary ? "Binary file cannot be displayed as text." : body.text;
 					const model = (
 						modelService.getModel(resource) ??
 						modelService.createModel(
-							body.text,
-							languages.createByFilepathOrFirstLine(resource, body.text.split("\n", 1)[0]),
+							text,
+							body.binary ? languages.createById("plaintext") : languages.createByFilepathOrFirstLine(resource, text.split("\n", 1)[0]),
 							resource,
 						)
 					);
-					if (body.localPath) {
+					if (!body.binary && body.localPath) {
 						this.followDisk(model, URI.file(body.localPath), async () => (await this.read<{ text: string }>(target.view.reviewId, "/file", { ...reviewSourceQuery(target.view), side: target.side, file: target.file })).text);
 					}
 					return model;
@@ -204,9 +208,9 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 		const target = { view, file: path };
 		const pane = await this.editors.openEditor({
 			original: {
-				resource: await this.sourceResource({ ...target, file: file.previousPath ?? path, side: "base" }, file.status === "added"),
+				resource: await this.sourceResource({ ...target, file: file.previousPath ?? path, side: "base" }, file.status === "added" || !!file.binary),
 			},
-			modified: { resource: await this.sourceResource({ ...target, side: "head" }, file.status === "deleted") },
+			modified: { resource: await this.sourceResource({ ...target, side: "head" }, file.status === "deleted" || !!file.binary) },
 			options: { pinned: true },
 		});
 		if (pane?.input) this.tabs.registerReviewEditor(view.reviewId, pane.input);
@@ -268,8 +272,9 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 					session: openComparison(current),
 					sourceUri: URI.from({ scheme: "review-api-diff", authority: current.reviewId, path: `/${current.version}/${current.generation ?? ""}`, query: comparisonQuery(current) }),
 					entries: await Promise.all(entries.map(async file => {
-						const original = file.status === "added" ? undefined : await this.sourceResource({ view: current, side: "base", file: file.previousPath ?? file.path });
-						const modified = file.status === "deleted" ? undefined : await this.sourceResource({ view: current, side: "head", file: file.path });
+						// A binary's sides read as empty: it stays folded, so nothing fetches its bytes.
+						const original = file.status === "added" ? undefined : await this.sourceResource({ view: current, side: "base", file: file.previousPath ?? file.path }, !!file.binary);
+						const modified = file.status === "deleted" ? undefined : await this.sourceResource({ view: current, side: "head", file: file.path }, !!file.binary);
 						return { file, original, modified, goToFileResource: (modified ?? original)! };
 					})),
 				};

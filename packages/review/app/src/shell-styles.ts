@@ -187,7 +187,6 @@ export const shellStyles = stylex.create({
     minWidth: 0,
     height: "100%",
     overflowX: "auto",
-    scrollbarWidth: "thin",
   },
   // Every direct child of the action row keeps its size.
   topbarItem: {
@@ -326,7 +325,7 @@ export const shellStyles = stylex.create({
     minWidth: 0,
     overflowX: "hidden",
     overflowY: "auto",
-    scrollbarColor: `${tokens.reviewScrollbarThumb} transparent`,
+    // Let macOS hide the document scrollbar when idle.
     scrollbarWidth: "thin",
     padding: {
       default: `${tokens.reviewPageTop} 52px calc(max(120px, var(--review-bottom-scroll-padding, 0px)) + var(--review-toc-tail, 0px))`,
@@ -338,34 +337,6 @@ export const shellStyles = stylex.create({
         },
       },
       [narrowViewport]: "22px 8px calc(96px + var(--review-toc-tail, 0px))",
-    },
-    // A transparent track, so the thumb communicates position without
-    // drawing a persistent gutter.
-    "::-webkit-scrollbar": {
-      width: tokens.reviewScrollbarSize,
-      backgroundColor: "transparent",
-    },
-    "::-webkit-scrollbar-track": {
-      backgroundColor: "transparent",
-    },
-    "::-webkit-scrollbar-corner": {
-      backgroundColor: "transparent",
-    },
-    "::-webkit-scrollbar-thumb": {
-      minHeight: "32px",
-      borderWidth: "3px",
-      borderStyle: "solid",
-      borderColor: "transparent",
-      borderRadius: "999px",
-      backgroundColor: tokens.reviewScrollbarThumb,
-      backgroundClip: "padding-box",
-    },
-    // The thumb's own states: a nested `:hover` would key on the region.
-    "::-webkit-scrollbar-thumb:hover": {
-      backgroundColor: tokens.reviewScrollbarThumbHover,
-    },
-    "::-webkit-scrollbar-thumb:active": {
-      backgroundColor: tokens.reviewScrollbarThumbActive,
     },
   },
   documentView: {

@@ -18,6 +18,7 @@ import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
 import { peekResolutionOutcome } from "./peek-telemetry";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
+import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
 
@@ -84,7 +85,7 @@ export function CodePeekGroup({
         return (
           <section
             key={group.key}
-            {...stylex.props(styles.peek)}
+            {...withClass("code-peek", styles.peek)}
             data-code-rendering="inline-editor"
           >
             <DocumentCodeView
@@ -174,7 +175,7 @@ export function CodePeekCard({
   if (!ranges.length)
     return (
       <section
-        {...stylex.props(styles.peek, drawStyles.blockChild)}
+        {...withClass("code-peek", styles.peek, drawStyles.blockChild)}
         role="status"
       >
         {outcome === "failed"
@@ -185,7 +186,7 @@ export function CodePeekCard({
 
   return (
     <section
-      {...stylex.props(styles.peek, drawStyles.blockChild)}
+      {...withClass("code-peek", styles.peek, drawStyles.blockChild)}
       data-code-rendering="inline-editor"
     >
       <DocumentCodeView
@@ -241,7 +242,7 @@ function FileSnippetCard({
 
   return (
     <section
-      {...stylex.props(styles.peek, drawStyles.blockChild)}
+      {...withClass("code-peek", styles.peek, drawStyles.blockChild)}
       data-code-rendering="inline-editor"
     >
       <DocumentCodeView
@@ -373,6 +374,7 @@ const inDocument = ":is(.review-document .api-document-node > *)";
 
 const inMapInspector = ":is(.software-map-code-inspector *)";
 
+// Peeks keep the `code-peek` class: document-embed-scroll.ts finds embeds by it.
 const styles = stylex.create({
   peek: {
     width: {

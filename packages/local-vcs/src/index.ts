@@ -96,6 +96,8 @@ export interface LocalVcsDiffFileSummary {
   status: "added" | "modified" | "deleted" | "renamed";
   additions: number;
   deletions: number;
+  /** Git reports no line counts for this file's contents. */
+  binary?: true;
 }
 
 export interface LocalVcsCommitSummary {
@@ -2155,7 +2157,11 @@ export function parseGitRawNumStatSummaries(
   const files: Array<Omit<LocalVcsDiffFileSummary, "additions" | "deletions">> =
     [];
 
-  const counts = new Map<string, { additions: number; deletions: number }>();
+  const counts = new Map<
+    string,
+    { additions: number; deletions: number; binary?: true }
+  >();
+
   let index = 0;
 
   while (index < fields.length) {
@@ -2207,10 +2213,16 @@ export function parseGitRawNumStatSummaries(
     }
 
     if (!path) continue;
-    counts.set(path, {
-      additions: parseGitNumStatCount(rawAdditions),
-      deletions: parseGitNumStatCount(rawDeletions),
-    });
+    // Git prints "-" for both counts when it treats the file as binary.
+    counts.set(
+      path,
+      rawAdditions === "-" && rawDeletions === "-"
+        ? { additions: 0, deletions: 0, binary: true }
+        : {
+            additions: parseGitNumStatCount(rawAdditions),
+            deletions: parseGitNumStatCount(rawDeletions),
+          },
+    );
   }
 
   // Counts without raw records: the sections came out of order.
@@ -2288,8 +2300,12 @@ function parseGitDiffSectionSummary(
   let renameTo: string | undefined;
   let additions = 0;
   let deletions = 0;
+  let binary = false;
 
   for (const line of lines) {
+    if (line.startsWith("Binary files ") || line === "GIT binary patch")
+      binary = true;
+
     const parsedOldPath = parseGitFileLine(line, "--- ");
     const parsedNewPath = parseGitFileLine(line, "+++ ");
 
@@ -2323,7 +2339,7 @@ function parseGitDiffSectionSummary(
 
   if (!filePath) return null;
 
-  return {
+  const summary: LocalVcsDiffFileSummary = {
     path: filePath,
     previousPath:
       status === "renamed" ? (renameFrom ?? oldPath ?? undefined) : undefined,
@@ -2331,6 +2347,10 @@ function parseGitDiffSectionSummary(
     additions,
     deletions,
   };
+
+  if (binary) summary.binary = true;
+
+  return summary;
 }
 
 function parseDiffGitHeaderPaths(

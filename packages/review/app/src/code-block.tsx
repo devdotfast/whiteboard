@@ -288,18 +288,6 @@ const styles = stylex.create({
     color: tokens.ink,
     font: `13px/20px ${tokens.fontMono}`,
     textAlign: "left",
-    scrollbarWidth: "thin",
-    scrollbarColor: `${tokens.ghost} ${tokens.tray}`,
-    "::-webkit-scrollbar": {
-      height: "4px",
-    },
-    "::-webkit-scrollbar-track": {
-      backgroundColor: tokens.tray,
-    },
-    "::-webkit-scrollbar-thumb": {
-      borderRadius: "2px",
-      backgroundColor: tokens.ghost,
-    },
   },
   code: {
     display: "block",

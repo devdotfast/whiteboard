@@ -34,6 +34,7 @@ import {
 } from "./debug-settings";
 import { DiffLayoutControl } from "./diff-layout-control";
 import { ReviewDiffView } from "./DiffView";
+import { useDocumentEmbedScroll } from "./document-embed-scroll";
 import { documentStyles } from "./document-styles";
 import { useReviewSession } from "./host/review-session";
 import { DiscordIcon, MarkerUnderline, SettingsSlidersIcon } from "./icons";
@@ -369,6 +370,7 @@ function ReviewLayoutContent({
     containerRef: appRef,
   });
 
+  useDocumentEmbedScroll(scrollRegionRef);
   const viewStateSync = useReviewViewStateSync({ scrollRegionRef, panelStore });
 
   const hasChangeRange =

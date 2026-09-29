@@ -115,6 +115,12 @@ export const themeStyles = stylex.create({
     "--ink": "var(--vscode-editor-foreground, #15181e)",
     "--ink-muted": "var(--vscode-descriptionForeground, #5d6472)",
     "--ink-faint": "var(--vscode-disabledForeground, #9aa0ab)",
+    "--review-scrollbar-thumb":
+      "var(--vscode-scrollbarSlider-background, color-mix(in srgb, #9aa0ab 45%, transparent))",
+    "--review-scrollbar-thumb-hover":
+      "var(--vscode-scrollbarSlider-hoverBackground, #9aa0ab)",
+    "--review-scrollbar-thumb-active":
+      "var(--vscode-scrollbarSlider-activeBackground, #5d6472)",
     "--rule": "var(--vscode-panel-border, #d8dbe1)",
     "--rule-soft": "var(--vscode-editorWidget-border, #b9bec7)",
     "--selection": "var(--accent)",
