@@ -305,7 +305,7 @@ it("shares a review's lenses and reads a bundle that holds them as document bloc
     const { targetId } = await local.store.execute({
       commandId: randomUUID(),
       operation: {
-        type: "lens",
+        type: "lens_edit",
         reviewId,
         edit: { type: "insert", ...lens },
       },

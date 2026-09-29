@@ -59,7 +59,7 @@ const edit = <Content>(reviewId: string, value: Content) =>
 
 const writeLens = <Edit>(reviewId: string, value: Edit, leaseId?: string) =>
   store.execute({
-    ...request({ type: "lens", reviewId, edit: value }),
+    ...request({ type: "lens_edit", reviewId, edit: value }),
     leaseId,
   });
 

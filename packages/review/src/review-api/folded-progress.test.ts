@@ -255,7 +255,7 @@ async function progressApi() {
 
   const { reviewId } = await run({ type: "create", title: "Folds", pins });
   await run({
-    type: "lens",
+    type: "lens_edit",
     reviewId,
     edit: {
       type: "insert",

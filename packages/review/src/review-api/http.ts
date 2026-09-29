@@ -1253,7 +1253,7 @@ export function createReviewApi(
 
     const result = await store.execute(input);
 
-    if (input.operation.type === "lens") {
+    if (input.operation.type === "lens_edit") {
       const gaps = await lensGaps(
         result.reviewId,
         result.version,
