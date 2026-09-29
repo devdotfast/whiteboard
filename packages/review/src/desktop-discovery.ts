@@ -184,7 +184,9 @@ export interface ReviewInstanceDependencies {
 }
 
 /** Records by key, plus the files that could not be read, by key. */
-async function readReviewInstances(dependencies: ReviewInstanceDependencies) {
+export async function readReviewInstances(
+  dependencies: ReviewInstanceDependencies,
+) {
   const env = dependencies.env ?? process.env;
   const directory = reviewInstancesDir(env);
   const names = await readdir(directory).catch((): string[] => []);

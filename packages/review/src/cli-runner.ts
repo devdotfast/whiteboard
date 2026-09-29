@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import type { Writable } from "node:stream";
@@ -40,7 +41,7 @@ import {
 } from "./cli-install";
 import { cliRuntimeInfo, describeCliRuntime } from "./cli-runtime-info";
 import { connectPrompts } from "./connect-prompts";
-import { selectReviewInstance } from "./desktop-discovery";
+import { readReviewInstances, selectReviewInstance } from "./desktop-discovery";
 import {
   ALL_INSTALL_TARGETS,
   type InstallTarget,
@@ -369,16 +370,34 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     }>();
 
     const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
-    const discovery = await readReviewServerDiscovery(stateDir);
 
-    const desktops = await selectReviewInstance({
+    if (!existsSync(path.join(stateDir, "review-api.db")))
+      throw new Error(
+        `No saved reviews in ${stateDir}, so there is no server id to reset. Check --state-dir.`,
+      );
+
+    // Any live record holds the store, attached Desktop window or not.
+    const desktops = await readReviewInstances({
       env: { ...env, [DEV_REVIEW_HOME_ENV]: stateDir },
     });
 
-    if (
-      (discovery && (await reviewServerIsHealthy(discovery))) ||
-      desktops.instances.some((instance) => instance.healthy)
-    )
+    const [problem] = desktops.broken.values();
+
+    if (problem)
+      throw new Error(
+        `Cannot tell whether a Whiteboard Desktop is using ${stateDir}: ${problem.message}`,
+      );
+
+    const records = [
+      await readReviewServerDiscovery(stateDir),
+      ...desktops.instances.map((instance) => instance.discovery),
+    ];
+
+    const answers = await Promise.all(
+      records.map((record) => record && readReviewServerHealth(record)),
+    );
+
+    if (answers.some(Boolean))
       throw new Error(
         `A Whiteboard server is using ${stateDir}. Stop it first, then run whiteboard server reset-id again.`,
       );

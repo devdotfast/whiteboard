@@ -1,6 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -812,7 +819,12 @@ it("resets the server id only while no server holds the store", async () => {
   expect(await serverId(server.discovery.url)).toBe(before);
 
   await server.stop();
-  const done = await cli(reset, process.env);
+
+  // An unrelated instance selection must not get in the way.
+  const done = await cli(reset, {
+    ...process.env,
+    DEV_REVIEW_INSTANCE: "Not A Key!",
+  });
 
   expect(done).toMatchObject({ exitCode: 0, errors: "" });
   const { event, serverId: after } = JSON.parse(done.output);
@@ -823,38 +835,86 @@ it("resets the server id only while no server holds the store", async () => {
   expect(await serverId(restarted.discovery.url)).toBe(after);
 });
 
-it("refuses to reset the id of a store a Desktop holds", async () => {
+it.each(["attached", "not yet attached"])(
+  "refuses to reset the id of a store a Desktop holds, window %s",
+  async (window) => {
+    const local = await openReviewProfile(root, { manageWorkspaces: false });
+
+    const desktop = createGlobalReviewServer({
+      reviewStore: local.store,
+      reviewData: local.data,
+      appPid: process.pid,
+      packageRoot: root,
+      toolingRoot: root,
+      port: 0,
+      telemetry: ReviewTelemetry.fromEnv(process.env),
+    });
+
+    stops.push(async () => {
+      await desktop.close();
+      await local.data.close();
+      await local.store.close();
+    });
+    await desktop.listen();
+    const before = local.store.serverId();
+
+    const attached =
+      window === "attached" ? await attachDesktop(desktop.discovery) : null;
+
+    try {
+      const refused = await cli(
+        ["--state-dir", root, "server", "reset-id", "--json"],
+        process.env,
+      );
+
+      expect(refused.exitCode).toBe(1);
+      expect(JSON.parse(refused.output).error.message).toMatch(/Stop it first/);
+      expect(local.store.serverId()).toBe(before);
+      expect(
+        (await (await fetch(`${desktop.discovery.url}/health`)).json())
+          .serverId,
+      ).toBe(before);
+    } finally {
+      attached?.detach();
+    }
+  },
+);
+
+it("refuses to reset the id while a Desktop record cannot be read", async () => {
   const local = await openReviewProfile(root, { manageWorkspaces: false });
+  const before = local.store.serverId();
+  await local.data.close();
+  await local.store.close();
+  const instances = path.join(root, "review-desktop", "instances");
+  await mkdir(instances, { recursive: true });
+  await writeFile(path.join(instances, "stable.json"), "not json");
 
-  const desktop = createGlobalReviewServer({
-    reviewStore: local.store,
-    reviewData: local.data,
-    appPid: process.pid,
-    packageRoot: root,
-    toolingRoot: root,
-    port: 0,
-    telemetry: ReviewTelemetry.fromEnv(process.env),
-  });
+  const refused = await cli(
+    ["--state-dir", root, "server", "reset-id", "--json"],
+    process.env,
+  );
 
+  expect(refused.exitCode).toBe(1);
+
+  const reopened = await openReviewProfile(root, { manageWorkspaces: false });
   stops.push(async () => {
-    await desktop.close();
-    await local.data.close();
-    await local.store.close();
+    await reopened.data.close();
+    await reopened.store.close();
   });
-  await desktop.listen();
-  const attached = await attachDesktop(desktop.discovery);
+  expect(reopened.store.serverId()).toBe(before);
+});
 
-  try {
-    const refused = await cli(
-      ["--state-dir", root, "server", "reset-id", "--json"],
-      process.env,
-    );
+it("refuses to reset the id where there is no store, and creates none", async () => {
+  const typo = path.join(root, "no-such-state");
 
-    expect(refused.exitCode).toBe(1);
-    expect(JSON.parse(refused.output).error.message).toMatch(/Stop it first/);
-  } finally {
-    attached.detach();
-  }
+  const refused = await cli(
+    ["--state-dir", typo, "server", "reset-id", "--json"],
+    process.env,
+  );
+
+  expect(refused.exitCode).toBe(1);
+  expect(JSON.parse(refused.output).error.message).toContain(typo);
+  await expect(access(typo)).rejects.toThrow(/ENOENT/);
 });
 
 it("refuses the removed batch authoring mode instead of ignoring it", async () => {

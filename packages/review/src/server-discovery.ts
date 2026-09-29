@@ -55,8 +55,10 @@ export async function reviewServerIsHealthy(discovery: ReviewServerDiscovery) {
   return (await readReviewServerHealth(discovery)) !== null;
 }
 
-/** The discovered server's /health, or null when it is not the one recorded. */
-export async function readReviewServerHealth(discovery: ReviewServerDiscovery) {
+/** The recorded server's /health, or null when another or none answers. */
+export async function readReviewServerHealth(
+  discovery: Pick<ReviewServerDiscovery, "url" | "token" | "instanceId">,
+) {
   try {
     const response = await fetch(`${discovery.url}/health`, {
       headers: { "x-review-token": discovery.token },
