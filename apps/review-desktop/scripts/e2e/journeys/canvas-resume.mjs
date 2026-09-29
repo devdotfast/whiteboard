@@ -278,13 +278,17 @@ export async function run(ctx) {
 
   await focusOrders();
   await waitPressed(ctx, page, "Map (Experimental)");
-  // The signature: the Map view's first mount selects its first node over the focused one.
-  await selected("orderService", "the map's first node to take the selection");
-  await page.waitForTimeout(1000);
-  assert.deepEqual(await selectedNodes(page), ["orderService"]);
-  await ctx.knownBug(
-    "A focus request that mounts the Map view loses to its default selection",
+  await selected(
+    "orderService.application.orders",
+    "the focus request that mounts the Map view to select its element",
   );
+  await page.waitForTimeout(1000);
+  assert.deepEqual(
+    await selectedNodes(page),
+    ["orderService.application.orders"],
+    "the Map view's default selection replaced the focused element",
+  );
+  ctx.check("a focus request that mounts the Map view selects its element");
 
   await activate(ctx, page, "Whiteboard");
   await focusOrders();

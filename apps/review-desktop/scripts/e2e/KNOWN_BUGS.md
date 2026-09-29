@@ -26,7 +26,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 - The tutorial's live editor gets no hover or Go to Definition — open
 - Activating the Go extension opens its welcome page over the review — open
 - Peeks and tour stops never offer to show their element in the software map — open
-- A focus request that mounts the Map view loses to its default selection — open
+- A focus request that mounts the Map view loses to its default selection — fixed
 - The Trace view lists retained traces in the order they finish loading — open
 
 ## Template (copy, do not edit)
@@ -498,7 +498,7 @@ Server` cannot help — the captured workspace is never re-read. The fix
 
 ## A focus request that mounts the Map view loses to its default selection
 
-- **Journey:** `canvas-resume` · **Found:** 2026-09-28 · **Status:** open
+- **Journey:** `canvas-resume` · **Found:** 2026-09-28 · **Status:** fixed
 - **Repro:** in the tutorial, before the Map view has been opened, request the
   map focus of `orderService.application.orders` (the review action the
   "Show … in software map" button calls).
@@ -512,6 +512,9 @@ Server` cannot help — the captured workspace is never re-read. The fix
   (`:580`), still holding the render's `null`, replaces it with the first node
   of the snapshot. The request is consumed once handled, so the focus is lost.
   The same two effects are on `ca17c9a62` (by reading; not run there).
+- **Fix:** the normalization effect now leaves a selection made after its render
+  alone, and the map consumes the request only once its snapshot shows the
+  element selected (`software-map-focus.browser.test.tsx`).
 
 ## The Trace view lists retained traces in the order they finish loading
 
