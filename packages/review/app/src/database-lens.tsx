@@ -1151,7 +1151,7 @@ function tourIdFor(lensId: string, useCaseId: string): string {
 
 const inDocument = ":is(.review-document *)";
 
-// Where theme.css defines --diagram-border (a .review-app inside the canvas
+// Where the theme defines --diagram-border (a .review-app inside the canvas
 // scope).
 const inApp = ":is(:scope .review-app *)";
 

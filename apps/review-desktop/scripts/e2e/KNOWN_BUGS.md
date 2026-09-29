@@ -147,14 +147,14 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 - **Actual:** neither click reaches its button. Playwright reports
   `<header class="review-topbar">…</header> intercepts pointer events` for the
   pill and `<div class="review-topbar-actions">…</div> … subtree intercepts
-  pointer events` for the toggles, and `document.elementFromPoint` at the
+pointer events` for the toggles, and `document.elementFromPoint` at the
   centre of each control returns an element inside `.review-topbar`.
 - **Notes:** measured in the workbench renderer (viewport 1200x800): the review
   canvas starts at y=74, `.review-topbar` is `position: sticky` from 74 to 109
   with `z-index: var(--review-debug-layer)` (`review-shell.css`), and the whole
   review scroll region starts at 109. That token is `2147483000`
-  (`theme.css`) and five rules share it (`review-shell.css`,
-  `tutorial-experience.css` twice, `diagrams.css`, `software-map/styles.css`),
+  (`global.css`) and five StyleX styles share it (the shell, the tutorial
+  twice, the diagram tour and the software map),
   so a fix belongs on the token or on the overlays, not on a
   literal; the prebuilt canvas CSS the staged runtime ships still carries an
   older `2147480000`, which is the number the measurement reports. Both
@@ -178,9 +178,9 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   origin/main (1 of 1 runs) and on the housekeeping stack (3 of 4 runs; the
   fourth rendered normally and also passed the delete path), opening the review
   after `mv <repo> <repo>-moved` renders `ReviewApiError: Review operation
-  failed (Error). The server logged the cause; …`, and the host logs
+failed (Error). The server logged the cause; …`, and the host logs
   `GET /reviews-api/<uuid>/commits failed: Error: No Git or jj repository found
-  for <repo>.` The delete path fails the same way. The journey asserts that log
+for <repo>.` The delete path fails the same way. The journey asserts that log
   line in the current launch's output before it records this bug, and accepts
   a normal render.
 - **Repro:** create a review with a `commits` target in a git repository, let it
@@ -216,7 +216,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   whatever `/:id/commits` needs from the repository is not what `sourcePins`
   needs. The `/commits` route has no equivalent degradation at all, so it has
   nothing to fall back to. (The other writer, the worktree refresh at
-  `store.ts:186-198` and `:225-243`, *is* gated on
+  `store.ts:186-198` and `:225-243`, _is_ gated on
   `target.kind === "worktree"` and cannot fire for this review either.) The
   `Worktree unavailable` state at `desktop-entry.tsx:38-46` is unreachable
   today: the only `{ kind: "source" }` render (`reviewCanvasPart.ts:308`) never
@@ -279,7 +279,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   (`review-home.ts:364-366`, `:706-710`).
 - **Actual:** the host exits 1 before it ever listens, and nothing starts. It
   prints `Error: Review migration could not finish. The original database is
-  unchanged. Report: <home>/.json-cutover-XXXXXX/report.json`, followed by the
+unchanged. Report: <home>/.json-cutover-XXXXXX/report.json`, followed by the
   review's uuid and the raw Zod union failure — three alternatives, roughly 90
   lines of `"code": "invalid_type"` entries naming `repoKey`, `worktreePath`,
   `baseRef` and the rest. The words `whiteboard migrate apply` do not appear. The
@@ -295,8 +295,8 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   "The Review server exhausted its restart budget without becoming ready."
   (`reviewServerSupervisor.ts:290-313`), leaving the schema dump in the log.
   The advice the record's own error carries does not help either: `review
-  migrate apply` on this record reports `<dir>: current artifact migration
-  failed: Unsupported Review schema; the record was preserved.` and exits 1
+migrate apply` on this record reports `<dir>: current artifact migration
+failed: Unsupported Review schema; the record was preserved.` and exits 1
   (`stored-review-migration.ts:95-100`, `:190-194`), so a reader whose Desktop
   will not start has no way forward but to find and move the directory by hand.
   Skipping the unreadable directory — the cutover already records it in
@@ -350,19 +350,19 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   (`reviewCuratedExtensions.contribution.ts:244-527`), or at least the way the
   Go extension's own `promptForMissingTool` asks —
   `The "gopls" command is not available. Run "go install -v
-  golang.org/x/tools/gopls@latest" to install.` with an `Install` action.
+golang.org/x/tools/gopls@latest" to install.` with an `Install` action.
 - **Actual:** no notification appears. Within seconds of the peek rendering,
   `golang.go` has run `go install github.com/golang/vscode-go/vscgo@v0.56.0`
   and `go install -v golang.org/x/tools/gopls@latest` against the reader's Go
   toolchain and written a 41 MB `gopls` into `$GOPATH/bin`. Observed in
   `<profile>/user-data/logs/*/window1/exthost/golang.go/Go.log`:
   `Installing 1 tool at <GOPATH>/bin` / `gopls` / `Installing
-  golang.org/x/tools/gopls@latest (…) SUCCEEDED`. The journey asserts the
+golang.org/x/tools/gopls@latest (…) SUCCEEDED`. The journey asserts the
   binary appears with no prompt having been shown.
 - **Notes:** `golang.go@0.56.0` `dist/goMain.js:32837` `maybeInstallImportantTools`
   installs every missing `isImportant` tool on activation
   (`:32860`, `installTools(missing, goVersion, { toolsManager: tm,
-  skipRestartGopls: true })`), which is reached before any code path that
+skipRestartGopls: true })`), which is reached before any code path that
   prompts: `promptForMissingTool` (`:32675`, the `Install` / `Install All`
   error notification at `:32696-32710`) only ever sees tools that go missing
   after that pass. `curated-extensions.manifest.mjs:247-248` describes the
@@ -406,9 +406,9 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
   `fetchWorkspace()` once (`out/main.js`, `new Ctx(context, …, fetchWorkspace())`);
   with no folders and no open Rust document it is `{kind: "Empty"}`,
   `getOrCreateClient` returns without starting anything, and
-  `onWorkspaceFolderChanges` only restarts a client that is *already running*,
+  `onWorkspaceFolderChanges` only restarts a client that is _already running_,
   so the later folder change is ignored and even `rust-analyzer: Restart
-  Server` cannot help — the captured workspace is never re-read. The fix
+Server` cannot help — the captured workspace is never re-read. The fix
   belongs on Review's side: activate only after the extension host has the
   folder (or open the document first, which would at least yield
   `{kind: "Detached Files"}`). The same ordering is what

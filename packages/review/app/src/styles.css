@@ -4,9 +4,7 @@
 @import "./fonts/fonts.css";
 /* In a layer, so any canvas rule beats React Flow. */
 @import "@xyflow/react/dist/style.css" layer(vendor);
-@import "./theme.css";
-@import "./base.css";
-@import "./vendor-overrides.css";
+@import "./global.css";
 
 /* Last: authoring-motion restyles everything above while data-motion is set. */
 @import "./courier.css";

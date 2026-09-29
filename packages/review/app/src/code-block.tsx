@@ -75,13 +75,10 @@ export function RenderedCodeBlock({
   const lineCount = countLines(code);
 
   return (
-    // The class scopes the token colors in vendor-overrides.css.
     <figure
-      {...withClass(
-        className ? `rendered-code-block ${className}` : "rendered-code-block",
-        styles.block,
-        compact && styles.compact,
-      )}
+      {...(className
+        ? withClass(className, styles.block, compact && styles.compact)
+        : stylex.props(styles.block, compact && styles.compact))}
       data-language={displayLanguage}
     >
       <DiagramHeader
@@ -115,7 +112,10 @@ export function RenderedCodeBlock({
           {normalizedLanguage && highlightedTokens
             ? highlightedTokens.map((item, index) =>
                 item.token ? (
-                  <span className={`shj-syn-${item.token}`} key={index}>
+                  <span
+                    {...stylex.props(syntaxByToken.get(item.token))}
+                    key={index}
+                  >
                     {item.text}
                   </span>
                 ) : (
@@ -314,3 +314,29 @@ const styles = stylex.create({
     userSelect: "none",
   },
 });
+
+// Syntax tokens (@speed-highlight/core). The Whiteboard palette: ink at three
+// strengths, the marker for keywords, two more blues for types and functions,
+// one warm pencil for strings and one plum for numbers. Comments are quiet and
+// italic. Diff green and red are reserved for the diff language. The editor
+// themes carry the same values.
+const syntaxStyles = stylex.create({
+  kwd: { color: tokens.accent },
+  type: { color: tokens.syntaxType },
+  class: { color: tokens.syntaxType, fontWeight: 500 },
+  func: { color: tokens.syntaxFunction },
+  section: { color: tokens.syntaxFunction, fontWeight: 600 },
+  var: { color: tokens.ink },
+  str: { color: tokens.syntaxString },
+  num: { color: tokens.syntaxNumber },
+  bool: { color: tokens.syntaxNumber, fontWeight: 500 },
+  cmnt: { color: tokens.syntaxComment, fontStyle: "italic" },
+  oper: { color: tokens.syntaxOperator },
+  insert: { color: tokens.syntaxInserted },
+  deleted: { color: tokens.syntaxDeleted },
+  err: { color: tokens.syntaxDeleted },
+});
+
+const syntaxByToken = new Map<string, stylex.StyleXStyles>(
+  Object.entries(syntaxStyles),
+);

@@ -15,6 +15,7 @@ import { useReviewContainer } from "./review-root-context";
 import { shellStyles } from "./shell-styles";
 import { useRightPanelResize } from "./side-panel-resizer";
 import { withClass } from "./stylex-props";
+import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 
 /**
@@ -66,6 +67,7 @@ export function DiagramTourOverlay({
       ref={overlayRef}
       {...withClass(
         `diagram-tour-overlay review-app--theme-${theme}`,
+        theme === "light" && themeStyles.light,
         styles.overlay,
         flow && styles.flowOverlay,
       )}

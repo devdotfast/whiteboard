@@ -1655,7 +1655,7 @@ function C4MapCanvas({
   );
 
   return (
-    // The class scopes the React Flow internals in vendor-overrides.css.
+    // The class scopes the React Flow internals in global.css.
     <div
       ref={keyboardTargetRef}
       {...withClass(
