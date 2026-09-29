@@ -3,6 +3,7 @@ import {
   type BlockType,
   traceQuoteLink,
 } from "@review/review-api/document";
+import * as stylex from "@stylexjs/stylex";
 import {
   Component,
   type ReactNode,
@@ -19,10 +20,12 @@ import { RenderedCodeBlock } from "./code-block";
 import { CodePeekCard } from "./CodePeek";
 import { DatabaseLens } from "./database-lens";
 import { SequenceDiagram } from "./diagrams";
+import { documentStyles } from "./document-styles";
 import { FlowDiagram } from "./flow-diagram";
 import { AnchorLink, ReviewSection } from "./review-components";
 import { ReviewDocumentTitle } from "./review-document-surface";
 import { SoftwareMap } from "./software-map/SoftwareMap";
+import { tokens } from "./tokens.stylex";
 import { TraceQuote } from "./trace-quote";
 import { TutorialAuthoringConversation } from "./tutorial-authoring-conversation";
 import {
@@ -140,7 +143,15 @@ function SectionBlock({ node, data, children }: BlockProps<"section">) {
 
 function CalloutBlock({ node, children }: BlockProps<"callout">) {
   return (
-    <blockquote data-tone={node.tone}>
+    <blockquote
+      data-tone={node.tone}
+      {...stylex.props(
+        documentStyles.serif,
+        styles.callout,
+        styles[node.tone],
+        documentStyles.column,
+      )}
+    >
       {node.title && <strong data-review-copy-prose>{node.title}</strong>}
       {children(node.children)}
     </blockquote>
@@ -180,8 +191,12 @@ function DatabaseLensBlock({ node }: BlockProps<"database_lens">) {
 
 function ImageBlock({ node, data }: BlockProps<"image">) {
   return (
-    <figure className="review-image">
-      <img src={data.images.get(node.assetId)} alt={node.alt} />
+    <figure {...stylex.props(documentStyles.column)}>
+      <img
+        src={data.images.get(node.assetId)}
+        alt={node.alt}
+        {...stylex.props(documentStyles.image)}
+      />
       {node.caption && <figcaption>{node.caption}</figcaption>}
     </figure>
   );
@@ -196,7 +211,14 @@ function TraceQuoteBlock({ node, data }: BlockProps<"trace_quote">) {
     trace?.events.findIndex((item) => item.id === node.eventId) ?? -1;
 
   if (!trace || event < 0)
-    return <blockquote data-unavailable="trace">{node.text}</blockquote>;
+    return (
+      <blockquote
+        data-unavailable="trace"
+        {...stylex.props(documentStyles.serif, documentStyles.column)}
+      >
+        {node.text}
+      </blockquote>
+    );
 
   return (
     <TraceQuote sessionId={node.traceId} event={event}>
@@ -223,19 +245,19 @@ function TutorialBlock({ node, children }: BlockProps<"tutorial">) {
   switch (node.kind) {
     case "keymap":
       return (
-        <div className="api-tutorial-control">
+        <div {...stylex.props(documentStyles.column)}>
           <TutorialKeymapPicker />
         </div>
       );
     case "conversation":
       return (
-        <div className="api-tutorial-control">
+        <div {...stylex.props(documentStyles.column)}>
           <TutorialAuthoringConversation conversation={node.conversation} />
         </div>
       );
     case "view":
       return (
-        <div className="api-tutorial-control">
+        <div {...stylex.props(documentStyles.column)}>
           <TutorialViewButton view={node.view}>{node.label}</TutorialViewButton>
         </div>
       );
@@ -341,3 +363,35 @@ export class BlockErrorBoundary extends Component<
     return this.props.children;
   }
 }
+
+const inDocument = ":is(.review-document *)";
+
+const styles = stylex.create({
+  callout: {
+    margin: { default: null, [inDocument]: "18px 0" },
+    padding: { default: null, [inDocument]: "12px 16px" },
+    borderLeftWidth: { default: null, [inDocument]: "2px" },
+    borderLeftStyle: { default: null, [inDocument]: "solid" },
+    borderLeftColor: { default: null, [inDocument]: tokens.inkFaint },
+    borderRadius: { default: null, [inDocument]: "0 6px 6px 0" },
+    backgroundColor: { default: null, [inDocument]: tokens.tray },
+    fontSize: { default: null, [inDocument]: "15px" },
+    lineHeight: { default: null, [inDocument]: "22px" },
+  },
+  info: {
+    borderLeftColor: { default: null, [inDocument]: tokens.accent },
+    backgroundColor: { default: null, [inDocument]: tokens.markerTint },
+  },
+  warning: {
+    borderLeftColor: { default: null, [inDocument]: tokens.changeModified },
+    backgroundColor: { default: null, [inDocument]: tokens.diffModifiedBg },
+  },
+  danger: {
+    borderLeftColor: { default: null, [inDocument]: tokens.changeRemoved },
+    backgroundColor: { default: null, [inDocument]: tokens.diffRemovedBg },
+  },
+  success: {
+    borderLeftColor: { default: null, [inDocument]: tokens.changeAdded },
+    backgroundColor: { default: null, [inDocument]: tokens.diffAddedBg },
+  },
+});

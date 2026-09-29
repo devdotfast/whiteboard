@@ -1,5 +1,7 @@
+import * as stylex from "@stylexjs/stylex";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
+import { documentStyles } from "./document-styles";
 import type { ReviewSession } from "./host/review-session";
 import { ReviewUnavailable } from "./review-empty-state";
 import { captureClientError } from "./ui-telemetry";
@@ -60,7 +62,10 @@ export class ReviewDocumentBoundary extends Component<
               Your coding agent is writing the canvas now…
               <br />
               Edit the review through the Whiteboard MCP tools or{" "}
-              <code>whiteboard api</code> to replace the failing block.
+              <code {...stylex.props(documentStyles.code)}>
+                whiteboard api
+              </code>{" "}
+              to replace the failing block.
             </>
           }
         />

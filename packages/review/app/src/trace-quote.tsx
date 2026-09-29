@@ -44,10 +44,10 @@ export function TraceQuote({
   const href = `#trace-${sessionId}${trace ? `-${trace}` : ""}${event !== undefined ? `-event-${event}` : ""}`;
 
   return (
-    <span className="review-trace-quote-container">
+    <span {...stylex.props(styles.container)}>
       <ProsePeekAnchor
         href={href}
-        className={stylex.props(styles.quote, isOpen && styles.open).className}
+        xstyle={[styles.quote, isOpen && styles.open]}
         isOpen={isOpen}
         inertFallback={
           <span {...stylex.props(styles.quote, styles.inert)}>{children}</span>
@@ -84,7 +84,22 @@ export function TraceQuote({
   );
 }
 
+const inBlock = ":is(.review-document .api-document-node > *)";
+
 const styles = stylex.create({
+  // A quote block stands in the prose column; a quote in prose stays inline.
+  container: {
+    display: { default: null, [inBlock]: "block" },
+    width: {
+      default: null,
+      [inBlock]: `min(100%, ${tokens.reviewProseMaxWidth})`,
+    },
+    maxWidth: {
+      default: null,
+      [inBlock]: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
+    },
+    marginInline: { default: null, [inBlock]: "auto" },
+  },
   quote: {
     color: tokens.accent,
     textDecoration: { default: "none", ":hover": "underline" },

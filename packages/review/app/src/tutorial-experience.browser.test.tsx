@@ -142,7 +142,17 @@ function section(title: string): HTMLElement {
 }
 
 function card(): HTMLElement | null {
-  return canvasRoot.querySelector(".tutorial-guide");
+  return canvasRoot.querySelector('aside[aria-label="Tutorial guide"]');
+}
+
+/** Rings drawn in the shell overlay, beside the guide card. */
+function shellRings() {
+  return card()?.parentElement?.querySelectorAll(":scope > div") ?? [];
+}
+
+/** The ring layer inside the scroll region. */
+function regionLayer() {
+  return canvasRoot.querySelector(".review-view-region > [aria-hidden]");
 }
 
 describe("TutorialExperience", () => {
@@ -151,8 +161,9 @@ describe("TutorialExperience", () => {
     render(tutorial);
 
     expect(card()?.textContent).toContain("Choose your keybindings");
-    expect(canvasRoot.querySelectorAll(".tutorial-guide")).toHaveLength(1);
-    expect(card()?.parentElement?.className).toBe("tutorial-experience");
+    expect(
+      canvasRoot.querySelectorAll('aside[aria-label="Tutorial guide"]'),
+    ).toHaveLength(1);
     expect(card()?.parentElement?.parentElement?.className).toBe(
       "review-document-shell",
     );
@@ -184,14 +195,8 @@ describe("TutorialExperience", () => {
       vi.unstubAllGlobals();
     }
 
-    const layer = canvasRoot.querySelector(
-      ".review-view-region > .tutorial-target-layer",
-    );
-
-    expect(layer?.querySelectorAll(".tutorial-target-ring")).toHaveLength(1);
-    expect(
-      canvasRoot.querySelectorAll(".tutorial-experience .tutorial-target-ring"),
-    ).toHaveLength(0);
+    expect(regionLayer()?.children).toHaveLength(1);
+    expect(shellRings()).toHaveLength(0);
   });
 
   it("draws a toolbar target's ring in the shell overlay", () => {
@@ -216,12 +221,8 @@ describe("TutorialExperience", () => {
     }
 
     // The Commits tab sits outside the region; the prose button inside it.
-    expect(
-      canvasRoot.querySelectorAll(".tutorial-experience .tutorial-target-ring"),
-    ).toHaveLength(2);
-    expect(
-      canvasRoot.querySelector(".review-view-region > .tutorial-target-layer"),
-    ).toBeNull();
+    expect(shellRings()).toHaveLength(2);
+    expect(regionLayer()).toBeNull();
   });
 
   it("expands the active chapter without collapsing the others", () => {
@@ -229,9 +230,7 @@ describe("TutorialExperience", () => {
     render(tutorial);
 
     const toggle = (title: string) =>
-      section(title).querySelector<HTMLButtonElement>(
-        ".review-section-toggle",
-      )!;
+      section(title).querySelector<HTMLButtonElement>("button[aria-expanded]")!;
 
     act(() => toggle("Interactive Diagrams").click());
     expect(toggle("Interactive Diagrams").getAttribute("aria-expanded")).toBe(
@@ -538,7 +537,7 @@ describe("TutorialExperience", () => {
     render(tutorial);
 
     const pill = canvasRoot.querySelector<HTMLButtonElement>(
-      ".tutorial-experience > .tutorial-guide-pill",
+      'button[aria-label="Show tutorial"]',
     );
 
     expect(pill?.getAttribute("aria-label")).toBe("Show tutorial");

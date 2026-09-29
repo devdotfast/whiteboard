@@ -1,5 +1,6 @@
 import type { ActivitySnapshot } from "@review/review-api/activity";
 import type { Block } from "@review/review-api/document";
+import * as stylex from "@stylexjs/stylex";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -12,6 +13,7 @@ import {
 import type { AuthoringCursor } from "./authoring-cursor";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { AuthoringCursorContext } from "./courier";
+import { documentStyles } from "./document-styles";
 import { ReviewSessionProvider } from "./host/review-session";
 import type { ReviewRoots } from "./review-root-context";
 import { ReviewRootsProvider } from "./review-root-context";
@@ -48,7 +50,7 @@ const onLocate = vi.fn<() => void>();
 
 beforeEach(() => {
   article = document.createElement("article");
-  article.className = "review-document";
+  article.className = `review-document ${stylex.props(documentStyles.article).className}`;
   article.style.position = "relative";
   container = document.createElement("div");
   article.append(container);

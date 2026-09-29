@@ -1,11 +1,13 @@
 import { ReviewApiClient } from "@review/review-api/client";
 import type { Block } from "@review/review-api/document";
+import * as stylex from "@stylexjs/stylex";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ApiDocument, createDocumentLoader } from "./api-document";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
+import { documentStyles } from "./document-styles";
 import { ReviewSessionProvider } from "./host/review-session";
 import type { ReviewRoots } from "./review-root-context";
 import { ReviewRootsProvider } from "./review-root-context";
@@ -40,7 +42,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
   window.localStorage.clear();
   article = document.createElement("article");
-  article.className = "review-document";
+  article.className = `review-document ${stylex.props(documentStyles.article).className}`;
   container = document.createElement("div");
   article.append(container);
   document.body.append(article);
@@ -127,7 +129,7 @@ it("renders the retained document without reading commits when the source is gon
 
   expect(article.textContent).toContain("Imported");
   expect(article.querySelector("#details-2")).not.toBeNull();
-  expect(article.querySelector(".review-source-context")?.textContent).toBe(
+  expect(article.querySelector(":scope > div > p")?.textContent).toBe(
     "Local checkout unavailable. Showing retained source.",
   );
 });

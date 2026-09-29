@@ -909,7 +909,7 @@ it("degrades to the retained document and an unavailable Commits tab when the ch
       ),
     );
 
-    expect(container.querySelector(".review-source-context")?.textContent).toBe(
+    expect(container.querySelector(".review-document > p")?.textContent).toBe(
       "Local checkout unavailable. Showing retained source.",
     );
 

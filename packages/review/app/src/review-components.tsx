@@ -12,6 +12,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { AuthoredCodeSurface } from "./authored-code-surface";
 import { CodePeekCard } from "./CodePeek";
 import { controlStyles } from "./controls-styles";
+import { documentStyles } from "./document-styles";
 import { findWhitespaceNormalizedSpan } from "./highlighted-text";
 import {
   useOptionalReviewSession,
@@ -38,6 +39,7 @@ import {
 import { useBottomSheetResize } from "./side-panel-resizer";
 import { panelStyles, tourStyles } from "./side-panel-styles";
 import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 import { TraceDocument, extractEventText } from "./trace-document";
 import { traceStyles } from "./trace-styles";
 import { useTutorialSection } from "./tutorial-section-context";
@@ -202,33 +204,49 @@ export function ReviewSection({
     };
   }, []);
 
+  // The classes are markers: find, the code view and authoring motion look
+  // for a (collapsed) section, and the tutorial targets a section's body.
   return (
     <section
-      className={
+      {...withClass(
         collapsed
           ? "review-section review-section--collapsed"
-          : "review-section"
-      }
+          : "review-section",
+        sectionStyles.section,
+      )}
       data-review-section={title}
       data-tutorial-chapter-state={tutorialSection.state ?? undefined}
     >
-      <div className="review-section-header">
+      <div
+        {...stylex.props(
+          sectionStyles.header,
+          tutorialSection.state === "complete" && sectionStyles.complete,
+        )}
+      >
         <button
           type="button"
-          {...withClass("review-section-toggle", chevronMarker)}
+          {...stylex.props(chevronMarker, sectionStyles.toggle)}
           aria-expanded={!collapsed}
           aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
           onClick={toggleCollapsed}
         >
           <DisclosureChevron expanded={!collapsed} />
         </button>
-        <div className="review-section-heading">
-          <h2 id={id} data-review-copy-prose>
+        <div {...withClass("review-section-heading", sectionStyles.heading)}>
+          <h2
+            id={id}
+            data-review-copy-prose
+            {...stylex.props(
+              sectionStyles.title,
+              tutorialSection.state === "active" && sectionStyles.titleActive,
+              collapsed && sectionStyles.titleCollapsed,
+            )}
+          >
             {title}
           </h2>
         </div>
         {collapsed && summary && (
-          <span className="review-section-meta">
+          <span {...stylex.props(sectionStyles.meta)}>
             {reviewSectionSummaryLabel(summary)}
           </span>
         )}
@@ -275,7 +293,7 @@ interface ProsePeekAnchorProps {
   isOpen: boolean;
   onOpen: (text: string) => void;
   onAlreadyOpen?: () => void;
-  className?: string;
+  xstyle?: stylex.StyleXStyles;
   anchorId?: string;
   inertFallback?: ReactNode;
   children: ReactNode;
@@ -290,7 +308,7 @@ export function ProsePeekAnchor({
   isOpen,
   onOpen,
   onAlreadyOpen,
-  className,
+  xstyle,
   anchorId,
   inertFallback,
   children,
@@ -305,7 +323,7 @@ export function ProsePeekAnchor({
   return (
     <a
       href={href}
-      className={className}
+      {...stylex.props(documentStyles.link, xstyle)}
       data-review-anchor-id={anchorId}
       data-review-anchor-open={isOpen ? "true" : undefined}
       onClick={(event) => {
@@ -1099,3 +1117,81 @@ function ReviewPeekContentView({
 
   return null;
 }
+
+const inDocument = ":is(.review-document *)";
+
+const sectionStyles = stylex.create({
+  section: {
+    position: "relative",
+    width: "100%",
+  },
+  header: {
+    position: "relative",
+    display: "flex",
+    alignItems: "baseline",
+    gap: "12px",
+    width: `min(100%, ${tokens.reviewProseMaxWidth})`,
+    maxWidth: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
+    marginBlock: "40px 12px",
+    marginInline: "auto",
+  },
+  // A finished tutorial chapter says so at the end of its heading row.
+  complete: {
+    "::after": {
+      content: "'Complete ✓'",
+      marginLeft: "auto",
+      color: tokens.tutorialRing,
+      font: `10px/16px ${tokens.fontMono}`,
+    },
+  },
+  // Expanded sections keep a faint chevron so "this collapses" is legible
+  // without hovering the header first.
+  toggle: {
+    position: "absolute",
+    top: "5px",
+    left: "-28px",
+    display: "grid",
+    placeItems: "center",
+    width: "18px",
+    height: "18px",
+    padding: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    borderRadius: "4px",
+    backgroundColor: tokens.transparent,
+    color: {
+      default: tokens.inkFaint,
+      ":hover": tokens.inkMuted,
+      ":focus-visible": tokens.inkMuted,
+    },
+    outline: { default: null, ":hover": "none", ":focus-visible": "none" },
+    opacity: 1,
+    transition: "opacity 120ms ease",
+  },
+  heading: {
+    minWidth: 0,
+  },
+  title: {
+    scrollMarginTop: { default: null, [inDocument]: "24px" },
+    margin: 0,
+    color: { default: null, [inDocument]: tokens.ink },
+    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
+    fontSize: { default: null, [inDocument]: "26px" },
+    fontWeight: { default: null, [inDocument]: 500 },
+    lineHeight: { default: null, [inDocument]: "32px" },
+  },
+  titleActive: {
+    color: tokens.ink,
+  },
+  titleCollapsed: {
+    color: tokens.ghost,
+  },
+  meta: {
+    flex: "0 0 auto",
+    color: tokens.inkFaint,
+    fontFamily: tokens.fontMono,
+    fontSize: "11px",
+    whiteSpace: "nowrap",
+  },
+});

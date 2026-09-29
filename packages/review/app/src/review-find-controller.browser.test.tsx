@@ -7,6 +7,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { scopeReviewCanvasCss } from "../desktop-css-scope";
+import { documentStyles } from "./document-styles";
 import {
   type ReviewFindHost,
   ReviewFindProvider,
@@ -14,6 +15,7 @@ import {
   useReviewFindRegistration,
 } from "./review-find";
 import { ReviewRootsProvider } from "./review-root-context";
+import { withClass } from "./stylex-props";
 
 import canvasCss from "./styles.css?inline";
 
@@ -331,7 +333,7 @@ it("keeps the find widget below and above the topbar", async () => {
           </header>
           <section class="review-view-region review-view-region--review">
             <div class="review-document-view">
-              <article class="review-document">
+              <article class="review-document ${stylex.props(documentStyles.article).className}">
                 <h2 id="rollout">Rollout</h2><p>body</p>
                 <h2 id="risks">Risks</h2><p>body</p>
               </article>
@@ -437,7 +439,10 @@ function FindHarness({
       >
         <main ref={shellRef} className="review-document-shell">
           <section ref={scrollRef}>
-            <article ref={articleRef} className="review-document">
+            <article
+              ref={articleRef}
+              {...withClass("review-document", documentStyles.article)}
+            >
               <DocumentProbe onRender={onDocumentRender} />
               <p>Alpha first</p>
               <InlineRegistration handle={handles[0]!} />

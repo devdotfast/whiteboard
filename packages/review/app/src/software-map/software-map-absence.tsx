@@ -113,10 +113,14 @@ const styles = stylex.create({
   },
   // In a document the notice reads as the document's own heading and prose.
   heading: {
+    scrollMarginTop: { default: null, [inDocument]: "24px" },
     margin: { default: "0 0 10px", [inDocument]: "30px auto 10px" },
     marginTop: { default: null, [scratchpadOpening]: 0 },
     color: tokens.ink,
+    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
     fontSize: { default: "16px", [inDocument]: "20px" },
+    fontWeight: { default: null, [inDocument]: 500 },
+    lineHeight: { default: null, [inDocument]: "23px" },
   },
   paragraph: {
     maxWidth: "540px",
@@ -128,7 +132,12 @@ const styles = stylex.create({
     textAlign: { default: null, [inDocument]: "left" },
   },
   code: {
+    padding: { default: null, [inDocument]: "2px 5px" },
+    borderRadius: { default: null, [inDocument]: "3px" },
+    backgroundColor: { default: null, [inDocument]: tokens.well },
     color: tokens.ink,
+    fontFamily: { default: null, [inDocument]: tokens.fontMono },
+    fontSize: { default: null, [inDocument]: "0.85em" },
     fontWeight: 700,
   },
 });

@@ -1,7 +1,9 @@
+import * as stylex from "@stylexjs/stylex";
 import { act, createRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { documentStyles } from "./document-styles";
 import { type ReviewRoots, ReviewRootsProvider } from "./review-root-context";
 import { ReviewToc } from "./review-toc";
 
@@ -20,7 +22,7 @@ globalThis.ResizeObserver ??= NoopResizeObserver as never;
 
 function renderArticle(headings: string[]): HTMLElement {
   const article = document.createElement("article");
-  article.className = "review-document";
+  article.className = `review-document ${stylex.props(documentStyles.article).className}`;
   article.innerHTML = headings
     .map(
       (heading, index) =>

@@ -1,4 +1,5 @@
 import type { AgentSelection } from "@review/agent-selection";
+import * as stylex from "@stylexjs/stylex";
 import {
   type ReactNode,
   createContext,
@@ -238,7 +239,7 @@ export function AgentSelectionProvider({
               createPortal(
                 <button
                   type="button"
-                  className="copy-for-agent-popover"
+                  {...stylex.props(styles.popover)}
                   aria-keyshortcuts="Meta+Shift+C"
                   aria-label="Copy for Agent"
                   disabled={busy}
@@ -251,10 +252,10 @@ export function AgentSelectionProvider({
                   onClick={() => void copy()}
                 >
                   <span>{busy ? "Copying…" : "Copy for Agent"}</span>
-                  <kbd aria-hidden="true">
-                    <span>⇧</span>
-                    <span>⌘</span>
-                    <span>C</span>
+                  <kbd aria-hidden="true" {...stylex.props(styles.keys)}>
+                    <span {...stylex.props(styles.key)}>⇧</span>
+                    <span {...stylex.props(styles.key)}>⌘</span>
+                    <span {...stylex.props(styles.key)}>C</span>
                   </kbd>
                 </button>,
                 selection.anchorContainer ?? overlayHost,
@@ -266,3 +267,50 @@ export function AgentSelectionProvider({
     </SelectionContext.Provider>
   );
 }
+
+const systemFont = "-apple-system, BlinkMacSystemFont, sans-serif";
+
+// Rendered in the workbench document so native Monaco and prose use one
+// affordance, so it takes the workbench's widget colors.
+const styles = stylex.create({
+  popover: {
+    position: "fixed",
+    zIndex: 10002,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "4px 9px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: "var(--vscode-editorWidget-border, #3b3b3b)",
+    borderRadius: "6px",
+    backgroundColor: {
+      default: "var(--vscode-editorWidget-background, #202020)",
+      ":hover":
+        "color-mix(in srgb, var(--vscode-editorWidget-background, #202020) 90%, var(--vscode-editor-foreground, #eee) 10%)",
+    },
+    color: "var(--vscode-editor-foreground, #eee)",
+    boxShadow: "0 3px 12px #0004",
+    font: `13px/20px ${systemFont}`,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+    outline: {
+      default: null,
+      ":focus-visible": "2px solid var(--vscode-focusBorder, #87baff)",
+    },
+  },
+  keys: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "3px",
+    padding: "0 5px",
+    borderRadius: "4px",
+    backgroundColor: "#8882",
+    color: "var(--vscode-descriptionForeground, #aaa)",
+    font: `500 13px/20px ${systemFont}`,
+    letterSpacing: 0,
+  },
+  key: {
+    display: "inline-block",
+  },
+});

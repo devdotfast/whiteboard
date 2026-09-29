@@ -1,6 +1,8 @@
+import * as stylex from "@stylexjs/stylex";
 import type { ComponentProps, ReactElement } from "react";
 
 import { ReviewDocumentMetaLine } from "./review-doc-meta";
+import { tokens } from "./tokens.stylex";
 
 export function ReviewDocumentTitle({
   children,
@@ -8,9 +10,26 @@ export function ReviewDocumentTitle({
 }: ComponentProps<"h1">): ReactElement {
   return (
     <ReviewDocumentMetaLine>
-      <h1 {...props} data-review-copy-prose>
+      <h1 {...props} data-review-copy-prose {...stylex.props(styles.title)}>
         {children}
       </h1>
     </ReviewDocumentMetaLine>
   );
 }
+
+const inDocument = ":is(.review-document *)";
+
+const styles = stylex.create({
+  title: {
+    width: { default: null, [inDocument]: "100%" },
+    maxWidth: { default: null, [inDocument]: "1000px" },
+    margin: { default: null, [inDocument]: 0 },
+    color: { default: null, [inDocument]: tokens.ink },
+    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
+    fontSize: { default: null, [inDocument]: "32px" },
+    fontWeight: { default: null, [inDocument]: 500 },
+    lineHeight: { default: null, [inDocument]: "38px" },
+    letterSpacing: { default: null, [inDocument]: "-0.015em" },
+    textAlign: { default: null, [inDocument]: "left" },
+  },
+});

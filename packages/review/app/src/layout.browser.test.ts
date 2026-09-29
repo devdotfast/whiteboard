@@ -1,35 +1,50 @@
+import * as stylex from "@stylexjs/stylex";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { scopeReviewCanvasCss } from "../desktop-css-scope";
+import { MarkdownContent } from "./agent-markdown";
+import { documentStyles } from "./document-styles";
 import {
   softwareMapFrameProps,
   softwareMapOverlayProps,
 } from "./software-map/SoftwareMap";
+import { TraceQuote } from "./trace-quote";
 
 import canvasCss from "./styles.css?inline";
 import "./styles.css";
 
 describe("Review layout", () => {
   it("aligns standalone JSON trace quotes with prose while keeping nested quotes inline", () => {
+    const quote = (text: string) =>
+      createElement(TraceQuote, { sessionId: "session" }, text);
+
     const documentView = document.createElement("article");
-    documentView.className = "review-document";
+    documentView.className = `review-document ${stylex.props(documentStyles.article).className}`;
     documentView.style.width = "1000px";
     documentView.innerHTML = `
-      <div class="api-document-node">
-        <p>Prose with <span class="review-trace-quote-container">an inline quote</span>.</p>
+      <div class="api-document-node api-document-node--prose">
+        ${renderToStaticMarkup(
+          createElement(MarkdownContent, {
+            source: "Prose with [an inline quote](#quote).",
+            renderLink: (_href, children) => quote(String(children)),
+          }),
+        )}
       </div>
-      <div class="api-document-node">
-        <span class="review-trace-quote-container">A standalone quote</span>
+      <div class="api-document-node api-document-node--prose">
+        ${renderToStaticMarkup(quote("A standalone quote"))}
       </div>
     `;
     document.body.append(documentView);
 
     try {
       const prose = documentView.querySelector("p")!;
+      const inline = prose.querySelector("span")!;
 
-      const [inline, standalone] = documentView.querySelectorAll<HTMLElement>(
-        ".review-trace-quote-container",
-      );
+      const standalone = documentView.querySelector<HTMLElement>(
+        ".api-document-node > span",
+      )!;
 
       const proseBounds = prose.getBoundingClientRect();
       const quoteBounds = standalone.getBoundingClientRect();

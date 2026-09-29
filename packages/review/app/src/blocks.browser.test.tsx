@@ -149,8 +149,7 @@ const rendered: Record<
     text(c).includes("Queue an order") &&
     text(c).includes("write queued"),
   image: (c) =>
-    has(c, "figure.review-image img[src^='blob:']") &&
-    text(c).includes("An image"),
+    has(c, "figure img[src^='blob:']") && text(c).includes("An image"),
   trace_quote: (c) =>
     has(c, 'a[href^="#trace-"]') && text(c).includes("queue the order"),
   // The map has drawn its system and is neither refreshing nor failed.
@@ -165,7 +164,7 @@ const rendered: Record<
   section: (c) =>
     has(c, "button[aria-expanded='true']") && text(c).includes("Hello."),
   tutorial: (c) =>
-    has(c, ".tutorial-authoring-conversation") &&
+    text(c).includes("Representative authoring conversation") &&
     text(c).includes("Explain this change."),
   callout: (c) =>
     c.querySelector("blockquote[data-tone='warning'] strong")?.textContent ===
@@ -416,7 +415,7 @@ describe("block components", () => {
       await settled(
         () =>
           has(container, ".tutorial-keymap-picker") &&
-          has(container, ".tutorial-authoring-conversation"),
+          text(container).includes("Representative authoring conversation"),
       ),
     ).toBe(true);
 
@@ -634,7 +633,9 @@ describe("tutorial guide placement", () => {
       "position: relative; height: 700px; overflow: hidden;",
     );
 
-    expect(await settled(() => has(container, ".tutorial-guide"))).toBe(true);
+    expect(
+      await settled(() => has(container, 'aside[aria-label="Tutorial guide"]')),
+    ).toBe(true);
 
     const contentsElement = container.querySelector("#review-toc")!;
     const appElement = container.querySelector(".review-app")!;
@@ -658,7 +659,7 @@ describe("tutorial guide placement", () => {
       .getBoundingClientRect();
 
     const guide = container
-      .querySelector(".tutorial-guide")!
+      .querySelector('aside[aria-label="Tutorial guide"]')!
       .getBoundingClientRect();
 
     expect(app.bottom).toBeLessThanOrEqual(host.bottom);

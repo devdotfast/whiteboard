@@ -61,12 +61,12 @@ describe("ReviewSection", () => {
     expect(container.querySelectorAll("h2")).toHaveLength(1);
     expect(body?.querySelectorAll(":scope > p, :scope > ol")).toHaveLength(3);
     expect(body).toHaveProperty("hidden", true);
-    expect(container.querySelector(".review-section-meta")?.textContent).toBe(
-      "2 paragraphs",
-    );
+    expect(
+      container.querySelector(".review-section-heading + span")?.textContent,
+    ).toBe("2 paragraphs");
 
     const toggle = container.querySelector<HTMLButtonElement>(
-      ".review-section-toggle",
+      "button[aria-expanded]",
     );
 
     expect(toggle?.getAttribute("aria-label")).toBe("Expand Testing");

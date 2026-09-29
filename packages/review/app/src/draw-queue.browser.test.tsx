@@ -1,4 +1,5 @@
 import type { Block } from "@review/review-api/document";
+import * as stylex from "@stylexjs/stylex";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -8,6 +9,7 @@ import { AuthoringActivityContext } from "./authoring-activity";
 import type { AuthoringCursor } from "./authoring-cursor";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
+import { documentStyles } from "./document-styles";
 import type { DrawQueueClock } from "./draw-queue-provider";
 import { DrawQueueProvider } from "./draw-queue-provider";
 import { ReviewSessionProvider } from "./host/review-session";
@@ -109,7 +111,7 @@ let manualClock: ReturnType<typeof createManualClock>;
 
 beforeEach(() => {
   article = document.createElement("article");
-  article.className = "review-document";
+  article.className = `review-document ${stylex.props(documentStyles.article).className}`;
   article.style.position = "relative";
   article.style.width = "900px";
   container = document.createElement("div");

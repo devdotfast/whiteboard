@@ -79,7 +79,7 @@ export async function run(ctx) {
   const canvas = page.locator(".review-canvas-root [data-review-api]");
 
   const guide = page.locator(
-    'aside.tutorial-guide[aria-label="Tutorial guide"]',
+    'aside[aria-label="Tutorial guide"]',
   );
 
   const viewTab = (label) =>

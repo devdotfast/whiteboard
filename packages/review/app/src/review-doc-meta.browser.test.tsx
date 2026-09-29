@@ -59,7 +59,7 @@ describe("ReviewDocumentMetaLine", () => {
       "codex/reorganize-homepage-sections",
     );
     await render(undefined, 0);
-    expect(container.querySelector(".review-doc-meta-branch")).toBeNull();
+    expect(container.querySelector('[title^="Head branch"]')).toBeNull();
   });
 
   it("hydrates when the relative update time changes after SSR", async () => {
@@ -221,20 +221,22 @@ describe("ReviewDocumentMetaLine", () => {
     });
     expect(container.textContent).toContain("current");
     expect(
-      [...container.querySelectorAll(".review-stack-position-marker")].map(
-        (marker) => marker.textContent,
-      ),
+      [
+        ...container.querySelectorAll(
+          "details > div > * > span:first-child > span",
+        ),
+      ].map((marker) => marker.textContent),
     ).toEqual(["1", "2", "3"]);
 
     const unavailable = container.querySelector<HTMLButtonElement>(
-      ".review-stack-menu button:disabled",
+      "details button:disabled",
     );
 
     expect(unavailable?.textContent).toContain("PR #40");
     expect(unavailable?.textContent).toContain("No session");
 
     const layer = container.querySelector<HTMLButtonElement>(
-      '.review-stack-menu button[data-relation="later"]',
+      'details button[data-relation="later"]',
     );
 
     expect(layer?.textContent).toContain("PR #30");

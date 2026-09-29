@@ -3,6 +3,7 @@ import {
   type ReviewStackLayer,
   summarizeReviewDiffFiles,
 } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import { useQuery } from "@tanstack/react-query";
 import {
   Fragment,
@@ -21,6 +22,8 @@ import { DisplayedReviewVersionContext } from "./displayed-review-version-contex
 import { useReviewSession } from "./host/review-session";
 import { ReviewBranchRange, WORKING_TREE } from "./review-branch-range";
 import { useReviewDiffFiles } from "./review-diff-files-context";
+import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 
 interface ReviewDocumentMetaState {
   pullRequestNumber: number | null;
@@ -86,17 +89,20 @@ export function ReviewDocumentMetaLine({
     facts.push({
       key: "branch",
       node: (
-        <span
-          className="review-doc-meta-branch"
-          title={`Head branch: ${branch}`}
-        >
-          <svg width="13" height="13" viewBox="0 0 20 20" aria-hidden="true">
+        <span {...stylex.props(styles.branch)} title={`Head branch: ${branch}`}>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 20 20"
+            aria-hidden="true"
+            {...stylex.props(styles.icon, styles.branchIcon)}
+          >
             <circle cx="5" cy="4.5" r="2" />
             <circle cx="5" cy="15.5" r="2" />
             <circle cx="15" cy="6.5" r="2" />
             <path d="M5 6.5v7M15 8.5c0 3-10 2-10 5" />
           </svg>
-          <span>{branch}</span>
+          <span {...stylex.props(styles.branchName)}>{branch}</span>
         </span>
       ),
     });
@@ -114,20 +120,23 @@ export function ReviewDocumentMetaLine({
     facts.push({
       key: "changes",
       node: (
-        <span className="review-header-stats">
+        <span {...stylex.props(styles.row, styles.stats)}>
           <DiffCount
             additions={diff.additions}
             deletions={diff.deletions}
             large
           />
           {diff.additions + diff.deletions > 0 ? (
-            <span className="review-header-change-bar" aria-hidden="true">
+            <span {...stylex.props(styles.changeBar)} aria-hidden="true">
               {diff.additions > 0 ? (
-                <span style={{ flexGrow: diff.additions }} />
+                <span
+                  {...stylex.props(styles.change)}
+                  style={{ flexGrow: diff.additions }}
+                />
               ) : null}
               {diff.deletions > 0 ? (
                 <span
-                  className="is-removed"
+                  {...stylex.props(styles.change, styles.removed)}
                   style={{ flexGrow: diff.deletions }}
                 />
               ) : null}
@@ -153,26 +162,28 @@ export function ReviewDocumentMetaLine({
   }
 
   return (
-    <header className="review-document-header">
-      <div className="review-header-top" data-review-copy-ignore>
-        <div className="review-header-identity">
+    // The class is a marker: the document and the contents read whether
+    // the document has a header.
+    <header {...withClass("review-document-header", styles.header)}>
+      <div {...stylex.props(styles.row, styles.top)} data-review-copy-ignore>
+        <div {...stylex.props(styles.row, styles.identity)}>
           {repository ? (
             <span>
               {repository[1]} / {repository[2]}
             </span>
           ) : null}
           {repository && meta.pullRequestNumber != null ? (
-            <span className="review-header-separator" aria-hidden="true">
+            <span {...stylex.props(styles.separator)} aria-hidden="true">
               ·
             </span>
           ) : null}
           {meta.pullRequestNumber != null &&
             (meta.pullRequestUrl ? (
               <a
-                className="review-doc-meta-pr"
                 href={meta.pullRequestUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                {...stylex.props(styles.pullRequest, styles.pullRequestLink)}
               >
                 PR #{meta.pullRequestNumber}
                 <svg
@@ -180,18 +191,19 @@ export function ReviewDocumentMetaLine({
                   height="11"
                   viewBox="0 0 20 20"
                   aria-hidden="true"
+                  {...stylex.props(styles.icon)}
                 >
                   <path d="M7 4h9v9M16 4 5 15" />
                 </svg>
               </a>
             ) : (
-              <span className="review-doc-meta-pr">
+              <span {...stylex.props(styles.pullRequest)}>
                 PR #{meta.pullRequestNumber}
               </span>
             ))}
           {stackLayers.length > 1 ? (
             <>
-              <span className="review-header-separator" aria-hidden="true">
+              <span {...stylex.props(styles.separator)} aria-hidden="true">
                 ·
               </span>
               <ReviewStackSelector layers={stackLayers} />
@@ -199,11 +211,14 @@ export function ReviewDocumentMetaLine({
           ) : null}
         </div>
         {updatedLabel && (
-          <span className="review-header-updated">Updated {updatedLabel}</span>
+          <span {...stylex.props(styles.updated)}>Updated {updatedLabel}</span>
         )}
       </div>
       {children}
-      <div className="review-header-details" data-review-copy-ignore>
+      <div
+        {...stylex.props(styles.row, styles.details)}
+        data-review-copy-ignore
+      >
         {withFactDots(facts)}
       </div>
     </header>
@@ -217,7 +232,7 @@ function withFactDots(
   return facts.map(({ key, node }, index) => (
     <Fragment key={key}>
       {index > 0 ? (
-        <span className="review-header-dot" aria-hidden="true" />
+        <span {...stylex.props(styles.dot)} aria-hidden="true" />
       ) : null}
       {node}
     </Fragment>
@@ -259,17 +274,21 @@ function ReviewStackSelector({
   };
 
   return (
-    <details className="review-stack-selector" ref={detailsRef}>
-      <summary>
-        <span className="review-stack-position">
+    <details {...stylex.props(styles.stack)} ref={detailsRef}>
+      <summary {...stylex.props(styles.stackSummary)}>
+        <span {...stylex.props(styles.stackPosition)}>
           {position} of {layers.length}
         </span>
-        <span className="review-stack-label">stack</span>
-        <svg viewBox="0 0 12 12" aria-hidden="true">
-          <path d="m3 4.5 3 3 3-3" />
+        <span {...stylex.props(styles.stackLabel)}>stack</span>
+        <svg
+          viewBox="0 0 12 12"
+          aria-hidden="true"
+          {...stylex.props(styles.icon, styles.stackChevron)}
+        >
+          <path d="m3 4.5 3 3 3-3" {...stylex.props(styles.stackChevronPath)} />
         </svg>
       </summary>
-      <div className="review-stack-menu">
+      <div {...stylex.props(styles.stackMenu)}>
         {layers.map((layer, index) => (
           <ReviewStackLayerRow
             key={layer.pullRequestNumber}
@@ -296,20 +315,49 @@ function ReviewStackLayerRow({
   ) => void;
 }): ReactElement {
   const current = layer.relation === "current";
+  const disabled = !current && !layer.reviewUuid;
 
   const content = (
     <>
-      <span className="review-stack-indicator">
-        <span className="review-stack-position-marker">{position}</span>
+      <span {...stylex.props(styles.stackIndicator)}>
+        <span
+          {...stylex.props(
+            styles.stackMarker,
+            current && styles.stackMarkerCurrent,
+            disabled && styles.stackFaint,
+          )}
+        >
+          {position}
+        </span>
       </span>
-      <span className="review-stack-layer-copy">
-        <span className="review-stack-layer-title">
+      <span {...stylex.props(styles.stackCopy)}>
+        <span
+          {...stylex.props(
+            styles.stackEllipsis,
+            styles.stackTitle,
+            current && styles.stackTitleCurrent,
+            disabled && styles.stackFaint,
+          )}
+        >
           PR #{layer.pullRequestNumber}
           {layer.reviewTitle ? ` · ${layer.reviewTitle}` : ""}
         </span>
-        <span className="review-stack-branch">{layer.branch}</span>
+        <span
+          {...stylex.props(
+            styles.stackEllipsis,
+            styles.stackBranch,
+            current && styles.stackBranchCurrent,
+          )}
+        >
+          {layer.branch}
+        </span>
       </span>
-      <span className="review-stack-relation">
+      <span
+        {...stylex.props(
+          styles.stackRelation,
+          current && styles.stackRelationCurrent,
+        )}
+      >
         {!layer.reviewUuid && !current ? "No session" : layer.relation}
       </span>
     </>
@@ -317,7 +365,10 @@ function ReviewStackLayerRow({
 
   if (current) {
     return (
-      <div className="review-stack-row is-current" aria-current="true">
+      <div
+        {...stylex.props(styles.stackRow, styles.stackRowCurrent)}
+        aria-current="true"
+      >
         {content}
       </div>
     );
@@ -325,7 +376,7 @@ function ReviewStackLayerRow({
 
   return (
     <button
-      className="review-stack-row"
+      {...stylex.props(styles.stackRow, styles.stackButton)}
       type="button"
       data-relation={layer.relation}
       disabled={!layer.reviewUuid}
@@ -384,3 +435,276 @@ function relativeTimeLabel(timeMs: number, nowMs: number): string | null {
     day: "numeric",
   });
 }
+
+// Paper's review header: identity, title, then source and diff metadata.
+const styles = stylex.create({
+  header: {
+    width: `min(100%, ${tokens.reviewProseMaxWidth})`,
+    margin: "28px auto 0",
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+    paddingBottom: "28px",
+    font: `13px/18px ${tokens.fontMono}`,
+    color: tokens.inkFaint,
+  },
+  row: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  top: {
+    justifyContent: "space-between",
+    gap: "10px 24px",
+  },
+  identity: {
+    gap: "10px",
+    minWidth: 0,
+    overflowWrap: "anywhere",
+  },
+  separator: {
+    color: tokens.inkFaint,
+  },
+  updated: {
+    marginLeft: "auto",
+  },
+  icon: {
+    flexShrink: 0,
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  },
+  pullRequest: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "5px",
+    color: tokens.accent,
+    fontWeight: 500,
+    textDecoration: "none",
+  },
+  pullRequestLink: {
+    textDecoration: { default: "none", ":hover": "underline" },
+  },
+  // Facts in the details row are divided by small ink-faint dots.
+  details: {
+    gap: "8px 10px",
+    paddingTop: "12px",
+  },
+  dot: {
+    flex: "0 0 3px",
+    width: "3px",
+    height: "3px",
+    borderRadius: "50%",
+    backgroundColor: tokens.inkFaint,
+  },
+  branch: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "7px",
+    boxSizing: "border-box",
+    minWidth: 0,
+    minHeight: "26px",
+    maxWidth: "100%",
+    padding: "3px 10px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.rule,
+    borderRadius: "6px",
+    backgroundColor: tokens.well,
+    color: tokens.ink,
+    overflowWrap: "anywhere",
+  },
+  branchIcon: {
+    color: tokens.inkFaint,
+  },
+  branchName: {
+    minWidth: 0,
+    overflowWrap: "anywhere",
+  },
+  stats: {
+    gap: "10px",
+  },
+  changeBar: {
+    display: "flex",
+    flex: "0 0 42px",
+    gap: "2px",
+    height: "8px",
+  },
+  change: {
+    minWidth: "1px",
+    borderRadius: "1px",
+    backgroundColor: tokens.changeAdded,
+  },
+  removed: {
+    backgroundColor: tokens.changeRemoved,
+  },
+  stack: {
+    position: "relative",
+    display: "inline-flex",
+    alignItems: "center",
+    alignSelf: "center",
+    color: tokens.inkFaint,
+  },
+  stackSummary: {
+    display: "flex",
+    alignItems: "center",
+    gap: "7px",
+    height: "20px",
+    padding: "0 8px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: {
+      default: tokens.rule,
+      ":hover": `color-mix(in srgb, ${tokens.accent} 45%, ${tokens.ruleSoft})`,
+    },
+    borderRadius: "4px",
+    backgroundColor: { default: "transparent", ":hover": tokens.controlBg },
+    color: tokens.ink,
+    cursor: "pointer",
+    fontSize: "11px",
+    listStyle: "none",
+    "::-webkit-details-marker": {
+      display: "none",
+    },
+  },
+  stackPosition: {
+    color: tokens.ink,
+    fontSize: "11px",
+    fontWeight: 600,
+  },
+  stackLabel: {
+    color: tokens.inkFaint,
+    fontSize: "10px",
+    fontWeight: 400,
+  },
+  stackChevron: {
+    width: "12px",
+    height: "12px",
+    color: tokens.inkFaint,
+    transform: { default: null, ":is([open] > summary > *)": "rotate(180deg)" },
+    transition: "transform 120ms ease-out",
+  },
+  stackChevronPath: {
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.25",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  },
+  stackMenu: {
+    position: "absolute",
+    zIndex: 20,
+    top: "calc(100% + 6px)",
+    left: 0,
+    display: "flex",
+    flexDirection: "column",
+    minWidth: "340px",
+    padding: "7px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.ruleSoft,
+    borderRadius: "9px",
+    backgroundColor: tokens.surfaceRaised,
+    boxShadow: `0 14px 32px ${tokens.shadowColor}`,
+  },
+  stackRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    width: "100%",
+    minHeight: "48px",
+    padding: "7px 9px",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    borderRadius: "6px",
+    backgroundColor: "transparent",
+    color: tokens.ink,
+    font: "inherit",
+    textAlign: "left",
+  },
+  stackRowCurrent: {
+    backgroundColor: `color-mix(in srgb, ${tokens.accent} 8%, ${tokens.surfaceRaised})`,
+  },
+  stackButton: {
+    backgroundColor: {
+      default: "transparent",
+      ":hover:not(:disabled)": tokens.tray,
+    },
+    cursor: { default: "pointer", ":disabled": "default" },
+  },
+  stackIndicator: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: "0 0 24px",
+    width: "24px",
+  },
+  stackMarker: {
+    display: "none",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: "0 0 auto",
+    width: "18px",
+    height: "18px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.inkFaint,
+    borderRadius: "50%",
+    color: tokens.inkMuted,
+    fontSize: "9px",
+    fontWeight: 500,
+  },
+  stackMarkerCurrent: {
+    borderColor: `color-mix(in srgb, ${tokens.accent} 64%, ${tokens.ruleSoft})`,
+    backgroundColor: `color-mix(in srgb, ${tokens.accent} 12%, transparent)`,
+    color: tokens.accent,
+    fontWeight: 600,
+  },
+  stackCopy: {
+    display: "flex",
+    flex: "1 1 0",
+    flexDirection: "column",
+    gap: "2px",
+    minWidth: 0,
+  },
+  stackEllipsis: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  stackTitle: {
+    color: tokens.ink,
+    fontSize: "11px",
+    lineHeight: "15px",
+  },
+  stackTitleCurrent: {
+    fontWeight: 600,
+  },
+  stackBranch: {
+    color: tokens.inkFaint,
+    fontSize: "10px",
+    lineHeight: "14px",
+  },
+  stackBranchCurrent: {
+    color: tokens.inkMuted,
+  },
+  stackRelation: {
+    flex: "0 0 54px",
+    width: "54px",
+    color: tokens.inkFaint,
+    fontSize: "8px",
+    letterSpacing: "0.02em",
+    lineHeight: "13px",
+    textAlign: "right",
+    textTransform: "uppercase",
+  },
+  stackRelationCurrent: {
+    color: tokens.accent,
+  },
+  stackFaint: {
+    color: tokens.inkFaint,
+  },
+});
