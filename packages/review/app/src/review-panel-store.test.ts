@@ -193,6 +193,14 @@ describe("Fullscreen tours", () => {
     expect(store.getState().overlayTour).toBeNull();
   });
 
+  it("closes when a lens moves the view to its diff", () => {
+    const store = createReviewPanelStore();
+
+    store.getState().openOverlayTour(sequence, "first");
+    store.getState().selectLens({ id: "api", version: 3, mode: "structural" });
+    expect(store.getState()).toMatchObject({ view: "diff", overlayTour: null });
+  });
+
   it("reveals the first stop when an open tour switches to another tour", () => {
     const store = createReviewPanelStore();
 
