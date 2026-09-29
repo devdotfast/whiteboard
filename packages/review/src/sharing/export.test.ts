@@ -391,7 +391,7 @@ it("uses normal source and workspace routes but rejects authoring mutations", as
       .status,
   ).toBe(404);
   expect(
-    (await app.request(`/${id}/activity`, { method: "POST" })).status,
+    (await app.request(`/${id}/activity/begin`, { method: "POST" })).status,
   ).toBe(409);
   expect(
     (await app.request(`/${id}/source-attachment?side=head&file=main.ts`))

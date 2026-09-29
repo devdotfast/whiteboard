@@ -1,4 +1,4 @@
-import type { JsonObject } from "@dev.fast/json";
+import { type JsonObject, isJsonObject } from "@dev.fast/json";
 import type { ReviewStructuralDiffEvent } from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
 import {
@@ -388,13 +388,25 @@ export function createReviewApi(
         : store.activity.read(id),
     );
   });
-  app.post("/:id/activity", async (context) => {
-    const input = await readBoundedRequestJson(context.req.raw);
-    const id = context.req.param("id");
-    store.assertExists(id);
 
-    return context.json(store.activity.update(id, input));
-  });
+  // One route per agent tool; the path names the action.
+  for (const [path, action] of [
+    ["begin", "begin"],
+    ["update", "renew"],
+    ["end", "end"],
+  ] as const)
+    app.post(`/:id/activity/${path}`, async (context) => {
+      const input = await readBoundedRequestJson(context.req.raw);
+      const id = context.req.param("id");
+      store.assertExists(id);
+
+      return context.json(
+        store.activity.update(
+          id,
+          isJsonObject(input) ? { ...input, action } : input,
+        ),
+      );
+    });
   app.get("/watch", async (context) => {
     const query = context.req.query("subscriptions");
 

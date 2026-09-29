@@ -180,7 +180,7 @@ try {
   });
 
   const lease = { sessionId: created.sessionId, leaseId: randomUUID() };
-  await api("session_activity", { ...lease, action: "begin" });
+  await api("session_activity_begin", lease);
   await api("session_edit", {
     ...lease,
     commandId: randomUUID(),
@@ -198,7 +198,7 @@ try {
       },
     },
   });
-  await api("session_activity", { ...lease, action: "end" });
+  await api("session_activity_end", lease);
   const reviews = await api("session_list");
   assert.equal(reviews.length, 1);
   console.log(

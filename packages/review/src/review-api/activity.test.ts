@@ -15,6 +15,13 @@ import { ReviewStore } from "./store.js";
 
 type ActivityInput = z.input<typeof activitySchema>;
 
+/** Omit per action: the input is a union over begin, renew and end. */
+type WithoutLease = ActivityInput extends infer Input
+  ? Input extends unknown
+    ? Omit<Input, "leaseId">
+    : never
+  : never;
+
 const databases: DatabaseSync[] = [];
 
 const newActivity = () => {
@@ -70,7 +77,7 @@ it("reports working transitions without heartbeats or focus changes", () => {
   activity.subscribeWorking(transitions);
   const leaseId = randomUUID();
 
-  const update = (value: Omit<ActivityInput, "leaseId">) =>
+  const update = (value: WithoutLease) =>
     activity.update("review", { leaseId, ...value });
 
   update({ action: "begin" });
@@ -125,12 +132,11 @@ it("streams activity separately from document versions and closes the stream on 
     });
 
     const input = {
-      action: "begin",
       leaseId: randomUUID(),
       focus: { description: "Drafting outline" },
     };
 
-    await client.post(`/${reviewId}/activity`, input);
+    await client.post(`/${reviewId}/activity/begin`, input);
     expect((await stream.next()).value).toMatchObject({
       activity: { workingCount: 1, focuses: [input.focus] },
     });
@@ -151,9 +157,9 @@ it("streams activity separately from document versions and closes the stream on 
       for await (const _snapshot of stream) {
       }
     }).rejects.toThrow(Error);
-    await expect(client.post(`/${reviewId}/activity`, input)).rejects.toThrow(
-      /not found/i,
-    );
+    await expect(
+      client.post(`/${reviewId}/activity/begin`, input),
+    ).rejects.toThrow(/not found/i);
     expect(store.activity.read(reviewId).workingCount).toBe(0);
   } finally {
     abort.abort();

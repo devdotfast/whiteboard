@@ -3,7 +3,7 @@ you are grouping a code whiteboard's changed files into file lenses for the Diff
 **input:** a whiteboard id.
 
 **flow**
-- begin `session_activity` with `scope: "lenses"` before writing, end it when done.
+- call `session_activity_begin` with `scope: "lenses"` before writing, and `session_activity_end` when done.
 - run `session_diff` with `format: "files"`to get an overview of the files involved
 - categorize all the changes into buckets - leaving nothing in uncategorized changes by the end
     - first, categorize away non-implementation code:  tests, docs, generated files and lockfiles, config and build, fixtures and snapshots, pure renames and moves, formatting-only changes, imports — all might be reasonable.

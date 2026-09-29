@@ -66,10 +66,9 @@ it("enforces session ownership through the tool adapter while allowing reads and
 
   await callAuthoringTool(
     client,
-    tools.find((tool) => tool.name === "review_activity")!,
+    tools.find((tool) => tool.name === "review_activity_begin")!,
     {
       reviewId,
-      action: "begin",
       leaseId,
     },
   );

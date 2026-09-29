@@ -48,7 +48,7 @@ All paths below are relative to `/reviews-api`.
 | `GET /authoring` | Tool names, host input schemas and HTTP mappings for CLI/MCP adapters |
 | `GET /capabilities` | Desktop availability and permission for optional software-map generation, independent of opening a review |
 | `GET /:id/activity` | Currently reported authoring work, not stored in document history |
-| `POST /:id/activity {action,leaseId,scope?,focus?}` | Begin, renew or end a working signal in `scope` (`document`, the default, or `lenses`); return count, expiry and live scopes |
+| `POST /:id/activity/{begin,update,end} {leaseId,scope?,focus?}` | Begin, update (renew) or end a working signal in `scope` (`document`, the default, or `lenses`); return count, expiry and live scopes, plus the `leaseId` for begin and update. `leaseId` is optional on begin: the host assigns one |
 | `GET /watch` | NDJSON review summaries: initial list, then saved changes |
 | `GET /watch?subscriptions=…` | One NDJSON connection for multiple `{reviewId}` subscriptions; `reviewId:null` selects the catalog. Each line is an ordered array of `{value}` or `{error}` results, with `null` where a subscription is unchanged since the previous line. |
 | `GET /:id`                                | Compact outline                                                        |
@@ -257,7 +257,7 @@ only loads document data when its version changes.
 This avoids another long-lived browser connection. The badge is hidden while
 idle or viewing history, and reports unknown activity on a lost connection.
 Optional `focus:{description,targetId?}` identifies the current work; description is 1–160 characters and targetId is an existing component ID. Omitted focus retains the lease’s current focus; null clears it. Snapshots include `focuses` when any leases have a focus. The header shows descriptions, and matching components show an inline working indicator. Focus is ephemeral, disappears when its lease ends or expires, and is hidden when activity is unknown or history is displayed.
-There is no applying-update state. CLI/MCP expose this as `review_activity`.
+There is no applying-update state. CLI/MCP expose this as `review_activity_begin`, `review_activity_update` (renew) and `review_activity_end`.
 
 Profile migration remains later work.
 

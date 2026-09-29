@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 import { z } from "zod";
@@ -16,16 +17,37 @@ export const leaseScopeSchema = z.enum(["document", "lenses"]);
 
 export type LeaseScope = z.infer<typeof leaseScopeSchema>;
 
-export const activitySchema = z.strictObject({
-  action: z.enum(["begin", "renew", "end"]),
-  leaseId: z.uuid(),
-  scope: leaseScopeSchema
+const scope = leaseScopeSchema
+  .optional()
+  .describe(
+    'What the lease covers. Default "document": review_edit and every other document write. "lenses": review_lens_edit writes only.',
+  );
+
+// One schema per action, so each agent tool states exactly what it needs.
+export const activityBeginSchema = z.strictObject({
+  leaseId: z
+    .uuid()
     .optional()
     .describe(
-      'What the lease covers. Default "document": review_edit and every other document write. "lenses": review_lens_edit writes only.',
+      "Omit it: the result gives you one. Pass the one you sent only to retry a begin.",
     ),
+  scope,
   focus: focusSchema.nullable().optional(),
 });
+
+export const activityUpdateSchema = z.strictObject({
+  leaseId: z.uuid(),
+  scope,
+  focus: focusSchema.nullable().optional(),
+});
+
+export const activityEndSchema = z.strictObject({ leaseId: z.uuid(), scope });
+
+export const activitySchema = z.discriminatedUnion("action", [
+  activityBeginSchema.extend({ action: z.literal("begin") }),
+  activityUpdateSchema.extend({ action: z.literal("renew") }),
+  activityEndSchema.extend({ action: z.literal("end") }),
+]);
 
 export type ActivityFocus = z.infer<typeof focusSchema> & {
   /** The lease this focus belongs to; absent means the document's. */
@@ -177,7 +199,7 @@ export class ReviewActivity {
     if (leaseId && !active)
       throw new ReviewInputError(
         scope === "lenses"
-          ? 'No live lenses lease. Begin one with review_activity scope:"lenses" and reread the lenses before editing them.'
+          ? 'No live lenses lease. Begin one with review_activity_begin scope:"lenses" and reread the lenses before editing them.'
           : "Authoring session ended or expired. Begin a new session and reread the review before editing.",
         409,
       );
@@ -209,12 +231,13 @@ export class ReviewActivity {
   }
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Activity boundary: activitySchema.parse below validates incoming JSON.
   update(reviewId: string, value: unknown) {
-    const {
-      action,
-      leaseId,
-      scope = "document",
-      focus,
-    } = activitySchema.parse(value);
+    const input = activitySchema.parse(value);
+    const { action, scope = "document" } = input;
+    const focus = input.action === "end" ? undefined : input.focus;
+
+    // The host assigns a lease when begin names none; a named one is reused, so a
+    // retried begin stays harmless.
+    const leaseId = input.leaseId ?? randomUUID();
 
     this.db.exec("BEGIN IMMEDIATE");
 
@@ -268,7 +291,11 @@ export class ReviewActivity {
 
     this.changed(reviewId);
 
-    return this.read(reviewId);
+    const result: ActivitySnapshot & { leaseId?: string } = this.read(reviewId);
+
+    if (action !== "end") result.leaseId = leaseId;
+
+    return result;
   }
 
   /** One timer per review, for its soonest-expiring live lease. */

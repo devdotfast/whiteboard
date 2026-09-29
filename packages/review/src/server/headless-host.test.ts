@@ -181,8 +181,7 @@ it("shares review identity, resources, sessions and live changes with Desktop in
       version: 0,
     });
     const leaseId = randomUUID();
-    await server.client.post(`/${created.reviewId}/activity`, {
-      action: "begin",
+    await server.client.post(`/${created.reviewId}/activity/begin`, {
       leaseId,
     });
 
@@ -260,8 +259,7 @@ it("shares review identity, resources, sessions and live changes with Desktop in
         .map((item) => item.reviewId)
         .filter((id) => id !== "scratchpad"),
     ).toEqual([created.reviewId]);
-    await server.client.post(`/${created.reviewId}/activity`, {
-      action: "end",
+    await server.client.post(`/${created.reviewId}/activity/end`, {
       leaseId,
     });
     await desktop.post("/commands", {
