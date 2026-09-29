@@ -885,8 +885,6 @@ export function createReviewApi(
       return context.json(
         remoteCaller(context)
           ? {
-              // Undefined drops rootPath from the JSON.
-              rootPath: undefined,
               // A live checkout's identity names its path; keep only its equality.
               identity: createHash("sha256")
                 .update(environment.identity)
