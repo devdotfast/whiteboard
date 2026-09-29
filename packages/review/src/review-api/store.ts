@@ -453,6 +453,10 @@ export class ReviewStore {
     this.db.exec(
       `CREATE TABLE IF NOT EXISTS legacy_imports(review_id TEXT PRIMARY KEY, revision TEXT NOT NULL, map_revision TEXT, imported_at TEXT NOT NULL);`,
     );
+    // One row: which machine this store is. Review ids never contain it.
+    this.db.exec(
+      "CREATE TABLE IF NOT EXISTS server_identity(one INTEGER PRIMARY KEY CHECK(one=1), id TEXT NOT NULL)",
+    );
     // Batch authoring's scratch drafts were removed; drop their leftover table.
     this.db.exec("DROP TABLE IF EXISTS authoring_drafts");
     this.activity = new ReviewActivity(this.db, (id) => this.assertExists(id));
@@ -719,6 +723,22 @@ export class ReviewStore {
     this.catalogListeners.clear();
     this.activity.close();
     this.db.close();
+  }
+  /** Stable across restarts; the first host on a new store chooses it. */
+  serverId(): string {
+    this.db
+      .prepare("INSERT OR IGNORE INTO server_identity(one,id) VALUES(1,?)")
+      .run(randomUUID());
+
+    return String(this.db.prepare("SELECT id FROM server_identity").get()!.id);
+  }
+  resetServerId(): string {
+    const id = randomUUID();
+    this.db
+      .prepare("INSERT OR REPLACE INTO server_identity(one,id) VALUES(1,?)")
+      .run(id);
+
+    return id;
   }
   /** The 404 check alone, without loading a snapshot. */
   assertExists(id: string) {
