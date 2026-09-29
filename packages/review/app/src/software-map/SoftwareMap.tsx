@@ -430,7 +430,6 @@ function SoftwareMapWithModel({
       nodeId: targetPath,
       requireExpanded: false,
     });
-    onFocusRequestHandled?.(focusRequest.requestId);
   }, [focusRequest]);
 
   useEffect(() => {
@@ -598,10 +597,22 @@ function SoftwareMapWithModel({
       selectedNodeId,
     });
 
+    // Leave a selection made after this render, such as a focus request's, for the snapshot that shows it.
     if (nextSelectedNodeId !== selectedNodeId) {
-      setSelectedNodeId(nextSelectedNodeId);
+      setSelectedNodeId((current) =>
+        current === selectedNodeId ? nextSelectedNodeId : current,
+      );
     }
   }, [mapSnapshot.nodes, selectedNodeId]);
+
+  useEffect(() => {
+    if (
+      focusRequest &&
+      mapSnapshot.selectedNodeId === focusRequest.elementPath
+    ) {
+      onFocusRequestHandled?.(focusRequest.requestId);
+    }
+  }, [focusRequest, mapSnapshot.selectedNodeId]);
 
   const frameTitle = title ?? mapSnapshot.title ?? placeholderLabel;
 
