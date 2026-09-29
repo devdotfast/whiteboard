@@ -1,3 +1,4 @@
+import { fontSize, radius } from "@canvas/scale.stylex";
 import type { FlowDiagramBlock } from "@review/review-api/blocks/flow_diagram";
 import type { Snapshot } from "@review/review-api/store";
 import * as stylex from "@stylexjs/stylex";
@@ -192,7 +193,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
-    borderRadius: "8px",
+    borderRadius: radius.surface,
     backgroundColor: tokens.surface,
     color: tokens.ink,
     font: `12px/1.5 ${tokens.fontMono}`,
@@ -248,7 +249,7 @@ const styles = stylex.create({
     backgroundColor: tokens.tray,
     color: tokens.inkMuted,
     font: `10px/1.5 ${tokens.fontMono}`,
-    fontSize: "11px",
+    fontSize: fontSize.small,
   },
   legend: {
     display: "flex",
@@ -260,7 +261,7 @@ const styles = stylex.create({
     width: "6px",
     height: "6px",
     marginLeft: "7px",
-    borderRadius: "50%",
+    borderRadius: radius.round,
   },
   added: {
     backgroundColor: tokens.changeAdded,

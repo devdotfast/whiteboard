@@ -1,3 +1,5 @@
+import { flowLayer } from "@canvas/flow-layers.stylex";
+import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import type { Step } from "@review/review-api/document";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -1053,7 +1055,7 @@ const styles = stylex.create({
     borderWidth: { default: null, [inApp]: "1px" },
     borderStyle: { default: null, [inApp]: "solid" },
     borderColor: { default: null, [inApp]: tokens.diagramBorder },
-    borderRadius: "6px",
+    borderRadius: radius.control,
     backgroundColor: tokens.diagramSurface,
     boxShadow: "none",
     cursor: "pointer",
@@ -1081,8 +1083,8 @@ const styles = stylex.create({
   },
   header: {
     justifyContent: "space-between",
-    fontSize: "12px",
-    fontWeight: 700,
+    fontSize: fontSize.body,
+    fontWeight: fontWeight.bold,
   },
   // No overscroll-behavior: Chrome latches wheel gestures to the nearest
   // scroll container even when it has nothing to scroll, and `contain` would
@@ -1111,7 +1113,7 @@ const styles = stylex.create({
   // whole lane before it ellipsizes (its title carries the full name).
   participantLabelAnchor: {
     position: "relative",
-    zIndex: 40,
+    zIndex: flowLayer.label,
     width: "fit-content",
     minWidth: "min(148px, 100%)",
     maxWidth: "calc(100% - 16px)",
@@ -1127,13 +1129,13 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
-    borderRadius: "6px",
+    borderRadius: radius.control,
     backgroundColor: tokens.surface,
     boxShadow: { default: "none", ":hover": labelHover },
     color: tokens.ink,
     fontFamily: tokens.fontMono,
-    fontSize: "11.5px",
-    fontWeight: 700,
+    fontSize: fontSize.small,
+    fontWeight: fontWeight.bold,
     textAlign: "center",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
@@ -1189,7 +1191,7 @@ const styles = stylex.create({
     borderWidth: "1.5px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
-    borderRadius: "50%",
+    borderRadius: radius.round,
     backgroundColor: tokens.surface,
   },
   dotAttention: {
@@ -1208,7 +1210,7 @@ const styles = stylex.create({
     height: "18px",
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
-    fontSize: "10px",
+    fontSize: fontSize.micro,
     lineHeight: 1,
   },
   stopBadgeActive: {
@@ -1216,7 +1218,7 @@ const styles = stylex.create({
   },
   labelAnchor: {
     position: "absolute",
-    zIndex: 40,
+    zIndex: flowLayer.label,
     display: "inline-flex",
     alignItems: "center",
     pointerEvents: "all",
@@ -1233,8 +1235,8 @@ const styles = stylex.create({
     boxShadow: { default: "none", ":hover": labelHover },
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
-    fontSize: "11.5px",
-    fontWeight: 500,
+    fontSize: fontSize.small,
+    fontWeight: fontWeight.medium,
     lineHeight: "14px",
     overflowWrap: "anywhere",
     textAlign: "center",
@@ -1243,6 +1245,6 @@ const styles = stylex.create({
   },
   labelActive: {
     color: tokens.accent,
-    fontWeight: 700,
+    fontWeight: fontWeight.bold,
   },
 });

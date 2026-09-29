@@ -1,3 +1,4 @@
+import { fontSize, fontWeight, motion } from "@canvas/scale.stylex";
 import type {
   FlowDiagramBlock,
   FlowDiagramNode,
@@ -689,7 +690,7 @@ const styles = stylex.create({
     margin: { default: null, [inDocument]: "14px 0" },
     color: { default: null, [inDocument]: tokens.ink },
     fontFamily: { default: null, [inDocument]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument]: "15px" },
+    fontSize: { default: null, [inDocument]: fontSize.reading },
     lineHeight: { default: null, [inDocument]: 1.72 },
     textAlign: { default: null, [inDocument]: "left" },
   },
@@ -751,7 +752,7 @@ const styles = stylex.create({
       [stylex.when.ancestor(":focus-visible", flowNodeMarker)]: 1.5,
     },
     vectorEffect: "non-scaling-stroke",
-    transition: "fill 200ms ease, stroke 200ms ease",
+    transition: `fill ${motion.medium} ${motion.ease}, stroke ${motion.medium} ${motion.ease}`,
   },
   outlineSelected: {
     fill: tokens.markerTint,
@@ -792,13 +793,13 @@ const styles = stylex.create({
   },
   label: {
     overflow: "hidden",
-    fontWeight: 500,
+    fontWeight: fontWeight.medium,
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
   caption: {
     color: tokens.inkFaint,
-    fontSize: "10px",
+    fontSize: fontSize.micro,
   },
   edge: {
     fill: "none",

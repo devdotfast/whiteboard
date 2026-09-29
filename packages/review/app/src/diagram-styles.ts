@@ -1,3 +1,4 @@
+import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
@@ -36,9 +37,9 @@ export const diagramStyles = stylex.create({
     minWidth: 0,
     overflow: "hidden",
     color: tokens.ink,
-    fontSize: "12px",
+    fontSize: fontSize.body,
     fontStyle: "normal",
-    fontWeight: 600,
+    fontWeight: fontWeight.semibold,
     lineHeight: "18px",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
@@ -65,7 +66,7 @@ export const diagramStyles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: { default: tokens.ruleSoft, ":focus-visible": tokens.accent },
-    borderRadius: "6px",
+    borderRadius: radius.control,
     backgroundColor: { default: tokens.surface, ":hover": tokens.well },
     color: tokens.ink,
     font: `500 11px ${tokens.fontMono}`,
