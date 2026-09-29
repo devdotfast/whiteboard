@@ -10,7 +10,6 @@ import {
   createSequenceTourEntry,
   sequenceActiveMessageScrollTarget,
   sequenceActiveMessageScrollTopTarget,
-  sequenceDiagramClassName,
   sequenceMessageColor,
   sequenceMessageHandleTop,
   sequenceSelfMessagePath,
@@ -415,13 +414,6 @@ describe("sequence diagram guided tour", () => {
         currentScrollTop: 0,
       }),
     ).toBeNull();
-  });
-
-  it("marks a sequence diagram while its tour is active", () => {
-    expect(sequenceDiagramClassName(true)).toContain("sequence-tour--active");
-    expect(sequenceDiagramClassName(false)).not.toContain(
-      "sequence-tour--active",
-    );
   });
 });
 

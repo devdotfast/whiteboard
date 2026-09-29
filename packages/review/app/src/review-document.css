@@ -753,9 +753,10 @@ button.review-stack-row:disabled .review-stack-relation {
   margin-top: 40px;
 }
 
-/* Diagrams inside the document: an inline diagram sits centered on the
-   prose column, no narrower than the prose measure. */
-.review-document :is(.sequence-diagram, .database-lens, .software-map) {
+/* A software map inside the document sits centered on the prose column, no
+   narrower than the prose measure. The other diagrams style this
+   themselves. */
+.review-document .software-map {
   width: fit-content;
   max-width: min(
     var(--review-inline-diagram-max-width),
@@ -767,11 +768,10 @@ button.review-stack-row:disabled .review-stack-relation {
   margin-inline: auto;
 }
 
-/* An inline diagram never renders narrower than the prose measure (clamped
-   to the container width so narrow viewports still fit). Sequence diagrams
-   get the same floor from their width: 100% rule below. */
+/* Never narrower than the prose measure (clamped to the container width so
+   narrow viewports still fit). */
 
-.review-document :is(.software-map, .database-lens) {
+.review-document .software-map {
   min-width: min(
     var(--review-prose-max-width),
     calc(
@@ -781,26 +781,9 @@ button.review-stack-row:disabled .review-stack-relation {
   );
 }
 
-/* Sequence diagrams read as part of the prose: same measure as the text
-   column, with lanes spreading to fill it (see laneWidth in diagrams.tsx).
-   The fullscreen overlay is the escape hatch for more room. */
-
-.review-document .sequence-diagram {
-  width: 100%;
-  max-width: min(
-    var(--review-prose-max-width),
-    calc(
-      100cqi - var(--review-document-padding-inline) -
-        var(--review-document-padding-inline)
-    )
-  );
-}
-
 @media (max-width: 720px) {
-  .review-document :is(.sequence-diagram, .database-lens, .software-map),
-  .review-app--peek-open
-    .review-document
-    :is(.sequence-diagram, .database-lens, .software-map) {
+  .review-document .software-map,
+  .review-app--peek-open .review-document .software-map {
     --review-inline-diagram-max-width: none;
     width: calc(100cqi - 16px);
   }

@@ -6,6 +6,7 @@ import type {
   DatabaseOperation,
   DatabaseStore,
 } from "@review/review-api/document";
+import * as stylex from "@stylexjs/stylex";
 import {
   type ChangeEvent,
   useCallback,
@@ -16,6 +17,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { diagramStyles } from "./diagram-styles";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { useReviewSession } from "./host/review-session";
 import type { GuidedTour, PeekAnchor } from "./review-panel-model";
@@ -28,6 +30,8 @@ import {
   type SoftwareMapRelationshipSnapshot,
   type SoftwareMapResolvedSnapshot,
 } from "./software-map/SoftwareMap";
+import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
 
 type OperationKind = "read" | "write";
@@ -393,21 +397,21 @@ export function DatabaseLens(block: DatabaseLensProps) {
 
   const renderLensFigure = (stage: boolean) => (
     <figure
-      className="database-lens"
+      {...withClass("database-lens", styles.figure, stage && styles.stage)}
       style={{ height: stage ? "100%" : height }}
     >
-      <header className="diagram-header database-lens-header">
-        <div className="diagram-header-main">
-          <span className="diagram-kind-badge">DB</span>
-          <span className="diagram-header-title" data-review-copy-prose>
+      <header {...stylex.props(diagramStyles.header, styles.header)}>
+        <div {...stylex.props(diagramStyles.headerMain)}>
+          <span {...stylex.props(diagramStyles.kindBadge)}>DB</span>
+          <span {...stylex.props(diagramStyles.title)} data-review-copy-prose>
             {title ?? "Database lens"}
           </span>
         </div>
-        <div className="diagram-header-actions">
+        <div {...stylex.props(styles.actions)}>
           {activeUseCase && (
-            <div className="database-use-case-select-target">
+            <div {...stylex.props(styles.selectTarget)}>
               <select
-                className="database-use-case-select"
+                {...stylex.props(diagramStyles.control, diagramStyles.select)}
                 aria-label="Database use case"
                 value={activeUseCase.id}
                 onChange={handleUseCaseChange}
@@ -423,7 +427,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
           {!stage && activeTourId && (
             <button
               type="button"
-              className="diagram-tour-button"
+              {...withClass("diagram-tour-button", diagramStyles.control)}
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -435,7 +439,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
           )}
         </div>
       </header>
-      <div className="database-lens-diagram">
+      <div {...stylex.props(styles.diagram)}>
         {activeUseCase ? (
           <DatabaseUseCaseDiagram
             useCase={activeUseCase}
@@ -444,7 +448,9 @@ export function DatabaseLens(block: DatabaseLensProps) {
             onOpenAnchor={(anchor) => openLensTour(anchor)}
           />
         ) : (
-          <div className="database-empty">No database use-cases declared.</div>
+          <div {...stylex.props(styles.empty)}>
+            No database use-cases declared.
+          </div>
         )}
       </div>
     </figure>
@@ -650,7 +656,12 @@ function DatabaseC4UseCaseDiagram({
   const relationshipStateById = highlights.operationStates;
 
   return (
-    <div className="database-diagram-canvas database-diagram-canvas--c4">
+    <div
+      {...withClass(
+        "database-diagram-canvas database-diagram-canvas--c4",
+        styles.canvas,
+      )}
+    >
       <SoftwareMapFrame
         snapshot={frameSnapshot}
         hasResolvedSnapshot
@@ -1141,3 +1152,118 @@ function fieldExample(field: DatabaseField): JsonValue | undefined {
 function tourIdFor(lensId: string, useCaseId: string): string {
   return `${lensId}-${useCaseId}`;
 }
+
+const inDocument = ":is(.review-document *)";
+
+// Where theme.css defines --diagram-border (a .review-app inside the canvas
+// scope).
+const inApp = ":is(:scope .review-app *)";
+
+const narrow = "@container review-content (max-width: 760px)";
+
+const styles = stylex.create({
+  // Inline it sits centered on the prose column, no narrower than the
+  // prose measure; the tour stage fills the overlay without card chrome.
+  figure: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gridTemplateRows: "auto minmax(0, 1fr)",
+    width: {
+      default: "100%",
+      [inDocument]: "fit-content",
+      "@media (max-width: 720px)": {
+        default: "100%",
+        [inDocument]: "calc(100cqi - 16px)",
+      },
+    },
+    minWidth: {
+      default: null,
+      [inDocument]: `min(${tokens.reviewProseMaxWidth}, calc(100cqi - ${tokens.reviewDocumentPaddingInline} - ${tokens.reviewDocumentPaddingInline}))`,
+    },
+    maxWidth: {
+      default: "100%",
+      [inDocument]: `min(${tokens.reviewInlineDiagramMaxWidth}, calc(100cqi - ${tokens.reviewDocumentPaddingInline} - ${tokens.reviewDocumentPaddingInline}))`,
+      "@media (max-width: 720px)": {
+        default: "100%",
+        [inDocument]: "none",
+      },
+    },
+    marginBlock: "24px",
+    marginInline: { default: 0, [inDocument]: "auto" },
+    overflow: "hidden",
+    // Without --diagram-border the border drops out whole, as the shorthand
+    // it replaces did.
+    borderWidth: { default: null, [inApp]: "1px" },
+    borderStyle: { default: null, [inApp]: "solid" },
+    borderColor: { default: null, [inApp]: tokens.diagramBorder },
+    borderRadius: "6px",
+    backgroundColor: tokens.diagramSurface,
+    boxShadow: "none",
+  },
+  stage: {
+    width: "100%",
+    minWidth: 0,
+    maxWidth: "none",
+    height: "100%",
+    minHeight: 0,
+    marginBlock: 0,
+    marginInline: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    borderRadius: 0,
+    boxShadow: "none",
+  },
+  header: {
+    justifyContent: "space-between",
+    alignItems: { default: "center", [narrow]: "flex-start" },
+    flexDirection: { default: null, [narrow]: "column" },
+    height: { default: null, [narrow]: "auto" },
+  },
+  actions: {
+    display: { default: "inline-flex", [narrow]: "grid" },
+    flex: { default: "0 1 min(58%, 460px)", [narrow]: "0 0 auto" },
+    gridTemplateColumns: { default: null, [narrow]: "minmax(0, 1fr) auto" },
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: "8px",
+    width: { default: null, [narrow]: "100%" },
+    minWidth: 0,
+  },
+  selectTarget: {
+    position: "relative",
+    display: "inline-flex",
+    flex: { default: "1 1 320px", [narrow]: "1 1 auto" },
+    alignItems: "center",
+    width: { default: null, [narrow]: "auto" },
+    minWidth: { default: "180px", [narrow]: 0 },
+    maxWidth: { default: "360px", [narrow]: "none" },
+  },
+  diagram: {
+    position: "relative",
+    overflow: "auto",
+    minWidth: 0,
+    minHeight: 0,
+    backgroundColor: tokens.diagramCanvasBg,
+  },
+  canvas: {
+    position: "relative",
+    width: "100%",
+    height: "100%",
+    minWidth: 0,
+    minHeight: 0,
+    backgroundColor: tokens.diagramCanvasBg,
+  },
+  empty: {
+    display: "grid",
+    placeItems: "center",
+    height: "100%",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.rule,
+    borderRadius: "6px",
+    backgroundColor: tokens.surface,
+    color: tokens.inkMuted,
+    fontSize: "13px",
+  },
+});

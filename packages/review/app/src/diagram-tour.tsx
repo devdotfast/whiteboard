@@ -1,3 +1,4 @@
+import * as stylex from "@stylexjs/stylex";
 import type {
   CSSProperties,
   HTMLAttributes,
@@ -12,6 +13,8 @@ import { GuidedTourPanel } from "./review-components";
 import type { GuidedTour } from "./review-panel-model";
 import { useReviewContainer } from "./review-root-context";
 import { useRightPanelResize } from "./side-panel-resizer";
+import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 
 /**
  * Fullscreen guided tour shell shared by every diagram kind: the inline
@@ -22,7 +25,7 @@ import { useRightPanelResize } from "./side-panel-resizer";
  * and selection behave identically everywhere.
  */
 export function DiagramTourOverlay({
-  className,
+  flow = false,
   tour,
   activeAnchor,
   revealRequest,
@@ -33,7 +36,8 @@ export function DiagramTourOverlay({
   onClose,
   children,
 }: {
-  className?: string;
+  /** A flow keeps its stage, stacked over the panel, when the canvas is narrow. */
+  flow?: boolean;
   tour: GuidedTour;
   activeAnchor: string;
   revealRequest: number;
@@ -59,18 +63,24 @@ export function DiagramTourOverlay({
   return (
     <div
       ref={overlayRef}
-      className={`diagram-tour-overlay review-app--theme-${theme} ${className ?? ""}`}
+      {...withClass(
+        `diagram-tour-overlay review-app--theme-${theme}`,
+        styles.overlay,
+        flow && styles.flowOverlay,
+      )}
       role="dialog"
       aria-modal="true"
       aria-label={`${tour.title ?? "Guided"} tour`}
       style={overlayStyle}
     >
-      <div className="diagram-tour-stage">{children}</div>
+      <div {...stylex.props(styles.stage, flow && styles.flowStage)}>
+        {children}
+      </div>
       <div
-        className="side-panel-resizer diagram-tour-resizer"
+        {...withClass("side-panel-resizer", styles.resizer)}
         {...separatorProps}
       />
-      <div className="diagram-tour-panel">
+      <div {...stylex.props(styles.panel)}>
         <GuidedTourPanel
           tour={tour}
           activeAnchor={activeAnchor}
@@ -135,3 +145,53 @@ export function useDiagramTourShell(open: boolean, onClose: () => void) {
 
   return { overlayRef, portalTarget, paneResize };
 }
+
+// A terminal split can leave the canvas too narrow for both tour columns: the
+// diagram collapses before the tour panel becomes unreadable.
+const narrow = "@container review-canvas (max-width: 1080px)";
+
+// Portals inside .review-canvas-root but outside .review-app, where
+// --review-debug-layer lives, hence the literal fallback.
+const styles = stylex.create({
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: "var(--review-debug-layer, 2147483000)",
+    boxSizing: "border-box",
+    display: "grid",
+    gridTemplateColumns: {
+      default: "minmax(0, 1fr) 10px var(--diagram-tour-pane-width, 424px)",
+      [narrow]: "minmax(0, 1fr)",
+    },
+    minWidth: 0,
+    minHeight: 0,
+    overflow: "hidden",
+    backgroundColor: tokens.bg,
+  },
+  flowOverlay: {
+    gridTemplateRows: {
+      default: null,
+      [narrow]: "minmax(180px, 40%) minmax(0, 1fr)",
+    },
+  },
+  stage: {
+    display: { default: "flex", [narrow]: "none" },
+    flexDirection: "column",
+    minWidth: 0,
+    minHeight: 0,
+  },
+  flowStage: {
+    display: "flex",
+  },
+  resizer: {
+    display: { default: null, [narrow]: "none" },
+  },
+  // Positioned so the panel's floating pager centers on this column.
+  panel: {
+    position: "relative",
+    display: "flex",
+    flexDirection: "column",
+    minWidth: 0,
+    minHeight: 0,
+  },
+});

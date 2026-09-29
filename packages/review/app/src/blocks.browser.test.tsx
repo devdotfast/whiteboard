@@ -140,7 +140,7 @@ const rendered: Record<
     ),
   // Every step is laid out as a routed message once the diagram settles.
   sequence: (c) =>
-    has(c, ".sequence-diagram-body") &&
+    has(c, ".sequence-diagram .react-flow") &&
     has(c, "[data-review-anchor-id='step-1']") &&
     has(c, "[data-review-anchor-id='step-2']") &&
     text(c).includes("set status"),
@@ -155,7 +155,7 @@ const rendered: Record<
     has(c, 'a[href^="#trace-"]') && text(c).includes("queue the order"),
   // The map has drawn its system and is neither refreshing nor failed.
   flow_diagram: (c) =>
-    has(c, ".flow-node") &&
+    has(c, ".lens-flow-node") &&
     text(c).includes("Queue order") &&
     !text(c).includes("Laying out"),
   software_map: (c) =>
@@ -281,17 +281,17 @@ describe("block components", () => {
   it.each([
     {
       kind: "sequence",
-      selector: ".diagram-header-title",
+      selector: "figure [data-review-copy-prose]",
       label: "sequence title",
     },
     {
       kind: "flow_diagram",
-      selector: ".diagram-header-title",
+      selector: "figure [data-review-copy-prose]",
       label: "flow title",
     },
     {
       kind: "database_lens",
-      selector: ".diagram-header-title",
+      selector: "figure [data-review-copy-prose]",
       label: "database title",
     },
     {
@@ -457,9 +457,9 @@ describe("block components", () => {
 
       const target = container.querySelector<HTMLElement>(
         kind === "sequence"
-          ? ".sequence-participant-label"
+          ? ".sequence-diagram .react-flow__node span[title]"
           : kind === "database_lens"
-            ? ".database-lens-header"
+            ? ".database-lens header"
             : ".software-map .react-flow__node",
       );
 
@@ -672,31 +672,32 @@ describe("tutorial guide placement", () => {
 
 it("opens a flow node in a full-screen tour with all its code attachments", async () => {
   const { container } = await mountFixture("flow_diagram");
-  await settled(() => container.querySelector(".flow-node"));
+  await settled(() => container.querySelector(".lens-flow-node"));
   await act(async () =>
     container
-      .querySelector(".flow-node")!
+      .querySelector(".lens-flow-node")!
       .dispatchEvent(new MouseEvent("click", { bubbles: true })),
   );
   expect(
     await settled(
       () =>
-        container.querySelectorAll(".diagram-tour-panel .fixture-inline-editor")
-          .length === 2,
+        container.querySelectorAll(
+          '[role="dialog"] > :last-child .fixture-inline-editor',
+        ).length === 2,
     ),
   ).toBe(true);
-  expect(container.querySelector(".diagram-tour-panel")?.textContent).toContain(
-    "Validation",
-  );
+  expect(
+    container.querySelector('[role="dialog"] > :last-child')?.textContent,
+  ).toContain("Validation");
   expect(
     container.querySelector('[role="dialog"][aria-modal="true"]'),
   ).not.toBeNull();
-  expect(container.querySelector(".flow-diagram aside")).toBeNull();
+  expect(container.querySelector("figure aside")).toBeNull();
   await act(async () =>
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
   );
   expect(container.querySelector('[role="dialog"]')).toBeNull();
-  expect(container.querySelector(".flow-node")).not.toBeNull();
+  expect(container.querySelector(".lens-flow-node")).not.toBeNull();
 });
 
 it("grows a tall, wide sequence diagram to its height instead of scrolling it vertically", async () => {
@@ -726,8 +727,10 @@ it("grows a tall, wide sequence diagram to its height instead of scrolling it ve
     "position: relative; height: 700px; overflow: hidden",
   );
 
-  const body = await settled(() =>
-    container.querySelector<HTMLElement>(".sequence-diagram-body"),
+  const body = await settled(
+    () =>
+      container.querySelector<HTMLElement>(".sequence-diagram .react-flow")
+        ?.parentElement,
   );
 
   await settled(() => body!.querySelector(".react-flow__node"));

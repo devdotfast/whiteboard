@@ -150,12 +150,12 @@ describe("DatabaseLens", () => {
       );
     });
 
-    expect(container.querySelector(".diagram-header-title")?.textContent).toBe(
-      "Checkout data",
-    );
+    expect(
+      container.querySelector("[data-review-copy-prose]")?.textContent,
+    ).toBe("Checkout data");
 
     const select = container.querySelector<HTMLSelectElement>(
-      ".database-use-case-select",
+      'select[aria-label="Database use case"]',
     );
 
     expect(

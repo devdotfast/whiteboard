@@ -101,3 +101,18 @@
 ::highlight(review-find-match-active) {
   background: var(--review-find-match-active-background);
 }
+
+/* React Flow's edge label layer: diagram text selects like the prose around
+   it. */
+
+.sequence-diagram .react-flow__edgelabel-renderer {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* An inline flow draws on its figure's dotted canvas. */
+
+.lens-flow .react-flow__pane,
+.lens-flow .react-flow__viewport {
+  background: var(--transparent);
+}

@@ -64,7 +64,7 @@ it.each([0, 1, 2, "all"])("renders after removing edge %s", async (removed) => {
     expect(
       await settled(
         () =>
-          container.querySelectorAll(".flow-node").length === 3 &&
+          container.querySelectorAll(".lens-flow-node").length === 3 &&
           container.querySelectorAll(".react-flow__edge").length ===
             (removed === "all" ? 0 : 2),
       ),
@@ -105,12 +105,12 @@ it("draws a second copy of a laid-out flow without laying it out again", async (
     await render(1);
     expect(
       await settled(
-        () => container.querySelectorAll(".flow-node").length === 2,
+        () => container.querySelectorAll(".lens-flow-node").length === 2,
       ),
     ).toBe(true);
     await render(2);
     expect(container.textContent).not.toContain("Laying out flow");
-    expect(container.querySelectorAll(".flow-node")).toHaveLength(4);
+    expect(container.querySelectorAll(".lens-flow-node")).toHaveLength(4);
   } finally {
     await act(async () => root.unmount());
   }
@@ -274,16 +274,18 @@ describe("zooming a flow by hand", () => {
 
     const frame = flow.getBoundingClientRect();
 
-    const visible = [...flow.querySelectorAll(".flow-node")].some((node) => {
-      const box = node.getBoundingClientRect();
+    const visible = [...flow.querySelectorAll(".lens-flow-node")].some(
+      (node) => {
+        const box = node.getBoundingClientRect();
 
-      return (
-        box.right > frame.left &&
-        box.left < frame.right &&
-        box.bottom > frame.top &&
-        box.top < frame.bottom
-      );
-    });
+        return (
+          box.right > frame.left &&
+          box.left < frame.right &&
+          box.bottom > frame.top &&
+          box.top < frame.bottom
+        );
+      },
+    );
 
     expect(visible).toBe(true);
   });
@@ -334,7 +336,9 @@ describe("zooming a flow by hand", () => {
     await zoomIn(flow);
     expect(await settled(() => viewport().zoom > 1)).toBe(true);
 
-    await act(async () => userEvent.click(flow.querySelector(".flow-node")!));
+    await act(async () =>
+      userEvent.click(flow.querySelector(".lens-flow-node")!),
+    );
 
     expect(onSelect).toHaveBeenCalledTimes(1);
   });

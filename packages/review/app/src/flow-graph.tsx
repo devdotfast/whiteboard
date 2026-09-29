@@ -27,8 +27,10 @@ import ELK, { type ElkNode } from "elkjs/lib/elk.bundled.js";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import { useReviewDebugSettings } from "./debug-settings";
+import { diagramStyles } from "./diagram-styles";
 import { useMotionPhase } from "./draw-queue-provider";
 import { ElementCountsText } from "./lens-counts";
+import { flowNodeMarker } from "./markers.stylex";
 import { useReviewLenses } from "./review-lenses";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
@@ -118,6 +120,7 @@ export function FlowGraph({
                 ...SIZE,
                 draggable: false,
                 selectable: false,
+                className: stylex.props(styles.nodeWrapper).className,
                 data: {
                   node,
                   requireReady,
@@ -165,9 +168,17 @@ export function FlowGraph({
     [layout, interactive],
   );
 
-  if (error) return <p role="alert">Could not lay out diagram: {error}</p>;
+  if (error)
+    return (
+      <p role="alert" {...stylex.props(styles.paragraph)}>
+        Could not lay out diagram: {error}
+      </p>
+    );
 
-  if (!layout) return <p {...stylex.props(styles.note)}>Laying out flow…</p>;
+  if (!layout)
+    return (
+      <p {...stylex.props(styles.paragraph, styles.note)}>Laying out flow…</p>
+    );
 
   return (
     <div
@@ -178,6 +189,7 @@ export function FlowGraph({
     >
       <ReactFlowProvider>
         <ReactFlow
+          {...stylex.props(styles.canvas)}
           colorMode={theme}
           nodes={nodes}
           edges={edges}
@@ -212,7 +224,7 @@ export function FlowGraph({
           {moved ? (
             <Panel position="top-right">
               <button
-                className="diagram-tour-button"
+                {...withClass("diagram-tour-button", diagramStyles.control)}
                 onClick={() => setMovedLayout(undefined)}
               >
                 Reset view
@@ -514,18 +526,13 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
 
   return (
     <div
+      // The class carries the draw queue's motion rules.
       {...withClass(
-        [
-          "flow-node",
-          "lens-flow-node",
-          `lens-flow-node--${change(progress)}`,
-          `lens-flow-node--${node.kind ?? "process"}`,
-          selected ? "is-selected" : "",
-          progress.state === "viewed" ? "is-viewed" : "",
-        ]
-          .filter(Boolean)
-          .join(" "),
+        "lens-flow-node",
+        flowNodeMarker,
         styles.node,
+        // Queued, the motion rule hides it.
+        progress.state === "viewed" && motion !== "queued" && styles.viewed,
       )}
       style={{ width: SIZE.width, height: SIZE.height }}
       role="button"
@@ -552,20 +559,29 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
       <Handle
         type="target"
         position={Position.Top}
-        className="flow-node-handle"
+        {...stylex.props(styles.handle)}
       />
       <Handle
         type="source"
         position={Position.Bottom}
-        className="flow-node-handle"
+        {...stylex.props(styles.handle)}
       />
       <svg
-        className="flow-node-shape"
+        {...withClass("flow-node-shape", styles.drawing)}
         viewBox={`0 0 ${SIZE.width} ${SIZE.height}`}
         preserveAspectRatio="none"
         aria-hidden="true"
       >
         <rect
+          {...stylex.props(
+            styles.outline,
+            changeOutline[change(progress)],
+            selected && styles.outlineSelected,
+            node.kind === "decision" && !motion && styles.outlineDecision,
+            motion === "stroke" && styles.outlineTracing,
+            motion === "outline" && styles.outlineOnly,
+            motion === "attention" && styles.outlineAttention,
+          )}
           pathLength={1}
           x={0.5}
           y={0.5}
@@ -574,11 +590,11 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
           rx={node.kind === "terminal" ? SIZE.height / 2 : 6}
         />
       </svg>
-      <div className="flow-node-text">
-        <span className="flow-node-label">
+      <div {...withClass("flow-node-text", styles.text)}>
+        <span {...stylex.props(styles.label)}>
           {node.label.length > 26 ? `${node.label.slice(0, 25)}…` : node.label}
         </span>
-        <span className="flow-node-caption lens-flow-caption">
+        <span {...stylex.props(styles.caption)}>
           {unavailable ? (
             availability === "pending" ? (
               "…"
@@ -610,7 +626,13 @@ function FlowEdge({ id, data, markerEnd }: EdgeProps<FlowEdgeType>) {
       <BaseEdge
         id={id}
         path={path}
-        className="lens-flow-edge"
+        className={
+          withClass(
+            "lens-flow-edge",
+            styles.edge,
+            (motion === "outline" || motion === "stroke") && styles.edgeTracing,
+          ).className
+        }
         // The arrowhead is the last stroke.
         markerEnd={
           motion === "outline" || motion === "stroke" ? undefined : markerEnd
@@ -639,28 +661,164 @@ const nodeTypes = { flowNode: FlowNode };
 
 const edgeTypes = { flowEdge: FlowEdge };
 
+const inDocument = ":is(.review-document *)";
+
 const styles = stylex.create({
+  // Read as document paragraphs inside a document.
+  paragraph: {
+    margin: { default: null, [inDocument]: "14px 0" },
+    color: { default: null, [inDocument]: tokens.ink },
+    fontFamily: { default: null, [inDocument]: tokens.fontSerif },
+    fontSize: { default: null, [inDocument]: "15px" },
+    lineHeight: { default: null, [inDocument]: 1.72 },
+    textAlign: { default: null, [inDocument]: "left" },
+  },
   note: {
     padding: "8px 12px",
-    // Document prose restyles the note inside a document's flow figure.
-    color: {
-      default: tokens.inkFaint,
-      ":where(.review-document .flow-diagram *)": tokens.ink,
-    },
+    color: { default: tokens.inkFaint, [inDocument]: tokens.ink },
   },
   flow: {
     width: "100%",
+    minHeight: "120px",
     display: "block",
     font: `12px ${tokens.fontMono}`,
   },
+  canvas: {
+    backgroundColor: tokens.transparent,
+  },
+  nodeWrapper: {
+    cursor: "default",
+  },
   node: {
+    position: "relative",
+    boxSizing: "border-box",
+    color: tokens.ink,
+    font: `12px/1.4 ${tokens.fontMono}`,
     cursor: "pointer",
+    outline: { default: null, ":focus-visible": "none" },
+  },
+  viewed: {
+    opacity: 0.42,
+  },
+  // Handles exist only so edges can attach.
+  handle: {
+    width: "1px",
+    height: "1px",
+    minWidth: 0,
+    minHeight: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    backgroundColor: tokens.transparent,
+    opacity: 0,
+    pointerEvents: "none",
+  },
+  drawing: {
+    position: "absolute",
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    overflow: "visible",
+  },
+  outline: {
+    fill: tokens.surface,
+    stroke: {
+      default: tokens.ruleSoft,
+      [stylex.when.ancestor(":focus-visible", flowNodeMarker)]: tokens.accent,
+    },
+    strokeWidth: {
+      default: 1,
+      [stylex.when.ancestor(":focus-visible", flowNodeMarker)]: 1.5,
+    },
+    vectorEffect: "non-scaling-stroke",
+    transition: "fill 200ms ease, stroke 200ms ease",
+  },
+  outlineSelected: {
+    fill: tokens.markerTint,
+    stroke: tokens.accent,
+    strokeWidth: 1.5,
+  },
+  // A decision rests as a dashed box; the trace draws it solid. With
+  // pathLength 1, the dashes are fractions of the outline: about 4px on,
+  // 3px off.
+  outlineDecision: {
+    stroke: tokens.inkMuted,
+    strokeDasharray: "0.0075 0.0057",
+  },
+  // While drawn, the trace strokes it in the marker (the motion rules
+  // carry the dashes and the animation).
+  outlineTracing: {
+    stroke: tokens.accent,
+    strokeWidth: 1.6,
+  },
+  outlineOnly: {
+    fill: tokens.transparent,
+    stroke: tokens.accent,
+    strokeWidth: 1.6,
+  },
+  outlineAttention: {
+    fill: tokens.markerTint,
+    stroke: tokens.accent,
+    strokeWidth: 1.6,
+  },
+  text: {
+    position: "absolute",
+    inset: 0,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    gap: "2px",
+    minWidth: 0,
+    padding: "0 12px",
+  },
+  label: {
+    overflow: "hidden",
+    fontWeight: 500,
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  caption: {
+    color: tokens.inkFaint,
+    fontSize: "10px",
+  },
+  edge: {
+    fill: "none",
+    stroke: tokens.inkMuted,
+    strokeWidth: 1.4,
+  },
+  edgeTracing: {
+    strokeWidth: 1.6,
   },
   edgeLabel: {
-    fontSize: "9px",
+    font: `9px ${tokens.fontMono}`,
     fill: tokens.inkMuted,
     paintOrder: "stroke",
     stroke: tokens.tray,
     strokeWidth: "4px",
+  },
+});
+
+const changeOutline = stylex.create({
+  unchanged: {},
+  added: {
+    fill: tokens.diffAddedBg,
+    stroke: {
+      default: tokens.changeAdded,
+      [stylex.when.ancestor(":focus-visible", flowNodeMarker)]: tokens.accent,
+    },
+  },
+  removed: {
+    fill: tokens.diffRemovedBg,
+    stroke: {
+      default: tokens.changeRemoved,
+      [stylex.when.ancestor(":focus-visible", flowNodeMarker)]: tokens.accent,
+    },
+  },
+  modified: {
+    fill: tokens.diffModifiedBg,
+    stroke: {
+      default: tokens.changeModified,
+      [stylex.when.ancestor(":focus-visible", flowNodeMarker)]: tokens.accent,
+    },
   },
 });
