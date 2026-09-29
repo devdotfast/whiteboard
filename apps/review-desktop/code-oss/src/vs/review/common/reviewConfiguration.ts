@@ -54,7 +54,7 @@ configurationRegistry.registerConfiguration({
 				localize('review.notifications.reviewReady.notification', "Show a notification only."),
 				localize('review.notifications.reviewReady.off', "Don't notify."),
 			],
-			default: 'notificationAndBadge',
+			default: 'off',
 			description: localize('review.notifications.reviewReady', "How Whiteboard tells you an agent finished a review."),
 		},
 		[REVIEW_TELEMETRY_SETTING]: {

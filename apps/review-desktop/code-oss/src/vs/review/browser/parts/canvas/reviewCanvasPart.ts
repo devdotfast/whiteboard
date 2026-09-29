@@ -857,7 +857,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 
 	private currentReadyNotification(): ReviewReadyNotificationChoice {
-		return this.configurationService.getValue<ReviewReadyNotificationChoice>(REVIEW_READY_NOTIFICATION_SETTING) ?? "notificationAndBadge";
+		return this.configurationService.getValue<ReviewReadyNotificationChoice>(REVIEW_READY_NOTIFICATION_SETTING) ?? "off";
 	}
 
 	private currentStructuralDiffEnabled(): boolean {
