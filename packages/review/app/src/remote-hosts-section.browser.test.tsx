@@ -138,6 +138,43 @@ test("lists each host with its state and detail as plain text, and the install c
   ).toEqual(["Retry box2"]);
 });
 
+test("says whether an online host has language features, and why not as one line of plain text", async () => {
+  await render(
+    remoteHosts(
+      ["devbox", "box2", "box3"],
+      [
+        {
+          alias: "devbox",
+          serverId: "s1",
+          state: "online",
+          languageFeatures: true,
+        },
+        {
+          alias: "box2",
+          serverId: "s2",
+          state: "online",
+          languageFeatures: false,
+          languageFeaturesDetail:
+            "it runs [e10c782](command:x) <b>new</b>\nthis\u0007 Desktop\r 3c82a2a",
+        },
+        {
+          alias: "box3",
+          state: "offline",
+          detail: "timed out",
+          languageFeatures: false,
+        },
+      ],
+    ),
+  );
+  await vi.waitFor(() => expect(rows()[0]).toContain("online"));
+  expect(rows()[0]).toContain("Language features: available");
+  expect(rows()[1]).toContain(
+    "Language features: unavailable — it runs [e10c782](command:x) <b>new</b> this Desktop 3c82a2a",
+  );
+  expect(rows()[2]).not.toContain("Language features");
+  expect(section()!.querySelector("a, b")).toBeNull();
+});
+
 test("reads the states again only once the last read has answered", async () => {
   const pending = Promise.withResolvers<ReviewGatewayHostState[]>();
   const hosts = remoteHosts(["devbox"]);

@@ -18,6 +18,10 @@ const RETRIED = new Set<ReviewGatewayHostState["state"]>([
   "unreachable",
 ]);
 
+// The detail can carry a remote's text: shown as one line of plain text.
+const plain = (text: string) =>
+  text.replaceAll("\n", " ").replaceAll(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
+
 /**
  * The machines Whiteboard reaches over SSH: each alias with what the gateway
  * says of it, and an alias field that offers the SSH configuration's hosts.
@@ -104,6 +108,13 @@ export function RemoteHostsSection({
                 <span {...stylex.props(styles.rowDescription, local.detail)}>
                   {(state?.state ?? "connecting").replace("-", " ")}
                   {state?.detail ? ` · ${state.detail}` : null}
+                </span>
+              ) : null}
+              {state?.state === "online" ? (
+                <span {...stylex.props(styles.rowDescription, local.detail)}>
+                  {state.languageFeatures
+                    ? "Language features: available"
+                    : `Language features: unavailable${state.languageFeaturesDetail ? ` — ${plain(state.languageFeaturesDetail)}` : ""}`}
                 </span>
               ) : null}
               {state?.installCommand ? (
