@@ -7,9 +7,14 @@
  * POSIX sh, sent to `sh -s` on the remote. Finds the CLI on PATH, in
  * ~/.local/bin, then through the login shell (Node version managers), and
  * exits 127 when there is none. The CLI's directory goes first on PATH, so
- * a `#!/usr/bin/env node` next to it is found.
+ * a `#!/usr/bin/env node` next to it is found. `groups` are the optional
+ * extension groups this Desktop has enabled.
  */
-export const REVIEW_REMOTE_ATTACH_SCRIPT = `wb=$(command -v whiteboard 2>/dev/null)
+export function reviewRemoteAttachScript(groups: readonly string[] = []): string {
+	for (const group of groups) {
+		if (!/^[a-z0-9-]+$/.test(group)) throw new Error(`Invalid extension group ${JSON.stringify(group)}.`);
+	}
+	return `wb=$(command -v whiteboard 2>/dev/null)
 case "$wb" in /*) ;; *) wb= ;; esac
 if [ -z "$wb" ] && [ -x "$HOME/.local/bin/whiteboard" ]; then wb="$HOME/.local/bin/whiteboard"; fi
 if [ -z "$wb" ] && [ -n "$SHELL" ]; then
@@ -18,11 +23,19 @@ fi
 if [ -z "$wb" ] || [ ! -x "$wb" ]; then exit 127; fi
 PATH="\${wb%/*}:$PATH"
 export PATH
-exec "$wb" remote attach --json
+exec "$wb" remote attach --json${groups.length ? ` --groups ${groups.join(",")}` : ""}
 `;
+}
 
 export const REVIEW_REMOTE_ATTACH_BEGIN = "WHITEBOARD-REMOTE-BEGIN";
 export const REVIEW_REMOTE_ATTACH_END = "WHITEBOARD-REMOTE-END";
+
+export interface ReviewRemoteLanguageServer {
+	/** The VS Code server's loopback port on the remote. */
+	readonly port: number;
+	readonly connectionToken: string;
+	readonly commit: string;
+}
 
 export interface ReviewRemoteAttach {
 	readonly version: string | null;
@@ -30,6 +43,9 @@ export interface ReviewRemoteAttach {
 	readonly token: string;
 	/** The remote server's loopback port. */
 	readonly port: number;
+	readonly languageServer: ReviewRemoteLanguageServer | null;
+	/** Why there is no language server. */
+	readonly languageServerDetail?: string;
 }
 
 /**
@@ -68,10 +84,29 @@ export function parseRemoteAttach(stdout: string): { attach: ReviewRemoteAttach 
 				serverId: typeof record.serverId === "string" ? record.serverId : null,
 				token: record.token,
 				port,
+				...languageServerOf(record),
 			},
 		};
 	}
 	return { error: "remote attach printed nothing readable between its sentinels." };
+}
+
+function languageServerOf(record: Record<string, unknown>): Pick<ReviewRemoteAttach, "languageServer" | "languageServerDetail"> {
+	const detail = typeof record.languageServerDetail === "string" ? record.languageServerDetail.slice(0, 2000) : undefined;
+	const server = record.languageServer as Record<string, unknown> | null | undefined;
+	if (server && typeof server === "object") {
+		const { port, connectionToken, commit } = server;
+		if (
+			typeof port === "number" && Number.isInteger(port) && port > 0 && port < 65536 &&
+			typeof connectionToken === "string" && /^[0-9A-Za-z_-]+$/.test(connectionToken) &&
+			typeof commit === "string" && /^[0-9a-f]{40}$/.test(commit)
+		) {
+			return { languageServer: { port, connectionToken, commit } };
+		}
+		return { languageServer: null, languageServerDetail: "remote attach reported a VS Code server without a port, a token and a commit." };
+	}
+	// An older package says nothing of a language server.
+	return { languageServer: null, languageServerDetail: detail ?? "The Whiteboard on this host has no VS Code server." };
 }
 
 /** Remote data is untrusted: only a port on the remote's loopback is used. */

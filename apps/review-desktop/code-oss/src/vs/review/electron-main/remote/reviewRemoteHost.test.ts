@@ -14,7 +14,7 @@ import test from "node:test";
 
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
 import { attachOutput, fakeClock, fakeSsh, until, type FakeRemote } from "./reviewRemoteFakeSsh.js";
-import { classifySshFailure, reconnectDelay, ReviewRemoteHost } from "./reviewRemoteHost.js";
+import { classifySshFailure, languageCommitMismatch, reconnectDelay, ReviewRemoteHost } from "./reviewRemoteHost.js";
 import { reviewSshSession } from "./reviewSshCommand.js";
 
 /** Stands in for the forwarded port: the probe reaches it through real HTTP. */
@@ -26,6 +26,18 @@ async function healthServer(t: test.TestContext, servers?: Server[]): Promise<nu
 	return (server.address() as AddressInfo).port;
 }
 
+/** Stands in for the forwarded VS Code server: `/version` answers `commit`. */
+async function versionServer(t: test.TestContext, commit: string): Promise<number> {
+	const server: Server = createServer((request, response) => response.end(request.url === "/version" ? commit : ""));
+	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+	t.after(() => new Promise((resolve) => server.close(() => resolve(undefined))));
+	return (server.address() as AddressInfo).port;
+}
+
+const COMMIT = "a".repeat(40);
+
+const NO_SERVER = { languageFeatures: false, languageFeaturesDetail: "Language features are unavailable on wb-test-a: The Whiteboard on this host has no VS Code server." };
+
 /** `ports` are handed out in turn as the free local ports. */
 function hostFor(
 	t: test.TestContext,
@@ -33,6 +45,7 @@ function hostFor(
 	ports: number | number[] | (() => Promise<number>),
 	alias = "wb-test-a",
 	controlDirectory = "/tmp/wb-ssh-test",
+	desktopCommit?: string,
 ) {
 	const free = typeof ports === "function" ? [] : [ports].flat();
 	let next = 0;
@@ -44,6 +57,8 @@ function hostFor(
 		spawn: ssh.spawn,
 		environment: async () => ({ PATH: "/usr/bin" }),
 		desktopVersion: async () => "0.1.6",
+		desktopCommit,
+		groups: async () => ["go"],
 		freePort: typeof ports === "function" ? ports : async () => free[next++ % free.length],
 		report: (state) => reports.push(state),
 		log: () => {},
@@ -61,12 +76,100 @@ test("a successful attach reports an endpoint at the forwarded port", async (t) 
 	host.start();
 	await until(() => last()?.endpoint !== undefined);
 
-	assert.deepEqual(last(), { alias: "wb-test-a", endpoint: { url: `http://127.0.0.1:${port}`, token: "remote-token" } });
+	assert.deepEqual(last(), { alias: "wb-test-a", endpoint: { url: `http://127.0.0.1:${port}`, token: "remote-token" }, ...NO_SERVER });
 	const [forward] = ssh.of("wb-test-a", "forward");
 	assert.ok(forward.args.includes(`127.0.0.1:${port}:127.0.0.1:41234`));
 	// The master answered -O check before the script ran through it.
 	const kinds = ssh.calls.map((c) => c.kind);
 	assert.ok(kinds.indexOf("check") < kinds.indexOf("exec"));
+});
+
+test("the VS Code server gets a second forward on the same master, and only its endpoint reaches a window", async (t) => {
+	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
+	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
+	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", languageServer) } }, ports);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.deepEqual(last(), { alias: "wb-test-a", endpoint: { url: `http://127.0.0.1:${ports[0]}`, token: "remote-token" }, languageFeatures: true });
+	assert.equal(ssh.of("wb-test-a", "master").length, 1);
+	const forwards = ssh.of("wb-test-a", "forward").map((call) => call.args.find((arg) => arg.startsWith("127.0.0.1:")));
+	assert.deepEqual(forwards, [`127.0.0.1:${ports[0]}:127.0.0.1:41234`, `127.0.0.1:${ports[1]}:127.0.0.1:45678`]);
+	assert.deepEqual(host.languageEndpoint("s1"), { host: "127.0.0.1", port: ports[1], connectionToken: "vscode-token" });
+	assert.equal(host.languageEndpoint("another machine"), undefined);
+	assert.doesNotMatch(JSON.stringify(last()), /vscode-token/);
+});
+
+test("the Desktop's enabled groups go to remote attach", async (t) => {
+	const port = await healthServer(t);
+	const { host, ssh, last } = hostFor(t, {}, port);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.match(ssh.of("wb-test-a", "exec")[0].input(), /exec "\$wb" remote attach --json --groups go\n$/);
+});
+
+test("a VS Code server of another commit leaves the review online without language features", async (t) => {
+	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
+	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
+	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", languageServer) } }, ports, "wb-test-a", "/tmp/wb-ssh-test", "b".repeat(40));
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.deepEqual(last(), {
+		alias: "wb-test-a",
+		endpoint: { url: `http://127.0.0.1:${ports[0]}`, token: "remote-token" },
+		languageFeatures: false,
+		languageFeaturesDetail: "language features need the same Whiteboard version on wb-test-a: it runs aaaaaaa, this Desktop bbbbbbb",
+	});
+	assert.equal(ssh.of("wb-test-a", "forward").length, 1);
+	assert.equal(host.languageEndpoint("s1"), undefined);
+});
+
+test("a dev Desktop, with no commit, accepts any VS Code server; a release Desktop only its own", () => {
+	assert.equal(languageCommitMismatch("a", COMMIT, undefined), undefined);
+	assert.equal(languageCommitMismatch("a", COMMIT, COMMIT), undefined);
+	assert.match(languageCommitMismatch("a", COMMIT, "b".repeat(40))!, /on a: it runs aaaaaaa, this Desktop bbbbbbb$/);
+});
+
+test("a VS Code server that does not answer through its forward is unavailable, and its forward is cancelled", async (t) => {
+	const ports = [await healthServer(t), await versionServer(t, "c".repeat(40))];
+	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
+	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", languageServer) } }, ports);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(last()?.languageFeatures, false);
+	assert.match(last()!.languageFeaturesDetail!, /did not answer through the forward: it reports c{40}, not a{40}\.$/);
+	const cancels = ssh.of("wb-test-a", "cancel");
+	assert.equal(cancels.length, 1);
+	assert.ok(cancels[0].args.includes(`127.0.0.1:${ports[1]}:127.0.0.1:45678`));
+	assert.equal(host.languageEndpoint("s1"), undefined);
+});
+
+test("a reattach drops both old forwards", async (t) => {
+	const ports = [await healthServer(t), await versionServer(t, COMMIT), await healthServer(t), await versionServer(t, COMMIT)];
+	const { host, ssh, last } = hostFor(
+		t,
+		{ attach: (call) => ({ code: 0, stdout: attachOutput(41234 + call, `token-${call}`, { port: 45678 + call, connectionToken: `vscode-${call}`, commit: COMMIT }) }) },
+		ports,
+	);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	await host.reattach();
+
+	assert.equal(last()?.endpoint?.token, "token-2");
+	assert.equal(ssh.of("wb-test-a", "forward").length, 4);
+	assert.deepEqual(
+		ssh.of("wb-test-a", "cancel").map((call) => call.args.find((arg) => arg.startsWith("127.0.0.1:"))),
+		[`127.0.0.1:${ports[0]}:127.0.0.1:41235`, `127.0.0.1:${ports[1]}:127.0.0.1:45679`],
+	);
+	assert.deepEqual(host.languageEndpoint("s1"), { host: "127.0.0.1", port: ports[3], connectionToken: "vscode-2" });
 });
 
 test("output with a banner before the first sentinel still parses", async (t) => {
@@ -259,7 +362,7 @@ test("a restarted remote server is attached again over the same master", async (
 	await until(() => last()?.endpoint !== undefined);
 	await host.reattach();
 
-	assert.deepEqual(last(), { alias: "wb-test-a", endpoint: { url: `http://127.0.0.1:${ports[1]}`, token: "token-2" } });
+	assert.deepEqual(last(), { alias: "wb-test-a", endpoint: { url: `http://127.0.0.1:${ports[1]}`, token: "token-2" }, ...NO_SERVER });
 	assert.equal(ssh.of("wb-test-a", "master").length, 1);
 	assert.equal(ssh.of("wb-test-a", "forward").length, 2);
 	const cancels = ssh.of("wb-test-a", "cancel");

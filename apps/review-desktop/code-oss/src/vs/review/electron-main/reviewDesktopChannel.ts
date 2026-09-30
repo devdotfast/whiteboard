@@ -46,6 +46,10 @@ export class ReviewDesktopChannel implements IServerChannel {
     if (command === "listSshAliases") {
       return (await this.host.listSshAliases()) as T;
     }
+    if (command === "getRemoteLanguageEndpoint") {
+      if (typeof arg !== "string") return undefined as T;
+      return (await this.host.getRemoteLanguageEndpoint(arg)) as T;
+    }
     if (command === "retryRemoteHost") {
       if (typeof arg === "string") this.host.retryRemoteHost(arg);
       return undefined as T;

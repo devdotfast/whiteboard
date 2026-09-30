@@ -21,6 +21,7 @@ import { NullTelemetryService } from "../../platform/telemetry/common/telemetryU
 import { IUpdateService } from "../../platform/update/common/update.js";
 import { UtilityProcess } from "../../platform/utilityProcess/electron-main/utilityProcess.js";
 import type { ReviewDesktopConnection } from "../common/reviewDesktopBootstrap.js";
+import type { ReviewGatewayHostState } from "../common/reviewProtocol.js";
 import {
   REVIEW_REMOTE_HOSTS_ENABLED_SETTING,
   REVIEW_REMOTE_HOSTS_SETTING,
@@ -31,6 +32,7 @@ import { REVIEW_CRASH_DUMPS_DIRNAME } from "../node/reviewCrashReporter.js";
 import { ReviewCrashDumps } from "./reviewCrashDumps.js";
 import { ReviewCrashTelemetry } from "./reviewCrashTelemetry.js";
 import { ReviewMainErrorTelemetry } from "./reviewMainErrorTelemetry.js";
+import { reviewEnabledExtensionGroups } from "./remote/reviewEnabledExtensionGroups.js";
 import { ReviewRemoteHosts } from "./remote/reviewRemoteHosts.js";
 import { createSshAskpass } from "./remote/reviewSshAskpass.js";
 import {
@@ -229,6 +231,25 @@ export class ReviewDesktopHost extends Disposable {
     this.remoteHosts?.retry(alias);
   }
 
+  /**
+   * The forwarded VS Code server of an online machine with language
+   * features. Its token is that server's; the review server's never leaves
+   * this process.
+   */
+  async getRemoteLanguageEndpoint(serverId: string) {
+    const manager = this.remoteHosts;
+    if (!manager) return undefined;
+    const { url, token } = await this.whenConnected();
+    const response = await fetch(new URL("/remote-hosts", url), {
+      headers: { "x-review-token": token },
+    });
+    if (!response.ok) return undefined;
+    return manager.languageEndpoint(
+      serverId,
+      (await response.json()) as ReviewGatewayHostState[],
+    );
+  }
+
   private startRemoteHosts(
     shellEnvironment: () => Promise<NodeJS.ProcessEnv>,
   ): void {
@@ -246,6 +267,10 @@ export class ReviewDesktopHost extends Disposable {
       createAskpass: (input) => createSshAskpass(input),
       prompt: (request) => reviewSshPromptRelay.prompt(request),
       desktopVersion: () => (version ??= this.desktopVersion()),
+      // Undefined in a dev build, whose VS Code client sends no commit.
+      desktopCommit: this.productService.commit,
+      groups: () =>
+        reviewEnabledExtensionGroups(this.environmentMainService.extensionsPath),
       send: (hosts) => this.supervisor.setRemoteHosts(hosts),
       log: (message) => this.logService.info(`[Remote hosts] ${message}`),
     });

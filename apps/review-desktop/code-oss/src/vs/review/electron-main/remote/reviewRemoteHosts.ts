@@ -6,7 +6,7 @@
 import { readdir, rm } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { join } from "node:path";
-import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
+import type { ReviewGatewayHost, ReviewGatewayHostState } from "../../common/reviewProtocol.js";
 import { REVIEW_REMOTE_TIMEOUTS, ReviewRemoteHost, runSsh, systemClock, type ReviewRemoteClock, type ReviewRemoteHostOptions, type SpawnSsh } from "./reviewRemoteHost.js";
 import type { ReviewSshAskpass, SshPromptRequest } from "./reviewSshAskpass.js";
 import {
@@ -35,6 +35,8 @@ export interface ReviewRemoteHostsOptions {
 	/** Shows a prompt; `undefined` is a cancel. */
 	prompt(request: SshPromptRequest): Promise<string | undefined>;
 	desktopVersion(): Promise<string>;
+	readonly desktopCommit?: string;
+	groups?(): Promise<readonly string[]>;
 	freePort?(): Promise<number>;
 	/** Hands the whole list to the local server. */
 	send(hosts: ReviewGatewayHost[]): void;
@@ -120,6 +122,15 @@ export class ReviewRemoteHosts {
 		void this.hosts.get(alias)?.reattach();
 	}
 
+	/**
+	 * The forwarded VS Code server of the machine `serverId`, through the
+	 * first alias the gateway has online for it, when it has language features.
+	 */
+	languageEndpoint(serverId: string, states: readonly ReviewGatewayHostState[]): ReturnType<ReviewRemoteHost["languageEndpoint"]> {
+		const online = states.find((state) => state.serverId === serverId && state.state === "online");
+		return online && this.hosts.get(online.alias)?.languageEndpoint(serverId);
+	}
+
 	/** After sleep, every host is checked at once. */
 	resume(): void {
 		for (const host of this.hosts.values()) void host.resume();
@@ -148,6 +159,8 @@ export class ReviewRemoteHosts {
 			spawn: this.options.spawn,
 			environment: async () => ({ ...(await this.options.environment()), ...(await this.askpass()).env(alias) }),
 			desktopVersion: () => this.options.desktopVersion(),
+			desktopCommit: this.options.desktopCommit,
+			groups: this.options.groups,
 			freePort: this.options.freePort ?? freeLoopbackPort,
 			report: () => this.publish(),
 			log: this.options.log,

@@ -7,7 +7,7 @@ import { rm } from "node:fs/promises";
 import { get } from "node:http";
 import type { Readable, Writable } from "node:stream";
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
-import { parseRemoteAttach, REVIEW_REMOTE_ATTACH_SCRIPT, type ReviewRemoteAttach } from "./reviewRemoteAttachScript.js";
+import { parseRemoteAttach, reviewRemoteAttachScript, type ReviewRemoteAttach } from "./reviewRemoteAttachScript.js";
 import {
 	sshCancelForwardArgs,
 	sshCheckArgs,
@@ -143,6 +143,31 @@ function probeHealth(port: number, timeout: number): Promise<void> {
 	});
 }
 
+/** The VS Code server's commit through its forward; `/version` needs no token. */
+function probeVersion(port: number, timeout: number): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const request = get({ host: "127.0.0.1", port, path: "/version", timeout }, (response) => {
+			let body = "";
+			response.setEncoding("utf8");
+			response.on("data", (chunk: string) => (body = (body + chunk).slice(0, 200)));
+			response.on("end", () => (response.statusCode === 200 ? resolve(body.trim()) : reject(new Error(`/version answered ${response.statusCode}`))));
+		});
+		request.on("timeout", () => request.destroy(new Error(`/version did not answer within ${timeout / 1000} seconds`)));
+		request.on("error", reject);
+	});
+}
+
+/**
+ * The VS Code server refuses a client of another commit. A dev Desktop has no
+ * commit, and the server accepts it.
+ */
+export function languageCommitMismatch(alias: string, serverCommit: string, desktopCommit: string | undefined): string | undefined {
+	if (!desktopCommit || desktopCommit === serverCommit) return undefined;
+	return `language features need the same Whiteboard version on ${alias}: it runs ${serverCommit.slice(0, 7)}, this Desktop ${desktopCommit.slice(0, 7)}`;
+}
+
+type LanguageFeatures = Pick<ReviewGatewayHost, "languageFeatures" | "languageFeaturesDetail">;
+
 export interface RunResult {
 	readonly code: number | null;
 	/** The last 64 KiB: the sentinels come at the end, after any login banner. */
@@ -194,6 +219,10 @@ export interface ReviewRemoteHostOptions {
 	environment(): Promise<NodeJS.ProcessEnv>;
 	/** The version the Desktop's own server reports: the one to install. */
 	desktopVersion(): Promise<string>;
+	/** The commit the Desktop's VS Code client sends; none in a dev build. */
+	readonly desktopCommit?: string;
+	/** The optional extension groups this Desktop has enabled. */
+	groups?(): Promise<readonly string[]>;
 	freePort(): Promise<number>;
 	report(host: ReviewGatewayHost): void;
 	log(message: string): void;
@@ -204,8 +233,9 @@ export interface ReviewRemoteHostOptions {
 
 /**
  * One alias: a master connection, `whiteboard remote attach` through it, and
- * a forward to the remote server. Reports an endpoint or a problem, and
- * reconnects with backoff when the master ends. The token stays in memory.
+ * forwards to the remote server and its VS Code server. Reports an endpoint
+ * or a problem, and reconnects with backoff when the master ends. The tokens
+ * stay in memory.
  */
 export class ReviewRemoteHost {
 	private readonly alias: string;
@@ -219,6 +249,9 @@ export class ReviewRemoteHost {
 	private readonly closing = new Map<SshChildProcess, Promise<void>>();
 	/** The ports of the forward to the remote server. */
 	private forwarded: { local: number; remote: number } | undefined;
+	/** The forward to the VS Code server, once it answered with a commit this Desktop can use. */
+	private language: { local: number; remote: number; connectionToken: string } | undefined;
+	private serverId: string | null = null;
 	private reattaching = false;
 	/** Reattaches since the connection last stayed up `stable`; each further one waits longer. */
 	private reattaches = 0;
@@ -302,6 +335,7 @@ export class ReviewRemoteHost {
 	private async attachAgain(): Promise<void> {
 		const env = this.env;
 		const old = this.forwarded;
+		const oldLanguage = this.language;
 		if (this.disposed || this.reattaching || !this.master || this.connectedAt === undefined || !env || !old) return;
 		const generation = this.generation;
 		const stale = () => generation !== this.generation || this.disposed;
@@ -315,10 +349,15 @@ export class ReviewRemoteHost {
 			if (stale()) return;
 			const url = await this.forward(env, attach, stale);
 			if (stale()) return;
-			await this.run(sshCancelForwardArgs(this.options.session, old.local, old.remote, env), this.timeouts.operation);
+			const language = await this.forwardLanguage(env, attach, stale);
 			if (stale()) return;
+			for (const forward of [old, oldLanguage]) {
+				if (forward) await this.run(sshCancelForwardArgs(this.options.session, forward.local, forward.remote, env), this.timeouts.operation);
+				if (stale()) return;
+			}
 			this.connectedAt = this.clock.now();
-			this.set({ alias: this.alias, endpoint: { url, token: attach.token } });
+			this.serverId = attach.serverId;
+			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language });
 		} catch (error) {
 			if (stale()) return;
 			this.fail(error instanceof HostFailure ? error.problem : { state: "unreachable", detail: (error as Error).message });
@@ -347,6 +386,12 @@ export class ReviewRemoteHost {
 		const master = this.master;
 		this.master = undefined;
 		await this.close(master);
+	}
+
+	/** The VS Code server of the machine `serverId`, when its forward works and its commit matches. */
+	languageEndpoint(serverId: string): { host: "127.0.0.1"; port: number; connectionToken: string } | undefined {
+		if (!this.language || this.connectedAt === undefined || this.serverId !== serverId || this.reported.languageFeatures !== true) return undefined;
+		return { host: "127.0.0.1", port: this.language.local, connectionToken: this.language.connectionToken };
 	}
 
 	/** At process exit, when nothing can be awaited. */
@@ -387,10 +432,13 @@ export class ReviewRemoteHost {
 			if (stale()) return;
 			const url = await this.forward(env, attach, stale);
 			if (stale()) return;
+			const language = await this.forwardLanguage(env, attach, stale);
+			if (stale()) return;
 			this.connectedAt = this.clock.now();
+			this.serverId = attach.serverId;
 			// What authentication printed says nothing about why the connection may end later.
 			this.masterStderr = "";
-			this.set({ alias: this.alias, endpoint: { url, token: attach.token } });
+			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language });
 		} catch (error) {
 			if (stale()) return;
 			this.fail(error instanceof HostFailure ? error.problem : { state: "unreachable", detail: (error as Error).message });
@@ -457,7 +505,8 @@ export class ReviewRemoteHost {
 	}
 
 	private async attach(env: NodeJS.ProcessEnv): Promise<ReviewRemoteAttach> {
-		const result = await this.run(sshExecArgs(this.options.session, env), this.timeouts.attach, REVIEW_REMOTE_ATTACH_SCRIPT);
+		const script = reviewRemoteAttachScript((await this.options.groups?.()) ?? []);
+		const result = await this.run(sshExecArgs(this.options.session, env), this.timeouts.attach, script);
 		const parsed = parseRemoteAttach(result.stdout);
 		if (parsed && "attach" in parsed) return parsed.attach;
 		if (parsed) throw unreachable(`whiteboard remote attach failed on ${this.alias}: ${parsed.error}`);
@@ -488,6 +537,33 @@ export class ReviewRemoteHost {
 		return `http://127.0.0.1:${port}`;
 	}
 
+	/**
+	 * A second forward on the same master, to the VS Code server. Language
+	 * features are unavailable, with the reason, when there is none, its commit
+	 * differs from this Desktop's, or it does not answer; the review is not.
+	 */
+	private async forwardLanguage(env: NodeJS.ProcessEnv, attach: ReviewRemoteAttach, stale: () => boolean): Promise<LanguageFeatures> {
+		this.language = undefined;
+		const server = attach.languageServer;
+		const unavailable = (detail: string): LanguageFeatures => ({ languageFeatures: false, languageFeaturesDetail: detail });
+		if (!server) return unavailable(`Language features are unavailable on ${this.alias}: ${attach.languageServerDetail ?? "it has no VS Code server"}`);
+		const mismatch = languageCommitMismatch(this.alias, server.commit, this.options.desktopCommit);
+		if (mismatch) return unavailable(mismatch);
+		const port = await this.options.freePort();
+		if (stale()) throw unreachable("The SSH connection ended.");
+		const forward = await this.run(sshForwardArgs(this.options.session, port, server.port, env), this.timeouts.operation);
+		if (forward.code !== 0) return unavailable(`Could not forward a local port to the VS Code server on ${this.alias}: ${firstLines(forward.stderr) || `ssh exited with code ${forward.code}`}`);
+		try {
+			const commit = await probeVersion(port, this.timeouts.operation);
+			if (commit !== server.commit) throw new Error(`it reports ${commit.slice(0, 40)}, not ${server.commit}`);
+		} catch (error) {
+			await this.run(sshCancelForwardArgs(this.options.session, port, server.port, env), this.timeouts.operation);
+			return unavailable(`The VS Code server on ${this.alias} did not answer through the forward: ${(error as Error).message}.`);
+		}
+		this.language = { local: port, remote: server.port, connectionToken: server.connectionToken };
+		return { languageFeatures: true };
+	}
+
 	private fail(problem: Problem): void {
 		this.generation++;
 		this.cancelReattach?.();
@@ -508,6 +584,7 @@ export class ReviewRemoteHost {
 		const master = this.master;
 		this.master = undefined;
 		this.forwarded = undefined;
+		this.language = undefined;
 		void this.close(master);
 	}
 

@@ -72,3 +72,15 @@ test("lists the SSH aliases and retries a remote host through the host", async (
 
 	assert.deepEqual(retried, ["devbox"]);
 });
+
+test("hands a window a remote machine's VS Code server by its server id, and nothing for anything else", async () => {
+	const asked: string[] = [];
+	const endpoint = { host: "127.0.0.1", port: 50123, connectionToken: "vscode-token" };
+	const host = { getRemoteLanguageEndpoint: async (serverId: string) => (asked.push(serverId), serverId === "s1" ? endpoint : undefined) };
+	const channel = new ReviewDesktopChannel(host as never, { getWindows: () => [] } as never);
+
+	assert.deepEqual(await channel.call("window", "getRemoteLanguageEndpoint", "s1"), endpoint);
+	assert.equal(await channel.call("window", "getRemoteLanguageEndpoint", "s2"), undefined);
+	assert.equal(await channel.call("window", "getRemoteLanguageEndpoint", { serverId: "s1" }), undefined);
+	assert.deepEqual(asked, ["s1", "s2"]);
+});
