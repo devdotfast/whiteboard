@@ -130,6 +130,48 @@ it("refuses a host whose version could not be read", async () => {
   await expect.poll(() => gateway.states()[0]?.state).toBe("incompatible");
 });
 
+it("shows Desktop's language features on an online host, and keeps the host online when only they change", async () => {
+  const fake = await startFake({ version });
+  const gateway = hosts();
+  const detail =
+    "language features need the same Whiteboard version on devbox: it runs 1111111, this Desktop 2222222";
+
+  gateway.set([
+    {
+      alias: "devbox",
+      endpoint: fake.endpoint,
+      languageFeatures: false,
+      languageFeaturesDetail: detail,
+    },
+  ]);
+
+  await expect.poll(() => gateway.states()[0]?.state).toBe("online");
+  expect(gateway.states()[0]).toMatchObject({
+    languageFeatures: false,
+    languageFeaturesDetail: detail,
+  });
+  gateway.set([
+    { alias: "devbox", endpoint: fake.endpoint, languageFeatures: true },
+  ]);
+
+  expect(gateway.states()[0]).toMatchObject({
+    state: "online",
+    languageFeatures: true,
+  });
+  expect(gateway.states()[0]?.languageFeaturesDetail).toBeUndefined();
+  expect(gateway.online().map((host) => host.alias)).toEqual(["devbox"]);
+});
+
+it("says nothing of language features for a host that is not online", () => {
+  const gateway = hosts();
+
+  gateway.set([{ alias: "devbox", languageFeatures: true }]);
+
+  expect(gateway.states()).toEqual([
+    { alias: "devbox", state: "connecting", detail: expect.any(String) },
+  ]);
+});
+
 it("treats one server under two aliases as one machine", async () => {
   const remote = await startRemote(path.join(root, "a"));
   const gateway = hosts();
