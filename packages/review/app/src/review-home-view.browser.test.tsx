@@ -611,9 +611,13 @@ describe("ReviewHome", () => {
     expect(titles()).toEqual(["On other"]);
   });
 
-  it.each(["offline", "connecting"] as const)(
+  it.each([
+    ["offline", "offline"],
+    ["connecting", "connecting"],
+    ["not-installed", "not installed"],
+  ] as const)(
     "draws a %s host's review as unavailable, and opening it shows the host's detail",
-    async (hostState) => {
+    async (hostState, words) => {
       const review = remote("devbox", { hostState });
       const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
 
@@ -644,9 +648,9 @@ describe("ReviewHome", () => {
       )!;
 
       expect(row.hasAttribute("data-unavailable")).toBe(true);
-      expect(row.textContent).toContain(hostState);
+      expect(row.textContent).toContain(words);
       expect(open.getAttribute("aria-disabled")).toBe("true");
-      expect(open.title).toBe(`devbox is ${hostState}`);
+      expect(open.title).toBe(`devbox is ${words}`);
       await act(async () =>
         container
           .querySelector<HTMLButtonElement>("td:nth-child(2) > button")!

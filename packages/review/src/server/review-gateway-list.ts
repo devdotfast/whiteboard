@@ -44,10 +44,10 @@ const hostStateOf = (
 ): NonNullable<ReviewApiSummary["hostState"]> => {
   if (serving) return "online";
 
-  if (state.state === "incompatible" || state.state === "connecting")
-    return state.state;
-
-  return "offline";
+  // Online but not the machine's serving alias: nothing answers for it.
+  return state.state === "online" || state.state === "duplicate"
+    ? "offline"
+    : state.state;
 };
 
 /** Each machine's last list, in the setting's order, under its first alias. */
