@@ -60,6 +60,7 @@ it("starts the server on loopback with a private token, and a second call report
       connectionToken: expect.stringMatching(/^[0-9a-f]{64}$/),
       commit: COMMIT,
     },
+    languageGroups: [],
   });
   const { port, connectionToken } = first.languageServer!;
   expect(await text(port, "/version")).toBe(COMMIT);
@@ -156,6 +157,7 @@ it("runs extensions ensure first, with the groups, and starts nothing when it fa
     languageServer: null,
     languageServerDetail:
       "Could not install the language extensions: astral-sh.ty: Network error reaching open-vsx.org: ENETUNREACH",
+    languageGroups: [{ group: "go", installed: false }],
   });
   expect(
     await stat(remoteLanguageServerFiles(env).runningFile).catch(() => null),
@@ -194,6 +196,7 @@ it("hands downloads that outlast the attach to one detached install, and reports
     languageServerDetail:
       "Installing the language extensions on this host; they will be available on the next connection.",
     languageServerPending: true,
+    languageGroups: [{ group: "go", installed: false }],
   };
 
   expect(await attach()).toEqual(pending);

@@ -221,6 +221,7 @@ it("attaches with one JSON line between the sentinels, and its token reaches the
     diffr: true,
     languageServer: null,
     languageServerDetail: expect.stringContaining("has no VS Code server"),
+    languageGroups: [],
   });
 
   const reviews = (token?: string) =>
@@ -315,6 +316,7 @@ it("attaches the review server when the language extensions cannot be installed"
     languageServer: null,
     languageServerDetail:
       "Could not install the language extensions: golang.go: groups go",
+    languageGroups: [{ group: "go", installed: false }],
   });
 
   const reviews = await fetch(`${attach.url}/reviews-api`, {
@@ -322,6 +324,43 @@ it("attaches the review server when the language extensions cannot be installed"
   });
 
   expect(reviews.status).toBe(200);
+}, 60_000);
+
+it("attaches a remote whose login shell has no Swift, and the group names what is missing", async () => {
+  const packageRoot = path.join(root, "package");
+  await mkdir(path.join(packageRoot, "vscode-server"), { recursive: true });
+  await writeFile(
+    path.join(packageRoot, "vscode-server", "product.json"),
+    JSON.stringify({ commit: "f".repeat(40) }),
+  );
+
+  // A login shell that finds no command at all.
+  const shell = path.join(root, "shell");
+  await writeFile(shell, "#!/bin/sh\nexit 127\n", { mode: 0o755 });
+
+  const attach = await remoteAttach({
+    stateDir,
+    env: { ...env, PATH: path.dirname(process.execPath), SHELL: shell },
+    stderr: discard(),
+    packageRoot,
+    cli: sourceCli,
+    groups: ["swift"],
+    ensureExtensions: async () => ({
+      failed: [],
+      groups: [{ group: "swift", installed: true }],
+    }),
+  });
+
+  expect(attach).toMatchObject({
+    startedServer: true,
+    languageGroups: [
+      {
+        group: "swift",
+        installed: true,
+        detail: "swift was not found on the login shell's PATH",
+      },
+    ],
+  });
 }, 60_000);
 
 it("gives up on a refused download at once and on a stalled one at the bound", async () => {

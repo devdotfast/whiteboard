@@ -417,6 +417,80 @@ it("installs an optional extension only when its group is requested", async () =
   ).toEqual(["astral-sh.ty", "golang.go"]);
 });
 
+/** An optional-tier extension of `group` with nothing in it but its manifest. */
+function optionalExtension(
+  id: string,
+  group: string,
+  overrides: Partial<CuratedRemoteExtension> = {},
+): CuratedRemoteExtension {
+  const [publisher, name] = id.split(".");
+
+  const download = serve(
+    `${id}.vsix`,
+    vsix({
+      "extension/package.json": {
+        data: JSON.stringify({ publisher, name, version: "1.0.0" }),
+      },
+    }),
+  );
+
+  return {
+    id,
+    version: "1.0.0",
+    tier: "optional",
+    group,
+    executables: [],
+    stripExtensionPack: false,
+    addActivationEvents: [],
+    targets: { "linux-x64": download, "linux-arm64": download },
+    ...overrides,
+  };
+}
+
+it("reports each requested group, and installs nothing of a group the Desktop has not turned on", async () => {
+  const lldb = optionalExtension("llvm-vs-code-extensions.lldb-dap", "swift");
+
+  const curated = [
+    optionalExtension("rust-lang.rust-analyzer", "rust"),
+    optionalExtension("swiftlang.swift-vscode", "swift"),
+    lldb,
+    optionalExtension("muhammad-sammy.csharp", "csharp", {
+      targets: {
+        "linux-x64": { ...lldb.targets["linux-x64"], sha256: "0".repeat(64) },
+        "linux-arm64": lldb.targets["linux-arm64"],
+      },
+    }),
+  ];
+
+  const result = await ensureRemoteExtensions({
+    env,
+    curated,
+    groups: ["swift", "csharp"],
+    target: "linux-x64",
+  });
+
+  expect(result.installed).toEqual([
+    "swiftlang.swift-vscode",
+    "llvm-vs-code-extensions.lldb-dap",
+  ]);
+  expect(result.groups).toEqual([
+    { group: "swift", installed: true },
+    {
+      group: "csharp",
+      installed: false,
+      detail: expect.stringMatching(
+        /^muhammad-sammy\.csharp: Checksum mismatch/,
+      ),
+    },
+  ]);
+  expect(requests).not.toContain("/rust-lang.rust-analyzer.vsix");
+  expect((await readdir(remoteServerPaths(env).extensionsDir)).sort()).toEqual([
+    "extensions.json",
+    "llvm-vs-code-extensions.lldb-dap-1.0.0",
+    "swiftlang.swift-vscode-1.0.0",
+  ]);
+});
+
 it("refuses a VSIX with a path that leaves its folder, or a symlink, and writes nothing", async () => {
   const manifest = {
     data: JSON.stringify({

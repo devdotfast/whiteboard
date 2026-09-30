@@ -13,6 +13,7 @@ import {
   type EnsureRemoteLanguageServerInput,
   ensureRemoteLanguageServer,
 } from "./remote-language-server";
+import { missingToolchains } from "./remote-toolchains";
 import { readReviewServerHealth, serverNotReady } from "./server-discovery";
 import {
   type EnsureBackgroundServerInput,
@@ -64,6 +65,9 @@ export async function remoteAttach(
     cli: input.cli,
   });
 
+  // A missing toolchain never fails the attach; its group says what is missing.
+  const toolchains = missingToolchains(input.groups ?? [], input.env);
+
   let server: Awaited<ReturnType<typeof ensureBackgroundServer>>;
 
   try {
@@ -77,15 +81,21 @@ export async function remoteAttach(
     // A pending download must not hold the failed command open.
     abort.abort();
     extensions.abort();
-    await Promise.all([fetching, language]);
+    await Promise.all([fetching, language, toolchains]);
     throw error;
   }
 
   const { discovery, started } = server;
   const diffr = await fetching;
 
-  const { languageServer, languageServerDetail, languageServerPending } =
-    await language;
+  const {
+    languageServer,
+    languageServerDetail,
+    languageServerPending,
+    languageGroups,
+  } = await language;
+
+  const missing = await toolchains;
 
   const health = await readReviewServerHealth(discovery);
 
@@ -103,6 +113,11 @@ export async function remoteAttach(
     languageServer,
     ...(languageServerDetail !== undefined && { languageServerDetail }),
     ...(languageServerPending && { languageServerPending }),
+    languageGroups: languageGroups.map(({ group, installed, detail }) => {
+      const details = [detail, missing.get(group)].filter(Boolean).join("; ");
+
+      return { group, installed, ...(details && { detail: details }) };
+    }),
   };
 }
 

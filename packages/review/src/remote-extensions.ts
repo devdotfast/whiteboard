@@ -229,7 +229,37 @@ export async function ensureRemoteExtensions(
     installed,
     skipped,
     failed,
+    groups: requestedGroups(curated, input.groups ?? [], failed),
   };
+}
+
+/** Each requested optional group, installed when none of its extensions failed. */
+function requestedGroups(
+  curated: CuratedRemoteExtension[],
+  groups: string[],
+  failed: { id: string; error: string }[],
+) {
+  return groups.flatMap((group) => {
+    const members = curated.filter(
+      (extension) => extension.tier === "optional" && extension.group === group,
+    );
+
+    if (members.length === 0) return [];
+
+    const errors = failed.filter(({ id }) =>
+      members.some((extension) => extension.id === id),
+    );
+
+    return [
+      errors.length === 0
+        ? { group, installed: true }
+        : {
+            group,
+            installed: false,
+            detail: errors.map(({ id, error }) => `${id}: ${error}`).join("; "),
+          },
+    ];
+  });
 }
 
 async function readPackagedCurated(): Promise<CuratedRemoteExtension[]> {
