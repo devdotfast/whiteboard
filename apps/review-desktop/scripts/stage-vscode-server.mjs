@@ -121,7 +121,10 @@ async function cached(cacheDir, { url, sha256 }) {
   return file;
 }
 
-/** curated.json: every remote extension, with a download per Linux target. */
+/**
+ * curated.json: every remote extension, with a download per Linux target.
+ * `ensure` installs an optional-tier one only when the Desktop enabled its group.
+ */
 export function remoteCuratedExtensions() {
   return {
     extensions: remoteExtensionIds.map((id) => {
@@ -130,6 +133,8 @@ export function remoteCuratedExtensions() {
       return {
         id,
         version: extension.version,
+        tier: extension.tier,
+        group: extension.group,
         executables: extension.executables,
         stripExtensionPack: extension.stripExtensionPack,
         addActivationEvents: extension.addActivationEvents ?? [],

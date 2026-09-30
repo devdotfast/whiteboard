@@ -358,7 +358,10 @@ export const supportedTargets = Object.freeze([
  */
 export const remoteTargets = Object.freeze(["linux-x64", "linux-arm64"]);
 
-/** The language extensions a remote runs; a subset of the Desktop's, so the UI knows their languages. */
+/**
+ * The language extensions a remote runs; a subset of the Desktop's, so the UI
+ * knows their languages. Optional-tier ones only when the Desktop enabled their group.
+ */
 export const remoteExtensionIds = Object.freeze([
   "ms-python.python",
   "astral-sh.ty",

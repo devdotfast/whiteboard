@@ -47,6 +47,8 @@ type CuratedDownload = z.infer<typeof curatedDownloadSchema>;
 const curatedExtensionSchema = z.object({
   id: z.string(),
   version: z.string(),
+  tier: z.enum(["bundled", "optional"]),
+  group: z.string(),
   executables: z.array(z.string()),
   stripExtensionPack: z.boolean(),
   addActivationEvents: z.array(z.string()),
@@ -103,6 +105,8 @@ interface EnsureRemoteExtensionsInput {
   env?: NodeJS.ProcessEnv;
   /** The package's vscode-server/curated.json by default. */
   curated?: CuratedRemoteExtension[];
+  /** Optional-tier groups to install, the ones the Desktop has enabled. */
+  groups?: string[];
   target?: RemoteTarget;
   timeoutMs?: number;
 }
@@ -111,7 +115,9 @@ interface EnsureRemoteExtensionsInput {
  * Downloads the curated extensions for this machine into the extensions
  * directory, checking each SHA-256 before anything is unpacked, and writes the
  * list the server's scanner reads. An extension whose stamp matches is left
- * alone, so a second run downloads nothing.
+ * alone, so a second run downloads nothing. An optional-tier extension is
+ * installed only when its group is requested, so the remote never runs one
+ * the Desktop has not enabled.
  */
 export async function ensureRemoteExtensions(
   input: EnsureRemoteExtensionsInput = {},
@@ -120,13 +126,24 @@ export async function ensureRemoteExtensions(
   const curated = input.curated ?? (await readPackagedCurated());
   const { extensionsDir, serverDataDir } = remoteServerPaths(input.env);
   const installed: string[] = [];
-  const skipped: string[] = [];
+  const skipped: { id: string; reason: string }[] = [];
   const failed: { id: string; error: string }[] = [];
   const listed: StoredExtension[] = [];
 
   await mkdir(extensionsDir, { recursive: true });
 
   for (const extension of curated) {
+    if (
+      extension.tier === "optional" &&
+      !input.groups?.includes(extension.group)
+    ) {
+      skipped.push({
+        id: extension.id,
+        reason: `optional group "${extension.group}" not requested`,
+      });
+      continue;
+    }
+
     const download = extension.targets[target];
     const folder = `${extension.id}-${extension.version}`;
     const directory = path.join(extensionsDir, folder);
@@ -149,7 +166,7 @@ export async function ensureRemoteExtensions(
           () => false,
         ))
       ) {
-        skipped.push(extension.id);
+        skipped.push({ id: extension.id, reason: "up to date" });
         listed.push(
           storedExtension(
             extension,
@@ -193,8 +210,10 @@ export async function ensureRemoteExtensions(
   const listFile = path.join(extensionsDir, "extensions.json");
 
   if ((await readFile(listFile, "utf8").catch(() => undefined)) !== list) {
-    await writeFile(`${listFile}.tmp`, list);
-    await rename(`${listFile}.tmp`, listFile);
+    const temporary = `${listFile}.${process.pid}.tmp`;
+
+    await writeFile(temporary, list);
+    await rename(temporary, listFile);
     await rm(path.join(serverDataDir, "data", "CachedProfilesData"), {
       recursive: true,
       force: true,
@@ -227,10 +246,10 @@ async function readPackagedCurated(): Promise<CuratedRemoteExtension[]> {
 }
 
 async function readStamp(directory: string): Promise<Stamp | undefined> {
-  return readFile(path.join(directory, STAMP_FILE), "utf8").then(
-    (text) => stampSchema.safeParse(JSON.parse(text)).data,
-    () => undefined,
-  );
+  // A missing or unreadable stamp means "reinstall".
+  return readFile(path.join(directory, STAMP_FILE), "utf8")
+    .then((text) => stampSchema.safeParse(parseJsonText(text)).data)
+    .catch(() => undefined);
 }
 
 function sameStamp(
@@ -259,7 +278,7 @@ async function install(
   try {
     await fetchVerified(download, part, timeoutMs);
     await rm(staging, { recursive: true, force: true });
-    await extractVsix(part, staging);
+    await extractVsix(part, staging, download.size * 8);
     await sanitizeManifest(staging, extension);
 
     await checkExecutables(staging, extension);
@@ -345,8 +364,17 @@ const networkCause = (error: Error) =>
     ? "timed out"
     : (networkCauseSchema.safeParse(error.cause).data?.code ?? error.message);
 
-/** Unpacks the VSIX's `extension/` folder, refusing paths that leave it and symlinks. */
-async function extractVsix(vsix: string, destination: string) {
+/**
+ * Unpacks the VSIX's `extension/` folder, refusing paths that leave it,
+ * symlinks, and more than `maxBytes` unpacked.
+ */
+async function extractVsix(
+  vsix: string,
+  destination: string,
+  maxBytes: number,
+) {
+  let unpacked = 0;
+
   const zip = await new Promise<yauzl.ZipFile>((resolve, reject) =>
     yauzl.open(vsix, { lazyEntries: true }, (error, opened) =>
       error ? reject(error) : resolve(opened),
@@ -381,6 +409,11 @@ async function extractVsix(vsix: string, destination: string) {
 
           if ((mode & 0o170000) === 0o120000)
             throw new Error(`VSIX contains a symlink: ${name}`);
+
+          unpacked += entry.uncompressedSize;
+
+          if (unpacked > maxBytes)
+            throw new Error(`VSIX unpacks to more than ${maxBytes} bytes`);
 
           const output = path.join(destination, ...relative.split("/"));
           await mkdir(path.dirname(output), { recursive: true });

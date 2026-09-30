@@ -121,11 +121,40 @@ function tyExtension(
   return {
     id: "astral-sh.ty",
     version: "1.0.0",
+    tier: "bundled",
+    group: "python",
     executables: ["bundled/libs/bin/ty"],
     stripExtensionPack: true,
     addActivationEvents: ["onLanguage:ty-test"],
     targets: { "linux-x64": download, "linux-arm64": download },
     ...overrides,
+  };
+}
+
+/** Go is optional on the Desktop: it runs `go install` when it activates. */
+function goExtension(): CuratedRemoteExtension {
+  const download = serve(
+    "go.vsix",
+    vsix({
+      "extension/package.json": {
+        data: JSON.stringify({
+          publisher: "golang",
+          name: "go",
+          version: "1.0.0",
+        }),
+      },
+    }),
+  );
+
+  return {
+    id: "golang.go",
+    version: "1.0.0",
+    tier: "optional",
+    group: "go",
+    executables: [],
+    stripExtensionPack: false,
+    addActivationEvents: [],
+    targets: { "linux-x64": download, "linux-arm64": download },
   };
 }
 
@@ -236,7 +265,7 @@ it("downloads nothing and leaves the list alone the second time", async () => {
 
   expect(result).toMatchObject({
     installed: [],
-    skipped: ["astral-sh.ty"],
+    skipped: [{ id: "astral-sh.ty", reason: "up to date" }],
     failed: [],
   });
   expect(requests).toEqual([]);
@@ -316,6 +345,92 @@ it("fails an extension whose executable does not run", async () => {
   expect(await readdir(remoteServerPaths(env).extensionsDir)).toEqual([
     "extensions.json",
   ]);
+});
+
+it("installs an optional extension only when its group is requested", async () => {
+  const curated = [tyExtension(), goExtension()];
+
+  const without = await ensureRemoteExtensions({
+    env,
+    curated,
+    target: "linux-x64",
+  });
+
+  expect(without).toMatchObject({
+    installed: ["astral-sh.ty"],
+    skipped: [{ id: "golang.go", reason: 'optional group "go" not requested' }],
+    failed: [],
+  });
+  expect(requests).toEqual(["/ty.vsix"]);
+
+  const withGo = await ensureRemoteExtensions({
+    env,
+    curated,
+    groups: ["go"],
+    target: "linux-x64",
+  });
+
+  expect(withGo).toMatchObject({ installed: ["golang.go"], failed: [] });
+  expect(requests).toEqual(["/ty.vsix", "/go.vsix"]);
+
+  const list = JSON.parse(
+    await readFile(
+      path.join(remoteServerPaths(env).extensionsDir, "extensions.json"),
+      "utf8",
+    ),
+  );
+
+  expect(
+    list.map((entry: { identifier: { id: string } }) => entry.identifier.id),
+  ).toEqual(["astral-sh.ty", "golang.go"]);
+});
+
+it("refuses a VSIX with a path that leaves its folder, or a symlink, and writes nothing", async () => {
+  const manifest = {
+    data: JSON.stringify({
+      publisher: "astral-sh",
+      name: "ty",
+      version: "1.0.0",
+    }),
+  };
+
+  for (const [name, entry] of [
+    ["escape.vsix", { "extension/../../escaped.txt": { data: "x" } }],
+    [
+      "symlink.vsix",
+      { "extension/link": { data: "/etc/passwd", mode: 0o120777 } },
+    ],
+  ] as const) {
+    const download = serve(
+      name,
+      vsix({ "extension/package.json": manifest, ...entry }),
+    );
+
+    const result = await ensureRemoteExtensions({
+      env,
+      curated: [
+        tyExtension({
+          executables: [],
+          targets: { "linux-x64": download, "linux-arm64": download },
+        }),
+      ],
+      target: "linux-x64",
+    });
+
+    // yauzl refuses a `..` entry itself; the symlink is refused by our check.
+    expect(result.failed).toEqual([
+      {
+        id: "astral-sh.ty",
+        error: expect.stringMatching(
+          /invalid relative path|VSIX contains a symlink/,
+        ),
+      },
+    ]);
+  }
+
+  const { extensionsDir } = remoteServerPaths(env);
+  expect(await readdir(extensionsDir)).toEqual(["extensions.json"]);
+  expect(await readdir(path.dirname(extensionsDir))).toEqual(["extensions"]);
 });
 
 it("refuses a machine that is not Linux on x64 or arm64", () => {

@@ -152,6 +152,11 @@ test("packs the Desktop version under the whiteboard name with both bins and the
     remoteExtensionIds,
   );
 
+  // The remote installs Go only when the Desktop enabled its optional group.
+  const go = curated.extensions.find((extension) => extension.id === "golang.go");
+  assert.equal(go.tier, "optional");
+  assert.equal(go.group, "go");
+
   for (const extension of curated.extensions)
     for (const target of ["linux-x64", "linux-arm64"]) {
       const { url, sha256, size } = extension.targets[target];
@@ -208,5 +213,10 @@ test("refuses a tarball over the size limit", async (t) => {
       maxBytes: 1024,
     }),
     /over the 1024-byte limit/,
+  );
+  await assert.rejects(
+    stat(
+      path.join(root, "output", `dev.fast-whiteboard-${version}.tgz`),
+    ),
   );
 });
