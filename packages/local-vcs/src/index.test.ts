@@ -26,7 +26,6 @@ import {
   parseGitRemoteSlug,
   parseJjDiffSummary,
   readFileAtCommit,
-  readFileAtRevision,
   resolveRepoContext,
   resolveRepoContextSync,
   setLocalVcsCommandObserver,
@@ -860,34 +859,6 @@ describe("local vcs", () => {
       changedFiles: ["src/app.ts", "src/new.ts"],
       deletedFiles: ["src/old.ts"],
     });
-  });
-
-  it("reads file source at a revision asynchronously", async () => {
-    const rootPath = await mkdtemp(
-      path.join(tmpdir(), "local-vcs-read-file-revision-"),
-    );
-
-    execGit(rootPath, ["init"]);
-    execGit(rootPath, ["config", "user.email", "test@example.com"]);
-    execGit(rootPath, ["config", "user.name", "Test User"]);
-    mkdirSync(path.join(rootPath, "src"));
-    writeFileSync(
-      path.join(rootPath, "src", "app.ts"),
-      "export const app = 1;\n",
-    );
-    execGit(rootPath, ["add", "src/app.ts"]);
-    execGit(rootPath, ["commit", "-m", "initial"]);
-
-    await expect(
-      readFileAtRevision({ rootPath, ref: "HEAD", relativePath: "src/app.ts" }),
-    ).resolves.toMatchObject({ source: "export const app = 1;\n" });
-    await expect(
-      readFileAtRevision({
-        rootPath,
-        ref: "HEAD",
-        relativePath: "src/missing.ts",
-      }),
-    ).resolves.toBeNull();
   });
 
   it("falls back to colocated Git when a jj root cannot answer", async () => {

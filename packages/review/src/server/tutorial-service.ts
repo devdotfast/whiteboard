@@ -179,7 +179,6 @@ export function createTutorialService(input: {
   }
 
   return {
-    find,
     async status() {
       return {
         version: 1 as const,

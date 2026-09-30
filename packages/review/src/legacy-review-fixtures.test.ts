@@ -14,7 +14,6 @@ import {
   snapshotReviewTree,
 } from "./fixtures/legacy-reviews/legacy-review-fixture";
 import {
-  findReview,
   materializeReviewRevision,
   readStoredReview,
   sealReviewCandidate,
@@ -174,7 +173,6 @@ describe.each(fixtures)("legacy fixture $name", (fixture) => {
     expect(await readFile(path.join(dir, "review.db"))).toEqual(staleDatabase);
     const snapshot = await snapshotReviewTree(dir);
     expect(await readStoredReview(dir)).toEqual(loaded);
-    expect((await findReview(uuid))?.review.schemaVersion).toBe(5);
     expect(await snapshotReviewTree(dir)).toEqual(snapshot);
   });
 

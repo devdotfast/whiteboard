@@ -399,22 +399,6 @@ export function createGlobalReviewServer(
       reviewUuid: prepared.reviewId,
     });
   });
-  // The tutorial descriptor is not in `GET /reviews`, so tooling and
-  // integration checks fetch it here.
-  app.get("/tutorial/review", async () => {
-    const stored = await tutorial.find();
-
-    if (!stored) {
-      throw new ReviewServerError("Review not found.", 404);
-    }
-
-    return globalJson(200, {
-      reviewId: stored.reviewId,
-      title: stored.title,
-      pins: stored.pins,
-      version: stored.version,
-    });
-  });
   app.post("/tutorial/open", async () => {
     return globalJson(
       200,

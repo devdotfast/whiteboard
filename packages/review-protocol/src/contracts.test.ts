@@ -189,7 +189,7 @@ const contracts: Array<[string, ZodType, JsonObject]> = [
       selection: null,
     },
   ],
-  ["verb request", ReviewVerbRequestSchema, { name: "focusCanvas", args: {} }],
+  ["verb request", ReviewVerbRequestSchema, { name: "focusWindow", args: {} }],
   ["verb response", ReviewVerbResponseSchema, { ok: true }],
   [
     "desktop verb frame",
@@ -197,7 +197,7 @@ const contracts: Array<[string, ZodType, JsonObject]> = [
     {
       event: "desktop-verb",
       id: "verb-1",
-      request: { name: "focusCanvas", args: {} },
+      request: { name: "focusWindow", args: {} },
     },
   ],
   [

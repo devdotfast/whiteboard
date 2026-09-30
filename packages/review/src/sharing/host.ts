@@ -77,11 +77,6 @@ export function mountSharingHost(
       ...login,
     });
   });
-  app.post("/sharing/logout", async (context) => {
-    await clearStoreAuth();
-
-    return context.json({ ok: true });
-  });
   app.post("/sharing/login", async (context) => {
     if (!login.pending) {
       login = { pending: true };

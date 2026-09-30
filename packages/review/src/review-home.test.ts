@@ -13,10 +13,9 @@ import {
 import {
   ReviewHomeScanError,
   type StoredReview,
-  findReview,
-  findReviewForRepair,
   materializeReviewRevision,
   parseAnyStoredReviewRecord,
+  readStoredReview,
   reviewsHomeDir,
   sealReviewCandidate,
 } from "./review-home";
@@ -160,29 +159,19 @@ describe("review home", () => {
       }),
       "utf8",
     );
-    const loaded = await findReview(created.review.uuid);
+    const loaded = await load(created.dir);
 
     expect(loaded?.review).not.toHaveProperty("softwareMap");
   });
-
-  it("distinguishes invalid UUIDs, missing reviews, and malformed records", async () => {
-    await reviewHome();
-    const malformedUuid = "22222222-2222-4222-8222-222222222222";
-    const malformedDir = path.join(reviewsHomeDir(), malformedUuid);
-    await mkdir(malformedDir, { recursive: true });
-    await writeFile(path.join(malformedDir, "review.json"), "ENOENT", "utf8");
-
-    await expect(findReview("not-a-uuid")).rejects.toThrow(
-      "Review UUID is invalid: not-a-uuid",
-    );
-    await expect(
-      findReview("11111111-1111-4111-8111-111111111111"),
-    ).resolves.toBeNull();
-    await expect(findReview(malformedUuid)).rejects.toBeInstanceOf(
-      ReviewHomeScanError,
-    );
-  });
 });
+
+async function load(dir: string): Promise<StoredReview> {
+  const loaded = await readStoredReview(dir);
+
+  if ("error" in loaded) throw new ReviewHomeScanError([loaded.error]);
+
+  return loaded;
+}
 
 async function git(root: string, args: string[]): Promise<string> {
   const { stdout } = await execFilePromise("git", ["-C", root, ...args], {
@@ -193,51 +182,6 @@ async function git(root: string, args: string[]): Promise<string> {
 }
 
 describe("legacy records on read", () => {
-  it("reads repair metadata without migration and preserves lookup validation", async () => {
-    const root = await gitRepository();
-    await reviewHome();
-
-    const created = await createLegacyReviewDir({
-      worktreePath: root,
-      baseRef: "main",
-      baseCommit: await git(root, ["rev-parse", "HEAD"]),
-    });
-
-    const recordPath = path.join(created.dir, "review.json");
-    const record = await legacyRecord(created, 4, "a".repeat(40));
-    const bytes = JSON.stringify(record);
-    await writeFile(recordPath, bytes);
-    const loaded = await findReviewForRepair(created.review.uuid);
-    expect(loaded).toMatchObject({
-      dir: created.dir,
-      review: { schemaVersion: 5, presentedDocumentRevision: "a".repeat(40) },
-    });
-    expect(loaded).not.toHaveProperty("recovery");
-    expect(await readFile(recordPath, "utf8")).toBe(bytes);
-
-    for (const value of [
-      "{broken",
-      JSON.stringify({ ...record, baseCommit: 42 }),
-      JSON.stringify({ ...record, schemaVersion: 6 }),
-      JSON.stringify({
-        ...record,
-        uuid: "11111111-1111-4111-8111-111111111111",
-      }),
-    ]) {
-      await writeFile(recordPath, value);
-      await expect(
-        findReviewForRepair(created.review.uuid),
-      ).rejects.toBeInstanceOf(ReviewHomeScanError);
-      expect(await readFile(recordPath, "utf8")).toBe(value);
-    }
-
-    await expect(findReviewForRepair("not-a-uuid")).rejects.toThrow(
-      "Review UUID is invalid",
-    );
-    await expect(
-      findReviewForRepair("22222222-2222-4222-8222-222222222222"),
-    ).resolves.toBeNull();
-  });
   it.each([2, 3, 4, 6] as const)(
     "does not mutate malformed or unsupported schema %s records",
     async (schemaVersion) => {
@@ -272,7 +216,7 @@ describe("legacy records on read", () => {
 
       await writeFile(recordPath, bytes);
       const refs = await git(created.dir, ["rev-parse", "HEAD"]);
-      await expect(findReview(created.review.uuid)).rejects.toMatchObject({
+      await expect(load(created.dir)).rejects.toMatchObject({
         errors: [{ code: "MIGRATION_REQUIRED" }],
       });
       expect(await readFile(recordPath, "utf8")).toBe(bytes);
@@ -305,7 +249,7 @@ describe("legacy records on read", () => {
         JSON.stringify(await legacyRecord(created, schemaVersion, revision)),
       );
 
-      const stored = await findReview(created.review.uuid);
+      const stored = await load(created.dir);
       expect(stored?.review).toMatchObject({
         schemaVersion: 5,
         status: "accepted",
@@ -324,7 +268,7 @@ describe("legacy records on read", () => {
       expect(bundle && reviewDocumentBundleData(bundle).title).toBe("Sealed");
 
       const bytes = await readFile(recordPath, "utf8");
-      await findReview(created.review.uuid);
+      await load(created.dir);
       expect(await readFile(recordPath, "utf8")).toBe(bytes);
     },
   );
@@ -348,8 +292,8 @@ describe("legacy records on read", () => {
     const seal = vi.spyOn(reviewVcs, "seal");
 
     const [first, second] = await Promise.all([
-      findReview(created.review.uuid),
-      findReview(created.review.uuid),
+      load(created.dir),
+      load(created.dir),
     ]);
 
     expect(first?.review.schemaVersion).toBe(5);
@@ -376,7 +320,7 @@ describe("legacy records on read", () => {
     await writeFile(recordPath, bytes);
     const refs = await readFile(path.join(created.dir, ".git/refs/heads/main"));
 
-    await expect(findReview(created.review.uuid)).rejects.toMatchObject({
+    await expect(load(created.dir)).rejects.toMatchObject({
       errors: [{ code: "REPAIR_REQUIRED", reviewUuid: created.review.uuid }],
     });
     expect(await readFile(recordPath, "utf8")).toBe(bytes);
