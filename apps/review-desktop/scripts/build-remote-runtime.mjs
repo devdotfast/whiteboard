@@ -12,13 +12,19 @@
 //   out/vs/workbench/api/node/extensionHostProcess.js
 //   out/vs/platform/files/node/watcher/watcherMain.js
 //   extensions/                     built-in extensions, scanned by the server
+//   extensions/node_modules/typescript   the TypeScript the extensions load
+//
+// The built-in language extensions are bundled with their own esbuild scripts
+// and listed with vsce, as the Desktop build does, so they carry no
+// node_modules of their own.
 //
 // `@vscode/ripgrep-universal` is bundled; only its `rg` binary is not shipped.
 // Its `rgPath` is `bin/<platform>-<arch>/rg` beside the grandparent directory
 // of the bundle that imports it, so the extension host looks for
 //   out/vs/workbench/api/bin/linux-x64/rg
 //   out/vs/workbench/api/bin/linux-arm64/rg
-// and text and file search are unavailable until that file exists.
+// and text and file search are unavailable until that file exists. The
+// package (scripts/pack-review-cli.mjs) puts both there.
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { createRequire, isBuiltin } from "node:module";
@@ -65,6 +71,56 @@ export const OPTIONAL_NATIVE_PACKAGES = [
   "node-pty",
   "vsda",
 ];
+
+export const REMOTE_BUILTIN_EXTENSIONS = [
+  "typescript-language-features",
+  "json-language-features",
+  "css-language-features",
+  "html-language-features",
+];
+
+// The Desktop build's local extension packaging (build/lib/extensions.ts
+// fromLocalEsbuild), without source maps.
+async function buildBuiltinExtensions(out) {
+  const buildRequire = createRequire(path.join(codeOss, "build/package.json"));
+  const vsce = buildRequire("@vscode/vsce");
+  const extensions = path.join(codeOss, "extensions");
+
+  for (const name of REMOTE_BUILTIN_EXTENSIONS) {
+    const source = path.join(extensions, name);
+    const destination = path.join(out, "extensions", name);
+
+    execFileSync(process.execPath, ["esbuild.mts"], {
+      cwd: source,
+      stdio: ["ignore", "ignore", "inherit"],
+    });
+
+    const files = await vsce.listFiles({
+      cwd: source,
+      packageManager: vsce.PackageManager.None,
+    });
+
+    for (const file of files.filter((f) => !f.endsWith(".map"))) {
+      fs.cpSync(path.join(source, file), path.join(destination, file));
+    }
+
+    const manifestPath = path.join(destination, "package.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+
+    delete manifest.scripts;
+    delete manifest.dependencies;
+    delete manifest.devDependencies;
+    manifest.main &&= manifest.main.replace("/out/", "/dist/");
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  }
+
+  // extensions/postinstall.mjs already trimmed it to what they load.
+  fs.cpSync(
+    path.join(extensions, "node_modules/typescript"),
+    path.join(out, "extensions/node_modules/typescript"),
+    { recursive: true },
+  );
+}
 
 // The same rule the Desktop's own build stamps `product.commit` with
 // (code-oss/build/lib/getVersion.ts), so a release Desktop and its runtime agree.
@@ -179,6 +235,8 @@ export async function buildRemoteRuntime({
       `remote runtime left imports unbundled: ${[...unexpected].join(", ")}`,
     );
   }
+
+  await buildBuiltinExtensions(out);
 
   return { out, commit };
 }
