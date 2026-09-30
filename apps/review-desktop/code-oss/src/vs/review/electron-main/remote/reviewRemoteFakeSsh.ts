@@ -82,7 +82,7 @@ export const attachOutput = (port: number, token = "remote-token") =>
 export function fakeClock() {
 	let time = 0;
 	let pending: { at: number; run(): void }[] = [];
-	const clock: ReviewRemoteClock & { next(): boolean; readonly pending: number; delays: number[] } = {
+	const clock: ReviewRemoteClock & { next(): boolean; advance(ms: number): void; readonly pending: number; delays: number[] } = {
 		delays: [],
 		now: () => time,
 		schedule(ms, run) {
@@ -98,6 +98,10 @@ export function fakeClock() {
 			time = Math.max(time, entry.at);
 			entry.run();
 			return true;
+		},
+		/** Time passes with nothing due; scheduled work still waits for `next`. */
+		advance(ms) {
+			time += ms;
 		},
 		get pending() {
 			return pending.length;

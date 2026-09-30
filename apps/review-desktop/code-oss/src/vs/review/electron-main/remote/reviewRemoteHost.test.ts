@@ -237,6 +237,37 @@ test("a restarted remote server is attached again over the same master", async (
 	assert.ok(cancels[0].args.includes(`127.0.0.1:${ports[0]}:127.0.0.1:41235`));
 });
 
+test("a server that keeps restarting is attached again with growing delays, until a stable period", async (t) => {
+	const ports = [await healthServer(t), await healthServer(t)];
+	const { host, ssh, clock, last } = hostFor(
+		t,
+		{ attach: (call) => ({ code: 0, stdout: attachOutput(41234 + call, `token-${call}`) }) },
+		ports,
+	);
+	const execs = () => ssh.of("wb-test-a", "exec");
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	await host.reattach();
+	assert.equal(execs().length, 2);
+	for (let call = 3; call <= 4; call++) {
+		await host.reattach();
+		assert.equal(clock.pending, 1);
+		assert.ok(clock.next());
+		await until(() => last()?.endpoint?.token === `token-${call}`);
+	}
+
+	const [, first, second, third] = execs().map((c) => c.at);
+	assert.ok(second - first >= 1000, `${second - first} ms`);
+	assert.ok(third - second > second - first, `${third - second} ms after ${second - first} ms`);
+
+	clock.advance(30_000);
+	await host.reattach();
+	assert.equal(execs().length, 5);
+	assert.equal(clock.pending, 0);
+	assert.equal(last()?.endpoint?.token, "token-5");
+});
+
 test("a retry starts the new master only after the old one has exited", async (t) => {
 	const port = await healthServer(t);
 	const { host, ssh, last } = hostFor(t, { exitDelayMs: 150 }, port);

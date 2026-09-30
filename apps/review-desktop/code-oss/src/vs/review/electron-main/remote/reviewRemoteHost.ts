@@ -219,6 +219,9 @@ export class ReviewRemoteHost {
 	/** The ports of the forward to the remote server. */
 	private forwarded: { local: number; remote: number } | undefined;
 	private reattaching = false;
+	/** Reattaches since the connection last stayed up `stable`; each further one waits longer. */
+	private reattaches = 0;
+	private cancelReattach: (() => void) | undefined;
 	private masterStderr = "";
 	private env: NodeJS.ProcessEnv | undefined;
 	private connectedAt: number | undefined;
@@ -278,9 +281,24 @@ export class ReviewRemoteHost {
 
 	/**
 	 * The remote server restarted with a new token: attach again over the
-	 * same master, forward a new port, and drop the old forward.
+	 * same master. A server that keeps crashing is attached again with the
+	 * reconnect backoff, reset once a connection stays up `stable`.
 	 */
-	async reattach(): Promise<void> {
+	reattach(): Promise<void> {
+		if (this.disposed || this.reattaching || this.cancelReattach || !this.master || this.connectedAt === undefined) return Promise.resolve();
+		if (this.clock.now() - this.connectedAt >= this.timeouts.stable) this.reattaches = 0;
+		if (this.reattaches++ === 0) return this.attachAgain();
+		const delay = reconnectDelay(this.reattaches - 2, this.options.random);
+		this.options.log(`${this.alias}: its server restarted again; attaching again in ${Math.round(delay / 1000)} s.`);
+		this.cancelReattach = this.clock.schedule(delay, () => {
+			this.cancelReattach = undefined;
+			void this.attachAgain();
+		});
+		return Promise.resolve();
+	}
+
+	/** Attach, forward a new port, and drop the old forward, over the same master. */
+	private async attachAgain(): Promise<void> {
 		const env = this.env;
 		const old = this.forwarded;
 		if (this.disposed || this.reattaching || !this.master || this.connectedAt === undefined || !env || !old) return;
@@ -298,6 +316,7 @@ export class ReviewRemoteHost {
 			if (stale()) return;
 			await this.run(sshCancelForwardArgs(this.options.session, old.local, old.remote, env), this.timeouts.operation);
 			if (stale()) return;
+			this.connectedAt = this.clock.now();
 			this.set({ alias: this.alias, endpoint: { url, token: attach.token } });
 		} catch (error) {
 			if (stale()) return;
@@ -322,6 +341,8 @@ export class ReviewRemoteHost {
 		this.generation++;
 		this.cancelTimer?.();
 		this.cancelTimer = undefined;
+		this.cancelReattach?.();
+		this.cancelReattach = undefined;
 		const master = this.master;
 		this.master = undefined;
 		await this.close(master);
@@ -460,6 +481,8 @@ export class ReviewRemoteHost {
 
 	private fail(problem: Problem): void {
 		this.generation++;
+		this.cancelReattach?.();
+		this.cancelReattach = undefined;
 		this.connectedAt = undefined;
 		this.dropMaster();
 		this.set({ alias: this.alias, problem });
