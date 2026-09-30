@@ -1,9 +1,11 @@
 import http from "node:http";
 import { Readable } from "node:stream";
 
-import type {
-  ReviewGatewayHost,
-  ReviewGatewayHostState,
+import {
+  REVIEW_CLIENT_HEADER,
+  REVIEW_CLIENT_REMOTE,
+  type ReviewGatewayHost,
+  type ReviewGatewayHostState,
 } from "@dev.fast/review-protocol";
 import { z } from "zod";
 
@@ -11,9 +13,20 @@ import { StreamLimitError } from "./bounded-stream.js";
 
 const HEALTH_TIMEOUT_MS = 3_000;
 
-const FIRST_RETRY_MS = 500;
+export const FIRST_RETRY_MS = 500;
 
-const MAX_RETRY_MS = 30_000;
+export const MAX_RETRY_MS = 30_000;
+
+export const FIRST_BYTE_TIMEOUT_MS = 10_000;
+
+export const NO_ANSWER = `it did not answer within ${FIRST_BYTE_TIMEOUT_MS / 1_000} seconds`;
+
+/** Remotes hold only reviews with these ids. */
+export const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A backoff delay, ±25%. */
+export const jitter = (ms: number) => ms * (0.75 + Math.random() * 0.5);
 
 const healthSchema = z.object({
   ok: z.literal(true),
@@ -57,6 +70,8 @@ export function createGatewayHosts(input: {
   remembered?(serverId: string): string | undefined;
   /** The alias that now speaks for a server id. */
   machine?(serverId: string, alias: string): void;
+  /** Host states may have changed. */
+  changed?(): void;
 }) {
   const log = input.log ?? (() => {});
   let hosts: Host[] = [];
@@ -182,6 +197,8 @@ export function createGatewayHosts(input: {
     for (const alias of reported.keys())
       if (!states.some((state) => state.alias === alias))
         reported.delete(alias);
+
+    input.changed?.();
   }
 
   function dispose(host: Host) {
@@ -212,7 +229,7 @@ export function createGatewayHosts(input: {
   }
 
   function retryLater(host: Host) {
-    const delay = host.retryMs * (0.75 + Math.random() * 0.5);
+    const delay = jitter(host.retryMs);
     host.retryMs = Math.min(host.retryMs * 2, MAX_RETRY_MS);
     host.retry = setTimeout(() => void check(host), delay);
     host.retry.unref();
@@ -353,6 +370,12 @@ export function createGatewayHosts(input: {
       report();
       void check(host);
     },
+    /** A stream to the host ended: /health decides whether it is down. */
+    recheck(remote: GatewayRemote) {
+      const host = hosts.find((candidate) => candidate === remote);
+
+      if (host && !host.checking) void check(host);
+    },
     close() {
       closed = true;
 
@@ -362,6 +385,12 @@ export function createGatewayHosts(input: {
 }
 
 export type GatewayHosts = ReturnType<typeof createGatewayHosts>;
+
+/** The headers every request to a remote carries. */
+export const remoteHeaders = (remote: GatewayRemote) => ({
+  "x-review-token": remote.endpoint?.token ?? "",
+  [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE,
+});
 
 /** One HTTP request to a host, resolved when its headers arrive. */
 export function send(

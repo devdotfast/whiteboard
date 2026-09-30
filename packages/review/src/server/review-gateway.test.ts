@@ -1,9 +1,5 @@
-import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { once } from "node:events";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -12,26 +8,24 @@ import {
   REVIEW_HOST_HEADER,
   type ReviewGatewayHost,
 } from "@dev.fast/review-protocol";
-import { getRequestListener } from "@hono/node-server";
 import {
   findReviewPackageRoot,
   readReviewPackageVersion,
 } from "@review/package-paths.js";
-import { createReviewApi } from "@review/review-api/http.js";
 import { openReviewProfile } from "@review/review-api/profile.js";
-import type { Result } from "@review/review-api/store.js";
-import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { createGlobalReviewServer } from "./desktop-server.js";
 import { gatewayMemoryPath } from "./review-gateway-memory.js";
 import {
   type FakeHandler,
+  repository as createRepository,
+  seed as seedReview,
   startFake,
+  startGateway as startLaptopGateway,
   startRemote,
   stopAll,
 } from "./review-gateway-test-utils.js";
-import { createReviewGateway } from "./review-gateway.js";
 
 const version = readReviewPackageVersion(import.meta.url);
 
@@ -55,112 +49,15 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-/** The laptop's review API in process, and a gateway over it on a real port. */
-async function startGateway(
-  hosts: ReviewGatewayHost[],
-  gatewayVersion = version,
-) {
-  const home = path.join(root, "laptop");
-  const local = await openReviewProfile(home, { manageWorkspaces: true });
-  await local.store.ensureScratchpad();
+const startGateway = (hosts: ReviewGatewayHost[], gatewayVersion = version) =>
+  startLaptopGateway(root, hosts, { version: gatewayVersion });
 
-  const laptop = new Hono().route(
-    "/reviews-api",
-    createReviewApi(
-      local.store,
-      local.data,
-      undefined,
-      undefined,
-      undefined,
-      () => true,
-    ),
-  );
-
-  const logged: string[] = [];
-
-  const gateway = createReviewGateway({
-    local: (request) => laptop.fetch(request),
-    version: gatewayVersion,
-    home,
-    log: (message) => logged.push(message),
-  });
-
-  gateway.setHosts(hosts);
-
-  const server = createServer(getRequestListener(gateway.fetch));
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-
-  const close = async () => {
-    server.closeAllConnections();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-    await gateway.close();
-    await local.data.close();
-    await local.store.close();
-  };
-
-  cleanups.push(close);
-
-  // SAFETY: a TCP listener's address() is an AddressInfo.
-  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-
-  const request = (route: string, init: RequestInit = {}) =>
-    fetch(`${url}/reviews-api${route}`, {
-      ...init,
-      headers: {
-        "content-type": "application/json",
-        "x-review-token": LAPTOP_TOKEN,
-        ...init.headers,
-      },
-    });
-
-  return { gateway, local, request, close, logged };
-}
-
-async function repository() {
-  const directory = path.join(root, `repo-${randomUUID()}`);
-  await mkdir(directory, { recursive: true });
-
-  const git = (...args: string[]) =>
-    execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trim();
-
-  git("init", "-q", "-b", "main");
-  git("config", "user.name", "Review Test");
-  git("config", "user.email", "review-test@example.invalid");
-  await writeFile(path.join(directory, "example.ts"), "export const a = 1;\n");
-  git("add", ".");
-  git("commit", "-qm", "base");
-  const base = git("rev-parse", "HEAD");
-  await writeFile(path.join(directory, "example.ts"), "export const a = 2;\n");
-  git("commit", "-qam", "head");
-
-  return { directory, base, head: git("rev-parse", "HEAD") };
-}
+const repository = () => createRepository(root);
 
 type Remote = Awaited<ReturnType<typeof startRemote>>;
 
-async function seed(remote: Remote, title: string) {
-  const repo = await repository();
-
-  const registered = await remote.api<{ id: string }>("/repositories", {
-    method: "POST",
-    body: JSON.stringify({ path: repo.directory }),
-  });
-
-  const created = await remote.api<Result>("/commands", {
-    method: "POST",
-    body: JSON.stringify({
-      commandId: randomUUID(),
-      operation: {
-        type: "create",
-        title,
-        pins: { repositoryId: registered.id, base: repo.base, head: repo.head },
-      },
-    }),
-  });
-
-  return created.reviewId;
-}
+const seed = (remote: Remote, title: string) =>
+  seedReview(remote.api, root, title);
 
 const command = (operation: JsonObject) =>
   JSON.stringify({ commandId: randomUUID(), operation });
@@ -427,7 +324,9 @@ it("reaches the laptop for the scratchpad and shared reviews, even when a remote
   const shared = await request(`/shared-${"a".repeat(64)}`);
   expect(shared.headers.has(REVIEW_HOST_HEADER)).toBe(false);
 
-  expect(fake.requests.map((entry) => entry.url)).toEqual(["/health"]);
+  expect(
+    fake.requests.filter((entry) => /scratchpad|shared-/.test(entry.url ?? "")),
+  ).toEqual([]);
 });
 
 it("answers 503 with the install command for a review on another version, also from its memory file", async () => {
@@ -596,8 +495,10 @@ it("never serves a review from a copied store while its machine is down", async 
   ).toBe("wb-a");
 
   await a.stop();
-  // The first request finds a gone; later ones are refused, never sent to c.
-  expect((await request(`/${onA}?full=true`)).status).toBe(502);
+  // Once a is found gone (its streams end), requests are refused, never sent to c.
+  await expect
+    .poll(async () => (await request(`/${onA}?full=true`)).status)
+    .toBe(503);
 
   const refused = await request(`/${onA}?full=true`);
   expect(refused.status).toBe(503);
