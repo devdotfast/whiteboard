@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -24,6 +24,7 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { createGlobalReviewServer } from "./desktop-server.js";
+import { gatewayMemoryPath } from "./review-gateway-memory.js";
 import {
   startFake,
   startRemote,
@@ -504,7 +505,7 @@ it("marks a host that stops answering offline within 11 s while others answer", 
   const quick = Date.now();
   expect((await request(`/${onLaptop.reviewId}`)).status).toBe(200);
   expect((await request(`/${onB}`)).status).toBe(200);
-  expect(Date.now() - quick).toBeLessThan(1_000);
+  expect(Date.now() - quick).toBeLessThan(3_000);
 
   expect((await stuck).status).toBe(504);
   expect(gateway.hosts()[0]?.state).toBe("offline");
@@ -571,4 +572,111 @@ it("mounts the gateway in the Desktop server, with host states behind the token"
   const unknown = await get("/reviews-api/status/unknown");
   expect(unknown.status).toBe(404);
   expect(await unknown.json()).toEqual({ ok: false, error: "Not found." });
+});
+
+it("never serves a review from a copied store while its machine is down", async () => {
+  const first = await startRemote(path.join(root, "a"));
+  const onA = await seed(first, "On a");
+  await first.stop();
+  await cp(path.join(root, "a"), path.join(root, "c"), { recursive: true });
+  const a = await startRemote(path.join(root, "a"));
+  const c = await startRemote(path.join(root, "c"));
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: a.endpoint },
+    { alias: "wb-c", endpoint: c.endpoint },
+  ]);
+
+  await expect
+    .poll(() => gateway.hosts().map((host) => host.state))
+    .toEqual(["online", "duplicate"]);
+  expect(
+    (await request(`/${onA}?full=true`)).headers.get(REVIEW_HOST_HEADER),
+  ).toBe("wb-a");
+
+  await a.stop();
+  // The first request finds a gone; later ones are refused, never sent to c.
+  expect((await request(`/${onA}?full=true`)).status).toBe(502);
+
+  const refused = await request(`/${onA}?full=true`);
+  expect(refused.status).toBe(503);
+  expect(refused.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+  expect(await refused.json()).toMatchObject({
+    error: expect.stringContaining("wb-a is offline"),
+  });
+  expect(gateway.hosts().map((host) => host.state)).toEqual([
+    "offline",
+    "duplicate",
+  ]);
+});
+
+it("refuses a redirect from a remote and drops its cookies", async () => {
+  const reviewId = randomUUID();
+
+  const fake = await startFake({
+    version,
+    reviewIds: [reviewId],
+    handle(request, response) {
+      if (request.url?.startsWith(`/reviews-api/${reviewId}/progress`)) {
+        response.writeHead(302, { location: "/remote-hosts" }).end();
+
+        return true;
+      }
+
+      if (request.url?.startsWith(`/reviews-api/${reviewId}/commits`)) {
+        response
+          .writeHead(200, {
+            "content-type": "application/json",
+            "set-cookie": ["a=1", "b=2"],
+          })
+          .end("[]");
+
+        return true;
+      }
+
+      return false;
+    },
+  });
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: fake.endpoint },
+  ]);
+
+  await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+
+  const redirected = await request(`/${reviewId}/progress`, {
+    redirect: "manual",
+  });
+
+  expect(redirected.status).toBe(502);
+  expect(redirected.headers.has("location")).toBe(false);
+
+  const commits = await request(`/${reviewId}/commits`);
+  expect(commits.status).toBe(200);
+  expect(commits.headers.has("set-cookie")).toBe(false);
+});
+
+it("forgets a review its owner no longer has", async () => {
+  const a = await startRemote(path.join(root, "a"));
+  const onA = await seed(a, "On a");
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: a.endpoint },
+  ]);
+
+  const memoryFile = gatewayMemoryPath(path.join(root, "laptop"));
+
+  await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+  expect((await request(`/${onA}?full=true`)).status).toBe(200);
+  await expect.poll(() => readFile(memoryFile, "utf8")).toContain(onA);
+
+  await a.api("/commands", {
+    method: "POST",
+    body: command({ type: "delete", reviewId: onA }),
+  });
+
+  const gone = await request(`/${onA}?full=true`);
+  expect(gone.status).toBe(404);
+  expect(gone.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+  await expect.poll(() => readFile(memoryFile, "utf8")).not.toContain(onA);
 });

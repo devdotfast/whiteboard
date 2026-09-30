@@ -28,6 +28,8 @@ import { serverJson } from "./review-server-core.js";
 
 const FIRST_BYTE_TIMEOUT_MS = 10_000;
 
+const NO_ANSWER = `it did not answer within ${FIRST_BYTE_TIMEOUT_MS / 1_000} seconds`;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** `/reviews-api/<name>` routes that are not a review. The list and the
@@ -88,6 +90,8 @@ const HOP_HEADERS = new Set([
   "upgrade",
 ]);
 
+const DROPPED_RESPONSE_HEADERS = new Set(["location", "set-cookie"]);
+
 const DROPPED_REQUEST_HEADERS = new Set([
   ...HOP_HEADERS,
   "host",
@@ -134,21 +138,26 @@ export function createReviewGateway(input: {
 
   /** The status a host gives the ownership check, or undefined on failure. */
   async function ownership(remote: GatewayRemote, reviewId: string) {
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), FIRST_BYTE_TIMEOUT_MS);
+
     try {
       const response = await send(remote, {
         method: "GET",
         path: `/reviews-api/${encodeURIComponent(reviewId)}/activity`,
         headers: remoteHeaders(remote),
-        signal: AbortSignal.timeout(FIRST_BYTE_TIMEOUT_MS),
+        signal: abort.signal,
       });
 
       response.resume();
 
       return response.statusCode;
     } catch (error) {
-      hosts.failed(remote, errorText(error));
+      hosts.failed(remote, abort.signal.aborted ? NO_ANSWER : errorText(error));
 
       return undefined;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -291,9 +300,7 @@ export function createReviewGateway(input: {
     } catch (error) {
       request.signal.removeEventListener("abort", leave);
 
-      const reason = timedOut
-        ? `it did not answer within ${FIRST_BYTE_TIMEOUT_MS / 1_000} seconds`
-        : errorText(error);
+      const reason = timedOut ? NO_ANSWER : errorText(error);
 
       if (!request.signal.aborted) hosts.failed(remote, reason);
 
@@ -311,6 +318,17 @@ export function createReviewGateway(input: {
 
     const status = response.statusCode ?? 502;
 
+    // A review server never redirects; a remote must not steer the UI.
+    if (status >= 300 && status < 400 && status !== 304) {
+      response.resume();
+      log(`Refused ${remote.alias}'s redirect (${status}).`);
+
+      return answer(remote.alias, 502, {
+        ok: false,
+        error: `${remote.alias} answered with a redirect, so the answer was refused.`,
+      });
+    }
+
     // Bounds the memory file: an owner that no longer has the review.
     if (status === 404) void confirmOwner(remote, options.reviewId);
 
@@ -320,6 +338,7 @@ export function createReviewGateway(input: {
       if (
         value !== undefined &&
         !HOP_HEADERS.has(key) &&
+        !DROPPED_RESPONSE_HEADERS.has(key) &&
         !key.startsWith("access-control-")
       )
         out.set(key, Array.isArray(value) ? value.join(", ") : value);

@@ -209,7 +209,10 @@ function watchRemoteHostsFile(
         ),
       );
     } catch (error) {
-      log(`Cannot read remote hosts from ${file}: ${String(error)}`);
+      // The file holds tokens, and parse messages quote the file.
+      log(
+        `Cannot read remote hosts from ${file}: ${error instanceof Error ? error.name : "unreadable"}.`,
+      );
     }
   };
 
