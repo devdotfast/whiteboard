@@ -40,13 +40,38 @@ export const IReviewRemoteExtensions = createDecorator<IReviewRemoteExtensions>(
 const WEB_LINK = /^(https?|mailto):/i;
 const LINKS = "links other than http, https and mailto in text a remote shows";
 
-/** Link and image targets, and whether raw HTML is present, as the window's markdown parser sees them. */
-function markdownLinks(value: string) {
+const WITHHELD = "(message withheld)";
+const RESIDUAL = "text with a link the guard could not remove";
+/** `NotificationViewItem.MAX_MESSAGE_LENGTH` (private upstream, `workbench/common/notifications.ts`). */
+const MAX_MESSAGE_LENGTH = 1000;
+
+/** Link and image targets, and raw HTML if asked, that the window's markdown parser finds and that are not web. */
+function markdownLinks(value: string, html = true) {
 	const unsafe: marked.Token[] = [];
 	marked.walkTokens(marked.lexer(value, { gfm: true }), (token) => {
-		if (token.type === "html" || ((token.type === "link" || token.type === "image") && !WEB_LINK.test(token.href))) unsafe.push(token);
+		if ((html && token.type === "html") || ((token.type === "link" || token.type === "image") && !WEB_LINK.test(token.href))) unsafe.push(token);
 	});
 	return unsafe;
+}
+
+/**
+ * The safety net: whether either of the window's parsers still finds a link
+ * that is not web. A static so a test can stand in for a parser difference.
+ */
+function residualLinks(value: string, html: boolean): boolean {
+	return parseLinkedText(value).nodes.some((node) => typeof node !== "string" && !WEB_LINK.test(node.href)) || markdownLinks(value, html).length > 0;
+}
+
+/**
+ * What the notification renderer does to a message before it parses links
+ * (`NotificationViewItem.parseNotificationMessage`): cut to its length limit,
+ * then newlines to spaces, then trim. Done here first, with every run of
+ * whitespace made one space, the renderer's own pass changes nothing, so it
+ * parses exactly what the guard parsed.
+ */
+function normalise(value: string): string {
+	const cut = value.length > MAX_MESSAGE_LENGTH ? `${value.substring(0, MAX_MESSAGE_LENGTH - 3)}...` : value;
+	return cut.replace(/\s+/g, " ").trim();
 }
 
 /** Markdown with every syntax character escaped, `<` and `&` too: no link, image or HTML is left. */
@@ -86,20 +111,31 @@ export class ReviewRemoteRefusals {
 	 * Text a remote wrote that the window renders with `parseLinkedText`
 	 * (notifications, progress, quick input prompts and validation, plain
 	 * tooltips). A link the user clicks would open through the window's opener
-	 * with commands allowed, so, with that same parser, every link whose target
-	 * is not http, https or mailto becomes its label. Repeated until the parser
-	 * finds none, since a label can close a link around it.
+	 * with commands allowed. So the text is first normalised as the
+	 * notification renderer does, then, with that same parser, every link whose
+	 * target is not http, https or mailto becomes its label, repeated until the
+	 * parser finds none (a label can close a link around it). Finally both of
+	 * the window's parsers check the result.
 	 */
 	text(value: string): string {
-		let result = value;
+		let result = normalise(value);
 		for (;;) {
 			const nodes = parseLinkedText(result).nodes;
 			if (!nodes.some((node) => typeof node !== "string" && !WEB_LINK.test(node.href))) break;
 			this.refuse(LINKS);
 			result = nodes.map((node) => (typeof node === "string" ? node : WEB_LINK.test(node.href) ? `[${node.label}](${node.href})` : node.label)).join("");
 		}
-		return result;
+		return this.checked(result, false);
 	}
+
+	/** Whatever a parser difference, a non-web link never leaves the guard: the text is withheld instead. */
+	private checked(value: string, html: boolean): string {
+		if (!ReviewRemoteRefusals.residual(value, html)) return value;
+		this.refuse(RESIDUAL);
+		return WITHHELD;
+	}
+
+	static residual = residualLinks;
 
 	/**
 	 * Remote markdown for the window's markdown renderer: rebuilt with only its
@@ -121,7 +157,7 @@ export class ReviewRemoteRefusals {
 			for (const token of unsafe) text = text.replace(token.raw, inert(token.type === "html" ? token.raw : (token as marked.Tokens.Link).text));
 		}
 		if (markdownLinks(text).length) text = inert(text);
-		return { value: text, isTrusted: false, supportHtml: false, ...(value.supportThemeIcons !== undefined && { supportThemeIcons: value.supportThemeIcons }) };
+		return { value: this.checked(text, true), isTrusted: false, supportHtml: false, ...(value.supportThemeIcons !== undefined && { supportThemeIcons: value.supportThemeIcons }) };
 	}
 
 	/** For members whose every call is refused. */

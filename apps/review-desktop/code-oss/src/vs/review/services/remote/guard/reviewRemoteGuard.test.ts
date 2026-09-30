@@ -37,6 +37,25 @@ const HOSTILE = [
 	"<A HREF='COMMAND:q'>q</A>",
 ];
 
+/** What the notification renderer does before it parses (`workbench/common/notifications.ts`). */
+function notificationRenderer(value: string) {
+	const cut = value.length > 1000 ? `${value.substring(0, 1000)}...` : value;
+	return cut.replace(/(\r\n|\n|\r)/gm, " ").trim();
+}
+
+/** Whitespace a renderer collapses before parsing, inside the target and the title. */
+const WHITESPACE = [
+	`see [open](${openHosts} "t\nx")`,
+	`see [open](${openHosts} "t\r\nx")`,
+	`see [open](${openHosts} "t\rx")`,
+	`see [open](${openHosts} 't\n\tx')`,
+	`[open](\t${openHosts}\t)`,
+	`[open](  ${openHosts}  "  t  ")`,
+	`[open](\n${openHosts}\n"t")`,
+	`\r\n  [open](${openHosts})\t\n`,
+	`${"x".repeat(990)} [open](${openHosts})`,
+];
+
 function linkedTextLinks(value: string) {
 	return parseLinkedText(value).nodes.filter((node) => typeof node !== "string").map((node) => node.href);
 }
@@ -88,4 +107,27 @@ test("remote markdown is rebuilt: untrusted, no HTML, no uris or baseUri", () =>
 		supportThemeIcons: true,
 	});
 	assert.deepEqual(refusals.markdown({ value: "a" }), { value: "a", isTrusted: false, supportHtml: false });
+});
+
+test("text is normalised as the notification renderer normalises it, so the renderer parses what the guard parsed", () => {
+	for (const input of [...WHITESPACE, ...HOSTILE]) {
+		const output = refusals.text(input);
+		assert.equal(notificationRenderer(output), output, JSON.stringify(input));
+		const hrefs = linkedTextLinks(notificationRenderer(output));
+		assert.ok(hrefs.every(web), `${JSON.stringify(input)} -> ${hrefs.join(", ")}`);
+	}
+	assert.equal(refusals.text(`see [open](${openHosts} "t\nx")`), "see open");
+	assert.equal(refusals.text("  two\r\nlines\tand  [docs](https://x.dev)  "), "two lines and [docs](https://x.dev)");
+});
+
+test("if a parser still finds a non-web link after stripping, the text is withheld, logged once per host", (t) => {
+	const warnings: string[] = [];
+	const host = new ReviewRemoteRefusals("whiteboard+aaaa-1111", () => "wb-test-a", { warn: (message: string) => warnings.push(message) } as unknown as ILogService);
+	const residual = ReviewRemoteRefusals.residual;
+	t.after(() => (ReviewRemoteRefusals.residual = residual));
+	ReviewRemoteRefusals.residual = () => true;
+	assert.equal(host.text("looks fine"), "(message withheld)");
+	assert.equal(host.text("also fine"), "(message withheld)");
+	assert.deepEqual(host.markdown({ value: "fine" }), { value: "(message withheld)", isTrusted: false, supportHtml: false });
+	assert.deepEqual(warnings, ["[Remote guard] whiteboard+aaaa-1111: refused text with a link the guard could not remove"]);
 });
