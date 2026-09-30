@@ -12,7 +12,7 @@ verifyDepsBeforeRun: false
 minimumReleaseAge: 10080
 minimumReleaseAgeStrict: true
 minimumReleaseAgeExclude:
-  - "@dev.fast/diffr@0.1.7"
+  - "@dev.fast/diffr@0.1.8"
 
 overrides:
   # @dev.fast/review declares a registry range; this override is what makes

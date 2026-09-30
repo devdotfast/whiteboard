@@ -71,11 +71,11 @@ if (args[0] === 'config' && args[1] === 'show') {
   let value = args[3]; try { value = JSON.parse(value); } catch {}
   object[keys.at(-1)] = value;
   fs.writeFileSync(state, JSON.stringify(config));
- } else if (!args.includes('--config')) {
+ } else if (!args.includes('--no-index')) {
   console.log(JSON.stringify({type:'start',version:4,lhs:{type:'revision',rev:'base'},rhs:{type:'revision',rev:'head'},files:[]}));
   console.log(JSON.stringify({type:'complete',succeeded:0,failed:0}));
 } else {
-  const temporary = args[args.indexOf('--config') + 1];
+  const temporary = require('node:path').join(process.env.XDG_CONFIG_HOME, 'diffr', 'config.toml');
   fs.writeFileSync(${JSON.stringify(path.join(root, "test-config"))}, fs.readFileSync(temporary));
   fs.writeFileSync(${JSON.stringify(path.join(root, "test-path"))}, temporary);
   const mode = process.env.TEST_MODE;
