@@ -711,3 +711,60 @@ it("sends nothing for a review whose host is still connecting, then its value", 
   expect(valueOf(line, reviewId)).toMatchObject({ title: "On b" });
   expect(stream.all.filter((next) => !!errorOf(next, reviewId))).toEqual([]);
 });
+
+it("finds a host that stops answering while its streams are open", async () => {
+  let hang = false;
+
+  const hung = await startFake({
+    version,
+    handle(request, response) {
+      if (hang) return true;
+
+      if (!request.url?.startsWith("/reviews-api/watch")) return false;
+      // An open stream that says nothing, as a quiet list does.
+      response.setHeader("content-type", "application/x-ndjson");
+      response.flushHeaders();
+
+      return true;
+    },
+  });
+
+  const a = await startRemote(path.join(root, "a"));
+  const onA = await seed(a.api, root, "On a");
+
+  const laptop = await startGateway(
+    root,
+    [
+      { alias: "wb-h", endpoint: hung.endpoint },
+      { alias: "wb-a", endpoint: a.endpoint },
+    ],
+    { heartbeatMs: 1_000 },
+  );
+
+  const onLaptop = await seed(laptop.api, root, "On the laptop");
+
+  await expect
+    .poll(() => laptop.gateway.hosts().map((host) => host.state))
+    .toEqual(["online", "online"]);
+  await vi.waitFor(() =>
+    expect(
+      hung.requests.some((request) =>
+        request.url?.startsWith("/reviews-api/watch"),
+      ),
+    ).toBe(true),
+  );
+
+  hang = true;
+  const started = Date.now();
+
+  await vi.waitFor(
+    () => expect(laptop.gateway.hosts()[0]?.state).toBe("offline"),
+    { timeout: 6_000 },
+  );
+  expect(Date.now() - started).toBeLessThan(1_000 + 3_000 + 500);
+
+  const quick = Date.now();
+  expect((await laptop.request(`/${onA}`)).status).toBe(200);
+  expect((await laptop.request(`/${onLaptop}`)).status).toBe(200);
+  expect(Date.now() - quick).toBeLessThan(1_000);
+}, 20_000);

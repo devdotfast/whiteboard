@@ -127,6 +127,8 @@ export function createReviewGateway(input: {
   home: string;
   /** The laptop server's own relay, which its windows attach to. */
   relay: ReviewDesktopVerbRelay;
+  /** How often an answering host is checked again; 30 s. */
+  heartbeatMs?: number;
   log?(message: string): void;
 }) {
   const log = input.log ?? (() => {});
@@ -139,6 +141,7 @@ export function createReviewGateway(input: {
     log,
     remembered: (serverId) => memory.alias(serverId),
     machine: (serverId, alias) => memory.rename(serverId, alias),
+    ...(input.heartbeatMs !== undefined && { heartbeatMs: input.heartbeatMs }),
     // Streams react to host states outside the hosts module's own call.
     changed() {
       if (changing) return;

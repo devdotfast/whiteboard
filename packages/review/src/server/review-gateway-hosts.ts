@@ -13,6 +13,9 @@ import { StreamLimitError } from "./bounded-stream.js";
 
 const HEALTH_TIMEOUT_MS = 3_000;
 
+/** An answering host is checked again this often, so a hang is found. */
+const HEARTBEAT_MS = 30_000;
+
 export const FIRST_RETRY_MS = 500;
 
 export const MAX_RETRY_MS = 30_000;
@@ -72,6 +75,7 @@ export function createGatewayHosts(input: {
   machine?(serverId: string, alias: string): void;
   /** Host states may have changed. */
   changed?(): void;
+  heartbeatMs?: number;
 }) {
   const log = input.log ?? (() => {});
   let hosts: Host[] = [];
@@ -306,6 +310,13 @@ export function createGatewayHosts(input: {
         host.status = "online";
         host.detail = undefined;
       }
+
+      // Its streams would not notice a server that stops answering.
+      host.retry = setTimeout(
+        () => void check(host),
+        input.heartbeatMs ?? HEARTBEAT_MS,
+      );
+      host.retry.unref();
     }
 
     report();
