@@ -77,10 +77,12 @@ export async function packReviewCli(
     const packed = path.join(output, tarball);
     const { size } = await stat(packed);
 
-    if (size > maxBytes)
+    if (size > maxBytes) {
+      await rm(packed, { force: true });
       throw new Error(
         `${tarball} is ${size} bytes, over the ${maxBytes}-byte limit`,
       );
+    }
 
     return packed;
   } finally {
