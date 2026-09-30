@@ -1,7 +1,6 @@
 import {
-  type JsonValue,
+  type ReviewVerbRequest,
   type ReviewVerbResponse,
-  isJsonObject,
   parseJsonText,
   parseReviewDesktopVerbFrame,
 } from "@dev.fast/review-protocol";
@@ -16,29 +15,42 @@ import {
   remoteHeaders,
   send,
 } from "./review-gateway-hosts.js";
-import type { GatewayMemory } from "./review-gateway-memory.js";
 import { keepOpen, readLines } from "./review-gateway-transport.js";
+
+/** The only verbs another machine may send to the laptop's windows. */
+const REMOTE_VERBS = new Set<ReviewVerbRequest["name"]>([
+  "authoringCapabilities",
+  "openApiReview",
+  "focusWindow",
+]);
 
 /**
  * Attaches to `/control` on each online machine, so a remote's "open this
- * review" and its other Desktop verbs reach the laptop's windows through the
- * laptop's own relay.
+ * review" reaches the laptop's windows through the laptop's own relay.
  */
 export function createGatewayPushes(input: {
   hosts: GatewayHosts;
-  memory: GatewayMemory;
   relay: ReviewDesktopVerbRelay;
+  /** Why `remote` may not open `reviewId`; undefined records it as the owner. */
+  claim(remote: GatewayRemote, reviewId: string): Promise<string | undefined>;
   log(message: string): void;
 }) {
-  const { hosts, memory, relay } = input;
+  const { hosts, relay } = input;
   const links = new Map<GatewayRemote, AbortController>();
 
   async function answer(
     remote: GatewayRemote,
-    request: JsonValue,
-    reviewId: string | undefined,
+    request: ReviewVerbRequest,
   ): Promise<ReviewVerbResponse> {
-    if (reviewId !== undefined) {
+    if (!REMOTE_VERBS.has(request.name))
+      return {
+        ok: false,
+        error: `${request.name} is not available from another machine.`,
+      };
+
+    if (request.name === "openApiReview") {
+      const { reviewId } = request.args;
+
       // The scratchpad and shared reviews are only ever the laptop's.
       if (!UUID.test(reviewId))
         return {
@@ -47,12 +59,9 @@ export function createGatewayPushes(input: {
         };
 
       // Known before the window's first request for it.
-      if (remote.serverId !== undefined)
-        memory.remember(
-          remote.serverId,
-          hosts.machineAlias(remote.serverId) ?? remote.alias,
-          reviewId,
-        );
+      const refused = await input.claim(remote, reviewId);
+
+      if (refused) return { ok: false, error: refused };
     }
 
     return relay.dispatch(request);
@@ -89,22 +98,10 @@ export function createGatewayPushes(input: {
   }
 
   async function push(remote: GatewayRemote, data: string) {
-    let id: string;
-    let reviewId: string | undefined;
-    let request: JsonValue;
+    let frame: ReturnType<typeof parseReviewDesktopVerbFrame>;
 
     try {
-      const value = parseJsonText(data);
-      const frame = parseReviewDesktopVerbFrame(value);
-      id = frame.id;
-
-      if (frame.request.name === "openApiReview")
-        reviewId = frame.request.args.reviewId;
-      else if (frame.request.name === "openReview")
-        reviewId = frame.request.args.reviewUuid;
-
-      // The relay parses the request itself.
-      request = isJsonObject(value) ? (value.request ?? null) : null;
+      frame = parseReviewDesktopVerbFrame(parseJsonText(data));
     } catch {
       input.log(`Ignored an unreadable push from ${remote.alias}.`);
 
@@ -114,12 +111,12 @@ export function createGatewayPushes(input: {
     let response: ReviewVerbResponse;
 
     try {
-      response = await answer(remote, request, reviewId);
+      response = await answer(remote, frame.request);
     } catch (error) {
       response = { ok: false, error: errorText(error) };
     }
 
-    await reply(remote, id, response);
+    await reply(remote, frame.id, response);
   }
 
   return {

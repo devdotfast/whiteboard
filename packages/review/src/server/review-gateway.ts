@@ -182,7 +182,10 @@ export function createReviewGateway(input: {
   }
 
   /** An id not seen before: the laptop first, then every online host. */
-  async function lookup(reviewId: string): Promise<Owner> {
+  /** The laptop holds the review; asked in process. */
+  async function onLaptop(reviewId: string) {
+    if (laptopIds.has(reviewId)) return true;
+
     const laptop = await input.local(
       new Request(
         `http://gateway/reviews-api/${encodeURIComponent(reviewId)}/activity`,
@@ -191,11 +194,21 @@ export function createReviewGateway(input: {
 
     await laptop.body?.cancel();
 
-    if (laptop.ok) {
-      laptopIds.add(reviewId);
+    if (laptop.ok) laptopIds.add(reviewId);
 
-      return undefined;
-    }
+    return laptop.ok;
+  }
+
+  /** Server ids in the setting's order, for ids several lists hold. */
+  const order = () =>
+    hosts
+      .states()
+      .flatMap(
+        (state) => state.serverId ?? memory.serverIdOf(state.alias) ?? [],
+      );
+
+  async function lookup(reviewId: string): Promise<Owner> {
+    if (await onLaptop(reviewId)) return undefined;
 
     // The first host to claim it wins, so a hung host delays only ids that
     // no other machine has.
@@ -236,7 +249,7 @@ export function createReviewGateway(input: {
     // Remotes hold only UUID reviews; the scratchpad and shared reviews are
     // always the laptop's.
     if (!UUID.test(reviewId) || laptopIds.has(reviewId)) return "laptop";
-    const known = memory.owner(reviewId);
+    const known = memory.owner(reviewId, order());
 
     if (!known) return undefined;
     const remote = hosts.serving(known.serverId);
@@ -529,10 +542,30 @@ export function createReviewGateway(input: {
     log,
   });
 
+  /** Why `remote` may not open `reviewId` here; otherwise records it as the owner. */
+  async function claim(remote: GatewayRemote, reviewId: string) {
+    if (await onLaptop(reviewId)) return `${reviewId} belongs to the laptop.`;
+    const known = memory.owner(reviewId, order());
+
+    if (known && known.serverId !== remote.serverId)
+      return `${reviewId} belongs to ${known.alias}.`;
+
+    if (remote.serverId === undefined)
+      return `${remote.alias} has not reported its server id.`;
+
+    memory.remember(
+      remote.serverId,
+      hosts.machineAlias(remote.serverId) ?? remote.alias,
+      reviewId,
+    );
+
+    return undefined;
+  }
+
   const pushes = createGatewayPushes({
     hosts,
-    memory,
     relay: input.relay,
+    claim,
     log,
   });
 

@@ -65,15 +65,20 @@ export function openGatewayMemory(
   const file = gatewayMemoryPath(home);
   const servers = new Map<string, Server>();
   const owners = new Map<string, string>();
-  /** Review ids in the last lists, by server id. */
-  const listed = new Map<string, string>();
+  /** The server ids whose last lists hold each review id. */
+  const listed = new Map<string, Set<string>>();
 
   const index = () => {
     listed.clear();
 
     for (const [serverId, server] of servers)
       for (const list of Object.values(server.lastList))
-        for (const entry of list) listed.set(entry.reviewId, serverId);
+        for (const entry of list) {
+          let serverIds = listed.get(entry.reviewId);
+
+          if (!serverIds) listed.set(entry.reviewId, (serverIds = new Set()));
+          serverIds.add(serverId);
+        }
   };
 
   try {
@@ -130,9 +135,19 @@ export function openGatewayMemory(
   };
 
   return {
-    /** The server that holds a review, from routing or its last list. */
-    owner(reviewId: string) {
-      const serverId = owners.get(reviewId) ?? listed.get(reviewId);
+    /**
+     * The server that holds a review, from routing or else from the last
+     * lists; of several lists, the first server in `order` (the setting's).
+     */
+    owner(reviewId: string, order: readonly string[] = []) {
+      const candidates = listed.get(reviewId);
+
+      const serverId =
+        owners.get(reviewId) ??
+        (candidates &&
+          (order.find((candidate) => candidates.has(candidate)) ??
+            [...candidates][0]));
+
       const server = serverId && servers.get(serverId);
 
       return server ? { serverId, alias: server.alias } : undefined;
@@ -159,10 +174,12 @@ export function openGatewayMemory(
         server = { alias, reviewIds: new Set(), lastList: {} };
         servers.set(serverId, server);
       } else if (
+        server.alias === alias &&
         JSON.stringify(server.lastList[mode]) === JSON.stringify(reviews)
       )
         return;
 
+      server.alias = alias;
       server.lastList[mode] = reviews;
       index();
       save();

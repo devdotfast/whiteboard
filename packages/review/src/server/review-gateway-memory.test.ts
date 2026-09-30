@@ -107,3 +107,29 @@ it("keeps each server's last list, and knows the owner of every review in it", a
   });
   expect(reopened.serverIdOf("devbox")).toBe("server-1");
 });
+
+it("gives an id two lists hold to the server first in the given order, and follows a renamed alias", async () => {
+  const entry = {
+    reviewId: "review-1",
+    version: 1,
+    title: "Listed twice",
+    createdAt: "2026-09-30T00:00:00.000Z",
+    repositoryName: "project",
+    viewedAt: null,
+    dismissedAt: null,
+  };
+
+  const memory = openGatewayMemory(home);
+  memory.setList("server-1", "one", "structural", [entry]);
+  memory.setList("server-2", "two", "structural", [entry]);
+
+  expect(memory.owner("review-1", ["server-2", "server-1"])?.serverId).toBe(
+    "server-2",
+  );
+  expect(memory.owner("review-1", ["server-1", "server-2"])?.serverId).toBe(
+    "server-1",
+  );
+
+  memory.setList("server-2", "renamed", "structural", [entry]);
+  expect(memory.alias("server-2")).toBe("renamed");
+});

@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
-import type { IncomingMessage } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -117,14 +118,20 @@ it("opens a review a remote creates with open: true, and knows its owner before 
 
   expect(opened(received)).toEqual([reviewId]);
   expect(first).toEqual([{ status: 200, host: "wb-a" }]);
-  // Known from the push: the laptop was never asked whether it has it.
-  expect(laptop.localPaths).not.toContain(`/reviews-api/${reviewId}/activity`);
+  // Known from the push: only the push's own check asked the laptop, and no
+  // lookup followed the window's request.
+  expect(
+    laptop.localPaths.filter(
+      (entry) => entry === `/reviews-api/${reviewId}/activity`,
+    ),
+  ).toHaveLength(1);
 });
 
 /** A remote whose /control sends `frames` and records every result. */
-async function pushingRemote(frames: JsonValue[]) {
+async function pushingRemote(frames: JsonValue[] = []) {
   const results: JsonValue[] = [];
   const controls: IncomingMessage[] = [];
+  const streams: ServerResponse[] = [];
 
   const fake = await startFake({
     version,
@@ -133,6 +140,7 @@ async function pushingRemote(frames: JsonValue[]) {
         controls.push(request);
         response.setHeader("content-type", "text/event-stream");
         response.write(": attached\n\n");
+        streams.push(response);
 
         for (const frame of frames)
           response.write(`data: ${JSON.stringify(frame)}\n\n`);
@@ -156,8 +164,18 @@ async function pushingRemote(frames: JsonValue[]) {
     },
   });
 
-  return { fake, results, controls };
+  /** Sends a frame on the newest /control stream. */
+  const push = (frame: JsonValue) =>
+    streams.at(-1)?.write(`data: ${JSON.stringify(frame)}\n\n`);
+
+  return { fake, results, controls, push };
 }
+
+const verb = (id: string, request: JsonValue) => ({
+  event: "desktop-verb",
+  id,
+  request,
+});
 
 it("refuses a remote's push to open the scratchpad or a shared review", async () => {
   const shared = `shared-${"a".repeat(64)}`;
@@ -258,4 +276,94 @@ it("attaches again when a remote drops its /control stream, without a storm", as
 
   await new Promise((resolve) => setTimeout(resolve, 1_500));
   expect(remote.controls).toHaveLength(2);
+});
+
+it("refuses every verb from a remote but capabilities, focus and opening a review", async () => {
+  const remote = await pushingRemote([
+    verb("shot", { name: "captureScreenshot", args: {} }),
+    verb("home", {
+      name: "openReview",
+      args: { reviewUuid: randomUUID(), active: true },
+    }),
+  ]);
+
+  const relay = new GlobalReviewDesktopVerbRelay({ maxClients: 1 });
+  const received = attachWindow(relay);
+
+  await startGateway(
+    root,
+    [{ alias: "wb-a", endpoint: remote.fake.endpoint }],
+    {
+      relay,
+    },
+  );
+
+  await vi.waitFor(() => expect(remote.results).toHaveLength(2));
+  expect(remote.results).toEqual(
+    expect.arrayContaining([
+      {
+        id: "shot",
+        response: {
+          ok: false,
+          error: "captureScreenshot is not available from another machine.",
+        },
+      },
+      {
+        id: "home",
+        response: {
+          ok: false,
+          error: "openReview is not available from another machine.",
+        },
+      },
+    ]),
+  );
+  expect(received).toEqual([]);
+});
+
+it("refuses a push to open another machine's review or the laptop's", async () => {
+  const a = await startRemote(path.join(root, "a"));
+  const onA = await seed(a.api, root, "On a");
+  const b = await pushingRemote();
+  const relay = new GlobalReviewDesktopVerbRelay({ maxClients: 1 });
+  const received = attachWindow(relay);
+
+  const laptop = await startGateway(
+    root,
+    [
+      { alias: "wb-a", endpoint: a.endpoint },
+      { alias: "wb-b", endpoint: b.fake.endpoint },
+    ],
+    { relay },
+  );
+
+  const onLaptop = await seed(laptop.api, root, "On the laptop");
+
+  const hostOf = async () =>
+    (await laptop.request(`/${onA}`)).headers.get(REVIEW_HOST_HEADER);
+
+  await expect.poll(hostOf).toBe("wb-a");
+  await vi.waitFor(() => expect(b.controls).toHaveLength(1));
+
+  b.push(
+    verb("a", { name: "openApiReview", args: { reviewId: onA, title: "A" } }),
+  );
+  b.push(
+    verb("laptop", {
+      name: "openApiReview",
+      args: { reviewId: onLaptop, title: "L" },
+    }),
+  );
+
+  await vi.waitFor(() => expect(b.results).toHaveLength(2));
+  expect(b.results).toEqual(
+    expect.arrayContaining([
+      { id: "a", response: { ok: false, error: `${onA} belongs to wb-a.` } },
+      {
+        id: "laptop",
+        response: { ok: false, error: `${onLaptop} belongs to the laptop.` },
+      },
+    ]),
+  );
+  expect(received).toEqual([]);
+  expect(await hostOf()).toBe("wb-a");
 });
