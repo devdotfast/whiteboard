@@ -124,8 +124,8 @@ export async function setupServerServices(connectionToken: ServerConnectionToken
 	services.set(IExtensionsScannerService, new SyncDescriptor(ExtensionsScannerService));
 
 	const instantiationService: IInstantiationService = new InstantiationService(services);
+	// Whiteboard: language packs and the pty host (terminals) are cut.
 
-	// Whiteboard: terminals are cut.
 	const serverLifetimeService = instantiationService.createInstance(ServerLifetimeService, {
 		enableAutoShutdown: !!args['enable-remote-auto-shutdown'],
 		shutdownWithoutDelay: !!args['remote-auto-shutdown-without-delay'],
