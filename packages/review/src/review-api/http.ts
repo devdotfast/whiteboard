@@ -2,6 +2,7 @@ import { type JsonObject, isJsonObject } from "@dev.fast/json";
 import type { ReviewStructuralDiffEvent } from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
 import {
+  type AgentSelection,
   AgentSelectionSchema,
   selectionMarkdown,
 } from "@review/agent-selection.js";
@@ -985,14 +986,27 @@ export function createReviewApi(
       await readBoundedRequestJson(context.req.raw),
     );
 
-    const reviewId = context.req.param("id");
+    return context.json({
+      text: await selectionContext(
+        context.req.param("id"),
+        selection,
+        query.version,
+      ),
+    });
+  });
 
+  /** The Markdown an agent gets for a selection, copied or asked about. */
+  async function selectionContext(
+    reviewId: string,
+    selection: AgentSelection,
+    version?: number,
+  ) {
     if (selection.apiSource && selection.apiSource.reviewId !== reviewId)
       throw new ReviewInputError("Selection belongs to another review.");
 
     const snapshot = readReview(
       reviewId,
-      selection.apiSource?.version ?? query.version,
+      selection.apiSource?.version ?? version,
     );
 
     const target = selection.target;
@@ -1035,38 +1049,36 @@ export function createReviewApi(
         : undefined,
     );
 
-    return context.json({
-      text: [
-        `Selected ${target.kind === "text" ? "text" : "code"} from Whiteboard: ${snapshot.title}`,
-        `Session ID: ${snapshot.reviewId}`,
-        `Version: ${snapshot.version}`,
-        ...(selection.apiSource?.commit
-          ? [`Selected commit: ${selection.apiSource.commit}`]
-          : []),
-        ...(selection.apiSource?.pins
-          ? [
-              `Selected repository ID: ${selection.apiSource.pins.repositoryId}`,
-              ...(selection.apiSource.pins.base
-                ? [`Selected base: ${selection.apiSource.pins.base}`]
-                : []),
-              `Selected head: ${selection.apiSource.pins.head}`,
-            ]
-          : []),
-        ...(snapshot.pins
-          ? [
-              `Repository ID: ${snapshot.pins.repositoryId}`,
-              `Session base: ${snapshot.pins.base}`,
-              `Session head: ${snapshot.pins.head}`,
-            ]
-          : []),
-        `Read this version with session_get({"sessionId":"${snapshot.reviewId}","version":${snapshot.version},"full":true}).`,
-        "",
-        text,
-        "",
-        "",
-      ].join("\n"),
-    });
-  });
+    return [
+      `Selected ${target.kind === "text" ? "text" : "code"} from Whiteboard: ${snapshot.title}`,
+      `Session ID: ${snapshot.reviewId}`,
+      `Version: ${snapshot.version}`,
+      ...(selection.apiSource?.commit
+        ? [`Selected commit: ${selection.apiSource.commit}`]
+        : []),
+      ...(selection.apiSource?.pins
+        ? [
+            `Selected repository ID: ${selection.apiSource.pins.repositoryId}`,
+            ...(selection.apiSource.pins.base
+              ? [`Selected base: ${selection.apiSource.pins.base}`]
+              : []),
+            `Selected head: ${selection.apiSource.pins.head}`,
+          ]
+        : []),
+      ...(snapshot.pins
+        ? [
+            `Repository ID: ${snapshot.pins.repositoryId}`,
+            `Session base: ${snapshot.pins.base}`,
+            `Session head: ${snapshot.pins.head}`,
+          ]
+        : []),
+      `Read this version with session_get({"sessionId":"${snapshot.reviewId}","version":${snapshot.version},"full":true}).`,
+      "",
+      text,
+      "",
+      "",
+    ].join("\n");
+  }
 
   app.get("/:id/stack", async (context) => {
     const query = readQuerySchemas.get.parse(context.req.query());
