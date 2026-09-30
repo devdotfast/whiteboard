@@ -93,6 +93,8 @@ export function createGatewayStreams(input: {
   const { hosts, memory } = input;
   const feeds = new Map<GatewayRemote, AbortController>();
   const clients = new Set<Client>();
+  /** Stops a laptop stream passed through while no host was set. */
+  const passThrough = new Set<() => void>();
   const conflicts = new Set<string>();
   let onlineKey = "";
 
@@ -417,9 +419,32 @@ export function createGatewayStreams(input: {
     });
   }
 
+  /** The laptop's stream as it is, ended when the first host is set so the client reconnects. */
+  async function passLaptop(request: Request): Promise<Response> {
+    const response = await input.local(request);
+
+    if (!response.body) return response;
+    let stop = () => {};
+
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>({
+      start(controller) {
+        stop = () => controller.terminate();
+      },
+    });
+
+    passThrough.add(stop);
+    void response.body
+      .pipeTo(writable)
+      .catch(() => undefined)
+      .finally(() => passThrough.delete(stop));
+
+    return new Response(readable, response);
+  }
+
   return {
     /** `GET /reviews-api/watch` for every machine. */
     watch(request: Request): Response | Promise<Response> {
+      if (!hosts.states().length) return passLaptop(request);
       let subscriptions: z.infer<typeof subscriptionsSchema>;
 
       try {
@@ -439,7 +464,7 @@ export function createGatewayStreams(input: {
     async list(request: Request): Promise<Response> {
       const response = await input.local(request);
 
-      if (!response.ok) return response;
+      if (!response.ok || !hosts.states().length) return response;
 
       const mode =
         coverageModeSchema.safeParse(
@@ -455,6 +480,11 @@ export function createGatewayStreams(input: {
     changed() {
       syncFeeds();
 
+      if (hosts.states().length) {
+        for (const stop of passThrough) stop();
+        passThrough.clear();
+      }
+
       const key = JSON.stringify(
         hosts.online().map((remote) => [remote.alias, remote.serverId]),
       );
@@ -469,6 +499,8 @@ export function createGatewayStreams(input: {
     close() {
       for (const abort of feeds.values()) abort.abort();
       feeds.clear();
+
+      for (const stop of passThrough) stop();
 
       for (const client of clients) client.stop();
     },

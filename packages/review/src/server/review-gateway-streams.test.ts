@@ -330,6 +330,45 @@ async function rawLines(url: string, token: string, reviewId: string) {
   };
 }
 
+it("passes the laptop's list and stream through as they are while no host is set, then ends the stream when one is", async () => {
+  const laptop = await startGateway(root, []);
+  const a = await startRemote(path.join(root, "a"));
+  await seed(a.api, root, "On a");
+
+  const watch = `/reviews-api/watch?subscriptions=${encodeURIComponent(
+    JSON.stringify([{ reviewId: null, mode: "structural" }]),
+  )}`;
+
+  const firstLine = async (response: Response) => {
+    const reader = response.body!.getReader();
+    stops.push(() => void reader.cancel().catch(() => undefined));
+    let text = "";
+
+    while (!text.includes("\n"))
+      text += Buffer.from((await reader.read()).value!).toString();
+
+    return { line: text.slice(0, text.indexOf("\n")), reader };
+  };
+
+  const through = await firstLine(
+    await fetch(`${laptop.url}${watch}`, {
+      headers: { "x-review-token": "laptop-token" },
+    }),
+  );
+
+  expect(through.line).toBe((await firstLine(await laptop.direct(watch))).line);
+  expect(await (await laptop.request("")).text()).toBe(
+    await (await laptop.direct("/reviews-api")).text(),
+  );
+
+  laptop.gateway.setHosts([{ alias: "wb-a", endpoint: a.endpoint }]);
+
+  for (;;) if ((await through.reader.read()).done) break;
+
+  const merged = follow(laptop.url, [{ reviewId: null }]);
+  await merged.until((line) => entry(line, "On a")?.host === "wb-a");
+});
+
 it("forwards a remote's review line byte for byte", async () => {
   const a = await startRemote(path.join(root, "a"));
   const onA = await seed(a.api, root, "On a");

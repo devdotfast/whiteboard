@@ -281,6 +281,9 @@ export async function startGateway(
   return {
     gateway,
     local,
+    /** The laptop's own routes, without the gateway. */
+    direct: (route: string) =>
+      laptop.fetch(new Request(`http://laptop${route}`)),
     request,
     api,
     close,
