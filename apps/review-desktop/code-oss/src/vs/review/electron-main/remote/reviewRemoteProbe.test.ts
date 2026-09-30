@@ -172,6 +172,21 @@ test("a home with quotes and backslashes reaches the parser intact", async (t) =
 	assert.equal(result.probe.home, home);
 });
 
+test("a home that does not exist is refused as unwritable, not as a malformed answer", async (t) => {
+	const parent = await mkdtemp(join(tmpdir(), "wb-probe-"));
+	t.after(() => rm(parent, { recursive: true, force: true }));
+	const home = join(parent, "missing");
+
+	const result = await probeRemote({ session, spawn: localShell({ HOME: home, PATH: "/usr/bin:/bin" }), env: {} });
+
+	assert.ok("probe" in result, "error" in result ? result.error : "");
+	assert.equal(result.probe.freeBytes, 0);
+	assert.deepEqual(judgeRemote({ ...result.probe, os: "Linux", arch: "x86_64", glibc: "2.35" }), {
+		supported: false,
+		reason: `The home directory ${home} cannot be written; Whiteboard needs to write under it.`,
+	});
+});
+
 test("a probe that does not answer in time is ended and reported", async () => {
 	const started = Date.now();
 	const result = await probeRemote({ session, spawn: localShell({}, "/bin/sleep", ["30"]), env: {}, timeout: 300 });

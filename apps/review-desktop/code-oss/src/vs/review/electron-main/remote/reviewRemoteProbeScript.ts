@@ -25,7 +25,7 @@ os=$(uname -s 2>/dev/null)
 arch=$(uname -m 2>/dev/null)
 glibc=$(getconf GNU_LIBC_VERSION 2>/dev/null | sed -n 's/^glibc \\([0-9][0-9.]*\\)$/\\1/p')
 if [ -z "$glibc" ]; then
-	glibc=$(ldd --version 2>&1 | head -n 1 | grep -i 'glibc\\|gnu libc' | sed -n 's/.* \\([0-9][0-9]*\\.[0-9][0-9]*\\)$/\\1/p')
+	glibc=$(ldd --version 2>&1 | head -n 1 | grep -i -e glibc -e 'gnu libc' | sed -n 's/.* \\([0-9][0-9]*\\.[0-9][0-9]*\\)$/\\1/p')
 fi
 home=$HOME
 writable=false
@@ -90,17 +90,19 @@ if command -v curl >/dev/null 2>&1; then
 elif command -v wget >/dev/null 2>&1; then
 	downloader=wget
 	hsts=
+	tries=
 	wget --help 2>&1 | grep -q -- --no-hsts && hsts=--no-hsts
+	wget --help 2>&1 | grep -q -- --tries && tries="-t 1"
 	limit=
 	command -v timeout >/dev/null 2>&1 && limit="timeout 3"
-	$limit wget -q $hsts -T 3 --spider "$registry" >/dev/null 2>&1 && reachable=true
+	$limit wget -q $hsts $tries -T 3 --spider "$registry" >/dev/null 2>&1 && reachable=true
 fi
 
 echo
 echo ${REVIEW_REMOTE_PROBE_BEGIN}
 printf '{"os":%s,"arch":%s,"glibc":%s,"home":%s,"homeWritable":%s,"freeBytes":%s,' \\
 	"$(str "$os")" "$(str "$arch")" "$(strOrNull "$glibc")" "$(str "$home")" \\
-	"$writable" "\${free:-null}"
+	"$writable" "\${free:-0}"
 if [ -n "$node" ]; then
 	printf '"node":{"path":%s,"version":%s},' "$(str "$node")" "$(str "$nodeVersion")"
 else
