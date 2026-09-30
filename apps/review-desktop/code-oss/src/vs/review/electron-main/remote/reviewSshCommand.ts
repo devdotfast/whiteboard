@@ -132,6 +132,21 @@ export function sshCancelForwardArgs(
 	return [...base(session, env), "-O", "cancel", "-L", localForward(localPort, remotePort), "--", session.alias];
 }
 
+/**
+ * Asks the master to listen on a port the remote picks, on its loopback, and
+ * carry it to `localPort` here; ssh prints the port it got. Cancel with the
+ * same arguments and "cancel": OpenSSH matches the request as it was made, port 0.
+ */
+export function sshRemoteForwardArgs(
+	session: ReviewSshSession,
+	localPort: number,
+	operation: "forward" | "cancel",
+	env: NodeJS.ProcessEnv = process.env,
+): string[] {
+	if (!Number.isInteger(localPort) || localPort < 1 || localPort > 65535) throw new Error(`Invalid port ${localPort}.`);
+	return [...base(session, env), "-O", operation, "-R", `127.0.0.1:0:127.0.0.1:${localPort}`, "--", session.alias];
+}
+
 /** Exits 0 while the master answers on its socket. Run before an exec: without a master, ssh would authenticate again. */
 export function sshCheckArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = process.env): string[] {
 	return [...base(session, env), "-O", "check", "--", session.alias];
