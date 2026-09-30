@@ -26,6 +26,7 @@ test("builds a runtime that starts on this Node and reports the Desktop's commit
     env: { ...process.env, BUILD_SOURCEVERSION: commit },
     stdio: "pipe",
   });
+
   for (const entry of REMOTE_RUNTIME_ENTRIES) {
     assert.ok(existsSync(path.join(runtime, "out", `${entry}.js`)), entry);
   }
@@ -49,11 +50,13 @@ test("builds a runtime that starts on this Node and reports the Desktop's commit
   );
   let output = "";
   server.stderr.on("data", (chunk) => (output += chunk));
+
   const port = await new Promise((resolve, reject) => {
     server.once("exit", () => reject(new Error(output)));
     server.stdout.on("data", (chunk) => {
       output += chunk;
       const match = /Extension host agent listening on (\d+)/.exec(output);
+
       if (match) resolve(Number(match[1]));
     });
   });

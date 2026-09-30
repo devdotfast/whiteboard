@@ -23,7 +23,9 @@ const appDirectory = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
+
 const codeOss = path.join(appDirectory, "code-oss");
+
 const monorepoRoot = path.resolve(appDirectory, "..", "..");
 
 export const DEFAULT_REMOTE_RUNTIME = path.join(
@@ -62,7 +64,9 @@ export const OPTIONAL_NATIVE_PACKAGES = [
 // (code-oss/build/lib/getVersion.ts), so a release Desktop and its runtime agree.
 function desktopCommit() {
   const fromEnv = process.env.BUILD_SOURCEVERSION?.trim();
+
   if (fromEnv && /^[0-9a-f]{40}$/i.test(fromEnv)) return fromEnv;
+
   return execFileSync("git", ["-C", monorepoRoot, "rev-parse", "HEAD"], {
     encoding: "utf8",
   }).trim();
@@ -70,6 +74,7 @@ function desktopCommit() {
 
 function packageName(specifier) {
   const parts = specifier.split("/");
+
   return specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
 }
 
@@ -86,13 +91,16 @@ export async function buildRemoteRuntime({
   const product = JSON.parse(
     fs.readFileSync(path.join(codeOss, "product.json"), "utf8"),
   );
+
   fs.writeFileSync(
     path.join(out, "product.json"),
     `${JSON.stringify({ ...product, commit }, null, "\t")}\n`,
   );
+
   const { name, version } = JSON.parse(
     fs.readFileSync(path.join(codeOss, "package.json"), "utf8"),
   );
+
   fs.writeFileSync(
     path.join(out, "package.json"),
     `${JSON.stringify({ name, version, type: "module" }, null, "\t")}\n`,
@@ -102,6 +110,7 @@ export async function buildRemoteRuntime({
     path.join(codeOss, "node_modules/tslib/tslib.es6.js"),
     "utf8",
   );
+
   // Bundled CommonJS packages call require() and read __dirname.
   const banner = [
     'import { createRequire as __wbCreateRequire } from "node:module";',
@@ -117,6 +126,7 @@ export async function buildRemoteRuntime({
     pkg,
     `${pkg}/*`,
   ]);
+
   const results = await Promise.all(
     REMOTE_RUNTIME_ENTRIES.map((entry) =>
       esbuild.build({
@@ -145,21 +155,25 @@ export async function buildRemoteRuntime({
   );
 
   const unexpected = new Set();
+
   for (const result of results) {
     for (const output of Object.values(result.metafile.outputs)) {
       for (const { path: specifier, external: isExternal } of output.imports) {
         if (!isExternal || isBuiltin(specifier)) continue;
+
         if (!OPTIONAL_NATIVE_PACKAGES.includes(packageName(specifier))) {
           unexpected.add(specifier);
         }
       }
     }
   }
+
   if (unexpected.size > 0) {
     throw new Error(
       `remote runtime left imports unbundled: ${[...unexpected].join(", ")}`,
     );
   }
+
   return { out, commit };
 }
 
@@ -167,11 +181,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { values } = parseArgs({
     options: { out: { type: "string" }, commit: { type: "string" } },
   });
+
   const started = Date.now();
+
   const { out, commit } = await buildRemoteRuntime({
     out: values.out ? path.resolve(values.out) : undefined,
     commit: values.commit,
   });
+
   console.log(
     `remote runtime at ${out} (commit ${commit}) in ${Date.now() - started} ms`,
   );
