@@ -45,7 +45,7 @@ const PROVIDER_LABELS: Record<ReviewDiffrProvider, string> = {
 
 const DEFAULT_MODELS: Record<ReviewDiffrProvider, string> = {
   gemini: "gemini-3.8-flash",
-  openai: "gpt-5-mini",
+  openai: "gpt-6-luna",
   anthropic: "claude-haiku-4-5",
 };
 
