@@ -79,6 +79,7 @@ it("starts the server on loopback with a private token, and a second call report
     packageRoot,
     ensure: noExtensions,
   });
+
   expect(second).toEqual(first);
   expect(await text(port, "/pid")).toBe(pid);
 }, 30_000);
@@ -89,6 +90,7 @@ it("starts a new server when the running one stopped answering", async () => {
     packageRoot,
     ensure: noExtensions,
   });
+
   const pid = Number(await text(first.languageServer!.port, "/pid"));
   process.kill(pid, "SIGKILL");
 
@@ -111,6 +113,7 @@ it("replaces a running server of another commit once the package is reinstalled"
     packageRoot,
     ensure: noExtensions,
   });
+
   const other = "f".repeat(40);
   await standInServer(other);
 
@@ -122,7 +125,9 @@ it("replaces a running server of another commit once the package is reinstalled"
 
   expect(second.languageServer?.commit).toBe(other);
   expect(await text(second.languageServer!.port, "/version")).toBe(other);
-  await expect(text(first.languageServer!.port, "/version")).rejects.toThrow();
+  await expect(text(first.languageServer!.port, "/version")).rejects.toThrow(
+    "fetch failed",
+  );
 }, 30_000);
 
 it("runs extensions ensure first, with the groups, and starts nothing when it fails", async () => {

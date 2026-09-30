@@ -336,6 +336,7 @@ it("stops a stalled download when its signal aborts, and leaves nothing behind",
   setTimeout(() => stop.abort(new Error("stopped for the test")), 200);
 
   const started = Date.now();
+
   const result = await ensureRemoteExtensions({
     env,
     curated: [extension],

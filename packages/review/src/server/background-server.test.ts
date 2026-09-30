@@ -316,9 +316,11 @@ it("attaches the review server when the language extensions cannot be installed"
     languageServerDetail:
       "Could not install the language extensions: golang.go: groups go",
   });
+
   const reviews = await fetch(`${attach.url}/reviews-api`, {
     headers: { "x-review-token": attach.token },
   });
+
   expect(reviews.status).toBe(200);
 }, 60_000);
 

@@ -133,6 +133,7 @@ it("refuses a host whose version could not be read", async () => {
 it("shows Desktop's language features on an online host, and keeps the host online when only they change", async () => {
   const fake = await startFake({ version });
   const gateway = hosts();
+
   const detail =
     "language features need the same Whiteboard version on devbox: it runs 1111111, this Desktop 2222222";
 
