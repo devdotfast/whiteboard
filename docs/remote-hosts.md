@@ -82,9 +82,9 @@ remote by the same language extensions a laptop review uses. Desktop runs a
 VS Code server and one extension host on each remote it connects to.
 
 - **Which languages:** TypeScript, JavaScript, JSON, CSS and HTML always.
-  Python, with ty, Ruff and the Python extension. Go when you have installed
-  the Go extensions in Whiteboard (Settings → Tools → Extensions) and Go is
-  installed on the remote.
+  Python, with ty, Ruff and the Python extension. Go, Rust, Swift and C# when
+  you have turned their group on in Whiteboard (Settings → Tools → Extensions);
+  see [Optional languages](#optional-languages).
 - **First use:** the remote downloads its language extensions from Open VSX
   (`open-vsx.org`) the first time Desktop connects. That takes a few seconds
   to a minute, and the remote needs network access to Open VSX for it. A
@@ -98,6 +98,37 @@ VS Code server and one extension host on each remote it connects to.
   Settings says under the host why language features are unavailable.
 
 Settings shows "Language features: available" or why not for each online host.
+
+### Optional languages
+
+A group you turn on in Whiteboard is installed on each remote at its next
+connection, at the same version as on your laptop. A group you have not turned
+on is never installed on a remote. Turning a group off leaves it on the remote,
+unused. Each group needs its toolchain on the remote, on the `PATH` of your
+login shell (`~/.profile` or your shell's own start-up file is enough):
+
+| Group | Needs on the remote | Extensions the remote downloads |
+|---|---|---|
+| Go | `go` | Go |
+| Rust | `cargo` and `rustc`, glibc 2.28 or newer | rust-analyzer, about 16 MB |
+| Swift | `swift` | Swift and LLDB DAP, about 16 MB |
+| C# | `dotnet` (a .NET SDK) | C# and .NET Runtime, about 80 MB |
+
+- When a toolchain is missing, the host still connects. Settings says under
+  the host which tool the login shell could not find, for example
+  "swift: installed — swift was not found on the login shell's PATH".
+- **Memory:** a small Rust project needs about 1 GB for the VS Code server,
+  its extension host and rust-analyzer.
+- **Rust** gives hover and go to definition on remotes.
+- **Swift and C#** are installed on a remote but do not answer hovers there
+  yet. The Swift extension needs a terminal module and task support that the
+  remote does not have; the C# extension's server starts but does not answer.
+- The debuggers in the Swift and C# groups are never started: reviews are
+  read-only.
+- The remote downloads each extension from Open VSX itself, and checks it
+  against the checksum Whiteboard pins. Whiteboard redistributes none of them.
+  The C# extension downloads its OmniSharp server from Microsoft the first
+  time it starts.
 
 ### What an extension on a remote can do
 

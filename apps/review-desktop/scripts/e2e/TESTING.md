@@ -45,7 +45,9 @@ prints a JSON summary on stdout, one entry per journey, `ok | failed | skipped`.
 Phase 1 runs offline, after a one-time network fetch of the curated VSIX cache
 that `lsp-python` triggers. Phase 2 (`lsp-go`, `lsp-rust`, `remote-host`, `remote-lsp`)
 downloads toolchains or a container image and runs only with
-`REVIEW_E2E_NETWORK=1` or when named with `--journey`. In development mode each journey
+`REVIEW_E2E_NETWORK=1` or when named with `--journey`. A journey that exports
+`manual = true` (`remote-lsp-rust`, `remote-lsp-swift`, `remote-lsp-csharp`,
+whose container images are large) runs only when named. In development mode each journey
 re-materializes its extension group through `run.sh`, so this checkout's
 `code-oss/extensions` holds the last journey's selection afterwards;
 `node scripts/curated-extensions.mjs --only=all` restores it.
@@ -208,3 +210,39 @@ $R pack --out /tmp/wb.tgz    # then, on each host: Node 24, `sudo npm install -g
 REVIEW_E2E_REMOTE_HOSTS=a,b node apps/review-desktop/scripts/e2e/run.mjs --runtime "$REVIEW_E2E_RUNTIME" --journey remote-lsp
 $R down --all; $R verify-clean
 ```
+
+## The remote-lsp-rust, -swift and -csharp journeys
+
+Each checks one optional language group on a container built from the
+toolchain's official image (`remote.mjs up --toolchain rust|swift|dotnet`),
+with the toolchain on the login shell's `PATH` only for Rust and .NET:
+
+1. the toolchain is found by a login shell;
+2. the group is turned on in the Desktop's extension picker;
+3. a review of the fixture from `fixtures/lsp/<language>` on the remote;
+4. the host added in Settings: language features available, the row lists the
+   group as installed, and the remote installed that group and no other
+   optional group (Rust: the server binary runs, and the installed manifest
+   carries `onLanguage:rust`);
+5. Swift only: a second host, `wb-test-d`, without Swift, attaches, and its
+   Settings row names the missing `swift`;
+6. a pointer hover shows the type, within 120 s of the Diff click;
+7. go to definition opens the remote's file, read-only;
+8. the extension host's `PATH` holds the toolchain, no debugger runs, and the
+   remote's memory;
+9. no extension host is left after the window closes.
+
+Build and stage as for `remote-lsp`, then run one by name. Set
+`REVIEW_E2E_REMOTE_PLATFORM=linux/amd64` for an x64 container. On failure the
+journey prints the remote's processes and extension logs.
+
+```sh
+R="node apps/review-desktop/scripts/e2e/remote/remote.mjs"
+export WB_TEST_RUN=e2e-$$ DEV_FAST_REVIEW_DESKTOP_BACKGROUND=1
+trap '$R down --all; $R verify-clean' EXIT
+node apps/review-desktop/scripts/e2e/run.mjs --runtime "$REVIEW_E2E_RUNTIME" --journey remote-lsp-rust
+```
+
+The base images stay in Docker after `down`; remove them with `docker rmi`
+when done (`rust:1.98-bookworm`, `swift:6.4-noble`,
+`mcr.microsoft.com/dotnet/sdk:10.0-noble`).
