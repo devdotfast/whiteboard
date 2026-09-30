@@ -341,11 +341,7 @@
    --------------------------------------------------------------------------- */
 
 .monaco-workbench.review-workbench {
-  /* Each pill color mixes over the tab-strip background, so a theme change
-     carries into the pill. */
-  /* In dark themes the board is darker than the tray, so a board-colored pill
-     would read as a hole. The active pill is lighter than the tray instead,
-     with the stronger widget hairline. */
+  /* Dark boards are darker than the tray, so the active pill mixes lighter. */
   --review-tab-fill: color-mix(
     in srgb,
     #ffffff 8%,
@@ -362,9 +358,7 @@
     monospace;
 }
 
-/* Light themes: the active tab is a board-colored pill with a hairline, the
-   same surface and rule the canvas uses, so the tab reads as a piece of the
-   board lifted onto the tray. */
+/* Light themes: a board-colored pill. */
 .monaco-workbench.review-workbench.vs,
 .monaco-workbench.review-workbench.hc-light {
   --review-tab-fill: var(--vscode-editor-background);
@@ -492,7 +486,6 @@ body
   display: none;
 }
 
-/* The raised pill with a 1px outline. */
 body
   .monaco-workbench.review-workbench
   .part.editor
