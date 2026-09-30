@@ -653,7 +653,9 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       .command("diffr")
       .description("Structural diff on this host")
       .command("ensure")
-      .description("Fetch diffr for this platform unless a current copy is present")
+      .description(
+        "Fetch diffr for this platform unless a current copy is present",
+      )
       .option(
         "--state-dir <path>",
         "directory for saved reviews and server discovery",
