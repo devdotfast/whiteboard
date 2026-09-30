@@ -9,6 +9,10 @@ on:
       version:
         type: string
         default: ""
+      whiteboard_remote:
+        description: The npm job's remote pin (stamp-remote-package.mjs); required with a version.
+        type: string
+        default: ""
       package_revision:
         type: string
         default: "1"
@@ -48,6 +52,11 @@ jobs:
           QUALITY=stable
           if [[ "$VERSION" == *-preview.* ]]; then QUALITY=preview; fi
           node apps/review-desktop/scripts/stamp-release-channel.mjs --version "$VERSION" --quality "$QUALITY"
+      - name: Pin the remote package and Node
+        if: inputs.version != ''
+        env:
+          WHITEBOARD_REMOTE: ${{ inputs.whiteboard_remote }}
+        run: node apps/review-desktop/scripts/stamp-remote-package.mjs --pinned "$WHITEBOARD_REMOTE"
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
