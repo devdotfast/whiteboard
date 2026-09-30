@@ -125,6 +125,11 @@ export function sshCancelForwardArgs(
 	return [...base(session, env), "-O", "cancel", "-L", localForward(localPort, remotePort), "--", session.alias];
 }
 
+/** Exits 0 while the master answers on its socket. Run before an exec: without a master, ssh would authenticate again. */
+export function sshCheckArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = process.env): string[] {
+	return [...base(session, env), "-O", "check", "--", session.alias];
+}
+
 export function sshCloseArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = process.env): string[] {
 	return [...base(session, env), "-O", "exit", "--", session.alias];
 }

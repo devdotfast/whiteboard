@@ -15,6 +15,7 @@ import {
 	reviewSshControlDirectory,
 	reviewSshSession,
 	sshCancelForwardArgs,
+	sshCheckArgs,
 	sshCloseArgs,
 	sshExecArgs,
 	sshForwardArgs,
@@ -30,6 +31,7 @@ const allArgs = (env: NodeJS.ProcessEnv = {}) => [
 	sshForwardArgs(session, 41000, 42000, env),
 	sshCancelForwardArgs(session, 41000, 42000, env),
 	sshCloseArgs(session, env),
+	sshCheckArgs(session, env),
 ];
 
 test("refuses aliases that could become options or reach a shell", () => {
@@ -68,11 +70,12 @@ test("no argument list overrides host-key checking or prompting", () => {
 });
 
 test("every call after the master reuses its control socket", () => {
-	const [, exec, forward, cancel, close] = allArgs();
-	for (const args of [exec, forward, cancel, close]) assert.equal(args[args.indexOf("-S") + 1], session.controlPath);
+	const [, exec, forward, cancel, close, check] = allArgs();
+	for (const args of [exec, forward, cancel, close, check]) assert.equal(args[args.indexOf("-S") + 1], session.controlPath);
 	assert.ok(exec.includes("-oControlMaster=no"));
 	assert.equal(forward[forward.indexOf("-O") + 1], "forward");
 	assert.equal(cancel[cancel.indexOf("-O") + 1], "cancel");
+	assert.equal(check[check.indexOf("-O") + 1], "check");
 });
 
 test("the forward and its cancel bind loopback on both ends", () => {
