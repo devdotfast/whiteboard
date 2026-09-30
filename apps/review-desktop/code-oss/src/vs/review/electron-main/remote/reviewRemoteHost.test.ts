@@ -268,6 +268,23 @@ test("a server that keeps restarting is attached again with growing delays, unti
 	assert.equal(last()?.endpoint?.token, "token-5");
 });
 
+test("a retry drops a reattach waiting for its delay, and reattach is accepted again", async (t) => {
+	const port = await healthServer(t);
+	const { host, clock, last } = hostFor(t, {}, port);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	await host.reattach();
+	await host.reattach();
+	assert.equal(clock.pending, 1);
+	host.retry();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(clock.pending, 0);
+	await host.reattach();
+	assert.equal(clock.pending, 1);
+});
+
 test("a retry starts the new master only after the old one has exited", async (t) => {
 	const port = await healthServer(t);
 	const { host, ssh, last } = hostFor(t, { exitDelayMs: 150 }, port);

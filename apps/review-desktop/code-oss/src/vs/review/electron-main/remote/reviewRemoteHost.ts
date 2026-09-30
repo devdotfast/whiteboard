@@ -367,6 +367,9 @@ export class ReviewRemoteHost {
 		const stale = () => generation !== this.generation || this.disposed;
 		this.cancelTimer?.();
 		this.cancelTimer = undefined;
+		// A reattach waiting for its delay belongs to the connection being replaced.
+		this.cancelReattach?.();
+		this.cancelReattach = undefined;
 		this.connectedAt = undefined;
 		this.promptCancelled = false;
 		try {
