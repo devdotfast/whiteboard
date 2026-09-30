@@ -35,6 +35,8 @@ const scripts = join(import.meta.dirname, '../../../../../scripts');
 
 // The client's LoadEstimator ticks every second for the life of the process.
 // Create it with an unreferenced interval so this test process can exit.
+// The client's 10 s handshake timeouts are never cleared either; the package's
+// test command runs this directory with --test-force-exit so they are not waited out.
 const setIntervalReferenced = globalThis.setInterval;
 globalThis.setInterval = ((...args: Parameters<typeof setInterval>) => (setIntervalReferenced(...args) as unknown as NodeJS.Timeout).unref()) as unknown as typeof setInterval;
 LoadEstimator.getInstance();
