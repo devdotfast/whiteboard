@@ -361,6 +361,8 @@ export class ReviewRemoteHost {
 			const url = await this.forward(env, attach);
 			if (stale()) return;
 			this.connectedAt = this.clock.now();
+			// What authentication printed says nothing about why the connection may end later.
+			this.masterStderr = "";
 			this.set({ alias: this.alias, endpoint: { url, token: attach.token } });
 		} catch (error) {
 			if (stale()) return;

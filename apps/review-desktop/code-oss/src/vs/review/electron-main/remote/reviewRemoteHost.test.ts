@@ -213,7 +213,7 @@ test("an authenticated master that ends is unreachable and retried, whatever its
 	await until(() => last()?.problem !== undefined);
 
 	assert.equal(last()?.problem?.state, "unreachable");
-	assert.match(last()!.problem!.detail, /Connection reset by peer$/);
+	assert.equal(last()!.problem!.detail, "The SSH connection to wb-test-a ended: Connection reset by peer");
 	assert.equal(clock.pending, 1);
 });
 
