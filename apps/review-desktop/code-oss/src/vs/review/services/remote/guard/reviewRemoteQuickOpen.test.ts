@@ -14,7 +14,7 @@ import { ReviewRemoteQuickOpen } from "./reviewRemoteQuickOpen.js";
 
 const A = "whiteboard+aaaa-1111";
 const LINK = "see [this](command:vscode.openFolder?%5B%22file%3A%2F%2F%2F%22%5D) or [docs](https://example.com)";
-const CLEAN = "see [this] or [docs](https://example.com)";
+const CLEAN = "see this or [docs](https://example.com)";
 
 function setup() {
 	const warnings: string[] = [];

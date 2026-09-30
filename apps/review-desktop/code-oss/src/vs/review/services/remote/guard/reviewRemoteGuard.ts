@@ -3,7 +3,9 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { IMarkdownString } from "../../../../base/common/htmlContent.js";
+import { escapeMarkdownSyntaxTokens, type IMarkdownString } from "../../../../base/common/htmlContent.js";
+import { parseLinkedText } from "../../../../base/common/linkedText.js";
+import * as marked from "../../../../base/common/marked/marked.js";
 import { Schemas } from "../../../../base/common/network.js";
 import type { URI } from "../../../../base/common/uri.js";
 import type { IExtensionDescription } from "../../../../platform/extensions/common/extensions.js";
@@ -34,15 +36,23 @@ export interface IReviewRemoteExtensions {
 }
 export const IReviewRemoteExtensions = createDecorator<IReviewRemoteExtensions>("reviewRemoteExtensions");
 
-/** A literal prefix, so an entity-encoded or escaped scheme never counts as web. */
+/** A literal prefix, so an entity-encoded, percent-encoded or spaced scheme never counts as web. */
 const WEB_LINK = /^(https?|mailto):/i;
-/** The `](target "title")` half of an inline link, whatever its label. */
-const INLINE_TARGET = /\]\(\s*<?([^)\s>]*)>?(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g;
-/** `[ref]: target` reference definitions. */
-const REFERENCE = /^[ \t]*\[[^\]\n]+\]:[ \t]*<?(\S*?)>?(?:[ \t].*)?$/gm;
-/** `<scheme:...>` autolinks. */
-const AUTO_LINK = /<([a-z][a-z0-9+.-]*:[^>\s]*)>/gi;
 const LINKS = "links other than http, https and mailto in text a remote shows";
+
+/** Link and image targets, and whether raw HTML is present, as the window's markdown parser sees them. */
+function markdownLinks(value: string) {
+	const unsafe: marked.Token[] = [];
+	marked.walkTokens(marked.lexer(value, { gfm: true }), (token) => {
+		if (token.type === "html" || ((token.type === "link" || token.type === "image") && !WEB_LINK.test(token.href))) unsafe.push(token);
+	});
+	return unsafe;
+}
+
+/** Markdown with every syntax character escaped, `<` and `&` too: no link, image or HTML is left. */
+function inert(value: string): string {
+	return escapeMarkdownSyntaxTokens(value).replace(/[<>&]/g, "\\$&");
+}
 
 /**
  * What a remote's extensions may not do on the laptop. Each refusal is an
@@ -73,25 +83,45 @@ export class ReviewRemoteRefusals {
 	}
 
 	/**
-	 * Text a remote wrote that the window renders with links (notifications,
-	 * progress, quick input, status bar tooltips). A link the user clicks would
-	 * open through the window's opener with commands allowed, so only web and
-	 * mail links stay; any other link keeps its label and loses its target.
+	 * Text a remote wrote that the window renders with `parseLinkedText`
+	 * (notifications, progress, quick input prompts and validation, plain
+	 * tooltips). A link the user clicks would open through the window's opener
+	 * with commands allowed, so, with that same parser, every link whose target
+	 * is not http, https or mailto becomes its label. Repeated until the parser
+	 * finds none, since a label can close a link around it.
 	 */
 	text(value: string): string {
-		let stripped = false;
-		const strip = (keep: string) => (link: string, target: string) => (WEB_LINK.test(target) ? link : ((stripped = true), keep));
-		const result = value
-			.replace(INLINE_TARGET, strip("]"))
-			.replace(REFERENCE, strip(""))
-			.replace(AUTO_LINK, (link: string, target: string) => (WEB_LINK.test(target) ? link : ((stripped = true), target)));
-		if (stripped) this.refuse(LINKS);
+		let result = value;
+		for (;;) {
+			const nodes = parseLinkedText(result).nodes;
+			if (!nodes.some((node) => typeof node !== "string" && !WEB_LINK.test(node.href))) break;
+			this.refuse(LINKS);
+			result = nodes.map((node) => (typeof node === "string" ? node : WEB_LINK.test(node.href) ? `[${node.label}](${node.href})` : node.label)).join("");
+		}
 		return result;
 	}
 
-	/** Remote markdown is never trusted: no command links, no HTML. */
+	/**
+	 * Remote markdown for the window's markdown renderer: rebuilt with only its
+	 * text, untrusted, no HTML, and no `uris` or `baseUri` (they would resolve a
+	 * web-looking link to any target). With the window's own markdown parser,
+	 * every link, image or HTML it would render that is not http, https or
+	 * mailto is made inert text; if one survives that, the whole text is.
+	 */
 	markdown(value: IMarkdownString): IMarkdownString {
-		return { ...value, value: this.text(value.value), isTrusted: false, supportHtml: false };
+		let text = value.value;
+		for (let round = 0; round < 8; round++) {
+			const unsafe = markdownLinks(text);
+			if (!unsafe.length) break;
+			this.refuse(LINKS);
+			if (!unsafe.every((token) => text.includes(token.raw))) {
+				text = inert(text);
+				break;
+			}
+			for (const token of unsafe) text = text.replace(token.raw, inert(token.type === "html" ? token.raw : (token as marked.Tokens.Link).text));
+		}
+		if (markdownLinks(text).length) text = inert(text);
+		return { value: text, isTrusted: false, supportHtml: false, ...(value.supportThemeIcons !== undefined && { supportThemeIcons: value.supportThemeIcons }) };
 	}
 
 	/** For members whose every call is refused. */

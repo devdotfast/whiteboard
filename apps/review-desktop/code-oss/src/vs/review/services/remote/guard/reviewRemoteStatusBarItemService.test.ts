@@ -49,10 +49,10 @@ test("tooltips lose their non-web links and their markdown is untrusted, includi
 	entry("wb-test.probe.a", "[go](command:vscode.openFolder?%5B%22file%3A%2F%2F%2F%22%5D) [docs](https://example.com)", undefined);
 	entry("wb-test.probe.b", { value: "[x](file:///etc/hosts)", isTrusted: true, supportHtml: true }, undefined);
 	entry("wb-test.probe.c", { markdown: async () => ({ value: "[y](command:x)", isTrusted: true }), markdownNotSupportedFallback: undefined }, undefined);
-	assert.equal(set[0][5], "[go] [docs](https://example.com)");
-	assert.deepEqual(set[1][5], { value: "[x]", isTrusted: false, supportHtml: false });
+	assert.equal(set[0][5], "go [docs](https://example.com)");
+	assert.deepEqual(set[1][5], { value: "x", isTrusted: false, supportHtml: false });
 	const provided = await (set[2][5] as { markdown: (token: CancellationToken) => Promise<IMarkdownString> }).markdown(CancellationToken.None);
-	assert.deepEqual(provided, { value: "[y]", isTrusted: false, supportHtml: false });
+	assert.deepEqual(provided, { value: "y", isTrusted: false, supportHtml: false });
 });
 
 test("the laptop's items are neither sent to the host nor changed or removed by it", (t) => {

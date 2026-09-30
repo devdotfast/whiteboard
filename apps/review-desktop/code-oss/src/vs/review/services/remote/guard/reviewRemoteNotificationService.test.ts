@@ -5,7 +5,7 @@ import { ReviewRemoteRefusals } from "./reviewRemoteGuard.js";
 
 const A = "whiteboard+aaaa-1111";
 const LINK = "run [this](command:vscode.openFolder?%5B%22file%3A%2F%2F%2FUsers%22%5D) or read [docs](https://example.com)";
-const CLEAN = "run [this] or read [docs](https://example.com)";
+const CLEAN = "run this or read [docs](https://example.com)";
 
 function refusals() {
 	const warnings: string[] = [];
@@ -27,7 +27,7 @@ test("a notification from a remote keeps its web links and loses the rest; logge
 	notifications.notify({ severity: Severity.Info, message: LINK });
 	notifications.prompt(Severity.Warning, LINK, []);
 	notifications.error([LINK, "plain"]);
-	notifications.notify({ severity: Severity.Info, message: "no links, [ref]\n\n[ref]: command:workbench.action.openSettings" });
-	assert.deepEqual(shown, [CLEAN, CLEAN, [CLEAN, "plain"], "no links, [ref]\n\n"]);
+	notifications.notify({ severity: Severity.Info, message: "[open](command:vscode.open?%5B%22file%3A%2F%2F%2Fetc%2Fhosts%22%5D#>x)" });
+	assert.deepEqual(shown, [CLEAN, CLEAN, [CLEAN, "plain"], "open"]);
 	assert.deepEqual(warnings, [`[Remote guard] ${A}: refused links other than http, https and mailto in text a remote shows`]);
 });
