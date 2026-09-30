@@ -10,7 +10,8 @@ import { override, type ReviewRemoteRefusals } from "./reviewRemoteGuard.js";
 const WEB = [Schemas.http, Schemas.https];
 
 /**
- * Web and mail links only, through the window's own opener. A file, an app,
+ * Web and mail links only, through the window's own opener, as for a laptop
+ * extension (the fork registers no trusted-domains prompt). A file, an app,
  * a command link or any other scheme would run something on the laptop.
  */
 export function reviewRemoteOpenerService(base: IOpenerService, refusals: ReviewRemoteRefusals): IOpenerService {
