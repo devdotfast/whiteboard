@@ -853,8 +853,9 @@ export class AskThread {
       this.sessionId = response.sessionId;
       start.onSession?.(response.sessionId);
 
-      this.greeting = piGreetingSchema.safeParse(response._meta).data?.piAcp
-        .startupInfo;
+      this.greeting = piGreetingSchema.safeParse(
+        response._meta,
+      ).data?.piAcp.startupInfo;
 
       return { sessionId: response.sessionId, response };
     }

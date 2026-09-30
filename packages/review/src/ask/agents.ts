@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
-import { homedir } from "node:os";
 import { createRequire } from "node:module";
+import { homedir } from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 
