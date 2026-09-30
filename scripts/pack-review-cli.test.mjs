@@ -161,6 +161,7 @@ test("packs the Desktop version under the whiteboard name with both bins and the
   const rust = curated.extensions.find(
     (extension) => extension.id === "rust-lang.rust-analyzer",
   );
+
   assert.deepEqual(rust.addActivationEvents, ["onLanguage:rust"]);
 
   for (const extension of curated.extensions)

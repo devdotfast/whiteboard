@@ -6,7 +6,7 @@ const PROBE_TIMEOUT_MS = 10_000;
 type Toolchains = Record<string, readonly (readonly string[])[]>;
 
 /** What each optional group's language server runs from the remote's PATH. */
-const TOOLCHAINS: Toolchains = {
+const TOOLCHAINS = {
   rust: [
     ["cargo", "--version"],
     ["rustc", "--version"],
@@ -14,7 +14,7 @@ const TOOLCHAINS: Toolchains = {
   swift: [["swift", "--version"]],
   csharp: [["dotnet", "--version"]],
   go: [["go", "version"]],
-};
+} satisfies Toolchains;
 
 type Outcome = "found" | "missing" | string;
 
@@ -28,6 +28,7 @@ function probe(
   timeoutMs: number,
 ) {
   const shell = env.SHELL || "/bin/sh";
+
   const flags = ["csh", "tcsh"].includes(path.basename(shell))
     ? ["-ic"]
     : ["-i", "-l", "-c"];
@@ -43,6 +44,7 @@ function probe(
       try {
         process.kill(-child.pid!, "SIGKILL");
       } catch {}
+
       resolve(
         `${command.join(" ")} did not answer within ${timeoutMs / 1_000} s`,
       );
@@ -73,17 +75,23 @@ function probe(
 export async function missingToolchains(
   groups: readonly string[],
   env: NodeJS.ProcessEnv,
-  { timeoutMs = PROBE_TIMEOUT_MS, toolchains = TOOLCHAINS } = {},
+  {
+    timeoutMs = PROBE_TIMEOUT_MS,
+    toolchains = TOOLCHAINS,
+  }: { timeoutMs?: number; toolchains?: Toolchains } = {},
 ) {
   const entries = await Promise.all(
     groups.map(async (group) => {
       const commands = toolchains[group] ?? [];
+
       const outcomes = await Promise.all(
         commands.map((command) => probe(command, env, timeoutMs)),
       );
+
       const missing = commands
         .filter((_, i) => outcomes[i] === "missing")
         .map(([tool]) => tool);
+
       const failures = outcomes.filter(
         (outcome) => outcome !== "found" && outcome !== "missing",
       );
