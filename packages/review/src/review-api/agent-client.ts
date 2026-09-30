@@ -83,9 +83,13 @@ export async function connectReviewInstance(
   const selection = await selectReviewInstance({ env });
   const discovery = healthyReviewInstance(selection);
 
-  // With no Desktop to start, the CLI keeps this machine's own server up.
+  // With no Desktop here at all, not even a record of one, the CLI keeps
+  // this machine's own server up.
   if (
     !discovery &&
+    selection.source === "fallback" &&
+    selection.instances.length === 0 &&
+    !selection.problem &&
     !(
       options.desktopInstalled ?? (() => desktopApplicationInstalled({ env }))
     )()

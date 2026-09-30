@@ -7,6 +7,7 @@ import path from "node:path";
 import { PassThrough, Readable, Writable } from "node:stream";
 
 import type { JsonObject } from "@dev.fast/json";
+import { REVIEW_DESKTOP_DISCOVERY_VERSION } from "@dev.fast/review-protocol";
 import { ListToolsResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { readReviewServerDiscovery } from "@review/server-discovery.js";
 import {
@@ -660,6 +661,40 @@ describe("with no Desktop running", () => {
     });
   }, 60_000);
 
+  it.each([
+    ["an explicit selection that is not running", "selected"],
+    ["a broken instance record", "broken"],
+    ["several running and none selected", "several"],
+  ] as const)(
+    "keeps the old diagnosis for %s, even with no Desktop installed",
+    async (_case, kind) => {
+      const desktops = await fakeDesktops(kind, env);
+
+      try {
+        const connect = (installed: boolean) =>
+          agentClient
+            .connectReviewInstance(
+              env,
+              {},
+              { desktopInstalled: () => installed, cli: sourceCli },
+            )
+            .then(
+              () => "connected",
+              (error: Error) => error.message,
+            );
+
+        const before = await connect(true);
+
+        expect(before).not.toBe("connected");
+        expect(await connect(false)).toBe(before);
+        expect(await readReviewServerDiscovery(home())).toBeNull();
+      } finally {
+        for (const server of desktops) server.close();
+      }
+    },
+    30_000,
+  );
+
   it("fails as before when a Desktop is installed but not running", async () => {
     await expect(
       agentClient.connectReviewInstance(
@@ -673,3 +708,59 @@ describe("with no Desktop running", () => {
     expect(await readReviewServerDiscovery(home())).toBeNull();
   });
 });
+
+/** A selection with no running Desktop, a broken record, or two running and neither the fallback. */
+async function fakeDesktops(
+  kind: "selected" | "broken" | "several",
+  env: NodeJS.ProcessEnv,
+) {
+  const instances = path.join(
+    env.DEV_REVIEW_HOME!,
+    "review-desktop",
+    "instances",
+  );
+
+  await mkdir(instances, { recursive: true });
+
+  if (kind === "selected") {
+    env.DEV_REVIEW_INSTANCE = "preview";
+
+    return [];
+  }
+
+  if (kind === "broken") {
+    await writeFile(path.join(instances, "stable.json"), "{");
+
+    return [];
+  }
+
+  return Promise.all(
+    ["preview", "dev-other-0123456789ab"].map(async (key) => {
+      const instanceId = randomUUID();
+
+      const server = createServer((_request, response) =>
+        response.end(
+          JSON.stringify({ ok: true, instanceId, desktopAttached: true }),
+        ),
+      ).listen(0, "127.0.0.1");
+
+      await once(server, "listening");
+      const { port } = z.object({ port: z.number() }).parse(server.address());
+      await writeFile(
+        path.join(instances, `${key}.json`),
+        JSON.stringify({
+          version: REVIEW_DESKTOP_DISCOVERY_VERSION,
+          instanceId,
+          url: `http://127.0.0.1:${port}`,
+          appPid: process.pid,
+          serverPid: process.pid,
+          token: "token",
+          startedAt: 1,
+          key,
+        }),
+      );
+
+      return server;
+    }),
+  );
+}
