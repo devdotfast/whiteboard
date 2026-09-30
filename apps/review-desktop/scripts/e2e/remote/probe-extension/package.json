@@ -1,0 +1,23 @@
+{
+  "name": "remote-guard-probe",
+  "displayName": "Remote guard probe",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Test only. Attempts each action the guard must block, and records the outcome.",
+  "publisher": "wb-test",
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "wbProbe.run",
+        "title": "Run the remote guard probe again"
+      }
+    ]
+  },
+  "activationEvents": [
+    "*"
+  ],
+  "engines": {
+    "vscode": "^1.80.0"
+  }
+}

@@ -188,7 +188,7 @@ test("a host's main-thread peers are created with the guarded services", async (
 		resolver: {} as IRemoteAuthorityResolverService,
 	}, accessor)));
 	const context = { remoteAuthority: A, getProxy: () => ({ $acceptProviderInfos() { }, $onDidChangeWindowFocus() { } }) } as unknown as IExtHostContext;
-	const peer = <T>(ctor: new (context: IExtHostContext, ...services: never[]) => T) => scope.invokeFunction((accessor) => accessor.get(IInstantiationService).createInstance(ctor as never, context) as T);
+	const peer = <T>(ctor: new (context: IExtHostContext, ...services: never[]) => T): T => scope.invokeFunction((accessor) => (accessor.get(IInstantiationService).createInstance as (ctor: unknown, context: IExtHostContext) => T)(ctor, context));
 	const refused = /^Error: Not available for an extension on wb-test-a: /;
 	const laptop = URI.file("/etc/hosts");
 

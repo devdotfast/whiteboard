@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import { awsUp } from "./aws-hosts.mjs";
 import { containerOf, install, up } from "./docker-hosts.mjs";
 import { docker, inherit } from "./exec.mjs";
+import { installExtension } from "./install-extension.mjs";
 import { down, downEveryRun, downRun } from "./removal.mjs";
 import { checkName, hostOf, openRun } from "./run-state.mjs";
 import { forward, sshArgs } from "./ssh.mjs";
@@ -15,6 +16,7 @@ const usage = `usage: remote.mjs <command>
             [--auth key|password] [--banner] [--shell bash|fish] [--jump <name>]
             [--sealed] [--delay-ms <n>] [--no-forwarding] [--port <n>]
   install <name> [--version <v>]
+  install-extension <name> <local extension dir>
   ssh <name> -- <command...>
   forward <name> <remote port>
   pause <name> | resume <name> | logs <name>
@@ -69,6 +71,10 @@ async function main(argv) {
       return awsUp(await openRun(true), name, values);
     case "install":
       return install(await openRun(false), name, values.version);
+    case "install-extension":
+      if (!arg) throw new Error("install-extension needs a local extension dir");
+
+      return installExtension(await openRun(false), name, arg);
     case "ssh": {
       const runState = await openRun(false);
 
