@@ -42,7 +42,7 @@
   "scripts": {
     "prebuild": "pnpm run build:workspace-deps",
     "ensure:diffr": "diffr-fetch --into bin",
-    "build": "tsdown",
+    "build": "node --max-old-space-size=8192 node_modules/tsdown/dist/run.mjs",
     "build:tutorial-assets": "tsx scripts/build-tutorial-assets.ts",
     "ensure:tutorial-assets": "tsx scripts/ensure-tutorial-assets.ts",
     "check:tutorial": "tsx scripts/check-tutorial.ts",
