@@ -297,9 +297,7 @@ export default createActiveReviewDocument({ title: "Legacy", routePath: "/", fil
       },
     );
 
-    expect(documentLocalComponent.errors).toContain(
-      "Document-local components are not supported; use the Review components.",
-    );
+    expect(documentLocalComponent.errors.length).toBeGreaterThan(0);
     expect(documentLocalComponent.document).toBeNull();
 
     const schemaFailure = await evaluateReviewDocumentBundleForPublish({

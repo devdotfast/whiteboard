@@ -756,7 +756,7 @@ export interface ReviewCanvasModule {
 // bump; readers must ignore fields they do not understand.
 export const ReviewDesktopDiscoverySchema = z.object({
   version: z.literal(REVIEW_DESKTOP_DISCOVERY_VERSION, {
-    error: "Unsupported Review Desktop discovery version",
+    error: "Unsupported Whiteboard Desktop discovery version",
   }),
   instanceId: requiredString,
   url: loopbackOriginSchema,

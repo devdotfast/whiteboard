@@ -1,7 +1,7 @@
 {
   "name": "@dev.fast/trace-protocol",
   "version": "0.5.0",
-  "description": "Contract between the Review CLI and the hosted trace store.",
+  "description": "Contract between the Whiteboard CLI and the hosted trace store.",
   "license": "MIT",
   "repository": {
     "type": "git",

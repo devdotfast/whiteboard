@@ -16,10 +16,9 @@ const RELEASE_IDENTITIES = Object.freeze({
     win32x64UserAppId: "{{78391143-AA32-4906-AF1B-54B2248A214A}",
     win32arm64UserAppId: "{{E81529AA-7A0C-43B8-956F-9DDAD5A1AA5F}",
     win32AppUserModelId: "devfast.Review",
-    win32ShellNameShort: "Review",
+    win32ShellNameShort: "Whiteboard",
     win32TunnelServiceMutex: "devfastreview-tunnelservice",
     win32TunnelMutex: "devfastreview-tunnel",
-
   }),
   preview: Object.freeze({
     nameShort: "Whiteboard Preview",
@@ -38,10 +37,9 @@ const RELEASE_IDENTITIES = Object.freeze({
     win32x64UserAppId: "{{BFADA66E-FC12-452C-9F6F-09B38530CA2D}",
     win32arm64UserAppId: "{{AC7786E1-8977-4AEB-A14F-72A8E77A6EC3}",
     win32AppUserModelId: "devfast.ReviewPreview",
-    win32ShellNameShort: "Review Preview",
+    win32ShellNameShort: "Whiteboard Preview",
     win32TunnelServiceMutex: "devfastreview-tunnelservicePreview",
     win32TunnelMutex: "devfastreview-tunnelPreview",
-
   }),
 });
 

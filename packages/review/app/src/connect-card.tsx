@@ -254,7 +254,7 @@ export function ConnectCard({
       ) : plugin.url ? (
         <>
           <p {...stylex.props(promptStyles.body)}>
-            Opens {agent} and adds the review server.
+            Opens {agent} and adds the Whiteboard server.
           </p>
           <div {...stylex.props(promptStyles.actions)}>
             <a
