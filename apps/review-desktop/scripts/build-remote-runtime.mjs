@@ -12,6 +12,13 @@
 //   out/vs/workbench/api/node/extensionHostProcess.js
 //   out/vs/platform/files/node/watcher/watcherMain.js
 //   extensions/                     built-in extensions, scanned by the server
+//
+// `@vscode/ripgrep-universal` is bundled; only its `rg` binary is not shipped.
+// Its `rgPath` is `bin/<platform>-<arch>/rg` beside the grandparent directory
+// of the bundle that imports it, so the extension host looks for
+//   out/vs/workbench/api/bin/linux-x64/rg
+//   out/vs/workbench/api/bin/linux-arm64/rg
+// and text and file search are unavailable until that file exists.
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { createRequire, isBuiltin } from "node:module";
@@ -40,14 +47,13 @@ export const REMOTE_RUNTIME_ENTRIES = [
   "vs/platform/files/node/watcher/watcherMain",
 ];
 
-// Native addons and tools that stay out of the bundles. Every import site
-// tolerates their absence: logging falls back to the console, recursive file
-// watching and text search are unavailable.
+// Native addons that stay out of the bundles. Every import site tolerates
+// their absence: logging falls back to the console, recursive file watching
+// is unavailable.
 export const OPTIONAL_NATIVE_PACKAGES = [
   "@parcel/watcher",
   "@vscode/deviceid",
   "@vscode/native-watchdog",
-  "@vscode/ripgrep",
   "@vscode/spdlog",
   "@vscode/sqlite3",
   "@vscode/windows-ca-certs",
