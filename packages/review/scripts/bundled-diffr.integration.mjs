@@ -211,7 +211,6 @@ describe("Relocated runtime diffr integrates with Review streams and settings", 
     assert.equal(existsSync(sentinel), false);
   });
 
-
   test("a provider switch saves through the binary, clears the old key and keeps the file sparse", async () => {
     delete process.env.ANTHROPIC_API_KEY;
     await setDiffrConfigValue(
@@ -221,7 +220,10 @@ describe("Relocated runtime diffr integrates with Review streams and settings", 
     );
     const current = await readDiffrConfig(repository);
     assert.ok(current.defaultPrompt);
-    assert.match(current.defaultPromptUrl, /^https:\/\/github\.com\/devdotfast\/diffr\//);
+    assert.match(
+      current.defaultPromptUrl,
+      /^https:\/\/github\.com\/devdotfast\/diffr\//,
+    );
 
     const saved = await saveDiffrSummarizer(
       {
@@ -268,7 +270,11 @@ describe("Relocated runtime diffr integrates with Review streams and settings", 
 
         const content = JSON.stringify({
           summaries: [
-            { id, summary: "", pseudocode: "count and average positive values" },
+            {
+              id,
+              summary: "",
+              pseudocode: "count and average positive values",
+            },
           ],
         });
 

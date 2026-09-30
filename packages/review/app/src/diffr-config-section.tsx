@@ -149,7 +149,8 @@ export function DiffrConfigSection({
   const unavailable =
     !config || setting(config, "summarize.enabled") === undefined;
 
-  const summaryValid = !!draft?.model.trim() && !!draft.systemPrompt.trim();
+  const summaryValid = !!draft?.model.trim();
+  const savedDraft = config && summaryDraft(config);
   const hiddenTags = config ? setting(config, "hide-files.tags") : undefined;
 
   return (
@@ -258,6 +259,7 @@ export function DiffrConfigSection({
                             ...draft,
                             provider: choice,
                             model: DEFAULT_MODELS[choice],
+                            endpoint: "",
                             apiKey: "",
                           })
                         }
@@ -277,10 +279,13 @@ export function DiffrConfigSection({
                       />
                     </SettingRow>
                     <p {...stylex.props(styles.rowDescription)}>
-                      {draft.provider !== provider(config)
-                        ? config.credentialSource === "config"
-                          ? `Saving clears the key saved for ${PROVIDER_LABELS[provider(config)]}.`
-                          : `Enter a key for ${PROVIDER_LABELS[draft.provider]}, or leave blank to use its environment variable.`
+                      {draft.provider !== provider(config) ||
+                      draft.endpoint !== savedDraft?.endpoint
+                        ? config.credentialSource !== "config"
+                          ? `Enter a key for ${PROVIDER_LABELS[draft.provider]}, or leave blank to use its environment variable.`
+                          : draft.provider !== provider(config)
+                            ? `Saving clears the key saved for ${PROVIDER_LABELS[provider(config)]}.`
+                            : "Saving clears the saved key, since the endpoint changed."
                         : `${
                             config.credentialSource === "config"
                               ? "Saved key"

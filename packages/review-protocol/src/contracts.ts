@@ -476,7 +476,8 @@ export const reviewDiffrSummarizerInputSchema = z.object({
   provider: z.enum(reviewDiffrProviders),
   model: z.string().trim().min(1),
   endpoint: z.string().trim(),
-  systemPrompt: z.string().trim().min(1),
+  // Blank means diffr's own default; kept as written, not trimmed.
+  systemPrompt: z.string(),
   tests: z.boolean(),
   apiKey: z.string().optional(),
 });

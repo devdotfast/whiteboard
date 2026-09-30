@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import type { JsonObject } from "@dev.fast/json";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import {
@@ -43,7 +44,7 @@ const draft = {
   tests: true,
 };
 
-async function fakeDiffr(key = "") {
+async function fakeDiffr(key = "", summarize: JsonObject = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "review-diffr-config-"));
   roots.push(root);
 
@@ -58,10 +59,12 @@ async function fakeDiffr(key = "") {
         bundled: {
           summarize: {
             enabled: false,
+            provider: "gemini",
             model: "old",
             tests: false,
             system_prompt: DEFAULT_PROMPT,
-            api_key: key,
+            ...(key && { api_key: key }),
+            ...summarize,
           },
           context: { lines: 3, enabled: true },
         },
@@ -76,7 +79,9 @@ const args = process.argv.slice(2);
 const state = ${JSON.stringify(state)}, log = ${JSON.stringify(log)};
 fs.appendFileSync(log, JSON.stringify(args) + '\\n');
 const config = JSON.parse(fs.readFileSync(state, 'utf8'));
-if (args[0] === 'config' && args[1] === 'schema') {
+if (args[0] === 'config' && args[1] === 'schema' && process.env.FAIL_SCHEMA) {
+  process.exit(2);
+} else if (args[0] === 'config' && args[1] === 'schema') {
   const summarize = { type: 'object', properties: { system_prompt: { type: 'string', default: ${JSON.stringify(DEFAULT_PROMPT)}, description: ${JSON.stringify(`Unset uses the default: ${PROMPT_URL}`)} } } };
   console.log(JSON.stringify({ properties: { plugins: { properties: { bundled: { properties: { summarize } } } } } }));
 } else if (args[0] === 'config' && args[1] === 'show') {
@@ -156,7 +161,7 @@ test("saves credentials and options before enabling and preserves blank keys", a
   await saveDiffrSummarizer({ ...draft, apiKey: "test-secret" });
   const writes = (await fake.calls()).filter((args) => args[1] === "set");
   expect(writes.map((args) => args[2])).toEqual(
-    ["api_key", "provider", "model", "tests", "enabled"].map(
+    ["api_key", "model", "tests", "enabled"].map(
       (key) => `plugins.bundled.summarize.${key}`,
     ),
   );
@@ -420,4 +425,66 @@ test("reads the environment key of the saved provider", async () => {
   expect((await readDiffrConfig()).credentialSource).toBe("missing");
   vi.stubEnv("ANTHROPIC_API_KEY", "anthropic-env");
   expect((await readDiffrConfig()).credentialSource).toBe("environment");
+});
+
+test("a switch clears the saved key before naming the new provider", async () => {
+  const fake = await fakeDiffr("gemini-secret");
+  vi.stubEnv("FAIL_KEY", "plugins.bundled.summarize.provider");
+
+  const result = await saveDiffrSummarizer({
+    ...draft,
+    provider: "openai",
+    apiKey: "openai-secret",
+  });
+
+  expect(result.error).toBeDefined();
+
+  const state = JSON.parse(await readFile(fake.state, "utf8")).plugins.bundled
+    .summarize;
+
+  // The failure left the old provider, and no key for it to send.
+  expect(state).toMatchObject({ provider: "gemini", api_key: "" });
+});
+
+test("a new endpoint is treated like a new provider", async () => {
+  const fake = await fakeDiffr("saved-secret");
+  const moved = { ...draft, endpoint: "https://proxy.example/v1" };
+  await expect(testDiffrSummarizer(moved)).rejects.toThrow("Add an API key");
+  await saveDiffrSummarizer({ ...moved, enabled: false });
+  expect(
+    JSON.parse(await readFile(fake.state, "utf8")).plugins.bundled.summarize,
+  ).toMatchObject({ api_key: "", endpoint: "https://proxy.example/v1" });
+});
+
+test("a switch with no saved key writes no empty key", async () => {
+  const fake = await fakeDiffr();
+  await saveDiffrSummarizer({
+    ...draft,
+    enabled: false,
+    provider: "anthropic",
+  });
+  expect(
+    (await fake.calls()).some((args) => args[2]?.endsWith(".api_key")),
+  ).toBe(false);
+});
+
+test("settings still read when diffr describes no schema", async () => {
+  await fakeDiffr();
+  vi.stubEnv("FAIL_SCHEMA", "1");
+  const config = await readDiffrConfig();
+  expect(config.defaultPrompt).toBeUndefined();
+  expect(config.values).toBeDefined();
+});
+
+test("a saved prompt is compared as written and a blank one is left alone", async () => {
+  const fake = await fakeDiffr("", { system_prompt: "Custom.\n" });
+  await saveDiffrSummarizer({
+    ...draft,
+    enabled: false,
+    systemPrompt: "Custom.\n",
+  });
+  await saveDiffrSummarizer({ ...draft, enabled: false, systemPrompt: "" });
+  expect(
+    (await fake.calls()).some((args) => args[2]?.endsWith(".system_prompt")),
+  ).toBe(false);
 });

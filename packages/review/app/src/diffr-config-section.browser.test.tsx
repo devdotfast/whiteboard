@@ -1,4 +1,5 @@
 import {
+  type JsonObject,
   type ReviewDiffrConfig,
   type ReviewDiffrConfigActions,
 } from "@dev.fast/review-protocol";
@@ -360,4 +361,36 @@ test("switching provider without a saved key does not promise to clear one", asy
     )
     .toBeVisible();
   expect(document.body.textContent).not.toContain("Saving clears");
+});
+
+test("switching provider clears a custom endpoint, and a new endpoint warns about the saved key", async () => {
+  const { values } = config();
+
+  const summarize: JsonObject = {
+    enabled: false,
+    provider: "openai",
+    model: "test-model",
+    endpoint: "https://openrouter.ai/api/v1",
+    tests: true,
+    system_prompt: "Default prompt.",
+  };
+
+  await mount({ values: { ...values, plugins: { bundled: { summarize } } } });
+  await open();
+  const endpoint = page.getByLabelText("Endpoint URL", { exact: true });
+  await expect.element(endpoint).toHaveValue("https://openrouter.ai/api/v1");
+  await act(async () => {
+    await endpoint.fill("https://other.example/v1");
+  });
+  await expect
+    .element(
+      page.getByText(
+        "Saving clears the saved key, since the endpoint changed.",
+      ),
+    )
+    .toBeVisible();
+  await act(async () => {
+    await page.getByRole("radio", { name: "Anthropic" }).click();
+  });
+  await expect.element(endpoint).toHaveValue("");
 });

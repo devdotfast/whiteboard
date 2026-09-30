@@ -123,15 +123,41 @@ function environmentKey(provider: ReviewDiffrProvider): string | undefined {
     .find((key) => !!key);
 }
 
+function savedEndpoint(config: JsonObject): string {
+  const value = valueAt(config, `${prefix}.endpoint`);
+
+  return isStringValue(value) ? value : "";
+}
+
+/** Whether a saved key belongs to a different destination than the draft's. */
+function movesKey(
+  config: JsonObject,
+  draft: Pick<ReviewDiffrSummarizerInput, "provider" | "endpoint">,
+): boolean {
+  return (
+    draft.provider !== savedProvider(config) ||
+    draft.endpoint !== savedEndpoint(config)
+  );
+}
+
 function keyOptional(provider: ReviewDiffrProvider, endpoint: string): boolean {
   return provider === "openai" && endpoint !== "";
 }
 
-/** The default prompt and the link its description gives to it. */
+/**
+ * The default prompt and the link its description gives to it, or neither
+ * when diffr cannot describe its schema: the rest of Settings still works.
+ */
 async function defaultPrompt(
   rootPath?: string,
 ): Promise<Pick<ReviewDiffrConfig, "defaultPrompt" | "defaultPromptUrl">> {
-  const schema = json(await diffr(["config", "schema"], rootPath));
+  let schema: JsonObject;
+
+  try {
+    schema = json(await diffr(["config", "schema"], rootPath));
+  } catch {
+    return {};
+  }
 
   const prompt = valueAt(
     schema,
@@ -241,13 +267,13 @@ export function saveDiffrSummarizer(
 
   return serialized(async () => {
     const current = await read(rootPath);
-    const switching = draft.provider !== savedProvider(current.values);
-    const savedKey = !switching && current.credentialSource === "config";
+    const moving = movesKey(current.values, draft);
+    const savedKey = current.credentialSource === "config";
 
     if (
       draft.enabled &&
       !draft.apiKey &&
-      !savedKey &&
+      !(savedKey && !moving) &&
       !environmentKey(draft.provider) &&
       !keyOptional(draft.provider, draft.endpoint)
     ) {
@@ -262,18 +288,22 @@ export function saveDiffrSummarizer(
 
     if (!draft.enabled) entries.push([`${prefix}.enabled`, false]);
 
-    if (draft.apiKey) entries.push([`${prefix}.api_key`, draft.apiKey]);
-    else if (switching) entries.push([`${prefix}.api_key`, ""]);
+    // Clear a key before its destination changes and write a new one only
+    // after, so a failure part way never pairs a key with another vendor.
+    if (moving && savedKey) entries.push([`${prefix}.api_key`, ""]);
     entries.push([`${prefix}.provider`, draft.provider]);
 
-    // Unset keys read as undefined; skip writing an empty string over them.
-    for (const [key, value] of [
-      ["endpoint", draft.endpoint],
-      ["system_prompt", draft.systemPrompt],
-    ] as const) {
-      if (value !== (valueAt(current.values, `${prefix}.${key}`) ?? ""))
-        entries.push([`${prefix}.${key}`, value]);
-    }
+    if (draft.endpoint !== savedEndpoint(current.values))
+      entries.push([`${prefix}.endpoint`, draft.endpoint]);
+
+    if (draft.apiKey) entries.push([`${prefix}.api_key`, draft.apiKey]);
+
+    // A blank prompt leaves diffr's own in place.
+    if (
+      draft.systemPrompt.trim() &&
+      draft.systemPrompt !== valueAt(current.values, `${prefix}.system_prompt`)
+    )
+      entries.push([`${prefix}.system_prompt`, draft.systemPrompt]);
 
     entries.push(
       [`${prefix}.model`, draft.model],
@@ -309,11 +339,12 @@ export async function testDiffrSummarizer(
       throw new Error("The summarizer is not available in this configuration.");
 
     const { provider, endpoint, model, systemPrompt } = parsed.data;
-    const switching = provider !== savedProvider(config);
 
     const apiKey =
       parsed.data.apiKey ||
-      (!switching && isStringValue(saved.api_key) ? saved.api_key : "") ||
+      (!movesKey(config, parsed.data) && isStringValue(saved.api_key)
+        ? saved.api_key
+        : "") ||
       environmentKey(provider);
 
     if (!apiKey && !keyOptional(provider, endpoint))
@@ -325,7 +356,7 @@ export async function testDiffrSummarizer(
       enabled: true,
       provider,
       model,
-      system_prompt: systemPrompt,
+      ...(systemPrompt.trim() && { system_prompt: systemPrompt }),
       min_lines: 1,
       retries: 0,
       request_timeout_ms: 45_000,
