@@ -26,7 +26,8 @@ const scope = leaseScopeSchema
 // One schema per action, so each agent tool states exactly what it needs.
 export const activityBeginSchema = z.strictObject({
   leaseId: z
-    .uuid()
+    .string()
+    .min(1)
     .optional()
     .describe(
       "Omit it: the result gives you one. Pass the one you sent only to retry a begin.",
@@ -36,12 +37,15 @@ export const activityBeginSchema = z.strictObject({
 });
 
 export const activityUpdateSchema = z.strictObject({
-  leaseId: z.uuid(),
+  leaseId: z.string().min(1),
   scope,
   focus: focusSchema.nullable().optional(),
 });
 
-export const activityEndSchema = z.strictObject({ leaseId: z.uuid(), scope });
+export const activityEndSchema = z.strictObject({
+  leaseId: z.string().min(1),
+  scope,
+});
 
 export const activitySchema = z.discriminatedUnion("action", [
   activityBeginSchema.extend({ action: z.literal("begin") }),

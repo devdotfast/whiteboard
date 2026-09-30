@@ -74,8 +74,8 @@ export const SCRATCHPAD_TITLE = "Scratchpad";
 const SCRATCHPAD_COMMAND_ID = "5c7a7c6e-0000-4000-8000-5c7a7c6e0000";
 
 export const commandSchema = z.strictObject({
-  commandId: z.uuid(),
-  leaseId: z.uuid().optional(),
+  commandId: z.string().min(1),
+  leaseId: z.string().min(1).optional(),
   operation: z.discriminatedUnion("type", [
     z.strictObject({ type: z.literal("delete"), reviewId }),
     z.strictObject({

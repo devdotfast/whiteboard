@@ -159,7 +159,8 @@ export function authoringTools(
           ...(type === "edit" && { edit: publishedEditSchema }),
           ...(type === "lens_edit" && { edit: publishedLensEditSchema }),
           commandId: z
-            .uuid()
+            .string()
+            .min(1)
             .optional()
             .describe(
               "Idempotency key. Omit it; Whiteboard assigns one. Pass one only when an error tells you to.",
