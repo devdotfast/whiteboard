@@ -63,3 +63,22 @@ test("an abandoned prompt is closed in the window", async () => {
 	assert.ok(events.some((event) => "closed" in event));
 	relay.dispose();
 });
+
+test("a prompt open in a window that reloads is shown to the reloaded window", async () => {
+	const relay = new ReviewSshPromptRelay(1000);
+	const first: ReviewSshPromptEvent[] = [];
+	const window = relay.onPrompt((event) => first.push(event));
+	const answer = relay.prompt(request);
+	assert.equal(first.length, 1);
+
+	window.dispose();
+	const second: ReviewSshPromptEvent[] = [];
+	relay.onPrompt((event) => second.push(event));
+	const [shown] = second;
+	assert.ok(shown && !("closed" in shown));
+	assert.equal(shown.id, first[0].id);
+	relay.answer(shown.id, "late");
+
+	assert.equal(await answer, "late");
+	relay.dispose();
+});
