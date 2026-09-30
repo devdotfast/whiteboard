@@ -43,6 +43,7 @@ export const canvasQueryKeys = {
     trace: string | null | undefined,
     storage: AgentTraceStorage | null | undefined,
   ) => ["agent-trace", sessionId, trace ?? null, storage ?? null] as const,
+  commitFiles: (commit: string) => ["commit-files", commit] as const,
   diffFiles: (documentKey: string, source: number, revision?: string) =>
     ["diff-files", documentKey, source, revision] as const,
   reviewStack: (

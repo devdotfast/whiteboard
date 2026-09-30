@@ -7,8 +7,10 @@ import {
   type ReviewDiffFileWire,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
+import { canvasQueryKeys } from "./canvas-query";
 import { controlStyles } from "./controls-styles";
 import { CopyButton } from "./copy-text";
 import { DiffCount } from "./diff-count";
@@ -27,11 +29,6 @@ type OpenCommitDiff = (
   via: "row" | "file",
   file?: string,
 ) => void;
-
-type CommitFilesState =
-  | { status: "loading" }
-  | { status: "error"; error: string }
-  | { status: "loaded"; files: ReviewDiffFileWire[] };
 
 export function ReviewCommitsView({
   commits,
@@ -119,34 +116,26 @@ function CommitRow({
 }) {
   const session = useReviewSession();
   const [expanded, setExpanded] = useState(false);
-  const [filesState, setFilesState] = useState<CommitFilesState | null>(null);
   const openTooltip = useTooltip("Open commit diff");
+
+  // A commit's files never change, so the first expansion's read serves the
+  // rest of the canvas's life.
+  const files = useQuery({
+    queryKey: canvasQueryKeys.commitFiles(commit.commit),
+    queryFn: async () => [
+      ...(await session.bridge.diffView.files({ commit: commit.commit })),
+    ],
+    enabled: expanded,
+    staleTime: Infinity,
+  });
 
   const toggleExpanded = () => {
     const next = !expanded;
     setExpanded(next);
     captureUiEvent(session, "commit_expanded", { expanded: next });
-
-    if (!next || filesState) return;
-    setFilesState({ status: "loading" });
-    const diffView = session.bridge.diffView;
-
-    const request = diffView.files({ commit: commit.commit });
-
-    request
-      .then((files) => setFilesState({ status: "loaded", files: [...files] }))
-      .catch((cause: unknown) => {
-        setFilesState({
-          status: "error",
-          error: cause instanceof Error ? cause.message : String(cause),
-        });
-      });
   };
 
-  const visibleFiles =
-    filesState?.status === "loaded"
-      ? visibleCommitFiles(filesState.files)
-      : null;
+  const visibleFiles = files.data ? visibleCommitFiles(files.data) : null;
 
   const omittedFileCount = visibleFiles
     ? visibleFiles.testFilesOmitted + visibleFiles.overflowFilesOmitted
@@ -192,11 +181,11 @@ function CommitRow({
       </div>
       {expanded ? (
         <div {...stylex.props(styles.files)}>
-          {filesState?.status === "loading" ? (
+          {files.isPending ? (
             <p {...stylex.props(styles.filesNote)}>Loading files…</p>
           ) : null}
-          {filesState?.status === "error" ? (
-            <p {...stylex.props(styles.filesNote)}>{filesState.error}</p>
+          {files.isError ? (
+            <p {...stylex.props(styles.filesNote)}>{files.error.message}</p>
           ) : null}
           {visibleFiles?.files.map((file) => (
             <button

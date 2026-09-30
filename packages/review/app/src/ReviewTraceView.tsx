@@ -24,10 +24,15 @@ import { type TraceListState, useTraceList } from "./use-trace-list";
 export function ReviewTraceView({
   selection,
   onSelect,
+  storage = null,
+  onSelectStorage,
   storedList: providedList,
 }: {
   selection?: TraceSelection;
   onSelect: (selection: TraceSelection) => void;
+  /** Read override only; capture and consent are unchanged. */
+  storage?: AgentTraceStorage | null;
+  onSelectStorage: (storage: AgentTraceStorage | null) => void;
   storedList?: TraceListState;
 }) {
   const session = useReviewSession();
@@ -38,10 +43,6 @@ export function ReviewTraceView({
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement | null>(null);
-
-  // Read override only; capture and consent are unchanged.
-  const [storageOverride, setStorageOverride] =
-    useState<AgentTraceStorage | null>(null);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -63,7 +64,7 @@ export function ReviewTraceView({
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [pickerOpen]);
 
-  const storedList = useTraceList(storageOverride, providedList);
+  const storedList = useTraceList(storage, providedList);
 
   const list: TraceListState = useMemo(() => {
     const retained = [
@@ -159,7 +160,7 @@ export function ReviewTraceView({
   const detail = useAgentTrace(
     activeTarget?.sessionId,
     activeTarget?.trace,
-    storageOverride,
+    storage,
   );
 
   // Keep source controls visible during refetch.
@@ -171,7 +172,7 @@ export function ReviewTraceView({
   }, [list]);
 
   const activeSource =
-    storageOverride ?? (list.status === "loaded" ? list.storage : null);
+    storage ?? (list.status === "loaded" ? list.storage : null);
 
   const activeTrace = detail.status === "loaded" ? detail.trace : undefined;
 
@@ -213,7 +214,7 @@ export function ReviewTraceView({
               value={activeSource ?? ""}
               onChange={(event) => {
                 const value = event.currentTarget.value;
-                setStorageOverride(
+                onSelectStorage(
                   value === "s3" || value === "hosted" ? value : null,
                 );
               }}

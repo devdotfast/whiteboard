@@ -2,7 +2,7 @@ import { fontSize, radius } from "@canvas/scale.stylex";
 import type { FlowDiagramBlock } from "@review/review-api/blocks/flow_diagram";
 import type { Snapshot } from "@review/review-api/store";
 import * as stylex from "@stylexjs/stylex";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { createPortal } from "react-dom";
 
 import { DiagramHeader } from "./diagram-header";
@@ -11,6 +11,7 @@ import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { drawStyles } from "./draw-styles";
 import { FlowGraph } from "./flow-graph";
 import { documentMarker } from "./markers.stylex";
+import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type { GuidedTour, GuidedTourStop } from "./review-panel-model";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
@@ -63,12 +64,16 @@ export function FlowDiagram({
     [node.id, node.title, stops],
   );
 
-  const [selection, setSelection] = useState<{
-    anchor: string;
-    revealRequest: number;
-  } | null>(null);
+  const panelStore = useReviewPanelStore();
 
-  const close = useCallback(() => setSelection(null), []);
+  const selection = useReviewPanel((state) =>
+    state.overlayTour?.tourId === tour.id &&
+    stops.some((stop) => stop.anchor.id === state.overlayTour!.anchor)
+      ? state.overlayTour
+      : null,
+  );
+
+  const { closeOverlayTour: close, moveOverlayTour } = panelStore.getState();
 
   const { overlayRef, portalTarget, paneResize } = useDiagramTourShell(
     selection !== null,
@@ -85,10 +90,9 @@ export function FlowDiagram({
     )?.anchor.id;
 
     if (anchor)
-      setSelection((previous) => ({
-        anchor,
-        revealRequest: (previous?.revealRequest ?? 0) + 1,
-      }));
+      panelStore
+        .getState()
+        .openOverlayTour({ tourId: tour.id, kind: "flow" }, anchor);
   };
 
   const figure = (fullscreen: boolean) => (
@@ -167,16 +171,7 @@ export function FlowDiagram({
               separatorProps={paneResize.separatorProps}
               overlayRef={overlayRef}
               onClose={close}
-              onActiveAnchorChange={(anchor, { reveal }) =>
-                setSelection((previous) =>
-                  previous
-                    ? {
-                        anchor,
-                        revealRequest: previous.revealRequest + Number(reveal),
-                      }
-                    : previous,
-                )
-              }
+              onActiveAnchorChange={moveOverlayTour}
             >
               {figure(true)}
             </DiagramTourOverlay>,

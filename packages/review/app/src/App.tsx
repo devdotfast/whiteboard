@@ -370,6 +370,7 @@ function ReviewLayoutContent({
   const activeView = useReviewPanel((state) => state.view);
   const diffScope = useReviewPanel((state) => state.diffScope);
   const traceSelection = useReviewPanel((state) => state.traceSelection);
+  const traceStorage = useReviewPanel((state) => state.traceStorage);
   const mapFocus = useReviewPanel((state) => state.mapFocus);
   const showView = useReviewPanel((state) => state.showView);
 
@@ -855,6 +856,8 @@ function ReviewLayoutContent({
               <ReviewTraceView
                 selection={traceSelection}
                 onSelect={panelStore.getState().selectTrace}
+                storage={traceStorage}
+                onSelectStorage={panelStore.getState().selectTraceStorage}
                 storedList={storedList}
               />
             )}

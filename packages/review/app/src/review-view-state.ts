@@ -26,6 +26,7 @@ import type {
 import { reviewPersistence } from "./review-persistence";
 import { removeReviewUiState, reviewUiStateKey } from "./review-ui-state";
 import { type ReviewView, offeredReviewViews } from "./review-view-route";
+import type { AgentTraceStorage } from "./use-agent-trace";
 
 const REVIEW_VIEW_STATE_NAMESPACE = "view-state";
 
@@ -38,11 +39,12 @@ export interface PersistedReviewViewState {
   lens?: ReviewLensSelection;
   /** Written by older builds for an in-panel tour; read only as a fallback. */
   panel?: PersistedTourPanel;
-  /** A fullscreen diagram tour (sequence or database lens) that was open. */
+  /** A fullscreen diagram tour that was open. */
   overlayTour?: PersistedOverlayTour;
   /** The commit the diff was scoped to; restored while the version lists it. */
   diffScope?: { commit: string; file?: string };
   trace?: TraceSelection;
+  traceStorage?: AgentTraceStorage;
   /** The view `scrollTop` was taken on; absent on older records ("review"). */
   scrollView?: ReviewView;
 }
@@ -81,7 +83,8 @@ export function useReviewViewStateSync({
           state.lens === previous.lens &&
           state.overlayTour === previous.overlayTour &&
           state.diffScope === previous.diffScope &&
-          state.traceSelection === previous.traceSelection
+          state.traceSelection === previous.traceSelection &&
+          state.traceStorage === previous.traceStorage
         ) {
           return;
         }
@@ -111,6 +114,7 @@ export function useReviewViewStateSync({
                 }
               : undefined,
           }),
+          traceStorage: state.traceStorage ?? undefined,
           overlayTour: state.overlayTour
             ? {
                 tourId: state.overlayTour.tourId,
@@ -197,6 +201,7 @@ export function readReviewNavigationRestore(
         }
       : null,
     traceSelection: stored.trace,
+    traceStorage: stored.traceStorage ?? null,
     overlayTour: tour
       ? {
           tourId: tour.tourId,
@@ -451,6 +456,11 @@ function parsePersistedReviewViewState(
     };
   }
 
+  const traceStorage = jsonString(jsonProperty(value, "traceStorage"));
+
+  if (traceStorage === "s3" || traceStorage === "hosted")
+    state.traceStorage = traceStorage;
+
   const lens = parsePersistedLens(jsonObject(jsonProperty(value, "lens")));
 
   if (lens) state.lens = lens;
@@ -514,7 +524,7 @@ function parsePersistedTourState(
 
   if (tourId === undefined || activeAnchor === undefined) return undefined;
 
-  return kind === "sequence" || kind === "database"
+  return kind === "sequence" || kind === "database" || kind === "flow"
     ? { tourId, activeAnchor, kind }
     : { tourId, activeAnchor };
 }

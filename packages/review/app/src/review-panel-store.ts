@@ -7,6 +7,7 @@ import { createStore } from "zustand/vanilla";
 
 import type { PeekPanel, ReviewPanelMotion } from "./review-panel-model";
 import { shouldCloseSidePeekForReviewView } from "./review-view-route";
+import type { AgentTraceStorage } from "./use-agent-trace";
 
 export interface ReviewPanelState {
   active: PeekPanel | null;
@@ -40,11 +41,13 @@ export interface MapFocus {
   pending: boolean;
 }
 
+export type OverlayTourKind = "sequence" | "database" | "flow";
+
 /** A fullscreen diagram tour. `kind` is absent on one restored from an
  * older build's in-panel record. */
 export interface OverlayTour {
   tourId: string;
-  kind?: "sequence" | "database";
+  kind?: OverlayTourKind;
   anchor: string;
   revealRequest: number;
 }
@@ -56,6 +59,8 @@ export interface ReviewNavigationState {
   availableViews: readonly ReviewView[];
   diffScope: ReviewDiffScope | null;
   traceSelection: TraceSelection | undefined;
+  /** Where traces are read from; null is the configured default. */
+  traceStorage: AgentTraceStorage | null;
   lens: ReviewLensSelection | null;
   mapFocus: MapFocus | null;
   overlayTour: OverlayTour | null;
@@ -75,11 +80,12 @@ export interface ReviewNavigationActions {
   clearLens: () => void;
   openTrace: (selection: TraceSelection) => void;
   selectTrace: (selection: TraceSelection) => void;
+  selectTraceStorage: (storage: AgentTraceStorage | null) => void;
   setAvailableViews: (views: readonly ReviewView[]) => void;
   focusMapElement: (elementPath: string) => void;
   consumeMapFocus: (requestId: number) => void;
   openOverlayTour: (
-    tour: { tourId: string; kind: "sequence" | "database" },
+    tour: { tourId: string; kind: OverlayTourKind },
     anchor: string,
   ) => void;
   moveOverlayTour: (anchor: string, options: { reveal: boolean }) => void;
@@ -100,6 +106,7 @@ export type ReviewNavigationRestore = Partial<
     | "availableViews"
     | "diffScope"
     | "traceSelection"
+    | "traceStorage"
     | "lens"
     | "overlayTour"
   >
@@ -110,6 +117,7 @@ export function createReviewPanelStore({
   availableViews = reviewViewSchema.options,
   diffScope = null,
   traceSelection,
+  traceStorage = null,
   lens = null,
   overlayTour = null,
 }: ReviewNavigationRestore = {}) {
@@ -122,6 +130,7 @@ export function createReviewPanelStore({
     availableViews,
     diffScope: initialView === "diff" ? diffScope : null,
     traceSelection,
+    traceStorage,
     lens,
     mapFocus: null,
     overlayTour: initialView === "review" ? overlayTour : null,
@@ -152,6 +161,7 @@ export function createReviewPanelStore({
         traceSelection: selection,
       })),
     selectTrace: (selection) => set({ traceSelection: selection }),
+    selectTraceStorage: (traceStorage) => set({ traceStorage }),
     focusMapElement: (elementPath) =>
       set((state) =>
         state.availableViews.includes("map")

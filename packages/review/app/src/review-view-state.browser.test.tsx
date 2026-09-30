@@ -120,15 +120,16 @@ describe("review view state", () => {
     ).toBeNull();
   });
 
-  it("restores trace identity and event without saving trace content", () => {
+  it("restores trace identity, event and source without saving trace content", () => {
     const session = testReviewSession();
     const store = createReviewPanelStore();
     renderViewState({ session, store });
-    act(() =>
+    act(() => {
       store
         .getState()
-        .openTrace({ sessionId: "agent-a", trace: "subagent", eventIndex: 7 }),
-    );
+        .openTrace({ sessionId: "agent-a", trace: "subagent", eventIndex: 7 });
+      store.getState().selectTraceStorage("hosted");
+    });
     unmount();
 
     const restored = createReviewPanelStore(
@@ -141,6 +142,7 @@ describe("review view state", () => {
       trace: "subagent",
       eventIndex: 7,
     });
+    expect(restored.getState().traceStorage).toBe("hosted");
     restored.getState().setAvailableViews(["review", "diff"]);
     expect(restored.getState().view).toBe("review");
   });
