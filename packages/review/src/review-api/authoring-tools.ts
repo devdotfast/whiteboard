@@ -22,14 +22,15 @@ export function authoringTools(
   const version = z.number().int().nonnegative().optional();
 
   // Anthropic rejects a top-level union, so publish one object; the host validates the union.
-  const [image, trace, map] = uploadSchema.options;
+  // The map kind is left out: its software-map model schema was most of the
+  // catalog's size, and the host still accepts map uploads from other callers.
+  const [image, trace] = uploadSchema.options;
 
   const uploadInput = z
     .strictObject({
       ...image.shape,
       ...trace.shape,
-      ...map.shape,
-      kind: z.enum(["image", "trace", "map"]),
+      kind: z.enum(["image", "trace"]),
     })
     .partial()
     .required({ id: true, repositoryId: true, kind: true });
@@ -78,7 +79,7 @@ export function authoringTools(
     REVIEW_STATUS_TOOL,
     tool(
       "capabilities",
-      "Discover whether Desktop is available and optional software-map generation is enabled. Read before authoring. Map uploads remain supported regardless of generation permission.",
+      "Discover whether Desktop is available and optional software-map generation is enabled. Read before authoring.",
       z.strictObject({}),
       "GET",
       "/capabilities",
@@ -204,7 +205,7 @@ export function authoringTools(
     ),
     tool(
       "upload",
-      'Retain an image, trace or software map for use in a review. kind:"image" takes base64; kind:"trace" takes trace; kind:"map" takes pins, side and model. Reusing an upload ID requires identical content; rejected uploads are not saved.',
+      'Retain an image or trace for use in a review. kind:"image" takes base64; kind:"trace" takes trace. Reusing an upload ID requires identical content; rejected uploads are not saved.',
       uploadInput,
       "POST",
       "/resources",
