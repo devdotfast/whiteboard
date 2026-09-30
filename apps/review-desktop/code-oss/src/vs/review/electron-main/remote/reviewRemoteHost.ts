@@ -171,6 +171,10 @@ export function languageCommitMismatch(alias: string, serverCommit: string, desk
 
 type LanguageFeatures = Pick<ReviewGatewayHost, "languageFeatures" | "languageFeaturesDetail">;
 
+/** The optional groups the remote reported, when this Desktop asked for any. */
+const groupsOf = ({ languageGroups }: ReviewRemoteAttach): Pick<ReviewGatewayHost, "languageGroups"> =>
+	languageGroups.length > 0 ? { languageGroups: [...languageGroups] } : {};
+
 export interface RunResult {
 	readonly code: number | null;
 	/** The last 64 KiB: the sentinels come at the end, after any login banner. */
@@ -380,7 +384,7 @@ export class ReviewRemoteHost {
 			}
 			this.connectedAt = this.clock.now();
 			this.serverId = attach.serverId;
-			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language });
+			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language, ...groupsOf(attach) });
 			this.whilePending(attach);
 		} catch (error) {
 			if (stale()) return;
@@ -496,7 +500,7 @@ export class ReviewRemoteHost {
 			this.serverId = attach.serverId;
 			// What authentication printed says nothing about why the connection may end later.
 			this.masterStderr = "";
-			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language });
+			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language, ...groupsOf(attach) });
 			this.whilePending(attach);
 		} catch (error) {
 			if (stale()) return;

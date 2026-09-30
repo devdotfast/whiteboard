@@ -37,6 +37,13 @@ export interface ReviewRemoteLanguageServer {
 	readonly commit: string;
 }
 
+export interface ReviewRemoteLanguageGroup {
+	readonly group: string;
+	readonly installed: boolean;
+	/** What is missing, such as the group's toolchain. */
+	readonly detail?: string;
+}
+
 export interface ReviewRemoteAttach {
 	readonly version: string | null;
 	readonly serverId: string | null;
@@ -48,6 +55,8 @@ export interface ReviewRemoteAttach {
 	readonly languageServerDetail?: string;
 	/** The remote is still installing the language extensions. */
 	readonly languageServerPending?: true;
+	/** Each optional extension group this Desktop asked for. */
+	readonly languageGroups: readonly ReviewRemoteLanguageGroup[];
 }
 
 /**
@@ -87,6 +96,7 @@ export function parseRemoteAttach(stdout: string): { attach: ReviewRemoteAttach 
 				token: record.token,
 				port,
 				...languageServerOf(record),
+				languageGroups: languageGroupsOf(record.languageGroups),
 			},
 		};
 	}
@@ -113,6 +123,16 @@ function languageServerOf(record: Record<string, unknown>): Pick<ReviewRemoteAtt
 		languageServerDetail: detail ?? "The Whiteboard on this host has no VS Code server.",
 		...(record.languageServerPending === true && { languageServerPending: true as const }),
 	};
+}
+
+/** Remote data is untrusted: well-formed entries only, bounded in number and length. */
+function languageGroupsOf(value: unknown): ReviewRemoteLanguageGroup[] {
+	if (!Array.isArray(value)) return [];
+	return value.slice(0, 16).flatMap((entry: unknown) => {
+		const { group, installed, detail } = (entry && typeof entry === "object" ? entry : {}) as Record<string, unknown>;
+		if (typeof group !== "string" || !/^[a-z0-9-]{1,40}$/.test(group) || typeof installed !== "boolean") return [];
+		return [{ group, installed, ...(typeof detail === "string" && detail && { detail: detail.slice(0, 500) }) }];
+	});
 }
 
 /** Remote data is untrusted: only a port on the remote's loopback is used. */

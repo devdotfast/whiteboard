@@ -65,6 +65,7 @@ interface Host extends GatewayRemote {
   problem?: ReviewGatewayHost["problem"];
   languageFeatures?: boolean;
   languageFeaturesDetail?: string;
+  languageGroups?: ReviewGatewayHost["languageGroups"];
   serverId?: string;
   instanceId?: string;
   status: ReviewGatewayHostState["state"];
@@ -410,6 +411,7 @@ export function createGatewayHosts(input: {
           current.retryMs = FIRST_RETRY_MS;
           current.languageFeatures = given.languageFeatures;
           current.languageFeaturesDetail = given.languageFeaturesDetail;
+          current.languageGroups = given.languageGroups;
           next.push(current);
         } else next.push(create(given));
       }
@@ -472,9 +474,14 @@ export type GatewayHosts = ReturnType<typeof createGatewayHosts>;
 const languageOf = ({
   languageFeatures,
   languageFeaturesDetail,
-}: Pick<ReviewGatewayHost, "languageFeatures" | "languageFeaturesDetail">) => ({
+  languageGroups,
+}: Pick<
+  ReviewGatewayHost,
+  "languageFeatures" | "languageFeaturesDetail" | "languageGroups"
+>) => ({
   ...(languageFeatures !== undefined && { languageFeatures }),
   ...(languageFeaturesDetail !== undefined && { languageFeaturesDetail }),
+  ...(languageGroups !== undefined && { languageGroups }),
 });
 
 /** The headers every request to a remote carries. */

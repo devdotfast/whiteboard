@@ -898,6 +898,17 @@ export const ReviewGatewayHostSchema = z.strictObject({
   languageFeatures: z.boolean().optional(),
   // Why language features are unavailable.
   languageFeaturesDetail: stringAllowEmpty.optional(),
+  // Each optional extension group this Desktop asked the host for.
+  languageGroups: z
+    .array(
+      z.strictObject({
+        group: requiredString,
+        installed: z.boolean(),
+        // What is missing, such as the group's toolchain.
+        detail: stringAllowEmpty.optional(),
+      }),
+    )
+    .optional(),
 });
 
 export type ReviewGatewayHost = z.infer<typeof ReviewGatewayHostSchema>;
@@ -921,6 +932,7 @@ export interface ReviewGatewayHostState {
   /** For `online`, as Desktop reported it. */
   languageFeatures?: boolean;
   languageFeaturesDetail?: string;
+  languageGroups?: ReviewGatewayHost["languageGroups"];
 }
 
 export const ReviewRepositoryIdentitySchema = z.strictObject({

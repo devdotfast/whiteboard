@@ -151,13 +151,28 @@ it("shows Desktop's language features on an online host, and keeps the host onli
     languageFeatures: false,
     languageFeaturesDetail: detail,
   });
+
+  const languageGroups = [
+    {
+      group: "swift",
+      installed: true,
+      detail: "swift was not found on the login shell's PATH",
+    },
+  ];
+
   gateway.set([
-    { alias: "devbox", endpoint: fake.endpoint, languageFeatures: true },
+    {
+      alias: "devbox",
+      endpoint: fake.endpoint,
+      languageFeatures: true,
+      languageGroups,
+    },
   ]);
 
   expect(gateway.states()[0]).toMatchObject({
     state: "online",
     languageFeatures: true,
+    languageGroups,
   });
   expect(gateway.states()[0]?.languageFeaturesDetail).toBeUndefined();
   expect(gateway.online().map((host) => host.alias)).toEqual(["devbox"]);
