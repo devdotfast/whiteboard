@@ -385,3 +385,24 @@ test("uses the bundled binary only when present and no override is set", async (
   vi.stubEnv("REVIEW_DIFFR_BINARY", "/elsewhere/diffr");
   expect(diffrExecutable(root)).toBe("/elsewhere/diffr");
 });
+
+test("looks up diffr: override, package bin, then the fetched copy, then PATH", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "review-diffr-lookup-"));
+  roots.push(root);
+  const fetched = path.join(root, "state", "diffr");
+
+  const lookup = (env: NodeJS.ProcessEnv = {}) =>
+    diffrExecutable(root, env, fetched);
+
+  expect(lookup()).toBe("diffr");
+  await mkdir(path.dirname(fetched));
+  await writeFile(fetched, "#!/bin/sh\n", { mode: 0o755 });
+  expect(lookup()).toBe(fetched);
+  await mkdir(path.join(root, "bin"));
+  const bundled = path.join(root, "bin", "diffr");
+  await writeFile(bundled, "#!/bin/sh\n", { mode: 0o755 });
+  expect(lookup()).toBe(bundled);
+  expect(lookup({ REVIEW_DIFFR_BINARY: "/elsewhere/diffr" })).toBe(
+    "/elsewhere/diffr",
+  );
+});

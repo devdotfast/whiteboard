@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { constants, existsSync } from "node:fs";
-import { access } from "node:fs/promises";
+import { access, mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import type { Writable } from "node:stream";
@@ -12,7 +12,7 @@ import {
   type EnsureBackgroundServerInput,
   ensureBackgroundServer,
 } from "./server/background-server";
-import { diffrExecutable } from "./server/structural-diff";
+import { diffrExecutable, fetchedDiffrPath } from "./server/structural-diff";
 
 export const REMOTE_ATTACH_BEGIN = "WHITEBOARD-REMOTE-BEGIN";
 
@@ -21,26 +21,41 @@ export const REMOTE_ATTACH_END = "WHITEBOARD-REMOTE-END";
 /** Desktop waits on the attach; a download that stalls longer is dropped. */
 const DIFFR_FETCH_TIMEOUT_MS = 15_000;
 
-interface RemoteAttachInput {
+interface EnsureDiffrInput {
   stateDir: string;
   env: NodeJS.ProcessEnv;
   stderr: Writable;
   packageRoot?: string;
-  cli?: EnsureBackgroundServerInput["cli"];
+  /** The package's fetcher by default. */
+  fetcher?: string;
+  timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 /** The review server Desktop reaches over SSH, started if none is healthy. */
-export async function remoteAttach(input: RemoteAttachInput) {
-  const [{ discovery, started }, diffr] = await Promise.all([
-    ensureBackgroundServer({
+export async function remoteAttach(
+  input: EnsureDiffrInput & { cli?: EnsureBackgroundServerInput["cli"] },
+) {
+  const abort = new AbortController();
+  const fetching = ensureDiffr({ ...input, signal: abort.signal });
+  let server: Awaited<ReturnType<typeof ensureBackgroundServer>>;
+
+  try {
+    server = await ensureBackgroundServer({
       stateDir: input.stateDir,
       env: input.env,
       startedBy: "desktop",
       cli: input.cli,
-    }),
-    ensureDiffr(input),
-  ]);
+    });
+  } catch (error) {
+    // A pending download must not hold the failed command open.
+    abort.abort();
+    await fetching;
+    throw error;
+  }
 
+  const { discovery, started } = server;
+  const diffr = await fetching;
   const health = await readReviewServerHealth(discovery);
 
   if (!health) throw serverNotReady(input.stateDir);
@@ -58,31 +73,32 @@ export async function remoteAttach(input: RemoteAttachInput) {
 }
 
 /**
- * Fetches this machine's diffr into the package, as `ensure:diffr` does.
- * Never fails: without diffr the server runs and structural diff is off.
+ * Fetches this machine's diffr with the package's own fetcher, into the
+ * package as `ensure:diffr` does, or into the state directory when the
+ * package is not writable. Never fails: without diffr, structural diff is off.
  */
-export async function ensureDiffr(input: {
-  env: NodeJS.ProcessEnv;
-  stderr: Writable;
-  packageRoot?: string;
-}) {
+export async function ensureDiffr(input: EnsureDiffrInput) {
   const packageRoot =
     input.packageRoot ?? findReviewPackageRoot(import.meta.url);
 
-  const into = path.join(packageRoot, "bin");
+  const fetched = fetchedDiffrPath(input.stateDir);
 
-  // A root-owned global install cannot take it; do not download for nothing.
-  const writable = await access(
-    existsSync(into) ? into : packageRoot,
-    constants.W_OK,
-  ).then(
-    () => true,
-    () => false,
-  );
+  const found = () =>
+    diffrPresent(diffrExecutable(packageRoot, input.env, fetched), input.env);
 
-  if (writable)
-    try {
-      const fetcher = path.join(
+  // An override, a bundled copy (a Desktop's signed runtime) or PATH wins.
+  if (await found()) return true;
+
+  const into = (await writable(path.join(packageRoot, "bin")))
+    ? path.join(packageRoot, "bin")
+    : path.dirname(fetched);
+
+  try {
+    await mkdir(into, { recursive: true });
+
+    const fetcher =
+      input.fetcher ??
+      path.join(
         path.dirname(
           createRequire(import.meta.url).resolve(
             "@dev.fast/diffr/package.json",
@@ -92,24 +108,35 @@ export async function ensureDiffr(input: {
         "fetch.mjs",
       );
 
-      const { stderr } = await promisify(execFile)(
-        process.execPath,
-        [fetcher, "--into", into],
-        {
-          env: input.env,
-          timeout: DIFFR_FETCH_TIMEOUT_MS,
-          killSignal: "SIGKILL",
-        },
-      );
+    const { stderr } = await promisify(execFile)(
+      process.execPath,
+      [fetcher, "--into", into],
+      {
+        env: input.env,
+        timeout: input.timeoutMs ?? DIFFR_FETCH_TIMEOUT_MS,
+        killSignal: "SIGKILL",
+        signal: input.signal,
+      },
+    );
 
-      input.stderr.write(stderr);
-    } catch (error) {
-      input.stderr.write(
-        `Could not fetch diffr: ${error instanceof Error ? error.message : String(error)}\n`,
-      );
-    }
+    input.stderr.write(stderr);
+  } catch (error) {
+    input.stderr.write(
+      `Could not fetch diffr: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+  }
 
-  return diffrPresent(diffrExecutable(packageRoot, input.env), input.env);
+  return found();
+}
+
+/** The directory, or its parent while it does not exist, takes new files. */
+async function writable(directory: string): Promise<boolean> {
+  const target = existsSync(directory) ? directory : path.dirname(directory);
+
+  return access(target, constants.W_OK).then(
+    () => true,
+    () => false,
+  );
 }
 
 async function diffrPresent(executable: string, env: NodeJS.ProcessEnv) {

@@ -10,6 +10,7 @@ import {
   decodeStructuralDiffEvent,
 } from "@dev.fast/review-protocol";
 import { findReviewPackageRoot } from "@review/package-paths";
+import { devReviewHome } from "@review/review-home-paths";
 
 export type DiffComparison =
   | { kind: "trees"; base: string; head: string }
@@ -24,9 +25,22 @@ export interface StructuralDiffRequest {
   signal: AbortSignal;
 }
 
+/** Where `remote attach` fetches diffr when the package cannot take it. */
+export function fetchedDiffrPath(stateDir: string) {
+  return path.join(stateDir, "review-tools", "diffr-fetch", "diffr");
+}
+
+let fetchedDiffr: string | undefined;
+
+/** A headless server looks for a fetched diffr in its own state directory. */
+export function useFetchedDiffr(stateDir: string) {
+  fetchedDiffr = fetchedDiffrPath(stateDir);
+}
+
 export function diffrExecutable(
   packageRoot = findReviewPackageRoot(import.meta.url),
   env: NodeJS.ProcessEnv = process.env,
+  fetched = fetchedDiffr ?? fetchedDiffrPath(devReviewHome(env)),
 ): string {
   if (env.REVIEW_DIFFR_BINARY) return env.REVIEW_DIFFR_BINARY;
 
@@ -36,7 +50,9 @@ export function diffrExecutable(
     process.platform === "win32" ? "diffr.exe" : "diffr",
   );
 
-  return existsSync(bundled) ? bundled : "diffr";
+  if (existsSync(bundled)) return bundled;
+
+  return existsSync(fetched) ? fetched : "diffr";
 }
 
 export function diffrMissingError(): Error {

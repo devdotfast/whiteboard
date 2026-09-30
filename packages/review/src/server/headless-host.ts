@@ -28,6 +28,7 @@ import {
   createReviewServerApp,
   relayReviewCallbacks,
 } from "./review-server-core.js";
+import { useFetchedDiffr } from "./structural-diff.js";
 import type { ReviewTelemetryCapture } from "./ui-telemetry.js";
 
 interface HeadlessServerInput {
@@ -45,6 +46,7 @@ interface HeadlessServerInput {
 export async function runHeadlessServer(input: HeadlessServerInput) {
   await mkdir(input.stateDir, { recursive: true, mode: 0o700 });
   const stateDir = await realpath(input.stateDir);
+  useFetchedDiffr(stateDir);
 
   const stopErrorTelemetry =
     input.telemetry && installProcessErrorTelemetry(input.telemetry);
