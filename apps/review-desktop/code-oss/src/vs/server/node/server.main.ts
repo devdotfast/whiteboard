@@ -7,7 +7,6 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as net from 'net';
 import { FileAccess } from '../../base/common/network.js';
-import { run as runCli } from './remoteExtensionHostAgentCli.js';
 import { createServer as doCreateServer, IServerAPI } from './remoteExtensionHostAgentServer.js';
 import { parseArgs, ErrorReporter } from '../../platform/environment/node/argv.js';
 import { join, dirname } from '../../base/common/path.js';
@@ -60,7 +59,9 @@ args['extensions-dir'] = args['extensions-dir'] || join(REMOTE_DATA_FOLDER, 'ext
  * invoked by server-main.js
  */
 export function spawnCli() {
-	runCli(args, REMOTE_DATA_FOLDER, serverOptions);
+	// Whiteboard: the extension management CLI is cut.
+	console.error('This server does not include the extension management CLI.');
+	process.exit(1);
 }
 
 /**
