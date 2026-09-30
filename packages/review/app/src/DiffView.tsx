@@ -329,6 +329,7 @@ export function ReviewDiffView({
               )}
             >
               Lenses
+              <MagnifierIcon />
             </div>
             <div {...stylex.props(styles.hint)}>
               Click any lens to filter the diff
@@ -385,13 +386,6 @@ export function ReviewDiffView({
                           (selected ? "Clear lens filter" : undefined)
                         }
                       >
-                        <FilterIcon
-                          xstyle={
-                            selected
-                              ? styles.iconActive
-                              : empty && styles.iconEmpty
-                          }
-                        />
                         <LensName title={item.title} phase={phase} />
                         {selected && (
                           <span
@@ -652,20 +646,21 @@ function useLensRows<Item extends { id: string }>(items: Item[]) {
   return { items: shown, phases };
 }
 
-function FilterIcon({ xstyle }: { xstyle?: stylex.StyleXStyles }) {
+function MagnifierIcon() {
   return (
     <svg
-      {...stylex.props(styles.icon, xstyle)}
+      {...stylex.props(styles.icon)}
       width="14"
       height="14"
-      viewBox="0 0 16 16"
+      viewBox="0 0 14 14"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.2"
-      strokeLinejoin="round"
+      strokeLinecap="round"
       aria-hidden="true"
     >
-      <path d="M2.5 3h11L9.25 8v4.5l-2.5 1.25V8z" />
+      <circle cx="6" cy="6" r="4.25" />
+      <path d="M9.2 9.2l3.3 3.3" />
     </svg>
   );
 }
@@ -801,6 +796,9 @@ const styles = stylex.create({
     padding: "10px 14px 6px 16px",
   },
   lensesHeading: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingBottom: "2px",
   },
   filesHeading: {
@@ -887,13 +885,6 @@ const styles = stylex.create({
   icon: {
     flexShrink: 0,
     color: tokens.inkMuted,
-  },
-  iconActive: {
-    color: "inherit",
-    fill: "currentColor",
-  },
-  iconEmpty: {
-    color: "inherit",
   },
   name: {
     minWidth: 0,
