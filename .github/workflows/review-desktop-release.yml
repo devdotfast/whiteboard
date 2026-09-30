@@ -281,7 +281,7 @@ jobs:
     name: Publish npm package
     needs: version
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
       id-token: write
@@ -319,6 +319,48 @@ jobs:
           fi
           echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
           echo "published=$PUBLISHED" >> "$GITHUB_OUTPUT"
+      # The package carries the VS Code server, built from this commit so a
+      # Desktop from the same run passes the server's commit check.
+      - name: Install Code OSS native build prerequisites
+        run: |
+          # The hosted runner image lists an HTTP Azure mirror first. That
+          # mirror can accept the release file and then hang on package indexes.
+          echo 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libx11-dev libxkbfile-dev libkrb5-dev libsecret-1-dev
+      - name: Setup Code OSS Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: apps/review-desktop/code-oss/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/review-desktop/code-oss/**/package-lock.json
+      - name: Compute Code OSS dependency key
+        id: code-oss-inputs
+        run: |
+          DIGEST=$(node apps/review-desktop/scripts/code-oss-bootstrap.mjs digest apps/review-desktop/code-oss)
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+      - name: Restore Code OSS dependencies
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            apps/review-desktop/code-oss/node_modules
+            apps/review-desktop/code-oss/build/node_modules
+            apps/review-desktop/code-oss/extensions/node_modules
+            apps/review-desktop/code-oss/extensions/*/node_modules
+            apps/review-desktop/code-oss/extensions/*/server/node_modules
+            apps/review-desktop/code-oss/.build/distro/npm/node_modules
+            apps/review-desktop/code-oss/.build/distro/npm/remote/node_modules
+            apps/review-desktop/code-oss/.build/distro/npm/remote/web/node_modules
+            ~/.cache/node-gyp
+          key: ${{ runner.os }}-code-oss-deps-v3-${{ steps.code-oss-inputs.outputs.digest }}
+          restore-keys: |
+            ${{ runner.os }}-code-oss-deps-v3-
+      - name: Build the VS Code server
+        run: |
+          source apps/review-desktop/scripts/code-oss-dependencies.sh
+          ensure_code_oss_dependencies "$PWD/apps/review-desktop" "$PWD/apps/review-desktop/code-oss"
+          BUILD_SOURCEVERSION="$COMMIT" node apps/review-desktop/scripts/build-remote-runtime.mjs
       - name: Build release tarball
         run: |
           jq -n --arg version "$VERSION" --arg commit "$COMMIT" '{$version, $commit}' > release-plan.json
