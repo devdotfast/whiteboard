@@ -1329,7 +1329,10 @@ export class CodeApplication extends Disposable {
 		sharedProcessClient.then(client => client.registerChannel('nativeHost', nativeHostChannel));
 
 		// Workspaces
-		const workspacesChannel = ProxyChannel.fromService(accessor.get(IWorkspacesService), disposables);
+		const workspacesChannel = ProxyChannel.fromService(accessor.get(IWorkspacesService), disposables, {
+			// Only VS Code's menubar consumes this over IPC, and Whiteboard installs its own menus.
+			unbufferedEvents: ['onDidChangeRecentlyOpened']
+		});
 		mainProcessElectronServer.registerChannel('workspaces', workspacesChannel);
 
 		// Menubar
