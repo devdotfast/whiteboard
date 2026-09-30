@@ -54,8 +54,8 @@ export class ReviewTooltip extends Disposable {
 		this.hide();
 		if (!this.current?.label) return;
 		const body = $("span.review-tooltip-body");
-		append(body, $("span.review-tooltip-label")).textContent = this.current.label;
-		if (this.current.detail) append(body, $("span.review-tooltip-detail")).textContent = this.current.detail;
+		appendCounts(append(body, $("span.review-tooltip-label")), this.current.label);
+		if (this.current.detail) appendCounts(append(body, $("span.review-tooltip-detail")), this.current.detail);
 		this.hover.value = this.hoverService.showInstantHover({
 			target: this.target,
 			content: body,
@@ -76,6 +76,22 @@ export class ReviewTooltip extends Disposable {
 }
 
 const signedPair = (additions: number, deletions: number) => `+${additions} −${deletions}`;
+
+const SIGNED_PAIR = /\+([\d.]+[kKM]?) −([\d.]+[kKM]?)/;
+
+/** Writes `text`, coloring each `+N −N` pair the way the tree colors counts. */
+function appendCounts(parent: HTMLElement, text: string): void {
+	const match = SIGNED_PAIR.exec(text);
+	if (!match) {
+		parent.append(text);
+		return;
+	}
+	parent.append(text.slice(0, match.index));
+	append(parent, $("span.review-tree-added")).textContent = `+${match[1]}`;
+	parent.append(" ");
+	append(parent, $("span.review-tree-removed")).textContent = `−${match[2]}`;
+	appendCounts(parent, text.slice(match.index + match[0].length));
+}
 
 /** What a diff count's tooltip says: what is left, then the whole. */
 export function reviewCountsTooltip(counts: {
