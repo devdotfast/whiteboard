@@ -25,7 +25,9 @@ for (const file of (await readdir(journeysDir))
 
 if (values.list) {
   console.log(
-    JSON.stringify(journeys.map(({ name, phase }) => ({ name, phase }))),
+    JSON.stringify(
+      journeys.map(({ name, phase, manual }) => ({ name, phase, manual })),
+    ),
   );
   process.exit(0);
 }
@@ -38,8 +40,10 @@ const selected = values.journey
 
       return found;
     })
-  : journeys.filter(
-      (j) => j.phase === 1 || process.env.REVIEW_E2E_NETWORK === "1",
+  : // A manual journey (a large container image) runs only when named.
+    journeys.filter(
+      (j) =>
+        !j.manual && (j.phase === 1 || process.env.REVIEW_E2E_NETWORK === "1"),
     );
 
 if (!values.runtime)

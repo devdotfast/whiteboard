@@ -27,7 +27,7 @@ const probeDir = path.join(import.meta.dirname, "../remote/probe-extension");
 // A live check sets WB_TEST_RUN so its trap can remove the run; otherwise the journey names its own.
 const runId = process.env.WB_TEST_RUN ?? `e2e${Date.now().toString(36)}`;
 
-const runDir = `/tmp/wbt.${runId}`;
+export const runDir = `/tmp/wbt.${runId}`;
 
 // Two hosts a user prepared (`aws-up`, then a hand install) in the WB_TEST_RUN run; the journey never removes them.
 const prepared = process.env.REVIEW_E2E_REMOTE_HOSTS?.split(",");
@@ -133,7 +133,7 @@ ps -eo pid=,ppid=,rss=,args=
 `;
 
 /** Rejects after `ms`, so a wait that never settles fails the run instead of stalling it. */
-function bounded(promise, ms, label) {
+export function bounded(promise, ms, label) {
   let timer;
 
   return Promise.race([
@@ -147,7 +147,7 @@ function bounded(promise, ms, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
-async function remote(...args) {
+export async function remote(...args) {
   return (
     await exec(process.execPath, [remoteScript, ...args], {
       env: { ...process.env, WB_TEST_RUN: runId },
@@ -158,7 +158,7 @@ async function remote(...args) {
 }
 
 /** Runs `command` on `alias` through the run's ssh_config, with `input` on stdin; killed after `timeout`. */
-function onRemote(alias, command, input = "", timeout = 300000) {
+export function onRemote(alias, command, input = "", timeout = 300000) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       "ssh",
@@ -216,12 +216,12 @@ async function attach(alias, env = "") {
 }
 
 /** Extension host processes on a remote; the bracket keeps pgrep's own command line out. */
-async function extensionHosts(alias) {
+export async function extensionHosts(alias) {
   return Number(await onRemote(alias, `pgrep -fc '[e]xtensionHost' || true`));
 }
 
 /** The VS Code server's process tree on `alias`: RSS in MB of the server, its extension host, and the rest. */
-async function remoteMemory(alias) {
+export async function remoteMemory(alias) {
   const [serverJson, , ...lines] = (await onRemote(alias, processTree)).split(
     "\n",
   );
@@ -971,16 +971,16 @@ async function laptopFixture() {
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
-const visibleCanvas = (page) =>
+export const visibleCanvas = (page) =>
   page
     .locator(".review-canvas-root [data-review-api]")
     .filter({ visible: true });
 
-const tab = (page, text) =>
+export const tab = (page, text) =>
   page.locator(".tabs-container .tab").filter({ hasText: text });
 
 /** Brings a review's tab forward and shows `file` in its Diff view. */
-async function showDiff(ctx, title, file) {
+export async function showDiff(ctx, title, file) {
   // A tab keeps its view, so its heading shows only on the first visit.
   await tab(ctx.page, title).click();
   await ctx.page
@@ -1000,7 +1000,7 @@ async function showDiff(ctx, title, file) {
 }
 
 /** Monaco's rendered lines under `scope`, with its non-breaking spaces made plain. */
-async function lines(scope) {
+export async function lines(scope) {
   return (await scope.locator(".view-line").allInnerTexts())
     .join("\n")
     .replaceAll(" ", " ");
@@ -1011,7 +1011,7 @@ async function lines(scope) {
  * Without one for 3 s (none, or TypeScript's "(loading...)" answer) it moves
  * again, as a user would. `ms` is null on a timeout.
  */
-async function pointerHover(page, point, pattern, timeout) {
+export async function pointerHover(page, point, pattern, timeout) {
   const started = Date.now();
   const seen = [];
   let moved = 0;
@@ -1068,7 +1068,7 @@ async function windowLog(ctx) {
 }
 
 /** `until` without its Desktop-exit check, for waits after the window closed. */
-async function waitFor(check, label, timeout) {
+export async function waitFor(check, label, timeout) {
   const deadline = Date.now() + timeout;
 
   while (Date.now() < deadline) {
@@ -1083,7 +1083,7 @@ async function waitFor(check, label, timeout) {
  * Runs `inWindow` in the workbench on the window's ReviewRemoteHostsService,
  * found by its prototype: the journey needs no hook in the product.
  */
-async function windowCall(ctx, command, ...args) {
+export async function windowCall(ctx, command, ...args) {
   const cdp = await bounded(
     ctx.page.context().newCDPSession(ctx.page),
     30000,
