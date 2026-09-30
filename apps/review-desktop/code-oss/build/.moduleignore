@@ -64,8 +64,6 @@ fsevents/test/**
 !@vscode/tree-sitter-wasm/wasm/tree-sitter-regex.wasm
 !@vscode/tree-sitter-wasm/wasm/tree-sitter-ini.wasm
 !@vscode/tree-sitter-wasm/wasm/tree-sitter-css.wasm
-!@vscode/tree-sitter-wasm/wasm/tree-sitter-powershell.wasm
-!@vscode/tree-sitter-wasm/wasm/tree-sitter-bash.wasm
 
 native-keymap/binding.gyp
 native-keymap/build/**
@@ -199,6 +197,8 @@ typescript/lib/typescriptServices.js
 typescript/lib/tsserverlibrary.js
 # We still need to include stdlib d.ts
 !typescript/lib/lib*.d.ts
+# tsserver's translated diagnostics; Review's UI is English only
+typescript/lib/*/diagnosticMessages.generated.json
 
 jschardet/index.js
 jschardet/src/**
@@ -230,3 +230,16 @@ es5-ext/**
 # neither its services nor its IPC channels, so nothing constructs
 # PlaywrightService and its dynamic import never runs. See UPSTREAM.
 playwright-core/**
+
+# Telemetry SDKs. The root copies load only through OneDataSystemAppender,
+# which needs `product.aiConfig`; Review sets none. The copies hoisted into
+# extensions/node_modules are already bundled into each built-in extension.
+@microsoft/1ds-*/**
+@microsoft/applicationinsights-*/**
+@microsoft/dynamicproto-js/**
+@nevware21/**
+@vscode/extension-telemetry/**
+
+# KaTeX backs chat's math rendering, which Review does not register. The
+# canvas bundles its own copy.
+katex/**

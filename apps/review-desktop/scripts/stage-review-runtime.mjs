@@ -125,7 +125,6 @@ export async function stageReviewRuntime(packagedRoot) {
     pnpmScript ? process.execPath : "pnpm",
     [
       ...(pnpmScript ? [pnpmScript] : []),
-      "--config.allow-unused-patches=true",
       // This workspace pins `nodeLinker: hoisted`, under which a plain deploy
       // links workspace dependencies back to the checkout and never resolves
       // their own dependency graphs. Injecting copies them in with their deps.

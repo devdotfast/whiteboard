@@ -14,20 +14,11 @@ minimumReleaseAge: 10080
 minimumReleaseAgeStrict: true
 minimumReleaseAgeExclude:
   - "@dev.fast/diffr@0.1.7"
-  # Vitest 4.1.11 requires this exact release, which is not yet seven days old.
-  - obug@2.2.1
-  - "@dev.fast/trace-protocol@0.5.0"
-  - "@hono/node-server@2.0.12"
-  # Checked before pinning: no GitHub security advisory, no open or closed
-  # issue reporting a vulnerability, and `npm audit` reports none.
-  - fuzzysort@4.0.2
 
 overrides:
   # @dev.fast/review declares a registry range; this override is what makes
   # it resolve to the workspace package. Do not remove it.
   "@dev.fast/local-vcs": "workspace:0.1.0"
-  "brace-expansion@2": "2.1.2"
-  "brace-expansion@5": "5.0.8"
   esbuild: "0.28.1"
   hono: "4.13.5"
   postcss: "8.5.23"
