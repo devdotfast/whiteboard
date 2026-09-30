@@ -126,7 +126,23 @@ install command in Settings; and removing the host takes its reviews out of
 Home. Throughout, no Desktop route fails, and no request from the window goes
 anywhere but the local server or carries the remote's token.
 
-The journey removes its run with `down --all` when it ends. A runner killed
+It runs in development mode only: a packaged build ignores
+`DEV_FAST_REVIEW_SSH_CONFIG`, so with `--app` the journey is skipped.
+
+To run it against a host you prepared yourself, such as an AWS instance with
+the package installed by hand, set `REVIEW_E2E_REMOTE_HOST` to the host's name
+in the `WB_TEST_RUN` run. The journey then skips the Docker check, `up` and
+`install`, and step 8, which would replace the package. It never removes that
+run: it quits the Desktop and ends the Desktop's `ssh`, and you remove the run.
+
+```sh
+export WB_TEST_RUN=aws-$$
+$R aws-up b --arch arm64     # prints wb-test-b; install the package there by hand
+REVIEW_E2E_REMOTE_HOST=b node apps/review-desktop/scripts/e2e/run.mjs --runtime "$REVIEW_E2E_RUNTIME" --journey remote-host
+$R down --all; $R verify-clean
+```
+
+Otherwise the journey removes its run with `down --all` when it ends. A runner killed
 before that leaves the run behind, so name the run and trap it:
 
 ```sh
