@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { withFileLock } from "@dev.fast/trace-core";
 import { ensureJsonCutover } from "@review/review-import/json-cutover.js";
+import { fetchedDiffrPath } from "@review/server/structural-diff.js";
 
 import { openLocalReviewStore } from "./local-data.js";
 
@@ -33,7 +34,10 @@ export async function openReviewProfile(
       ])
         await importHeadlessStore(home, source);
 
-      return openLocalReviewStore(path.join(home, "review-api.db"), options);
+      return openLocalReviewStore(path.join(home, "review-api.db"), {
+        ...options,
+        fetchedDiffr: fetchedDiffrPath(home),
+      });
     },
   );
 

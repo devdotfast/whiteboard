@@ -10,7 +10,6 @@ import {
   decodeStructuralDiffEvent,
 } from "@dev.fast/review-protocol";
 import { findReviewPackageRoot } from "@review/package-paths";
-import { devReviewHome } from "@review/review-home-paths";
 
 export type DiffComparison =
   | { kind: "trees"; base: string; head: string }
@@ -23,6 +22,8 @@ export interface StructuralDiffRequest {
   comparison: DiffComparison;
   paths?: readonly string[];
   signal: AbortSignal;
+  /** A diffr that `remote attach` fetched for this profile. */
+  fetchedDiffr?: string;
 }
 
 /** Where `remote attach` fetches diffr when the package cannot take it. */
@@ -30,17 +31,10 @@ export function fetchedDiffrPath(stateDir: string) {
   return path.join(stateDir, "review-tools", "diffr-fetch", "diffr");
 }
 
-let fetchedDiffr: string | undefined;
-
-/** A headless server looks for a fetched diffr in its own state directory. */
-export function useFetchedDiffr(stateDir: string) {
-  fetchedDiffr = fetchedDiffrPath(stateDir);
-}
-
 export function diffrExecutable(
   packageRoot = findReviewPackageRoot(import.meta.url),
   env: NodeJS.ProcessEnv = process.env,
-  fetched = fetchedDiffr ?? fetchedDiffrPath(devReviewHome(env)),
+  fetched?: string,
 ): string {
   if (env.REVIEW_DIFFR_BINARY) return env.REVIEW_DIFFR_BINARY;
 
@@ -52,12 +46,12 @@ export function diffrExecutable(
 
   if (existsSync(bundled)) return bundled;
 
-  return existsSync(fetched) ? fetched : "diffr";
+  return fetched && existsSync(fetched) ? fetched : "diffr";
 }
 
-export function diffrMissingError(): Error {
+export function diffrMissingError(executable = diffrExecutable()): Error {
   return new Error(
-    `Cannot find diffr at ${diffrExecutable()}. Whiteboard Desktop bundles it at bin/diffr under its runtime; in a checkout, run \`pnpm --filter @dev.fast/whiteboard ensure:diffr\` or install diffr on PATH, or set REVIEW_DIFFR_BINARY to its executable.`,
+    `Cannot find diffr at ${executable}. Whiteboard Desktop bundles it at bin/diffr under its runtime; in a checkout, run \`pnpm --filter @dev.fast/whiteboard ensure:diffr\` or install diffr on PATH, or set REVIEW_DIFFR_BINARY to its executable.`,
   );
 }
 
@@ -99,11 +93,10 @@ export async function* structuralDiff(
 
   // The host inherits its own environment and runs from the repository, so
   // diffr reads the user's config and keys exactly as it would from a shell.
-  console.info(
-    `[Review] structural diff: ${diffrExecutable()} ${args.join(" ")}`,
-  );
+  const executable = diffrExecutable(undefined, undefined, input.fetchedDiffr);
+  console.info(`[Review] structural diff: ${executable} ${args.join(" ")}`);
 
-  const child = spawn(diffrExecutable(), args, {
+  const child = spawn(executable, args, {
     cwd: input.repositoryPath,
     stdio: ["ignore", "pipe", "pipe"],
     signal,
@@ -117,7 +110,7 @@ export async function* structuralDiff(
 
   const exited = new Promise<number | null>((resolve, reject) => {
     child.once("error", (error: NodeJS.ErrnoException) => {
-      reject(error.code === "ENOENT" ? diffrMissingError() : error);
+      reject(error.code === "ENOENT" ? diffrMissingError(executable) : error);
     });
     child.once("close", (code) => resolve(code));
   });
