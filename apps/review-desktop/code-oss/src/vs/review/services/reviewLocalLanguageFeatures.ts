@@ -1,3 +1,4 @@
+import { raceTimeout, timeout } from "../../base/common/async.js";
 import type { CancellationToken } from "../../base/common/cancellation.js";
 import { Disposable, DisposableStore, RefCountedDisposable, toDisposable, type IDisposable, type IReference } from "../../base/common/lifecycle.js";
 import { URI } from "../../base/common/uri.js";
@@ -15,20 +16,28 @@ import { registerWorkbenchContribution2, WorkbenchPhase } from "../../workbench/
 import { IExtensionService } from "../../workbench/services/extensions/common/extensions.js";
 import { ITextFileService } from "../../workbench/services/textfile/common/textfiles.js";
 import { IWorkspaceEditingService } from "../../workbench/services/workspaces/common/workspaceEditing.js";
-import { reviewSourceQuery, type ReviewLanguageEnvironment } from "../common/reviewProtocol.js";
+import { reviewSourceQuery, type ReviewLanguageEnvironment, type ReviewRemoteLanguageEnvironment } from "../common/reviewProtocol.js";
 import { sourceLocation } from "../common/reviewSourceView.js";
 import { reviewWorkspaceLanguageEvent } from "../common/reviewWorkspaceLanguageActivation.js";
 import { REVIEW_LANGUAGE_SOURCE_SCHEME } from "../common/reviewReadonlySource.js";
 import { REVIEW_API_SOURCE_SCHEME } from "./reviewApiSourceService.js";
 import { IReviewDesktopConnectionService } from "./reviewDesktopConnectionService.js";
 import { withCurrentLocalContext } from "./reviewLocalRequest.js";
-import { acquireReviewLanguageRoot } from "./reviewLocalWorkspace.js";
+import { acquireReviewLanguageRoot, reviewLanguageRoot } from "./reviewLocalWorkspace.js";
 import { ReviewLanguageEnvironmentRequests } from "./reviewLanguageEnvironmentRequests.js";
 import { watchAttachedReviewModels, withRetainedSource } from "./reviewSourceModelLifecycle.js";
+import { ownsRemoteResource, ReviewRemoteRefusals } from "./remote/guard/reviewRemoteGuard.js";
+import type { IReviewRemoteHost } from "./remote/reviewRemoteHost.js";
+import { IReviewRemoteHostsService } from "./remote/reviewRemoteHosts.js";
+
+/** A remote review's host may be offline or reconnecting; its answer is given up after this, and the next request asks again. */
+const REMOTE_ANSWER_MS = 5_000;
 
 interface LocalSource {
 	identity: string;
 	root: URI;
+	/** The remote machine that holds the checkout; undefined on the laptop. */
+	remote?: { host: IReviewRemoteHost; refusals: ReviewRemoteRefusals };
 	reference: IReference<IResolvedTextEditorModel>;
 	retain(): IDisposable | undefined;
 	dispose(): void;
@@ -37,7 +46,10 @@ interface LocalSource {
 /** Review bytes remain pinned; language queries use the resolved project environment. */
 export class ReviewLocalLanguageFeatures extends Disposable {
 	static readonly ID = "review.localLanguageFeatures";
-	private readonly sources = new Map<ITextModel, { identity: string; rootPath: string; pending: Promise<LocalSource | undefined> }>();
+	/** `root` names the host too, so the same review and path on another machine is a different source. */
+	private readonly sources = new Map<ITextModel, { identity: string; root: string; pending: Promise<LocalSource | undefined> }>();
+	/** Reviews whose language context last came from a remote host. */
+	private readonly remoteReviews = new Set<string>();
 	private readonly environments = new ReviewLanguageEnvironmentRequests();
 	private readonly roots = new Map<string, number>();
 	private readonly uncertainRoots = new Set<string>();
@@ -53,13 +65,14 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 		@ITextFileService private readonly textFiles: ITextFileService,
 		@IFileService private readonly files: IFileService,
 		@ILogService private readonly log: ILogService,
+		@IReviewRemoteHostsService private readonly remoteHosts: IReviewRemoteHostsService,
 	) {
 		super();
 		this._register(connection.onDidChangeConnection(() => {
 			this.environments.invalidate();
 			this.generation++;
 			for (const entry of this.sources.values()) {
-				this.uncertainRoots.add(URI.file(entry.rootPath).toString());
+				this.uncertainRoots.add(entry.root);
 				void entry.pending.then(source => source?.dispose());
 			}
 			this.sources.clear();
@@ -83,14 +96,14 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 			this._register(languages.implementationProvider.register(target, { provideImplementation: (model, position, token) => this.locations(model, position, token, "implementation") }));
 			this._register(languages.referenceProvider.register(target, {
 				provideReferences: (model, position, context, token) => this.withSource(model, position, token, async (local, at, pinned, source) => {
-					const results = await Promise.all(languages.referenceProvider.ordered(local).map(provider => provider.provideReferences(local, at, context, token)));
+					const results = await Promise.all(this.registry(source).referenceProvider.ordered(local).map(provider => provider.provideReferences(local, at, context, token)));
 					return this.reviewLocations(pinned, results.flatMap(result => result ?? []), token, source);
 				}),
 			}));
 		}
 	}
 
-	private async environment(model: ITextModel, validate = false): Promise<ReviewLanguageEnvironment | undefined> {
+	private async environment(model: ITextModel, validate = false): Promise<ReviewLanguageEnvironment | ReviewRemoteLanguageEnvironment | undefined> {
 		const { serverUrl, token } = await this.connection.getConnection();
 		const target = sourceLocation(model.uri);
 		return this.environments.read(JSON.stringify([serverUrl, token]), target.view, target.side, async () => {
@@ -118,20 +131,23 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 			const epoch = this.environments.generation;
 			const context = await this.environment(model);
 			if (epoch !== this.environments.generation || this._store.isDisposed || model.isDisposed() || (warming && !model.isAttachedToEditor())) return undefined;
+			if (context && "remoteRootPath" in context) this.remoteReviews.add(model.uri.authority);
+			else if (context) this.remoteReviews.delete(model.uri.authority);
+			const target = reviewLanguageRoot(context);
 			const cached = this.sources.get(model);
-			if (cached && cached.identity === context?.identity && cached.rootPath === context.rootPath) return cached.pending;
+			if (cached && cached.identity === context?.identity && cached.root === target?.root.toString()) return cached.pending;
 			if (cached) {
-				this.uncertainRoots.add(URI.file(cached.rootPath).toString());
+				this.uncertainRoots.add(cached.root);
 				void cached.pending.then(source => source?.dispose());
 				this.sources.delete(model);
 				this.generation++;
 			}
-			if (!context?.rootPath) return undefined;
-			const pending = this.acquire(model, { rootPath: context.rootPath, identity: context.identity }).catch(error => {
+			if (!context || !target) return undefined;
+			const pending = this.acquire(model, target, context.identity).catch(error => {
 				this.log.debug("[Whiteboard] Language model unavailable", error);
 				return undefined;
 			});
-			const entry = { identity: context.identity, rootPath: context.rootPath, pending };
+			const entry = { identity: context.identity, root: target.root.toString(), pending };
 			this.sources.set(model, entry);
 			const result = await pending;
 			if (this.sources.get(model) !== entry || epoch !== this.environments.generation) { result?.dispose(); return undefined; }
@@ -139,21 +155,25 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 			return result;
 		} catch (error) {
 			const cached = this.sources.get(model);
-			if (cached) this.uncertainRoots.add(URI.file(cached.rootPath).toString());
+			if (cached) this.uncertainRoots.add(cached.root);
 			this.log.debug("[Whiteboard] Language environment unavailable", error);
 			return undefined;
 		}
 	}
 
-	private async acquire(model: ITextModel, context: { rootPath: string; identity: string }): Promise<LocalSource | undefined> {
-		const root = URI.file(context.rootPath);
+	private async acquire(model: ITextModel, { root, serverId }: { root: URI; serverId?: string }, identity: string): Promise<LocalSource | undefined> {
 		const relative = model.uri.path.slice(1);
 		if (!relative || relative.split(/[\\/]/).some(part => part === "..")) return undefined;
+		// Laptop files are the laptop's; a remote review's language source is its host's own files.
+		if (serverId !== undefined && model.uri.scheme === REVIEW_LANGUAGE_SOURCE_SCHEME) return undefined;
 		const resource = model.uri.scheme === REVIEW_LANGUAGE_SOURCE_SCHEME ? URI.file(model.uri.path) : URI.joinPath(root, relative);
+		// Undefined while the host cannot connect; it keeps trying, and the next request asks again.
+		const host = serverId === undefined ? undefined : await raceTimeout(this.remoteHosts.host(serverId), REMOTE_ANSWER_MS);
+		if (serverId !== undefined && !host) return undefined;
 		if (!await this.files.exists(resource) || model.isDisposed()) return undefined;
 		const owned = new DisposableStore();
 		try {
-			owned.add(await acquireReviewLanguageRoot(this.workspace, root));
+			owned.add(host ? await host.addRoot(root) : await acquireReviewLanguageRoot(this.workspace, root));
 			this.roots.set(root.toString(), (this.roots.get(root.toString()) ?? 0) + 1);
 			owned.add({
 				dispose: () => {
@@ -166,14 +186,17 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 			owned.add(reference.object.textEditorModel.onDidChangeContent(() => this.generation++));
 		if (model.isDisposed()) { owned.dispose(); return undefined; }
 			const languageId = reference.object.textEditorModel.getLanguageId();
-			await this.extensions.activateByEvent(`onLanguage:${languageId}`);
+			const events = [`onLanguage:${languageId}`, reviewWorkspaceLanguageEvent(languageId)];
+			// A reconnecting host replays the activation itself; its providers arrive when it is back.
+			if (host) await raceTimeout((async () => { for (const event of events) await host.activateByEvent(event); })(), REMOTE_ANSWER_MS);
 			// Folder changes reach the extension host before this activation request.
-			await this.extensions.activateByEvent(reviewWorkspaceLanguageEvent(languageId));
+			else for (const event of events) await this.extensions.activateByEvent(event);
 			if (model.isDisposed()) { owned.dispose(); return undefined; }
 			const lifetime = new RefCountedDisposable(owned);
 			const owner = toDisposable(() => lifetime.release());
 			return {
-				root, reference, identity: context.identity,
+				root, reference, identity,
+				remote: host && { host, refusals: new ReviewRemoteRefusals(host.authority, () => host.authority, this.log) },
 				retain: () => {
 					if (owned.isDisposed) return undefined;
 					lifetime.acquire();
@@ -185,6 +208,17 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 	}
 
 	private async withSource<T>(model: ITextModel, position: Position, token: CancellationToken, run: (local: ITextModel, at: Position, review: ITextModel, source: LocalSource | undefined) => Promise<T>): Promise<T | undefined> {
+		const answer = this.query(model, position, token, run);
+		// Checked when the time is up: a first request learns only from its answer whether the review is remote.
+		const limit = timeout(REMOTE_ANSWER_MS);
+		try {
+			return await Promise.race([answer, limit.then(() => this.remoteReviews.has(model.uri.authority) ? undefined : answer)]);
+		} finally {
+			limit.cancel();
+		}
+	}
+
+	private async query<T>(model: ITextModel, position: Position, token: CancellationToken, run: (local: ITextModel, at: Position, review: ITextModel, source: LocalSource | undefined) => Promise<T>): Promise<T | undefined> {
 		if (token.isCancellationRequested || model.isDisposed()) return undefined;
 		if (model.uri.scheme === "file") return withCurrentLocalContext([model], token, () => this.generation, async () => run(model, position, model, undefined));
 		const epoch = this.environments.generation;
@@ -202,7 +236,7 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 					// watcher updates. Until watcher readiness is authoritative, revalidate
 					// clean native buffers before querying; never replace a dirty buffer.
 					const prefix = source.root.path.replace(/\/$/, "") + "/";
-					await Promise.all(this.textFiles.files.models.filter(file => !file.isDirty() && file.resource.scheme === "file" && file.resource.path.startsWith(prefix))
+					await Promise.all(this.textFiles.files.models.filter(file => !file.isDirty() && file.resource.scheme === source.root.scheme && file.resource.authority === source.root.authority && file.resource.path.startsWith(prefix))
 						.map(file => this.textFiles.files.resolve(file.resource, { reload: { async: false } })));
 				}
 				// Resolve current disk contents, preserving any unsaved local editor buffer.
@@ -212,11 +246,11 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 					if (!sameSource(model, local)) return undefined;
 					const result = await run(local, position, model, source);
 					const current = await this.environment(model, true).catch(() => undefined);
-					if (epoch === this.environments.generation && isSameRoot(current?.rootPath, source.root) && current?.identity === source.identity) return result;
+					if (epoch === this.environments.generation && reviewLanguageRoot(current)?.root.toString() === source.root.toString() && current?.identity === source.identity) return result;
 					// Failed validation must also release the old workspace/watchers. Keeping
 					// them after deletion can leave the language server blind to later edits.
 					const cached = this.sources.get(model);
-					if (cached?.identity === source.identity && isSameRoot(cached.rootPath, source.root)) {
+					if (cached?.identity === source.identity && cached.root === source.root.toString()) {
 						this.uncertainRoots.add(source.root.toString());
 						this.sources.delete(model);
 						void cached.pending.then(value => value?.dispose());
@@ -230,21 +264,30 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 		}
 	}
 
+	/** A remote review's documents are answered only by its host's registry; the window's has the laptop's degraded copy. */
+	private registry(source: LocalSource | undefined): ILanguageFeaturesService {
+		return source?.remote?.host.languageFeatures ?? this.languages;
+	}
+
 	private hover(model: ITextModel, position: Position, token: CancellationToken): Promise<Hover | undefined> {
-		return this.withSource(model, position, token, async (local, at) => {
-			const hovers = await getHoversPromise(this.languages.hoverProvider, local, at, token);
+		return this.withSource(model, position, token, async (local, at, _review, source) => {
+			const hovers = await getHoversPromise(this.registry(source).hoverProvider, local, at, token);
 			if (!hovers.length) return undefined;
 			const range = hovers[0].range;
 			if (!range) return undefined;
-			return { range, contents: hovers.flatMap(hover => hover.contents) };
+			const contents = hovers.flatMap(hover => hover.contents);
+			const remote = source?.remote;
+			// Untrusted, and only web links: a command a remote returns is dropped, never run in the window.
+			return { range, contents: remote ? contents.map(content => remote.refusals.markdown(content)) : contents };
 		});
 	}
 
 	private async locations(model: ITextModel, position: Position, token: CancellationToken, kind: "definition" | "type" | "implementation"): Promise<LocationLink[] | undefined> {
 		return this.withSource(model, position, token, async (local, at, pinned, source) => {
-			const results = kind === "definition" ? await getDefinitionsAtPosition(this.languages.definitionProvider, local, at, false, token)
-				: kind === "type" ? await getTypeDefinitionsAtPosition(this.languages.typeDefinitionProvider, local, at, false, token)
-				: await getImplementationsAtPosition(this.languages.implementationProvider, local, at, false, token);
+			const registry = this.registry(source);
+			const results = kind === "definition" ? await getDefinitionsAtPosition(registry.definitionProvider, local, at, false, token)
+				: kind === "type" ? await getTypeDefinitionsAtPosition(registry.typeDefinitionProvider, local, at, false, token)
+				: await getImplementationsAtPosition(registry.implementationProvider, local, at, false, token);
 			return this.reviewLocations(pinned, results, token, source);
 		});
 	}
@@ -265,17 +308,23 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 		const mapped = new Map<T, T>();
 		await Promise.all([...groups.values()].map(async group => {
 			const target = group[0].uri;
-			if (target.scheme !== "file") return;
+			const remote = source.remote;
+			if (remote ? !ownsRemoteResource(remote.host.authority, target) : target.scheme !== "file") return;
+			const inside = (remote || target.authority === source.root.authority) && target.path.startsWith(prefix);
+			// Elsewhere on the host, such as a library, it opens read-only through vscode-remote, labelled with the host.
+			const onHost = () => { for (const location of group) mapped.set(location, location); };
+			if (remote && !inside) return onHost();
 			const owned = new DisposableStore();
 			try {
 				const local = owned.add(await this.models.createModelReference(target)).object.textEditorModel;
 				await this.textFiles.files.resolve(target, { reload: { async: false } });
 				let original: ITextModel | undefined;
-				if (target.authority === source.root.authority && target.path.startsWith(prefix)) {
+				if (inside) {
 					const candidate = pinned.uri.with({ scheme: REVIEW_API_SOURCE_SCHEME, path: "/" + target.path.slice(prefix.length) });
 					try { original = owned.add(await this.models.createModelReference(candidate)).object.textEditorModel; }
 					catch { /* Dependencies and generated files may have no review counterpart. */ }
 				}
+				if (remote && (!original || !sameSource(original, local))) return onHost();
 				if (!original || !sameSource(original, local)) {
 					const candidate = pinned.uri.with({ scheme: REVIEW_LANGUAGE_SOURCE_SCHEME, path: target.path });
 					original = owned.add(await this.models.createModelReference(candidate)).object.textEditorModel;
@@ -312,9 +361,4 @@ registerWorkbenchContribution2(ReviewLocalLanguageFeatures.ID, ReviewLocalLangua
 function sameSource(review: ITextModel, local: ITextModel): boolean {
 	if (review.getEOL() === local.getEOL()) return review.equalsTextBuffer(local.getTextBuffer());
 	return review.getLineCount() === local.getLineCount() && review.getValue(EndOfLinePreference.LF) === local.getValue(EndOfLinePreference.LF);
-}
-
-/** Compare as URIs: Windows fsPath lowercases the drive letter the server reported. */
-function isSameRoot(rootPath: string | null | undefined, root: URI): boolean {
-	return typeof rootPath === "string" && URI.file(rootPath).toString() === root.toString();
 }
