@@ -98,6 +98,7 @@ test("the control path is under 100 bytes for a 40-character alias", () => {
 	assert.ok(Buffer.byteLength(controlPath) < 100, controlPath);
 	assert.ok(controlPath.startsWith(reviewSshControlDirectory()));
 	assert.notEqual(reviewSshSession("b".repeat(40)).controlPath, controlPath);
+	assert.notEqual(reviewSshSession(alias, undefined, "/Users/u/Library/Application Support/Whiteboard").controlPath, controlPath);
 });
 
 test("the control directory is created 0700, repaired, and a symlink is refused", async (t) => {

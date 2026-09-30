@@ -41,10 +41,13 @@ export function reviewSshControlDirectory(): string {
 	return join(tmpdir(), `wb-ssh-${currentUid()}`);
 }
 
-/** The caller runs `prepareSshControlDirectory` before starting the master. */
-export function reviewSshSession(alias: string, controlDirectory = reviewSshControlDirectory()): ReviewSshSession {
+/**
+ * The caller runs `prepareSshControlDirectory` before starting the master.
+ * `instance` keeps two Desktops that share the directory off each other's sockets.
+ */
+export function reviewSshSession(alias: string, controlDirectory = reviewSshControlDirectory(), instance?: string): ReviewSshSession {
 	checkAlias(alias);
-	const name = createHash("sha256").update(alias).digest("hex").slice(0, 12);
+	const name = createHash("sha256").update(instance === undefined ? alias : `${instance}\n${alias}`).digest("hex").slice(0, 12);
 	return { alias, controlPath: join(controlDirectory, name) };
 }
 

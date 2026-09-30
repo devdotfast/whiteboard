@@ -1,0 +1,173 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) dev.fast. All rights reserved.
+ *  Licensed under the MIT License. See LICENSE in the repository root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import { createServer, type AddressInfo } from "node:net";
+import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
+import { ReviewRemoteHost, systemClock, type ReviewRemoteClock, type ReviewRemoteHostOptions, type SpawnSsh } from "./reviewRemoteHost.js";
+import type { ReviewSshAskpass, SshPromptRequest } from "./reviewSshAskpass.js";
+import { prepareSshControlDirectory, reviewSshSession, validateSshAlias } from "./reviewSshCommand.js";
+
+/** The gateway restarts a first check when hosts arrive faster than this. */
+const SEND_INTERVAL_MS = 1_000;
+
+export interface ReviewRemoteHostsOptions {
+	readonly spawn: SpawnSsh;
+	readonly controlDirectory: string;
+	/** Keeps this Desktop's control sockets apart from another Desktop's. */
+	readonly instance?: string;
+	/** The environment every ssh starts from; askpass is added per alias. */
+	environment(): Promise<NodeJS.ProcessEnv>;
+	createAskpass(input: {
+		directory: string;
+		prompt(request: SshPromptRequest): Promise<string | undefined>;
+		log(message: string): void;
+	}): Promise<ReviewSshAskpass>;
+	/** Shows a prompt; `undefined` is a cancel. */
+	prompt(request: SshPromptRequest): Promise<string | undefined>;
+	desktopVersion(): Promise<string>;
+	freePort?(): Promise<number>;
+	/** Hands the whole list to the local server. */
+	send(hosts: ReviewGatewayHost[]): void;
+	log(message: string): void;
+	readonly clock?: ReviewRemoteClock;
+	readonly timeouts?: ReviewRemoteHostOptions["timeouts"];
+}
+
+export function freeLoopbackPort(): Promise<number> {
+	return new Promise((resolve, reject) => {
+		const server = createServer();
+		server.once("error", reject);
+		server.listen(0, "127.0.0.1", () => {
+			const { port } = server.address() as AddressInfo;
+			server.close(() => resolve(port));
+		});
+	});
+}
+
+/**
+ * Every alias in the setting, each connecting on its own. Sends the local
+ * server the whole list, in the setting's order, at most once a second.
+ */
+export class ReviewRemoteHosts {
+	private readonly clock: ReviewRemoteClock;
+	private readonly hosts = new Map<string, ReviewRemoteHost>();
+	/** Aliases refused before reaching ssh. */
+	private readonly refused = new Map<string, ReviewGatewayHost>();
+	private order: string[] = [];
+	private prepared: Promise<ReviewSshAskpass> | undefined;
+	private cancelSend: (() => void) | undefined;
+	private lastSent = -Infinity;
+	private sentAny = false;
+	private disposed = false;
+
+	constructor(private readonly options: ReviewRemoteHostsOptions) {
+		this.clock = options.clock ?? systemClock;
+	}
+
+	/** Connects added aliases and closes removed ones. Returns at once. */
+	update(enabled: boolean, aliases: readonly string[]): void {
+		if (this.disposed) return;
+		const wanted = enabled ? [...new Set(aliases)] : [];
+		for (const [alias, host] of this.hosts) {
+			if (wanted.includes(alias)) continue;
+			this.hosts.delete(alias);
+			this.options.log(`${alias}: removed from the setting; closing its connection.`);
+			void host.dispose();
+		}
+		this.order = wanted;
+		this.refused.clear();
+		for (const alias of wanted) {
+			const valid = validateSshAlias(alias);
+			if (!valid.ok) {
+				this.refused.set(alias, { alias, problem: { state: "unreachable", detail: `The SSH alias ${JSON.stringify(alias)} ${valid.reason}.` } });
+				continue;
+			}
+			const existing = this.hosts.get(alias);
+			// A changed setting is the user's cue to try a refused login or a missing install again.
+			if (existing) {
+				if (existing.state.problem && existing.state.problem.state !== "unreachable") existing.retry();
+				continue;
+			}
+			const host = this.createHost(alias);
+			this.hosts.set(alias, host);
+			host.start();
+		}
+		this.publish();
+	}
+
+	retry(alias: string): void {
+		this.hosts.get(alias)?.retry();
+	}
+
+	/** After sleep, every host is checked at once. */
+	resume(): void {
+		for (const host of this.hosts.values()) void host.resume();
+	}
+
+	/** Closes every forward and master; remote servers keep running. */
+	async dispose(): Promise<void> {
+		this.disposed = true;
+		this.cancelSend?.();
+		const hosts = [...this.hosts.values()];
+		this.hosts.clear();
+		await Promise.all(hosts.map((host) => host.dispose()));
+		(await this.prepared?.catch(() => undefined))?.dispose();
+	}
+
+	/** At process exit, when nothing can be awaited: masters are detached and would outlive us. */
+	killNow(): void {
+		for (const host of this.hosts.values()) host.killNow();
+	}
+
+	private createHost(alias: string): ReviewRemoteHost {
+		return new ReviewRemoteHost({
+			session: reviewSshSession(alias, this.options.controlDirectory, this.options.instance),
+			spawn: this.options.spawn,
+			environment: async () => ({ ...(await this.options.environment()), ...(await this.askpass()).env(alias) }),
+			desktopVersion: () => this.options.desktopVersion(),
+			freePort: this.options.freePort ?? freeLoopbackPort,
+			report: () => this.publish(),
+			log: this.options.log,
+			clock: this.clock,
+			timeouts: this.options.timeouts,
+		});
+	}
+
+	/** One control directory and one askpass for the process, made on first use. */
+	private askpass(): Promise<ReviewSshAskpass> {
+		return (this.prepared ??= (async () => {
+			await prepareSshControlDirectory(this.options.controlDirectory);
+			return this.options.createAskpass({
+				directory: this.options.controlDirectory,
+				prompt: (request) => this.prompt(request),
+				log: this.options.log,
+			});
+		})());
+	}
+
+	private async prompt(request: SshPromptRequest): Promise<string | undefined> {
+		const host = this.hosts.get(request.alias);
+		host?.promptOpened();
+		let answered = true;
+		try {
+			const answer = await this.options.prompt(request);
+			answered = answer !== undefined;
+			return answer;
+		} finally {
+			host?.promptClosed(answered);
+		}
+	}
+
+	private publish(): void {
+		if (this.disposed || this.cancelSend || (!this.sentAny && !this.order.length)) return;
+		const wait = Math.max(0, this.lastSent + SEND_INTERVAL_MS - this.clock.now());
+		this.cancelSend = this.clock.schedule(wait, () => {
+			this.cancelSend = undefined;
+			this.lastSent = this.clock.now();
+			this.sentAny = true;
+			this.options.send(this.order.map((alias) => this.refused.get(alias) ?? this.hosts.get(alias)!.state));
+		});
+	}
+}
