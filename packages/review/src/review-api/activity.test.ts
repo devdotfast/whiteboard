@@ -98,7 +98,7 @@ it("reports working transitions without heartbeats or focus changes", () => {
   activity.close();
 });
 
-it("streams activity separately from document versions and closes the stream on deletion", async () => {
+it("streams activity separately from document versions and reports deletion on the stream", async () => {
   const store = new ReviewStore(":memory:", {
     validatePins: async () => {},
     validateSource: async () => {},
@@ -124,11 +124,11 @@ it("streams activity separately from document versions and closes the stream on 
   const changed = vi.fn<Parameters<ReviewStore["subscribe"]>[0]>();
   store.subscribe(changed);
   const abort = new AbortController();
-  const stream = client.watch(reviewId, abort.signal);
+  const stream = client.watch([{ reviewId }], abort.signal);
 
   try {
     expect((await stream.next()).value).toMatchObject({
-      activity: { workingCount: 0 },
+      value: { activity: { workingCount: 0 } },
     });
 
     const input = {
@@ -138,13 +138,13 @@ it("streams activity separately from document versions and closes the stream on 
 
     await client.post(`/${reviewId}/activity/begin`, input);
     expect((await stream.next()).value).toMatchObject({
-      activity: { workingCount: 1, focuses: [input.focus] },
+      value: { activity: { workingCount: 1, focuses: [input.focus] } },
     });
     expect(changed).not.toHaveBeenCalled();
     expect(store.history(reviewId)).toHaveLength(1);
-    const reconnect = client.watch(reviewId, abort.signal);
+    const reconnect = client.watch([{ reviewId }], abort.signal);
     expect((await reconnect.next()).value).toMatchObject({
-      activity: { workingCount: 1, focuses: [input.focus] },
+      value: { activity: { workingCount: 1, focuses: [input.focus] } },
     });
     await reconnect.return(undefined);
     await store.execute({
@@ -152,17 +152,18 @@ it("streams activity separately from document versions and closes the stream on 
       leaseId: input.leaseId,
       operation: { type: "delete", reviewId },
     });
-    // A reader may already have buffered a pre-deletion snapshot.
-    await expect(async () => {
-      for await (const _snapshot of stream) {
-      }
-    }).rejects.toThrow(Error);
+    expect((await stream.next()).value).toEqual({
+      kind: "review",
+      reviewId,
+      error: expect.stringMatching(/not found/i),
+    });
     await expect(
       client.post(`/${reviewId}/activity/begin`, input),
     ).rejects.toThrow(/not found/i);
     expect(store.activity.read(reviewId).workingCount).toBe(0);
   } finally {
     abort.abort();
+    await stream.return(undefined);
     await store.close();
   }
 });
@@ -201,73 +202,67 @@ it("retains, changes and clears the owner's focus until its lease expires", () =
   activity.close();
 });
 
-it.each([false, true])(
-  "streams completion and expiry to the catalog without an open canvas (multiplexed=%s)",
-  async (multiplexed) => {
-    vi.useFakeTimers();
+it("streams completion and expiry to the catalog without an open canvas", async () => {
+  vi.useFakeTimers();
 
-    const store = new ReviewStore(":memory:", {
-      validatePins: async () => {},
-      validateSource: async () => {},
-      validateResource: async () => {},
+  const store = new ReviewStore(":memory:", {
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+  });
+
+  const api = createReviewApi(store);
+
+  const { reviewId } = await store.execute({
+    commandId: randomUUID(),
+    operation: {
+      type: "create",
+      title: "Background review",
+      pins: { repositoryId: "repo", base: "base", head: "head" },
+    },
+  });
+
+  const client = new ReviewApiClient(
+    { serverUrl: "http://review.test", token: "test" },
+    async (url, init) => api.request(url.replace("/reviews-api", ""), init),
+  );
+
+  const abort = new AbortController();
+
+  const stream = client.watch([{ reviewId: null }], abort.signal);
+
+  const next = async () => {
+    const line = (await stream.next()).value;
+
+    return line?.kind === "list" ? line.reviews : line;
+  };
+
+  const expected = (working: boolean) => [
+    expect.objectContaining({ reviewId, working }),
+  ];
+
+  const leaseId = randomUUID();
+
+  try {
+    expect(await next()).toEqual(expected(false));
+    store.activity.update(reviewId, { action: "begin", leaseId });
+    expect(await next()).toEqual(expected(true));
+    // One line per transition: no repeat, nothing for renewals or focus.
+    store.activity.update(reviewId, { action: "renew", leaseId });
+    store.activity.update(reviewId, {
+      action: "renew",
+      leaseId,
+      focus: { description: "Reading the diff" },
     });
-
-    const api = createReviewApi(store);
-
-    const { reviewId } = await store.execute({
-      commandId: randomUUID(),
-      operation: {
-        type: "create",
-        title: "Background review",
-        pins: { repositoryId: "repo", base: "base", head: "head" },
-      },
-    });
-
-    const client = new ReviewApiClient(
-      { serverUrl: "http://review.test", token: "test" },
-      async (url, init) => api.request(url.replace("/reviews-api", ""), init),
-    );
-
-    const abort = new AbortController();
-
-    const stream = client.watch(
-      multiplexed ? [{ reviewId: null }] : null,
-      abort.signal,
-    );
-
-    const next = async () => {
-      const value = (await stream.next()).value;
-
-      return multiplexed ? (value as { value: unknown }[])[0]!.value : value;
-    };
-
-    const expected = (working: boolean) => [
-      expect.objectContaining({ reviewId, working }),
-    ];
-
-    const leaseId = randomUUID();
-
-    try {
-      expect(await next()).toEqual(expected(false));
-      store.activity.update(reviewId, { action: "begin", leaseId });
-      expect(await next()).toEqual(expected(true));
-      // One line per transition: no repeat, nothing for renewals or focus.
-      store.activity.update(reviewId, { action: "renew", leaseId });
-      store.activity.update(reviewId, {
-        action: "renew",
-        leaseId,
-        focus: { description: "Reading the diff" },
-      });
-      store.activity.update(reviewId, { action: "end", leaseId });
-      expect(await next()).toEqual(expected(false));
-      store.activity.update(reviewId, { action: "begin", leaseId });
-      expect(await next()).toEqual(expected(true));
-      await vi.advanceTimersByTimeAsync(ACTIVITY_TTL_MS);
-      expect(await next()).toEqual(expected(false));
-    } finally {
-      abort.abort();
-      await stream.return(undefined);
-      await store.close();
-    }
-  },
-);
+    store.activity.update(reviewId, { action: "end", leaseId });
+    expect(await next()).toEqual(expected(false));
+    store.activity.update(reviewId, { action: "begin", leaseId });
+    expect(await next()).toEqual(expected(true));
+    await vi.advanceTimersByTimeAsync(ACTIVITY_TTL_MS);
+    expect(await next()).toEqual(expected(false));
+  } finally {
+    abort.abort();
+    await stream.return(undefined);
+    await store.close();
+  }
+});

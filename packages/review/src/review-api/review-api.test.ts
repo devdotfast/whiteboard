@@ -1858,20 +1858,25 @@ it("serves the experiment through the real desktop HTTP server and existing auth
       }),
     ).rejects.toThrow(/start.line/);
     const abort = new AbortController();
-    const catalog = client.watch(null, abort.signal);
-    expect(reviewsOnly((await catalog.next()).value)).toMatchObject([
-      { reviewId, dismissedAt: null },
-    ]);
+    const catalog = client.watch([{ reviewId: null }], abort.signal);
+
+    const nextList = async () => {
+      const line = (await catalog.next()).value;
+
+      return reviewsOnly(line?.kind === "list" ? line.reviews : []);
+    };
+
+    expect(await nextList()).toMatchObject([{ reviewId, dismissedAt: null }]);
     await post({ type: "attention", reviewId, action: "dismiss" });
-    expect(reviewsOnly((await catalog.next()).value)).toMatchObject([
+    expect(await nextList()).toMatchObject([
       { reviewId, dismissedAt: expect.any(String) },
     ]);
     await catalog.return(undefined);
-    const live = client.watch(reviewId, abort.signal);
+    const live = client.watch([{ reviewId }], abort.signal);
     expect((await live.next()).value).toMatchObject({
+      kind: "review",
       reviewId,
-      version: 0,
-      document: [],
+      value: { reviewId, version: 0, document: [] },
     });
     expect(
       (
@@ -1884,13 +1889,19 @@ it("serves the experiment through the real desktop HTTP server and existing auth
     ).toBe(200);
     const read = await fetch(url + "/" + reviewId + "?full=true", { headers });
     expect((await live.next()).value).toMatchObject({
-      version: 1,
-      document: [{ type: "sequence" }],
+      value: { version: 1, document: [{ type: "sequence" }] },
     });
     await live.return(undefined);
     abort.abort();
-    const reconnect = client.watch(reviewId, new AbortController().signal);
-    expect((await reconnect.next()).value).toMatchObject({ version: 1 });
+
+    const reconnect = client.watch(
+      [{ reviewId }],
+      new AbortController().signal,
+    );
+
+    expect((await reconnect.next()).value).toMatchObject({
+      value: { version: 1 },
+    });
     await reconnect.return(undefined);
     expect(await read.json()).toMatchObject({
       title: "HTTP review",
@@ -1917,15 +1928,15 @@ it("serves the experiment through the real desktop HTTP server and existing auth
         })
       ).status,
     ).toBe(413);
-    const watching = client.watch(reviewId, new AbortController().signal);
+    const watching = client.watch([{ reviewId }], new AbortController().signal);
     await watching.next();
-
-    await Promise.all([
-      expect(watching.next()).rejects.toThrow(Error),
-      post({ type: "delete", reviewId }).then((response) => {
-        expect(response.status).toBe(200);
-      }),
-    ]);
+    expect((await post({ type: "delete", reviewId })).status).toBe(200);
+    expect((await watching.next()).value).toEqual({
+      kind: "review",
+      reviewId,
+      error: expect.stringMatching(/not found/i),
+    });
+    await watching.return(undefined);
     expect(
       (await fetch(`${url}/${reviewId}?full=true`, { headers })).status,
     ).toBe(404);
@@ -2763,7 +2774,7 @@ it("returns pending progress without waiting for coverage and signals completion
       new TextDecoder().decode((await reader.read()).value),
     );
 
-    expect(initial[0].value.coverageRevision).toBeGreaterThan(0);
+    expect(initial.value.coverageRevision).toBeGreaterThan(0);
     await reader.cancel();
     const ready = await api.request(route);
     expect(ready.status).toBe(200);

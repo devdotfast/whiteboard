@@ -153,9 +153,15 @@ it("finishes an in-flight render before another tab replaces the shared stream",
         start(controller) {
           controller.enqueue(
             new TextEncoder().encode(
-              JSON.stringify(
-                subscriptions.map(() => ({ value: streams.length })),
-              ) + "\n",
+              subscriptions
+                .map(({ reviewId }: { reviewId: string }) =>
+                  JSON.stringify({
+                    kind: "review",
+                    reviewId,
+                    value: streams.length,
+                  }),
+                )
+                .join("\n") + "\n",
             ),
           );
         },
@@ -214,5 +220,73 @@ it("finishes an in-flight render before another tab replaces the shared stream",
     a.abort();
     b.abort();
     await Promise.all([first, second]);
+  }
+});
+
+it("delivers each line only to the listeners it is about", async () => {
+  const store = new ReviewStore(":memory:", {
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+  });
+
+  const app = createReviewApi(store);
+
+  const client = new ReviewApiClient(
+    { serverUrl: "http://review.test", token: "token" },
+    async (url, init) =>
+      app.request(url.replace("http://review.test/reviews-api", ""), init),
+  );
+
+  const command = <Operation>(operation: Operation) =>
+    store.execute({ commandId: randomUUID(), operation });
+
+  const pins = { repositoryId: "repo", base: "base", head: "head" };
+  const a = (await command({ type: "create", title: "A", pins })).reviewId;
+  const b = (await command({ type: "create", title: "B", pins })).reviewId;
+  const abort = new AbortController();
+
+  const seen = {
+    a: [] as { reviewId: string; title: string }[],
+    b: [] as { reviewId: string; title: string }[],
+  };
+
+  const follow = (key: "a" | "b", id: string) =>
+    client.follow<{ reviewId: string; title: string }>(
+      id,
+      abort.signal,
+      (value) => {
+        seen[key].push(value);
+      },
+      (error) => {
+        throw error;
+      },
+    );
+
+  const following = [follow("a", a)];
+
+  try {
+    await vi.waitFor(() => expect(seen.a).toHaveLength(1));
+    following.push(follow("b", b));
+    await vi.waitFor(() => expect(seen.b).toHaveLength(1));
+    // The second tab replaces the shared stream, which resends A once.
+    await vi.waitFor(() => expect(seen.a).toHaveLength(2));
+    const delivered = seen.a.length;
+
+    for (const title of ["B1", "B2", "B3"]) {
+      await command({ type: "rename", reviewId: b, title });
+      await vi.waitFor(() => expect(seen.b.at(-1)?.title).toBe(title));
+    }
+
+    expect(seen.a).toHaveLength(delivered);
+    await command({ type: "rename", reviewId: a, title: "A1" });
+    await vi.waitFor(() => expect(seen.a.at(-1)?.title).toBe("A1"));
+    expect(seen.a).toHaveLength(delivered + 1);
+    expect(seen.a.every((value) => value.reviewId === a)).toBe(true);
+    expect(seen.b.every((value) => value.reviewId === b)).toBe(true);
+  } finally {
+    abort.abort();
+    await Promise.all(following);
+    await store.close();
   }
 });

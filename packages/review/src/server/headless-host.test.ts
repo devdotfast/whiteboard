@@ -22,6 +22,7 @@ import {
   type JsonValue,
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
+  type ReviewStreamLine,
   STRUCTURAL_DIFF_WIRE_VERSION,
   parseReviewDesktopVerbFrame,
 } from "@dev.fast/review-protocol";
@@ -185,12 +186,12 @@ it("shares review identity, resources, sessions and live changes with Desktop in
   );
 
   const abort = new AbortController();
-  const catalog = desktop.watch(null, abort.signal);
+  const catalog = desktop.watch([{ reviewId: null }], abort.signal);
   let reviewStream: ReturnType<ReviewApiClient["watch"]> | undefined;
 
   try {
     // The scratchpad is off by default, so there is nothing to list yet.
-    expect((await catalog.next()).value).toEqual([]);
+    expect((await catalog.next()).value).toMatchObject({ reviews: [] });
 
     const registered = await server.client.post<{ id: string }>(
       "/repositories",
@@ -209,18 +210,20 @@ it("shares review identity, resources, sessions and live changes with Desktop in
     });
 
     // Catalog refreshes can also report repository registration before creation.
-    for await (const value of catalog) {
+    for await (const line of catalog) {
       if (
-        Array.isArray(value) &&
-        value.some((item) => item.reviewId === created.reviewId)
+        line.kind === "list" &&
+        line.reviews.some((item) => item.reviewId === created.reviewId)
       )
         break;
     }
 
-    reviewStream = desktop.watch(created.reviewId, abort.signal);
+    reviewStream = desktop.watch(
+      [{ reviewId: created.reviewId }],
+      abort.signal,
+    );
     expect((await reviewStream.next()).value).toMatchObject({
-      reviewId: created.reviewId,
-      version: 0,
+      value: { reviewId: created.reviewId, version: 0 },
     });
     const leaseId = randomUUID();
     await server.client.post(`/${created.reviewId}/activity/begin`, {
@@ -228,14 +231,9 @@ it("shares review identity, resources, sessions and live changes with Desktop in
     });
 
     for (;;) {
-      const value = (await reviewStream.next()).value;
+      const line = (await reviewStream.next()).value;
 
-      if (
-        value &&
-        !Array.isArray(value) &&
-        "activity" in value &&
-        value.activity?.workingCount === 1
-      )
+      if (line && "value" in line && line.value.activity.workingCount === 1)
         break;
     }
 
@@ -283,15 +281,9 @@ it("shares review identity, resources, sessions and live changes with Desktop in
     });
 
     for (;;) {
-      const value = (await reviewStream.next()).value;
+      const line = (await reviewStream.next()).value;
 
-      if (
-        value &&
-        !Array.isArray(value) &&
-        "version" in value &&
-        value.version === 1
-      )
-        break;
+      if (line && "value" in line && line.value.version === 1) break;
     }
 
     await desktop.post(`/${created.reviewId}/open`, {});
@@ -319,10 +311,14 @@ it("shares review identity, resources, sessions and live changes with Desktop in
       commandId: randomUUID(),
       operation: { type: "delete", reviewId: created.reviewId },
     });
-    await expect(async () => {
-      for await (const _value of reviewStream!) {
-      }
-    }).rejects.toThrow(/not found/i);
+    let deleted: ReviewStreamLine | void = undefined;
+
+    while (!(deleted && "error" in deleted))
+      deleted = (await reviewStream.next()).value;
+
+    expect(deleted).toMatchObject({
+      error: expect.stringMatching(/not found/i),
+    });
   } finally {
     abort.abort();
     await local.data.close();
