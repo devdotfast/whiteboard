@@ -34,6 +34,7 @@ import { writePrivateJsonAtomic } from "@dev.fast/trace-core";
 import { textIncludesQuote } from "@review/evidence.js";
 import { isMissingFileError } from "@review/fs-utils.js";
 import { reviewManagedCheckoutRoot } from "@review/review-checkout-paths.js";
+import { ensureReviewPinnedCheckout } from "@review/review-head-checkout.js";
 import { StructuralComparisons } from "@review/server/structural-comparisons.js";
 import { resolveSoftwareMapDiffCounts } from "@review/software-map-diff-counts.js";
 import {
@@ -578,9 +579,15 @@ export class LocalReviewData {
       return;
     }
 
-    // A managed checkout is freed with its review. A release that starts
-    // mid-stream fails this stream; the reader's next request rebuilds it.
-    const { rootPath } = await this.workspaces.source(reviewId, pins, "head");
+    // Waiting covers a release already queued. One that starts mid-stream
+    // fails this stream, and the reader's next request rebuilds the checkout.
+    await this.workspaceManager?.released(reviewId);
+
+    const rootPath = await ensureReviewPinnedCheckout({
+      rootPath: this.store.repositoryPath(pins.repositoryId),
+      ref: pins.head,
+      reviewUuid: reviewId,
+    });
 
     if (!rootPath)
       throw new ReviewInputError(

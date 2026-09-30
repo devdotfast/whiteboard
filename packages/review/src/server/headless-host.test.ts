@@ -32,10 +32,15 @@ import {
 } from "@review/review-api/agent-client.js";
 import { ReviewApiClient } from "@review/review-api/client.js";
 import type { Pins } from "@review/review-api/document.js";
-import { createReviewApi } from "@review/review-api/http.js";
+import {
+  REMOTE_CHECKOUT_ISSUE,
+  REMOTE_STRUCTURAL_DIFF_ERROR,
+  createReviewApi,
+} from "@review/review-api/http.js";
 import { serveReviewMcp } from "@review/review-api/mcp.js";
 import { openReviewProfile } from "@review/review-api/profile.js";
 import type { Result, Snapshot } from "@review/review-api/store.js";
+import type { WorkspaceStatus } from "@review/review-api/workspaces.js";
 import {
   reviewManagedCheckoutDir,
   reviewManagedCheckoutRoot,
@@ -1197,24 +1202,40 @@ async function commitsReviews(client: ReviewApiClient) {
   };
 }
 
-async function structuralDiff(
+/** The streamed events' types, with each error's message. */
+async function structuralDiffEvents(
   discovery: Pick<ReviewServerDiscovery, "url" | "token">,
   reviewId: string,
-) {
+  remote = false,
+): Promise<{ type: string; message?: string }[]> {
   const response = await fetch(
     `${discovery.url}/reviews-api/${reviewId}/structural-diff`,
-    { headers: { "x-review-token": discovery.token } },
+    {
+      headers: {
+        "x-review-token": discovery.token,
+        ...(remote && { [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE }),
+      },
+    },
   );
 
   expect(response.status).toBe(200);
 
-  const events = (await response.text())
+  return (await response.text())
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line));
+}
 
+async function structuralDiff(
+  discovery: Pick<ReviewServerDiscovery, "url" | "token">,
+  reviewId: string,
+) {
+  const events = await structuralDiffEvents(discovery, reviewId);
   expect(events.filter((event) => event.type === "error")).toEqual([]);
 }
+
+// Cleanup runs git per checkout; a loaded runner needs more than a second.
+const cleanupTimeout = { timeout: 10_000 };
 
 const attention = (
   client: ReviewApiClient,
@@ -1226,7 +1247,7 @@ const attention = (
     operation: { type: "attention", reviewId, action },
   });
 
-it("frees a commits review's checkouts on a headless server when it is dismissed or deleted", async () => {
+it("frees the checkouts a structural diff made when the review is dismissed or deleted", async () => {
   await stubDiffr();
   const server = await start();
 
@@ -1248,7 +1269,10 @@ it("frees a commits review's checkouts on a headless server when it is dismissed
 
   await attention(server.client, dismissed, "dismiss");
   await expect
-    .poll(() => existsSync(reviewManagedCheckoutRoot(commonDir, dismissed)))
+    .poll(
+      () => existsSync(reviewManagedCheckoutRoot(commonDir, dismissed)),
+      cleanupTimeout,
+    )
     .toBe(false);
 
   await server.client.post("/commands", {
@@ -1256,7 +1280,10 @@ it("frees a commits review's checkouts on a headless server when it is dismissed
     operation: { type: "delete", reviewId: deleted },
   });
   await expect
-    .poll(() => existsSync(reviewManagedCheckoutRoot(commonDir, deleted)))
+    .poll(
+      () => existsSync(reviewManagedCheckoutRoot(commonDir, deleted)),
+      cleanupTimeout,
+    )
     .toBe(false);
   expect(worktrees()).toBe(1);
 });
@@ -1270,17 +1297,16 @@ it("leaves a review's checkouts to a live lease owner and takes over a dead owne
   );
 
   const reviewId = await create("Leased");
-  await structuralDiff(first.discovery, reviewId);
+  const deleted = await create("Leased and deleted");
+
+  for (const id of [reviewId, deleted])
+    await structuralDiff(first.discovery, id);
   await first.stop();
 
-  const checkout = reviewManagedCheckoutDir(
-    commonDir,
-    reviewId,
-    "head",
-    repo.head,
-  );
+  const checkout = (id: string) =>
+    reviewManagedCheckoutDir(commonDir, id, "head", repo.head);
 
-  expect(existsSync(checkout)).toBe(true);
+  expect(existsSync(checkout(reviewId))).toBe(true);
 
   // Another live process, say a Desktop sharing this store, leases the review.
   const owner = spawn(process.execPath, ["-e", "setInterval(() => {}, 1e9)"], {
@@ -1301,18 +1327,24 @@ it("leaves a review's checkouts to a live lease owner and takes over a dead owne
   );
 
   try {
-    leases
-      .prepare("INSERT OR REPLACE INTO workspace_leases VALUES(?,?,?)")
-      .run(reviewId, randomUUID(), owner.pid!);
+    for (const id of [reviewId, deleted])
+      leases
+        .prepare("INSERT OR REPLACE INTO workspace_leases VALUES(?,?,?)")
+        .run(id, randomUUID(), owner.pid!);
   } finally {
     leases.close();
   }
 
   const leased = await start(first.stateDir);
   await attention(leased.client, reviewId, "dismiss");
+  await leased.client.post("/commands", {
+    commandId: randomUUID(),
+    operation: { type: "delete", reviewId: deleted },
+  });
   // Stopping waits for the server's checkout cleanup.
   await leased.stop();
-  expect(existsSync(checkout)).toBe(true);
+  expect(existsSync(checkout(reviewId))).toBe(true);
+  expect(existsSync(checkout(deleted))).toBe(true);
 
   await stopOwner();
   // A server frees the reviews dismissed while it was not running.
@@ -1320,11 +1352,9 @@ it("leaves a review's checkouts to a live lease owner and takes over a dead owne
   expect(existsSync(reviewManagedCheckoutRoot(commonDir, reviewId))).toBe(
     false,
   );
-  expect(worktrees()).toBe(1);
+  // Nothing remembers a review deleted under another owner's lease.
+  expect(worktrees()).toBe(2);
 });
-
-const REMOTE_CHECKOUT_ISSUE =
-  "The checkout for language features is not available on the remote machine.";
 
 /** A JSON route of a review, as a local or a remote caller. */
 function caller(discovery: Pick<ReviewServerDiscovery, "url" | "token">) {
@@ -1349,12 +1379,7 @@ function caller(discovery: Pick<ReviewServerDiscovery, "url" | "token">) {
   };
 }
 
-interface Workspace {
-  id: string;
-  rootPath?: string | null;
-  log?: string;
-  issue?: string;
-}
+type Workspace = Partial<WorkspaceStatus>;
 
 it("gives a remote caller no checkout paths or logs from workspace management", async () => {
   const server = await start();
@@ -1443,7 +1468,7 @@ it.skipIf(process.getuid?.() === 0)(
     const failures = async (remote: boolean) =>
       (await call<{ failures: Workspace[] }>(cleanup, remote, {})).failures;
 
-    await expect.poll(() => failures(false)).not.toEqual([]);
+    await expect.poll(() => failures(false), cleanupTimeout).not.toEqual([]);
     const local = await failures(false);
     expect(JSON.stringify(local)).toContain(marker);
 
@@ -1452,3 +1477,22 @@ it.skipIf(process.getuid?.() === 0)(
     );
   },
 );
+
+it("gives a remote caller no paths from a failed structural diff", async () => {
+  await stubDiffr();
+  const server = await start();
+  const { create, commonDir } = await commitsReviews(server.client);
+  const reviewId = await create("Blocked");
+  const marker = path.basename(root);
+
+  // A file where checkouts go fails acquisition with an error naming a path.
+  await mkdir(path.join(commonDir, "dev-fast"), { recursive: true });
+  await writeFile(path.join(commonDir, "dev-fast", "reviews"), "");
+
+  const local = await structuralDiffEvents(server.discovery, reviewId);
+  expect(local).toEqual([{ type: "error", message: expect.any(String) }]);
+  expect(local[0]!.message).toContain(marker);
+  expect(await structuralDiffEvents(server.discovery, reviewId, true)).toEqual([
+    { type: "error", message: REMOTE_STRUCTURAL_DIFF_ERROR },
+  ]);
+});

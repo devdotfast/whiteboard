@@ -109,11 +109,11 @@ it("lets a second Desktop share the profile without preparing a review the first
       preparing,
     );
     await expect(second.data.workspaces.remove(reviewId)).rejects.toThrow(
-      /Another Desktop/,
+      /Another Whiteboard server/,
     );
     await expect(
       second.data.workspaces.retry(reviewId, preparing.id),
-    ).rejects.toThrow(/Another Desktop/);
+    ).rejects.toThrow(/Another Whiteboard server/);
     await local.data.close();
     await local.store.close();
     local = second;
@@ -310,7 +310,7 @@ it("claims unowned workspaces before removing them", async () => {
     await local.data.close();
     const removal = second.data.workspaces.remove(reviewId);
     await expect(third.data.workspaces.remove(reviewId)).rejects.toThrow(
-      /Another Desktop/,
+      /Another Whiteboard server/,
     );
     await removal;
     expect(third.data.workspaces.list(reviewId)).toEqual([]);

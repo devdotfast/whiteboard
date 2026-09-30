@@ -155,8 +155,11 @@ const remoteCaller = (context: Context) =>
   context.req.header(REVIEW_CLIENT_HEADER) === REVIEW_CLIENT_REMOTE;
 
 // Acquisition errors and preparation logs can quote local paths.
-const REMOTE_CHECKOUT_ISSUE =
+export const REMOTE_CHECKOUT_ISSUE =
   "The checkout for language features is not available on the remote machine.";
+
+export const REMOTE_STRUCTURAL_DIFF_ERROR =
+  "The structural diff failed on the remote machine.";
 
 /** A remote caller learns a checkout's state, not its path or log. */
 const workspaceFor = (context: Context, status: WorkspaceStatus) =>
@@ -1040,7 +1043,10 @@ export function createReviewApi(
           } catch (error) {
             send({
               type: "error",
-              message: error instanceof Error ? error.message : String(error),
+              // Checkout and diffr errors can quote local paths.
+              message: remoteCaller(context)
+                ? REMOTE_STRUCTURAL_DIFF_ERROR
+                : errorMessage(error),
             });
           } finally {
             if (!abort.signal.aborted) controller.close();
