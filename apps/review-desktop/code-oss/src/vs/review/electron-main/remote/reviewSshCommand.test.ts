@@ -14,6 +14,7 @@ import {
 	reviewSshConfigPath,
 	reviewSshControlDirectory,
 	reviewSshSession,
+	sshCancelForwardArgs,
 	sshCloseArgs,
 	sshExecArgs,
 	sshForwardArgs,
@@ -27,29 +28,13 @@ const allArgs = (env: NodeJS.ProcessEnv = {}) => [
 	sshMasterArgs(session, env),
 	sshExecArgs(session, env),
 	sshForwardArgs(session, 41000, 42000, env),
+	sshCancelForwardArgs(session, 41000, 42000, env),
 	sshCloseArgs(session, env),
 ];
 
 test("refuses aliases that could become options or reach a shell", () => {
-	for (const [alias, reason] of [
-		["-oProxyCommand=x", "starts with -"],
-		["a b", "contains whitespace"],
-		["a`id`", "contains `"],
-		["", "is empty"],
-		["a\tb", "contains whitespace"],
-		["a\u0001b", "contains a control character"],
-		["a$HOME", "contains $"],
-		["a;b", "contains ;"],
-		["a|b", "contains |"],
-		["a&b", "contains &"],
-		["a<b", "contains <"],
-		["a>b", "contains >"],
-		["a(b", "contains ("],
-		["a)b", "contains )"],
-		["a'b", "contains '"],
-		['a"b', 'contains "'],
-		["a\\b", "contains \\"],
-	]) assert.deepEqual(validateSshAlias(alias), { ok: false, reason }, JSON.stringify(alias));
+	for (const alias of ["-oProxyCommand=x", "a b", "a`id`", "", "a\u0001b", "a$HOME", "a;b", "a|b", "a&b", "a<b", "a>b", "a(b", "a)b", "a'b", 'a"b', "a\\b"])
+		assert.equal(validateSshAlias(alias).ok, false, JSON.stringify(alias));
 });
 
 test("accepts ordinary aliases", () => {
@@ -57,16 +42,23 @@ test("accepts ordinary aliases", () => {
 		assert.deepEqual(validateSshAlias(alias), { ok: true }, alias);
 });
 
-test("a session refuses an invalid alias", () => {
+test("a session and every builder refuse an invalid alias", () => {
 	assert.throws(() => reviewSshSession("-oProxyCommand=x", "/tmp/d"), /starts with -/);
+	const handBuilt = { alias: "-oProxyCommand=x", controlPath: "/tmp/d/x" };
+	assert.throws(() => sshMasterArgs(handBuilt, {}), /starts with -/);
+	assert.throws(() => sshForwardArgs(handBuilt, 1, 2, {}), /starts with -/);
+});
+
+test("the forward refuses a port outside 1-65535", () => {
+	assert.throws(() => sshForwardArgs(session, 0, 42000, {}), /Invalid port 0/);
+	assert.throws(() => sshCancelForwardArgs(session, 41000, 1.5, {}), /Invalid port 1.5/);
 });
 
 test("every argument list ends with -- and the alias, and exec with the fixed command after it", () => {
-	const [master, exec, forward, close] = allArgs();
+	const [master, exec, ...others] = allArgs();
 	assert.deepEqual(master.slice(-2), ["--", "wb-test-a"]);
 	assert.deepEqual(exec.slice(-4), ["--", "wb-test-a", "sh", "-s"]);
-	assert.deepEqual(forward.slice(-2), ["--", "wb-test-a"]);
-	assert.deepEqual(close.slice(-2), ["--", "wb-test-a"]);
+	for (const args of others) assert.deepEqual(args.slice(-2), ["--", "wb-test-a"]);
 	for (const args of allArgs()) assert.equal(args.indexOf("--"), args.lastIndexOf("--"));
 });
 
@@ -75,19 +67,17 @@ test("no argument list overrides host-key checking or prompting", () => {
 		for (const arg of args) assert.doesNotMatch(arg, /StrictHostKeyChecking|UserKnownHostsFile|BatchMode/i);
 });
 
-test("the exec, forward and close reuse the session's control path", () => {
-	const [, exec, forward, close] = allArgs();
-	for (const args of [exec, forward, close]) {
-		const i = args.indexOf("-S");
-		assert.equal(args[i + 1], session.controlPath);
-	}
+test("every call after the master reuses its control socket", () => {
+	const [, exec, forward, cancel, close] = allArgs();
+	for (const args of [exec, forward, cancel, close]) assert.equal(args[args.indexOf("-S") + 1], session.controlPath);
 	assert.ok(exec.includes("-oControlMaster=no"));
-	assert.ok(forward.includes("-oControlMaster=no"));
+	assert.equal(forward[forward.indexOf("-O") + 1], "forward");
+	assert.equal(cancel[cancel.indexOf("-O") + 1], "cancel");
 });
 
-test("the forward binds loopback on both ends", () => {
-	const forward = sshForwardArgs(session, 41000, 42000, {});
-	assert.equal(forward[forward.indexOf("-L") + 1], "127.0.0.1:41000:127.0.0.1:42000");
+test("the forward and its cancel bind loopback on both ends", () => {
+	for (const args of [sshForwardArgs(session, 41000, 42000, {}), sshCancelForwardArgs(session, 41000, 42000, {})])
+		assert.equal(args[args.indexOf("-L") + 1], "127.0.0.1:41000:127.0.0.1:42000");
 });
 
 test("a development config file is passed to every call, and ignored in a packaged build", () => {

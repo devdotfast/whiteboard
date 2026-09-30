@@ -30,16 +30,27 @@ export function validateSshAlias(alias: string): { ok: true } | { ok: false; rea
 	return { ok: true };
 }
 
-/** Per user and short: macOS limits a socket path to about 104 bytes, and ssh appends 17 to it while binding. */
-export function reviewSshControlDirectory(): string {
-	return join(tmpdir(), `wb-ssh-${process.getuid?.() ?? 0}`);
+/** Connection sharing needs Unix sockets and a uid; Windows has neither. */
+function currentUid(): number {
+	if (!process.getuid) throw new Error("SSH connection sharing is not supported on this platform.");
+	return process.getuid();
 }
 
+/** Per user and short: macOS limits a socket path to about 104 bytes, and ssh appends 17 to it while binding. */
+export function reviewSshControlDirectory(): string {
+	return join(tmpdir(), `wb-ssh-${currentUid()}`);
+}
+
+/** The caller runs `prepareSshControlDirectory` before starting the master. */
 export function reviewSshSession(alias: string, controlDirectory = reviewSshControlDirectory()): ReviewSshSession {
-	const valid = validateSshAlias(alias);
-	if (!valid.ok) throw new Error(`SSH alias ${JSON.stringify(alias)} ${valid.reason}.`);
+	checkAlias(alias);
 	const name = createHash("sha256").update(alias).digest("hex").slice(0, 12);
 	return { alias, controlPath: join(controlDirectory, name) };
+}
+
+function checkAlias(alias: string): void {
+	const valid = validateSshAlias(alias);
+	if (!valid.ok) throw new Error(`SSH alias ${JSON.stringify(alias)} ${valid.reason}.`);
 }
 
 /** Creates the directory 0700, repairs its mode, and refuses one this user does not own. */
@@ -48,7 +59,7 @@ export async function prepareSshControlDirectory(dir: string): Promise<void> {
 		if (error.code !== "EEXIST") throw error;
 	});
 	const stat = await lstat(dir);
-	if (!stat.isDirectory() || stat.uid !== process.getuid?.()) {
+	if (!stat.isDirectory() || stat.uid !== currentUid()) {
 		throw new Error(`${dir} is not a directory owned by this user.`);
 	}
 	if ((stat.mode & 0o777) !== 0o700) await chmod(dir, 0o700);
@@ -65,6 +76,7 @@ export function reviewSshConfigPath(env: NodeJS.ProcessEnv = process.env, home =
 }
 
 function base(session: ReviewSshSession, env: NodeJS.ProcessEnv): string[] {
+	checkAlias(session.alias);
 	const config = developmentConfig(env);
 	return [...(config ? ["-F", config] : []), "-S", session.controlPath];
 }
@@ -76,7 +88,6 @@ export function sshMasterArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv 
 		"-N",
 		"-oServerAliveInterval=15",
 		"-oServerAliveCountMax=3",
-		"-oExitOnForwardFailure=yes",
 		"-oControlPersist=no",
 		"--",
 		session.alias,
@@ -88,22 +99,30 @@ export function sshExecArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = 
 	return [...base(session, env), "-oControlMaster=no", "-T", "--", session.alias, "sh", "-s"];
 }
 
+function localForward(localPort: number, remotePort: number): string {
+	for (const port of [localPort, remotePort]) {
+		if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid port ${port}.`);
+	}
+	return `127.0.0.1:${localPort}:127.0.0.1:${remotePort}`;
+}
+
+/** Asks the master for the listener and exits: 0 once it listens, 255 with OpenSSH's text if not. */
 export function sshForwardArgs(
 	session: ReviewSshSession,
 	localPort: number,
 	remotePort: number,
 	env: NodeJS.ProcessEnv = process.env,
 ): string[] {
-	return [
-		...base(session, env),
-		"-oControlMaster=no",
-		"-N",
-		"-L",
-		`127.0.0.1:${localPort}:127.0.0.1:${remotePort}`,
-		"-oExitOnForwardFailure=yes",
-		"--",
-		session.alias,
-	];
+	return [...base(session, env), "-O", "forward", "-L", localForward(localPort, remotePort), "--", session.alias];
+}
+
+export function sshCancelForwardArgs(
+	session: ReviewSshSession,
+	localPort: number,
+	remotePort: number,
+	env: NodeJS.ProcessEnv = process.env,
+): string[] {
+	return [...base(session, env), "-O", "cancel", "-L", localForward(localPort, remotePort), "--", session.alias];
 }
 
 export function sshCloseArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = process.env): string[] {
