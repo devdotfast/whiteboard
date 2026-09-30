@@ -431,7 +431,35 @@ async function journey(ctx, page, until) {
 
   await tab(second).waitFor({ timeout: 30000 });
   await canvas.getByRole("heading", { name: second }).waitFor();
-  ctx.check(`5. session_create with open: true on the remote opened a tab`);
+
+  // The tab can open before its list entry arrives; it must still read as the remote's.
+  const laptopOnly = canvas.locator(
+    'button[aria-label="Source tree ↗"], button[aria-label="Share review"], button[aria-label="Shared review"], [aria-label="Session views"] button[aria-label="Trace"]',
+  );
+
+  await until(
+    async () => (await laptopOnly.count()) === 0,
+    "the pushed tab without Source tree, Share and Trace",
+    10000,
+  );
+  await view("Diff").click();
+  await until(
+    async () =>
+      (await page.locator(".review-path-label").allInnerTexts()).some((t) =>
+        t.includes("f.ts"),
+      ),
+    "the pushed tab's Diff view to show f.ts",
+  );
+  assert.ok(
+    await page
+      .locator(".review-multidiff-open-container")
+      .evaluateAll((all) => all.length > 0 && all.every((e) => e.hidden)),
+    "Open file shown for a review on another machine",
+  );
+  await view("Whiteboard").click();
+  ctx.check(
+    "5. session_create with open: true on the remote opened a tab without Open file, Source tree, Share or Trace",
+  );
 
   // 6. The ssh master dies: the review says so, then recovers in the same page.
   await tab(title).click();

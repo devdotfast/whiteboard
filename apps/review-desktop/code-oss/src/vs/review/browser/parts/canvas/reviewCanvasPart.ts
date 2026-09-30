@@ -54,7 +54,6 @@ import {
 } from "../../../common/reviewConfigurationDefaults.js";
 import { resolveReviewSourceView, reviewSourceAnchor, type ReviewSourceView, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
 import type {
-	ReviewApiSummary,
 	ReviewCanvasBridge,
 	ReviewCanvasContent,
 	ReviewCanvasDiagnostic,
@@ -102,6 +101,7 @@ import "../../media/review.css";
 import { ReviewSessionTelemetry } from "../../reviewSessionTelemetry.js";
 import { applyReviewThemeChoice, currentReviewThemeChoice } from "../../reviewThemeChoice.js";
 import { ReviewCanvasEditorInput } from "./reviewCanvasEditorInput.js";
+import { remoteEntry, withRemoteEntry } from "./reviewRemoteEntry.js";
 import { reviewRemoteHostsSettings } from "../../reviewRemoteHostsSettings.js";
 
 interface ReviewCanvasAssetsModule extends ReviewCanvasModule {
@@ -128,10 +128,6 @@ const reviewCanvasPolicy = createTrustedTypesPolicy("reviewCanvas", {
 });
 
 const requestReviewApi: typeof fetch = (url, init) => fetch(url, init);
-
-/** What a review's canvas learns from its list entry: the host is a label, and what it cannot open. */
-const remoteEntry = (review: ReviewApiSummary | undefined) =>
-	review?.host ? { host: review.host, available: review.available } : {};
 
 function isTutorialStepId(step: unknown): step is TutorialStepId {
 	return typeof step === "string" && REVIEW_TUTORIAL_STEP_IDS.includes(step as TutorialStepId);
@@ -218,6 +214,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			const previous = catalog;
 			catalog = this.apiCatalog.reviews;
 			this.sessionTelemetry.catalogChanged(previous, catalog);
+			const content = this.apiContent;
+			const updated = content && withRemoteEntry(content, catalog.find((review) => review.reviewId === content.reviewId));
+			if (updated) {
+				this.apiContent = updated;
+				this.canvas.value?.update(updated);
+			}
 		}));
 		this.inlineEditors = this._register(reviewInstantiationService.createInstance(ReviewEmbeddedEditors));
 		this.refreshProgress = this._register(new LongRunningOperation(editorProgressService));
