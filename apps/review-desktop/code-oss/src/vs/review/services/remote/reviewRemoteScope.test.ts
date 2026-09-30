@@ -26,6 +26,11 @@ import { ITelemetryService } from "../../../platform/telemetry/common/telemetry.
 import { IUriIdentityService } from "../../../platform/uriIdentity/common/uriIdentity.js";
 import { IUserActivityService } from "../../../workbench/services/userActivity/common/userActivityService.js";
 import { IWorkspaceTrustRequestService } from "../../../platform/workspace/common/workspaceTrust.js";
+import { INotificationService } from "../../../platform/notification/common/notification.js";
+import { IProgressService } from "../../../platform/progress/common/progress.js";
+import { IExtensionStatusBarItemService } from "../../../workbench/api/browser/statusBarExtensionPoint.js";
+import { IExtensionsWorkbenchService } from "../../../workbench/contrib/extensions/common/extensions.js";
+import { IWorkbenchExtensionEnablementService } from "../../../workbench/services/extensionManagement/common/extensionManagement.js";
 import { MainThreadBulkEdits } from "../../../workbench/api/browser/mainThreadBulkEdits.js";
 import { MainThreadClipboard } from "../../../workbench/api/browser/mainThreadClipboard.js";
 import { MainThreadDownloadService } from "../../../workbench/api/browser/mainThreadDownloadService.js";
@@ -174,7 +179,7 @@ test("a host's main-thread peers are created with the guarded services", async (
 	fake(ILoggerService, { createLogger: record("createLogger"), onDidChangeLogLevel: Event.None });
 	fake(ITextFileService, { files: {}, untitled: {} });
 	fake(IUriIdentityService, { asCanonicalUri: (uri: URI) => uri });
-	for (const id of [IModelService, IMarkerService, ITextModelService, IWorkingCopyFileService, IEditorGroupsService, IEditorService, IConfigurationService, IStorageService, ISecretStorageService, IWebviewWorkbenchServiceId, IWebviewViewService, ILabelService, IDecorationsService, IWorkspaceTrustRequestService, IRequestService, ILanguagePackService, ITelemetryService, IExtensionService, IWorkbenchEnvironmentService, IEnvironmentService, IBulkEditService] as ServiceIdentifier<unknown>[]) {
+	for (const id of [IExtensionStatusBarItemService, INotificationService, IProgressService, IExtensionsWorkbenchService, IWorkbenchExtensionEnablementService, IModelService, IMarkerService, ITextModelService, IWorkingCopyFileService, IEditorGroupsService, IEditorService, IConfigurationService, IStorageService, ISecretStorageService, IWebviewWorkbenchServiceId, IWebviewViewService, ILabelService, IDecorationsService, IWorkspaceTrustRequestService, IRequestService, ILanguagePackService, ITelemetryService, IExtensionService, IWorkbenchEnvironmentService, IEnvironmentService, IBulkEditService] as ServiceIdentifier<unknown>[]) {
 		if (!window.has(id)) fake(id);
 	}
 	const parent = new InstantiationService(window, true);

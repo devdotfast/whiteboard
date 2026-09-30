@@ -13,9 +13,16 @@ import { IOutputService } from "../../../../workbench/services/output/common/out
 import { IStatusbarService } from "../../../../workbench/services/statusbar/browser/statusbar.js";
 import { IViewsService } from "../../../../workbench/services/views/common/viewsService.js";
 import { ReviewRemoteCommands, ReviewRemoteCommandService } from "./reviewRemoteCommandService.js";
-import { IReviewRemoteRefusals, ReviewRemoteRefusals } from "./reviewRemoteGuard.js";
+import { IReviewRemoteExtensions, IReviewRemoteRefusals, ReviewRemoteRefusals } from "./reviewRemoteGuard.js";
 import { ReviewRemoteOutputService } from "./reviewRemoteOutputService.js";
 import { ReviewRemoteGuardedPeers } from "./reviewRemotePeers.js";
+import { ReviewRemoteQuickOpen } from "./reviewRemoteQuickOpen.js";
+import { ReviewRemoteTreeViews } from "./reviewRemoteTreeViews.js";
+import { IQuickInputService } from "../../../../platform/quickinput/common/quickInput.js";
+import { ILabelService } from "../../../../platform/label/common/label.js";
+import { ICustomEditorLabelService } from "../../../../workbench/services/editor/common/customEditorLabelService.js";
+import { IModelService } from "../../../../editor/common/services/model.js";
+import { ILanguageService } from "../../../../editor/common/languages/language.js";
 
 function scope() {
 	return new InstantiationService(new ServiceCollection(
@@ -25,6 +32,12 @@ function scope() {
 		[IViewsService, { isViewVisible: () => false, onDidChangeViewVisibility: Event.None }],
 		[IConfigurationService, {}],
 		[IStatusbarService, {}],
+		[IReviewRemoteExtensions, { extensions: [] }],
+		[IQuickInputService, {}],
+		[ILabelService, {}],
+		[ICustomEditorLabelService, {}],
+		[IModelService, {}],
+		[ILanguageService, {}],
 	), true);
 }
 
@@ -34,11 +47,13 @@ function context(remoteAuthority: string | null) {
 	return { context: value as unknown as IExtHostContext, set };
 }
 
-test("a remote host's commands and output peers are the guarded ones", () => {
+test("a remote host's commands, output, quick input and tree view peers are the guarded ones", () => {
 	const { context: remote, set } = context("whiteboard+aaaa-1111");
 	scope().createInstance(ReviewRemoteGuardedPeers, remote).dispose();
 	assert.ok(set.get(MainContext.MainThreadCommands.sid) instanceof ReviewRemoteCommands);
 	assert.ok(set.get(MainContext.MainThreadOutputService.sid) instanceof ReviewRemoteOutputService);
+	assert.ok(set.get(MainContext.MainThreadQuickOpen.sid) instanceof ReviewRemoteQuickOpen);
+	assert.ok(set.get(MainContext.MainThreadTreeViews.sid) instanceof ReviewRemoteTreeViews);
 });
 
 test("the window's own extension host keeps upstream's peers", () => {

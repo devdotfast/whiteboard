@@ -44,6 +44,11 @@ import {
 	WorkspaceFolder,
 } from "../../../platform/workspace/common/workspace.js";
 import { IWorkspaceTrustRequestService } from "../../../platform/workspace/common/workspaceTrust.js";
+import { INotificationService } from "../../../platform/notification/common/notification.js";
+import { IProgressService } from "../../../platform/progress/common/progress.js";
+import { IExtensionStatusBarItemService } from "../../../workbench/api/browser/statusBarExtensionPoint.js";
+import { IExtensionsWorkbenchService } from "../../../workbench/contrib/extensions/common/extensions.js";
+import { IWorkbenchExtensionEnablementService } from "../../../workbench/services/extensionManagement/common/extensionManagement.js";
 import { IWebviewViewService } from "../../../workbench/contrib/webviewView/browser/webviewViewService.js";
 import { IDecorationsService } from "../../../workbench/services/decorations/common/decorations.js";
 import { IEditorGroupsService } from "../../../workbench/services/editor/common/editorGroupsService.js";
@@ -61,6 +66,12 @@ import { ReviewRemoteClipboardService } from "./guard/reviewRemoteClipboardServi
 import { ReviewRemoteCommandService } from "./guard/reviewRemoteCommandService.js";
 import { reviewRemoteConfigurationService } from "./guard/reviewRemoteConfigurationService.js";
 import { reviewRemoteDecorationsService } from "./guard/reviewRemoteDecorationsService.js";
+import { reviewRemoteDiagnostics } from "./guard/reviewRemoteDiagnostics.js";
+import { reviewRemoteExtensionEnablementService } from "./guard/reviewRemoteExtensionEnablementService.js";
+import { reviewRemoteExtensionsWorkbenchService } from "./guard/reviewRemoteExtensionsWorkbenchService.js";
+import { reviewRemoteNotificationService } from "./guard/reviewRemoteNotificationService.js";
+import { reviewRemoteProgressService } from "./guard/reviewRemoteProgressService.js";
+import { ReviewRemoteStatusBarItemService } from "./guard/reviewRemoteStatusBarItemService.js";
 import { ReviewRemoteDownloadService } from "./guard/reviewRemoteDownloadService.js";
 import { ReviewRemoteEditSessionIdentityService } from "./guard/reviewRemoteEditSessionIdentityService.js";
 import { reviewRemoteEditorGroupsService } from "./guard/reviewRemoteEditorGroupsService.js";
@@ -68,7 +79,7 @@ import { reviewRemoteEditorService } from "./guard/reviewRemoteEditorService.js"
 import { reviewRemoteEnvironmentService } from "./guard/reviewRemoteEnvironmentService.js";
 import { reviewRemoteExtensionService } from "./guard/reviewRemoteExtensionService.js";
 import { reviewRemoteFileService } from "./guard/reviewRemoteFileService.js";
-import { IReviewRemoteRefusals, override, ownsRemoteResource, ReviewRemoteRefusals } from "./guard/reviewRemoteGuard.js";
+import { IReviewRemoteExtensions, IReviewRemoteRefusals, override, ownsRemoteResource, ReviewRemoteRefusals } from "./guard/reviewRemoteGuard.js";
 import { reviewRemoteLabelService } from "./guard/reviewRemoteLabelService.js";
 import { reviewRemoteLanguagePackService } from "./guard/reviewRemoteLanguagePackService.js";
 import { ReviewRemoteLoggerService } from "./guard/reviewRemoteLoggerService.js";
@@ -256,11 +267,12 @@ export function reviewRemoteScope(input: {
 		[ILanguageFeaturesService, input.languageFeatures],
 		[IModelService, reviewRemoteModelService(window.get(IModelService), authority)],
 		[IWorkspaceContextService, input.workspace],
-		[IMarkerService, reviewRemoteMarkerService(window.get(IMarkerService), authority)],
+		[IMarkerService, reviewRemoteDiagnostics(reviewRemoteMarkerService(window.get(IMarkerService), authority), refusals)],
 		// Its own instance, so a file search from this host's extensions reaches this host's search provider.
 		[ISearchService, new SyncDescriptor(SearchService)],
 		[IRemoteAuthorityResolverService, input.resolver],
 		[IReviewRemoteRefusals, refusals],
+		[IReviewRemoteExtensions, { _serviceBrand: undefined, extensions: input.extensions }],
 		[IFileService, reviewRemoteFileService(window.get(IFileService), refusals)],
 		[ITextModelService, reviewRemoteTextModelService(window.get(ITextModelService), refusals)],
 		[ITextFileService, reviewRemoteTextFileService(window.get(ITextFileService), refusals)],
@@ -292,5 +304,11 @@ export function reviewRemoteScope(input: {
 		[IWorkbenchEnvironmentService, environment],
 		[IEnvironmentService, environment],
 		[IExtensionService, reviewRemoteExtensionService(window.get(IExtensionService), input.extensions, input.activate)],
+		[IExtensionsWorkbenchService, reviewRemoteExtensionsWorkbenchService(window.get(IExtensionsWorkbenchService), refusals)],
+		[IWorkbenchExtensionEnablementService, reviewRemoteExtensionEnablementService(window.get(IWorkbenchExtensionEnablementService), refusals)],
+		// Window UI a host writes into: its links and commands go through this guard.
+		[INotificationService, reviewRemoteNotificationService(window.get(INotificationService), refusals)],
+		[IProgressService, reviewRemoteProgressService(window.get(IProgressService), refusals)],
+		[IExtensionStatusBarItemService, new SyncDescriptor(ReviewRemoteStatusBarItemService, [window.get(IExtensionStatusBarItemService)])],
 	);
 }
