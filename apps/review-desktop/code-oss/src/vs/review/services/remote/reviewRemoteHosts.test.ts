@@ -45,7 +45,7 @@ test("the window's vscode-remote provider is registered at start, and nothing co
 	assert.equal(await target.host("not/an id"), undefined);
 	assert.deepEqual(asked, []);
 
-	assert.equal(await target.host(SERVER_ID.toUpperCase()), undefined, "no endpoint: undefined, not a hang");
+	assert.equal(await target.host(SERVER_ID), undefined, "no endpoint: undefined, not a hang");
 	mock.timers.tick(1_000);
 	for (let i = 0; i < 10; i++) await Promise.resolve();
 	assert.deepEqual(asked, [SERVER_ID, SERVER_ID], "main is asked again for each attempt");

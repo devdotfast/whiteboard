@@ -65,7 +65,7 @@ export class ReviewRemoteHostsService extends Disposable implements IReviewRemot
 		if (!authority || this.closing) return undefined;
 		let host = this.hosts.get(authority);
 		if (!host) {
-			host = new ReviewRemoteHost(serverId.toLowerCase(), authority, (target) => this.open(target), this.logService);
+			host = new ReviewRemoteHost(serverId, authority, (target) => this.open(target), this.logService);
 			this.hosts.set(authority, host);
 		}
 		return (await host.connect()) ? host : undefined;
@@ -88,7 +88,7 @@ export class ReviewRemoteHostsService extends Disposable implements IReviewRemot
 
 	private async label(host: ReviewRemoteHost): Promise<void> {
 		const states = await this.connection.readRemoteHosts().catch(() => []);
-		const alias = states.find((state) => state.serverId?.toLowerCase() === host.serverId)?.alias;
+		const alias = states.find((state) => state.serverId === host.serverId)?.alias;
 		if (this.closing) return;
 		this.labels.set(host.authority, this.labelService.registerFormatter({
 			scheme: Schemas.vscodeRemote,
