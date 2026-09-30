@@ -93,6 +93,8 @@ class FakeServerProcess implements IReviewServerProcess {
 	readonly onExit = this.exit.event;
 	private readonly crashed = new Emitter<{ readonly code: number; readonly reason: string }>();
 	readonly onCrash = this.crashed.event;
+	readonly message = new Emitter<unknown>();
+	readonly onMessage = this.message.event;
 	env: Record<string, string | undefined> = {};
 
 	start(configuration: { readonly env?: Record<string, string | undefined> }): boolean {
@@ -259,6 +261,33 @@ test('sends the remote hosts to a server once it is ready, and again after a res
 	await whenRestarted;
 	processes[1].announceReady();
 	assert.deepEqual(processes[1].messages, [{ type: 'remote-hosts', hosts }]);
+});
+
+test('passes a remote host restart the server posts to its callback', (t) => {
+	const processes: FakeServerProcess[] = [];
+	const restarted: string[] = [];
+	const supervisor = new ReviewServerSupervisor({
+		appRoot: '/app',
+		appVersion: '0.0.34',
+		isBuilt: true,
+		channel: 'stable',
+		logInfo: () => { },
+		logError: () => { },
+		createProcess: () => {
+			const serverProcess = new FakeServerProcess();
+			processes.push(serverProcess);
+			return serverProcess;
+		},
+		onRemoteHostRestarted: (alias) => restarted.push(alias),
+	});
+	t.after(() => supervisor.dispose());
+
+	supervisor.start();
+	processes[0].message.fire({ type: 'remote-host-restarted', alias: 'devbox' });
+	processes[0].message.fire({ type: 'remote-host-restarted', alias: 7 });
+	processes[0].message.fire('noise');
+
+	assert.deepEqual(restarted, ['devbox']);
 });
 
 test('the app path names the macOS bundle, else the executable', () => {

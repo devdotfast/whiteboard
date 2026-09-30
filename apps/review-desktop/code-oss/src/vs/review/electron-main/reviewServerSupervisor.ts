@@ -38,6 +38,8 @@ export interface IReviewServerProcess extends IDisposable {
   readonly onStderr: Event<string>;
   readonly onExit: Event<{ readonly code: number; readonly signal: string }>;
   readonly onCrash: Event<{ readonly code: number; readonly reason: string }>;
+  /** What the server posts on its parent port. */
+  readonly onMessage: Event<unknown>;
   start(configuration: {
     readonly type: string;
     readonly name: string;
@@ -87,6 +89,8 @@ export interface ReviewServerSupervisorOptions {
   readonly onServerTerminated?: (detail: ReviewServerTermination) => void;
   /** Called every time a server, first or restarted, announces its endpoint. */
   readonly onServerReady?: () => void;
+  /** A remote's server restarted with a new token; attach to it again. */
+  readonly onRemoteHostRestarted?: (alias: string) => void;
 }
 
 export function createReviewServerEnvironment(options: {
@@ -353,6 +357,13 @@ export class ReviewServerSupervisor extends Disposable {
           void this.connected.complete(connection);
         }
         this.options.onServerReady?.();
+      }),
+    );
+    this.processListeners.add(
+      serverProcess.onMessage((message) => {
+        const { type, alias } = (message ?? {}) as { type?: unknown; alias?: unknown };
+        if (type === "remote-host-restarted" && typeof alias === "string")
+          this.options.onRemoteHostRestarted?.(alias);
       }),
     );
     this.processListeners.add(

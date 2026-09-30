@@ -14,14 +14,18 @@ import { classifySshFailure, reconnectDelay, ReviewRemoteHost } from "./reviewRe
 import { reviewSshSession } from "./reviewSshCommand.js";
 
 /** Stands in for the forwarded port: the probe reaches it through real HTTP. */
-async function healthServer(t: test.TestContext): Promise<number> {
+async function healthServer(t: test.TestContext, servers?: Server[]): Promise<number> {
 	const server: Server = createServer((_request, response) => response.end('{"ok":true}'));
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-	t.after(() => new Promise((resolve) => server.close(resolve)));
+	t.after(() => new Promise((resolve) => server.close(() => resolve(undefined))));
+	servers?.push(server);
 	return (server.address() as AddressInfo).port;
 }
 
-function hostFor(t: test.TestContext, remote: FakeRemote, port: number, alias = "wb-test-a") {
+/** `ports` are handed out in turn as the free local ports. */
+function hostFor(t: test.TestContext, remote: FakeRemote, ports: number | number[], alias = "wb-test-a") {
+	const free = [ports].flat();
+	let next = 0;
 	const clock = fakeClock();
 	const ssh = fakeSsh({ [alias]: remote }, clock);
 	const reports: ReviewGatewayHost[] = [];
@@ -30,7 +34,7 @@ function hostFor(t: test.TestContext, remote: FakeRemote, port: number, alias = 
 		spawn: ssh.spawn,
 		environment: async () => ({ PATH: "/usr/bin" }),
 		desktopVersion: async () => "0.1.6",
-		freePort: async () => port,
+		freePort: async () => free[next++ % free.length],
 		report: (state) => reports.push(state),
 		log: () => {},
 		clock,
@@ -169,18 +173,92 @@ test("a resume reconnects at once, without waiting for the backoff", async (t) =
 	assert.equal(clock.pending, 0);
 });
 
-test("a resume replaces a master that no longer answers", async (t) => {
-	const port = await healthServer(t);
-	const { host, ssh, clock, last } = hostFor(t, {}, port);
+test("a resume replaces a master whose forward no longer answers", async (t) => {
+	const servers: Server[] = [];
+	const ports = [await healthServer(t, servers), await healthServer(t, servers)];
+	const { host, ssh, clock, last } = hostFor(t, {}, ports);
 
 	host.start();
 	await until(() => last()?.endpoint !== undefined);
 	const first = ssh.master("wb-test-a")!;
-	ssh.wedge("wb-test-a");
+	// -O check still answers: only the HTTP path through the forward is dead.
+	servers[0].closeAllConnections();
+	await new Promise((resolve) => servers[0].close(resolve));
 	await host.resume();
-	await until(() => ssh.of("wb-test-a", "master").length === 2 && ssh.master("wb-test-a") !== first);
-	await until(() => !first.alive);
+
+	await until(() => last()?.endpoint?.url === `http://127.0.0.1:${ports[1]}`);
+	assert.equal(ssh.of("wb-test-a", "master").length, 2);
+	assert.equal(first.alive, false);
 	assert.equal(clock.pending, 0);
+});
+
+test("a resume leaves a host whose forward answers alone", async (t) => {
+	const port = await healthServer(t);
+	const { host, ssh, last } = hostFor(t, {}, port);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	await host.resume();
+
+	assert.equal(ssh.of("wb-test-a", "master").length, 1);
+});
+
+test("an authenticated master that ends is unreachable and retried, whatever its prompts left in stderr", async (t) => {
+	const port = await healthServer(t);
+	const { host, ssh, clock, last } = hostFor(t, { masterStderr: "Permission denied, please try again.\n" }, port);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	ssh.master("wb-test-a")!.finish(255, { stderr: "Connection reset by peer\n" });
+	await until(() => last()?.problem !== undefined);
+
+	assert.equal(last()?.problem?.state, "unreachable");
+	assert.match(last()!.problem!.detail, /Connection reset by peer$/);
+	assert.equal(clock.pending, 1);
+});
+
+test("a restarted remote server is attached again over the same master", async (t) => {
+	const ports = [await healthServer(t), await healthServer(t)];
+	const { host, ssh, last } = hostFor(
+		t,
+		{ attach: (call) => ({ code: 0, stdout: attachOutput(41234 + call, `token-${call}`) }) },
+		ports,
+	);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	await host.reattach();
+
+	assert.deepEqual(last(), { alias: "wb-test-a", endpoint: { url: `http://127.0.0.1:${ports[1]}`, token: "token-2" } });
+	assert.equal(ssh.of("wb-test-a", "master").length, 1);
+	assert.equal(ssh.of("wb-test-a", "forward").length, 2);
+	const cancels = ssh.of("wb-test-a", "cancel");
+	assert.equal(cancels.length, 1);
+	assert.ok(cancels[0].args.includes(`127.0.0.1:${ports[0]}:127.0.0.1:41235`));
+});
+
+test("a retry starts the new master only after the old one has exited", async (t) => {
+	const port = await healthServer(t);
+	const { host, ssh, last } = hostFor(t, { exitDelayMs: 150 }, port);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	const first = ssh.master("wb-test-a")!;
+	host.retry();
+	await until(() => ssh.of("wb-test-a", "master").length === 2);
+
+	assert.ok(first.exitedAt !== undefined && ssh.of("wb-test-a", "master")[1].wall >= first.exitedAt);
+});
+
+test("the sentinels are found after a banner longer than the output bound", async (t) => {
+	const port = await healthServer(t);
+	const banner = `${"motd ".repeat(20 * 1024)}\n`;
+	const { host, last } = hostFor(t, { attach: { code: 0, stdout: `${banner}${attachOutput(41234, "late")}` } }, port);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(last()?.endpoint?.token, "late");
 });
 
 test("ssh missing from PATH is unreachable and says OpenSSH is needed", async (t) => {

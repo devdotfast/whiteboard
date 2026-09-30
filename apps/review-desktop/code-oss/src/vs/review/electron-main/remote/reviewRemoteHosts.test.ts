@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -15,6 +15,7 @@ import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
 import { fakeClock, fakeSsh, until, type FakeRemote } from "./reviewRemoteFakeSsh.js";
 import { ReviewRemoteHosts } from "./reviewRemoteHosts.js";
 import type { SshPromptRequest } from "./reviewSshAskpass.js";
+import { reviewSshInstancePrefix } from "./reviewSshCommand.js";
 
 async function healthServer(t: test.TestContext): Promise<number> {
 	const server: Server = createServer((_request, response) => response.end('{"ok":true}'));
@@ -23,9 +24,10 @@ async function healthServer(t: test.TestContext): Promise<number> {
 	return (server.address() as AddressInfo).port;
 }
 
-async function managerFor(t: test.TestContext, remotes: Record<string, FakeRemote>, answer?: string) {
+async function managerFor(t: test.TestContext, remotes: Record<string, FakeRemote>, answer?: string, before?: (directory: string) => Promise<void>) {
 	const port = await healthServer(t);
 	const directory = await mkdtemp(join(tmpdir(), "wb-hosts-"));
+	await before?.(directory);
 	const clock = fakeClock();
 	const ssh = fakeSsh(remotes, clock);
 	const sent: { at: number; hosts: ReviewGatewayHost[] }[] = [];
@@ -33,6 +35,7 @@ async function managerFor(t: test.TestContext, remotes: Record<string, FakeRemot
 	const manager = new ReviewRemoteHosts({
 		spawn: ssh.spawn,
 		controlDirectory: directory,
+		instance: "/user-data",
 		environment: async () => ({ PATH: "/usr/bin" }),
 		createAskpass: async (input) => {
 			prompt = input.prompt;
@@ -144,4 +147,24 @@ test("a prompt cancelled through askpass is auth-failed, until a retry", async (
 
 	manager.retry("wb-test-c");
 	await until(() => ssh.of("wb-test-c", "master").length === 2);
+});
+
+test("at start, sockets an earlier run of this Desktop left are closed and removed; others are kept", async (t) => {
+	const mine = `${reviewSshInstancePrefix("/user-data")}0123456789ab`;
+	const theirs = `${reviewSshInstancePrefix("/other-user-data")}0123456789ab`;
+	let directory = "";
+	const { manager, ssh, sentUntil } = await managerFor(t, { "wb-test-a": {} }, undefined, async (dir) => {
+		directory = dir;
+		await writeFile(join(dir, mine), "");
+		await writeFile(join(dir, theirs), "");
+	});
+
+	manager.update(true, ["wb-test-a"]);
+	await sentUntil((hosts) => hosts[0]?.endpoint !== undefined);
+
+	const exits = ssh.calls.filter((c) => c.kind === "exit");
+	assert.equal(exits.length, 1);
+	assert.equal(exits[0].args[exits[0].args.indexOf("-S") + 1], join(directory, mine));
+	assert.ok(ssh.calls.indexOf(exits[0]) < ssh.calls.findIndex((c) => c.kind === "master"));
+	assert.deepEqual(await readdir(directory), [theirs]);
 });

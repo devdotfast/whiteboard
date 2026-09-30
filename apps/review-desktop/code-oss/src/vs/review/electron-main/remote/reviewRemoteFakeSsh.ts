@@ -14,6 +14,7 @@ class FakeChild extends EventEmitter {
 	readonly pid = FakeChild.nextPid++;
 	exitCode: number | null = null;
 	signalCode: NodeJS.Signals | null = null;
+	exitedAt: number | undefined;
 	readonly stdin = new PassThrough();
 	readonly stdout = new PassThrough();
 	readonly stderr = new PassThrough();
@@ -37,6 +38,7 @@ class FakeChild extends EventEmitter {
 		setImmediate(() => {
 			this.exitCode = code;
 			this.signalCode = signal;
+			this.exitedAt = Date.now();
 			this.emit("exit", code, signal);
 			this.emit("close", code, signal);
 		});
@@ -53,15 +55,24 @@ type MasterOutcome = "up" | "hang" | "missing" | { code: number; stderr: string 
 export interface FakeRemote {
 	/** How a new master ends up: up (the default), a failure right away, or never answering. */
 	master?: MasterOutcome | ((alias: string) => MasterOutcome);
-	attach?: { code: number; stdout?: string; stderr?: string };
+	/** The answer to `sh -s`; a function answers each exec in turn (1, 2, ...). */
+	attach?: Attach | ((call: number) => Attach);
 	remotePort?: number;
+	/** Written by an up master as it starts, as a prompt's retries leave it. */
+	masterStderr?: string;
+	/** How long an up master takes to exit after -O exit. */
+	exitDelayMs?: number;
 }
+
+type Attach = { code: number; stdout?: string; stderr?: string };
 
 export interface FakeCall {
 	readonly alias: string;
 	readonly kind: "master" | "check" | "exec" | "forward" | "cancel" | "exit";
 	readonly args: readonly string[];
 	readonly at: number;
+	/** Real time, for ordering against a child's `exitedAt`. */
+	readonly wall: number;
 }
 
 export const attachOutput = (port: number, token = "remote-token") =>
@@ -106,20 +117,27 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 		const remote = remotes[alias] ?? {};
 		const operation = args.includes("-O") ? args[args.indexOf("-O") + 1] : undefined;
 		const kind: FakeCall["kind"] = args.includes("-M") ? "master" : args.at(-1) === "-s" ? "exec" : (operation as FakeCall["kind"]);
-		calls.push({ alias, kind, args, at: clock?.now() ?? Date.now() });
+		calls.push({ alias, kind, args, at: clock?.now() ?? Date.now(), wall: Date.now() });
 		const master = masters.get(alias);
 		setImmediate(() => {
 			if (kind === "master") {
 				masters.set(alias, child);
 				const how = typeof remote.master === "function" ? remote.master(alias) : (remote.master ?? "up");
-				if (how === "up") up.add(child);
+				if (how === "up") {
+					up.add(child);
+					if (remote.masterStderr) child.stderr.write(remote.masterStderr);
+				}
 				else if (how === "missing") child.emit("error", Object.assign(new Error("spawn ssh ENOENT"), { code: "ENOENT" }));
 				else if (how !== "hang") child.finish(how.code, { stderr: how.stderr });
 			} else if (kind === "check") {
 				child.finish(master && master.alive && up.has(master) ? 0 : 255, master?.alive ? {} : { stderr: "Control socket connect: No such file or directory\n" });
 			} else if (kind === "exec") {
 				const answer = () => {
-					const attach = remote.attach ?? { code: 0, stdout: attachOutput(remote.remotePort ?? 41234) };
+					const call = calls.filter((c) => c.alias === alias && c.kind === "exec").length;
+					const attach =
+						typeof remote.attach === "function"
+							? remote.attach(call)
+							: (remote.attach ?? { code: 0, stdout: attachOutput(remote.remotePort ?? 41234) });
 					child.finish(attach.code, attach);
 				};
 				if (child.stdin.writableFinished) answer();
@@ -127,7 +145,7 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 			} else if (kind === "exit") {
 				const listening = master !== undefined && master.alive && up.has(master);
 				child.finish(listening ? 0 : 255, { stderr: listening ? "Exit request sent.\n" : "Control socket connect: No such file or directory\n" });
-				if (listening) master.finish(255);
+				if (listening) setTimeout(() => master.finish(255), remote.exitDelayMs ?? 0);
 			} else child.finish(master?.alive ? 0 : 255);
 		});
 		return child as unknown as SshChildProcess;

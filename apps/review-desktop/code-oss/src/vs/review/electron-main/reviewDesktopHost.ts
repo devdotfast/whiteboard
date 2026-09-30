@@ -122,6 +122,7 @@ export class ReviewDesktopHost extends Disposable {
           crashTelemetry?.reportServerExit(detail);
         },
         onServerReady: () => errorTelemetry?.serverReady(),
+        onRemoteHostRestarted: (alias) => this.remoteHosts?.reattach(alias),
       }),
     );
     this._register(

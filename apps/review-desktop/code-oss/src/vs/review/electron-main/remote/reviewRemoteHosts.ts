@@ -3,11 +3,19 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { readdir, rm } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
+import { join } from "node:path";
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
-import { ReviewRemoteHost, systemClock, type ReviewRemoteClock, type ReviewRemoteHostOptions, type SpawnSsh } from "./reviewRemoteHost.js";
+import { REVIEW_REMOTE_TIMEOUTS, ReviewRemoteHost, runSsh, systemClock, type ReviewRemoteClock, type ReviewRemoteHostOptions, type SpawnSsh } from "./reviewRemoteHost.js";
 import type { ReviewSshAskpass, SshPromptRequest } from "./reviewSshAskpass.js";
-import { prepareSshControlDirectory, reviewSshSession, validateSshAlias } from "./reviewSshCommand.js";
+import {
+	prepareSshControlDirectory,
+	reviewSshInstancePrefix,
+	reviewSshSession,
+	sshCloseArgs,
+	validateSshAlias,
+} from "./reviewSshCommand.js";
 
 /** The gateway restarts a first check when hosts arrive faster than this. */
 const SEND_INTERVAL_MS = 1_000;
@@ -105,6 +113,11 @@ export class ReviewRemoteHosts {
 		this.hosts.get(alias)?.retry();
 	}
 
+	/** The local server saw the host's server restart with a new token. */
+	reattach(alias: string): void {
+		void this.hosts.get(alias)?.reattach();
+	}
+
 	/** After sleep, every host is checked at once. */
 	resume(): void {
 		for (const host of this.hosts.values()) void host.resume();
@@ -145,12 +158,28 @@ export class ReviewRemoteHosts {
 	private askpass(): Promise<ReviewSshAskpass> {
 		return (this.prepared ??= (async () => {
 			await prepareSshControlDirectory(this.options.controlDirectory);
+			await this.sweepOrphans();
 			return this.options.createAskpass({
 				directory: this.options.controlDirectory,
 				prompt: (request) => this.prompt(request),
 				log: this.options.log,
 			});
 		})());
+	}
+
+	/** Masters a crashed run of this Desktop left, for any alias: each is asked to exit, and its socket removed. */
+	private async sweepOrphans(): Promise<void> {
+		if (this.options.instance === undefined) return;
+		const prefix = reviewSshInstancePrefix(this.options.instance);
+		const env = await this.options.environment();
+		for (const name of await readdir(this.options.controlDirectory)) {
+			if (!name.startsWith(prefix)) continue;
+			const controlPath = join(this.options.controlDirectory, name);
+			// -O exit works on any socket; the alias after -- is only a placeholder.
+			const closed = await runSsh(this.options.spawn, env, sshCloseArgs({ alias: "orphan", controlPath }, env), REVIEW_REMOTE_TIMEOUTS.close);
+			if (closed.code === 0) this.options.log(`closed an SSH connection left by an earlier run (${name}).`);
+			await rm(controlPath, { force: true });
+		}
 	}
 
 	private async prompt(request: SshPromptRequest): Promise<string | undefined> {

@@ -3,12 +3,12 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { existsSync, rmSync } from "node:fs";
 import { get } from "node:http";
 import type { Readable, Writable } from "node:stream";
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
 import { parseRemoteAttach, REVIEW_REMOTE_ATTACH_SCRIPT, type ReviewRemoteAttach } from "./reviewRemoteAttachScript.js";
 import {
+	sshCancelForwardArgs,
 	sshCheckArgs,
 	sshCloseArgs,
 	sshExecArgs,
@@ -94,16 +94,24 @@ class HostFailure extends Error {
 
 const unreachable = (detail: string) => new HostFailure({ state: "unreachable", detail });
 
+function meaningfulLines(text: string): string[] {
+	return (
+		text
+			.split("\n")
+			.map((line) => line.trim())
+			// OpenSSH's note on a first connection to a host says nothing about the failure.
+			.filter((line) => line && !line.startsWith("Warning: Permanently added"))
+	);
+}
+
 /** OpenSSH's first lines; enough to say what happened. */
 function firstLines(text: string, count = 6): string {
-	return text
-		.split("\n")
-		.map((line) => line.trim())
-		// OpenSSH's note on a first connection to a host says nothing about the failure.
-		.filter((line) => line && !line.startsWith("Warning: Permanently added"))
-		.slice(0, count)
-		.join("\n")
-		.slice(0, 1000);
+	return meaningfulLines(text).slice(0, count).join("\n").slice(0, 1000);
+}
+
+/** The last lines: why a long-lived master ended. */
+function lastLines(text: string, count = 6): string {
+	return meaningfulLines(text).slice(-count).join("\n").slice(-1000);
 }
 
 const gone = (child: SshChildProcess) => child.exitCode !== null || child.signalCode !== null;
@@ -134,12 +142,48 @@ function probeHealth(port: number, timeout: number): Promise<void> {
 	});
 }
 
-interface RunResult {
+export interface RunResult {
 	readonly code: number | null;
+	/** The last 64 KiB: the sentinels come at the end, after any login banner. */
 	readonly stdout: string;
+	/** The first 64 KiB: OpenSSH says what went wrong first. */
 	readonly stderr: string;
 	readonly error?: NodeJS.ErrnoException;
 	readonly timedOut: boolean;
+}
+
+/** One short-lived ssh; output is bounded, and a timeout ends it. */
+export function runSsh(spawn: SpawnSsh, env: NodeJS.ProcessEnv, args: string[], timeout: number, input?: string): Promise<RunResult> {
+	return new Promise((resolve) => {
+		let child: SshChildProcess;
+		try {
+			child = spawn(args, { env, detached: true, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
+		} catch (error) {
+			return resolve({ code: null, stdout: "", stderr: "", error: error as NodeJS.ErrnoException, timedOut: false });
+		}
+		let stdout = "";
+		let stderr = "";
+		let timedOut = false;
+		const done = (result: Omit<RunResult, "stdout" | "stderr" | "timedOut">) => {
+			clearTimeout(timer);
+			resolve({ ...result, stdout, stderr, timedOut });
+		};
+		const timer = setTimeout(() => {
+			timedOut = true;
+			child.kill("SIGKILL");
+			done({ code: null });
+		}, timeout);
+		child.stdout?.setEncoding("utf8");
+		child.stdout?.on("data", (chunk: string) => (stdout = (stdout + chunk).slice(-OUTPUT_LIMIT)));
+		child.stderr?.setEncoding("utf8");
+		child.stderr?.on("data", (chunk: string) => (stderr = (stderr + chunk).slice(0, OUTPUT_LIMIT)));
+		child.once("error", (error: NodeJS.ErrnoException) => done({ code: null, error }));
+		child.once("close", (code: number | null) => done({ code }));
+		if (input !== undefined) {
+			child.stdin?.on("error", () => {});
+			child.stdin?.end(input);
+		}
+	});
 }
 
 export interface ReviewRemoteHostOptions {
@@ -170,8 +214,11 @@ export class ReviewRemoteHost {
 	/** Bumped to abandon an attempt in flight. */
 	private generation = 0;
 	private master: SshChildProcess | undefined;
-	/** Masters asked to exit that have not yet. */
-	private readonly closing = new Set<SshChildProcess>();
+	/** Masters asked to exit that have not yet; a new master waits for them, since an exiting one unlinks the socket path. */
+	private readonly closing = new Map<SshChildProcess, Promise<void>>();
+	/** The ports of the forward to the remote server. */
+	private forwarded: { local: number; remote: number } | undefined;
+	private reattaching = false;
 	private masterStderr = "";
 	private env: NodeJS.ProcessEnv | undefined;
 	private connectedAt: number | undefined;
@@ -199,23 +246,65 @@ export class ReviewRemoteHost {
 	/** Forgets the backoff and any problem, and connects at once. */
 	retry(): void {
 		if (this.disposed) return;
+		this.generation++;
 		this.failures = 0;
 		this.dropMaster();
 		this.set({ alias: this.alias });
 		void this.connect();
 	}
 
-	/** After sleep: a host waiting to retry connects now, and a master that no longer answers is replaced. */
+	/**
+	 * After sleep: a host waiting to retry connects now. A connected host is
+	 * probed through its forward, because `-O check` answers from local state
+	 * while the TCP session may be dead; if it does not answer, the master is replaced.
+	 */
 	async resume(): Promise<void> {
 		if (this.disposed) return;
 		if (this.cancelTimer) return void this.connect();
 		const master = this.master;
-		if (!master || this.connectedAt === undefined || !this.env) return;
-		const check = await this.run(sshCheckArgs(this.options.session, this.env), this.timeouts.operation);
-		if (check.code === 0 || master !== this.master) return;
-		this.options.log(`${this.alias}: the SSH connection did not answer after resume; reconnecting.`);
+		const port = this.forwarded?.local;
+		if (!master || this.connectedAt === undefined || port === undefined) return;
+		try {
+			await probeHealth(port, this.timeouts.operation);
+			return;
+		} catch (error) {
+			if (master !== this.master || this.disposed) return;
+			this.options.log(`${this.alias}: no answer through the forward after resume (${(error as Error).message}); reconnecting.`);
+		}
+		this.generation++;
 		this.dropMaster();
 		void this.connect();
+	}
+
+	/**
+	 * The remote server restarted with a new token: attach again over the
+	 * same master, forward a new port, and drop the old forward.
+	 */
+	async reattach(): Promise<void> {
+		const env = this.env;
+		const old = this.forwarded;
+		if (this.disposed || this.reattaching || !this.master || this.connectedAt === undefined || !env || !old) return;
+		const generation = this.generation;
+		const stale = () => generation !== this.generation || this.disposed;
+		this.reattaching = true;
+		this.options.log(`${this.alias}: its server restarted; attaching again.`);
+		try {
+			const check = await this.run(sshCheckArgs(this.options.session, env), this.timeouts.operation);
+			if (stale()) return;
+			if (check.code !== 0) throw unreachable(`The SSH connection to ${this.alias} did not answer. ${firstLines(check.stderr)}`.trim());
+			const attach = await this.attach(env);
+			if (stale()) return;
+			const url = await this.forward(env, attach);
+			if (stale()) return;
+			await this.run(sshCancelForwardArgs(this.options.session, old.local, old.remote, env), this.timeouts.operation);
+			if (stale()) return;
+			this.set({ alias: this.alias, endpoint: { url, token: attach.token } });
+		} catch (error) {
+			if (stale()) return;
+			this.fail(error instanceof HostFailure ? error.problem : { state: "unreachable", detail: (error as Error).message });
+		} finally {
+			this.reattaching = false;
+		}
 	}
 
 	promptOpened(): void {
@@ -240,7 +329,7 @@ export class ReviewRemoteHost {
 
 	/** At process exit, when nothing can be awaited. */
 	killNow(): void {
-		for (const master of [this.master, ...this.closing]) master?.kill();
+		for (const master of [this.master, ...this.closing.keys()]) master?.kill();
 	}
 
 	private set(state: ReviewGatewayHost): void {
@@ -263,7 +352,7 @@ export class ReviewRemoteHost {
 			const env = await this.options.environment();
 			if (stale()) return;
 			this.env = env;
-			await this.removeOrphan(env);
+			await Promise.all(this.closing.values());
 			if (stale()) return;
 			const master = this.startMaster(env);
 			await this.waitForMaster(master, env, stale);
@@ -277,15 +366,6 @@ export class ReviewRemoteHost {
 			if (stale()) return;
 			this.fail(error instanceof HostFailure ? error.problem : { state: "unreachable", detail: (error as Error).message });
 		}
-	}
-
-	/** A socket left by a Desktop that crashed: its master, if alive, is ours; otherwise the file is stale. */
-	private async removeOrphan(env: NodeJS.ProcessEnv): Promise<void> {
-		const { controlPath } = this.options.session;
-		if (!existsSync(controlPath)) return;
-		const check = await this.run(sshCheckArgs(this.options.session, env), this.timeouts.operation);
-		if (check.code === 0) await this.run(sshCloseArgs(this.options.session, env), this.timeouts.operation);
-		rmSync(controlPath, { force: true });
 	}
 
 	private startMaster(env: NodeJS.ProcessEnv): SshChildProcess {
@@ -315,12 +395,18 @@ export class ReviewRemoteHost {
 		if (master !== this.master) return;
 		this.master = undefined;
 		if (error?.code === "ENOENT") return this.fail({ state: "unreachable", detail: OPENSSH_NEEDED });
-		const connected = this.connectedAt !== undefined;
-		if (connected && this.clock.now() - this.connectedAt! >= this.timeouts.stable) this.failures = 0;
-		const text = firstLines(this.masterStderr) || error?.message || `ssh exited with code ${code ?? "none"}.`;
+		const exited = error?.message || `ssh exited with code ${code ?? "none"}.`;
+		// An authenticated master cannot fail authentication: earlier prompts' text in its stderr says nothing now.
+		if (this.connectedAt !== undefined) {
+			if (this.clock.now() - this.connectedAt >= this.timeouts.stable) this.failures = 0;
+			return this.fail({
+				state: "unreachable",
+				detail: `The SSH connection to ${this.alias} ended: ${lastLines(this.masterStderr) || exited}`,
+			});
+		}
 		this.fail({
 			state: classifySshFailure(this.masterStderr, this.promptCancelled),
-			detail: connected ? `The SSH connection to ${this.alias} ended: ${text}` : text,
+			detail: firstLines(this.masterStderr) || exited,
 		});
 	}
 
@@ -356,6 +442,7 @@ export class ReviewRemoteHost {
 	}
 
 	private async forward(env: NodeJS.ProcessEnv, attach: ReviewRemoteAttach): Promise<string> {
+		this.forwarded = undefined;
 		const port = await this.options.freePort();
 		const forward = await this.run(sshForwardArgs(this.options.session, port, attach.port, env), this.timeouts.operation);
 		if (forward.code !== 0) throw unreachable(`Could not forward a local port to ${this.alias}: ${firstLines(forward.stderr) || `ssh exited with code ${forward.code}`}`);
@@ -365,6 +452,7 @@ export class ReviewRemoteHost {
 			const refused = /^.*administratively prohibited.*$/m.exec(this.masterStderr)?.[0];
 			throw unreachable(refused ? `${this.alias} refused the port forward: ${refused}` : `The Whiteboard server on ${this.alias} did not answer through the forward: ${(error as Error).message}.`);
 		}
+		this.forwarded = { local: port, remote: attach.port };
 		return `http://127.0.0.1:${port}`;
 	}
 
@@ -385,54 +473,26 @@ export class ReviewRemoteHost {
 	private dropMaster(): void {
 		const master = this.master;
 		this.master = undefined;
+		this.forwarded = undefined;
 		void this.close(master);
 	}
 
 	/** `-O exit`, then SIGTERM if the master is still there. */
-	private async close(master: SshChildProcess | undefined): Promise<void> {
-		if (!master || gone(master)) return;
-		this.closing.add(master);
-		// A master still connecting has no socket to take -O exit.
-		const asked = this.env && (await this.run(sshCloseArgs(this.options.session, this.env), this.timeouts.close)).code === 0;
-		if (!asked || !(await exitedWithin(master, this.timeouts.close))) master.kill("SIGTERM");
-		this.closing.delete(master);
+	private close(master: SshChildProcess | undefined): Promise<void> {
+		if (!master || gone(master)) return Promise.resolve();
+		const pending = this.closing.get(master);
+		if (pending) return pending;
+		const closed = (async () => {
+			// A master still connecting has no socket to take -O exit.
+			const asked = this.env && (await this.run(sshCloseArgs(this.options.session, this.env), this.timeouts.close)).code === 0;
+			if (!asked || !(await exitedWithin(master, this.timeouts.close))) master.kill("SIGTERM");
+			await exitedWithin(master, this.timeouts.close);
+		})().finally(() => this.closing.delete(master));
+		this.closing.set(master, closed);
+		return closed;
 	}
 
-	/** One short-lived ssh; output is bounded, and a timeout ends it. */
 	private run(args: string[], timeout: number, input?: string): Promise<RunResult> {
-		return new Promise((resolve) => {
-			let child: SshChildProcess;
-			try {
-				child = this.options.spawn(args, {
-					env: this.env ?? {},
-					detached: true,
-					stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
-				});
-			} catch (error) {
-				return resolve({ code: null, stdout: "", stderr: "", error: error as NodeJS.ErrnoException, timedOut: false });
-			}
-			let stdout = "";
-			let stderr = "";
-			let timedOut = false;
-			const done = (result: Omit<RunResult, "stdout" | "stderr" | "timedOut">) => {
-				clearTimeout(timer);
-				resolve({ ...result, stdout, stderr, timedOut });
-			};
-			const timer = setTimeout(() => {
-				timedOut = true;
-				child.kill("SIGKILL");
-				done({ code: null });
-			}, timeout);
-			child.stdout?.setEncoding("utf8");
-			child.stdout?.on("data", (chunk: string) => (stdout = (stdout + chunk).slice(0, OUTPUT_LIMIT)));
-			child.stderr?.setEncoding("utf8");
-			child.stderr?.on("data", (chunk: string) => (stderr = (stderr + chunk).slice(0, OUTPUT_LIMIT)));
-			child.once("error", (error: NodeJS.ErrnoException) => done({ code: null, error }));
-			child.once("close", (code: number | null) => done({ code }));
-			if (input !== undefined) {
-				child.stdin?.on("error", () => {});
-				child.stdin?.end(input);
-			}
-		});
+		return runSsh(this.options.spawn, this.env ?? {}, args, timeout, input);
 	}
 }
