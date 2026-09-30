@@ -1,0 +1,326 @@
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { type Server, createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { crc32, deflateRawSync } from "node:zlib";
+
+import {
+  type CuratedRemoteExtension,
+  ensureRemoteExtensions,
+  remoteExtensionTarget,
+  remoteServerPaths,
+} from "@review/remote-extensions.js";
+import { afterEach, beforeEach, expect, it } from "vitest";
+
+let root: string;
+
+let env: NodeJS.ProcessEnv;
+
+let server: Server;
+
+let base: string;
+
+let requests: string[];
+
+const files = new Map<string, Buffer>();
+
+/** A VSIX: a zip whose `extension/` folder holds the extension. */
+function vsix(entries: Record<string, { data: string; mode?: number }>) {
+  const locals: Buffer[] = [];
+  const centrals: Buffer[] = [];
+  let offset = 0;
+
+  for (const [name, { data, mode = 0o644 }] of Object.entries(entries)) {
+    const raw = Buffer.from(data);
+    const packed = deflateRawSync(raw);
+    const fileName = Buffer.from(name);
+    const common = Buffer.alloc(26);
+    common.writeUInt16LE(20, 0);
+    common.writeUInt16LE(8, 4);
+    common.writeUInt32LE(crc32(raw), 10);
+    common.writeUInt32LE(packed.length, 14);
+    common.writeUInt32LE(raw.length, 18);
+    common.writeUInt16LE(fileName.length, 22);
+
+    const local = Buffer.concat([
+      Buffer.from([0x50, 0x4b, 3, 4]),
+      common,
+      fileName,
+      packed,
+    ]);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(0x0314, 4);
+    common.copy(central, 6);
+    central.writeUInt32LE(((0o100000 | mode) << 16) >>> 0, 38);
+    central.writeUInt32LE(offset, 42);
+    locals.push(local);
+    centrals.push(central, fileName);
+    offset += local.length;
+  }
+
+  const directory = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(locals.length, 8);
+  end.writeUInt16LE(locals.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+
+  return Buffer.concat([...locals, directory, end]);
+}
+
+function serve(name: string, data: Buffer) {
+  files.set(`/${name}`, data);
+
+  return {
+    universal: false,
+    url: `${base}/${name}`,
+    sha256: createHash("sha256").update(data).digest("hex"),
+    size: data.length,
+  };
+}
+
+/** ty as its VSIX ships it: a manifest and a server binary under bundled/libs/bin. */
+function tyExtension(
+  overrides: Partial<CuratedRemoteExtension> = {},
+): CuratedRemoteExtension {
+  const download = serve(
+    "ty.vsix",
+    vsix({
+      "extension/package.json": {
+        data: JSON.stringify({
+          publisher: "astral-sh",
+          name: "ty",
+          version: "1.0.0",
+          scripts: { build: "x" },
+          dependencies: { a: "1" },
+          extensionPack: ["ms-python.vscode-pylance"],
+          activationEvents: ["onLanguage:python"],
+        }),
+      },
+      "extension/bundled/libs/bin/ty": {
+        data: "#!/bin/sh\necho ty 1.0.0\n",
+        mode: 0o755,
+      },
+    }),
+  );
+
+  return {
+    id: "astral-sh.ty",
+    version: "1.0.0",
+    executables: ["bundled/libs/bin/ty"],
+    stripExtensionPack: true,
+    addActivationEvents: ["onLanguage:ty-test"],
+    targets: { "linux-x64": download, "linux-arm64": download },
+    ...overrides,
+  };
+}
+
+beforeEach(async () => {
+  root = await mkdtemp(path.join(tmpdir(), "wb-remote-ext-"));
+  env = { ...process.env, DEV_REVIEW_HOME: root };
+  requests = [];
+  files.clear();
+  server = createServer((request, response) => {
+    requests.push(request.url ?? "");
+    const data = files.get(request.url ?? "");
+    response.writeHead(data ? 200 : 404).end(data);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+});
+
+afterEach(async () => {
+  await new Promise((resolve) => server.close(resolve));
+  await rm(root, { recursive: true, force: true });
+});
+
+it("installs the extension, applies the manifest's changes, lists it for the scanner and clears the scan cache", async () => {
+  const { extensionsDir, serverDataDir } = remoteServerPaths(env);
+
+  const cache = path.join(
+    serverDataDir,
+    "data",
+    "CachedProfilesData",
+    "__default__profile__",
+  );
+
+  await mkdir(cache, { recursive: true });
+  await writeFile(path.join(cache, "extensions.user.cache"), "{}");
+
+  const result = await ensureRemoteExtensions({
+    env,
+    curated: [tyExtension()],
+    target: "linux-x64",
+  });
+
+  expect(result).toMatchObject({
+    event: "remote.extensions",
+    installed: ["astral-sh.ty"],
+    skipped: [],
+    failed: [],
+  });
+
+  const directory = path.join(extensionsDir, "astral-sh.ty-1.0.0");
+
+  const manifest = JSON.parse(
+    await readFile(path.join(directory, "package.json"), "utf8"),
+  );
+
+  expect(manifest).not.toHaveProperty("scripts");
+  expect(manifest).not.toHaveProperty("dependencies");
+  expect(manifest).not.toHaveProperty("extensionPack");
+  expect(manifest.activationEvents).toEqual([
+    "onLanguage:python",
+    "onLanguage:ty-test",
+  ]);
+  expect(
+    (await stat(path.join(directory, "bundled/libs/bin/ty"))).mode & 0o111,
+  ).not.toBe(0);
+
+  expect(
+    JSON.parse(
+      await readFile(path.join(extensionsDir, "extensions.json"), "utf8"),
+    ),
+  ).toEqual([
+    {
+      identifier: { id: "astral-sh.ty" },
+      version: "1.0.0",
+      location: { $mid: 1, scheme: "file", path: directory },
+      relativeLocation: "astral-sh.ty-1.0.0",
+      metadata: {
+        installedTimestamp: expect.any(Number),
+        targetPlatform: "linux-x64",
+      },
+    },
+  ]);
+  expect(
+    existsSync(path.join(serverDataDir, "data", "CachedProfilesData")),
+  ).toBe(false);
+  // Only the extension and the list: no download or staging folder is left.
+  expect((await readdir(extensionsDir)).sort()).toEqual([
+    "astral-sh.ty-1.0.0",
+    "extensions.json",
+  ]);
+});
+
+it("downloads nothing and leaves the list alone the second time", async () => {
+  const curated = [tyExtension()];
+  await ensureRemoteExtensions({ env, curated, target: "linux-x64" });
+
+  const list = await readFile(
+    path.join(remoteServerPaths(env).extensionsDir, "extensions.json"),
+    "utf8",
+  );
+
+  requests = [];
+
+  const result = await ensureRemoteExtensions({
+    env,
+    curated,
+    target: "linux-x64",
+  });
+
+  expect(result).toMatchObject({
+    installed: [],
+    skipped: ["astral-sh.ty"],
+    failed: [],
+  });
+  expect(requests).toEqual([]);
+  expect(
+    await readFile(
+      path.join(remoteServerPaths(env).extensionsDir, "extensions.json"),
+      "utf8",
+    ),
+  ).toBe(list);
+});
+
+it("deletes a download that fails its checksum and installs nothing", async () => {
+  const extension = tyExtension();
+  const wrong = { ...extension.targets["linux-x64"], sha256: "0".repeat(64) };
+
+  const result = await ensureRemoteExtensions({
+    env,
+    curated: [
+      { ...extension, targets: { "linux-x64": wrong, "linux-arm64": wrong } },
+    ],
+    target: "linux-x64",
+  });
+
+  expect(result.installed).toEqual([]);
+  expect(result.failed).toEqual([
+    { id: "astral-sh.ty", error: expect.stringMatching(/Checksum mismatch/) },
+  ]);
+  const { extensionsDir } = remoteServerPaths(env);
+  expect(await readdir(extensionsDir)).toEqual(["extensions.json"]);
+  expect(
+    JSON.parse(
+      await readFile(path.join(extensionsDir, "extensions.json"), "utf8"),
+    ),
+  ).toEqual([]);
+});
+
+it("names the network when the download cannot reach it", async () => {
+  const extension = tyExtension();
+  await new Promise((resolve) => server.close(resolve));
+
+  const result = await ensureRemoteExtensions({
+    env,
+    curated: [extension],
+    target: "linux-x64",
+  });
+
+  expect(result.failed).toEqual([
+    {
+      id: "astral-sh.ty",
+      error: expect.stringMatching(
+        /^Network error reaching 127\.0\.0\.1:\d+: ECONNREFUSED$/,
+      ),
+    },
+  ]);
+  expect(await readdir(remoteServerPaths(env).extensionsDir)).toEqual([
+    "extensions.json",
+  ]);
+});
+
+it("fails an extension whose executable does not run", async () => {
+  const extension = tyExtension({ executables: ["bundled/libs/bin/missing"] });
+
+  const result = await ensureRemoteExtensions({
+    env,
+    curated: [extension],
+    target: "linux-x64",
+  });
+
+  expect(result.failed).toEqual([
+    {
+      id: "astral-sh.ty",
+      error: expect.stringMatching(
+        /bundled\/libs\/bin\/missing does not run here/,
+      ),
+    },
+  ]);
+  expect(await readdir(remoteServerPaths(env).extensionsDir)).toEqual([
+    "extensions.json",
+  ]);
+});
+
+it("refuses a machine that is not Linux on x64 or arm64", () => {
+  expect(remoteExtensionTarget("linux", "arm64")).toBe("linux-arm64");
+  expect(() => remoteExtensionTarget("darwin", "arm64")).toThrow(
+    "Language features on a remote need Linux on x64 or arm64; this machine is darwin-arm64.",
+  );
+});

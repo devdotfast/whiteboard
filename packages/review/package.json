@@ -85,6 +85,7 @@
     "semver": "7.8.5",
     "sharp": "0.35.4",
     "smol-toml": "1.8.0",
+    "yauzl": "3.4.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -97,6 +98,7 @@
     "@types/node": "24.12.2",
     "@types/react": "19.2.14",
     "@types/semver": "7.7.1",
+    "@types/yauzl": "3.4.0",
     "isomorphic-git": "1.38.10",
     "micromark-extension-math": "3.1.0",
     "pino-pretty": "13.1.3",

@@ -595,6 +595,34 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     );
   });
 
+  configureJsonOutput(
+    remote
+      .command("extensions")
+      .description("Language extensions for the VS Code server on a remote")
+      .command("ensure")
+      .description(
+        "Download the curated extensions for this machine and list them for the VS Code server",
+      ),
+    "plain",
+  ).action(async (_options, command: Command) => {
+    const { json } = command.optsWithGlobals<{ json?: boolean }>();
+    const { ensureRemoteExtensions } = await import("./remote-extensions.js");
+    const result = await ensureRemoteExtensions({ env });
+
+    input.stdout.write(
+      json
+        ? `${JSON.stringify(result)}\n`
+        : [
+            ...result.installed.map((id) => `Installed ${id}`),
+            ...result.skipped.map((id) => `Up to date: ${id}`),
+            ...result.failed.map(({ id, error }) => `Failed ${id}: ${error}`),
+          ]
+            .map((line) => `${line}\n`)
+            .join(""),
+    );
+    state.exitCode = result.failed.length > 0 ? 1 : 0;
+  });
+
   async function writeServerStatus(
     discovery: ReviewServerDiscovery,
     stateDir: string,
