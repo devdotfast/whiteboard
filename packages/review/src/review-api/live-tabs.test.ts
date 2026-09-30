@@ -184,6 +184,8 @@ it("finishes an in-flight render before another tab replaces the shared stream",
   });
 
   const rendered: unknown[] = [];
+  // follow's report() swallows a throwing handler, so record disconnects instead.
+  const disconnects: unknown[] = [];
   let started = false;
 
   const first = client.follow(
@@ -194,9 +196,7 @@ it("finishes an in-flight render before another tab replaces the shared stream",
       await rendering;
       rendered.push(value);
     },
-    (error) => {
-      throw error;
-    },
+    (error) => disconnects.push(error),
   );
 
   let second: Promise<void> | undefined;
@@ -207,14 +207,13 @@ it("finishes an in-flight render before another tab replaces the shared stream",
       "b",
       b.signal,
       () => {},
-      (error) => {
-        throw error;
-      },
+      (error) => disconnects.push(error),
     );
     await new Promise((resolve) => setImmediate(resolve));
     expect(streams).toHaveLength(1);
     release();
     await vi.waitFor(() => expect(rendered).toEqual([1, 2]));
+    expect(disconnects).toEqual([]);
   } finally {
     release();
     a.abort();
@@ -251,6 +250,8 @@ it("delivers each line only to the listeners it is about", async () => {
     b: [] as { reviewId: string; title: string }[],
   };
 
+  const disconnects: unknown[] = [];
+
   const follow = (key: "a" | "b", id: string) =>
     client.follow<{ reviewId: string; title: string }>(
       id,
@@ -258,9 +259,7 @@ it("delivers each line only to the listeners it is about", async () => {
       (value) => {
         seen[key].push(value);
       },
-      (error) => {
-        throw error;
-      },
+      (error) => disconnects.push(error),
     );
 
   const following = [follow("a", a)];
@@ -284,6 +283,7 @@ it("delivers each line only to the listeners it is about", async () => {
     expect(seen.a).toHaveLength(delivered + 1);
     expect(seen.a.every((value) => value.reviewId === a)).toBe(true);
     expect(seen.b.every((value) => value.reviewId === b)).toBe(true);
+    expect(disconnects).toEqual([]);
   } finally {
     abort.abort();
     await Promise.all(following);

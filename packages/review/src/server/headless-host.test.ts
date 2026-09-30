@@ -313,8 +313,12 @@ it("shares review identity, resources, sessions and live changes with Desktop in
     });
     let deleted: ReviewStreamLine | void = undefined;
 
-    while (!(deleted && "error" in deleted))
-      deleted = (await reviewStream.next()).value;
+    while (!(deleted && "error" in deleted)) {
+      const next = await reviewStream.next();
+
+      if (next.done) throw new Error("The stream ended before the deletion.");
+      deleted = next.value;
+    }
 
     expect(deleted).toMatchObject({
       error: expect.stringMatching(/not found/i),

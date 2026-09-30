@@ -47,20 +47,24 @@ export interface ReviewApiSummary {
   working?: boolean;
 }
 
-/** A review's snapshot, with its authoring activity and coverage revision. */
-export type ReviewStreamSnapshot = JsonObject & {
-  activity: JsonObject;
-  coverageRevision: number;
-};
+/**
+ * A review's snapshot, with its authoring activity and coverage revision.
+ * `Snapshot` is the server's document type; clients read it as JSON.
+ */
+export type ReviewStreamSnapshot<Snapshot extends object = JsonObject> =
+  Snapshot & {
+    activity: { workingCount: number; expiresAt: number | null };
+    coverageRevision: number;
+  };
 
 /** One line of `GET /reviews-api/watch`: the new state of one list or review. */
-export type ReviewStreamLine =
+export type ReviewStreamLine<Snapshot extends object = JsonObject> =
   | {
       kind: "list";
       mode: "structural" | "textual";
       reviews: ReviewApiSummary[];
     }
-  | { kind: "review"; reviewId: string; value: ReviewStreamSnapshot }
+  | { kind: "review"; reviewId: string; value: ReviewStreamSnapshot<Snapshot> }
   | { kind: "review"; reviewId: string; error: string };
 
 export interface ReviewSourceEntry {
