@@ -293,6 +293,7 @@ it("a restarted server is offline until Desktop attaches again, then online with
     .poll(() => gateway.states().map((host) => host.state))
     .toEqual(["online", "online"]);
   expect(restarted).toHaveLength(2);
+  expect(gateway.serving(serverId)?.alias).toBe("wb-a1");
 }, 20_000);
 
 it("a 401 from a host asks Desktop once to attach again", async () => {
