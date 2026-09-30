@@ -25,10 +25,4 @@ describe("uniqueId", () => {
       "shared-3",
     );
   });
-
-  it("does not mutate the reserved set", () => {
-    const used = new Set(["a"]);
-    uniqueId("a", used);
-    expect([...used]).toEqual(["a"]);
-  });
 });

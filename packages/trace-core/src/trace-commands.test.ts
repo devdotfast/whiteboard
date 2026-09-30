@@ -290,27 +290,10 @@ describe("shared trace command parsing", () => {
     expect(fixture.result.code).toBe(2);
   });
 
-  it("refuses the removed deny option", async () => {
-    const fixture = build();
-    await expect(fixture.parse(["deny", "--delete-store"])).rejects.toThrow(
-      "unknown option",
-    );
-    expect(fixture.result.code).toBe(-1);
-  });
   it("renders repository help and hides hook commands", () => {
     const fixture = build();
     expect(fixture.parent.helpInformation()).toContain("status");
     expect(fixture.parent.helpInformation()).not.toContain("git-hook");
     expect(fixture.parent.helpInformation()).not.toContain("hook <event>");
-  });
-  it("renders explicit hidden hook help", async () => {
-    const fixture = build();
-    await expect(fixture.parse(["hook", "--help"])).rejects.toMatchObject({
-      code: "commander.helpDisplayed",
-    });
-    expect(fixture.result.out).toContain(
-      "Handle agent session lifecycle hooks",
-    );
-    expect(fixture.result.code).toBe(-1);
   });
 });

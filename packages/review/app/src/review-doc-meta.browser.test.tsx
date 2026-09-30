@@ -1,7 +1,7 @@
 import { act } from "react";
 import { type Root, createRoot, hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
@@ -12,8 +12,6 @@ import { testReviewSession } from "./review-session-test-utils";
 let root: Root | null = null;
 
 describe("ReviewDocumentMetaLine", () => {
-  beforeEach(() => {});
-
   afterEach(async () => {
     if (root) {
       await act(async () => root?.unmount());

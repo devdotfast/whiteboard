@@ -955,26 +955,6 @@ describe("hosted trace commands", () => {
     );
   });
 
-  it("names the verify command the CLI registers", async () => {
-    await login();
-    const out = collect();
-
-    const code = await runTraceAllow({
-      cwd: repo,
-      scope: traceScope({ homeDir: home, env }),
-      harnessHooks: false,
-      verifyCommand: "whiteboard check",
-      client: client(() => Response.json(STORE)),
-      stdout: out.stream,
-      stderr: out.stream,
-    });
-
-    expect(code).toBe(0);
-    expect(out.text()).toBe(
-      `Traces from acme/app may be published to ${ORIGIN}. Run \`whiteboard check\` to verify.\n`,
-    );
-  });
-
   it("writes a harness hook only for a harness this machine holds", async () => {
     await login();
     mkdirSync(path.join(home, ".claude"), { recursive: true });

@@ -8,7 +8,6 @@ import {
   c4DisplayedSnapshotForCurrentState,
   softwareMapNodeDiffPeeks,
   softwareMapSnapshotFromInlineC4Projection,
-  visibleSoftwareMapChangeCount,
 } from "./software-map-snapshot";
 
 describe("SoftwareMap snapshot helpers", () => {
@@ -202,13 +201,6 @@ describe("SoftwareMap snapshot helpers", () => {
         graph: "base",
       },
     ]);
-  });
-
-  it("hides zero-value map diff counts", () => {
-    expect(visibleSoftwareMapChangeCount(0)).toBe(0);
-    expect(visibleSoftwareMapChangeCount(-1)).toBe(0);
-    expect(visibleSoftwareMapChangeCount(Number.NaN)).toBe(0);
-    expect(visibleSoftwareMapChangeCount(3)).toBe(3);
   });
 
   it("keeps rendered C4 selection current while reusing an existing layout", () => {

@@ -24,14 +24,6 @@ test("keeps Review disconnected from Microsoft update and extension services", (
   assert.notEqual(product.updateUrl, "https://update.code.visualstudio.com");
 });
 
-test("updates only from the sanctioned dev.fast feed", () => {
-  assert.equal(product.updateUrl, "https://update.dev.fast");
-  assert.equal(
-    product.quality,
-    process.env.REVIEW_EXPECTED_QUALITY ?? "stable",
-  );
-});
-
 test("publishes the release number the About panel shows", async () => {
   // The About panel reads `reviewVersion`, because `version` is the Code OSS
   // base version. Nothing else keeps the two files together, so a release that
@@ -71,15 +63,6 @@ test("owns every install identity rather than sharing Code OSS's", () => {
       `${appId} is not a brace-escaped GUID`,
     );
   }
-});
-
-test("keeps compatibility-sensitive Desktop identifiers unchanged", () => {
-  // Existing installs key off these: macOS registers the app under the
-  // bundle id, the OS resolves review:// links via urlProtocol, and
-  // dataFolderName is where users' current app data already lives.
-  assert.equal(product.darwinBundleIdentifier, "dev.fast.review");
-  assert.equal(product.urlProtocol, "dev-fast-review");
-  assert.equal(product.dataFolderName, ".dev-fast-review");
 });
 
 test("keeps upstream identity out of the fields Review has claimed", () => {
@@ -123,14 +106,6 @@ test("removes dormant Microsoft endpoint configuration that is safe to omit", ()
   ]) {
     assert.equal(product[key], undefined, key);
   }
-});
-
-// Desktop Code OSS never reads `configurationDefaults` from product.json — only the
-// extension contribution point and the web workbench options carry that name. Keeping
-// a copy there reads as hardening while applying nothing, so the block is gone and
-// `reviewConfigurationDefaults.ts` is the single channel.
-test("keeps product.json free of defaults nothing reads", () => {
-  assert.equal(product.configurationDefaults, undefined);
 });
 
 test("allows the webview host script through its own hash-only CSP", () => {

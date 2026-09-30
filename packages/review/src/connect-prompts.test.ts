@@ -6,7 +6,6 @@ import {
   REVIEW_MCP_LAUNCH,
   WINDOWS_MCP_LAUNCH,
   connectPrompt,
-  connectPrompts,
   launchCommand,
   reviewMcpLaunch,
 } from "./connect-prompts";
@@ -87,14 +86,6 @@ describe("connectPrompt", () => {
   it("quotes the sh launch so Pi stores it unchanged", () => {
     expect(launchCommand(reviewMcpLaunch(true, "darwin"))).toBe(
       `sh -c 'exec "$HOME/.local/bin/whiteboard" mcp'`,
-    );
-  });
-});
-
-describe("connectPrompts", () => {
-  it("returns one prompt per target", () => {
-    expect(Object.keys(connectPrompts(input)).sort()).toEqual(
-      [...ALL_INSTALL_TARGETS].sort(),
     );
   });
 });

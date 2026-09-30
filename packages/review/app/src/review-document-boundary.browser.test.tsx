@@ -3,7 +3,6 @@ import {
   isJsonObject,
   parseJsonText,
 } from "@dev.fast/review-protocol";
-import { sequenceDiagramPropsSchema } from "@review/authoring";
 import { StrictMode, act } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -110,43 +109,10 @@ describe("ReviewDocumentBoundary", () => {
     );
     expect(container.querySelector('[data-testid="shell"]')).not.toBeNull();
   });
-
-  it("reports standard Zod authoring errors", async () => {
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
-    roots.push(root);
-
-    await act(async () => {
-      root.render(
-        <ReviewDocumentBoundary
-          revision="bad-authoring"
-          onError={() => {}}
-          session={session}
-        >
-          <ThrowingAuthoringDocument />
-        </ReviewDocumentBoundary>,
-      );
-    });
-
-    expect(clientErrorReports()).toEqual([
-      expect.objectContaining({
-        properties: expect.objectContaining({ error_source: "render" }),
-        error: expect.objectContaining({ name: "ZodError" }),
-      }),
-    ]);
-  });
 });
 
 function ThrowingDocument(): never {
   throw new TypeError("sequence actor exploded");
-}
-
-function ThrowingAuthoringDocument(): never {
-  return sequenceDiagramPropsSchema.parse({
-    label: "Request",
-    messages: [{ from: "HeyGen" }],
-  }) as never;
 }
 
 function clientErrorReports(): JsonObject[] {

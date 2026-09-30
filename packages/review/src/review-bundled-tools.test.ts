@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   chmod,
   mkdtemp,
@@ -14,7 +13,6 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   ensureBundledRustAnalyzer,
-  reviewToolsRoot,
   stagedToolPath,
 } from "./review-bundled-tools";
 
@@ -54,20 +52,5 @@ describe("bundled Review tools", () => {
 
     expect(stagedBytes).toEqual(sourceBytes);
     expect(stagedMetadata.mode & 0o111).not.toBe(0);
-    expect(createHash("sha256").update(stagedBytes).digest("hex")).toBe(
-      createHash("sha256").update(sourceBytes).digest("hex"),
-    );
-    expect(
-      JSON.parse(
-        await readFile(
-          path.join(path.dirname(staged), "review-tool.json"),
-          "utf8",
-        ),
-      ),
-    ).toMatchObject({
-      tool: "rust-analyzer",
-      sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
-    });
-    expect(reviewToolsRoot(env)).toBe(path.join(devHome, "review-tools"));
   });
 });

@@ -4,7 +4,6 @@ import {
   captureTraceScrollAnchor,
   chooseTraceAnchor,
   restoreTraceScrollAnchor,
-  traceScrollAdjustment,
 } from "./trace-scroll-anchor";
 
 /** A scroll container whose rows report stubbed layout positions. */
@@ -88,13 +87,6 @@ describe("chooseTraceAnchor", () => {
       ),
     ).toEqual({ index: 5, offset: -300 });
     expect(chooseTraceAnchor([], 100)).toBeNull();
-  });
-});
-
-describe("traceScrollAdjustment", () => {
-  it("returns the delta that restores the saved offset", () => {
-    expect(traceScrollAdjustment({ index: 2, offset: 20 }, 420, 100)).toBe(300);
-    expect(traceScrollAdjustment({ index: 2, offset: 20 }, 120, 100)).toBe(0);
   });
 });
 

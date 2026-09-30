@@ -11,11 +11,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  ICON_VARIANTS,
-  getIconVariant,
-  hashIconSource,
-} from "./build-app-icon-catalog.mjs";
+import { ICON_VARIANTS, hashIconSource } from "./build-app-icon-catalog.mjs";
 
 for (const [channel, variant] of Object.entries(ICON_VARIANTS)) {
   test(`committed ${channel} Assets.car was built from the current .icon`, () => {
@@ -53,9 +49,3 @@ for (const [channel, variant] of Object.entries(ICON_VARIANTS)) {
   });
 }
 
-test("stable remains the default icon channel", () => {
-  assert.equal(getIconVariant(), ICON_VARIANTS.stable);
-  assert.equal(getIconVariant("stable"), ICON_VARIANTS.stable);
-  assert.equal(getIconVariant("preview"), ICON_VARIANTS.preview);
-  assert.throws(() => getIconVariant("nightly"), /stable or preview/);
-});

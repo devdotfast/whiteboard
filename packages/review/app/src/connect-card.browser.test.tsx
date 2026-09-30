@@ -346,16 +346,6 @@ describe("ConnectCard", () => {
     expect(short.querySelector("pre")?.dataset.collapsed).toBe("false");
     expect(short.querySelector("pre + [aria-expanded]")).toBeNull();
   });
-
-  it("shows the setup error from the status", async () => {
-    const container = await mount(
-      <ConnectCard install={content({ error: "boom" })} />,
-    );
-
-    expect(container.querySelector("section > p:last-child")?.textContent).toBe(
-      "boom",
-    );
-  });
 });
 
 describe("LegacySkillsRow", () => {

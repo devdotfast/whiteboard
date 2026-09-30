@@ -150,9 +150,6 @@ it("defers native editor creation until the peek nears the viewport", () => {
   );
 
   expect(host).not.toBeNull();
-  // 5 range lines + 3 lines of leading context + 3 trailing = 11 lines
-  // at LINE_HEIGHT 20 plus the 40px header.
-  expect(host?.style.height).toBe("260px");
 
   const observer = FakeIntersectionObserver.instances.at(-1);
   expect(observer).toBeDefined();

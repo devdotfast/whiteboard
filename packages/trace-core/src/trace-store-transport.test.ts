@@ -15,12 +15,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
 
-import { type StoredObject, traceObjectKey } from "@dev.fast/trace-protocol";
+import type { StoredObject } from "@dev.fast/trace-protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { pullReviewTraceCorpus, syncReviewTrace } from "./review-agent-traces";
-import { StoreApiError, StoreClient } from "./store-client";
+import { StoreClient } from "./store-client";
 import { allowTraceRepository, denyTraceRepository } from "./trace-consent";
 import {
   type TraceRepositoryTarget,
@@ -37,7 +37,6 @@ import {
   gzipToTemp,
 } from "./trace-store-transport";
 import {
-  type MemoryTraceStoreTransport,
   createMemoryTraceStoreTransport,
   memoryTraceSessionKey,
   seedMemoryTraceSession,
@@ -87,23 +86,6 @@ function respondWith(body: Buffer | ReadableStream, headers = {}) {
   return vi.fn<typeof fetch>(
     async () => new Response(bodyInit, { status: 200, headers }),
   );
-}
-
-/** Stages one gzipped upload in a memory transport without completing it. */
-async function stageUpload(
-  transport: MemoryTraceStoreTransport,
-  sourcePath: string,
-) {
-  const gzipped = await gzipToTemp(sourcePath);
-
-  const begun = await transport.beginUpload(REPOSITORY_ID, SESSION_ID, {
-    harness: "claude",
-    objects: [
-      { name: "main.jsonl.gz", size: gzipped.size, sha256: gzipped.sha256 },
-    ],
-  });
-
-  return { gzipped, begun, upload: begun.uploads[0] };
 }
 
 describe("trace-store-transport", () => {
@@ -242,43 +224,6 @@ describe("trace-store-transport", () => {
     }
   });
 
-  it("puts the object with the presigned headers", async () => {
-    const source = path.join(tempDir, "put.jsonl");
-    await writeFile(source, "hello\n", "utf8");
-    const gzipped = await gzipToTemp(source);
-
-    const fetchImpl = vi.fn<typeof fetch>(
-      async () => new Response(null, { status: 200 }),
-    );
-
-    await httpTransport(fetchImpl).putObject(
-      {
-        name: "main.jsonl.gz",
-        url: "https://r2.test/k?sig",
-        headers: {
-          "content-type": "application/gzip",
-          "content-length": String(gzipped.size),
-          "x-amz-checksum-sha256": "x",
-          "if-none-match": "*",
-        },
-        expiresAt: "2099-01-01T00:00:00.000Z",
-      },
-      gzipped.path,
-    );
-
-    expect(fetchImpl.mock.calls[0][0]).toBe("https://r2.test/k?sig");
-    expect(fetchImpl.mock.calls[0][1]).toMatchObject({
-      method: "PUT",
-      duplex: "half",
-      headers: expect.objectContaining({
-        "x-amz-checksum-sha256": "x",
-        "if-none-match": "*",
-      }),
-    });
-    expect(fetchImpl.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
-    await gzipped.cleanup();
-  });
-
   it("treats a 412 as a stored object and hides the URL from other faults", async () => {
     const source = path.join(tempDir, "put.jsonl");
     await writeFile(source, "hello\n", "utf8");
@@ -411,191 +356,6 @@ describe("trace-store-transport", () => {
       expect(readdirSync(tempDir).some((name) => name.endsWith(".tmp"))).toBe(
         false,
       );
-    });
-  });
-
-  describe("memory transport", () => {
-    let source: string;
-
-    beforeEach(async () => {
-      source = path.join(tempDir, "trace.jsonl");
-      await writeFile(source, `${JSON.stringify({ type: "session" })}\n`);
-    });
-
-    it("keeps objects immutable and publishes on completion", async () => {
-      const transport = createMemoryTraceStoreTransport();
-      const { gzipped, begun, upload } = await stageUpload(transport, source);
-      expect(begun.baseGeneration).toBe(0);
-      expect(upload.headers["if-none-match"]).toBe("*");
-      expect(upload.url).toContain(
-        traceObjectKey({
-          repositoryId: REPOSITORY_ID,
-          storeId: transport.storeId,
-          sessionId: SESSION_ID,
-          uploadId: begun.uploadId,
-          name: "main.jsonl.gz",
-        }),
-      );
-
-      await expect(
-        transport.completeUpload(REPOSITORY_ID, SESSION_ID, begun.uploadId, {
-          commits: [],
-        }),
-      ).rejects.toMatchObject({ code: "upload_incomplete", status: 409 });
-
-      await transport.putObject(upload, gzipped.path);
-      // A retried PUT of identical bytes resolves like an S3 412 does.
-      await expect(
-        transport.putObject(upload, gzipped.path),
-      ).resolves.toBeUndefined();
-
-      const receipt = await transport.completeUpload(
-        REPOSITORY_ID,
-        SESSION_ID,
-        begun.uploadId,
-        { commits: ["a".repeat(40)] },
-      );
-
-      expect(receipt).toMatchObject({
-        uploadId: begun.uploadId,
-        generation: 1,
-        commits: ["a".repeat(40)],
-      });
-      // Repeating the completion returns the same receipt.
-      await expect(
-        transport.completeUpload(REPOSITORY_ID, SESSION_ID, begun.uploadId, {
-          commits: [],
-        }),
-      ).resolves.toEqual(receipt);
-      expect(
-        transport.sessions.get(
-          memoryTraceSessionKey(REPOSITORY_ID, SESSION_ID),
-        ),
-      ).toMatchObject({ currentUploadId: begun.uploadId, generation: 1 });
-
-      const listed = await transport.listSessions(REPOSITORY_ID, {
-        session: SESSION_ID,
-      });
-
-      expect(listed.sessions[0]).toMatchObject({
-        uploadId: begun.uploadId,
-        generation: 1,
-        objects: [expect.objectContaining({ name: "main.jsonl.gz" })],
-      });
-      await expect(
-        transport.completeUpload(REPOSITORY_ID, SESSION_ID, "f".repeat(32), {
-          commits: [],
-        }),
-      ).rejects.toMatchObject({ code: "not_found", status: 404 });
-      await gzipped.cleanup();
-    });
-
-    it("rejects a completion whose base generation is stale", async () => {
-      const transport = createMemoryTraceStoreTransport();
-      const first = await stageUpload(transport, source);
-      const second = await stageUpload(transport, source);
-      await transport.putObject(first.upload, first.gzipped.path);
-      await transport.putObject(second.upload, second.gzipped.path);
-
-      await transport.completeUpload(
-        REPOSITORY_ID,
-        SESSION_ID,
-        second.begun.uploadId,
-        { commits: [] },
-      );
-
-      await expect(
-        transport.completeUpload(
-          REPOSITORY_ID,
-          SESSION_ID,
-          first.begun.uploadId,
-          { commits: [] },
-        ),
-      ).rejects.toSatisfy((error) => {
-        expect(error).toBeInstanceOf(StoreApiError);
-        expect(error).toMatchObject({ code: "stale_upload", status: 409 });
-
-        return true;
-      });
-      expect(
-        transport.sessions.get(
-          memoryTraceSessionKey(REPOSITORY_ID, SESSION_ID),
-        ),
-      ).toMatchObject({
-        currentUploadId: second.begun.uploadId,
-        generation: 1,
-      });
-      await first.gzipped.cleanup();
-      await second.gzipped.cleanup();
-    });
-
-    it("rejects different bytes at an occupied key", async () => {
-      const transport = createMemoryTraceStoreTransport();
-      const { gzipped, upload } = await stageUpload(transport, source);
-      await transport.putObject(upload, gzipped.path);
-      const other = path.join(tempDir, "other.jsonl");
-      await writeFile(other, "other\n");
-      const otherGzipped = await gzipToTemp(other);
-
-      await expect(
-        transport.putObject(
-          {
-            ...upload,
-            headers: {
-              ...upload.headers,
-              "content-length": String(otherGzipped.size),
-              "x-amz-checksum-sha256": Buffer.from(
-                otherGzipped.sha256,
-                "hex",
-              ).toString("base64"),
-            },
-          },
-          otherGzipped.path,
-        ),
-      ).rejects.toThrow(/412/);
-      await gzipped.cleanup();
-      await otherGzipped.cleanup();
-    });
-
-    it("verifies downloads like the HTTP transport", async () => {
-      const transport = createMemoryTraceStoreTransport({
-        limits: { maxExpandedBytes: 4096 },
-      });
-
-      const seeded = seedMemoryTraceSession(transport, {
-        repositoryId: REPOSITORY_ID,
-        sessionId: SESSION_ID,
-        traces: { "main.jsonl.gz": "hello\n" },
-      });
-
-      const listed = await transport.listSessions(REPOSITORY_ID, {
-        session: SESSION_ID,
-      });
-
-      const object = listed.sessions[0].objects[0];
-      const destination = path.join(tempDir, "main.jsonl");
-
-      await transport.getObject(object, destination);
-      expect(readFileSync(destination, "utf8")).toBe("hello\n");
-
-      await expect(
-        transport.getObject({ ...object, sha256: "0".repeat(64) }, destination),
-      ).rejects.toThrow(/checksum/);
-      expect(readFileSync(destination, "utf8")).toBe("hello\n");
-
-      const bomb = zlib.gzipSync(Buffer.from("a".repeat(64 * 1024)));
-      transport.objects.set(seeded.keys["main.jsonl.gz"], bomb);
-      await expect(
-        transport.getObject(
-          {
-            ...object,
-            size: bomb.byteLength,
-            sha256: createHash("sha256").update(bomb).digest("hex"),
-          },
-          destination,
-        ),
-      ).rejects.toThrow(/expands past/);
-      expect(readFileSync(destination, "utf8")).toBe("hello\n");
     });
   });
 

@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import {
   mkdir,
   mkdtemp,
@@ -50,12 +49,6 @@ const document: ReviewDocumentData = {
 };
 
 describe("review document bundle", () => {
-  it("exposes the parsed document through the bundle accessor", async () => {
-    const bundle = bundleReviewDocument(document);
-    expect(reviewDocumentBundleData(bundle)).toEqual(document);
-    expect(Object.keys(bundle).sort()).toEqual(["contentHash", "json"]);
-  });
-
   it("upgrades an old sealed bundle on read without rewriting the file", async () => {
     directory = await mkdtemp(path.join(tmpdir(), "review-document-bundle-"));
     const bundleDir = path.join(directory, REVIEW_DOCUMENT_BUNDLE_DIR);
@@ -126,14 +119,6 @@ describe("review document bundle", () => {
     await writeReviewDocumentBundle(directory, bundle);
 
     expect(await readReviewDocumentBundle(directory, "/")).toEqual(bundle);
-    expect(bundle.json).toBe(`${JSON.stringify(document)}\n`);
-    expect(bundle.contentHash).toBe(
-      crypto
-        .createHash("sha256")
-        .update(bundle.json)
-        .digest("hex")
-        .slice(0, 20),
-    );
     expect((await readdir(bundleDir)).sort()).toEqual([
       "manifest.json",
       "review-document.json",

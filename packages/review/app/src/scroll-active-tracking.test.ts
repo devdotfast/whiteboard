@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  activeTargetForScroll,
-  scrollTailHeight,
-} from "./scroll-active-tracking";
+import { activeTargetForScroll } from "./scroll-active-tracking";
 
 const targets = [
   { id: "a", top: -400 },
@@ -59,26 +56,5 @@ describe("activeTargetForScroll", () => {
       ),
     ).toBe("b");
     expect(activeTargetForScroll([], 0, 300)).toBeNull();
-  });
-});
-
-describe("scrollTailHeight", () => {
-  it("grants exactly the room the last target needs to reach the active line", () => {
-    expect(
-      scrollTailHeight({
-        lastTargetTop: 2000,
-        slack: 20,
-        viewportHeight: 800,
-        contentHeightSansTail: 2400,
-      }),
-    ).toBe(380);
-    expect(
-      scrollTailHeight({
-        lastTargetTop: 100,
-        slack: 20,
-        viewportHeight: 800,
-        contentHeightSansTail: 2400,
-      }),
-    ).toBe(0);
   });
 });

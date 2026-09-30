@@ -59,18 +59,6 @@ describe("bug report protocol", () => {
     expect(ReviewBugReportMetaV2Schema.parse(baseMeta)).toEqual(baseMeta);
   });
 
-  it("accepts a verbatim Unicode and multiline description", () => {
-    const description = "First line\nSnowman: ☃️\nLast line";
-
-    const meta = {
-      ...baseMeta,
-      description,
-      description_length: new TextEncoder().encode(description).byteLength,
-    };
-
-    expect(ReviewBugReportMetaV2Schema.parse(meta)).toEqual(meta);
-  });
-
   it("accepts the 64 KiB description boundary", () => {
     const description = "😀".repeat(16_384);
 

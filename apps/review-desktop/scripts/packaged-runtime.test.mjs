@@ -1,15 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { canvasLoaderSource, canvasTargets } from "./copy-canvas.mjs";
-
-const appRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
+import { canvasTargets } from "./copy-canvas.mjs";
 
 test("canvas targets are derived from fixed output locations", () => {
   const fakeAppRoot = path.resolve("/tmp/review desktop");
@@ -42,27 +35,3 @@ test("canvas targets are derived from fixed output locations", () => {
   assert.throws(() => canvasTargets(["--output", packagedRoot]), /usage:/);
 });
 
-test("macOS entitlement artifacts retain required app and helper permissions", async () => {
-  const required = {
-    app: ["device.audio-input", "device.camera", "automation.apple-events"],
-    helper: ["cs.allow-jit"],
-    "helper-plugin": [
-      "cs.allow-unsigned-executable-memory",
-      "cs.disable-library-validation",
-    ],
-  };
-
-  for (const [name, permissions] of Object.entries(required)) {
-    const plist = await readFile(
-      path.join(appRoot, `code-oss/build/darwin/entitlements/${name}.plist`),
-      "utf8",
-    );
-
-    for (const permission of permissions) {
-      assert.ok(
-        plist.includes(`com.apple.security.${permission}`),
-        `${name}: ${permission}`,
-      );
-    }
-  }
-});

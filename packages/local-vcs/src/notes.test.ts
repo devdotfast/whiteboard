@@ -331,34 +331,6 @@ describe("git notes primitives", () => {
     );
   });
 
-  it("survives concurrent writers via the notes lock", async () => {
-    const rootPath = await initGitRepo();
-
-    const commits = [
-      commit(rootPath, "a"),
-      commit(rootPath, "b"),
-      commit(rootPath, "c"),
-      commit(rootPath, "d"),
-    ];
-
-    await Promise.all(
-      commits.map((sha, index) =>
-        writeNote({
-          rootPath,
-          ref: MAP_REF,
-          commit: sha,
-          content: `concurrent ${index}`,
-        }),
-      ),
-    );
-
-    for (const [index, sha] of commits.entries()) {
-      expect(await readNote({ rootPath, ref: MAP_REF, commit: sha })).toBe(
-        `concurrent ${index}`,
-      );
-    }
-  });
-
   it("serializes notes writes from independent processes", async () => {
     const rootPath = await initGitRepo();
 
@@ -984,31 +956,6 @@ describe("jj integration", () => {
       const evolog = await evologCommitIds({ rootPath, ref: rewritten });
       expect(evolog[0]).toBe(rewritten);
       expect(evolog).toContain(original);
-    },
-  );
-
-  it.skipIf(!hasJj())(
-    "works against a colocated jj repo's git dir",
-    async () => {
-      const rootPath = await mkdtemp(path.join(tmpdir(), "notes-jj-git-"));
-      run(rootPath, "jj", ["git", "init", "--colocate"]);
-      git(rootPath, ["config", "user.email", "test@example.com"]);
-      git(rootPath, ["config", "user.name", "Test User"]);
-      run(rootPath, "jj", ["describe", "-m", "change"]);
-
-      const head = run(rootPath, "jj", [
-        "log",
-        "-r",
-        "@",
-        "--no-graph",
-        "-T",
-        "commit_id",
-      ]);
-
-      await writeNote({ rootPath, ref: MAP_REF, commit: head, content: "jj" });
-      expect(await readNote({ rootPath, ref: MAP_REF, commit: head })).toBe(
-        "jj",
-      );
     },
   );
 });

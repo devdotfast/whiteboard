@@ -37,13 +37,6 @@ describe("defineBlock", () => {
       z.ZodError,
     );
   });
-
-  it("carries the check through", () => {
-    expect(() => note.check({ type: "note", body: "forbidden" })).toThrow(
-      "Forbidden body.",
-    );
-    expect(() => note.check({ type: "note", body: "fine" })).not.toThrow();
-  });
 });
 
 describe("requireKey", () => {

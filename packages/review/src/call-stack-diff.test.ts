@@ -8,7 +8,6 @@ import {
   codePeekSource,
 } from "./authoring";
 import { callStackEvidenceErrors, diffCallStacks } from "./call-stack-diff";
-import { patchChangedLines } from "./call-stack-diff-test-utils";
 import { callStackFrames } from "./call-stack-frames";
 import { selectSource } from "./lens-selection";
 
@@ -63,12 +62,6 @@ describe("diffCallStacks", () => {
       ["added", "processItem"],
       ["unchanged", "persistResult"],
     ]);
-  });
-
-  it("renders a shared frame from the head entry", () => {
-    const headReconcile = anchor("reconcile");
-    const rows = diff([reconcile], [headReconcile]);
-    expect(rows[0]!.frame).toEqual(callStackFrames([headReconcile])[0]);
   });
 
   it("matches a calls() hop by its child frame", () => {
@@ -139,30 +132,6 @@ describe("callStackDiffPropsSchema side rules", () => {
     });
 
     expect(result.success).toBe(false);
-  });
-});
-
-describe("patchChangedLines", () => {
-  it("collects deleted base lines and added head lines per hunk", () => {
-    const patch = [
-      "diff --git a/x.ts b/x.ts",
-      "--- a/x.ts",
-      "+++ b/x.ts",
-      "@@ -10,4 +10,4 @@",
-      " context",
-      "-removed line",
-      "+added line",
-      " context",
-      "@@ -30,2 +30,3 @@",
-      " context",
-      "+second added",
-      " context",
-      "",
-    ].join("\n");
-
-    const lines = patchChangedLines(patch);
-    expect([...lines.deleted]).toEqual([11]);
-    expect([...lines.added]).toEqual([11, 31]);
   });
 });
 

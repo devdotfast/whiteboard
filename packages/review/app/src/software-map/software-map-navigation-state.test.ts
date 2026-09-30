@@ -6,7 +6,6 @@ import {
   initialSoftwareMapExpandedNodeIds,
   seedSoftwareMapDefaultExpandedNodeIds,
   softwareMapAncestorPaths,
-  softwareMapNavigationKey,
 } from "./software-map-navigation-state";
 
 describe("SoftwareMap navigation state", () => {

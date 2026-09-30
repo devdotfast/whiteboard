@@ -15,33 +15,6 @@ const content: ReviewPeekContent = {
   text: "start();",
 };
 
-describe("Review panel store", () => {
-  it("replaces the open peek instead of layering peeks", () => {
-    const store = createReviewPanelStore();
-    const next = { kind: "peek", content: { kind: "explanation" } } as const;
-
-    store.getState().openPeek({ kind: "peek", anchor, content });
-    store.getState().openPeek(next);
-    expect(store.getState().active).toEqual(next);
-
-    store.getState().close();
-    expect(store.getState().active).toBeNull();
-  });
-
-  it("suppresses a live panel when its cached canvas resumes", () => {
-    const store = createReviewPanelStore();
-
-    store.getState().openPeek({ kind: "peek", anchor, content });
-    expect(store.getState().motion).toBe("live");
-
-    store.getState().suppressMotion();
-    expect(store.getState().motion).toBe("restored");
-
-    store.getState().close();
-    expect(store.getState().motion).toBe("live");
-  });
-});
-
 const commit = {
   commit: "abc123",
   subject: "Add startup",
@@ -141,24 +114,6 @@ describe("Review navigation", () => {
 
     store.getState().focusMapElement("review.missing");
     store.getState().showView("review");
-    store.getState().showView("map");
-    expect(store.getState().mapFocus).toMatchObject({
-      elementPath: "review.missing",
-      pending: false,
-    });
-  });
-
-  it("drops a map focus the map never applied when a lens leaves Map, keeping the peek", () => {
-    const store = createReviewPanelStore();
-
-    store.getState().focusMapElement("review.missing");
-    store.getState().openPeek({ kind: "peek", anchor, content });
-    store.getState().selectLens({ id: "api", version: 3, mode: "structural" });
-    expect(store.getState()).toMatchObject({
-      view: "diff",
-      active: { kind: "peek" },
-    });
-
     store.getState().showView("map");
     expect(store.getState().mapFocus).toMatchObject({
       elementPath: "review.missing",

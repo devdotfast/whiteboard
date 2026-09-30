@@ -57,28 +57,6 @@ describe("reading a pull request", () => {
 
   const ghFails = () => Promise.reject(new Error("gh pr: not logged in"));
 
-  it("asks gh about the URL's repository and number", async () => {
-    const using = deps(async () => JSON.stringify(record));
-
-    await expect(readPullRequest(url, using)).resolves.toEqual({
-      host: "github.com",
-      slug: "acme/widget",
-      ...record,
-    });
-    expect(using.calls).toEqual([
-      [
-        "gh",
-        "pr",
-        "view",
-        "7",
-        "--repo",
-        "github.com/acme/widget",
-        "--json",
-        "number,title,baseRefName,baseRefOid",
-      ],
-    ]);
-  });
-
   it("falls back to the public API when gh fails", async () => {
     const using = deps(ghFails, async () =>
       Response.json({

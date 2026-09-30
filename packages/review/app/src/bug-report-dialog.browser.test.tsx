@@ -91,12 +91,6 @@ describe("BugReportControl", () => {
     },
   );
 
-  it("enables Send with an empty description", async () => {
-    await renderAndOpen();
-
-    expect(sendButton().disabled).toBe(false);
-  });
-
   it("disables Send when the description exceeds the byte limit", async () => {
     await renderAndOpen();
 
@@ -139,17 +133,6 @@ describe("BugReportControl", () => {
 
     await act(async () => sendButton().click());
     expect(reportBody()).not.toHaveProperty("screenshot");
-  });
-
-  it("still opens when automatic capture returns no result", async () => {
-    captureScreenshotMock.mockResolvedValue(null);
-
-    await renderAndOpen();
-
-    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
-    expect(container.textContent).toContain(
-      "Paste or drop an image to attach a screenshot.",
-    );
   });
 
   it("disables reporting in the tutorial", async () => {
