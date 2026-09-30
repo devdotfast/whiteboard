@@ -230,6 +230,7 @@ export const curatedExtensions = Object.freeze([
       universal: {
         sha256:
           "232aeafb01f069824fdd92d3e628c1c442bbcfa1d3cc945ff97076340bb2b4a6",
+        size: 6826731,
       },
     },
     executables: [],
@@ -266,6 +267,12 @@ export const curatedExtensions = Object.freeze([
       "linux-x64": {
         sha256:
           "d64fc3104f07c4d47c3122a0fa9f2da3e593937c8b506b5f952b4283d877d212",
+        size: 12848973,
+      },
+      "linux-arm64": {
+        sha256:
+          "c8874795cb19bbe3bd3f3a28398a6cbb63fab1bd917b622aa8aaa31efc9f775d",
+        size: 12328752,
       },
     },
     executables: ["bundled/libs/bin/ty"],
@@ -297,6 +304,12 @@ export const curatedExtensions = Object.freeze([
       "linux-x64": {
         sha256:
           "3ed6bc6d6dc9a70cff97698d498844b756110b5c66964689dad5839845f06556",
+        size: 12225917,
+      },
+      "linux-arm64": {
+        sha256:
+          "7a6e4eea699617bb0ff318d0301a52df8d6f36c6a8f9dbc977ba695cef30425e",
+        size: 11760344,
       },
     },
     executables: ["bundled/libs/bin/ruff"],
@@ -336,6 +349,21 @@ export const supportedTargets = Object.freeze([
   "darwin-x64",
   "linux-x64",
   "win32-x64",
+]);
+
+/**
+ * Remote Linux hosts, where the package's VS Code server runs the extensions
+ * in `remoteExtensionIds`. Only those pin `linux-arm64`, which no Desktop
+ * build targets.
+ */
+export const remoteTargets = Object.freeze(["linux-x64", "linux-arm64"]);
+
+/** The language extensions a remote runs; a subset of the Desktop's, so the UI knows their languages. */
+export const remoteExtensionIds = Object.freeze([
+  "ms-python.python",
+  "astral-sh.ty",
+  "charliermarsh.ruff",
+  "golang.go",
 ]);
 
 /** Group tokens accepted by DEV_REVIEW_EXTENSIONS, in display order. */
