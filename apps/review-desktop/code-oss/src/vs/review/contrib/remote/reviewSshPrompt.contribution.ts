@@ -18,6 +18,7 @@ class ReviewSshPrompts extends Disposable {
 	static readonly ID = "review.sshPrompts";
 
 	private current: { id: number; input: IQuickInput } | undefined;
+	private closing = false;
 
 	constructor(
 		@IMainProcessService private readonly mainProcessService: IMainProcessService,
@@ -32,7 +33,13 @@ class ReviewSshPrompts extends Disposable {
 				} else if (this.current?.id !== event.id) this.show(event);
 			}),
 		);
-		this._register({ dispose: () => this.current?.input.dispose() });
+		// A closing or reloading window leaves the prompt open in main, which shows it again to the next window.
+		this._register({
+			dispose: () => {
+				this.closing = true;
+				this.current?.input.dispose();
+			},
+		});
 	}
 
 	private show(prompt: ShownPrompt): void {
@@ -42,7 +49,7 @@ class ReviewSshPrompts extends Disposable {
 			if (settled) return;
 			settled = true;
 			if (this.current?.id === prompt.id) this.current = undefined;
-			void this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call(REVIEW_SSH_ANSWER_CALL, { id: prompt.id, answer });
+			if (!this.closing) void this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call(REVIEW_SSH_ANSWER_CALL, { id: prompt.id, answer });
 			input.dispose();
 		};
 
