@@ -623,7 +623,6 @@ describe("migrateStoredReviewData", () => {
       migrateStoredReviewData({ reviewHome }),
     ).resolves.toMatchObject({
       documents: 1,
-      droppedLegacyPeekReviews: 0,
       droppedReviews: 0,
     });
     await expect(

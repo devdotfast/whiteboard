@@ -109,7 +109,6 @@ export async function runReviewMigration(input: {
     "Old review cleanup",
     {
       documents: 0,
-      droppedLegacyPeekReviews: 0,
       droppedReviews: 0,
       legacyCheckoutsRemoved: 0,
     },
@@ -180,7 +179,6 @@ export async function runReviewMigration(input: {
     [
       `Whiteboard migration: ${count(stored.documents, "document")} checked;`,
       `${count(stored.droppedReviews, "old review")} dropped;`,
-      `${count(stored.droppedLegacyPeekReviews, "legacy-peek review")} dropped;`,
       `${count(jj.migrated, "jj repository", "jj repositories")} converted;`,
       `${count(managedCheckouts.created, "managed checkout")} created;`,
       `${count(stored.legacyCheckoutsRemoved + managedCheckouts.legacyRemoved, "legacy checkout")} removed;`,
@@ -198,7 +196,6 @@ export async function runReviewMigration(input: {
     event: "migrated",
     documents: stored.documents,
     droppedReviews: stored.droppedReviews,
-    droppedLegacyPeekReviews: stored.droppedLegacyPeekReviews,
     jjRepositories: jj.migrated,
     managedCheckouts: managedCheckouts.created,
     legacyCheckouts:

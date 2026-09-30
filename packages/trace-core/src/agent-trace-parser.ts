@@ -71,32 +71,6 @@ const INPUT_LIMIT = 4_000;
 
 const TITLE_LIMIT = 160;
 
-export function sniffAgentTraceHarness(
-  jsonlFirstChunk: string,
-): AgentTraceHarness {
-  for (const line of jsonlFirstChunk.split("\n")) {
-    const trimmed = line.trim();
-
-    if (!trimmed) continue;
-
-    try {
-      const type = jsonObject(parseJsonText(trimmed))?.type;
-
-      if (type === "session_meta") return "codex";
-
-      if (type === "session") return "pi";
-
-      if (type === "opencode_session") return "opencode";
-
-      return "claude-code";
-    } catch {
-      continue;
-    }
-  }
-
-  return "unknown";
-}
-
 export function parseAgentTraceJsonl(
   jsonl: string,
   options?: { isSubagent?: boolean },

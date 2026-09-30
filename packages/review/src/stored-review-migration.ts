@@ -55,7 +55,6 @@ const UUID_PATTERN =
 export interface StoredReviewMigrationResult {
   failedReviewUuids?: string[];
   documents: number;
-  droppedLegacyPeekReviews: number;
   droppedReviews: number;
   legacyCheckoutsRemoved: number;
 }
@@ -150,7 +149,6 @@ export async function migrateStoredReviewData(input: {
   const total: StoredReviewMigrationResult = {
     failedReviewUuids: [],
     documents: 0,
-    droppedLegacyPeekReviews: 0,
     droppedReviews: 0,
     legacyCheckoutsRemoved: 0,
   };

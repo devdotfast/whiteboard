@@ -178,7 +178,6 @@ describe("whiteboard migrate apply", () => {
           return {
             documents: 1,
             failedReviewUuids: [uuid],
-            droppedLegacyPeekReviews: 0,
             droppedReviews: 0,
             legacyCheckoutsRemoved: 0,
           };
@@ -211,7 +210,6 @@ describe("whiteboard migrate apply", () => {
       runtime: {
         migrateStoredReviewData: async () => ({
           documents: 3,
-          droppedLegacyPeekReviews: 0,
           droppedReviews: 1,
           legacyCheckoutsRemoved: 0,
         }),
