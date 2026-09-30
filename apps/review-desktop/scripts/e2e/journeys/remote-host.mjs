@@ -116,8 +116,13 @@ async function remoteToken() {
   return token;
 }
 
-/** Every request the workbench page sends, with its headers and outcome, from CDP's Network domain. */
-async function recordRequests(page) {
+/**
+ * Every request the workbench page sends, with its headers and outcome, from
+ * CDP's Network domain. A response whose URL matches `streamed` also keeps
+ * its bytes as they arrive: the page cancels a stream once it has what it
+ * needs, and a cancelled request's body can no longer be read.
+ */
+async function recordRequests(page, streamed) {
   const cdp = await page.context().newCDPSession(page);
   const requests = new Map();
   const entry = (id) => requests.get(id) ?? requests.set(id, { id }).get(id);
@@ -134,28 +139,33 @@ async function recordRequests(page) {
       headers: { ...entry(requestId).headers, ...headers },
     }),
   );
-  cdp.on("Network.responseReceived", ({ requestId, response }) =>
-    Object.assign(entry(requestId), { status: response.status }),
-  );
+  cdp.on("Network.responseReceived", ({ requestId, response }) => {
+    Object.assign(entry(requestId), { status: response.status });
+
+    if (streamed.test(response.url))
+      cdp
+        .send("Network.streamResourceContent", { requestId })
+        .then(({ bufferedData }) => {
+          entry(requestId).received = Buffer.concat([
+            Buffer.from(bufferedData, "base64"),
+            entry(requestId).received ?? Buffer.alloc(0),
+          ]);
+        })
+        .catch(() => {});
+  });
+  cdp.on("Network.dataReceived", ({ requestId, data }) => {
+    if (data)
+      entry(requestId).received = Buffer.concat([
+        entry(requestId).received ?? Buffer.alloc(0),
+        Buffer.from(data, "base64"),
+      ]);
+  });
   cdp.on("Network.loadingFailed", ({ requestId, errorText, canceled }) =>
     Object.assign(entry(requestId), { failed: errorText, canceled }),
   );
-  cdp.on("Network.loadingFinished", ({ requestId }) =>
-    Object.assign(entry(requestId), { finished: true }),
-  );
   await cdp.send("Network.enable");
 
-  /** The whole body of a finished request, as the page received it. */
-  const body = async (id) => {
-    const { body: text, base64Encoded } = await cdp.send(
-      "Network.getResponseBody",
-      { requestId: id },
-    );
-
-    return base64Encoded ? Buffer.from(text, "base64").toString() : text;
-  };
-
-  return { requests, body };
+  return requests;
 }
 
 // The laptop-only routes of the local server: everything but reviews, health and pings.
@@ -197,7 +207,11 @@ export async function run(ctx) {
 async function closeDesktop(ctx) {
   const session = await ctx.browser.newBrowserCDPSession().catch(() => null);
 
-  await session?.send("Browser.close").catch(() => {});
+  // The browser drops the connection as it closes, so this answer may never come.
+  await Promise.race([
+    session?.send("Browser.close").catch(() => {}),
+    new Promise((resolve) => setTimeout(resolve, 2000)),
+  ]);
 
   for (let i = 0; i < 40 && (await desktopSsh()).length; i++)
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -206,7 +220,7 @@ async function closeDesktop(ctx) {
 }
 
 async function journey(ctx, page, until) {
-  const { requests, body } = await recordRequests(page);
+  const requests = await recordRequests(page, /\/structural-diff(\?|$)/);
   const remoteTokens = new Set();
   const timeOrigin = await page.evaluate(() => performance.timeOrigin);
   const timings = {};
@@ -320,28 +334,45 @@ async function journey(ctx, page, until) {
   );
 
   // The route answers 200 and streams; a diffr or checkout failure is an `error` line inside that body.
-  const structural = await until(
-    () =>
-      [...requests.values()].find(
-        (r) =>
-          r.url?.includes(`/reviews-api/${reviewId}/structural-diff`) &&
-          r.status === 200 &&
-          r.finished,
-      ),
-    "a finished structural-diff read through the gateway",
-  );
+  const streamEvents = (r) =>
+    (r.received?.toString() ?? "")
+      .split("\n")
+      .filter((line) => line.startsWith("{"))
+      .flatMap((line) => {
+        try {
+          return [JSON.parse(line)];
+        } catch {
+          return []; // A line still arriving.
+        }
+      });
 
-  const events = (await body(structural.id))
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
+  const reads = () =>
+    [...requests.values()].filter(
+      (r) =>
+        r.url?.includes(`/reviews-api/${reviewId}/structural-diff`) &&
+        r.status === 200,
+    );
+
+  const events = await until(() => {
+    const read = reads().find((r) =>
+      streamEvents(r).some((event) => event.type === "complete"),
+    );
+
+    if (read) return streamEvents(read);
+
+    throw new Error(
+      JSON.stringify(reads().map((r) => streamEvents(r).map((e) => e.type))),
+    );
+  }, "a complete structural diff in what the page received");
 
   assert.ok(
     events.some((event) => event.type === "file"),
     `no file event in the structural diff: ${events.map((e) => e.type)}`,
   );
   assert.deepEqual(
-    events.filter((event) => event.type === "error"),
+    reads()
+      .flatMap(streamEvents)
+      .filter((event) => event.type === "error"),
     [],
     "structural diff errors",
   );
