@@ -134,7 +134,9 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 			if (Date.now() - opened >= STABLE_MS) this.failures = 0;
 			this.retryLater();
 		});
-		for (const event of this.activations) void session.activateByEvent(event);
+		for (const event of this.activations) {
+			session.activateByEvent(event).catch((error) => this.logService.warn(`[Remote language] ${this.authority}: ${event} failed: ${toErrorMessage(error)}`));
+		}
 		return true;
 	}
 
@@ -159,6 +161,8 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 
 	/** For window shutdown and reload. */
 	async close(): Promise<void> {
+		// A first connect in flight would otherwise leave its extension host on the remote for the grace time.
+		if (this.connecting) await raceTimeout(this.connecting, 2_000);
 		const session = this.session;
 		this.session = undefined;
 		this.dispose();

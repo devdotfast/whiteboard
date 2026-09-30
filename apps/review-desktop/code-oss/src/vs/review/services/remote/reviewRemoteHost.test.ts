@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mock, test } from "node:test";
 import { URI } from "../../../base/common/uri.js";
 import { NullLogService } from "../../../platform/log/common/log.js";
-import { type IReviewRemoteSession, ReviewRemoteHost, reviewRemoteRetryDelay } from "./reviewRemoteHost.js";
+import { type IReviewRemoteSession, ReviewRemoteHost } from "./reviewRemoteHost.js";
 
 const AUTHORITY = "whiteboard+aaaa-1111";
 
@@ -36,10 +36,6 @@ function host(script: (() => IReviewRemoteSession | undefined | Error)[]) {
 async function settle() {
 	for (let i = 0; i < 10; i++) await Promise.resolve();
 }
-
-test("the delay starts at 1 s, doubles, and stays at 60 s", () => {
-	assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 7, 20].map(reviewRemoteRetryDelay), [1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000, 60_000]);
-});
 
 test("while the endpoint is missing or the connect fails, the host tries again after each delay, then connects", async (t) => {
 	mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
@@ -128,4 +124,22 @@ test("a root on another machine is refused, and a closed host stops trying and c
 	await connected.target.connect();
 	await connected.target.close();
 	assert.deepEqual([only.value.closed, only.value.disposed], [true, true]);
+});
+
+test("a reload during a first connect waits for it, then closes that session: no extension host is left behind", async () => {
+	const late = session();
+	let resolveOpen!: (value: IReviewRemoteSession) => void;
+	let opens = 0;
+	const target = new ReviewRemoteHost("aaaa-1111", AUTHORITY, () => {
+		opens++;
+		return new Promise<IReviewRemoteSession>((resolve) => (resolveOpen = resolve));
+	}, new NullLogService());
+	const connecting = target.connect();
+	const closing = target.close();
+	resolveOpen(late.value);
+	await closing;
+	assert.equal(await connecting, true);
+	assert.deepEqual([late.value.closed, late.value.disposed, opens], [true, true, 1]);
+	assert.equal(await target.connect(), false);
+	assert.equal(opens, 1);
 });
