@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 
+import { readFileSync, unwatchFile, watchFile } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  type ReviewGatewayHost,
+  ReviewGatewayHostSchema,
+} from "@dev.fast/review-protocol";
 import { reviewInstanceIdentity } from "@review/desktop-discovery";
 import { findReviewPackageRoot } from "@review/package-paths";
 import { openReviewProfile } from "@review/review-api/profile";
@@ -98,8 +103,12 @@ export async function runDesktopHost(
   shared.connect(local.store, local.data);
   await shared.load();
 
+  const log = (message: string) =>
+    process.stderr.write(`[Whiteboard gateway] ${message}\n`);
+
   const server = createGlobalReviewServer({
     ...serverInput,
+    log,
     sharedReviews: shared,
     reviewStore: local.store,
     reviewData: local.data,
@@ -129,10 +138,17 @@ export async function runDesktopHost(
 
   void stageRustAnalyzer();
 
+  const stopHostsFile = watchRemoteHostsFile(
+    env,
+    (hosts) => server.setRemoteHosts(hosts),
+    log,
+  );
+
   let stopping: Promise<void> | null = null;
 
   const stop = () => {
     if (!stopping) {
+      stopHostsFile();
       stopping = server
         .close("app-exit")
         .finally(() => shared.close())
@@ -155,6 +171,7 @@ export async function runDesktopHost(
       env.DEV_FAST_REVIEW_RUST_ANALYZER = sourcePath;
       void stageRustAnalyzer();
     },
+    (hosts) => server.setRemoteHosts(hosts),
   );
   process.once("SIGINT", () => {
     void stop().then(() => process.exit(0));
@@ -162,6 +179,44 @@ export async function runDesktopHost(
   process.once("SIGTERM", () => {
     void stop().then(() => process.exit(0));
   });
+}
+
+/**
+ * A test hook until Desktop manages remotes: the hosts in a JSON file, read
+ * at start and on every change. Only an unpackaged Desktop, whose channel
+ * Electron main sets to `dev`, honours it.
+ */
+function watchRemoteHostsFile(
+  env: NodeJS.ProcessEnv,
+  setHosts: (hosts: ReviewGatewayHost[]) => void,
+  log: (message: string) => void,
+): () => void {
+  const file = env.DEV_FAST_REVIEW_REMOTE_HOSTS_FILE;
+
+  if (!file) return () => {};
+
+  if (reviewTelemetryChannel(env) !== "dev") {
+    log("Ignoring DEV_FAST_REVIEW_REMOTE_HOSTS_FILE in a packaged build.");
+
+    return () => {};
+  }
+
+  const read = () => {
+    try {
+      setHosts(
+        ReviewGatewayHostSchema.array().parse(
+          JSON.parse(readFileSync(file, "utf8")),
+        ),
+      );
+    } catch (error) {
+      log(`Cannot read remote hosts from ${file}: ${String(error)}`);
+    }
+  };
+
+  read();
+  watchFile(file, { interval: 1_000 }, read);
+
+  return () => unwatchFile(file, read);
 }
 
 function isEnabledEnvValue(value: string | undefined): boolean {

@@ -7,7 +7,7 @@ import type {
 } from "@dev.fast/review-protocol";
 import { z } from "zod";
 
-import { readBoundedStream } from "./bounded-stream.js";
+import { StreamLimitError } from "./bounded-stream.js";
 
 const HEALTH_TIMEOUT_MS = 3_000;
 
@@ -59,7 +59,9 @@ export function createGatewayHosts(input: {
   const serving = (serverId: string | undefined) =>
     serverId === undefined
       ? undefined
-      : hosts.find((host) => host.status === "online" && host.serverId === serverId);
+      : hosts.find(
+          (host) => host.status === "online" && host.serverId === serverId,
+        );
 
   function stateOf(host: Host): ReviewGatewayHostState {
     const known = {
@@ -100,7 +102,8 @@ export function createGatewayHosts(input: {
     }
 
     for (const alias of reported.keys())
-      if (!states.some((state) => state.alias === alias)) reported.delete(alias);
+      if (!states.some((state) => state.alias === alias))
+        reported.delete(alias);
   }
 
   function dispose(host: Host) {
@@ -306,15 +309,35 @@ export function send(
 }
 
 /** A whole answer, refused past `limit` bytes. */
-export function readBody(response: http.IncomingMessage, limit: number) {
-  return readBoundedStream(Readable.toWeb(response), limit);
+export async function readBody(response: http.IncomingMessage, limit: number) {
+  const parts: Buffer[] = [];
+  let size = 0;
+
+  for await (const part of response) {
+    // SAFETY: an IncomingMessage without an encoding yields Buffers.
+    const chunk = part as Buffer;
+    size += chunk.byteLength;
+
+    if (size > limit) {
+      response.destroy();
+      throw new StreamLimitError();
+    }
+
+    parts.push(chunk);
+  }
+
+  return Buffer.concat(parts, size);
 }
 
-export function errorText(error: unknown): string {
-  if (!(error instanceof Error)) return String(error);
-  // SAFETY: Node network errors carry `code`, also on their cause.
-  const cause = error.cause as { code?: string } | undefined;
-  const code = (error as NodeJS.ErrnoException).code ?? cause?.code;
+const codedError = z.object({ code: z.string() });
 
-  return code ?? error.message;
+/** A network error's code (ECONNREFUSED), else its message. */
+export function errorText(cause: unknown): string {
+  if (!(cause instanceof Error)) return String(cause);
+
+  return (
+    codedError.safeParse(cause).data?.code ??
+    codedError.safeParse(cause.cause).data?.code ??
+    cause.message
+  );
 }

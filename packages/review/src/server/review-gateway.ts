@@ -1,13 +1,18 @@
 import type http from "node:http";
 import { Readable } from "node:stream";
+import type { ReadableStream as WebReadableStream } from "node:stream/web";
 
 import {
+  type JsonValue,
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
   REVIEW_HOST_HEADER,
   type ReviewGatewayHost,
   type ReviewGatewayHostState,
+  isJsonObject,
+  parseJsonText,
 } from "@dev.fast/review-protocol";
+import { z } from "zod";
 
 import { StreamLimitError, readBoundedStream } from "./bounded-stream.js";
 import { DEFAULT_MAX_REQUEST_BYTES } from "./http-json.js";
@@ -92,6 +97,11 @@ const DROPPED_REQUEST_HEADERS = new Set([
   REVIEW_CLIENT_HEADER,
   REVIEW_HOST_HEADER,
 ]);
+
+/** Only what routing needs; the owner parses the command itself. */
+const commandTarget = z.object({
+  operation: z.object({ reviewId: z.string().optional() }).optional(),
+});
 
 type Owner =
   | { remote: GatewayRemote }
@@ -219,7 +229,11 @@ export function createReviewGateway(input: {
     return pending;
   }
 
-  function answer(alias: string, status: number, body: object) {
+  function answer(
+    alias: string,
+    status: number,
+    body: { ok: boolean; error?: string },
+  ) {
     const response = serverJson(status, body);
     response.headers.set(REVIEW_HOST_HEADER, alias);
 
@@ -261,6 +275,9 @@ export function createReviewGateway(input: {
       abort.abort();
     }, FIRST_BYTE_TIMEOUT_MS);
 
+    // SAFETY: Node's Request body is its own web stream; the DOM type only
+    // names the same object.
+    const stream = request.body as WebReadableStream | null;
     let response: http.IncomingMessage;
 
     try {
@@ -268,13 +285,12 @@ export function createReviewGateway(input: {
         method: request.method,
         path: `${url.pathname}${url.search}`,
         headers,
-        body:
-          options.body ??
-          (request.body ? Readable.fromWeb(request.body) : undefined),
+        body: options.body ?? (stream ? Readable.fromWeb(stream) : undefined),
         signal: abort.signal,
       });
     } catch (error) {
       request.signal.removeEventListener("abort", leave);
+
       const reason = timedOut
         ? `it did not answer within ${FIRST_BYTE_TIMEOUT_MS / 1_000} seconds`
         : errorText(error);
@@ -344,7 +360,11 @@ export function createReviewGateway(input: {
       return new Response(null, { status, headers: out });
     }
 
-    return new Response(Readable.toWeb(response), { status, headers: out });
+    // SAFETY: Node's Response takes its own web stream; the DOM type only
+    // names the same object.
+    const body = Readable.toWeb(response) as ReadableStream<Uint8Array>;
+
+    return new Response(body, { status, headers: out });
   }
 
   async function confirmOwner(remote: GatewayRemote, reviewId: string) {
@@ -366,17 +386,18 @@ export function createReviewGateway(input: {
       });
     }
 
-    let reviewId: unknown;
+    let reviewId: string | undefined;
 
     try {
-      reviewId = JSON.parse(body.toString()).operation?.reviewId;
+      reviewId = commandTarget.safeParse(parseJsonText(body.toString())).data
+        ?.operation?.reviewId;
     } catch {
       // The laptop answers a malformed command.
     }
 
-    const owner = typeof reviewId === "string" && (await ownerOf(reviewId));
+    const owner = reviewId === undefined ? undefined : await ownerOf(reviewId);
 
-    if (!owner || typeof reviewId !== "string")
+    if (!owner || reviewId === undefined)
       return input.local(
         new Request(request.url, {
           method: request.method,
@@ -393,6 +414,7 @@ export function createReviewGateway(input: {
 
   async function handle(request: Request): Promise<Response> {
     const url = new URL(request.url);
+
     const [first = "", ...rest] = url.pathname
       .slice("/reviews-api/".length)
       .split("/");
@@ -454,25 +476,23 @@ export type ReviewGateway = ReturnType<typeof createReviewGateway>;
 /** The first local-path field anywhere in a JSON answer; any unreadable
  * answer counts as one. */
 function pathField(body: Buffer): string | undefined {
-  let value: unknown;
+  let value: JsonValue;
 
   try {
-    value = JSON.parse(body.toString());
+    value = parseJsonText(body.toString());
   } catch {
     return "an unreadable body";
   }
 
   const pending = [value];
 
-  while (pending.length) {
-    const next = pending.pop();
-
-    if (typeof next !== "object" || next === null) continue;
-
-    for (const [key, item] of Object.entries(next)) {
-      if (PATH_FIELDS.has(key)) return key;
-      pending.push(item);
-    }
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    if (Array.isArray(next)) pending.push(...next);
+    else if (isJsonObject(next))
+      for (const [key, item] of Object.entries(next)) {
+        if (PATH_FIELDS.has(key)) return key;
+        pending.push(item);
+      }
   }
 
   return undefined;

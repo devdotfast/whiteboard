@@ -13,6 +13,7 @@ import {
   REVIEW_DESKTOP_DISCOVERY_VERSION,
   type ReviewCliInstallApplyResponse,
   type ReviewDesktopDiscovery,
+  type ReviewGatewayHost,
   type ReviewTutorialOpenResponse,
   isJsonObject,
   isObjectValue,
@@ -58,6 +59,7 @@ import {
   type ReviewTelemetryContext,
 } from "@review/review-telemetry";
 import type { SharedReviewStore } from "@review/sharing/import.js";
+import { Hono } from "hono";
 import { z } from "zod";
 
 import { aliasInstallationToAccount } from "./account-alias";
@@ -72,12 +74,18 @@ import {
   GlobalReviewDesktopVerbRelay,
   type ReviewDesktopVerbRelay,
 } from "./global-verb-relay";
-import { createNodeRequestListener, readBoundedRequestJson } from "./hono-http";
+import {
+  type ReviewHonoEnv,
+  createNodeRequestListener,
+  readBoundedRequestJson,
+} from "./hono-http";
 import { ReviewServerError } from "./http-json";
 import { createJsonReviewReporting } from "./json-review-reporting";
+import { createReviewGateway } from "./review-gateway";
 import { reviewLifecycleTelemetry } from "./review-lifecycle-telemetry";
 import { ReviewOpenWatchdog } from "./review-open-watchdog";
 import {
+  answerErrorsAsJson,
   createReviewServerApp,
   relayReviewCallbacks,
   serverJson,
@@ -108,6 +116,7 @@ export interface GlobalReviewServerInput {
   relay?: ReviewDesktopVerbRelay;
   /** Electron's Review crash dump directory; `/crash-reports` reads only inside it. */
   crashDumpsDir?: string;
+  log?(message: string): void;
 }
 
 export interface GlobalReviewServer {
@@ -115,6 +124,7 @@ export interface GlobalReviewServer {
   readonly url: string;
   listen(): Promise<void>;
   close(reason?: "app-exit"): Promise<void>;
+  setRemoteHosts(hosts: ReviewGatewayHost[]): void;
 }
 
 export function createGlobalReviewServer(
@@ -240,14 +250,18 @@ export function createGlobalReviewServer(
 
   const callbacks = relayReviewCallbacks(relay);
 
-  app.route(
+  // The laptop's own reviews; the gateway calls it in process.
+  const laptopApi = new Hono<ReviewHonoEnv>();
+  answerErrorsAsJson(laptopApi);
+
+  laptopApi.route(
     "/reviews-api",
     createJsonReviewReporting(input.reviewStore, telemetry, {
       shared: input.sharedReviews,
     }),
   );
 
-  app.route(
+  laptopApi.route(
     "/reviews-api",
     createReviewApi(
       input.reviewStore,
@@ -280,6 +294,17 @@ export function createGlobalReviewServer(
       { threads: askThreads, agents: () => detectAskAgents() },
     ),
   );
+
+  const gateway = createReviewGateway({
+    local: (request) => laptopApi.fetch(request),
+    version: readReviewPackageVersion(import.meta.url),
+    home: devReviewHome(),
+    log: input.log,
+  });
+
+  app.all("/reviews-api", (context) => gateway.fetch(context.req.raw));
+  app.all("/reviews-api/*", (context) => gateway.fetch(context.req.raw));
+  app.get("/remote-hosts", () => serverJson(200, gateway.hosts()));
   app.get("/preferences/scratchpad", () =>
     serverJson(200, { enabled: scratchpadEnabled }),
   );
@@ -599,8 +624,10 @@ export function createGlobalReviewServer(
       openWatchdog.dispose();
 
       await closeHttpServer(httpServer);
+      await gateway.close();
       await telemetry.shutdown(1_500);
     },
+    setRemoteHosts: (hosts) => gateway.setHosts(hosts),
   };
 }
 

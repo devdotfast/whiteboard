@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { writePrivateJsonAtomic } from "@dev.fast/trace-core";
+import { errorMessage, writePrivateJsonAtomic } from "@dev.fast/trace-core";
 import { z } from "zod";
 
 const memorySchema = z.record(
@@ -52,8 +52,8 @@ export function openGatewayMemory(
 
     writing = writing
       .then(() => writePrivateJsonAtomic(file, value))
-      .catch((error: unknown) =>
-        log(`Could not save remote review memory: ${String(error)}`),
+      .catch((cause: unknown) =>
+        log(`Could not save remote review memory: ${errorMessage(cause)}`),
       );
   };
 

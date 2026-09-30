@@ -6,11 +6,16 @@ import { readReviewPackageVersion } from "@review/package-paths.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { createGatewayHosts } from "./review-gateway-hosts.js";
-import { startFake, startRemote, stopAll } from "./review-gateway-test-utils.js";
+import {
+  startFake,
+  startRemote,
+  stopAll,
+} from "./review-gateway-test-utils.js";
 
 const version = readReviewPackageVersion(import.meta.url);
 
 let root: string;
+
 const closes: (() => void)[] = [];
 
 beforeEach(async () => {

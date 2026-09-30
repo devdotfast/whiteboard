@@ -63,7 +63,9 @@ export async function startRemote(stateDir: string) {
 
   const health = async () =>
     // SAFETY: /health answers ReviewServerHealth on every review server.
-    (await (await fetch(`${discovery.url}/health`)).json()) as ReviewServerHealth;
+    (await (
+      await fetch(`${discovery.url}/health`)
+    ).json()) as ReviewServerHealth;
 
   return {
     discovery,
@@ -97,6 +99,7 @@ export async function startFake(
 ) {
   const requests: IncomingMessage[] = [];
   const token = options.token ?? "fake-token";
+
   const health: ReviewServerHealth = {
     ok: true,
     instanceId: options.instanceId ?? randomUUID(),
@@ -139,6 +142,7 @@ export async function startFake(
 
   stops.push(stop);
 
+  // SAFETY: a TCP listener's address() is an AddressInfo.
   const address = server.address() as AddressInfo;
 
   return {

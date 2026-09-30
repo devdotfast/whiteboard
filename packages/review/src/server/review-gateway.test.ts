@@ -8,25 +8,35 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
+  type JsonObject,
   REVIEW_HOST_HEADER,
   type ReviewGatewayHost,
 } from "@dev.fast/review-protocol";
 import { getRequestListener } from "@hono/node-server";
-import { readReviewPackageVersion } from "@review/package-paths.js";
+import {
+  findReviewPackageRoot,
+  readReviewPackageVersion,
+} from "@review/package-paths.js";
 import { createReviewApi } from "@review/review-api/http.js";
 import { openReviewProfile } from "@review/review-api/profile.js";
 import type { Result } from "@review/review-api/store.js";
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import { createGlobalReviewServer } from "./desktop-server.js";
+import {
+  startFake,
+  startRemote,
+  stopAll,
+} from "./review-gateway-test-utils.js";
 import { createReviewGateway } from "./review-gateway.js";
-import { startFake, startRemote, stopAll } from "./review-gateway-test-utils.js";
 
 const version = readReviewPackageVersion(import.meta.url);
 
 const LAPTOP_TOKEN = "laptop-token";
 
 let root: string;
+
 const cleanups: (() => Promise<void>)[] = [];
 
 beforeEach(async () => {
@@ -51,6 +61,7 @@ async function startGateway(
   const home = path.join(root, "laptop");
   const local = await openReviewProfile(home, { manageWorkspaces: true });
   await local.store.ensureScratchpad();
+
   const laptop = new Hono().route(
     "/reviews-api",
     createReviewApi(
@@ -64,6 +75,7 @@ async function startGateway(
   );
 
   const logged: string[] = [];
+
   const gateway = createReviewGateway({
     local: (request) => laptop.fetch(request),
     version: gatewayVersion,
@@ -127,6 +139,7 @@ type Remote = Awaited<ReturnType<typeof startRemote>>;
 
 async function seed(remote: Remote, title: string) {
   const repo = await repository();
+
   const registered = await remote.api<{ id: string }>("/repositories", {
     method: "POST",
     body: JSON.stringify({ path: repo.directory }),
@@ -147,7 +160,7 @@ async function seed(remote: Remote, title: string) {
   return created.reviewId;
 }
 
-const command = (operation: object) =>
+const command = (operation: JsonObject) =>
   JSON.stringify({ commandId: randomUUID(), operation });
 
 it("sends a read, a command and a file request to the machine that owns the review", async () => {
@@ -161,10 +174,9 @@ it("sends a read, a command and a file request to the machine that owns the revi
     { alias: "wb-b", endpoint: b.endpoint },
   ]);
 
-  await expect.poll(() => gateway.hosts().map((host) => host.state)).toEqual([
-    "online",
-    "online",
-  ]);
+  await expect
+    .poll(() => gateway.hosts().map((host) => host.state))
+    .toEqual(["online", "online"]);
 
   const readA = await request(`/${onA}?full=true`);
   expect(readA.status).toBe(200);
@@ -179,6 +191,7 @@ it("sends a read, a command and a file request to the machine that owns the revi
     method: "POST",
     body: command({ type: "rename", reviewId: onA, title: "Renamed on a" }),
   });
+
   expect(renamed.status).toBe(200);
   expect(renamed.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
   expect(await a.api(`/${onA}?full=true`)).toMatchObject({
@@ -194,12 +207,15 @@ it("sends a read, a command and a file request to the machine that owns the revi
 
   // Registering and creating name no review; they belong to the laptop.
   const repo = await repository();
+
   const registered = await request("/repositories", {
     method: "POST",
     body: JSON.stringify({ path: repo.directory }),
   });
+
   expect(registered.headers.has(REVIEW_HOST_HEADER)).toBe(false);
   const { id: repositoryId } = await registered.json();
+
   const created = await request("/commands", {
     method: "POST",
     body: command({
@@ -208,6 +224,7 @@ it("sends a read, a command and a file request to the machine that owns the revi
       pins: { repositoryId, base: repo.base, head: repo.head },
     }),
   });
+
   expect(created.status).toBe(200);
   expect(created.headers.has(REVIEW_HOST_HEADER)).toBe(false);
   const { reviewId: onLaptop } = await created.json();
@@ -226,20 +243,26 @@ it("sends a read, a command and a file request to the machine that owns the revi
 it("replaces the laptop's token with the remote's and marks the caller remote", async () => {
   const reviewId = randomUUID();
   const fake = await startFake({ version, reviewIds: [reviewId] });
+
   const { request, gateway } = await startGateway([
     { alias: "wb-a", endpoint: fake.endpoint },
   ]);
 
   await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
 
-  const response = await request(`/${reviewId}/progress?token=${LAPTOP_TOKEN}`, {
-    headers: { "x-review-client": "local" },
-  });
+  const response = await request(
+    `/${reviewId}/progress?token=${LAPTOP_TOKEN}`,
+    {
+      headers: { "x-review-client": "local" },
+    },
+  );
+
   expect(response.status).toBe(200);
 
-  const forwarded = fake.requests.filter(
-    (entry) => entry.url?.startsWith(`/reviews-api/${reviewId}/progress`),
+  const forwarded = fake.requests.filter((entry) =>
+    entry.url?.startsWith(`/reviews-api/${reviewId}/progress`),
   );
+
   expect(forwarded).toHaveLength(1);
   const [seen] = forwarded;
   expect(seen?.url).toBe(`/reviews-api/${reviewId}/progress`);
@@ -251,6 +274,7 @@ it("replaces the laptop's token with the remote's and marks the caller remote", 
 it("answers per-review telemetry for a remote review itself and refuses laptop-only routes", async () => {
   const reviewId = randomUUID();
   const fake = await startFake({ version, reviewIds: [reviewId] });
+
   const { request, gateway } = await startGateway([
     { alias: "wb-a", endpoint: fake.endpoint },
   ]);
@@ -261,6 +285,7 @@ it("answers per-review telemetry for a remote review itself and refuses laptop-o
     method: "POST",
     body: "{}",
   });
+
   expect(telemetry.status).toBe(200);
   expect(telemetry.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
 
@@ -274,9 +299,12 @@ it("answers per-review telemetry for a remote review itself and refuses laptop-o
       method,
       ...(method === "POST" && { body: "{}" }),
     });
+
     expect(refused.status).toBe(404);
     expect(await refused.json()).toMatchObject({
-      error: expect.stringContaining("not available for a review on another machine"),
+      error: expect.stringContaining(
+        "not available for a review on another machine",
+      ),
     });
   }
 
@@ -316,10 +344,14 @@ it("streams a remote answer line by line and closes the remote connection when t
   await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
 
   const abort = new AbortController();
+
   const response = await request(`/${reviewId}/structural-diff`, {
     signal: abort.signal,
   });
-  const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+
+  const reader = response
+    .body!.pipeThrough(new TextDecoderStream())
+    .getReader();
 
   expect((await reader.read()).value).toBe('{"line":1}\n');
   next.resolve();
@@ -340,6 +372,7 @@ it.each([
   async (route, method, field) => {
     const reviewId = randomUUID();
     const leaked = "/home/dev/secret/project";
+
     const fake = await startFake({
       version,
       reviewIds: [reviewId],
@@ -347,7 +380,9 @@ it.each([
         if (!request.url?.startsWith(`/reviews-api/${reviewId}/${route}`))
           return false;
         response.setHeader("content-type", "application/json");
-        response.end(JSON.stringify({ nested: { [field]: leaked }, text: "x" }));
+        response.end(
+          JSON.stringify({ nested: { [field]: leaked }, text: "x" }),
+        );
 
         return true;
       },
@@ -375,6 +410,7 @@ it("reaches the laptop for the scratchpad and shared reviews, even when a remote
     version,
     reviewIds: ["scratchpad", `shared-${"a".repeat(64)}`],
   });
+
   const { request, gateway } = await startGateway([
     { alias: "wb-a", endpoint: fake.endpoint },
   ]);
@@ -405,6 +441,7 @@ it("answers 503 with the install command for a review on another version, also f
     [{ alias: "wb-a", endpoint: a.endpoint }],
     "0.0.0-other",
   );
+
   await expect
     .poll(() => second.gateway.hosts()[0]?.state)
     .toBe("incompatible");
@@ -419,61 +456,119 @@ it("answers 503 with the install command for a review on another version, also f
   });
 });
 
-it(
-  "marks a host that stops answering offline within 11 s while others answer",
-  async () => {
-    const hung = randomUUID();
-    let hang = false;
-    const fake = await startFake({
-      version,
-      reviewIds: [hung],
-      handle: () => hang,
-    });
-    const b = await startRemote(path.join(root, "b"));
-    const onB = await seed(b, "On b");
+it("marks a host that stops answering offline within 11 s while others answer", async () => {
+  const hung = randomUUID();
+  let hang = false;
 
-    const { request, gateway, local } = await startGateway([
-      { alias: "wb-a", endpoint: fake.endpoint },
-      { alias: "wb-b", endpoint: b.endpoint },
+  const fake = await startFake({
+    version,
+    reviewIds: [hung],
+    handle: () => hang,
+  });
+
+  const b = await startRemote(path.join(root, "b"));
+  const onB = await seed(b, "On b");
+
+  const { request, gateway, local } = await startGateway([
+    { alias: "wb-a", endpoint: fake.endpoint },
+    { alias: "wb-b", endpoint: b.endpoint },
+  ]);
+
+  await expect
+    .poll(() => gateway.hosts().map((host) => host.state))
+    .toEqual(["online", "online"]);
+  expect((await request(`/${hung}/progress`)).status).toBe(200);
+  const repo = await repository();
+
+  const { id: repositoryId } = await (
+    await request("/repositories", {
+      method: "POST",
+      body: JSON.stringify({ path: repo.directory }),
+    })
+  ).json();
+
+  const onLaptop = await local.store.execute({
+    commandId: randomUUID(),
+    operation: {
+      type: "create",
+      title: "On the laptop",
+      pins: { repositoryId, base: repo.base, head: repo.head },
+    },
+  });
+
+  hang = true;
+  const started = Date.now();
+  const stuck = request(`/${hung}/progress`);
+
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const quick = Date.now();
+  expect((await request(`/${onLaptop.reviewId}`)).status).toBe(200);
+  expect((await request(`/${onB}`)).status).toBe(200);
+  expect(Date.now() - quick).toBeLessThan(1_000);
+
+  expect((await stuck).status).toBe(504);
+  expect(gateway.hosts()[0]?.state).toBe("offline");
+  expect(Date.now() - started).toBeLessThan(11_000);
+
+  const refused = await request(`/${hung}/progress`);
+  expect(refused.status).toBe(503);
+}, 20_000);
+
+it("mounts the gateway in the Desktop server, with host states behind the token", async () => {
+  const a = await startRemote(path.join(root, "a"));
+  const onA = await seed(a, "On a");
+
+  const local = await openReviewProfile(path.join(root, "laptop"), {
+    manageWorkspaces: true,
+  });
+
+  const packageRoot = findReviewPackageRoot(import.meta.url);
+
+  const desktop = createGlobalReviewServer({
+    reviewStore: local.store,
+    reviewData: local.data,
+    appPid: process.pid,
+    packageRoot,
+    toolingRoot: packageRoot,
+    port: 0,
+    token: LAPTOP_TOKEN,
+    discoveryPath: path.join(root, "desktop.json"),
+  });
+
+  cleanups.push(async () => {
+    await desktop.close();
+    await local.data.close();
+    await local.store.close();
+  });
+  await desktop.listen();
+
+  const get = (route: string, headers: Record<string, string> = {}) =>
+    fetch(`${desktop.url}${route}`, {
+      headers: { "x-review-token": LAPTOP_TOKEN, ...headers },
+    });
+
+  expect((await fetch(`${desktop.url}/remote-hosts`)).status).toBe(401);
+  expect(await (await get("/remote-hosts")).json()).toEqual([]);
+
+  desktop.setRemoteHosts([{ alias: "wb-a", endpoint: a.endpoint }]);
+  await expect
+    .poll(async () => (await get("/remote-hosts")).json())
+    .toEqual([
+      { alias: "wb-a", serverId: (await a.health()).serverId, state: "online" },
     ]);
 
-    await expect.poll(() => gateway.hosts().map((host) => host.state)).toEqual([
-      "online",
-      "online",
-    ]);
-    expect((await request(`/${hung}/progress`)).status).toBe(200);
-    const repo = await repository();
-    const { id: repositoryId } = await (
-      await request("/repositories", {
-        method: "POST",
-        body: JSON.stringify({ path: repo.directory }),
-      })
-    ).json();
-    const onLaptop = await local.store.execute({
-      commandId: randomUUID(),
-      operation: {
-        type: "create",
-        title: "On the laptop",
-        pins: { repositoryId, base: repo.base, head: repo.head },
-      },
-    });
+  const read = await get(`/reviews-api/${onA}?full=true`, {
+    origin: "vscode-file://vscode-app",
+  });
 
-    hang = true;
-    const started = Date.now();
-    const stuck = request(`/${hung}/progress`);
+  expect(read.status).toBe(200);
+  expect(read.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+  expect(read.headers.get("access-control-expose-headers")).toContain(
+    REVIEW_HOST_HEADER,
+  );
+  expect(await read.json()).toMatchObject({ title: "On a" });
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const quick = Date.now();
-    expect((await request(`/${onLaptop.reviewId}`)).status).toBe(200);
-    expect((await request(`/${onB}`)).status).toBe(200);
-    expect(Date.now() - quick).toBeLessThan(1_000);
-
-    expect((await stuck).status).toBe(504);
-    expect(gateway.hosts()[0]?.state).toBe("offline");
-    expect(Date.now() - started).toBeLessThan(11_000);
-
-    const refused = await request(`/${hung}/progress`);
-    expect(refused.status).toBe(503);
-  },
-  20_000,
-);
+  const unknown = await get("/reviews-api/status/unknown");
+  expect(unknown.status).toBe(404);
+  expect(await unknown.json()).toEqual({ ok: false, error: "Not found." });
+});

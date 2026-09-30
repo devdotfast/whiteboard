@@ -1,7 +1,11 @@
 import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { type JsonValue, parseJsonText } from "@dev.fast/review-protocol";
+import {
+  type JsonValue,
+  REVIEW_HOST_HEADER,
+  parseJsonText,
+} from "@dev.fast/review-protocol";
 import { type HttpBindings, getRequestListener } from "@hono/node-server";
 import { REVIEW_APP_SESSION_ID_HEADER } from "@review/ui-telemetry-events";
 import type { Hono } from "hono";
@@ -76,6 +80,8 @@ export function applyCorsHeaders(
     "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
   );
   response.headers.set("access-control-allow-private-network", "true");
+  // The UI reads which machine answered.
+  response.headers.set("access-control-expose-headers", REVIEW_HOST_HEADER);
 
   return response;
 }
