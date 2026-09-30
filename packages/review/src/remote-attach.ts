@@ -27,9 +27,6 @@ export const REMOTE_ATTACH_END = "WHITEBOARD-REMOTE-END";
 /** Desktop waits on the attach; a download that stalls longer is dropped. */
 const DIFFR_FETCH_TIMEOUT_MS = 15_000;
 
-/** Extension downloads stop here, so the attach ends within Desktop's minute. */
-const EXTENSIONS_TIMEOUT_MS = 35_000;
-
 interface EnsureDiffrInput {
   stateDir: string;
   env: NodeJS.ProcessEnv;
@@ -50,21 +47,12 @@ export async function remoteAttach(
     cli?: EnsureBackgroundServerInput["cli"];
     groups?: string[];
     ensureExtensions?: EnsureRemoteLanguageServerInput["ensure"];
+    installTimeoutMs?: number;
   },
 ) {
   const abort = new AbortController();
   const fetching = ensureDiffr({ ...input, signal: abort.signal });
   const extensions = new AbortController();
-
-  const stopExtensions = setTimeout(
-    () =>
-      extensions.abort(
-        new Error(
-          `stopped after ${EXTENSIONS_TIMEOUT_MS / 1_000} s; the next connection continues`,
-        ),
-      ),
-    EXTENSIONS_TIMEOUT_MS,
-  );
 
   const language = ensureRemoteLanguageServer({
     env: input.env,
@@ -72,7 +60,9 @@ export async function remoteAttach(
     groups: input.groups,
     signal: extensions.signal,
     ensure: input.ensureExtensions,
-  }).finally(() => clearTimeout(stopExtensions));
+    installTimeoutMs: input.installTimeoutMs,
+    cli: input.cli,
+  });
 
   let server: Awaited<ReturnType<typeof ensureBackgroundServer>>;
 
@@ -93,7 +83,10 @@ export async function remoteAttach(
 
   const { discovery, started } = server;
   const diffr = await fetching;
-  const { languageServer, languageServerDetail } = await language;
+
+  const { languageServer, languageServerDetail, languageServerPending } =
+    await language;
+
   const health = await readReviewServerHealth(discovery);
 
   if (!health) throw serverNotReady(input.stateDir);
@@ -109,6 +102,7 @@ export async function remoteAttach(
     diffr,
     languageServer,
     ...(languageServerDetail !== undefined && { languageServerDetail }),
+    ...(languageServerPending && { languageServerPending }),
   };
 }
 

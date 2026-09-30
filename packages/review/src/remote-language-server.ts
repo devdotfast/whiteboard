@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -19,14 +18,25 @@ import { z } from "zod";
 
 import { findReviewPackageRoot } from "./package-paths";
 import { ensureRemoteExtensions, remoteServerPaths } from "./remote-extensions";
+import { cliSpawn } from "./server/background-server";
 
 const START_TIMEOUT_MS = 15_000;
 
 const VERSION_TIMEOUT_MS = 3_000;
 
+/** Downloads in the attach stop here, so it ends within Desktop's minute; a detached install goes on. */
+const INSTALL_TIMEOUT_MS = 35_000;
+
 /** Development only: exit as soon as the last extension host leaves, for idle checks. */
-export const SHUTDOWN_WITHOUT_DELAY_ENV =
+const SHUTDOWN_WITHOUT_DELAY_ENV =
   "DEV_FAST_REVIEW_REMOTE_SHUTDOWN_WITHOUT_DELAY";
+
+const PENDING = {
+  languageServer: null,
+  languageServerDetail:
+    "Installing the language extensions on this host; they will be available on the next connection.",
+  languageServerPending: true,
+} as const;
 
 // Upstream's lifetime service exits 5 minutes after the last extension host
 // leaves (SHUTDOWN_TIMEOUT, not configurable), and 5 minutes after start when
@@ -38,6 +48,18 @@ const IDLE_ARGS = [
 ];
 
 const LISTENING = /Extension host agent listening on (\d+)/;
+
+const LOCK = {
+  retryMs: 100,
+  staleMs: 60_000,
+  unownedGraceMs: 5_000,
+  identifyOwner: true,
+};
+
+const installingSchema = z.object({
+  pid: z.number(),
+  started: z.string().nullable(),
+});
 
 const runningSchema = z.object({
   pid: z.number(),
@@ -66,11 +88,15 @@ export interface EnsureRemoteLanguageServerInput {
   packageRoot?: string;
   /** Optional extension groups the Desktop has enabled. */
   groups?: string[];
-  /** Ends extension downloads still running. */
+  /** Ends extension downloads still running, with no detached install. */
   signal?: AbortSignal;
   /** `ensureRemoteExtensions` by default. */
   ensure?: EnsureExtensions;
   timeoutMs?: number;
+  /** How long the downloads may take before a detached install takes over. */
+  installTimeoutMs?: number;
+  /** The CLI a detached install runs; this process's own by default. */
+  cli?: readonly string[];
 }
 
 /** Where the VS Code server keeps its token, pid, log and start lock. */
@@ -83,6 +109,9 @@ export function remoteLanguageServerFiles(env: NodeJS.ProcessEnv) {
     runningFile: path.join(serverDataDir, "server.json"),
     logFile: path.join(serverDataDir, "server.log"),
     lock: path.join(serverDataDir, "start.lock"),
+    installingFile: path.join(serverDataDir, "install.json"),
+    installLog: path.join(serverDataDir, "install.log"),
+    installLock: path.join(serverDataDir, "install.lock"),
   };
 }
 
@@ -90,47 +119,61 @@ export function remoteLanguageServerFiles(env: NodeJS.ProcessEnv) {
  * The curated extensions, then the package's VS Code server on the remote's
  * loopback, started in the background unless one of this commit answers.
  * Never fails: without it, a review has no language features and the reason
- * is in `languageServerDetail`.
+ * is in `languageServerDetail`. Downloads that outlast the attach go on in a
+ * detached `extensions ensure`, and the result is pending until it is done.
  */
 export async function ensureRemoteLanguageServer(
   input: EnsureRemoteLanguageServerInput,
 ): Promise<{
   languageServer: RemoteLanguageServer | null;
   languageServerDetail?: string;
+  languageServerPending?: true;
 }> {
   const root = path.join(
     input.packageRoot ?? findReviewPackageRoot(import.meta.url),
     "vscode-server",
   );
 
+  const files = remoteLanguageServerFiles(input.env);
+  const capped = new AbortController();
+
+  const cap = setTimeout(
+    () => capped.abort(),
+    input.installTimeoutMs ?? INSTALL_TIMEOUT_MS,
+  );
+
   try {
     const commit = await readCommit(root);
     const ensure = input.ensure ?? ensureRemoteExtensions;
+    await mkdir(files.serverDataDir, { recursive: true, mode: 0o700 });
+
+    // Two installs at once would download the same extensions twice.
+    if (await installing(files)) return PENDING;
 
     // First: it clears the scanner's cache when the list changes.
     const { failed } = await ensure({
       env: input.env,
       groups: input.groups,
-      signal: input.signal,
+      signal: AbortSignal.any([
+        capped.signal,
+        ...(input.signal ? [input.signal] : []),
+      ]),
     });
+
+    if (failed.length > 0 && capped.signal.aborted && !input.signal?.aborted) {
+      await installDetached(files, input);
+
+      return PENDING;
+    }
 
     if (failed.length > 0)
       throw new Error(
         `Could not install the language extensions: ${failed.map(({ id, error }) => `${id}: ${error}`).join("; ")}`,
       );
 
-    const files = remoteLanguageServerFiles(input.env);
-    await mkdir(files.serverDataDir, { recursive: true, mode: 0o700 });
-
     const outcome = await withFileLock(
       files.lock,
-      {
-        retryMs: 100,
-        staleMs: 60_000,
-        timeoutMs: (input.timeoutMs ?? START_TIMEOUT_MS) * 2,
-        unownedGraceMs: 5_000,
-        identifyOwner: true,
-      },
+      { ...LOCK, timeoutMs: (input.timeoutMs ?? START_TIMEOUT_MS) * 2 },
       async () => {
         const running = await healthy(files.runningFile, commit);
 
@@ -156,7 +199,66 @@ export async function ensureRemoteLanguageServer(
       languageServerDetail:
         error instanceof Error ? error.message : String(error),
     };
+  } finally {
+    clearTimeout(cap);
   }
+}
+
+async function installing(files: ReturnType<typeof remoteLanguageServerFiles>) {
+  const running = await readFile(files.installingFile, "utf8")
+    .then((text) => installingSchema.safeParse(JSON.parse(text)).data)
+    .catch(() => undefined);
+
+  return (
+    running !== undefined &&
+    running.started !== null &&
+    processStartIdentity(running.pid) === running.started
+  );
+}
+
+/** `whiteboard remote extensions ensure` in the background, unless one runs. */
+async function installDetached(
+  files: ReturnType<typeof remoteLanguageServerFiles>,
+  input: EnsureRemoteLanguageServerInput,
+) {
+  await withFileLock(
+    files.installLock,
+    { ...LOCK, timeoutMs: 10_000 },
+    async () => {
+      if (await installing(files)) return;
+      const { command, args, env } = cliSpawn(input.cli, input.env);
+      const log = await open(files.installLog, "a", 0o600);
+
+      const child = spawn(
+        command,
+        [
+          ...args,
+          "remote",
+          "extensions",
+          "ensure",
+          "--json",
+          ...(input.groups?.length ? ["--groups", input.groups.join(",")] : []),
+        ],
+        {
+          cwd: files.serverDataDir,
+          detached: true,
+          env,
+          stdio: ["ignore", log.fd, log.fd],
+        },
+      );
+
+      child.once("error", () => {});
+      child.unref();
+      await log.close();
+
+      if (child.pid !== undefined)
+        await writeFile(
+          files.installingFile,
+          `${JSON.stringify({ pid: child.pid, started: processStartIdentity(child.pid) })}\n`,
+          { mode: 0o600 },
+        );
+    },
+  );
 }
 
 /** Stops the VS Code server this home started, if it still runs. */
@@ -313,15 +415,13 @@ async function startServer(
 
   if (!exited && child.pid !== undefined) process.kill(child.pid, "SIGTERM");
 
-  const tail = existsSync(files.logFile)
-    ? (await readFile(files.logFile))
-        .subarray(logStart)
-        .toString("utf8")
-        .trimEnd()
-        .split("\n")
-        .slice(-10)
-        .join("\n")
-    : "";
+  const tail = (await readFile(files.logFile))
+    .subarray(logStart)
+    .toString("utf8")
+    .trimEnd()
+    .split("\n")
+    .slice(-10)
+    .join("\n");
 
   throw new Error(
     `The VS Code server did not start${failure ? `: ${failure.message}` : exited ? "" : ` within ${timeoutMs / 1_000} s`}. The end of ${files.logFile}:\n${tail}`,

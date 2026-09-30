@@ -81,16 +81,15 @@ async function spawnServer(
   input: EnsureBackgroundServerInput,
 ) {
   const log = await open(logPath, "a", 0o600);
-  const [command, ...cliArgs] = input.cli ?? currentCli();
-  const env = input.env ?? process.env;
+  const { command, args, env } = cliSpawn(input.cli, input.env ?? process.env);
 
   // The token reaches callers through the discovery file only: never an
   // argument, the environment or this log. The working directory is the
   // state directory, so the server never holds the caller's.
   const child = spawn(
-    command!,
+    command,
     [
-      ...cliArgs,
+      ...args,
       "server",
       "start",
       "--state-dir",
@@ -102,17 +101,7 @@ async function spawnServer(
     {
       cwd: stateDir,
       detached: true,
-      // Run from source, tsx finds the path aliases only through this.
-      env:
-        cliArgs.at(-1)?.endsWith(".ts") && !env.TSX_TSCONFIG_PATH
-          ? {
-              ...env,
-              TSX_TSCONFIG_PATH: path.join(
-                findReviewPackageRoot(import.meta.url),
-                "tsconfig.json",
-              ),
-            }
-          : env,
+      env,
       stdio: ["ignore", log.fd, log.fd],
     },
   );
@@ -133,6 +122,30 @@ async function spawnServer(
   await log.close();
 
   return state;
+}
+
+/** How to spawn `cli`, this process's own CLI by default. */
+export function cliSpawn(
+  cli: readonly string[] | undefined,
+  env: NodeJS.ProcessEnv,
+) {
+  const [command, ...args] = cli ?? currentCli();
+
+  return {
+    command: command!,
+    args,
+    // Run from source, tsx finds the path aliases only through this.
+    env:
+      args.at(-1)?.endsWith(".ts") && !env.TSX_TSCONFIG_PATH
+        ? {
+            ...env,
+            TSX_TSCONFIG_PATH: path.join(
+              findReviewPackageRoot(import.meta.url),
+              "tsconfig.json",
+            ),
+          }
+        : env,
+  };
 }
 
 function currentCli() {

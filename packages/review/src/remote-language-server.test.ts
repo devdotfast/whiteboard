@@ -162,6 +162,66 @@ it("runs extensions ensure first, with the groups, and starts nothing when it fa
   ).toBeNull();
 });
 
+it("hands downloads that outlast the attach to one detached install, and reports pending until it is done", async () => {
+  // Stands in for the CLI: records its arguments and runs a while.
+  const cli = path.join(root, "cli.mjs");
+  const runs = path.join(root, "runs");
+  await writeFile(
+    cli,
+    `import { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(runs)}, process.argv.slice(2).join(" ") + "\\n");\nsetTimeout(() => {}, 30_000);\n`,
+  );
+  let ensured = 0;
+
+  const stalled = async ({ signal }: { signal?: AbortSignal }) => {
+    ensured++;
+    await new Promise((resolve) => signal?.addEventListener("abort", resolve));
+
+    return { failed: [{ id: "astral-sh.ty", error: "aborted" }] };
+  };
+
+  const attach = () =>
+    ensureRemoteLanguageServer({
+      env,
+      packageRoot,
+      groups: ["go"],
+      ensure: stalled,
+      installTimeoutMs: 200,
+      cli: [process.execPath, cli],
+    });
+
+  const pending = {
+    languageServer: null,
+    languageServerDetail:
+      "Installing the language extensions on this host; they will be available on the next connection.",
+    languageServerPending: true,
+  };
+
+  expect(await attach()).toEqual(pending);
+  await expect
+    .poll(() => readFile(runs, "utf8").catch(() => ""))
+    .toBe("remote extensions ensure --json --groups go\n");
+
+  // While it runs, an attach neither downloads nor starts another.
+  expect(await attach()).toEqual(pending);
+  expect(ensured).toBe(1);
+  expect(await readFile(runs, "utf8")).toBe(
+    "remote extensions ensure --json --groups go\n",
+  );
+
+  const { installLog } = remoteLanguageServerFiles(env);
+  expect((await stat(installLog)).mode & 0o777).toBe(0o600);
+
+  await stopServersUnder(root);
+
+  const done = await ensureRemoteLanguageServer({
+    env,
+    packageRoot,
+    ensure: noExtensions,
+  });
+
+  expect(done.languageServer?.commit).toBe(COMMIT);
+}, 30_000);
+
 it("reports a package without a VS Code server", async () => {
   const result = await ensureRemoteLanguageServer({
     env,
