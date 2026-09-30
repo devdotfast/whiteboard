@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { stageVscodeServer } from "../../stage-vscode-server.mjs";
 import { addOnce, docker, exec, run, sleep } from "./exec.mjs";
 import { hostOf } from "./run-state.mjs";
 import { waitForSsh } from "./ssh.mjs";
@@ -290,7 +291,10 @@ export function containerOf(runState, name) {
   return host;
 }
 
-/** Packs packages/review from this worktree and installs it globally; a sealed host gets its route back meanwhile. */
+/**
+ * Packs packages/review from this worktree, with the VS Code server, and
+ * installs it globally; a sealed host gets its route back meanwhile.
+ */
 export async function install(runState, name, version) {
   const host = containerOf(runState, name);
   const scratch = await mkdtemp(`${runState.dir}/pack-`);
@@ -305,9 +309,7 @@ export async function install(runState, name, version) {
     ]);
 
     const [packed] = (await readdir(scratch)).filter((f) => f.endsWith(".tgz"));
-    let tarball = path.join(scratch, packed);
-
-    await run("tar", ["-xzf", tarball, "-C", scratch]);
+    await run("tar", ["-xzf", path.join(scratch, packed), "-C", scratch]);
 
     const manifestPath = path.join(scratch, "package/package.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -315,9 +317,15 @@ export async function install(runState, name, version) {
     if (version) {
       manifest.version = version;
       await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-      tarball = path.join(scratch, "stamped.tgz");
-      await run("tar", ["-czf", tarball, "-C", scratch, "package"]);
     }
+
+    // As the release pack does, from the runtime build-remote-runtime.mjs left.
+    await stageVscodeServer(path.join(scratch, "package"));
+    const tarball = path.join(scratch, "staged.tgz");
+    // No AppleDouble files for the macOS metadata the runtime's files carry.
+    await run("tar", ["-czf", tarball, "-C", scratch, "package"], {
+      env: { ...process.env, COPYFILE_DISABLE: "1" },
+    });
 
     await docker("cp", tarball, `${host.container}:/tmp/wb-test-package.tgz`);
 
