@@ -281,8 +281,7 @@ export function ReviewDiffView({
           onExpand={sidebarResize.expand}
         />
       )}
-      {/* Folded, the sidebar stays mounted: the diff views render their file
-          trees into it. */}
+      {/* Stays mounted while folded: it hosts the diff views' file trees. */}
       <aside
         {...stylex.props(
           styles.sidebar,
@@ -684,8 +683,6 @@ type ReviewLenses = NonNullable<ReturnType<typeof useReviewLenses>>;
 
 type LensItem = ReviewLenses["lenses"][number];
 
-// The sidebar folded past its minimum: the viewed ring, each lens's first
-// five letters, and buttons that open the sidebar again.
 function DiffRail({
   rows,
   lenses,
@@ -739,7 +736,7 @@ function RailLens({
   const stats = lenses.stats(item.sources),
     empty = !item.pending && item.fileCount === 0;
 
-  // On the name, not the button: a disabled button gets no pointer events.
+  // On the name: disabled buttons get no pointer events.
   const tooltip = useTooltip<HTMLSpanElement>(item.title, {
     instant: true,
     detail: item.pending ? undefined : empty ? "0 files" : countsLabel(stats),
@@ -961,7 +958,7 @@ const styles = stylex.create({
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: { default: null, ":focus-visible": "-2px" },
   },
-  // Geist Mono makes 5ch exactly five letters.
+  // 5ch is five letters in Geist Mono.
   railLens: {
     flexShrink: 0,
     boxSizing: "content-box",

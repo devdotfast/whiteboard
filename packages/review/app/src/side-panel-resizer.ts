@@ -210,8 +210,7 @@ export function useRightPanelResize({
   const collapsible = collapsedWidth !== undefined;
   const foldedWidth = storedCollapsed ? collapsedWidth : undefined;
   const collapsed = foldedWidth !== undefined;
-  // Folding restores the width the drag started from, not the minimum it
-  // passed on the way.
+  // Unfolding restores the width from before the drag.
   const dragStartWidth = useRef(requestedWidth);
 
   const [isResizing, setIsResizing] = useState(false);
@@ -315,8 +314,7 @@ export function useRightPanelResize({
     ],
   );
 
-  // The panel follows the first move, not the press: a press on the separator
-  // of a panel at its minimum would otherwise fold it.
+  // Resize on move, not press, so a press at the minimum can't fold.
   const startResize = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       event.preventDefault();

@@ -79,7 +79,7 @@ const signedPair = (additions: number, deletions: number) => `+${additions} −$
 
 const SIGNED_PAIR = /\+([\d.]+[kKM]?) −([\d.]+[kKM]?)/;
 
-/** Writes `text`, coloring each `+N −N` pair the way the tree colors counts. */
+/** Colors each `+N −N` pair like the tree's counts. */
 function appendCounts(parent: HTMLElement, text: string): void {
 	const match = SIGNED_PAIR.exec(text);
 	if (!match) {
