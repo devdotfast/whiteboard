@@ -314,6 +314,8 @@ one of these entries:
 - `build/gulpfile.vscode.ts` and `build/next/index.ts`: also skip the welcome
   walkthrough media, the PSReadLine terminal module, and the tree-sitter query
   files, none of which Review loads.
+  `gulpfile.vscode.ts` also keeps only Chromium's English UI translations
+  (`locales/en-*.pak`, `en*.lproj`), since Review's UI is English only.
 - `build/hygiene.ts`
 - `build/lib/extensions.ts` (also excludes the curated built-in extensions,
   which are staged from prebuilt VSIXes rather than packaged from source)
