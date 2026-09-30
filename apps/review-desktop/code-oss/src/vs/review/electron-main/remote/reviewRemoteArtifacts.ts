@@ -8,7 +8,6 @@ import { createHash, randomBytes } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { pathToFileURL } from "node:url";
 
@@ -123,7 +122,7 @@ export async function fetchToLaptopCache(artifact: ReviewRemoteArtifact, options
 	try {
 		const response = await fetch(artifact.url, { signal: AbortSignal.timeout(REVIEW_REMOTE_ARTIFACT_TIMEOUTS.download) });
 		if (!response.ok || !response.body) throw new Error(`Downloading ${artifact.name} failed: ${artifact.url} answered ${response.status}.`);
-		await pipeline(Readable.fromWeb(response.body), createWriteStream(part));
+		await pipeline(response.body, createWriteStream(part));
 		await verify(part, artifact);
 		await rename(part, file);
 	} finally {

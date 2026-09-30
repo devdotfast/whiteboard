@@ -17,10 +17,12 @@ after(async () => {
 });
 
 const X64 = "a".repeat(64);
+
 const ARM64 = "b".repeat(64);
 
 function shasums(version, lines = ["linux-x64", "linux-arm64"]) {
   const sums = { "linux-x64": X64, "linux-arm64": ARM64 };
+
   return [
     `${"c".repeat(64)}  node-v${version}-darwin-arm64.tar.xz`,
     `${"d".repeat(64)}  node-v${version}-linux-x64.tar.gz`,
@@ -44,6 +46,7 @@ async function fixture() {
     productPath,
     `${JSON.stringify({ nameShort: "Whiteboard", quality: "stable" }, null, "\t")}\n`,
   );
+
   return { root, tarball, productPath };
 }
 
@@ -57,6 +60,7 @@ test("pins the tarball's integrity and Node's checksums into product.json", asyn
     nodeVersion: "24.18.0",
     fetchText: async (url) => {
       fetched.push(url);
+
       return shasums("24.18.0");
     },
   });
@@ -106,6 +110,7 @@ test("fails when SHASUMS256.txt has no line for a target, and leaves product.jso
 
 test("a pin from earlier in the run is written as it is, and a malformed one is refused", async () => {
   const { tarball, productPath } = await fixture();
+
   const pin = await remotePin({
     tarball,
     nodeVersion: "24.18.0",
