@@ -15,6 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { reviewManagedCheckoutRoot } from "@review/review-checkout-paths.js";
 import { runPrepareCommand } from "@review/review-prepare.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { z } from "zod";
@@ -389,6 +390,28 @@ it("dismissing a review frees only its own managed checkout, leaving a user's si
   );
   expect(existsSync(path.join(userWorktree, "scratch.txt"))).toBe(true);
   expect(git("status", "--porcelain")).toBe(mainStatusBefore);
+});
+
+it("removes a deleted review's whole checkout directory", async () => {
+  const { workspacePath } = await local.data.navigatorWorkspace(
+    local.store.read(reviewId),
+  );
+
+  await local.data.workspaces.open(reviewId, pins);
+
+  const managed = reviewManagedCheckoutRoot(
+    path.join(repository, ".git"),
+    reviewId,
+  );
+
+  expect(existsSync(workspacePath)).toBe(true);
+  await command({ type: "delete", reviewId });
+  await local.data.workspaces.idle();
+  expect(local.data.workspaces.list(reviewId)).toEqual([]);
+  expect(existsSync(managed)).toBe(false);
+  expect(
+    git("worktree", "list", "--porcelain").match(/^worktree /gm),
+  ).toHaveLength(1);
 });
 
 it("removes checkouts left by reviews dismissed while Desktop was closed", async () => {

@@ -648,6 +648,22 @@ export class ReviewWorkspaces {
           if (environment.rootPath)
             await removeReviewPrepareArtifacts(environment.rootPath);
 
+          // The last checkout in a repository takes the review's directory
+          // with it, including source-window workspaces.
+          if (
+            environment.repository &&
+            !this.all().some(
+              (other) =>
+                other.id !== environment.id &&
+                other.reviewId === environment.reviewId &&
+                other.repository === environment.repository,
+            )
+          )
+            await removeReviewManagedCheckouts(
+              environment.repository,
+              environment.reviewId,
+            );
+
           this.db
             .prepare("DELETE FROM pinned_environments WHERE id=?")
             .run(environment.id);
