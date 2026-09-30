@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { AskThreadState, AskUpdate } from "@review/ask/thread-state";
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 
@@ -9,7 +9,7 @@ import {
   AskOpenThreadProvider,
   useShowOpenThread,
 } from "./ask-delete";
-import { AskHistoryProvider } from "./ask-history";
+import { AskHistoryProvider, useAskHistory } from "./ask-history";
 import { AskHistoryList, AskPanelContent } from "./ask-panel";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewPanelProvider, useReviewPanel } from "./review-panel";
@@ -231,6 +231,16 @@ it("asks the chosen agent, streams its answer, relays a decision, and closes the
   expect(posted("/ask/thread/close")).toEqual(["POST"]);
 });
 
+/** What the document's marks report once they place themselves. */
+function ReportOutdated({ ids }: { ids: string[] }) {
+  const report = useAskHistory()?.reportOutdated;
+  const key = ids.join();
+
+  useEffect(() => report?.(new Set(key ? key.split(",") : [])), [report, key]);
+
+  return null;
+}
+
 it("lists saved conversations, reopens one, and deletes another once confirmed", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const session = testReviewSession();
@@ -281,6 +291,7 @@ it("lists saved conversations, reopens one, and deletes another once confirmed",
             <AskHistoryProvider>
               <AskHistoryList />
               <Probe />
+              <ReportOutdated ids={["first"]} />
             </AskHistoryProvider>
           </ReviewPanelProvider>
         </ReviewSessionProvider>,
@@ -298,6 +309,13 @@ it("lists saved conversations, reopens one, and deletes another once confirmed",
       "Delete “Is this safe on replicas?”",
       "Delete “Why a new index?”",
     ]);
+
+    // The document found the first one's passage changed.
+    expect(
+      [...container.querySelectorAll("li")].map((row) =>
+        Boolean(row.textContent?.includes("Outdated")),
+      ),
+    ).toEqual([true, false]);
 
     const deleteButton = () =>
       container.querySelector<HTMLButtonElement>(

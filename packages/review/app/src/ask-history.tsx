@@ -25,6 +25,11 @@ export interface AskHistory {
   refresh: () => void;
   /** Whether it was deleted; a failure lands in `error`. */
   forget: (id: string) => Promise<boolean>;
+  /** Conversations whose passage changed in the version on screen: its
+   * block is gone, or an edit touched its words. */
+  outdated: ReadonlySet<string>;
+  /** The document's marks say which are outdated as they place them. */
+  reportOutdated: (ids: ReadonlySet<string>) => void;
 }
 
 const AskHistoryContext = createContext<AskHistory | null>(null);
@@ -41,6 +46,19 @@ export function AskHistoryProvider({
   const session = useReviewSession();
   const [entries, setEntries] = useState<AskHistoryEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [outdated, setOutdated] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+
+  // Placing marks reports on every layout; only a different set is news.
+  const reportOutdated = useCallback((ids: ReadonlySet<string>) => {
+    setOutdated((current) =>
+      current.size === ids.size && [...ids].every((id) => current.has(id))
+        ? current
+        : ids,
+    );
+  }, []);
 
   // A slower, older read must not replace a newer one.
   const reads = useRef(0);
@@ -88,8 +106,8 @@ export function AskHistoryProvider({
   );
 
   const value = useMemo(
-    () => ({ entries, error, refresh, forget }),
-    [entries, error, refresh, forget],
+    () => ({ entries, error, refresh, forget, outdated, reportOutdated }),
+    [entries, error, refresh, forget, outdated, reportOutdated],
   );
 
   return (

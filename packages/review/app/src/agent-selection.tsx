@@ -12,6 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { askAnchor } from "./ask-anchor";
 import {
   AskChevronIcon,
   AskCopyIcon,
@@ -36,6 +37,8 @@ type Selection = Omit<AgentSelection, "revision"> & {
   anchor?: { x: number; y: number };
   anchorElement?: Element;
   anchorContainer?: HTMLElement;
+  /** The selected document text, read for its context only when asked. */
+  range?: Range;
 };
 
 type Select = (selection: Selection | null) => void;
@@ -182,6 +185,7 @@ export function AgentSelectionProvider({
       anchor: _anchor,
       anchorElement: _anchorElement,
       anchorContainer: _anchorContainer,
+      range: _range,
       ...payload
     } = selection;
 
@@ -219,8 +223,17 @@ export function AgentSelectionProvider({
         anchor: _anchor,
         anchorElement: _anchorElement,
         anchorContainer: _anchorContainer,
+        range,
         ...payload
       } = selection;
+
+      // The saved conversation marks this passage by its place in its
+      // block, so its pin finds it again in later versions.
+      const anchor =
+        payload.target.kind === "text" && range && askAnchor(range);
+
+      if (payload.target.kind === "text" && anchor)
+        payload.target = { ...payload.target, anchor };
 
       if (agent) rememberAskAgent(session, agent);
       panels.getState().openAsk({ ...payload, revision }, agent);

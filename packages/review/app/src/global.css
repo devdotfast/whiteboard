@@ -261,6 +261,16 @@ button {
   background: var(--review-find-match-active-background);
 }
 
+/* The passages saved Ask conversations are about, and the one the pointer
+   pairs with its pin. */
+::highlight(ask-thread) {
+  background: var(--accent-wash);
+}
+
+::highlight(ask-thread-active) {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
 /* The software map's React Flow layers: edges under the cards, edge labels
    selectable like prose, and the map view's pane on the board grid. */
 

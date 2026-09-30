@@ -61,6 +61,7 @@ import { shellStyles } from "./shell-styles";
 import { useToast } from "./toast";
 import { tokens } from "./tokens.stylex";
 import { IconButton } from "./ui/button";
+import { Chip } from "./ui/chip";
 import { surfaceStyles } from "./ui/surface";
 import { textStyles } from "./ui/text";
 import { useFollowLatest } from "./use-follow-latest";
@@ -823,6 +824,7 @@ export function AskPanelContent({
           onScrollEnd={latest.onScrollEnd}
         >
           <AskSelectionQuote selection={selection} />
+          <AskOutdatedNote threadId={threadId ?? savedThreadId ?? null} />
 
           {thread ? <AskTurns thread={thread} onDecide={decide} /> : null}
 
@@ -1393,6 +1395,32 @@ function AskSignIn({
   );
 }
 
+function OutdatedTag({
+  xstyle,
+}: {
+  xstyle?: stylex.StyleXStyles;
+}): ReactElement {
+  return <Chip xstyle={[styles.outdatedTag, xstyle]}>Outdated</Chip>;
+}
+
+/** A conversation whose passage changed in the version on screen. */
+function AskOutdatedNote({
+  threadId,
+}: {
+  threadId: string | null;
+}): ReactElement | null {
+  const history = useAskHistory();
+
+  if (threadId === null || !history?.outdated.has(threadId)) return null;
+
+  return (
+    <p {...stylex.props(styles.outdated)}>
+      <OutdatedTag />
+      <span>The passage changed in this version of the review.</span>
+    </p>
+  );
+}
+
 /** The Ask panel's header button for its history. */
 export function AskHistoryButton({ view }: { view: AskView }): ReactElement {
   const openHistory = useOpenAskHistory();
@@ -1512,6 +1540,9 @@ export function AskHistoryList(): ReactElement {
                       <span {...stylex.props(styles.historyMeta)}>
                         {formatRelativeTime(entry.updatedAt)} ·{" "}
                         {entry.head.slice(0, 7)}
+                        {history?.outdated.has(entry.id) ? (
+                          <OutdatedTag xstyle={styles.outdatedInline} />
+                        ) : null}
                       </span>
                     </span>
                   </button>
@@ -1888,6 +1919,27 @@ const styles = stylex.create({
       ":focus-visible": 1,
       [stylex.when.ancestor(":hover")]: 1,
     },
+  },
+  // A conversation whose passage changed in the version on screen.
+  outdatedTag: {
+    ...hairline,
+    borderColor: tokens.warningFocus,
+    backgroundColor: tokens.warningWash,
+    fontFamily: tokens.fontMono,
+  },
+  outdatedInline: {
+    marginLeft: "6px",
+  },
+  outdated: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    gap: "4px 8px",
+    margin: 0,
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    lineHeight: "16px",
   },
 });
 

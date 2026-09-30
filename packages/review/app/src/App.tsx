@@ -25,6 +25,7 @@ import {
 import { AgentSelectionProvider, useAgentSelection } from "./agent-selection";
 import { observeAgentTextSelection } from "./agent-text-selection";
 import { AskHistoryProvider } from "./ask-history";
+import { AskThreadMarks } from "./ask-marks";
 import { AskHistoryControl } from "./ask-panel";
 import {
   AuthoringActivityBadge,
@@ -661,27 +662,33 @@ function ReviewLayoutContent({
               )}
               hidden={activeView !== "review"}
             >
-              <article
-                ref={articleRef}
-                {...withClass(
-                  "review-document",
-                  documentStyles.article,
-                  documentMarker,
-                  rightPanelOpen && documentStyles.articlePeekOpen,
-                )}
-                data-kind={scratchpad ? "scratchpad" : undefined}
-              >
-                <ReviewDocumentBoundary
-                  key={documentRevision}
-                  session={session}
-                  revision={documentRevision}
-                  onError={(_revision, error) =>
-                    reportReviewDocumentRenderError(session, error)
-                  }
+              <>
+                <article
+                  ref={articleRef}
+                  {...withClass(
+                    "review-document",
+                    documentStyles.article,
+                    documentMarker,
+                    rightPanelOpen && documentStyles.articlePeekOpen,
+                  )}
+                  data-kind={scratchpad ? "scratchpad" : undefined}
                 >
-                  <document.render />
-                </ReviewDocumentBoundary>
-              </article>
+                  <ReviewDocumentBoundary
+                    key={documentRevision}
+                    session={session}
+                    revision={documentRevision}
+                    onError={(_revision, error) =>
+                      reportReviewDocumentRenderError(session, error)
+                    }
+                  >
+                    <document.render />
+                  </ReviewDocumentBoundary>
+                </article>
+                <AskThreadMarks
+                  articleRef={articleRef}
+                  revision={documentRevision}
+                />
+              </>
             </div>
             {softwareMapEnabled && activeView === "map" && (
               <div

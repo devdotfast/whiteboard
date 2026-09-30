@@ -5,6 +5,7 @@ const NON_FIND_TEXT_SELECTOR = [
   ".review-find-widget",
   "[data-review-inline-editor]",
   ".side-panel",
+  ".ask-marks",
 ].join(", ");
 
 const BLOCK_TEXT_TAGS = new Set([
