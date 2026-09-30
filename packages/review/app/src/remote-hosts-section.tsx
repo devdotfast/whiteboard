@@ -14,6 +14,7 @@ const STATES_EVERY_MS = 3000;
 // Hosts that stopped trying until someone asks again.
 const RETRIED = new Set<ReviewGatewayHostState["state"]>([
   "auth-failed",
+  "not-installed",
   "unreachable",
 ]);
 

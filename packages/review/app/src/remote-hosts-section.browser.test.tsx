@@ -128,9 +128,13 @@ test("lists each host with its state and detail as plain text, and the install c
     [...section()!.querySelectorAll("code")].map((code) => code.textContent),
   ).toEqual([install, install]);
   expect(section()!.querySelector("a")).toBeNull();
-  expect(page.getByRole("button", { name: "Retry" }).elements()).toHaveLength(
-    0,
-  );
+  // A host that needs an install is retried once it has one; the others are not.
+  expect(
+    page
+      .getByRole("button", { name: /^Retry / })
+      .elements()
+      .map((button) => button.getAttribute("aria-label")),
+  ).toEqual(["Retry box2"]);
 });
 
 test("reads the states again only once the last read has answered", async () => {
@@ -152,12 +156,13 @@ test("reads the states again only once the last read has answered", async () => 
   }
 });
 
-test("offers Retry to a host that failed to authenticate or is unreachable", async () => {
+test("offers Retry to a host that failed to authenticate, is unreachable or is not installed", async () => {
   const hosts = remoteHosts(
-    ["devbox", "box2"],
+    ["devbox", "box2", "box3"],
     [
       { alias: "devbox", state: "auth-failed", detail: "Permission denied" },
       { alias: "box2", state: "unreachable", detail: "timed out" },
+      { alias: "box3", state: "not-installed", detail: "Not installed." },
     ],
   );
 
@@ -169,6 +174,8 @@ test("offers Retry to a host that failed to authenticate or is unreachable", asy
   );
   await page.getByRole("button", { name: "Retry box2" }).click();
   expect(hosts.retry).toHaveBeenCalledWith("box2");
+  await page.getByRole("button", { name: "Retry box3" }).click();
+  expect(hosts.retry).toHaveBeenCalledWith("box3");
 });
 
 test("adding -bad is refused with the reason", async () => {
