@@ -274,8 +274,10 @@ one of these entries:
   were regenerated rather than kept at the stock Code OSS GUIDs.
   Two identity gaps remain deliberately: `serverApplicationName`,
   `serverDataFolderName`, and `tunnelApplicationName` still hold their upstream
-  values because the fork ships no REH build and the agent-host stack uses those
-  names to locate a server on *remote* hosts; and `darwinProfileUUID` /
+  values because the agent-host stack uses those names to locate a server on
+  *remote* hosts. The fork does ship a trimmed remote server (below), but its
+  launcher (stage 2 Task 3) always passes `--server-data-dir`, so the
+  `serverDataFolderName` default is never used; and `darwinProfileUUID` /
   `darwinProfilePayloadUUID` are untouched upstream values kept only because
   `build/lib/policies/policyGenerator.ts` hard-throws without them, on a path
   nothing in this tree invokes.
