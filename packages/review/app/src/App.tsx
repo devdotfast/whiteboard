@@ -295,6 +295,7 @@ function ReviewLayoutContent({
   // The scratchpad is a document and nothing else: no source tree to browse,
   // nothing to share, nothing to dismiss.
   const scratchpad = session.review?.kind === "scratchpad";
+  const sourceWindows = session.review?.available?.sourceWindows !== false;
   useEffect(() => {
     if (scratchpad) captureUiEvent(session, "scratchpad_opened");
   }, [scratchpad, session]);
@@ -387,9 +388,11 @@ function ReviewLayoutContent({
   const storedList = useTraceList();
   const diffFiles = useReviewDiffFiles();
 
-  // The scratchpad has no repository of its own, so no traces to show.
+  // The scratchpad has no repository of its own, so no traces to show, and
+  // traces are the laptop's, so a review on another machine has none either.
   const hasTraceSessions =
     !scratchpad &&
+    !session.review?.host &&
     ((session.review?.traces.size ?? 0) > 0 ||
       storedList.status !== "loaded" ||
       storedList.sessions.length > 0);
@@ -582,7 +585,7 @@ function ReviewLayoutContent({
                   shellStyles.topbarContext,
                 )}
               >
-                {!scratchpad && (
+                {!scratchpad && sourceWindows && (
                   <Button
                     variant="ghost"
                     xstyle={shellStyles.openSourceTree}

@@ -6,6 +6,7 @@ import path from "node:path";
 
 import type {
   ReviewCanvasBridge,
+  ReviewDiffViewSpec,
   ReviewInlineEditorSpec,
   ReviewSurfaceEvent,
 } from "@dev.fast/review-protocol";
@@ -1063,3 +1064,161 @@ it("leaves window errors to the workbench it shares a window with", async () => 
 
   expect(telemetry).not.toContain("client_error");
 });
+
+async function mountPeekReview(content: {
+  host?: string;
+  available?: { sourceWindows: boolean; languageFeatures: boolean };
+}) {
+  const review = await command({ type: "create", title: "Peek review", pins });
+
+  await command({
+    type: "edit",
+    reviewId: review.reviewId,
+    edit: {
+      type: "insert",
+      content: {
+        type: "code_peek",
+        source: selectSource({
+          side: "base",
+          file: "src/a.ts",
+          fromLine: 1,
+          toLine: 2,
+        }),
+      },
+    },
+  });
+
+  const app = new Hono();
+  app.get("/reviews-api/:id/progress", (c) =>
+    c.json({
+      files: [],
+      lenses: [],
+      resolvedSelections: {
+        [JSON.stringify(["src/a.ts", "base", 1, "base", 2])]: [
+          { file: "src/a.ts", side: "base", fromLine: 1, toLine: 2 },
+        ],
+      },
+    }),
+  );
+  app.route("/reviews-api", createReviewApi(store));
+  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+  const requested: string[] = [];
+  const inline: ReviewInlineEditorSpec[] = [];
+  const diffs: ReviewDiffViewSpec[] = [];
+
+  const bridge = testReviewBridge(
+    {},
+    {
+      request: async (url, init) => {
+        requested.push(new URL(String(url)).pathname);
+
+        return app.request(url, init);
+      },
+      inlineEditors: {
+        async find() {
+          return { matchCount: 0 };
+        },
+        create: (spec) => {
+          inline.push(spec);
+
+          return {
+            height: 180,
+            setActive() {},
+            setCollapsed() {},
+            async setFindQuery() {
+              return { matchCount: 0 };
+            },
+            revealFindMatch() {},
+            clearActiveFindMatch() {},
+            clearFind() {},
+            onDidChangeHeight: () => ({ dispose() {} }),
+            onDidError: () => ({ dispose() {} }),
+            dispose() {},
+          };
+        },
+      },
+      diffView: {
+        files: async () => [],
+        create: (spec) => {
+          diffs.push(spec);
+
+          return {
+            focus() {},
+            onDidError: () => ({ dispose() {} }),
+            dispose() {},
+          };
+        },
+      },
+    },
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  await act(async () => {
+    canvas = mount(container, {
+      kind: "api",
+      reviewId: review.reviewId,
+      bridge,
+      setSourceView: () => {},
+      ...content,
+    });
+  });
+  await act(async () => {
+    await vi.waitFor(() => expect(inline).toHaveLength(1));
+  });
+
+  const button = (label: string) =>
+    [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (candidate) =>
+        candidate.textContent === label ||
+        candidate.getAttribute("aria-label") === label,
+    );
+
+  return { container, inline, diffs, requested, button };
+}
+
+it.each([
+  { available: undefined, shown: true },
+  {
+    available: { sourceWindows: false, languageFeatures: false },
+    shown: false,
+  },
+])(
+  "shows Open file and the source tree only where source windows are available ($available)",
+  async ({ available, shown }) => {
+    const { inline, diffs, button } = await mountPeekReview({ available });
+
+    expect(Boolean(button("Source tree ↗"))).toBe(shown);
+    expect(inline[0]!.onDidOpen !== undefined).toBe(shown);
+    await act(async () => button("Diff")!.click());
+    await act(async () => {
+      await vi.waitFor(() => expect(diffs).toHaveLength(1));
+    });
+    expect(diffs[0]!.openFile).toBe(shown ? undefined : false);
+  },
+);
+
+it.each([
+  { host: undefined, shown: true },
+  { host: "devbox", shown: false },
+])(
+  "shows the share control and the trace tab only for a laptop review (host $host)",
+  async ({ host }) => {
+    const shown = host === undefined;
+
+    const { button, requested } = await mountPeekReview({
+      host,
+      ...(host && {
+        available: { sourceWindows: false, languageFeatures: false },
+      }),
+    });
+
+    await act(async () => {
+      await vi.waitFor(() => expect(Boolean(button("Trace"))).toBe(shown));
+    });
+    expect(Boolean(button("Share review"))).toBe(shown);
+    expect(requested.some((path) => path.endsWith("/agent-traces"))).toBe(
+      shown,
+    );
+  },
+);

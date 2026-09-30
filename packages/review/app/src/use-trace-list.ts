@@ -70,7 +70,8 @@ export function useTraceList(
     ),
     queryFn: ({ signal }) =>
       readTraceList(session.fetch, storageOverride, signal),
-    enabled: !usesProvided,
+    // Traces are the laptop's; another machine's server has none to list.
+    enabled: !usesProvided && !session.review?.host,
     staleTime: 0,
   });
 
