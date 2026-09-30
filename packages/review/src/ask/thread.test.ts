@@ -11,6 +11,7 @@ import {
 } from "@agentclientprotocol/sdk";
 import type { AskAgentLauncher } from "@review/ask/agents.js";
 import {
+  type AskAgentId,
   type AskChoices,
   type AskEntry,
   type AskPicks,
@@ -35,6 +36,9 @@ function fakeAgent(
   turn: (client: AgentContext, prompt: string) => Promise<void>,
   /** Replays a saved session; without it the agent cannot load one. */
   load?: (client: AgentContext, sessionId: string) => Promise<void>,
+  /** What the agent says to a new session before anything is asked, as Pi
+   * does. */
+  greeting?: string,
 ) {
   const modes: string[] = [];
   const mcpServers: McpServer[][] = [];
@@ -85,11 +89,21 @@ function fakeAgent(
       agentCapabilities: { loadSession: Boolean(load) },
       authMethods: [],
     }))
-    .onRequest(methods.agent.session.new, ({ params }) => {
+    .onRequest(methods.agent.session.new, ({ params, client }) => {
       mcpServers.push(params.mcpServers);
       metas.push(params._meta);
 
-      return { sessionId: "session", configOptions: configOptions() };
+      if (!greeting)
+        return { sessionId: "session", configOptions: configOptions() };
+
+      // Like pi-acp: just after the session's response.
+      setTimeout(() => void say(client, greeting), 0);
+
+      return {
+        sessionId: "session",
+        configOptions: configOptions(),
+        _meta: { piAcp: { startupInfo: greeting } },
+      };
     })
     .onRequest(methods.agent.session.load, async ({ params, client }) => {
       mcpServers.push(params.mcpServers);
@@ -105,7 +119,9 @@ function fakeAgent(
         if (!efforts().includes(effort)) effort = "medium";
       } else if (params.configId === "reasoning_effort")
         effort = String(params.value);
-      else modes.push(String(params.value));
+      else if (params.value === "default" || params.value === "plan")
+        modes.push(params.value);
+      else throw RequestError.invalidParams({}, "No such mode.");
 
       return { configOptions: configOptions() };
     })
@@ -210,6 +226,7 @@ function openThread(
   launch: AskAgentLauncher,
   mcpServers: () => McpServer[] = () => [],
   options: {
+    agent?: AskAgentId;
     picks?: AskPicks;
     onChoices?: (choices: AskChoices) => void;
     limits?: AskThreadLimits;
@@ -1285,5 +1302,62 @@ it("says so when the agent leaves its read-only mode", async () => {
   const state = await until(thread, ({ status }) => status === "idle");
 
   expect(state.readOnly).toBe(false);
+  thread.close();
+});
+
+it("leaves the greeting Pi opens a session with out of the answer", async () => {
+  const { launch } = fakeAgent(
+    (client) => say(client, "It is safe."),
+    undefined,
+    "pi v1\n---\n\n## Skills\n- review",
+  );
+
+  const thread = openThread(launch, () => [], { agent: "pi" });
+  const state = await until(thread, ({ status }) => status === "idle");
+
+  expect(state.entries.filter((entry) => entry.kind === "agent")).toEqual([
+    { kind: "agent", id: expect.any(String), text: "It is safe." },
+  ]);
+  thread.close();
+});
+
+it("answers with an agent that has no read-only mode, and says it has none", async () => {
+  const { launch, modes } = fakeAgent((client) => say(client, "It is safe."));
+  const thread = openThread(launch, () => [], { agent: "pi" });
+  const state = await until(thread, ({ status }) => status === "idle");
+
+  expect(modes).toEqual([]);
+  expect(state.readOnly).toBe(false);
+  expect(state.entries.at(-1)).toMatchObject({ text: "It is safe." });
+  thread.close();
+});
+
+it("answers without a read-only mode its agent no longer offers", async () => {
+  // Codex's read-only mode, which this agent does not have.
+  const { launch, modes } = fakeAgent((client) => say(client, "It is safe."));
+  const thread = openThread(launch, () => [], { agent: "codex" });
+  const state = await until(thread, ({ status }) => status === "idle");
+
+  expect(modes).toEqual([]);
+  expect(state.readOnly).toBe(false);
+  expect(state.error).toBeUndefined();
+  expect(state.entries.at(-1)).toMatchObject({ text: "It is safe." });
+  thread.close();
+});
+
+it("accepts Cursor's todo list, so it carries on with the answer", async () => {
+  const todos = [{ id: "1", content: "Read the runner", status: "pending" }];
+  let reply: unknown;
+
+  const { launch } = fakeAgent(async (client) => {
+    reply = await client.request("cursor/update_todos", { todos });
+    await say(client, "It is safe.");
+  });
+
+  const thread = openThread(launch, () => [], { agent: "cursor" });
+  const state = await until(thread, ({ status }) => status === "idle");
+
+  expect(reply).toEqual({ outcome: { outcome: "accepted", todos } });
+  expect(state.entries.at(-1)).toMatchObject({ text: "It is safe." });
   thread.close();
 });

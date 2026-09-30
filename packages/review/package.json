@@ -77,6 +77,7 @@
     "mdast-util-gfm": "3.1.0",
     "mdast-util-math": "3.0.0",
     "micromark-extension-gfm": "3.0.0",
+    "pi-acp": "0.0.34",
     "pino": "10.3.1",
     "semver": "7.8.5",
     "sharp": "0.35.4",

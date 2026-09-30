@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 
-import { ClaudeCodeLogo, CodexLogo } from "./agent-logos";
+import { AGENT_LOGOS } from "./agent-logos";
 import { AgentMarkdown } from "./agent-markdown";
 import { askFileCode, askFileLink } from "./ask-files";
 import {
@@ -530,11 +530,7 @@ export function AskAgentTurn({
     <div {...stylex.props(styles.turn)}>
       <div {...stylex.props(styles.byline)}>
         <span {...stylex.props(styles.bylineLogo)}>
-          {thread.agent === "codex" ? (
-            <CodexLogo xstyle={styles.bylineLogoMark} />
-          ) : (
-            <ClaudeCodeLogo xstyle={styles.bylineLogoMark} />
-          )}
+          {AGENT_LOGOS[thread.agent]({ xstyle: styles.bylineLogoMark })}
         </span>
         <span>{thread.agentName}</span>
       </div>

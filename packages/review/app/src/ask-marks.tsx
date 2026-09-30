@@ -9,7 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { ClaudeCodeLogo, CodexLogo } from "./agent-logos";
+import { AGENT_LOGOS } from "./agent-logos";
 import { resolveAskAnchor } from "./ask-anchor";
 import { useAskHistory } from "./ask-history";
 import { useOptionalReviewPanelStore } from "./review-panel";
@@ -380,11 +380,7 @@ export function AskThreadMarks({
               )
             }
           >
-            {newest?.agent === "codex" ? (
-              <CodexLogo xstyle={styles.logo} />
-            ) : (
-              <ClaudeCodeLogo xstyle={styles.logo} />
-            )}
+            {AGENT_LOGOS[newest?.agent ?? "claude"]({ xstyle: styles.logo })}
             {/* One conversation needs no count. */}
             {count > 1 ? (
               <span {...stylex.props(styles.count)}>{count}</span>

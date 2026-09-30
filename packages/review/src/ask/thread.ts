@@ -74,6 +74,12 @@ function mcpServerOf(toolCall: Pick<ToolCallUpdate, "_meta" | "rawInput">) {
   return input && ("server" in input ? input.server : input.serverName);
 }
 
+const piGreetingSchema = z.object({
+  piAcp: z.object({ startupInfo: z.string() }),
+});
+
+const cursorTodosSchema = z.object({ todos: z.unknown() }).loose();
+
 /** MCP servers the reviewer's own agent may bring whose tools only read,
  * so their calls run without asking, like the agent reading files. */
 const READ_ONLY_MCP_SERVERS = new Set([
@@ -362,6 +368,9 @@ export class AskThread {
   /** Stop ended the agent itself: a start, or a turn that would not stop. */
   private halted = false;
   private stopTimer?: ReturnType<typeof setTimeout>;
+  /** What Pi greets a new session with, its version and skills, which is no
+   * part of the answer. */
+  private greeting?: string;
 
   constructor(
     private readonly launch: AskAgentLauncher,
@@ -679,7 +688,11 @@ export class AskThread {
         )
         .onNotification(methods.client.session.update, ({ params }) =>
           this.update(params),
-        ),
+        )
+        // Cursor waits on an answer to its todo list before it carries on.
+        .onRequest("cursor/update_todos", cursorTodosSchema, ({ params }) => ({
+          outcome: { outcome: "accepted", todos: params.todos },
+        })),
     );
 
     this.connection = connection;
@@ -690,7 +703,11 @@ export class AskThread {
       protocolVersion: PROTOCOL_VERSION,
       // Notices keep an agent's asides about itself (Codex's warnings about
       // its own config) out of the answer's text.
-      clientCapabilities: { session: { notices: {} } },
+      // Cursor offers its models as config options only when asked to.
+      clientCapabilities: {
+        session: { notices: {} },
+        _meta: { parameterizedModelPicker: true },
+      },
       clientInfo: { name: "whiteboard", title: "Whiteboard", version: "1" },
     });
 
@@ -702,13 +719,26 @@ export class AskThread {
 
     const mode = askAgents[this.start.agent].readOnlyMode;
 
-    const configurable = session.response.configOptions?.some(
-      (option) => option.id === "mode" && option.type === "select",
-    );
+    // An agent without a read-only mode still answers, as it is.
+    const configurable =
+      mode !== undefined &&
+      session.response.configOptions?.some(
+        (option) =>
+          option.id === "mode" &&
+          option.type === "select" &&
+          selectOptionsSchema
+            .safeParse(option.options)
+            .data?.flatMap((choice) =>
+              "group" in choice ? choice.options : [choice],
+            )
+            .some((choice) => choice.value === mode),
+      );
 
-    const selectable = session.response.modes?.availableModes.some(
-      (available) => available.id === mode,
-    );
+    const selectable =
+      mode !== undefined &&
+      session.response.modes?.availableModes.some(
+        (available) => available.id === mode,
+      );
 
     let config = session.response.configOptions;
 
@@ -822,6 +852,9 @@ export class AskThread {
 
       this.sessionId = response.sessionId;
       start.onSession?.(response.sessionId);
+
+      this.greeting = piGreetingSchema.safeParse(response._meta).data?.piAcp
+        .startupInfo;
 
       return { sessionId: response.sessionId, response };
     }
@@ -1032,7 +1065,15 @@ export class AskThread {
         return;
       case "agent_message_chunk": {
         if (update.content.type !== "text") return;
+
         const { text } = update.content;
+
+        if (text === this.greeting) {
+          this.greeting = undefined;
+
+          return;
+        }
+
         const last = this.state.entries.at(-1);
         const id = update.messageId ?? undefined;
 

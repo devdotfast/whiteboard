@@ -28,7 +28,7 @@ import {
 import { z } from "zod";
 
 import { AgentChatUserMessage } from "./agent-chat";
-import { ClaudeCodeLogo, CodexLogo } from "./agent-logos";
+import { AGENT_LOGOS } from "./agent-logos";
 import { AskDeleteButton, useShowOpenThread } from "./ask-delete";
 import { AskFilesProvider } from "./ask-files";
 import { useAskHistory } from "./ask-history";
@@ -82,10 +82,7 @@ export type AskAgent = z.infer<typeof agentsSchema>["agents"][number];
 const logos: Record<
   AskAgentId,
   (props: { xstyle?: stylex.StyleXStyles }) => ReactElement
-> = {
-  claude: ClaudeCodeLogo,
-  codex: CodexLogo,
-};
+> = AGENT_LOGOS;
 
 const agentsBySession = new WeakMap<
   ReviewSession,
@@ -821,11 +818,17 @@ export function AskPanelContent({
           title={
             !thread || thread.readOnly
               ? "The agent cannot change files in the checkout, and asks before running commands. It can edit this review."
-              : "This agent has no mode that asks first; Whiteboard still refuses file changes."
+              : `${thread.agentName} has no read-only mode, so it may change files in the checkout.`
           }
         >
-          <AskLockIcon />
-          {!thread || thread.readOnly ? "Read-only" : "No changes"}
+          {!thread || thread.readOnly ? (
+            <>
+              <AskLockIcon />
+              Read-only
+            </>
+          ) : (
+            "Not read-only"
+          )}
           {thread ? ` · ${thread.head.slice(0, 7)}` : null}
         </span>
       </div>
