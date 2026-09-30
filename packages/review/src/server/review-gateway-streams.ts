@@ -358,7 +358,9 @@ export function createGatewayStreams(input: {
           if (located === undefined) resolve(reviewId);
           else if (located === "laptop") want("laptop", reviewId);
           else if ("remote" in located) want(located.remote, reviewId);
-          else down(reviewId, located.down);
+          // Nothing until the host's first check says online or not.
+          else if (located.down.state !== "connecting")
+            down(reviewId, located.down);
         }
 
         for (const [key, upstream] of upstreams) {

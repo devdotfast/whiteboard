@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { type IncomingMessage, get } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -13,6 +13,7 @@ import {
 import { readReviewPackageVersion } from "@review/package-paths.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import { gatewayMemoryPath } from "./review-gateway-memory.js";
 import {
   seed,
   startFake,
@@ -642,3 +643,71 @@ it("gives a reader that stops reading the latest state once, not a backlog", asy
   expect(steps.filter((value) => value === `Step ${updates}`)).toHaveLength(1);
   expect(steps.length).toBeLessThan(updates / 2);
 }, 30_000);
+
+it("sends nothing for a review whose host is still connecting, then its value", async () => {
+  const serverId = randomUUID();
+  const reviewId = randomUUID();
+  const home = path.join(root, "laptop");
+
+  await mkdir(home, { recursive: true });
+  await writeFile(
+    gatewayMemoryPath(home),
+    JSON.stringify({ [serverId]: { alias: "wb-b", reviewIds: [reviewId] } }),
+  );
+
+  const value = { reviewId, title: "On b", activity: {}, coverageRevision: 0 };
+
+  const b = await startFake({
+    version,
+    serverId,
+    reviewIds: [reviewId],
+    handle(request, response) {
+      if (request.url === "/health") {
+        // The first check takes 1.5 s.
+        setTimeout(
+          () =>
+            response.writeHead(200, { "content-type": "application/json" }).end(
+              JSON.stringify({
+                ok: true,
+                serverId,
+                instanceId: "b",
+                serverPid: 1,
+                desktopAttached: false,
+                version,
+                commit: null,
+              }),
+            ),
+          1_500,
+        );
+
+        return true;
+      }
+
+      if (
+        !request.url?.includes(reviewId) ||
+        !request.url.startsWith("/reviews-api/watch")
+      )
+        return false;
+      response.setHeader("content-type", "application/x-ndjson");
+      response.write(
+        `${JSON.stringify({ kind: "review", reviewId, value })}\n`,
+      );
+
+      return true;
+    },
+  });
+
+  const laptop = await startGateway(root, [
+    { alias: "wb-b", endpoint: b.endpoint },
+  ]);
+
+  expect(laptop.gateway.hosts()[0]?.state).toBe("connecting");
+  const stream = follow(laptop.url, [{ reviewId }]);
+
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  expect(stream.all).toEqual([]);
+
+  const line = await stream.until((next) => !!valueOf(next, reviewId));
+  expect(valueOf(line, reviewId)).toMatchObject({ title: "On b" });
+  expect(stream.all.filter((next) => !!errorOf(next, reviewId))).toEqual([]);
+});
