@@ -23,8 +23,17 @@ function setup() {
 		registerProvider: () => calls.push("registerProvider"),
 		onDidFilesChange: changes.event,
 	} as unknown as IFileService;
+	const ownCalls: string[] = [];
+	const own = {
+		writeFile: async (resource: URI) => ownCalls.push(`writeFile ${resource}`),
+		copy: async (source: URI, target: URI) => ownCalls.push(`copy ${source} ${target}`),
+		move: async (source: URI, target: URI) => ownCalls.push(`move ${source} ${target}`),
+		createFolder: async (resource: URI) => ownCalls.push(`createFolder ${resource}`),
+		del: async (resource: URI) => ownCalls.push(`del ${resource}`),
+		canDelete: async () => true,
+	} as unknown as IFileService;
 	const refusals = new ReviewRemoteRefusals(A, () => "wb-test-a", { warn: (message: string) => warnings.push(message) } as unknown as ILogService);
-	return { files: reviewRemoteFileService(base, refusals), calls, warnings, changes };
+	return { files: reviewRemoteFileService(base, refusals, own), calls, ownCalls, warnings, changes };
 }
 
 test("a host reads its own files through the window's file service", async () => {
@@ -50,14 +59,45 @@ test("the laptop's files, its profile and another host's files are refused, and 
 	assert.deepEqual(warnings, [`[Remote guard] ${A}: refused reading files outside this remote`]);
 });
 
-test("nothing is written, not even to the host's own files, and no file system is registered", async () => {
-	const { files, calls } = setup();
-	assert.throws(() => files.writeFile(own, undefined as never), refused);
-	assert.throws(() => files.del(URI.file("/tmp/x")), refused);
-	assert.ok(await files.canDelete(own) instanceof Error);
+test("a host changes its own files through its own connection, never the window's", async () => {
+	const { files, calls, ownCalls } = setup();
+	const other = URI.parse(`vscode-remote://${A}/home/dev/proj/b.ts`);
+	await files.writeFile(own, undefined as never);
+	await files.copy(own, other);
+	await files.move(other, own);
+	await files.createFolder(other);
+	await files.del(other);
+	assert.equal(await files.canDelete(own), true);
+	assert.deepEqual(ownCalls, [
+		`writeFile ${own}`,
+		`copy ${own} ${other}`,
+		`move ${other} ${own}`,
+		`createFolder ${other}`,
+		`del ${other}`,
+	]);
+	assert.deepEqual(calls, []);
+});
+
+test("it changes nothing on the laptop or another host, and registers no file system", async () => {
+	const { files, calls, ownCalls, warnings } = setup();
+	const laptop = URI.file("/tmp/x");
+	const otherHost = URI.parse("vscode-remote://whiteboard+bbbb-2222/home/dev/proj/a.ts");
+	for (const uri of [laptop, otherHost, URI.parse("vscode-userdata:/Users/me/Library/settings.json")]) {
+		assert.throws(() => files.writeFile(uri, undefined as never), refused, uri.toString());
+		assert.throws(() => files.del(uri), refused, uri.toString());
+		assert.throws(() => files.createFolder(uri), refused, uri.toString());
+		assert.ok(await files.canDelete(uri) instanceof Error);
+	}
+	// A copy or move is refused when either end is not this host's.
+	assert.throws(() => files.copy(own, laptop), refused);
+	assert.throws(() => files.move(otherHost, own), refused);
 	assert.throws(() => files.registerProvider("file", {} as never), refused);
 	assert.equal(files.getProvider("vscode-remote"), undefined);
-	assert.deepEqual(calls, []);
+	assert.deepEqual([calls, ownCalls], [[], []]);
+	assert.deepEqual(warnings, [
+		`[Remote guard] ${A}: refused changing files outside this remote`,
+		`[Remote guard] ${A}: refused registering a file system`,
+	]);
 });
 
 test("change events carry only this host's files", () => {

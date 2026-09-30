@@ -11,30 +11,44 @@ import { FileChangesEvent, FileChangeType, type IFileService } from "../../../..
 import { override, type ReviewRemoteRefusals } from "./reviewRemoteGuard.js";
 
 const READ_ELSEWHERE = "reading files outside this remote";
-const WRITE = "changing files";
+const WRITE_ELSEWHERE = "changing files outside this remote";
 
 /**
- * Files of this host only, read-only. The laptop's disk (`file:`, which is
- * what the remote's `vscode-local:` arrives as), its profile and every other
- * host's files are refused, and their change events never reach the host.
+ * Files of this host only. The laptop's disk (`file:`, which is what the
+ * remote's `vscode-local:` arrives as), its profile and every other host's
+ * files are refused, and their change events never reach the host.
+ *
+ * Its own files it may also change, as its extensions can with Node's `fs`
+ * anyway: through `own`, its own connection, never the window's router, which
+ * keeps every editor read-only.
  */
-export function reviewRemoteFileService(base: IFileService, refusals: ReviewRemoteRefusals): IFileService {
+export function reviewRemoteFileService(base: IFileService, refusals: ReviewRemoteRefusals, own: IFileService): IFileService {
 	const mine = (resource: URI) => refusals.owns(resource);
 	const elsewhere = () => Promise.reject(refusals.refuse(READ_ELSEWHERE));
+	const writable = (...resources: URI[]) => {
+		if (!resources.every(mine)) throw refusals.refuse(WRITE_ELSEWHERE);
+		return own;
+	};
 	return override(base, {
-		...refusals.refuseAll<IFileService>(["writeFile", "move", "copy", "cloneFile", "createFile", "createFolder", "del"], WRITE),
-		canMove: async () => refusals.refuse(WRITE),
-		canCopy: async () => refusals.refuse(WRITE),
-		canCreateFile: async () => refusals.refuse(WRITE),
-		canDelete: async () => refusals.refuse(WRITE),
+		writeFile: (resource, content, options) => writable(resource).writeFile(resource, content, options),
+		move: (source, target, overwrite) => writable(source, target).move(source, target, overwrite),
+		copy: (source, target, overwrite) => writable(source, target).copy(source, target, overwrite),
+		cloneFile: (source, target) => writable(source, target).cloneFile(source, target),
+		createFile: (resource, content, options) => writable(resource).createFile(resource, content, options),
+		createFolder: (resource) => writable(resource).createFolder(resource),
+		del: (resource, options) => writable(resource).del(resource, options),
+		canMove: async (source, target, overwrite) => (mine(source) && mine(target) ? own.canMove(source, target, overwrite) : refusals.refuse(WRITE_ELSEWHERE)),
+		canCopy: async (source, target, overwrite) => (mine(source) && mine(target) ? own.canCopy(source, target, overwrite) : refusals.refuse(WRITE_ELSEWHERE)),
+		canCreateFile: async (resource, options) => (mine(resource) ? own.canCreateFile(resource, options) : refusals.refuse(WRITE_ELSEWHERE)),
+		canDelete: async (resource, options) => (mine(resource) ? own.canDelete(resource, options) : refusals.refuse(WRITE_ELSEWHERE)),
 		registerProvider: () => { throw refusals.refuse("registering a file system"); },
 		// The router answers for every host; handing it out would skip this check.
 		getProvider: () => undefined,
 		activateProvider: async () => { },
 		canHandleResource: async (resource) => mine(resource),
 		hasProvider: (resource) => mine(resource),
-		hasCapability: (resource, capability) => mine(resource) && base.hasCapability(resource, capability),
-		listCapabilities: () => [...base.listCapabilities()].filter(({ scheme }) => scheme === Schemas.vscodeRemote),
+		hasCapability: (resource, capability) => mine(resource) && own.hasCapability(resource, capability),
+		listCapabilities: () => [...own.listCapabilities()].filter(({ scheme }) => scheme === Schemas.vscodeRemote),
 		onDidChangeFileSystemProviderRegistrations: Event.filter(base.onDidChangeFileSystemProviderRegistrations, (e) => e.scheme === Schemas.vscodeRemote),
 		onDidChangeFileSystemProviderCapabilities: Event.filter(base.onDidChangeFileSystemProviderCapabilities, (e) => e.scheme === Schemas.vscodeRemote),
 		onWillActivateFileSystemProvider: Event.None,

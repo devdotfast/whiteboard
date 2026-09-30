@@ -191,6 +191,7 @@ test("a host's main-thread peers are created with the guarded services", async (
 		languageFeatures: {} as never,
 		workspace: new ReviewRemoteWorkspace("w"),
 		resolver: {} as IRemoteAuthorityResolverService,
+		ownFiles: { copy: record("own copy"), writeFile: record("own writeFile"), listCapabilities: () => [] } as unknown as IFileService,
 	}, accessor)));
 	const context = { remoteAuthority: A, getProxy: () => ({ $acceptProviderInfos() { }, $onDidChangeWindowFocus() { } }) } as unknown as IExtHostContext;
 	const peer = <T>(ctor: new (context: IExtHostContext, ...services: never[]) => T): T => scope.invokeFunction((accessor) => (accessor.get(IInstantiationService).createInstance as (ctor: unknown, context: IExtHostContext) => T)(ctor, context));
@@ -200,12 +201,15 @@ test("a host's main-thread peers are created with the guarded services", async (
 	await assert.rejects(peer(MainThreadFileSystem).$readFile(laptop), refused);
 	await assert.rejects(peer(MainThreadFileSystem).$readFile(onB), refused);
 	await peer(MainThreadFileSystem).$readFile(onA);
+	await peer(MainThreadFileSystem).$copy(onA, onA.with({ path: "/home/dev/proj/copy.ts" }), { overwrite: false });
+	await assert.rejects(peer(MainThreadFileSystem).$writeFile(laptop, undefined as never), refused);
+	await assert.rejects(peer(MainThreadFileSystem).$copy(onA, onB, { overwrite: false }), refused);
 	await assert.rejects(peer(MainThreadWindow).$openUri(URI.file("/System/Applications/Calculator.app"), undefined, {}), refused);
 	await peer(MainThreadWindow).$openUri(URI.parse("https://example.com/"), undefined, {});
 	await assert.rejects(peer(MainThreadClipboard).$readText(), refused);
 	await assert.rejects(peer(MainThreadDownloadService).$download(URI.parse("https://example.com/"), laptop), refused);
 	assert.equal(await peer(MainThreadBulkEdits).$tryApplyWorkspaceEdit({ value: { edits: [] } } as never), false);
 	await assert.rejects(peer(MainThreadLoggerService).$createLogger(URI.file("/Users/me/.zshrc")), refused);
-	assert.deepEqual(reached, [`readFile ${onA}`, "open https://example.com/"]);
+	assert.deepEqual(reached, [`readFile ${onA}`, `own copy ${onA}`, "open https://example.com/"]);
 	assert.ok(warnings.some((warning) => warning.includes("refused editing documents or files")));
 });

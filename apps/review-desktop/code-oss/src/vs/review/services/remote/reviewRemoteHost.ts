@@ -7,6 +7,7 @@ import { DeferredPromise, raceTimeout, TimeoutTimer } from "../../../base/common
 import { toErrorMessage } from "../../../base/common/errorMessage.js";
 import { CancellationError } from "../../../base/common/errors.js";
 import { Disposable, type IDisposable } from "../../../base/common/lifecycle.js";
+import { Schemas } from "../../../base/common/network.js";
 import * as platform from "../../../base/common/platform.js";
 import type { Mutable } from "../../../base/common/types.js";
 import { URI } from "../../../base/common/uri.js";
@@ -14,6 +15,7 @@ import type { ILanguageFeaturesService } from "../../../editor/common/services/l
 import { LanguageFeaturesService } from "../../../editor/common/services/languageFeaturesService.js";
 import type { IExtensionDescription } from "../../../platform/extensions/common/extensions.js";
 import { DiskFileSystemProviderClient } from "../../../platform/files/common/diskFileSystemProviderClient.js";
+import { FileService } from "../../../platform/files/common/fileService.js";
 import { IInstantiationService } from "../../../platform/instantiation/common/instantiation.js";
 import { ILogService } from "../../../platform/log/common/log.js";
 import { IProductService } from "../../../platform/product/common/productService.js";
@@ -276,6 +278,9 @@ export class ReviewRemoteSession extends Disposable implements IReviewRemoteSess
 
 		const files = this._register(new DiskFileSystemProviderClient(management.client.getChannel(REMOTE_FILE_SYSTEM_CHANNEL_NAME), { pathCaseSensitive: true }));
 		this._register(this.router.add(authority, files));
+		// This host's own disk, writable for its extensions only: the window's router, and so every editor, stays read-only.
+		const ownFiles = this._register(new FileService(this.logService));
+		this._register(ownFiles.registerProvider(Schemas.vscodeRemote, files));
 
 		const scope = this._register(this.instantiationService.createChild(this.instantiationService.invokeFunction((window) => reviewRemoteScope({
 			authority,
@@ -285,6 +290,7 @@ export class ReviewRemoteSession extends Disposable implements IReviewRemoteSess
 			languageFeatures: this.host.languageFeatures,
 			workspace: this.host.workspace,
 			resolver: reviewRemoteResolver(this.resolverService, authority, () => this.address()),
+			ownFiles,
 		}, window))));
 		const extensionHost = scope.createInstance(ReviewRemoteExtensionHost, new RemoteRunningLocation(), {
 			remoteAuthority: authority,
