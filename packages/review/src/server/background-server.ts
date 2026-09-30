@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, open, readFile } from "node:fs/promises";
+import { mkdir, open, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -37,12 +37,54 @@ export async function ensureBackgroundServer(
 
   const logPath = backgroundServerLogPath(stateDir);
   await mkdir(path.dirname(logPath), { recursive: true, mode: 0o700 });
+  const logStart = (await stat(logPath).catch(() => null))?.size ?? 0;
+  const deadline = Date.now() + (input.timeoutMs ?? 15_000);
+  let child = await spawnServer(stateDir, logPath, input);
+  let respawned = false;
+
+  while (Date.now() < deadline) {
+    const discovery = await healthyDiscovery(stateDir);
+
+    if (discovery)
+      return { discovery, started: discovery.serverPid === child.pid };
+
+    if (child.error) throw child.error;
+
+    // Our child lost the start to another, or failed. Only a lock holder
+    // can still publish a server; one that was shutting down cannot, so
+    // try once more.
+    if (child.exited && !existsSync(headlessServerLockPath(stateDir))) {
+      if (respawned) break;
+      respawned = true;
+      child = await spawnServer(stateDir, logPath, input);
+    }
+
+    await delay(100);
+  }
+
+  throw new Error(
+    `The Whiteboard server did not become ready${child.exited ? "" : ` within ${Math.round((input.timeoutMs ?? 15_000) / 1_000)} s; process ${child.pid} is still starting`}. The end of ${logPath}:\n${await logTail(logPath, logStart)}`,
+  );
+}
+
+interface ServerChild {
+  pid?: number;
+  exited: boolean;
+  /** Set when the command itself could not run. */
+  error?: Error;
+}
+
+async function spawnServer(
+  stateDir: string,
+  logPath: string,
+  input: EnsureBackgroundServerInput,
+) {
   const log = await open(logPath, "a", 0o600);
-  const logStart = (await log.stat()).size;
   const [command, ...cliArgs] = input.cli ?? currentCli();
 
   // The token reaches callers through the discovery file only: never an
-  // argument, the environment or this log.
+  // argument, the environment or this log. The working directory is the
+  // state directory, so the server never holds the caller's.
   const child = spawn(
     command!,
     [
@@ -56,39 +98,37 @@ export async function ensureBackgroundServer(
       ...(input.args ?? []),
     ],
     {
+      cwd: stateDir,
       detached: true,
       env: input.env ?? process.env,
       stdio: ["ignore", log.fd, log.fd],
     },
   );
 
-  let exited = false;
-  child.once("exit", () => (exited = true));
-  child.once("error", () => (exited = true));
+  const state: ServerChild = {
+    pid: child.pid,
+    exited: false,
+  };
+
+  child.once("exit", () => (state.exited = true));
+  child.once("error", (error) => {
+    state.exited = true;
+    state.error = new Error(
+      `Could not start the Whiteboard server: ${error.message}`,
+    );
+  });
   child.unref();
   await log.close();
 
-  const deadline = Date.now() + (input.timeoutMs ?? 15_000);
-
-  while (Date.now() < deadline) {
-    const discovery = await healthyDiscovery(stateDir);
-
-    if (discovery)
-      return { discovery, started: discovery.serverPid === child.pid };
-
-    // Our child lost the start to another, or failed. Only a lock holder
-    // can still publish a server.
-    if (exited && !existsSync(headlessServerLockPath(stateDir))) break;
-    await delay(100);
-  }
-
-  throw new Error(
-    `The Whiteboard server did not become ready${exited ? "" : ` within ${Math.round((input.timeoutMs ?? 15_000) / 1_000)} s; process ${child.pid} is still starting`}. The end of ${logPath}:\n${await logTail(logPath, logStart)}`,
-  );
+  return state;
 }
 
 function currentCli() {
-  return [process.execPath, ...process.execArgv, process.argv[1]!];
+  return [
+    process.execPath,
+    ...process.execArgv,
+    path.resolve(process.argv[1]!),
+  ];
 }
 
 async function healthyDiscovery(stateDir: string) {

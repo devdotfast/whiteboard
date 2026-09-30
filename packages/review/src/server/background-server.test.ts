@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
+import { existsSync } from "node:fs";
 import {
   mkdir,
   mkdtemp,
@@ -13,12 +14,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Writable } from "node:stream";
 
+import { processStartIdentity } from "@dev.fast/trace-core";
 import {
   REMOTE_ATTACH_BEGIN,
   REMOTE_ATTACH_END,
+  ensureDiffr,
   remoteAttach,
 } from "@review/remote-attach.js";
 import {
+  headlessServerLockPath,
   readReviewServerDiscovery,
   readReviewServerHealth,
   reviewServerDiscoveryPath,
@@ -34,6 +38,7 @@ import {
   backgroundServerLogPath,
   ensureBackgroundServer,
 } from "./background-server.js";
+import { fetchedDiffrPath } from "./structural-diff.js";
 
 let root: string;
 
@@ -187,7 +192,10 @@ it("ends two simultaneous starts with one server that both callers reach", async
 }, 60_000);
 
 it("attaches with one JSON line between the sentinels, and its token reaches the server", async () => {
-  const first = await cli(["remote", "attach", "--json"]);
+  // An override resolves diffr, so the real fetcher never runs and nothing
+  // is written into this checkout's package.
+  const diffr = await fakeDiffr();
+  const first = await cli(["remote", "attach", "--json"], diffr);
 
   expect(first.code).toBe(0);
   const lines = first.stdout.split("\n");
@@ -207,7 +215,7 @@ it("attaches with one JSON line between the sentinels, and its token reaches the
     url: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
     token: expect.any(String),
     startedServer: true,
-    diffr: expect.any(Boolean),
+    diffr: true,
   });
 
   const reviews = (token?: string) =>
@@ -221,7 +229,7 @@ it("attaches with one JSON line between the sentinels, and its token reaches the
     "desktop",
   );
 
-  const second = await cli(["remote", "attach", "--json"]);
+  const second = await cli(["remote", "attach", "--json"], diffr);
   expect(JSON.parse(second.stdout.split("\n")[1]!)).toMatchObject({
     startedServer: false,
     serverId: attach.serverId,
@@ -237,36 +245,248 @@ it("attaches with one JSON line between the sentinels, and its token reaches the
   ).not.toContain(attach.token);
 }, 60_000);
 
-it("attaches without a network, with structural diff off", async () => {
+it("prints a failed attach between the sentinels and exits non-zero", async () => {
+  await writeFile(path.join(root, "file"), "");
+
+  const failed = await cli(
+    ["remote", "attach", "--json"],
+    await fakeDiffr(),
+    path.join(root, "file", "state"),
+  );
+
+  expect(failed.code).toBe(1);
+  const lines = failed.stdout.split("\n");
+  expect(lines).toEqual([
+    REMOTE_ATTACH_BEGIN,
+    expect.any(String),
+    REMOTE_ATTACH_END,
+    "",
+  ]);
+  expect(JSON.parse(lines[1]!)).toMatchObject({
+    event: "error",
+    error: { message: expect.stringContaining("ENOTDIR") },
+  });
+}, 30_000);
+
+it("attaches without a network, with structural diff off and nothing written", async () => {
   const packageRoot = path.join(root, "package");
   await mkdir(packageRoot);
-  let stderr = "";
-
-  const began = Date.now();
 
   const attach = await remoteAttach({
     stateDir,
     env: { ...env, PATH: path.dirname(process.execPath) },
-    stderr: new Writable({
-      write(chunk, _encoding, done) {
-        stderr += chunk;
-        done();
-      },
-    }),
+    stderr: discard(),
     packageRoot,
     cli: sourceCli,
   });
 
   expect(attach).toMatchObject({ startedServer: true, diffr: false });
-  expect(stderr).toContain("could not download");
-  expect(Date.now() - began).toBeLessThan(15_000);
+  expect(existsSync(path.join(packageRoot, "bin", "diffr"))).toBe(false);
+  expect(existsSync(fetchedDiffrPath(stateDir))).toBe(false);
 }, 60_000);
 
-async function cli(args: string[]) {
+it("gives up on a refused download at once and on a stalled one at the bound", async () => {
+  const packageRoot = path.join(root, "package");
+  await mkdir(packageRoot);
+  const noDiffr = { ...env, PATH: path.dirname(process.execPath) };
+
+  let began = Date.now();
+  expect(
+    await ensureDiffr({
+      stateDir,
+      env: noDiffr,
+      stderr: discard(),
+      packageRoot,
+    }),
+  ).toBe(false);
+  expect(Date.now() - began).toBeLessThan(5_000);
+
+  const stalls = path.join(root, "stalls.mjs");
+  await writeFile(stalls, "setTimeout(() => {}, 60_000);\n");
+  began = Date.now();
+  expect(
+    await ensureDiffr({
+      stateDir,
+      env: noDiffr,
+      stderr: discard(),
+      packageRoot,
+      fetcher: stalls,
+      timeoutMs: 500,
+    }),
+  ).toBe(false);
+  expect(Date.now() - began).toBeLessThan(3_000);
+}, 30_000);
+
+it("fetches diffr into the state directory when the package is not writable", async () => {
+  const packageRoot = path.join(root, "package");
+  await mkdir(packageRoot, { mode: 0o555 });
+  const fetcher = await fakeFetcher();
+
+  expect(
+    await ensureDiffr({
+      stateDir,
+      env: { ...env, PATH: path.dirname(process.execPath) },
+      stderr: discard(),
+      packageRoot,
+      fetcher,
+    }),
+  ).toBe(true);
+  expect(existsSync(fetchedDiffrPath(stateDir))).toBe(true);
+  expect(existsSync(path.join(packageRoot, "bin"))).toBe(false);
+});
+
+it("leaves a bundled diffr alone and fetches nothing", async () => {
+  const packageRoot = path.join(root, "package");
+  await mkdir(path.join(packageRoot, "bin"), { recursive: true });
+  await writeFile(path.join(packageRoot, "bin", "diffr"), "#!/bin/sh\n", {
+    mode: 0o755,
+  });
+  const fetcher = await fakeFetcher();
+  let stderr = "";
+
+  expect(
+    await ensureDiffr({
+      stateDir,
+      env: { ...env, PATH: path.dirname(process.execPath) },
+      stderr: new Writable({
+        write(chunk, _encoding, done) {
+          stderr += chunk;
+          done();
+        },
+      }),
+      packageRoot,
+      fetcher,
+    }),
+  ).toBe(true);
+  expect(stderr).toBe("");
+  expect(existsSync(`${fetcher}.ran`)).toBe(false);
+  expect(existsSync(path.join(stateDir, "review-tools"))).toBe(false);
+});
+
+it("ends a pending download when the server cannot start", async () => {
+  const stalls = path.join(root, "stalls.mjs");
+  await writeFile(stalls, "setTimeout(() => {}, 60_000);\n");
+  await writeFile(path.join(root, "file"), "");
+  await mkdir(path.join(root, "package"));
+  const began = Date.now();
+
+  await expect(
+    remoteAttach({
+      stateDir: path.join(root, "file", "state"),
+      env: { ...env, PATH: path.dirname(process.execPath) },
+      stderr: discard(),
+      packageRoot: path.join(root, "package"),
+      fetcher: stalls,
+      cli: sourceCli,
+    }),
+  ).rejects.toThrow(/ENOTDIR/);
+  expect(Date.now() - began).toBeLessThan(5_000);
+
+  expect(spawnSync("pgrep", ["-f", stalls]).status).toBe(1);
+}, 30_000);
+
+it("runs the detached server in its state directory, not the caller's", async () => {
+  const caller = path.join(root, "caller");
+  await mkdir(caller);
+
+  const started = await cli(
+    ["server", "start", "--detach", "--json"],
+    {},
+    stateDir,
+    caller,
+  );
+
+  expect(started.code).toBe(0);
+  const { serverPid, url } = JSON.parse(started.stdout);
+  await rm(caller, { recursive: true });
+
+  const cwd = spawnSync(
+    "lsof",
+    ["-a", "-p", `${serverPid}`, "-d", "cwd", "-Fn"],
+    {
+      encoding: "utf8",
+    },
+  ).stdout;
+
+  expect(cwd).toContain(`n${stateDir}\n`);
+
+  const discovery = (await readReviewServerDiscovery(stateDir))!;
+  expect(await readReviewServerHealth(discovery)).toMatchObject({ ok: true });
+
+  const response = await fetch(`${url}/reviews-api`, {
+    headers: { "x-review-token": discovery.token },
+  });
+
+  expect(response.status).toBe(200);
+}, 60_000);
+
+it("starts over a lock whose pid now belongs to an unrelated live process", async () => {
+  await writeLock({ pid: process.pid, started: "a process before a reboot" });
+
+  const { started } = await ensureBackgroundServer({
+    stateDir,
+    env,
+    cli: sourceCli,
+  });
+
+  expect(started).toBe(true);
+}, 60_000);
+
+it("never starts beside a live lock holder", async () => {
+  await writeLock({
+    pid: process.pid,
+    started: processStartIdentity(process.pid),
+  });
+
+  await expect(
+    ensureBackgroundServer({ stateDir, env, cli: sourceCli, timeoutMs: 3_000 }),
+  ).rejects.toThrow(/did not become ready/);
+  expect(await readReviewServerDiscovery(stateDir)).toBeNull();
+}, 30_000);
+
+it("tries once more when the lock holder was shutting down", async () => {
+  await writeLock({
+    pid: process.pid,
+    started: processStartIdentity(process.pid),
+  });
+
+  const starting = ensureBackgroundServer({ stateDir, env, cli: sourceCli });
+
+  // The holder exits once our first child has lost the lock to it.
+  for (let i = 0; i < 200; i++) {
+    const log = await readFile(backgroundServerLogPath(stateDir), "utf8").catch(
+      () => "",
+    );
+
+    if (log.includes("already owns")) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  await rm(headlessServerLockPath(stateDir), { recursive: true });
+
+  expect(await starting).toMatchObject({ started: true });
+}, 60_000);
+
+it("reports a server command that cannot be spawned", async () => {
+  await expect(
+    ensureBackgroundServer({
+      stateDir,
+      env,
+      cli: [path.join(root, "missing")],
+    }),
+  ).rejects.toThrow(/Could not start the Whiteboard server: .*ENOENT/);
+});
+
+async function cli(
+  args: string[],
+  extraEnv: NodeJS.ProcessEnv = {},
+  dir = stateDir,
+  cwd?: string,
+) {
   const child = spawn(
     sourceCli[0]!,
-    [...sourceCli.slice(1), ...args, "--state-dir", stateDir],
-    { env, stdio: ["ignore", "pipe", "pipe"] },
+    [...sourceCli.slice(1), ...args, "--state-dir", dir],
+    { cwd, env: { ...env, ...extraEnv }, stdio: ["ignore", "pipe", "pipe"] },
   );
 
   let stdout = "";
@@ -299,4 +519,44 @@ function alive(pid: number) {
   } catch {
     return false;
   }
+}
+
+async function fakeDiffr() {
+  const binary = path.join(root, "override", "diffr");
+  await mkdir(path.dirname(binary), { recursive: true });
+  await writeFile(binary, "#!/bin/sh\n", { mode: 0o755 });
+
+  return { REVIEW_DIFFR_BINARY: binary };
+}
+
+/** Writes an executable diffr where it is told, and leaves a mark that it ran. */
+async function fakeFetcher() {
+  const fetcher = path.join(root, "fetcher.mjs");
+  await writeFile(
+    fetcher,
+    [
+      'import { mkdirSync, writeFileSync } from "node:fs";',
+      "const into = process.argv[process.argv.indexOf('--into') + 1];",
+      "mkdirSync(into, { recursive: true });",
+      'writeFileSync(`${into}/diffr`, "#!/bin/sh\\n", { mode: 0o755 });',
+      `writeFileSync(${JSON.stringify(`${fetcher}.ran`)}, into);`,
+      "",
+    ].join("\n"),
+  );
+
+  return fetcher;
+}
+
+async function writeLock(owner: { pid: number; started: string | null }) {
+  const lock = headlessServerLockPath(stateDir);
+  await mkdir(lock, { recursive: true });
+  await writeFile(path.join(lock, "owner.json"), JSON.stringify(owner));
+}
+
+function discard() {
+  return new Writable({
+    write(_chunk, _encoding, done) {
+      done();
+    },
+  });
 }

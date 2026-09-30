@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
-import type { Writable } from "node:stream";
+import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -420,7 +420,16 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       throw new Error(
         `The Whiteboard server in ${stateDir} (process ${serverPid}) runs in the foreground of \`whiteboard server start\`. Stop it there with Ctrl-C.`,
       );
-    process.kill(serverPid, "SIGTERM");
+
+    try {
+      process.kill(serverPid, "SIGTERM");
+    } catch (error) {
+      // It exited between the health check and the signal.
+      if (
+        !(error instanceof Error && "code" in error && error.code === "ESRCH")
+      )
+        throw error;
+    }
 
     // Shutdown force-closes open streams after 5 s.
     for (let waited = 0; processIsAlive(serverPid); waited += 100) {
@@ -552,7 +561,32 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     const { REMOTE_ATTACH_BEGIN, REMOTE_ATTACH_END, remoteAttach } =
       await import("./remote-attach.js");
 
-    const attach = await remoteAttach({ stateDir, env, stderr: input.stderr });
+    let attach: Awaited<ReturnType<typeof remoteAttach>>;
+
+    try {
+      attach = await remoteAttach({ stateDir, env, stderr: input.stderr });
+    } catch (error) {
+      if (!options.json) throw error;
+
+      // Desktop reads only between the sentinels, so the reason goes there.
+      let line = "";
+
+      emitReviewEvent(
+        new Writable({
+          write(chunk, _encoding, done) {
+            line += chunk;
+            done();
+          },
+        }),
+        { event: "error", error: serializeReviewError(error) },
+      );
+      input.stdout.write(
+        `${REMOTE_ATTACH_BEGIN}\n${ensureTrailingNewline(line)}${REMOTE_ATTACH_END}\n`,
+      );
+      state.exitCode = 1;
+
+      return;
+    }
 
     // Sentinels let Desktop drop whatever the login shell prints around them.
     input.stdout.write(

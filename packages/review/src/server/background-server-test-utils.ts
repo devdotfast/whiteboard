@@ -24,7 +24,7 @@ export function isolatedEnv(root: string): NodeJS.ProcessEnv {
 
   for (const [key, value] of Object.entries(process.env))
     if (
-      !/^(DEV_REVIEW_|DEV_FAST_REVIEW_|REVIEW_DIFFR_|TRACE_HOME_DIR$)/.test(
+      !/^(DEV_REVIEW_|DEV_FAST_REVIEW_|REVIEW_DIFFR_|TRACE_|TSX_|XDG_CONFIG_HOME$|CODEX_HOME$)/.test(
         key,
       ) &&
       !/^(https?|no|all)_proxy$/i.test(key)
@@ -32,6 +32,7 @@ export function isolatedEnv(root: string): NodeJS.ProcessEnv {
       env[key] = value;
 
   const home = path.join(root, "home");
+  roots.add(root);
 
   return {
     ...env,
@@ -43,24 +44,44 @@ export function isolatedEnv(root: string): NodeJS.ProcessEnv {
     NODE_USE_ENV_PROXY: "1",
     HTTPS_PROXY: "http://127.0.0.1:9",
     NO_PROXY: "127.0.0.1,localhost",
+    // The detached server runs in its state directory, away from tsconfig.
+    TSX_TSCONFIG_PATH: path.join(packageRoot, "tsconfig.json"),
   };
 }
+
+const roots = new Set<string>();
+
+// An interrupted run skips afterEach; detached servers must not outlive it.
+process.on("exit", () => {
+  for (const root of roots)
+    spawnSync("pkill", ["-KILL", "-f", path.basename(root)]);
+});
 
 /** Detached servers outlive their CLI; each has `root` in its arguments. */
 export async function stopServersUnder(root: string) {
   const pattern = path.basename(root);
 
   for (const signal of ["TERM", "TERM", "KILL"]) {
-    spawnSync("pkill", [`-${signal}`, "-f", pattern]);
+    checked(spawnSync("pkill", [`-${signal}`, "-f", pattern]));
 
     for (let i = 0; i < 30 && running(pattern); i++) await delay(100);
 
-    if (!running(pattern)) return;
+    if (!running(pattern)) {
+      roots.delete(root);
+
+      return;
+    }
   }
 
   throw new Error(`Processes under ${root} survived SIGKILL`);
 }
 
 function running(pattern: string) {
-  return spawnSync("pgrep", ["-f", pattern]).status === 0;
+  return checked(spawnSync("pgrep", ["-f", pattern])).status === 0;
+}
+
+function checked(result: ReturnType<typeof spawnSync>) {
+  if (result.error) throw result.error;
+
+  return result;
 }
