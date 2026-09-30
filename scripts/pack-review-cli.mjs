@@ -1,17 +1,36 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { stageReviewDocs } from "../apps/review-desktop/scripts/stage-review-runtime.mjs";
+import { stageVscodeServer } from "../apps/review-desktop/scripts/stage-vscode-server.mjs";
 import { distTag } from "./review-cli-release.mjs";
 
-/** Pack from the workspace, then add the docs and version metadata shipped by Desktop. */
+/** npm serves larger tarballs, but a remote downloads this one on every upgrade. */
+export const MAX_TARBALL_BYTES = 60 * 1024 * 1024;
+
+/**
+ * Pack from the workspace, then add the docs, the VS Code server and the
+ * version metadata shipped by Desktop.
+ */
 export async function packReviewCli(
   { version, commit },
   outputDirectory,
-  { packageDirectory = "packages/review", stdio = "inherit" } = {},
+  {
+    packageDirectory = "packages/review",
+    stdio = "inherit",
+    vscodeServer = {},
+    maxBytes = MAX_TARBALL_BYTES,
+  } = {},
 ) {
   distTag(version);
 
@@ -47,6 +66,7 @@ export async function packReviewCli(
     ]);
     const staged = path.join(scratch, "package");
     await stageReviewDocs(staged);
+    await stageVscodeServer(staged, { ...vscodeServer, commit });
 
     execFileSync(
       "npm",
@@ -54,7 +74,15 @@ export async function packReviewCli(
       { cwd: staged, stdio },
     );
 
-    return path.join(output, tarball);
+    const packed = path.join(output, tarball);
+    const { size } = await stat(packed);
+
+    if (size > maxBytes)
+      throw new Error(
+        `${tarball} is ${size} bytes, over the ${maxBytes}-byte limit`,
+      );
+
+    return packed;
   } finally {
     await writeFile(manifestPath, original);
     await rm(scratch, { recursive: true, force: true });
