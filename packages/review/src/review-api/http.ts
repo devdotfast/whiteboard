@@ -6,6 +6,14 @@ import {
   AgentSelectionSchema,
   selectionMarkdown,
 } from "@review/agent-selection.js";
+import type { AskAgentStatus } from "@review/ask/agents.js";
+import {
+  askAgentIds,
+  askChoiceKinds,
+  askPicksSchema,
+} from "@review/ask/thread-state.js";
+import type { AskThreads } from "@review/ask/thread.js";
+import { watchAskThread } from "@review/ask/watch.js";
 import { resolveReviewStackLayers } from "@review/review-stack.js";
 import { readBoundedRequestJson } from "@review/server/hono-http.js";
 import { HttpJsonError } from "@review/server/http-json.js";
@@ -55,6 +63,34 @@ import {
 } from "./store.js";
 import { listPinnedTraces, readStoredTrace } from "./traces.js";
 
+export interface AskHost {
+  threads: AskThreads;
+  agents: () => Promise<AskAgentStatus[]>;
+}
+
+const askStartSchema = z.strictObject({
+  agent: z.enum(askAgentIds),
+  question: z.string().trim().min(1).max(8_000),
+  selection: AgentSelectionSchema,
+  picks: askPicksSchema.optional(),
+});
+
+const askOpenSchema = z.strictObject({ picks: askPicksSchema.optional() });
+
+const askChoiceSchema = z.strictObject({
+  kind: z.enum(askChoiceKinds),
+  value: z.string().min(1).max(200),
+});
+
+const askFollowUpSchema = z.strictObject({
+  question: z.string().trim().min(1).max(8_000),
+});
+
+const askDecisionSchema = z.strictObject({
+  permissionId: z.string().min(1),
+  optionId: z.string().min(1),
+});
+
 export interface AuthoringCapabilities {
   desktopAvailable: boolean;
   softwareMapEnabled: boolean;
@@ -103,6 +139,8 @@ export function createReviewApi(
   /** Which server this is, for whiteboard_status. */
   status: () => JsonObject = () => ({}),
   hooks: ReviewApiHooks = {},
+  /** Desktop's Ask: local agents answering questions about a selection. */
+  ask?: AskHost,
 ) {
   const app = new Hono();
   app.onError((error, context) => {
@@ -1078,6 +1116,284 @@ export function createReviewApi(
       "",
       "",
     ].join("\n");
+  }
+
+  if (ask && data) {
+    const readThread = (reviewId: string, threadId: string) => {
+      const thread = ask.threads.get(threadId);
+
+      if (!thread || thread.reviewId !== reviewId)
+        throw new ReviewInputError("This conversation has ended.", 404);
+
+      return thread;
+    };
+
+    // Each agent with the models and efforts it offered last; none until
+    // it has run.
+    app.get("/:id/ask/agents", async (context) =>
+      context.json({ agents: await ask.agents() }),
+    );
+
+    // What an agent offers to choose: what it said last, else what a
+    // session started in the review's checkout says.
+    app.get("/:id/ask/agents/:agent/choices", async (context) => {
+      const agent = z.enum(askAgentIds).parse(context.req.param("agent"));
+      const stored = store.askHistory.choices(agent);
+
+      if (stored) return context.json({ choices: stored });
+
+      const checkout = await data.agentCheckout(
+        readReview(context.req.param("id")),
+      );
+
+      const choices = await ask.threads.offered(agent, checkout.rootPath);
+
+      if (Object.keys(choices).length)
+        store.askHistory.saveChoices(agent, choices);
+
+      return context.json({ choices });
+    });
+
+    app.post("/:id/ask", async (context) => {
+      const reviewId = context.req.param("id");
+
+      const { version } = readQuerySchemas.get
+        .pick({ version: true })
+        .parse(context.req.query());
+
+      const input = askStartSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
+      );
+
+      const snapshot = readReview(reviewId, version);
+      const checkout = await data.agentCheckout(snapshot);
+      const target = input.selection.target;
+      const id = crypto.randomUUID();
+      const createdAt = new Date().toISOString();
+
+      const thread = ask.threads.open({
+        id,
+        reviewId,
+        agent: input.agent,
+        // Saved once the agent has a session to reopen.
+        onSession: (sessionId) =>
+          store.askHistory.save({
+            id,
+            reviewId,
+            agent: input.agent,
+            sessionId,
+            version: snapshot.version,
+            head: checkout.head,
+            cwd: checkout.rootPath,
+            selection: input.selection,
+            title: input.question.slice(0, 200),
+            createdAt,
+            updatedAt: createdAt,
+          }),
+        onTurn: () => store.askHistory.touch(id),
+        onSave: (entries) => store.askHistory.saveEntries(id, entries),
+        picks: input.picks,
+        onChoices: (choices) =>
+          store.askHistory.saveChoices(input.agent, choices),
+        cwd: checkout.rootPath,
+        head: checkout.head,
+        selection: {
+          title: input.selection.title,
+          quote: target.kind === "text" ? target.quote : undefined,
+        },
+        context: [
+          `A reviewer is reading "${snapshot.title}" in Whiteboard and has a question about a selection.`,
+          checkout.live
+            ? "Your working directory is the repository the review describes."
+            : `Your working directory is a checkout of the review's head commit, ${checkout.head}. Answer from this code, not from other branches.`,
+          "Answer the question. Do not change files in the checkout.",
+          "Name files by their path from the checkout root, with a line where it helps, as in `src/app.ts:42`; the reviewer can open them from your answer.",
+          ...(ask.threads.providesMcp
+            ? [
+                `The whiteboard MCP tools read and change this review: its sessionId is "${reviewId}". Read it with session_get. If the reviewer asks you to change the review, edit it with session_edit; do not write files to do it.`,
+              ]
+            : []),
+          "",
+          await selectionContext(reviewId, input.selection, version),
+        ].join("\n"),
+        question: input.question,
+      });
+
+      return context.json({ threadId: thread.id });
+    });
+
+    app.get("/:id/ask/threads", (context) => {
+      const reviewId = context.req.param("id");
+
+      readReview(reviewId);
+
+      return context.json({ threads: store.askHistory.list(reviewId) });
+    });
+
+    // A saved conversation: attach to it if it is still running, else start
+    // the agent and load it, at the commit it was asked about.
+    app.post("/:id/ask/:threadId/open", async (context) => {
+      const reviewId = context.req.param("id");
+      const threadId = context.req.param("threadId");
+      const live = ask.threads.get(threadId);
+
+      if (live?.reviewId === reviewId) return context.json({ threadId });
+      const record = store.askHistory.get(threadId);
+
+      const { picks } = askOpenSchema.parse(
+        await readBoundedRequestJson(context.req.raw, undefined, {}),
+      );
+
+      if (record?.reviewId !== reviewId)
+        throw new ReviewInputError("This conversation was not found.", 404);
+
+      const checkout = await data.agentCheckout(
+        readReview(reviewId, record.version),
+      );
+
+      const target = record.selection.target;
+
+      ask.threads.open({
+        id: record.id,
+        reviewId,
+        agent: record.agent,
+        cwd: checkout.rootPath,
+        head: checkout.head,
+        selection: {
+          title: record.selection.title,
+          quote: target.kind === "text" ? target.quote : undefined,
+        },
+        resume: { sessionId: record.sessionId, entries: record.entries },
+        onTurn: () => store.askHistory.touch(record.id),
+        onSave: (entries) => store.askHistory.saveEntries(record.id, entries),
+        picks,
+        onChoices: (choices) =>
+          store.askHistory.saveChoices(record.agent, choices),
+      });
+
+      return context.json({ threadId: record.id });
+    });
+
+    app.get("/:id/ask/:threadId/watch", (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      return watchAskThread(thread);
+    });
+
+    app.post("/:id/ask/:threadId/prompt", async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      const { question } = askFollowUpSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
+      );
+
+      if (thread.read().status !== "idle")
+        throw new ReviewInputError("The agent is still answering.", 409);
+
+      void thread.ask(question);
+
+      return context.json({ ok: true });
+    });
+
+    app.post("/:id/ask/:threadId/permission", async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      const decision = askDecisionSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
+      );
+
+      if (!thread.decide(decision.permissionId, decision.optionId))
+        throw new ReviewInputError("This request was already answered.", 409);
+
+      return context.json({ ok: true });
+    });
+
+    // Another model or effort for the next answer.
+    // The files an answer names, as the checkout's own paths, so the panel
+    // can open them.
+    app.post("/:id/ask/:threadId/choice", async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      const { kind, value } = askChoiceSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
+      );
+
+      if (thread.read().status !== "idle")
+        throw new ReviewInputError(
+          "Settings can change once the agent finishes answering.",
+          409,
+        );
+
+      try {
+        await thread.choose(kind, value);
+      } catch (error) {
+        throw new ReviewInputError(errorMessage(error), 409);
+      }
+
+      return context.json({ ok: true });
+    });
+
+    // Starts a failed agent again, as after signing it back in, and asks
+    // again what it did not answer. The state reports how that goes.
+    app.post("/:id/ask/:threadId/retry", (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      if (thread.read().status !== "failed")
+        throw new ReviewInputError(
+          "Only a conversation that failed can try again.",
+          409,
+        );
+      void thread.retry();
+
+      return context.json({ ok: true });
+    });
+
+    app.post("/:id/ask/:threadId/cancel", async (context) => {
+      await readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      ).cancel();
+
+      return context.json({ ok: true });
+    });
+
+    // Closing the panel ends the agent; the conversation stays saved.
+    app.post("/:id/ask/:threadId/close", (context) => {
+      readThread(context.req.param("id"), context.req.param("threadId"));
+      ask.threads.close(context.req.param("threadId"));
+
+      return context.json({ ok: true });
+    });
+
+    // Forgets a saved conversation. The agent keeps its own transcript.
+    app.delete("/:id/ask/:threadId", (context) => {
+      const reviewId = context.req.param("id");
+      const threadId = context.req.param("threadId");
+
+      if (store.askHistory.get(threadId)?.reviewId !== reviewId)
+        throw new ReviewInputError("This conversation was not found.", 404);
+
+      if (ask.threads.get(threadId)?.reviewId === reviewId)
+        ask.threads.close(threadId);
+      store.askHistory.delete(threadId);
+
+      return context.json({ ok: true });
+    });
   }
 
   app.get("/:id/stack", async (context) => {

@@ -307,6 +307,25 @@ export class LocalReviewData {
     return { snapshot, pins };
   }
 
+  /** Where an Ask agent reads source: the Review's own head checkout, or the
+   * registered checkout for a live worktree target, as the navigator does. */
+  async agentCheckout(snapshot: Snapshot) {
+    const { pins } = await this.resolveSource(snapshot);
+
+    const rootPath = pins.worktreeRevision
+      ? await realpath(this.store.repositoryPath(pins.repositoryId))
+      : (await this.workspaces.source(snapshot.reviewId, pins, "head"))
+          .rootPath;
+
+    if (!rootPath)
+      throw new ReviewInputError(
+        "The head checkout for this review is not ready yet.",
+        409,
+      );
+
+    return { rootPath, head: pins.head, live: !!pins.worktreeRevision };
+  }
+
   /** Resolve a native workspace without replacing the selected source with today's HEAD. */
   async navigatorWorkspace(
     snapshot: Snapshot,
