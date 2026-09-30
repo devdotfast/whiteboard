@@ -24,13 +24,14 @@ import {
   useReactFlow,
   useStoreApi,
 } from "@xyflow/react";
-import ELK, { type ElkNode } from "elkjs/lib/elk.bundled.js";
+import type { ElkNode } from "elkjs/lib/elk.bundled.js";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import { useReviewDebugSettings } from "./debug-settings";
 import { diagramStyles } from "./diagram-styles";
 import { useMotionPhase } from "./draw-queue-provider";
 import { drawStyles } from "./draw-styles";
+import { loadElk } from "./elk";
 import { ElementCountsText } from "./lens-counts";
 import { documentMarker, flowNodeMarker } from "./markers.stylex";
 import { useReviewLenses } from "./review-lenses";
@@ -417,7 +418,9 @@ async function layoutFlow(
   block: FlowDiagramBlock,
   direction: "down" | "right" | undefined,
 ): Promise<Layout> {
-  const result = await new ELK().layout<ElkNode>({
+  const elk = await loadElk();
+
+  const result = await elk.layout<ElkNode>({
     id: "flow",
     layoutOptions: {
       "elk.algorithm": "layered",
