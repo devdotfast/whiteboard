@@ -101,8 +101,9 @@ export async function runDesktopHost(
   shared.connect(local.store, local.data);
   await shared.load();
 
+  // Stdout lines reach the Desktop log at info; stderr lines at error.
   const log = (message: string) =>
-    process.stderr.write(`[Whiteboard gateway] ${message}\n`);
+    process.stdout.write(`[Whiteboard gateway] ${message}\n`);
 
   const server = createGlobalReviewServer({
     ...serverInput,
