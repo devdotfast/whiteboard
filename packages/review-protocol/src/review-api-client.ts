@@ -45,6 +45,12 @@ export interface ReviewApiSummary {
   dismissedAt: string | null;
   /** An agent holds a live lease; absent on shared reviews. */
   working?: boolean;
+  /** The SSH alias of the machine that holds the review; absent on the laptop. */
+  host?: string;
+  /** Set with `host`; a review server never writes these three. */
+  hostState?: "online" | "offline" | "incompatible" | "duplicate";
+  /** Absent on the laptop, where everything is available. */
+  available?: { sourceWindows: boolean; languageFeatures: boolean };
 }
 
 /**

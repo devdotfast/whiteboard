@@ -77,3 +77,33 @@ it("starts empty from an unreadable file and says so", async () => {
     expect.stringContaining("Ignoring unreadable remote review memory"),
   ]);
 });
+
+it("keeps each server's last list, and knows the owner of every review in it", async () => {
+  const entry = {
+    reviewId: "review-1",
+    version: 1,
+    title: "Listed",
+    createdAt: "2026-09-30T00:00:00.000Z",
+    repositoryName: "project",
+    viewedAt: null,
+    dismissedAt: null,
+  };
+
+  const memory = openGatewayMemory(home);
+  memory.setList("server-1", "devbox", "structural", [entry]);
+  memory.setList("server-1", "devbox", "structural", [
+    { ...entry, title: "Renamed" },
+  ]);
+  await memory.flush();
+
+  const reopened = openGatewayMemory(home);
+  expect(reopened.list("server-1", "structural")).toEqual([
+    { ...entry, title: "Renamed" },
+  ]);
+  expect(reopened.list("server-1", "textual")).toBeUndefined();
+  expect(reopened.owner("review-1")).toEqual({
+    serverId: "server-1",
+    alias: "devbox",
+  });
+  expect(reopened.serverIdOf("devbox")).toBe("server-1");
+});

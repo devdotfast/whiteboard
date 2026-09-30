@@ -1,13 +1,53 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import { errorMessage, writePrivateJsonAtomic } from "@dev.fast/trace-core";
 import { z } from "zod";
 
+export type ListMode = "structural" | "textual";
+
+/** What the gateway reads of a remote's list entry; the rest passes through. */
+const listEntrySchema = z.looseObject({
+  reviewId: z.string(),
+  version: z.number(),
+  title: z.string(),
+  createdAt: z.string(),
+  repositoryName: z.string(),
+  viewedAt: z.string().nullable(),
+  dismissedAt: z.string().nullable(),
+  repositoryGroup: z.object({ key: z.string(), label: z.string() }).optional(),
+});
+
+/** A list, keeping the entries that have the shape of a list entry. */
+export const listEntriesSchema = z.array(z.unknown()).transform(
+  (entries) =>
+    // SAFETY: the schema checks the fields the gateway and Home rely on.
+    entries.filter(
+      (entry) => listEntrySchema.safeParse(entry).success,
+    ) as ReviewApiSummary[],
+);
+
+const lastListSchema = z.object({
+  structural: listEntriesSchema.optional(),
+  textual: listEntriesSchema.optional(),
+});
+
 const memorySchema = z.record(
   z.string(),
-  z.object({ alias: z.string(), reviewIds: z.array(z.string()) }),
+  z.object({
+    alias: z.string(),
+    reviewIds: z.array(z.string()),
+    lastList: lastListSchema.optional(),
+  }),
 );
+
+interface Server {
+  alias: string;
+  reviewIds: Set<string>;
+  /** The last list the server sent, per mode, as it sent it. */
+  lastList: Partial<Record<ListMode, ReviewApiSummary[]>>;
+}
 
 export function gatewayMemoryPath(home: string) {
   return path.join(home, "remote-reviews.json");
@@ -23,17 +63,35 @@ export function openGatewayMemory(
   log: (message: string) => void = () => {},
 ) {
   const file = gatewayMemoryPath(home);
-  const servers = new Map<string, { alias: string; reviewIds: Set<string> }>();
+  const servers = new Map<string, Server>();
   const owners = new Map<string, string>();
+  /** Review ids in the last lists, by server id. */
+  const listed = new Map<string, string>();
+
+  const index = () => {
+    listed.clear();
+
+    for (const [serverId, server] of servers)
+      for (const list of Object.values(server.lastList))
+        for (const entry of list) listed.set(entry.reviewId, serverId);
+  };
 
   try {
     const saved = memorySchema.parse(JSON.parse(readFileSync(file, "utf8")));
 
-    for (const [serverId, { alias, reviewIds }] of Object.entries(saved)) {
-      servers.set(serverId, { alias, reviewIds: new Set(reviewIds) });
+    for (const [serverId, { alias, reviewIds, lastList }] of Object.entries(
+      saved,
+    )) {
+      servers.set(serverId, {
+        alias,
+        reviewIds: new Set(reviewIds),
+        lastList: lastList ?? {},
+      });
 
       for (const id of reviewIds) owners.set(id, serverId);
     }
+
+    index();
   } catch (error) {
     // SAFETY: fs rejects with a Node ErrnoException carrying `code`.
     if ((error as NodeJS.ErrnoException).code !== "ENOENT")
@@ -41,28 +99,73 @@ export function openGatewayMemory(
   }
 
   let writing = Promise.resolve();
+  let queued = false;
 
+  // One write for any number of changes made before it starts.
   const save = () => {
-    const value = Object.fromEntries(
-      [...servers].map(([serverId, { alias, reviewIds }]) => [
-        serverId,
-        { alias, reviewIds: [...reviewIds] },
-      ]),
-    );
+    if (queued) return;
+    queued = true;
 
     writing = writing
-      .then(() => writePrivateJsonAtomic(file, value))
+      .then(() => {
+        queued = false;
+
+        return writePrivateJsonAtomic(
+          file,
+          Object.fromEntries(
+            [...servers].map(([serverId, { alias, reviewIds, lastList }]) => [
+              serverId,
+              {
+                alias,
+                reviewIds: [...reviewIds],
+                ...(Object.keys(lastList).length > 0 && { lastList }),
+              },
+            ]),
+          ),
+        );
+      })
       .catch((cause: unknown) =>
         log(`Could not save remote review memory: ${errorMessage(cause)}`),
       );
   };
 
   return {
+    /** The server that holds a review, from routing or its last list. */
     owner(reviewId: string) {
-      const serverId = owners.get(reviewId);
+      const serverId = owners.get(reviewId) ?? listed.get(reviewId);
       const server = serverId && servers.get(serverId);
 
       return server ? { serverId, alias: server.alias } : undefined;
+    },
+    /** The server id last recorded under `alias`. */
+    serverIdOf(alias: string) {
+      for (const [serverId, server] of servers)
+        if (server.alias === alias) return serverId;
+
+      return undefined;
+    },
+    list: (serverId: string, mode: ListMode) =>
+      servers.get(serverId)?.lastList[mode],
+    /** Keeps only the last list a server sent. */
+    setList(
+      serverId: string,
+      alias: string,
+      mode: ListMode,
+      reviews: ReviewApiSummary[],
+    ) {
+      let server = servers.get(serverId);
+
+      if (!server) {
+        server = { alias, reviewIds: new Set(), lastList: {} };
+        servers.set(serverId, server);
+      } else if (
+        JSON.stringify(server.lastList[mode]) === JSON.stringify(reviews)
+      )
+        return;
+
+      server.lastList[mode] = reviews;
+      index();
+      save();
     },
     /** The alias last used for `serverId`. */
     alias: (serverId: string) => servers.get(serverId)?.alias,
@@ -88,7 +191,12 @@ export function openGatewayMemory(
       if (server) {
         server.alias = alias;
         server.reviewIds.add(reviewId);
-      } else servers.set(serverId, { alias, reviewIds: new Set([reviewId]) });
+      } else
+        servers.set(serverId, {
+          alias,
+          reviewIds: new Set([reviewId]),
+          lastList: {},
+        });
 
       owners.set(reviewId, serverId);
       save();
