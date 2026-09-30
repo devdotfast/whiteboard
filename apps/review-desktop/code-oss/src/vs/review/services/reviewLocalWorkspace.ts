@@ -1,7 +1,10 @@
 import { Queue } from "../../base/common/async.js";
 import type { IDisposable } from "../../base/common/lifecycle.js";
+import { Schemas } from "../../base/common/network.js";
 import { URI } from "../../base/common/uri.js";
 import type { IWorkspaceEditingService } from "../../workbench/services/workspaces/common/workspaceEditing.js";
+import type { ReviewLanguageEnvironment, ReviewRemoteLanguageEnvironment } from "../common/reviewProtocol.js";
+import { reviewRemoteAuthority } from "./remote/reviewRemoteScope.js";
 
 type ReviewLanguageRoots = Pick<IWorkspaceEditingService, "addFolders" | "removeFolders">;
 
@@ -41,4 +44,17 @@ export async function acquireReviewLanguageRoot(workspace: ReviewLanguageRoots, 
 			});
 		}
 	};
+}
+
+/**
+ * Where a review's language checkout is: on the laptop, or on the remote
+ * machine that answered, as `vscode-remote://whiteboard+<serverId><path>`.
+ * Undefined while the checkout is prepared.
+ */
+export function reviewLanguageRoot(context: ReviewLanguageEnvironment | ReviewRemoteLanguageEnvironment | undefined): { root: URI; serverId?: string } | undefined {
+	if (!context) return undefined;
+	if (!("remoteRootPath" in context)) return context.rootPath ? { root: URI.file(context.rootPath) } : undefined;
+	const authority = reviewRemoteAuthority(context.serverId);
+	if (!context.remoteRootPath || !authority) return undefined;
+	return { root: URI.from({ scheme: Schemas.vscodeRemote, authority, path: context.remoteRootPath }), serverId: context.serverId };
 }

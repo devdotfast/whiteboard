@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { URI } from '../../base/common/uri.js';
-import { acquireReviewLanguageRoot } from './reviewLocalWorkspace.js';
+import { acquireReviewLanguageRoot, reviewLanguageRoot } from './reviewLocalWorkspace.js';
 
 function workspace() {
 	const folders: string[] = [];
@@ -59,4 +59,25 @@ test('a shared checkout stays until its last owner releases it', async () => {
 	second.dispose();
 	await settled(target);
 	assert.ok(!target.folders.includes(a.toString()));
+});
+
+const SERVER_ID = '6F23D55B-8446-437e-afd6-ad3a40eecc4c';
+
+test('a remote language context is rooted on its host through vscode-remote; a laptop one on file', () => {
+	const remote = reviewLanguageRoot({ remoteRootPath: '/home/dev/repo/.git/dev-fast/reviews/r/head/c', identity: 'hash', serverId: SERVER_ID });
+	assert.equal(remote?.root.scheme, 'vscode-remote');
+	assert.equal(remote?.root.authority, 'whiteboard+6f23d55b-8446-437e-afd6-ad3a40eecc4c');
+	assert.equal(remote?.root.path, '/home/dev/repo/.git/dev-fast/reviews/r/head/c');
+	assert.equal(remote?.serverId, SERVER_ID, 'the host is asked for with the id as received');
+
+	const laptop = reviewLanguageRoot({ rootPath: '/Users/me/repo', identity: 'id' });
+	assert.equal(laptop?.root.toString(), 'file:///Users/me/repo');
+	assert.equal(laptop?.serverId, undefined);
+});
+
+test('no root while a checkout is prepared, or for a server id that is not an id', () => {
+	assert.equal(reviewLanguageRoot({ remoteRootPath: null, identity: 'hash', serverId: SERVER_ID }), undefined);
+	assert.equal(reviewLanguageRoot({ remoteRootPath: '/repo', identity: 'hash', serverId: '../x' }), undefined);
+	assert.equal(reviewLanguageRoot({ rootPath: null, identity: 'id' }), undefined);
+	assert.equal(reviewLanguageRoot(undefined), undefined);
 });
