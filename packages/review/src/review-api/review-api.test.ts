@@ -5,7 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
-import { selectSource } from "@review/lens-selection.js";
+import { anchorSelection, rangeAnchor } from "@review/lens-selection.js";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { GlobalReviewDesktopVerbRelay } from "@review/server/global-verb-relay.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -38,7 +38,7 @@ const diagram = {
   title: "Save",
   actors: { app: "App", db: "Database" },
   steps: [
-    { from: "app", to: "db", label: "Write", source: selectSource(source) },
+    { from: "app", to: "db", label: "Write", source: rangeAnchor(source) },
   ],
 };
 
@@ -284,13 +284,13 @@ describe("snapshot authoring", () => {
       children: [{ type: "markdown", markdown: "Nested" }],
     },
     { type: "callout", tone: "warning", children: [] },
-    { type: "code_peek", source: selectSource(source) },
+    { type: "code_peek", source: rangeAnchor(source) },
     diagram,
     {
       type: "call_stack_diff",
       title: "Change",
-      base: [{ source: selectSource({ ...source, side: "base" }) }],
-      head: [{ source: selectSource(source) }],
+      base: [{ source: rangeAnchor({ ...source, side: "base" }) }],
+      head: [{ source: rangeAnchor(source) }],
     },
     {
       type: "database_lens",
@@ -318,7 +318,7 @@ describe("snapshot authoring", () => {
               collection: "reviews",
               actor: "app",
               label: "Insert",
-              source: selectSource(source),
+              source: rangeAnchor(source),
             },
           ],
         },
@@ -403,7 +403,7 @@ describe("snapshot authoring", () => {
     const { reviewId } = await create();
     await edit(reviewId, {
       type: "insert",
-      content: { type: "code_peek", source: selectSource(source) },
+      content: { type: "code_peek", source: rangeAnchor(source) },
     });
     await edit(reviewId, {
       type: "insert",
@@ -440,11 +440,11 @@ describe("snapshot authoring", () => {
     await edit(reviewId, {
       type: "update",
       targetId: original.document[0]!.id!,
-      changes: { source: selectSource({ ...source, file: "renamed.ts" }) },
+      changes: { source: rangeAnchor({ ...source, file: "renamed.ts" }) },
     });
     expect(store.read(reviewId).document[0]).toMatchObject({
       id: original.document[0]!.id,
-      source: { file: "renamed.ts" },
+      source: "head/renamed.ts#L1-L5",
     });
   });
 
@@ -452,7 +452,7 @@ describe("snapshot authoring", () => {
     const { reviewId } = await create();
     await edit(reviewId, {
       type: "insert",
-      content: { type: "code_peek", source: selectSource(source) },
+      content: { type: "code_peek", source: rangeAnchor(source) },
     });
 
     const result = await store.execute(
@@ -474,7 +474,7 @@ describe("snapshot authoring", () => {
     const { reviewId } = await create();
     await edit(reviewId, {
       type: "insert",
-      content: { type: "code_peek", source: selectSource(source) },
+      content: { type: "code_peek", source: rangeAnchor(source) },
     });
     const original = store.read(reviewId);
     vi.mocked(providers.validatePins).mockRejectedValueOnce(
@@ -543,7 +543,7 @@ describe("snapshot authoring", () => {
     expect(value().steps[0]).toMatchObject({
       id: step,
       label: "Commit",
-      source: selectSource(source),
+      source: rangeAnchor(source),
     });
     expect(providers.validateSource).toHaveBeenCalledTimes(1);
     await edit(reviewId, {
@@ -989,7 +989,7 @@ describe("snapshot authoring", () => {
   it("accepts flow nodes with no code attachments and reads them back with an empty list", async () => {
     const { reviewId } = await create();
 
-    const evidence = [{ label: "Entry", sources: [selectSource(source)] }];
+    const evidence = [{ label: "Entry", sources: [rangeAnchor(source)] }];
 
     const { targetId: diagramId } = await edit(reviewId, {
       type: "insert",
@@ -1070,7 +1070,7 @@ describe("snapshot authoring", () => {
         type: "insert",
         content: {
           type: "code_peek",
-          source: selectSource({ ...source, fromLine: 10 }),
+          source: rangeAnchor({ ...source, fromLine: 10 }),
         },
       },
     ];
@@ -1084,7 +1084,7 @@ describe("snapshot authoring", () => {
     await expect(
       edit(reviewId, {
         type: "insert",
-        content: { type: "code_peek", source: selectSource(source) },
+        content: { type: "code_peek", source: rangeAnchor(source) },
       }),
     ).rejects.toThrow(/Range/);
     expect(store.read(reviewId)).toEqual(before);
@@ -1115,14 +1115,14 @@ describe("snapshot authoring", () => {
         title: "Save",
         actors: { a: "App", s: "Server" },
         steps: [
-          { from: "a", to: "s", label: "save", source: selectSource(source) },
+          { from: "a", to: "s", label: "save", source: rangeAnchor(source) },
         ],
       },
       {
         type: "call_stack_diff",
         title: "Save path",
         base: [],
-        head: [{ key: "save", label: "save", source: selectSource(source) }],
+        head: [{ key: "save", label: "save", source: rangeAnchor(source) }],
       },
       {
         type: "database_lens",
@@ -1150,7 +1150,7 @@ describe("snapshot authoring", () => {
                 collection: "saves",
                 actor: "s",
                 label: "insert",
-                source: selectSource(source),
+                source: rangeAnchor(source),
               },
             ],
           },
@@ -1195,7 +1195,8 @@ describe("snapshot authoring", () => {
       type: "insert",
       content: {
         type: "code_peek",
-        source: { ...selectSource(source), file: "src/other.ts", pins: own },
+        source: rangeAnchor({ ...source, file: "src/other.ts" }),
+        pins: own,
       },
     });
     await edit(reviewId, {
@@ -1229,15 +1230,11 @@ describe("snapshot authoring", () => {
         type: "insert",
         content: {
           type: "code_peek",
-          source: {
-            file: "src/other.ts",
-            start: { side: "base", line: 1 },
-            end: { side: "base", line: 2 },
-            pins: own,
-          },
+          source: "base/src/other.ts#L1-L2",
+          pins: own,
         },
       }),
-    ).rejects.toThrow(/base-side endpoint needs base pins/);
+    ).rejects.toThrow(/base-side anchor needs base pins/);
   });
 
   it("keeps one scratchpad: made on demand, drawn on at explicit pins only, outside the review lifecycle", async () => {
@@ -1260,7 +1257,7 @@ describe("snapshot authoring", () => {
     await expect(
       edit(SCRATCHPAD_ID, {
         type: "insert",
-        content: { type: "code_peek", source: selectSource(source) },
+        content: { type: "code_peek", source: rangeAnchor(source) },
       }),
     ).rejects.toThrow(/document has no pins/);
     const own = { repositoryId: "repo-b", head: "b".repeat(40) };
@@ -1268,7 +1265,8 @@ describe("snapshot authoring", () => {
       type: "insert",
       content: {
         type: "code_peek",
-        source: { ...selectSource(source), pins: own },
+        source: rangeAnchor(source),
+        pins: own,
       },
     });
     await edit(SCRATCHPAD_ID, {
@@ -1358,7 +1356,7 @@ describe("snapshot authoring", () => {
 
     const pending = edit(reviewId, {
       type: "insert",
-      content: { type: "code_peek", source: selectSource(source) },
+      content: { type: "code_peek", source: rangeAnchor(source) },
     });
 
     await entered;
@@ -1820,7 +1818,7 @@ it("serves the experiment through the real desktop HTTP server and existing auth
           type: "insert",
           content: {
             type: "code_peek",
-            source: selectSource({
+            source: rangeAnchor({
               side: "head" as const,
               file: "x",
               fromLine: 0,
@@ -1829,7 +1827,7 @@ it("serves the experiment through the real desktop HTTP server and existing auth
           },
         },
       }),
-    ).rejects.toThrow(/start.line/);
+    ).rejects.toThrow(/lines count from 1/);
     const abort = new AbortController();
     const catalog = client.watch(null, abort.signal);
     expect(reviewsOnly((await catalog.next()).value)).toMatchObject([
@@ -2091,9 +2089,8 @@ it("keeps reference coverage apart by pins: one path, changed under one comparis
   }));
 
   const cite = (at: typeof changed | typeof same) => ({
-    file: "a.ts",
-    start: { side: "head" as const, line: 1 },
-    end: { side: "head" as const, line: 2 },
+    label: "a",
+    sources: ["head/a.ts#L1-L2"],
     pins: at,
   });
 
@@ -2106,12 +2103,12 @@ it("keeps reference coverage apart by pins: one path, changed under one comparis
         {
           key: "changed",
           label: "Changed there",
-          attachments: [{ label: "a", sources: [cite(changed)] }],
+          attachments: [cite(changed)],
         },
         {
           key: "same",
           label: "Unchanged there",
-          attachments: [{ label: "a", sources: [cite(same)] }],
+          attachments: [cite(same)],
         },
       ],
       edges: [{ from: "changed", to: "same" }],
@@ -2499,7 +2496,7 @@ it("validates range lens evidence and scopes progress and Uncategorized to disti
     targets: [
       {
         kind: "ranges",
-        sources: [selectSource(selected), selectSource(selected)],
+        sources: [rangeAnchor(selected), rangeAnchor(selected)],
       },
     ],
   });
@@ -2518,7 +2515,7 @@ it("validates range lens evidence and scopes progress and Uncategorized to disti
       steps: [
         {
           ...diagram.steps[0],
-          source: selectSource({ ...selected, fromLine: 1, toLine: 1 }),
+          source: rangeAnchor({ ...selected, fromLine: 1, toLine: 1 }),
         },
       ],
     },
@@ -2611,13 +2608,7 @@ it("validates range lens evidence and scopes progress and Uncategorized to disti
     targets: [
       {
         kind: "ranges",
-        sources: [
-          {
-            file: selected.file,
-            start: { side: "head", line: 99 },
-            end: { side: "head", line: 100 },
-          },
-        ],
+        sources: [`head/${selected.file}#L99-L100`],
       },
     ],
   });
@@ -2645,7 +2636,7 @@ it("rejects unsafe patterns and missing range sources", async () => {
     writeLens(reviewId, {
       type: "insert",
       title: "Missing",
-      targets: [{ kind: "ranges", sources: [selectSource(source)] }],
+      targets: [{ kind: "ranges", sources: [rangeAnchor(source)] }],
     }),
   ).rejects.toThrow("File is unavailable");
   expect(store.read(reviewId).lenses).toBeUndefined();
@@ -2792,7 +2783,7 @@ it("makes a diagram step's selection usable before an unrelated file finishes co
   const { reviewId } = await create();
 
   const refs = ["a.ts", "b.ts"].map((file) =>
-    selectSource({ side: "head", file, fromLine: 1, toLine: 1 }),
+    rangeAnchor({ side: "head", file, fromLine: 1, toLine: 1 }),
   );
 
   await edit(reviewId, {
@@ -2854,8 +2845,12 @@ it("makes a diagram step's selection usable before an unrelated file finishes co
     expect(partial.complete).toBe(false);
     // A diagram is not a Diff-view lens: only the automatic lens is listed.
     expect(partial.lenses).toHaveLength(1);
-    expect(partial.resolvedSelections[selectionKey(refs[0])]).toBeDefined();
-    expect(partial.resolvedSelections[selectionKey(refs[1])]).toBeUndefined();
+    expect(
+      partial.resolvedSelections[selectionKey(anchorSelection(refs[0]!))],
+    ).toBeDefined();
+    expect(
+      partial.resolvedSelections[selectionKey(anchorSelection(refs[1]!))],
+    ).toBeUndefined();
     expect(partial.unavailableSelections).toEqual({});
     expect(partial.lenses.at(-1)).toMatchObject({
       id: "automatic-uncategorized",
@@ -2867,7 +2862,9 @@ it("makes a diagram step's selection usable before an unrelated file finishes co
     const complete = await (await api.request(route)).json();
     expect(complete.complete).toBe(true);
     expect(complete.lenses[0].pending).toBe(false);
-    expect(complete.resolvedSelections[selectionKey(refs[1])]).toBeDefined();
+    expect(
+      complete.resolvedSelections[selectionKey(anchorSelection(refs[1]!))],
+    ).toBeDefined();
   } finally {
     release();
     await data.close();

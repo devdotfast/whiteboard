@@ -11,6 +11,7 @@ import {
   resolvedTargetRefSchema,
   storeRefDataSchema,
 } from "./authoring";
+import { anchored } from "./lens-selection";
 import type {
   DatabaseActor,
   DatabaseField,
@@ -34,6 +35,7 @@ export interface DatabaseLensBlockProps {
   actors: Record<string, DatabaseActor>;
   stores: Record<string, DatabaseStore>;
   useCases: DatabaseLensBlock["useCases"];
+  pins?: DatabaseLensBlock["pins"];
 }
 
 const nonEmpty = z.string().min(1);
@@ -191,7 +193,7 @@ function operationFor(
     collection: target.collectionId,
     actor: actorName(actor),
     label,
-    source: anchor.peek,
+    ...anchored(anchor.peek),
   };
 
   if (target.path.length > 0) operation.field = target.path.join(".");

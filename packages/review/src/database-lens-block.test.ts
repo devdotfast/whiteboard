@@ -241,11 +241,7 @@ describe("databaseLensBlockFromLegacy", () => {
             actor: "api",
             label: "insert order",
             detail: "Writes the row",
-            source: {
-              file: "src/orders.ts",
-              start: { side: "head", line: 3 },
-              end: { side: "head", line: 9 },
-            },
+            source: "head/src/orders.ts#L3-L9",
           },
           {
             id: "readCity",
@@ -255,11 +251,7 @@ describe("databaseLensBlockFromLegacy", () => {
             field: "address.city",
             actor: "worker",
             label: "read city",
-            source: {
-              file: "src/users.ts",
-              start: { side: "head", line: 1 },
-              end: { side: "head", line: 2 },
-            },
+            source: "head/src/users.ts#L1-L2",
           },
         ],
       },

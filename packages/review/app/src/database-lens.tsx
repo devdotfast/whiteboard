@@ -3,7 +3,7 @@ import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { type JsonValue, isStringValue } from "@dev.fast/review-protocol";
 import type { DatabaseLensBlockProps } from "@review/database-lens-block";
-import { type DiffSelection } from "@review/lens-selection";
+import { type DiffSelection, anchorSelection } from "@review/lens-selection";
 import type {
   DatabaseField,
   DatabaseOperation,
@@ -175,7 +175,10 @@ export function lensUseCases(block: DatabaseLensProps): ParsedUseCase[] {
           actor: lensActor(block.actors, operation.actor),
           target: lensTarget(block.stores, operation),
           label: operation.label,
-          source: operation.source,
+          source: anchorSelection(
+            operation.source,
+            operation.pins ?? block.pins,
+          ),
         };
 
         if (operation.detail !== undefined) resolved.detail = operation.detail;

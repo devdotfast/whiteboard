@@ -1,6 +1,9 @@
 import { frameIdentity } from "@review/call-stack-frames";
-import { type DiffSelection } from "@review/lens-selection";
-import { type LensSource } from "@review/lens-selection";
+import {
+  type DiffSelection,
+  type LensSource,
+  anchorSelection,
+} from "@review/lens-selection";
 import type { CallStackDiffBlock } from "@review/review-api/blocks/call_stack_diff";
 
 export interface CallTreeStop {
@@ -31,30 +34,33 @@ export function callTreeStops(block: CallStackDiffBlock): CallTreeStop[] {
       const id = `${block.id}:${frame.key ?? `${side}:${index}`}`;
       const existing = nodes.get(id);
 
-      if (existing)
-        existing.sources.push(
-          frame.source,
-          ...(frame.contextSources ?? []),
-          ...(frame.callSite ? [frame.callSite] : []),
-        );
+      const select = (anchor: string) =>
+        anchorSelection(anchor, frame.pins ?? block.pins);
+
+      const source = select(frame.source);
+      const callSite = frame.callSite ? select(frame.callSite) : undefined;
+
+      const sources = [
+        source,
+        ...(frame.contextSources ?? []).map(select),
+        ...(callSite ? [callSite] : []),
+      ];
+
+      if (existing) existing.sources.push(...sources);
       else
         nodes.set(id, {
           id,
-          source: frame.source,
+          source,
           anchorId: frame.id ?? frameIdentity(frame),
-          label: frame.label ?? frame.source.file.split("/").pop()!,
-          sources: [
-            frame.source,
-            ...(frame.contextSources ?? []),
-            ...(frame.callSite ? [frame.callSite] : []),
-          ],
+          label: frame.label ?? source.file.split("/").pop()!,
+          sources,
           parentId:
             frame.parentKey === null
               ? undefined
               : frame.parentKey
                 ? `${block.id}:${frame.parentKey}`
                 : previous,
-          callSite: frame.callSite,
+          callSite,
           via: frame.via?.reason,
         });
       previous = id;

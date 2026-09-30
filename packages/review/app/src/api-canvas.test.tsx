@@ -9,7 +9,7 @@ import type {
   ReviewInlineEditorSpec,
   ReviewSurfaceEvent,
 } from "@dev.fast/review-protocol";
-import { selectSource } from "@review/lens-selection";
+import { rangeAnchor } from "@review/lens-selection";
 import { createReviewApi } from "@review/review-api/http";
 import { ReviewInputError } from "@review/review-api/input-error";
 import { LocalReviewData } from "@review/review-api/local-data";
@@ -505,7 +505,7 @@ it("renders a code peek block on its pinned side without fetching source text", 
       type: "insert",
       content: {
         type: "code_peek",
-        source: selectSource({
+        source: rangeAnchor({
           side: "base",
           file: "src/old.ts",
           fromLine: 7,

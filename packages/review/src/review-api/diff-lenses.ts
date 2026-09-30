@@ -1,4 +1,8 @@
-import { type LensSource, lensSourceSchema } from "@review/lens-selection.js";
+import {
+  type LensSource,
+  anchorSchema,
+  anchorSelection,
+} from "@review/lens-selection.js";
 import type { FileLineRange } from "@review/source.js";
 import { z } from "zod";
 
@@ -17,7 +21,7 @@ export const lensTargetSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("files"), patterns: patternsSchema }),
   z.strictObject({
     kind: z.literal("ranges"),
-    sources: z.array(lensSourceSchema).min(1).max(10000),
+    sources: z.array(anchorSchema).min(1).max(10000),
   }),
 ]);
 
@@ -28,7 +32,7 @@ export const lensTargetsSchema = z
   .min(1)
   .max(1000)
   .describe(
-    "Select changed lines using repository-relative paths/globs or pinned source ranges. Counts and viewed actions apply only to those lines.",
+    "Select changed lines using repository-relative paths/globs or source ranges. Counts and viewed actions apply only to those lines.",
   );
 
 export const lensSchema = z.strictObject({
@@ -141,7 +145,8 @@ export function applyLensEdit(
   return next;
 }
 
-/** Every pinned range a lens selects, with an id stable for its position. */
+/** Every range a lens selects, with an id stable for its position. Lens
+ * ranges read at the review's pins. */
 export function lensSelections(
   lenses: readonly Lens[],
 ): { id: string; source: LensSource }[] {
@@ -150,7 +155,7 @@ export function lensSelections(
       target.kind === "ranges"
         ? target.sources.map((source, range) => ({
             id: `${lens.id}:target:${index}:${range}`,
-            source,
+            source: anchorSelection(source),
           }))
         : [],
     ),

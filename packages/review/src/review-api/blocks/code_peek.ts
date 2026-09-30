@@ -1,11 +1,12 @@
-import { diffSelectionSchema } from "@review/lens-selection.js";
+import { anchorSchema } from "@review/lens-selection.js";
 
-import { defineBlock, text } from "./definition.js";
+import { defineBlock, elementPins, text } from "./definition.js";
 
 export const code_peek = {
   type: "code_peek",
   schema: defineBlock("code_peek", {
-    source: diffSelectionSchema,
+    source: anchorSchema,
+    pins: elementPins,
     // Not rendered yet.
     caption: text.optional(),
   }),

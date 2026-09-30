@@ -1,7 +1,9 @@
 import { fontSize, fontWeight, motion } from "@canvas/scale.stylex";
-import type {
-  FlowDiagramBlock,
-  FlowDiagramNode,
+import type { DiffSelection } from "@review/lens-selection";
+import {
+  type FlowDiagramBlock,
+  type FlowDiagramNode,
+  nodeSources,
 } from "@review/review-api/blocks/flow_diagram";
 import {
   type CoverageProgress,
@@ -126,6 +128,9 @@ export function FlowGraph({
                 className: stylex.props(styles.nodeWrapper).className,
                 data: {
                   node,
+                  sources: nodeSources(node, block.pins).map(
+                    ({ source }) => source,
+                  ),
                   requireReady,
                   selected: selectedKey === node.key,
                   select: () => onSelect(node),
@@ -486,6 +491,7 @@ async function layoutFlow(
 
 interface FlowNodeData extends Record<string, unknown> {
   node: FlowDiagramNode;
+  sources: DiffSelection[];
   requireReady: boolean;
   selected: boolean;
   select(): void;
@@ -512,11 +518,9 @@ const change = (progress: CoverageProgress) =>
         : "unchanged";
 
 function FlowNode({ data }: NodeProps<FlowNodeType>) {
-  const { node, requireReady, selected } = data;
+  const { node, sources, requireReady, selected } = data;
   const lenses = useReviewLenses();
   const motion = useMotionPhase(node.id);
-
-  const sources = node.attachments.flatMap((attachment) => attachment.sources);
 
   const availability = requireReady ? lenses?.availability(sources) : "ready";
   const unavailable = availability !== "ready";

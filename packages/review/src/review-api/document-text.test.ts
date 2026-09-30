@@ -1,4 +1,4 @@
-import { selectSource } from "@review/lens-selection.js";
+import { rangeAnchor } from "@review/lens-selection.js";
 import { expect, it } from "vitest";
 
 import { documentText } from "./document-text.js";
@@ -78,7 +78,7 @@ const snapshot: Snapshot = {
     {
       id: "peek-8",
       type: "code_peek",
-      source: selectSource(source),
+      source: rangeAnchor(source),
       caption: "The save function",
     },
     {
@@ -88,7 +88,7 @@ const snapshot: Snapshot = {
       base: [],
       head: [
         {
-          source: selectSource(source),
+          source: rangeAnchor(source),
           label: "New caller",
           via: { kind: "queue", reason: "Background work" },
         },
@@ -129,7 +129,7 @@ const snapshot: Snapshot = {
               collection: "reviews",
               actor: "server",
               label: "Store snapshot",
-              source: selectSource(source),
+              source: rangeAnchor(source),
             },
           ],
         },
@@ -170,7 +170,7 @@ it("reads all component kinds without losing prose, relationships or source loca
     "client → server: Submit",
     "Validate before saving.",
     "Result (return)",
-    "head/src/save.ts:10-20",
+    "head/src/save.ts#L10-L20",
     "New caller",
     "Background work",
     "Owner, text, nullable → db.users.id",

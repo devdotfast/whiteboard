@@ -1,4 +1,5 @@
 import { ReviewInputError } from "@review/review-api/input-error.js";
+import { sourcePinsSchema } from "@review/source.js";
 import { z } from "zod";
 
 export const text = z.string();
@@ -6,6 +7,13 @@ export const text = z.string();
 export const label = text.trim().min(1);
 
 export const identity = { id: text.optional() };
+
+/** The repository and commits an element's anchors quote. A step, frame,
+ * attachment or operation without them reads its block's; a block without
+ * them reads its document's. */
+export const elementPins = sourcePinsSchema
+  .optional()
+  .describe("Pins for the anchors here; needed on the scratchpad.");
 
 /**
  * One block kind: the strict schema the store parses with, and the rules a

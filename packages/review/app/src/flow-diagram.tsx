@@ -1,5 +1,8 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
-import type { FlowDiagramBlock } from "@review/review-api/blocks/flow_diagram";
+import {
+  type FlowDiagramBlock,
+  nodeSources,
+} from "@review/review-api/blocks/flow_diagram";
 import type { Snapshot } from "@review/review-api/store";
 import * as stylex from "@stylexjs/stylex";
 import { useMemo } from "react";
@@ -21,9 +24,7 @@ export function flowTourStops(
   block: FlowDiagramBlock,
 ): (GuidedTourStop & { nodeKey: string })[] {
   return block.nodes.flatMap<GuidedTourStop & { nodeKey: string }>((node) => {
-    const sources = node.attachments.flatMap((attachment) =>
-      attachment.sources.map((source) => ({ label: attachment.label, source })),
-    );
+    const sources = nodeSources(node, block.pins);
 
     return sources.length
       ? sources.map(({ label, source }, index) => ({

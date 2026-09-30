@@ -6,7 +6,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { type JsonObject, isJsonObject } from "@dev.fast/review-protocol";
-import { selectSource } from "@review/lens-selection";
+import { rangeAnchor } from "@review/lens-selection";
 import { ReviewInputError } from "@review/review-api/document.js";
 import { createReviewApi } from "@review/review-api/http.js";
 import { openLocalReviewStore } from "@review/review-api/local-data.js";
@@ -85,7 +85,7 @@ async function fixture() {
   for (const content of [
     {
       type: "code_peek",
-      source: selectSource({
+      source: rangeAnchor({
         side: "head",
         file: "main.ts",
         fromLine: 1,
@@ -94,7 +94,7 @@ async function fixture() {
     },
     {
       type: "code_peek",
-      source: selectSource({
+      source: rangeAnchor({
         side: "head",
         file: "new.ts",
         fromLine: 1,
@@ -290,7 +290,7 @@ it("shares a review's lenses and reads a bundle that holds them as document bloc
       {
         kind: "ranges",
         sources: [
-          selectSource({
+          rangeAnchor({
             side: "head",
             file: "new.ts",
             fromLine: 1,

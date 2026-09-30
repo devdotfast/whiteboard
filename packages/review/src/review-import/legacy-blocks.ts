@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { anchored } from "@review/lens-selection";
 import { type Block, elements } from "@review/review-api/document";
 import type {
   ReviewComponentNode,
@@ -195,9 +196,9 @@ export function legacyDocumentToBlocks(
         }
 
         case "CodePeek": {
-          const peek: Block = {
+          const peek: Extract<Block, { type: "code_peek" }> = {
             type: "code_peek",
-            source: node.props.anchor.peek,
+            ...anchored(node.props.anchor.peek),
           };
 
           if (node.props.anchor.title) peek.caption = node.props.anchor.title;

@@ -32,6 +32,7 @@ import {
   type SoftwareModelData,
   softwareModelDataSchema,
 } from "./software-map-model";
+import { anchorStrings } from "./stored-document-migration";
 
 export const REVIEW_DOCUMENT_FORMAT = "review-document/1";
 
@@ -292,7 +293,7 @@ export const reviewDocumentDataSchema: z.ZodType<ReviewDocumentData> =
  * (`{ __kind: "code-peek-ref", props, resolution }`) where they now store a
  * diff selection. Sealed bundles are upgraded when read, never rewritten. */
 export function upgradeReviewDocumentJson(value: JsonValue): JsonValue {
-  return upgradeDocumentNode(migrateDiffSelections(value));
+  return upgradeDocumentNode(anchorStrings(migrateDiffSelections(value)));
 }
 
 function upgradeDocumentNode(value: JsonValue): JsonValue {
