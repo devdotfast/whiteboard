@@ -26,6 +26,7 @@ parseReviewDesktopVerbFrame,
 parseReviewTutorialOpenResponse,
 type ReviewCliInstallApplyResponse,
 type ReviewCliInstallStatus,
+type ReviewGatewayHostState,
 type ReviewTutorialOpenResponse,
 type ReviewVerbResponse
 } from "../common/reviewProtocol.js";
@@ -65,6 +66,11 @@ export interface IReviewDesktopConnectionService {
 	/** The scratchpad preference: a server preference, since the review server reads it. */
 	readScratchpadEnabled(): Promise<boolean>;
 	setScratchpadEnabled(enabled: boolean): Promise<boolean>;
+	/** The gateway's state of each configured remote host. */
+	readRemoteHosts(): Promise<ReviewGatewayHostState[]>;
+	/** Aliases from the user's SSH configuration. */
+	listSshAliases(): Promise<string[]>;
+	retryRemoteHost(alias: string): Promise<void>;
 	getTutorialStatus(): Promise<{ version: 1; reviewUuid: string | null }>;
 	prepareTutorial(): Promise<void>;
 	openTutorial(): Promise<ReviewTutorialOpenResponse>;
@@ -206,6 +212,25 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		});
 		await this.requireOk(response, "scratchpad preference");
 		return parseScratchpadPreference(await response.json());
+	}
+
+	async readRemoteHosts(): Promise<ReviewGatewayHostState[]> {
+		await this.initialize();
+		const response = await fetch(`${this.serverUrl}/remote-hosts`, {
+			headers: this.authHeaders(),
+			signal: AbortSignal.timeout(30_000),
+		});
+		await this.requireOk(response, "remote hosts");
+		return parseRemoteHostStates(await response.json());
+	}
+
+	async listSshAliases(): Promise<string[]> {
+		const aliases: unknown = await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("listSshAliases");
+		return Array.isArray(aliases) ? aliases.filter((alias): alias is string => typeof alias === "string") : [];
+	}
+
+	async retryRemoteHost(alias: string): Promise<void> {
+		await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("retryRemoteHost", alias);
 	}
 
 	async saveDiffrSummarizer(input: ReviewDiffrSummarizerInput): Promise<ReviewDiffrConfig> {
@@ -548,6 +573,19 @@ export async function reviewResponseError(response: Response, fallback: string):
 		error?: unknown;
 	} | null;
 	return new Error(typeof payload?.error === "string" && payload.error ? payload.error : fallback);
+}
+
+const REMOTE_HOST_STATES = new Set(["connecting", "online", "offline", "incompatible", "duplicate", "unreachable", "not-installed", "auth-failed"]);
+
+function parseRemoteHostStates(value: unknown): ReviewGatewayHostState[] {
+	const optionalString = (field: unknown) => field === undefined || typeof field === "string";
+	if (!Array.isArray(value) || !value.every((host) =>
+		typeof host === "object" && host !== null &&
+		typeof host.alias === "string" && REMOTE_HOST_STATES.has(host.state) &&
+		optionalString(host.serverId) && optionalString(host.detail))) {
+		throw new Error("remote hosts response is malformed.");
+	}
+	return value;
 }
 
 function parseScratchpadPreference(value: unknown): boolean {
