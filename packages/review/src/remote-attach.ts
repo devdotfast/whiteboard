@@ -9,6 +9,10 @@ import { promisify } from "node:util";
 import { jsonObject, jsonString, parseJsonText } from "@dev.fast/json";
 
 import { findReviewPackageRoot } from "./package-paths";
+import {
+  type EnsureRemoteLanguageServerInput,
+  ensureRemoteLanguageServer,
+} from "./remote-language-server";
 import { readReviewServerHealth, serverNotReady } from "./server-discovery";
 import {
   type EnsureBackgroundServerInput,
@@ -23,6 +27,9 @@ export const REMOTE_ATTACH_END = "WHITEBOARD-REMOTE-END";
 /** Desktop waits on the attach; a download that stalls longer is dropped. */
 const DIFFR_FETCH_TIMEOUT_MS = 15_000;
 
+/** Extension downloads stop here, so the attach ends within Desktop's minute. */
+const EXTENSIONS_TIMEOUT_MS = 35_000;
+
 interface EnsureDiffrInput {
   stateDir: string;
   env: NodeJS.ProcessEnv;
@@ -34,12 +41,39 @@ interface EnsureDiffrInput {
   signal?: AbortSignal;
 }
 
-/** The review server Desktop reaches over SSH, started if none is healthy. */
+/**
+ * The review server Desktop reaches over SSH, started if none is healthy,
+ * and the VS Code server for language features, which may be missing.
+ */
 export async function remoteAttach(
-  input: EnsureDiffrInput & { cli?: EnsureBackgroundServerInput["cli"] },
+  input: EnsureDiffrInput & {
+    cli?: EnsureBackgroundServerInput["cli"];
+    groups?: string[];
+    ensureExtensions?: EnsureRemoteLanguageServerInput["ensure"];
+  },
 ) {
   const abort = new AbortController();
   const fetching = ensureDiffr({ ...input, signal: abort.signal });
+  const extensions = new AbortController();
+
+  const stopExtensions = setTimeout(
+    () =>
+      extensions.abort(
+        new Error(
+          `stopped after ${EXTENSIONS_TIMEOUT_MS / 1_000} s; the next connection continues`,
+        ),
+      ),
+    EXTENSIONS_TIMEOUT_MS,
+  );
+
+  const language = ensureRemoteLanguageServer({
+    env: input.env,
+    packageRoot: input.packageRoot,
+    groups: input.groups,
+    signal: extensions.signal,
+    ensure: input.ensureExtensions,
+  }).finally(() => clearTimeout(stopExtensions));
+
   let server: Awaited<ReturnType<typeof ensureBackgroundServer>>;
 
   try {
@@ -52,12 +86,14 @@ export async function remoteAttach(
   } catch (error) {
     // A pending download must not hold the failed command open.
     abort.abort();
-    await fetching;
+    extensions.abort();
+    await Promise.all([fetching, language]);
     throw error;
   }
 
   const { discovery, started } = server;
   const diffr = await fetching;
+  const { languageServer, languageServerDetail } = await language;
   const health = await readReviewServerHealth(discovery);
 
   if (!health) throw serverNotReady(input.stateDir);
@@ -71,6 +107,8 @@ export async function remoteAttach(
     token: discovery.token,
     startedServer: started,
     diffr,
+    languageServer,
+    ...(languageServerDetail !== undefined && { languageServerDetail }),
   };
 }
 
