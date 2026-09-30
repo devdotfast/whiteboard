@@ -240,13 +240,19 @@ test("reads the states again only once the last read has answered", async () => 
   }
 });
 
-test("offers Retry to a host that failed to authenticate, is unreachable or is not installed", async () => {
+test("offers Retry to a host that failed to authenticate, is unreachable, not installed or unsupported", async () => {
   const hosts = remoteHosts(
-    ["devbox", "box2", "box3"],
+    ["devbox", "box2", "box3", "box4", "box5"],
     [
       { alias: "devbox", state: "auth-failed", detail: "Permission denied" },
       { alias: "box2", state: "unreachable", detail: "timed out" },
       { alias: "box3", state: "not-installed", detail: "Not installed." },
+      {
+        alias: "box4",
+        state: "unsupported",
+        detail: "This host runs glibc 2.31; Whiteboard needs 2.34 or newer.",
+      },
+      { alias: "box5", state: "installing" },
     ],
   );
 
@@ -256,6 +262,15 @@ test("offers Retry to a host that failed to authenticate, is unreachable or is n
       page.getByRole("button", { name: "Retry devbox" }).elements(),
     ).toHaveLength(1),
   );
+  expect(rows()[3]).toContain("unsupported");
+  expect(rows()[3]).toContain("glibc 2.31");
+  expect(rows()[4]).toContain("installing");
+  expect(
+    page
+      .getByRole("button", { name: /^Retry / })
+      .elements()
+      .map((button) => button.getAttribute("aria-label")),
+  ).toEqual(["Retry devbox", "Retry box2", "Retry box3", "Retry box4"]);
   await page.getByRole("button", { name: "Retry box2" }).click();
   expect(hosts.retry).toHaveBeenCalledWith("box2");
   await page.getByRole("button", { name: "Retry box3" }).click();

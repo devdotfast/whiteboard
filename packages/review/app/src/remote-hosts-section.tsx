@@ -16,6 +16,7 @@ const RETRIED = new Set<ReviewGatewayHostState["state"]>([
   "auth-failed",
   "not-installed",
   "unreachable",
+  "unsupported",
 ]);
 
 // The detail can carry a remote's text: shown as one line of plain text.
