@@ -92,3 +92,20 @@ Direct third-party runtime/UI dependencies currently include:
 - `semver` (`ISC`)
 - `zod` (`MIT`)
 - `zustand` (`MIT`)
+- `yauzl` (`MIT`)
+
+## Bundled VS Code Server
+
+The published package carries `vscode-server/`, staged by
+`apps/review-desktop/scripts/stage-vscode-server.mjs`. It is built from the
+Code OSS fork (`MIT`) and bundles, besides the fork's own JavaScript
+dependencies:
+
+- `typescript` (`Apache-2.0`), for the built-in TypeScript extension
+- `@vscode/ripgrep-universal` (`MIT`), whose `rg` binaries are ripgrep
+  (`MIT OR Unlicense`)
+- `@parcel/watcher` and its Linux prebuilds (`MIT`), with `detect-libc`
+  (`Apache-2.0`), `is-glob`, `is-extglob` and `picomatch` (`MIT`)
+
+Curated extensions are not bundled; `whiteboard remote extensions ensure`
+downloads them from Open VSX on the remote.
