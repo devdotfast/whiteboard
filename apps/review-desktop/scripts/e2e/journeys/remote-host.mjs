@@ -430,6 +430,19 @@ async function journey(ctx, page, until) {
     "8. another version made the host incompatible, Settings shows the install command, and its reviews stay listed",
   );
 
+  // What docs/remote-hosts.md says to do: install the matching version, then restart the server.
+  await remote("install", "a");
+  await onRemote("whiteboard server stop");
+  await waitState("online", "online after the matching install", 60000);
+  remoteTokens.add(await remoteToken());
+  await until(
+    async () => (await row(title).getAttribute("data-unavailable")) === null,
+    "the remote review to be available again",
+  );
+  ctx.check(
+    "8b. installing the matching version and stopping the server brought the host back online",
+  );
+
   // 9. Removing the host takes its reviews out of Home.
   settings = await openSettings(ctx);
   section = settings.getByRole("region", { name: "Remote hosts" });
