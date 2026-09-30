@@ -56,6 +56,26 @@ function model(attached = false) {
 	} as any;
 }
 
+/** The window's code editor service as far as opening goes: later handlers first, then the workbench's own path to a source window. */
+function codeEditors() {
+	const handlers: ((input: any, source: unknown, sideBySide?: boolean) => Promise<unknown>)[] = [];
+	const sourceWindows: string[] = [];
+	const opened: { resource: string; selection: unknown }[] = [];
+	return {
+		sourceWindows, opened,
+		service: { registerCodeEditorOpenHandler: (handler: any) => { handlers.unshift(handler); return Disposable.None; } },
+		editors: { openEditor: async (input: any) => { opened.push({ resource: input.resource.toString(), selection: input.options?.selection }); return { getControl: () => ({ getEditorType: () => "vs.editor.ICodeEditor" }) }; } },
+		async open(input: any) {
+			for (const handler of handlers) {
+				const editor = await handler(input, null);
+				if (editor) return editor;
+			}
+			sourceWindows.push(input.resource.toString());
+			return null;
+		},
+	};
+}
+
 function setup(input: ReturnType<typeof model> | ReturnType<typeof model>[]) {
 	const sourceModels = Array.isArray(input) ? input : [input];
 	const added = event<any>();
@@ -72,6 +92,7 @@ function setup(input: ReturnType<typeof model> | ReturnType<typeof model>[]) {
 		getEOL: () => "\n",
 		equalsTextBuffer: (other: string) => other === "same pinned source",
 	};
+	const opening = codeEditors();
 	const service = new ReviewLocalLanguageFeatures(
 		{ onDidChangeConnection: () => Disposable.None } as any,
 		{ createModelReference: async (uri: URI) => ({ object: { textEditorModel: { ...local, uri } }, dispose() { } }) } as any,
@@ -83,8 +104,10 @@ function setup(input: ReturnType<typeof model> | ReturnType<typeof model>[]) {
 		{ onDidFilesChange: () => Disposable.None, exists: async () => true } as any,
 		{ debug() { } } as any,
 		{ host: async () => undefined } as any,
+		opening.service as any,
+		opening.editors as any,
 	);
-	return { service, sourceModel: sourceModels[0], sourceModels, local };
+	return { service, sourceModel: sourceModels[0], sourceModels, local, opening };
 }
 
 function source(local: any) {
@@ -220,6 +243,7 @@ function remoteSetup(connect?: () => Promise<unknown>) {
 		isTooLargeForSyncing: () => false, onDidChangeContent: () => Disposable.None,
 	});
 	const review = model(true);
+	const opening = codeEditors();
 	const service = new ReviewLocalLanguageFeatures(
 		{ onDidChangeConnection: () => Disposable.None } as any,
 		{ createModelReference: async (uri: URI) => ({ object: { textEditorModel: textModel(uri) }, dispose() { } }) } as any,
@@ -231,10 +255,12 @@ function remoteSetup(connect?: () => Promise<unknown>) {
 		{ onDidFilesChange: () => Disposable.None, exists: async () => true } as any,
 		{ debug() { }, warn() { } } as any,
 		{ host: async (serverId: string) => { asked.push(serverId); return connect ? connect() : host; } } as any,
+		opening.service as any,
+		opening.editors as any,
 	);
 	const internal = service as any;
 	internal.environment = async () => ({ remoteRootPath: ROOT, identity: "hash", serverId: SERVER_ID });
-	return { service, internal, review, window, remote, roots, asked, activated, windowActivations };
+	return { service, internal, review, window, remote, roots, asked, activated, windowActivations, opening };
 }
 
 test("a remote review is rooted on its host and asks that host's registry, never the window's", async (t) => {
@@ -325,4 +351,27 @@ test("a cached source is kept per host: the same review and path on another host
 	internal.environment = async () => ({ remoteRootPath: ROOT, identity: "hash", serverId: "b563e17e-6f4f-4552-968e-12c38d75a6ab" });
 	await internal.localSource(review);
 	assert.deepEqual(acquired, [AUTHORITY, "whiteboard+b563e17e-6f4f-4552-968e-12c38d75a6ab"]);
+});
+
+test("a remote review's in-repository definition opens its host's file at the range, never a source window; a laptop review's still does", async (t) => {
+	const { service, internal, review, remote, opening } = remoteSetup();
+	t.after(() => service.dispose());
+	remote.definitionProvider.register({ language: "typescript" }, { provideDefinition: () => [{ uri: remoteUri(`${ROOT}/src/a.ts`), range: new Range(1, 7, 1, 13) }] });
+	const [location] = await internal.locations(review, new Position(1, 2), CancellationToken.None, "definition");
+	assert.equal(location.uri.scheme, "review-api-source", "results still name the review's own file");
+	const selection = { startLineNumber: 1, startColumn: 7, endLineNumber: 1, endColumn: 7 };
+	assert.ok(await opening.open({ resource: location.uri, options: { selection } }));
+	assert.deepEqual(opening.opened, [{ resource: remoteUri(`${ROOT}/src/a.ts`).toString(), selection }]);
+	assert.deepEqual(opening.sourceWindows, []);
+
+	const laptop = setup(model(true));
+	t.after(() => laptop.service.dispose());
+	const internalLaptop = laptop.service as any;
+	internalLaptop.environment = async () => ({ rootPath: "/project", identity: "identity" });
+	internalLaptop.acquire = async () => source(laptop.local);
+	await internalLaptop.localSource(laptop.sourceModel);
+	const target = laptop.sourceModel.uri.with({ path: "/src/a.ts" });
+	assert.equal(await laptop.opening.open({ resource: target, options: { selection } }), null);
+	assert.deepEqual(laptop.opening.sourceWindows, [target.toString()]);
+	assert.deepEqual(laptop.opening.opened, []);
 });

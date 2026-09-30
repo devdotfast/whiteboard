@@ -2,6 +2,8 @@ import { raceTimeout, timeout } from "../../base/common/async.js";
 import type { CancellationToken } from "../../base/common/cancellation.js";
 import { Disposable, DisposableStore, RefCountedDisposable, toDisposable, type IDisposable, type IReference } from "../../base/common/lifecycle.js";
 import { URI } from "../../base/common/uri.js";
+import { getCodeEditor } from "../../editor/browser/editorBrowser.js";
+import { ICodeEditorService } from "../../editor/browser/services/codeEditorService.js";
 import { Position } from "../../editor/common/core/position.js";
 import type { Hover, LocationLink } from "../../editor/common/languages.js";
 import { EndOfLinePreference, type ITextModel } from "../../editor/common/model.js";
@@ -13,6 +15,7 @@ import { getHoversPromise } from "../../editor/contrib/hover/browser/getHover.js
 import { IFileService } from "../../platform/files/common/files.js";
 import { ILogService } from "../../platform/log/common/log.js";
 import { registerWorkbenchContribution2, WorkbenchPhase } from "../../workbench/common/contributions.js";
+import { ACTIVE_GROUP, IEditorService, SIDE_GROUP } from "../../workbench/services/editor/common/editorService.js";
 import { IExtensionService } from "../../workbench/services/extensions/common/extensions.js";
 import { ITextFileService } from "../../workbench/services/textfile/common/textfiles.js";
 import { IWorkspaceEditingService } from "../../workbench/services/workspaces/common/workspaceEditing.js";
@@ -50,6 +53,10 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 	private readonly sources = new Map<ITextModel, { identity: string; root: string; pending: Promise<LocalSource | undefined> }>();
 	/** Reviews whose language context last came from a remote host. */
 	private readonly remoteReviews = new Set<string>();
+	/** A remote review's checkout root per review side and version (its source URI without a path). */
+	private readonly remoteRoots = new Map<string, URI>();
+	/** One per host, so each refusal kind is logged once per host. */
+	private readonly refusals = new Map<string, ReviewRemoteRefusals>();
 	private readonly environments = new ReviewLanguageEnvironmentRequests();
 	private readonly roots = new Map<string, number>();
 	private readonly uncertainRoots = new Set<string>();
@@ -66,8 +73,18 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 		@IFileService private readonly files: IFileService,
 		@ILogService private readonly log: ILogService,
 		@IReviewRemoteHostsService private readonly remoteHosts: IReviewRemoteHostsService,
+		@ICodeEditorService codeEditors: ICodeEditorService,
+		@IEditorService private readonly editors: IEditorService,
 	) {
 		super();
+		// Runs before the workbench's own path, which would open a source window: those are the laptop's.
+		// A remote review's file opens read-only from its host instead, labelled `<alias>: <path>`.
+		this._register(codeEditors.registerCodeEditorOpenHandler(async (input, _source, sideBySide) => {
+			const root = input.resource.scheme === REVIEW_API_SOURCE_SCHEME ? this.remoteRoots.get(input.resource.with({ path: "/" }).toString()) : undefined;
+			if (!root) return null;
+			const pane = await this.editors.openEditor({ resource: URI.joinPath(root, input.resource.path), options: input.options }, sideBySide ? SIDE_GROUP : ACTIVE_GROUP);
+			return getCodeEditor(pane?.getControl());
+		}));
 		this._register(connection.onDidChangeConnection(() => {
 			this.environments.invalidate();
 			this.generation++;
@@ -134,6 +151,9 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 			if (context && "remoteRootPath" in context) this.remoteReviews.add(model.uri.authority);
 			else if (context) this.remoteReviews.delete(model.uri.authority);
 			const target = reviewLanguageRoot(context);
+			const side = model.uri.with({ path: "/" }).toString();
+			if (target?.serverId !== undefined) this.remoteRoots.set(side, target.root);
+			else if (context) this.remoteRoots.delete(side);
 			const cached = this.sources.get(model);
 			if (cached && cached.identity === context?.identity && cached.root === target?.root.toString()) return cached.pending;
 			if (cached) {
@@ -196,7 +216,7 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 			const owner = toDisposable(() => lifetime.release());
 			return {
 				root, reference, identity,
-				remote: host && { host, refusals: new ReviewRemoteRefusals(host.authority, () => host.authority, this.log) },
+				remote: host && { host, refusals: this.refusalsFor(host) },
 				retain: () => {
 					if (owned.isDisposed) return undefined;
 					lifetime.acquire();
@@ -262,6 +282,12 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 		} finally {
 			if (!model.isAttachedToEditor()) this.releaseSource(model);
 		}
+	}
+
+	private refusalsFor(host: IReviewRemoteHost): ReviewRemoteRefusals {
+		let refusals = this.refusals.get(host.authority);
+		if (!refusals) this.refusals.set(host.authority, refusals = new ReviewRemoteRefusals(host.authority, () => host.authority, this.log));
+		return refusals;
 	}
 
 	/** A remote review's documents are answered only by its host's registry; the window's has the laptop's degraded copy. */
