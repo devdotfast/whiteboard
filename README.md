@@ -9,6 +9,7 @@
   <p>
     <a href="https://dev.fast/install">Download for macOS, Windows, and Linux</a> ·
     <a href="https://dev.fast">Website</a> ·
+    <a href="https://github.com/devdotfast/whiteboard/wiki/Roadmap">Roadmap</a> ·
     <a href="https://discord.gg/wYvd2cpMQg">Discord</a>
   </p>
 </div>
