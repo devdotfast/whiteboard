@@ -12,7 +12,7 @@ export interface CalloutBlock {
 }
 
 // blockSchema is read inside z.lazy, after every module in the cycle has evaluated.
-const schema: z.ZodType<CalloutBlock> = defineBlock("callout", {
+export const calloutSchema = defineBlock("callout", {
   title: label.optional(),
   tone: z.enum(["info", "warning", "danger", "success"]).default("info"),
   children: z.array(z.lazy((): z.ZodType<Block> => blockSchema)),
@@ -20,5 +20,5 @@ const schema: z.ZodType<CalloutBlock> = defineBlock("callout", {
 
 export const callout: BlockDefinition<CalloutBlock> = {
   type: "callout",
-  schema,
+  schema: calloutSchema,
 };

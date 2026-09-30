@@ -316,6 +316,29 @@ describe("diagram rules", () => {
   });
 });
 
+describe("malformed content", () => {
+  it("reports the named kind's own issues", async () => {
+    await expectRejected(
+      () => insert({ type: "code_peek", src: "head/src/store.ts#L1" }),
+      /Unrecognized key: "src"/,
+    );
+    await expectRejected(
+      () =>
+        insert({
+          type: "sequence",
+          title: "Save",
+          actors: { a: "Agent" },
+          steps: [{ from: "a", to: "a", lable: "Save", explanation: "x" }],
+        }),
+      /Unrecognized key: "lable"[\s\S]*steps\[0\]\.label/,
+    );
+    await expectRejected(
+      () => insert({ type: "sequnce" }),
+      /Expected 'markdown' \| 'code'/,
+    );
+  });
+});
+
 describe("source rules in every peek position", () => {
   const blank = head("src/blank.ts", 2, 3);
 

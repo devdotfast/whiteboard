@@ -12,7 +12,7 @@ export interface SectionBlock {
 }
 
 // blockSchema is read inside z.lazy, after every module in the cycle has evaluated.
-const schema: z.ZodType<SectionBlock> = defineBlock("section", {
+export const sectionSchema = defineBlock("section", {
   title: label,
   defaultCollapsed: z.boolean().optional(),
   children: z.array(z.lazy((): z.ZodType<Block> => blockSchema)),
@@ -20,5 +20,5 @@ const schema: z.ZodType<SectionBlock> = defineBlock("section", {
 
 export const section: BlockDefinition<SectionBlock> = {
   type: "section",
-  schema,
+  schema: sectionSchema,
 };

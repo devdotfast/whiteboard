@@ -15,7 +15,7 @@ type TutorialContent =
 
 export type TutorialBlock = { id?: string; type: "tutorial" } & TutorialContent;
 
-const schema: z.ZodType<TutorialBlock> = z.discriminatedUnion("kind", [
+export const tutorialSchema = z.discriminatedUnion("kind", [
   defineBlock("tutorial", { kind: z.literal("keymap") }),
   defineBlock("tutorial", {
     kind: z.literal("conversation"),
@@ -35,5 +35,5 @@ const schema: z.ZodType<TutorialBlock> = z.discriminatedUnion("kind", [
 
 export const tutorial: BlockDefinition<TutorialBlock> = {
   type: "tutorial",
-  schema,
+  schema: tutorialSchema,
 };

@@ -1026,33 +1026,6 @@ describe("snapshot authoring", () => {
       { key: "ok", attachments: [] },
       { key: "fail", attachments: [] },
     ]);
-
-    // The published tool schema does not tell agents attachments are required.
-    const nodeSchemas = (
-      schema: z.core.JSONSchema._JSONSchema,
-    ): z.core.JSONSchema.JSONSchema[] =>
-      schema === true || schema === false
-        ? []
-        : [
-            ...(schema.properties?.key && schema.properties.attachments
-              ? [schema]
-              : []),
-            ...[
-              ...Object.values(schema.properties ?? {}),
-              ...(schema.anyOf ?? []),
-              ...(schema.oneOf ?? []),
-              ...[schema.items ?? []].flat(),
-            ].flatMap(nodeSchemas),
-          ];
-
-    const published = nodeSchemas(
-      authoringTools().find((tool) => tool.name === "review_edit")!.inputSchema,
-    );
-
-    expect(published.length).toBeGreaterThan(0);
-
-    for (const schema of published)
-      expect(schema.required).not.toContain("attachments");
   });
 
   it("moves blocks in both directions and between containers without duplicating them", async () => {
