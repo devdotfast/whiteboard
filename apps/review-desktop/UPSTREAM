@@ -289,8 +289,9 @@ one of these entries:
   unregistered.
   It also drops the 1DS/Application Insights telemetry SDKs (Review sets no
   `product.aiConfig`, and the built-in extensions bundle their own copies),
-  root `katex` (chat only), the tree-sitter bash and PowerShell grammars (the
-  agent host's command parser only), and tsserver's translated diagnostics.
+  root `katex` (chat only), `@vscode/tree-sitter-wasm` (Review stubs
+  `ITreeSitterLibraryService`; highlighting is behind experimental settings it
+  never enables), and tsserver's translated diagnostics.
 - `build/darwin/create-universal-app.ts`
 - `build/darwin/verify-macho.ts`
 - `build/lib/i18n.resources.json`
@@ -311,8 +312,8 @@ one of these entries:
 - `build/gulpfile.hygiene.ts`
 - `build/gulpfile.reh.ts`
 - `build/gulpfile.vscode.ts` and `build/next/index.ts`: also skip the welcome
-  walkthrough media and the PSReadLine terminal module, which Review never
-  loads.
+  walkthrough media, the PSReadLine terminal module, and the tree-sitter query
+  files, none of which Review loads.
 - `build/hygiene.ts`
 - `build/lib/extensions.ts` (also excludes the curated built-in extensions,
   which are staged from prebuilt VSIXes rather than packaged from source)

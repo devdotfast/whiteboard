@@ -59,11 +59,8 @@ fsevents/test/**
 @vscode/windows-registry/build/**
 !@vscode/windows-registry/build/Release/*.node
 
-@vscode/tree-sitter-wasm/wasm/tree-sitter-*.wasm
-!@vscode/tree-sitter-wasm/wasm/tree-sitter-typescript.wasm
-!@vscode/tree-sitter-wasm/wasm/tree-sitter-regex.wasm
-!@vscode/tree-sitter-wasm/wasm/tree-sitter-ini.wasm
-!@vscode/tree-sitter-wasm/wasm/tree-sitter-css.wasm
+# Review stubs ITreeSitterLibraryService (src/vs/review/editor.common.main.ts).
+@vscode/tree-sitter-wasm/**
 
 native-keymap/binding.gyp
 native-keymap/build/**
