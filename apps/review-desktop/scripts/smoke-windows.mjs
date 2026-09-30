@@ -310,12 +310,12 @@ export async function smokeWindows(app, evidence) {
 
         assert.ok(created.sessionId);
 
-        const diff = api("session_diff", {
+        // Uncategorized lines come from the structural diff.
+        const lenses = api("session_lens_get", {
           sessionId: created.sessionId,
-          format: "files",
         });
 
-        assert.ok(JSON.stringify(diff).includes("order.ts"));
+        assert.ok(JSON.stringify(lenses).includes("order.ts"));
 
         console.log(
           JSON.stringify({

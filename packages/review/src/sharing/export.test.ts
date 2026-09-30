@@ -398,13 +398,7 @@ it("uses normal source and workspace routes but rejects authoring mutations", as
       .status,
   ).toBe(404);
 
-  const source = await app.request(`/${id}/source`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      source: { side: "head", file: "main.ts", fromLine: 1, toLine: 1 },
-    }),
-  });
+  const source = await app.request(`/${id}/file?side=head&file=main.ts`);
 
   expect(source.status).toBe(200);
 
