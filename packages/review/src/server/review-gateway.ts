@@ -14,6 +14,7 @@ import {
 import { z } from "zod";
 
 import { StreamLimitError, readBoundedStream } from "./bounded-stream.js";
+import type { ReviewDesktopVerbRelay } from "./global-verb-relay.js";
 import { DEFAULT_MAX_REQUEST_BYTES } from "./http-json.js";
 import {
   FIRST_BYTE_TIMEOUT_MS,
@@ -27,6 +28,7 @@ import {
   send,
 } from "./review-gateway-hosts.js";
 import { openGatewayMemory } from "./review-gateway-memory.js";
+import { createGatewayPushes } from "./review-gateway-pushes.js";
 import {
   type Located,
   createGatewayStreams,
@@ -123,6 +125,8 @@ export function createReviewGateway(input: {
   version: string;
   /** Review home, for the memory file. */
   home: string;
+  /** The laptop server's own relay, which its windows attach to. */
+  relay: ReviewDesktopVerbRelay;
   log?(message: string): void;
 }) {
   const log = input.log ?? (() => {});
@@ -144,6 +148,7 @@ export function createReviewGateway(input: {
 
         if (closed) return;
         streams.changed();
+        pushes.changed();
       });
     },
   });
@@ -524,6 +529,13 @@ export function createReviewGateway(input: {
     log,
   });
 
+  const pushes = createGatewayPushes({
+    hosts,
+    memory,
+    relay: input.relay,
+    log,
+  });
+
   return {
     fetch: handle,
     setHosts: (list: ReviewGatewayHost[]) => hosts.set(list),
@@ -531,6 +543,7 @@ export function createReviewGateway(input: {
     async close() {
       closed = true;
       streams.close();
+      pushes.close();
       hosts.close();
       await memory.flush();
     },

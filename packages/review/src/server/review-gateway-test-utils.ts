@@ -23,6 +23,10 @@ import type { Result } from "@review/review-api/store.js";
 import type { ReviewServerDiscovery } from "@review/server-discovery.js";
 import { Hono } from "hono";
 
+import {
+  GlobalReviewDesktopVerbRelay,
+  type ReviewDesktopVerbRelay,
+} from "./global-verb-relay.js";
 import { runHeadlessServer } from "./headless-host.js";
 import { createReviewGateway } from "./review-gateway.js";
 
@@ -191,6 +195,7 @@ export async function startGateway(
   options: {
     version?: string;
     home?: string;
+    relay?: ReviewDesktopVerbRelay;
   } = {},
 ) {
   const home = options.home ?? path.join(root, "laptop");
@@ -212,6 +217,7 @@ export async function startGateway(
   const logged: string[] = [];
   /** Every path the gateway asked the laptop for. */
   const localPaths: string[] = [];
+  const relay = options.relay ?? new GlobalReviewDesktopVerbRelay();
 
   const gateway = createReviewGateway({
     local: (request) => {
@@ -221,6 +227,7 @@ export async function startGateway(
     },
     version: options.version ?? version,
     home,
+    relay,
     log: (message) => logged.push(message),
   });
 
@@ -276,6 +283,7 @@ export async function startGateway(
     logged,
     localPaths,
     url,
+    relay,
   };
 }
 
