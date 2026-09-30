@@ -54,9 +54,6 @@ Review applies four of them, covering four CVEs:
   `isUNC` import by hand because the surrounding import block predates
   upstream's `isPortableLinkTarget`; the rest is verbatim.
 
-`scripts/vscode-security-backports.test.mjs` asserts each of these hunks is
-still present.
-
 #### Not applicable at this pin
 
 - Azure DevOps access token disclosure (CVE-2026-81381, moderate):

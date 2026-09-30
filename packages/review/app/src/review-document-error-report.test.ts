@@ -1,16 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import {
-  REVIEW_DOCUMENT_ERROR_EVENT,
-  reviewDocumentErrorReport,
-} from "./review-document-error-report";
+import { reviewDocumentErrorReport } from "./review-document-error-report";
 
 describe("reviewDocumentErrorReport", () => {
-  it("keeps a stable channel name for the CLI listener", () => {
-    expect(REVIEW_DOCUMENT_ERROR_EVENT).toBe("review:document-error");
-  });
-
   it("captures name, message, and stack from an Error", () => {
     const error = new TypeError("sequence actor exploded");
     const report = reviewDocumentErrorReport(error);

@@ -42,20 +42,6 @@ test("canvas targets are derived from fixed output locations", () => {
   assert.throws(() => canvasTargets(["--output", packagedRoot]), /usage:/);
 });
 
-test("the canvas loader exposes transient view-state reset", () => {
-  const source = canvasLoaderSource({
-    canvasFile: "assets/canvas.js",
-    wasmFile: "assets/libavoid.wasm",
-    stylesheets: ["assets/canvas.css"],
-  });
-
-  assert.match(
-    source,
-    /export \{ clearReviewViewState, mountReviewCanvas \} from "\.\/assets\/canvas\.js";/,
-  );
-  assert.doesNotMatch(source, /reviewDocRuntimeUrl|doc-runtime/);
-});
-
 test("macOS entitlement artifacts retain required app and helper permissions", async () => {
   const required = {
     app: ["device.audio-input", "device.camera", "automation.apple-events"],

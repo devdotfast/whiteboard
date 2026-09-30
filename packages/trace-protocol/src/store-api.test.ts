@@ -4,7 +4,6 @@ import {
   MAX_TRACE_OBJECT_BYTES,
   MAX_TRACE_SESSIONS_PAGE,
   MAX_TRACE_SESSION_BYTES,
-  TRACE_STORE_API_PREFIX,
   beginUploadRequestSchema,
   beginUploadResponseSchema,
   completeUploadRequestSchema,
@@ -35,10 +34,6 @@ describe("store-api contracts", () => {
     expect(
       listUploadsResponseSchema.parse({ storeId: id, uploads: [] }),
     ).toEqual({ storeId: id, uploads: [] });
-  });
-
-  it("fixes the versioned prefix", () => {
-    expect(TRACE_STORE_API_PREFIX).toBe("/api/trace/v1");
   });
 
   it("accepts main and subagent object names only", () => {

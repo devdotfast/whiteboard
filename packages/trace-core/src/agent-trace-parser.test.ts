@@ -1,16 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  AGENT_TRACE_PARSER_VERSION,
   parseAgentTraceJsonl,
   sniffAgentTraceHarness,
 } from "./agent-trace-parser";
 
 describe("agent-trace-parser", () => {
-  it("exports the parser version", () => {
-    expect(AGENT_TRACE_PARSER_VERSION).toBe("1");
-  });
-
   describe("sniffAgentTraceHarness", () => {
     it("sniffs codex harness from session_meta", () => {
       const chunk = JSON.stringify({

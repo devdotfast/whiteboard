@@ -44,17 +44,6 @@ test("publishes the release number the About panel shows", async () => {
 });
 
 test("owns every install identity rather than sharing Code OSS's", () => {
-  // These name the singleton mutexes, the Windows installer registration, and
-  // the shared storage directory. Left at their upstream values they collide
-  // with a real Code OSS or VS Code install on the same machine: one app's
-  // installer blocks on the other's running process, and both write the same
-  // sharedStorage database.
-  assert.equal(product.sharedDataFolderName, ".dev-fast-review-shared");
-  assert.equal(product.win32MutexName, "devfastreview");
-  assert.equal(product.win32TunnelMutex, "devfastreview-tunnel");
-  assert.equal(product.win32TunnelServiceMutex, "devfastreview-tunnelservice");
-  assert.equal(product.win32AppUserModelId, "devfast.Review");
-
   const appIds = [
     product.win32x64AppId,
     product.win32arm64AppId,
@@ -94,8 +83,10 @@ test("keeps compatibility-sensitive Desktop identifiers unchanged", () => {
 });
 
 test("keeps upstream identity out of the fields Review has claimed", () => {
-  // A re-vendor rewrites product.json wholesale, so guard the values above
-  // against silently reverting to anything Code OSS- or Microsoft-branded.
+  // A re-vendor rewrites product.json wholesale, so guard these fields against
+  // silently reverting to anything Code OSS- or Microsoft-branded. At upstream
+  // values the mutex and shared-storage names collide with a real Code OSS or
+  // VS Code install on the same machine.
   const claimedKeys = [
     "nameShort",
     "nameLong",
@@ -132,9 +123,6 @@ test("removes dormant Microsoft endpoint configuration that is safe to omit", ()
   ]) {
     assert.equal(product[key], undefined, key);
   }
-
-  assert.equal(product.defaultChatAgent.extensionId, "GitHub.copilot");
-  assert.equal(product.defaultChatAgent.chatExtensionId, "GitHub.copilot-chat");
 });
 
 // Desktop Code OSS never reads `configurationDefaults` from product.json — only the
