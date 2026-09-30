@@ -109,6 +109,8 @@ interface EnsureRemoteExtensionsInput {
   groups?: string[];
   target?: RemoteTarget;
   timeoutMs?: number;
+  /** Ends every download still running. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -186,6 +188,7 @@ export async function ensureRemoteExtensions(
         directory,
         { ...stamp, installedTimestamp },
         input.timeoutMs,
+        input.signal,
       );
       installed.push(extension.id);
       listed.push(
@@ -271,12 +274,13 @@ async function install(
   directory: string,
   stamp: Stamp,
   timeoutMs = DOWNLOAD_TIMEOUT_MS,
+  signal?: AbortSignal,
 ) {
   const part = `${directory}.${process.pid}.vsix`;
   const staging = `${directory}.${process.pid}.staging`;
 
   try {
-    await fetchVerified(download, part, timeoutMs);
+    await fetchVerified(download, part, timeoutMs, signal);
     await rm(staging, { recursive: true, force: true });
     await extractVsix(part, staging, download.size * 8);
     await sanitizeManifest(staging, extension);
@@ -299,13 +303,17 @@ async function fetchVerified(
   download: CuratedDownload,
   file: string,
   timeoutMs: number,
+  signal?: AbortSignal,
 ) {
   const { host } = new URL(download.url);
   let response: Response;
 
   try {
     response = await fetch(download.url, {
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: AbortSignal.any([
+        AbortSignal.timeout(timeoutMs),
+        ...(signal ? [signal] : []),
+      ]),
     });
   } catch (error) {
     throw new Error(
