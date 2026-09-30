@@ -13,7 +13,7 @@ import { ClientConnectionEvent, IPCServer } from '../../base/parts/ipc/common/ip
 import { PersistentProtocol } from '../../base/parts/ipc/common/ipc.net.js';
 import { NodeSocket } from '../../base/parts/ipc/node/ipc.net.js';
 import { NullLogService } from '../../platform/log/common/log.js';
-import { connectRemoteAgentManagement, IConnectionOptions, ManagementPersistentConnection, PersistentConnectionEventType } from '../../platform/remote/common/remoteAgentConnection.js';
+import { connectRemoteAgentManagement, IConnectionOptions, ManagementPersistentConnection, PersistentConnection, PersistentConnectionEventType } from '../../platform/remote/common/remoteAgentConnection.js';
 import { RemoteConnectionType, WebSocketRemoteConnection } from '../../platform/remote/common/remoteAuthorityResolver.js';
 import { RemoteSocketFactoryService } from '../../platform/remote/common/remoteSocketFactoryService.js';
 import { ISignService } from '../../platform/sign/common/sign.js';
@@ -168,6 +168,19 @@ test('a permanent reconnection failure of one authority leaves another authority
 	await failPermanently(b, toB);
 
 	assert.equal(await echo(toA, 'a'), 'a');
+});
+
+test('a connection that failed permanently does not start reconnecting again', async () => {
+	const b = await startRemote();
+	const toB = await connect(b, 'wb-test+b');
+	await failPermanently(b, toB);
+	const events: PersistentConnectionEventType[] = [];
+	toB.onDidStateChange(e => events.push(e.type));
+
+	PersistentConnection.debugTriggerReconnection();
+	await new Promise(resolve => setTimeoutReferenced(resolve, 100));
+
+	assert.deepEqual(events, []);
 });
 
 test('a failed initial connection to one authority leaves another authority sending and receiving', async () => {

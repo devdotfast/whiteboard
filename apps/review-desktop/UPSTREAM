@@ -255,7 +255,9 @@ one of these entries:
   in one static flag that ends every connection in the window and every later
   one; with several remotes in one window, one failed remote would end the
   others until a reload. With the option, a failed initial connection or
-  Management reconnection ends only that connection.
+  Management reconnection ends only that connection. A connection that failed
+  also sets upstream's per-connection flag, which upstream declares but never
+  sets, so it does not start reconnecting again.
 - `extensions/package.json` and the extension `package.json`/`package-lock.json`
   files: `@vscode/extension-telemetry` is hoisted to the shared extensions
   install (github keeps its own ^1.0.0 copy; the shared copy is ^0.9.8). The
