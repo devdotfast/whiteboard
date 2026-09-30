@@ -1023,9 +1023,6 @@ describe("MCP self-install", () => {
 
       const { plugins } = built.connect;
 
-      expect(plugins.opencode.command).toContain(
-        "@dev.fast/opencode-whiteboard",
-      );
       expect(plugins.cursor).toEqual({
         label: "Install in Cursor",
         url: cursorInstallDeeplink(reviewMcpLaunch(true)),

@@ -1,6 +1,5 @@
 packages:
   - "packages/*"
-  - "packages/agent-plugins/opencode"
   - "packages/agent-plugins/pi"
   - "packages/review/app"
   - "apps/*"
@@ -27,5 +26,3 @@ overrides:
 
 allowBuilds:
   esbuild: true
-  # Optional native speedup pulled in by @opencode-ai/plugin (types only here).
-  msgpackr-extract: false

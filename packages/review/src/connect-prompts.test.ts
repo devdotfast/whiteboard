@@ -71,9 +71,13 @@ describe("connectPrompt", () => {
     }
   });
 
-  it("registers the shared MCP launch in Pi and oh-my-pi", () => {
+  it("registers the shared MCP launch in Pi, oh-my-pi and OpenCode", () => {
     for (const platform of ["darwin", "win32"] as const) {
       const launch = reviewMcpLaunch(true, platform);
+
+      expect(connectPrompt("opencode", { ...input, platform })).toContain(
+        `opencode mcp add --global whiteboard -- ${launchCommand(launch)}\n`,
+      );
 
       expect(connectPrompt("pi", { ...input, platform })).toContain(
         `pi mcp add whiteboard -- ${launchCommand(launch)}\n`,
