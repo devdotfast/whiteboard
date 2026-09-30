@@ -43,6 +43,7 @@ test("builds a runtime that starts on this Node and reports the Desktop's commit
   // Bundled: each built-in's entry point exists, with no node_modules beside it.
   for (const name of REMOTE_BUILTIN_EXTENSIONS) {
     const extension = path.join(runtime, "extensions", name);
+
     const { main } = JSON.parse(
       readFileSync(path.join(extension, "package.json"), "utf8"),
     );
