@@ -73,21 +73,27 @@ export async function createSshAskpass(input: {
 		{ mode: 0o700, flag: "wx" },
 	);
 
-	// ssh retries a password it was sent empty; after a cancel, its later prompts are not shown.
-	const cancelledSsh = new Set<number>();
+	// ssh sends a cancelled password as empty and asks again with the same text; those retries are not shown.
+	const cancelled = new Map<number, Set<string>>();
 	let queue = Promise.resolve();
 
 	async function ask(alias: string, text: string, pid: number, signal: AbortSignal): Promise<string | undefined> {
 		if (signal.aborted) return undefined;
 		const kind = sshPromptKind(text);
-		for (const cancelled of cancelledSsh) if (!isAlive(cancelled)) cancelledSsh.delete(cancelled);
-		if (cancelledSsh.has(pid)) {
-			log(`ssh prompt (${kind}) for ${alias}: cancelled, an earlier prompt of this ssh was cancelled`);
+		for (const ssh of cancelled.keys()) if (!isAlive(ssh)) cancelled.delete(ssh);
+		if (cancelled.get(pid)?.has(text)) {
+			log(`ssh prompt (${kind}) for ${alias}: cancelled, the same prompt of this ssh was cancelled`);
 			return undefined;
 		}
 		log(`ssh prompt (${kind}) for ${alias}: shown`);
-		const answer = await input.prompt({ alias, text, kind, signal }).catch(() => undefined);
-		if (answer === undefined) cancelledSsh.add(pid);
+		let answer: string | undefined;
+		try {
+			answer = await input.prompt({ alias, text, kind, signal });
+		} catch (error) {
+			log(`ssh prompt (${kind}) for ${alias}: failed: ${(error as Error).message}`);
+			return undefined;
+		}
+		if (answer === undefined) cancelled.set(pid, (cancelled.get(pid) ?? new Set()).add(text));
 		log(`ssh prompt (${kind}) for ${alias}: ${answer === undefined ? "cancelled" : "answered"}`);
 		return answer;
 	}

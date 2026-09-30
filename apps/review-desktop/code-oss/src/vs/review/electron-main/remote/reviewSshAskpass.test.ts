@@ -71,17 +71,32 @@ test("a cancelled prompt makes the helper exit non-zero and print nothing", asyn
 	assert.ok(log.some((line) => line.includes("cancelled")), log.join("\n"));
 });
 
-test("after a cancel, the same ssh process is not asked again", async (t) => {
-	let shown = 0;
-	const { askpass } = await listener(t, async () => {
-		shown++;
+test("after a cancel, the same ssh's retry of that prompt is not shown, but a different prompt is", async (t) => {
+	const shown: string[] = [];
+	const { askpass } = await listener(t, async ({ text }) => {
+		shown.push(text);
 		return undefined;
 	});
+	const env = askpass.env("wb-test-a");
 
-	// Both runs have this test process as their parent, as ssh's retries share ssh.
-	assert.notEqual((await runAskpass(askpass.env("wb-test-a"), password)).code, 0);
-	assert.notEqual((await runAskpass(askpass.env("wb-test-a"), password)).code, 0);
-	assert.equal(shown, 1);
+	// Every run has this test process as its parent, as ssh's prompts all share ssh.
+	assert.notEqual((await runAskpass(env, passphrase)).code, 0);
+	assert.notEqual((await runAskpass(env, password)).code, 0);
+	assert.notEqual((await runAskpass(env, password)).code, 0);
+	assert.deepEqual(shown, [passphrase, password]);
+});
+
+test("a failing prompt is logged as an error, and the retry is still shown", async (t) => {
+	let calls = 0;
+	const { askpass, log } = await listener(t, async () => {
+		if (++calls === 1) throw new Error("relay broke");
+		return "second";
+	});
+	const env = askpass.env("wb-test-a");
+
+	assert.notEqual((await runAskpass(env, password)).code, 0);
+	assert.equal((await runAskpass(env, password)).stdout, "second");
+	assert.ok(log.some((line) => line.includes("failed: relay broke")), log.join("\n"));
 });
 
 test("the helper fails without printing when the listener is gone", async (t) => {
