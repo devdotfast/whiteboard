@@ -85,11 +85,13 @@ test("a cancelled prompt is auth-failed, and there is no second attempt", async 
 	await until(() => ssh.master("wb-test-a") !== undefined);
 	host.promptOpened();
 	host.promptClosed(false);
-	ssh.master("wb-test-a")!.finish(255, { stderr: "dev@127.0.0.1: Permission denied (publickey,password).\n" });
+	ssh.master("wb-test-a")!.finish(255, {
+		stderr: "Warning: Permanently added '[127.0.0.1]:2222' (ED25519) to the list of known hosts.\ndev@127.0.0.1: Permission denied (publickey,password).\n",
+	});
 	await until(() => last()?.problem !== undefined);
 
 	assert.equal(last()?.problem?.state, "auth-failed");
-	assert.match(last()!.problem!.detail, /Permission denied/);
+	assert.equal(last()!.problem!.detail, "dev@127.0.0.1: Permission denied (publickey,password).");
 	assert.equal(clock.pending, 0);
 	assert.equal(ssh.of("wb-test-a", "master").length, 1);
 });

@@ -97,6 +97,17 @@ test("removing a host from the setting closes its connection", async (t) => {
 	assert.ok(ssh.master("wb-test-b")!.alive);
 });
 
+test("removing a host whose master is still connecting ends that ssh at once", async (t) => {
+	const { manager, ssh } = await managerFor(t, { "wb-test-slow": { master: "hang" } });
+
+	manager.update(true, ["wb-test-slow"]);
+	await until(() => ssh.master("wb-test-slow") !== undefined);
+	manager.update(true, []);
+
+	await until(() => !ssh.master("wb-test-slow")!.alive, 500);
+	assert.equal(ssh.master("wb-test-slow")!.signalCode, "SIGTERM");
+});
+
 test("with the experimental setting off, nothing connects and no hosts are sent", async (t) => {
 	const { manager, ssh, sent, clock } = await managerFor(t, { "wb-test-a": {} });
 

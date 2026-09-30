@@ -99,7 +99,8 @@ function firstLines(text: string, count = 6): string {
 	return text
 		.split("\n")
 		.map((line) => line.trim())
-		.filter(Boolean)
+		// OpenSSH's note on a first connection to a host says nothing about the failure.
+		.filter((line) => line && !line.startsWith("Warning: Permanently added"))
 		.slice(0, count)
 		.join("\n")
 		.slice(0, 1000);
@@ -169,6 +170,8 @@ export class ReviewRemoteHost {
 	/** Bumped to abandon an attempt in flight. */
 	private generation = 0;
 	private master: SshChildProcess | undefined;
+	/** Masters asked to exit that have not yet. */
+	private readonly closing = new Set<SshChildProcess>();
 	private masterStderr = "";
 	private env: NodeJS.ProcessEnv | undefined;
 	private connectedAt: number | undefined;
@@ -237,7 +240,7 @@ export class ReviewRemoteHost {
 
 	/** At process exit, when nothing can be awaited. */
 	killNow(): void {
-		this.master?.kill();
+		for (const master of [this.master, ...this.closing]) master?.kill();
 	}
 
 	private set(state: ReviewGatewayHost): void {
@@ -388,8 +391,11 @@ export class ReviewRemoteHost {
 	/** `-O exit`, then SIGTERM if the master is still there. */
 	private async close(master: SshChildProcess | undefined): Promise<void> {
 		if (!master || gone(master)) return;
-		if (this.env) await this.run(sshCloseArgs(this.options.session, this.env), this.timeouts.close);
-		if (!(await exitedWithin(master, this.timeouts.close))) master.kill("SIGTERM");
+		this.closing.add(master);
+		// A master still connecting has no socket to take -O exit.
+		const asked = this.env && (await this.run(sshCloseArgs(this.options.session, this.env), this.timeouts.close)).code === 0;
+		if (!asked || !(await exitedWithin(master, this.timeouts.close))) master.kill("SIGTERM");
+		this.closing.delete(master);
 	}
 
 	/** One short-lived ssh; output is bounded, and a timeout ends it. */

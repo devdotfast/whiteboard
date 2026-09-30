@@ -53,6 +53,8 @@ export function freeLoopbackPort(): Promise<number> {
 export class ReviewRemoteHosts {
 	private readonly clock: ReviewRemoteClock;
 	private readonly hosts = new Map<string, ReviewRemoteHost>();
+	/** Removed from the setting, still closing. */
+	private readonly closing = new Set<ReviewRemoteHost>();
 	/** Aliases refused before reaching ssh. */
 	private readonly refused = new Map<string, ReviewGatewayHost>();
 	private order: string[] = [];
@@ -75,7 +77,8 @@ export class ReviewRemoteHosts {
 			if (wanted.includes(alias)) continue;
 			this.hosts.delete(alias);
 			this.options.log(`${alias}: removed from the setting; closing its connection.`);
-			void host.dispose();
+			this.closing.add(host);
+			void host.dispose().finally(() => this.closing.delete(host));
 		}
 		this.order = wanted;
 		this.refused.clear();
@@ -112,7 +115,7 @@ export class ReviewRemoteHosts {
 		return (this.disposing ??= (async () => {
 			this.disposed = true;
 			this.cancelSend?.();
-			const hosts = [...this.hosts.values()];
+			const hosts = [...this.hosts.values(), ...this.closing];
 			this.hosts.clear();
 			await Promise.all(hosts.map((host) => host.dispose()));
 			(await this.prepared?.catch(() => undefined))?.dispose();
@@ -121,7 +124,7 @@ export class ReviewRemoteHosts {
 
 	/** At process exit, when nothing can be awaited: masters are detached and would outlive us. */
 	killNow(): void {
-		for (const host of this.hosts.values()) host.killNow();
+		for (const host of [...this.hosts.values(), ...this.closing]) host.killNow();
 	}
 
 	private createHost(alias: string): ReviewRemoteHost {

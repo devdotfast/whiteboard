@@ -125,8 +125,9 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 				if (child.stdin.writableFinished) answer();
 				else child.stdin.once("finish", answer);
 			} else if (kind === "exit") {
-				child.finish(master?.alive ? 0 : 255, { stderr: "Exit request sent.\n" });
-				master?.finish(255);
+				const listening = master !== undefined && master.alive && up.has(master);
+				child.finish(listening ? 0 : 255, { stderr: listening ? "Exit request sent.\n" : "Control socket connect: No such file or directory\n" });
+				if (listening) master.finish(255);
 			} else child.finish(master?.alive ? 0 : 255);
 		});
 		return child as unknown as SshChildProcess;
