@@ -4,6 +4,7 @@ import { z } from "zod";
 import { codeFields } from "./code.js";
 import {
   type BlockDefinition,
+  blockPins,
   defineBlock,
   identity,
   label,
@@ -37,6 +38,7 @@ export const sequenceSchema = defineBlock("sequence", {
   title: label,
   actors: z.record(text, label),
   steps: z.array(stepSchema),
+  pins: blockPins,
 });
 
 export type SequenceBlock = z.infer<typeof sequenceSchema>;

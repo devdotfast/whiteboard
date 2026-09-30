@@ -1,4 +1,5 @@
 import { ReviewInputError } from "@review/review-api/input-error.js";
+import { sourcePinsSchema } from "@review/source.js";
 import { z } from "zod";
 
 export const text = z.string();
@@ -6,6 +7,11 @@ export const text = z.string();
 export const label = text.trim().min(1);
 
 export const identity = { id: text.optional() };
+
+/** On a block that quotes code: the pins its anchors read when they name none. */
+export const blockPins = sourcePinsSchema
+  .optional()
+  .describe("Pins for this block's anchors; needed on the scratchpad.");
 
 /**
  * One block kind: the strict schema the store parses with, and the rules a

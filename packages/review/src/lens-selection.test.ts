@@ -1,7 +1,9 @@
 import { expect, it } from "vitest";
+import { z } from "zod";
 
 import {
   diffSelectionSchema,
+  parseAnchor,
   resolveDiffSelection,
   selectSource,
   selectionKey,
@@ -227,4 +229,29 @@ it("requires base pins before a selection may touch the base side", () => {
       pins: { ...pins, base: "a".repeat(40) },
     }).pins,
   ).toEqual({ ...pins, base: "a".repeat(40) });
+});
+
+it("reads the anchor strings agents write", () => {
+  expect(parseAnchor("head/src/a b.ts#L10-L24")).toEqual({
+    file: "src/a b.ts",
+    start: { side: "head", line: 10 },
+    end: { side: "head", line: 24 },
+  });
+  expect(parseAnchor("base/src/a.ts#L7")).toEqual({
+    file: "src/a.ts",
+    start: { side: "base", line: 7 },
+    end: { side: "base", line: 7 },
+  });
+  expect(parseAnchor("diff/src/a.ts#L84-R90")).toEqual({
+    file: "src/a.ts",
+    start: { side: "base", line: 84 },
+    end: { side: "head", line: 90 },
+  });
+
+  for (const text of ["src/a.ts#L1", "head/src/a.ts", "diff/src/a.ts#L1-X2"])
+    expect(parseAnchor(text)).toBeUndefined();
+
+  expect(() => diffSelectionSchema.parse("head/src/a.ts#L9-L2")).toThrow(
+    /ends before it starts/,
+  );
 });

@@ -316,11 +316,83 @@ describe("diagram rules", () => {
   });
 });
 
+describe("anchors written as strings", () => {
+  it("reads them, gives them the block's pins, and gives a unit inserted later its diagram's", async () => {
+    const blockPins = {
+      repositoryId: pins.repositoryId,
+      base: pins.base,
+      head: pins.head,
+    };
+
+    const sequence = await insert({
+      type: "sequence",
+      title: "Save",
+      actors: { a: "Agent", b: "Host" },
+      pins: blockPins,
+      steps: [
+        {
+          from: "a",
+          to: "b",
+          label: "Save",
+          source: "head/src/store.ts#L1-L3",
+        },
+      ],
+    });
+
+    expect(sequence.status).toBe(200);
+
+    const step = await post("/commands", {
+      commandId: randomUUID(),
+      operation: {
+        type: "edit",
+        reviewId,
+        edit: {
+          type: "insert",
+          parentId: sequence.body.targetId!,
+          content: {
+            type: "step",
+            from: "b",
+            to: "a",
+            label: "Status",
+            source: "diff/order.ts#L1-R1",
+          },
+        },
+      },
+    });
+
+    expect(step.status).toBe(200);
+    expect(
+      elements(local.store.read(reviewId).document).flatMap((element) =>
+        element.type === "step" && element.source ? [element.source] : [],
+      ),
+    ).toEqual([
+      {
+        file: "src/store.ts",
+        start: { side: "head", line: 1 },
+        end: { side: "head", line: 3 },
+        pins: blockPins,
+      },
+      {
+        file: "order.ts",
+        start: { side: "base", line: 1 },
+        end: { side: "head", line: 1 },
+        pins: blockPins,
+      },
+    ]);
+  });
+
+  it("rejects a string that isn't an anchor", () =>
+    expectRejected(
+      () => insert({ type: "code_peek", source: "src/store.ts#L1" }),
+      /head\/path#L10-L24/,
+    ));
+});
+
 describe("malformed content", () => {
   it("reports the named kind's own issues", async () => {
     await expectRejected(
       () => insert({ type: "code_peek", src: "head/src/store.ts#L1" }),
-      /Unrecognized key: "src"/,
+      /Unrecognized key: "src"[\s\S]*Expected a source anchor/,
     );
     await expectRejected(
       () =>
@@ -465,7 +537,7 @@ describe("source rules in every peek position", () => {
           type: "markdown",
           markdown: "[x](review-source:head/src/store.ts)",
         }),
-      "Use review-source:head/path#L10-L24 (or base) for a source link.",
+      "Use review-source:head/path#L10-L24 (or base, or diff/path#L84-R90 across sides) for a source link.",
     );
     await expectRejected(
       () =>

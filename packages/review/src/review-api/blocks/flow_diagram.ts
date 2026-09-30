@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import {
   type BlockDefinition,
+  blockPins,
   defineBlock,
   identity,
   label,
@@ -56,6 +57,7 @@ export const flowDiagramSchema = defineBlock("flow_diagram", {
   direction: z.enum(["right", "down"]).optional(),
   nodes: z.array(flowNodeSchema).min(1).max(100),
   edges: z.array(flowEdgeSchema).max(300),
+  pins: blockPins,
 });
 
 export type FlowDiagramBlock = z.infer<typeof flowDiagramSchema>;

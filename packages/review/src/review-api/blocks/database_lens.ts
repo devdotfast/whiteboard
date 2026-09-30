@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import {
   type BlockDefinition,
+  blockPins,
   defineBlock,
   identity,
   label,
@@ -95,6 +96,7 @@ export const databaseLensSchema = defineBlock("database_lens", {
       }),
     )
     .min(1, "A database lens needs at least one use case."),
+  pins: blockPins,
 });
 
 export type DatabaseLensBlock = z.infer<typeof databaseLensSchema>;

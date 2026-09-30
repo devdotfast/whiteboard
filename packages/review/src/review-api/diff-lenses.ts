@@ -1,4 +1,8 @@
-import { type LensSource, lensSourceSchema } from "@review/lens-selection.js";
+import {
+  type LensSource,
+  anchorTextSchema,
+  lensSourceSchema,
+} from "@review/lens-selection.js";
 import type { FileLineRange } from "@review/source.js";
 import { z } from "zod";
 
@@ -13,23 +17,29 @@ import { ReviewInputError } from "./input-error.js";
 
 const patternsSchema = z.array(label).min(1).max(1000);
 
-export const lensTargetSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("files"), patterns: patternsSchema }),
-  z.strictObject({
-    kind: z.literal("ranges"),
-    sources: z.array(lensSourceSchema).min(1).max(10000),
-  }),
-]);
+const lensTarget = <Source extends z.ZodType>(source: Source) =>
+  z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("files"), patterns: patternsSchema }),
+    z.strictObject({
+      kind: z.literal("ranges"),
+      sources: z.array(source).min(1).max(10000),
+    }),
+  ]);
+
+const lensTargets = <Source extends z.ZodType>(source: Source) =>
+  z
+    .array(lensTarget(source))
+    .min(1)
+    .max(1000)
+    .describe(
+      "Select changed lines using repository-relative paths/globs or pinned source ranges. Counts and viewed actions apply only to those lines.",
+    );
+
+export const lensTargetSchema = lensTarget(lensSourceSchema);
 
 export type LensTarget = z.infer<typeof lensTargetSchema>;
 
-export const lensTargetsSchema = z
-  .array(lensTargetSchema)
-  .min(1)
-  .max(1000)
-  .describe(
-    "Select changed lines using repository-relative paths/globs or pinned source ranges. Counts and viewed actions apply only to those lines.",
-  );
+export const lensTargetsSchema = lensTargets(lensSourceSchema);
 
 export const lensSchema = z.strictObject({
   id: label,
@@ -43,23 +53,31 @@ export const LENS_LIMIT = 200;
 
 /** One lens edit. Ids are host-assigned (`lens-N`); an update patches only
  * the fields it names. */
-export const lensEditSchema = z.discriminatedUnion("type", [
-  z.strictObject({
-    type: z.literal("insert"),
-    title: label,
-    targets: lensTargetsSchema,
-    afterId: label
-      .optional()
-      .describe("The lens this one follows. Omitted appends."),
-  }),
-  z.strictObject({
-    type: z.literal("update"),
-    targetId: label,
-    title: label.optional(),
-    targets: lensTargetsSchema.optional(),
-  }),
-  z.strictObject({ type: z.literal("remove"), targetId: label }),
-]);
+function lensEdits<Targets extends z.ZodType>(targets: Targets) {
+  return z.discriminatedUnion("type", [
+    z.strictObject({
+      type: z.literal("insert"),
+      title: label,
+      targets,
+      afterId: label
+        .optional()
+        .describe("The lens this one follows. Omitted appends."),
+    }),
+    z.strictObject({
+      type: z.literal("update"),
+      targetId: label,
+      title: label.optional(),
+      targets: targets.optional(),
+    }),
+    z.strictObject({ type: z.literal("remove"), targetId: label }),
+  ]);
+}
+
+export const lensEditSchema = lensEdits(lensTargetsSchema);
+
+/** What agents are shown: ranges as anchor strings only. The host parses
+ * lensEditSchema, which also takes the object form. */
+export const publishedLensEditSchema = lensEdits(lensTargets(anchorTextSchema));
 
 export type LensEdit = z.infer<typeof lensEditSchema>;
 

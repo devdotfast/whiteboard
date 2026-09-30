@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import {
   type BlockDefinition,
+  blockPins,
   defineBlock,
   identity,
   label,
@@ -38,6 +39,7 @@ const schema = defineBlock("call_stack_diff", {
   title: label,
   base: z.array(frameSchema),
   head: z.array(frameSchema),
+  pins: blockPins,
 });
 
 export type CallStackDiffBlock = z.infer<typeof schema>;

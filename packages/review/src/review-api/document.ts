@@ -1,6 +1,7 @@
 import {
   type LensSource,
-  selectSource,
+  diffSelectionObjectSchema,
+  parseAnchor,
   sourceAnchors,
 } from "@review/lens-selection.js";
 import {
@@ -235,52 +236,41 @@ function documentReferences(
             if (/^(?:https?:\/\/|mailto:|#)/i.test(href)) return [];
 
             return reject(
-              `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](review-source:head/path#L10-L24) or review-source:base/path#L10-L24 for repository files, with a repository-relative path and verified line numbers. External links must use https://, http://, or mailto:; document anchors use #heading.`,
+              `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](review-source:head/path#L10-L24) or review-source:base/path#L10-L24 for repository files, or review-source:diff/path#L84-R90 across sides, with a repository-relative path and verified line numbers. External links must use https://, http://, or mailto:; document anchors use #heading.`,
             );
           }
 
-          const match =
-            /^review-source:(base|head)\/(.+)#L(\d+)(?:-L(\d+))?$/i.exec(
-              node.url!,
-            );
-
-          if (!match)
-            return reject(
-              "Use review-source:head/path#L10-L24 (or base) for a source link.",
-            );
-          let file: string;
+          let target: string;
 
           try {
-            file = decodeURIComponent(match[2]!);
+            target = decodeURIComponent(href.slice("review-source:".length));
           } catch {
             return reject("Invalid URL encoding in source link.");
           }
 
-          let source = fileLineRangeSchema.safeParse({
-            side: match[1]!.toLowerCase(),
-            file,
-            fromLine: Number(match[3]),
-            toLine: Number(match[4] ?? match[3]),
-          });
+          // Links share the anchor grammar blocks use.
+          const anchor = parseAnchor(
+            target.replace(/^(head|base|diff)\//i, (side) =>
+              side.toLowerCase(),
+            ),
+          );
+
+          if (!anchor)
+            return reject(
+              "Use review-source:head/path#L10-L24 (or base, or diff/path#L84-R90 across sides) for a source link.",
+            );
 
           // A block's pins are the default for every link it holds.
-          if (source.success && element.pins)
-            source = fileLineRangeSchema.safeParse({
-              ...source.data,
-              pins: element.pins,
-            });
+          const source = diffSelectionObjectSchema.safeParse(
+            element.pins ? { ...anchor, pins: element.pins } : anchor,
+          );
 
           if (!source.success) {
             if (tolerant) return [];
             throw source.error;
           }
 
-          return [
-            {
-              id: `${element.id}:${node.url}`,
-              source: selectSource(source.data),
-            },
-          ];
+          return [{ id: `${element.id}:${node.url}`, source: source.data }];
         },
       );
 
@@ -650,6 +640,54 @@ export function assignFreshIds(
     }
 }
 
+/** The anchors an element quotes code with, not counting its units'. */
+function ownAnchors(element: Element): LensSource[] {
+  switch (element.type) {
+    case "code_peek":
+      return [element.source];
+    case "step":
+      return element.source ? [element.source] : [];
+    case "flow_node":
+      return element.attachments.flatMap((attachment) => attachment.sources);
+    case "call_stack_diff":
+      return [...element.base, ...element.head].flatMap((frame) => [
+        frame.source,
+        ...(frame.callSite ? [frame.callSite] : []),
+        ...(frame.contextSources ?? []),
+      ]);
+    case "database_lens":
+      return element.useCases.flatMap((useCase) =>
+        useCase.operations.map((operation) => operation.source),
+      );
+    default:
+      return [];
+  }
+}
+
+const blockPinsOf = (element: Element | undefined) =>
+  element && "pins" in element ? element.pins : undefined;
+
+/** A block's pins become the pins of every anchor in it that names none, its
+ * units' included; a unit inserted later takes its diagram's. Stored anchors
+ * then carry their pins, as the canvas and source reads expect. */
+function inheritPins(element: Element, diagramPins?: SourcePins): void {
+  const pins = isUnit(element) ? diagramPins : blockPinsOf(element);
+
+  if (pins)
+    for (const anchor of ownAnchors(element)) {
+      if (anchor.pins) continue;
+
+      if (
+        !pins.base &&
+        (anchor.start.side === "base" || anchor.end.side === "base")
+      )
+        throw new ReviewInputError("A base-side anchor needs base pins.");
+      anchor.pins = pins;
+    }
+
+  for (const child of children(element)) inheritPins(child, pins);
+}
+
 export interface ApplyEditOptions {
   /** Where a root-level insert with no placement lands: the end by default. */
   placement?: "first" | "last";
@@ -686,6 +724,9 @@ export function applyEdit(
   };
 
   const fresh = (element: Element) => assignFreshIds(element, allocate);
+
+  const diagramPins = (parentId?: string) =>
+    parentId ? blockPinsOf(locate(parentId).element) : undefined;
 
   const place = (
     element: Element,
@@ -745,6 +786,7 @@ export function applyEdit(
         );
       fresh(node);
       place(node, edit.parentId, edit.afterId);
+      inheritPins(node, diagramPins(edit.parentId));
 
       const edge: FlowDiagramEdge = {
         type: "flow_edge",
@@ -763,6 +805,7 @@ export function applyEdit(
 
     fresh(edit.content);
     place(edit.content, edit.parentId, edit.afterId);
+    inheritPins(edit.content, diagramPins(edit.parentId));
 
     return written(edit.content);
   }
@@ -795,7 +838,25 @@ export function applyEdit(
         ),
       );
 
-      siblings[index] = contentSchema.parse(merged);
+      const updated = contentSchema.parse(merged);
+      const before = blockPinsOf(element);
+
+      // Anchors that took the old block pins follow the new ones.
+      if (before && "pins" in edit.changes)
+        for (const candidate of elements([updated]))
+          for (const anchor of ownAnchors(candidate))
+            if (JSON.stringify(anchor.pins) === JSON.stringify(before))
+              delete anchor.pins;
+
+      inheritPins(
+        updated,
+        blockPinsOf(
+          elements(document).find((candidate) =>
+            childLists(candidate).includes(siblings),
+          ),
+        ),
+      );
+      siblings[index] = updated;
       break;
     }
 
@@ -824,6 +885,7 @@ export function applyEdit(
         );
       fresh(edit.content);
       edit.content.id = element.id;
+      inheritPins(edit.content);
       siblings[index] = edit.content;
 
       return written(edit.content);

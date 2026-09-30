@@ -175,7 +175,7 @@ it("resolves a block's links at the block's own pins, and only where those pins 
         pins,
       },
     ]),
-  ).toThrow(/base-side source needs base pins/);
+  ).toThrow(/base-side endpoint needs base pins/);
 });
 
 for (const href of [
