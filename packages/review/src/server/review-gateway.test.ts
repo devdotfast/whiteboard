@@ -329,7 +329,7 @@ it("reaches the laptop for the scratchpad and shared reviews, even when a remote
   ).toEqual([]);
 });
 
-it("answers 503 with the install command for a review on another version, also from its memory file", async () => {
+it("answers 503 naming the version to install for a review on another version, also from its memory file", async () => {
   const a = await startRemote(path.join(root, "a"));
   const onA = await seed(a, "On a");
 
@@ -351,9 +351,7 @@ it("answers 503 with the install command for a review on another version, also f
   expect(response.status).toBe(503);
   expect(response.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
   expect(await response.json()).toMatchObject({
-    error: expect.stringContaining(
-      "npm install -g @dev.fast/whiteboard@0.0.0-other",
-    ),
+    error: expect.stringContaining("Install Whiteboard 0.0.0-other on wb-a."),
   });
 });
 

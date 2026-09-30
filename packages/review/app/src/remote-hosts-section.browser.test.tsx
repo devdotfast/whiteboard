@@ -100,7 +100,8 @@ test("lists each host with its state and detail as plain text, and the install c
         {
           alias: "box2",
           state: "not-installed",
-          detail: `Whiteboard is not installed on box2. Install it there with \`${install}\`. Node 24 is needed.`,
+          detail:
+            "Whiteboard is not installed on box2. Install Whiteboard 0.1.6 there; Node 24 is needed.",
           installCommand: install,
         },
         {
@@ -117,7 +118,7 @@ test("lists each host with its state and detail as plain text, and the install c
   await vi.waitFor(() => expect(rows()[0]).toContain("online"));
   expect(rows()[1]).toContain("not installed");
   expect(rows()[1]).toContain(
-    `Whiteboard is not installed on box2. Install it there with \`${install}\`. Node 24 is needed.`,
+    "Whiteboard is not installed on box2. Install Whiteboard 0.1.6 there; Node 24 is needed.",
   );
   expect(rows()[2]).toContain("incompatible");
   expect(rows()[2]).toContain(

@@ -59,7 +59,7 @@ it("never contacts a host that arrives with a problem", async () => {
   expect(fake.requests).toEqual([]);
 });
 
-it("refuses a host on another version and names the install command", async () => {
+it("refuses a host on another version, naming both versions, with the install command beside the detail", async () => {
   const remote = await startRemote(path.join(root, "a"));
   const gateway = hosts("0.0.0-other");
 
@@ -70,9 +70,8 @@ it("refuses a host on another version and names the install command", async () =
   expect(state?.serverId).toBe((await remote.health()).serverId);
   expect(state?.detail).toContain(version);
   expect(state?.detail).toContain("0.0.0-other");
-  expect(state?.detail).toContain(
-    "npm install -g @dev.fast/whiteboard@0.0.0-other",
-  );
+  expect(state?.detail).toContain("Install Whiteboard 0.0.0-other on devbox.");
+  expect(state?.detail).not.toContain("npm install");
   expect(state?.installCommand).toBe(
     "npm install -g @dev.fast/whiteboard@0.0.0-other",
   );

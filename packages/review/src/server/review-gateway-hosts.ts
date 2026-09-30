@@ -367,7 +367,7 @@ export function createGatewayHosts(input: {
         health.version !== input.version
       ) {
         host.status = "incompatible";
-        host.detail = `${host.alias} runs Whiteboard ${health.version}; this Desktop runs ${input.version}. Run npm install -g @dev.fast/whiteboard@${input.version} on ${host.alias}.`;
+        host.detail = `${host.alias} runs Whiteboard ${health.version}; this Desktop runs ${input.version}. Install Whiteboard ${input.version} on ${host.alias}.`;
       } else {
         host.status = "online";
         host.detail = undefined;

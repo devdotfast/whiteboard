@@ -192,7 +192,7 @@ export interface ReviewRemoteHostOptions {
 	readonly spawn: SpawnSsh;
 	/** Every ssh of this host runs with it: the login shell's environment plus askpass. */
 	environment(): Promise<NodeJS.ProcessEnv>;
-	/** The version the Desktop's own server reports, for the install command. */
+	/** The version the Desktop's own server reports: the one to install. */
 	desktopVersion(): Promise<string>;
 	freePort(): Promise<number>;
 	report(host: ReviewGatewayHost): void;
@@ -464,7 +464,7 @@ export class ReviewRemoteHost {
 			const version = await this.options.desktopVersion();
 			throw new HostFailure({
 				state: "not-installed",
-				detail: `Whiteboard is not installed on ${this.alias}. Install it there with \`npm install -g @dev.fast/whiteboard@${version}\`. Node 24 is needed.`,
+				detail: `Whiteboard is not installed on ${this.alias}. Install Whiteboard ${version} there; Node 24 is needed.`,
 			});
 		}
 		throw unreachable(firstLines(result.stderr) || `whiteboard remote attach on ${this.alias} exited with code ${result.code ?? "none"}.`);

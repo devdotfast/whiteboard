@@ -74,14 +74,15 @@ test("output with a banner before the first sentinel still parses", async (t) =>
 	assert.equal(last()?.endpoint?.token, "t2");
 });
 
-test("exit 127 from the script is not-installed, with the install command", async (t) => {
+test("exit 127 from the script is not-installed, naming the version to install", async (t) => {
 	const { host, clock, last } = hostFor(t, { attach: { code: 127 } }, 1);
 
 	host.start();
 	await until(() => last()?.problem !== undefined);
 
 	assert.equal(last()?.problem?.state, "not-installed");
-	assert.match(last()!.problem!.detail, /npm install -g @dev\.fast\/whiteboard@0\.1\.6/);
+	assert.match(last()!.problem!.detail, /Install Whiteboard 0\.1\.6 there/);
+	assert.doesNotMatch(last()!.problem!.detail, /npm install/);
 	assert.match(last()!.problem!.detail, /Node 24/);
 	assert.equal(clock.pending, 0);
 });
