@@ -23,7 +23,12 @@ import {
   flowNodeInsertSchema,
   flowNodeSchema,
 } from "./blocks/flow_diagram.js";
-import { type Block, blockSchema } from "./blocks/index.js";
+import {
+  type Block,
+  blockKindSchemas,
+  blockSchema,
+  blocks,
+} from "./blocks/index.js";
 import { type Step, stepSchema } from "./blocks/sequence.js";
 import type { Lens } from "./diff-lenses.js";
 import { ReviewInputError } from "./input-error.js";
@@ -365,8 +370,10 @@ export function hasCodeReferences(review: {
 
 export const documentSchema = z.array(blockSchema);
 
-export const contentSchema = z.union([
-  blockSchema,
+/** Discriminated by type, like blockSchema, so a malformed insert reports
+ * its own kind's issues. */
+export const contentSchema = z.discriminatedUnion("type", [
+  ...blockKindSchemas(),
   stepSchema,
   flowNodeInsertSchema,
   flowEdgeSchema,
@@ -374,27 +381,49 @@ export const contentSchema = z.union([
 
 const placement = { parentId: label.optional(), afterId: label.optional() };
 
-export const editSchema = z.discriminatedUnion("type", [
-  z.strictObject({
-    type: z.literal("insert"),
-    content: contentSchema,
-    ...placement,
-  }),
-  z.strictObject({
-    type: z.literal("replace"),
-    targetId: label,
-    content: blockSchema,
-  }),
-  z.strictObject({
-    type: z.literal("update"),
-    targetId: label,
-    changes: z.record(text, z.json()),
-  }),
-  z.strictObject({ type: z.literal("move"), targetId: label, ...placement }),
-  z.strictObject({ type: z.literal("remove"), targetId: label }),
-]);
+function edits<
+  Content extends z.ZodType,
+  Replacement extends z.ZodType,
+  Value extends z.ZodType,
+>(content: Content, replacement: Replacement, value: Value) {
+  return z.discriminatedUnion("type", [
+    z.strictObject({ type: z.literal("insert"), content, ...placement }),
+    z.strictObject({
+      type: z.literal("replace"),
+      targetId: label,
+      content: replacement,
+    }),
+    z.strictObject({
+      type: z.literal("update"),
+      targetId: label,
+      changes: z.record(text, value),
+    }),
+    z.strictObject({ type: z.literal("move"), targetId: label, ...placement }),
+    z.strictObject({ type: z.literal("remove"), targetId: label }),
+  ]);
+}
+
+export const editSchema = edits(contentSchema, blockSchema, z.json());
 
 export type Edit = z.infer<typeof editSchema>;
+
+// Tutorial blocks are the built-in tutorial's, not for agents to write.
+const writableBlockTypes = Object.keys(blocks).filter(
+  (type) => type !== "tutorial",
+);
+
+const namedByType = (types: string[]) =>
+  z
+    .looseObject({ type: z.enum(types) })
+    .describe("Fields depend on type; see the tool description.");
+
+/** What agents are shown: content names only its type. The host parses
+ * editSchema, reporting the named kind's issues. */
+export const publishedEditSchema = edits(
+  namedByType([...writableBlockTypes, "step", "flow_node", "flow_edge"]),
+  namedByType(writableBlockTypes),
+  z.unknown(),
+);
 
 /**
  * What one saved version did, for a canvas drawing the document as the

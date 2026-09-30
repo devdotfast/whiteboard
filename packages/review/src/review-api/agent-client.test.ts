@@ -260,6 +260,13 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
         ["anyOf", "oneOf", "allOf"].some((key) => key in tool.inputSchema),
       ),
     ).toEqual([]);
+    // Codex and Claude Code mishandle $ref (openai/codex#13746,
+    // anthropics/claude-code#18260).
+    expect(
+      list.result.tools.filter((tool: AuthoringTool) =>
+        JSON.stringify(tool.inputSchema).includes("$ref"),
+      ),
+    ).toEqual([]);
     expect(
       list.result.tools.find(
         (tool: AuthoringTool) => tool.name === "session_edit",
