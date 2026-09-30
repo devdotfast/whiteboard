@@ -388,7 +388,8 @@ one of these entries:
   `workbench-dev.html`: allow the local Review session connection and the
   native canvas Trusted Types policy in built and development launches.
 - `src/vs/base/common/product.ts`: declares the `reviewVersion` field described
-  above, so the About panel can read it typed.
+  above, so the About panel can read it typed, and `whiteboardRemote`, the
+  remote package and Node that release builds pin for remote installs.
 - `src/vs/code/electron-main/app.ts`: own the embedded Review server lifecycle
   and register the Review connection channel that hands the renderer the server
   endpoint the main process validated. Also swaps two update- and menu-related

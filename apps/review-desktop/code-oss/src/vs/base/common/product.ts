@@ -83,6 +83,16 @@ export interface IAgentSdkProductConfig {
 	readonly urlTemplate: string;
 }
 
+export interface IWhiteboardRemoteNode {
+	readonly url: string;
+	readonly sha256: string;
+}
+
+export interface IWhiteboardRemoteProduct {
+	readonly package: { readonly name: string; readonly version: string; readonly integrity: string };
+	readonly node: { readonly version: string; readonly 'linux-x64': IWhiteboardRemoteNode; readonly 'linux-arm64': IWhiteboardRemoteNode };
+}
+
 export interface IProductConfiguration {
 	readonly version: string;
 	readonly date?: string;
@@ -96,6 +106,13 @@ export interface IProductConfiguration {
 	 * cannot be the same field. Kept in sync with `apps/review-desktop/package.json`.
 	 */
 	readonly reviewVersion?: string;
+
+	/**
+	 * What Desktop installs on a remote machine, pinned at release time by
+	 * `apps/review-desktop/scripts/stamp-remote-package.mjs`. Absent in a
+	 * development build, which packs its own checkout instead.
+	 */
+	readonly whiteboardRemote?: IWhiteboardRemoteProduct;
 
 	readonly nameShort: string;
 	readonly nameLong: string;
