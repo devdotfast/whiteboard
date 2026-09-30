@@ -1,17 +1,55 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Emitter } from "../../../base/common/event.js";
+import { Emitter, Event } from "../../../base/common/event.js";
 import { URI } from "../../../base/common/uri.js";
-import type { IModelService } from "../../../editor/common/services/model.js";
+import { IModelService } from "../../../editor/common/services/model.js";
 import { MarkerService } from "../../../platform/markers/common/markerService.js";
 import { MarkerSeverity } from "../../../platform/markers/common/markers.js";
 import type { IRemoteAuthorityResolverService } from "../../../platform/remote/common/remoteAuthorityResolver.js";
+import { IBulkEditService } from "../../../editor/browser/services/bulkEditService.js";
+import { ITextModelService } from "../../../editor/common/services/resolverService.js";
+import { IConfigurationService } from "../../../platform/configuration/common/configuration.js";
+import { IEnvironmentService } from "../../../platform/environment/common/environment.js";
+import { IFileService } from "../../../platform/files/common/files.js";
+import { IInstantiationService, type ServiceIdentifier } from "../../../platform/instantiation/common/instantiation.js";
+import { InstantiationService } from "../../../platform/instantiation/common/instantiationService.js";
+import { ServiceCollection } from "../../../platform/instantiation/common/serviceCollection.js";
+import { ILabelService } from "../../../platform/label/common/label.js";
+import { ILanguagePackService } from "../../../platform/languagePacks/common/languagePacks.js";
+import { ILoggerService, ILogService } from "../../../platform/log/common/log.js";
+import { IMarkerService } from "../../../platform/markers/common/markers.js";
+import { IOpenerService } from "../../../platform/opener/common/opener.js";
+import { IRequestService } from "../../../platform/request/common/request.js";
+import { ISecretStorageService } from "../../../platform/secrets/common/secrets.js";
+import { IStorageService } from "../../../platform/storage/common/storage.js";
+import { ITelemetryService } from "../../../platform/telemetry/common/telemetry.js";
+import { IUriIdentityService } from "../../../platform/uriIdentity/common/uriIdentity.js";
+import { IUserActivityService } from "../../../workbench/services/userActivity/common/userActivityService.js";
+import { IWorkspaceTrustRequestService } from "../../../platform/workspace/common/workspaceTrust.js";
+import { MainThreadBulkEdits } from "../../../workbench/api/browser/mainThreadBulkEdits.js";
+import { MainThreadClipboard } from "../../../workbench/api/browser/mainThreadClipboard.js";
+import { MainThreadDownloadService } from "../../../workbench/api/browser/mainThreadDownloadService.js";
+import { MainThreadFileSystem } from "../../../workbench/api/browser/mainThreadFileSystem.js";
+import { MainThreadLoggerService } from "../../../workbench/api/browser/mainThreadLogService.js";
+import { MainThreadWindow } from "../../../workbench/api/browser/mainThreadWindow.js";
+import { IWebviewViewService } from "../../../workbench/contrib/webviewView/browser/webviewViewService.js";
+import { IDecorationsService } from "../../../workbench/services/decorations/common/decorations.js";
+import { IEditorGroupsService } from "../../../workbench/services/editor/common/editorGroupsService.js";
+import { IEditorService } from "../../../workbench/services/editor/common/editorService.js";
+import { IWorkbenchEnvironmentService } from "../../../workbench/services/environment/common/environmentService.js";
+import type { IExtHostContext } from "../../../workbench/services/extensions/common/extHostCustomers.js";
+import { IExtensionService } from "../../../workbench/services/extensions/common/extensions.js";
+import { IHostService } from "../../../workbench/services/host/browser/host.js";
+import { ITextFileService } from "../../../workbench/services/textfile/common/textfiles.js";
+import { IWorkingCopyFileService } from "../../../workbench/services/workingCopy/common/workingCopyFileService.js";
+import { IWebviewWorkbenchServiceId } from "./guard/reviewRemoteWebviewWorkbenchService.js";
 import {
 	ReviewRemoteWorkspace,
 	reviewRemoteAuthority,
 	reviewRemoteMarkerService,
 	reviewRemoteModelService,
 	reviewRemoteResolver,
+	reviewRemoteScope,
 } from "./reviewRemoteScope.js";
 
 const A = "whiteboard+aaaa-1111";
@@ -120,4 +158,49 @@ test("a host's workspace holds each root while any caller holds it", () => {
 	third.dispose();
 	assert.deepEqual(events, ["+/home/dev/proj -", "+/home/dev/other -", "+ -/home/dev/proj", "+ -/home/dev/other"]);
 	workspace.dispose();
+});
+
+test("a host's main-thread peers are created with the guarded services", async () => {
+	const reached: string[] = [];
+	const warnings: string[] = [];
+	const record = (name: string) => async (...args: unknown[]) => { reached.push(`${name} ${args[0]}`); return { value: { toString: () => "text" } }; };
+	const window = new ServiceCollection();
+	const fake = <T>(id: ServiceIdentifier<T>, value: object = {}) => window.set(id, value as T);
+	fake(ILogService, { warn: (message: string) => warnings.push(message), trace() { } });
+	fake(IFileService, { readFile: record("readFile"), writeFile: record("writeFile"), listCapabilities: () => [], onDidChangeFileSystemProviderRegistrations: Event.None, onDidChangeFileSystemProviderCapabilities: Event.None });
+	fake(IOpenerService, { open: record("open") });
+	fake(IHostService, { onDidChangeFocus: Event.None, onDidChangeActiveWindow: Event.None });
+	fake(IUserActivityService, { onDidChangeIsActive: Event.None });
+	fake(ILoggerService, { createLogger: record("createLogger"), onDidChangeLogLevel: Event.None });
+	fake(ITextFileService, { files: {}, untitled: {} });
+	fake(IUriIdentityService, { asCanonicalUri: (uri: URI) => uri });
+	for (const id of [IModelService, IMarkerService, ITextModelService, IWorkingCopyFileService, IEditorGroupsService, IEditorService, IConfigurationService, IStorageService, ISecretStorageService, IWebviewWorkbenchServiceId, IWebviewViewService, ILabelService, IDecorationsService, IWorkspaceTrustRequestService, IRequestService, ILanguagePackService, ITelemetryService, IExtensionService, IWorkbenchEnvironmentService, IEnvironmentService, IBulkEditService] as ServiceIdentifier<unknown>[]) {
+		if (!window.has(id)) fake(id);
+	}
+	const parent = new InstantiationService(window, true);
+	const scope = parent.createChild(parent.invokeFunction((accessor) => reviewRemoteScope({
+		authority: A,
+		name: () => "wb-test-a",
+		extensions: [],
+		activate: async () => { },
+		languageFeatures: {} as never,
+		workspace: new ReviewRemoteWorkspace("w"),
+		resolver: {} as IRemoteAuthorityResolverService,
+	}, accessor)));
+	const context = { remoteAuthority: A, getProxy: () => ({ $acceptProviderInfos() { }, $onDidChangeWindowFocus() { } }) } as unknown as IExtHostContext;
+	const peer = <T>(ctor: new (context: IExtHostContext, ...services: never[]) => T) => scope.invokeFunction((accessor) => accessor.get(IInstantiationService).createInstance(ctor as never, context) as T);
+	const refused = /^Error: Not available for an extension on wb-test-a: /;
+	const laptop = URI.file("/etc/hosts");
+
+	await assert.rejects(peer(MainThreadFileSystem).$readFile(laptop), refused);
+	await assert.rejects(peer(MainThreadFileSystem).$readFile(onB), refused);
+	await peer(MainThreadFileSystem).$readFile(onA);
+	await assert.rejects(peer(MainThreadWindow).$openUri(URI.file("/System/Applications/Calculator.app"), undefined, {}), refused);
+	await peer(MainThreadWindow).$openUri(URI.parse("https://example.com/"), undefined, {});
+	await assert.rejects(peer(MainThreadClipboard).$readText(), refused);
+	await assert.rejects(peer(MainThreadDownloadService).$download(URI.parse("https://example.com/"), laptop), refused);
+	assert.equal(await peer(MainThreadBulkEdits).$tryApplyWorkspaceEdit({ value: { edits: [] } } as never), false);
+	await assert.rejects(peer(MainThreadLoggerService).$createLogger(URI.file("/Users/me/.zshrc")), refused);
+	assert.deepEqual(reached, [`readFile ${onA}`, "open https://example.com/"]);
+	assert.ok(warnings.some((warning) => warning.includes("refused editing documents or files")));
 });

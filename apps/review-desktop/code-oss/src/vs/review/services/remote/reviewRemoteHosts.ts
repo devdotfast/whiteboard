@@ -90,6 +90,7 @@ export class ReviewRemoteHostsService extends Disposable implements IReviewRemot
 		const states = await this.connection.readRemoteHosts().catch(() => []);
 		const alias = states.find((state) => state.serverId === host.serverId)?.alias;
 		if (this.closing) return;
+		host.alias = alias;
 		this.labels.set(host.authority, this.labelService.registerFormatter({
 			scheme: Schemas.vscodeRemote,
 			authority: host.authority,

@@ -12,12 +12,10 @@ import type { Mutable } from "../../../base/common/types.js";
 import { URI } from "../../../base/common/uri.js";
 import type { ILanguageFeaturesService } from "../../../editor/common/services/languageFeatures.js";
 import { LanguageFeaturesService } from "../../../editor/common/services/languageFeaturesService.js";
-import { IModelService } from "../../../editor/common/services/model.js";
 import type { IExtensionDescription } from "../../../platform/extensions/common/extensions.js";
 import { DiskFileSystemProviderClient } from "../../../platform/files/common/diskFileSystemProviderClient.js";
 import { IInstantiationService } from "../../../platform/instantiation/common/instantiation.js";
 import { ILogService } from "../../../platform/log/common/log.js";
-import { IMarkerService } from "../../../platform/markers/common/markers.js";
 import { IProductService } from "../../../platform/product/common/productService.js";
 import {
 	connectRemoteAgentManagement,
@@ -83,6 +81,8 @@ const STABLE_MS = 60_000;
 export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	readonly languageFeatures: ILanguageFeaturesService = new LanguageFeaturesService();
 	readonly workspace: ReviewRemoteWorkspace;
+	/** From `/remote-hosts`, for the refusals a remote's extensions get. */
+	alias: string | undefined;
 	private session: IReviewRemoteSession | undefined;
 	private connecting: Promise<boolean> | undefined;
 	private failures = 0;
@@ -215,8 +215,6 @@ export class ReviewRemoteSession extends Disposable implements IReviewRemoteSess
 		@IRemoteSocketFactoryService private readonly remoteSocketFactoryService: IRemoteSocketFactoryService,
 		@ISignService private readonly signService: ISignService,
 		@ILogService private readonly logService: ILogService,
-		@IModelService private readonly modelService: IModelService,
-		@IMarkerService private readonly markerService: IMarkerService,
 		@IRemoteAuthorityResolverService private readonly resolverService: IRemoteAuthorityResolverService,
 		@IReviewDesktopConnectionService private readonly connection: IReviewDesktopConnectionService,
 	) {
@@ -279,14 +277,15 @@ export class ReviewRemoteSession extends Disposable implements IReviewRemoteSess
 		const files = this._register(new DiskFileSystemProviderClient(management.client.getChannel(REMOTE_FILE_SYSTEM_CHANNEL_NAME), { pathCaseSensitive: true }));
 		this._register(this.router.add(authority, files));
 
-		const scope = this._register(this.instantiationService.createChild(reviewRemoteScope({
+		const scope = this._register(this.instantiationService.createChild(this.instantiationService.invokeFunction((window) => reviewRemoteScope({
 			authority,
+			name: () => this.host.alias ?? this.host.serverId.slice(0, 8),
+			extensions,
+			activate: (event) => this.activateByEvent(event),
 			languageFeatures: this.host.languageFeatures,
 			workspace: this.host.workspace,
 			resolver: reviewRemoteResolver(this.resolverService, authority, () => this.address()),
-			modelService: this.modelService,
-			markerService: this.markerService,
-		})));
+		}, window))));
 		const extensionHost = scope.createInstance(ReviewRemoteExtensionHost, new RemoteRunningLocation(), {
 			remoteAuthority: authority,
 			isolatePermanentFailure: true,
