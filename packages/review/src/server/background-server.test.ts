@@ -7,8 +7,10 @@ import {
   readFile,
   realpath,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -31,6 +33,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 
 import {
   isolatedEnv,
+  packageRoot,
   sourceCli,
   stopServersUnder,
 } from "./background-server-test-utils.js";
@@ -317,25 +320,41 @@ it("gives up on a refused download at once and on a stalled one at the bound", a
   expect(Date.now() - began).toBeLessThan(3_000);
 }, 30_000);
 
-it("fetches diffr into the state directory when the package is not writable", async () => {
+it("fetches diffr into the state directory, never into the package", async () => {
   const packageRoot = path.join(root, "package");
-  await mkdir(packageRoot, { mode: 0o555 });
-  const fetcher = await fakeFetcher();
+  await mkdir(packageRoot);
 
-  expect(
-    await ensureDiffr({
-      stateDir,
-      env: { ...env, PATH: path.dirname(process.execPath) },
-      stderr: discard(),
-      packageRoot,
-      fetcher,
-    }),
-  ).toBe(true);
+  expect(await attachDiffr(packageRoot, await fakeFetcher())).toBe(true);
   expect(existsSync(fetchedDiffrPath(stateDir))).toBe(true);
   expect(existsSync(path.join(packageRoot, "bin"))).toBe(false);
 });
 
-it("leaves a bundled diffr alone and fetches nothing", async () => {
+it("keeps a fetched diffr whose stamp matches the pin, without downloading", async () => {
+  const binary = await fetchedCopy(PINNED);
+  const before = await stat(binary);
+
+  // The real fetcher, with HTTPS refused: a download attempt would fail.
+  expect(await attachDiffr(path.join(root, "package"))).toBe(true);
+  expect((await stat(binary)).mtimeMs).toBe(before.mtimeMs);
+});
+
+it("replaces a fetched diffr of another version", async () => {
+  const binary = await fetchedCopy("0.0.0-old");
+
+  expect(
+    await attachDiffr(path.join(root, "package"), await fakeFetcher()),
+  ).toBe(true);
+  expect(await readFile(binary, "utf8")).toBe("#!/bin/sh\n# fetched\n");
+});
+
+it("reports an old fetched diffr it could not refresh as missing, and keeps it", async () => {
+  const binary = await fetchedCopy("0.0.0-old");
+
+  expect(await attachDiffr(path.join(root, "package"))).toBe(false);
+  expect(await readFile(binary, "utf8")).toBe("#!/bin/sh\n# old\n");
+});
+
+it("leaves a bundled or overriding diffr alone and fetches nothing", async () => {
   const packageRoot = path.join(root, "package");
   await mkdir(path.join(packageRoot, "bin"), { recursive: true });
   await writeFile(path.join(packageRoot, "bin", "diffr"), "#!/bin/sh\n", {
@@ -361,6 +380,17 @@ it("leaves a bundled diffr alone and fetches nothing", async () => {
   expect(stderr).toBe("");
   expect(existsSync(`${fetcher}.ran`)).toBe(false);
   expect(existsSync(path.join(stateDir, "review-tools"))).toBe(false);
+
+  expect(
+    await ensureDiffr({
+      stateDir,
+      env: { ...env, ...(await fakeDiffr()) },
+      stderr: discard(),
+      packageRoot: path.join(root, "empty"),
+      fetcher,
+    }),
+  ).toBe(true);
+  expect(existsSync(`${fetcher}.ran`)).toBe(false);
 });
 
 it("ends a pending download when the server cannot start", async () => {
@@ -453,19 +483,46 @@ it("tries once more when the lock holder was shutting down", async () => {
   const starting = ensureBackgroundServer({ stateDir, env, cli: sourceCli });
 
   // The holder exits once our first child has lost the lock to it.
-  for (let i = 0; i < 200; i++) {
-    const log = await readFile(backgroundServerLogPath(stateDir), "utf8").catch(
+  let log = "";
+
+  for (let i = 0; i < 200 && !log.includes("already owns"); i++) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    log = await readFile(backgroundServerLogPath(stateDir), "utf8").catch(
       () => "",
     );
-
-    if (log.includes("already owns")) break;
-    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
+  expect(log).toContain("already owns");
   await rm(headlessServerLockPath(stateDir), { recursive: true });
 
   expect(await starting).toMatchObject({ started: true });
 }, 60_000);
+
+it("points tsx at the package's tsconfig only for a source entry", async () => {
+  const seen = path.join(root, "seen");
+  const entry = path.join(root, "entry");
+  const script = `require("node:fs").appendFileSync(${JSON.stringify(seen)}, (process.env.TSX_TSCONFIG_PATH ?? "none") + "\\n");`;
+
+  for (const extension of [".js", ".ts"]) {
+    await writeFile(`${entry}${extension}`, script);
+    await expect(
+      ensureBackgroundServer({
+        stateDir,
+        env,
+        cli: [process.execPath, `${entry}${extension}`],
+        timeoutMs: 5_000,
+      }),
+    ).rejects.toThrow(/did not become ready/);
+  }
+
+  expect((await readFile(seen, "utf8")).split("\n")).toEqual([
+    "none",
+    "none",
+    path.join(packageRoot, "tsconfig.json"),
+    path.join(packageRoot, "tsconfig.json"),
+    "",
+  ]);
+}, 30_000);
 
 it("reports a server command that cannot be spawned", async () => {
   await expect(
@@ -486,7 +543,19 @@ async function cli(
   const child = spawn(
     sourceCli[0]!,
     [...sourceCli.slice(1), ...args, "--state-dir", dir],
-    { cwd, env: { ...env, ...extraEnv }, stdio: ["ignore", "pipe", "pipe"] },
+    {
+      cwd,
+      // Only this process may run outside the package; the server it starts
+      // gets the variable from spawnServer.
+      env: {
+        ...env,
+        ...(cwd && {
+          TSX_TSCONFIG_PATH: path.join(packageRoot, "tsconfig.json"),
+        }),
+        ...extraEnv,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
   );
 
   let stdout = "";
@@ -538,7 +607,8 @@ async function fakeFetcher() {
       'import { mkdirSync, writeFileSync } from "node:fs";',
       "const into = process.argv[process.argv.indexOf('--into') + 1];",
       "mkdirSync(into, { recursive: true });",
-      'writeFileSync(`${into}/diffr`, "#!/bin/sh\\n", { mode: 0o755 });',
+      'writeFileSync(`${into}/diffr`, "#!/bin/sh\\n# fetched\\n", { mode: 0o755 });',
+      `writeFileSync(\`\${into}/diffr.stamp.json\`, ${JSON.stringify(JSON.stringify({ version: PINNED }))});`,
       `writeFileSync(${JSON.stringify(`${fetcher}.ran`)}, into);`,
       "",
     ].join("\n"),
@@ -558,5 +628,43 @@ function discard() {
     write(_chunk, _encoding, done) {
       done();
     },
+  });
+}
+
+const PINNED = (
+  createRequire(import.meta.url)("@dev.fast/diffr/package.json") as {
+    version: string;
+  }
+).version;
+
+/** A diffr fetched earlier, stamped as the given version. */
+async function fetchedCopy(version: string) {
+  const binary = fetchedDiffrPath(stateDir);
+
+  const target = new Map([
+    ["darwin-arm64", "aarch64-apple-darwin"],
+    ["darwin-x64", "x86_64-apple-darwin"],
+    ["linux-x64", "x86_64-unknown-linux-gnu"],
+    ["linux-arm64", "aarch64-unknown-linux-gnu"],
+  ]).get(`${process.platform}-${process.arch}`);
+
+  await mkdir(path.dirname(binary), { recursive: true });
+  await writeFile(binary, "#!/bin/sh\n# old\n", { mode: 0o755 });
+  await writeFile(
+    path.join(path.dirname(binary), "diffr.stamp.json"),
+    JSON.stringify({ version, target }),
+  );
+
+  return binary;
+}
+
+/** ensureDiffr with no diffr on PATH; the real fetcher unless one is given. */
+function attachDiffr(packageRoot: string, fetcher?: string) {
+  return ensureDiffr({
+    stateDir,
+    env: { ...env, PATH: path.dirname(process.execPath) },
+    stderr: discard(),
+    packageRoot,
+    fetcher,
   });
 }

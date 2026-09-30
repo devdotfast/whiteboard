@@ -4,7 +4,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
+export const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 /** The CLI from source; `--import` takes a URL so any cwd resolves it. */
 export const sourceCli = [
@@ -44,8 +44,6 @@ export function isolatedEnv(root: string): NodeJS.ProcessEnv {
     NODE_USE_ENV_PROXY: "1",
     HTTPS_PROXY: "http://127.0.0.1:9",
     NO_PROXY: "127.0.0.1,localhost",
-    // The detached server runs in its state directory, away from tsconfig.
-    TSX_TSCONFIG_PATH: path.join(packageRoot, "tsconfig.json"),
   };
 }
 

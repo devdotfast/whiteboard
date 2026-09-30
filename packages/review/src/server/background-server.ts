@@ -4,6 +4,7 @@ import { mkdir, open, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { findReviewPackageRoot } from "@review/package-paths.js";
 import {
   type ReviewServerDiscovery,
   headlessServerLockPath,
@@ -81,6 +82,7 @@ async function spawnServer(
 ) {
   const log = await open(logPath, "a", 0o600);
   const [command, ...cliArgs] = input.cli ?? currentCli();
+  const env = input.env ?? process.env;
 
   // The token reaches callers through the discovery file only: never an
   // argument, the environment or this log. The working directory is the
@@ -100,7 +102,17 @@ async function spawnServer(
     {
       cwd: stateDir,
       detached: true,
-      env: input.env ?? process.env,
+      // Run from source, tsx finds the path aliases only through this.
+      env:
+        cliArgs.at(-1)?.endsWith(".ts") && !env.TSX_TSCONFIG_PATH
+          ? {
+              ...env,
+              TSX_TSCONFIG_PATH: path.join(
+                findReviewPackageRoot(import.meta.url),
+                "tsconfig.json",
+              ),
+            }
+          : env,
       stdio: ["ignore", log.fd, log.fd],
     },
   );
