@@ -28,6 +28,7 @@ const supported: ReviewRemoteProbe = {
 	managedNode: null,
 	downloader: "curl",
 	registryReachable: true,
+	tools: ["tar", "xz", "sha256sum", "sha512sum"],
 };
 
 const answer = (value: unknown, before = "", after = "") =>
@@ -88,11 +89,18 @@ test("a malformed answer is an error, never an exception", () => {
 		{ managedNode: 7 },
 		{ downloader: "fetch" },
 		{ registryReachable: 1 },
+		{ tools: "tar" },
 		{ npm: undefined },
 	]) {
 		assert.match(malformed({ ...supported, ...change }), /malformed/);
 	}
 	assert.match(malformed([supported]), /malformed/);
+});
+
+test("tools keeps only the tools asked about", () => {
+	const parsed = parseRemoteProbe(answer({ ...supported, tools: ["openssl", "rm -rf", 5, "tar"] }));
+	assert.ok("probe" in parsed);
+	assert.deepEqual(parsed.probe.tools, ["tar", "openssl"]);
 });
 
 test("installed keeps only version names", () => {
@@ -157,6 +165,7 @@ test("the script finds the highest Node 24, the installed versions and the manag
 	assert.ok(probe.freeBytes > 0);
 	assert.equal(probe.downloader, "curl");
 	assert.equal(probe.registryReachable, false);
+	assert.ok(probe.tools.includes("tar"), probe.tools.join());
 	assert.deepEqual(await tree(home), before);
 });
 
