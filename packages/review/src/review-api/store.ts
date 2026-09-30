@@ -22,6 +22,7 @@ import {
 import { z } from "zod";
 
 import { type LeaseScope, ReviewActivity } from "./activity.js";
+import { AskHistory } from "./ask-history.js";
 import {
   type Lens,
   applyLensEdit,
@@ -264,6 +265,7 @@ export interface ReviewProviders {
  */
 export class ReviewStore {
   readonly activity: ReviewActivity;
+  readonly askHistory: AskHistory;
   private readonly db: DatabaseSync;
   private pending: Promise<unknown> = Promise.resolve();
   private closing = false;
@@ -454,6 +456,7 @@ export class ReviewStore {
     // Batch authoring's scratch drafts were removed; drop their leftover table.
     this.db.exec("DROP TABLE IF EXISTS authoring_drafts");
     this.activity = new ReviewActivity(this.db, (id) => this.assertExists(id));
+    this.askHistory = new AskHistory(this.db);
 
     // Homes written before map resumption lack the column.
     if (
@@ -1097,6 +1100,7 @@ export class ReviewStore {
           result,
           () => {
             for (const table of [
+              "ask_conversations",
               "authoring_sessions",
               "review_coverage",
               "review_attention",
