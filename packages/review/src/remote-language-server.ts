@@ -31,6 +31,9 @@ const INSTALL_TIMEOUT_MS = 35_000;
 const SHUTDOWN_WITHOUT_DELAY_ENV =
   "DEV_FAST_REVIEW_REMOTE_SHUTDOWN_WITHOUT_DELAY";
 
+/** Development only: a reconnection grace in seconds, for checks that outlast it. */
+const GRACE_ENV = "DEV_FAST_REVIEW_REMOTE_RECONNECTION_GRACE_SECONDS";
+
 const PENDING = {
   languageServer: null,
   languageServerDetail:
@@ -41,11 +44,15 @@ const PENDING = {
 // Upstream's lifetime service exits 5 minutes after the last extension host
 // leaves (SHUTDOWN_TIMEOUT, not configurable), and 5 minutes after start when
 // none ever connects. A dropped client may reconnect for 10 minutes.
-const IDLE_ARGS = [
-  "--enable-remote-auto-shutdown",
-  "--reconnection-grace-time",
-  "600",
-];
+function idleArgs(env: NodeJS.ProcessEnv) {
+  const grace = env[GRACE_ENV] ?? "";
+
+  return [
+    "--enable-remote-auto-shutdown",
+    "--reconnection-grace-time",
+    /^[1-9]\d{0,3}$/.test(grace) ? grace : "600",
+  ];
+}
 
 const LISTENING = /Extension host agent listening on (\d+)/;
 
@@ -364,7 +371,7 @@ async function startServer(
       "--extensions-dir",
       extensionsDir,
       "--accept-server-license-terms",
-      ...IDLE_ARGS,
+      ...idleArgs(env),
       ...(env[SHUTDOWN_WITHOUT_DELAY_ENV] === "1"
         ? ["--remote-auto-shutdown-without-delay"]
         : []),
