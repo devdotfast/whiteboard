@@ -4,8 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
@@ -23,14 +27,14 @@ async function healthServer(t: test.TestContext, servers?: Server[]): Promise<nu
 }
 
 /** `ports` are handed out in turn as the free local ports. */
-function hostFor(t: test.TestContext, remote: FakeRemote, ports: number | number[], alias = "wb-test-a") {
+function hostFor(t: test.TestContext, remote: FakeRemote, ports: number | number[], alias = "wb-test-a", controlDirectory = "/tmp/wb-ssh-test") {
 	const free = [ports].flat();
 	let next = 0;
 	const clock = fakeClock();
 	const ssh = fakeSsh({ [alias]: remote }, clock);
 	const reports: ReviewGatewayHost[] = [];
 	const host = new ReviewRemoteHost({
-		session: reviewSshSession(alias, "/tmp/wb-ssh-test"),
+		session: reviewSshSession(alias, controlDirectory),
 		spawn: ssh.spawn,
 		environment: async () => ({ PATH: "/usr/bin" }),
 		desktopVersion: async () => "0.1.6",
@@ -124,6 +128,25 @@ test("the master exits and the host reconnects after the backoff", async (t) => 
 	await until(() => last()?.endpoint !== undefined);
 	assert.equal(ssh.of("wb-test-a", "master").length, 2);
 	assert.ok(clock.delays[0] >= 1000 && clock.delays[0] <= 1250);
+});
+
+test("a master killed by a signal leaves its socket, and the next master does not find it", async (t) => {
+	const port = await healthServer(t);
+	const dir = await mkdtemp(join(tmpdir(), "wb-ssh-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
+	const { host, ssh, clock, last } = hostFor(t, {}, port, "wb-test-a", dir);
+	const socket = reviewSshSession("wb-test-a", dir).controlPath;
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	await writeFile(socket, "");
+	ssh.master("wb-test-a")!.kill("SIGKILL");
+	await until(() => last()?.problem !== undefined);
+	assert.ok(clock.next());
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(ssh.of("wb-test-a", "master").length, 2);
+	assert.equal(existsSync(socket), false);
 });
 
 test("ten failures in a row are never less than 1 s apart, and the delay never exceeds 60 s", async (t) => {

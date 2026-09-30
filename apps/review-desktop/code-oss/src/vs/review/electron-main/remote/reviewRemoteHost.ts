@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { rm } from "node:fs/promises";
 import { get } from "node:http";
 import type { Readable, Writable } from "node:stream";
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
@@ -377,6 +378,8 @@ export class ReviewRemoteHost {
 			if (stale()) return;
 			this.env = env;
 			await Promise.all(this.closing.values());
+			// None of this host's masters runs now, but one killed by a signal left its socket, and ssh does not multiplex on a path that exists.
+			await rm(this.options.session.controlPath, { force: true });
 			if (stale()) return;
 			const master = this.startMaster(env);
 			await this.waitForMaster(master, env, stale);
