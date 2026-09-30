@@ -722,6 +722,8 @@ export type ReviewCanvasContent =
       // not support them.
       dismissReview?(uuid: string): Promise<void>;
       restoreReview?(uuid: string): Promise<void>;
+      // What an unavailable remote review's host says about itself.
+      hostStates?(): Promise<ReviewGatewayHostState[]>;
       // Opens the review and pins its read-only source tree open. Absent when
       // the host cannot show the tree.
       openSourceTree?(uuid: string): void;

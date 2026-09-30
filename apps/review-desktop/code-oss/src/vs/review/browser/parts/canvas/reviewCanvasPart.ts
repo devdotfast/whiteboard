@@ -520,6 +520,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 							this.reviewTelemetryService.capture("review_restored", { via: "home" });
 							return this.apiCatalog.attention(uuid, "restore");
 						},
+						hostStates: () => this.desktopConnection.readRemoteHosts(),
 						openSourceTree: (uuid) => {
 							const api = this.apiCatalog.reviews.find((review) => review.reviewId === uuid);
 							if (api) {
