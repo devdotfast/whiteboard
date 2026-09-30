@@ -142,3 +142,100 @@ it("retries an offline host until it answers", async () => {
     .poll(() => gateway.states()[0]?.state, { timeout: 5_000 })
     .toBe("online");
 });
+
+/** `a` and a copy of its store in `c`, both running. */
+async function copiedStore() {
+  const first = await startRemote(path.join(root, "a"));
+  await first.stop();
+  await cp(path.join(root, "a"), path.join(root, "c"), { recursive: true });
+  const a = await startRemote(path.join(root, "a"));
+  const c = await startRemote(path.join(root, "c"));
+
+  return { a, c, serverId: (await a.health()).serverId };
+}
+
+it("keeps a copied store a duplicate while the first alias is down", async () => {
+  const { a, c, serverId } = await copiedStore();
+  const port = Number(new URL(a.endpoint.url).port);
+  const gateway = hosts();
+
+  gateway.set([
+    { alias: "wb-a", endpoint: a.endpoint },
+    { alias: "wb-c", endpoint: c.endpoint },
+  ]);
+  await expect.poll(() => gateway.states()[1]?.state).toBe("duplicate");
+
+  await a.stop();
+  gateway.failed(gateway.serving(serverId)!, "test");
+  await expect.poll(() => gateway.states()[0]?.state).toBe("offline");
+
+  expect(gateway.states()[1]?.state).toBe("duplicate");
+  expect(gateway.serving(serverId)).toBeUndefined();
+  expect(gateway.online()).toEqual([]);
+  expect(gateway.unavailable(serverId, "wb-a")).toMatchObject({
+    alias: "wb-a",
+    state: "offline",
+  });
+
+  // Back on its port with a new instance id: still the machine.
+  await startRemote(path.join(root, "a"), port);
+  await expect
+    .poll(() => gateway.states()[0]?.state, { timeout: 5_000 })
+    .toBe("online");
+  expect(gateway.states()[1]?.state).toBe("duplicate");
+  expect(gateway.serving(serverId)?.alias).toBe("wb-a");
+});
+
+it("decides the duplicate by the order of the setting", async () => {
+  const { a, c, serverId } = await copiedStore();
+  const gateway = hosts();
+
+  gateway.set([
+    { alias: "wb-c", endpoint: c.endpoint },
+    { alias: "wb-a", endpoint: a.endpoint },
+  ]);
+
+  await expect
+    .poll(() => gateway.states().map((host) => host.state))
+    .toEqual(["online", "duplicate"]);
+  expect(gateway.states()[1]?.detail).toContain("wb-c");
+  expect(gateway.serving(serverId)?.alias).toBe("wb-c");
+});
+
+it("checks a host in backoff at once when the setting changes", async () => {
+  let failing = true;
+  let checks = 0;
+
+  const fake = await startFake({
+    version,
+    handle(request, response) {
+      if (request.url !== "/health") return false;
+      checks += 1;
+
+      if (!failing) return false;
+      response.statusCode = 500;
+      response.end();
+
+      return true;
+    },
+  });
+
+  const gateway = hosts();
+
+  gateway.set([{ alias: "devbox", endpoint: fake.endpoint }]);
+  // After four failures the next retry is at least three seconds away.
+  await expect
+    .poll(() => checks, { timeout: 10_000 })
+    .toBeGreaterThanOrEqual(4);
+  expect(gateway.states()[0]?.state).toBe("offline");
+
+  failing = false;
+  gateway.set([
+    { alias: "devbox", endpoint: fake.endpoint },
+    { alias: "other" },
+  ]);
+
+  await expect
+    .poll(() => gateway.states()[0]?.state, { timeout: 1_000 })
+    .toBe("online");
+}, 20_000);

@@ -56,11 +56,29 @@ export function createGatewayHosts(input: {
   let closed = false;
   const reported = new Map<string, string>();
 
+  // The first alias in the setting that reported a server id is that
+  // machine, whatever its state now. Another alias with the same id and the
+  // same instance is the same running server; with another instance it is a
+  // copied store, a duplicate for as long as the setting keeps that order.
+  const machine = (serverId: string | undefined) =>
+    serverId === undefined
+      ? undefined
+      : hosts.find((host) => host.serverId === serverId);
+
+  const isDuplicate = (host: Host) => {
+    const first = machine(host.serverId);
+
+    return first !== undefined && first.instanceId !== host.instanceId;
+  };
+
   const serving = (serverId: string | undefined) =>
     serverId === undefined
       ? undefined
       : hosts.find(
-          (host) => host.status === "online" && host.serverId === serverId,
+          (host) =>
+            host.status === "online" &&
+            host.serverId === serverId &&
+            !isDuplicate(host),
         );
 
   function stateOf(host: Host): ReviewGatewayHostState {
@@ -69,24 +87,17 @@ export function createGatewayHosts(input: {
       ...(host.serverId !== undefined && { serverId: host.serverId }),
     };
 
-    if (host.status !== "online")
+    if (isDuplicate(host))
       return {
         ...known,
-        state: host.status,
-        ...(host.detail !== undefined && { detail: host.detail }),
+        state: "duplicate",
+        detail: `${machine(host.serverId)?.alias} and ${host.alias} are two machines that report the same server id. Run whiteboard server reset-id on ${host.alias} to give it its own.`,
       };
-
-    // The first alias in the setting speaks for its machine; a second
-    // alias of the same running server is the same machine.
-    const first = serving(host.serverId);
-
-    if (first === host || first?.instanceId === host.instanceId)
-      return { ...known, state: "online" };
 
     return {
       ...known,
-      state: "duplicate",
-      detail: `${first?.alias} and ${host.alias} are two machines that report the same server id. Run whiteboard server reset-id on ${host.alias} to give it its own.`,
+      state: host.status,
+      ...(host.detail !== undefined && { detail: host.detail }),
     };
   }
 
@@ -180,8 +191,18 @@ export function createGatewayHosts(input: {
       host.detail = `${host.alias} is offline: ${reason}.`;
       retryLater(host);
     } else {
+      const restarted =
+        host.serverId === health.serverId &&
+        host.instanceId !== health.instanceId;
+
       host.serverId = health.serverId;
       host.instanceId = health.instanceId;
+
+      // Other aliases of a restarted server still hold its old instance id.
+      if (restarted)
+        for (const other of hosts)
+          if (other !== host && other.serverId === health.serverId)
+            void check(other);
       host.retryMs = FIRST_RETRY_MS;
 
       // "unknown" is the fallback when a package cannot read its version.
@@ -237,6 +258,7 @@ export function createGatewayHosts(input: {
       const host = hosts.find(
         (candidate) =>
           candidate.status !== "online" &&
+          !isDuplicate(candidate) &&
           (candidate.serverId === serverId ||
             (candidate.serverId === undefined && candidate.alias === alias)),
       );

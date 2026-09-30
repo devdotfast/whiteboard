@@ -21,12 +21,13 @@ export async function stopAll() {
 }
 
 /** A real headless review server on a loopback port. */
-export async function startRemote(stateDir: string) {
+export async function startRemote(stateDir: string, port?: number) {
   const controller = new AbortController();
   const ready = Promise.withResolvers<ReviewServerDiscovery>();
 
   const running = runHeadlessServer({
     stateDir,
+    ...(port !== undefined && { port }),
     signal: controller.signal,
     onReady: ready.resolve,
   });
