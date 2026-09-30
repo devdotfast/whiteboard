@@ -213,14 +213,17 @@ export function createGatewayHosts(input: {
   }
 
   /** Once per endpoint: offline until Desktop sends the new one. */
-  function restartedHost(host: Host) {
+  function restartedHost(
+    host: Host,
+    detail = `${host.alias} restarted; attaching again.`,
+  ) {
     if (host.restarted || closed) return;
     host.restarted = true;
     clearTimeout(host.retry);
     host.checking?.abort();
     host.checking = undefined;
     host.status = "offline";
-    host.detail = `${host.alias} restarted; attaching again.`;
+    host.detail = detail;
     report();
     input.restarted?.(host.alias);
   }
@@ -299,6 +302,18 @@ export function createGatewayHosts(input: {
     if (host.checking !== abort) return;
     host.checking = undefined;
     host.checked = true;
+
+    // Through a forward, a reset or refusal means nothing listens on the
+    // remote port: its server stopped, or restarted on another port.
+    if (
+      !health &&
+      host.instanceId !== undefined &&
+      (reason === "ECONNRESET" || reason === "ECONNREFUSED")
+    )
+      return restartedHost(
+        host,
+        `${host.alias} is offline: ${reason}; attaching again.`,
+      );
 
     if (!health) {
       host.status = "offline";

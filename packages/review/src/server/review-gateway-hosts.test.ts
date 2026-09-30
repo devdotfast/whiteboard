@@ -177,12 +177,13 @@ it("keeps a copied store a duplicate while the first alias is down", async () =>
     state: "offline",
   });
 
-  // Back on its port with a new instance id and token: offline until Desktop
-  // attaches again, then still the machine.
-  const restarted = await startRemote(path.join(root, "a"), port);
+  // Nothing listens on its port: Desktop is asked to attach again, which
+  // finds it back with a new instance id and token, still the machine.
   await expect
-    .poll(() => gateway.states()[0]?.detail, { timeout: 5_000 })
-    .toBe("wb-a restarted; attaching again.");
+    .poll(() => gateway.states()[0]?.detail)
+    .toBe("wb-a is offline: ECONNREFUSED; attaching again.");
+  const restarted = await startRemote(path.join(root, "a"), port);
+
   gateway.set([
     { alias: "wb-a", endpoint: restarted.endpoint },
     { alias: "wb-c", endpoint: c.endpoint },
@@ -333,4 +334,28 @@ it("a 401 from a host asks Desktop once to attach again", async () => {
     detail: "devbox restarted; attaching again.",
   });
   expect(restarted).toEqual(["devbox"]);
+});
+
+it("a server gone from behind a working forward asks Desktop to attach again", async () => {
+  const a = await startRemote(path.join(root, "a"));
+  const restarted: string[] = [];
+
+  const gateway = createGatewayHosts({
+    version,
+    restarted: (alias) => restarted.push(alias),
+  });
+
+  closes.push(() => gateway.close());
+  gateway.set([{ alias: "wb-a", endpoint: a.endpoint }]);
+  await expect.poll(() => gateway.states()[0]?.state).toBe("online");
+
+  // It restarts on another port: only a new attach can find it.
+  await a.stop();
+  gateway.failed(gateway.online()[0]!, "test");
+
+  await expect.poll(() => restarted).toEqual(["wb-a"]);
+  expect(gateway.states()[0]).toMatchObject({
+    state: "offline",
+    detail: "wb-a is offline: ECONNREFUSED; attaching again.",
+  });
 });
