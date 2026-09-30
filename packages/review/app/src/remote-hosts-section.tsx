@@ -20,7 +20,9 @@ const RETRIED = new Set<ReviewGatewayHostState["state"]>([
 
 // The detail can carry a remote's text: shown as one line of plain text.
 const plain = (text: string) =>
-  text.replaceAll("\n", " ").replaceAll(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
+  text
+    .replaceAll(/[\t\n\u2028\u2029]/g, " ")
+    .replaceAll(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 
 /**
  * The machines Whiteboard reaches over SSH: each alias with what the gateway

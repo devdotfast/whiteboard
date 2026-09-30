@@ -155,7 +155,7 @@ test("says whether an online host has language features, and why not as one line
           state: "online",
           languageFeatures: false,
           languageFeaturesDetail:
-            "it runs [e10c782](command:x) <b>new</b>\nthis\u0007 Desktop\r 3c82a2a",
+            "it runs [e10c782](command:x) <b>new</b>\nthis\u0007 Desktop\r\u20283c82a2a",
         },
         {
           alias: "box3",
