@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -167,4 +167,21 @@ test("at start, sockets an earlier run of this Desktop left are closed and remov
 	assert.equal(exits[0].args[exits[0].args.indexOf("-S") + 1], join(directory, mine));
 	assert.ok(ssh.calls.indexOf(exits[0]) < ssh.calls.findIndex((c) => c.kind === "master"));
 	assert.deepEqual(await readdir(directory), [theirs]);
+});
+
+test("an entry the sweep cannot remove does not stop the sweep or the hosts", async (t) => {
+	const prefix = reviewSshInstancePrefix("/user-data");
+	let directory = "";
+	const { manager, ssh, sentUntil } = await managerFor(t, { "wb-test-a": {} }, undefined, async (dir) => {
+		directory = dir;
+		// rm without recursive refuses a directory: a matching name that is not a socket.
+		await mkdir(join(dir, `${prefix}000000000000`));
+		await writeFile(join(dir, `${prefix}111111111111`), "");
+	});
+
+	manager.update(true, ["wb-test-a"]);
+	await sentUntil((hosts) => hosts[0]?.endpoint !== undefined);
+
+	assert.equal(ssh.calls.filter((c) => c.kind === "exit").length, 2);
+	assert.deepEqual(await readdir(directory), [`${prefix}000000000000`]);
 });

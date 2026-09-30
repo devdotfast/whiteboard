@@ -168,17 +168,26 @@ export class ReviewRemoteHosts {
 	}
 
 	/** Masters a crashed run of this Desktop left, for any alias: each is asked to exit, and its socket removed. */
+	/** Best effort: a failure is logged and never keeps a host from connecting. */
 	private async sweepOrphans(): Promise<void> {
 		if (this.options.instance === undefined) return;
 		const prefix = reviewSshInstancePrefix(this.options.instance);
-		const env = await this.options.environment();
-		for (const name of await readdir(this.options.controlDirectory)) {
-			if (!name.startsWith(prefix)) continue;
-			const controlPath = join(this.options.controlDirectory, name);
-			// -O exit works on any socket; the alias after -- is only a placeholder.
-			const closed = await runSsh(this.options.spawn, env, sshCloseArgs({ alias: "orphan", controlPath }, env), REVIEW_REMOTE_TIMEOUTS.close);
-			if (closed.code === 0) this.options.log(`closed an SSH connection left by an earlier run (${name}).`);
-			await rm(controlPath, { force: true });
+		try {
+			const env = await this.options.environment();
+			for (const name of await readdir(this.options.controlDirectory)) {
+				if (!name.startsWith(prefix)) continue;
+				const controlPath = join(this.options.controlDirectory, name);
+				try {
+					// -O exit works on any socket; the alias after -- is only a placeholder.
+					const closed = await runSsh(this.options.spawn, env, sshCloseArgs({ alias: "orphan", controlPath }, env), REVIEW_REMOTE_TIMEOUTS.close);
+					if (closed.code === 0) this.options.log(`closed an SSH connection left by an earlier run (${name}).`);
+					await rm(controlPath, { force: true });
+				} catch (error) {
+					this.options.log(`could not remove ${name} from the SSH control directory: ${(error as Error).message}`);
+				}
+			}
+		} catch (error) {
+			this.options.log(`could not sweep the SSH control directory: ${(error as Error).message}`);
 		}
 	}
 
