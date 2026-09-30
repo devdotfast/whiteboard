@@ -224,6 +224,82 @@ async function run(context) {
     log,
   );
 
+  // 11-14. Window UI the remote writes into, which the laptop user may click.
+  // Each is fire-and-forget; the live check inspects the window: the status
+  // bar item's command must be the host's relay (which refuses the laptop
+  // command), and the texts must have lost their command: links.
+  const openFolder = "command:vscode.openFolder?%5B%22file%3A%2F%2F%2F%22%5D";
+
+  await observe(
+    "status bar item with a laptop command",
+    () => {
+      const item = vscode.window.createStatusBarItem("wbProbe.item");
+
+      item.text = "wb probe";
+      item.tooltip = new vscode.MarkdownString(
+        `wb probe [open](${openFolder})`,
+      );
+      item.command = {
+        command: "vscode.openFolder",
+        title: "Open",
+        arguments: [vscode.Uri.file("/")],
+      };
+      item.show();
+      context.subscriptions.push(item);
+
+      return "SENT (window check)";
+    },
+    log,
+  );
+  await observe(
+    "notification with a command: link",
+    () => {
+      vscode.window.showWarningMessage(
+        `wb probe notification [open](${openFolder})`,
+      );
+
+      return "SENT (window check)";
+    },
+    log,
+  );
+  await observe(
+    "diagnostic with a command: code target",
+    () => {
+      const diagnostics =
+        vscode.languages.createDiagnosticCollection("wbProbe");
+
+      const diagnostic = new vscode.Diagnostic(
+        new vscode.Range(0, 0, 0, 1),
+        "wb probe diagnostic",
+      );
+
+      diagnostic.code = {
+        value: "WBPROBE",
+        target: vscode.Uri.parse(openFolder),
+      };
+      diagnostics.set(vscode.Uri.file("/tmp/wb-test-proj/a.ts"), [diagnostic]);
+      context.subscriptions.push(diagnostics);
+
+      return "SENT (window check)";
+    },
+    log,
+  );
+  await observe(
+    "quick input with a command link",
+    () => {
+      const box = vscode.window.createInputBox();
+
+      box.title = "wb probe";
+      box.prompt = `wb probe prompt [open](${openFolder})`;
+      box.validationMessage = `wb probe validation [open](${openFolder})`;
+      box.show();
+      context.subscriptions.push(box);
+
+      return "SENT (window check)";
+    },
+    log,
+  );
+
   // One allowed action: showing an information message needs the user, so it
   // is allowed. It resolves without a chosen item in a background window.
   try {
