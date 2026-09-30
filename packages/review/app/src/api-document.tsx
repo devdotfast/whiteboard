@@ -16,7 +16,7 @@ import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { markdownHasTitle } from "./agent-markdown";
 import { type ApiHeadingIds, apiHeadingIds } from "./api-document-headings";
-import { AuthoringActivityContext } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import { scopeLive } from "./authoring-cursor";
 import {
   BlockErrorBoundary,

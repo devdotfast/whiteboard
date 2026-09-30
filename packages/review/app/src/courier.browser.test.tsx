@@ -6,10 +6,8 @@ import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ApiDocument } from "./api-document";
-import {
-  AuthoringActivityBadge,
-  AuthoringActivityContext,
-} from "./authoring-activity";
+import { AuthoringActivityBadge } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import type { AuthoringCursor } from "./authoring-cursor";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { AuthoringCursorContext } from "./courier";

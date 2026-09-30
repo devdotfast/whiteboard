@@ -12,7 +12,7 @@ import {
   useState,
 } from "react";
 
-import { AuthoringActivityContext } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import {
   type AuthoringCursor,
   scopeFocus,

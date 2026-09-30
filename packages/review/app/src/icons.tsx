@@ -36,34 +36,6 @@ export function SlidersIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
-export function UnifiedLayoutIcon({ xstyle }: IconProps = {}): ReactElement {
-  return (
-    <svg
-      aria-hidden="true"
-      {...stylex.props(styles.icon, xstyle)}
-      focusable="false"
-      viewBox="0 0 24 24"
-    >
-      <rect x="4" y="5" width="16" height="14" rx="2" />
-      <path d="M8 10h8M8 14h8" />
-    </svg>
-  );
-}
-
-export function SplitLayoutIcon({ xstyle }: IconProps = {}): ReactElement {
-  return (
-    <svg
-      aria-hidden="true"
-      {...stylex.props(styles.icon, xstyle)}
-      focusable="false"
-      viewBox="0 0 24 24"
-    >
-      <rect x="4" y="5" width="16" height="14" rx="2" />
-      <path d="M12 5v14" />
-    </svg>
-  );
-}
-
 export function BugIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg

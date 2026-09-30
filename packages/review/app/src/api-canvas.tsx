@@ -26,7 +26,7 @@ import {
 import { retainedTrace } from "./api-trace";
 import { App } from "./App";
 import type { RenderedReviewDocument } from "./App";
-import { AuthoringActivityContext } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import {
   type AuthoringCursor,
   type CursorMemory,

@@ -25,7 +25,7 @@ import {
   useState,
 } from "react";
 
-import { AuthoringActivityContext } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import { scopeLive } from "./authoring-cursor";
 import { Courier, LensCursorContext, lensRowElement } from "./courier";
 import { compactDiffCount, diffCountStyles } from "./diff-count";

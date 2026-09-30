@@ -5,9 +5,9 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 
 import {
   AuthoringActivityBadge,
-  AuthoringActivityContext,
   ReviewSurfaceLabel,
 } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 
 import "./styles.css";
