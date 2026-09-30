@@ -5,10 +5,10 @@ import {
   activityEndSchema,
   activityUpdateSchema,
 } from "./activity.js";
-import { fileLineRangeSchema, publishedEditSchema } from "./document.js";
+import { publishedEditSchema } from "./document.js";
 import { instructionsQuerySchema } from "./instructions.js";
 import { uploadSchema } from "./local-data.js";
-import { inspectQuerySchema, readQuerySchemas } from "./read-schemas.js";
+import { inspectQuerySchema } from "./read-schemas.js";
 import { REVIEW_STATUS_TOOL } from "./status-tool.js";
 import { commandSchema } from "./store.js";
 
@@ -21,7 +21,6 @@ export function authoringTools(
 ) {
   const id = z.string().min(1);
   const review = { reviewId: id };
-  const version = z.number().int().nonnegative().optional();
 
   // Anthropic rejects a top-level union, so publish one object; the host validates the union.
   const [image, trace] = uploadSchema.options;
@@ -34,9 +33,6 @@ export function authoringTools(
     })
     .partial()
     .required({ id: true, repositoryId: true, kind: true });
-
-  const read = (name: keyof typeof readQuerySchemas) =>
-    z.strictObject({ ...review, ...readQuerySchemas[name].shape });
 
   const descriptions = {
     create:
@@ -235,46 +231,6 @@ export function authoringTools(
       uploadInput,
       "POST",
       "/resources",
-    ),
-    tool(
-      "source",
-      "Read an exact code range from the current target. An explicit version reads retained historical source. source.pins reads at explicit commits of any registered repository instead; the same pins on a block, or on the step, frame, attachment or operation holding an anchor, make it resolve there.",
-      z.strictObject({
-        ...review,
-        version,
-        source: fileLineRangeSchema,
-        commit: z.string().min(1).optional(),
-      }),
-      "POST",
-      "/:reviewId/source",
-    ),
-    tool(
-      "file",
-      "Read a complete source file from the current target; version selects retained history. repositoryId and head (and base for the base side) read at explicit pins of any registered repository instead.",
-      read("file"),
-      "GET",
-      "/:reviewId/file",
-    ),
-    tool(
-      "tree",
-      "List immediate directory entries in the target, including working files for worktree targets. repositoryId and head list a registered repository at explicit pins instead.",
-      read("tree"),
-      "GET",
-      "/:reviewId/tree",
-    ),
-    tool(
-      "diff",
-      'Read this review\'s changes. paths selects files (default: all). format:"files" lists them with status and counts; format:"patch" returns plain-text patches with base and head line numbers on every line, ready for review-source links. Patches past maxBytes are listed with a paths:[…] hint. commit selects one commit from this review; repositoryId, base and head compare explicit pins of a registered repository instead.',
-      read("diff"),
-      "GET",
-      "/:reviewId/diff",
-    ),
-    tool(
-      "commits",
-      "List commits in this review's pinned comparison.",
-      read("commits"),
-      "GET",
-      "/:reviewId/commits",
     ),
   ];
 }

@@ -22,7 +22,6 @@ import {
   listTrackedFilesAtCommit,
   readFileAtCommit,
   resolveRepoContext,
-  splitGitPatchFiles,
 } from "@dev.fast/local-vcs";
 import { structuralChangeCounts } from "@dev.fast/review-protocol";
 import type {
@@ -73,7 +72,6 @@ import {
 } from "./document.js";
 import { decodeImage } from "./image-decode.js";
 import { mapInputSchema } from "./map-input.js";
-import { budgetPatches } from "./numbered-patch.js";
 import {
   type PullRequestDeps,
   defaultPullRequestDeps,
@@ -1494,63 +1492,6 @@ export class LocalReviewData {
 
     return this.rawPatch(pins, { paths: [file] });
   }
-  /** Changed files matching a pathspec: exact files or directories, either side of a rename. */
-  async changedFiles(pins: Pins, paths?: string[]) {
-    const files = await this.summaries(pins);
-
-    if (!paths?.length) return files;
-
-    for (const spec of paths) checkRelativePath(spec.replace(/\/+$/, ""));
-
-    return files.filter((file) =>
-      paths.some((spec) => pathspecMatches(spec, file)),
-    );
-  }
-  /** Numbered plain-text patches for the pathspec, within maxBytes. */
-  async patches(
-    pins: Pins,
-    options: { paths?: string[]; contextLines?: number; maxBytes: number },
-  ) {
-    const files = await this.changedFiles(pins, options.paths);
-
-    const unmatched = (options.paths ?? []).filter(
-      (spec) => !files.some((file) => pathspecMatches(spec, file)),
-    );
-
-    const note = unmatched.length
-      ? `[No changes match paths:${JSON.stringify(unmatched)}.]\n`
-      : "";
-
-    if (files.length === 0) return note || "[No changes.]\n";
-
-    const patch = await this.rawPatch(pins, {
-      // Both sides of a rename, so Git pairs them instead of adding a file.
-      paths: options.paths?.length
-        ? [
-            ...new Set(
-              files.flatMap((file) =>
-                file.previousPath
-                  ? [file.previousPath, file.path]
-                  : [file.path],
-              ),
-            ),
-          ]
-        : undefined,
-      contextLines: options.contextLines,
-    });
-
-    return (
-      budgetPatches(
-        splitGitPatchFiles(patch).map(({ file, patch }) => ({
-          path: file.path,
-          additions: file.additions,
-          deletions: file.deletions,
-          patch,
-        })),
-        options.maxBytes,
-      ) + note
-    );
-  }
   private async summaries(pins: Pins) {
     if (pins.worktreeRevision) {
       return diffFileSummariesWorkingTree(await this.worktreeInput(pins));
@@ -1886,19 +1827,6 @@ export function openLocalReviewStore(
   }
 
   return { store, data };
-}
-
-/** A pathspec entry names a changed file or a directory above it, on either side of a rename. */
-function pathspecMatches(
-  spec: string,
-  file: { path: string; previousPath?: string },
-) {
-  const prefix = spec.replace(/\/+$/, "");
-
-  return [file.path, file.previousPath].some(
-    (path) =>
-      path !== undefined && (path === prefix || path.startsWith(prefix + "/")),
-  );
 }
 
 /** The parts of a VS Code workspace file the navigator owns; everything else

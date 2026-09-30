@@ -41,7 +41,7 @@ import { z } from "zod";
 
 import { authoringTools } from "./authoring-tools.js";
 import { documentText } from "./document-text.js";
-import { ReviewInputError, fileLineRangeSchema } from "./document.js";
+import { ReviewInputError } from "./document.js";
 import {
   instructionsQuerySchema,
   renderInstructions,
@@ -849,23 +849,6 @@ export function createReviewApi(
         },
       });
     });
-    app.post("/:id/source", async (context) => {
-      const input = z
-        .strictObject({
-          version: z.number().int().nonnegative().optional(),
-          source: fileLineRangeSchema,
-          commit: z.string().min(1).optional(),
-        })
-        .parse(await readBoundedRequestJson(context.req.raw));
-
-      const { pins } = await data.resolveSource(
-        readReview(context.req.param("id"), input.version),
-        input.commit,
-        input.source.pins,
-      );
-
-      return context.json(await data.quote(pins, input.source));
-    });
     app.get("/:id/language-context", async (context) => {
       const input = readQuerySchemas.maps
         .extend({
@@ -1031,14 +1014,7 @@ export function createReviewApi(
       });
     });
     app.get("/:id/diff", async (context) => {
-      const query = context.req.query();
-      const paths = context.req.queries("paths");
-      const input = readQuerySchemas.diff.parse({ ...query, paths });
-
-      if (input.file !== undefined && (paths || "format" in query))
-        throw new ReviewInputError(
-          'file cannot be combined with paths or format; use paths:["…"], format:"patch".',
-        );
+      const input = readQuerySchemas.diff.parse(context.req.query());
 
       const { pins } = await data.resolveSource(
         readReview(context.req.param("id"), input.version),
@@ -1046,16 +1022,7 @@ export function createReviewApi(
         queryAnchor(input),
       );
 
-      if (input.format === "files" && input.file === undefined)
-        return context.json(await data.changedFiles(pins, input.paths));
-
-      return context.text(
-        await data.patches(pins, {
-          paths: input.file === undefined ? input.paths : [input.file],
-          contextLines: input.context,
-          maxBytes: input.maxBytes,
-        }),
-      );
+      return context.json(await data.changes(pins));
     });
     app.get("/:id/commits", async (context) => {
       const input = readQuerySchemas.commits.parse(context.req.query());
