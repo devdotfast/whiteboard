@@ -15,7 +15,10 @@ const runId = process.env.WB_TEST_RUN ?? `e2e${Date.now().toString(36)}`;
 
 const runDir = `/tmp/wbt.${runId}`;
 
-const alias = "wb-test-a";
+// A host a user prepared (`up` or `aws-up`, then a hand install) in the WB_TEST_RUN run; the journey never removes it.
+const prepared = process.env.REVIEW_E2E_REMOTE_HOST;
+
+const alias = `wb-test-${prepared ?? "a"}`;
 
 const title = "Remote order";
 
@@ -32,7 +35,7 @@ export const options = {
   env: { DEV_FAST_REVIEW_SSH_CONFIG: `${runDir}/ssh_config` },
 };
 
-/** Runs on the remote: a repository with two commits, and a review of them with prose and a code peek. Prints its id. */
+/** Runs on the remote: a repository with two commits, and a review of them with prose and a code peek. Prints its id and the repository's path. */
 const createRemoteReview = String.raw`
 set -e
 uuid() { cat /proc/sys/kernel/random/uuid; }
@@ -52,6 +55,7 @@ id=$(whiteboard api session_create "{\"commandId\":\"$(uuid)\",\"title\":\"$1\",
 whiteboard api session_edit "{\"commandId\":\"$(uuid)\",\"sessionId\":\"$id\",\"edit\":{\"type\":\"insert\",\"content\":{\"type\":\"markdown\",\"markdown\":\"One now returns **two**.\"}}}" >/dev/null
 whiteboard api session_edit "{\"commandId\":\"$(uuid)\",\"sessionId\":\"$id\",\"edit\":{\"type\":\"insert\",\"content\":{\"type\":\"code_peek\",\"source\":{\"file\":\"f.ts\",\"start\":{\"side\":\"head\",\"line\":5},\"end\":{\"side\":\"head\",\"line\":7}}}}}" >/dev/null
 echo "$id"
+pwd
 `;
 
 async function remote(...args) {
@@ -94,12 +98,22 @@ const remoteApi = (tool, input) =>
 async function remoteToken() {
   const out = (await onRemote("whiteboard remote attach --json")).split("\n");
 
+  let token;
+
   try {
-    return JSON.parse(out[out.indexOf("WHITEBOARD-REMOTE-BEGIN") + 1]).token;
+    token = JSON.parse(out[out.indexOf("WHITEBOARD-REMOTE-BEGIN") + 1]).token;
   } catch {
     // JSON.parse quotes the text it could not read, which may hold the token.
     throw new Error("whiteboard remote attach printed no attach line");
   }
+
+  assert.ok(
+    // A token is base64url; assert.match would print it on a failure.
+    /^[\w-]+$/.test(String(token ?? "")),
+    "remote attach gave no token",
+  );
+
+  return token;
 }
 
 /** Every request the workbench page sends, with its headers and outcome, from CDP's Network domain. */
@@ -126,9 +140,22 @@ async function recordRequests(page) {
   cdp.on("Network.loadingFailed", ({ requestId, errorText, canceled }) =>
     Object.assign(entry(requestId), { failed: errorText, canceled }),
   );
+  cdp.on("Network.loadingFinished", ({ requestId }) =>
+    Object.assign(entry(requestId), { finished: true }),
+  );
   await cdp.send("Network.enable");
 
-  return requests;
+  /** The whole body of a finished request, as the page received it. */
+  const body = async (id) => {
+    const { body: text, base64Encoded } = await cdp.send(
+      "Network.getResponseBody",
+      { requestId: id },
+    );
+
+    return base64Encoded ? Buffer.from(text, "base64").toString() : text;
+  };
+
+  return { requests, body };
 }
 
 // The laptop-only routes of the local server: everything but reviews, health and pings.
@@ -138,25 +165,48 @@ const DESKTOP_ROUTE =
 export async function run(ctx) {
   const { page, until } = ctx;
 
-  try {
-    await exec("docker", ["info", "--format", "{{.ServerVersion}}"]);
-  } catch (error) {
-    throw new Error(
-      `skip: remote-host needs Docker for its SSH server (${error.message.split("\n")[0]})`,
-    );
-  }
+  // A packaged build ignores DEV_FAST_REVIEW_SSH_CONFIG, so its ssh would read the user's configuration.
+  if (ctx.report.mode === "packaged")
+    throw new Error("skip: remote-host runs in development mode only");
+
+  if (prepared === undefined)
+    try {
+      await exec("docker", ["info", "--format", "{{.ServerVersion}}"]);
+    } catch (error) {
+      throw new Error(
+        `skip: remote-host needs Docker for its SSH server (${error.message.split("\n")[0]})`,
+      );
+    }
 
   try {
     await journey(ctx, page, until);
   } finally {
-    await remote("down", "--all").catch((error) =>
-      console.error(`[remote-host] down --all: ${error.message}`),
-    );
+    if (prepared === undefined)
+      await remote("down", "--all").catch((error) =>
+        console.error(`[remote-host] down --all: ${error.message}`),
+      );
+    else await closeDesktop(ctx);
   }
 }
 
+/**
+ * For a prepared host, whose run the journey must not remove: quit the
+ * Desktop the way a user does, so it closes its masters, then end any of its
+ * ssh that outlived it. The harness's own close still runs afterwards.
+ */
+async function closeDesktop(ctx) {
+  const session = await ctx.browser.newBrowserCDPSession().catch(() => null);
+
+  await session?.send("Browser.close").catch(() => {});
+
+  for (let i = 0; i < 40 && (await desktopSsh()).length; i++)
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+  for (const pid of await desktopSsh()) process.kill(pid, "SIGTERM");
+}
+
 async function journey(ctx, page, until) {
-  const requests = await recordRequests(page);
+  const { requests, body } = await recordRequests(page);
   const remoteTokens = new Set();
   const timeOrigin = await page.evaluate(() => performance.timeOrigin);
   const timings = {};
@@ -171,14 +221,20 @@ async function journey(ctx, page, until) {
       timeout,
     );
 
-  await remote("up", "a");
-  await remote("install", "a");
+  if (prepared === undefined) {
+    await remote("up", "a");
+    await remote("install", "a");
+  }
 
-  const reviewId = await onRemote(`bash -s -- '${title}'`, createRemoteReview);
+  const [reviewId, repoPath] = (
+    await onRemote(`bash -s -- '${title}'`, createRemoteReview)
+  ).split("\n");
 
   assert.match(reviewId, /^[0-9a-f-]{36}$/, "the remote review's id");
   remoteTokens.add(await remoteToken());
-  ctx.check("a container with sshd and this checkout's package holds a review");
+  ctx.check(
+    `${alias}${prepared ? " (prepared)" : ", a container with sshd and this checkout's package,"} holds a review`,
+  );
 
   // 1. Settings, as a user adds a host.
   let settings = await openSettings(ctx);
@@ -227,9 +283,9 @@ async function journey(ctx, page, until) {
   const row = (text) => rows.filter({ hasText: text });
 
   await row(title).waitFor({ timeout: 60000 });
-  assert.match(await row(title).innerText(), /wb-test-a: wbrepo/);
+  assert.ok((await row(title).innerText()).includes(`${alias}: wbrepo`));
   assert.equal(await row(title).getAttribute("data-unavailable"), null);
-  ctx.check("2. Home lists the remote review as wb-test-a: wbrepo");
+  ctx.check(`2. Home lists the remote review as ${alias}: wbrepo`);
 
   // 3. Open it: the document, its code peek, the Diff view and the structural diff.
   const canvas = page.locator(".review-canvas-root [data-review-api]");
@@ -263,15 +319,46 @@ async function journey(ctx, page, until) {
     "the Diff view to show f.ts",
   );
 
-  const structural = () =>
-    [...requests.values()].find(
-      (r) =>
-        r.url?.includes(`/reviews-api/${reviewId}/structural-diff`) &&
-        r.status === 200,
-    );
+  // The route answers 200 and streams; a diffr or checkout failure is an `error` line inside that body.
+  const structural = await until(
+    () =>
+      [...requests.values()].find(
+        (r) =>
+          r.url?.includes(`/reviews-api/${reviewId}/structural-diff`) &&
+          r.status === 200 &&
+          r.finished,
+      ),
+    "a finished structural-diff read through the gateway",
+  );
 
-  await until(structural, "a 200 structural-diff read through the gateway");
-  ctx.check("3b. the Diff view shows f.ts, and its structural diff answered");
+  const events = (await body(structural.id))
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+
+  assert.ok(
+    events.some((event) => event.type === "file"),
+    `no file event in the structural diff: ${events.map((e) => e.type)}`,
+  );
+  assert.deepEqual(
+    events.filter((event) => event.type === "error"),
+    [],
+    "structural diff errors",
+  );
+
+  const streamStatus = page.locator(".review-structural-stream-status");
+
+  await until(
+    async () =>
+      (await streamStatus.count()) > 0 &&
+      (await streamStatus.evaluateAll((all) =>
+        all.every((e) => e.hidden && e.textContent === ""),
+      )),
+    "the structural diff's stream status to be hidden and empty",
+  );
+  ctx.check(
+    `3b. the Diff view shows f.ts; its structural diff streamed ${events.filter((e) => e.type === "file").length} file event(s), no error, and its status line cleared`,
+  );
   await view("Whiteboard").click();
 
   // 4. An edit on the remote reaches the open tab without a reload.
@@ -299,7 +386,7 @@ async function journey(ctx, page, until) {
         kind: "commits",
         repositoryId: JSON.parse(
           await remoteApi("session_register_repository", {
-            path: "/home/dev/wbrepo",
+            path: repoPath,
           }),
         ).id,
         base: "HEAD~1",
@@ -394,7 +481,7 @@ async function journey(ctx, page, until) {
   });
   timings.laptopOpen = Date.now() - laptopOpened;
   assert.ok(
-    timings.laptopOpen < 5000,
+    timings.laptopOpen < 2000,
     `a laptop review took ${timings.laptopOpen} ms`,
   );
   await onRemote(`kill -CONT ${serverPid}`);
@@ -403,45 +490,57 @@ async function journey(ctx, page, until) {
     `7. SIGSTOP: offline after ${timings.offline} ms; a laptop review opened in ${timings.laptopOpen} ms; SIGCONT: online`,
   );
 
-  // 8. Another version on the remote: incompatible, the install command, and its reviews stay listed.
-  await remote("install", "a", "--version", "0.0.2-e2e");
-  await onRemote("whiteboard server stop");
-  await waitState("incompatible", "incompatible", 60000);
-  remoteTokens.add(await remoteToken());
-  settings = await openSettings(ctx);
-  section = settings.getByRole("region", { name: "Remote hosts" });
-  await until(
-    async () => /incompatible/.test(await hostRow().innerText()),
-    "the Settings row to read incompatible",
-  );
-  assert.match(
-    await hostRow().locator("code").innerText(),
-    /^npm install -g @dev\.fast\/whiteboard@\d+\.\d+\.\d+/,
-  );
-  await openHome(ctx);
+  async function anotherVersion() {
+    // Incompatible, the install command, and its reviews stay listed.
+    await remote("install", "a", "--version", "0.0.2-e2e");
+    await onRemote("whiteboard server stop");
+    await waitState("incompatible", "incompatible", 60000);
+    remoteTokens.add(await remoteToken());
+    const settings = await openSettings(ctx);
 
-  for (const text of [title, second]) {
-    await row(text).waitFor();
-    assert.equal(await row(text).getAttribute("data-unavailable"), "");
-    assert.match(await row(text).innerText(), /incompatible/);
+    section = settings.getByRole("region", { name: "Remote hosts" });
+    await until(
+      async () => /incompatible/.test(await hostRow().innerText()),
+      "the Settings row to read incompatible",
+    );
+    assert.match(
+      await hostRow().locator("code").innerText(),
+      /^npm install -g @dev\.fast\/whiteboard@\d+\.\d+\.\d+/,
+    );
+    await openHome(ctx);
+
+    for (const text of [title, second]) {
+      await row(text).waitFor();
+      assert.equal(await row(text).getAttribute("data-unavailable"), "");
+      assert.match(await row(text).innerText(), /incompatible/);
+    }
+
+    ctx.check(
+      "8. another version made the host incompatible, Settings shows the install command, and its reviews stay listed",
+    );
+
+    // What docs/remote-hosts.md says to do: install the matching version, then restart the server.
+    await remote("install", "a");
+    await onRemote("whiteboard server stop");
+    await waitState("online", "online after the matching install", 60000);
+    remoteTokens.add(await remoteToken());
+    await until(
+      async () => (await row(title).getAttribute("data-unavailable")) === null,
+      "the remote review to be available again",
+    );
+    ctx.check(
+      "8b. installing the matching version and stopping the server brought the host back online",
+    );
   }
 
-  ctx.check(
-    "8. another version made the host incompatible, Settings shows the install command, and its reviews stay listed",
-  );
-
-  // What docs/remote-hosts.md says to do: install the matching version, then restart the server.
-  await remote("install", "a");
-  await onRemote("whiteboard server stop");
-  await waitState("online", "online after the matching install", 60000);
-  remoteTokens.add(await remoteToken());
-  await until(
-    async () => (await row(title).getAttribute("data-unavailable")) === null,
-    "the remote review to be available again",
-  );
-  ctx.check(
-    "8b. installing the matching version and stopping the server brought the host back online",
-  );
+  // 8. Another version on the remote. Only on a host this journey installed: it never replaces a prepared host's package.
+  if (prepared === undefined) await anotherVersion();
+  else {
+    console.error(
+      `[remote-host] step 8 skipped: ${alias} was prepared by hand, and the journey does not replace its package`,
+    );
+    ctx.check("8. skipped on a prepared host: no package swap");
+  }
 
   // 9. Removing the host takes its reviews out of Home.
   settings = await openSettings(ctx);
@@ -521,22 +620,28 @@ async function lines(scope) {
     .replaceAll("\u00a0", " ");
 }
 
-/** The pid of this Desktop's ssh master for the alias, found by its arguments. */
-async function masterPid() {
+/** The Desktop's ssh processes for this run, as `[pid, args]`: they name a control socket (`-S`), which the harness's own ssh never does. */
+async function desktopSshProcesses() {
   const { stdout } = await exec("ps", ["-axo", "pid=,args="]);
 
-  for (const line of stdout.split("\n")) {
-    const match = line.trim().match(/^(\d+) (.*)$/);
-
-    if (
-      match &&
-      /(^|\/)ssh /.test(match[2]) &&
-      match[2].includes(` -M -N `) &&
-      match[2].includes(`-F ${runDir}/ssh_config`) &&
-      match[2].endsWith(`-- ${alias}`)
+  return stdout
+    .split("\n")
+    .map((line) => line.trim().match(/^(\d+) (.*)$/))
+    .filter(
+      (match) =>
+        match &&
+        /(^|\/)ssh /.test(match[2]) &&
+        match[2].includes(`-F ${runDir}/ssh_config -S `),
     )
-      return Number(match[1]);
-  }
+    .map((match) => [Number(match[1]), match[2]]);
+}
 
-  return undefined;
+const desktopSsh = async () =>
+  (await desktopSshProcesses()).map(([pid]) => pid);
+
+/** The pid of this Desktop's ssh master for the alias. */
+async function masterPid() {
+  return (await desktopSshProcesses()).find(
+    ([, args]) => args.includes(" -M -N ") && args.endsWith(`-- ${alias}`),
+  )?.[0];
 }
