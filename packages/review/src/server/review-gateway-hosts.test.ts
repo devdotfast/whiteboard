@@ -226,7 +226,7 @@ it("keeps a copied store a duplicate while the first alias is down", async () =>
   // finds it back with a new instance id and token, still the machine.
   await expect
     .poll(() => gateway.states()[0]?.detail)
-    .toBe("wb-a is offline: ECONNREFUSED; attaching again.");
+    .toBe("wb-a is offline: it refused the connection; attaching again.");
   const restarted = await startRemote(path.join(root, "a"), port);
 
   gateway.set([
@@ -402,6 +402,6 @@ it("a server gone from behind a working forward asks Desktop to attach again", a
   await expect.poll(() => restarted).toEqual(["wb-a"]);
   expect(gateway.states()[0]).toMatchObject({
     state: "offline",
-    detail: "wb-a is offline: ECONNREFUSED; attaching again.",
+    detail: "wb-a is offline: it refused the connection; attaching again.",
   });
 });
