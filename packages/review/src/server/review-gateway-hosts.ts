@@ -50,6 +50,8 @@ interface Host extends GatewayRemote {
 export function createGatewayHosts(input: {
   version: string;
   log?(message: string): void;
+  /** The alias the memory file last recorded for a server id. */
+  remembered?(serverId: string): string | undefined;
 }) {
   const log = input.log ?? (() => {});
   let hosts: Host[] = [];
@@ -65,10 +67,25 @@ export function createGatewayHosts(input: {
       ? undefined
       : hosts.find((host) => host.serverId === serverId);
 
+  // The remembered alias of a server id, while it is in the setting and has
+  // not reported yet: until it does, another alias with that id may be a copy.
+  const pending = (host: Host) => {
+    if (host.serverId === undefined) return undefined;
+    const alias = input.remembered?.(host.serverId);
+
+    if (alias === undefined || alias === host.alias) return undefined;
+    const remembered = hosts.find((candidate) => candidate.alias === alias);
+
+    return remembered?.serverId === undefined ? remembered : undefined;
+  };
+
   const isDuplicate = (host: Host) => {
     const first = machine(host.serverId);
 
-    return first !== undefined && first.instanceId !== host.instanceId;
+    if (first !== undefined && first.instanceId !== host.instanceId)
+      return true;
+
+    return pending(host) !== undefined;
   };
 
   const serving = (serverId: string | undefined) =>
@@ -86,6 +103,15 @@ export function createGatewayHosts(input: {
       alias: host.alias,
       ...(host.serverId !== undefined && { serverId: host.serverId }),
     };
+
+    const waitingFor = pending(host);
+
+    if (waitingFor)
+      return {
+        ...known,
+        state: "duplicate",
+        detail: `${host.alias} reports the server id last seen on ${waitingFor.alias}, which has not answered yet. If they are two machines, run whiteboard server reset-id on ${host.alias} to give it its own.`,
+      };
 
     if (isDuplicate(host))
       return {

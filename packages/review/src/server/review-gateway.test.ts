@@ -680,3 +680,136 @@ it("forgets a review its owner no longer has", async () => {
   expect(gone.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
   await expect.poll(() => readFile(memoryFile, "utf8")).not.toContain(onA);
 });
+
+/** A loopback port nothing listens on yet. */
+async function freePort() {
+  const probe = await startFake({ version });
+
+  await probe.stop();
+
+  return probe.port;
+}
+
+async function rememberOwner(
+  serverId: string,
+  alias: string,
+  reviewId: string,
+) {
+  const home = path.join(root, "laptop");
+
+  await mkdir(home, { recursive: true });
+  await writeFile(
+    gatewayMemoryPath(home),
+    JSON.stringify({ [serverId]: { alias, reviewIds: [reviewId] } }),
+  );
+}
+
+const states = (gateway: { hosts(): { state: string }[] }) =>
+  gateway.hosts().map((host) => host.state);
+
+it.each([
+  ["another instance: a is the machine, c the duplicate", false, "duplicate"],
+  ["the same instance: one machine under two aliases", true, "online"],
+])(
+  "holds a copy as duplicate until the remembered alias reports (%s)",
+  async (_name, sameInstance, cState) => {
+    const serverId = randomUUID();
+    const reviewId = randomUUID();
+    await rememberOwner(serverId, "wb-a", reviewId);
+    const port = await freePort();
+    const c = await startFake({ version, serverId, reviewIds: [reviewId] });
+
+    const { request, gateway } = await startGateway([
+      {
+        alias: "wb-a",
+        endpoint: { url: `http://127.0.0.1:${port}`, token: "a" },
+      },
+      { alias: "wb-c", endpoint: c.endpoint },
+    ]);
+
+    await expect.poll(() => states(gateway)).toEqual(["offline", "duplicate"]);
+    const detail = gateway.hosts()[1]?.detail;
+    expect(detail).toContain("wb-a");
+    expect(detail).toContain("wb-c");
+    expect(detail).toContain("whiteboard server reset-id");
+
+    const refused = await request(`/${reviewId}`);
+    expect(refused.status).toBe(503);
+    expect(refused.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+    expect(await refused.json()).toMatchObject({
+      error: expect.stringContaining("wb-a is offline"),
+    });
+    expect(c.requests.some((entry) => entry.url?.includes(reviewId))).toBe(
+      false,
+    );
+
+    await startFake(
+      {
+        version,
+        serverId,
+        reviewIds: [reviewId],
+        ...(sameInstance && { instanceId: c.health.instanceId }),
+      },
+      port,
+    );
+
+    await expect
+      .poll(() => states(gateway), { timeout: 5_000 })
+      .toEqual(["online", cState]);
+    const served = await request(`/${reviewId}`);
+    expect(served.status).toBe(200);
+    expect(served.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+  },
+);
+
+it("takes a reporting alias as the machine when the remembered alias left the setting", async () => {
+  const serverId = randomUUID();
+  const reviewId = randomUUID();
+  await rememberOwner(serverId, "wb-a", reviewId);
+  const c = await startFake({ version, serverId, reviewIds: [reviewId] });
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-c", endpoint: c.endpoint },
+  ]);
+
+  await expect.poll(() => states(gateway)).toEqual(["online"]);
+  const served = await request(`/${reviewId}`);
+  expect(served.status).toBe(200);
+  expect(served.headers.get(REVIEW_HOST_HEADER)).toBe("wb-c");
+  await expect
+    .poll(async () =>
+      JSON.parse(
+        await readFile(gatewayMemoryPath(path.join(root, "laptop")), "utf8"),
+      ),
+    )
+    .toEqual({ [serverId]: { alias: "wb-c", reviewIds: [reviewId] } });
+});
+
+it("without memory, serves from the first alias to report until an earlier one reports", async () => {
+  const serverId = randomUUID();
+  const reviewId = randomUUID();
+  const port = await freePort();
+  const c = await startFake({ version, serverId, reviewIds: [reviewId] });
+
+  const { request, gateway } = await startGateway([
+    {
+      alias: "wb-a",
+      endpoint: { url: `http://127.0.0.1:${port}`, token: "a" },
+    },
+    { alias: "wb-c", endpoint: c.endpoint },
+  ]);
+
+  await expect.poll(() => states(gateway)).toEqual(["offline", "online"]);
+  expect((await request(`/${reviewId}`)).headers.get(REVIEW_HOST_HEADER)).toBe(
+    "wb-c",
+  );
+
+  await startFake({ version, serverId, reviewIds: [reviewId] }, port);
+
+  await expect
+    .poll(() => states(gateway), { timeout: 5_000 })
+    .toEqual(["online", "duplicate"]);
+  expect((await request(`/${reviewId}`)).headers.get(REVIEW_HOST_HEADER)).toBe(
+    "wb-a",
+  );
+});

@@ -64,6 +64,8 @@ export function openGatewayMemory(
 
       return server ? { serverId, alias: server.alias } : undefined;
     },
+    /** The alias last used for `serverId`. */
+    alias: (serverId: string) => servers.get(serverId)?.alias,
     /** Also records `alias` as the server's latest name. */
     remember(serverId: string, alias: string, reviewId: string) {
       const server = servers.get(serverId);

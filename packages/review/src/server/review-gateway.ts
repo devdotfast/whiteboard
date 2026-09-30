@@ -126,8 +126,14 @@ export function createReviewGateway(input: {
   log?(message: string): void;
 }) {
   const log = input.log ?? (() => {});
-  const hosts = createGatewayHosts({ version: input.version, log });
   const memory = openGatewayMemory(input.home, log);
+
+  const hosts = createGatewayHosts({
+    version: input.version,
+    log,
+    remembered: (serverId) => memory.alias(serverId),
+  });
+
   const laptopIds = new Set<string>();
   const lookups = new Map<string, Promise<Owner>>();
 
