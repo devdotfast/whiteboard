@@ -71,16 +71,20 @@ export function createGatewayHosts(input: {
       ? undefined
       : hosts.find((host) => host.serverId === serverId);
 
-  // The remembered alias of a server id, while it is in the setting and has
-  // not reported yet: until it does, another alias with that id may be a copy.
+  // The remembered alias of a server id, while it is earlier in the setting
+  // and has not reported yet: until it does, a later alias with that id may
+  // be a copy. The setting's order says which alias is the machine.
   const pending = (host: Host) => {
     if (host.serverId === undefined) return undefined;
     const alias = input.remembered?.(host.serverId);
+    const index = hosts.findIndex((candidate) => candidate.alias === alias);
+    const remembered = hosts[index];
 
-    if (alias === undefined || alias === host.alias) return undefined;
-    const remembered = hosts.find((candidate) => candidate.alias === alias);
-
-    return remembered?.serverId === undefined ? remembered : undefined;
+    return remembered &&
+      index < hosts.indexOf(host) &&
+      remembered.serverId === undefined
+      ? remembered
+      : undefined;
   };
 
   // An alias that reported is held while an earlier alias in the setting has
@@ -130,7 +134,16 @@ export function createGatewayHosts(input: {
           .join(", ")} to answer before using ${host.alias}.`,
       };
 
-    const first = pending(host) ?? machine(host.serverId);
+    const waitingFor = pending(host);
+
+    if (waitingFor)
+      return {
+        ...known,
+        state: "duplicate",
+        detail: `${host.alias} is waiting for ${waitingFor.alias}, which last served this server id and has not answered yet. If they are one machine, remove one of the aliases. If they are two machines, run \`whiteboard server reset-id\` on ${host.alias}.`,
+      };
+
+    const first = machine(host.serverId);
 
     if (isDuplicate(host))
       return {

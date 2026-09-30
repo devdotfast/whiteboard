@@ -846,7 +846,10 @@ export interface ReviewServerHealthWithToken extends ReviewServerHealth {
   commit: string | null;
 }
 
-/** A remote as Electron main hands it to the gateway. */
+/**
+ * A remote as Electron main hands it to the gateway. Every alias gets an
+ * endpoint or a problem within a bounded time; until then later aliases wait.
+ */
 export const ReviewGatewayHostSchema = z.strictObject({
   alias: requiredString,
   // url is http://127.0.0.1:<forwarded port>

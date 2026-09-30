@@ -733,6 +733,7 @@ it.each([
     expect(detail).toContain("wb-a");
     expect(detail).toContain("wb-c");
     expect(detail).toContain("whiteboard server reset-id");
+    expect(detail).toContain("wb-c is waiting for wb-a");
 
     const refused = await request(`/${reviewId}`);
     expect(refused.status).toBe(503);
@@ -969,3 +970,69 @@ it("names the 10 second limit when a lookup finds a host hung", async () => {
     "Host wb-a: offline (wb-a is offline: it did not answer within 10 seconds.)",
   );
 }, 20_000);
+
+it("does not hold the first alias behind a later remembered one", async () => {
+  const serverId = randomUUID();
+  const reviewId = randomUUID();
+  await rememberOwner(serverId, "wb-c", reviewId);
+  const a = await startFake({ version, serverId, reviewIds: [reviewId] });
+
+  const c = await startFake({
+    version,
+    serverId,
+    handle: slowHealth(1_000, serverId, randomUUID()),
+  });
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: a.endpoint },
+    { alias: "wb-c", endpoint: c.endpoint },
+  ]);
+
+  await expect.poll(() => states(gateway)).toEqual(["online", "connecting"]);
+  expect((await request(`/${reviewId}`)).headers.get(REVIEW_HOST_HEADER)).toBe(
+    "wb-a",
+  );
+
+  await expect.poll(() => states(gateway)).toEqual(["online", "duplicate"]);
+  await expect
+    .poll(memoryOf)
+    .toEqual({ [serverId]: { alias: "wb-a", reviewIds: [reviewId] } });
+});
+
+it("holds a later remembered alias until the first alias answers", async () => {
+  const serverId = randomUUID();
+  const reviewId = randomUUID();
+  await rememberOwner(serverId, "wb-c", reviewId);
+
+  const a = await startFake({
+    version,
+    serverId,
+    reviewIds: [reviewId],
+    handle: slowHealth(1_000, serverId, randomUUID()),
+  });
+
+  const c = await startFake({ version, serverId, reviewIds: [reviewId] });
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: a.endpoint },
+    { alias: "wb-c", endpoint: c.endpoint },
+  ]);
+
+  await expect.poll(() => gateway.hosts()[1]?.serverId).toBe(serverId);
+  expect(states(gateway)).toEqual(["connecting", "connecting"]);
+  const held = await request(`/${reviewId}`);
+  expect(held.status).toBe(503);
+  expect(held.headers.get(REVIEW_HOST_HEADER)).toBe("wb-c");
+  expect(await held.json()).toMatchObject({
+    error: expect.stringContaining("Waiting for wb-a"),
+  });
+
+  await expect.poll(() => states(gateway)).toEqual(["online", "duplicate"]);
+  expect((await request(`/${reviewId}`)).headers.get(REVIEW_HOST_HEADER)).toBe(
+    "wb-a",
+  );
+  await expect
+    .poll(memoryOf)
+    .toEqual({ [serverId]: { alias: "wb-a", reviewIds: [reviewId] } });
+  expect(c.requests.some((entry) => entry.url?.includes(reviewId))).toBe(false);
+});
