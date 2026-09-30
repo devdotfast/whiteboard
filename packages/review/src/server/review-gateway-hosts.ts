@@ -41,6 +41,8 @@ interface Host extends GatewayRemote {
   retryMs: number;
   retry?: NodeJS.Timeout;
   checking?: AbortController;
+  /** Its first /health check of this session has finished. */
+  checked?: boolean;
 }
 
 /**
@@ -52,6 +54,8 @@ export function createGatewayHosts(input: {
   log?(message: string): void;
   /** The alias the memory file last recorded for a server id. */
   remembered?(serverId: string): string | undefined;
+  /** The alias that now speaks for a server id. */
+  machine?(serverId: string, alias: string): void;
 }) {
   const log = input.log ?? (() => {});
   let hosts: Host[] = [];
@@ -79,6 +83,18 @@ export function createGatewayHosts(input: {
     return remembered?.serverId === undefined ? remembered : undefined;
   };
 
+  // An alias that reported is held while an earlier alias in the setting has
+  // not answered its first check: that one may be the machine.
+  const unsettledBefore = (host: Host) =>
+    host.serverId === undefined
+      ? []
+      : hosts
+          .slice(0, hosts.indexOf(host))
+          .filter((earlier) => !earlier.problem && !earlier.checked);
+
+  const held = (host: Host) =>
+    host.status === "online" && unsettledBefore(host).length > 0;
+
   const isDuplicate = (host: Host) => {
     const first = machine(host.serverId);
 
@@ -95,6 +111,7 @@ export function createGatewayHosts(input: {
           (host) =>
             host.status === "online" &&
             host.serverId === serverId &&
+            !held(host) &&
             !isDuplicate(host),
         );
 
@@ -104,20 +121,22 @@ export function createGatewayHosts(input: {
       ...(host.serverId !== undefined && { serverId: host.serverId }),
     };
 
-    const waitingFor = pending(host);
-
-    if (waitingFor)
+    if (held(host))
       return {
         ...known,
-        state: "duplicate",
-        detail: `${host.alias} reports the server id last seen on ${waitingFor.alias}, which has not answered yet. If they are two machines, run whiteboard server reset-id on ${host.alias} to give it its own.`,
+        state: "connecting",
+        detail: `Waiting for ${unsettledBefore(host)
+          .map((earlier) => earlier.alias)
+          .join(", ")} to answer before using ${host.alias}.`,
       };
+
+    const first = pending(host) ?? machine(host.serverId);
 
     if (isDuplicate(host))
       return {
         ...known,
         state: "duplicate",
-        detail: `${machine(host.serverId)?.alias} and ${host.alias} are two machines that report the same server id. Run whiteboard server reset-id on ${host.alias} to give it its own.`,
+        detail: `${first?.alias} and ${host.alias} report the same server id. If they are one machine, remove one of the aliases. If they are two machines, run \`whiteboard server reset-id\` on ${host.alias}.`,
       };
 
     return {
@@ -129,6 +148,14 @@ export function createGatewayHosts(input: {
 
   function report() {
     const states = hosts.map(stateOf);
+
+    for (const host of hosts)
+      if (
+        host.serverId !== undefined &&
+        serving(host.serverId) === host &&
+        machine(host.serverId) === host
+      )
+        input.machine?.(host.serverId, host.alias);
 
     for (const state of states) {
       const line = `${state.state}${state.detail ? ` (${state.detail})` : ""}`;
@@ -211,6 +238,7 @@ export function createGatewayHosts(input: {
     // Replaced by a newer check, a new setting, or close.
     if (host.checking !== abort) return;
     host.checking = undefined;
+    host.checked = true;
 
     if (!health) {
       host.status = "offline";
@@ -274,6 +302,8 @@ export function createGatewayHosts(input: {
     states: () => hosts.map(stateOf),
     /** The host that answers for `serverId` now. */
     serving: (serverId: string): GatewayRemote | undefined => serving(serverId),
+    /** The first alias in the setting that reported `serverId`. */
+    machineAlias: (serverId: string) => machine(serverId)?.alias,
     /** One host per online machine. */
     online: (): GatewayRemote[] =>
       hosts.filter(
@@ -283,7 +313,7 @@ export function createGatewayHosts(input: {
     unavailable(serverId: string, alias: string) {
       const host = hosts.find(
         (candidate) =>
-          candidate.status !== "online" &&
+          (candidate.status !== "online" || held(candidate)) &&
           !isDuplicate(candidate) &&
           (candidate.serverId === serverId ||
             (candidate.serverId === undefined && candidate.alias === alias)),

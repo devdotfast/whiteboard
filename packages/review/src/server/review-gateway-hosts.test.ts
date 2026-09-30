@@ -239,3 +239,30 @@ it("checks a host in backoff at once when the setting changes", async () => {
     .poll(() => gateway.states()[0]?.state, { timeout: 1_000 })
     .toBe("online");
 }, 20_000);
+
+it("re-checks another alias of a server that restarted", async () => {
+  const stateDir = path.join(root, "a");
+  const a = await startRemote(stateDir);
+  const port = Number(new URL(a.endpoint.url).port);
+  const gateway = hosts();
+
+  gateway.set([
+    { alias: "wb-a1", endpoint: a.endpoint },
+    { alias: "wb-a2", endpoint: a.endpoint },
+  ]);
+  const { serverId } = await a.health();
+  await expect
+    .poll(() => gateway.states().map((host) => host.state))
+    .toEqual(["online", "online"]);
+
+  // Same port, new instance id; /health needs no token, so the old
+  // endpoint still reaches it. Only the first alias learns of the restart.
+  await a.stop();
+  await startRemote(stateDir, port);
+  gateway.failed(gateway.serving(serverId)!, "test");
+
+  await expect
+    .poll(() => gateway.states().map((host) => host.state))
+    .toEqual(["online", "online"]);
+  expect(gateway.serving(serverId)?.alias).toBe("wb-a1");
+});

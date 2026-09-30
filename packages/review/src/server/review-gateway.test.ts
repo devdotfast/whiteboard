@@ -26,6 +26,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createGlobalReviewServer } from "./desktop-server.js";
 import { gatewayMemoryPath } from "./review-gateway-memory.js";
 import {
+  type FakeHandler,
   startFake,
   startRemote,
   stopAll,
@@ -785,7 +786,138 @@ it("takes a reporting alias as the machine when the remembered alias left the se
     .toEqual({ [serverId]: { alias: "wb-c", reviewIds: [reviewId] } });
 });
 
-it("without memory, serves from the first alias to report until an earlier one reports", async () => {
+/** A /health that answers after `delayMs`, or never when it is undefined. */
+function slowHealth(
+  delayMs: number | undefined,
+  serverId: string,
+  instanceId: string,
+): FakeHandler {
+  return (request, response) => {
+    if (request.url !== "/health") return false;
+
+    if (delayMs !== undefined)
+      setTimeout(
+        () =>
+          response.writeHead(200, { "content-type": "application/json" }).end(
+            JSON.stringify({
+              ok: true,
+              serverId,
+              instanceId,
+              serverPid: process.pid,
+              desktopAttached: false,
+              version,
+              commit: null,
+            }),
+          ),
+        delayMs,
+      );
+
+    return true;
+  };
+}
+
+const memoryOf = async () =>
+  JSON.parse(
+    await readFile(gatewayMemoryPath(path.join(root, "laptop")), "utf8"),
+  );
+
+it("holds a later alias until an earlier one answers, then setting order decides", async () => {
+  const serverId = randomUUID();
+  const reviewId = randomUUID();
+
+  const a = await startFake({
+    version,
+    serverId,
+    reviewIds: [reviewId],
+    handle: slowHealth(1_000, serverId, randomUUID()),
+  });
+
+  const c = await startFake({ version, serverId, reviewIds: [reviewId] });
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: a.endpoint },
+    { alias: "wb-c", endpoint: c.endpoint },
+  ]);
+
+  await expect.poll(() => gateway.hosts()[1]?.serverId).toBe(serverId);
+  expect(gateway.hosts()[1]).toMatchObject({
+    state: "connecting",
+    detail: expect.stringContaining("wb-a"),
+  });
+
+  await expect.poll(() => states(gateway)).toEqual(["online", "duplicate"]);
+  const served = await request(`/${reviewId}`);
+  expect(served.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+  await expect
+    .poll(memoryOf)
+    .toEqual({ [serverId]: { alias: "wb-a", reviewIds: [reviewId] } });
+  expect(c.requests.map((entry) => entry.url)).toEqual(["/health"]);
+});
+
+it("takes a later alias as the machine once an earlier one fails its first check", async () => {
+  const serverId = randomUUID();
+  const reviewId = randomUUID();
+
+  const a = await startFake({
+    version,
+    serverId,
+    handle: slowHealth(undefined, serverId, randomUUID()),
+  });
+
+  const c = await startFake({ version, serverId, reviewIds: [reviewId] });
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: a.endpoint },
+    { alias: "wb-c", endpoint: c.endpoint },
+  ]);
+
+  await expect.poll(() => gateway.hosts()[1]?.serverId).toBe(serverId);
+  expect(states(gateway)).toEqual(["connecting", "connecting"]);
+  await expect
+    .poll(() => states(gateway), { timeout: 5_000 })
+    .toEqual(["offline", "online"]);
+  expect((await request(`/${reviewId}`)).headers.get(REVIEW_HOST_HEADER)).toBe(
+    "wb-c",
+  );
+  await expect
+    .poll(memoryOf)
+    .toEqual({ [serverId]: { alias: "wb-c", reviewIds: [reviewId] } });
+});
+
+it("holds a second alias of the same machine until the first answers", async () => {
+  const serverId = randomUUID();
+  const instanceId = randomUUID();
+  const reviewId = randomUUID();
+
+  const a = await startFake({
+    version,
+    serverId,
+    instanceId,
+    reviewIds: [reviewId],
+    handle: slowHealth(1_000, serverId, instanceId),
+  });
+
+  const b = await startFake({
+    version,
+    serverId,
+    instanceId,
+    reviewIds: [reviewId],
+  });
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: a.endpoint },
+    { alias: "wb-b", endpoint: b.endpoint },
+  ]);
+
+  await expect.poll(() => gateway.hosts()[1]?.serverId).toBe(serverId);
+  expect(gateway.hosts()[1]?.state).toBe("connecting");
+  await expect.poll(() => states(gateway)).toEqual(["online", "online"]);
+  expect((await request(`/${reviewId}`)).headers.get(REVIEW_HOST_HEADER)).toBe(
+    "wb-a",
+  );
+});
+
+it("without memory, uses a later alias while an earlier one is down, then setting order", async () => {
   const serverId = randomUUID();
   const reviewId = randomUUID();
   const port = await freePort();
@@ -803,13 +935,37 @@ it("without memory, serves from the first alias to report until an earlier one r
   expect((await request(`/${reviewId}`)).headers.get(REVIEW_HOST_HEADER)).toBe(
     "wb-c",
   );
+  await expect
+    .poll(memoryOf)
+    .toEqual({ [serverId]: { alias: "wb-c", reviewIds: [reviewId] } });
 
   await startFake({ version, serverId, reviewIds: [reviewId] }, port);
 
   await expect
     .poll(() => states(gateway), { timeout: 5_000 })
     .toEqual(["online", "duplicate"]);
+  // The memory follows the machine, not the alias that served last.
+  await expect
+    .poll(memoryOf)
+    .toEqual({ [serverId]: { alias: "wb-a", reviewIds: [reviewId] } });
   expect((await request(`/${reviewId}`)).headers.get(REVIEW_HOST_HEADER)).toBe(
     "wb-a",
   );
 });
+
+it("names the 10 second limit when a lookup finds a host hung", async () => {
+  const fake = await startFake({
+    version,
+    handle: (request) => request.url !== "/health",
+  });
+
+  const { request, gateway, logged } = await startGateway([
+    { alias: "wb-a", endpoint: fake.endpoint },
+  ]);
+
+  await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+  expect((await request(`/${randomUUID()}`)).status).toBe(404);
+  expect(logged).toContain(
+    "Host wb-a: offline (wb-a is offline: it did not answer within 10 seconds.)",
+  );
+}, 20_000);

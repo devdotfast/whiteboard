@@ -66,6 +66,14 @@ export function openGatewayMemory(
     },
     /** The alias last used for `serverId`. */
     alias: (serverId: string) => servers.get(serverId)?.alias,
+    /** Records the alias that now speaks for a server this file knows. */
+    rename(serverId: string, alias: string) {
+      const server = servers.get(serverId);
+
+      if (!server || server.alias === alias) return;
+      server.alias = alias;
+      save();
+    },
     /** Also records `alias` as the server's latest name. */
     remember(serverId: string, alias: string, reviewId: string) {
       const server = servers.get(serverId);

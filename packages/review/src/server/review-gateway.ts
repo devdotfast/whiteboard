@@ -132,6 +132,7 @@ export function createReviewGateway(input: {
     version: input.version,
     log,
     remembered: (serverId) => memory.alias(serverId),
+    machine: (serverId, alias) => memory.rename(serverId, alias),
   });
 
   const laptopIds = new Set<string>();
@@ -203,7 +204,11 @@ export function createReviewGateway(input: {
             );
           else {
             owner = remote;
-            memory.remember(remote.serverId, remote.alias, reviewId);
+            memory.remember(
+              remote.serverId,
+              hosts.machineAlias(remote.serverId) ?? remote.alias,
+              reviewId,
+            );
             found.resolve({ remote });
           }
         }
@@ -224,7 +229,11 @@ export function createReviewGateway(input: {
       const remote = hosts.serving(known.serverId);
 
       if (remote) {
-        memory.remember(known.serverId, remote.alias, reviewId);
+        memory.remember(
+          known.serverId,
+          hosts.machineAlias(known.serverId) ?? remote.alias,
+          reviewId,
+        );
 
         return { remote };
       }
@@ -326,7 +335,7 @@ export function createReviewGateway(input: {
 
     // A review server never redirects; a remote must not steer the UI.
     if (status >= 300 && status < 400 && status !== 304) {
-      response.resume();
+      response.destroy();
       log(`Refused ${remote.alias}'s redirect (${status}).`);
 
       return answer(remote.alias, 502, {
