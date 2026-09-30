@@ -448,11 +448,25 @@ describe("snapshot authoring", () => {
     });
   });
 
-  it("asks agents to verify retained ranges even when their line numbers remain valid", async () => {
+  it("asks agents to verify retained ranges in files the new pins changed", async () => {
     const { reviewId } = await create();
     await edit(reviewId, {
       type: "insert",
       content: { type: "code_peek", source: selectSource(source) },
+    });
+    providers.filesChangedBetween = async () => ({
+      base: new Set(),
+      head: new Set(["src/other.ts"]),
+    });
+
+    const untouched = await store.execute(
+      request({ type: "repin", reviewId, pins: { ...pins, head: "rebased" } }),
+    );
+
+    expect(untouched.warnings).toBeUndefined();
+    providers.filesChangedBetween = async () => ({
+      base: new Set(),
+      head: new Set(["src/store.ts"]),
     });
 
     const result = await store.execute(
