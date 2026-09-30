@@ -36,9 +36,10 @@ const VERSION = "9.9.9";
  * killing ssh leaves the remote side running.
  */
 const localRemote =
-	(home: string): SpawnSsh =>
+	(home: string, uploadDelaySeconds = 0): SpawnSsh =>
 	(args, options) => {
-		const command = args.slice(args.indexOf("--") + 2).join(" ");
+		let command = args.slice(args.indexOf("--") + 2).join(" ");
+		if (uploadDelaySeconds && command.includes("cat >")) command = `sleep ${uploadDelaySeconds}; ${command}`;
 		const env = { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin` };
 		return spawn("/bin/sh", ["-c", `${command}; exit $?`], { ...options, env });
 	};
@@ -290,4 +291,109 @@ test("shellQuote survives quotes and refuses control characters", async () => {
 test("versions order as semver", () => {
 	const sorted = ["0.1.10", "0.1.7", "0.1.7-preview.20261003.10", "0.1.6", "0.1.7-preview.20261003.2", "0.2.0-preview.1"].sort(compareVersions);
 	assert.deepEqual(sorted, ["0.1.6", "0.1.7-preview.20261003.2", "0.1.7-preview.20261003.10", "0.1.7", "0.1.10", "0.2.0-preview.1"]);
+});
+
+test("a lock taken over between the stealer's two reads is left to its new holder", async (t) => {
+	const f = await fixture(t);
+	const lock = join(f.remoteRoot, "install.lock");
+	await mkdir(lock, { recursive: true });
+	await writeFile(join(lock, "token"), "0123456789abcdef\n");
+	await writeFile(join(lock, "started"), "0\n");
+	// A `cat` that lets another install finish its takeover right after the first read of the lock.
+	const bin = join(f.root, "racing-bin");
+	await mkdir(bin);
+	await writeFile(
+		join(bin, "cat"),
+		`#!/bin/sh
+/bin/cat "$@"
+case "$1" in */install.lock/*)
+	[ -e "$RACED" ] && exit 0
+	: > "$RACED"
+	rm -rf "$LOCK" && mkdir "$LOCK" && echo fedcba9876543210 > "$LOCK/token" && echo winner > "$LOCK/owner" && date +%s > "$LOCK/started" ;;
+esac
+`,
+		{ mode: 0o755 },
+	);
+
+	const out = await new Promise<string>((resolve, reject) => {
+		const child = spawn("/bin/sh", ["-s"], {
+			env: { HOME: f.home, LOCK: lock, RACED: join(f.root, "raced"), PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin` },
+			stdio: ["pipe", "pipe", "inherit"],
+		});
+		let text = "";
+		child.stdout.setEncoding("utf8").on("data", (chunk: string) => (text += chunk));
+		child.once("error", reject);
+		child.once("close", () => resolve(text));
+		child.stdin.end(lockScript({ home: f.home, token: "00112233aabbccdd" }, "stealer"));
+	});
+
+	assert.match(out, /WHITEBOARD-INSTALL BUSY winner/);
+	assert.equal(await readFile(join(lock, "token"), "utf8"), "fedcba9876543210\n");
+});
+
+test("a long npm step and a long upload keep the lock fresh, so a second install waits", async (t) => {
+	for (const slow of ["npm", "upload"] as const) {
+		const f = await fixture(t);
+		const npm = join(f.root, "slow-npm");
+		await writeFile(npm, `#!/bin/sh\nsleep 5\nexec ${shellQuote(join(dirname(process.execPath), "npm"))} "$@"\n`, { mode: 0o755 });
+		const timeouts = { lockPoll: 100, lockStale: 3000 };
+		const first = installRemote(
+			f.input({
+				timeouts,
+				...(slow === "npm" ? { probe: { ...f.probe, npm } } : { spawn: localRemote(f.home, 5) }),
+			}),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 500));
+		const second = installRemote(f.input({ timeouts }));
+
+		const [a, b] = await Promise.all([first, second]);
+
+		assert.deepEqual(a, b, slow);
+		assert.deepEqual(
+			f.progress.filter((p) => p.step !== "verifying" && p.step !== "done"),
+			[{ step: "package", via: "upload" }, { step: "waiting-for-lock" }],
+			slow,
+		);
+	}
+});
+
+test("an abort during an upload is an AbortError", async (t) => {
+	const f = await fixture(t);
+	const abort = new AbortController();
+
+	await assert.rejects(
+		installRemote(
+			f.input({
+				spawn: localRemote(f.home, 5),
+				signal: abort.signal,
+				onProgress: (step) => void (step.step === "package" && setTimeout(() => abort.abort(), 300)),
+			}),
+		),
+		{ name: "AbortError" },
+	);
+	assert.ok(!(await f.versions()).includes(VERSION));
+});
+
+test("a marker whose integrity only contains the pin is not complete", async (t) => {
+	const f = await fixture(t);
+	const result = await installRemote(f.input());
+	const marker = join(dirname(result.launcher), REVIEW_REMOTE_INSTALL_MARKER);
+	const text = await readFile(marker, "utf8");
+	await writeFile(marker, text.replace(f.pack.integrity, `${f.pack.integrity}x`));
+	f.progress.length = 0;
+
+	await installRemote(f.input());
+
+	assert.ok(f.progress.some((p) => p.step === "package"));
+	assert.equal(JSON.parse(await readFile(marker, "utf8")).integrity, f.pack.integrity);
+});
+
+test("a Node path with a quote is refused before anything runs", async (t) => {
+	const f = await fixture(t);
+
+	await assert.rejects(
+		installRemote(f.input({ probe: { ...f.probe, node: { path: '/opt/no"de/bin/node', version: "24.18.0" } } })),
+		/Whiteboard cannot install on devbox: .* holds a quote or backslash/,
+	);
+	assert.deepEqual(await readdir(f.home), []);
 });

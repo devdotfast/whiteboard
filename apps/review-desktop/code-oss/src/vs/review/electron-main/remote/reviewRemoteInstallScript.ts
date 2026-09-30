@@ -68,10 +68,11 @@ own() {
 	date +%s > "$lock/started"
 }
 guard() {
-	"$@" &
+	if command -v setsid >/dev/null 2>&1; then setsid "$@" & else "$@" & fi
 	pid=$!
 	while kill -0 "$pid" 2>/dev/null; do
-		printf '.\\n' >&3 2>/dev/null || { kill "$pid" 2>/dev/null; exit 3; }
+		printf '.\\n' >&3 2>/dev/null || { kill -TERM -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null; exit 3; }
+		[ "$(cat "$lock/token" 2>/dev/null)" = "$token" ] && date +%s > "$lock/started"
 		sleep 1
 	done
 	wait "$pid"
@@ -92,6 +93,8 @@ take() {
 	exit 0
 }
 take
+# The token first: a takeover completed between the two reads leaves "started" fresh.
+held=$(cat "$lock/token" 2>/dev/null)
 started=$(cat "$lock/started" 2>/dev/null)
 case "$started" in
 ''|*[!0-9]*)
@@ -99,7 +102,6 @@ case "$started" in
 	if [ -n "$(find "$lock" -prune -mmin +${staleMinutes} 2>/dev/null)" ]; then started=0; else started=$(date +%s); fi ;;
 esac
 if [ $(( $(date +%s) - started )) -ge ${staleSeconds} ]; then
-	held=$(cat "$lock/token" 2>/dev/null)
 	stale="$root/install.lock.$token.stale"
 	if mv "$lock" "$stale" 2>/dev/null; then
 		# Another install may have taken it over first: give that one back.
@@ -108,6 +110,13 @@ if [ $(( $(date +%s) - started )) -ge ${staleSeconds} ]; then
 	take
 fi
 say BUSY "$(cat "$lock/owner" 2>/dev/null)"
+`;
+}
+
+/** Keeps the lock fresh while the laptop uploads; `guard` does the same for commands on the remote. */
+export function refreshScript(context: ReviewRemoteInstallContext): string {
+	return `${prelude(context)}own
+say REFRESHED
 `;
 }
 
@@ -136,7 +145,7 @@ mkdir -p "$root/versions" "$root/node" || fail cannot create "$root/versions"
 v=${shellQuote(reviewRemoteVersionDir(context.home, input.version))}
 m="$v/${REVIEW_REMOTE_INSTALL_MARKER}"
 complete=
-if [ -f "$m" ] && grep -qF ${shellQuote(`"integrity":"${input.integrity}"`)} "$m"; then
+if [ -f "$m" ] && [ "$(sed -n 's/.*"integrity":"\\([^"]*\\)".*/\\1/p' "$m")" = ${shellQuote(input.integrity)} ]; then
 	node=$(sed -n 's/.*"node":"\\([^"]*\\)".*/\\1/p' "$m")
 	cli=$(sed -n 's/.*"cli":"\\([^"]*\\)".*/\\1/p' "$m")
 	[ -x "$node" ] && [ -f "$cli" ] && complete=1

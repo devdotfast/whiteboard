@@ -19,6 +19,7 @@ import {
 	packageTarball,
 	partScript,
 	prepareScript,
+	refreshScript,
 	releaseScript,
 	REVIEW_REMOTE_INSTALL_SAY,
 	REVIEW_REMOTE_LOCK_STALE_SECONDS,
@@ -52,6 +53,8 @@ export const REVIEW_REMOTE_INSTALL_TIMEOUTS = {
 	diffr: 60_000,
 	/** Waiting for another install's lock. */
 	lockWait: REVIEW_REMOTE_LOCK_STALE_SECONDS * 1000,
+	/** A lock not refreshed for this long is taken over; uploads refresh it every fifth of this. */
+	lockStale: REVIEW_REMOTE_LOCK_STALE_SECONDS * 1000,
 	lockPoll: 2_000,
 	/** Releasing the lock, also after an abort. */
 	release: 15_000,
@@ -75,8 +78,6 @@ export interface ReviewRemoteInstallInput {
 	/** Shown to another install that finds the lock taken. */
 	readonly owner?: string;
 	readonly timeouts?: Partial<typeof REVIEW_REMOTE_INSTALL_TIMEOUTS>;
-	/** Tests only. */
-	readonly startRelay?: () => Promise<ReviewRegistryRelay>;
 }
 
 export interface ReviewRemoteInstallResult {
@@ -102,9 +103,13 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 	const timeouts = { ...REVIEW_REMOTE_INSTALL_TIMEOUTS, ...input.timeouts };
 	const alias = session.alias;
 	signal.throwIfAborted();
-	if (/['"\\]/.test(probe.home)) throw new Error(`Whiteboard cannot install under ${JSON.stringify(probe.home)}: the path holds a quote or backslash.`);
+	// The marker is JSON read back with sed: no quote or backslash in any path it holds.
+	for (const path of [probe.home, probe.node?.path, probe.npm]) {
+		if (path && /['"\\]/.test(path)) throw new Error(`Whiteboard cannot install on ${alias}: ${JSON.stringify(path)} holds a quote or backslash.`);
+	}
 	if (!VERSION.test(input.version)) throw new Error(`${JSON.stringify(input.version)} is not a version.`);
 	const { integrity, sha512, nodeVersion, nodeSha256 } = pinned(input.artifacts);
+	if (!input.artifacts.node.name.endsWith(`-${input.target}.tar.xz`)) throw new Error(`${input.artifacts.node.name} is not the Node for ${input.target}.`);
 
 	const context: ReviewRemoteInstallContext = { home: probe.home, token: randomBytes(8).toString("hex") };
 	const owner = (input.owner ?? hostname()).replace(/[^\w.-]/g, "-").slice(0, 64) || "unknown";
@@ -149,7 +154,7 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 		const deadline = Date.now() + timeouts.lockWait;
 		let told = false;
 		for (;;) {
-			const says = await run("taking the install lock", lockScript(context, owner));
+			const says = await run("taking the install lock", lockScript(context, owner, Math.ceil(timeouts.lockStale / 1000)));
 			if (says.has("LOCKED")) return;
 			const holder = says.get("BUSY");
 			if (holder === undefined) throw says.failure();
@@ -173,6 +178,8 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 
 		const { node, npm } = await ensureNode(prepared.has("MANAGED-NODE"));
 		await placePackage(node, npm);
+		if (relay) await closeRelay(relay);
+		relay = undefined;
 
 		input.onProgress({ step: "verifying" });
 		const verified = await run("verifying", verifyScript(context, { version: input.version, node }));
@@ -267,14 +274,23 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 			if (downloaded.has("DOWNLOADED")) return;
 		}
 		input.onProgress({ step, via: "upload" });
+		// An abort stops waiting; the download itself finishes into the cache, verified, for next time.
 		const local = await abortable(fetchToLaptopCache(artifact, { cacheDirectory: input.cacheDirectory }), signal);
-		await uploadFile(session, local, file, { spawn: tracked, env: input.env });
-		signal.throwIfAborted();
+		// The upload runs no script of ours, so the lock is refreshed beside it.
+		const refresh = setInterval(() => void runSsh(tracked, input.env, sshExecArgs(session, input.env), timeouts.step, refreshScript(context)), timeouts.lockStale / 5);
+		try {
+			await uploadFile(session, local, file, { spawn: tracked, env: input.env });
+		} catch (error) {
+			signal.throwIfAborted();
+			throw error;
+		} finally {
+			clearInterval(refresh);
+		}
 	}
 
 	/** The relay, forwarded to a port the remote picks; its address on the remote. */
 	async function startRelay(): Promise<string> {
-		const server = await (input.startRelay ?? startRegistryRelay)();
+		const server = await startRegistryRelay();
 		relay = { server, forwarded: false };
 		const result = await runSsh(tracked, input.env, sshRemoteForwardArgs(session, server.port, "forward", input.env), timeouts.step);
 		signal.throwIfAborted();
@@ -337,10 +353,14 @@ function answer(alias: string, what: string, result: RunResult, timeout: number)
 	};
 }
 
+/** The probe's rule for a path read off the remote: absolute, bounded, no control characters. */
+const remotePath = (value: unknown): value is string =>
+	typeof value === "string" && value.startsWith("/") && value.length <= 4096 && !/[\x00-\x1f\x7f-\x9f]/.test(value);
+
 function readMarker(text: string | undefined): { node: string; cli: string } | undefined {
 	try {
 		const marker = JSON.parse(text ?? "") as { node?: unknown; cli?: unknown };
-		if (typeof marker.node === "string" && typeof marker.cli === "string" && marker.node.startsWith("/") && marker.cli.startsWith("/")) {
+		if (remotePath(marker.node) && remotePath(marker.cli)) {
 			return { node: marker.node, cli: marker.cli };
 		}
 	} catch {
