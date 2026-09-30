@@ -14,7 +14,7 @@ export const options = {};
 
 const TITLE = "Canvas resume review";
 
-const TUTORIAL = "Review Desktop: three-minute tour";
+const TUTORIAL = "Whiteboard Desktop: three-minute tour";
 
 const trace = (label) => ({
   label,

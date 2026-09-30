@@ -21,7 +21,7 @@ export async function run(ctx) {
   await ctx.page
     .getByRole("option", { name: /Whiteboard: Open Tutorial/ })
     .click();
-  let page = await ctx.apiCanvasFor("Review Desktop: three-minute tour");
+  let page = await ctx.apiCanvasFor("Whiteboard Desktop: three-minute tour");
 
   const tab = (label) =>
     page.locator(`[aria-label="Session views"] button[aria-label="${label}"]`);
