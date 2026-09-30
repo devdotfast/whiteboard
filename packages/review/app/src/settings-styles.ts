@@ -118,6 +118,11 @@ export const settingsStyles = stylex.create({
     display: "flex",
     gap: "8px",
   },
+  link: {
+    color: tokens.accent,
+    textDecoration: "underline",
+    textUnderlineOffset: "3px",
+  },
   prompt: {
     display: "flex",
     flexDirection: "column",

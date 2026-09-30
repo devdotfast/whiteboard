@@ -278,7 +278,9 @@ export function DiffrConfigSection({
                     </SettingRow>
                     <p {...stylex.props(styles.rowDescription)}>
                       {draft.provider !== provider(config)
-                        ? `Saving clears the key saved for ${PROVIDER_LABELS[provider(config)]}.`
+                        ? config.credentialSource === "config"
+                          ? `Saving clears the key saved for ${PROVIDER_LABELS[provider(config)]}.`
+                          : `Enter a key for ${PROVIDER_LABELS[draft.provider]}, or leave blank to use its environment variable.`
                         : `${
                             config.credentialSource === "config"
                               ? "Saved key"
@@ -342,6 +344,7 @@ export function DiffrConfigSection({
                       to summarize.{" "}
                       {config.defaultPromptUrl && (
                         <a
+                          {...stylex.props(styles.link)}
                           href={config.defaultPromptUrl}
                           target="_blank"
                           rel="noreferrer"

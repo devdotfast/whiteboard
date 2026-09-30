@@ -45,8 +45,8 @@ function config(): ReviewDiffrConfig {
   };
 }
 
-async function mount() {
-  const current = config();
+async function mount(overrides: Partial<ReviewDiffrConfig> = {}) {
+  const current = { ...config(), ...overrides };
 
   const actions: ReviewDiffrConfigActions = {
     read: vi.fn<ReviewDiffrConfigActions["read"]>(async () => current),
@@ -344,4 +344,20 @@ test("edits the prompt, links its default, and resets it", async () => {
   await expect
     .element(page.getByRole("button", { name: "Save summaries" }))
     .toBeDisabled();
+});
+
+test("switching provider without a saved key does not promise to clear one", async () => {
+  await mount({ credentialSource: "missing" });
+  await open();
+  await act(async () => {
+    await page.getByRole("radio", { name: "OpenAI" }).click();
+  });
+  await expect
+    .element(
+      page.getByText(
+        "Enter a key for OpenAI, or leave blank to use its environment variable.",
+      ),
+    )
+    .toBeVisible();
+  expect(document.body.textContent).not.toContain("Saving clears");
 });
