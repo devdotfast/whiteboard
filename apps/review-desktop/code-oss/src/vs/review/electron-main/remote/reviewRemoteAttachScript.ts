@@ -13,7 +13,7 @@ export const REVIEW_REMOTE_ATTACH_SCRIPT = `wb=$(command -v whiteboard 2>/dev/nu
 case "$wb" in /*) ;; *) wb= ;; esac
 if [ -z "$wb" ] && [ -x "$HOME/.local/bin/whiteboard" ]; then wb="$HOME/.local/bin/whiteboard"; fi
 if [ -z "$wb" ] && [ -n "$SHELL" ]; then
-	wb=$("$SHELL" -lic 'command -v whiteboard' </dev/null 2>/dev/null | tr -d '\\r' | grep '^/' | tail -n 1)
+	wb=$("$SHELL" -lic 'command -v whiteboard' </dev/null 2>/dev/null | tr -d '\\r' | grep '^/.*/whiteboard$' | tail -n 1)
 fi
 if [ -z "$wb" ] || [ ! -x "$wb" ]; then exit 127; fi
 PATH="\${wb%/*}:$PATH"
