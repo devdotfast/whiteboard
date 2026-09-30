@@ -581,7 +581,8 @@ export function AskPanelContent({
 
   // The server saves a conversation once the agent starts it and dates it
   // by its last turn, so the document's marks and the history follow.
-  const refreshHistory = useAskHistory()?.refresh;
+  const history = useAskHistory();
+  const refreshHistory = history?.refresh;
   const status = thread?.status;
 
   useEffect(() => {
@@ -742,9 +743,14 @@ export function AskPanelContent({
       ? `Whiteboard lost its connection to ${thread?.agentName ?? chosenName}.`
       : null);
 
+  // Saved once its agent started a session; before that, nothing reopens it.
+  const unsaved =
+    threadId !== null &&
+    history?.entries?.some((entry) => entry.id === threadId) === false;
+
   // The conversation is saved, so a lost one reopens where it stopped.
   const reconnect =
-    lost && threadId && panels
+    lost && threadId && panels && !unsaved
       ? () =>
           panels.getState().openAskView({
             type: "saved",
@@ -764,6 +770,14 @@ export function AskPanelContent({
             setRequestError(error.message),
           );
         }
+      : undefined;
+
+  // Nothing to reopen, or it could not be: ask about the selection anew.
+  const startOver =
+    panels &&
+    ((lost && unsaved) ||
+      (savedThreadId !== undefined && requestError !== null && !thread))
+      ? () => panels.getState().openAsk(selection, thread?.agent ?? agent)
       : undefined;
 
   // Reopening starts the agent and loads its session. Whiteboard's saved
@@ -862,15 +876,19 @@ export function AskPanelContent({
             ) : error ? (
               <p {...stylex.props(styles.error)} role="alert">
                 {error}
-                {reconnect || retry ? (
+                {reconnect || retry || startOver ? (
                   <>
                     {" "}
                     <button
                       type="button"
                       {...stylex.props(styles.errorAction)}
-                      onClick={reconnect ?? retry}
+                      onClick={reconnect ?? retry ?? startOver}
                     >
-                      {reconnect ? "Reconnect" : "Try again"}
+                      {reconnect
+                        ? "Reconnect"
+                        : retry
+                          ? "Try again"
+                          : "Start a new chat"}
                     </button>
                   </>
                 ) : null}
@@ -920,7 +938,7 @@ export function AskPanelContent({
                 : "Loading the conversation…"
               : composerStatus(thread, busy)}
           </span>
-          {busy && threadId && !connecting ? (
+          {busy && threadId ? (
             <button
               type="button"
               {...stylex.props(styles.send, styles.stop)}
@@ -1260,6 +1278,8 @@ function AskPermission({
             key={option.optionId}
             type="button"
             title={option.name}
+            // A thread that stopped no longer waits on the answer.
+            disabled={thread.status !== "waiting"}
             {...stylex.props(
               permissionStyles.option,
               option.kind === "allow_once" && permissionStyles.allowOnce,

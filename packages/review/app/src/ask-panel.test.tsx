@@ -821,3 +821,225 @@ it("says how to sign a signed-out agent back in, and tries again once it is", as
     vi.unstubAllGlobals();
   }
 });
+
+it("offers a new chat when a conversation cannot be reopened: one lost before it was saved, or one the server no longer has", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const session = testReviewSession();
+  let stream!: ReadableStreamDefaultController<Uint8Array>;
+
+  vi.spyOn(session, "fetch").mockImplementation(async (endpoint, init) => {
+    if (endpoint === "/ask/agents")
+      return Response.json({
+        agents: [{ id: "claude", name: "Claude Code", available: true }],
+      });
+
+    if (endpoint === "/ask/threads") return Response.json({ threads: [] });
+
+    if (endpoint === "/ask") return Response.json({ threadId: "thread" });
+
+    if (endpoint === "/ask/thread/watch")
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            stream = controller;
+          },
+        }),
+      );
+
+    if (endpoint === "/ask/gone/open")
+      return Response.json(
+        { error: "This conversation was not found." },
+        { status: 404 },
+      );
+
+    return Response.json({ ok: true }, { status: init?.method ? 200 : 404 });
+  });
+
+  let view: unknown;
+
+  function Probe() {
+    view = useReviewPanel(({ active }) =>
+      active?.kind === "ask" ? active.view : null,
+    );
+
+    return null;
+  }
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  const render = (savedThreadId?: string) =>
+    root.render(
+      <ReviewSessionProvider session={session}>
+        <ReviewPanelProvider>
+          <AskHistoryProvider>
+            <AskPanelContent
+              key={savedThreadId}
+              selection={selection}
+              agent="claude"
+              savedThreadId={savedThreadId}
+            />
+            <Probe />
+          </AskHistoryProvider>
+        </ReviewPanelProvider>
+      </ReviewSessionProvider>,
+    );
+
+  try {
+    await act(async () => render());
+
+    const textarea = container.querySelector("textarea")!;
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      )!.set!.call(textarea, "Is this safe?");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () =>
+      textarea.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+    );
+
+    const push = (update: AskUpdate) =>
+      stream.enqueue(new TextEncoder().encode(JSON.stringify(update) + "\n"));
+
+    // The agent never started a session, so Whiteboard saved nothing.
+    await act(async () =>
+      push({
+        seq: 0,
+        snapshot: state({
+          status: "starting",
+          entries: [{ kind: "user", id: "q", text: "Is this safe?" }],
+        }),
+      }),
+    );
+    await act(async () => stream.close());
+    await act(async () => new Promise((resolve) => setTimeout(resolve)));
+
+    expect(buttonNamed(container, "Reconnect")).toBeNull();
+    await act(async () => buttonNamed(container, "Start a new chat")!.click());
+    expect(view).toMatchObject({ type: "new", selection, agent: "claude" });
+
+    // A saved conversation the server no longer has.
+    await act(async () => render("gone"));
+    await act(async () => new Promise((resolve) => setTimeout(resolve)));
+
+    expect(container.textContent).toContain("This conversation was not found.");
+    await act(async () => buttonNamed(container, "Start a new chat")!.click());
+    expect(view).toMatchObject({ type: "new", selection, agent: "claude" });
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("stops a conversation while it reopens, and takes no answer to a permission once it has stopped", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const session = testReviewSession();
+  let stream!: ReadableStreamDefaultController<Uint8Array>;
+
+  const fetch = vi
+    .spyOn(session, "fetch")
+    .mockImplementation(async (endpoint, init) => {
+      if (endpoint === "/ask/agents")
+        return Response.json({
+          agents: [{ id: "claude", name: "Claude Code", available: true }],
+        });
+
+      if (endpoint === "/ask/saved/open")
+        return Response.json({ threadId: "saved" });
+
+      if (endpoint === "/ask/saved/watch")
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              stream = controller;
+            },
+          }),
+        );
+
+      return Response.json({ ok: true }, { status: init?.method ? 200 : 404 });
+    });
+
+  const push = (update: AskUpdate) =>
+    stream.enqueue(new TextEncoder().encode(JSON.stringify(update) + "\n"));
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  const saved = [
+    { kind: "user" as const, id: "q", text: "Is this safe?" },
+    { kind: "agent" as const, id: "a", text: "It is." },
+  ];
+
+  try {
+    await act(async () =>
+      root.render(
+        <ReviewSessionProvider session={session}>
+          <AskPanelContent
+            selection={selection}
+            agent="claude"
+            savedThreadId="saved"
+          />
+        </ReviewSessionProvider>,
+      ),
+    );
+    await act(async () =>
+      push({
+        seq: 0,
+        snapshot: state({ id: "saved", status: "starting", entries: saved }),
+      }),
+    );
+
+    // Loading the conversation can be stopped like an answer.
+    await act(async () => buttonNamed(container, "Stop")!.click());
+    expect(
+      fetch.mock.calls.filter(([called]) => called === "/ask/saved/cancel"),
+    ).toHaveLength(1);
+
+    await act(async () =>
+      push({
+        seq: 1,
+        snapshot: state({
+          id: "saved",
+          status: "failed",
+          error: "Claude Code stopped.",
+          entries: [
+            ...saved,
+            {
+              kind: "permission",
+              id: "call",
+              title: "Run npm test",
+              toolKind: "execute",
+              options: [
+                { optionId: "allow", name: "Allow once", kind: "allow_once" },
+                { optionId: "deny", name: "Deny", kind: "reject_once" },
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+
+    const options = [
+      ...container.querySelectorAll<HTMLButtonElement>(
+        'section[aria-label="Permission request"] button',
+      ),
+    ];
+
+    expect(options).toHaveLength(2);
+    expect(options.every((option) => option.disabled)).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
