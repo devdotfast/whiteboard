@@ -50,6 +50,8 @@ export const REQUIRED_RUNTIME_ENTRIES = [
   RUNTIME_CLI_ENTRY,
   `bin/${diffrName}`,
   "dist/cli.js",
+  // The build's commit; without it the server reports `commit: null`.
+  "dist/build-info.json",
   "instructions/authoring.md",
   "tutorial/runtime-manifest.json",
   "node_modules",
