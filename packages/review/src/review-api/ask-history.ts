@@ -105,6 +105,14 @@ export class AskHistory {
       );
   }
 
+  /** Points a conversation at a new session, when its agent could not
+   * reopen the one it had. */
+  updateSession(id: string, sessionId: string) {
+    this.db
+      .prepare("UPDATE ask_conversations SET session_id=? WHERE id=?")
+      .run(sessionId, id);
+  }
+
   /** Keeps what the panel shows, so a reopen need not wait on the agent. */
   saveEntries(id: string, entries: AskEntry[]) {
     this.db

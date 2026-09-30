@@ -11,6 +11,7 @@ import {
   type SessionConfigOption,
   type SessionNotification,
   type SessionUpdate,
+  type StopReason,
   type ToolCallUpdate,
   type ToolKind,
   client,
@@ -37,7 +38,6 @@ import {
 } from "@review/ask/thread-state.js";
 import { z } from "zod";
 
-/** Kinds an Ask agent may never be allowed to run: Ask reads, it does not change. */
 /** Refused without asking: changes to files, and leaving the read-only
  * mode (Claude asks to exit plan mode with its plan). */
 const REFUSED_KINDS = new Set<ToolKind>([
@@ -93,7 +93,11 @@ interface AskThreadBase {
   cwd: string;
   head: string;
   selection: { title: string; quote?: string };
-  /** The agent created its session: the id a later reopen loads. */
+  /** What the agent reads before a session's first question: the selection
+   * and how to find the review. */
+  context: string;
+  /** The agent created a session: the id a later reopen loads. A new one
+   * replaces a session the agent could not reopen. */
   onSession?: (sessionId: string) => void;
   /** A turn ended. */
   onTurn?: () => void;
@@ -109,11 +113,7 @@ interface AskThreadBase {
 /** A new conversation, or an earlier one to load from the agent. */
 export type AskThreadStart = AskThreadBase &
   (
-    | {
-        /** What the agent reads before the first question: the selection and how to find the review. */
-        context: string;
-        question: string;
-      }
+    | { question: string }
     | {
         resume: {
           sessionId: string;
@@ -298,6 +298,24 @@ function signedOut(error: unknown): error is RequestError {
   );
 }
 
+/** How long an agent may take to start and open its session. */
+const START_TIMEOUT_MS = 60_000;
+
+/** How long a turn may run on after Stop before Whiteboard stops its agent.
+ * Claude's adapter ends a wedged turn itself after 30 seconds; Codex's does not. */
+const STOP_GRACE_MS = 15_000;
+
+/** How long an agent may take to start, and to stop a turn when asked. */
+export interface AskThreadLimits {
+  startMs: number;
+  stopGraceMs: number;
+}
+
+const askThreadLimits: AskThreadLimits = {
+  startMs: START_TIMEOUT_MS,
+  stopGraceMs: STOP_GRACE_MS,
+};
+
 /** One Ask conversation: an agent process and one ACP session in the review's checkout. */
 export class AskThread {
   readonly id: string;
@@ -312,6 +330,10 @@ export class AskThread {
   >();
   private process?: AskAgentProcess;
   private connection?: ClientConnection;
+  /** Counts connections, so a start that was given up on cannot take over. */
+  private generation = 0;
+  /** What the last agent process said on stderr, once it is gone. */
+  private stderr = "";
   private sessionId?: string;
   private closed = false;
   /** The MCP server behind each tool call an adapter reported one for. */
@@ -326,14 +348,30 @@ export class AskThread {
   private shown: boolean;
   /** The config option that sets each choice the agent offers. */
   private readonly configIds = new Map<AskChoiceKind, string>();
+  /** The model and effort in use, which a new agent process starts with. */
+  private readonly picks: AskPicks;
+  /** The question being answered, until its turn ends; after a failure,
+   * the one trying again asks. */
+  private asking?: string;
+  /** The session has not had the selection yet: a new conversation, or a
+   * new session for one the agent could not reopen. */
+  private needsContext: boolean;
+  /** The agent could not reopen the session, for a reason signing in would
+   * not fix, so trying again starts a new one. */
+  private unloadable = false;
+  /** Stop ended the agent itself: a start, or a turn that would not stop. */
+  private halted = false;
+  private stopTimer?: ReturnType<typeof setTimeout>;
 
   constructor(
     private readonly launch: AskAgentLauncher,
     private readonly start: AskThreadStart,
     mcpServers: AskMcpServers = () => [],
+    private readonly limits: AskThreadLimits = askThreadLimits,
   ) {
     this.id = start.id ?? randomUUID();
     this.mcpServers = mcpServers();
+    this.picks = { ...start.picks };
     this.state = {
       id: this.id,
       agent: start.agent,
@@ -345,7 +383,10 @@ export class AskThread {
       selection: start.selection,
       entries: ("resume" in start && start.resume.entries) || [],
     };
+
+    if ("resume" in start) this.sessionId = start.resume.sessionId;
     this.shown = "resume" in start && Boolean(start.resume.entries);
+    this.needsContext = !("resume" in start);
   }
 
   get reviewId() {
@@ -372,82 +413,81 @@ export class AskThread {
   async open() {
     const start = this.start;
 
-    try {
-      if ("resume" in start) {
+    if ("resume" in start) {
+      await this.attempt(async () => {
         await this.connect();
         this.emit({ type: "set", status: "idle" });
+      });
 
-        return;
-      }
+      return;
+    }
 
-      this.addUser(start.question);
+    this.asking = this.addUser(start.question);
+    await this.attempt(async () => {
       await this.connect();
-      await this.prompt(withContext(start.context, start.question));
-    } catch (error) {
-      this.fail(error);
+      await this.prompt(start.question);
+    });
+  }
+
+  /** Why a question cannot be asked now, if it cannot. */
+  askRefusal(): string | undefined {
+    switch (this.state.status) {
+      case "idle":
+        return undefined;
+      case "failed":
+        return `${this.state.agentName} stopped. Try again first.`;
+      default:
+        return "The agent is still answering.";
     }
   }
 
+  /** Asks a follow-up, starting the agent again if it has stopped since. */
   async ask(question: string) {
-    if (this.state.status !== "idle")
-      throw new Error("The agent is still answering.");
+    const refusal = this.askRefusal();
 
-    this.addUser(question);
+    if (refusal) throw new Error(refusal);
 
-    try {
-      await this.prompt([{ type: "text", text: question }]);
-    } catch (error) {
-      this.fail(error);
-    }
+    this.asking = this.addUser(question);
+    await this.attempt(async () => {
+      await this.reconnect();
+      await this.prompt(question);
+    });
   }
 
   /** Starts the agent again after it failed, as when its login lapsed, and
-   * asks again the question it did not answer. */
+   * asks again the question it did not answer, if one failed. */
   async retry() {
     if (this.state.status !== "failed")
       throw new Error("Only a conversation that failed can try again.");
 
-    this.connection?.close();
-    this.process?.stop();
-    this.connection = undefined;
-    this.process = undefined;
+    this.disconnect();
 
-    // What the failed turn left, such as the agent's own login notice.
-    const asked = this.state.entries.findLastIndex(
-      (entry) => entry.kind === "user",
+    const asked = this.state.entries.findIndex(
+      (entry) => entry.kind === "user" && entry.id === this.asking,
     );
 
-    const unanswered = this.state.entries[asked];
-    const partial = this.state.entries.slice(asked + 1);
+    const question = this.state.entries[asked];
 
-    if (unanswered && partial.length)
+    // What the failed turn left, such as the agent's own login notice. A
+    // reopen that failed left nothing: its last answer stays.
+    const partial = asked === -1 ? [] : this.state.entries.slice(asked + 1);
+
+    if (partial.length)
       this.emit({ type: "remove", ids: partial.map((entry) => entry.id) });
-    this.emit({ type: "set", status: "starting", error: null, signIn: null });
 
-    try {
+    if (this.unloadable) {
+      this.unloadable = false;
+      this.sessionId = undefined;
+      this.needsContext = true;
+    }
+
+    this.emit({ type: "set", status: "starting", error: null, signIn: null });
+    await this.attempt(async () => {
       await this.connect();
 
-      if (unanswered?.kind !== "user") {
-        this.emit({ type: "set", status: "idle" });
-
-        return;
-      }
-
-      const start = this.start;
-
-      // The first question carries the selection, as it did when asked.
-      const first =
-        this.state.entries.findIndex((entry) => entry.kind === "user") ===
-        asked;
-
-      await this.prompt(
-        first && !("resume" in start)
-          ? withContext(start.context, unanswered.text)
-          : [{ type: "text", text: unanswered.text }],
-      );
-    } catch (error) {
-      this.fail(error);
-    }
+      if (question?.kind === "user") await this.prompt(question.text);
+      else this.emit({ type: "set", status: "idle" });
+    });
   }
 
   decide(permissionId: string, optionId: string) {
@@ -459,15 +499,34 @@ export class AskThread {
     return true;
   }
 
+  /** Stops the turn, or the start, in progress. A turn the agent does not
+   * end soon after is ended by stopping the agent. */
   async cancel() {
     // ACP: the Client answers every pending permission request as cancelled.
     for (const resolve of this.decisions.values())
       resolve({ outcome: { outcome: "cancelled" } });
 
-    if (this.sessionId && this.connection)
-      await this.connection.agent.notify(methods.agent.session.cancel, {
-        sessionId: this.sessionId,
-      });
+    const { status } = this.state;
+
+    if (status === "starting") {
+      this.halt();
+
+      return;
+    }
+
+    const { connection, sessionId } = this;
+
+    if ((status !== "running" && status !== "waiting") || !connection) return;
+
+    clearTimeout(this.stopTimer);
+    this.stopTimer = setTimeout(() => {
+      if (this.connection === connection) this.halt();
+    }, this.limits.stopGraceMs);
+
+    if (sessionId)
+      await connection.agent
+        .notify(methods.agent.session.cancel, { sessionId })
+        .catch(() => {});
   }
 
   close() {
@@ -482,9 +541,15 @@ export class AskThread {
       this.state.status !== "failed"
     )
       this.start.onSave?.(settled(this.state.entries));
-    void this.cancel().catch(() => {});
-    this.connection?.close();
-    this.process?.stop();
+
+    for (const resolve of this.decisions.values())
+      resolve({ outcome: { outcome: "cancelled" } });
+
+    if (this.connection && this.sessionId)
+      void this.connection.agent
+        .notify(methods.agent.session.cancel, { sessionId: this.sessionId })
+        .catch(() => {});
+    this.disconnect();
     this.listeners.clear();
 
     for (const closed of this.closers) closed();
@@ -504,28 +569,122 @@ export class AskThread {
     return () => this.closers.delete(closed);
   }
 
+  /** Runs a step that talks to the agent; failures land in the state. */
+  private async attempt(step: () => Promise<void>) {
+    this.halted = false;
+
+    try {
+      await step();
+    } catch (error) {
+      if (this.closed) return;
+
+      if (this.halted) this.stopped();
+      else this.fail(error);
+    }
+  }
+
+  /** Stop ended the agent before a turn could: nothing is running now, and
+   * the next question starts the agent again. */
+  private stopped() {
+    this.halted = false;
+
+    if (this.asking)
+      this.push({
+        kind: "notice",
+        id: randomUUID(),
+        severity: "info",
+        title: "Stopped here.",
+      });
+    this.asking = undefined;
+    this.emit({ type: "set", status: "idle", error: null });
+  }
+
+  /** Ends the agent process, failing whatever was waiting on it. */
+  private halt() {
+    this.halted = true;
+    this.disconnect();
+  }
+
+  private disconnect() {
+    this.generation += 1;
+    clearTimeout(this.stopTimer);
+
+    if (this.process) this.stderr = this.process.diagnostics();
+    this.connection?.close();
+    this.process?.stop();
+    this.connection = undefined;
+    this.process = undefined;
+  }
+
+  /** Starts the agent again if it stopped since the last turn. */
+  private async reconnect() {
+    if (this.connection && !this.connection.signal.aborted) return;
+
+    this.disconnect();
+    this.emit({ type: "set", status: "starting" });
+    await this.connect();
+  }
+
+  /** Starts the agent and opens the session, or gives up after a while. */
   private async connect() {
-    this.process = await this.launch(this.start.agent, this.start.cwd);
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
-    // Closed while the process started: close() had nothing to stop yet.
-    if (this.closed) {
-      this.process.stop();
+    const expired = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new Error(
+              `${this.state.agentName} did not start within ${Math.round(this.limits.startMs / 1000)} seconds.`,
+            ),
+          ),
+        this.limits.startMs,
+      );
+    });
 
-      return;
+    const starting = this.startAgent();
+
+    // A start given up on fails later, once its agent is stopped.
+    starting.catch(() => {});
+
+    try {
+      await Promise.race([starting, expired]);
+    } catch (error) {
+      this.disconnect();
+
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async startAgent() {
+    const generation = ++this.generation;
+    const launched = await this.launch(this.start.agent, this.start.cwd);
+
+    // Closed, stopped or given up on while the process started.
+    if (this.closed || this.halted || generation !== this.generation) {
+      launched.stop();
+
+      throw new Error(`${this.state.agentName} was stopped while it started.`);
     }
 
+    this.process = launched;
+
     // Advertise no file system or terminal: the agent reads the checkout itself.
-    this.connection = this.process.connect(
+    const connection = launched.connect(
       client({ name: "whiteboard" })
-        .onRequest(methods.client.session.requestPermission, ({ params }) =>
-          this.requestPermission(params),
+        .onRequest(
+          methods.client.session.requestPermission,
+          ({ params, signal }) => this.requestPermission(params, signal),
         )
         .onNotification(methods.client.session.update, ({ params }) =>
           this.update(params),
         ),
     );
 
-    const agent = this.connection.agent;
+    this.connection = connection;
+
+    const agent = connection.agent;
 
     const initialized = await agent.request(methods.agent.initialize, {
       protocolVersion: PROTOCOL_VERSION,
@@ -536,6 +695,8 @@ export class AskThread {
     });
 
     const session = await this.session(
+      connection,
+      generation,
       initialized.agentCapabilities?.loadSession === true,
     );
 
@@ -572,7 +733,7 @@ export class AskThread {
     // The model first: the efforts on offer depend on it. A pick the agent
     // no longer offers keeps its default.
     for (const kind of askChoiceKinds) {
-      const picked = this.start.picks?.[kind];
+      const picked = this.picks[kind];
       const select = this.state.choices?.[kind];
 
       if (
@@ -584,10 +745,20 @@ export class AskThread {
     }
   }
 
-  /** Answers the next question with another model or effort. */
+  /** Answers the next question with another model or effort, starting the
+   * agent again if it has stopped since. */
   async choose(kind: AskChoiceKind, value: string) {
     if (this.state.status !== "idle")
       throw new Error("Settings can change between answers.");
+
+    if (!this.connection || this.connection.signal.aborted) {
+      await this.attempt(async () => {
+        await this.reconnect();
+        this.emit({ type: "set", status: "idle" });
+      });
+
+      if (this.state.status !== "idle") return;
+    }
 
     await this.change(kind, value);
   }
@@ -603,6 +774,7 @@ export class AskThread {
       { sessionId: this.sessionId, configId, value },
     );
 
+    this.picks[kind] = value;
     this.useConfig(response.configOptions);
   }
 
@@ -621,16 +793,25 @@ export class AskThread {
     this.start.onChoices?.(choices);
   }
 
+  /** The agent says which mode it is in now; only its read-only one keeps
+   * the checkout as it is. */
+  private useMode(mode: string) {
+    const readOnly = mode === askAgents[this.start.agent].readOnlyMode;
+
+    if (readOnly !== this.state.readOnly) this.emit({ type: "set", readOnly });
+  }
+
   /** A new session, or the earlier one loaded with its history replayed. */
-  private async session(canLoad: boolean) {
-    const agent = this.connection!.agent;
+  private async session(
+    connection: ClientConnection,
+    generation: number,
+    canLoad: boolean,
+  ) {
+    const agent = connection.agent;
     const start = this.start;
     const name = this.state.agentName;
-
-    // Trying again reloads the session the failed attempt started.
-    const earlier =
-      this.sessionId ??
-      ("resume" in start ? start.resume.sessionId : undefined);
+    // Reopening, or trying again, loads the session there is.
+    const earlier = this.sessionId;
 
     if (!earlier) {
       const response = await agent.request(methods.agent.session.new, {
@@ -645,10 +826,19 @@ export class AskThread {
       return { sessionId: response.sessionId, response };
     }
 
-    if (!canLoad) throw new Error(`${name} cannot reopen past conversations.`);
-    // The replay arrives before the response, addressed to this session.
-    this.sessionId = earlier;
+    // Trying again cannot help: continue in a new session instead.
+    const unloadable = (reason: string, cause?: unknown) => {
+      this.unloadable = true;
+
+      return new Error(
+        `${name} could not reopen this conversation. ${reason} Try again to continue it in a new session, which starts without what was said before.`,
+        { cause },
+      );
+    };
+
+    if (!canLoad) throw unloadable(`${name} cannot reopen past conversations.`);
     this.shown ||= this.state.entries.length > 0;
+    // The replay arrives before the response, addressed to this session.
     this.replaying = true;
 
     try {
@@ -661,23 +851,57 @@ export class AskThread {
 
       return { sessionId: earlier, response };
     } catch (error) {
-      throw new Error(
-        `This conversation is no longer available in ${name}. ${errorMessage(error)}`,
-        { cause: error },
-      );
+      // A lapsed login, Stop, or a start given up on: the session may
+      // still be there.
+      if (
+        signedOut(error) ||
+        this.closed ||
+        this.halted ||
+        generation !== this.generation
+      )
+        throw error;
+
+      throw unloadable(errorMessage(error), error);
     } finally {
       this.replaying = false;
     }
   }
 
-  private async prompt(prompt: ContentBlock[]) {
-    if (!this.connection || !this.sessionId) return;
+  /** Asks a question in the session, with the selection first if the
+   * session has not had it. */
+  private async prompt(question: string) {
+    const { connection, sessionId } = this;
+
+    if (!connection || !sessionId)
+      throw new Error(`${this.state.agentName} is not running.`);
+
+    const withSelection = this.needsContext;
+
     this.emit({ type: "set", status: "running", error: null });
 
-    const { stopReason } = await this.connection.agent.request(
-      methods.agent.session.prompt,
-      { sessionId: this.sessionId, prompt },
-    );
+    let stopReason: StopReason;
+
+    try {
+      ({ stopReason } = await connection.agent.request(
+        methods.agent.session.prompt,
+        {
+          sessionId,
+          prompt: withSelection
+            ? withContext(this.start.context, question)
+            : [{ type: "text", text: question }],
+        },
+      ));
+    } catch (error) {
+      // Stop ended an agent that would not stop the turn itself.
+      if (!this.halted) throw error;
+      stopReason = "cancelled";
+      this.halted = false;
+    } finally {
+      clearTimeout(this.stopTimer);
+    }
+
+    if (withSelection) this.needsContext = false;
+    this.asking = undefined;
 
     // An answer cut off by Stop ends mid-sentence; say where it stopped.
     if (stopReason === "cancelled")
@@ -704,6 +928,8 @@ export class AskThread {
 
   private async requestPermission(
     request: RequestPermissionRequest,
+    /** Aborts when the agent withdraws the request, or goes away. */
+    signal: AbortSignal,
   ): Promise<RequestPermissionResponse> {
     const id = request.toolCall.toolCallId;
     const toolKind = request.toolCall.kind ?? "other";
@@ -761,9 +987,16 @@ export class AskThread {
     this.push(entry);
     this.emit({ type: "set", status: "waiting" });
 
-    const response = await new Promise<RequestPermissionResponse>((resolve) =>
-      this.decisions.set(id, resolve),
-    );
+    const response = await new Promise<RequestPermissionResponse>((resolve) => {
+      this.decisions.set(id, resolve);
+
+      // Nothing waits on a request its agent withdrew: it is no longer
+      // the reviewer's to answer.
+      const withdrawn = () => resolve({ outcome: { outcome: "cancelled" } });
+
+      if (signal.aborted) withdrawn();
+      else signal.addEventListener("abort", withdrawn, { once: true });
+    });
 
     this.decisions.delete(id);
     this.replace(id, "permission", (current) => ({
@@ -774,7 +1007,8 @@ export class AskThread {
           : "cancelled",
     }));
 
-    if (this.state.status === "waiting")
+    // The agent carries on, unless it still waits on another answer.
+    if (this.state.status === "waiting" && !this.decisions.size)
       this.emit({ type: "set", status: "running" });
 
     return response;
@@ -813,8 +1047,20 @@ export class AskThread {
         return;
       }
 
-      case "config_option_update":
+      case "config_option_update": {
         this.useConfig(update.configOptions);
+
+        const mode = update.configOptions.find(
+          (option) => option.id === "mode" && option.type === "select",
+        );
+
+        if (mode?.type === "select") this.useMode(mode.currentValue);
+
+        return;
+      }
+
+      case "current_mode_update":
+        this.useMode(update.currentModeId);
 
         return;
       case "notice": {
@@ -962,7 +1208,11 @@ export class AskThread {
   }
 
   private addUser(text: string) {
-    this.push({ kind: "user", id: randomUUID(), text, at: Date.now() });
+    const id = randomUUID();
+
+    this.push({ kind: "user", id, text, at: Date.now() });
+
+    return id;
   }
 
   private fail(cause: unknown) {
@@ -981,7 +1231,7 @@ export class AskThread {
       return;
     }
 
-    const diagnostics = this.process?.diagnostics().trim();
+    const diagnostics = (this.process?.diagnostics() ?? this.stderr).trim();
 
     this.emit({
       type: "set",
@@ -1026,7 +1276,6 @@ export class AskThread {
   }
 }
 
-/** The live Ask threads of one server; they end with it. */
 /** How long an agent may take to say what it offers. */
 const OFFER_TIMEOUT_MS = 30_000;
 
@@ -1075,6 +1324,7 @@ async function offeredChoices(
   }
 }
 
+/** The live Ask threads of one server; they end with it. */
 export class AskThreads {
   private readonly threads = new Map<string, AskThread>();
   /** One question to each agent at a time about what it offers. */
@@ -1083,6 +1333,7 @@ export class AskThreads {
   constructor(
     private readonly launch: AskAgentLauncher,
     private readonly mcpServers: AskMcpServers = () => [],
+    private readonly limits: AskThreadLimits = askThreadLimits,
   ) {}
 
   /** Whether sessions get Whiteboard's MCP tools, which the first prompt mentions. */
@@ -1091,7 +1342,12 @@ export class AskThreads {
   }
 
   open(start: AskThreadStart) {
-    const thread = new AskThread(this.launch, start, this.mcpServers);
+    const thread = new AskThread(
+      this.launch,
+      start,
+      this.mcpServers,
+      this.limits,
+    );
 
     this.threads.set(thread.id, thread);
     void thread.open();

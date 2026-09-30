@@ -117,3 +117,17 @@ it("keeps what the panel showed, and what each agent offered", () => {
     db.close();
   }
 });
+
+it("reopens a conversation in the new session that replaced one its agent lost, with what it showed", () => {
+  const history = store.askHistory;
+  const entries = [{ kind: "user" as const, id: "asked", text: "Is it?" }];
+
+  history.save(record("review", "lost", "2026-09-01T10:00:00.000Z"));
+  history.saveEntries("lost", entries);
+  history.updateSession("lost", "session-new");
+
+  expect(history.get("lost")).toMatchObject({
+    sessionId: "session-new",
+    entries,
+  });
+});

@@ -1,5 +1,6 @@
 import {
   type AgentContext,
+  type ClientConnection,
   type McpServer,
   RequestError,
   type RequestPermissionResponse,
@@ -17,7 +18,11 @@ import {
   applyAskChange,
   askUpdateSchema,
 } from "@review/ask/thread-state.js";
-import { AskThread, AskThreads } from "@review/ask/thread.js";
+import {
+  AskThread,
+  type AskThreadLimits,
+  AskThreads,
+} from "@review/ask/thread.js";
 import { expect, it, vi } from "vitest";
 
 const permissionOptions = [
@@ -124,13 +129,57 @@ function fakeAgent(
     })
     .onNotification(methods.agent.session.cancel, cancelled);
 
-  const launch: AskAgentLauncher = async () => ({
-    connect: (client) => client.connect(app),
-    diagnostics: () => "",
-    stop: () => {},
-  });
+  const connections: ClientConnection[] = [];
 
-  return { launch, modes, mcpServers, metas, cancelled };
+  // Stopping the process ends its connection, as the real one's exit does.
+  const launch: AskAgentLauncher = async () => {
+    let connection: ClientConnection | undefined;
+
+    return {
+      connect: (client) => {
+        connection = client.connect(app);
+        connections.push(connection);
+
+        return connection;
+      },
+      diagnostics: () => "",
+      stop: () => connection?.close(),
+    };
+  };
+
+  return {
+    launch,
+    modes,
+    mcpServers,
+    metas,
+    cancelled,
+    /** How many times the agent started. */
+    launches: () => connections.length,
+    /** The agent process exits on its own. */
+    exit: () => connections.at(-1)?.close(),
+  };
+}
+
+/** An agent that starts but never answers `initialize`, then `next`. */
+function stuckOnce(next: AskAgentLauncher): AskAgentLauncher {
+  let stuck = true;
+
+  const app = agent({ name: "stuck" }).onRequest(
+    methods.agent.initialize,
+    () => new Promise<never>(() => {}),
+  );
+
+  return async (id, cwd) => {
+    if (!stuck) return next(id, cwd);
+    stuck = false;
+    let connection: ClientConnection | undefined;
+
+    return {
+      connect: (client) => (connection = client.connect(app)),
+      diagnostics: () => "",
+      stop: () => connection?.close(),
+    };
+  };
 }
 
 const say = (client: AgentContext, text: string) =>
@@ -142,7 +191,11 @@ const say = (client: AgentContext, text: string) =>
     },
   });
 
-const askPermission = (client: AgentContext, kind: ToolKind) =>
+const askPermission = (
+  client: AgentContext,
+  kind: ToolKind,
+  cancellationSignal?: AbortSignal,
+) =>
   client.request<RequestPermissionResponse>(
     methods.client.session.requestPermission,
     {
@@ -150,13 +203,20 @@ const askPermission = (client: AgentContext, kind: ToolKind) =>
       toolCall: { toolCallId: `call-${kind}`, title: `A ${kind} tool`, kind },
       options: permissionOptions,
     },
+    { cancellationSignal },
   );
 
 function openThread(
   launch: AskAgentLauncher,
   mcpServers: () => McpServer[] = () => [],
-  options: { picks?: AskPicks; onChoices?: (choices: AskChoices) => void } = {},
+  options: {
+    picks?: AskPicks;
+    onChoices?: (choices: AskChoices) => void;
+    limits?: AskThreadLimits;
+  } = {},
 ) {
+  const { limits, ...start } = options;
+
   const thread = new AskThread(
     launch,
     {
@@ -167,9 +227,10 @@ function openThread(
       selection: { title: "Paragraph 3", quote: "The index is concurrent." },
       context: "Selected text from Whiteboard.",
       question: "Is this safe?",
-      ...options,
+      ...start,
     },
     mcpServers,
+    limits,
   );
 
   void thread.open();
@@ -528,7 +589,11 @@ it("gives the agent Whiteboard's MCP server and runs its tools, and read-only se
 
 function reopenThread(
   launch: AskAgentLauncher,
-  saved: { entries?: AskEntry[]; onSave?: (entries: AskEntry[]) => void } = {},
+  saved: {
+    entries?: AskEntry[];
+    onSave?: (entries: AskEntry[]) => void;
+    onSession?: (sessionId: string) => void;
+  } = {},
 ) {
   const thread = new AskThread(launch, {
     reviewId: "review",
@@ -536,8 +601,10 @@ function reopenThread(
     cwd: "/checkout",
     head: "abc123",
     selection: { title: "Paragraph 3", quote: "The index is concurrent." },
+    context: "Selected text from Whiteboard.",
     resume: { sessionId: "session", entries: saved.entries },
     onSave: saved.onSave,
+    onSession: saved.onSession,
   });
 
   void thread.open();
@@ -959,4 +1026,264 @@ it("says what an agent offers before anything is asked, starting it once for eve
   expect(second).toBe(first);
   expect(launch).toHaveBeenCalledTimes(1);
   expect(stopped).toHaveBeenCalled();
+});
+
+const quick: AskThreadLimits = { startMs: 50, stopGraceMs: 50 };
+
+it("tries a failed reopen again without asking its last question again", async () => {
+  let signedIn = false;
+  const prompts: string[] = [];
+
+  const { launch } = fakeAgent(
+    async (_client, prompt) => {
+      prompts.push(prompt);
+    },
+    async () => {
+      if (!signedIn) throw RequestError.authRequired();
+    },
+  );
+
+  const saved: AskEntry[] = [
+    { kind: "user", id: "asked", text: "Is this safe?" },
+    { kind: "agent", id: "answered", text: "It is." },
+  ];
+
+  const thread = reopenThread(launch, { entries: saved });
+  const failed = await until(thread, ({ status }) => status === "failed");
+
+  expect(failed.signIn).toBe("claude auth login");
+
+  signedIn = true;
+  await thread.retry();
+
+  const state = await until(thread, ({ status }) => status === "idle");
+
+  expect(prompts).toEqual([]);
+  expect(state.entries).toEqual(saved);
+  thread.close();
+});
+
+it("gives up on an agent that does not start, and starts it again", async () => {
+  const prompts: string[] = [];
+
+  const { launch } = fakeAgent(async (client, prompt) => {
+    prompts.push(prompt);
+    await say(client, "It is.");
+  });
+
+  const thread = openThread(stuckOnce(launch), undefined, { limits: quick });
+  const failed = await until(thread, ({ status }) => status === "failed");
+
+  expect(failed.error).toMatch(/Claude Code did not start within/);
+
+  await thread.retry();
+  const state = await until(thread, ({ status }) => status === "idle");
+
+  expect(prompts).toHaveLength(1);
+  expect(prompts[0]).toContain("Selected text from Whiteboard.");
+  expect(state.entries.map((entry) => entry.kind)).toEqual(["user", "agent"]);
+  thread.close();
+});
+
+it("stops an agent that is still starting, and starts it again for the next question", async () => {
+  const prompts: string[] = [];
+
+  const { launch } = fakeAgent(async (client, prompt) => {
+    prompts.push(prompt);
+    await say(client, "It is.");
+  });
+
+  const thread = openThread(stuckOnce(launch));
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(thread.read().status).toBe("starting");
+  await thread.cancel();
+
+  const stopped = await until(thread, ({ status }) => status === "idle");
+
+  expect(stopped.entries.map((entry) => entry.kind)).toEqual([
+    "user",
+    "notice",
+  ]);
+
+  await thread.ask("Is it safe now?");
+  await until(thread, ({ status }) => status === "idle");
+
+  // The agent never saw the selection, so the next question brings it.
+  expect(prompts).toHaveLength(1);
+  expect(prompts[0]).toContain("Selected text from Whiteboard.");
+  expect(prompts[0]).toContain("Is it safe now?");
+  thread.close();
+});
+
+it("stops the agent when a turn does not stop, and starts it again for the next question", async () => {
+  const prompts: string[] = [];
+  const loaded: string[] = [];
+
+  const { launch, launches } = fakeAgent(
+    async (client, prompt) => {
+      prompts.push(prompt);
+
+      // The first turn ignores Stop.
+      if (prompts.length === 1) await new Promise<never>(() => {});
+      await say(client, "Yes.");
+    },
+    async (_client, sessionId) => {
+      loaded.push(sessionId);
+    },
+  );
+
+  const thread = openThread(launch, undefined, { limits: quick });
+
+  await until(thread, ({ status }) => status === "running");
+  await thread.cancel();
+
+  const stopped = await until(thread, ({ status }) => status === "idle");
+
+  expect(stopped.entries.at(-1)).toMatchObject({
+    kind: "notice",
+    title: "Stopped here.",
+  });
+
+  await thread.ask("And now?");
+  const state = await until(thread, ({ status }) => status === "idle");
+
+  expect(launches()).toBe(2);
+  expect(loaded).toEqual(["session"]);
+  expect(prompts[1]).toBe("And now?");
+  expect(state.entries.at(-1)).toMatchObject({ kind: "agent", text: "Yes." });
+  thread.close();
+});
+
+it("continues a conversation its agent can no longer reopen in a new session", async () => {
+  const prompts: string[] = [];
+  const sessions: string[] = [];
+
+  const { launch } = fakeAgent(
+    async (client, prompt) => {
+      prompts.push(prompt);
+      await say(client, "Still here.");
+    },
+    async (_client, sessionId) => {
+      throw RequestError.resourceNotFound(sessionId);
+    },
+  );
+
+  const saved: AskEntry[] = [
+    { kind: "user", id: "asked", text: "Is this safe?" },
+    { kind: "agent", id: "answered", text: "It is." },
+  ];
+
+  const thread = reopenThread(launch, {
+    entries: saved,
+    onSession: (sessionId) => sessions.push(sessionId),
+  });
+
+  const failed = await until(thread, ({ status }) => status === "failed");
+
+  expect(failed.error).toMatch(/could not reopen this conversation/);
+
+  await thread.retry();
+  await until(thread, ({ status }) => status === "idle");
+
+  expect(sessions).toEqual(["session"]);
+
+  await thread.ask("Are you still there?");
+  const state = await until(thread, ({ status }) => status === "idle");
+
+  // The new session has not seen the selection.
+  expect(prompts).toHaveLength(1);
+  expect(prompts[0]).toContain("Selected text from Whiteboard.");
+  expect(prompts[0]).toContain("Are you still there?");
+  expect(state.entries.slice(0, 2)).toEqual(saved);
+  thread.close();
+});
+
+it("stops waiting on a permission its agent withdrew", async () => {
+  const withdrawn = new AbortController();
+
+  const { launch } = fakeAgent(async (client) => {
+    await askPermission(client, "execute", withdrawn.signal);
+    await say(client, "Carried on.");
+  });
+
+  const thread = openThread(launch);
+
+  await until(thread, ({ status }) => status === "waiting");
+  withdrawn.abort();
+
+  const state = await until(thread, ({ status }) => status === "idle");
+
+  expect(state.entries).toContainEqual(
+    expect.objectContaining({ kind: "permission", outcome: "cancelled" }),
+  );
+  expect(thread.decide("call-execute", "allow")).toBe(false);
+  thread.close();
+});
+
+it("leaves nothing to answer when the agent exits while it waits for a permission", async () => {
+  const { launch, exit } = fakeAgent(async (client) => {
+    await askPermission(client, "execute");
+  });
+
+  const thread = openThread(launch);
+
+  await until(thread, ({ status }) => status === "waiting");
+  exit();
+
+  const state = await until(thread, ({ status }) => status === "failed");
+
+  expect(state.entries.at(-1)).toMatchObject({
+    kind: "permission",
+    outcome: "cancelled",
+  });
+  expect(thread.decide("call-execute", "allow")).toBe(false);
+  thread.close();
+});
+
+it("starts the agent again for a follow-up after it exited", async () => {
+  const prompts: string[] = [];
+  const loaded: string[] = [];
+
+  const { launch, launches, exit } = fakeAgent(
+    async (client, prompt) => {
+      prompts.push(prompt);
+      await say(client, "Yes.");
+    },
+    async (_client, sessionId) => {
+      loaded.push(sessionId);
+    },
+  );
+
+  const thread = openThread(launch);
+
+  await until(thread, ({ status }) => status === "idle");
+  exit();
+  await thread.ask("And on replicas?");
+
+  const state = await until(
+    thread,
+    ({ status, entries }) => status === "idle" && entries.length === 4,
+  );
+
+  expect(launches()).toBe(2);
+  expect(loaded).toEqual(["session"]);
+  expect(prompts[1]).toBe("And on replicas?");
+  expect(state.error).toBeUndefined();
+  thread.close();
+});
+
+it("says so when the agent leaves its read-only mode", async () => {
+  const { launch } = fakeAgent(async (client) => {
+    await client.notify(methods.client.session.update, {
+      sessionId: "session",
+      update: { sessionUpdate: "current_mode_update", currentModeId: "plan" },
+    });
+  });
+
+  const thread = openThread(launch);
+  const state = await until(thread, ({ status }) => status === "idle");
+
+  expect(state.readOnly).toBe(false);
+  thread.close();
 });

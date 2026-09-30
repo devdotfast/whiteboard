@@ -1134,6 +1134,30 @@ export function createReviewApi(
       return thread;
     };
 
+    /** What an agent reads before a session's first question: the review,
+     * the checkout, and the selection. */
+    const askContext = async (
+      snapshot: Snapshot,
+      checkout: { head: string; live: boolean },
+      selection: AgentSelection,
+      version: number | undefined,
+    ) =>
+      [
+        `A reviewer is reading "${snapshot.title}" in Whiteboard and has a question about a selection.`,
+        checkout.live
+          ? "Your working directory is the repository the review describes."
+          : `Your working directory is a checkout of the review's head commit, ${checkout.head}. Answer from this code, not from other branches.`,
+        "Answer the question. Do not change files in the checkout.",
+        "Name files by their path from the checkout root, with a line where it helps, as in `src/app.ts:42`; the reviewer can open them from your answer.",
+        ...(ask.threads.providesMcp
+          ? [
+              `The whiteboard MCP tools read and change this review: its sessionId is "${snapshot.reviewId}". Read it with session_get. If the reviewer asks you to change the review, edit it with session_edit; do not write files to do it.`,
+            ]
+          : []),
+        "",
+        await selectionContext(snapshot.reviewId, selection, version),
+      ].join("\n");
+
     // Each agent with the models and efforts it offered last; none until
     // it has run.
     app.get("/:id/ask/agents", async (context) =>
@@ -1181,21 +1205,24 @@ export function createReviewApi(
         id,
         reviewId,
         agent: input.agent,
-        // Saved once the agent has a session to reopen.
+        // Saved once the agent has a session to reopen; a later one
+        // replaces a session the agent could not reopen.
         onSession: (sessionId) =>
-          store.askHistory.save({
-            id,
-            reviewId,
-            agent: input.agent,
-            sessionId,
-            version: snapshot.version,
-            head: checkout.head,
-            cwd: checkout.rootPath,
-            selection: input.selection,
-            title: input.question.slice(0, 200),
-            createdAt,
-            updatedAt: createdAt,
-          }),
+          store.askHistory.get(id)
+            ? store.askHistory.updateSession(id, sessionId)
+            : store.askHistory.save({
+                id,
+                reviewId,
+                agent: input.agent,
+                sessionId,
+                version: snapshot.version,
+                head: checkout.head,
+                cwd: checkout.rootPath,
+                selection: input.selection,
+                title: input.question.slice(0, 200),
+                createdAt,
+                updatedAt: createdAt,
+              }),
         onTurn: () => store.askHistory.touch(id),
         onSave: (entries) => store.askHistory.saveEntries(id, entries),
         picks: input.picks,
@@ -1207,21 +1234,7 @@ export function createReviewApi(
           title: input.selection.title,
           quote: target.kind === "text" ? target.quote : undefined,
         },
-        context: [
-          `A reviewer is reading "${snapshot.title}" in Whiteboard and has a question about a selection.`,
-          checkout.live
-            ? "Your working directory is the repository the review describes."
-            : `Your working directory is a checkout of the review's head commit, ${checkout.head}. Answer from this code, not from other branches.`,
-          "Answer the question. Do not change files in the checkout.",
-          "Name files by their path from the checkout root, with a line where it helps, as in `src/app.ts:42`; the reviewer can open them from your answer.",
-          ...(ask.threads.providesMcp
-            ? [
-                `The whiteboard MCP tools read and change this review: its sessionId is "${reviewId}". Read it with session_get. If the reviewer asks you to change the review, edit it with session_edit; do not write files to do it.`,
-              ]
-            : []),
-          "",
-          await selectionContext(reviewId, input.selection, version),
-        ].join("\n"),
+        context: await askContext(snapshot, checkout, input.selection, version),
         question: input.question,
       });
 
@@ -1253,10 +1266,8 @@ export function createReviewApi(
       if (record?.reviewId !== reviewId)
         throw new ReviewInputError("This conversation was not found.", 404);
 
-      const checkout = await data.agentCheckout(
-        readReview(reviewId, record.version),
-      );
-
+      const snapshot = readReview(reviewId, record.version);
+      const checkout = await data.agentCheckout(snapshot);
       const target = record.selection.target;
 
       ask.threads.open({
@@ -1270,6 +1281,15 @@ export function createReviewApi(
           quote: target.kind === "text" ? target.quote : undefined,
         },
         resume: { sessionId: record.sessionId, entries: record.entries },
+        // For a new session, should the agent no longer have this one.
+        context: await askContext(
+          snapshot,
+          checkout,
+          record.selection,
+          record.version,
+        ),
+        onSession: (sessionId) =>
+          store.askHistory.updateSession(record.id, sessionId),
         onTurn: () => store.askHistory.touch(record.id),
         onSave: (entries) => store.askHistory.saveEntries(record.id, entries),
         picks,
@@ -1299,8 +1319,9 @@ export function createReviewApi(
         await readBoundedRequestJson(context.req.raw),
       );
 
-      if (thread.read().status !== "idle")
-        throw new ReviewInputError("The agent is still answering.", 409);
+      const refusal = thread.askRefusal();
+
+      if (refusal) throw new ReviewInputError(refusal, 409);
 
       void thread.ask(question);
 
@@ -1323,7 +1344,6 @@ export function createReviewApi(
       return context.json({ ok: true });
     });
 
-    // Another model or effort for the next answer.
     // The files an answer names, as the checkout's own paths, so the panel
     // can open them.
     app.post("/:id/ask/:threadId/files", async (context) => {
@@ -1358,6 +1378,7 @@ export function createReviewApi(
       });
     });
 
+    // Another model or effort for the next answer.
     app.post("/:id/ask/:threadId/choice", async (context) => {
       const thread = readThread(
         context.req.param("id"),
