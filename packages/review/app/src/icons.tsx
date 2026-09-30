@@ -36,6 +36,20 @@ export function SlidersIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
+export function StackIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      {...stylex.props(styles.icon, xstyle)}
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <path d="M12 4 20 8.5 12 13 4 8.5Z" />
+      <path d="M4 12.5 12 17l8-4.5M4 16.5 12 21l8-4.5" />
+    </svg>
+  );
+}
+
 export function BugIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg

@@ -1,32 +1,18 @@
-// Aliased: review stacks call their entries layers.
-import {
-  fontSize,
-  fontWeight,
-  motion,
-  radius,
-  layer as stackingLayer,
-  tracking,
-} from "@canvas/scale.stylex";
-import { surfaceStyles } from "@canvas/ui/surface";
+import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import {
   type ReviewDiffStats,
-  type ReviewStackLayer,
   summarizeReviewDiffFiles,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { useQuery } from "@tanstack/react-query";
 import {
   Fragment,
-  type MouseEvent,
   type ReactElement,
   type ReactNode,
   useContext,
   useEffect,
-  useRef,
   useState,
 } from "react";
 
-import { canvasQueryKeys } from "./canvas-query";
 import { DiffCount } from "./diff-count";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { drawStyles } from "./draw-styles";
@@ -65,19 +51,6 @@ export function ReviewDocumentMetaLine({
   useEffect(() => {
     setRelativeTimeNowMs(Date.now());
   }, [displayedVersion]);
-
-  // The pull request stack is optional context; a failed read is not shown.
-  const stackLayers =
-    useQuery({
-      queryKey: canvasQueryKeys.reviewStack(
-        displayedVersion,
-        meta.pullRequestNumber,
-        meta.pullRequestUrl,
-      ),
-      queryFn: ({ signal }) => review.stack(signal),
-      enabled: Boolean(meta.pullRequestNumber),
-      staleTime: 0,
-    }).data ?? [];
 
   const diff =
     diffFiles.status === "loaded" ? reviewDiffStats(diffFiles) : null;
@@ -214,14 +187,6 @@ export function ReviewDocumentMetaLine({
                 PR #{meta.pullRequestNumber}
               </span>
             ))}
-          {stackLayers.length > 1 ? (
-            <>
-              <span {...stylex.props(styles.separator)} aria-hidden="true">
-                ·
-              </span>
-              <ReviewStackSelector layers={stackLayers} />
-            </>
-          ) : null}
         </div>
         {updatedLabel && (
           <span {...stylex.props(styles.updated)}>Updated {updatedLabel}</span>
@@ -250,162 +215,6 @@ function withFactDots(
       {node}
     </Fragment>
   ));
-}
-
-function ReviewStackSelector({
-  layers,
-}: {
-  layers: readonly ReviewStackLayer[];
-}): ReactElement {
-  const session = useReviewSession();
-  const detailsRef = useRef<HTMLDetailsElement>(null);
-
-  const currentIndex = layers.findIndex(
-    (layer) => layer.relation === "current",
-  );
-
-  const position = currentIndex < 0 ? 1 : currentIndex + 1;
-
-  const openLayer = (
-    layer: ReviewStackLayer,
-    event: Pick<MouseEvent, "metaKey" | "ctrlKey" | "shiftKey" | "button">,
-  ) => {
-    if (!layer.reviewUuid) return;
-    detailsRef.current?.removeAttribute("open");
-    void session.surface.post({
-      name: "openReview",
-      args: {
-        reviewUuid: layer.reviewUuid,
-        active: !(
-          event.metaKey ||
-          event.ctrlKey ||
-          event.shiftKey ||
-          event.button === 1
-        ),
-      },
-    });
-  };
-
-  return (
-    <details {...stylex.props(styles.stack)} ref={detailsRef}>
-      <summary {...stylex.props(styles.stackSummary)}>
-        <span {...stylex.props(styles.stackPosition)}>
-          {position} of {layers.length}
-        </span>
-        <span {...stylex.props(styles.stackLabel)}>stack</span>
-        <svg
-          viewBox="0 0 12 12"
-          aria-hidden="true"
-          {...stylex.props(styles.icon, styles.stackChevron)}
-        >
-          <path d="m3 4.5 3 3 3-3" {...stylex.props(styles.stackChevronPath)} />
-        </svg>
-      </summary>
-      <div {...stylex.props(surfaceStyles.popover, styles.stackMenu)}>
-        {layers.map((layer, index) => (
-          <ReviewStackLayerRow
-            key={layer.pullRequestNumber}
-            layer={layer}
-            position={index + 1}
-            onOpen={openLayer}
-          />
-        ))}
-      </div>
-    </details>
-  );
-}
-
-function ReviewStackLayerRow({
-  layer,
-  position,
-  onOpen,
-}: {
-  layer: ReviewStackLayer;
-  position: number;
-  onOpen: (
-    layer: ReviewStackLayer,
-    event: Pick<MouseEvent, "metaKey" | "ctrlKey" | "shiftKey" | "button">,
-  ) => void;
-}): ReactElement {
-  const current = layer.relation === "current";
-  const disabled = !current && !layer.reviewUuid;
-
-  const content = (
-    <>
-      <span {...stylex.props(styles.stackIndicator)}>
-        <span
-          {...stylex.props(
-            styles.stackMarker,
-            current && styles.stackMarkerCurrent,
-            disabled && styles.stackFaint,
-          )}
-        >
-          {position}
-        </span>
-      </span>
-      <span {...stylex.props(styles.stackCopy)}>
-        <span
-          {...stylex.props(
-            styles.stackEllipsis,
-            styles.stackTitle,
-            current && styles.stackTitleCurrent,
-            disabled && styles.stackFaint,
-          )}
-        >
-          PR #{layer.pullRequestNumber}
-          {layer.reviewTitle ? ` · ${layer.reviewTitle}` : ""}
-        </span>
-        <span
-          {...stylex.props(
-            styles.stackEllipsis,
-            styles.stackBranch,
-            current && styles.stackBranchCurrent,
-          )}
-        >
-          {layer.branch}
-        </span>
-      </span>
-      <span
-        {...stylex.props(
-          styles.stackRelation,
-          current && styles.stackRelationCurrent,
-        )}
-      >
-        {!layer.reviewUuid && !current ? "No session" : layer.relation}
-      </span>
-    </>
-  );
-
-  if (current) {
-    return (
-      <div
-        {...stylex.props(styles.stackRow, styles.stackRowCurrent)}
-        aria-current="true"
-      >
-        {content}
-      </div>
-    );
-  }
-
-  return (
-    <button
-      {...stylex.props(styles.stackRow, styles.stackButton)}
-      type="button"
-      data-relation={layer.relation}
-      disabled={!layer.reviewUuid}
-      title={
-        layer.reviewUuid
-          ? "Open session (Cmd/Ctrl-click to open in the background)"
-          : "No generated session exists for this pull request"
-      }
-      onClick={(event) => onOpen(layer, event)}
-      onAuxClick={(event) => {
-        if (event.button === 1) onOpen(layer, event);
-      }}
-    >
-      {content}
-    </button>
-  );
 }
 
 function documentMetaState(meta: {
@@ -552,166 +361,5 @@ const styles = stylex.create({
   },
   removed: {
     backgroundColor: tokens.changeRemoved,
-  },
-  stack: {
-    position: "relative",
-    display: "inline-flex",
-    alignItems: "center",
-    alignSelf: "center",
-    color: tokens.inkFaint,
-  },
-  stackSummary: {
-    display: "flex",
-    alignItems: "center",
-    gap: "7px",
-    height: "20px",
-    padding: "0 8px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: {
-      default: tokens.rule,
-      ":hover": `color-mix(in srgb, ${tokens.accent} 45%, ${tokens.ruleSoft})`,
-    },
-    borderRadius: radius.small,
-    backgroundColor: { default: "transparent", ":hover": tokens.controlBg },
-    color: tokens.ink,
-    cursor: "pointer",
-    fontSize: fontSize.small,
-    listStyle: "none",
-    "::-webkit-details-marker": {
-      display: "none",
-    },
-  },
-  stackPosition: {
-    color: tokens.ink,
-    fontSize: fontSize.small,
-    fontWeight: fontWeight.semibold,
-  },
-  stackLabel: {
-    color: tokens.inkFaint,
-    fontSize: fontSize.micro,
-    fontWeight: fontWeight.regular,
-  },
-  stackChevron: {
-    width: "12px",
-    height: "12px",
-    color: tokens.inkFaint,
-    transform: { default: null, ":is([open] > summary > *)": "rotate(180deg)" },
-    transition: `transform ${motion.fast} ease-out`,
-  },
-  stackChevronPath: {
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: "1.25",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-  },
-  stackMenu: {
-    position: "absolute",
-    zIndex: stackingLayer.popover,
-    top: "calc(100% + 6px)",
-    left: 0,
-    display: "flex",
-    flexDirection: "column",
-    minWidth: "340px",
-    padding: "7px",
-  },
-  stackRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    width: "100%",
-    minHeight: "48px",
-    padding: "7px 9px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: radius.control,
-    backgroundColor: "transparent",
-    color: tokens.ink,
-    font: "inherit",
-    textAlign: "left",
-  },
-  stackRowCurrent: {
-    backgroundColor: `color-mix(in srgb, ${tokens.accent} 8%, ${tokens.surfaceRaised})`,
-  },
-  stackButton: {
-    backgroundColor: {
-      default: "transparent",
-      ":hover:not(:disabled)": tokens.tray,
-    },
-    cursor: { default: "pointer", ":disabled": "default" },
-  },
-  stackIndicator: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flex: "0 0 24px",
-    width: "24px",
-  },
-  stackMarker: {
-    display: "none",
-    alignItems: "center",
-    justifyContent: "center",
-    flex: "0 0 auto",
-    width: "18px",
-    height: "18px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.inkFaint,
-    borderRadius: radius.round,
-    color: tokens.inkMuted,
-    fontSize: fontSize.micro,
-    fontWeight: fontWeight.medium,
-  },
-  stackMarkerCurrent: {
-    borderColor: `color-mix(in srgb, ${tokens.accent} 64%, ${tokens.ruleSoft})`,
-    backgroundColor: `color-mix(in srgb, ${tokens.accent} 12%, transparent)`,
-    color: tokens.accent,
-    fontWeight: fontWeight.semibold,
-  },
-  stackCopy: {
-    display: "flex",
-    flex: "1 1 0",
-    flexDirection: "column",
-    gap: "2px",
-    minWidth: 0,
-  },
-  stackEllipsis: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  stackTitle: {
-    color: tokens.ink,
-    fontSize: fontSize.small,
-    lineHeight: "15px",
-  },
-  stackTitleCurrent: {
-    fontWeight: fontWeight.semibold,
-  },
-  stackBranch: {
-    color: tokens.inkFaint,
-    fontSize: fontSize.micro,
-    lineHeight: "14px",
-  },
-  stackBranchCurrent: {
-    color: tokens.inkMuted,
-  },
-  stackRelation: {
-    flex: "0 0 64px",
-    width: "64px",
-    color: tokens.inkFaint,
-    fontSize: fontSize.micro,
-    letterSpacing: tracking.chrome,
-    lineHeight: "13px",
-    textAlign: "right",
-    textTransform: "uppercase",
-  },
-  stackRelationCurrent: {
-    color: tokens.accent,
-  },
-  stackFaint: {
-    color: tokens.inkFaint,
   },
 });
