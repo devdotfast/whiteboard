@@ -10,6 +10,7 @@ import { InstantiationType, registerSingleton } from "../../../platform/instanti
 import { createDecorator, IInstantiationService } from "../../../platform/instantiation/common/instantiation.js";
 import { ILabelService } from "../../../platform/label/common/label.js";
 import { ILogService } from "../../../platform/log/common/log.js";
+import { registerWorkbenchContribution2, WorkbenchPhase } from "../../../workbench/common/contributions.js";
 import { ILifecycleService } from "../../../workbench/services/lifecycle/common/lifecycle.js";
 import { IReviewDesktopConnectionService } from "../reviewDesktopConnectionService.js";
 import { ReviewRemoteFileSystemRouter } from "./reviewRemoteFileSystemRouter.js";
@@ -111,5 +112,11 @@ export class ReviewRemoteHostsService extends Disposable implements IReviewRemot
 	}
 }
 
-// Eager so `vscode-remote` has its provider from the start; no host connects until asked for.
 registerSingleton(IReviewRemoteHostsService, ReviewRemoteHostsService, InstantiationType.Eager);
+
+/** Creates the service at start, so `vscode-remote` has its provider before editors restore. No host connects until asked for. */
+class ReviewRemoteHostsStartup {
+	static readonly ID = "workbench.contrib.reviewRemoteHosts";
+	constructor(@IReviewRemoteHostsService _hosts: IReviewRemoteHostsService) { }
+}
+registerWorkbenchContribution2(ReviewRemoteHostsStartup.ID, ReviewRemoteHostsStartup, WorkbenchPhase.BlockStartup);
