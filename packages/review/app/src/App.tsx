@@ -24,6 +24,8 @@ import {
 
 import { AgentSelectionProvider, useAgentSelection } from "./agent-selection";
 import { observeAgentTextSelection } from "./agent-text-selection";
+import { AskHistoryProvider } from "./ask-history";
+import { AskHistoryControl } from "./ask-panel";
 import {
   AuthoringActivityBadge,
   ReviewSurfaceLabel,
@@ -222,29 +224,31 @@ function ReviewLayout({
             softwareMapEnabled={softwareMapEnabled}
             openTraceSession={panelStore.getState().openTrace}
           >
-            <AgentSelectionProvider revision={documentRevision}>
-              <ReviewLayoutContent
-                appRef={appRef}
-                shellRef={shellRef}
-                scrollRegionRef={scrollRegionRef}
-                articleRef={articleRef}
-                document={document}
-                documentRevision={documentRevision}
-                softwareModels={[
-                  ...(softwareMap.head ? [softwareMap.head] : []),
-                  ...document.documentSoftwareModels,
-                ]}
-                repoSoftwareMap={softwareMap.head ?? null}
-                baseSoftwareMap={softwareMap.base ?? null}
-                softwareMapTopologyDiff={diffSoftwareMaps(
-                  softwareMap.base,
-                  softwareMap.head,
-                )}
-                softwareMapEnabled={softwareMapEnabled}
-                range={range}
-                commits={commits}
-              />
-            </AgentSelectionProvider>
+            <AskHistoryProvider>
+              <AgentSelectionProvider revision={documentRevision}>
+                <ReviewLayoutContent
+                  appRef={appRef}
+                  shellRef={shellRef}
+                  scrollRegionRef={scrollRegionRef}
+                  articleRef={articleRef}
+                  document={document}
+                  documentRevision={documentRevision}
+                  softwareModels={[
+                    ...(softwareMap.head ? [softwareMap.head] : []),
+                    ...document.documentSoftwareModels,
+                  ]}
+                  repoSoftwareMap={softwareMap.head ?? null}
+                  baseSoftwareMap={softwareMap.base ?? null}
+                  softwareMapTopologyDiff={diffSoftwareMaps(
+                    softwareMap.base,
+                    softwareMap.head,
+                  )}
+                  softwareMapEnabled={softwareMapEnabled}
+                  range={range}
+                  commits={commits}
+                />
+              </AgentSelectionProvider>
+            </AskHistoryProvider>
           </ReviewProvider>
         </ReviewDebugSettingsProvider>
       </ReviewFindProvider>
@@ -585,6 +589,7 @@ function ReviewLayoutContent({
                 />
               </div>
               <ReviewStackSelector />
+              <AskHistoryControl />
               <ShareControl />
               <IconButton
                 xstyle={shellStyles.topbarItem}
@@ -772,7 +777,11 @@ function ReviewLayoutContent({
       </main>
       {rightPanelOpen && (
         <div
-          {...stylex.props(shellStyles.resizer, shellStyles.peekResizer)}
+          {...stylex.props(
+            shellStyles.resizer,
+            shellStyles.peekResizer,
+            activePanel?.kind === "ask" && shellStyles.peekResizerTray,
+          )}
           {...sidePeekResize.separatorProps}
         />
       )}

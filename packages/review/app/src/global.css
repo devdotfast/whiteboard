@@ -67,6 +67,9 @@
   --change-added: #4ed990;
   --change-removed: #f26a55;
   --change-modified: #f2c14e;
+  --warning-wash: rgba(242, 193, 78, 0.12);
+  --warning-focus: rgba(242, 193, 78, 0.52);
+  --on-warning: #1a1405;
   --diff-added: #4ed990;
   --diff-added-bg: #132019;
   --diff-modified: #f2c14e;

@@ -14,6 +14,8 @@ import type {
 } from "react";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
+import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
+import { AskHistoryButton, AskHistoryList, AskPanelContent } from "./ask-panel";
 import { AuthoredCodeSurface } from "./authored-code-surface";
 import { CodePeekCard } from "./CodePeek";
 import { controlStyles } from "./controls-styles";
@@ -68,11 +70,13 @@ function ReviewPanelFrame({
   onClose,
   closeLabel,
   titleAccessory,
+  headerActions,
   floatingFooter,
   bodyRef,
   onBodyScroll,
   tour = false,
   docked = false,
+  tray = false,
   children,
 }: {
   label: string;
@@ -80,11 +84,15 @@ function ReviewPanelFrame({
   onClose: () => void;
   closeLabel: string;
   titleAccessory?: ReactNode;
+  /** Buttons beside the close button. */
+  headerActions?: ReactNode;
   floatingFooter?: ReactNode;
   bodyRef?: Ref<HTMLDivElement>;
   onBodyScroll?: () => void;
   tour?: boolean;
   docked?: boolean;
+  /** On the tray, as a conversation is, with a quieter kicker. */
+  tray?: boolean;
   children: ReactNode;
 }) {
   const appRef = useReviewRoots()?.appRef;
@@ -123,6 +131,7 @@ function ReviewPanelFrame({
         panelMotion === "restored" && panelStyles.restored,
         tour && panelStyles.tour,
         docked && panelStyles.docked,
+        tray && panelStyles.tray,
       )}
       role="complementary"
       aria-label={title ?? label}
@@ -132,26 +141,35 @@ function ReviewPanelFrame({
         {...stylex.props(shellStyles.sheetResizer)}
         {...sheet.separatorProps}
       />
-      <header {...stylex.props(panelStyles.header)}>
+      <header {...stylex.props(panelStyles.header, tray && panelStyles.tray)}>
         <div {...stylex.props(panelStyles.title)}>
-          <span {...stylex.props(textStyles.eyebrow, panelStyles.kicker)}>
+          <span
+            {...stylex.props(
+              textStyles.eyebrow,
+              panelStyles.kicker,
+              tray && panelStyles.trayKicker,
+            )}
+          >
             {label}
           </span>
           {title && <h2 {...stylex.props(panelStyles.heading)}>{title}</h2>}
           {titleAccessory}
         </div>
-        <IconButton
-          size="large"
-          xstyle={panelStyles.close}
-          onClick={onClose}
-          aria-label={closeLabel}
-        >
-          <CloseIcon xstyle={controlStyles.inertIcon} />
-        </IconButton>
+        <div {...stylex.props(panelStyles.actions)}>
+          {headerActions}
+          <IconButton
+            size="large"
+            xstyle={panelStyles.close}
+            onClick={onClose}
+            aria-label={closeLabel}
+          >
+            <CloseIcon xstyle={controlStyles.inertIcon} />
+          </IconButton>
+        </div>
       </header>
       <div
         ref={bodyRef}
-        {...stylex.props(panelStyles.body)}
+        {...stylex.props(panelStyles.body, tray && panelStyles.trayBody)}
         onScroll={onBodyScroll}
       >
         {children}
@@ -436,12 +454,41 @@ export function ReviewPanelHost() {
 
   if (!activePanel) return null;
 
-  return (
+  return activePanel.kind === "peek" ? (
     <ReviewPeekPanel
       anchor={activePanel.anchor}
       content={activePanel.content}
       onClose={close}
     />
+  ) : (
+    <AskOpenThreadProvider key={activePanel.key}>
+      <ReviewPanelFrame
+        tray
+        label="Ask"
+        onClose={close}
+        closeLabel="Close Ask"
+        headerActions={
+          <>
+            <AskDeleteThreadButton />
+            <AskHistoryButton view={activePanel.view} />
+          </>
+        }
+      >
+        {activePanel.view.type === "history" ? (
+          <AskHistoryList />
+        ) : (
+          <AskPanelContent
+            selection={activePanel.view.selection}
+            agent={activePanel.view.agent}
+            savedThreadId={
+              activePanel.view.type === "saved"
+                ? activePanel.view.threadId
+                : undefined
+            }
+          />
+        )}
+      </ReviewPanelFrame>
+    </AskOpenThreadProvider>
   );
 }
 

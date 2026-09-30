@@ -130,6 +130,28 @@ export const panelStyles = stylex.create({
   close: {
     flex: "0 0 auto",
   },
+  actions: {
+    display: "flex",
+    flex: "0 0 auto",
+    alignItems: "center",
+    gap: "2px",
+  },
+  // A conversation sits on the tray, header and all.
+  tray: {
+    backgroundColor: tokens.tray,
+  },
+  trayKicker: {
+    color: tokens.inkMuted,
+    fontSize: fontSize.small,
+    fontWeight: fontWeight.regular,
+  },
+  // The conversation scrolls its own thread; the composer stays put.
+  trayBody: {
+    display: "flex",
+    flexDirection: "column",
+    paddingBottom: 0,
+    overflow: "hidden",
+  },
   body: {
     paddingBottom: "var(--review-bottom-scroll-padding, 0px)",
     flex: "1 1 auto",

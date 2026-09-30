@@ -65,6 +65,7 @@ export const tokens = stylex.defineConsts({
   minimapNodeSelected: "var(--minimap-node-selected)",
   onAccent: "var(--on-accent)",
   onAccentWash: "var(--on-accent-wash)",
+  onWarning: "var(--on-warning)",
   raised: "var(--raised)",
   reviewBottomScrollPadding: "var(--review-bottom-scroll-padding)",
   reviewDebugLayer: "var(--review-debug-layer)",
@@ -151,5 +152,7 @@ export const tokens = stylex.defineConsts({
   tutorialRingGlow: "var(--tutorial-ring-glow)",
   wbSweep: "var(--wb-sweep)",
   wbWipe: "var(--wb-wipe)",
+  warningFocus: "var(--warning-focus)",
+  warningWash: "var(--warning-wash)",
   well: "var(--well)",
 });

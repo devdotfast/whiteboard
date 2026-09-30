@@ -44,6 +44,8 @@ const TaskToggle = createContext<((item: MarkdownNode) => void) | undefined>(
 interface RenderContext {
   chat: boolean;
   highlightQuote?: string;
+  /** Restyles a chat message's inline code, as on a tray. */
+  codeXstyle?: stylex.StyleXStyles;
 }
 
 const documentContext: RenderContext = { chat: false };
@@ -51,14 +53,17 @@ const documentContext: RenderContext = { chat: false };
 export function AgentMarkdown({
   source,
   xstyle,
+  codeXstyle,
   highlightQuote,
 }: {
   source: string;
   xstyle?: stylex.StyleXStyles;
+  /** Restyles inline code, as on a tray. */
+  codeXstyle?: stylex.StyleXStyles;
   highlightQuote?: string;
 }): ReactElement {
   const { body, footnotes } = splitFootnotes(parseMarkdown(source));
-  const context = { chat: true, highlightQuote };
+  const context = { chat: true, highlightQuote, codeXstyle };
 
   return (
     <div {...stylex.props(chat.root, xstyle)}>
@@ -230,6 +235,7 @@ function renderMarkdownNode(
   paragraph?: stylex.StyleXStyles,
 ): ReactNode {
   const { chat: inChat, highlightQuote } = context;
+  const codeStyle = inChat ? [chat.code, context.codeXstyle] : doc.code;
 
   switch (node.type) {
     case "root":
@@ -283,14 +289,14 @@ function renderMarkdownNode(
     case "inlineCode":
       if (highlightQuote) {
         return (
-          <code key={key} {...stylex.props(inChat ? chat.code : doc.code)}>
+          <code key={key} {...stylex.props(codeStyle)}>
             <HighlightedText text={node.value ?? ""} quote={highlightQuote} />
           </code>
         );
       }
 
       return (
-        <code key={key} {...stylex.props(inChat ? chat.code : doc.code)}>
+        <code key={key} {...stylex.props(codeStyle)}>
           {node.value ?? ""}
         </code>
       );

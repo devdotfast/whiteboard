@@ -1,3 +1,5 @@
+import type { AgentSelection } from "@review/agent-selection";
+import type { AskAgentId } from "@review/ask/thread-state";
 import { type DiffSelection } from "@review/lens-selection";
 
 export type ReviewPeekContent =
@@ -42,5 +44,32 @@ export interface PeekPanel {
   anchor?: PeekAnchor;
   content: ReviewPeekContent;
 }
+
+/** What the Ask panel shows: a new question about a selection, a saved
+ * conversation, or the list of saved ones. */
+export type AskView =
+  | {
+      type: "new";
+      selection: AgentSelection;
+      /** The agent chosen from the selection toolbar, if any. */
+      agent?: AskAgentId;
+    }
+  | {
+      type: "saved";
+      threadId: string;
+      selection: AgentSelection;
+      agent: AskAgentId;
+    }
+  | { type: "history" };
+
+/** Conversations with a local agent about selections. Each view change
+ * remounts the panel through `key`. */
+export interface AskPanel {
+  kind: "ask";
+  key: number;
+  view: AskView;
+}
+
+export type ReviewPanel = PeekPanel | AskPanel;
 
 export type ReviewPanelMotion = "live" | "restored";

@@ -3,14 +3,21 @@ import {
   type ReviewView,
   reviewViewSchema,
 } from "@dev.fast/review-protocol";
+import type { AgentSelection } from "@review/agent-selection";
+import type { AskAgentId } from "@review/ask/thread-state";
 import { createStore } from "zustand/vanilla";
 
-import type { PeekPanel, ReviewPanelMotion } from "./review-panel-model";
+import type {
+  AskView,
+  PeekPanel,
+  ReviewPanel,
+  ReviewPanelMotion,
+} from "./review-panel-model";
 import { shouldCloseSidePeekForReviewView } from "./review-view-route";
 import type { AgentTraceStorage } from "./use-agent-trace";
 
 export interface ReviewPanelState {
-  active: PeekPanel | null;
+  active: ReviewPanel | null;
   motion: ReviewPanelMotion;
 }
 
@@ -69,6 +76,8 @@ export interface ReviewNavigationState {
 export interface ReviewPanelActions {
   suppressMotion: () => void;
   openPeek: (panel: PeekPanel) => void;
+  openAsk: (selection: AgentSelection, agent?: AskAgentId) => void;
+  openAskView: (view: AskView) => void;
   close: () => void;
 }
 
@@ -136,6 +145,25 @@ export function createReviewPanelStore({
     overlayTour: initialView === "review" ? overlayTour : null,
     suppressMotion: () => set({ motion: "restored" }),
     openPeek: (panel) => set({ active: panel, motion: "live" }),
+    openAsk: (selection, agent) =>
+      set((state) => ({
+        active: {
+          kind: "ask",
+          key: state.active?.kind === "ask" ? state.active.key + 1 : 0,
+          view: { type: "new", selection, agent },
+        },
+        motion: "live",
+      })),
+    openAskView: (view) =>
+      set((state) => ({
+        active: {
+          kind: "ask",
+          key: state.active?.kind === "ask" ? state.active.key + 1 : 0,
+          view,
+        },
+        // Switching views inside an open panel is not a new panel.
+        motion: state.active?.kind === "ask" ? "restored" : "live",
+      })),
     close: () => set({ active: null, motion: "live" }),
     showView: (next) => set((state) => viewTransition(state, next)),
     openCommitDiff: (scope) =>
