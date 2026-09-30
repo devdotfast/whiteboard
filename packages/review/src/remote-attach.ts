@@ -1,10 +1,12 @@
 import { execFile } from "node:child_process";
-import { constants, existsSync } from "node:fs";
-import { access, mkdir } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, mkdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import type { Writable } from "node:stream";
 import { promisify } from "node:util";
+
+import { jsonObject, jsonString, parseJsonText } from "@dev.fast/json";
 
 import { findReviewPackageRoot } from "./package-paths";
 import { readReviewServerHealth, serverNotReady } from "./server-discovery";
@@ -73,44 +75,39 @@ export async function remoteAttach(
 }
 
 /**
- * Fetches this machine's diffr with the package's own fetcher, into the
- * package as `ensure:diffr` does, or into the state directory when the
- * package is not writable. Never fails: without diffr, structural diff is off.
+ * Keeps the diffr that remote attach fetched into the state directory at the
+ * pinned version, using the package's own fetcher, which does nothing while
+ * its stamp matches. A copy we did not fetch is never touched. Never fails:
+ * without a current diffr, structural diff is off.
  */
 export async function ensureDiffr(input: EnsureDiffrInput) {
   const packageRoot =
     input.packageRoot ?? findReviewPackageRoot(import.meta.url);
 
   const fetched = fetchedDiffrPath(input.stateDir);
+  const executable = diffrExecutable(packageRoot, input.env, fetched);
 
-  const found = () =>
-    diffrPresent(diffrExecutable(packageRoot, input.env, fetched), input.env);
+  // An override, the package's own copy (a Desktop's signed runtime) or PATH.
+  if (executable !== fetched && (await diffrPresent(executable, input.env)))
+    return true;
 
-  // An override, a bundled copy (a Desktop's signed runtime) or PATH wins.
-  if (await found()) return true;
+  const diffrPackage = createRequire(import.meta.url).resolve(
+    "@dev.fast/diffr/package.json",
+  );
 
-  const into = (await writable(path.join(packageRoot, "bin")))
-    ? path.join(packageRoot, "bin")
-    : path.dirname(fetched);
+  const into = path.dirname(fetched);
 
   try {
     await mkdir(into, { recursive: true });
 
-    const fetcher =
-      input.fetcher ??
-      path.join(
-        path.dirname(
-          createRequire(import.meta.url).resolve(
-            "@dev.fast/diffr/package.json",
-          ),
-        ),
-        "bin",
-        "fetch.mjs",
-      );
-
     const { stderr } = await promisify(execFile)(
       process.execPath,
-      [fetcher, "--into", into],
+      [
+        input.fetcher ??
+          path.join(path.dirname(diffrPackage), "bin", "fetch.mjs"),
+        "--into",
+        into,
+      ],
       {
         env: input.env,
         timeout: input.timeoutMs ?? DIFFR_FETCH_TIMEOUT_MS,
@@ -126,16 +123,21 @@ export async function ensureDiffr(input: EnsureDiffrInput) {
     );
   }
 
-  return found();
+  // A refresh that failed leaves an older copy, which is not the pinned diffr.
+  const pinned = await stampVersion(diffrPackage);
+  const stamp = await stampVersion(path.join(into, "diffr.stamp.json"));
+
+  return (
+    stamp !== undefined &&
+    stamp === pinned &&
+    (await diffrPresent(fetched, input.env))
+  );
 }
 
-/** The directory, or its parent while it does not exist, takes new files. */
-async function writable(directory: string): Promise<boolean> {
-  const target = existsSync(directory) ? directory : path.dirname(directory);
-
-  return access(target, constants.W_OK).then(
-    () => true,
-    () => false,
+async function stampVersion(file: string) {
+  return readFile(file, "utf8").then(
+    (text) => jsonString(jsonObject(parseJsonText(text))?.version),
+    () => undefined,
   );
 }
 
