@@ -12,9 +12,8 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { z } from "zod";
 
-import { copyText } from "./copy-text";
+import { copyAgentContext } from "./copy-agent-context";
 import { useReviewSession } from "./host/review-session";
 import { useToast } from "./toast";
 
@@ -166,19 +165,7 @@ export function AgentSelectionProvider({
     } = selection;
 
     try {
-      const response = await session.fetch("/copy-context", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...payload, revision }),
-      });
-
-      if (!response.ok) throw new Error("Context unavailable");
-
-      const { text } = z
-        .object({ text: z.string() })
-        .parse(await response.json());
-
-      if (!(await copyText(text))) throw new Error("Clipboard unavailable");
+      await copyAgentContext(session, { ...payload, revision });
       setCopiedSelection(
         JSON.stringify([
           selection.target,
