@@ -12,6 +12,7 @@ import {
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { promisify } from "node:util";
 
 import {
@@ -305,7 +306,9 @@ async function fetchVerified(
 
   try {
     await pipeline(
-      Readable.fromWeb(response.body),
+      // SAFETY: Node's fetch body is its own web stream; the DOM type only
+      // names the same object.
+      Readable.fromWeb(response.body as WebReadableStream),
       async function* (chunks: AsyncIterable<Buffer>) {
         for await (const chunk of chunks) {
           received += chunk.length;
