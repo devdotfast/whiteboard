@@ -59,7 +59,7 @@ export interface ReviewNavigationState {
   availableViews: readonly ReviewView[];
   diffScope: ReviewDiffScope | null;
   traceSelection: TraceSelection | undefined;
-  /** Where traces are read from; null is the configured default. */
+  /** null reads the configured default. */
   traceStorage: AgentTraceStorage | null;
   lens: ReviewLensSelection | null;
   mapFocus: MapFocus | null;

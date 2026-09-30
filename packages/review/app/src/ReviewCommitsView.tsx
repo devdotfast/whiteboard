@@ -118,8 +118,7 @@ function CommitRow({
   const [expanded, setExpanded] = useState(false);
   const openTooltip = useTooltip("Open commit diff");
 
-  // A commit's files never change, so the first expansion's read serves the
-  // rest of the canvas's life.
+  // A commit's files never change.
   const files = useQuery({
     queryKey: canvasQueryKeys.commitFiles(commit.commit),
     queryFn: async () => [

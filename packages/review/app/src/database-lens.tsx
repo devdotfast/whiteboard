@@ -289,8 +289,6 @@ export function DatabaseLens(block: DatabaseLensProps) {
   const activeUseCaseId = useStore(lensState, (state) => state.activeUseCaseId);
   const { setActiveUseCaseId } = lensState.getState();
 
-  // Opening a tour selects its use case first, so the lens store alone
-  // decides which use case shows.
   const activeUseCase =
     useCases.find((useCase) => useCase.id === activeUseCaseId) ??
     useCases[0] ??

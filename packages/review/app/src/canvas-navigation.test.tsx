@@ -332,7 +332,6 @@ it("keeps a flow diagram's tour in the canvas navigation", async () => {
     overlayTour: { kind: "flow" },
   });
 
-  // A reload reopens it, and leaving the whiteboard closes it.
   await open();
   expect(overlay()).toBeTruthy();
   await act(async () => tab(container, "Commits")!.click());
