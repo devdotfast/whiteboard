@@ -37,6 +37,8 @@ const ALL_HIGHLIGHT = "review-find-match";
 
 const ACTIVE_HIGHLIGHT = "review-find-match-active";
 
+const SEARCH_DELAY_MS = 150;
+
 interface FindController {
   showFind(seed?: string): boolean;
   hideFind(): void;
@@ -215,11 +217,22 @@ function createFindController(
 
     clearHighlights();
     const generation = store.getState().startSearch();
+    // Editor searches are expensive; only a query the reader pauses on runs.
+    setTimeout(() => {
+      if (store.getState().generation === generation) {
+        run(generation, query, compiled.expression);
+      }
+    }, SEARCH_DELAY_MS);
+  };
+
+  const run = (
+    generation: number,
+    query: ReviewFindQuery,
+    expression: RegExp,
+  ) => {
     const article = articleRef.current;
 
-    const ranges = article
-      ? reviewFindRanges(article, compiled.expression)
-      : [];
+    const ranges = article ? reviewFindRanges(article, expression) : [];
 
     const orderedRegistrations = [...registrations].sort((left, right) =>
       compareDocumentOrder(left.container, right.container),
@@ -230,7 +243,7 @@ function createFindController(
         try {
           const result = await registration.setFindQuery({
             ...query,
-            text: compiled.expression.source,
+            text: expression.source,
             wholeWord: false,
             isRegex: true,
           });

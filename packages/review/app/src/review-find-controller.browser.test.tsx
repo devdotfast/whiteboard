@@ -123,6 +123,35 @@ it("ignores results from an older query generation", async () => {
   expect(findCount(container)?.textContent).toBe("1 of 3");
 });
 
+it("searches editors once for a query typed in quick succession", async () => {
+  const first = findHandle();
+  const second = findHandle();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const host = createReviewFindHost();
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(<FindHarness host={host} handles={[first, second]} />);
+  });
+  await act(async () => {
+    host.showFind();
+  });
+
+  for (const text of ["A", "Al", "Alp", "Alph", "Alpha"]) {
+    await setInput(container, text);
+  }
+
+  await vi.waitFor(() => {
+    expect(findCount(container)?.textContent).toBe("1 of 4");
+  });
+
+  for (const handle of [first, second]) {
+    expect(handle.setFindQuery.mock.calls.map(([query]) => query.text)).toEqual(
+      ["Alpha"],
+    );
+  }
+});
+
 it("keeps late editor results from reviving a closed search", async () => {
   const slow = deferred<{ matchCount: number }>();
   const handle = findHandle(() => slow.promise);
