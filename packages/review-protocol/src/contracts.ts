@@ -583,6 +583,20 @@ export interface ReviewCanvasSettingsContent {
   // has reviews and no longer shows the Welcome rail. Absent when the
   // install status endpoint is unavailable.
   install?: ReviewCanvasInstallContent;
+  remoteHosts: ReviewRemoteHostsSettings;
+}
+
+/** The `review.remote.hosts` setting and the hosts' live states. */
+export interface ReviewRemoteHostsSettings {
+  // `review.experimental.remoteHosts.enabled`.
+  enabled: boolean;
+  configured: string[];
+  // Aliases from the SSH configuration.
+  suggestions(): Promise<string[]>;
+  states(): Promise<ReviewGatewayHostState[]>;
+  // Rejects, with the reason, an alias the SSH command would refuse.
+  set(aliases: string[]): Promise<string[]>;
+  retry(alias: string): Promise<void>;
 }
 
 /** Workspace attachment identity is independent of the displayed source generation. */
