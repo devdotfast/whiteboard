@@ -26,7 +26,8 @@ import { RemoteExtensionEnvironmentChannelClient } from '../../workbench/service
 //
 // With REVIEW_SERVER_HANDSHAKE_TARGET=<host>:<port> and
 // REVIEW_SERVER_HANDSHAKE_TOKEN_FILE=<file>, it instead runs the handshake
-// against a server started elsewhere, for example through an SSH tunnel.
+// against a server started elsewhere, for example through an SSH tunnel, and
+// holds the connections for REVIEW_SERVER_HANDSHAKE_HOLD_MS before leaving.
 
 const COMMIT = '0123456789abcdef0123456789abcdef01234567';
 const AUTHORITY = 'wb-test+handshake';
@@ -100,8 +101,9 @@ if (external) {
 		assert.ok(tokenFile, 'REVIEW_SERVER_HANDSHAKE_TOKEN_FILE is required');
 		const target = { host, port: Number(port), token: readFileSync(tokenFile, 'utf8').trim() };
 		const started = Date.now();
-		const connection = await handshake(target, process.env['REVIEW_SERVER_HANDSHAKE_COMMIT'] ?? await version(target));
+		const connection = await handshake(target, await version(target));
 		console.log(`extension host Ready after ${Date.now() - started} ms; server pid ${connection.environment.pid}, ${connection.environment.arch}`);
+		await new Promise(resolve => setTimeout(resolve, Number(process.env['REVIEW_SERVER_HANDSHAKE_HOLD_MS'] ?? 0)));
 		close(connection);
 		await new Promise(resolve => setTimeout(resolve, 2_000));
 		assert.match(await version(target), /^[0-9a-f]{40}$/);
