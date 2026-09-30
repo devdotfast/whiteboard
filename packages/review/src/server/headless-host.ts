@@ -85,7 +85,7 @@ async function serve(input: HeadlessServerInput) {
   if (input.telemetry) await drainServerCrashReport(input.telemetry);
 
   const local = await openReviewProfile(input.stateDir, {
-    manageWorkspaces: false,
+    manageWorkspaces: true,
   });
 
   const discovery: ReviewServerDiscovery = {
