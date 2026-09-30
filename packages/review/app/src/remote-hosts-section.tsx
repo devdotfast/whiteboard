@@ -16,8 +16,6 @@ const RETRIED = new Set<ReviewGatewayHostState["state"]>([
   "unreachable",
 ]);
 
-const INSTALL_COMMAND = /npm install -g [^\s`]*[^\s`.]/;
-
 /**
  * The machines Whiteboard reaches over SSH: each alias with what the gateway
  * says of it, and an alias field that offers the SSH configuration's hosts.
@@ -43,15 +41,21 @@ export function RemoteHostsSection({
 
   useEffect(() => {
     let live = true;
+    // A read can take up to its 30 s timeout; ticks meanwhile are skipped.
+    let reading = false;
 
     const read = () => {
-      if (document.hidden) return;
+      if (document.hidden || reading) return;
+      reading = true;
       void hosts
         .states()
         .then((next) => {
           if (live) setStates(next);
         })
-        .catch(() => undefined);
+        .catch(() => undefined)
+        .finally(() => {
+          reading = false;
+        });
     };
 
     read();
@@ -97,18 +101,14 @@ export function RemoteHostsSection({
               {states ? (
                 <span {...stylex.props(styles.rowDescription, local.detail)}>
                   {(state?.state ?? "connecting").replace("-", " ")}
-                  {state?.detail ? (
-                    <>
-                      {" · "}
-                      <HostDetail
-                        detail={state.detail}
-                        install={
-                          state.state === "not-installed" ||
-                          state.state === "incompatible"
-                        }
-                      />
-                    </>
-                  ) : null}
+                  {state?.detail ? ` · ${state.detail}` : null}
+                </span>
+              ) : null}
+              {state?.installCommand ? (
+                <span {...stylex.props(styles.rowDescription, local.detail)}>
+                  <code {...stylex.props(local.command)}>
+                    {state.installCommand}
+                  </code>
                 </span>
               ) : null}
             </div>
@@ -184,21 +184,6 @@ export function RemoteHostsSection({
         </p>
       ) : null}
     </section>
-  );
-}
-
-/** Plain text from the host; its install command set apart so it selects whole. */
-function HostDetail({ detail, install }: { detail: string; install: boolean }) {
-  const command = install ? INSTALL_COMMAND.exec(detail) : null;
-
-  if (!command) return <>{detail}</>;
-
-  return (
-    <>
-      {detail.slice(0, command.index).replace(/`$/, "")}
-      <code {...stylex.props(local.command)}>{command[0]}</code>
-      {detail.slice(command.index + command[0].length).replace(/^`/, "")}
-    </>
   );
 }
 

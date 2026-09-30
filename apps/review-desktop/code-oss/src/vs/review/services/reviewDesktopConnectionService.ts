@@ -582,7 +582,7 @@ function parseRemoteHostStates(value: unknown): ReviewGatewayHostState[] {
 	if (!Array.isArray(value) || !value.every((host) =>
 		typeof host === "object" && host !== null &&
 		typeof host.alias === "string" && REMOTE_HOST_STATES.has(host.state) &&
-		optionalString(host.serverId) && optionalString(host.detail))) {
+		optionalString(host.serverId) && optionalString(host.detail) && optionalString(host.installCommand))) {
 		throw new Error("remote hosts response is malformed.");
 	}
 	return value;

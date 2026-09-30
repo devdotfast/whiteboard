@@ -31,6 +31,15 @@ export const UUID =
 /** A backoff delay, ±25%. */
 export const jitter = (ms: number) => ms * (0.75 + Math.random() * 0.5);
 
+// A remote's version reaches the UI, so only a version passes.
+const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+
+/** The command that installs this Desktop's version; never built from a remote's text. */
+const INSTALLS = new Set<ReviewGatewayHostState["state"]>([
+  "incompatible",
+  "not-installed",
+]);
+
 const healthSchema = z.object({
   ok: z.literal(true),
   // Absent unless the token is the server's.
@@ -183,6 +192,9 @@ export function createGatewayHosts(input: {
       ...known,
       state: host.status,
       ...(host.detail !== undefined && { detail: host.detail }),
+      ...(INSTALLS.has(host.status) && {
+        installCommand: `npm install -g @dev.fast/whiteboard@${input.version}`,
+      }),
     };
   }
 
@@ -346,8 +358,14 @@ export function createGatewayHosts(input: {
       // A restarted server has a new token, which only a new attach reads.
       if (restarted) return restartedHost(host);
 
-      // "unknown" is the fallback when a package cannot read its version.
-      if (health.version === "unknown" || health.version !== input.version) {
+      if (health.version !== "unknown" && !VERSION.test(health.version)) {
+        host.status = "incompatible";
+        host.detail = `${host.alias} reports an invalid version.`;
+      } else if (
+        // "unknown" is the fallback when a package cannot read its version.
+        health.version === "unknown" ||
+        health.version !== input.version
+      ) {
         host.status = "incompatible";
         host.detail = `${host.alias} runs Whiteboard ${health.version}; this Desktop runs ${input.version}. Run npm install -g @dev.fast/whiteboard@${input.version} on ${host.alias}.`;
       } else {

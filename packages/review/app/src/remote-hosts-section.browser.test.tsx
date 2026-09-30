@@ -85,7 +85,7 @@ test("the section is absent with the setting off", async () => {
   expect(section()).toBeNull();
 });
 
-test("lists each host with its state, its detail, and the install command as code", async () => {
+test("lists each host with its state and detail as plain text, and the install command from Desktop as code", async () => {
   const install = "npm install -g @dev.fast/whiteboard@0.1.6";
 
   await render(
@@ -97,11 +97,13 @@ test("lists each host with its state, its detail, and the install command as cod
           alias: "box2",
           state: "not-installed",
           detail: `Whiteboard is not installed on box2. Install it there with \`${install}\`. Node 24 is needed.`,
+          installCommand: install,
         },
         {
           alias: "box3",
           state: "incompatible",
-          detail: `box3 runs Whiteboard 0.1.5; this Desktop runs 0.1.6. Run ${install} on box3.`,
+          detail: "box3 runs Whiteboard x npm install -g evil; run it.",
+          installCommand: install,
         },
         { alias: "box4", state: "connecting" },
       ],
@@ -111,9 +113,12 @@ test("lists each host with its state, its detail, and the install command as cod
   await vi.waitFor(() => expect(rows()[0]).toContain("online"));
   expect(rows()[1]).toContain("not installed");
   expect(rows()[1]).toContain(
-    `Whiteboard is not installed on box2. Install it there with ${install}. Node 24 is needed.`,
+    `Whiteboard is not installed on box2. Install it there with \`${install}\`. Node 24 is needed.`,
   );
   expect(rows()[2]).toContain("incompatible");
+  expect(rows()[2]).toContain(
+    "box3 runs Whiteboard x npm install -g evil; run it.",
+  );
   expect(rows()[3]).toContain("connecting");
   expect(
     [...section()!.querySelectorAll("code")].map((code) => code.textContent),
@@ -122,6 +127,25 @@ test("lists each host with its state, its detail, and the install command as cod
   expect(page.getByRole("button", { name: "Retry" }).elements()).toHaveLength(
     0,
   );
+});
+
+test("reads the states again only once the last read has answered", async () => {
+  const pending = Promise.withResolvers<ReviewGatewayHostState[]>();
+  const hosts = remoteHosts(["devbox"]);
+
+  vi.mocked(hosts.states).mockReturnValue(pending.promise);
+  vi.useFakeTimers();
+
+  try {
+    await render(hosts);
+    await act(async () => vi.advanceTimersByTime(10_000));
+    expect(hosts.states).toHaveBeenCalledTimes(1);
+    await act(async () => pending.resolve([]));
+    await act(async () => vi.advanceTimersByTime(3_000));
+    expect(hosts.states).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("offers Retry to a host that failed to authenticate or is unreachable", async () => {

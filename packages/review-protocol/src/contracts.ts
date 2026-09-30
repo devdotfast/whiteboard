@@ -901,6 +901,8 @@ export interface ReviewGatewayHostState {
     | "not-installed"
     | "auth-failed";
   detail?: string;
+  /** For `incompatible` and `not-installed`: installs this Desktop's version. */
+  installCommand?: string;
 }
 
 export const ReviewRepositoryIdentitySchema = z.strictObject({
