@@ -28,7 +28,8 @@ export const workbenchDesktop = [
 	createModuleDescription('vs/workbench/api/node/extensionHostProcess'),
 	createModuleDescription('vs/review/review.desktop.main'),
 	createModuleDescription('vs/review/navigator.desktop.main'),
-	createModuleDescription('vs/review/electron-utility/reviewDesktopHostMain')
+	createModuleDescription('vs/review/electron-utility/reviewDesktopHostMain'),
+	createModuleDescription('vs/review/node/reviewSshAskpassMain')
 ];
 
 export const keyboardMaps = [

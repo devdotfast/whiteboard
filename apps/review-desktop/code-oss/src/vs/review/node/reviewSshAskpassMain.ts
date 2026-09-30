@@ -22,10 +22,10 @@ if (!socketPath || !alias) process.exit(1);
 // Any way out but a received answer is a failure.
 process.exitCode = 1;
 const fail = () => process.exit(1);
-setTimeout(fail, TIMEOUT_MS).unref();
 
 const socket = connect(socketPath);
 socket.setEncoding("utf8");
+socket.setTimeout(TIMEOUT_MS, fail);
 socket.on("error", fail);
 socket.on("connect", () => socket.write(`${JSON.stringify({ alias, text: process.argv[2] ?? "", pid: process.ppid })}\n`));
 let reply = "";

@@ -96,6 +96,7 @@ const desktopEntryPoints = [
 	'vs/review/review.desktop.main',
 	'vs/review/navigator.desktop.main',
 	'vs/review/electron-utility/reviewDesktopHostMain',
+	'vs/review/node/reviewSshAskpassMain',
 	'vs/workbench/contrib/debug/node/telemetryApp',
 	'vs/platform/files/node/watcher/watcherMain',
 	'vs/platform/terminal/node/ptyHostMain',

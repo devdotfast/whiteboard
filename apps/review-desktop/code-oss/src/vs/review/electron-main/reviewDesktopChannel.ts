@@ -7,6 +7,8 @@ import { Event } from "../../base/common/event.js";
 import { IServerChannel } from "../../base/parts/ipc/common/ipc.js";
 import type { IWindowsMainService } from "../../platform/windows/electron-main/windows.js";
 import type { ReviewDesktopConnection } from "../common/reviewDesktopBootstrap.js";
+import { REVIEW_SSH_ANSWER_CALL, REVIEW_SSH_PROMPT_EVENT } from "../common/reviewSshPrompt.js";
+import { reviewSshPromptRelay, type ReviewSshPromptRelay } from "./remote/reviewSshPromptRelay.js";
 import type { ReviewDesktopHost } from "./reviewDesktopHost.js";
 
 export { REVIEW_DESKTOP_CHANNEL } from "../common/reviewDesktopBootstrap.js";
@@ -20,9 +22,11 @@ export class ReviewDesktopChannel implements IServerChannel {
   constructor(
     private readonly host: ReviewDesktopHost,
     private readonly windows: IWindowsMainService,
+    private readonly sshPrompts: ReviewSshPromptRelay = reviewSshPromptRelay,
   ) {}
 
-  listen<T>(): Event<T> {
+  listen<T>(_context: string, event: string): Event<T> {
+    if (event === REVIEW_SSH_PROMPT_EVENT) return this.sshPrompts.onPrompt as Event<T>;
     return Event.None as Event<T>;
   }
 
@@ -37,6 +41,12 @@ export class ReviewDesktopChannel implements IServerChannel {
     }
     if (command === "closeSourceWindows") {
       this.closeSourceWindows(Array.isArray(arg) ? arg.map(String) : []);
+      return undefined as T;
+    }
+    if (command === REVIEW_SSH_ANSWER_CALL) {
+      const { id, answer } = (arg ?? {}) as { id?: unknown; answer?: unknown };
+      if (typeof id === "number")
+        this.sshPrompts.answer(id, typeof answer === "string" ? answer : undefined);
       return undefined as T;
     }
     throw new Error(`Unknown Review Desktop channel call: ${command}`);

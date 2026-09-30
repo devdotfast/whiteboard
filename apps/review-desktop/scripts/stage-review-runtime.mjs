@@ -77,6 +77,7 @@ export function requiredPackagedArtifacts(packagedRoot) {
     "out/vs/review/review.desktop.main.js",
     "out/vs/review/review.desktop.main.css",
     "out/vs/review/electron-utility/reviewDesktopHostMain.js",
+    "out/vs/review/node/reviewSshAskpassMain.js",
     "out/vs/review/canvas/canvas-loader.js",
     ...REQUIRED_RUNTIME_ENTRIES.map((entry) =>
       path.join(RUNTIME_DIRECTORY_NAME, entry),
