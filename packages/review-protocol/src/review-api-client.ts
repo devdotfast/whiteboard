@@ -48,7 +48,12 @@ export interface ReviewApiSummary {
   /** The SSH alias of the machine that holds the review; absent on the laptop. */
   host?: string;
   /** Set with `host`; a review server never writes these three. */
-  hostState?: "online" | "offline" | "incompatible" | "duplicate";
+  hostState?:
+    | "online"
+    | "connecting"
+    | "offline"
+    | "incompatible"
+    | "duplicate";
   /** Absent on the laptop, where everything is available. */
   available?: { sourceWindows: boolean; languageFeatures: boolean };
 }

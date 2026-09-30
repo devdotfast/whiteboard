@@ -426,7 +426,7 @@ it("marks a stopped host's review and list entries, keeps the others live, and r
   expect(stream.ended()).toBe(false);
 }, 30_000);
 
-it("lists a host's last reviews as offline after a restart while it is unreachable", async () => {
+it("lists a host's last reviews as connecting, then offline, after a restart while it is unreachable", async () => {
   const a = await startRemote(path.join(root, "a"));
   const b = await startRemote(path.join(root, "b"));
   await seed(a.api, root, "On a");
@@ -447,7 +447,20 @@ it("lists a host's last reviews as offline after a restart while it is unreachab
   await first.close();
   await b.stop();
 
-  const second = await startGateway(root, hosts);
+  // b's address now accepts and never answers, so its first check takes 3 s.
+  const hung = await startFake({ version, handle: () => true });
+
+  const second = await startGateway(root, [
+    hosts[0]!,
+    { alias: "wb-b", endpoint: hung.endpoint },
+  ]);
+
+  // Before b's first check ends, its remembered reviews are listed as connecting.
+  expect(
+    (await second.api<ReviewApiSummary[]>(""))
+      .filter((review) => review.host === "wb-b")
+      .map((review) => [review.title, review.hostState]),
+  ).toEqual([["On b", "connecting"]]);
 
   await expect
     .poll(

@@ -17,7 +17,7 @@ import {
   send,
 } from "./review-gateway-hosts.js";
 import type { GatewayMemory } from "./review-gateway-memory.js";
-import { keepOpen, readLines } from "./review-gateway-streams.js";
+import { keepOpen, readLines } from "./review-gateway-transport.js";
 
 /**
  * Attaches to `/control` on each online machine, so a remote's "open this

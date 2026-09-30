@@ -20,17 +20,19 @@ import {
   remoteHeaders,
   send,
 } from "./review-gateway-hosts.js";
+import { mergeLists } from "./review-gateway-list.js";
 import {
   type GatewayMemory,
   type ListMode,
   listEntriesSchema,
 } from "./review-gateway-memory.js";
+import {
+  chunks,
+  keepOpen,
+  readLines,
+  sleep,
+} from "./review-gateway-transport.js";
 import { serverJson } from "./review-server-core.js";
-
-/** A stream that stayed up this long starts its backoff again. */
-const STEADY_MS = 10_000;
-
-const MAX_LINE_CHARS = 64 * 1024 * 1024;
 
 const LIST_MODES: readonly ListMode[] = ["structural", "textual"];
 
@@ -72,129 +74,6 @@ function parseLine(text: string) {
   }
 }
 
-const sleep = (ms: number, signal: AbortSignal) =>
-  new Promise<void>((resolve) => {
-    const done = () => {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", done);
-      resolve();
-    };
-
-    const timer = setTimeout(done, ms);
-    signal.addEventListener("abort", done, { once: true });
-  });
-
-/** Calls `line` with each newline-terminated line of a body. */
-export async function readLines(
-  body: AsyncIterable<Uint8Array>,
-  line: (text: string) => void,
-) {
-  const decoder = new TextDecoder();
-  let pending = "";
-
-  for await (const chunk of body) {
-    pending += decoder.decode(chunk, { stream: true });
-    let end: number;
-
-    while ((end = pending.indexOf("\n")) !== -1) {
-      line(pending.slice(0, end));
-      pending = pending.slice(end + 1);
-    }
-
-    if (pending.length > MAX_LINE_CHARS) throw new Error("A line is too long.");
-  }
-}
-
-/** A web stream's chunks, cancelled when `signal` aborts. */
-function chunks(
-  body: ReadableStream<Uint8Array>,
-  signal: AbortSignal,
-): AsyncIterable<Uint8Array> {
-  const reader = body.getReader();
-  const cancel = () => void reader.cancel().catch(() => undefined);
-
-  return {
-    async *[Symbol.asyncIterator]() {
-      signal.addEventListener("abort", cancel, { once: true });
-
-      if (signal.aborted) cancel();
-
-      try {
-        for (;;) {
-          const { value, done } = await reader.read();
-
-          if (done) return;
-          yield value;
-        }
-      } finally {
-        signal.removeEventListener("abort", cancel);
-        cancel();
-      }
-    },
-  };
-}
-
-/**
- * Keeps one GET stream to a host open until `signal` aborts. When it ends,
- * /health is checked at once, so a host that is gone goes offline, and the
- * stream reopens with backoff. A host that does not answer in time is marked
- * offline.
- */
-export function keepOpen(input: {
-  hosts: GatewayHosts;
-  remote: GatewayRemote;
-  path: string;
-  signal: AbortSignal;
-  read(body: http.IncomingMessage): Promise<void>;
-}) {
-  const { remote, signal } = input;
-
-  void (async () => {
-    let delay = FIRST_RETRY_MS;
-
-    while (!signal.aborted) {
-      const started = Date.now();
-      const abort = new AbortController();
-      const leave = () => abort.abort();
-      signal.addEventListener("abort", leave, { once: true });
-      let timedOut = false;
-
-      const firstByte = setTimeout(() => {
-        timedOut = true;
-        abort.abort();
-      }, FIRST_BYTE_TIMEOUT_MS);
-
-      try {
-        const response = await send(remote, {
-          method: "GET",
-          path: input.path,
-          headers: remoteHeaders(remote),
-          signal: abort.signal,
-        });
-
-        clearTimeout(firstByte);
-
-        if (response.statusCode === 200) await input.read(response);
-      } catch {
-        // Ended: /health decides below.
-      } finally {
-        clearTimeout(firstByte);
-        signal.removeEventListener("abort", leave);
-        abort.abort();
-      }
-
-      if (signal.aborted) return;
-
-      if (timedOut) input.hosts.failed(remote, NO_ANSWER);
-      else input.hosts.recheck(remote);
-
-      if (Date.now() - started >= STEADY_MS) delay = FIRST_RETRY_MS;
-      await sleep(jitter(delay), signal);
-      delay = Math.min(delay * 2, MAX_RETRY_MS);
-    }
-  })();
-}
-
 /**
  * The merged list and the live updates: one list subscription to each online
  * machine, whose last lists the memory file keeps, and for each client
@@ -217,76 +96,24 @@ export function createGatewayStreams(input: {
   const conflicts = new Set<string>();
   let onlineKey = "";
 
-  function decorate(
-    entry: ReviewApiSummary,
-    alias: string,
-    hostState: NonNullable<ReviewApiSummary["hostState"]>,
-  ): ReviewApiSummary {
-    return {
-      ...entry,
-      // Two machines' repositories at one path stay two groups.
-      ...(entry.repositoryGroup && {
-        repositoryGroup: {
-          key: `${alias}:${entry.repositoryGroup.key}`,
-          label: entry.repositoryGroup.label,
-        },
-      }),
-      host: alias,
-      hostState,
-      available: { sourceWindows: false, languageFeatures: false },
-    };
-  }
-
-  /** Each machine's last list, in the setting's order, under its first alias. */
-  function remoteEntries(mode: ListMode) {
-    const entries: ReviewApiSummary[] = [];
-    const seen = new Set<string>();
-
-    for (const state of hosts.states()) {
-      // A copy's reviews are its machine's; a host still connecting has
-      // not been confirmed as any machine.
-      if (state.state === "duplicate" || state.state === "connecting") continue;
-      const serverId = state.serverId ?? memory.serverIdOf(state.alias);
-
-      if (serverId === undefined || seen.has(serverId)) continue;
-      seen.add(serverId);
-
-      const hostState = hosts.serving(serverId)
-        ? "online"
-        : state.state === "incompatible"
-          ? "incompatible"
-          : "offline";
-
-      for (const entry of memory.list(serverId, mode) ?? [])
-        entries.push(decorate(entry, state.alias, hostState));
-    }
-
-    return entries;
-  }
-
-  /** The laptop's entries, then each machine's; the first owner keeps an id. */
-  function merge(mode: ListMode, laptop: ReviewApiSummary[]) {
-    const ids = new Set(laptop.map((entry) => entry.reviewId));
-    const merged = [...laptop];
-
-    for (const entry of remoteEntries(mode)) {
-      if (ids.has(entry.reviewId)) {
-        if (!conflicts.has(entry.reviewId)) {
-          conflicts.add(entry.reviewId);
-          input.log(
-            `Review ${entry.reviewId} is also listed by ${entry.host}; the machine listed first keeps it.`,
-          );
-        }
-
-        continue;
-      }
-
-      ids.add(entry.reviewId);
-      merged.push(entry);
-    }
-
-    return merged;
-  }
+  const merge = (mode: ListMode, laptop: ReviewApiSummary[]) =>
+    mergeLists(
+      mode,
+      laptop,
+      {
+        states: hosts.states(),
+        serving: (serverId) => hosts.serving(serverId) !== undefined,
+        serverIdOf: (alias) => memory.serverIdOf(alias),
+        list: (serverId, listMode) => memory.list(serverId, listMode),
+      },
+      (entry) => {
+        if (conflicts.has(entry.reviewId)) return;
+        conflicts.add(entry.reviewId);
+        input.log(
+          `Review ${entry.reviewId} is also listed by ${entry.host}; the machine listed first keeps it.`,
+        );
+      },
+    );
 
   function feedLine(remote: GatewayRemote, text: string) {
     const line = parseLine(text);
