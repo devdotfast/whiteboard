@@ -126,7 +126,7 @@ export class ReviewRemoteHosts {
 	 * The forwarded VS Code server of the machine `serverId`, through the
 	 * first alias the gateway has online for it, when it has language features.
 	 */
-	languageEndpoint(serverId: string, states: readonly ReviewGatewayHostState[]): ReturnType<ReviewRemoteHost["languageEndpoint"]> {
+	async languageEndpoint(serverId: string, states: readonly ReviewGatewayHostState[]): ReturnType<ReviewRemoteHost["languageEndpoint"]> {
 		const online = states.find((state) => state.serverId === serverId && state.state === "online");
 		return online && this.hosts.get(online.alias)?.languageEndpoint(serverId);
 	}

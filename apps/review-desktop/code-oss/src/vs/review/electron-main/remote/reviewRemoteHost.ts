@@ -67,6 +67,9 @@ export const REVIEW_REMOTE_TIMEOUTS = {
 };
 
 const FIRST_DELAY_MS = 1_000;
+/** A remote still installing its language extensions is attached again this often, at most this many times in a row. */
+const PENDING_REATTACH_MS = 60_000;
+const PENDING_ATTACHES = 10;
 const MAX_DELAY_MS = 60_000;
 const OUTPUT_LIMIT = 64 * 1024;
 
@@ -250,7 +253,10 @@ export class ReviewRemoteHost {
 	/** The ports of the forward to the remote server. */
 	private forwarded: { local: number; remote: number } | undefined;
 	/** The forward to the VS Code server, once it answered with a commit this Desktop can use. */
-	private language: { local: number; remote: number; connectionToken: string } | undefined;
+	private language: { local: number; remote: number; connectionToken: string; commit: string } | undefined;
+	/** Attaches in a row that found the language extensions still installing. */
+	private pendingAttaches = 0;
+	private cancelPending: (() => void) | undefined;
 	private serverId: string | null = null;
 	private reattaching = false;
 	/** Reattaches since the connection last stayed up `stable`; each further one waits longer. */
@@ -321,18 +327,18 @@ export class ReviewRemoteHost {
 	reattach(): Promise<void> {
 		if (this.disposed || this.reattaching || this.cancelReattach || !this.master || this.connectedAt === undefined) return Promise.resolve();
 		if (this.clock.now() - this.connectedAt >= this.timeouts.stable) this.reattaches = 0;
-		if (this.reattaches++ === 0) return this.attachAgain();
+		if (this.reattaches++ === 0) return this.attachAgain("its server restarted");
 		const delay = reconnectDelay(this.reattaches - 2, this.options.random);
 		this.options.log(`${this.alias}: its server restarted again; attaching again in ${Math.round(delay / 1000)} s.`);
 		this.cancelReattach = this.clock.schedule(delay, () => {
 			this.cancelReattach = undefined;
-			void this.attachAgain();
+			void this.attachAgain("its server restarted");
 		});
 		return Promise.resolve();
 	}
 
-	/** Attach, forward a new port, and drop the old forward, over the same master. */
-	private async attachAgain(): Promise<void> {
+	/** Attach, forward a new port unless the old one still reaches it, and drop the old forwards, over the same master. */
+	private async attachAgain(reason: string): Promise<void> {
 		const env = this.env;
 		const old = this.forwarded;
 		const oldLanguage = this.language;
@@ -340,24 +346,29 @@ export class ReviewRemoteHost {
 		const generation = this.generation;
 		const stale = () => generation !== this.generation || this.disposed;
 		this.reattaching = true;
-		this.options.log(`${this.alias}: its server restarted; attaching again.`);
+		this.options.log(`${this.alias}: ${reason}; attaching again.`);
 		try {
 			const check = await this.run(sshCheckArgs(this.options.session, env), this.timeouts.operation);
 			if (stale()) return;
 			if (check.code !== 0) throw unreachable(`The SSH connection to ${this.alias} did not answer. ${firstLines(check.stderr)}`.trim());
 			const attach = await this.attach(env);
 			if (stale()) return;
-			const url = await this.forward(env, attach, stale);
+			// The same server keeps its forward, so the gateway keeps the host online.
+			const kept = attach.port === old.remote && (await probeHealth(old.local, this.timeouts.operation).then(() => true, () => false));
+			if (stale()) return;
+			if (kept) this.forwarded = old;
+			const url = kept ? `http://127.0.0.1:${old.local}` : await this.forward(env, attach, stale);
 			if (stale()) return;
 			const language = await this.forwardLanguage(env, attach, stale);
 			if (stale()) return;
-			for (const forward of [old, oldLanguage]) {
+			for (const forward of [kept ? undefined : old, oldLanguage]) {
 				if (forward) await this.run(sshCancelForwardArgs(this.options.session, forward.local, forward.remote, env), this.timeouts.operation);
 				if (stale()) return;
 			}
 			this.connectedAt = this.clock.now();
 			this.serverId = attach.serverId;
 			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language });
+			this.whilePending(attach);
 		} catch (error) {
 			if (stale()) return;
 			this.fail(error instanceof HostFailure ? error.problem : { state: "unreachable", detail: (error as Error).message });
@@ -383,15 +394,43 @@ export class ReviewRemoteHost {
 		this.cancelTimer = undefined;
 		this.cancelReattach?.();
 		this.cancelReattach = undefined;
+		this.cancelPending?.();
+		this.cancelPending = undefined;
 		const master = this.master;
 		this.master = undefined;
 		await this.close(master);
 	}
 
-	/** The VS Code server of the machine `serverId`, when its forward works and its commit matches. */
-	languageEndpoint(serverId: string): { host: "127.0.0.1"; port: number; connectionToken: string } | undefined {
-		if (!this.language || this.connectedAt === undefined || this.serverId !== serverId || this.reported.languageFeatures !== true) return undefined;
-		return { host: "127.0.0.1", port: this.language.local, connectionToken: this.language.connectionToken };
+	/**
+	 * The VS Code server of the machine `serverId`, when its commit matches and
+	 * it answers through its forward now. One that stopped (its idle limit) is
+	 * attached again, which starts a new one.
+	 */
+	async languageEndpoint(serverId: string): Promise<{ host: "127.0.0.1"; port: number; connectionToken: string } | undefined> {
+		const language = this.language;
+		if (!language || this.connectedAt === undefined || this.serverId !== serverId || this.reported.languageFeatures !== true) return undefined;
+		const commit = await probeVersion(language.local, this.timeouts.operation).catch(() => undefined);
+		if (commit === language.commit) return { host: "127.0.0.1", port: language.local, connectionToken: language.connectionToken };
+		if (language === this.language) {
+			this.options.log(`${this.alias}: its VS Code server did not answer; attaching again.`);
+			void this.reattach();
+		}
+		return undefined;
+	}
+
+	/** An attach that found the extensions still installing is repeated, a bounded number of times. */
+	private whilePending(attach: ReviewRemoteAttach): void {
+		this.cancelPending?.();
+		this.cancelPending = undefined;
+		if (!attach.languageServerPending) {
+			this.pendingAttaches = 0;
+			return;
+		}
+		if (++this.pendingAttaches >= PENDING_ATTACHES) return;
+		this.cancelPending = this.clock.schedule(PENDING_REATTACH_MS, () => {
+			this.cancelPending = undefined;
+			void this.attachAgain("its language extensions were installing");
+		});
 	}
 
 	/** At process exit, when nothing can be awaited. */
@@ -416,6 +455,8 @@ export class ReviewRemoteHost {
 		// A reattach waiting for its delay belongs to the connection being replaced.
 		this.cancelReattach?.();
 		this.cancelReattach = undefined;
+		this.cancelPending?.();
+		this.cancelPending = undefined;
 		this.connectedAt = undefined;
 		this.promptCancelled = false;
 		try {
@@ -439,6 +480,7 @@ export class ReviewRemoteHost {
 			// What authentication printed says nothing about why the connection may end later.
 			this.masterStderr = "";
 			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language });
+			this.whilePending(attach);
 		} catch (error) {
 			if (stale()) return;
 			this.fail(error instanceof HostFailure ? error.problem : { state: "unreachable", detail: (error as Error).message });
@@ -560,7 +602,7 @@ export class ReviewRemoteHost {
 			await this.run(sshCancelForwardArgs(this.options.session, port, server.port, env), this.timeouts.operation);
 			return unavailable(`The VS Code server on ${this.alias} did not answer through the forward: ${(error as Error).message}.`);
 		}
-		this.language = { local: port, remote: server.port, connectionToken: server.connectionToken };
+		this.language = { local: port, remote: server.port, connectionToken: server.connectionToken, commit: server.commit };
 		return { languageFeatures: true };
 	}
 
@@ -568,6 +610,8 @@ export class ReviewRemoteHost {
 		this.generation++;
 		this.cancelReattach?.();
 		this.cancelReattach = undefined;
+		this.cancelPending?.();
+		this.cancelPending = undefined;
 		this.connectedAt = undefined;
 		this.dropMaster();
 		this.set({ alias: this.alias, problem });

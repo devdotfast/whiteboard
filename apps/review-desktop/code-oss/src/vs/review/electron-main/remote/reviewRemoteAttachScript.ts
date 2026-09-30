@@ -46,6 +46,8 @@ export interface ReviewRemoteAttach {
 	readonly languageServer: ReviewRemoteLanguageServer | null;
 	/** Why there is no language server. */
 	readonly languageServerDetail?: string;
+	/** The remote is still installing the language extensions. */
+	readonly languageServerPending?: true;
 }
 
 /**
@@ -91,7 +93,7 @@ export function parseRemoteAttach(stdout: string): { attach: ReviewRemoteAttach 
 	return { error: "remote attach printed nothing readable between its sentinels." };
 }
 
-function languageServerOf(record: Record<string, unknown>): Pick<ReviewRemoteAttach, "languageServer" | "languageServerDetail"> {
+function languageServerOf(record: Record<string, unknown>): Pick<ReviewRemoteAttach, "languageServer" | "languageServerDetail" | "languageServerPending"> {
 	const detail = typeof record.languageServerDetail === "string" ? record.languageServerDetail.slice(0, 2000) : undefined;
 	const server = record.languageServer as Record<string, unknown> | null | undefined;
 	if (server && typeof server === "object") {
@@ -106,7 +108,11 @@ function languageServerOf(record: Record<string, unknown>): Pick<ReviewRemoteAtt
 		return { languageServer: null, languageServerDetail: "remote attach reported a VS Code server without a port, a token and a commit." };
 	}
 	// An older package says nothing of a language server.
-	return { languageServer: null, languageServerDetail: detail ?? "The Whiteboard on this host has no VS Code server." };
+	return {
+		languageServer: null,
+		languageServerDetail: detail ?? "The Whiteboard on this host has no VS Code server.",
+		...(record.languageServerPending === true && { languageServerPending: true as const }),
+	};
 }
 
 /** Remote data is untrusted: only a port on the remote's loopback is used. */

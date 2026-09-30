@@ -210,8 +210,8 @@ test("a window gets the VS Code server of a machine only while the gateway has i
 	await sentUntil((hosts) => byAlias(hosts, "wb-test-a")?.languageFeatures === true);
 
 	const online = [{ alias: "wb-test-a", serverId: "s1", state: "online" as const }];
-	assert.deepEqual(manager.languageEndpoint("s1", online), { host: "127.0.0.1", port, connectionToken: "vscode-token" });
-	assert.equal(manager.languageEndpoint("s1", [{ ...online[0], state: "duplicate" }]), undefined);
-	assert.equal(manager.languageEndpoint("s1", [{ ...online[0], serverId: "s2" }]), undefined);
-	assert.equal(manager.languageEndpoint("s1", []), undefined);
+	assert.deepEqual(await manager.languageEndpoint("s1", online), { host: "127.0.0.1", port, connectionToken: "vscode-token" });
+	assert.equal(await manager.languageEndpoint("s1", [{ ...online[0], state: "duplicate" }]), undefined);
+	assert.equal(await manager.languageEndpoint("s1", [{ ...online[0], serverId: "s2" }]), undefined);
+	assert.equal(await manager.languageEndpoint("s1", []), undefined);
 });

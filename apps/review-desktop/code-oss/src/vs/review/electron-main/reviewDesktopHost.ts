@@ -239,15 +239,19 @@ export class ReviewDesktopHost extends Disposable {
   async getRemoteLanguageEndpoint(serverId: string) {
     const manager = this.remoteHosts;
     if (!manager) return undefined;
-    const { url, token } = await this.whenConnected();
-    const response = await fetch(new URL("/remote-hosts", url), {
-      headers: { "x-review-token": token },
-    });
-    if (!response.ok) return undefined;
-    return manager.languageEndpoint(
-      serverId,
-      (await response.json()) as ReviewGatewayHostState[],
-    );
+    try {
+      const { url, token } = await this.whenConnected();
+      const response = await fetch(new URL("/remote-hosts", url), {
+        headers: { "x-review-token": token },
+      });
+      if (!response.ok) return undefined;
+      return await manager.languageEndpoint(
+        serverId,
+        (await response.json()) as ReviewGatewayHostState[],
+      );
+    } catch {
+      return undefined;
+    }
   }
 
   private startRemoteHosts(
