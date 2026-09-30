@@ -62,14 +62,14 @@ const FORWARDED_ROUTES: readonly (readonly [string, RegExp])[] = [
   ["GET", /^stack$/],
   ["GET", /^tree$/],
   ["GET", /^file$/],
-  ["GET", /^language-context$/],
   ["GET", /^resources\/[^/]+$/],
   ["GET", /^maps\/[^/]+$/],
   ["POST", /^navigator$/],
   ["POST", /^copy-context$/],
 ];
 
-/** Routes whose answers are read whole and refused if they name a path. */
+/** Routes whose answers are read whole and refused if they name a path.
+ * `language-context` is not forwarded until stage 2 forwards it again. */
 const PATH_ROUTES = new Set(["file", "language-context", "navigator"]);
 
 const PATH_FIELDS = new Set([

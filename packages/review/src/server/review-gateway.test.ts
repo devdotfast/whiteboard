@@ -193,6 +193,7 @@ it("answers per-review telemetry for a remote review itself and refuses laptop-o
     ["GET", "agent-traces"],
     ["GET", "workspaces"],
     ["POST", "environment"],
+    ["GET", "language-context?side=head"],
   ] as const) {
     const refused = await request(`/${reviewId}/${route}`, {
       method,
@@ -263,7 +264,6 @@ it("streams a remote answer line by line and closes the remote connection when t
 it.each([
   ["file", "GET", "localPath"],
   ["file", "GET", "localRoot"],
-  ["language-context", "GET", "rootPath"],
   ["navigator", "POST", "workspacePath"],
   ["navigator", "POST", "filePath"],
 ])(
