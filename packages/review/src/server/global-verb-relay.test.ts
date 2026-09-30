@@ -426,3 +426,29 @@ function createWriter() {
     },
   };
 }
+
+it("says when the first client attaches and when the last one goes", () => {
+  const relay = new GlobalReviewDesktopVerbRelay();
+  const heard: boolean[] = [];
+  const stop = relay.onAttachedChange((attached) => heard.push(attached));
+  const first = new AbortController();
+  const second = new AbortController();
+
+  const writer = (signal: AbortSignal) => ({
+    signal,
+    write() {},
+    close() {},
+  });
+
+  relay.attach(writer(first.signal));
+  relay.attach(writer(second.signal));
+  first.abort();
+  expect(heard).toEqual([true]);
+
+  second.abort();
+  expect(heard).toEqual([true, false]);
+
+  stop();
+  relay.attach(writer(new AbortController().signal));
+  expect(heard).toEqual([true, false]);
+});

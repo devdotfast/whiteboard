@@ -120,9 +120,10 @@ export function createGatewayPushes(input: {
   }
 
   return {
-    /** Host states changed: one link per online machine. */
+    /** Hosts or the laptop's windows changed: one link per online machine. */
     changed() {
-      const online = new Set(hosts.online());
+      // With no window here, a remote must see no Desktop attached.
+      const online = new Set(relay.attached ? hosts.online() : []);
 
       for (const [remote, abort] of links)
         if (!online.has(remote)) {

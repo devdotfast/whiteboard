@@ -572,12 +572,17 @@ export function createReviewGateway(input: {
     log,
   });
 
+  const stopWatchingWindows = input.relay.onAttachedChange?.(() => {
+    if (!closed) pushes.changed();
+  });
+
   return {
     fetch: handle,
     setHosts: (list: ReviewGatewayHost[]) => hosts.set(list),
     hosts: () => hosts.states(),
     async close() {
       closed = true;
+      stopWatchingWindows?.();
       streams.close();
       pushes.close();
       hosts.close();

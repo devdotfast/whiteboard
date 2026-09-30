@@ -259,10 +259,14 @@ it("sends a push to every Desktop attached to the remote", async () => {
 
 it("attaches again when a remote drops its /control stream, without a storm", async () => {
   const remote = await pushingRemote([]);
+  const relay = new GlobalReviewDesktopVerbRelay({ maxClients: 1 });
+  attachWindow(relay);
 
-  const laptop = await startGateway(root, [
-    { alias: "wb-a", endpoint: remote.fake.endpoint },
-  ]);
+  const laptop = await startGateway(
+    root,
+    [{ alias: "wb-a", endpoint: remote.fake.endpoint }],
+    { relay },
+  );
 
   await vi.waitFor(() => expect(remote.controls).toHaveLength(1));
 
@@ -366,4 +370,44 @@ it("refuses a push to open another machine's review or the laptop's", async () =
   );
   expect(received).toEqual([]);
   expect(await hostOf()).toBe("wb-a");
+});
+
+it("attaches to remotes only while a window is attached to the laptop", async () => {
+  const a = await startRemote(path.join(root, "a"));
+  const relay = new GlobalReviewDesktopVerbRelay({ maxClients: 1 });
+
+  const laptop = await startGateway(
+    root,
+    [{ alias: "wb-a", endpoint: a.endpoint }],
+    { relay },
+  );
+
+  await expect.poll(() => laptop.gateway.hosts()[0]?.state).toBe("online");
+  // Time enough to attach, were it going to.
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect((await a.health()).desktopAttached).toBe(false);
+  expect(await a.api("/capabilities")).toMatchObject({
+    desktopAvailable: false,
+  });
+
+  const unopened = await seed(a.api, root, "Not opened", { open: true });
+  expect(unopened).toEqual(expect.any(String));
+
+  const received = attachWindow(relay);
+
+  await expect.poll(async () => (await a.health()).desktopAttached).toBe(true);
+  expect(await a.api("/capabilities")).toMatchObject({
+    desktopAvailable: true,
+  });
+
+  const opened = await seed(a.api, root, "Opened", { open: true });
+  expect(
+    received.flatMap((request) =>
+      request.name === "openApiReview" ? [request.args.reviewId] : [],
+    ),
+  ).toEqual([opened]);
+
+  // The window goes: so does the attachment.
+  detaches.splice(0).forEach((detach) => detach());
+  await expect.poll(async () => (await a.health()).desktopAttached).toBe(false);
 });

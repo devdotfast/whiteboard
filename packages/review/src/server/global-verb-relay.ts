@@ -35,6 +35,8 @@ export interface ReviewDesktopVerbRelay {
   dispatch(value: JsonValue): Promise<ReviewVerbResponse>;
   acceptResult(value: JsonValue): boolean;
   close(): void;
+  /** Hears when the first client attaches and when the last one goes. */
+  onAttachedChange?(listener: (attached: boolean) => void): () => void;
 }
 
 /**
@@ -51,6 +53,7 @@ export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
   private readonly pending = new Map<string, PendingVerb>();
   private readonly timeoutMs: number;
   private readonly maxClients: number;
+  private readonly attachedListeners = new Set<(attached: boolean) => void>();
 
   constructor(options: { timeoutMs?: number; maxClients?: number } = {}) {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_VERB_TIMEOUT_MS;
@@ -73,7 +76,19 @@ export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
     this.clients.set(writer, detach);
     writer.signal.addEventListener("abort", detach, { once: true });
 
+    if (this.clients.size === 1) this.notifyAttached(true);
+
     return true;
+  }
+
+  onAttachedChange(listener: (attached: boolean) => void): () => void {
+    this.attachedListeners.add(listener);
+
+    return () => this.attachedListeners.delete(listener);
+  }
+
+  private notifyAttached(attached: boolean): void {
+    for (const listener of [...this.attachedListeners]) listener(attached);
   }
 
   dispatch(value: JsonValue): Promise<ReviewVerbResponse> {
@@ -170,6 +185,8 @@ export class GlobalReviewDesktopVerbRelay implements ReviewDesktopVerbRelay {
     for (const [id, verb] of [...this.pending]) {
       if (verb.waiting.get(id) === writer) this.stopWaiting(verb, id);
     }
+
+    if (this.clients.size === 0) this.notifyAttached(false);
   }
 
   /** Drops one client's id; with nobody left to answer, the verb fails. */
