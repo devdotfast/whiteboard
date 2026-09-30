@@ -32,6 +32,11 @@ export const reviewOptionalExtensionCatalog = [
 				url: 'https://open-vsx.org/api/rust-lang/rust-analyzer/linux-x64/0.4.2990/file/rust-lang.rust-analyzer-0.4.2990@linux-x64.vsix',
 				sha256: '317cb128e8caf2495b955ef6612d828fef809187ac445242116ad8e2e32382ff',
 				size: 16313907
+			},
+			'linux-arm64': {
+				url: 'https://open-vsx.org/api/rust-lang/rust-analyzer/linux-arm64/0.4.2990/file/rust-lang.rust-analyzer-0.4.2990@linux-arm64.vsix',
+				sha256: 'f8b326bc52f5bd9af94979fea09224697c431ef0e76f0239cb599a86df1e32b7',
+				size: 15931320
 			}
 		}
 	},
@@ -86,6 +91,11 @@ export const reviewOptionalExtensionCatalog = [
 				url: 'https://open-vsx.org/api/muhammad-sammy/csharp/linux-x64/2.145.21-g154a82fd27/file/muhammad-sammy.csharp-2.145.21-g154a82fd27@linux-x64.vsix',
 				sha256: '78bc006683cc998e9fd1a6f2760d8cb3da63096464a217bbd192ecfb490a5516',
 				size: 78144854
+			},
+			'linux-arm64': {
+				url: 'https://open-vsx.org/api/muhammad-sammy/csharp/linux-arm64/2.145.21-g154a82fd27/file/muhammad-sammy.csharp-2.145.21-g154a82fd27@linux-arm64.vsix',
+				sha256: '74a50cd78ca1eb45d87eb922b76e6ef3b4d843b4fc8b7b8187a7d2a9583ab532',
+				size: 75204300
 			}
 		}
 	},

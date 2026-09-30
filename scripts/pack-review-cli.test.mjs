@@ -157,6 +157,12 @@ test("packs the Desktop version under the whiteboard name with both bins and the
   assert.equal(go.tier, "optional");
   assert.equal(go.group, "go");
 
+  // Without it rust-analyzer does not start for a Rust file on the remote either.
+  const rust = curated.extensions.find(
+    (extension) => extension.id === "rust-lang.rust-analyzer",
+  );
+  assert.deepEqual(rust.addActivationEvents, ["onLanguage:rust"]);
+
   for (const extension of curated.extensions)
     for (const target of ["linux-x64", "linux-arm64"]) {
       const { url, sha256, size } = extension.targets[target];
