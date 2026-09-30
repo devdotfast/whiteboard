@@ -846,6 +846,37 @@ export interface ReviewServerHealthWithToken extends ReviewServerHealth {
   commit: string | null;
 }
 
+/** A remote as Electron main hands it to the gateway. */
+export const ReviewGatewayHostSchema = z.strictObject({
+  alias: requiredString,
+  // url is http://127.0.0.1:<forwarded port>
+  endpoint: z.strictObject({ url: requiredString, token: requiredString }).optional(),
+  problem: z
+    .strictObject({
+      state: z.enum(["unreachable", "not-installed", "auth-failed"]),
+      detail: stringAllowEmpty,
+    })
+    .optional(),
+});
+
+export type ReviewGatewayHost = z.infer<typeof ReviewGatewayHostSchema>;
+
+/** `GET /remote-hosts` on the Desktop server answers one per alias. */
+export interface ReviewGatewayHostState {
+  alias: string;
+  serverId?: string;
+  state:
+    | "connecting"
+    | "online"
+    | "offline"
+    | "incompatible"
+    | "duplicate"
+    | "unreachable"
+    | "not-installed"
+    | "auth-failed";
+  detail?: string;
+}
+
 export const ReviewRepositoryIdentitySchema = z.strictObject({
   kind: z.enum(["git", "jj", "none"], {
     error: "must be git, jj, or none",
