@@ -21,6 +21,7 @@ import {
   type ReviewServerAnnouncement,
   resolveReviewServerEntry,
 } from "../common/reviewDesktopBootstrap.js";
+import type { ReviewGatewayHost } from "../common/reviewProtocol.js";
 import {
   REVIEW_SERVER_RESTART_DELAYS,
   REVIEW_SERVER_STARTUP_TIMEOUT_MS,
@@ -213,6 +214,9 @@ export class ReviewServerSupervisor extends Disposable {
   private restartCount = 0;
   private stopping = false;
   private telemetryEnabled: boolean;
+  /** The server that announced its endpoint, which can take messages. */
+  private readyProcess: IReviewServerProcess | undefined;
+  private remoteHosts: ReviewGatewayHost[] | undefined;
 
   /**
    * Credentials are minted once and reused for the life of the application, so
@@ -244,6 +248,12 @@ export class ReviewServerSupervisor extends Disposable {
   setTelemetryEnabled(enabled: boolean): void {
     this.telemetryEnabled = enabled;
     this.serverProcess?.postMessage({ type: "telemetry-setting", enabled });
+  }
+
+  /** Kept, and sent again to every restarted server. */
+  setRemoteHosts(hosts: ReviewGatewayHost[]): void {
+    this.remoteHosts = hosts;
+    this.readyProcess?.postMessage({ type: "remote-hosts", hosts });
   }
 
   stageRustAnalyzer(): void {
@@ -330,6 +340,9 @@ export class ReviewServerSupervisor extends Disposable {
           appSessionId: this.appSessionId,
         };
         ready = true;
+        this.readyProcess = serverProcess;
+        if (this.remoteHosts)
+          serverProcess.postMessage({ type: "remote-hosts", hosts: this.remoteHosts });
         this.readyTimer.cancel();
         this.port = Number(new URL(connection.url).port);
         this.restartCount = 0;
@@ -356,6 +369,7 @@ export class ReviewServerSupervisor extends Disposable {
         `[Review Desktop] server host terminated: ${detail.reason}`,
       );
       this.serverProcess = undefined;
+      if (this.readyProcess === serverProcess) this.readyProcess = undefined;
       this.processListeners.dispose();
       if (this.stopping) return;
       if (died) this.options.onServerTerminated?.(detail);

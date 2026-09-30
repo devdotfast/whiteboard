@@ -61,6 +61,7 @@ export class ReviewRemoteHosts {
 	private lastSent = -Infinity;
 	private sentAny = false;
 	private disposed = false;
+	private disposing: Promise<void> | undefined;
 
 	constructor(private readonly options: ReviewRemoteHostsOptions) {
 		this.clock = options.clock ?? systemClock;
@@ -107,13 +108,15 @@ export class ReviewRemoteHosts {
 	}
 
 	/** Closes every forward and master; remote servers keep running. */
-	async dispose(): Promise<void> {
-		this.disposed = true;
-		this.cancelSend?.();
-		const hosts = [...this.hosts.values()];
-		this.hosts.clear();
-		await Promise.all(hosts.map((host) => host.dispose()));
-		(await this.prepared?.catch(() => undefined))?.dispose();
+	dispose(): Promise<void> {
+		return (this.disposing ??= (async () => {
+			this.disposed = true;
+			this.cancelSend?.();
+			const hosts = [...this.hosts.values()];
+			this.hosts.clear();
+			await Promise.all(hosts.map((host) => host.dispose()));
+			(await this.prepared?.catch(() => undefined))?.dispose();
+		})());
 	}
 
 	/** At process exit, when nothing can be awaited: masters are detached and would outlive us. */

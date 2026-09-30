@@ -43,6 +43,13 @@ export class ReviewDesktopChannel implements IServerChannel {
       this.closeSourceWindows(Array.isArray(arg) ? arg.map(String) : []);
       return undefined as T;
     }
+    if (command === "listSshAliases") {
+      return (await this.host.listSshAliases()) as T;
+    }
+    if (command === "retryRemoteHost") {
+      if (typeof arg === "string") this.host.retryRemoteHost(arg);
+      return undefined as T;
+    }
     if (command === REVIEW_SSH_ANSWER_CALL) {
       const { id, answer } = (arg ?? {}) as { id?: unknown; answer?: unknown };
       if (typeof id === "number")

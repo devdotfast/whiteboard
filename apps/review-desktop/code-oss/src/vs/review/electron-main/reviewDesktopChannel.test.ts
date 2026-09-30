@@ -60,3 +60,15 @@ test("relays ssh prompts to the window and takes its answer", async () => {
 	assert.equal(await answer, "hunter2");
 	relay.dispose();
 });
+
+test("lists the SSH aliases and retries a remote host through the host", async () => {
+	const retried: string[] = [];
+	const host = { listSshAliases: async () => ["devbox", "gpu"], retryRemoteHost: (alias: string) => retried.push(alias) };
+	const channel = new ReviewDesktopChannel(host as never, { getWindows: () => [] } as never);
+
+	assert.deepEqual(await channel.call("", "listSshAliases"), ["devbox", "gpu"]);
+	await channel.call("", "retryRemoteHost", "devbox");
+	await channel.call("", "retryRemoteHost", { alias: "not a string" });
+
+	assert.deepEqual(retried, ["devbox"]);
+});

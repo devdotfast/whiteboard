@@ -117,7 +117,7 @@ class FakeServerProcess implements IReviewServerProcess {
 	exitWith(code: number, signal: string): void {
 		this.exit.fire({ code, signal });
 	}
-	postMessage(): void { }
+	postMessage(_message?: unknown): void { }
 	kill(): void { }
 	dispose(): void { }
 }
@@ -223,6 +223,42 @@ test('calls onServerReady for the first server and for each restarted one', asyn
 	assert.equal(ready, 1);
 	processes[1].announceReady();
 	assert.equal(ready, 2);
+});
+
+test('sends the remote hosts to a server once it is ready, and again after a restart', async (t) => {
+	class RecordingServerProcess extends FakeServerProcess {
+		readonly messages: unknown[] = [];
+		override postMessage(message?: unknown): void { this.messages.push(message); }
+	}
+	const processes: RecordingServerProcess[] = [];
+	let restarted!: () => void;
+	const whenRestarted = new Promise<void>((resolve) => restarted = resolve);
+	const supervisor = new ReviewServerSupervisor({
+		appRoot: '/app',
+		appVersion: '0.0.34',
+		isBuilt: true,
+		channel: 'stable',
+		logInfo: () => { },
+		logError: () => { },
+		createProcess: () => {
+			const serverProcess = new RecordingServerProcess();
+			processes.push(serverProcess);
+			if (processes.length === 2) queueMicrotask(restarted);
+			return serverProcess;
+		},
+	});
+	t.after(() => supervisor.dispose());
+	const hosts = [{ alias: 'devbox', endpoint: { url: 'http://127.0.0.1:41000', token: 'remote' } }];
+
+	supervisor.start();
+	supervisor.setRemoteHosts(hosts);
+	assert.deepEqual(processes[0].messages, []);
+	processes[0].announceReady();
+	assert.deepEqual(processes[0].messages, [{ type: 'remote-hosts', hosts }]);
+	processes[0].crash();
+	await whenRestarted;
+	processes[1].announceReady();
+	assert.deepEqual(processes[1].messages, [{ type: 'remote-hosts', hosts }]);
 });
 
 test('the app path names the macOS bundle, else the executable', () => {
