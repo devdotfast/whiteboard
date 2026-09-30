@@ -6,12 +6,11 @@
 import { Disposable } from "../../../base/common/lifecycle.js";
 import { localize } from "../../../nls.js";
 import { IMainProcessService } from "../../../platform/ipc/common/mainProcessService.js";
-import { IQuickInputService, type IQuickInput, type IQuickPickItem } from "../../../platform/quickinput/common/quickInput.js";
+import { IQuickInputService, type IQuickInput } from "../../../platform/quickinput/common/quickInput.js";
 import { registerWorkbenchContribution2, WorkbenchPhase } from "../../../workbench/common/contributions.js";
 import { REVIEW_DESKTOP_CHANNEL } from "../../common/reviewDesktopBootstrap.js";
 import { REVIEW_SSH_ANSWER_CALL, REVIEW_SSH_PROMPT_EVENT, type ReviewSshPromptEvent } from "../../common/reviewSshPrompt.js";
-
-type ShownPrompt = Exclude<ReviewSshPromptEvent, { closed: true }>;
+import { createSshPromptInput, type ShownSshPrompt } from "./reviewSshPromptInput.js";
 
 /** Shows what `ssh` asks, word for word, and sends the answer back to main. Hiding it cancels. */
 class ReviewSshPrompts extends Disposable {
@@ -42,7 +41,7 @@ class ReviewSshPrompts extends Disposable {
 		});
 	}
 
-	private show(prompt: ShownPrompt): void {
+	private show(prompt: ShownSshPrompt): void {
 		this.current?.input.dispose();
 		let settled = false;
 		const settle = (answer: string | undefined) => {
@@ -53,22 +52,12 @@ class ReviewSshPrompts extends Disposable {
 			input.dispose();
 		};
 
-		let input: IQuickInput;
-		if (prompt.kind === "confirm") {
-			const pick = this.quickInputService.createQuickPick<IQuickPickItem>();
-			pick.items = [{ label: "yes" }, { label: "no" }];
-			pick.prompt = prompt.text;
-			pick.onDidAccept(() => settle(pick.selectedItems[0]?.label));
-			input = pick;
-		} else {
-			const box = this.quickInputService.createInputBox();
-			box.prompt = prompt.text;
-			box.password = prompt.kind === "secret";
-			box.onDidAccept(() => settle(box.value));
-			input = box;
-		}
-		input.title = localize("review.sshPrompt.title", "SSH: {0}", prompt.alias);
-		input.ignoreFocusOut = true;
+		const input = createSshPromptInput(
+			this.quickInputService,
+			prompt,
+			localize("review.sshPrompt.title", "SSH: {0}", prompt.alias),
+			settle,
+		);
 		input.onDidHide(() => settle(undefined));
 		this.current = { id: prompt.id, input };
 		input.show();
