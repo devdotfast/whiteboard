@@ -10,6 +10,7 @@ import {
 
 import { ClaudeCodeLogo, CodexLogo } from "./agent-logos";
 import { AgentMarkdown } from "./agent-markdown";
+import { askFileCode, askFileLink } from "./ask-files";
 import {
   AskCheckIcon,
   AskChevronIcon,
@@ -427,6 +428,8 @@ export function AskAgentTurn({
             source={
               streaming ? settleStreamingMarkdown(entry.text) : entry.text
             }
+            renderLink={streaming ? undefined : askFileLink}
+            renderInlineCode={streaming ? undefined : askFileCode}
           />,
         );
         break;

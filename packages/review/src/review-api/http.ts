@@ -7,6 +7,8 @@ import {
   selectionMarkdown,
 } from "@review/agent-selection.js";
 import type { AskAgentStatus } from "@review/ask/agents.js";
+import { checkoutFiles } from "@review/ask/checkout-files.js";
+import { parseFileRef, resolveFileRefs } from "@review/ask/file-refs.js";
 import {
   askAgentIds,
   askChoiceKinds,
@@ -80,6 +82,10 @@ const askOpenSchema = z.strictObject({ picks: askPicksSchema.optional() });
 const askChoiceSchema = z.strictObject({
   kind: z.enum(askChoiceKinds),
   value: z.string().min(1).max(200),
+});
+
+const askFilesSchema = z.strictObject({
+  paths: z.array(z.string().min(1).max(400)).max(100),
 });
 
 const askFollowUpSchema = z.strictObject({
@@ -1320,6 +1326,38 @@ export function createReviewApi(
     // Another model or effort for the next answer.
     // The files an answer names, as the checkout's own paths, so the panel
     // can open them.
+    app.post("/:id/ask/:threadId/files", async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      const { paths } = askFilesSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
+      );
+
+      const { cwd, entries } = thread.read();
+
+      const touched = entries.flatMap((entry) =>
+        entry.kind === "tool"
+          ? `${entry.title} ${entry.input ?? ""}`
+              .split(/\s+/)
+              .flatMap((token) => parseFileRef(token)?.path ?? [])
+          : [],
+      );
+
+      const files = resolveFileRefs(
+        cwd,
+        await checkoutFiles(cwd),
+        paths,
+        touched,
+      );
+
+      return context.json({
+        files: [...files].map(([path, file]) => ({ path, file })),
+      });
+    });
+
     app.post("/:id/ask/:threadId/choice", async (context) => {
       const thread = readThread(
         context.req.param("id"),

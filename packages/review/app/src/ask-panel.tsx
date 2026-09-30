@@ -30,6 +30,7 @@ import { z } from "zod";
 import { AgentChatUserMessage } from "./agent-chat";
 import { ClaudeCodeLogo, CodexLogo } from "./agent-logos";
 import { AskDeleteButton, useShowOpenThread } from "./ask-delete";
+import { AskFilesProvider } from "./ask-files";
 import { useAskHistory } from "./ask-history";
 import {
   AskArrowIcon,
@@ -815,78 +816,82 @@ export function AskPanelContent({
         </span>
       </div>
 
-      <div {...stylex.props(styles.threadFrame)}>
-        <div
-          ref={scroller}
-          {...stylex.props(styles.thread)}
-          aria-live="polite"
-          onScroll={latest.onScroll}
-          onScrollEnd={latest.onScrollEnd}
-        >
-          <AskSelectionQuote selection={selection} />
-          <AskOutdatedNote threadId={threadId ?? savedThreadId ?? null} />
-
-          {thread ? <AskTurns thread={thread} onDecide={decide} /> : null}
-
-          {thread &&
-          (thread.status === "running" ||
-            (thread.status === "starting" && !connecting)) ? (
-            <AskWorking
-              key={
-                thread.entries.findLast((entry) => entry.kind === "user")?.id
-              }
-              thread={thread}
-            />
-          ) : null}
-
-          {connecting && !thread?.entries.length ? (
-            <div {...stylex.props(styles.loading)} role="status">
-              <span {...stylex.props(styles.loadingLabel)}>
-                Loading the conversation from {agentName}…
-              </span>
-              <span {...stylex.props(styles.loadingLine)} />
-              <span
-                {...stylex.props(styles.loadingLine, styles.loadingLineShort)}
-              />
-            </div>
-          ) : null}
-
-          {thread?.signIn && retry && !requestError ? (
-            <AskSignIn
-              agentName={agentName}
-              command={thread.signIn}
-              onRetry={retry}
-            />
-          ) : error ? (
-            <p {...stylex.props(styles.error)} role="alert">
-              {error}
-              {reconnect || retry ? (
-                <>
-                  {" "}
-                  <button
-                    type="button"
-                    {...stylex.props(styles.errorAction)}
-                    onClick={reconnect ?? retry}
-                  >
-                    {reconnect ? "Reconnect" : "Try again"}
-                  </button>
-                </>
-              ) : null}
-            </p>
-          ) : null}
-        </div>
-        {latest.atLatest ? null : (
-          <button
-            type="button"
-            {...stylex.props(surfaceStyles.popover, styles.toLatest)}
-            aria-label="Scroll to the latest"
-            title="Scroll to the latest"
-            onClick={() => latest.jump()}
+      <AskFilesProvider key={threadId} threadId={threadId}>
+        <div {...stylex.props(styles.threadFrame)}>
+          <div
+            ref={scroller}
+            {...stylex.props(styles.thread)}
+            aria-live="polite"
+            onScroll={latest.onScroll}
+            onScrollEnd={latest.onScrollEnd}
           >
-            <AskArrowIcon xstyle={[askIconSizes.small, styles.toLatestIcon]} />
-          </button>
-        )}
-      </div>
+            <AskSelectionQuote selection={selection} />
+            <AskOutdatedNote threadId={threadId ?? savedThreadId ?? null} />
+
+            {thread ? <AskTurns thread={thread} onDecide={decide} /> : null}
+
+            {thread &&
+            (thread.status === "running" ||
+              (thread.status === "starting" && !connecting)) ? (
+              <AskWorking
+                key={
+                  thread.entries.findLast((entry) => entry.kind === "user")?.id
+                }
+                thread={thread}
+              />
+            ) : null}
+
+            {connecting && !thread?.entries.length ? (
+              <div {...stylex.props(styles.loading)} role="status">
+                <span {...stylex.props(styles.loadingLabel)}>
+                  Loading the conversation from {agentName}…
+                </span>
+                <span {...stylex.props(styles.loadingLine)} />
+                <span
+                  {...stylex.props(styles.loadingLine, styles.loadingLineShort)}
+                />
+              </div>
+            ) : null}
+
+            {thread?.signIn && retry && !requestError ? (
+              <AskSignIn
+                agentName={agentName}
+                command={thread.signIn}
+                onRetry={retry}
+              />
+            ) : error ? (
+              <p {...stylex.props(styles.error)} role="alert">
+                {error}
+                {reconnect || retry ? (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      {...stylex.props(styles.errorAction)}
+                      onClick={reconnect ?? retry}
+                    >
+                      {reconnect ? "Reconnect" : "Try again"}
+                    </button>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
+          </div>
+          {latest.atLatest ? null : (
+            <button
+              type="button"
+              {...stylex.props(surfaceStyles.popover, styles.toLatest)}
+              aria-label="Scroll to the latest"
+              title="Scroll to the latest"
+              onClick={() => latest.jump()}
+            >
+              <AskArrowIcon
+                xstyle={[askIconSizes.small, styles.toLatestIcon]}
+              />
+            </button>
+          )}
+        </div>
+      </AskFilesProvider>
 
       <form
         {...stylex.props(styles.composer)}
