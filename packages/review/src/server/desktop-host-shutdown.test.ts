@@ -1,9 +1,12 @@
 import { EventEmitter } from "node:events";
 
-import type { ReviewGatewayHost } from "@dev.fast/review-protocol";
+import type { JsonValue, ReviewGatewayHost } from "@dev.fast/review-protocol";
 import { describe, expect, it, vi } from "vitest";
 
-import { listenForDesktopHostShutdown } from "./desktop-host-shutdown";
+import {
+  listenForDesktopHostShutdown,
+  postToDesktop,
+} from "./desktop-host-shutdown";
 
 describe("listenForDesktopHostShutdown", () => {
   it("unwraps Electron utility-process parentPort messages", () => {
@@ -84,5 +87,22 @@ describe("listenForDesktopHostShutdown", () => {
     processEvents.emit("message", { type: "shutdown" });
 
     expect(onShutdown).toHaveBeenCalledOnce();
+  });
+
+  it("posts to Desktop on the utility-process parent port", () => {
+    const postMessage = vi.fn<(message: JsonValue) => void>();
+    const send = vi.fn<(message: JsonValue) => void>();
+    const message = { type: "remote-host-restarted", alias: "devbox" };
+
+    postToDesktop(
+      Object.assign(new EventEmitter(), {
+        parentPort: Object.assign(new EventEmitter(), { postMessage }),
+        send,
+      }),
+      message,
+    );
+
+    expect(postMessage.mock.calls).toEqual([[message]]);
+    expect(send).not.toHaveBeenCalled();
   });
 });

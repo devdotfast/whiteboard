@@ -5,7 +5,7 @@ import path from "node:path";
 import { readReviewPackageVersion } from "@review/package-paths.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { createGatewayHosts } from "./review-gateway-hosts.js";
+import { createGatewayHosts, send } from "./review-gateway-hosts.js";
 import {
   startFake,
   startRemote,
@@ -177,9 +177,12 @@ it("keeps a copied store a duplicate while the first alias is down", async () =>
     state: "offline",
   });
 
-  // Back on its port with a new instance id and token: still the machine.
+  // Back on its port with a new instance id and token: offline until Desktop
+  // attaches again, then still the machine.
   const restarted = await startRemote(path.join(root, "a"), port);
-
+  await expect
+    .poll(() => gateway.states()[0]?.detail, { timeout: 5_000 })
+    .toBe("wb-a restarted; attaching again.");
   gateway.set([
     { alias: "wb-a", endpoint: restarted.endpoint },
     { alias: "wb-c", endpoint: c.endpoint },
@@ -245,11 +248,18 @@ it("checks a host in backoff at once when the setting changes", async () => {
     .toBe("online");
 }, 20_000);
 
-it("re-checks another alias of a server that restarted", async () => {
+it("a restarted server is offline until Desktop attaches again, then online with the new token", async () => {
   const stateDir = path.join(root, "a");
   const a = await startRemote(stateDir);
   const port = Number(new URL(a.endpoint.url).port);
-  const gateway = hosts();
+  const restarted: string[] = [];
+
+  const gateway = createGatewayHosts({
+    version,
+    restarted: (alias) => restarted.push(alias),
+  });
+
+  closes.push(() => gateway.close());
 
   gateway.set([
     { alias: "wb-a1", endpoint: a.endpoint },
@@ -260,18 +270,67 @@ it("re-checks another alias of a server that restarted", async () => {
     .poll(() => gateway.states().map((host) => host.state))
     .toEqual(["online", "online"]);
 
-  // Same port, new instance id and token: the old token no longer names
-  // the server. The first alias is given the new one; the second learns of
-  // the restart from it and is checked again.
+  // Same port, new instance id and token; /health needs no token, so the
+  // old endpoint still reaches it. Every alias of it learns of the restart.
   await a.stop();
-  const restarted = await startRemote(stateDir, port);
+  const b = await startRemote(stateDir, port);
+  gateway.failed(gateway.serving(serverId)!, "test");
+
+  await expect
+    .poll(() => gateway.states().map((host) => [host.state, host.detail]))
+    .toEqual([
+      ["offline", "wb-a1 restarted; attaching again."],
+      ["offline", "wb-a2 restarted; attaching again."],
+    ]);
+  expect(restarted).toEqual(["wb-a1", "wb-a2"]);
 
   gateway.set([
-    { alias: "wb-a1", endpoint: restarted.endpoint },
-    { alias: "wb-a2", endpoint: a.endpoint },
+    { alias: "wb-a1", endpoint: b.endpoint },
+    { alias: "wb-a2", endpoint: b.endpoint },
   ]);
   await expect
     .poll(() => gateway.states().map((host) => host.state))
-    .toEqual(["online", "offline"]);
-  expect(gateway.serving(serverId)?.alias).toBe("wb-a1");
+    .toEqual(["online", "online"]);
+  expect(restarted).toHaveLength(2);
+}, 20_000);
+
+it("a 401 from a host asks Desktop once to attach again", async () => {
+  const fake = await startFake({
+    version,
+    handle: (request, response) => {
+      if (request.url === "/health") return false;
+      response.statusCode = 401;
+      response.end();
+
+      return true;
+    },
+  });
+
+  const restarted: string[] = [];
+
+  const gateway = createGatewayHosts({
+    version,
+    restarted: (alias) => restarted.push(alias),
+  });
+
+  closes.push(() => gateway.close());
+
+  gateway.set([{ alias: "devbox", endpoint: fake.endpoint }]);
+  await expect.poll(() => gateway.states()[0]?.state).toBe("online");
+  const [remote] = gateway.online();
+
+  for (let i = 0; i < 2; i++)
+    (
+      await send(remote!, {
+        method: "GET",
+        path: "/reviews-api",
+        signal: new AbortController().signal,
+      })
+    ).resume();
+
+  expect(gateway.states()[0]).toMatchObject({
+    state: "offline",
+    detail: "devbox restarted; attaching again.",
+  });
+  expect(restarted).toEqual(["devbox"]);
 });

@@ -13,8 +13,8 @@ import { StreamLimitError } from "./bounded-stream.js";
 
 const HEALTH_TIMEOUT_MS = 3_000;
 
-/** An answering host is checked again this often, so a hang is found. */
-const HEARTBEAT_MS = 30_000;
+/** An answering host is checked again this often, so a hang is found within about 13 s. */
+const HEARTBEAT_MS = 10_000;
 
 export const FIRST_RETRY_MS = 500;
 
@@ -45,11 +45,14 @@ export interface GatewayRemote {
   readonly endpoint?: { url: string; token: string };
   readonly agent?: http.Agent;
   readonly serverId?: string;
+  /** Its server answered 401: it restarted with a new token. */
+  readonly unauthorized?: () => void;
 }
 
 interface Host extends GatewayRemote {
   endpoint?: { url: string; token: string };
   agent?: http.Agent;
+  unauthorized?: () => void;
   problem?: ReviewGatewayHost["problem"];
   serverId?: string;
   instanceId?: string;
@@ -60,6 +63,8 @@ interface Host extends GatewayRemote {
   checking?: AbortController;
   /** Its first /health check of this session has finished. */
   checked?: boolean;
+  /** Its server restarted; Desktop was asked once to attach again. */
+  restarted?: boolean;
 }
 
 /**
@@ -75,6 +80,8 @@ export function createGatewayHosts(input: {
   machine?(serverId: string, alias: string): void;
   /** Host states may have changed. */
   changed?(): void;
+  /** A host's server restarted, so its endpoint and token are stale: Desktop attaches again. */
+  restarted?(alias: string): void;
   heartbeatMs?: number;
 }) {
   const log = input.log ?? (() => {});
@@ -205,6 +212,19 @@ export function createGatewayHosts(input: {
     input.changed?.();
   }
 
+  /** Once per endpoint: offline until Desktop sends the new one. */
+  function restartedHost(host: Host) {
+    if (host.restarted || closed) return;
+    host.restarted = true;
+    clearTimeout(host.retry);
+    host.checking?.abort();
+    host.checking = undefined;
+    host.status = "offline";
+    host.detail = `${host.alias} restarted; attaching again.`;
+    report();
+    input.restarted?.(host.alias);
+  }
+
   function dispose(host: Host) {
     clearTimeout(host.retry);
     host.checking?.abort();
@@ -227,7 +247,10 @@ export function createGatewayHosts(input: {
       host.detail = given.problem.detail;
     } else if (!given.endpoint)
       host.detail = `Waiting for a connection to ${given.alias}.`;
-    else host.agent = new http.Agent({ keepAlive: true });
+    else {
+      host.agent = new http.Agent({ keepAlive: true });
+      host.unauthorized = () => restartedHost(host);
+    }
 
     return host;
   }
@@ -240,7 +263,7 @@ export function createGatewayHosts(input: {
   }
 
   async function check(host: Host) {
-    if (closed || !host.endpoint || host.problem) return;
+    if (closed || !host.endpoint || host.problem || host.restarted) return;
     clearTimeout(host.retry);
     host.checking?.abort();
     const abort = new AbortController();
@@ -282,11 +305,14 @@ export function createGatewayHosts(input: {
       host.detail = `${host.alias} is offline: ${reason}.`;
       retryLater(host);
     } else if (health.serverId === undefined) {
-      // A restarted server has a new token; only its instance id is open.
-      host.instanceId = health.instanceId;
-      host.status = "offline";
-      host.detail = `${host.alias} is offline: it did not accept the token.`;
-      retryLater(host);
+      // The token is refused: the server restarted with a new one. Other
+      // aliases of it hold the old token too.
+      if (host.serverId !== undefined)
+        for (const other of hosts)
+          if (other !== host && other.serverId === host.serverId)
+            void check(other);
+
+      return restartedHost(host);
     } else {
       const restarted =
         host.serverId === health.serverId &&
@@ -301,6 +327,9 @@ export function createGatewayHosts(input: {
           if (other !== host && other.serverId === health.serverId)
             void check(other);
       host.retryMs = FIRST_RETRY_MS;
+
+      // A restarted server has a new token, which only a new attach reads.
+      if (restarted) return restartedHost(host);
 
       // "unknown" is the fallback when a package cannot read its version.
       if (health.version === "unknown" || health.version !== input.version) {
@@ -435,6 +464,7 @@ export function send(
     else request.signal.addEventListener("abort", abort, { once: true });
 
     outgoing.on("response", (response) => {
+      if (response.statusCode === 401) remote.unauthorized?.();
       response.on("close", release);
       resolve(response);
     });
