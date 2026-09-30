@@ -864,11 +864,32 @@ it("gives a remote caller no local paths and no source window", async () => {
     expect(localContext.rootPath).toBe(checkout);
     expect(localContext.identity).not.toMatch(hash);
 
-    for (const reviewId of [worktree, commits]) {
-      const remoteContext = await read(reviewId, context, true);
-      expect(remoteContext).toEqual({ identity: expect.stringMatching(hash) });
-      expect(JSON.stringify(remoteContext)).not.toContain(home);
-    }
+    const { serverId } = await (
+      await fetch(`${server.discovery.url}/health`)
+    ).json();
+
+    expect(await read(worktree, context, true)).toEqual({
+      remoteRootPath: checkout,
+      identity: expect.stringMatching(hash),
+      serverId,
+    });
+
+    // The server prepares the commit's pinned checkout itself.
+    await expect
+      .poll(async () => (await read(commits, context, true)).remoteRootPath, {
+        timeout: 20_000,
+      })
+      .toEqual(expect.any(String));
+
+    const pinned = await read(commits, context, true);
+    expect(pinned).toEqual({
+      remoteRootPath: expect.any(String),
+      identity: expect.stringMatching(hash),
+      serverId,
+    });
+    expect(
+      await readFile(path.join(pinned.remoteRootPath, "example.ts"), "utf8"),
+    ).toBe("export const value = 2;\n");
 
     for (const reviewId of [worktree, commits]) {
       const remoteFile = await read(reviewId, file, true);

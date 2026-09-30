@@ -608,6 +608,17 @@ export interface ReviewLanguageEnvironment {
   readonly issue?: string;
 }
 
+/** `/language-context` for a caller on another machine. */
+export interface ReviewRemoteLanguageEnvironment {
+  /** A path on the answering machine, never one on the caller's. */
+  readonly remoteRootPath: string | null;
+  /** A hash; equal exactly when the checkout's identity is. */
+  readonly identity: string;
+  /** The answering server's `/health` serverId. */
+  readonly serverId: string;
+  readonly issue?: string;
+}
+
 /** Authored version selection is independent of whether source is live or fixed. */
 export type ReviewSourceSelection =
   | { readonly reviewId: string; readonly kind: "current" }

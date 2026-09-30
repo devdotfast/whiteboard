@@ -955,7 +955,7 @@ it("serves a historical version's file at the pins that version was saved with",
   });
 });
 
-it("gives a remote caller a commit review's language context without its checkout path", async () => {
+it("gives a remote caller a commit review's checkout as remoteRootPath, with the server's id", async () => {
   const { reviewId } = await local.store.execute(
     command({ type: "create", title: "Remote", pins }),
   );
@@ -973,8 +973,11 @@ it("gives a remote caller a commit review's language context without its checkou
   expect(ownMachine.rootPath).toEqual(expect.any(String));
 
   const remote = await read({ [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE });
-  expect(remote).toEqual({ identity: expect.any(String) });
-  expect(JSON.stringify(remote)).not.toContain(directory);
+  expect(remote).toEqual({
+    remoteRootPath: ownMachine.rootPath,
+    identity: expect.stringMatching(/^[0-9a-f]{64}$/),
+    serverId: local.store.serverId(),
+  });
   expect(await read({ [REVIEW_CLIENT_HEADER]: "local" })).toEqual(ownMachine);
 });
 
@@ -1000,7 +1003,9 @@ it("gives a remote caller a fixed issue when a commit review's checkout fails", 
   const remote = await read({ [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE });
   expect(JSON.stringify(remote)).not.toContain(directory);
   expect(remote).toEqual({
+    remoteRootPath: null,
     identity: expect.any(String),
+    serverId: local.store.serverId(),
     issue:
       "The checkout for language features is not available on the remote machine.",
   });
