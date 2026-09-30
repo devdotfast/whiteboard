@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -55,8 +55,9 @@ test("the file lands under its name with every byte, and progress reaches the wh
 	const { root, local, content, target } = await fixture();
 	const progress: number[] = [];
 
-	await uploadFile(session, local, target, { spawn: localSsh(), env, onProgress: (sent) => progress.push(sent) });
+	const sent = await uploadFile(session, local, target, { spawn: localSsh(), env, onProgress: (bytes) => progress.push(bytes) });
 
+	assert.deepEqual(sent, { sha256: createHash("sha256").update(content).digest("hex"), bytes: content.length });
 	assert.deepEqual(await readFile(target), content);
 	assert.deepEqual((await readdir(root)).sort(), ["local.bin", "remote file.tgz"]);
 	assert.equal(progress.at(-1), content.length);
@@ -84,6 +85,27 @@ test("an upload whose ssh ends halfway leaves only the .part file", async () => 
 	);
 
 	assert.deepEqual((await readdir(root)).sort(), ["local.bin", "remote file.tgz.part"]);
+});
+
+test("a slow remote that keeps reading is not a stall, and one that stops reading is", async () => {
+	const { local, content, target } = await fixture(1 << 20);
+	// 64 KiB every 0.2 s: about 3 s in all, three times the stall bound.
+	const slow = localSsh({
+		rewrite: (command) =>
+			command.replace(
+				'cat > "$1.part"',
+				': > "$1.part"; while n=$(dd bs=65536 count=1 2>/dev/null | tee -a "$1.part" | wc -c) && [ $n -gt 0 ]; do sleep 0.2; done',
+			),
+	});
+
+	await uploadFile(session, local, target, { spawn: slow, env, timeouts: { stall: 1_000 } });
+	assert.deepEqual(await readFile(target), content);
+
+	const stopped = localSsh({ rewrite: (command) => command.replace('cat > "$1.part"', 'sleep 2; cat > "$1.part"') });
+	await assert.rejects(
+		uploadFile(session, local, `${target}.2`, { spawn: stopped, env, timeouts: { stall: 300 } }),
+		/stalled: ssh took nothing from its stdin/,
+	);
 });
 
 test("a .part that does not match what was sent is removed, not renamed", async () => {

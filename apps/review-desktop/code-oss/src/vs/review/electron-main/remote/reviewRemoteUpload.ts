@@ -11,8 +11,14 @@ import { runSsh, type SpawnSsh } from "./reviewRemoteHost.js";
 import { sshExecArgs, type ReviewSshSession } from "./reviewSshCommand.js";
 
 export const REVIEW_REMOTE_UPLOAD_TIMEOUTS = {
-	/** No byte accepted by ssh for this long ends the upload. */
+	/**
+	 * No chunk taken off ssh's stdin for this long ends the upload. ssh reads
+	 * stdin only as the remote acknowledges, so this is remote progress: one
+	 * 64 KiB chunk per 30 s, a floor of about 2 KB/s.
+	 */
 	stall: 30_000,
+	/** After the last byte leaves the laptop: ssh may still hold its 2 MiB channel window, 100 s at 20 KB/s. */
+	flush: 120_000,
 	/** The check on the remote: size, sha256sum and rename. */
 	finish: 60_000,
 };
@@ -45,12 +51,23 @@ function checkRemotePath(remotePath: string): void {
  * ssh's stdin, never on a command line. An upload that ends early leaves only
  * the `.part` file; one that arrives different is removed.
  */
-export async function uploadFile(session: ReviewSshSession, localPath: string, remotePath: string, options: ReviewRemoteUploadOptions): Promise<void> {
+/** What was sent, and what the remote now holds. */
+export interface ReviewRemoteUpload {
+	readonly sha256: string;
+	readonly bytes: number;
+}
+
+export async function uploadFile(
+	session: ReviewSshSession,
+	localPath: string,
+	remotePath: string,
+	options: ReviewRemoteUploadOptions,
+): Promise<ReviewRemoteUpload> {
 	checkRemotePath(remotePath);
 	const timeouts = { ...REVIEW_REMOTE_UPLOAD_TIMEOUTS, ...options.timeouts };
 	const total = (await stat(localPath)).size;
 	const where = `The upload of ${localPath} to ${session.alias}:${remotePath}`;
-	const sha256 = await send(session, localPath, remotePath, total, options, timeouts.stall, where);
+	const sha256 = await send(session, localPath, remotePath, total, options, timeouts, where);
 
 	const script = [
 		`f='${remotePath}'`,
@@ -62,7 +79,7 @@ export async function uploadFile(session: ReviewSshSession, localPath: string, r
 		"",
 	].join("\n");
 	const result = await runSsh(options.spawn, options.env, sshExecArgs(session, options.env), timeouts.finish, script);
-	if (result.stdout.includes(OK)) return;
+	if (result.stdout.includes(OK)) return { sha256, bytes: total };
 	if (result.timedOut) throw new Error(`${where} was not checked within ${timeouts.finish / 1000} seconds.`);
 	const mismatch = result.stdout.split("\n").find((line) => line.startsWith(MISMATCH));
 	if (mismatch) {
@@ -79,7 +96,7 @@ function send(
 	remotePath: string,
 	total: number,
 	options: ReviewRemoteUploadOptions,
-	stallTimeout: number,
+	timeouts: typeof REVIEW_REMOTE_UPLOAD_TIMEOUTS,
 	where: string,
 ): Promise<string> {
 	return new Promise((resolve, reject) => {
@@ -97,14 +114,16 @@ function send(
 		let stderr = "";
 		let failure: string | undefined;
 		let stall: ReturnType<typeof setTimeout>;
-		const watch = () => {
+		// Reset only when ssh takes bytes off its stdin, never on reads from the laptop's disk.
+		const watch = (ms: number, what: string) => {
 			clearTimeout(stall);
 			stall = setTimeout(() => {
-				failure = `stalled: ssh accepted nothing for ${stallTimeout / 1000} seconds`;
+				failure = `stalled: ${what} for ${ms / 1000} seconds`;
 				child.kill("SIGKILL");
-			}, stallTimeout);
+			}, ms);
 		};
-		watch();
+		const accepted = () => watch(timeouts.stall, "ssh took nothing from its stdin");
+		accepted();
 
 		child.stderr?.setEncoding("utf8");
 		child.stderr?.on("data", (chunk: string) => (stderr = (stderr + chunk).slice(0, 4096)));
@@ -116,14 +135,18 @@ function send(
 		file.on("data", (chunk) => {
 			hash.update(chunk);
 			sent += chunk.length;
-			watch();
 			options.onProgress?.(sent, total);
-			if (!stdin.write(chunk)) {
-				file.pause();
-				stdin.once("drain", () => file.resume());
-			}
+			if (stdin.write(chunk)) return accepted();
+			file.pause();
+			stdin.once("drain", () => {
+				accepted();
+				file.resume();
+			});
 		});
-		file.on("end", () => stdin.end());
+		file.on("end", () => {
+			stdin.end();
+			watch(timeouts.flush, "ssh did not finish sending what it held");
+		});
 		// Whatever else holds the pipe, the remote `cat` sees its end.
 		child.once("exit", () => {
 			file.destroy();
