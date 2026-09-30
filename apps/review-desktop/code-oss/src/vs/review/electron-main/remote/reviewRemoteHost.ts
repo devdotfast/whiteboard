@@ -259,6 +259,8 @@ export class ReviewRemoteHost {
 	private cancelPending: (() => void) | undefined;
 	private serverId: string | null = null;
 	private reattaching = false;
+	/** A reattach the gateway asked for while another was running; it runs next. */
+	private queuedReattach = false;
 	/** Reattaches since the connection last stayed up `stable`; each further one waits longer. */
 	private reattaches = 0;
 	private cancelReattach: (() => void) | undefined;
@@ -291,6 +293,7 @@ export class ReviewRemoteHost {
 		if (this.disposed) return;
 		this.generation++;
 		this.failures = 0;
+		this.pendingAttaches = 0;
 		this.dropMaster();
 		this.set({ alias: this.alias });
 		void this.connect();
@@ -325,20 +328,30 @@ export class ReviewRemoteHost {
 	 * reconnect backoff, reset once a connection stays up `stable`.
 	 */
 	reattach(): Promise<void> {
-		if (this.disposed || this.reattaching || this.cancelReattach || !this.master || this.connectedAt === undefined) return Promise.resolve();
+		if (this.disposed || this.cancelReattach || !this.master || this.connectedAt === undefined) return Promise.resolve();
+		// Never dropped: the attach running may have read the remote before it restarted.
+		if (this.reattaching) {
+			this.queuedReattach = true;
+			return Promise.resolve();
+		}
 		if (this.clock.now() - this.connectedAt >= this.timeouts.stable) this.reattaches = 0;
-		if (this.reattaches++ === 0) return this.attachAgain("its server restarted");
+		if (this.reattaches++ === 0) return this.attachAgain("its server restarted", false);
 		const delay = reconnectDelay(this.reattaches - 2, this.options.random);
 		this.options.log(`${this.alias}: its server restarted again; attaching again in ${Math.round(delay / 1000)} s.`);
 		this.cancelReattach = this.clock.schedule(delay, () => {
 			this.cancelReattach = undefined;
-			void this.attachAgain("its server restarted");
+			void this.attachAgain("its server restarted", false);
 		});
 		return Promise.resolve();
 	}
 
-	/** Attach, forward a new port unless the old one still reaches it, and drop the old forwards, over the same master. */
-	private async attachAgain(reason: string): Promise<void> {
+	/**
+	 * Attach, forward new ports and drop the old forwards, over the same
+	 * master. Only an attach this Desktop starts itself (`reuse`) may keep a
+	 * review forward that still reaches the same port: the gateway stops
+	 * checking a host it asked to reattach until it sees a new endpoint.
+	 */
+	private async attachAgain(reason: string, reuse: boolean): Promise<void> {
 		const env = this.env;
 		const old = this.forwarded;
 		const oldLanguage = this.language;
@@ -354,7 +367,7 @@ export class ReviewRemoteHost {
 			const attach = await this.attach(env);
 			if (stale()) return;
 			// The same server keeps its forward, so the gateway keeps the host online.
-			const kept = attach.port === old.remote && (await probeHealth(old.local, this.timeouts.operation).then(() => true, () => false));
+			const kept = reuse && attach.port === old.remote && (await probeHealth(old.local, this.timeouts.operation).then(() => true, () => false));
 			if (stale()) return;
 			if (kept) this.forwarded = old;
 			const url = kept ? `http://127.0.0.1:${old.local}` : await this.forward(env, attach, stale);
@@ -374,6 +387,10 @@ export class ReviewRemoteHost {
 			this.fail(error instanceof HostFailure ? error.problem : { state: "unreachable", detail: (error as Error).message });
 		} finally {
 			this.reattaching = false;
+			if (this.queuedReattach) {
+				this.queuedReattach = false;
+				void this.reattach();
+			}
 		}
 	}
 
@@ -412,8 +429,7 @@ export class ReviewRemoteHost {
 		const commit = await probeVersion(language.local, this.timeouts.operation).catch(() => undefined);
 		if (commit === language.commit) return { host: "127.0.0.1", port: language.local, connectionToken: language.connectionToken };
 		if (language === this.language) {
-			this.options.log(`${this.alias}: its VS Code server did not answer; attaching again.`);
-			void this.reattach();
+			void this.attachAgain("its VS Code server did not answer", true);
 		}
 		return undefined;
 	}
@@ -429,7 +445,7 @@ export class ReviewRemoteHost {
 		if (++this.pendingAttaches >= PENDING_ATTACHES) return;
 		this.cancelPending = this.clock.schedule(PENDING_REATTACH_MS, () => {
 			this.cancelPending = undefined;
-			void this.attachAgain("its language extensions were installing");
+			void this.attachAgain("its language extensions were installing", true);
 		});
 	}
 
@@ -457,6 +473,7 @@ export class ReviewRemoteHost {
 		this.cancelReattach = undefined;
 		this.cancelPending?.();
 		this.cancelPending = undefined;
+		this.queuedReattach = false;
 		this.connectedAt = undefined;
 		this.promptCancelled = false;
 		try {
@@ -608,6 +625,7 @@ export class ReviewRemoteHost {
 
 	private fail(problem: Problem): void {
 		this.generation++;
+		this.queuedReattach = false;
 		this.cancelReattach?.();
 		this.cancelReattach = undefined;
 		this.cancelPending?.();

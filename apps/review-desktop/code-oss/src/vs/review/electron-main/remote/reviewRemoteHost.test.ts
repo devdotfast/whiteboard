@@ -181,6 +181,7 @@ const pendingOutput = (port: number) =>
 test("a VS Code server that stopped answering is not handed out, and the host attaches again", async (t) => {
 	const stopped: Server = createServer((request, response) => response.end(request.url === "/version" ? COMMIT : ""));
 	await new Promise<void>((resolve) => stopped.listen(0, "127.0.0.1", resolve));
+	t.after(() => new Promise((resolve) => stopped.close(() => resolve(undefined))));
 	const ports = [await healthServer(t), (stopped.address() as AddressInfo).port, await versionServer(t, COMMIT)];
 	const { host, ssh, last } = hostFor(
 		t,
@@ -201,6 +202,61 @@ test("a VS Code server that stopped answering is not handed out, and the host at
 		ssh.of("wb-test-a", "cancel").map((call) => call.args.find((arg) => arg.startsWith("127.0.0.1:"))),
 		[`127.0.0.1:${ports[1]}:127.0.0.1:45678`],
 	);
+});
+
+test("a reattach the gateway asks for opens a new review forward, even to the same server", async (t) => {
+	const ports = [await healthServer(t), await healthServer(t)];
+	const { host, ssh, last } = hostFor(t, {}, ports);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	// A transient reset: the same port and token answer again.
+	await host.reattach();
+
+	assert.equal(last()?.endpoint?.url, `http://127.0.0.1:${ports[1]}`);
+	assert.equal(last()?.endpoint?.token, "remote-token");
+	assert.equal(ssh.of("wb-test-a", "forward").length, 2);
+	assert.ok(ssh.of("wb-test-a", "cancel")[0].args.includes(`127.0.0.1:${ports[0]}:127.0.0.1:41234`));
+});
+
+test("a reattach the gateway asks for during a pending attach runs after it, with new forwards", async (t) => {
+	const ports = [await healthServer(t), await versionServer(t, COMMIT), await healthServer(t), await versionServer(t, COMMIT)];
+	const { host, ssh, clock, last } = hostFor(
+		t,
+		{ attach: (call) => ({ code: 0, stdout: call === 1 ? pendingOutput(41234) : attachOutput(41234, "remote-token", { port: 45678, connectionToken: `vscode-${call}`, commit: COMMIT }) }) },
+		ports,
+	);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	assert.ok(clock.next());
+	// The pending attach is running; the gateway's request must not be lost.
+	await host.reattach();
+	await until(() => ssh.of("wb-test-a", "exec").length === 3 && last()?.endpoint?.url === `http://127.0.0.1:${ports[2]}`);
+
+	assert.equal(last()?.languageFeatures, true);
+	assert.deepEqual(await host.languageEndpoint("s1"), { host: "127.0.0.1", port: ports[3], connectionToken: "vscode-3" });
+});
+
+test("a Retry after ten pending attaches attaches again on the same schedule", async (t) => {
+	const port = await healthServer(t);
+	const { host, ssh, clock, last } = hostFor(t, { attach: { code: 0, stdout: pendingOutput(41234) } }, port);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	for (let attaches = 1; attaches < 10; attaches++) {
+		await until(() => clock.pending === 1);
+		clock.next();
+		await until(() => ssh.of("wb-test-a", "exec").length === attaches + 1);
+	}
+	// The tenth attach schedules nothing.
+	await new Promise((resolve) => setTimeout(resolve, 100));
+	assert.equal(clock.pending, 0);
+
+	host.retry();
+	await until(() => ssh.of("wb-test-a", "exec").length === 11 && last()?.endpoint !== undefined);
+	await until(() => clock.pending === 1);
+	assert.equal(clock.delays.at(-1), 60_000);
 });
 
 test("a remote still installing its extensions is attached again after a minute, until its VS Code server is reported", async (t) => {
@@ -236,10 +292,14 @@ test("attaching again for a pending install stops after ten attaches in a row", 
 
 	host.start();
 	await until(() => last()?.endpoint !== undefined);
-	for (let attaches = 1; clock.next(); attaches++) {
+	for (let attaches = 1; attaches < 10; attaches++) {
+		await until(() => clock.pending === 1);
+		clock.next();
 		await until(() => ssh.of("wb-test-a", "exec").length === attaches + 1);
-		await new Promise((resolve) => setImmediate(resolve));
 	}
+	// The tenth attach schedules nothing.
+	await new Promise((resolve) => setTimeout(resolve, 100));
+	assert.equal(clock.pending, 0);
 
 	assert.equal(ssh.of("wb-test-a", "exec").length, 10);
 	assert.equal(last()?.languageFeaturesDetail, `Language features are unavailable on wb-test-a: ${PENDING_DETAIL}`);
