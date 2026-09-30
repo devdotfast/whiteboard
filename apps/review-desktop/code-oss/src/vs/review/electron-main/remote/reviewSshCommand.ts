@@ -98,9 +98,12 @@ export function sshMasterArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv 
 	];
 }
 
-/** Runs `sh -s` whatever the login shell; the caller writes the script to stdin. */
-export function sshExecArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = process.env): string[] {
-	return [...base(session, env), "-oControlMaster=no", "-T", "--", session.alias, "sh", "-s"];
+/**
+ * Runs `sh -s` whatever the login shell; the caller writes the script to stdin.
+ * Another `command` reaches the login shell as one line, so it must quote alike in every shell.
+ */
+export function sshExecArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = process.env, command: readonly string[] = ["sh", "-s"]): string[] {
+	return [...base(session, env), "-oControlMaster=no", "-T", "--", session.alias, ...command];
 }
 
 function localForward(localPort: number, remotePort: number): string {
