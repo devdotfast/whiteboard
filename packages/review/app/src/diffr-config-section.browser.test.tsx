@@ -23,6 +23,29 @@ const PROMPT_URL =
 function config(): ReviewDiffrConfig {
   return {
     credentialSource: "config",
+    providers: [
+      [
+        "gemini",
+        "Gemini",
+        "gemini-3.8-flash",
+        "https://generativelanguage.googleapis.com",
+      ],
+      ["openai", "OpenAI", "gpt-6-luna", "https://api.openai.com/v1"],
+      [
+        "anthropic",
+        "Anthropic",
+        "claude-haiku-4-5",
+        "https://api.anthropic.com",
+      ],
+      ["mistral", "Mistral", "mistral-small", "https://api.mistral.ai/v1"],
+    ].map(([id, title, model, endpoint]) => ({
+      id,
+      title,
+      model,
+      endpoint,
+      keyVariables: [],
+      keylessCustomEndpoint: id === "openai",
+    })),
     defaultPrompt: "Default prompt.",
     defaultPromptUrl: PROMPT_URL,
     values: {
@@ -36,6 +59,7 @@ function config(): ReviewDiffrConfig {
           "hide-files": { enabled: true, deleted: true, tags: ["test"] },
           summarize: {
             enabled: false,
+            provider: "gemini",
             model: "test-model",
             tests: true,
             system_prompt: "Default prompt.",
@@ -393,4 +417,18 @@ test("switching provider clears a custom endpoint, and a new endpoint warns abou
     await page.getByRole("radio", { name: "Anthropic" }).click();
   });
   await expect.element(endpoint).toHaveValue("");
+});
+
+test("offers whatever providers diffr describes, with their defaults", async () => {
+  await mount();
+  await open();
+  await act(async () => {
+    await page.getByRole("radio", { name: "Mistral" }).click();
+  });
+  await expect
+    .element(page.getByLabelText("Model", { exact: true }))
+    .toHaveValue("mistral-small");
+  await expect
+    .element(page.getByLabelText("Endpoint URL", { exact: true }))
+    .toHaveAttribute("placeholder", "https://api.mistral.ai/v1");
 });

@@ -20,6 +20,7 @@ beforeEach(() => {
   vi.stubEnv("GOOGLE_API_KEY", "");
   vi.stubEnv("OPENAI_API_KEY", "");
   vi.stubEnv("ANTHROPIC_API_KEY", "");
+  vi.stubEnv("MISTRAL_API_KEY", "");
   vi.clearAllMocks();
 });
 
@@ -34,6 +35,79 @@ const DEFAULT_PROMPT = "Summarize each fold.";
 
 const PROMPT_URL =
   "https://github.com/devdotfast/diffr/blob/main/plugins/summarize/plugin.toml#L68-L74";
+
+// What diffr's schema says about each provider. "mistral" exists only here:
+// Whiteboard must handle a provider it has never heard of.
+const PROVIDERS = [
+  [
+    "gemini",
+    "Gemini",
+    "gemini-3.8-flash",
+    "https://generativelanguage.googleapis.com",
+    ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+    false,
+  ],
+  [
+    "openai",
+    "OpenAI",
+    "gpt-6-luna",
+    "https://api.openai.com/v1",
+    ["OPENAI_API_KEY"],
+    true,
+  ],
+  [
+    "anthropic",
+    "Anthropic",
+    "claude-haiku-4-5",
+    "https://api.anthropic.com",
+    ["ANTHROPIC_API_KEY"],
+    false,
+  ],
+  [
+    "mistral",
+    "Mistral",
+    "mistral-small",
+    "https://api.mistral.ai/v1",
+    ["MISTRAL_API_KEY"],
+    false,
+  ],
+] as const;
+
+const SUMMARIZE_SCHEMA = {
+  type: "object",
+  properties: {
+    provider: {
+      enum: PROVIDERS.map(([id]) => id),
+      "x-enum-titles": PROVIDERS.map(([, title]) => title),
+    },
+    model: {
+      type: "string",
+      "x-default-by": {
+        key: "provider",
+        values: Object.fromEntries(
+          PROVIDERS.map(([id, , model]) => [id, model]),
+        ),
+      },
+    },
+    provider_details: {
+      type: "object",
+      "x-default-by": {
+        key: "provider",
+        values: Object.fromEntries(
+          PROVIDERS.map(([id, , , endpoint, keys, keyless]) => [
+            id,
+            { endpoint, key_variables: keys, keyless_custom_endpoint: keyless },
+          ]),
+        ),
+      },
+    },
+    system_prompt: {
+      type: "string",
+      default: DEFAULT_PROMPT,
+      description: `Unset uses the default: ${PROMPT_URL}`,
+    },
+  },
+};
 
 const draft = {
   enabled: true,
@@ -82,7 +156,7 @@ const config = JSON.parse(fs.readFileSync(state, 'utf8'));
 if (args[0] === 'config' && args[1] === 'schema' && process.env.FAIL_SCHEMA) {
   process.exit(2);
 } else if (args[0] === 'config' && args[1] === 'schema') {
-  const summarize = { type: 'object', properties: { system_prompt: { type: 'string', default: ${JSON.stringify(DEFAULT_PROMPT)}, description: ${JSON.stringify(`Unset uses the default: ${PROMPT_URL}`)} } } };
+  const summarize = ${JSON.stringify(SUMMARIZE_SCHEMA)};
   console.log(JSON.stringify({ properties: { plugins: { properties: { bundled: { properties: { summarize } } } } } }));
 } else if (args[0] === 'config' && args[1] === 'show') {
   if (!args.includes('--reveal') && config.plugins.bundled.summarize.api_key) config.plugins.bundled.summarize.api_key = '<redacted>';
@@ -487,4 +561,40 @@ test("a saved prompt is compared as written and a blank one is left alone", asyn
   expect(
     (await fake.calls()).some((args) => args[2]?.endsWith(".system_prompt")),
   ).toBe(false);
+});
+
+test("providers, their titles, models and keys all come from diffr's schema", async () => {
+  await fakeDiffr();
+  const config = await readDiffrConfig();
+  expect(config.providers).toContainEqual({
+    id: "mistral",
+    title: "Mistral",
+    model: "mistral-small",
+    endpoint: "https://api.mistral.ai/v1",
+    keyVariables: ["MISTRAL_API_KEY"],
+    keylessCustomEndpoint: false,
+  });
+  expect(
+    (await saveDiffrSummarizer({ ...draft, provider: "mistral" })).error,
+  ).toContain("API key");
+  vi.stubEnv("MISTRAL_API_KEY", "mistral-env");
+  expect(
+    (await saveDiffrSummarizer({ ...draft, provider: "mistral" })).error,
+  ).toBeUndefined();
+});
+
+test("the synthetic test lets diffr derive the draft provider's details", async () => {
+  const fake = await fakeDiffr("", {
+    provider_details: {
+      endpoint: "https://generativelanguage.googleapis.com",
+      key_variables: ["GEMINI_API_KEY"],
+      keyless_custom_endpoint: false,
+    },
+  });
+
+  vi.stubEnv("ANTHROPIC_API_KEY", "env-anthropic");
+  await testDiffrSummarizer({ ...draft, provider: "anthropic" });
+  expect(
+    await readFile(path.join(fake.root, "test-config"), "utf8"),
+  ).not.toContain("provider_details");
 });

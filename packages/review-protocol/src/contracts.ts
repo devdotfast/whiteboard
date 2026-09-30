@@ -458,22 +458,29 @@ export interface ReviewCanvasTutorialBridge {
  * setter resolves with the value that actually landed, so a row re-renders from
  * the authoritative result instead of an optimistic one.
  */
+/** What diffr's schema says about one summary provider. */
+export interface ReviewDiffrProvider {
+  id: string;
+  title: string;
+  model: string;
+  endpoint: string;
+  keyVariables: string[];
+  keylessCustomEndpoint: boolean;
+}
+
 export interface ReviewDiffrConfig {
   values: JsonObject;
   credentialSource: "config" | "environment" | "missing";
+  providers?: ReviewDiffrProvider[];
   defaultPrompt?: string;
   defaultPromptUrl?: string;
   changed?: boolean;
   error?: string;
 }
 
-export const reviewDiffrProviders = ["gemini", "openai", "anthropic"] as const;
-
-export type ReviewDiffrProvider = (typeof reviewDiffrProviders)[number];
-
 export const reviewDiffrSummarizerInputSchema = z.object({
   enabled: z.boolean(),
-  provider: z.enum(reviewDiffrProviders),
+  provider: z.string().min(1),
   model: z.string().trim().min(1),
   endpoint: z.string().trim(),
   // Blank means diffr's own default; kept as written, not trimmed.
@@ -489,6 +496,18 @@ export type ReviewDiffrSummarizerInput = z.infer<
 const reviewDiffrConfigSchema = z.object({
   values: z.custom<JsonObject>(isJsonObject),
   credentialSource: z.enum(["config", "environment", "missing"]),
+  providers: z
+    .array(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        model: z.string(),
+        endpoint: z.string(),
+        keyVariables: z.array(z.string()),
+        keylessCustomEndpoint: z.boolean(),
+      }),
+    )
+    .optional(),
   defaultPrompt: z.string().optional(),
   defaultPromptUrl: z.string().optional(),
   changed: z.boolean().optional(),

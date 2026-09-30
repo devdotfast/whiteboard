@@ -16,7 +16,6 @@ import {
   type ReviewDiffrProvider,
   type ReviewDiffrSummarizerInput,
   decodeStructuralDiffEvent,
-  reviewDiffrProviders,
   reviewDiffrSummarizerInputSchema,
 } from "@dev.fast/review-protocol";
 import { stringify } from "smol-toml";
@@ -103,24 +102,10 @@ function valueAt(object: JsonObject, key: string): JsonValue | undefined {
 
 const prefix = "plugins.bundled.summarize";
 
-const keyVariables: Record<ReviewDiffrProvider, string[]> = {
-  gemini: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
-  openai: ["OPENAI_API_KEY"],
-  anthropic: ["ANTHROPIC_API_KEY"],
-};
-
-function savedProvider(config: JsonObject): ReviewDiffrProvider {
+function savedProvider(config: JsonObject): string {
   const value = valueAt(config, `${prefix}.provider`);
 
-  return (
-    reviewDiffrProviders.find((provider) => provider === value) ?? "gemini"
-  );
-}
-
-function environmentKey(provider: ReviewDiffrProvider): string | undefined {
-  return keyVariables[provider]
-    .map((name) => process.env[name])
-    .find((key) => !!key);
+  return isStringValue(value) ? value : "";
 }
 
 function savedEndpoint(config: JsonObject): string {
@@ -140,17 +125,41 @@ function movesKey(
   );
 }
 
-function keyOptional(provider: ReviewDiffrProvider, endpoint: string): boolean {
-  return provider === "openai" && endpoint !== "";
+function environmentKey(
+  providers: ReviewDiffrProvider[],
+  id: string,
+): string | undefined {
+  return providers
+    .find((provider) => provider.id === id)
+    ?.keyVariables.map((name) => process.env[name])
+    .find((key) => !!key);
+}
+
+function keyOptional(
+  providers: ReviewDiffrProvider[],
+  id: string,
+  endpoint: string,
+): boolean {
+  return (
+    endpoint !== "" &&
+    !!providers.find((provider) => provider.id === id)?.keylessCustomEndpoint
+  );
+}
+
+function strings(value: JsonValue | undefined): string[] {
+  return Array.isArray(value) ? value.filter(isStringValue) : [];
 }
 
 /**
- * The default prompt and the link its description gives to it, or neither
- * when diffr cannot describe its schema: the rest of Settings still works.
+ * What diffr's schema says about summaries: each provider's defaults, and
+ * the default prompt with the link its description gives. Nothing when
+ * diffr cannot describe its schema: the rest of Settings still works.
  */
-async function defaultPrompt(
+async function summaryDefaults(
   rootPath?: string,
-): Promise<Pick<ReviewDiffrConfig, "defaultPrompt" | "defaultPromptUrl">> {
+): Promise<
+  Pick<ReviewDiffrConfig, "providers" | "defaultPrompt" | "defaultPromptUrl">
+> {
   let schema: JsonObject;
 
   try {
@@ -159,18 +168,45 @@ async function defaultPrompt(
     return {};
   }
 
-  const prompt = valueAt(
+  const options = valueAt(
     schema,
-    "properties.plugins.properties.bundled.properties.summarize.properties.system_prompt",
+    "properties.plugins.properties.bundled.properties.summarize.properties",
   );
 
-  if (!isJsonObject(prompt)) return {};
+  if (!isJsonObject(options)) return {};
+
+  const option = (name: string) =>
+    isJsonObject(options[name]) ? options[name] : {};
+
+  const provider = option("provider");
+  const titles = strings(provider["x-enum-titles"]);
+  const models = valueAt(option("model"), "x-default-by.values");
+  const details = valueAt(option("provider_details"), "x-default-by.values");
+
+  const providers = strings(provider.enum).map((id, index) => {
+    const detail = isJsonObject(details) ? details[id] : undefined;
+    const model = isJsonObject(models) ? models[id] : undefined;
+    const endpoint = isJsonObject(detail) ? detail.endpoint : undefined;
+
+    return {
+      id,
+      title: titles[index] ?? id,
+      model: isStringValue(model) ? model : "",
+      endpoint: isStringValue(endpoint) ? endpoint : "",
+      keyVariables: isJsonObject(detail) ? strings(detail.key_variables) : [],
+      keylessCustomEndpoint:
+        isJsonObject(detail) && detail.keyless_custom_endpoint === true,
+    };
+  });
+
+  const prompt = option("system_prompt");
 
   const description = isStringValue(prompt.description)
     ? prompt.description
     : "";
 
   return {
+    providers,
     defaultPrompt: isStringValue(prompt.default) ? prompt.default : undefined,
     defaultPromptUrl: /https:\/\/\S+/.exec(description)?.[0],
   };
@@ -178,12 +214,13 @@ async function defaultPrompt(
 
 async function read(rootPath?: string): Promise<ReviewDiffrConfig> {
   const config = await values(rootPath);
+  const defaults = await summaryDefaults(rootPath);
   const saved = valueAt(config, `${prefix}.api_key`);
 
   const credentialSource =
     isStringValue(saved) && saved.length > 0
       ? "config"
-      : environmentKey(savedProvider(config))
+      : environmentKey(defaults.providers ?? [], savedProvider(config))
         ? "environment"
         : "missing";
 
@@ -199,11 +236,7 @@ async function read(rootPath?: string): Promise<ReviewDiffrConfig> {
     }
   }
 
-  return {
-    values: config,
-    credentialSource,
-    ...(await defaultPrompt(rootPath)),
-  };
+  return { values: config, credentialSource, ...defaults };
 }
 
 export function readDiffrConfig(rootPath?: string): Promise<ReviewDiffrConfig> {
@@ -267,6 +300,7 @@ export function saveDiffrSummarizer(
 
   return serialized(async () => {
     const current = await read(rootPath);
+    const providers = current.providers ?? [];
     const moving = movesKey(current.values, draft);
     const savedKey = current.credentialSource === "config";
 
@@ -274,8 +308,8 @@ export function saveDiffrSummarizer(
       draft.enabled &&
       !draft.apiKey &&
       !(savedKey && !moving) &&
-      !environmentKey(draft.provider) &&
-      !keyOptional(draft.provider, draft.endpoint)
+      !environmentKey(providers, draft.provider) &&
+      !keyOptional(providers, draft.provider, draft.endpoint)
     ) {
       return {
         ...current,
@@ -339,15 +373,19 @@ export async function testDiffrSummarizer(
       throw new Error("The summarizer is not available in this configuration.");
 
     const { provider, endpoint, model, systemPrompt } = parsed.data;
+    const providers = (await summaryDefaults(rootPath)).providers ?? [];
+
+    const variables =
+      providers.find((known) => known.id === provider)?.keyVariables ?? [];
 
     const apiKey =
       parsed.data.apiKey ||
       (!movesKey(config, parsed.data) && isStringValue(saved.api_key)
         ? saved.api_key
         : "") ||
-      environmentKey(provider);
+      environmentKey(providers, provider);
 
-    if (!apiKey && !keyOptional(provider, endpoint))
+    if (!apiKey && !keyOptional(providers, provider, endpoint))
       throw new Error("Add an API key to test summaries.");
     directory = await mkdtemp(join(tmpdir(), "review-summary-"));
 
@@ -363,6 +401,8 @@ export async function testDiffrSummarizer(
     };
 
     delete options.api_key;
+    // Resolved for the saved provider; diffr derives the draft provider's.
+    delete options.provider_details;
 
     if (endpoint) options.endpoint = endpoint;
     else delete options.endpoint;
@@ -400,11 +440,11 @@ export async function testDiffrSummarizer(
         env: {
           ...process.env,
           ...Object.fromEntries(
-            Object.values(keyVariables)
-              .flat()
+            providers
+              .flatMap((known) => known.keyVariables)
               .map((name) => [name, ""]),
           ),
-          ...(apiKey && { [keyVariables[provider][0]]: apiKey }),
+          ...(apiKey && variables[0] && { [variables[0]]: apiKey }),
           XDG_CONFIG_HOME: directory,
         },
         signal: deadline,

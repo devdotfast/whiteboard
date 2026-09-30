@@ -4,10 +4,8 @@ import {
   type JsonValue,
   type ReviewDiffrConfig,
   type ReviewDiffrConfigActions,
-  type ReviewDiffrProvider,
   type ReviewDiffrSummarizerInput,
   isJsonObject,
-  reviewDiffrProviders,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -37,28 +35,17 @@ function setting(
   return value;
 }
 
-const PROVIDER_LABELS: Record<ReviewDiffrProvider, string> = {
-  gemini: "Gemini",
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-};
+function provider(config: ReviewDiffrConfig): string {
+  return String(setting(config, "summarize.provider") ?? "");
+}
 
-const DEFAULT_MODELS: Record<ReviewDiffrProvider, string> = {
-  gemini: "gemini-3.8-flash",
-  openai: "gpt-6-luna",
-  anthropic: "claude-haiku-4-5",
-};
+/** The provider diffr describes as `id`, if any. */
+function described(config: ReviewDiffrConfig, id: string) {
+  return config.providers?.find((known) => known.id === id);
+}
 
-const DEFAULT_ENDPOINTS: Record<ReviewDiffrProvider, string> = {
-  gemini: "https://generativelanguage.googleapis.com",
-  openai: "https://api.openai.com/v1",
-  anthropic: "https://api.anthropic.com",
-};
-
-function provider(config: ReviewDiffrConfig): ReviewDiffrProvider {
-  const value = setting(config, "summarize.provider");
-
-  return reviewDiffrProviders.find((choice) => choice === value) ?? "gemini";
+function title(config: ReviewDiffrConfig, id: string): string {
+  return described(config, id)?.title ?? id;
 }
 
 function summaryDraft(config: ReviewDiffrConfig): ReviewDiffrSummarizerInput {
@@ -248,23 +235,30 @@ export function DiffrConfigSection({
                         }
                       />
                     </SettingRow>
-                    <SettingRow label="Provider">
-                      <Choice
-                        label="Provider"
-                        value={draft.provider}
-                        labels={PROVIDER_LABELS}
-                        disabled={busy || unavailable}
-                        onChange={(choice) =>
-                          setDraft({
-                            ...draft,
-                            provider: choice,
-                            model: DEFAULT_MODELS[choice],
-                            endpoint: "",
-                            apiKey: "",
-                          })
-                        }
-                      />
-                    </SettingRow>
+                    {!!config.providers?.length && (
+                      <SettingRow label="Provider">
+                        <Choice
+                          label="Provider"
+                          value={draft.provider}
+                          labels={Object.fromEntries(
+                            config.providers.map((known) => [
+                              known.id,
+                              known.title,
+                            ]),
+                          )}
+                          disabled={busy || unavailable}
+                          onChange={(choice) =>
+                            setDraft({
+                              ...draft,
+                              provider: choice,
+                              model: described(config, choice)?.model ?? "",
+                              endpoint: "",
+                              apiKey: "",
+                            })
+                          }
+                        />
+                      </SettingRow>
+                    )}
                     <SettingRow label="API key">
                       <TextField
                         xstyle={styles.input}
@@ -282,9 +276,9 @@ export function DiffrConfigSection({
                       {draft.provider !== provider(config) ||
                       draft.endpoint !== savedDraft?.endpoint
                         ? config.credentialSource !== "config"
-                          ? `Enter a key for ${PROVIDER_LABELS[draft.provider]}, or leave blank to use its environment variable.`
+                          ? `Enter a key for ${title(config, draft.provider)}, or leave blank to use its environment variable.`
                           : draft.provider !== provider(config)
-                            ? `Saving clears the key saved for ${PROVIDER_LABELS[provider(config)]}.`
+                            ? `Saving clears the key saved for ${title(config, provider(config))}.`
                             : "Saving clears the saved key, since the endpoint changed."
                         : `${
                             config.credentialSource === "config"
@@ -308,7 +302,9 @@ export function DiffrConfigSection({
                       <TextField
                         xstyle={styles.input}
                         aria-label="Endpoint URL"
-                        placeholder={DEFAULT_ENDPOINTS[draft.provider]}
+                        placeholder={
+                          described(config, draft.provider)?.endpoint
+                        }
                         value={draft.endpoint}
                         onChange={(event) =>
                           setDraft({ ...draft, endpoint: event.target.value })
