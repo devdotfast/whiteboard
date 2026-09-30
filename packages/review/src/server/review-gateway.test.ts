@@ -496,9 +496,20 @@ it("never serves a review from a copied store while its machine is down", async 
 
   await a.stop();
   // Once a is found gone (its streams end), requests are refused, never sent to c.
+  const statuses: number[] = [];
+
   await expect
-    .poll(async () => (await request(`/${onA}?full=true`)).status)
+    .poll(async () => {
+      const { status } = await request(`/${onA}?full=true`);
+      statuses.push(status);
+
+      return status;
+    })
     .toBe(503);
+  // Before that, a request finds a gone: never an answer from c.
+  expect(statuses.every((status) => status === 502 || status === 503)).toBe(
+    true,
+  );
 
   const refused = await request(`/${onA}?full=true`);
   expect(refused.status).toBe(503);

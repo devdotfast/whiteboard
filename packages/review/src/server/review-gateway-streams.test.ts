@@ -768,3 +768,50 @@ it("finds a host that stops answering while its streams are open", async () => {
   expect((await laptop.request(`/${onLaptop}`)).status).toBe(200);
   expect(Date.now() - quick).toBeLessThan(1_000);
 }, 20_000);
+
+it("closes a client's streams to remotes when the client leaves", async () => {
+  const reviewId = randomUUID();
+  const closed = Promise.withResolvers<void>();
+  let opened = false;
+
+  const fake = await startFake({
+    version,
+    reviewIds: [reviewId],
+    handle(request, response) {
+      if (
+        !request.url?.startsWith("/reviews-api/watch") ||
+        !request.url.includes(reviewId)
+      )
+        return false;
+      opened = true;
+      response.setHeader("content-type", "application/x-ndjson");
+      response.write(
+        `${JSON.stringify({ kind: "review", reviewId, value: { reviewId } })}\n`,
+      );
+      response.on("close", () => closed.resolve());
+
+      return true;
+    },
+  });
+
+  const laptop = await startGateway(root, [
+    { alias: "wb-a", endpoint: fake.endpoint },
+  ]);
+
+  await expect.poll(() => laptop.gateway.hosts()[0]?.state).toBe("online");
+  const abort = new AbortController();
+
+  const response = await fetch(
+    `${laptop.url}/reviews-api/watch?subscriptions=${encodeURIComponent(
+      JSON.stringify([{ reviewId }]),
+    )}`,
+    { headers: { "x-review-token": "laptop-token" }, signal: abort.signal },
+  );
+
+  const reader = response.body!.getReader();
+  await reader.read();
+  expect(opened).toBe(true);
+
+  abort.abort();
+  await closed.promise;
+});
