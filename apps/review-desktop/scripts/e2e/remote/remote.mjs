@@ -1,9 +1,10 @@
 /** Disposable SSH remotes for live checks, in Docker or on AWS; see ../TESTING.md. */
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { awsUp } from "./aws-hosts.mjs";
-import { containerOf, install, up } from "./docker-hosts.mjs";
+import { containerOf, install, packStaged, up } from "./docker-hosts.mjs";
 import { docker, inherit } from "./exec.mjs";
 import { installExtension } from "./install-extension.mjs";
 import { down, downEveryRun, downRun } from "./removal.mjs";
@@ -15,7 +16,8 @@ const usage = `usage: remote.mjs <command>
   up <name> [--platform linux/amd64|linux/arm64] [--image <image>] [--node 24|20|none]
             [--auth key|password] [--banner] [--shell bash|fish] [--jump <name>]
             [--sealed] [--delay-ms <n>] [--no-forwarding] [--port <n>]
-  install <name> [--version <v>]
+  install <name> [--version <v>] [--runtime <remote runtime dir>]
+  pack --out <file.tgz> [--version <v>] [--runtime <remote runtime dir>]
   install-extension <name> <local extension dir>
   ssh <name> -- <command...>
   forward <name> <remote port>
@@ -26,7 +28,7 @@ const usage = `usage: remote.mjs <command>
 
 The run is WB_TEST_RUN, else the only one in /tmp/wbt.*.`;
 
-const commandsWithoutName = new Set(["verify-clean", "down"]);
+const commandsWithoutName = new Set(["verify-clean", "down", "pack"]);
 
 async function main(argv) {
   const split = argv.indexOf("--");
@@ -48,6 +50,8 @@ async function main(argv) {
       "no-forwarding": { type: "boolean" },
       port: { type: "string" },
       version: { type: "string" },
+      runtime: { type: "string" },
+      out: { type: "string" },
       arch: { type: "string" },
       all: { type: "boolean" },
       "every-run": { type: "boolean" },
@@ -70,9 +74,22 @@ async function main(argv) {
     case "aws-up":
       return awsUp(await openRun(true), name, values);
     case "install":
-      return install(await openRun(false), name, values.version);
+      return install(await openRun(false), name, {
+        version: values.version,
+        runtime: values.runtime && path.resolve(values.runtime),
+      });
+    case "pack":
+      if (!values.out) throw new Error("pack needs --out <file.tgz>");
+
+      return console.log(
+        await packStaged(path.resolve(values.out), {
+          version: values.version,
+          runtime: values.runtime && path.resolve(values.runtime),
+        }),
+      );
     case "install-extension":
-      if (!arg) throw new Error("install-extension needs a local extension dir");
+      if (!arg)
+        throw new Error("install-extension needs a local extension dir");
 
       return installExtension(await openRun(false), name, arg);
     case "ssh": {

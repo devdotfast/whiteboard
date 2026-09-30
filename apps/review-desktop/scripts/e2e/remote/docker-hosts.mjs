@@ -292,12 +292,12 @@ export function containerOf(runState, name) {
 }
 
 /**
- * Packs packages/review from this worktree, with the VS Code server, and
- * installs it globally; a sealed host gets its route back meanwhile.
+ * Packs packages/review from this worktree with the VS Code server from
+ * `runtime` (build-remote-runtime.mjs's by default) into `tarball`; returns
+ * the package's name@version.
  */
-export async function install(runState, name, version) {
-  const host = containerOf(runState, name);
-  const scratch = await mkdtemp(`${runState.dir}/pack-`);
+export async function packStaged(tarball, { version, runtime } = {}) {
+  const scratch = await mkdtemp(`${path.dirname(tarball)}/pack-`);
 
   try {
     await run("pnpm", [
@@ -319,13 +319,26 @@ export async function install(runState, name, version) {
       await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     }
 
-    // As the release pack does, from the runtime build-remote-runtime.mjs left.
-    await stageVscodeServer(path.join(scratch, "package"));
-    const tarball = path.join(scratch, "staged.tgz");
+    // As the release pack does.
+    await stageVscodeServer(path.join(scratch, "package"), { runtime });
     // No AppleDouble files for the macOS metadata the runtime's files carry.
     await run("tar", ["-czf", tarball, "-C", scratch, "package"], {
       env: { ...process.env, COPYFILE_DISABLE: "1" },
     });
+
+    return `${manifest.name}@${manifest.version}`;
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+/** Installs packStaged's package globally; a sealed host gets its route back meanwhile. */
+export async function install(runState, name, { version, runtime } = {}) {
+  const host = containerOf(runState, name);
+  const tarball = `${runState.dir}/staged-${randomBytes(3).toString("hex")}.tgz`;
+
+  try {
+    const packed = await packStaged(tarball, { version, runtime });
 
     await docker("cp", tarball, `${host.container}:/tmp/wb-test-package.tgz`);
 
@@ -353,8 +366,8 @@ export async function install(runState, name, version) {
     }
 
     await docker("exec", host.container, "rm", "/tmp/wb-test-package.tgz");
-    console.log(`${manifest.name}@${manifest.version}`);
+    console.log(packed);
   } finally {
-    await rm(scratch, { recursive: true, force: true });
+    await rm(tarball, { force: true });
   }
 }
