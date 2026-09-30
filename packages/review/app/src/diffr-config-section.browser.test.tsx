@@ -16,9 +16,14 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
+const PROMPT_URL =
+  "https://github.com/devdotfast/diffr/blob/main/plugins/summarize/plugin.toml#L68-L74";
+
 function config(): ReviewDiffrConfig {
   return {
     credentialSource: "config",
+    defaultPrompt: "Default prompt.",
+    defaultPromptUrl: PROMPT_URL,
     values: {
       plugins: {
         bundled: {
@@ -28,7 +33,12 @@ function config(): ReviewDiffrConfig {
           "removed-runs": { enabled: true },
           group: { enabled: true },
           "hide-files": { enabled: true, deleted: true, tags: ["test"] },
-          summarize: { enabled: false, model: "test-model", tests: true },
+          summarize: {
+            enabled: false,
+            model: "test-model",
+            tests: true,
+            system_prompt: "Default prompt.",
+          },
         },
       },
     },
@@ -53,7 +63,10 @@ async function mount() {
             bundled: {
               summarize: {
                 enabled: input.enabled,
+                provider: input.provider,
                 model: input.model,
+                endpoint: input.endpoint,
+                system_prompt: input.systemPrompt,
                 tests: input.tests,
               },
             },
@@ -166,7 +179,10 @@ test("tests draft settings without saving, then saves and clears the key", async
   });
   expect(actions.saveSummarizer).toHaveBeenCalledWith({
     enabled: false,
+    provider: "gemini",
     model: "test-model",
+    endpoint: "",
+    systemPrompt: "Default prompt.",
     tests: true,
     apiKey: "test-secret",
   });
@@ -256,4 +272,76 @@ test("shows partial save errors with authoritative values and a reload prompt", 
   await expect
     .element(page.getByRole("button", { name: "Reload window", exact: true }))
     .toBeVisible();
+});
+
+test("defaults to Gemini and switching provider resets the model and key", async () => {
+  const { actions } = await mount();
+  await open();
+  await expect
+    .element(page.getByRole("radio", { name: "Gemini" }))
+    .toHaveAttribute("aria-checked", "true");
+  await act(async () => {
+    await page.getByLabelText("API key", { exact: true }).fill("typed-secret");
+  });
+  await act(async () => {
+    await page.getByRole("radio", { name: "Anthropic" }).click();
+  });
+  await expect
+    .element(page.getByLabelText("Model", { exact: true }))
+    .toHaveValue("claude-haiku-4-5");
+  await expect
+    .element(page.getByLabelText("API key", { exact: true }))
+    .toHaveValue("");
+  await expect
+    .element(page.getByText("Saving clears the key saved for Gemini."))
+    .toBeVisible();
+  await act(async () => {
+    await page
+      .getByLabelText("Endpoint URL", { exact: true })
+      .fill(" https://proxy.example/anthropic ");
+  });
+  await act(async () => {
+    await page.getByRole("button", { name: "Save summaries" }).click();
+  });
+  expect(actions.saveSummarizer).toHaveBeenCalledWith({
+    enabled: false,
+    provider: "anthropic",
+    model: "claude-haiku-4-5",
+    endpoint: " https://proxy.example/anthropic ",
+    systemPrompt: "Default prompt.",
+    tests: true,
+    apiKey: "",
+  });
+});
+
+test("edits the prompt, links its default, and resets it", async () => {
+  const { actions } = await mount();
+  await open();
+  const prompt = page.getByLabelText("Prompt", { exact: true });
+  await expect.element(prompt).toHaveValue("Default prompt.");
+  await expect
+    .element(page.getByText("Default", { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(page.getByRole("link", { name: "Default prompt on GitHub" }))
+    .toHaveAttribute("href", PROMPT_URL);
+  await act(async () => {
+    await prompt.fill("Be terse.");
+  });
+  await expect
+    .element(page.getByText("Customized", { exact: true }))
+    .toBeVisible();
+  await act(async () => {
+    await page.getByRole("button", { name: "Test setup" }).click();
+  });
+  expect(actions.testSummarizer).toHaveBeenCalledWith(
+    expect.objectContaining({ systemPrompt: "Be terse." }),
+  );
+  await act(async () => {
+    await page.getByRole("button", { name: "Reset to default" }).click();
+  });
+  await expect.element(prompt).toHaveValue("Default prompt.");
+  await expect
+    .element(page.getByRole("button", { name: "Save summaries" }))
+    .toBeDisabled();
 });

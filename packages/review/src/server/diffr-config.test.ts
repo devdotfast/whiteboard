@@ -343,9 +343,15 @@ test("saves a changed prompt and leaves an unchanged one alone", async () => {
 
 test("switching providers clears the saved key unless a new one is entered", async () => {
   const fake = await fakeDiffr("gemini-secret");
+
   const state = async () =>
     JSON.parse(await readFile(fake.state, "utf8")).plugins.bundled.summarize;
-  await saveDiffrSummarizer({ ...draft, enabled: false, provider: "anthropic" });
+
+  await saveDiffrSummarizer({
+    ...draft,
+    enabled: false,
+    provider: "anthropic",
+  });
   expect(await state()).toMatchObject({ provider: "anthropic", api_key: "" });
   await saveDiffrSummarizer({
     ...draft,
@@ -363,7 +369,10 @@ test("credentials are checked against the draft provider", async () => {
   await fakeDiffr("gemini-secret");
   expect(
     await saveDiffrSummarizer({ ...draft, provider: "anthropic" }),
-  ).toMatchObject({ changed: false, error: expect.stringContaining("API key") });
+  ).toMatchObject({
+    changed: false,
+    error: expect.stringContaining("API key"),
+  });
   vi.stubEnv("ANTHROPIC_API_KEY", "env-secret");
   expect(
     (await saveDiffrSummarizer({ ...draft, provider: "anthropic" })).error,
@@ -402,7 +411,11 @@ test("the synthetic test never sends a saved key to another provider and uses th
 
 test("reads the environment key of the saved provider", async () => {
   await fakeDiffr();
-  await saveDiffrSummarizer({ ...draft, enabled: false, provider: "anthropic" });
+  await saveDiffrSummarizer({
+    ...draft,
+    enabled: false,
+    provider: "anthropic",
+  });
   vi.stubEnv("GEMINI_API_KEY", "gemini-env");
   expect((await readDiffrConfig()).credentialSource).toBe("missing");
   vi.stubEnv("ANTHROPIC_API_KEY", "anthropic-env");

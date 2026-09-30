@@ -12,9 +12,9 @@ import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
-import { controlStyles } from "./controls-styles";
 import { DiffrConfigSection } from "./diffr-config-section";
 import { homeStyles } from "./home-styles";
+import { Choice } from "./settings-choice";
 import { settingsStyles as styles } from "./settings-styles";
 import { withClass } from "./stylex-props";
 import { TraceCaptureSection } from "./trace-capture-section";
@@ -389,49 +389,6 @@ function Row({
         <span {...stylex.props(styles.rowDescription)}>{description}</span>
       </div>
       <div {...stylex.props(styles.rowControl)}>{children}</div>
-    </div>
-  );
-}
-
-function Choice<T extends string>({
-  label,
-  value,
-  labels,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  labels: Record<T, string>;
-  disabled: boolean;
-  onChange: (choice: T) => void;
-}) {
-  // SAFETY: `labels` is declared as Record<T, string>, so its own keys are
-  // exactly the T choices this control offers.
-  const choices = Object.keys(labels) as T[];
-
-  return (
-    <div
-      {...stylex.props(controlStyles.segmented)}
-      role="radiogroup"
-      aria-label={label}
-    >
-      {choices.map((choice) => (
-        <button
-          key={choice}
-          type="button"
-          role="radio"
-          aria-checked={choice === value}
-          disabled={disabled}
-          {...stylex.props(
-            controlStyles.segment,
-            choice === value && controlStyles.segmentActive,
-          )}
-          onClick={() => onChange(choice)}
-        >
-          {labels[choice]}
-        </button>
-      ))}
     </div>
   );
 }

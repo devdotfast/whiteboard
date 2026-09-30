@@ -1,15 +1,18 @@
 import { Button } from "@canvas/ui/button";
-import { TextField } from "@canvas/ui/text-field";
+import { TextField, fieldStyles } from "@canvas/ui/text-field";
 import {
   type JsonValue,
   type ReviewDiffrConfig,
   type ReviewDiffrConfigActions,
+  type ReviewDiffrProvider,
   type ReviewDiffrSummarizerInput,
   isJsonObject,
+  reviewDiffrProviders,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import { Choice } from "./settings-choice";
 import { settingsStyles as styles } from "./settings-styles";
 
 const displaySettings = [
@@ -34,10 +37,39 @@ function setting(
   return value;
 }
 
+const PROVIDER_LABELS: Record<ReviewDiffrProvider, string> = {
+  gemini: "Gemini",
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+};
+
+const DEFAULT_MODELS: Record<ReviewDiffrProvider, string> = {
+  gemini: "gemini-3.8-flash",
+  openai: "gpt-5-mini",
+  anthropic: "claude-haiku-4-5",
+};
+
+const DEFAULT_ENDPOINTS: Record<ReviewDiffrProvider, string> = {
+  gemini: "https://generativelanguage.googleapis.com",
+  openai: "https://api.openai.com/v1",
+  anthropic: "https://api.anthropic.com",
+};
+
+function provider(config: ReviewDiffrConfig): ReviewDiffrProvider {
+  const value = setting(config, "summarize.provider");
+
+  return reviewDiffrProviders.find((choice) => choice === value) ?? "gemini";
+}
+
 function summaryDraft(config: ReviewDiffrConfig): ReviewDiffrSummarizerInput {
   return {
     enabled: setting(config, "summarize.enabled") === true,
+    provider: provider(config),
     model: String(setting(config, "summarize.model") ?? ""),
+    endpoint: String(setting(config, "summarize.endpoint") ?? ""),
+    systemPrompt: String(
+      setting(config, "summarize.system_prompt") ?? config.defaultPrompt ?? "",
+    ),
     tests: setting(config, "summarize.tests") === true,
     apiKey: "",
   };
@@ -117,7 +149,7 @@ export function DiffrConfigSection({
   const unavailable =
     !config || setting(config, "summarize.enabled") === undefined;
 
-  const summaryValid = !!draft?.model.trim();
+  const summaryValid = !!draft?.model.trim() && !!draft.systemPrompt.trim();
   const hiddenTags = config ? setting(config, "hide-files.tags") : undefined;
 
   return (
@@ -192,8 +224,8 @@ export function DiffrConfigSection({
                 ))}
                 <h3>AI summaries</h3>
                 <p {...stylex.props(styles.rowDescription)}>
-                  Sends source-file contents to Gemini to summarize large new
-                  functions and tests.
+                  Sends source-file contents to the selected provider to
+                  summarize large new functions and tests.
                 </p>
                 {unavailable && (
                   <p {...stylex.props(styles.unavailable)}>
@@ -215,6 +247,22 @@ export function DiffrConfigSection({
                         }
                       />
                     </SettingRow>
+                    <SettingRow label="Provider">
+                      <Choice
+                        label="Provider"
+                        value={draft.provider}
+                        labels={PROVIDER_LABELS}
+                        disabled={busy || unavailable}
+                        onChange={(choice) =>
+                          setDraft({
+                            ...draft,
+                            provider: choice,
+                            model: DEFAULT_MODELS[choice],
+                            apiKey: "",
+                          })
+                        }
+                      />
+                    </SettingRow>
                     <SettingRow label="API key">
                       <TextField
                         xstyle={styles.input}
@@ -229,13 +277,15 @@ export function DiffrConfigSection({
                       />
                     </SettingRow>
                     <p {...stylex.props(styles.rowDescription)}>
-                      {config.credentialSource === "config"
-                        ? "Saved key"
-                        : config.credentialSource === "environment"
-                          ? "Environment key available"
-                          : "Not configured"}
-                      . Replacement keys are stored in diffr’s config. Leave
-                      blank to keep the current key.
+                      {draft.provider !== provider(config)
+                        ? `Saving clears the key saved for ${PROVIDER_LABELS[provider(config)]}.`
+                        : `${
+                            config.credentialSource === "config"
+                              ? "Saved key"
+                              : config.credentialSource === "environment"
+                                ? "Environment key available"
+                                : "Not configured"
+                          }. Replacement keys are stored in diffr’s config. Leave blank to keep the current key.`}
                     </p>
                     <SettingRow label="Model">
                       <TextField
@@ -247,6 +297,72 @@ export function DiffrConfigSection({
                         }
                       />
                     </SettingRow>
+                    <SettingRow label="Endpoint URL">
+                      <TextField
+                        xstyle={styles.input}
+                        aria-label="Endpoint URL"
+                        placeholder={DEFAULT_ENDPOINTS[draft.provider]}
+                        value={draft.endpoint}
+                        onChange={(event) =>
+                          setDraft({ ...draft, endpoint: event.target.value })
+                        }
+                      />
+                    </SettingRow>
+                    <p {...stylex.props(styles.rowDescription)}>
+                      Optional. With OpenAI, point this at any compatible
+                      server, such as OpenRouter or Ollama.
+                    </p>
+                    <label {...stylex.props(styles.prompt)}>
+                      <span {...stylex.props(styles.rowLabel)}>
+                        Prompt{" "}
+                        <span {...stylex.props(styles.rowDescription)}>
+                          {draft.systemPrompt === config.defaultPrompt
+                            ? "Default"
+                            : "Customized"}
+                        </span>
+                      </span>
+                      <textarea
+                        {...stylex.props(
+                          fieldStyles.box,
+                          fieldStyles.multiline,
+                        )}
+                        aria-label="Prompt"
+                        rows={6}
+                        value={draft.systemPrompt}
+                        onChange={(event) =>
+                          setDraft({
+                            ...draft,
+                            systemPrompt: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <p {...stylex.props(styles.rowDescription)}>
+                      Sent with every request. diffr adds the file and the folds
+                      to summarize.{" "}
+                      {config.defaultPromptUrl && (
+                        <a
+                          href={config.defaultPromptUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Default prompt on GitHub
+                        </a>
+                      )}{" "}
+                      {config.defaultPrompt &&
+                        draft.systemPrompt !== config.defaultPrompt && (
+                          <Button
+                            onClick={() =>
+                              setDraft({
+                                ...draft,
+                                systemPrompt: config.defaultPrompt ?? "",
+                              })
+                            }
+                          >
+                            Reset to default
+                          </Button>
+                        )}
+                    </p>
                     <SettingRow label="Include tests">
                       <input
                         type="checkbox"

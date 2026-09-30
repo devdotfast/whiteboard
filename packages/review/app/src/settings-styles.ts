@@ -118,6 +118,12 @@ export const settingsStyles = stylex.create({
     display: "flex",
     gap: "8px",
   },
+  prompt: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+    marginTop: "8px",
+  },
   summaryResult: {
     whiteSpace: "pre-wrap",
     overflowWrap: "anywhere",

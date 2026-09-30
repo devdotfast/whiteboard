@@ -132,12 +132,14 @@ async function defaultPrompt(
   rootPath?: string,
 ): Promise<Pick<ReviewDiffrConfig, "defaultPrompt" | "defaultPromptUrl">> {
   const schema = json(await diffr(["config", "schema"], rootPath));
+
   const prompt = valueAt(
     schema,
     "properties.plugins.properties.bundled.properties.summarize.properties.system_prompt",
   );
 
   if (!isJsonObject(prompt)) return {};
+
   const description = isStringValue(prompt.description)
     ? prompt.description
     : "";
@@ -272,6 +274,7 @@ export function saveDiffrSummarizer(
       if (value !== (valueAt(current.values, `${prefix}.${key}`) ?? ""))
         entries.push([`${prefix}.${key}`, value]);
     }
+
     entries.push(
       [`${prefix}.model`, draft.model],
       [`${prefix}.tests`, draft.tests],
