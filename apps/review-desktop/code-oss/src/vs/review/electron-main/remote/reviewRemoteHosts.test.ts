@@ -100,6 +100,19 @@ test("removing a host from the setting closes its connection", async (t) => {
 	assert.ok(ssh.master("wb-test-b")!.alive);
 });
 
+test("an alias added again while its old host closes starts only after the old master exited", async (t) => {
+	const { manager, ssh, sentUntil } = await managerFor(t, { "wb-test-a": { exitDelayMs: 150 } });
+
+	manager.update(true, ["wb-test-a"]);
+	await sentUntil((hosts) => byAlias(hosts, "wb-test-a")?.endpoint !== undefined);
+	const first = ssh.master("wb-test-a")!;
+	manager.update(true, []);
+	manager.update(true, ["wb-test-a"]);
+	await until(() => ssh.of("wb-test-a", "master").length === 2);
+
+	assert.ok(first.exitedAt !== undefined && ssh.of("wb-test-a", "master")[1].wall >= first.exitedAt);
+});
+
 test("removing a host whose master is still connecting ends that ssh at once", async (t) => {
 	const { manager, ssh } = await managerFor(t, { "wb-test-slow": { master: "hang" } });
 
