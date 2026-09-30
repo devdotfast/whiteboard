@@ -246,6 +246,12 @@ export interface ReviewProviders {
   /** Ids of references whose own pins no longer name a usable checkout. */
   unavailableAnchors?(snapshot: Snapshot): Promise<string[]>;
   validatePins(pins: Pins): Promise<void>;
+  /** The files each side's commit changed from one set of pins to another,
+   * or undefined when they can't be diffed commit to commit. */
+  filesChangedBetween?(
+    from: Pins,
+    to: Pins,
+  ): Promise<{ base: Set<string>; head: Set<string> } | undefined>;
   validateSource(
     pins: Pins,
     source: FileLineRange,
@@ -1815,6 +1821,13 @@ export class ReviewStore {
 
     const worktreeMoved = pinsChanged && snapshot.target?.kind === "worktree";
 
+    const changed =
+      repin && pinsChanged && previous.pins && snapshot.pins
+        ? await this.providers
+            .filesChangedBetween?.(previous.pins, snapshot.pins)
+            .catch(() => undefined)
+        : undefined;
+
     const retained = references(
       previous?.document ?? [],
       true,
@@ -1850,7 +1863,10 @@ export class ReviewStore {
             })
             .then(
               () => {
-                if (repin)
+                if (
+                  repin &&
+                  (!changed || changed[source.side].has(source.file))
+                )
                   warnings.push(
                     `${source.side}/${source.file}#L${source.fromLine}-L${source.toLine}: source pins changed; verify that this range still supports the document.`,
                   );
