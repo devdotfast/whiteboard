@@ -122,10 +122,19 @@ export function ReviewHome({
 
   const [deleteError, setDeleteError] = useState<string>();
   const [hostMessage, setHostMessage] = useState<string>();
+  // Only the latest open or list may set the message.
+  const hostMessageGeneration = useRef(0);
+
+  useEffect(() => {
+    hostMessageGeneration.current++;
+    setHostMessage(undefined);
+  }, [reviews]);
 
   // A review on a host that is not online has nothing to open; say why instead.
   const open = useCallback(
     async (review: ReviewApiSummary) => {
+      const generation = ++hostMessageGeneration.current;
+
       if (!unavailable(review)) {
         setHostMessage(undefined);
         onOpen(review);
@@ -133,13 +142,12 @@ export function ReviewHome({
         return;
       }
 
-      const state = `${review.host} is ${review.hostState}.`;
-
-      setHostMessage(state);
+      setHostMessage(`${review.host} is ${review.hostState}.`);
       const states = await hostStates?.().catch(() => undefined);
       const detail = states?.find((host) => host.alias === review.host)?.detail;
 
-      if (detail) setHostMessage(`${state} ${detail}`);
+      if (detail && generation === hostMessageGeneration.current)
+        setHostMessage(detail);
     },
     [onOpen, hostStates],
   );
@@ -609,7 +617,13 @@ function ReviewTable({
                         event.stopPropagation();
                         onOpen(review);
                       }}
-                      title={reviewTitle(review)}
+                      // Still focusable: opening it says why it is unavailable.
+                      aria-disabled={unavailable(review) || undefined}
+                      title={
+                        unavailable(review)
+                          ? `${review.host} is ${review.hostState}`
+                          : reviewTitle(review)
+                      }
                     >
                       <span {...stylex.props(styles.title, styles.tableTitle)}>
                         <MatchedText text={reviewTitle(review)} />

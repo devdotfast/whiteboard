@@ -639,8 +639,14 @@ describe("ReviewHome", () => {
 
       const row = container.querySelector("tbody tr")!;
 
+      const open = container.querySelector<HTMLButtonElement>(
+        "td:nth-child(2) > button",
+      )!;
+
       expect(row.hasAttribute("data-unavailable")).toBe(true);
       expect(row.textContent).toContain(hostState);
+      expect(open.getAttribute("aria-disabled")).toBe("true");
+      expect(open.title).toBe(`devbox is ${hostState}`);
       await act(async () =>
         container
           .querySelector<HTMLButtonElement>("td:nth-child(2) > button")!
@@ -648,10 +654,105 @@ describe("ReviewHome", () => {
       );
       expect(onOpen).not.toHaveBeenCalled();
       expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-        `devbox is ${hostState}. devbox is offline: it did not answer within 3 seconds.`,
+        "devbox is offline: it did not answer within 3 seconds.",
       );
     },
   );
+
+  it("says only the state while the host's detail loads or when it has none", async () => {
+    const answer = Promise.withResolvers<ReviewGatewayHostState[]>();
+    const review = remote("devbox", { hostState: "offline" });
+
+    await act(async () =>
+      renderWithHost(
+        <ReviewHome
+          reviews={[review]}
+          onOpen={() => {}}
+          hostStates={() => answer.promise}
+        />,
+      ),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("td:nth-child(2) > button")!
+        .click(),
+    );
+    expect(alert()).toBe("devbox is offline.");
+    await act(async () =>
+      answer.resolve([{ alias: "devbox", state: "offline" }]),
+    );
+    expect(alert()).toBe("devbox is offline.");
+  });
+
+  it("keeps the message of the last unavailable review opened, and drops it when the list changes", async () => {
+    const answers = [
+      Promise.withResolvers<ReviewGatewayHostState[]>(),
+      Promise.withResolvers<ReviewGatewayHostState[]>(),
+    ];
+
+    let calls = 0;
+
+    const hostStates = vi.fn<() => Promise<ReviewGatewayHostState[]>>(
+      () => answers[calls++]!.promise,
+    );
+
+    const reviews = [
+      remote("devbox", {
+        reviewId: uuid(1),
+        title: "One",
+        hostState: "offline",
+      }),
+      remote("other", {
+        reviewId: uuid(2),
+        title: "Two",
+        hostState: "offline",
+      }),
+    ];
+
+    const states = [
+      { alias: "devbox", state: "offline" as const, detail: "devbox detail" },
+      { alias: "other", state: "offline" as const, detail: "other detail" },
+    ];
+
+    await act(async () =>
+      renderWithHost(
+        <ReviewHome
+          reviews={reviews}
+          onOpen={() => {}}
+          hostStates={hostStates}
+        />,
+      ),
+    );
+
+    const open = (title: string) =>
+      [
+        ...container.querySelectorAll<HTMLButtonElement>(
+          "td:nth-child(2) > button",
+        ),
+      ]
+        .find((button) => button.textContent?.includes(title))!
+        .click();
+
+    await act(async () => open("One"));
+    await act(async () => open("Two"));
+    await act(async () => answers[1]!.resolve(states));
+    await act(async () => answers[0]!.resolve(states));
+    expect(alert()).toBe("other detail");
+    await act(async () =>
+      renderWithHost(
+        <ReviewHome
+          reviews={[{ ...reviews[1]!, hostState: "online" }]}
+          onOpen={() => {}}
+          hostStates={hostStates}
+        />,
+      ),
+    );
+    expect(alert()).toBeUndefined();
+  });
+
+  function alert() {
+    return container.querySelector('[role="alert"]')?.textContent;
+  }
 
   it("draws an online remote review as available", async () => {
     const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
