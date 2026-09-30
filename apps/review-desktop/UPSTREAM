@@ -256,6 +256,11 @@ one of these entries:
   remotes per window a failed remote must end only its own connection. A
   failed connection also sets upstream's never-written per-instance flag so
   it does not reconnect again.
+- `src/vs/workbench/services/extensions/common/remoteExtensionHost.ts`:
+  `RemoteExtensionHost` builds its own connection options, so its data
+  provider can now pass `isolatePermanentFailure` into them. Every remote's
+  extension host in a Whiteboard window sets it, so one remote's failed
+  extension host connection does not end the other remotes.
 - `extensions/package.json` and the extension `package.json`/`package-lock.json`
   files: `@vscode/extension-telemetry` is hoisted to the shared extensions
   install (github keeps its own ^1.0.0 copy; the shared copy is ^0.9.8). The

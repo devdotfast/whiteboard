@@ -42,6 +42,8 @@ export interface IRemoteExtensionHostInitData {
 
 export interface IRemoteExtensionHostDataProvider {
 	readonly remoteAuthority: string;
+	/** Whiteboard: passed on to the connection; see `IConnectionOptions.isolatePermanentFailure`. */
+	readonly isolatePermanentFailure?: boolean;
 	getInitData(): Promise<IRemoteExtensionHostInitData>;
 }
 
@@ -101,7 +103,8 @@ export class RemoteExtensionHost extends Disposable implements IExtensionHost {
 			remoteSocketFactoryService: this.remoteSocketFactoryService,
 			signService: this._signService,
 			logService: this._logService,
-			ipcLogger: null
+			ipcLogger: null,
+			isolatePermanentFailure: this._initDataProvider.isolatePermanentFailure
 		};
 		return this.remoteAuthorityResolverService.resolveAuthority(this._initDataProvider.remoteAuthority).then((resolverResult) => {
 
