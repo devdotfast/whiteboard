@@ -294,6 +294,9 @@ const styles = stylex.create({
     color: "inherit",
     font: "inherit",
     whiteSpace: "pre",
+    // As the editor shows tabs; the browser's eight push indented code
+    // off the block.
+    tabSize: 4,
   },
   gutter: {
     position: "sticky",
