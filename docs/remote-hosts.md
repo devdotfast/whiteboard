@@ -75,11 +75,52 @@ never stored.
 While a host is not `online`, its reviews stay in Home, drawn as unavailable.
 Opening one says why.
 
+## Language features
+
+Hover and go to definition work in a remote review's code, answered on the
+remote by the same language extensions a laptop review uses. Desktop runs a
+VS Code server and one extension host on each remote it connects to.
+
+- **Which languages:** TypeScript, JavaScript, JSON, CSS and HTML always.
+  Python, with ty, Ruff and the Python extension. Go when you have installed
+  the Go extensions in Whiteboard (Settings → Tools → Extensions) and Go is
+  installed on the remote.
+- **First use:** the remote downloads its language extensions from Open VSX
+  (`open-vsx.org`) the first time Desktop connects. That takes a few seconds
+  to a minute, and the remote needs network access to Open VSX for it. A
+  remote without that access still shows its reviews, without hovers.
+- **Memory:** plan on about 1 GB for the VS Code server, its extension host and
+  the language servers of one TypeScript and one Python project; about 0.8 GB
+  with TypeScript alone. The server exits 5 minutes after the last window
+  leaves.
+- **Same version:** language features need the same Whiteboard version on
+  both ends. Otherwise the host stays `online` and its reviews open, and
+  Settings says under the host why language features are unavailable.
+
+Settings shows "Language features: available" or why not for each online host.
+
+### What an extension on a remote can do
+
+An extension on the remote runs there, like any other process on that
+machine. It can read and write the remote's own files. It cannot reach your
+laptop:
+
+- It cannot read or change files on the laptop, or on another remote host.
+- It cannot open files or links with the laptop's operating system; only
+  `http`, `https` and `mailto` links open, in your browser.
+- It cannot run the window's commands, except a short fixed list, and cannot
+  replace one.
+- It cannot read or write the clipboard, change your settings, download to the
+  laptop, show a webview, or edit or save the documents the window shows. The
+  code in a review stays read-only.
+- It may show notifications, dialogs and prompts, because you act on those
+  yourself. Links in them lead only to `http`, `https` and `mailto`.
+
+Each refused action is an error the extension receives.
+
 ## Not available for remote reviews yet
 
 - Source windows: "Open file" and the source tree are hidden.
-- Language features, such as hover and go to definition, in code on the
-  remote.
 - Sharing.
 - Traces.
 - Scratchpads. The scratchpad is always the laptop's.
