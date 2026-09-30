@@ -68,7 +68,7 @@ never stored.
 | `offline` | The connection is up, but the review server did not answer. Whiteboard checks every 10 seconds, so a host that hangs shows `offline` within about 15 seconds. | It returns by itself when the server answers. If it stays offline, check the remote's load. |
 | `unreachable` | `ssh` could not connect, or the connection ended. | Whiteboard tries again by itself, waiting 1 to 60 seconds between tries; **Retry** tries now. Check that `ssh <alias>` works in a terminal. |
 | `auth-failed` | The login was refused, a prompt was cancelled, or the host key did not match. | Fix the login, then click **Retry**. Whiteboard does not retry this by itself. |
-| `not-installed` | `whiteboard` was not found on the remote. | Run the install command that Settings shows, then remove the host and add it again. Whiteboard does not retry this by itself. |
+| `not-installed` | `whiteboard` was not found on the remote. | Install it with the command that Settings shows, then click **Retry**. Whiteboard does not retry this by itself. |
 | `incompatible` | The remote runs another version of Whiteboard. | Run the install command that Settings shows, then `whiteboard server stop` on the remote. Desktop starts the new server within about 10 seconds. |
 | `duplicate` | Two hosts report the same server id. This happens when a review store was copied to a second machine. | If both aliases are one machine, remove one of them. If they are two machines, remove the copy's host, run `whiteboard server stop` and then `whiteboard server reset-id` on the copy, and add it again. |
 
