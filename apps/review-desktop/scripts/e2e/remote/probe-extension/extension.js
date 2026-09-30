@@ -236,8 +236,10 @@ async function run(context) {
       const item = vscode.window.createStatusBarItem("wbProbe.item");
 
       item.text = "wb probe";
+      // A web link and a file link: the extension host sends a `uris` map
+      // for both, which the window must not keep.
       item.tooltip = new vscode.MarkdownString(
-        `wb probe [open](${openFolder})`,
+        `wb probe [open](${openFolder}) [web](https://ok.example) [hosts](file:///etc/hosts)`,
       );
       item.command = {
         command: "vscode.openFolder",
@@ -256,6 +258,28 @@ async function run(context) {
     () => {
       vscode.window.showWarningMessage(
         `wb probe notification [open](${openFolder})`,
+      );
+      // A `>` in the target and a quote in the title, which a hand-written
+      // link regex misses but the window's own parser accepts.
+      vscode.window.showWarningMessage(
+        `wb probe gt [open](command:vscode.open?%5B%22file%3A%2F%2F%2Fetc%2Fhosts%22%5D#>x) [t](${openFolder} "t"x")`,
+      );
+
+      return "SENT (window check)";
+    },
+    log,
+  );
+  await observe(
+    "window progress with a command link",
+    () => {
+      // The extension API gives window progress no `command` field; the guard
+      // drops one sent over RPC (unit-tested). This checks its title's links.
+      vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Window,
+          title: `wb probe progress [open](${openFolder})`,
+        },
+        () => new Promise((resolve) => setTimeout(resolve, 60_000)),
       );
 
       return "SENT (window check)";
