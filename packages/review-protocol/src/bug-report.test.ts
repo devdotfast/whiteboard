@@ -6,7 +6,7 @@ import {
 } from "./bug-report.js";
 
 describe("bug report protocol", () => {
-  it("round-trips trace consent and defaults it off for older clients", () => {
+  it("still accepts the deprecated trace flag from older clients", () => {
     const request = {
       description: "",
       include_review: true,
@@ -18,9 +18,6 @@ describe("bug report protocol", () => {
     };
 
     expect(parseReviewBugReportRequest(request)).toEqual(request);
-
-    const { include_trace: _includeTrace, ...withoutTraceConsent } = request;
-    expect(parseReviewBugReportRequest(withoutTraceConsent)).toEqual(request);
   });
 
   const payloadPart = {

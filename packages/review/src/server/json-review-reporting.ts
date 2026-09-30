@@ -66,9 +66,6 @@ export function jsonReviewBugReportSource(
         includePatch: true,
       });
     },
-    async trace() {
-      return null;
-    },
   };
 }
 
@@ -164,7 +161,6 @@ export function createJsonReviewReporting(
               }),
               map: async () => JSON.stringify(imported.presentation.maps),
               diff: () => jsonReviewBugReportSource(store, snapshot).diff(),
-              trace: async () => null,
             }
           : jsonReviewBugReportSource(store, snapshot),
         clientErrorNames: clientErrorsForSession(report.app_session_id),

@@ -92,9 +92,8 @@ whether Whiteboard attaches:
   plus its software maps
 - **Changed-file diffs used by CodePeeks** (only the diff lines)
 
-Both attachments are selected by default. Attaching the agent session trace
-that authored a whiteboard is not available yet: the dialog offers no trace
-control and reports never include agent traces.
+Both attachments are selected by default. Reports never include agent session
+traces.
 
 Whiteboard captures a screenshot before the dialog opens, so the dialog itself
 is not in the image. The screenshot is attached by default with a visible

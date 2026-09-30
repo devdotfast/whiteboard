@@ -186,7 +186,6 @@ it("routes sanitized telemetry and uploads only opted-in JSON context from the d
   expect(payloads[1].review).toBeUndefined();
   expect(payloads[1].map).toBeUndefined();
   expect(payloads[1].diff).toBeUndefined();
-  expect(payloads[1].trace).toBeUndefined();
   expect((await post("bug-report?version=999", report)).status).not.toBe(200);
   expect(payloads).toHaveLength(2);
 });

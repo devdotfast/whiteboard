@@ -116,22 +116,7 @@ describe("BugReportControl", () => {
       include_review: false,
       include_map: false,
       include_diff: true,
-      include_trace: false,
     });
-  });
-
-  it("never offers or requests an agent session trace", async () => {
-    await renderAndOpen();
-
-    const labels = [...container.querySelectorAll("fieldset label")].map(
-      (label) => label.textContent?.trim(),
-    );
-
-    expect(labels).not.toContain("Agent session trace");
-
-    await act(async () => sendButton().click());
-
-    expect(reportBody()).toMatchObject({ include_trace: false });
   });
 
   it("shows an automatic screenshot and omits it after removal", async () => {
