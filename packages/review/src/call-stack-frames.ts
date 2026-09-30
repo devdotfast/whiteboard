@@ -1,5 +1,5 @@
 import { type CallStackEntry, isCallsAssertion } from "./authoring";
-import { selectionKey } from "./lens-selection";
+import { anchored } from "./lens-selection";
 import type { Frame } from "./review-api/document";
 
 /** Legacy call stacks list anchors and `calls()` hops; the document stores
@@ -12,7 +12,7 @@ export function callStackFrames(entries: readonly CallStackEntry[]): Frame[] {
     const frame: Frame = {
       id: anchor.id,
       key: anchor.id,
-      source: anchor.peek,
+      ...anchored(anchor.peek),
       label: anchor.title,
     };
 
@@ -26,5 +26,5 @@ export function callStackFrames(entries: readonly CallStackEntry[]): Frame[] {
 /** Matching identity: an explicit key, else the source range. React and
  * selection identity stay on `id`. */
 export function frameIdentity(frame: Frame): string {
-  return frame.key ?? selectionKey(frame.source);
+  return frame.key ?? frame.source;
 }

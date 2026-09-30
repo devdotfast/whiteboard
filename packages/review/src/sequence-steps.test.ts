@@ -61,12 +61,7 @@ describe("sequenceBlockFromProps", () => {
         to: "inline-web-d1",
         label: "write user",
         style: "call",
-        source: selectSource({
-          side: "head",
-          file: "src/authUserWrite.ts",
-          fromLine: 1,
-          toLine: 3,
-        }),
+        source: "head/src/authUserWrite.ts#L1-L3",
       },
       {
         id: "authUserWrite--sequence-use-2",
@@ -75,12 +70,7 @@ describe("sequenceBlockFromProps", () => {
         to: "inline-settings-page",
         label: "read organization",
         style: "call",
-        source: selectSource({
-          side: "head",
-          file: "src/authUserWrite.ts",
-          fromLine: 1,
-          toLine: 3,
-        }),
+        source: "head/src/authUserWrite.ts#L1-L3",
       },
       {
         id: "sequence-sign-in-flow-message-3",

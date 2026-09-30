@@ -13,7 +13,8 @@ import { REVIEW_STATUS_TOOL } from "./status-tool.js";
 import { commandSchema } from "./store.js";
 
 /** The host publishes its input schemas, except session_edit's, which shows
- * content by type only (publishedEditSchema); adapters validate nothing. */
+ * less than the host accepts (publishedEditSchema); adapters validate
+ * nothing. */
 export function authoringTools(
   scratchpadAvailable = false,
   traceEnabled = false,
@@ -43,29 +44,29 @@ export function authoringTools(
     set_target:
       "Change the review target, preserving document and component IDs. Returns warnings for source references needing repair. Earlier versions keep their retained source.",
     edit: [
-      "Edit a document component. content is one component, named by type. Its fields, with ? for optional and anchor for a source range:",
+      "Edit a document component. content is one component, named by type. Its fields, with ? for optional and anchor for a source anchor string:",
       "markdown {markdown, pins?}",
       "code {text, language?, caption?}",
       "divider {}",
-      "code_peek {source: anchor, caption?}",
+      "code_peek {source: anchor, caption?, pins?}",
       "section {title, children: component[], defaultCollapsed?}",
       "callout {children: component[], title?, tone?: info|warning|danger|success}",
       "image {assetId from review_upload, alt, caption?}",
       "trace_quote {traceId, eventId, text}",
       "software_map {mapVersionId, focusElementId?}",
-      "sequence {title, actors: {key: label}, steps: step[]}",
-      "step {from, to (actor keys), label, style?: call|return|async, and exactly one of source: anchor, explanation, or code: {text, language?}}",
-      "flow_diagram {title, nodes: flow_node[] (1 to 100), edges: flow_edge[], description?, direction?: right|down}",
-      "flow_node {key, label, description?, kind?: process|decision|terminal, attachments?: {label, sources: anchor[]}[], link?: {from or to, label?, style?}}",
+      "sequence {title, actors: {key: label}, steps: step[], pins?}",
+      "step {from, to (actor keys), label, style?: call|return|async, and exactly one of source: anchor, explanation, or code: {text, language?}; pins?}",
+      "flow_diagram {title, nodes: flow_node[] (1 to 100), edges: flow_edge[], description?, direction?: right|down, pins?}",
+      "flow_node {key, label, description?, kind?: process|decision|terminal, attachments?: {label, sources: anchor[], pins?}[], link?: {from or to, label?, style?}}",
       "flow_edge {from, to (node keys), label?, style?: solid|dashed}",
-      "call_stack_diff {title, base: frame[], head: frame[]}; either side may be empty",
-      "frame {source: anchor, label?, key?, parentKey? (an earlier frame on that side), callSite?: anchor, contextSources?: anchor[], via?: {kind: call|queue|callback|rpc, reason}}",
-      "database_lens {title, actors: {key: label}, stores: {key: store}, useCases: useCase[] (1 or more)}",
+      "call_stack_diff {title, base: frame[], head: frame[], pins?}; either side may be empty",
+      "frame {source: anchor, label?, key?, parentKey? (an earlier frame on that side), callSite?: anchor, contextSources?: anchor[], via?: {kind: call|queue|callback|rpc, reason}, pins?}",
+      "database_lens {title, actors: {key: label}, stores: {key: store}, useCases: useCase[] (1 or more), pins?}",
       "store {label, storage: relational|document, collections: {key: {label, fields: {key: field}}}, dataStoreKind?: database|objectStore|bucket|artifactStore|fileStore}",
       "field {label, dataType, nullable?, primaryKey?, references?: {store, collection, field}, fields?: {key: field}}",
-      "useCase {label, summary?, operations: operation[] (1 or more)}; operation {kind: read|write, actor, store, collection, label, source: anchor, field?, detail?}, naming declared keys",
-      "anchor {file, start: {side, line}, end: {side, line}, pins?}: side is head or base, lines are 1-based and inclusive, file is repository-relative; pins {repositoryId, head, base?} when reading other commits.",
-      'Example: {"type":"code_peek","source":{"file":"src/app.ts","start":{"side":"head","line":10},"end":{"side":"head","line":20}}}',
+      "useCase {label, summary?, operations: operation[] (1 or more)}; operation {kind: read|write, actor, store, collection, label, source: anchor, field?, detail?, pins?}, naming declared keys",
+      "Anchors are head/path#L10-L20 or base/path#L7, or diff/path#L84-R90 for a range across sides, with repository-relative paths and 1-based inclusive lines. pins {repositoryId, head, base?} say which commits anchors quote: a step, frame, attachment or operation without pins uses its block's, and a block without them the review's.",
+      'Example: {"type":"sequence","title":"Request","actors":{"a":"Client","b":"Server"},"steps":[{"from":"a","to":"b","label":"Send","source":"head/src/app.ts#L10-L20"}]}',
       "Replace example paths and lines with verified source ranges. The host assigns short durable IDs; use returned IDs to edit components in place. The result identifies the edited component and, for an insert or replace, its first-level children, so they can be edited without a follow-up read. Accepted edits are saved immediately. Omitted placement appends; on the scratchpad it lands at the top, so insert a multi-block thought bottom-up or chain each block with afterId. To fill a section later, insert into it with parentId. null removes an optional field in a patch. While a reader may be watching, write small and often: one paragraph per edit, so the document draws itself as you go. Insert a new diagram whole, with all its nodes and edges or steps; the board traces it in one quick pass. Change a diagram already on the board one unit at a time: insert, update or remove a flow_node, flow_edge or step by ID (parentId names the diagram). Link each added flow_node to a node already drawn, so it arrives attached; a separate flow_edge is only for two nodes that already exist. Removing a flow_node removes its edges.",
     ].join("\n"),
     lens_edit:
@@ -237,7 +238,7 @@ export function authoringTools(
     ),
     tool(
       "source",
-      "Read an exact code range from the current target. An explicit version reads retained historical source. source.pins reads at explicit commits of any registered repository instead; the same pins on a stored selection or markdown block make it resolve there.",
+      "Read an exact code range from the current target. An explicit version reads retained historical source. source.pins reads at explicit commits of any registered repository instead; the same pins on a block, or on the step, frame, attachment or operation holding an anchor, make it resolve there.",
       z.strictObject({
         ...review,
         version,

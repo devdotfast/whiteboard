@@ -447,11 +447,7 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
           type: "insert",
           content: {
             type: "code_peek",
-            source: {
-              file: "missing.ts",
-              start: { side: "head", line: 1 },
-              end: { side: "head", line: 1 },
-            },
+            source: "head/missing.ts#L1",
           },
         },
       },

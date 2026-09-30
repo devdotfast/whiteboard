@@ -9,35 +9,11 @@
         "attachments": [
           {
             "label": "Handler",
-            "sources": [
-              {
-                "file": "order.ts",
-                "start": {
-                  "side": "head",
-                  "line": 1
-                },
-                "end": {
-                  "side": "head",
-                  "line": 1
-                }
-              }
-            ]
+            "sources": ["head/order.ts#L1"]
           },
           {
             "label": "Validation",
-            "sources": [
-              {
-                "file": "order.ts",
-                "start": {
-                  "side": "base",
-                  "line": 1
-                },
-                "end": {
-                  "side": "base",
-                  "line": 1
-                }
-              }
-            ]
+            "sources": ["base/order.ts#L1"]
           }
         ]
       },

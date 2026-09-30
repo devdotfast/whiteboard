@@ -33,13 +33,7 @@ const docs: Lens = {
     { kind: "files", patterns: ["docs/**"] },
     {
       kind: "ranges",
-      sources: [
-        {
-          file: "README.md",
-          start: { side: "head", line: 1 },
-          end: { side: "head", line: 4 },
-        },
-      ],
+      sources: ["head/README.md#L1-L4"],
     },
   ],
 };

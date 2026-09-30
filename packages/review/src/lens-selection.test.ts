@@ -1,10 +1,14 @@
 import { expect, it } from "vitest";
 
 import {
-  diffSelectionSchema,
+  anchorSchema,
+  anchorSelection,
+  formatAnchor,
+  parseAnchor,
   resolveDiffSelection,
   selectSource,
   selectionKey,
+  selectionProblem,
   sourceAnchors,
 } from "./lens-selection.js";
 import { textualRows } from "./review-api/lens-alignment.js";
@@ -74,11 +78,7 @@ it("includes interior deletion rows when selecting by head endpoints, but exclud
 });
 
 it("accepts an interval starting on a deletion and ending on an insertion", () => {
-  const selection = diffSelectionSchema.parse({
-    file: "new.ts",
-    start: { side: "base", line: 2 },
-    end: { side: "head", line: 3 },
-  });
+  const selection = anchorSelection("diff/new.ts#L2-R3");
 
   expect(resolveDiffSelection(selection, rows, file)).toEqual([
     { file: "old.ts", side: "base", fromLine: 2, toLine: 3 },
@@ -145,22 +145,22 @@ it("resolves selections over existing textual hunks, including unchanged gaps", 
   ]);
 });
 
-it("rejects both retired authoring formats", () => {
-  expect(
-    diffSelectionSchema.safeParse({
+it("accepts only the anchor string, not any retired object form", () => {
+  for (const retired of [
+    { file: "a", side: "head", fromLine: 1, toLine: 2 },
+    { file: "a", start: { baseLine: 1, headLine: 1 }, end: { baseLine: 2 } },
+    {
       file: "a",
-      side: "head",
-      fromLine: 1,
-      toLine: 2,
-    }).success,
-  ).toBe(false);
-  expect(
-    diffSelectionSchema.safeParse({
-      file: "a",
-      start: { baseLine: 1, headLine: 1 },
-      end: { baseLine: 2, headLine: 2 },
-    }).success,
-  ).toBe(false);
+      start: { side: "head", line: 1 },
+      end: { side: "head", line: 2 },
+    },
+  ])
+    expect(anchorSchema.safeParse(retired).success).toBe(false);
+});
+
+it("takes a diff anchor only across sides", () => {
+  for (const oneSide of ["diff/a#L1312-L1323", "diff/a#R7"])
+    expect(anchorSchema.safeParse(oneSide).success).toBe(false);
 });
 
 it("orders mixed endpoints by alignment position rather than line number", () => {
@@ -186,18 +186,8 @@ it("orders mixed endpoints by alignment position rather than line number", () =>
 const pins = { repositoryId: "repo-b", head: "b".repeat(40) };
 
 it("keeps a selection's own pins through its key, its anchors and its round trip from a range", () => {
-  const selection = diffSelectionSchema.parse({
-    file: "src/a.ts",
-    start: { side: "head", line: 2 },
-    end: { side: "head", line: 4 },
-    pins,
-  });
-
-  const inherited = diffSelectionSchema.parse({
-    file: "src/a.ts",
-    start: { side: "head", line: 2 },
-    end: { side: "head", line: 4 },
-  });
+  const selection = anchorSelection("head/src/a.ts#L2-L4", pins);
+  const inherited = anchorSelection("head/src/a.ts#L2-L4");
 
   expect(selectionKey(selection)).not.toBe(selectionKey(inherited));
   expect(selectionKey(inherited)).toBe(
@@ -212,19 +202,44 @@ it("keeps a selection's own pins through its key, its anchors and its round trip
 });
 
 it("requires base pins before a selection may touch the base side", () => {
-  const base = {
-    file: "src/a.ts",
-    start: { side: "base", line: 2 },
-    end: { side: "head", line: 4 },
-  };
+  const anchor = "diff/src/a.ts#L2-R4";
 
-  expect(() => diffSelectionSchema.parse({ ...base, pins })).toThrow(
-    /base-side endpoint needs base pins/,
+  expect(selectionProblem(anchorSelection(anchor, pins))).toMatch(
+    /base-side anchor needs base pins/,
   );
   expect(
-    diffSelectionSchema.parse({
-      ...base,
-      pins: { ...pins, base: "a".repeat(40) },
-    }).pins,
-  ).toEqual({ ...pins, base: "a".repeat(40) });
+    selectionProblem(
+      anchorSelection(anchor, { ...pins, base: "a".repeat(40) }),
+    ),
+  ).toBeUndefined();
+});
+
+it("reads the anchor strings agents write", () => {
+  expect(parseAnchor("head/src/a b.ts#L10-L24")).toEqual({
+    file: "src/a b.ts",
+    start: { side: "head", line: 10 },
+    end: { side: "head", line: 24 },
+  });
+  expect(parseAnchor("base/src/a.ts#L7")).toEqual({
+    file: "src/a.ts",
+    start: { side: "base", line: 7 },
+    end: { side: "base", line: 7 },
+  });
+  expect(parseAnchor("diff/src/a.ts#L84-R90")).toEqual({
+    file: "src/a.ts",
+    start: { side: "base", line: 84 },
+    end: { side: "head", line: 90 },
+  });
+
+  for (const text of ["src/a.ts#L1", "head/src/a.ts", "diff/src/a.ts#L1-X2"])
+    expect(parseAnchor(text)).toBeUndefined();
+
+  for (const text of [
+    "head/src/a b.ts#L10-L24",
+    "base/src/a.ts#L7",
+    "diff/src/a.ts#L84-R90",
+  ])
+    expect(formatAnchor(parseAnchor(text)!)).toBe(text);
+
+  expect(anchorSchema.safeParse("head/src/a.ts#L9-L2").success).toBe(false);
 });

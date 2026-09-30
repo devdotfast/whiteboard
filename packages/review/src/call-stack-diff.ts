@@ -1,5 +1,5 @@
 import { frameIdentity } from "./call-stack-frames";
-import { sourceAnchor } from "./lens-selection";
+import { anchorSelection, sourceAnchor } from "./lens-selection";
 import type { Frame } from "./review-api/document";
 
 export type CallStackSide = "base" | "head";
@@ -89,7 +89,11 @@ export function callStackEvidenceErrors(
 
   for (const row of rows) {
     if (row.change === "unchanged") continue;
-    const { file, fromLine, toLine } = sourceAnchor(row.frame.source);
+
+    const { file, fromLine, toLine } = sourceAnchor(
+      anchorSelection(row.frame.source),
+    );
+
     const side: CallStackSide = row.change === "removed" ? "base" : "head";
     const lines = changedLines(file, side);
     const relevant = row.change === "removed" ? lines?.deleted : lines?.added;

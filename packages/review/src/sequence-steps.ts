@@ -5,6 +5,7 @@ import type {
   SequenceDiagramProps,
   SequenceMessageCodeInput,
 } from "./authoring";
+import { anchored } from "./lens-selection";
 import type { Step } from "./review-api/document";
 import { slugify, uniqueId } from "./slug";
 
@@ -113,7 +114,8 @@ export function sequenceBlockFromProps(
 
     // Tour content precedence was code, then source: keep it.
     if (code) step.code = code;
-    else if (message.anchor?.peek) step.source = message.anchor.peek;
+    else if (message.anchor?.peek)
+      Object.assign(step, anchored(message.anchor.peek));
     else step.explanation = message.label;
 
     return step;

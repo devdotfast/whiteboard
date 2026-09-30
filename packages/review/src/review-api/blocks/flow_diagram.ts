@@ -1,10 +1,15 @@
-import { lensSourceSchema } from "@review/lens-selection.js";
+import {
+  type DiffSelection,
+  anchorSchema,
+  anchorSelection,
+} from "@review/lens-selection.js";
 import { ReviewInputError } from "@review/review-api/input-error.js";
 import { z } from "zod";
 
 import {
   type BlockDefinition,
   defineBlock,
+  elementPins,
   identity,
   label,
 } from "./definition.js";
@@ -20,7 +25,13 @@ export const flowNodeSchema = z.strictObject({
   description: z.string().optional(),
   kind: z.enum(["process", "decision", "terminal"]).optional(),
   attachments: z
-    .array(z.strictObject({ label, sources: z.array(lensSourceSchema).min(1) }))
+    .array(
+      z.strictObject({
+        label,
+        sources: z.array(anchorSchema).min(1),
+        pins: elementPins,
+      }),
+    )
     .default([])
     .describe(
       "Code evidence for this node. Omit for nodes no code backs, such as start or exit states.",
@@ -56,11 +67,26 @@ export const flowDiagramSchema = defineBlock("flow_diagram", {
   direction: z.enum(["right", "down"]).optional(),
   nodes: z.array(flowNodeSchema).min(1).max(100),
   edges: z.array(flowEdgeSchema).max(300),
+  pins: elementPins,
 });
 
 export type FlowDiagramBlock = z.infer<typeof flowDiagramSchema>;
 
 export type FlowDiagramNode = z.infer<typeof flowNodeSchema>;
+
+/** A node's evidence, each anchor read at its attachment's pins, else the
+ * diagram's. */
+export function nodeSources(
+  node: FlowDiagramNode,
+  diagramPins: FlowDiagramBlock["pins"],
+): { label: string; source: DiffSelection }[] {
+  return node.attachments.flatMap((attachment) =>
+    attachment.sources.map((anchor) => ({
+      label: attachment.label,
+      source: anchorSelection(anchor, attachment.pins ?? diagramPins),
+    })),
+  );
+}
 
 export type FlowDiagramEdge = z.infer<typeof flowEdgeSchema>;
 

@@ -1,10 +1,11 @@
-import { lensSourceSchema } from "@review/lens-selection.js";
+import { anchorSchema } from "@review/lens-selection.js";
 import { ReviewInputError } from "@review/review-api/input-error.js";
 import { z } from "zod";
 
 import {
   type BlockDefinition,
   defineBlock,
+  elementPins,
   identity,
   label,
 } from "./definition.js";
@@ -14,16 +15,17 @@ export const frameSchema = z.strictObject({
   // Optional component-local name for the same frame on both sides (even if moved).
   key: label.optional(),
   parentKey: label.nullable().optional(),
-  callSite: lensSourceSchema.optional(),
-  source: lensSourceSchema,
+  callSite: anchorSchema.optional(),
+  source: anchorSchema,
   contextSources: z
-    .array(lensSourceSchema)
+    .array(anchorSchema)
     .max(1000)
     .optional()
     .describe(
       "Supporting code owned by this frame, such as field initializers. These ranges share the frame’s diff section and coverage; they do not create call edges.",
     ),
   label: label.optional(),
+  pins: elementPins,
   via: z
     .strictObject({
       kind: z.enum(["call", "queue", "callback", "rpc"]),
@@ -38,6 +40,7 @@ const schema = defineBlock("call_stack_diff", {
   title: label,
   base: z.array(frameSchema),
   head: z.array(frameSchema),
+  pins: elementPins,
 });
 
 export type CallStackDiffBlock = z.infer<typeof schema>;

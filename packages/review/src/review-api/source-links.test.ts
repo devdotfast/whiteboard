@@ -1,4 +1,4 @@
-import { selectSource } from "@review/lens-selection.js";
+import { rangeAnchor } from "@review/lens-selection.js";
 import { expect, it } from "vitest";
 
 import { sourceReferences } from "./document.js";
@@ -55,7 +55,7 @@ const range = {
 
 it("marks every source that renders as a peek, but not prose links", () => {
   const references = sourceReferences([
-    { type: "code_peek", id: "peek-1", source: selectSource(range) },
+    { type: "code_peek", id: "peek-1", source: rangeAnchor(range) },
     {
       type: "markdown",
       id: "n-2",
@@ -74,7 +74,7 @@ it("marks every source that renders as a peek, but not prose links", () => {
           to: "s",
           label: "save",
           style: "call",
-          source: selectSource(range),
+          source: rangeAnchor(range),
         },
         {
           type: "step",
@@ -97,7 +97,7 @@ it("marks every source that renders as a peek, but not prose links", () => {
           id: "frame-7",
           key: "save",
           label: "save",
-          source: selectSource(range),
+          source: rangeAnchor(range),
         },
       ],
     },
@@ -130,7 +130,7 @@ it("marks every source that renders as a peek, but not prose links", () => {
               collection: "saves",
               actor: "s",
               label: "insert",
-              source: selectSource(range),
+              source: rangeAnchor(range),
             },
           ],
         },
@@ -175,7 +175,7 @@ it("resolves a block's links at the block's own pins, and only where those pins 
         pins,
       },
     ]),
-  ).toThrow(/base-side source needs base pins/);
+  ).toThrow(/base-side anchor needs base pins/);
 });
 
 for (const href of [

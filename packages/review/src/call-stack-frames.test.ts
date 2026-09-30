@@ -22,11 +22,7 @@ describe("callStackFrames", () => {
       {
         id: "reconcile",
         key: "reconcile",
-        source: {
-          file: "src/reconcile.ts",
-          start: { side: "head", line: 1 },
-          end: { side: "head", line: 5 },
-        },
+        source: "head/src/reconcile.ts#L1-L5",
         label: "Anchor reconcile",
       },
     ]);
@@ -51,16 +47,12 @@ describe("callStackFrames", () => {
 
 describe("frame identity", () => {
   it("prefers the explicit key and falls back to the source range", () => {
-    const source = {
-      file: "src/a.ts",
-      start: { side: "head", line: 3 },
-      end: { side: "head", line: 4 },
-    } as const;
+    const source = "head/src/a.ts#L3-L4";
 
     expect(frameIdentity({ id: "x", key: "moved", source })).toBe("moved");
     expect(frameIdentity({ id: "x", source })).toBe(frameIdentity({ source }));
     expect(frameIdentity({ source })).not.toBe(
-      frameIdentity({ source: { ...source, end: { side: "head", line: 5 } } }),
+      frameIdentity({ source: "head/src/a.ts#L3-L5" }),
     );
   });
 });

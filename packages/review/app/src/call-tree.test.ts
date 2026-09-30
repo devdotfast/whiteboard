@@ -1,14 +1,11 @@
+import { anchorSelection } from "@review/lens-selection";
 import { call_stack_diff } from "@review/review-api/blocks/call_stack_diff";
 import { expect, it } from "vitest";
 
 import { callTreeStops } from "./call-tree";
 
 it("keeps separate calls into the same file as separate sections and combines matched base/head evidence", () => {
-  const source = {
-    file: "shared.ts",
-    start: { side: "head" as const, line: 5 },
-    end: { side: "head" as const, line: 20 },
-  };
+  const source = "head/shared.ts#L5-L20";
 
   const block = call_stack_diff.schema.parse({
     type: "call_stack_diff",
@@ -22,11 +19,7 @@ it("keeps separate calls into the same file as separate sections and combines ma
     base: [
       {
         key: "first",
-        source: {
-          ...source,
-          start: { side: "base", line: 5 },
-          end: { side: "base", line: 20 },
-        },
+        source: "base/shared.ts#L5-L20",
       },
     ],
   });
@@ -59,11 +52,7 @@ it("rejects a parent reference that would create a cyclic call tree", () => {
       {
         key: "self",
         parentKey: "self",
-        source: {
-          file: "a.ts",
-          start: { side: "head", line: 1 },
-          end: { side: "head", line: 3 },
-        },
+        source: "head/a.ts#L1-L3",
       },
     ],
   });
@@ -72,17 +61,8 @@ it("rejects a parent reference that would create a cyclic call tree", () => {
 });
 
 it("keeps supporting source ranges in the owning frame without adding call edges", () => {
-  const source = {
-    file: "view.ts",
-    start: { side: "head" as const, line: 10 },
-    end: { side: "head" as const, line: 20 },
-  };
-
-  const fields = {
-    ...source,
-    start: { side: "head" as const, line: 2 },
-    end: { side: "head" as const, line: 5 },
-  };
+  const source = "head/view.ts#L10-L20";
+  const fields = "head/view.ts#L2-L5";
 
   const stops = callTreeStops({
     type: "call_stack_diff",
@@ -100,6 +80,9 @@ it("keeps supporting source ranges in the owning frame without adding call edges
   });
 
   expect(stops).toHaveLength(1);
-  expect(stops[0].sources).toEqual([source, fields]);
+  expect(stops[0].sources).toEqual([
+    anchorSelection(source),
+    anchorSelection(fields),
+  ]);
   expect(stops[0].parentId).toBeUndefined();
 });

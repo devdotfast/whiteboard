@@ -93,7 +93,7 @@ describe("block definitions", () => {
         base: [
           {
             ...diff!.base[0]!,
-            source: { ...diff!.base[0]!.source, side: "head" as const },
+            source: diff!.base[0]!.source.replace(/^base\//, "head/"),
           },
         ],
       };

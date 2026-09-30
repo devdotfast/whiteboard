@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 
-import { type LensSource } from "@review/lens-selection.js";
+import { type LensSource, anchorSelection } from "@review/lens-selection.js";
 import type { FileLineRange } from "@review/source.js";
 import {
   type CoverageFile,
@@ -38,7 +38,7 @@ export function resolveFileLens(
 
   const selected = targets.flatMap((target) =>
     target.kind === "ranges"
-      ? target.sources.flatMap(resolve)
+      ? target.sources.flatMap((source) => resolve(anchorSelection(source)))
       : files
           .filter((file) => matchesFileLens(target.patterns, file))
           .flatMap((file) => fileSources.get(file.path) ?? []),

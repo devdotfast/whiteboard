@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { selectionKey } from "@review/lens-selection";
+import { formatAnchor, selectionKey } from "@review/lens-selection";
 import { expect, it } from "vitest";
 
 import { createReviewApi } from "./http";
@@ -67,11 +67,13 @@ it.each([
 
     const local = openLocalReviewStore(path.join(root, "reviews.db"));
 
-    const source = {
+    const selection = {
       file: "value.ts",
       start: { side: "head" as const, line: 1 },
       end: { side: "head" as const, line: 1 },
     };
+
+    const source = formatAnchor(selection);
 
     try {
       const { id } = await local.data.register(repository);
@@ -145,7 +147,7 @@ it.each([
 
         expect(progress.unavailableSelections).toEqual({});
         expect(
-          progress.resolvedSelections[selectionKey(source)],
+          progress.resolvedSelections[selectionKey(selection)],
         ).toContainEqual(
           expect.objectContaining({
             file: "value.ts",

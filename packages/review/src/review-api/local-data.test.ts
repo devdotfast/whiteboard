@@ -23,7 +23,7 @@ import {
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
 } from "@dev.fast/review-protocol";
-import { selectSource } from "@review/lens-selection";
+import { rangeAnchor } from "@review/lens-selection";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { Hono } from "hono";
 import sharp from "sharp";
@@ -182,24 +182,16 @@ it("reads, resolves and retires a reference at its own pins in another repositor
 
   const peek = await insert(reviewId, {
     type: "code_peek",
-    source: {
-      file: "lib.ts",
-      start: { side: "head", line: 1 },
-      end: { side: "head", line: 2 },
-      pins: own,
-    },
+    source: "head/lib.ts#L1-L2",
+    pins: own,
   });
 
   // A branch name is not a pin, even for a reference's own pins.
   await expect(
     insert(reviewId, {
       type: "code_peek",
-      source: {
-        file: "lib.ts",
-        start: { side: "head", line: 1 },
-        end: { side: "head", line: 1 },
-        pins: { ...own, head: "HEAD" },
-      },
+      source: "head/lib.ts#L1",
+      pins: { ...own, head: "HEAD" },
     }),
   ).rejects.toThrow(/resolved commit IDs/);
 
@@ -914,7 +906,7 @@ it("serves a historical version's file at the pins that version was saved with",
     command({ type: "create", title: "Snapshot", pins }),
   );
 
-  await insert(reviewId, { type: "code_peek", source: selectSource(source) });
+  await insert(reviewId, { type: "code_peek", source: rangeAnchor(source) });
   writeFileSync(
     path.join(repository, source.file),
     "export const value = 3;\n",
@@ -1333,7 +1325,7 @@ it("reads pinned Git objects, rejects invalid evidence before saving, and retain
 
   await insert(review.reviewId, {
     type: "code_peek",
-    source: selectSource(source),
+    source: rangeAnchor(source),
   });
   expect(await local.data.quote(pins, source)).toMatchObject({
     commit: pins.head,
@@ -1351,7 +1343,7 @@ it("reads pinned Git objects, rejects invalid evidence before saving, and retain
   await expect(
     insert(review.reviewId, {
       type: "code_peek",
-      source: selectSource({ ...source, toLine: 4 }),
+      source: rangeAnchor({ ...source, toLine: 4 }),
     }),
   ).rejects.toThrow(/exceeds/);
   await expect(local.data.file(pins, "head", "../outside.ts")).rejects.toThrow(
@@ -1417,7 +1409,7 @@ it("describes binary source for browsing without allowing it as code evidence", 
   await expect(
     insert(review.reviewId, {
       type: "code_peek",
-      source: selectSource({ ...source, file: "binary.bin", toLine: 1 }),
+      source: rangeAnchor({ ...source, file: "binary.bin", toLine: 1 }),
     }),
   ).rejects.toThrow("Binary files cannot be used as code references.");
 
@@ -2854,7 +2846,7 @@ it("keeps authored coordinates fixed as live source changes and warns only on un
 
   await insert(result.reviewId, {
     type: "code_peek",
-    source: selectSource({
+    source: rangeAnchor({
       side: "head",
       file: "range.ts",
       fromLine: 2,
@@ -2869,11 +2861,11 @@ it("keeps authored coordinates fixed as live source changes and warns only on un
   await new Promise((resolve) => setTimeout(resolve, 50));
   await local.store.refreshWorktrees();
   expect(local.store.read(result.reviewId).document[0]).toMatchObject({
-    source: { start: { line: 2 }, end: { line: 2 } },
+    source: "head/range.ts#L2",
   });
   expect(
     local.store.read(result.reviewId, saved.version).document[0],
-  ).toMatchObject({ source: { start: { line: 2 }, end: { line: 2 } } });
+  ).toMatchObject({ source: "head/range.ts#L2" });
   writeFileSync(path.join(repository, "range.ts"), "const first = 99;\n");
   await vi.waitFor(async () => {
     await local.store.refreshWorktrees();
@@ -3076,7 +3068,7 @@ it("retargets a live review without losing authored content or component IDs", a
 
   await insert(created.reviewId, {
     type: "code_peek",
-    source: selectSource({
+    source: rangeAnchor({
       side: "head",
       file: "example.ts",
       fromLine: 1,
@@ -3172,7 +3164,7 @@ it.each(["repin", "set_target"] as const)(
 
     await insert(created.reviewId, {
       type: "code_peek",
-      source: selectSource({
+      source: rangeAnchor({
         side: "head",
         file: "recover.ts",
         fromLine: 2,
@@ -3195,7 +3187,7 @@ it.each(["repin", "set_target"] as const)(
     await expect(
       insert(created.reviewId, {
         type: "code_peek",
-        source: selectSource({
+        source: rangeAnchor({
           side: "head",
           file: "recover.ts",
           fromLine: 99,
@@ -3209,7 +3201,7 @@ it.each(["repin", "set_target"] as const)(
     await local.store.refreshWorktrees();
     expect(local.store.read(created.reviewId).staleSources).toEqual([]);
     expect(local.store.read(created.reviewId).document[0]).toMatchObject({
-      source: { start: { line: 2 }, end: { line: 2 } },
+      source: "head/recover.ts#L2",
     });
     expect(
       local.store.read(created.reviewId, renamed.version).staleSources,
