@@ -461,13 +461,22 @@ export interface ReviewCanvasTutorialBridge {
 export interface ReviewDiffrConfig {
   values: JsonObject;
   credentialSource: "config" | "environment" | "missing";
+  defaultPrompt?: string;
+  defaultPromptUrl?: string;
   changed?: boolean;
   error?: string;
 }
 
+export const reviewDiffrProviders = ["gemini", "openai", "anthropic"] as const;
+
+export type ReviewDiffrProvider = (typeof reviewDiffrProviders)[number];
+
 export const reviewDiffrSummarizerInputSchema = z.object({
   enabled: z.boolean(),
+  provider: z.enum(reviewDiffrProviders),
   model: z.string().trim().min(1),
+  endpoint: z.string().trim(),
+  systemPrompt: z.string().trim().min(1),
   tests: z.boolean(),
   apiKey: z.string().optional(),
 });
@@ -479,6 +488,8 @@ export type ReviewDiffrSummarizerInput = z.infer<
 const reviewDiffrConfigSchema = z.object({
   values: z.custom<JsonObject>(isJsonObject),
   credentialSource: z.enum(["config", "environment", "missing"]),
+  defaultPrompt: z.string().optional(),
+  defaultPromptUrl: z.string().optional(),
   changed: z.boolean().optional(),
   error: z.string().optional(),
 });

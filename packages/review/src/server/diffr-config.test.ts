@@ -17,6 +17,8 @@ const roots: string[] = [];
 beforeEach(() => {
   vi.stubEnv("GEMINI_API_KEY", "");
   vi.stubEnv("GOOGLE_API_KEY", "");
+  vi.stubEnv("OPENAI_API_KEY", "");
+  vi.stubEnv("ANTHROPIC_API_KEY", "");
   vi.clearAllMocks();
 });
 
@@ -27,7 +29,19 @@ afterEach(async () => {
   );
 });
 
-const draft = { enabled: true, model: "test-model", tests: true };
+const DEFAULT_PROMPT = "Summarize each fold.";
+
+const PROMPT_URL =
+  "https://github.com/devdotfast/diffr/blob/main/plugins/summarize/plugin.toml#L68-L74";
+
+const draft = {
+  enabled: true,
+  provider: "gemini" as const,
+  model: "test-model",
+  endpoint: "",
+  systemPrompt: DEFAULT_PROMPT,
+  tests: true,
+};
 
 async function fakeDiffr(key = "") {
   const root = await mkdtemp(path.join(tmpdir(), "review-diffr-config-"));
@@ -46,6 +60,7 @@ async function fakeDiffr(key = "") {
             enabled: false,
             model: "old",
             tests: false,
+            system_prompt: DEFAULT_PROMPT,
             api_key: key,
           },
           context: { lines: 3, enabled: true },
@@ -61,7 +76,10 @@ const args = process.argv.slice(2);
 const state = ${JSON.stringify(state)}, log = ${JSON.stringify(log)};
 fs.appendFileSync(log, JSON.stringify(args) + '\\n');
 const config = JSON.parse(fs.readFileSync(state, 'utf8'));
-if (args[0] === 'config' && args[1] === 'show') {
+if (args[0] === 'config' && args[1] === 'schema') {
+  const summarize = { type: 'object', properties: { system_prompt: { type: 'string', default: ${JSON.stringify(DEFAULT_PROMPT)}, description: ${JSON.stringify(`Unset uses the default: ${PROMPT_URL}`)} } } };
+  console.log(JSON.stringify({ properties: { plugins: { properties: { bundled: { properties: { summarize } } } } } }));
+} else if (args[0] === 'config' && args[1] === 'show') {
   if (!args.includes('--reveal') && config.plugins.bundled.summarize.api_key) config.plugins.bundled.summarize.api_key = '<redacted>';
   console.log(JSON.stringify(config));
 } else if (args[0] === 'config' && args[1] === 'set') {
@@ -79,6 +97,7 @@ if (args[0] === 'config' && args[1] === 'show') {
   fs.writeFileSync(${JSON.stringify(path.join(root, "test-config"))}, fs.readFileSync(temporary));
   fs.writeFileSync(${JSON.stringify(path.join(root, "test-path"))}, temporary);
   const mode = process.env.TEST_MODE;
+  fs.writeFileSync(${JSON.stringify(path.join(root, "test-env"))}, JSON.stringify({ gemini: process.env.GEMINI_API_KEY, openai: process.env.OPENAI_API_KEY }));
   if (mode === 'reject') { console.error(process.env.GEMINI_API_KEY); process.exit(2); }
   if (mode === 'hang') { setTimeout(() => {}, 10000); }
   else {
@@ -137,7 +156,7 @@ test("saves credentials and options before enabling and preserves blank keys", a
   await saveDiffrSummarizer({ ...draft, apiKey: "test-secret" });
   const writes = (await fake.calls()).filter((args) => args[1] === "set");
   expect(writes.map((args) => args[2])).toEqual(
-    ["api_key", "model", "tests", "enabled"].map(
+    ["api_key", "provider", "model", "tests", "enabled"].map(
       (key) => `plugins.bundled.summarize.${key}`,
     ),
   );
@@ -295,4 +314,97 @@ test("saved changes invalidate cached comparisons while no-op saves reuse them",
   } finally {
     cache.close();
   }
+});
+
+test("reads the default prompt and its source link from diffr's schema", async () => {
+  await fakeDiffr();
+  expect(await readDiffrConfig()).toMatchObject({
+    defaultPrompt: DEFAULT_PROMPT,
+    defaultPromptUrl: PROMPT_URL,
+  });
+});
+
+test("saves a changed prompt and leaves an unchanged one alone", async () => {
+  const fake = await fakeDiffr("test-secret");
+  await saveDiffrSummarizer({ ...draft, enabled: false });
+  expect(
+    (await fake.calls()).some((args) => args[2]?.endsWith(".system_prompt")),
+  ).toBe(false);
+  await saveDiffrSummarizer({
+    ...draft,
+    enabled: false,
+    systemPrompt: "Be terse.",
+  });
+  expect(
+    JSON.parse(await readFile(fake.state, "utf8")).plugins.bundled.summarize
+      .system_prompt,
+  ).toBe("Be terse.");
+});
+
+test("switching providers clears the saved key unless a new one is entered", async () => {
+  const fake = await fakeDiffr("gemini-secret");
+  const state = async () =>
+    JSON.parse(await readFile(fake.state, "utf8")).plugins.bundled.summarize;
+  await saveDiffrSummarizer({ ...draft, enabled: false, provider: "anthropic" });
+  expect(await state()).toMatchObject({ provider: "anthropic", api_key: "" });
+  await saveDiffrSummarizer({
+    ...draft,
+    enabled: false,
+    provider: "openai",
+    apiKey: "openai-secret",
+  });
+  expect(await state()).toMatchObject({
+    provider: "openai",
+    api_key: "openai-secret",
+  });
+});
+
+test("credentials are checked against the draft provider", async () => {
+  await fakeDiffr("gemini-secret");
+  expect(
+    await saveDiffrSummarizer({ ...draft, provider: "anthropic" }),
+  ).toMatchObject({ changed: false, error: expect.stringContaining("API key") });
+  vi.stubEnv("ANTHROPIC_API_KEY", "env-secret");
+  expect(
+    (await saveDiffrSummarizer({ ...draft, provider: "anthropic" })).error,
+  ).toBeUndefined();
+  expect(
+    (
+      await saveDiffrSummarizer({
+        ...draft,
+        provider: "openai",
+        endpoint: "http://127.0.0.1:11434/v1",
+      })
+    ).error,
+  ).toBeUndefined();
+});
+
+test("the synthetic test never sends a saved key to another provider and uses the draft prompt", async () => {
+  const fake = await fakeDiffr("gemini-secret");
+  await expect(
+    testDiffrSummarizer({ ...draft, provider: "openai" }),
+  ).rejects.toThrow("Add an API key");
+  vi.stubEnv("OPENAI_API_KEY", "env-openai");
+  expect(
+    await testDiffrSummarizer({
+      ...draft,
+      provider: "openai",
+      systemPrompt: "Draft prompt.",
+    }),
+  ).toBe("count positive values");
+  expect(
+    JSON.parse(await readFile(path.join(fake.root, "test-env"), "utf8")),
+  ).toEqual({ gemini: "", openai: "env-openai" });
+  const config = await readFile(path.join(fake.root, "test-config"), "utf8");
+  expect(config).toContain('provider = "openai"');
+  expect(config).toContain("Draft prompt.");
+});
+
+test("reads the environment key of the saved provider", async () => {
+  await fakeDiffr();
+  await saveDiffrSummarizer({ ...draft, enabled: false, provider: "anthropic" });
+  vi.stubEnv("GEMINI_API_KEY", "gemini-env");
+  expect((await readDiffrConfig()).credentialSource).toBe("missing");
+  vi.stubEnv("ANTHROPIC_API_KEY", "anthropic-env");
+  expect((await readDiffrConfig()).credentialSource).toBe("environment");
 });

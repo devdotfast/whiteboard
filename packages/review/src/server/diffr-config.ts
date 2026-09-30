@@ -13,8 +13,10 @@ import {
 } from "@dev.fast/json";
 import {
   type ReviewDiffrConfig,
+  type ReviewDiffrProvider,
   type ReviewDiffrSummarizerInput,
   decodeStructuralDiffEvent,
+  reviewDiffrProviders,
   reviewDiffrSummarizerInputSchema,
 } from "@dev.fast/review-protocol";
 import { stringify } from "smol-toml";
@@ -69,12 +71,16 @@ async function values(
   reveal = false,
   signal?: AbortSignal,
 ): Promise<JsonObject> {
-  const output = await diffr(
-    ["config", "show", "--json", ...(reveal ? ["--reveal"] : [])],
-    rootPath,
-    { signal },
+  return json(
+    await diffr(
+      ["config", "show", "--json", ...(reveal ? ["--reveal"] : [])],
+      rootPath,
+      { signal },
+    ),
   );
+}
 
+function json(output: string): JsonObject {
   try {
     const parsed = parseJsonText(output);
 
@@ -97,8 +103,49 @@ function valueAt(object: JsonObject, key: string): JsonValue | undefined {
 
 const prefix = "plugins.bundled.summarize";
 
-function environmentKey(): string | undefined {
-  return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || undefined;
+const keyVariables: Record<ReviewDiffrProvider, string[]> = {
+  gemini: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+  openai: ["OPENAI_API_KEY"],
+  anthropic: ["ANTHROPIC_API_KEY"],
+};
+
+function savedProvider(config: JsonObject): ReviewDiffrProvider {
+  const value = valueAt(config, `${prefix}.provider`);
+
+  return (
+    reviewDiffrProviders.find((provider) => provider === value) ?? "gemini"
+  );
+}
+
+function environmentKey(provider: ReviewDiffrProvider): string | undefined {
+  return keyVariables[provider]
+    .map((name) => process.env[name])
+    .find((key) => !!key);
+}
+
+function keyOptional(provider: ReviewDiffrProvider, endpoint: string): boolean {
+  return provider === "openai" && endpoint !== "";
+}
+
+/** The default prompt and the link its description gives to it. */
+async function defaultPrompt(
+  rootPath?: string,
+): Promise<Pick<ReviewDiffrConfig, "defaultPrompt" | "defaultPromptUrl">> {
+  const schema = json(await diffr(["config", "schema"], rootPath));
+  const prompt = valueAt(
+    schema,
+    "properties.plugins.properties.bundled.properties.summarize.properties.system_prompt",
+  );
+
+  if (!isJsonObject(prompt)) return {};
+  const description = isStringValue(prompt.description)
+    ? prompt.description
+    : "";
+
+  return {
+    defaultPrompt: isStringValue(prompt.default) ? prompt.default : undefined,
+    defaultPromptUrl: /https:\/\/\S+/.exec(description)?.[0],
+  };
 }
 
 async function read(rootPath?: string): Promise<ReviewDiffrConfig> {
@@ -108,7 +155,7 @@ async function read(rootPath?: string): Promise<ReviewDiffrConfig> {
   const credentialSource =
     isStringValue(saved) && saved.length > 0
       ? "config"
-      : environmentKey()
+      : environmentKey(savedProvider(config))
         ? "environment"
         : "missing";
 
@@ -124,7 +171,11 @@ async function read(rootPath?: string): Promise<ReviewDiffrConfig> {
     }
   }
 
-  return { values: config, credentialSource };
+  return {
+    values: config,
+    credentialSource,
+    ...(await defaultPrompt(rootPath)),
+  };
 }
 
 export function readDiffrConfig(rootPath?: string): Promise<ReviewDiffrConfig> {
@@ -188,16 +239,20 @@ export function saveDiffrSummarizer(
 
   return serialized(async () => {
     const current = await read(rootPath);
+    const switching = draft.provider !== savedProvider(current.values);
+    const savedKey = !switching && current.credentialSource === "config";
 
     if (
       draft.enabled &&
       !draft.apiKey &&
-      current.credentialSource === "missing"
+      !savedKey &&
+      !environmentKey(draft.provider) &&
+      !keyOptional(draft.provider, draft.endpoint)
     ) {
       return {
         ...current,
         changed: false,
-        error: "Add a Gemini API key before enabling summaries.",
+        error: "Add an API key before enabling summaries.",
       };
     }
 
@@ -206,6 +261,17 @@ export function saveDiffrSummarizer(
     if (!draft.enabled) entries.push([`${prefix}.enabled`, false]);
 
     if (draft.apiKey) entries.push([`${prefix}.api_key`, draft.apiKey]);
+    else if (switching) entries.push([`${prefix}.api_key`, ""]);
+    entries.push([`${prefix}.provider`, draft.provider]);
+
+    // Unset keys read as undefined; skip writing an empty string over them.
+    for (const [key, value] of [
+      ["endpoint", draft.endpoint],
+      ["system_prompt", draft.systemPrompt],
+    ] as const) {
+      if (value !== (valueAt(current.values, `${prefix}.${key}`) ?? ""))
+        entries.push([`${prefix}.${key}`, value]);
+    }
     entries.push(
       [`${prefix}.model`, draft.model],
       [`${prefix}.tests`, draft.tests],
@@ -239,24 +305,33 @@ export async function testDiffrSummarizer(
     if (!isJsonObject(saved))
       throw new Error("The summarizer is not available in this configuration.");
 
+    const { provider, endpoint, model, systemPrompt } = parsed.data;
+    const switching = provider !== savedProvider(config);
+
     const apiKey =
       parsed.data.apiKey ||
-      (isStringValue(saved.api_key) ? saved.api_key : undefined) ||
-      environmentKey();
+      (!switching && isStringValue(saved.api_key) ? saved.api_key : "") ||
+      environmentKey(provider);
 
-    if (!apiKey) throw new Error("Add a Gemini API key to test summaries.");
+    if (!apiKey && !keyOptional(provider, endpoint))
+      throw new Error("Add an API key to test summaries.");
     directory = await mkdtemp(join(tmpdir(), "review-summary-"));
 
     const options: JsonObject = {
       ...saved,
       enabled: true,
-      model: parsed.data.model,
+      provider,
+      model,
+      system_prompt: systemPrompt,
       min_lines: 1,
       retries: 0,
       request_timeout_ms: 45_000,
     };
 
     delete options.api_key;
+
+    if (endpoint) options.endpoint = endpoint;
+    else delete options.endpoint;
     await mkdir(join(directory, "diffr"));
     await writeFile(
       join(directory, "diffr", "config.toml"),
@@ -290,9 +365,13 @@ export async function testDiffrSummarizer(
       {
         env: {
           ...process.env,
+          ...Object.fromEntries(
+            Object.values(keyVariables)
+              .flat()
+              .map((name) => [name, ""]),
+          ),
+          ...(apiKey && { [keyVariables[provider][0]]: apiKey }),
           XDG_CONFIG_HOME: directory,
-          GEMINI_API_KEY: apiKey,
-          GOOGLE_API_KEY: "",
         },
         signal: deadline,
       },
@@ -319,7 +398,9 @@ export async function testDiffrSummarizer(
         ) &&
         annotation
       ) {
-        return annotation.label.split(apiKey).join("[redacted]");
+        return apiKey
+          ? annotation.label.split(apiKey).join("[redacted]")
+          : annotation.label;
       }
     } catch {
       /* Never return provider output or parser causes. */
