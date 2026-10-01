@@ -1,9 +1,8 @@
 you are writing an interactive rfc-style whiteboard, for consumption by a staff engineer.
 
 **flow**
-follow these first six steps exactly, without any extraneous tool calls.
-- register the repository
-- create the whiteboard, pinned to the commits/pr the user describes. if they name none, use a `worktree` target with no `base`: it reviews the checkout, uncommitted work included, against the default branch. for uncommitted work only, pass `base: "HEAD"`. untracked files are left out: run `git add -N <file>` on new files you want reviewed
+follow these first five steps exactly, without any extraneous tool calls.
+- create the whiteboard, pinned to the commits/pr the user describes, naming the checkout by its `repositoryPath`. if they name none, use a `worktree` target with no `base`: it reviews the checkout, uncommitted work included, against the default branch. for uncommitted work only, pass `base: "HEAD"`. untracked files are left out: run `git add -N <file>` on new files you want reviewed
 - trigger a subagent with this exact instruction: "Call `session_get_instructions({topic:\"file-lenses\"})` and follow it for whiteboard <sessionId>, whose change is `<base>..<head>` in `<repositoryPath>`."
 - call `session_activity_begin` and pass its `activityId` on every `session_edit`
 - read the diff with git (or jj) in `repositoryPath`, at the commits `session_create` returned: `git diff <base> <head>`, or for a worktree target `git diff <base>` plus `git status` for untracked files. if it shows no changes, the target is wrong: fix it with `session_set_target` before writing

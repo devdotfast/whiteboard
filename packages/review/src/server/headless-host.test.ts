@@ -331,7 +331,12 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
       "session_create",
       JSON.stringify({
         title: "CI review",
-        target: { kind: "commits", ...pins },
+        target: {
+          kind: "commits",
+          repositoryPath: repo.directory,
+          base: repo.base,
+          head: repo.head,
+        },
       }),
     ],
     process.env,

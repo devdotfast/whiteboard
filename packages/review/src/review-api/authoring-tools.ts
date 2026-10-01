@@ -5,16 +5,16 @@ import {
   activityEndSchema,
   activityUpdateSchema,
 } from "./activity.js";
-import { publishedEditSchema } from "./document.js";
+import { pathTargetSchema, publishedEditSchema } from "./document.js";
 import { instructionsQuerySchema } from "./instructions.js";
 import { uploadSchema } from "./local-data.js";
 import { inspectQuerySchema } from "./read-schemas.js";
 import { REVIEW_STATUS_TOOL } from "./status-tool.js";
 import { commandSchema } from "./store.js";
 
-/** The host publishes its input schemas, except session_edit's, which shows
- * less than the host accepts (publishedEditSchema); adapters validate
- * nothing. */
+/** The host publishes its input schemas, except where agents write less than
+ * the host accepts (publishedEditSchema, publishedLensEditSchema) or name a
+ * checkout by path (pathTargetSchema); adapters validate nothing. */
 export function authoringTools(
   scratchpadAvailable = false,
   traceEnabled = false,
@@ -139,14 +139,29 @@ export function authoringTools(
     ),
     ...commandSchema.shape.operation.options.map((operation) => {
       const type = operation.shape.type.value;
-      const { type: _type, ...fields } = operation.shape;
+
+      // Agents name a checkout by its path; /commands registers it.
+      const {
+        type: _type,
+        repositoryId: _repositoryId,
+        ...fields
+      }: Record<string, z.ZodType> = operation.shape;
 
       return tool(
         type,
         descriptions[type],
         z.strictObject({
           ...fields,
-          ...(type === "create" && { open: z.boolean().optional() }),
+          ...(type === "create" && {
+            target: pathTargetSchema.optional(),
+            repositoryPath: id
+              .optional()
+              .describe(
+                "Only with pullRequestUrl and no target: the local checkout to fetch the PR into. Default: the existing review's, else the first registered checkout with a remote for the PR's repository.",
+              ),
+            open: z.boolean().optional(),
+          }),
+          ...(type === "set_target" && { target: pathTargetSchema }),
           ...(type === "edit" && { edit: publishedEditSchema }),
         }),
         "POST",
@@ -199,7 +214,7 @@ export function authoringTools(
     ),
     tool(
       "register_repository",
-      "Register a local Git or jj repository. The prepared checkout path is on the authoring server.",
+      "Register a local Git or jj repository and return its id, for pins on scratchpad blocks. session_create and session_set_target take the checkout's path instead.",
       z.strictObject({ path: id }),
       "POST",
       "/repositories",
