@@ -630,3 +630,33 @@ test("a dispose while the forward's port is chosen starts no forward", async (t)
 
 	assert.equal(ssh.of("wb-test-a", "forward").length, 0);
 });
+
+test("a dispose while the language forward's port is chosen starts no language forward, probe or endpoint", async (t) => {
+	const port = await healthServer(t);
+	let probes = 0;
+	const vscode: Server = createServer((_request, response) => {
+		probes++;
+		response.end(COMMIT);
+	});
+	await new Promise<void>((resolve) => vscode.listen(0, "127.0.0.1", resolve));
+	t.after(() => new Promise((resolve) => vscode.close(() => resolve(undefined))));
+	const chosen = Promise.withResolvers<number>();
+	const asked = Promise.withResolvers<void>();
+	let calls = 0;
+	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
+	const { host, ssh, reports } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", languageServer) } }, async () => {
+		if (++calls === 1) return port;
+		asked.resolve();
+		return chosen.promise;
+	});
+
+	host.start();
+	await asked.promise;
+	await host.dispose();
+	chosen.resolve((vscode.address() as AddressInfo).port);
+	await new Promise((resolve) => setTimeout(resolve, 20));
+
+	assert.equal(ssh.of("wb-test-a", "forward").length, 1);
+	assert.equal(probes, 0);
+	assert.ok(reports.every((report) => !report.endpoint));
+});
