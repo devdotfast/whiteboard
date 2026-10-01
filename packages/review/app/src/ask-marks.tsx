@@ -631,13 +631,14 @@ const styles = stylex.create({
     display: "contents",
   },
   // In the gutter right of the prose column, or of a wider block, level
-  // with the passage's line; never over the row above. All CSS, so the pins
-  // follow the document as it reflows. Hidden with a collapsed section.
+  // with the passage's line, two pins wide and growing down; never over the
+  // row above. All CSS, so the pins follow the document as it reflows.
+  // Hidden with a collapsed section.
   row: {
     position: "absolute",
-    display: "flex",
+    display: "grid",
+    gridTemplateColumns: "repeat(2, max-content)",
     gap: "4px",
-    width: "max-content",
     positionAnchor: "var(--ask-pin-block)",
     anchorName: "var(--ask-pin-row)",
     top: "max(calc(anchor(top) + var(--ask-pin-offset)), calc(anchor(var(--ask-pin-above) bottom, -99999px) + 4px))",
