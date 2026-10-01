@@ -116,8 +116,7 @@ const standsOn = (id: string) => {
 
 it("stands on the cursor's block, hops when it moves, and stands in for a hidden block with its section", async () => {
   await render(working("Adding evidence"), at("b1", "focus", 1));
-  await vi.waitFor(() => expect(courier()).toBeTruthy());
-  standsOn("b1");
+  await vi.waitFor(() => standsOn("b1"));
   expect(courier()!.dataset.state).toBe("live");
   expect(courier()!.dataset.motion).toBeUndefined();
   await vi.waitFor(() => expect(courier()!.dataset.idle).toBe("march"));
