@@ -18,7 +18,7 @@ import { override, type ReviewRemoteRefusals } from "./reviewRemoteGuard.js";
  * window already has from its product or from another extension is left out,
  * so a remote cannot claim `http.proxy` or another extension's settings.
  */
-export function remoteContributedSettings(extensions: readonly IExtensionDescription[]): Map<string, unknown> {
+function remoteContributedSettings(extensions: readonly IExtensionDescription[]): Map<string, unknown> {
 	const registered = Registry.as<IConfigurationRegistry>(Extensions.Configuration).getConfigurationProperties();
 	const settings = new Map<string, unknown>();
 	for (const extension of extensions) {

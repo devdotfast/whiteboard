@@ -9,7 +9,7 @@ import type { IExtHostContext } from "../../../../workbench/services/extensions/
 import { IReviewRemoteExtensions, IReviewRemoteRefusals, type ReviewRemoteRefusals } from "./reviewRemoteGuard.js";
 
 /** The view ids a host's extensions contribute under `contributes.views`. */
-export function remoteContributedViews(extensions: readonly { contributes?: { views?: unknown } }[]): Set<string> {
+function remoteContributedViews(extensions: readonly { contributes?: { views?: unknown } }[]): Set<string> {
 	const ids = new Set<string>();
 	for (const extension of extensions) {
 		const containers = extension.contributes?.views;

@@ -8,6 +8,7 @@ import { Disposable, type IDisposable } from "../../../base/common/lifecycle.js"
 import type { URI } from "../../../base/common/uri.js";
 import { IBulkEditService } from "../../../editor/browser/services/bulkEditService.js";
 import type { ITextModel } from "../../../editor/common/model.js";
+import { ILanguageConfigurationService, LanguageConfigurationService } from "../../../editor/common/languages/languageConfigurationRegistry.js";
 import { ILanguageFeaturesService } from "../../../editor/common/services/languageFeatures.js";
 import { IModelService } from "../../../editor/common/services/model.js";
 import { ITextModelService } from "../../../editor/common/services/resolverService.js";
@@ -269,6 +270,8 @@ export function reviewRemoteScope(input: {
 	const environment = reviewRemoteEnvironmentService(window.get(IWorkbenchEnvironmentService));
 	return new ServiceCollection(
 		[ILanguageFeaturesService, input.languageFeatures],
+		// Its own, so a remote's brackets, comments and word patterns stay off the laptop's editors.
+		[ILanguageConfigurationService, new SyncDescriptor(LanguageConfigurationService)],
 		[IModelService, reviewRemoteModelService(window.get(IModelService), authority)],
 		[IWorkspaceContextService, input.workspace],
 		[IMarkerService, reviewRemoteDiagnostics(reviewRemoteMarkerService(window.get(IMarkerService), authority), refusals)],

@@ -37,6 +37,10 @@ import { MainThreadDownloadService } from "../../../workbench/api/browser/mainTh
 import { MainThreadFileSystem } from "../../../workbench/api/browser/mainThreadFileSystem.js";
 import { MainThreadLoggerService } from "../../../workbench/api/browser/mainThreadLogService.js";
 import { MainThreadWindow } from "../../../workbench/api/browser/mainThreadWindow.js";
+import { MainThreadLanguageFeatures } from "../../../workbench/api/browser/mainThreadLanguageFeatures.js";
+import { ILanguageConfigurationService } from "../../../editor/common/languages/languageConfigurationRegistry.js";
+import { ILanguageService } from "../../../editor/common/languages/language.js";
+import { IInlineCompletionsUnificationService } from "../../../workbench/services/inlineCompletions/common/inlineCompletionsUnification.js";
 import { IWebviewViewService } from "../../../workbench/contrib/webviewView/browser/webviewViewService.js";
 import { IDecorationsService } from "../../../workbench/services/decorations/common/decorations.js";
 import { IEditorGroupsService } from "../../../workbench/services/editor/common/editorGroupsService.js";
@@ -185,6 +189,10 @@ test("a host's main-thread peers are created with the guarded services", async (
 	fake(IUriIdentityService, { asCanonicalUri: (uri: URI) => uri });
 	fake(ILanguageStatusService, { addStatus: record("addStatus") });
 	fake(ICodeEditorService, { listCodeEditors: () => [] });
+	fake(ILanguageConfigurationService, { register: record("window language configuration"), getLanguageConfiguration: () => { throw new Error("the window's"); }, onDidChange: Event.None });
+	fake(IConfigurationService, { onDidChangeConfiguration: Event.None, getValue: () => undefined });
+	fake(ILanguageService, { getRegisteredLanguageIds: () => ["typescript"], isRegisteredLanguageId: () => true, onDidChange: Event.None });
+	fake(IInlineCompletionsUnificationService, { onDidStateChange: Event.None, state: {} });
 	for (const id of [IExtensionStatusBarItemService, INotificationService, IProgressService, IExtensionsWorkbenchService, IWorkbenchExtensionEnablementService, IModelService, IMarkerService, ITextModelService, IWorkingCopyFileService, IEditorGroupsService, IEditorService, IConfigurationService, IStorageService, ISecretStorageService, IWebviewWorkbenchServiceId, IWebviewViewService, ILabelService, IDecorationsService, IWorkspaceTrustRequestService, IRequestService, ILanguagePackService, ITelemetryService, IExtensionService, IWorkbenchEnvironmentService, IEnvironmentService, IBulkEditService] as ServiceIdentifier<unknown>[]) {
 		if (!window.has(id)) fake(id);
 	}
@@ -199,7 +207,7 @@ test("a host's main-thread peers are created with the guarded services", async (
 		resolver: {} as IRemoteAuthorityResolverService,
 		ownFiles: { copy: record("own copy"), writeFile: record("own writeFile"), listCapabilities: () => [] } as unknown as IFileService,
 	}, accessor)));
-	const context = { remoteAuthority: A, getProxy: () => ({ $acceptProviderInfos() { }, $onDidChangeWindowFocus() { } }) } as unknown as IExtHostContext;
+	const context = { remoteAuthority: A, getProxy: () => ({ $acceptProviderInfos() { }, $onDidChangeWindowFocus() { }, $setWordDefinitions() { }, $acceptInlineCompletionsUnificationState() { } }) } as unknown as IExtHostContext;
 	const peer = <T>(ctor: new (context: IExtHostContext, ...services: never[]) => T): T => scope.invokeFunction((accessor) => (accessor.get(IInstantiationService).createInstance as (ctor: unknown, context: IExtHostContext) => T)(ctor, context));
 	const refused = /^Error: Not available for an extension on wb-test-a: /;
 	const laptop = URI.file("/etc/hosts");
@@ -219,6 +227,9 @@ test("a host's main-thread peers are created with the guarded services", async (
 	await assert.rejects(peer(ReviewRemoteTextEditors).$tryShowTextDocument(laptop, {}), refused);
 	await assert.rejects(peer(ReviewRemoteTextEditors).$tryApplyEdits(), refused);
 	scope.invokeFunction((accessor) => accessor.get(ILanguageStatusService)).addStatus({ command: { id: "vscode.openFolder" } } as never);
+	// A remote's word pattern and brackets for TypeScript stay in its own registry.
+	peer(MainThreadLanguageFeatures).$setLanguageConfiguration(1, "typescript", { wordPattern: { pattern: "(a+)+$", flags: "" }, brackets: [["<<", ">>"]] } as never);
+	assert.equal(scope.invokeFunction((accessor) => accessor.get(ILanguageConfigurationService)).getLanguageConfiguration("typescript").getWordDefinition().source, "(a+)+$");
 	assert.deepEqual(reached, [`readFile ${onA}`, `own copy ${onA}`, "open https://example.com/"]);
 	for (const kind of ["editing documents or files", "opening editors outside this remote", "showing language status items"])
 		assert.ok(warnings.some((warning) => warning.includes(`refused ${kind}`)), kind);

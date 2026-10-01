@@ -71,7 +71,7 @@ export interface IReviewRemoteSession extends IDisposable {
 }
 
 /** 1 s, doubling, at most 60 s. */
-export function reviewRemoteRetryDelay(failures: number): number {
+function reviewRemoteRetryDelay(failures: number): number {
 	return Math.min(60_000, 1_000 * 2 ** failures);
 }
 
