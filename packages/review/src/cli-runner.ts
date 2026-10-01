@@ -422,6 +422,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
 
     const { stopBackgroundServer } =
       await import("./server/background-server.js");
+
     await stopBackgroundServer(discovery);
 
     input.stdout.write(

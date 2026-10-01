@@ -320,9 +320,11 @@ it("with --replace, keeps a server of the same version", async () => {
   const second = await cli(["remote", "attach", "--json", "--replace"], diffr);
 
   expect(first.code).toBe(0);
+
   const [started, kept] = [first, second].map((result) =>
     JSON.parse(result.stdout.split("\n")[1]!),
   );
+
   expect(started).toMatchObject({ startedServer: true });
   expect(kept).toMatchObject({ startedServer: false, token: started.token });
   expect(kept).not.toHaveProperty("replaced");
