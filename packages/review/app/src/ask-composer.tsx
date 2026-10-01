@@ -1,7 +1,6 @@
 import {
   type AskCommand,
   type AskQuestion,
-  type AskUsage,
   askImageTypes,
 } from "@review/ask/thread-state";
 import { fuzzyRank } from "@review/fuzzy-match";
@@ -26,6 +25,7 @@ import {
   AskImageIcon,
   askIconSizes,
 } from "./ask-icons";
+import { askMotion } from "./ask-motion.stylex";
 import { fontSize, layer, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { surfaceStyles } from "./ui/surface";
@@ -184,10 +184,10 @@ export function AskComposer({
   disabled,
   canAsk,
   stop,
+  connecting = false,
   status,
   commands,
   acceptsImages,
-  usage,
   findFiles,
   permissions,
   settings,
@@ -201,10 +201,12 @@ export function AskComposer({
   canAsk: boolean;
   /** Stops the turn under way; a Stop button replaces Ask while set. */
   stop?: () => void;
+  /** The agent is still starting: Stop shows it connecting, not a turn to
+   * stop. */
+  connecting?: boolean;
   status: ReactNode;
   commands: AskCommand[] | undefined;
   acceptsImages: boolean;
-  usage: AskUsage | undefined;
   findFiles: (query: string, signal: AbortSignal) => Promise<string[]>;
   /** What the agent may do, starting the row below. */
   permissions?: ReactNode;
@@ -417,8 +419,6 @@ export function AskComposer({
     void attach([...event.dataTransfer.files]);
   };
 
-  const share = usage && usage.size > 0 ? usage.used / usage.size : undefined;
-
   return (
     <div {...stylex.props(styles.dock)}>
       <form
@@ -516,47 +516,29 @@ export function AskComposer({
             onPaste={paste}
           />
           <span {...stylex.props(styles.actions)}>
-            {acceptsImages ? (
-              <>
-                <input
-                  ref={picker}
-                  type="file"
-                  accept={askImageTypes.join(",")}
-                  multiple
-                  hidden
-                  onChange={(event) => {
-                    void attach([...(event.target.files ?? [])]);
-                    event.target.value = "";
-                  }}
-                />
-                <button
-                  type="button"
-                  {...stylex.props(styles.attach)}
-                  aria-label="Attach images"
-                  title="Attach images"
-                  disabled={disabled || images.length >= IMAGES_MAX}
-                  onClick={() => picker.current?.click()}
-                >
-                  <AskImageIcon xstyle={askIconSizes.toolbar} />
-                </button>
-              </>
-            ) : null}
             {stop ? (
               <button
                 type="button"
                 {...stylex.props(styles.send, styles.stop)}
+                aria-label={connecting ? "Stop connecting" : "Stop"}
+                title={connecting ? "Connecting… Click to stop." : "Stop"}
                 onClick={stop}
               >
-                <span aria-hidden="true" {...stylex.props(styles.stopMark)} />
-                Stop
+                <span
+                  aria-hidden="true"
+                  {...stylex.props(
+                    connecting ? styles.connecting : styles.stopMark,
+                  )}
+                />
               </button>
             ) : (
               <button
                 type="submit"
                 {...stylex.props(styles.send, styles.submit)}
+                aria-label="Ask"
+                title="Ask"
                 disabled={!draft.trim() || !canAsk}
               >
-                Ask
                 <AskArrowIcon
                   xstyle={[askIconSizes.small, styles.submitIcon]}
                 />
@@ -565,31 +547,44 @@ export function AskComposer({
           </span>
         </div>
       </form>
-      {/* The status sits between the settings, so it comes and goes without
-          moving anything. */}
+      {/* What a question can carry starts the row, as in the agents' own
+          apps. The status sits between the settings, so it comes and goes
+          without moving anything. */}
       <div {...stylex.props(styles.settings)}>
+        {acceptsImages ? (
+          <>
+            <input
+              ref={picker}
+              type="file"
+              accept={askImageTypes.join(",")}
+              multiple
+              hidden
+              onChange={(event) => {
+                void attach([...(event.target.files ?? [])]);
+                event.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              {...stylex.props(styles.attach)}
+              aria-label="Attach images"
+              title="Attach images"
+              disabled={disabled || images.length >= IMAGES_MAX}
+              onClick={() => picker.current?.click()}
+            >
+              <AskImageIcon xstyle={askIconSizes.toolbar} />
+            </button>
+          </>
+        ) : null}
         {permissions}
         <span {...stylex.props(styles.status)}>{note ?? status}</span>
-        {share === undefined ? null : (
-          <span
-            {...stylex.props(styles.usage)}
-            title={`${usage!.used.toLocaleString()} of ${usage!.size.toLocaleString()} tokens of context used`}
-          >
-            {Math.round(share * 100)}% context
-            {usage!.cost
-              ? ` · ${new Intl.NumberFormat(undefined, {
-                  style: "currency",
-                  currency: usage!.cost.currency,
-                  maximumFractionDigits: 2,
-                }).format(usage!.cost.amount)}`
-              : null}
-          </span>
-        )}
         {settings}
       </div>
     </div>
   );
 }
+
+const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
 
 const noBorder = {
   borderWidth: 0,
@@ -755,23 +750,18 @@ const styles = stylex.create({
     alignItems: "center",
     gap: "8px",
   },
-  usage: {
-    color: tokens.inkMuted,
-    fontSize: fontSize.small,
-    lineHeight: "16px",
-    whiteSpace: "nowrap",
-  },
+  // Pointed at, like the settings beside it.
   attach: {
     display: "inline-flex",
     alignItems: "center",
-    padding: "4px",
+    padding: "4px 6px",
     ...noBorder,
-    borderRadius: radius.small,
+    borderRadius: radius.surface,
     backgroundColor: {
       default: tokens.transparent,
-      ":not(:disabled):hover": tokens.accentWash,
+      ":not(:disabled):hover": tokens.tray,
     },
-    color: tokens.inkMuted,
+    color: { default: tokens.inkMuted, ":not(:disabled):hover": tokens.ink },
     cursor: { default: "pointer", ":disabled": "default" },
     opacity: { default: null, ":disabled": 0.45 },
   },
@@ -787,7 +777,9 @@ const styles = stylex.create({
     lineHeight: "14px",
     cursor: "pointer",
   },
+  // The arrow alone, square.
   submit: {
+    padding: "5px",
     borderColor: tokens.accent,
     backgroundColor: tokens.accent,
     color: tokens.onAccent,
@@ -797,15 +789,31 @@ const styles = stylex.create({
   submitIcon: {
     strokeWidth: "1.4px",
   },
+  // The mark alone, the size of the arrow it replaces.
   stop: {
-    paddingLeft: "8px",
+    padding: "6px",
     borderColor: tokens.ruleSoft,
     backgroundColor: tokens.transparent,
     color: tokens.ink,
   },
+  // In Stop's place while the agent starts.
+  connecting: {
+    width: "9px",
+    height: "9px",
+    borderWidth: "1.4px",
+    borderStyle: "solid",
+    borderColor: tokens.ruleSoft,
+    borderTopColor: tokens.accent,
+    borderRadius: radius.round,
+    boxSizing: "border-box",
+    animationName: spin,
+    animationDuration: askMotion.spin,
+    animationTimingFunction: "linear",
+    animationIterationCount: "infinite",
+  },
   stopMark: {
-    width: "8px",
-    height: "8px",
+    width: "9px",
+    height: "9px",
     borderRadius: radius.hairline,
     backgroundColor: "currentColor",
   },

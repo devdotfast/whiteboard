@@ -59,7 +59,9 @@ Element.prototype.scrollTo = () => {};
 function buttonNamed(container: HTMLElement, name: string) {
   return (
     [...container.querySelectorAll<HTMLButtonElement>("button")].find(
-      (button) => button.textContent?.trim() === name,
+      (button) =>
+        (button.getAttribute("aria-label") ?? button.textContent?.trim()) ===
+        name,
     ) ?? null
   );
 }
@@ -748,6 +750,7 @@ it("asks with the model and effort the reviewer picks, and switches them between
         }),
       }),
     );
+
     await pick("Effort", "Medium");
     expect(bodies("/ask/thread/choice")).toEqual([
       { kind: "effort", value: "medium" },
@@ -1142,8 +1145,8 @@ it("stops a conversation while it reopens, and takes no answer to a permission o
       }),
     );
 
-    // Loading the conversation can be stopped like an answer.
-    await act(async () => buttonNamed(container, "Stop")!.click());
+    // Loading the conversation shows it connecting, and can be stopped.
+    await act(async () => buttonNamed(container, "Stop connecting")!.click());
     expect(
       fetch.mock.calls.filter(([called]) => called === "/ask/saved/cancel"),
     ).toHaveLength(1);

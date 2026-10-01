@@ -417,7 +417,7 @@ export function AskPanelContent({
             status: connecting
               ? "Connecting…"
               : busy
-                ? composerStatus(thread, busy)
+                ? answeringStatus(thread)
                 : thread
                   ? "Answered"
                   : "New question",
@@ -624,17 +624,20 @@ export function AskPanelContent({
         disabled={thread?.status === "failed"}
         canAsk={Boolean(agent) && !busy}
         stop={busy && threadId ? stop : undefined}
+        connecting={thread?.status === "starting"}
         status={
           connecting
             ? // Without the saved copy, the thread itself says it is loading.
               thread?.entries.length
               ? `Connecting to ${agentName}…`
               : ""
-            : composerStatus(thread, busy)
+            : // The thread itself says what the agent is doing while it answers.
+              thread?.status === "waiting"
+              ? "Waiting for your approval"
+              : ""
         }
         commands={thread?.commands ?? offered?.commands}
         acceptsImages={(thread?.accepts ?? offered?.accepts)?.image === true}
-        usage={thread?.usage}
         findFiles={findFiles}
         permissions={permissions}
         settings={settings}
@@ -658,14 +661,8 @@ function askPlaceholders(
   return [`${lead} · ${hint}`, `${lead}…`, "Ask about this selection…"];
 }
 
-function composerStatus(thread: AskThreadState | null, busy: boolean) {
-  if (thread?.status === "waiting") return "Waiting for your approval";
-
-  // Nothing can be asked; the thread says what to do instead.
-  if (thread?.status === "failed") return "";
-
-  if (!busy) return "";
-
+/** What a busy agent is doing, for where the thread is out of sight. */
+function answeringStatus(thread: AskThreadState | null) {
   const sinceQuestion = thread?.entries.slice(
     thread.entries.findLastIndex((entry) => entry.kind === "user") + 1,
   );

@@ -521,7 +521,9 @@ export function AskChoicePicker({
         <span {...stylex.props(pickerStyles.choiceName)}>
           {chosen?.name ?? current}
         </span>
-        <AskChevronIcon xstyle={pickerStyles.chevron} />
+        {/* Under the composer it reads as text; pointing at it shows it
+            opens. */}
+        {quiet ? null : <AskChevronIcon xstyle={pickerStyles.chevron} />}
       </button>
       {open ? (
         <div
