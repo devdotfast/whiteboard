@@ -1,4 +1,7 @@
-import type { ReviewServerHealth } from "@dev.fast/review-protocol";
+import type {
+  ReviewServerHealth,
+  ReviewServerHealthWithToken,
+} from "@dev.fast/review-protocol";
 import {
   readBuildCommit,
   readReviewPackageVersion,
@@ -43,17 +46,27 @@ export function createReviewServerApp(input: {
     applyCorsHeaders(context.req.raw, context.res);
   });
   app.options("*", (context) => corsPreflightResponse(context.req.raw));
-  app.get("/health", () =>
-    serverJson(200, {
+  // Open to any caller, but the stable ids only to one holding the token.
+  app.get("/health", (context) => {
+    const health: ReviewServerHealth = {
       ok: true,
       instanceId: input.instanceId,
-      serverId: input.serverId,
-      serverPid: process.pid,
       desktopAttached: input.relay.attached,
       version,
-      commit,
-    } satisfies ReviewServerHealth),
-  );
+    };
+
+    return serverJson(
+      200,
+      isAuthorizedRequest(context.req.raw, input.token)
+        ? ({
+            ...health,
+            serverId: input.serverId,
+            serverPid: process.pid,
+            commit,
+          } satisfies ReviewServerHealthWithToken)
+        : health,
+    );
+  });
   app.use("*", async (context, next) => {
     if (!isAuthorizedRequest(context.req.raw, input.token)) {
       return serverJson(401, { ok: false, error: "Unauthorized" });

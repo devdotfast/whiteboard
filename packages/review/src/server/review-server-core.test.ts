@@ -85,24 +85,39 @@ const servers = {
 describe.each(["desktop", "headless"] as const)("the %s server", (kind) => {
   const start = servers[kind];
 
-  it("answers /health without a token", async () => {
+  it("answers /health without a token, but names no machine or build", async () => {
     const server = await start();
-    const response = await fetch(`${server.url}/health`);
 
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      ok: true,
-      serverPid: process.pid,
-      desktopAttached: false,
-    });
+    const callers: Record<string, string>[] = [
+      {},
+      { "x-review-token": "wrong" },
+    ];
+
+    for (const headers of callers) {
+      const response = await fetch(`${server.url}/health`, { headers });
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        ok: true,
+        instanceId: expect.stringMatching(uuid),
+        desktopAttached: false,
+        version: expect.any(String),
+      });
+    }
   });
 
-  it("says which store and build answer /health", async () => {
+  it("says which store, process and build answer /health to the token", async () => {
     const server = await start();
-    const health = await (await fetch(`${server.url}/health`)).json();
+
+    const health = await (
+      await fetch(`${server.url}/health`, {
+        headers: { "x-review-token": server.token },
+      })
+    ).json();
 
     expect(health).toMatchObject({
       serverId: expect.stringMatching(uuid),
+      serverPid: process.pid,
       version: JSON.parse(
         await readFile(path.join(packageRoot, "package.json"), "utf8"),
       ).version,
@@ -265,7 +280,13 @@ it("gives the Desktop and headless servers on one home one serverId, and another
       children.map(async ([kind, child, stateDir]) => {
         const server = await discovery(kind, child, stateDir);
 
-        return (await (await fetch(`${server.url}/health`)).json()).serverId;
+        return (
+          await (
+            await fetch(`${server.url}/health`, {
+              headers: { "x-review-token": server.token },
+            })
+          ).json()
+        ).serverId;
       }),
     );
 
@@ -350,7 +371,13 @@ it("refuses to reset the id while a paused headless server holds the store", asy
   const server = await discovery("headless", child, stateDir);
 
   const serverId = async () =>
-    (await (await fetch(`${server.url}/health`)).json()).serverId;
+    (
+      await (
+        await fetch(`${server.url}/health`, {
+          headers: { "x-review-token": server.token },
+        })
+      ).json()
+    ).serverId;
 
   const before = await serverId();
   child.kill("SIGSTOP");

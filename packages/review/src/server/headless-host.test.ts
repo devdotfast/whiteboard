@@ -98,6 +98,15 @@ async function start(
   return { client, discovery, env, stateDir, stop };
 }
 
+/** The stable id, which /health gives only to a caller with the token. */
+async function serverIdOf(discovery: { url: string; token: string }) {
+  const response = await fetch(`${discovery.url}/health`, {
+    headers: { "x-review-token": discovery.token },
+  });
+
+  return (await response.json()).serverId;
+}
+
 async function repository() {
   const directory = path.join(root, "repo");
   await mkdir(directory);
@@ -565,8 +574,7 @@ it("authenticates clients, reports capabilities and readiness without exposing t
     event: "server.status",
     ready: true,
     version: expect.any(String),
-    serverId: (await (await fetch(`${server.discovery.url}/health`)).json())
-      .serverId,
+    serverId: await serverIdOf(server.discovery),
   });
   expect(status.output).not.toContain(server.discovery.token);
   const repo = await repository();
@@ -977,10 +985,7 @@ it("does not connect to another instance through stale discovery", async () => {
 it("resets the server id only while no server holds the store", async () => {
   const server = await start();
 
-  const serverId = async (url: string) =>
-    (await (await fetch(`${url}/health`)).json()).serverId;
-
-  const before = await serverId(server.discovery.url);
+  const before = await serverIdOf(server.discovery);
 
   const reset = [
     "--state-dir",
@@ -994,7 +999,7 @@ it("resets the server id only while no server holds the store", async () => {
 
   expect(refused.exitCode).toBe(1);
   expect(JSON.parse(refused.output).error.message).toMatch(/Stop it first/);
-  expect(await serverId(server.discovery.url)).toBe(before);
+  expect(await serverIdOf(server.discovery)).toBe(before);
 
   await server.stop();
 
@@ -1010,7 +1015,7 @@ it("resets the server id only while no server holds the store", async () => {
   expect(after).not.toBe(before);
 
   const restarted = await start(server.stateDir);
-  expect(await serverId(restarted.discovery.url)).toBe(after);
+  expect(await serverIdOf(restarted.discovery)).toBe(after);
 });
 
 it("resets the id over a lock its dead server left behind", async () => {
@@ -1065,10 +1070,7 @@ it.each(["attached", "not yet attached"])(
       expect(refused.exitCode).toBe(1);
       expect(JSON.parse(refused.output).error.message).toMatch(/Stop it first/);
       expect(local.store.serverId()).toBe(before);
-      expect(
-        (await (await fetch(`${desktop.discovery.url}/health`)).json())
-          .serverId,
-      ).toBe(before);
+      expect(await serverIdOf(desktop.discovery)).toBe(before);
     } finally {
       attached?.detach();
     }

@@ -792,14 +792,18 @@ export type ReviewDesktopDiscovery = z.infer<
   typeof ReviewDesktopDiscoverySchema
 >;
 
-/** `GET /health` on every review server. No token. */
+/** `GET /health` on every review server. No token needed. */
 export interface ReviewServerHealth {
   ok: true;
   instanceId: string; // new on every start
-  serverId: string; // stable, one per review store
-  serverPid: number;
   desktopAttached: boolean;
   version: string; // package version; equals the Desktop version in release builds
+}
+
+/** `GET /health` with the server's token: what identifies the machine and build. */
+export interface ReviewServerHealthWithToken extends ReviewServerHealth {
+  serverId: string; // stable, one per review store
+  serverPid: number;
   commit: string | null;
 }
 
