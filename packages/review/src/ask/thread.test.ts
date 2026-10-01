@@ -22,11 +22,8 @@ import {
   applyAskChange,
   askUpdateSchema,
 } from "@review/ask/thread-state.js";
-import {
-  AskThread,
-  type AskThreadLimits,
-  AskThreads,
-} from "@review/ask/thread.js";
+import { AskThread, type AskThreadLimits } from "@review/ask/thread.js";
+import { AskThreads } from "@review/ask/threads.js";
 import { expect, it, vi } from "vitest";
 
 const permissionOptions = [

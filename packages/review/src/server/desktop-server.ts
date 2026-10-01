@@ -24,7 +24,7 @@ import {
   writePrivateJsonAtomic,
 } from "@dev.fast/trace-core";
 import { detectAskAgents, launchAskAgent } from "@review/ask/agents.js";
-import { AskThreads } from "@review/ask/thread.js";
+import { AskThreads } from "@review/ask/threads.js";
 import {
   applyCliInstall,
   declineCliInstall,

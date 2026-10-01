@@ -3,12 +3,10 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
-  type AvailableCommand,
   type ClientConnection,
   type ContentBlock,
   type McpServer,
   PROTOCOL_VERSION,
-  RequestError,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
   type SessionConfigOption,
@@ -27,17 +25,27 @@ import {
   askAgents,
 } from "@review/ask/agents.js";
 import {
+  attachmentsOf,
+  choicesOf,
+  commandOf,
+  mcpServerOf,
+  selectOptionsSchema,
+  settled,
+  signedOut,
+  toolDetails,
+  toolOutput,
+  withContext,
+  withoutContext,
+} from "@review/ask/protocol.js";
+import {
   type AskAgentId,
-  type AskAttachment,
   type AskChange,
   type AskChoiceKind,
   type AskChoices,
-  type AskCommand,
   type AskEntry,
   type AskOffer,
   type AskPicks,
   type AskQuestion,
-  type AskSelect,
   type AskThreadState,
   type AskUpdate,
   applyAskChange,
@@ -59,27 +67,6 @@ type PermissionEntry = Extract<AskEntry, { kind: "permission" }>;
 type NoticeEntry = Extract<AskEntry, { kind: "notice" }>;
 
 type ToolEntry = Extract<AskEntry, { kind: "tool" }>;
-
-/** Claude's adapter names the MCP server behind an `mcp__*` permission here. */
-const claudeMcpMetaSchema = z.object({
-  claudeCode: z.object({ mcpServer: z.object({ name: z.string() }) }),
-});
-
-/** Codex's adapter puts the server in an MCP tool call's input. */
-const mcpInputSchema = z.union([
-  z.object({ server: z.string() }),
-  z.object({ serverName: z.string() }),
-]);
-
-/** The MCP server a tool call runs on, if the adapter says. */
-function mcpServerOf(toolCall: Pick<ToolCallUpdate, "_meta" | "rawInput">) {
-  const claude = claudeMcpMetaSchema.safeParse(toolCall._meta).data;
-
-  if (claude) return claude.claudeCode.mcpServer.name;
-  const input = mcpInputSchema.safeParse(toolCall.rawInput).data;
-
-  return input && ("server" in input ? input.server : input.serverName);
-}
 
 const piGreetingSchema = z.object({
   piAcp: z.object({ startupInfo: z.string() }),
@@ -140,198 +127,6 @@ export type AskThreadStart = AskThreadBase &
       }
   );
 
-/** Wraps the selection context in the first prompt, so a replayed
- * conversation can show the question without it. */
-const CONTEXT_OPEN = "<whiteboard-context>";
-
-const CONTEXT_CLOSE = "</whiteboard-context>";
-
-/** A conversation closed mid-turn, as it should look when reopened: the
- * agent stopped, so nothing is still running or waiting on the reviewer. */
-function settled(entries: AskEntry[]): AskEntry[] {
-  return entries.map((entry) => {
-    if (entry.kind === "permission" && entry.outcome === undefined)
-      return { ...entry, outcome: "cancelled" };
-
-    if (
-      entry.kind === "tool" &&
-      (entry.status === "pending" || entry.status === "in_progress")
-    )
-      return { ...entry, status: "failed" };
-
-    return entry;
-  });
-}
-
-/** Enough of a tool's output to see what came back. */
-const OUTPUT_LIMIT = 4_000;
-
-const selectOptionSchema = z.object({
-  value: z.string(),
-  name: z.string(),
-  description: z.string().nullish(),
-});
-
-/** A select's choices, flat or in groups. */
-const selectOptionsSchema = z.array(
-  z.union([
-    selectOptionSchema,
-    z.object({ group: z.string(), options: z.array(selectOptionSchema) }),
-  ]),
-);
-
-/** The ACP config option category each choice comes from. */
-const choiceCategories = new Map<AskChoiceKind, string>([
-  ["model", "model"],
-  ["effort", "thought_level"],
-]);
-
-/** What the agent offers of each choice, from its session config options,
- * with the config option that sets it. */
-function choicesOf(options: SessionConfigOption[] | null | undefined) {
-  const found = new Map<
-    AskChoiceKind,
-    { configId: string; select: AskSelect }
-  >();
-
-  for (const kind of askChoiceKinds) {
-    const option = options?.find(
-      (candidate) =>
-        candidate.type === "select" &&
-        (candidate.category === choiceCategories.get(kind) ||
-          candidate.id === kind),
-    );
-
-    if (option?.type !== "select") continue;
-    const choices = selectOptionsSchema.safeParse(option.options).data;
-
-    if (!choices) continue;
-
-    found.set(kind, {
-      configId: option.id,
-      select: {
-        current: option.currentValue,
-        options: choices
-          .flatMap((choice) => ("group" in choice ? choice.options : [choice]))
-          .map(({ value, name, description }) =>
-            description ? { value, name, description } : { value, name },
-          ),
-      },
-    });
-  }
-
-  return found;
-}
-
-/** A slash command as the panel offers it. */
-function commandOf({ name, description, input }: AvailableCommand): AskCommand {
-  return input?.hint
-    ? { name, description, hint: input.hint }
-    : { name, description };
-}
-
-/** What a question carries, as its entry shows it. */
-function attachmentsOf({
-  mentions = [],
-  images = [],
-}: AskQuestion): AskAttachment[] {
-  return [
-    ...mentions.map((mention) => ({ kind: "file" as const, path: mention })),
-    ...images.map(({ name }) => ({ kind: "image" as const, name })),
-  ];
-}
-
-const toolInputSchema = z.object({
-  command: z.union([z.string(), z.array(z.string())]).optional(),
-  description: z.string().optional(),
-  file_path: z.string().optional(),
-  path: z.string().optional(),
-  // What a search looked for: fff's grep and find_files, and multi_grep's
-  // alternatives.
-  query: z.string().optional(),
-  pattern: z.string().optional(),
-  patterns: z.array(z.string()).optional(),
-});
-
-type ToolDetails = Pick<
-  Extract<AskEntry, { kind: "tool" }>,
-  "input" | "summary"
->;
-
-/** What a tool call ran or opened, and why, from what the adapter sent. */
-function toolDetails(update: ToolCallUpdate) {
-  const input = toolInputSchema.safeParse(update.rawInput).data;
-  const command = input?.command;
-
-  const target =
-    (Array.isArray(command) ? command.join(" ") : command) ??
-    input?.file_path ??
-    input?.path ??
-    input?.query ??
-    input?.pattern ??
-    input?.patterns?.join(" | ") ??
-    update.locations?.[0]?.path;
-
-  const details: ToolDetails = {};
-
-  if (target) details.input = target;
-
-  if (input?.description) details.summary = input.description;
-
-  return details;
-}
-
-/** A finished tool's text output. Claude fences a command's output. */
-function toolOutput(update: ToolCallUpdate) {
-  const text = (update.content ?? [])
-    .flatMap((item) =>
-      item.type === "content" && item.content.type === "text"
-        ? [item.content.text]
-        : [],
-    )
-    .join("\n")
-    .replace(/^\s*```[^\n]*\n([\s\S]*?)\n?```\s*$/u, "$1")
-    .trimEnd();
-
-  if (!text) return undefined;
-
-  return text.length > OUTPUT_LIMIT
-    ? `${text.slice(0, OUTPUT_LIMIT)}\n…`
-    : text;
-}
-
-/** A first question, after the selection it is about. */
-function withContext(context: string, question: string): ContentBlock[] {
-  return [
-    { type: "text", text: `${CONTEXT_OPEN}\n${context}\n${CONTEXT_CLOSE}` },
-    { type: "text", text: question },
-  ];
-}
-
-/** A replayed first message, as the reviewer typed it. */
-function withoutContext(text: string) {
-  const start = text.indexOf(CONTEXT_OPEN);
-
-  if (start === -1) return text.trim();
-  const end = text.indexOf(CONTEXT_CLOSE, start);
-
-  return (
-    text.slice(0, start) +
-    (end === -1 ? "" : text.slice(end + CONTEXT_CLOSE.length))
-  ).trim();
-}
-
-/** ACP's "authentication required": the agent's login lapsed or never was.
- * Some adapters send the same code for other failures, so its message has
- * to say so too. */
-function signedOut(error: unknown): error is RequestError {
-  return (
-    error instanceof RequestError &&
-    error.code === RequestError.authRequired().code &&
-    /auth/i.test(error.message)
-  );
-}
-
 /** How long an agent may take to start and open its session. */
 const START_TIMEOUT_MS = 60_000;
 
@@ -345,7 +140,7 @@ export interface AskThreadLimits {
   stopGraceMs: number;
 }
 
-const askThreadLimits: AskThreadLimits = {
+export const askThreadLimits: AskThreadLimits = {
   startMs: START_TIMEOUT_MS,
   stopGraceMs: STOP_GRACE_MS,
 };
@@ -1532,149 +1327,5 @@ export class AskThread {
     const update = { seq: this.seq, change };
 
     for (const listener of this.listeners) listener(update);
-  }
-}
-
-/** How long an agent may take to say what it offers. */
-const OFFER_TIMEOUT_MS = 30_000;
-
-/** How long after its session opens an agent may take to list its
- * commands, which it sends on its own rather than in the response. */
-const COMMANDS_WAIT_MS = 2_000;
-
-/** What an agent offers, from a session it starts and leaves without
- * asking anything. */
-async function offeredBy(
-  launch: AskAgentLauncher,
-  agent: AskAgentId,
-  cwd: string,
-): Promise<AskOffer> {
-  const process = await launch(agent, cwd);
-  // Stopping the process ends the connection, which fails its requests.
-  const timer = setTimeout(() => process.stop(), OFFER_TIMEOUT_MS);
-  let listed: (commands: AskCommand[]) => void = () => {};
-
-  const commands = new Promise<AskCommand[]>((resolve) => {
-    listed = resolve;
-  });
-
-  try {
-    const connection = process.connect(
-      client({ name: "whiteboard" }).onNotification(
-        methods.client.session.update,
-        ({ params: { update } }) => {
-          if (update.sessionUpdate === "available_commands_update")
-            listed(update.availableCommands.map(commandOf));
-        },
-      ),
-    );
-
-    const initialized = await connection.agent.request(
-      methods.agent.initialize,
-      {
-        protocolVersion: PROTOCOL_VERSION,
-        clientCapabilities: { _meta: { parameterizedModelPicker: true } },
-        clientInfo: { name: "whiteboard", title: "Whiteboard", version: "1" },
-      },
-    );
-
-    const session = await connection.agent.request(methods.agent.session.new, {
-      cwd,
-      mcpServers: [],
-      _meta: askAgents[agent].sessionMeta,
-    });
-
-    const offer: AskOffer = {
-      choices: {},
-      accepts: {
-        image:
-          initialized.agentCapabilities?.promptCapabilities?.image === true,
-      },
-    };
-
-    for (const [kind, { select }] of choicesOf(session.configOptions))
-      offer.choices[kind] = select;
-
-    let wait: ReturnType<typeof setTimeout> | undefined;
-
-    const offered = await Promise.race([
-      commands,
-      new Promise<undefined>((resolve) => {
-        wait = setTimeout(() => resolve(undefined), COMMANDS_WAIT_MS);
-      }),
-    ]).finally(() => clearTimeout(wait));
-
-    if (offered) offer.commands = offered;
-
-    return offer;
-  } catch (error) {
-    const diagnostics = process.diagnostics().trim();
-
-    throw new Error(
-      `${askAgents[agent].name} did not say what it offers. ${errorMessage(error)}${diagnostics ? `\n${diagnostics}` : ""}`,
-      { cause: error },
-    );
-  } finally {
-    clearTimeout(timer);
-    process.stop();
-  }
-}
-
-/** The live Ask threads of one server; they end with it. */
-export class AskThreads {
-  private readonly threads = new Map<string, AskThread>();
-  /** One question to each agent at a time about what it offers. */
-  private readonly offers = new Map<AskAgentId, Promise<AskOffer>>();
-
-  constructor(
-    private readonly launch: AskAgentLauncher,
-    private readonly mcpServers: AskMcpServers = () => [],
-    private readonly limits: AskThreadLimits = askThreadLimits,
-  ) {}
-
-  /** Whether sessions get Whiteboard's MCP tools, which the first prompt mentions. */
-  get providesMcp() {
-    return this.mcpServers().length > 0;
-  }
-
-  open(start: AskThreadStart) {
-    const thread = new AskThread(
-      this.launch,
-      start,
-      this.mcpServers,
-      this.limits,
-    );
-
-    this.threads.set(thread.id, thread);
-    void thread.open();
-
-    return thread;
-  }
-
-  get(id: string) {
-    return this.threads.get(id);
-  }
-
-  /** What the agent offers to choose before anything is asked of it. */
-  offered(agent: AskAgentId, cwd: string) {
-    let offer = this.offers.get(agent);
-
-    if (!offer) {
-      offer = offeredBy(this.launch, agent, cwd).finally(() =>
-        this.offers.delete(agent),
-      );
-      this.offers.set(agent, offer);
-    }
-
-    return offer;
-  }
-
-  close(id: string) {
-    this.threads.get(id)?.close();
-    this.threads.delete(id);
-  }
-
-  closeAll() {
-    for (const id of [...this.threads.keys()]) this.close(id);
   }
 }

@@ -15,7 +15,7 @@ import {
   askPicksSchema,
   askQuestionSchema,
 } from "@review/ask/thread-state.js";
-import type { AskThreads } from "@review/ask/thread.js";
+import type { AskThreads } from "@review/ask/threads.js";
 import { watchAskThread } from "@review/ask/watch.js";
 import { fuzzyRank } from "@review/fuzzy-match.js";
 import { resolveReviewStackLayers } from "@review/review-stack.js";
