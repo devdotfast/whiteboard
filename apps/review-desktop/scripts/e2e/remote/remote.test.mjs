@@ -13,15 +13,10 @@ const exec = promisify(execFile);
 
 const script = path.join(import.meta.dirname, "remote.mjs");
 
-const hasDocker = (() => {
-  try {
-    execFileSync("docker", ["info"], { stdio: "ignore" });
-
-    return true;
-  } catch {
-    return false;
-  }
-})();
+// Creating containers is opt-in, so a plain `pnpm test` or CI never touches Docker.
+const withoutContainers =
+  process.env.WB_TEST_CONTAINERS !== "1" &&
+  "set WB_TEST_CONTAINERS=1 to create a Docker container";
 
 const run = (args, env = {}) =>
   exec(process.execPath, [script, ...args], {
@@ -93,7 +88,7 @@ test("a host name or run id outside [a-z0-9-] is refused before any work", async
 
 test(
   "verify-clean fails and names a leftover wb-test container",
-  { skip: !hasDocker && "needs Docker" },
+  { skip: withoutContainers },
   async (t) => {
     execFileSync("docker", ["create", "--name", "wb-test-x", "ubuntu:22.04"], {
       stdio: "ignore",
