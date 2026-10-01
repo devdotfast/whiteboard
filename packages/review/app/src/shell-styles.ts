@@ -127,7 +127,7 @@ export const shellStyles = stylex.create({
       },
       transform: "translateX(-50%)",
       transitionProperty: "width, background-color",
-      transitionDuration: motion.instant,
+      transitionDuration: motion.fast,
       // Passing over a divider does not flash it.
       transitionDelay: { default: motion.instant, ":hover": motion.fast },
       content: "''",

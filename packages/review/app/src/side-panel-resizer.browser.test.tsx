@@ -236,6 +236,13 @@ describe("useRightPanelResize folding", () => {
     expect(width()).toBe("392");
   });
 
+  it("keeps the grabbed point of the divider under the pointer", () => {
+    mountPanel("grab-panel", { side: "left" });
+    pointer("pointerdown", 365);
+    pointer("pointermove", 425);
+    expect(width()).toBe("420");
+  });
+
   it("folds from the keyboard at the minimum and stays folded after a remount", () => {
     mountPanel("folding-panel", { side: "left", collapsedWidth: 42 });
     key("ArrowLeft");

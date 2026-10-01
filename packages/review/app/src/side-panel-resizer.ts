@@ -215,6 +215,8 @@ export function useRightPanelResize({
   const collapsed = foldedWidth !== undefined;
   // Unfolding restores the width from before the drag.
   const dragStartWidth = useRef(requestedWidth);
+  // Keeps the grabbed point of the divider under the pointer.
+  const grabOffset = useRef(0);
 
   const [isResizing, setIsResizing] = useState(false);
   const [, setLayoutRevision] = useState(0);
@@ -298,10 +300,18 @@ export function useRightPanelResize({
     };
   }, [containerRef]);
 
-  const resizeFromClientX = useCallback(
+  const pointerWidth = useCallback(
     (clientX: number) => {
       const { left, right } = containerMetrics();
-      const nextWidth = side === "left" ? clientX - left : right - clientX;
+
+      return side === "left" ? clientX - left : right - clientX;
+    },
+    [containerMetrics, side],
+  );
+
+  const resizeFromClientX = useCallback(
+    (clientX: number) => {
+      const nextWidth = pointerWidth(clientX) - grabOffset.current;
 
       if (collapsible && nextWidth < minWidth) {
         setCollapsed(true);
@@ -315,12 +325,11 @@ export function useRightPanelResize({
     },
     [
       collapsible,
-      containerMetrics,
       minWidth,
+      pointerWidth,
       setCollapsed,
       setRequestedWidth,
       setWidth,
-      side,
     ],
   );
 
@@ -330,9 +339,10 @@ export function useRightPanelResize({
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
       dragStartWidth.current = requestedWidth;
+      grabOffset.current = pointerWidth(event.clientX) - (foldedWidth ?? width);
       setIsResizing(true);
     },
-    [requestedWidth],
+    [foldedWidth, pointerWidth, requestedWidth, width],
   );
 
   const resize = useCallback(

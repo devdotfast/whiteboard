@@ -891,7 +891,7 @@ const styles = stylex.create({
     color: tokens.ink,
     font: `${fontSize.small}/1.5 ${tokens.fontMono}`,
   },
-  // The sidebar is the tray.
+  // The sidebar is the tray; its right padding holds the divider.
   sidebar: {
     width: "320px",
     minWidth: "250px",
@@ -899,10 +899,8 @@ const styles = stylex.create({
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
+    paddingRight: "16px",
     backgroundColor: tokens.tray,
-    borderRightWidth: "1px",
-    borderRightStyle: "solid",
-    borderRightColor: tokens.rule,
   },
   hidden: {
     display: "none",
@@ -1181,16 +1179,29 @@ const styles = stylex.create({
     strokeWidth: "1.4",
     strokeLinecap: "round",
   },
-  // The hit areas overlap adjacent panes; the visible dividers stay one
-  // pixel, aligned to the pane edge rather than straddling two pixels.
+  // Inside the sidebar, clear of its scrollbar; line on the editor's edge.
   sidebarResizer: {
-    flex: "0 0 10px",
-    margin: "0 -5px",
-    zIndex: 2,
+    flex: "0 0 16px",
+    width: "16px",
+    minWidth: "16px",
+    marginLeft: "-16px",
+    backgroundColor: tokens.tray,
     "::before": {
+      left: "auto",
+      right: 0,
       transform: "none",
     },
+    // 3px past the line, short of the editor's controls.
+    "::after": {
+      position: "absolute",
+      top: 0,
+      bottom: 0,
+      left: 0,
+      right: "-3px",
+      content: "''",
+    },
   },
+  // Overlaps the files pane; the line stays on the pane edge.
   cabinetsResizer: {
     display: "block",
     margin: "-5px 0",
