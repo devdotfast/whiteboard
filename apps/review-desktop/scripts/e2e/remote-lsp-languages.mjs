@@ -32,6 +32,11 @@ const fixtures = path.join(import.meta.dirname, "fixtures/lsp");
 // rust-analyzer can take minutes on a large project; these fixtures are small.
 const FIRST_HOVER_LIMIT_MS = 120000;
 
+// The toolchain's host; Swift adds a second one without it.
+const NAME = "c";
+
+const ALIAS = `wb-test-${NAME}`;
+
 export const LANGUAGES = {
   rust: {
     toolchain: "rust",
@@ -166,7 +171,7 @@ export async function runRemoteLspJourney(ctx, id) {
   } catch (error) {
     // The remote's server and extension host logs say why a language server did not answer.
     await onRemote(
-      "wb-test-c",
+      ALIAS,
       'ps -eo pid,rss,args | cut -c1-240; cd ~/.dev/whiteboard-remote/server && find data/logs -name \'*.log\' | while read f; do echo "== $f"; tail -n 60 "$f"; done',
       "",
       60000,
@@ -191,8 +196,7 @@ export async function runRemoteLspJourney(ctx, id) {
 
 async function journey(ctx, id, language) {
   const { page, until } = ctx;
-  const name = "c";
-  const alias = `wb-test-${name}`;
+  const [name, alias] = [NAME, ALIAS];
   const platform = process.env.REVIEW_E2E_REMOTE_PLATFORM;
   const timings = {};
 

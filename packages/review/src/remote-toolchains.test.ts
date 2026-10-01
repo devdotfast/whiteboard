@@ -61,6 +61,13 @@ it("names each tool that the login shell cannot find, and skips an unknown group
   );
 });
 
+it("knows no toolchain for a group named after an object property", async () => {
+  // As `whiteboard remote attach --groups constructor` passes it.
+  expect(await missingToolchains(["constructor", "toString"], env)).toEqual(
+    new Map(),
+  );
+});
+
 it("gives up on a tool that does not answer, and says so", async () => {
   await tool("wbtest-slow", "sleep 30");
 

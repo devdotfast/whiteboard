@@ -41,6 +41,8 @@ function probe(
     });
 
     const timer = setTimeout(() => {
+      child.removeAllListeners("exit");
+
       try {
         process.kill(-child.pid!, "SIGKILL");
       } catch {}
@@ -82,7 +84,9 @@ export async function missingToolchains(
 ) {
   const entries = await Promise.all(
     groups.map(async (group) => {
-      const commands = toolchains[group] ?? [];
+      const commands = Object.hasOwn(toolchains, group)
+        ? toolchains[group]
+        : [];
 
       const outcomes = await Promise.all(
         commands.map((command) => probe(command, env, timeoutMs)),

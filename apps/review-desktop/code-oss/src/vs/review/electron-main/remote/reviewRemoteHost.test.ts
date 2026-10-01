@@ -111,14 +111,15 @@ test("the Desktop's enabled groups go to remote attach", async (t) => {
 	assert.match(ssh.of("wb-test-a", "exec")[0].input(), /exec "\$wb" remote attach --json --groups go\n$/);
 });
 
-test("the remote's language groups reach the gateway, well-formed entries only", async (t) => {
+test("the remote's language groups reach the gateway: well-formed, asked for by this Desktop, once each", async (t) => {
 	const port = await healthServer(t);
 	const languageGroups = [
-		{ group: "swift", installed: true, detail: "swift was not found on the login shell's PATH" },
 		{ group: "Not A Group", installed: true },
-		{ group: "rust" },
-		"csharp",
-		{ group: "csharp", installed: false, detail: "x".repeat(900) },
+		{ group: "go" },
+		"go",
+		{ group: "python", installed: true },
+		{ group: "go", installed: true, detail: "x".repeat(900) },
+		{ group: "go", installed: false, detail: "a second go" },
 	];
 	const stdout = `WHITEBOARD-REMOTE-BEGIN\n${JSON.stringify({ event: "remote.attach", serverId: "s1", url: `http://127.0.0.1:${port}`, token: "remote-token", languageServer: null, languageServerDetail: "none", languageGroups })}\nWHITEBOARD-REMOTE-END\n`;
 	const { host, last } = hostFor(t, { attach: { code: 0, stdout } }, port);
@@ -126,10 +127,7 @@ test("the remote's language groups reach the gateway, well-formed entries only",
 	host.start();
 	await until(() => last()?.endpoint !== undefined);
 
-	assert.deepEqual(last()?.languageGroups, [
-		{ group: "swift", installed: true, detail: "swift was not found on the login shell's PATH" },
-		{ group: "csharp", installed: false, detail: "x".repeat(500) },
-	]);
+	assert.deepEqual(last()?.languageGroups, [{ group: "go", installed: true, detail: "x".repeat(500) }]);
 });
 
 test("a VS Code server of another commit leaves the review online without language features", async (t) => {

@@ -122,7 +122,8 @@ login shell (`~/.profile` or your shell's own start-up file is enough):
 - **Rust** gives hover and go to definition on remotes.
 - **Swift and C#** are installed on a remote but do not answer hovers yet,
   on a remote or on your laptop. Swift's extension needs the task API, which
-  Whiteboard does not expose yet. In a review's Diff view the C# extension
+  Whiteboard does not expose yet, and on a remote also `node-pty`, which the
+  remote's VS Code server does not include. In a review's Diff view the C# extension
   loads the project from the review's base side only, so a hover on the
   changed side stays at "Loading...".
 - The debuggers in the Swift and C# groups are never started: reviews are

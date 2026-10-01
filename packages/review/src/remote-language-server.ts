@@ -183,13 +183,14 @@ export async function ensureRemoteLanguageServer(
       ]),
     });
 
-    if (groups) languageGroups = groups;
-
     if (failed.length > 0 && capped.signal.aborted && !input.signal?.aborted) {
       await installDetached(files, input);
 
+      // The cap's aborts are not failures: the detached install goes on.
       return { ...PENDING, languageGroups };
     }
+
+    if (groups) languageGroups = groups;
 
     if (failed.length > 0)
       throw new Error(

@@ -178,7 +178,16 @@ it("hands downloads that outlast the attach to one detached install, and reports
     ensured++;
     await new Promise((resolve) => signal?.addEventListener("abort", resolve));
 
-    return { failed: [{ id: "astral-sh.ty", error: "aborted" }] };
+    // As ensureRemoteExtensions reports a download the cap stopped.
+    const error =
+      "Network error reaching open-vsx.org: This operation was aborted";
+
+    return {
+      failed: [{ id: "golang.go", error }],
+      groups: [
+        { group: "go", installed: false, detail: `golang.go: ${error}` },
+      ],
+    };
   };
 
   const attach = () =>

@@ -568,10 +568,17 @@ export class ReviewRemoteHost {
 	}
 
 	private async attach(env: NodeJS.ProcessEnv): Promise<ReviewRemoteAttach> {
-		const script = reviewRemoteAttachScript((await this.options.groups?.()) ?? []);
+		const groups = (await this.options.groups?.()) ?? [];
+		const script = reviewRemoteAttachScript(groups);
 		const result = await this.run(sshExecArgs(this.options.session, env), this.timeouts.attach, script);
 		const parsed = parseRemoteAttach(result.stdout);
-		if (parsed && "attach" in parsed) return parsed.attach;
+		if (parsed && "attach" in parsed) {
+			// Only the groups this Desktop asked for, once each.
+			const languageGroups = parsed.attach.languageGroups.filter(
+				(entry, index, all) => groups.includes(entry.group) && all.findIndex((other) => other.group === entry.group) === index,
+			);
+			return { ...parsed.attach, languageGroups };
+		}
 		if (parsed) throw unreachable(`whiteboard remote attach failed on ${this.alias}: ${parsed.error}`);
 		if (result.timedOut) throw unreachable(`whiteboard remote attach on ${this.alias} did not finish within ${this.timeouts.attach / 1000} seconds.`);
 		if (result.code === 127) {
