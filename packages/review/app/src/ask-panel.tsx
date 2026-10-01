@@ -134,6 +134,24 @@ export function AskPanelContent({
   }, [agents, agent, session]);
 
   const latestSession = useLatest(session);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  // A thread opened after the panel closed has nobody to close it.
+  const closeLate = useCallback(
+    (id: string) =>
+      void latestSession.current
+        .fetch(`/ask/${id}/close`, { method: "POST", keepalive: true })
+        .catch(() => {}),
+    [latestSession],
+  );
 
   // A saved conversation: the server starts its agent and loads it, once
   // per panel, not again for each new version of the review.
@@ -152,7 +170,11 @@ export function AskPanelContent({
         }),
       })
       .then(async (response) => {
-        if (!current) return;
+        if (!current) {
+          if (response.ok && !mounted.current) closeLate(savedThreadId);
+
+          return;
+        }
 
         if (response.ok) setThreadId(savedThreadId);
         else
@@ -169,7 +191,7 @@ export function AskPanelContent({
     return () => {
       current = false;
     };
-  }, [latestSession, savedThreadId, requestedAgent]);
+  }, [latestSession, savedThreadId, requestedAgent, closeLate]);
 
   useEffect(() => composer.current?.focus(), [agent, loadingConversation]);
 
@@ -238,6 +260,12 @@ export function AskPanelContent({
           .object({ threadId: z.string() })
           .parse(await response.json());
 
+        if (!mounted.current) {
+          closeLate(id);
+
+          return false;
+        }
+
         rememberAskAgent(session, agent);
         setThreadId(id);
       }
@@ -287,9 +315,6 @@ export function AskPanelContent({
     void post(`/ask/${threadId}/cancel`).catch((error: Error) =>
       setRequestError(error.message),
     );
-
-  if (agents && !agents.some((candidate) => candidate.available))
-    return <AskSetup agents={agents} selection={selection} />;
 
   const chosen = agents?.find((candidate) => candidate.id === agent);
   // A running thread offers its agent's choices; before one, what the
@@ -451,6 +476,9 @@ export function AskPanelContent({
     presence.status,
     presence.tone,
   ]);
+
+  if (agents && !agents.some((candidate) => candidate.available))
+    return <AskSetup agents={agents} selection={selection} />;
 
   if (loadingConversation)
     return <div {...stylex.props(askPanelStyles.body)} aria-busy="true" />;

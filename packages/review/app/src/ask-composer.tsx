@@ -223,7 +223,7 @@ export function AskComposer({
   /** The agent's model and effort, ending the row below. */
   settings?: ReactNode;
   onCyclePermissions?: () => void;
-  /** Resolves true once the question is sent, to clear it. */
+  /** Resolves false when the question did not go, to put it back. */
   onAsk: (question: AskQuestion) => Promise<boolean>;
 }): ReactElement {
   const [draft, setDraft] = useState("");
@@ -373,14 +373,20 @@ export function AskComposer({
         data,
       }));
 
-    const sent = await onAsk(question);
+    // Cleared now, so what is written while it goes stays; a question that
+    // did not go comes back where nothing newer took its place.
+    const sent = { draft, mentions, images };
 
-    if (!sent) return;
     setDraft("");
     setCaret(0);
     setMentions([]);
     setImages([]);
     setNote(null);
+
+    if (await onAsk(question)) return;
+    setDraft((current) => current || sent.draft);
+    setMentions((current) => [...new Set([...sent.mentions, ...current])]);
+    setImages((current) => (current.length ? current : sent.images));
   };
 
   const keydown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
