@@ -724,7 +724,7 @@ it("asks with the model and effort the reviewer picks, and switches them between
   }
 });
 
-it("completes the agent's commands after /", async () => {
+it("completes the agent's commands after / and the checkout's files after @, and asks with the files mentioned", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const session = testReviewSession();
 
@@ -746,6 +746,9 @@ it("completes the agent's commands after /", async () => {
             ],
           },
         });
+
+      if (String(endpoint).startsWith("/ask/mentions?"))
+        return Response.json({ paths: ["db/0042.sql"] });
 
       if (endpoint === "/ask") return Response.json({ threadId: "thread" });
 
@@ -796,7 +799,19 @@ it("completes the agent's commands after /", async () => {
     await press("Enter");
     expect(textarea().value).toBe("/review ");
 
-    await type("/review the locks");
+    await type("/review @004");
+    // Found as the reviewer stops typing.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 150)));
+    expect(
+      fetch.mock.calls.some(
+        ([endpoint]) => endpoint === "/ask/mentions?query=004",
+      ),
+    ).toBe(true);
+    expect(options()).toEqual(["0042.sql"]);
+    await press("Tab");
+    expect(textarea().value).toBe("/review @db/0042.sql ");
+
+    await type("/review @db/0042.sql for locks");
     expect(options()).toEqual([]);
     await press("Enter");
 
@@ -804,7 +819,9 @@ it("completes the agent's commands after /", async () => {
       fetch.mock.calls
         .filter(([endpoint]) => endpoint === "/ask")
         .map(([, init]) => JSON.parse(String(init?.body)).question),
-    ).toEqual([{ text: "/review the locks" }]);
+    ).toEqual([
+      { text: "/review @db/0042.sql for locks", mentions: ["db/0042.sql"] },
+    ]);
   } finally {
     await act(async () => root.unmount());
     container.remove();

@@ -16,13 +16,64 @@ import { fontSize, layer, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { surfaceStyles } from "./ui/surface";
 
-/** The slash command being typed: a question that is only `/` and a name
- * so far. */
-function commandAt(draft: string): string | null {
-  return /^\/(\S*)$/.exec(draft)?.[1] ?? null;
+const FIND_DELAY_MS = 80;
+
+/** What the caret is completing: a slash command at the start of the
+ * question, or a file after an @. */
+type Completion =
+  | { kind: "command"; query: string }
+  | { kind: "file"; query: string; start: number; end: number };
+
+function completionAt(draft: string, caret: number): Completion | null {
+  const command = /^\/(\S*)$/.exec(draft);
+
+  if (command) return { kind: "command", query: command[1]! };
+
+  const before = draft.slice(0, caret);
+  const file = /(?:^|\s)@([^\s@]*)$/.exec(before);
+
+  if (!file) return null;
+
+  return {
+    kind: "file",
+    query: file[1]!,
+    start: caret - file[1]!.length - 1,
+    end: caret,
+  };
 }
 
-/** Where a question is written; `/` lists the agent's commands. */
+/** The checkout's files matching a query, asked for as the reviewer types. */
+function useFiles(
+  completion: Completion | null,
+  findFiles: (query: string, signal: AbortSignal) => Promise<string[]>,
+) {
+  const [found, setFound] = useState<{ query: string; paths: string[] }>();
+  const query = completion?.kind === "file" ? completion.query : null;
+
+  useEffect(() => {
+    if (query === null) return;
+    const abort = new AbortController();
+
+    const timer = setTimeout(() => {
+      findFiles(query, abort.signal)
+        .then((paths) => setFound({ query, paths }))
+        // Without them the @ is just text.
+        .catch(() => {});
+    }, FIND_DELAY_MS);
+
+    return () => {
+      clearTimeout(timer);
+      abort.abort();
+    };
+  }, [query, findFiles]);
+
+  // The last answer stands until the next arrives, so the list does not
+  // flicker while typing.
+  return query === null ? [] : (found?.paths ?? []);
+}
+
+/** Where a question is written: `/` lists the agent's commands, and `@`
+ * finds a file in the checkout. */
 export function AskComposer({
   inputRef,
   placeholder,
@@ -31,6 +82,7 @@ export function AskComposer({
   stop,
   status,
   commands,
+  findFiles,
   onAsk,
 }: {
   inputRef: RefObject<HTMLTextAreaElement | null>;
@@ -42,46 +94,84 @@ export function AskComposer({
   stop?: () => void;
   status: ReactNode;
   commands: AskCommand[] | undefined;
+  findFiles: (query: string, signal: AbortSignal) => Promise<string[]>;
   /** Resolves true once the question is sent, to clear it. */
   onAsk: (question: AskQuestion) => Promise<boolean>;
 }): ReactElement {
   const [draft, setDraft] = useState("");
+  const [caret, setCaret] = useState(0);
+  const [mentions, setMentions] = useState<string[]>([]);
   const [active, setActive] = useState(0);
   // Escape hides the list until the question changes.
   const [dismissed, setDismissed] = useState<string | null>(null);
   const listId = useId();
 
-  const query = dismissed === draft ? null : commandAt(draft);
+  const completion = dismissed === draft ? null : completionAt(draft, caret);
+  const paths = useFiles(completion, findFiles);
 
   const options: { key: string; label: string; detail?: string }[] =
-    query === null
-      ? []
-      : fuzzyRank(query, commands ?? [], (command) => [command.name]).map(
-          (command) => ({
-            key: command.name,
-            label: `/${command.name}`,
-            detail: command.hint
-              ? `${command.description} · ${command.hint}`
-              : command.description,
-          }),
-        );
+    completion?.kind === "command"
+      ? fuzzyRank(completion.query, commands ?? [], (command) => [
+          command.name,
+        ]).map((command) => ({
+          key: command.name,
+          label: `/${command.name}`,
+          detail: command.hint
+            ? `${command.description} · ${command.hint}`
+            : command.description,
+        }))
+      : completion?.kind === "file"
+        ? paths.map((path) => {
+            const slash = path.lastIndexOf("/");
+
+            // The name first: a deep path would otherwise show only its
+            // folders.
+            return slash === -1
+              ? { key: path, label: path }
+              : {
+                  key: path,
+                  label: path.slice(slash + 1),
+                  detail: path.slice(0, slash),
+                };
+          })
+        : [];
 
   const open = options.length > 0;
   const shown = Math.min(active, options.length - 1);
 
-  useEffect(() => setActive(0), [query]);
+  useEffect(() => setActive(0), [completion?.kind, completion?.query]);
+
+  const place = (text: string, at: number) => {
+    setDraft(text);
+    setCaret(at);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(at, at);
+    });
+  };
 
   const pick = (index: number) => {
     const option = options[index];
 
-    if (!option) return;
-    const text = `${option.label} `;
+    if (!option || !completion) return;
 
-    setDraft(text);
-    requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.setSelectionRange(text.length, text.length);
-    });
+    if (completion.kind === "command") {
+      const text = `${option.label} `;
+
+      place(text, text.length);
+
+      return;
+    }
+
+    const inserted = `@${option.key} `;
+
+    place(
+      draft.slice(0, completion.start) + inserted + draft.slice(completion.end),
+      completion.start + inserted.length,
+    );
+    setMentions((current) =>
+      current.includes(option.key) ? current : [...current, option.key],
+    );
   };
 
   const submit = async () => {
@@ -89,7 +179,19 @@ export function AskComposer({
 
     if (!text || !canAsk) return;
 
-    if (await onAsk({ text })) setDraft("");
+    // A file stays mentioned while its @ does.
+    const mentioned = mentions.filter((path) => draft.includes(`@${path}`));
+
+    const question: AskQuestion = { text };
+
+    if (mentioned.length) question.mentions = mentioned;
+
+    const sent = await onAsk(question);
+
+    if (!sent) return;
+    setDraft("");
+    setCaret(0);
+    setMentions([]);
   };
 
   const keydown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -140,7 +242,7 @@ export function AskComposer({
         <div
           id={listId}
           role="listbox"
-          aria-label="Commands"
+          aria-label={completion?.kind === "command" ? "Commands" : "Files"}
           {...stylex.props(surfaceStyles.popover, styles.list)}
         >
           {options.map((option, index) => (
@@ -183,7 +285,11 @@ export function AskComposer({
         aria-controls={open ? listId : undefined}
         aria-activedescendant={open ? `${listId}-${shown}` : undefined}
         disabled={disabled}
-        onChange={(event) => setDraft(event.target.value)}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          setCaret(event.target.selectionStart);
+        }}
+        onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
         onKeyDown={keydown}
       />
 

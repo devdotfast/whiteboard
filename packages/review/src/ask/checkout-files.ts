@@ -26,3 +26,22 @@ export async function checkoutFiles(root: string): Promise<string[]> {
     return [];
   }
 }
+
+/** How long a listing serves mentions before git is asked again. */
+const LISTING_MS = 10_000;
+
+const listings = new Map<string, { at: number; files: Promise<string[]> }>();
+
+/** The checkout's files for a mention picker, which asks on each keystroke:
+ * listed again only once the last listing is a few seconds old. */
+export function mentionableFiles(root: string): Promise<string[]> {
+  const now = Date.now();
+  const listed = listings.get(root);
+
+  if (listed && now - listed.at < LISTING_MS) return listed.files;
+  const files = checkoutFiles(root);
+
+  listings.set(root, { at: now, files });
+
+  return files;
+}

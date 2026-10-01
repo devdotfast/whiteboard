@@ -18,6 +18,13 @@ const permissionOptionSchema = z.object({
   kind: z.enum(["allow_once", "allow_always", "reject_once", "reject_always"]),
 });
 
+/** What a question carries besides its text, as the thread shows it. */
+const askAttachmentSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("file"), path: z.string() }),
+]);
+
+export type AskAttachment = z.infer<typeof askAttachmentSchema>;
+
 export const askEntrySchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("user"),
@@ -25,6 +32,7 @@ export const askEntrySchema = z.discriminatedUnion("kind", [
     text: z.string(),
     /** When it was asked, in epoch milliseconds; unknown for a replayed one. */
     at: z.number().optional(),
+    attachments: z.array(askAttachmentSchema).optional(),
   }),
   z.object({ kind: z.literal("agent"), id: z.string(), text: z.string() }),
   z.object({
@@ -118,9 +126,12 @@ export const askOfferSchema = z.object({
 
 export type AskOffer = z.infer<typeof askOfferSchema>;
 
-/** A question as the reviewer asks it. */
+/** A question as the reviewer asks it: its text, and the checkout files it
+ * mentions. */
 export const askQuestionSchema = z.strictObject({
   text: z.string().trim().min(1).max(8_000),
+  /** Paths relative to the checkout's root. */
+  mentions: z.array(z.string().min(1).max(400)).max(20).optional(),
 });
 
 export type AskQuestion = z.infer<typeof askQuestionSchema>;

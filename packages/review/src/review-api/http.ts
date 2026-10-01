@@ -7,7 +7,7 @@ import {
   selectionMarkdown,
 } from "@review/agent-selection.js";
 import type { AskAgentStatus } from "@review/ask/agents.js";
-import { checkoutFiles } from "@review/ask/checkout-files.js";
+import { checkoutFiles, mentionableFiles } from "@review/ask/checkout-files.js";
 import { parseFileRef, resolveFileRefs } from "@review/ask/file-refs.js";
 import {
   askAgentIds,
@@ -17,6 +17,7 @@ import {
 } from "@review/ask/thread-state.js";
 import type { AskThreads } from "@review/ask/thread.js";
 import { watchAskThread } from "@review/ask/watch.js";
+import { fuzzyRank } from "@review/fuzzy-match.js";
 import { resolveReviewStackLayers } from "@review/review-stack.js";
 import { readBoundedRequestJson } from "@review/server/hono-http.js";
 import { HttpJsonError } from "@review/server/http-json.js";
@@ -90,6 +91,15 @@ const askFilesSchema = z.strictObject({
 });
 
 const askFollowUpSchema = z.strictObject({ question: askQuestionSchema });
+
+const askMentionsSchema = z.object({
+  query: z.string().max(400).default(""),
+  /** A conversation's checkout, which can be an earlier version's. */
+  thread: z.string().optional(),
+});
+
+/** How many files a mention picker shows. */
+const MENTION_LIMIT = 20;
 
 const askDecisionSchema = z.strictObject({
   permissionId: z.string().min(1),
@@ -1180,6 +1190,24 @@ export function createReviewApi(
       store.askHistory.saveOffer(agent, offer);
 
       return context.json({ offer });
+    });
+
+    // The checkout's files a mention could mean, best first.
+    app.get("/:id/ask/mentions", async (context) => {
+      const reviewId = context.req.param("id");
+
+      const { query, thread } = askMentionsSchema.parse(context.req.query());
+
+      const cwd = thread
+        ? readThread(reviewId, thread).read().cwd
+        : (await data.agentCheckout(readReview(reviewId))).rootPath;
+
+      const files = fuzzyRank(query, await mentionableFiles(cwd), (file) => [
+        file,
+        file.slice(file.lastIndexOf("/") + 1),
+      ]);
+
+      return context.json({ paths: files.slice(0, MENTION_LIMIT) });
     });
 
     app.post("/:id/ask", async (context) => {

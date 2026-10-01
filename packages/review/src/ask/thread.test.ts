@@ -2,6 +2,7 @@ import {
   type AgentContext,
   type AvailableCommand,
   type ClientConnection,
+  type ContentBlock,
   type McpServer,
   RequestError,
   type RequestPermissionResponse,
@@ -35,7 +36,11 @@ const permissionOptions = [
 
 /** A scripted ACP agent. `turn` runs inside each `session/prompt`. */
 function fakeAgent(
-  turn: (client: AgentContext, prompt: string) => Promise<void>,
+  turn: (
+    client: AgentContext,
+    prompt: string,
+    blocks: ContentBlock[],
+  ) => Promise<void>,
   /** Replays a saved session; without it the agent cannot load one. */
   load?: (client: AgentContext, sessionId: string) => Promise<void>,
   options: {
@@ -154,6 +159,7 @@ function fakeAgent(
         params.prompt
           .map((block) => (block.type === "text" ? block.text : ""))
           .join("\n"),
+        params.prompt,
       );
 
       // Like the real adapters, a turn cancelled while it ran says so.
@@ -1386,6 +1392,33 @@ it("lists the agent's commands, and sends one alone, keeping the selection for t
 
   expect(prompts[1]).toContain("Selected text from Whiteboard.");
   expect(prompts[1]).toMatch(/Is this safe\?$/);
+  thread.close();
+});
+
+it("links the checkout's files the reviewer mentions, and no others", async () => {
+  const sent: ContentBlock[][] = [];
+
+  const { launch } = fakeAgent(async (_client, _prompt, blocks) => {
+    sent.push(blocks);
+  });
+
+  const thread = openThread(launch, () => [], {
+    question: {
+      text: "Compare these",
+      mentions: ["db/0042.sql", "../../etc/passwd"],
+    },
+  });
+
+  await until(thread, ({ status }) => status === "idle");
+
+  expect(sent[0]?.filter((block) => block.type === "resource_link")).toEqual([
+    {
+      type: "resource_link",
+      uri: "file:///checkout/db/0042.sql",
+      name: "0042.sql",
+      title: "db/0042.sql",
+    },
+  ]);
   thread.close();
 });
 

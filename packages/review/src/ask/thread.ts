@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import {
   type AvailableCommand,
@@ -26,6 +28,7 @@ import {
 } from "@review/ask/agents.js";
 import {
   type AskAgentId,
+  type AskAttachment,
   type AskChange,
   type AskChoiceKind,
   type AskChoices,
@@ -223,6 +226,11 @@ function commandOf({ name, description, input }: AvailableCommand): AskCommand {
   return input?.hint
     ? { name, description, hint: input.hint }
     : { name, description };
+}
+
+/** What a question carries, as its entry shows it. */
+function attachmentsOf({ mentions = [] }: AskQuestion): AskAttachment[] {
+  return mentions.map((mention) => ({ kind: "file" as const, path: mention }));
 }
 
 const toolInputSchema = z.object({
@@ -939,9 +947,12 @@ export class AskThread {
 
     this.emit({ type: "set", status: "running", error: null });
 
-    const prompt: ContentBlock[] = withSelection
-      ? withContext(this.start.context, question.text)
-      : [{ type: "text", text: question.text }];
+    const prompt: ContentBlock[] = [
+      ...(withSelection
+        ? withContext(this.start.context, question.text)
+        : [{ type: "text" as const, text: question.text }]),
+      ...this.attachments(question),
+    ];
 
     let stopReason: StopReason;
 
@@ -1295,10 +1306,40 @@ export class AskThread {
 
   private addUser(question: AskQuestion) {
     const id = randomUUID();
+    const attachments = attachmentsOf(question);
 
-    this.push({ kind: "user", id, text: question.text, at: Date.now() });
+    const entry: Extract<AskEntry, { kind: "user" }> = {
+      kind: "user",
+      id,
+      text: question.text,
+      at: Date.now(),
+    };
+
+    if (attachments.length) entry.attachments = attachments;
+    this.push(entry);
 
     return id;
+  }
+
+  /** A question's files, as links into the checkout. */
+  private attachments(question: AskQuestion): ContentBlock[] {
+    const root = path.resolve(this.start.cwd);
+    const blocks: ContentBlock[] = [];
+
+    for (const mention of question.mentions ?? []) {
+      const file = path.resolve(root, mention);
+
+      // Only the checkout's own files.
+      if (!file.startsWith(root + path.sep)) continue;
+      blocks.push({
+        type: "resource_link",
+        uri: pathToFileURL(file).href,
+        name: path.basename(file),
+        title: mention,
+      });
+    }
+
+    return blocks;
   }
 
   private fail(cause: unknown) {

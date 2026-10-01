@@ -657,6 +657,25 @@ export function AskPanelContent({
     }
   };
 
+  const findFiles = useCallback(
+    async (query: string, signal: AbortSignal) => {
+      const params = new URLSearchParams({ query });
+
+      if (threadId) params.set("thread", threadId);
+
+      const response = await session.fetch(`/ask/mentions?${params}`, {
+        signal,
+      });
+
+      if (!response.ok) return [];
+
+      return z
+        .object({ paths: z.array(z.string()) })
+        .parse(await response.json()).paths;
+    },
+    [session, threadId],
+  );
+
   const decide = useCallback(
     (permissionId: string, optionId: string) =>
       void post(`/ask/${threadId}/permission`, {
@@ -921,6 +940,7 @@ export function AskPanelContent({
             : composerStatus(thread, busy)
         }
         commands={thread?.commands ?? offered?.commands}
+        findFiles={findFiles}
         onAsk={ask}
       />
     </div>
@@ -930,7 +950,7 @@ export function AskPanelContent({
 function composerStatus(thread: AskThreadState | null, busy: boolean) {
   if (thread?.status === "waiting") return "Waiting for your approval";
 
-  if (!busy) return "↵ to ask · / commands";
+  if (!busy) return "↵ to ask · / commands · @ files";
 
   const sinceQuestion = thread?.entries.slice(
     thread.entries.findLastIndex((entry) => entry.kind === "user") + 1,
