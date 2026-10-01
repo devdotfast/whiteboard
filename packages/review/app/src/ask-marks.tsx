@@ -41,10 +41,22 @@ interface AskMark {
   range: Range;
   /** Where its words are, for telling when the pointer is on them. */
   boxes: MarkBox[];
-  /** Level with the passage's first line, or below the pin above it. */
+  /** Level with the passage's first line. */
   pinTop: number;
   /** Just past the prose, or a block wider than it, where its pin sits. */
   pinLeft: number;
+  /** Where its first line starts, for ordering the pins on that line. */
+  lineLeft: number;
+}
+
+/** The pins level with one line, side by side in reading order. */
+interface PinRow {
+  key: string;
+  marks: AskMark[];
+  top: number;
+  left: number;
+  /** How far right of `left` the document ends. */
+  room: number;
 }
 
 /** A pin's height: its line, padding and border. */
@@ -52,9 +64,6 @@ const PIN_HEIGHT = 22;
 
 /** A pin's height and the gap below it, before the next pin down. */
 const PIN_STEP = PIN_HEIGHT + 4;
-
-/** Room for a pin with a two-digit count. */
-const PIN_WIDTH = 48;
 
 const PASSAGE_BLOCKS =
   "p, li, blockquote, pre, td, th, dd, figcaption, h1, h2, h3, h4, h5, h6";
@@ -121,6 +130,7 @@ function highlights(document: Document) {
 
 interface PlacedMarks {
   marks: AskMark[];
+  rows: PinRow[];
   /** Conversations whose passage changed. */
   outdated: Set<string>;
 }
@@ -204,9 +214,8 @@ function placeMarks(
       })),
       // Level with the passage's first line, whatever its type size.
       pinTop: first.top + first.height / 2 - PIN_HEIGHT / 2 - origin.top,
-      // A narrow document has little margin; the pin stays inside it
-      // rather than making the page scroll sideways.
-      pinLeft: Math.min(right - origin.left + 10, origin.width - PIN_WIDTH),
+      pinLeft: right - origin.left + 10,
+      lineLeft: first.left - origin.left,
     });
   }
 
@@ -219,16 +228,36 @@ function placeMarks(
     );
 
   // In reading order, which is also the order Tab reaches the pins. Pins
-  // that would overlap, as for passages on one line, stack down the lane.
+  // for passages on one line sit side by side on it; a row that would
+  // overlap the one above, as for lines closer than a pin, moves down.
   marks.sort((above, below) => above.pinTop - below.pinTop);
+  const rows: (PinRow & { line: number })[] = [];
 
-  for (const [index, mark] of marks.entries()) {
-    const above = marks[index - 1];
+  for (const mark of marks) {
+    const above = rows.at(-1);
 
-    if (above) mark.pinTop = Math.max(mark.pinTop, above.pinTop + PIN_STEP);
+    if (above && mark.pinTop - above.line < PIN_HEIGHT / 2) {
+      above.marks.push(mark);
+      above.left = Math.max(above.left, mark.pinLeft);
+      continue;
+    }
+
+    rows.push({
+      key: mark.key,
+      marks: [mark],
+      line: mark.pinTop,
+      top: above ? Math.max(mark.pinTop, above.top + PIN_STEP) : mark.pinTop,
+      left: mark.pinLeft,
+      room: 0,
+    });
   }
 
-  return { marks, outdated };
+  for (const row of rows) {
+    row.marks.sort((before, after) => before.lineLeft - after.lineLeft);
+    row.room = origin.width - row.left;
+  }
+
+  return { marks, rows, outdated };
 }
 
 function within(box: MarkBox, x: number, y: number) {
@@ -251,14 +280,19 @@ export function AskThreadMarks({
   const reportOutdated = history?.reportOutdated;
   const panels = useOptionalReviewPanelStore();
   const [article, setArticle] = useState<HTMLElement | null>(null);
-  const [marks, setMarks] = useState<AskMark[]>([]);
+
+  const [{ marks, rows }, setPlaced] = useState<{
+    marks: AskMark[];
+    rows: PinRow[];
+  }>({ marks: [], rows: [] });
+
   const [active, setActive] = useState<string | null>(null);
 
   useEffect(() => setArticle(articleRef.current), [articleRef, revision]);
 
   useEffect(() => {
     if (!article || !entries?.length) {
-      setMarks([]);
+      setPlaced({ marks: [], rows: [] });
       reportOutdated?.(new Set());
 
       return;
@@ -272,7 +306,7 @@ export function AskThreadMarks({
       frame = requestAnimationFrame(() => {
         const placed = placeMarks(article, entries);
 
-        setMarks(placed.marks);
+        setPlaced(placed);
         reportOutdated?.(placed.outdated);
       });
     };
@@ -350,65 +384,78 @@ export function AskThreadMarks({
 
   const layer = useMemo(
     () =>
-      marks.map((mark) => {
-        const [newest] = mark.entries;
-        const count = mark.entries.length;
+      rows.map((row) => (
+        <div
+          key={row.key}
+          {...stylex.props(styles.row)}
+          style={{
+            top: row.top,
+            left: row.left,
+            // A narrow document has little margin; the pins stay inside it
+            // rather than making the page scroll sideways.
+            translate: `min(0px, calc(${row.room}px - 100%))`,
+          }}
+        >
+          {row.marks.map((mark) => {
+            const [newest] = mark.entries;
+            const count = mark.entries.length;
 
-        const label =
-          count === 1
-            ? `Open the conversation about “${mark.quote.slice(0, 60)}”`
-            : `${count} conversations about “${mark.quote.slice(0, 60)}”`;
+            const label =
+              count === 1
+                ? `Open the conversation about “${mark.quote.slice(0, 60)}”`
+                : `${count} conversations about “${mark.quote.slice(0, 60)}”`;
 
-        return (
-          <button
-            key={mark.key}
-            type="button"
-            // Marker class: the pointer on a pin is not on its words.
-            {...withClass("ask-mark-pin", styles.pin)}
-            data-active={mark.key === active || undefined}
-            style={{ top: mark.pinTop, left: mark.pinLeft }}
-            aria-label={label}
-            title={count === 1 ? newest?.title : label}
-            onPointerEnter={() => setActive(mark.key)}
-            onPointerLeave={() => setActive(null)}
-            onFocus={() => setActive(mark.key)}
-            onBlur={() => setActive(null)}
-            onClick={() =>
-              newest &&
-              panels?.getState().openAskView(
-                count === 1
-                  ? {
-                      type: "saved",
-                      threadId: newest.id,
-                      selection: newest.selection,
-                      agent: newest.agent,
-                    }
-                  : {
-                      type: "history",
-                      passage: {
-                        quote: mark.quote,
-                        threadIds: mark.entries.map((entry) => entry.id),
-                      },
-                    },
-              )
-            }
-          >
-            {/* Each agent asked, newest first. */}
-            {[...new Set(mark.entries.map((entry) => entry.agent))].map(
-              (agent) => (
-                <span key={agent} {...stylex.props(styles.logoSlot)}>
-                  {AGENT_LOGOS[agent]({ xstyle: styles.logo })}
-                </span>
-              ),
-            )}
-            {/* One conversation needs no count. */}
-            {count > 1 ? (
-              <span {...stylex.props(styles.count)}>{count}</span>
-            ) : null}
-          </button>
-        );
-      }),
-    [active, marks, panels],
+            return (
+              <button
+                key={mark.key}
+                type="button"
+                // Marker class: the pointer on a pin is not on its words.
+                {...withClass("ask-mark-pin", styles.pin)}
+                data-active={mark.key === active || undefined}
+                aria-label={label}
+                title={count === 1 ? newest?.title : label}
+                onPointerEnter={() => setActive(mark.key)}
+                onPointerLeave={() => setActive(null)}
+                onFocus={() => setActive(mark.key)}
+                onBlur={() => setActive(null)}
+                onClick={() =>
+                  newest &&
+                  panels?.getState().openAskView(
+                    count === 1
+                      ? {
+                          type: "saved",
+                          threadId: newest.id,
+                          selection: newest.selection,
+                          agent: newest.agent,
+                        }
+                      : {
+                          type: "history",
+                          passage: {
+                            quote: mark.quote,
+                            threadIds: mark.entries.map((entry) => entry.id),
+                          },
+                        },
+                  )
+                }
+              >
+                {/* Each agent asked, newest first. */}
+                {[...new Set(mark.entries.map((entry) => entry.agent))].map(
+                  (agent) => (
+                    <span key={agent} {...stylex.props(styles.logoSlot)}>
+                      {AGENT_LOGOS[agent]({ xstyle: styles.logo })}
+                    </span>
+                  ),
+                )}
+                {/* One conversation needs no count. */}
+                {count > 1 ? (
+                  <span {...stylex.props(styles.count)}>{count}</span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      )),
+    [active, rows, panels],
   );
 
   if (!article || !marks.length) return null;
@@ -433,8 +480,13 @@ const styles = stylex.create({
   },
   // Quiet at rest, so a much-asked document stays calm; the accent is for
   // the pin paired with the pointer's passage.
-  pin: {
+  row: {
     position: "absolute",
+    display: "flex",
+    gap: "4px",
+    width: "max-content",
+  },
+  pin: {
     display: "flex",
     alignItems: "center",
     gap: "5px",

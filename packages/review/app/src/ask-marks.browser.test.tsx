@@ -349,7 +349,7 @@ it("follows the words asked about through later versions, and calls them outdate
   await act(async () => root.unmount());
 });
 
-it("pins every passage in one lane, stacks pins that would overlap, and pairs a pin with its words", async () => {
+it("pins every passage in one lane, side by side on a shared line, and pairs a pin with its words", async () => {
   const session = testReviewSession();
 
   const document_ = (
@@ -424,12 +424,27 @@ it("pins every passage in one lane, stacks pins that would overlap, and pairs a 
 
   const boxes = pins().map((pin) => pin.getBoundingClientRect());
 
-  // One lane on the right, beside the narrow table too.
-  expect(new Set(boxes.map((box) => Math.round(box.left))).size).toBe(1);
+  const [paragraph, sameLine, ...others] = boxes;
 
-  // No two pins overlap, though two passages share a line.
-  const overlapping = boxes.filter(
-    (box, index) => index > 0 && box.top < boxes[index - 1]!.bottom,
+  // One lane on the right, beside the narrow table too.
+  expect(
+    new Set([paragraph, ...others].map((box) => Math.round(box!.left))).size,
+  ).toBe(1);
+
+  // Two passages on one line: their pins sit level on it, in reading order.
+  expect(sameLine!.top).toBe(paragraph!.top);
+  expect(sameLine!.left).toBeGreaterThan(paragraph!.right);
+
+  // No two pins overlap.
+  const overlapping = boxes.filter((box, index) =>
+    boxes.some(
+      (other, at) =>
+        at < index &&
+        box.top < other.bottom &&
+        other.top < box.bottom &&
+        box.left < other.right &&
+        other.left < box.right,
+    ),
   );
 
   expect(overlapping).toEqual([]);
