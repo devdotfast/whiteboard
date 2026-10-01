@@ -133,10 +133,12 @@ export const shellStyles = stylex.create({
       content: "''",
     },
   },
-  // Extra grab area over the panel's padding. Rightward only: the scrollbar
-  // beside a divider belongs to the pane on its left. Only for panels with at
-  // least 8px of padding, so it covers no controls.
+  // The rule sits flush with the pane on its left, and the grab area extends
+  // over the panel's padding. Rightward only: the scrollbar beside a divider
+  // belongs to the pane on its left. Only for panels with at least 8px of
+  // padding, so it covers no controls.
   resizerGrabPanel: {
+    "::before": { left: 0, transform: "none" },
     "::after": {
       position: "absolute",
       top: 0,
@@ -146,13 +148,16 @@ export const shellStyles = stylex.create({
       content: "''",
     },
   },
+  // The divider's column is the panel's, so the panel header continues to
+  // the rule.
   peekResizer: {
     height: "100%",
     borderColor: tokens.transparent,
+    backgroundImage: `linear-gradient(${tokens.surface} calc(${tokens.reviewHeaderHeight} - 1px), ${tokens.rule} 0 ${tokens.reviewHeaderHeight}, transparent 0)`,
   },
-  // The divider's right half is the panel's, so a tray panel meets the rule.
   peekResizerTray: {
-    backgroundImage: `linear-gradient(to right, transparent 50%, ${tokens.tray} 50%)`,
+    backgroundColor: tokens.tray,
+    backgroundImage: `linear-gradient(transparent calc(${tokens.reviewHeaderHeight} - 1px), ${tokens.rule} 0 ${tokens.reviewHeaderHeight}, transparent 0)`,
   },
   // Horizontal twin of the divider for the narrow-layout bottom sheet: it
   // drags the sheet height. Hidden on wide layouts, where the vertical
