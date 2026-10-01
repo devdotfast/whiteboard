@@ -88,6 +88,8 @@ export function createGatewayStreams(input: {
   locate(reviewId: string): Located;
   /** Finds a review's owner, asking the machines when it is not known. */
   lookup(reviewId: string): Promise<Located>;
+  /** The laptop's list holds a review a remote lists too: the laptop's. */
+  onLaptop(reviewId: string): void;
   log(message: string): void;
 }) {
   const { hosts, memory } = input;
@@ -109,6 +111,9 @@ export function createGatewayStreams(input: {
         list: (serverId, listMode) => memory.list(serverId, listMode),
       },
       (entry) => {
+        if (laptop.some((local) => local.reviewId === entry.reviewId))
+          input.onLaptop(entry.reviewId);
+
         if (conflicts.has(entry.reviewId)) return;
         conflicts.add(entry.reviewId);
         input.log(

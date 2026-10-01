@@ -159,7 +159,8 @@ export function createReviewGateway(input: {
     },
   });
 
-  const laptopIds = new Set<string>();
+  /** Whether the laptop's store held each id when last asked. */
+  const onLaptopIds = new Map<string, boolean>();
   const lookups = new Map<string, Promise<Owner>>();
 
   /** The status a host gives the ownership check, or undefined on failure. */
@@ -187,10 +188,10 @@ export function createReviewGateway(input: {
     }
   }
 
-  /** An id not seen before: the laptop first, then every online host. */
-  /** The laptop holds the review; asked in process. */
+  /** The laptop holds the review; asked in process. A local review wins
+   * over any remote's claim, so this comes before every remote owner. */
   async function onLaptop(reviewId: string) {
-    if (laptopIds.has(reviewId)) return true;
+    if (onLaptopIds.get(reviewId)) return true;
 
     const laptop = await input.local(
       new Request(
@@ -199,8 +200,7 @@ export function createReviewGateway(input: {
     );
 
     await laptop.body?.cancel();
-
-    if (laptop.ok) laptopIds.add(reviewId);
+    onLaptopIds.set(reviewId, laptop.ok);
 
     return laptop.ok;
   }
@@ -213,9 +213,8 @@ export function createReviewGateway(input: {
         (state) => state.serverId ?? memory.serverIdOf(state.alias) ?? [],
       );
 
+  /** An id not seen before and not the laptop's: every online host. */
   async function lookup(reviewId: string): Promise<Owner> {
-    if (await onLaptop(reviewId)) return undefined;
-
     // The first host to claim it wins, so a hung host delays only ids that
     // no other machine has.
     const online = hosts.online();
@@ -254,7 +253,13 @@ export function createReviewGateway(input: {
   function locate(reviewId: string): Located {
     // Remotes hold only UUID reviews; the scratchpad and shared reviews are
     // always the laptop's.
-    if (!UUID.test(reviewId) || laptopIds.has(reviewId)) return "laptop";
+    if (!UUID.test(reviewId)) return "laptop";
+    const local = onLaptopIds.get(reviewId);
+
+    if (local) return "laptop";
+
+    // The laptop has not been asked: no remote's claim counts yet.
+    if (local === undefined) return undefined;
     const known = memory.owner(reviewId, order());
 
     if (!known) return undefined;
@@ -267,6 +272,8 @@ export function createReviewGateway(input: {
   }
 
   async function ownerOf(reviewId: string): Promise<Owner> {
+    if (UUID.test(reviewId) && !onLaptopIds.has(reviewId))
+      await onLaptop(reviewId);
     const located = locate(reviewId);
 
     if (located === "laptop") return undefined;
@@ -545,6 +552,7 @@ export function createReviewGateway(input: {
     local: input.local,
     locate,
     lookup: ownerOf,
+    onLaptop: (reviewId) => onLaptopIds.set(reviewId, true),
     log,
   });
 

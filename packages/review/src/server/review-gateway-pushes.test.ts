@@ -7,6 +7,7 @@ import path from "node:path";
 import {
   type JsonValue,
   REVIEW_HOST_HEADER,
+  ReviewApiClient,
   type ReviewVerbRequest,
   parseReviewDesktopVerbFrame,
 } from "@dev.fast/review-protocol";
@@ -410,4 +411,174 @@ it("attaches to remotes only while a window is attached to the laptop", async ()
   // The window goes: so does the attachment.
   detaches.splice(0).forEach((detach) => detach());
   await expect.poll(async () => (await a.health()).desktopAttached).toBe(false);
+});
+
+it("keeps a local review on the laptop when a remote lists its id, for every route", async () => {
+  const relay = new GlobalReviewDesktopVerbRelay({ maxClients: 1 });
+  const received = attachWindow(relay);
+  const laptop = await startGateway(root, [], { relay });
+  const onLaptop = await seed(laptop.api, root, "Local original");
+  const remoteOnly = randomUUID();
+
+  const summary = (reviewId: string, title: string) => ({
+    reviewId,
+    version: 1,
+    title,
+    createdAt: new Date(0).toISOString(),
+    repositoryName: "project",
+    viewedAt: null,
+    dismissedAt: null,
+  });
+
+  const impostor = { ...summary(onLaptop, "Remote impostor"), document: [] };
+  const results: JsonValue[] = [];
+  let control: ServerResponse | undefined;
+
+  // Claims the laptop's id in its list, its stream, its routes and a push.
+  const fake = await startFake({
+    version,
+    reviewIds: [onLaptop, remoteOnly],
+    handle(request, response) {
+      if (request.url?.startsWith("/reviews-api/watch")) {
+        response.setHeader("content-type", "application/x-ndjson");
+        response.write(
+          `${JSON.stringify({
+            kind: "list",
+            mode: "structural",
+            reviews: [
+              summary(onLaptop, "Remote impostor"),
+              summary(remoteOnly, "Remote only"),
+            ],
+          })}\n`,
+        );
+        response.write(
+          `${JSON.stringify({ kind: "review", reviewId: onLaptop, value: impostor })}\n`,
+        );
+
+        return true;
+      }
+
+      if (request.url === "/control") {
+        response.setHeader("content-type", "text/event-stream");
+        response.write(": attached\n\n");
+        control = response;
+
+        return true;
+      }
+
+      if (request.url === "/control/result") {
+        let body = "";
+        request.on("data", (chunk: Buffer) => (body += chunk.toString()));
+        request.on("end", () => {
+          results.push(JSON.parse(body));
+          response.end('{"ok":true}');
+        });
+
+        return true;
+      }
+
+      return false;
+    },
+  });
+
+  laptop.gateway.setHosts([{ alias: "wb-a", endpoint: fake.endpoint }]);
+
+  // The remote's list has arrived once its other review routes to it.
+  await expect
+    .poll(async () =>
+      (await laptop.request(`/${remoteOnly}`)).headers.get(REVIEW_HOST_HEADER),
+    )
+    .toBe("wb-a");
+
+  // Read before any merged list: the laptop's store decides, not a cache.
+  const read = await laptop.request(`/${onLaptop}?full=true`);
+  expect(read.headers.has(REVIEW_HOST_HEADER)).toBe(false);
+  expect(await read.json()).toMatchObject({ title: "Local original" });
+
+  const list = (
+    await laptop.api<{ reviewId: string; title: string; host?: string }[]>("")
+  ).filter((entry) => entry.reviewId !== "scratchpad");
+
+  expect(list.map(({ title, host }) => ({ title, host }))).toEqual([
+    { title: "Local original", host: undefined },
+    { title: "Remote only", host: "wb-a" },
+  ]);
+
+  const client = new ReviewApiClient({
+    serverUrl: laptop.url,
+    token: "laptop-token",
+  });
+
+  const abort = new AbortController();
+  detaches.push(() => abort.abort());
+
+  for await (const line of client.watch(
+    [{ reviewId: onLaptop, mode: "structural" }],
+    abort.signal,
+  )) {
+    expect(line).toMatchObject({
+      kind: "review",
+      reviewId: onLaptop,
+      value: { title: "Local original" },
+    });
+    break;
+  }
+
+  const renamed = await laptop.request("/commands", {
+    method: "POST",
+    body: JSON.stringify({
+      commandId: randomUUID(),
+      operation: { type: "rename", reviewId: onLaptop, title: "Renamed" },
+    }),
+  });
+
+  expect(renamed.status).toBe(200);
+  expect(renamed.headers.has(REVIEW_HOST_HEADER)).toBe(false);
+  expect(laptop.local.store.summary(onLaptop)?.title).toBe("Renamed");
+
+  // Last, so no earlier step learnt the id from the push's own check.
+  control?.write(
+    `data: ${JSON.stringify(verb("push", { name: "openApiReview", args: { reviewId: onLaptop, title: "I" } }))}\n\n`,
+  );
+  await vi.waitFor(() => expect(results).toHaveLength(1));
+  expect(results).toEqual([
+    {
+      id: "push",
+      response: { ok: false, error: `${onLaptop} belongs to the laptop.` },
+    },
+  ]);
+  expect(received).toEqual([]);
+
+  // The remote heard only its list subscription and the push's result.
+  expect(
+    fake.requests.filter((request) => request.url?.includes(onLaptop)),
+  ).toEqual([]);
+  expect(
+    laptop.logged.filter((line) => line.includes(`${onLaptop} is also listed`)),
+  ).toHaveLength(1);
+
+  // A review the laptop gains after a remote served it: the list that shows
+  // the laptop's row also routes it to the laptop.
+  const { pins } = laptop.local.store.read(onLaptop);
+
+  if (!pins) throw new Error("The seeded review has no pins.");
+
+  await laptop.local.store.importVersion({
+    reviewId: remoteOnly,
+    title: "Imported",
+    pins,
+    document: [],
+    createdAt: new Date().toISOString(),
+  });
+
+  expect(
+    (await laptop.api<{ reviewId: string; host?: string }[]>("")).find(
+      (entry) => entry.reviewId === remoteOnly,
+    ),
+  ).not.toHaveProperty("host");
+  expect(
+    (await laptop.request(`/${remoteOnly}?full=true`)).headers.has(
+      REVIEW_HOST_HEADER,
+    ),
+  ).toBe(false);
 });
