@@ -102,7 +102,11 @@ export async function createNativeTutorial(input: {
 
   const result = await input.store.execute(
     {
-      operation: { type: "create", title: assets.authored.title, pins },
+      operation: {
+        type: "create",
+        title: assets.authored.title,
+        target: { kind: "commits", ...pins },
+      },
     },
     { document: assets.authored.document, origin: { tutorial: true } },
   );

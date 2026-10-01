@@ -42,7 +42,12 @@ afterEach(async () => {
 
 const run = <Operation>(operation: Operation) => store.execute({ operation });
 
-const create = () => run({ type: "create", title: "Lenses", pins });
+const create = () =>
+  run({
+    type: "create",
+    title: "Lenses",
+    target: { kind: "commits", ...pins },
+  });
 
 const lens = <Edit>(reviewId: string, edit: Edit, activityId?: string) =>
   run({ type: "lens_edit", reviewId, edit, activityId });

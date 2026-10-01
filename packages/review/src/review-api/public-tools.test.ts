@@ -34,7 +34,12 @@ test("public session tools create, edit and retry against the unchanged review s
 
   const create = await call("session_create", {
     title: "Public names",
-    pins: { repositoryId: "repo", base: "base", head: "head" },
+    target: {
+      kind: "commits",
+      repositoryId: "repo",
+      base: "base",
+      head: "head",
+    },
   });
 
   expect(create).toHaveProperty("sessionId");

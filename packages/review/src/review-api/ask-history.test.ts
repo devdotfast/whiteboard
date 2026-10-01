@@ -46,7 +46,11 @@ const record = (
 
 it("keeps each review's conversations, newest first, until the review is deleted", async () => {
   const { reviewId } = await store.execute(
-    command({ type: "create", title: "Payments", pins }),
+    command({
+      type: "create",
+      title: "Payments",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   const history = store.askHistory;

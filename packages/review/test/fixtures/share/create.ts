@@ -50,7 +50,11 @@ export async function createShareFixture(root: string) {
   const pins = { repositoryId: registered.id, base, head };
 
   const created = await local.store.execute({
-    operation: { type: "create", title: "Sharing pinned commits", pins },
+    operation: {
+      type: "create",
+      title: "Sharing pinned commits",
+      target: { kind: "commits", ...pins },
+    },
   });
 
   const traceId = randomUUID(),

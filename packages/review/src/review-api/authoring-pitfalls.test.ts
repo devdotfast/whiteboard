@@ -116,7 +116,11 @@ beforeEach(async () => {
   app = createReviewApi(local.store, local.data);
 
   const created = await post("/commands", {
-    operation: { type: "create", title: "Pitfalls", pins },
+    operation: {
+      type: "create",
+      title: "Pitfalls",
+      target: { kind: "commits", ...pins },
+    },
   });
 
   reviewId = created.body.reviewId!;
