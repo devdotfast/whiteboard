@@ -3,6 +3,7 @@ import type http from "node:http";
 import {
   type ReviewApiSummary,
   type ReviewGatewayHostState,
+  isJsonObject,
   parseJsonText,
 } from "@dev.fast/review-protocol";
 import { coverageModeSchema } from "@review/review-api/review-progress.js";
@@ -49,7 +50,11 @@ const lineSchema = z.discriminatedUnion("kind", [
     mode: z.enum(LIST_MODES),
     reviews: z.array(z.unknown()),
   }),
-  z.object({ kind: z.literal("review"), reviewId: z.string() }),
+  z.object({
+    kind: z.literal("review"),
+    reviewId: z.string(),
+    value: z.unknown().optional(),
+  }),
 ]);
 
 /** Where a review is read now. `undefined`: not known yet. */
@@ -62,6 +67,11 @@ export type Located =
 /** The error a request or a stream gives for a host that cannot answer. */
 export const downDetail = (down: ReviewGatewayHostState) =>
   down.detail ?? `${down.alias} is ${down.state}.`;
+
+/** A remote's snapshot is the review it was asked for, so the canvas never
+ * picks another review's sources from it. */
+export const isSnapshotOf = (value: unknown, reviewId: string) =>
+  UUID.test(reviewId) && isJsonObject(value) && value.reviewId === reviewId;
 
 const watchPath = (subscriptions: object[]) =>
   `/reviews-api/watch?subscriptions=${encodeURIComponent(JSON.stringify(subscriptions))}`;
@@ -98,6 +108,8 @@ export function createGatewayStreams(input: {
   /** Stops a laptop stream passed through while no host was set. */
   const passThrough = new Set<() => void>();
   const conflicts = new Set<string>();
+  /** `<alias> <reviewId>` pairs whose wrong snapshot was logged. */
+  const refused = new Set<string>();
   let onlineKey = "";
 
   const merge = (mode: ListMode, laptop: ReviewApiSummary[]) =>
@@ -313,9 +325,28 @@ export function createGatewayStreams(input: {
           readLines(body, (text) => {
             const line = parseLine(text);
 
+            if (line?.kind !== "review" || !ids.has(line.reviewId)) return;
+            const { reviewId, value } = line;
+
             // Forwarded as the remote sent it.
-            if (line?.kind === "review" && ids.has(line.reviewId))
-              emitReview(line.reviewId, text);
+            if (value === undefined || isSnapshotOf(value, reviewId))
+              return emitReview(reviewId, text);
+
+            if (!refused.has(`${remote.alias} ${reviewId}`)) {
+              refused.add(`${remote.alias} ${reviewId}`);
+              input.log(
+                `Refused ${remote.alias}'s update for ${reviewId}: it carried another review.`,
+              );
+            }
+
+            emitReview(
+              reviewId,
+              JSON.stringify({
+                kind: "review",
+                reviewId,
+                error: `${remote.alias} answered with another review, so the answer was refused.`,
+              }),
+            );
           }),
       });
 

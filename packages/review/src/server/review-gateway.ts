@@ -33,6 +33,7 @@ import {
   type Located,
   createGatewayStreams,
   downDetail,
+  isSnapshotOf,
 } from "./review-gateway-streams.js";
 import { serverJson } from "./review-server-core.js";
 
@@ -406,7 +407,13 @@ export function createReviewGateway(input: {
 
     out.set(REVIEW_HOST_HEADER, remote.alias);
 
-    if (options.route && PATH_ROUTES.has(options.route)) {
+    // Only a full read is a snapshot; the canvas reads no other.
+    const snapshot =
+      options.route === "" &&
+      status === 200 &&
+      url.searchParams.get("full") === "true";
+
+    if (snapshot || (options.route && PATH_ROUTES.has(options.route))) {
       let body: Buffer;
 
       try {
@@ -415,6 +422,20 @@ export function createReviewGateway(input: {
         return answer(remote.alias, 502, {
           ok: false,
           error: `${remote.alias} did not answer: ${errorText(error)}.`,
+        });
+      }
+
+      if (snapshot) {
+        if (isSnapshotOf(parseBody(body), options.reviewId))
+          return new Response(new Uint8Array(body), { status, headers: out });
+
+        log(
+          `Refused ${remote.alias}'s answer for ${options.reviewId}: it carried another review.`,
+        );
+
+        return answer(remote.alias, 502, {
+          ok: false,
+          error: `${remote.alias} answered with another review, so the answer was refused.`,
         });
       }
 
@@ -607,14 +628,9 @@ export type ReviewGateway = ReturnType<typeof createReviewGateway>;
 /** The first local-path field anywhere in a JSON answer; any unreadable
  * answer counts as one. */
 function pathField(body: Buffer): string | undefined {
-  let value: JsonValue;
+  const value = parseBody(body);
 
-  try {
-    value = parseJsonText(body.toString());
-  } catch {
-    return "an unreadable body";
-  }
-
+  if (value === undefined) return "an unreadable body";
   const pending = [value];
 
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
@@ -627,4 +643,12 @@ function pathField(body: Buffer): string | undefined {
   }
 
   return undefined;
+}
+
+function parseBody(body: Buffer): JsonValue | undefined {
+  try {
+    return parseJsonText(body.toString());
+  } catch {
+    return undefined;
+  }
 }

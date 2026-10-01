@@ -153,13 +153,17 @@ export async function startFake(
       return;
     }
 
-    const owned = options.reviewIds?.some((id) =>
+    const owned = options.reviewIds?.find((id) =>
       request.url?.startsWith(`/reviews-api/${id}`),
     );
 
     response.statusCode = owned ? 200 : 404;
     response.setHeader("content-type", "application/json");
-    response.end(owned ? "{}" : '{"ok":false,"error":"Review not found."}');
+    response.end(
+      owned
+        ? JSON.stringify({ reviewId: owned })
+        : '{"ok":false,"error":"Review not found."}',
+    );
   });
 
   server.listen(port, "127.0.0.1");

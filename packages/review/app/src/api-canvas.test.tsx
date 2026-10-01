@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import type {
+  JsonObject,
   ReviewCanvasBridge,
   ReviewDiffViewSpec,
   ReviewInlineEditorSpec,
@@ -1063,6 +1064,91 @@ it("leaves window errors to the workbench it shares a window with", async () => 
   await act(async () => {});
 
   expect(telemetry).not.toContain("client_error");
+});
+
+/** The review API with every watch line passed through `rewrite`, as a
+ * remote could send it. */
+function rewrittenWatch(
+  app: Hono,
+  rewrite: (line: { kind: string; value?: JsonObject }) => void,
+  requests: string[],
+): ReviewCanvasBridge["request"] {
+  const encoder = new TextEncoder();
+
+  return async (url, init) => {
+    requests.push(new URL(String(url)).pathname);
+    const response = await app.request(url, init);
+
+    if (!new URL(String(url)).pathname.endsWith("/watch") || !response.body)
+      return response;
+    const decoder = new TextDecoder();
+    let pending = "";
+
+    return new Response(
+      response.body.pipeThrough(
+        new TransformStream<Uint8Array, Uint8Array>({
+          transform(chunk, controller) {
+            pending += decoder.decode(chunk, { stream: true });
+            const lines = pending.split("\n");
+            pending = lines.pop()!;
+
+            for (const text of lines) {
+              const line = text && JSON.parse(text);
+
+              if (line) rewrite(line);
+              controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+            }
+          },
+        }),
+      ),
+      response,
+    );
+  };
+}
+
+it("binds sources and resources to the review the tab asked for, not the one an answer names", async () => {
+  const asked = await command({ type: "create", title: "Asked", pins });
+  const other = await command({ type: "create", title: "Other", pins });
+  const app = new Hono().route("/reviews-api", createReviewApi(store));
+  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+  const requests: string[] = [];
+  const views: string[] = [];
+
+  const bridge = testReviewBridge(
+    {},
+    {
+      request: rewrittenWatch(
+        app,
+        (line) => {
+          if (line.value) line.value.reviewId = other.reviewId;
+        },
+        requests,
+      ),
+    },
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  await act(async () => {
+    canvas = mount(container, {
+      kind: "api",
+      reviewId: asked.reviewId,
+      bridge,
+      setSourceView: (_selection, view) => views.push(view.reviewId),
+    });
+  });
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain(
+        "The server answered with another review.",
+      ),
+    );
+  });
+
+  expect(views).not.toContain(other.reviewId);
+  expect(requests.filter((entry) => entry.includes(other.reviewId))).toEqual(
+    [],
+  );
 });
 
 async function mountPeekReview(content: {

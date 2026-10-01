@@ -121,6 +121,9 @@ export function ApiCanvas({
     const lensMemory: CursorMemory = {};
 
     const show = async (snapshot: Snapshot) => {
+      // Sources and resources are this tab's review's, whatever an answer names.
+      if (snapshot.reviewId !== content.reviewId)
+        throw new Error("The server answered with another review.");
       const next = await loader.load(snapshot);
 
       if (abort.signal.aborted) return;

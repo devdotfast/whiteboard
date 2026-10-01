@@ -853,3 +853,43 @@ it("closes a client's streams to remotes when the client leaves", async () => {
   abort.abort();
   await closed.promise;
 });
+
+it("refuses a remote's review line that carries another review, once in the log", async () => {
+  const reviewId = randomUUID();
+  const other = randomUUID();
+
+  const fake = await startFake({
+    version,
+    reviewIds: [reviewId],
+    handle(request, response) {
+      if (!request.url?.startsWith("/reviews-api/watch")) return false;
+      response.setHeader("content-type", "application/x-ndjson");
+
+      for (const id of [other, "scratchpad", other])
+        response.write(
+          `${JSON.stringify({ kind: "review", reviewId, value: { reviewId: id, version: 1 } })}\n`,
+        );
+
+      return true;
+    },
+  });
+
+  const laptop = await startGateway(root, [
+    { alias: "wb-a", endpoint: fake.endpoint },
+  ]);
+
+  await expect.poll(() => laptop.gateway.hosts()[0]?.state).toBe("online");
+
+  const stream = follow(laptop.url, [{ reviewId, mode: "structural" }]);
+
+  expect(
+    errorOf(await stream.until((line) => !!errorOf(line, reviewId)), reviewId),
+  ).toBe("wb-a answered with another review, so the answer was refused.");
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  expect(stream.all.some((line) => valueOf(line, reviewId))).toBe(false);
+  expect(
+    laptop.logged.filter((line) => line.startsWith("Refused wb-a's update")),
+  ).toEqual([
+    `Refused wb-a's update for ${reviewId}: it carried another review.`,
+  ]);
+});

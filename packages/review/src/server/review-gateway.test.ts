@@ -950,3 +950,44 @@ it("holds a later remembered alias until the first alias answers", async () => {
     .toEqual({ [serverId]: { alias: "wb-a", reviewIds: [reviewId] } });
   expect(c.requests.some((entry) => entry.url?.includes(reviewId))).toBe(false);
 });
+
+it("refuses a remote's snapshot of another review, and passes its own byte for byte", async () => {
+  const reviewId = randomUUID();
+  const own = `{"reviewId":"${reviewId}",  "title":"Own"}`;
+
+  const fake = await startFake({
+    version,
+    reviewIds: [reviewId],
+    handle(request, response) {
+      if (!request.url?.startsWith(`/reviews-api/${reviewId}?`)) return false;
+      response.setHeader("content-type", "application/json");
+      response.end(
+        request.url.includes("version=")
+          ? own
+          : JSON.stringify({ reviewId: "scratchpad", title: "Other" }),
+      );
+
+      return true;
+    },
+  });
+
+  const { request, gateway, logged } = await startGateway([
+    { alias: "wb-a", endpoint: fake.endpoint },
+  ]);
+
+  await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+
+  const other = await request(`/${reviewId}?full=true`);
+  expect(other.status).toBe(502);
+  expect(await other.json()).toEqual({
+    ok: false,
+    error: "wb-a answered with another review, so the answer was refused.",
+  });
+  expect(logged).toContain(
+    `Refused wb-a's answer for ${reviewId}: it carried another review.`,
+  );
+
+  const mine = await request(`/${reviewId}?full=true&version=1`);
+  expect(mine.status).toBe(200);
+  expect(await mine.text()).toBe(own);
+});
