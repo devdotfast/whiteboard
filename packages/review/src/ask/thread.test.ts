@@ -640,6 +640,7 @@ function reopenThread(
     entries?: AskEntry[];
     onSave?: (entries: AskEntry[]) => void;
     onSession?: (sessionId: string) => void;
+    onOffer?: (offer: AskOffer) => void;
   } = {},
 ) {
   const thread = new AskThread(launch, {
@@ -652,6 +653,7 @@ function reopenThread(
     resume: { sessionId: "session", entries: saved.entries },
     onSave: saved.onSave,
     onSession: saved.onSession,
+    onOffer: saved.onOffer,
   });
 
   void thread.open();
@@ -1134,6 +1136,34 @@ it("tries a failed reopen again without asking its last question again", async (
 
   expect(prompts).toEqual([]);
   expect(state.entries).toEqual(saved);
+  thread.close();
+});
+
+it("says what it offers once its settings are known, not when the agent lists its commands first while loading", async () => {
+  const commands = [{ name: "review", description: "Review the change" }];
+
+  const { launch } = fakeAgent(
+    async () => {},
+    async (client) => {
+      // Like the real adapters: the commands come during the load, before
+      // the settings in its response.
+      await replay(client, {
+        sessionUpdate: "available_commands_update",
+        availableCommands: commands,
+      });
+    },
+  );
+
+  const offered: AskOffer[] = [];
+
+  const thread = reopenThread(launch, {
+    onOffer: (offer) => offered.push(offer),
+  });
+
+  await until(thread, ({ status }) => status === "idle");
+  expect(offered.length).toBeGreaterThan(0);
+  expect(offered.every((offer) => offer.choices.model)).toBe(true);
+  expect(offered.at(-1)?.commands).toEqual(commands);
   thread.close();
 });
 

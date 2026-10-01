@@ -1201,7 +1201,13 @@ export function createReviewApi(
     app.get("/:id/ask/agents/:agent/offer", async (context) => {
       const agent = z.enum(askAgentIds).parse(context.req.param("agent"));
       const { model } = askOfferQuerySchema.parse(context.req.query());
-      const last = store.askHistory.offer(agent);
+      const stored = store.askHistory.offer(agent);
+
+      // An offer of nothing to choose was saved before the agent's
+      // settings were known; the agent says again.
+      const last =
+        stored && Object.keys(stored.choices).length ? stored : undefined;
+
       const models = last?.choices.model;
 
       const another =
@@ -1209,9 +1215,9 @@ export function createReviewApi(
         model !== models?.current &&
         (!models || models.options.some((option) => option.value === model));
 
-      const stored = another ? store.askHistory.offer(agent, model) : last;
+      const known = another ? store.askHistory.offer(agent, model) : last;
 
-      if (stored) return context.json({ offer: stored });
+      if (known) return context.json({ offer: known });
 
       const checkout = await data.agentCheckout(
         readReview(context.req.param("id")),
