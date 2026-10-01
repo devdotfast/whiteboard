@@ -63,16 +63,18 @@ lock="$root/install.lock"
 token=${context.token}
 say() { printf '\\n%s %s\\n' ${REVIEW_REMOTE_INSTALL_SAY} "$*" >&3; }
 fail() { say FAIL "$*"; exit 3; }
+# A rename, so a reader never sees "started" half written.
+stamp() { date +%s > "$lock/started.$token" && mv -f "$lock/started.$token" "$lock/started"; }
 own() {
 	[ "$(cat "$lock/token" 2>/dev/null)" = "$token" ] || fail this install no longer holds the install lock
-	date +%s > "$lock/started"
+	stamp
 }
 guard() {
 	if command -v setsid >/dev/null 2>&1; then setsid "$@" & else "$@" & fi
 	pid=$!
 	while kill -0 "$pid" 2>/dev/null; do
 		printf '.\\n' >&3 2>/dev/null || { kill -TERM -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null; exit 3; }
-		[ "$(cat "$lock/token" 2>/dev/null)" = "$token" ] && date +%s > "$lock/started"
+		[ "$(cat "$lock/token" 2>/dev/null)" = "$token" ] && stamp
 		sleep 1
 	done
 	wait "$pid"
@@ -88,7 +90,7 @@ take() {
 	mkdir "$lock" 2>/dev/null || return 1
 	printf '%s\\n' "$token" > "$lock/token"
 	printf '%s\\n' ${shellQuote(owner)} > "$lock/owner"
-	date +%s > "$lock/started"
+	stamp
 	say LOCKED
 	exit 0
 }
@@ -98,8 +100,8 @@ held=$(cat "$lock/token" 2>/dev/null)
 started=$(cat "$lock/started" 2>/dev/null)
 case "$started" in
 ''|*[!0-9]*)
-	# Created but not yet written: by its directory's age.
-	if [ -n "$(find "$lock" -prune -mmin +${staleMinutes} 2>/dev/null)" ]; then started=0; else started=$(date +%s); fi ;;
+	# Never written (a holder that died right after mkdir): by the directory's age. Unreadable: fresh.
+	if [ ! -e "$lock/started" ] && [ -n "$(find "$lock" -prune -mmin +${staleMinutes} 2>/dev/null)" ]; then started=0; else started=$(date +%s); fi ;;
 esac
 if [ $(( $(date +%s) - started )) -ge ${staleSeconds} ]; then
 	stale="$root/install.lock.$token.stale"

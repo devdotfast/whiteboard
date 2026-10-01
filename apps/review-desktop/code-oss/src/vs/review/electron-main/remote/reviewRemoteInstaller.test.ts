@@ -19,6 +19,7 @@ import type { SpawnSsh } from "./reviewRemoteHost.js";
 import { compareVersions, installRemote, type ReviewRemoteInstallInput, type ReviewRemoteInstallProgress } from "./reviewRemoteInstaller.js";
 import {
 	lockScript,
+	refreshScript,
 	nodePlaceScript,
 	partScript,
 	REVIEW_REMOTE_INSTALL_MARKER,
@@ -396,4 +397,40 @@ test("a Node path with a quote is refused before anything runs", async (t) => {
 		/Whiteboard cannot install on devbox: .* holds a quote or backslash/,
 	);
 	assert.deepEqual(await readdir(f.home), []);
+});
+
+test("a read of the lock's start time during refreshes never finds it empty", async (t) => {
+	const f = await fixture(t);
+	const context = { home: f.home, token: "00112233aabbccdd" };
+	assert.match(await sh(f.home, lockScript(context, "me")), /LOCKED/);
+	const started = join(f.remoteRoot, "install.lock", "started");
+	// Many refreshes in a row, as `own` and `guard` do them.
+	const refreshes = sh(f.home, refreshScript(context).replace("own\n", "i=0\nwhile [ $i -lt 400 ]; do own; i=$((i + 1)); done\n"));
+	let done = false;
+	void refreshes.then(() => (done = true));
+
+	let reads = 0;
+	const bad: string[] = [];
+	while (!done) {
+		const text = await readFile(started, "utf8").catch((error: NodeJS.ErrnoException) => error.code ?? "error");
+		reads++;
+		if (!/^\d+\n$/.test(text)) bad.push(JSON.stringify(text));
+	}
+
+	assert.match(await refreshes, /REFRESHED/);
+	assert.ok(reads > 50, `${reads} reads`);
+	assert.deepEqual(bad, []);
+});
+
+test("a lock whose start time cannot be read counts as fresh", async (t) => {
+	const f = await fixture(t);
+	const lock = join(f.remoteRoot, "install.lock");
+	await mkdir(lock, { recursive: true });
+	await writeFile(join(lock, "token"), "0123456789abcdef\n");
+	await writeFile(join(lock, "owner"), "busy-laptop\n");
+	await writeFile(join(lock, "started"), "");
+	execFileSync("touch", ["-t", "202001010000", lock]);
+
+	assert.match(await sh(f.home, lockScript({ home: f.home, token: "00112233aabbccdd" }, "me")), /BUSY busy-laptop/);
+	assert.equal(await readFile(join(lock, "token"), "utf8"), "0123456789abcdef\n");
 });
