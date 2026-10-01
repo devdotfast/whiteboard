@@ -36,7 +36,7 @@ async function versionServer(t: test.TestContext, commit: string): Promise<numbe
 
 const COMMIT = "a".repeat(40);
 
-const NO_SERVER = { languageFeatures: false, languageFeaturesDetail: "Language features are unavailable on wb-test-a: The Whiteboard on this host has no VS Code server." };
+const NO_SERVER = { languageFeatures: false, languageFeaturesDetail: "The Whiteboard on this host has no VS Code server." };
 
 /** `ports` are handed out in turn as the free local ports. */
 function hostFor(
@@ -293,7 +293,7 @@ test("a remote still installing its extensions is attached again after a minute,
 		alias: "wb-test-a",
 		endpoint: { url: `http://127.0.0.1:${ports[0]}`, token: "remote-token" },
 		languageFeatures: false,
-		languageFeaturesDetail: `Language features are unavailable on wb-test-a: ${PENDING_DETAIL}`,
+		languageFeaturesDetail: PENDING_DETAIL,
 	});
 	assert.equal(clock.pending, 1);
 	assert.equal(clock.delays.at(-1), 60_000);
@@ -321,7 +321,7 @@ test("attaching again for a pending install stops after ten attaches in a row", 
 	assert.equal(clock.pending, 0);
 
 	assert.equal(ssh.of("wb-test-a", "exec").length, 10);
-	assert.equal(last()?.languageFeaturesDetail, `Language features are unavailable on wb-test-a: ${PENDING_DETAIL}`);
+	assert.equal(last()?.languageFeaturesDetail, PENDING_DETAIL);
 	assert.equal(last()?.endpoint?.url, `http://127.0.0.1:${port}`);
 });
 

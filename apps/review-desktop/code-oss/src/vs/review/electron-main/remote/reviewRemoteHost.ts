@@ -616,7 +616,8 @@ export class ReviewRemoteHost {
 		this.language = undefined;
 		const server = attach.languageServer;
 		const unavailable = (detail: string): LanguageFeatures => ({ languageFeatures: false, languageFeaturesDetail: detail });
-		if (!server) return unavailable(`Language features are unavailable on ${this.alias}: ${attach.languageServerDetail ?? "it has no VS Code server"}`);
+		// Settings says "Language features: unavailable — " before it.
+		if (!server) return unavailable(attach.languageServerDetail ?? "This host has no VS Code server.");
 		const mismatch = languageCommitMismatch(this.alias, server.commit, this.options.desktopCommit);
 		if (mismatch) return unavailable(mismatch);
 		const port = await this.options.freePort();
