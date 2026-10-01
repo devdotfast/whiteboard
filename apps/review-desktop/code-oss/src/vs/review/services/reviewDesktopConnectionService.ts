@@ -79,6 +79,8 @@ export interface IReviewDesktopConnectionService {
 	retryRemoteHost(alias: string): Promise<void>;
 	/** The forwarded VS Code server of the machine with this id, when it has language features. */
 	getRemoteLanguageEndpoint(serverId: string): Promise<ReviewRemoteLanguageEndpoint | undefined>;
+	/** Agrees to Desktop's install on a host declined earlier. */
+	installRemoteHost(alias: string): Promise<void>;
 	getTutorialStatus(): Promise<{ version: 1; reviewUuid: string | null }>;
 	prepareTutorial(): Promise<void>;
 	openTutorial(): Promise<ReviewTutorialOpenResponse>;
@@ -248,6 +250,10 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		return typeof host === "string" && Number.isInteger(port) && typeof connectionToken === "string"
 			? { host, port: port as number, connectionToken }
 			: undefined;
+	}
+
+	async installRemoteHost(alias: string): Promise<void> {
+		await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("installRemoteHost", alias);
 	}
 
 	async saveDiffrSummarizer(input: ReviewDiffrSummarizerInput): Promise<ReviewDiffrConfig> {
@@ -599,7 +605,8 @@ function parseRemoteHostStates(value: unknown): ReviewGatewayHostState[] {
 	if (!Array.isArray(value) || !value.every((host) =>
 		typeof host === "object" && host !== null &&
 		typeof host.alias === "string" && REMOTE_HOST_STATES.has(host.state) &&
-		optionalString(host.serverId) && optionalString(host.detail) && optionalString(host.installCommand))) {
+		optionalString(host.serverId) && optionalString(host.detail) && optionalString(host.installCommand) &&
+		(host.declined === undefined || host.declined === true))) {
 		throw new Error("remote hosts response is malformed.");
 	}
 	return value;

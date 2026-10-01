@@ -23,6 +23,7 @@ function fixture(values: Record<string, unknown>) {
 			listSshAliases: async () => ["devbox"],
 			readRemoteHosts: async () => [{ alias: "devbox", state: "online" }],
 			retryRemoteHost: async (alias) => { retried.push(alias); },
+			installRemoteHost: async (alias) => { retried.push(`install ${alias}`); },
 		},
 	});
 	return { hosts, writes, retried };
@@ -51,10 +52,11 @@ test("writes the aliases once each and answers with the stored list", async () =
 	assert.deepEqual(writes, [["devbox", "other"]]);
 });
 
-test("passes suggestions, states and retries through to Desktop", async () => {
+test("passes suggestions, states, retries and installs through to Desktop", async () => {
 	const { hosts, retried } = fixture({});
 	assert.deepEqual(await hosts.suggestions(), ["devbox"]);
 	assert.deepEqual(await hosts.states(), [{ alias: "devbox", state: "online" }]);
 	await hosts.retry("devbox");
-	assert.deepEqual(retried, ["devbox"]);
+	await hosts.install("devbox");
+	assert.deepEqual(retried, ["devbox", "install devbox"]);
 });

@@ -32,6 +32,7 @@ function remoteHosts(
     states: vi.fn<ReviewRemoteHostsSettings["states"]>(async () => states),
     set: vi.fn<ReviewRemoteHostsSettings["set"]>(async (aliases) => aliases),
     retry: vi.fn<ReviewRemoteHostsSettings["retry"]>(async () => {}),
+    install: vi.fn<ReviewRemoteHostsSettings["install"]>(async () => {}),
   };
 }
 
@@ -135,7 +136,7 @@ test("lists each host with its state and detail as plain text, and the install c
       .getByRole("button", { name: /^Retry / })
       .elements()
       .map((button) => button.getAttribute("aria-label")),
-  ).toEqual(["Retry box2"]);
+  ).toEqual(["Retry box2", "Retry box3"]);
 });
 
 test("says whether an online host has language features, and why not as one line of plain text", async () => {
@@ -273,6 +274,49 @@ test("offers Retry to a host that failed to authenticate, is unreachable, not in
   ).toEqual(["Retry devbox", "Retry box2", "Retry box3", "Retry box4"]);
   await page.getByRole("button", { name: "Retry box2" }).click();
   expect(hosts.retry).toHaveBeenCalledWith("box2");
+  await page.getByRole("button", { name: "Retry box3" }).click();
+  expect(hosts.retry).toHaveBeenCalledWith("box3");
+});
+
+test("shows the install step, offers Install to a declined host, and Retry after a failed install", async () => {
+  const hosts = remoteHosts(
+    ["box1", "box2", "box3"],
+    [
+      {
+        alias: "box1",
+        state: "installing",
+        detail: "Installing Node 24 (uploaded from this computer).",
+      },
+      {
+        alias: "box2",
+        state: "not-installed",
+        detail: "Whiteboard is not installed on box2.",
+        installCommand: "npm install -g @dev.fast/whiteboard@0.1.6",
+        declined: true,
+      },
+      {
+        alias: "box3",
+        state: "not-installed",
+        detail:
+          "Installing Whiteboard 0.1.6 on box3 failed at the package step: the package does not match its pinned integrity.",
+      },
+    ],
+  );
+
+  await render(hosts);
+  await vi.waitFor(() =>
+    expect(rows()[0]).toContain(
+      "installing · Installing Node 24 (uploaded from this computer).",
+    ),
+  );
+  expect(
+    page
+      .getByRole("button", { name: /^(Retry|Install) / })
+      .elements()
+      .map((button) => button.getAttribute("aria-label")),
+  ).toEqual(["Install box2", "Retry box2", "Retry box3"]);
+  await page.getByRole("button", { name: "Install box2" }).click();
+  expect(hosts.install).toHaveBeenCalledWith("box2");
   await page.getByRole("button", { name: "Retry box3" }).click();
   expect(hosts.retry).toHaveBeenCalledWith("box3");
 });
