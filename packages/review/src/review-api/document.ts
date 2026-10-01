@@ -120,19 +120,27 @@ export function explicitPins(references: { source: { pins?: SourcePins } }[]) {
   return [...seen.values()];
 }
 
-export const reviewTargetSchema = z.discriminatedUnion("kind", [
-  z.strictObject({
-    kind: z.literal("worktree"),
-    repositoryId: label,
-    base: label.optional(),
-  }),
-  z.strictObject({
-    kind: z.literal("commits"),
-    repositoryId: label,
-    head: label,
-    base: label.optional(),
-  }),
-]);
+const targets = <Repository extends Record<string, z.ZodType>>(
+  repository: Repository,
+) =>
+  z.discriminatedUnion("kind", [
+    z.strictObject({
+      kind: z.literal("worktree"),
+      ...repository,
+      base: label.optional(),
+    }),
+    z.strictObject({
+      kind: z.literal("commits"),
+      ...repository,
+      head: label,
+      base: label.optional(),
+    }),
+  ]);
+
+export const reviewTargetSchema = targets({ repositoryId: label });
+
+/** How agents name a target: by the checkout's path, registered on acceptance. */
+export const pathTargetSchema = targets({ repositoryPath: label });
 
 export type ReviewTarget = z.infer<typeof reviewTargetSchema>;
 

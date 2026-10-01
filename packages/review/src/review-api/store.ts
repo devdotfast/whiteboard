@@ -1008,7 +1008,7 @@ export class ReviewStore {
 
         if (op.repositoryId && op.target)
           throw new ReviewInputError(
-            "repositoryId applies only to a create from pullRequestUrl alone; put it in the target instead.",
+            "A checkout for the PR applies only to a create from pullRequestUrl alone; name it in the target instead.",
           );
 
         if (!op.title && op.target)

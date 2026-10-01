@@ -1623,9 +1623,15 @@ export function createReviewApi(
   };
 
   app.post("/commands", async (context) => {
-    const { command: request, open: requestedOpen } = takeCreateOpen(
+    const { command: body, open: requestedOpen } = takeCreateOpen(
       await readBoundedRequestJson(context.req.raw),
     );
+
+    const request = await locateRepositories(body, (path) => {
+      if (!data) throw new ReviewInputError("Repositories are unavailable.");
+
+      return data.register(path);
+    });
 
     const input = commandSchema.parse(request);
 
@@ -1744,6 +1750,44 @@ function takeCreateOpen(body: unknown) {
   const { open, ...operation } = create.data.operation;
 
   return { command: { ...create.data, operation }, open };
+}
+
+/**
+ * Agents name a checkout by its path (pathTargetSchema, and repositoryPath on
+ * a create from a PR); the store keeps the id it registers as. A command that
+ * already names ids is left as it is.
+ */
+async function locateRepositories(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Request body boundary: commandSchema parses the result.
+  body: unknown,
+  register: (path: string) => Promise<{ id: string }>,
+) {
+  const located = z
+    .looseObject({
+      operation: z.looseObject({
+        type: z.enum(["create", "set_target"]),
+        target: z.looseObject({ repositoryPath: z.string() }).optional(),
+        repositoryPath: z.string().optional(),
+      }),
+    })
+    .safeParse(body);
+
+  if (!located.success) return body;
+  const { target, repositoryPath, ...operation } = located.data.operation;
+
+  const byId = async <Named extends { repositoryPath: string }>({
+    repositoryPath: path,
+    ...rest
+  }: Named) => ({ ...rest, repositoryId: (await register(path)).id });
+
+  return {
+    ...located.data,
+    operation: {
+      ...operation,
+      ...(target && { target: await byId(target) }),
+      ...(repositoryPath && (await byId({ repositoryPath }))),
+    },
+  };
 }
 
 /** Send committed state, coalescing updates when the reader falls behind. */

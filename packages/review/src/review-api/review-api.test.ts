@@ -1669,7 +1669,7 @@ describe("create for a pull request", () => {
           repositoryId: "repo",
         }),
       ),
-    ).rejects.toThrow(/repositoryId applies only/);
+    ).rejects.toThrow(/checkout for the PR applies only/);
     expect(store.list()).toEqual([]);
   });
 });
