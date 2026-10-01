@@ -608,6 +608,10 @@ export interface ReviewRemoteHostsSettings {
   ): Promise<ReviewRemoteAgentResult[]>;
 }
 
+/** The line that marks `~/.local/bin/whiteboard` on a remote host as the launcher Desktop writes and replaces with each install. */
+export const REVIEW_REMOTE_WRAPPER_MARK =
+  "# Written by Whiteboard Desktop, which replaces it with each install.";
+
 /** The agents `whiteboard connect --detect` finds and `--yes` connects: trace-core's harnesses. */
 export const REVIEW_REMOTE_AGENT_IDS = [
   "claude",

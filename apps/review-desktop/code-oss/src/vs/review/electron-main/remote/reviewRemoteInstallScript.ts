@@ -3,6 +3,10 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { REVIEW_REMOTE_WRAPPER_MARK } from "../../common/reviewProtocol.js";
+
+export { REVIEW_REMOTE_WRAPPER_MARK };
+
 /**
  * The installer's steps on the remote: short POSIX sh scripts sent to `sh -s`,
  * each run while the laptop holds the install lock. Every script first checks
@@ -18,8 +22,6 @@
 
 export const REVIEW_REMOTE_INSTALL_SAY = "WHITEBOARD-INSTALL";
 export const REVIEW_REMOTE_INSTALL_MARKER = ".whiteboard-install.json";
-/** The line that marks `~/.local/bin/whiteboard` as Desktop's to replace. */
-export const REVIEW_REMOTE_WRAPPER_MARK = "# Written by Whiteboard Desktop, which replaces it with each install.";
 /** A lock not refreshed for this long is taken over; every step refreshes it. */
 export const REVIEW_REMOTE_LOCK_STALE_SECONDS = 15 * 60;
 

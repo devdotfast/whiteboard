@@ -14,7 +14,7 @@ import {
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
 
-import { CONNECT_COMMANDS } from "./connect-prompts";
+import { CONNECT_COMMANDS, type ConnectCommand } from "./connect-prompts";
 import { isDirectory } from "./fs-utils";
 
 /** The harnesses this machine can be found to have, and connected without a person: trace-core's. */
@@ -96,11 +96,21 @@ export async function connectAgents(
     const deadline = Date.now() + (input.timeoutMs ?? AGENT_CONNECT_TIMEOUT_MS);
     let output = "";
 
-    for (const { argv } of CONNECT_COMMANDS[id]) {
+    const commands: readonly ConnectCommand[] = CONNECT_COMMANDS[id];
+
+    for (const { argv, ifAny } of commands) {
       const left = deadline - Date.now();
 
       if (left <= 0) break;
-      output += `$ ${argv.join(" ")}\n${await run(argv, input.env, left)}`;
+      const step = await run(argv, input.env, left);
+
+      output += `$ ${argv.join(" ")}\n${step.output}`;
+
+      // A cleanup runs only after the install before it worked: a failed install never removes a working registration.
+      if (!step.ok && !ifAny) {
+        output += `Stopped: ${argv.join(" ")} failed.\n`;
+        break;
+      }
     }
 
     results.push({
@@ -122,10 +132,10 @@ const ClaudePluginsSchema = z.object({
 });
 
 const CodexConfigSchema = z.object({
-  plugins: z
-    .record(z.string(), z.object({ enabled: z.boolean().optional() }))
-    .optional(),
+  plugins: z.record(z.string(), z.unknown()).optional(),
 });
+
+const CodexPluginSchema = z.object({ enabled: z.boolean().optional() });
 
 const PiSettingsSchema = z.object({
   packages: z.array(
@@ -164,11 +174,15 @@ async function connected(
       }
 
       case "codex": {
-        const plugin = CodexConfigSchema.parse(
+        const entry = CodexConfigSchema.parse(
           parseToml(await read("config.toml")),
         ).plugins?.[WHITEBOARD_PLUGIN];
 
-        return plugin !== undefined && plugin.enabled !== false;
+        // Other plugins' entries are not read: an odd one never hides this one.
+        return (
+          entry !== undefined &&
+          CodexPluginSchema.parse(entry).enabled !== false
+        );
       }
 
       case "opencode": {
@@ -216,11 +230,12 @@ async function run(
   argv: readonly string[],
   env: NodeJS.ProcessEnv,
   timeoutMs: number,
-): Promise<string> {
+): Promise<{ output: string; ok: boolean }> {
   const [command = "", ...args] = argv;
   const file = await onPath(command, env);
 
-  if (!file) return `${command} was not found on PATH.\n`;
+  if (!file)
+    return { output: `${command} was not found on PATH.\n`, ok: false };
 
   return new Promise((resolve) => {
     let output = "";
@@ -250,14 +265,17 @@ async function run(
     child.stderr.on("data", keep);
     child.once("error", (error) => {
       clearTimeout(timer);
-      resolve(`${output}${error.message}\n`);
+      resolve({ output: `${output}${error.message}\n`, ok: false });
     });
     child.once("close", (code) => {
       clearTimeout(timer);
       resolve(
         code === 0
-          ? output
-          : `${output}${output.endsWith("\n") || !output ? "" : "\n"}(exit ${code ?? "signal"})\n`,
+          ? { output, ok: true }
+          : {
+              output: `${output}${output.endsWith("\n") || !output ? "" : "\n"}(exit ${code ?? "signal"})\n`,
+              ok: false,
+            },
       );
     });
   });

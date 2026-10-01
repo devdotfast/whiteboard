@@ -164,33 +164,66 @@ describe("connectAgents", () => {
     expect(await readFile(codexConfig, "utf8")).toBe('model = "x"\n');
   });
 
-  it("runs Claude Code's plugin install, whose MCP launch is the launcher, and tolerates a missing old registration", async () => {
-    const { homeDir, bin, env } = await fakeHome();
-    await mkdir(path.join(homeDir, ".claude"));
+  /** A `claude` whose `mcp remove` drops a hand-made registration file, and whose install `exits`. */
+  async function claudeHome(installExit: number) {
+    const home = await fakeHome();
+    const registration = path.join(home.homeDir, ".claude.json");
+    await mkdir(path.join(home.homeDir, ".claude"));
+    await writeFile(registration, '{"mcpServers":{"whiteboard":{}}}');
     await fakeCli(
-      bin,
+      home.bin,
       "claude",
       `case "$2" in
-install) mkdir -p "$HOME/.claude/plugins" && echo '{"version":2,"plugins":{"whiteboard@devfast":[{"scope":"user"}]}}' > "$HOME/.claude/plugins/installed_plugins.json" ;;
-remove) echo "No MCP server named whiteboard" >&2; exit 1 ;;
+install) [ ${installExit} = 0 ] || { echo "network down" >&2; exit ${installExit}; }
+  mkdir -p "$HOME/.claude/plugins" && echo '{"version":2,"plugins":{"whiteboard@devfast":[{"scope":"user"}]}}' > "$HOME/.claude/plugins/installed_plugins.json" ;;
+remove) rm "$HOME/.claude.json"; echo "Removed" ;;
 esac`,
     );
 
-    const [result] = await connectAgents({
-      agents: ["claude"],
-      homeDir,
-      env,
-    });
+    return { ...home, registration };
+  }
+
+  it("replaces an old registration only once the plugin is installed", async () => {
+    const { homeDir, env, registration } = await claudeHome(0);
+
+    const [result] = await connectAgents({ agents: ["claude"], homeDir, env });
 
     expect(result).toMatchObject({ id: "claude", connected: true });
+    await expect(readFile(registration, "utf8")).rejects.toThrow("ENOENT");
+  });
+
+  it("stops at a failed install, and keeps the old registration", async () => {
+    const { homeDir, env, registration } = await claudeHome(1);
+
+    const [result] = await connectAgents({ agents: ["claude"], homeDir, env });
+
+    expect(result).toMatchObject({ id: "claude", connected: false });
+    expect(result?.output).toContain("network down");
+    expect(result?.output).toContain(
+      "Stopped: claude plugin install whiteboard@devfast --scope user failed.",
+    );
+    expect(await readFile(registration, "utf8")).toContain("whiteboard");
     expect(
-      (await readFile(path.join(homeDir, "calls.log"), "utf8")).split("\n"),
-    ).toEqual([
-      "claude plugin marketplace add devdotfast/whiteboard",
-      "claude plugin install whiteboard@devfast --scope user",
-      "claude mcp remove -s user whiteboard",
-      "",
-    ]);
+      await readFile(path.join(homeDir, "calls.log"), "utf8"),
+    ).not.toContain("mcp remove");
+  });
+
+  it("tolerates a cleanup that finds nothing to remove", async () => {
+    const { homeDir, bin, env } = await fakeHome();
+    await mkdir(path.join(homeDir, ".codex"));
+    await fakeCli(
+      bin,
+      "codex",
+      `case "$1 $2" in
+"plugin add") printf '[plugins."whiteboard@devfast"]\nenabled = true\n' > "$HOME/.codex/config.toml" ;;
+"mcp remove") echo "No MCP server named whiteboard" >&2; exit 1 ;;
+esac`,
+    );
+
+    const [result] = await connectAgents({ agents: ["codex"], homeDir, env });
+
+    expect(result).toMatchObject({ id: "codex", connected: true });
+    expect(result?.output).not.toContain("Stopped");
   });
 
   it("judges by the harness's record afterwards, and reports a failure with its output", async () => {

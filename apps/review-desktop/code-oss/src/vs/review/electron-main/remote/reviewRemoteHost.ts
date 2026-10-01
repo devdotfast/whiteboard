@@ -764,7 +764,7 @@ export class ReviewRemoteHost {
 		if (generation !== this.generation || this.disposed) return undefined;
 		const agents = parseRemoteAgents(result.stdout);
 		if (!agents) {
-			this.options.log(`${this.alias}: could not read its agents: ${result.timedOut ? "no answer within 10 seconds" : plain(firstLines(result.stderr)) || `exit ${result.code ?? "none"}`}.`);
+			this.options.log(`${this.alias}: could not read its agents: ${result.timedOut ? `no answer within ${this.timeouts.agents / 1000} seconds` : plain(firstLines(result.stderr)) || `exit ${result.code ?? "none"}`}.`);
 			return undefined;
 		}
 		return (this.agents = agents);
@@ -781,7 +781,8 @@ export class ReviewRemoteHost {
 			}
 		}
 		const env = this.env;
-		if (!this.master || !env || !wanted.length) return [];
+		if (!wanted.length) return [];
+		if (!this.master || !env) throw new Error(`The connection to ${this.alias} dropped; connect again to connect its agents.`);
 		const generation = this.generation;
 		const result = await this.run(sshExecArgs(this.options.session, env), this.timeouts.agentConnect * wanted.length, remoteConnectScript(this.cli, ["--yes", "--json", ...(wanted as string[])]));
 		const results = parseRemoteConnect(result.stdout);

@@ -11,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { PassThrough, Readable } from "node:stream";
 
+import { REVIEW_REMOTE_WRAPPER_MARK } from "@dev.fast/review-protocol";
 import {
   StoreClient,
   runTraceSessions as runTraceSessionsActual,
@@ -121,7 +122,7 @@ describe("Whiteboard CLI", () => {
         await mkdir(path.join(home, ".local", "bin"), { recursive: true });
         await writeFile(
           path.join(home, ".local", "bin", "whiteboard"),
-          `#!/bin/sh\n# Written by Whiteboard Desktop, which replaces it with each install.\nexec '${home}/.dev/whiteboard-remote/versions/0.1.6/whiteboard' "$@"\n`,
+          `#!/bin/sh\n${REVIEW_REMOTE_WRAPPER_MARK}\nexec '${home}/.dev/whiteboard-remote/versions/0.1.6/whiteboard' "$@"\n`,
         );
       },
     );
