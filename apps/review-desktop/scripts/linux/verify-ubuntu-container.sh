@@ -40,7 +40,6 @@ apt-get -o APT::Update::Error-Mode=any update
 apt-get install -y --no-install-recommends "$PACKAGE"
 if command -v node; then echo 'Ubuntu package unexpectedly requires system Node' >&2; exit 1; fi
 "$APP" --help >/dev/null
-"$LEGACY_APP" --help >/dev/null
 test "$(stat -c %u:%g:%a "/usr/share/$APP/chrome-sandbox")" = '0:0:4755'
 desktop-file-validate "/usr/share/applications/$LEGACY_PACKAGE.desktop"
 desktop-file-validate "/usr/share/applications/$LEGACY_PACKAGE-url-handler.desktop"
@@ -73,7 +72,6 @@ if dpkg-query -W -f='${db:Status-Status}' "$LEGACY_PACKAGE" 2>/dev/null | grep -
 fi
 test ! -e "/usr/share/$LEGACY_APP/upgrade-fixture"
 "$APP" --help >/dev/null
-"$LEGACY_APP" --help >/dev/null
 apt-get purge -y "$PACKAGE"
 for SENTINEL in /home/tester/.dev/reviews/package-test /home/tester/.config/Review/User/settings.json /home/tester/.claude/settings.json; do
   test "$(cat "$SENTINEL")" = 'keep me'

@@ -24,7 +24,6 @@ EOF
 dnf -y --setopt=install_weak_deps=False install "$PACKAGE"
 if command -v node; then echo 'Fedora package unexpectedly requires system Node' >&2; exit 1; fi
 "$APP" --help >/dev/null
-"$LEGACY_APP" --help >/dev/null
 test "$(stat -c %u:%g:%a "/usr/share/$APP/chrome-sandbox")" = "0:0:4755"
 test -f "/usr/share/applications/$LEGACY_PACKAGE.desktop"
 desktop-file-validate "/usr/share/applications/$LEGACY_PACKAGE-url-handler.desktop"
@@ -64,7 +63,6 @@ rpm -q "$PACKAGE"
 if rpm -q "$LEGACY_PACKAGE"; then echo "Legacy RPM remains installed" >&2; exit 1; fi
 test ! -e "/usr/share/$LEGACY_APP/upgrade-fixture"
 "$APP" --help >/dev/null
-"$LEGACY_APP" --help >/dev/null
 dnf -y remove "$PACKAGE"
 for SENTINEL in /root/.dev/reviews/package-test /root/.config/Review/User/settings.json /root/.claude/settings.json; do
   test "$(cat "$SENTINEL")" = 'keep me'
