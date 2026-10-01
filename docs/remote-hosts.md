@@ -148,6 +148,8 @@ laptop:
 - It cannot read or write the clipboard, change your settings, download to the
   laptop, show a webview, or edit or save documents through the window. The
   code in a review stays read-only in the window.
+- It reads the settings its own manifest declares, including the values you
+  set for them, and none of your other settings.
 - It may show notifications, dialogs and prompts, because you act on those
   yourself. Links in them lead only to `http`, `https` and `mailto`.
 
