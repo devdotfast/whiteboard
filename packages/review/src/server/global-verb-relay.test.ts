@@ -318,7 +318,7 @@ describe("global Review Desktop verb relay", () => {
       const [failing] = attachAll(timeoutRelay, 1);
 
       const failedThenTimedOut = timeoutRelay.dispatch({
-        name: "focusCanvas",
+        name: "focusWindow",
         args: {},
       });
 
