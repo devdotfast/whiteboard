@@ -162,6 +162,10 @@ if (args[0] === 'config' && args[1] === 'schema' && process.env.FAIL_SCHEMA) {
   const keys = args[2].split('.'); let object = config;
   for (const part of keys.slice(0,-1)) object = object[part];
   let value = args[3]; try { value = JSON.parse(value); } catch {}
+  // diffr 0.1.10 clears a provider's own settings when the provider changes.
+  if (process.env.FAKE_RESET && args[2].endsWith('.provider') && object.provider !== value) {
+    for (const option of ['api_key', 'endpoint', 'model']) delete object[option];
+  }
   object[keys.at(-1)] = value;
   fs.writeFileSync(state, JSON.stringify(config));
  } else if (!args.includes('--no-index')) {
@@ -592,4 +596,33 @@ test("the synthetic test lets diffr derive the draft provider's details", async 
   expect(
     await readFile(path.join(fake.root, "test-config"), "utf8"),
   ).not.toContain("provider_details");
+});
+
+test("a custom endpoint kept across a provider switch survives diffr clearing it", async () => {
+  const fake = await fakeDiffr();
+  vi.stubEnv("FAKE_RESET", "1");
+
+  const gateway = {
+    ...draft,
+    enabled: false,
+    endpoint: "https://gateway.example/v1",
+  };
+
+  await saveDiffrSummarizer({
+    ...gateway,
+    provider: "anthropic",
+    apiKey: "anthropic-key",
+  });
+  await saveDiffrSummarizer({
+    ...gateway,
+    provider: "openai",
+    apiKey: "openai-key",
+  });
+  expect(
+    JSON.parse(await readFile(fake.state, "utf8")).plugins.bundled.summarize,
+  ).toMatchObject({
+    provider: "openai",
+    endpoint: "https://gateway.example/v1",
+    api_key: "openai-key",
+  });
 });

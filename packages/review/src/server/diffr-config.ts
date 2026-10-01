@@ -246,7 +246,7 @@ async function writeSettings(
 ): Promise<ReviewDiffrConfig> {
   let changed = false;
   let error: string | undefined;
-  const current = await values(rootPath);
+  let current = await values(rootPath);
 
   try {
     for (const [key, value] of entries) {
@@ -256,6 +256,8 @@ async function writeSettings(
         rootPath,
       );
       changed = true;
+      // A write can clear others, such as a provider's endpoint and key.
+      current = await values(rootPath);
     }
   } catch {
     error = changed
@@ -320,7 +322,12 @@ export function saveDiffrSummarizer(
     if (moving && savedKey) entries.push([`${prefix}.api_key`, ""]);
     entries.push([`${prefix}.provider`, draft.provider]);
 
-    if (draft.endpoint !== savedEndpoint(current.values))
+    // diffr clears a provider's endpoint when the provider changes, so a
+    // custom one kept across a switch is written again.
+    if (
+      draft.endpoint !== savedEndpoint(current.values) ||
+      (draft.endpoint && draft.provider !== savedProvider(current.values))
+    )
       entries.push([`${prefix}.endpoint`, draft.endpoint]);
 
     if (draft.apiKey) entries.push([`${prefix}.api_key`, draft.apiKey]);
