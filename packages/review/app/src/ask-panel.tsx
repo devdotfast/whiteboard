@@ -572,15 +572,13 @@ export function AskPanelContent({
 
       <AskComposer
         inputRef={composer}
-        placeholder={`${
-          threadId || savedThreadId
-            ? "Ask a follow-up"
-            : `Ask ${chosen?.name ?? "an agent"} about this selection`
-        } · ${
+        placeholders={askPlaceholders(
+          Boolean(threadId || savedThreadId),
+          chosen?.name ?? "an agent",
           (thread?.commands ?? offered?.commands)?.length
             ? "/ for commands, @ for files"
-            : "@ for files"
-        }`}
+            : "@ for files",
+        )}
         disabled={thread?.status === "failed"}
         canAsk={Boolean(agent) && !busy}
         stop={busy && threadId ? stop : undefined}
@@ -602,6 +600,20 @@ export function AskPanelContent({
       />
     </div>
   );
+}
+
+/** What the question says before it is written, longest first: a narrow
+ * panel or window drops the hint, then shortens the question. */
+function askPlaceholders(
+  followUp: boolean,
+  agentName: string,
+  hint: string,
+): string[] {
+  if (followUp) return [`Ask a follow-up · ${hint}`, "Ask a follow-up…"];
+
+  const lead = `Ask ${agentName} about this selection`;
+
+  return [`${lead} · ${hint}`, `${lead}…`, "Ask about this selection…"];
 }
 
 function composerStatus(thread: AskThreadState | null, busy: boolean) {

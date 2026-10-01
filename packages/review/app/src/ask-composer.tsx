@@ -15,6 +15,7 @@ import {
   type RefObject,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -88,6 +89,60 @@ function completionAt(draft: string, caret: number): Completion | null {
   };
 }
 
+/**
+ * The first of the placeholders, longest first, that keeps the empty question
+ * on one line; the last when none does. The question grows to fit its
+ * placeholder, so one that wraps would make it two lines tall.
+ */
+function useFittingPlaceholder(
+  input: RefObject<HTMLTextAreaElement | null>,
+  placeholders: readonly string[],
+  empty: boolean,
+): string {
+  const key = placeholders.join("\n");
+  const [fitting, setFitting] = useState(0);
+
+  useLayoutEffect(() => {
+    const question = input.current;
+    const row = question?.parentElement;
+
+    if (!question || !row || !empty) return;
+    const candidates = key.split("\n");
+
+    const measure = () => {
+      const line = parseFloat(getComputedStyle(question).lineHeight);
+
+      const fits = candidates.findIndex((candidate) => {
+        question.placeholder = candidate;
+
+        return question.offsetHeight <= line + 1;
+      });
+
+      const chosen = fits === -1 ? candidates.length - 1 : fits;
+
+      question.placeholder = candidates[chosen]!;
+      setFitting(chosen);
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+
+    observer.observe(row);
+    let live = true;
+
+    // The serif may load after the first measure, at a different width.
+    if ("fonts" in document)
+      void document.fonts.ready.then(() => live && measure());
+
+    return () => {
+      live = false;
+      observer.disconnect();
+    };
+  }, [input, key, empty]);
+
+  return placeholders[Math.min(fitting, placeholders.length - 1)]!;
+}
+
 /** The checkout's files matching a query, asked for as the reviewer types. */
 function useFiles(
   completion: Completion | null,
@@ -125,7 +180,7 @@ function useFiles(
  */
 export function AskComposer({
   inputRef,
-  placeholder,
+  placeholders,
   disabled,
   canAsk,
   stop,
@@ -139,7 +194,8 @@ export function AskComposer({
   onAsk,
 }: {
   inputRef: RefObject<HTMLTextAreaElement | null>;
-  placeholder: string;
+  /** Longest first: the first that fits on one line shows. */
+  placeholders: readonly string[];
   disabled: boolean;
   /** Whether a question can go now: an agent is chosen and none is busy. */
   canAsk: boolean;
@@ -167,6 +223,12 @@ export function AskComposer({
   const [dismissed, setDismissed] = useState<string | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const listId = useId();
+
+  const placeholder = useFittingPlaceholder(
+    inputRef,
+    placeholders,
+    draft === "",
+  );
 
   const completion = dismissed === draft ? null : completionAt(draft, caret);
   const paths = useFiles(completion, findFiles);
