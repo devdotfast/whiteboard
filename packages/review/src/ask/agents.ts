@@ -9,9 +9,11 @@ import { Readable, Writable } from "node:stream";
 import {
   type ClientApp,
   type ClientConnection,
+  type McpServer,
   type NewSessionRequest,
   ndJsonStream,
 } from "@agentclientprotocol/sdk";
+import { piTakesMcp, piWithMcp } from "@review/ask/pi-mcp.js";
 import { type AskAgentId, askAgentIds } from "@review/ask/thread-state.js";
 
 /** How Whiteboard runs an agent that speaks ACP on stdio. */
@@ -43,10 +45,25 @@ interface AskAgentSpec {
   env?: Record<string, string>;
   /** Signs the user's CLI in again, run in a terminal. */
   signIn: string;
+  /** How its model gets the MCP servers a session is given, where its
+   * adapter keeps them; without it, the adapter passes them on. */
+  mcp?: AskAgentMcp;
   /** How it edits and runs commands without asking, in place of its
    * read-only mode and settings, when the reviewer bypasses permissions.
    * Whiteboard also allows whatever it still asks. */
   bypass?: AskAgentBypass;
+}
+
+interface AskAgentMcp {
+  /** Whether this install can take them. */
+  supported(executable: string): Promise<boolean>;
+  /** What the adapter runs in place of the user's CLI to give them, with
+   * what it needs in `env`. */
+  launch(
+    executable: string,
+    servers: McpServer[],
+    env: NodeJS.ProcessEnv,
+  ): Promise<string>;
 }
 
 export interface AskAgentBypass {
@@ -152,6 +169,7 @@ export const askAgents: Record<AskAgentId, AskAgentSpec> = {
     },
     // Pi signs in from its own prompt, with /login.
     signIn: "pi",
+    mcp: { supported: piTakesMcp, launch: piWithMcp },
     // Pi never asks before it edits or runs a command, and has no mode that
     // stops it.
   },
@@ -178,7 +196,11 @@ export interface AskAgentProcess {
 export type AskAgentLauncher = (
   agent: AskAgentId,
   cwd: string,
-  options?: { bypass?: boolean },
+  options?: {
+    bypass?: boolean;
+    /** The MCP servers its sessions are given. */
+    mcpServers?: McpServer[];
+  },
 ) => Promise<AskAgentProcess>;
 
 /** Desktop inherits the login shell's PATH, so this sees what a terminal sees.
@@ -248,7 +270,7 @@ const STDERR_LIMIT = 8_000;
 export const launchAskAgent: AskAgentLauncher = async (
   agent,
   cwd,
-  { bypass = false } = {},
+  { bypass = false, mcpServers = [] } = {},
 ) => {
   const spec = askAgents[agent];
   const executable = await findAgent(spec);
@@ -270,7 +292,10 @@ export const launchAskAgent: AskAgentLauncher = async (
   let args: string[];
 
   if ("adapter" in launch) {
-    env[launch.executableEnv] = executable;
+    env[launch.executableEnv] =
+      spec.mcp && mcpServers.length && (await spec.mcp.supported(executable))
+        ? await spec.mcp.launch(executable, mcpServers, env)
+        : executable;
 
     if (process.versions.electron) env.ELECTRON_RUN_AS_NODE = "1";
     command = process.execPath;

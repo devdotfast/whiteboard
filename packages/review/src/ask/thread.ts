@@ -507,6 +507,7 @@ export class AskThread {
 
     const launched = await this.launch(this.start.agent, this.start.cwd, {
       bypass: this.state.bypass,
+      mcpServers: this.mcpServers,
     });
 
     // Closed, stopped or given up on while the process started.
