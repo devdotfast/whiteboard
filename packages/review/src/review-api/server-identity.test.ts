@@ -80,7 +80,12 @@ it("resets the id without changing any review id", async () => {
     operation: {
       type: "create",
       title: "Kept",
-      pins: { repositoryId: "repo", base: "base", head: "head" },
+      target: {
+        kind: "commits",
+        repositoryId: "repo",
+        base: "base",
+        head: "head",
+      },
     },
   });
 

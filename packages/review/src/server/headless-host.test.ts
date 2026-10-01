@@ -679,7 +679,12 @@ it("reports attached Desktops and sends each the reviews to open", async () => {
       operation: {
         type: "create",
         title: "Opened remotely",
-        pins: { repositoryId: registered.id, base: repo.base, head: repo.head },
+        target: {
+          kind: "commits",
+          repositoryId: registered.id,
+          base: repo.base,
+          head: repo.head,
+        },
         open: false,
       },
     });

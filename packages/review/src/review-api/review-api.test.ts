@@ -1617,7 +1617,7 @@ describe("create for a pull request", () => {
   it("needs a source, and a title unless a PR supplies it", async () => {
     await expect(
       store.execute(request({ type: "create", title: "Nothing" })),
-    ).rejects.toThrow(/target, legacy pins, or a pullRequestUrl/);
+    ).rejects.toThrow(/Supply a target or a pullRequestUrl/);
     await expect(
       store.execute(
         request({ type: "create", target: { kind: "commits", ...pins } }),

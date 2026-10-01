@@ -1125,7 +1125,12 @@ it("leaves window errors to the workbench it shares a window with", async () => 
 });
 
 it("builds the full diff only once the Diff view is shown", async () => {
-  const review = await command({ type: "create", title: "Lazy diff", pins });
+  const review = await command({
+    type: "create",
+    title: "Lazy diff",
+    target: { kind: "commits", ...pins },
+  });
+
   const app = new Hono().route("/reviews-api", createReviewApi(store));
 
   app.get("/reviews-api/:id/commits", (context) => context.json([]));
