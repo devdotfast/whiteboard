@@ -74,6 +74,30 @@ export interface AskPanel {
   view: AskView;
 }
 
-export type ReviewPanel = PeekPanel | AskPanel;
+/** Where Ask shows: in the side panel, or in a window over the canvas that
+ * stays above peeks, fullscreen diagrams and every view. */
+export type AskPlace = "docked" | "window";
+
+/** How Ask shows now: in the side panel, in its window, or as a pill that
+ * says what the agent is doing. A docked Ask that a peek or a fullscreen
+ * diagram covers shows as the pill. */
+export type AskShown = "panel" | "window" | "pill";
+
+/** Where Ask floats, shared by its window and its pill: a corner of the
+ * canvas beside any docked panel, and how far the same corner of the window
+ * or pill is from it. Keeping to a corner, Ask moves aside as a panel docks
+ * and follows the canvas as it resizes. */
+export interface AskAnchor {
+  x: "left" | "right";
+  y: "top" | "bottom";
+  dx: number;
+  dy: number;
+}
+
+/** How big the reviewer made Ask's window. */
+export interface AskSize {
+  width: number;
+  height: number;
+}
 
 export type ReviewPanelMotion = "live" | "restored";

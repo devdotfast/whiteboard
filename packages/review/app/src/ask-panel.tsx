@@ -51,6 +51,7 @@ import { AskPermission } from "./ask-permission";
 import { AskSetup, AskSignIn } from "./ask-setup";
 import { useLatest, useThread } from "./ask-thread-stream";
 import { AskAgentTurn, AskWorking, turns } from "./ask-turn";
+import type { AskPresence } from "./ask-window";
 import { useReviewSession } from "./host/review-session";
 import { formatRelativeTime } from "./review-home-view";
 import { useOptionalReviewPanelStore } from "./review-panel";
@@ -84,11 +85,14 @@ export function AskPanelContent({
   selection,
   agent: requestedAgent,
   savedThreadId,
+  onPresence,
 }: {
   selection: AgentSelection;
   agent?: AskAgentId;
   /** A saved conversation to reopen instead of asking a new question. */
   savedThreadId?: string;
+  /** What the pill says while the conversation is out of sight. */
+  onPresence?: (presence: AskPresence) => void;
 }): ReactElement {
   const session = useReviewSession();
   const agents = useAskAgents(session);
@@ -398,6 +402,43 @@ export function AskPanelContent({
     (!thread || thread.status === "starting");
 
   const agentName = thread?.agentName ?? chosenName;
+
+  // Before the agents load, the pill names Ask.
+  const pillName = thread?.agentName ?? chosen?.name ?? "Ask";
+
+  const presence: AskPresence =
+    thread?.status === "waiting"
+      ? { agentName: pillName, status: "Needs your approval", tone: "waiting" }
+      : thread?.status === "failed" || error
+        ? { agentName: pillName, status: "Stopped", tone: "failed" }
+        : {
+            agentName: pillName,
+            status: connecting
+              ? "Connecting…"
+              : busy
+                ? composerStatus(thread, busy)
+                : thread
+                  ? "Answered"
+                  : "New question",
+            tone: "quiet",
+          };
+
+  const presenceAgent = thread?.agent ?? agent;
+
+  useEffect(() => {
+    onPresence?.({
+      agent: presenceAgent,
+      agentName: presence.agentName,
+      status: presence.status,
+      tone: presence.tone,
+    });
+  }, [
+    onPresence,
+    presenceAgent,
+    presence.agentName,
+    presence.status,
+    presence.tone,
+  ]);
 
   // Until the agent says, what its kind of agent does: a starting thread
   // has not yet been put in its read-only mode.

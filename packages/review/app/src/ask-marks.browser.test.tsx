@@ -38,9 +38,7 @@ let view: unknown;
 let outdated: ReadonlySet<string> | undefined;
 
 function Probe() {
-  view = useReviewPanel(({ active }) =>
-    active?.kind === "ask" ? active.view : null,
-  );
+  view = useReviewPanel(({ ask }) => ask?.view ?? null);
   outdated = useAskHistory()?.outdated;
 
   return null;

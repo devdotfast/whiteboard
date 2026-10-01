@@ -3,7 +3,7 @@ import type { AnchorRef } from "@review/authoring";
 import { describe, expect, it } from "vitest";
 
 import type { ReviewPeekContent } from "./review-panel-model";
-import { createReviewPanelStore } from "./review-panel-store";
+import { askShown, createReviewPanelStore } from "./review-panel-store";
 
 const anchor = {
   id: "startup",
@@ -20,6 +20,56 @@ const commit = {
   subject: "Add startup",
   fileCount: 2,
 } as ReviewCommitSummary;
+
+const selection = {
+  title: "Startup",
+  target: { kind: "text", quote: "start();" },
+} as const;
+
+describe("Ask", () => {
+  it("shrinks to a pill under a peek or a diagram, and comes back after", () => {
+    const store = createReviewPanelStore();
+    store.getState().openAsk(selection);
+    expect(askShown(store.getState())).toBe("panel");
+
+    store.getState().openPeek({ kind: "peek", anchor, content });
+    expect(askShown(store.getState())).toBe("pill");
+    store.getState().close();
+    expect(askShown(store.getState())).toBe("panel");
+
+    store
+      .getState()
+      .openOverlayTour({ tourId: "flow", kind: "sequence" }, "step-1");
+    expect(askShown(store.getState())).toBe("pill");
+    store.getState().closeOverlayTour();
+    expect(askShown(store.getState())).toBe("panel");
+  });
+
+  it("stays open in every view", () => {
+    const store = createReviewPanelStore();
+    store.getState().openAsk(selection);
+
+    store.getState().showView("diff");
+    expect(askShown(store.getState())).toBe("panel");
+  });
+
+  it("opens its window from the pill, and docks in place of a peek", () => {
+    const store = createReviewPanelStore();
+    store.getState().openAsk(selection);
+    store.getState().openPeek({ kind: "peek", anchor, content });
+
+    store.getState().restoreAsk();
+    expect(askShown(store.getState())).toBe("window");
+    expect(store.getState().active).toMatchObject({ kind: "peek" });
+
+    store.getState().minimizeAsk();
+    expect(askShown(store.getState())).toBe("pill");
+
+    store.getState().dockAsk();
+    expect(askShown(store.getState())).toBe("panel");
+    expect(store.getState().active).toBeNull();
+  });
+});
 
 describe("Review navigation", () => {
   it("scopes a commit diff until the reader leaves the diff", () => {

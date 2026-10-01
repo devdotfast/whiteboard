@@ -105,7 +105,57 @@ export function AskTrashIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
+export function AskPopOutIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <AskGlyph viewBox="0 0 16 16" xstyle={xstyle}>
+      <path d="M9 2.5h4.5V7M13.5 2.5 8 8M6.5 3.5H4A1.5 1.5 0 0 0 2.5 5v7A1.5 1.5 0 0 0 4 13.5h7a1.5 1.5 0 0 0 1.5-1.5V9.5" />
+    </AskGlyph>
+  );
+}
+
+/** The side panel, for putting Ask's window back in it. */
+export function AskDockIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <AskGlyph viewBox="0 0 16 16" xstyle={xstyle}>
+      <rect x="2.5" y="3" width="11" height="10" rx="1.5" />
+      <path d="M9.5 3v10" />
+    </AskGlyph>
+  );
+}
+
+export function AskMinimizeIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <AskGlyph viewBox="0 0 16 16" xstyle={xstyle}>
+      <path d="M4 11h8" />
+    </AskGlyph>
+  );
+}
+
+/** Where Ask's window is dragged from. */
+export function AskGripIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      {...stylex.props(styles.grip, xstyle)}
+      focusable="false"
+      viewBox="0 0 10 14"
+    >
+      {[3, 7].flatMap((cx) =>
+        [3, 7, 11].map((cy) => (
+          <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="1.1" />
+        )),
+      )}
+    </svg>
+  );
+}
+
 const styles = stylex.create({
+  grip: {
+    flex: "0 0 auto",
+    width: "10px",
+    height: "14px",
+    fill: "currentColor",
+  },
   icon: {
     flex: "0 0 auto",
     width: "12px",

@@ -13,10 +13,13 @@ import type {
   Ref,
 } from "react";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
 import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
+import { AskPopOutIcon, askIconSizes } from "./ask-icons";
 import { AskPanelContent } from "./ask-panel";
+import { AskPill, type AskPresence, AskSlot, AskWindow } from "./ask-window";
 import { AuthoredCodeSurface } from "./authored-code-surface";
 import { CodePeekCard } from "./CodePeek";
 import { controlStyles } from "./controls-styles";
@@ -38,6 +41,7 @@ import type {
   PeekAnchor,
   ReviewPeekContent,
 } from "./review-panel-model";
+import { askShown } from "./review-panel-store";
 import { useReviewRoots } from "./review-root-context";
 import type { ReviewSectionSummary } from "./review-section-summary";
 import { useReviewUiState } from "./review-ui-state";
@@ -453,42 +457,103 @@ export function ReviewPanelHost() {
   const activePanel = useReviewPanel((state) => state.active);
   const close = useReviewPanel((state) => state.close);
 
-  if (!activePanel) return null;
+  return (
+    <>
+      {activePanel ? (
+        <ReviewPeekPanel
+          anchor={activePanel.anchor}
+          content={activePanel.content}
+          onClose={close}
+        />
+      ) : null}
+      <AskHost />
+    </>
+  );
+}
 
-  return activePanel.kind === "peek" ? (
-    <ReviewPeekPanel
-      anchor={activePanel.anchor}
-      content={activePanel.content}
-      onClose={close}
-    />
-  ) : (
-    <AskOpenThreadProvider key={activePanel.key}>
-      <ReviewPanelFrame
-        tray
-        label="Ask"
-        onClose={close}
-        closeLabel="Close Ask"
-        headerActions={
-          <>
-            <AskDeleteThreadButton />
-            <AskHistoryButton view={activePanel.view} />
-          </>
-        }
-      >
-        {activePanel.view.type === "history" ? (
-          <AskHistoryList passage={activePanel.view.passage} />
+const historyPresence: AskPresence = {
+  agentName: "Ask",
+  status: "Conversations",
+  tone: "quiet",
+};
+
+/**
+ * The open conversation, in the side panel, its window or the pill. It
+ * renders once, into an element of its own that moves between them, so
+ * popping out, docking or minimizing never restarts it.
+ */
+function AskHost() {
+  const ask = useReviewPanel((state) => state.ask);
+  const shown = useReviewPanel(askShown);
+  const closeAsk = useReviewPanel((state) => state.closeAsk);
+  const popOutAsk = useReviewPanel((state) => state.popOutAsk);
+  const [node] = useState(() => document.createElement("div"));
+
+  const [presence, setPresence] = useState<AskPresence>({
+    agentName: "Ask",
+    status: "New question",
+    tone: "quiet",
+  });
+
+  if (!ask || !shown) return null;
+
+  const actions = (
+    <>
+      <AskDeleteThreadButton />
+      <AskHistoryButton view={ask.view} />
+    </>
+  );
+
+  return (
+    <AskOpenThreadProvider key={ask.key}>
+      {createPortal(
+        ask.view.type === "history" ? (
+          <AskHistoryList passage={ask.view.passage} />
         ) : (
           <AskPanelContent
-            selection={activePanel.view.selection}
-            agent={activePanel.view.agent}
+            selection={ask.view.selection}
+            agent={ask.view.agent}
             savedThreadId={
-              activePanel.view.type === "saved"
-                ? activePanel.view.threadId
-                : undefined
+              ask.view.type === "saved" ? ask.view.threadId : undefined
             }
+            onPresence={setPresence}
           />
-        )}
-      </ReviewPanelFrame>
+        ),
+        node,
+      )}
+      {shown === "panel" ? (
+        <ReviewPanelFrame
+          tray
+          label="Ask"
+          onClose={closeAsk}
+          closeLabel="Close Ask"
+          headerActions={
+            <>
+              {actions}
+              <IconButton
+                size="large"
+                aria-label="Pop out Ask"
+                title="Pop out"
+                onClick={popOutAsk}
+              >
+                <AskPopOutIcon
+                  xstyle={[controlStyles.inertIcon, askIconSizes.header]}
+                />
+              </IconButton>
+            </>
+          }
+        >
+          <AskSlot node={node} />
+        </ReviewPanelFrame>
+      ) : shown === "window" ? (
+        <AskWindow actions={actions}>
+          <AskSlot node={node} />
+        </AskWindow>
+      ) : (
+        <AskPill
+          presence={ask.view.type === "history" ? historyPresence : presence}
+        />
+      )}
     </AskOpenThreadProvider>
   );
 }

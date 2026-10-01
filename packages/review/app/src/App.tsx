@@ -75,7 +75,7 @@ import {
   useReviewPanelStore,
   useSuppressPanelMotionOnCanvasResume,
 } from "./review-panel";
-import type { ReviewDiffScope } from "./review-panel-store";
+import { type ReviewDiffScope, askShown } from "./review-panel-store";
 import { ReviewRootsProvider, useReviewContainer } from "./review-root-context";
 import { ReviewStackSelector } from "./review-stack-selector";
 import { ReviewToc } from "./review-toc";
@@ -299,6 +299,7 @@ function ReviewLayoutContent({
   const panelStore = useReviewPanelStore();
   useSuppressPanelMotionOnCanvasResume(appRef);
   const activePanel = useReviewPanel((state) => state.active);
+  const askDocked = useReviewPanel((state) => askShown(state) === "panel");
   const panelMotion = useReviewPanel((state) => state.motion);
   const activeView = useReviewPanel((state) => state.view);
   const diffScope = useReviewPanel((state) => state.diffScope);
@@ -422,7 +423,7 @@ function ReviewLayoutContent({
     [activeSoftwareMapSource, softwareMapTopologyDiff],
   );
 
-  const rightPanelOpen = activePanel !== null;
+  const rightPanelOpen = activePanel !== null || askDocked;
 
   // SAFETY: `--side-peek-width` is a CSS custom property, which React forwards
   // to style.setProperty; the CSSProperties typings only omit custom names.
@@ -723,7 +724,7 @@ function ReviewLayoutContent({
                     }
                     height="100%"
                     showChrome={false}
-                    showFloatingActions={!activePanel}
+                    showFloatingActions={!rightPanelOpen}
                     variant="view"
                   />
                   <MapSettingsControl />
@@ -787,7 +788,7 @@ function ReviewLayoutContent({
           {...stylex.props(
             shellStyles.resizer,
             shellStyles.peekResizer,
-            activePanel?.kind === "ask" && shellStyles.peekResizerTray,
+            askDocked && shellStyles.peekResizerTray,
           )}
           {...sidePeekResize.separatorProps}
         />

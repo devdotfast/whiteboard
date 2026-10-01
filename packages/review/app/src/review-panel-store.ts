@@ -8,16 +8,30 @@ import type { AskAgentId } from "@review/ask/thread-state";
 import { createStore } from "zustand/vanilla";
 
 import type {
+  AskAnchor,
+  AskPanel,
+  AskPlace,
+  AskShown,
+  AskSize,
   AskView,
   PeekPanel,
-  ReviewPanel,
   ReviewPanelMotion,
 } from "./review-panel-model";
 import { shouldCloseSidePeekForReviewView } from "./review-view-route";
 import type { AgentTraceStorage } from "./use-agent-trace";
 
 export interface ReviewPanelState {
-  active: ReviewPanel | null;
+  /** The peek in the side panel. */
+  active: PeekPanel | null;
+  /** The open conversation, wherever it shows. */
+  ask: AskPanel | null;
+  askPlace: AskPlace;
+  askMinimized: boolean;
+  /** Where the window and the pill were dragged to; until then, the bottom
+   * right. */
+  askAnchor: AskAnchor | null;
+  /** How big the window was made; until then, as wide as the docked panel. */
+  askSize: AskSize | null;
   motion: ReviewPanelMotion;
 }
 
@@ -78,7 +92,17 @@ export interface ReviewPanelActions {
   openPeek: (panel: PeekPanel) => void;
   openAsk: (selection: AgentSelection, agent?: AskAgentId) => void;
   openAskView: (view: AskView) => void;
+  /** Closes the peek; a docked Ask it covered comes back. */
   close: () => void;
+  closeAsk: () => void;
+  popOutAsk: () => void;
+  /** Puts Ask back in the side panel, in place of any peek. */
+  dockAsk: () => void;
+  minimizeAsk: () => void;
+  /** The pill opens Ask in its window. */
+  restoreAsk: () => void;
+  /** Moves the window and the pill together, resizing the window too. */
+  placeAsk: (anchor: AskAnchor, size?: AskSize) => void;
 }
 
 export interface ReviewNavigationActions {
@@ -132,8 +156,23 @@ export function createReviewPanelStore({
 }: ReviewNavigationRestore = {}) {
   const initialView = availableViews.includes(view) ? view : "review";
 
+  // Asking shows Ask where it was; docked, it takes the peek's place.
+  const showAsk = (
+    state: ReviewPanelState,
+    view: AskView,
+  ): Partial<ReviewPanelState> => ({
+    ask: { kind: "ask", key: state.ask ? state.ask.key + 1 : 0, view },
+    askMinimized: false,
+    active: state.askPlace === "docked" ? null : state.active,
+  });
+
   return createStore<ReviewPanelStoreState>()((set) => ({
     active: null,
+    ask: null,
+    askPlace: "docked",
+    askMinimized: false,
+    askAnchor: null,
+    askSize: null,
     motion: "live",
     view: initialView,
     availableViews,
@@ -147,24 +186,29 @@ export function createReviewPanelStore({
     openPeek: (panel) => set({ active: panel, motion: "live" }),
     openAsk: (selection, agent) =>
       set((state) => ({
-        active: {
-          kind: "ask",
-          key: state.active?.kind === "ask" ? state.active.key + 1 : 0,
-          view: { type: "new", selection, agent },
-        },
+        ...showAsk(state, { type: "new", selection, agent }),
         motion: "live",
       })),
     openAskView: (view) =>
       set((state) => ({
-        active: {
-          kind: "ask",
-          key: state.active?.kind === "ask" ? state.active.key + 1 : 0,
-          view,
-        },
+        ...showAsk(state, view),
         // Switching views inside an open panel is not a new panel.
-        motion: state.active?.kind === "ask" ? "restored" : "live",
+        motion: askShown(state) === "panel" ? "restored" : "live",
       })),
     close: () => set({ active: null, motion: "live" }),
+    closeAsk: () => set({ ask: null, askMinimized: false }),
+    popOutAsk: () => set({ askPlace: "window", askMinimized: false }),
+    dockAsk: () =>
+      set({
+        askPlace: "docked",
+        askMinimized: false,
+        active: null,
+        motion: "live",
+      }),
+    minimizeAsk: () => set({ askMinimized: true }),
+    restoreAsk: () => set({ askPlace: "window", askMinimized: false }),
+    placeAsk: (askAnchor, askSize) =>
+      set(askSize ? { askAnchor, askSize } : { askAnchor }),
     showView: (next) => set((state) => viewTransition(state, next)),
     openCommitDiff: (scope) =>
       set((state) => {
@@ -241,6 +285,18 @@ export function createReviewPanelStore({
             },
       ),
   }));
+}
+
+export function askShown(
+  state: ReviewPanelState & Pick<ReviewNavigationState, "overlayTour">,
+): AskShown | null {
+  if (!state.ask) return null;
+
+  if (state.askMinimized) return "pill";
+
+  if (state.askPlace === "window") return "window";
+
+  return state.active || state.overlayTour ? "pill" : "panel";
 }
 
 function viewTransition(
