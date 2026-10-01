@@ -561,6 +561,12 @@ export function AskThreadMarks({
   );
 }
 
+function truncate(text: string, length: number) {
+  const flat = text.trim().replace(/\s+/gu, " ");
+
+  return flat.length > length ? `${flat.slice(0, length - 1)}…` : flat;
+}
+
 /** A passage's pin: its agents, newest first, and how many conversations. */
 function AskPin({
   mark,
@@ -580,7 +586,13 @@ function AskPin({
       ? `Open the conversation about “${mark.quote.slice(0, 60)}”`
       : `${count} conversations about “${mark.quote.slice(0, 60)}”`;
 
-  const tooltip = useTooltip(count === 1 && newest ? newest.title : label);
+  const question = newest?.question ?? newest?.title ?? "";
+
+  const tooltip = useTooltip(
+    count === 1
+      ? truncate(question, 120)
+      : `${count} conversations · ${truncate(question, 100)}`,
+  );
 
   return (
     <button
