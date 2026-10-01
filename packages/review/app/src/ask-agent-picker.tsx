@@ -11,6 +11,7 @@ import {
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
+  type ReactNode,
   type RefObject,
   useCallback,
   useEffect,
@@ -377,7 +378,10 @@ export function AskAgentPicker({
   const chosen = agents?.find((candidate) => candidate.id === agent);
 
   return (
-    <div ref={anchor} {...stylex.props(pickerStyles.anchor)}>
+    <div
+      ref={anchor}
+      {...stylex.props(pickerStyles.anchor, pickerStyles.whole)}
+    >
       <button
         ref={trigger}
         type="button"
@@ -416,12 +420,20 @@ export function AskChoicePicker({
   select,
   current,
   disabled,
+  quiet = false,
+  end = false,
+  icon,
   onPick,
 }: {
   label: string;
   select: AskSelect;
   current: string;
   disabled: boolean;
+  /** Plain text under the composer, its menu opening upward. */
+  quiet?: boolean;
+  /** Its menu lines up with its right edge, at the row's end. */
+  end?: boolean;
+  icon?: ReactNode;
   onPick: (value: string) => void;
 }): ReactElement {
   const [open, setOpen] = useState(false);
@@ -455,7 +467,8 @@ export function AskChoicePicker({
         {...stylex.props(
           pickerStyles.picker,
           pickerStyles.choice,
-          open && pickerStyles.open,
+          quiet && pickerStyles.quiet,
+          open && (quiet ? pickerStyles.quietOpen : pickerStyles.open),
         )}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -466,6 +479,7 @@ export function AskChoicePicker({
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       >
+        {icon}
         <span {...stylex.props(pickerStyles.choiceName)}>
           {chosen?.name ?? current}
         </span>
@@ -481,6 +495,8 @@ export function AskChoicePicker({
             surfaceStyles.popover,
             menuStyles.menu,
             menuStyles.choices,
+            quiet && menuStyles.up,
+            end && menuStyles.end,
           )}
           onKeyDown={(event) => {
             if (event.key !== "Escape") return;
@@ -566,6 +582,14 @@ const menuStyles = stylex.create({
     minWidth: "160px",
     maxWidth: "260px",
   },
+  up: {
+    top: "auto",
+    bottom: "calc(100% + 6px)",
+  },
+  end: {
+    left: "auto",
+    right: 0,
+  },
   label: {
     padding: "8px 10px 6px",
     fontFamily: tokens.fontMono,
@@ -639,10 +663,16 @@ const pickerStyles = stylex.create({
     position: "relative",
     minWidth: 0,
   },
+  // The agent's name stays whole; its settings give way first.
+  whole: {
+    flexShrink: 0,
+  },
   picker: {
     display: "inline-flex",
     alignItems: "center",
     gap: "8px",
+    maxWidth: "100%",
+    whiteSpace: "nowrap",
     padding: "5px 8px 5px 6px",
     ...hairline,
     borderColor: {
@@ -666,8 +696,25 @@ const pickerStyles = stylex.create({
     borderColor: tokens.accentOutline,
   },
   choice: {
-    maxWidth: "150px",
+    maxWidth: "min(150px, 100%)",
     paddingLeft: "8px",
+  },
+  // Like text, until pointed at.
+  quiet: {
+    gap: "6px",
+    padding: "4px 6px",
+    borderColor: tokens.transparent,
+    backgroundColor: {
+      default: tokens.transparent,
+      ":not(:disabled):hover": tokens.tray,
+    },
+    color: { default: tokens.inkMuted, ":not(:disabled):hover": tokens.ink },
+    fontSize: fontSize.ui,
+    lineHeight: "16px",
+  },
+  quietOpen: {
+    backgroundColor: tokens.tray,
+    color: tokens.ink,
   },
   choiceName: {
     minWidth: 0,

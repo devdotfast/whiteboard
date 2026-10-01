@@ -406,6 +406,66 @@ export function AskPanelContent({
       ? thread.readOnly
       : !bypass && (chosen?.readOnly ?? true);
 
+  const modeTitle = readOnly
+    ? "The agent cannot change files in the checkout, and asks before running commands. It can edit this review."
+    : bypass
+      ? `${agentName} bypasses permissions: it may change files in the checkout and run commands without asking.`
+      : `${agentName} is not in a read-only mode, so it may change files in the checkout.`;
+
+  const settingsDisabled =
+    (busy && threadId !== null) || thread?.status === "failed";
+
+  // Below the composer, as in the agents' own apps: what the agent may do,
+  // then its model and effort.
+  const permissions =
+    chosen?.bypass && (thread || savedThreadId === undefined) ? (
+      <AskChoicePicker
+        label="Permissions"
+        select={permissionsSelect(bypass)}
+        current={bypass ? "bypass" : "ask"}
+        disabled={settingsDisabled}
+        quiet
+        icon={readOnly ? <AskLockIcon /> : null}
+        onPick={(value) => permit(value === "bypass")}
+      />
+    ) : (
+      <span
+        {...stylex.props(styles.mode, styles.settingsLabel)}
+        title={modeTitle}
+      >
+        {readOnly ? (
+          <>
+            <AskLockIcon />
+            Read-only
+          </>
+        ) : (
+          "Not read-only"
+        )}
+      </span>
+    );
+
+  const settings = (
+    <>
+      {askChoiceKinds.map((kind) => {
+        const select = choices?.[kind];
+        const current = currentChoice(kind);
+
+        return select && current ? (
+          <AskChoicePicker
+            key={kind}
+            label={choiceLabels.get(kind) ?? kind}
+            select={select}
+            current={current}
+            disabled={settingsDisabled}
+            quiet
+            end
+            onPick={(value) => choose(kind, value)}
+          />
+        ) : null;
+      })}
+    </>
+  );
+
   return (
     <div {...stylex.props(askPanelStyles.body)}>
       <div {...stylex.props(styles.agentBar)}>
@@ -419,54 +479,14 @@ export function AskPanelContent({
             setBypassPick(undefined);
           }}
         />
-        {askChoiceKinds.map((kind) => {
-          const select = choices?.[kind];
-          const current = currentChoice(kind);
-
-          return select && current ? (
-            <AskChoicePicker
-              key={kind}
-              label={choiceLabels.get(kind) ?? kind}
-              select={select}
-              current={current}
-              disabled={
-                (busy && threadId !== null) || thread?.status === "failed"
-              }
-              onPick={(value) => choose(kind, value)}
-            />
-          ) : null;
-        })}
-        {chosen?.bypass && (thread || savedThreadId === undefined) ? (
-          <AskChoicePicker
-            label="Permissions"
-            select={permissionsSelect(bypass)}
-            current={bypass ? "bypass" : "ask"}
-            disabled={
-              (busy && threadId !== null) || thread?.status === "failed"
-            }
-            onPick={(value) => permit(value === "bypass")}
-          />
+        {thread ? (
+          <span
+            {...stylex.props(styles.mode, styles.head)}
+            title={`Commit ${thread.head}`}
+          >
+            {thread.head.slice(0, 7)}
+          </span>
         ) : null}
-        <span
-          {...stylex.props(styles.mode)}
-          title={
-            readOnly
-              ? "The agent cannot change files in the checkout, and asks before running commands. It can edit this review."
-              : bypass
-                ? `${agentName} bypasses permissions: it may change files in the checkout and run commands without asking.`
-                : `${agentName} is not in a read-only mode, so it may change files in the checkout.`
-          }
-        >
-          {readOnly ? (
-            <>
-              <AskLockIcon />
-              Read-only
-            </>
-          ) : (
-            "Not read-only"
-          )}
-          {thread ? ` · ${thread.head.slice(0, 7)}` : null}
-        </span>
       </div>
 
       <AskFilesProvider key={threadId} threadId={threadId}>
@@ -552,11 +572,15 @@ export function AskPanelContent({
 
       <AskComposer
         inputRef={composer}
-        placeholder={
+        placeholder={`${
           threadId || savedThreadId
-            ? "Ask a follow-up…"
-            : `Ask ${chosen?.name ?? "an agent"} about this selection…`
-        }
+            ? "Ask a follow-up"
+            : `Ask ${chosen?.name ?? "an agent"} about this selection`
+        } · ${
+          (thread?.commands ?? offered?.commands)?.length
+            ? "/ for commands, @ for files"
+            : "@ for files"
+        }`}
         disabled={thread?.status === "failed"}
         canAsk={Boolean(agent) && !busy}
         stop={busy && threadId ? stop : undefined}
@@ -566,34 +590,27 @@ export function AskPanelContent({
               thread?.entries.length
               ? `Connecting to ${agentName}…`
               : ""
-            : composerStatus(
-                thread,
-                busy,
-                Boolean((thread?.commands ?? offered?.commands)?.length),
-              )
+            : composerStatus(thread, busy)
         }
         commands={thread?.commands ?? offered?.commands}
         acceptsImages={(thread?.accepts ?? offered?.accepts)?.image === true}
         usage={thread?.usage}
         findFiles={findFiles}
+        permissions={permissions}
+        settings={settings}
         onAsk={ask}
       />
     </div>
   );
 }
 
-function composerStatus(
-  thread: AskThreadState | null,
-  busy: boolean,
-  commands: boolean,
-) {
+function composerStatus(thread: AskThreadState | null, busy: boolean) {
   if (thread?.status === "waiting") return "Waiting for your approval";
 
   // Nothing can be asked; the thread says what to do instead.
   if (thread?.status === "failed") return "";
 
-  if (!busy)
-    return commands ? "↵ to ask · / commands · @ files" : "↵ to ask · @ files";
+  if (!busy) return "";
 
   const sinceQuestion = thread?.entries.slice(
     thread.entries.findLastIndex((entry) => entry.kind === "user") + 1,
@@ -711,13 +728,22 @@ const styles = stylex.create({
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
   },
+  // The commit the agent reads, at the bar's end.
+  head: {
+    marginLeft: "auto",
+  },
+  // Level with the pickers beside it.
+  settingsLabel: {
+    padding: "4px 6px",
+    fontSize: fontSize.ui,
+    lineHeight: "16px",
+  },
   mode: {
     display: "inline-flex",
     flex: "0 1 auto",
     alignItems: "center",
     gap: "6px",
     minWidth: 0,
-    marginLeft: "auto",
     overflow: "hidden",
     textOverflow: "ellipsis",
     color: tokens.inkMuted,

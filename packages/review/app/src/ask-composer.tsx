@@ -134,6 +134,8 @@ export function AskComposer({
   acceptsImages,
   usage,
   findFiles,
+  permissions,
+  settings,
   onAsk,
 }: {
   inputRef: RefObject<HTMLTextAreaElement | null>;
@@ -148,6 +150,10 @@ export function AskComposer({
   acceptsImages: boolean;
   usage: AskUsage | undefined;
   findFiles: (query: string, signal: AbortSignal) => Promise<string[]>;
+  /** What the agent may do, starting the row below. */
+  permissions?: ReactNode;
+  /** The agent's model and effort, ending the row below. */
+  settings?: ReactNode;
   /** Resolves true once the question is sent, to clear it. */
   onAsk: (question: AskQuestion) => Promise<boolean>;
 }): ReactElement {
@@ -352,163 +358,174 @@ export function AskComposer({
   const share = usage && usage.size > 0 ? usage.used / usage.size : undefined;
 
   return (
-    <form
-      {...stylex.props(styles.composer)}
-      onSubmit={(event) => {
-        event.preventDefault();
-        void submit();
-      }}
-      onDragOver={dragOver}
-      onDrop={drop}
-    >
-      {open ? (
-        <div
-          id={listId}
-          role="listbox"
-          aria-label={completion?.kind === "command" ? "Commands" : "Files"}
-          {...stylex.props(surfaceStyles.popover, styles.list)}
-        >
-          {options.map((option, index) => (
-            <div
-              key={option.key}
-              id={`${listId}-${index}`}
-              role="option"
-              tabIndex={-1}
-              aria-selected={index === shown}
-              {...stylex.props(
-                styles.option,
-                index === shown && styles.optionActive,
-              )}
-              // Picking keeps the question focused.
-              onPointerDown={(event) => event.preventDefault()}
-              onPointerMove={() => setActive(index)}
-              onClick={() => pick(index)}
-            >
-              <span {...stylex.props(styles.optionLabel)}>{option.label}</span>
-              {option.detail ? (
-                <span {...stylex.props(styles.optionDetail)}>
-                  {option.detail}
-                </span>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {images.length ? (
-        <ul {...stylex.props(styles.images)} aria-label="Attached images">
-          {images.map((image) => (
-            <li key={image.id} {...stylex.props(styles.image)}>
-              <img
-                {...stylex.props(styles.thumbnail)}
-                src={`data:${image.mimeType};base64,${image.data}`}
-                alt={image.name}
-              />
-              <button
-                type="button"
-                {...stylex.props(styles.remove)}
-                aria-label={`Remove ${image.name}`}
-                title={`Remove ${image.name}`}
-                onClick={() =>
-                  setImages((current) =>
-                    current.filter((other) => other.id !== image.id),
-                  )
-                }
-              >
-                <AskCrossIcon xstyle={askIconSizes.small} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      <textarea
-        ref={inputRef}
-        {...stylex.props(styles.question)}
-        value={draft}
-        rows={2}
-        placeholder={placeholder}
-        aria-label="Question"
-        role="combobox"
-        aria-autocomplete="list"
-        aria-expanded={open}
-        aria-controls={open ? listId : undefined}
-        aria-activedescendant={open ? `${listId}-${shown}` : undefined}
-        disabled={disabled}
-        onChange={(event) => {
-          setDraft(event.target.value);
-          setCaret(event.target.selectionStart);
+    <div {...stylex.props(styles.dock)}>
+      <form
+        {...stylex.props(styles.composer)}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
         }}
-        onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
-        onKeyDown={keydown}
-        onPaste={paste}
-      />
+        onDragOver={dragOver}
+        onDrop={drop}
+      >
+        {open ? (
+          <div
+            id={listId}
+            role="listbox"
+            aria-label={completion?.kind === "command" ? "Commands" : "Files"}
+            {...stylex.props(surfaceStyles.popover, styles.list)}
+          >
+            {options.map((option, index) => (
+              <div
+                key={option.key}
+                id={`${listId}-${index}`}
+                role="option"
+                tabIndex={-1}
+                aria-selected={index === shown}
+                {...stylex.props(
+                  styles.option,
+                  index === shown && styles.optionActive,
+                )}
+                // Picking keeps the question focused.
+                onPointerDown={(event) => event.preventDefault()}
+                onPointerMove={() => setActive(index)}
+                onClick={() => pick(index)}
+              >
+                <span {...stylex.props(styles.optionLabel)}>
+                  {option.label}
+                </span>
+                {option.detail ? (
+                  <span {...stylex.props(styles.optionDetail)}>
+                    {option.detail}
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
 
-      <div {...stylex.props(styles.footer)}>
-        <span {...stylex.props(styles.status)}>{note ?? status}</span>
-        <span {...stylex.props(styles.actions)}>
-          {share === undefined ? null : (
-            <span
-              {...stylex.props(styles.usage)}
-              title={`${usage!.used.toLocaleString()} of ${usage!.size.toLocaleString()} tokens of context used`}
-            >
-              {Math.round(share * 100)}% context
-              {usage!.cost
-                ? ` · ${new Intl.NumberFormat(undefined, {
-                    style: "currency",
-                    currency: usage!.cost.currency,
-                    maximumFractionDigits: 2,
-                  }).format(usage!.cost.amount)}`
-                : null}
-            </span>
-          )}
-          {acceptsImages ? (
-            <>
-              <input
-                ref={picker}
-                type="file"
-                accept={askImageTypes.join(",")}
-                multiple
-                hidden
-                onChange={(event) => {
-                  void attach([...(event.target.files ?? [])]);
-                  event.target.value = "";
-                }}
-              />
+        {images.length ? (
+          <ul {...stylex.props(styles.images)} aria-label="Attached images">
+            {images.map((image) => (
+              <li key={image.id} {...stylex.props(styles.image)}>
+                <img
+                  {...stylex.props(styles.thumbnail)}
+                  src={`data:${image.mimeType};base64,${image.data}`}
+                  alt={image.name}
+                />
+                <button
+                  type="button"
+                  {...stylex.props(styles.remove)}
+                  aria-label={`Remove ${image.name}`}
+                  title={`Remove ${image.name}`}
+                  onClick={() =>
+                    setImages((current) =>
+                      current.filter((other) => other.id !== image.id),
+                    )
+                  }
+                >
+                  <AskCrossIcon xstyle={askIconSizes.small} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <div {...stylex.props(styles.inputRow)}>
+          <textarea
+            ref={inputRef}
+            {...stylex.props(styles.question)}
+            value={draft}
+            rows={1}
+            placeholder={placeholder}
+            aria-label="Question"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={open}
+            aria-controls={open ? listId : undefined}
+            aria-activedescendant={open ? `${listId}-${shown}` : undefined}
+            disabled={disabled}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setCaret(event.target.selectionStart);
+            }}
+            onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
+            onKeyDown={keydown}
+            onPaste={paste}
+          />
+          <span {...stylex.props(styles.actions)}>
+            {acceptsImages ? (
+              <>
+                <input
+                  ref={picker}
+                  type="file"
+                  accept={askImageTypes.join(",")}
+                  multiple
+                  hidden
+                  onChange={(event) => {
+                    void attach([...(event.target.files ?? [])]);
+                    event.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  {...stylex.props(styles.attach)}
+                  aria-label="Attach images"
+                  title="Attach images"
+                  disabled={disabled || images.length >= IMAGES_MAX}
+                  onClick={() => picker.current?.click()}
+                >
+                  <AskImageIcon xstyle={askIconSizes.toolbar} />
+                </button>
+              </>
+            ) : null}
+            {stop ? (
               <button
                 type="button"
-                {...stylex.props(styles.attach)}
-                aria-label="Attach images"
-                title="Attach images"
-                disabled={disabled || images.length >= IMAGES_MAX}
-                onClick={() => picker.current?.click()}
+                {...stylex.props(styles.send, styles.stop)}
+                onClick={stop}
               >
-                <AskImageIcon xstyle={askIconSizes.toolbar} />
+                <span aria-hidden="true" {...stylex.props(styles.stopMark)} />
+                Stop
               </button>
-            </>
-          ) : null}
-          {stop ? (
-            <button
-              type="button"
-              {...stylex.props(styles.send, styles.stop)}
-              onClick={stop}
-            >
-              <span aria-hidden="true" {...stylex.props(styles.stopMark)} />
-              Stop
-            </button>
-          ) : (
-            <button
-              type="submit"
-              {...stylex.props(styles.send, styles.submit)}
-              disabled={!draft.trim() || !canAsk}
-            >
-              Ask
-              <AskArrowIcon xstyle={[askIconSizes.small, styles.submitIcon]} />
-            </button>
-          )}
-        </span>
+            ) : (
+              <button
+                type="submit"
+                {...stylex.props(styles.send, styles.submit)}
+                disabled={!draft.trim() || !canAsk}
+              >
+                Ask
+                <AskArrowIcon
+                  xstyle={[askIconSizes.small, styles.submitIcon]}
+                />
+              </button>
+            )}
+          </span>
+        </div>
+      </form>
+      {/* The status sits between the settings, so it comes and goes without
+          moving anything. */}
+      <div {...stylex.props(styles.settings)}>
+        {permissions}
+        <span {...stylex.props(styles.status)}>{note ?? status}</span>
+        {share === undefined ? null : (
+          <span
+            {...stylex.props(styles.usage)}
+            title={`${usage!.used.toLocaleString()} of ${usage!.size.toLocaleString()} tokens of context used`}
+          >
+            {Math.round(share * 100)}% context
+            {usage!.cost
+              ? ` · ${new Intl.NumberFormat(undefined, {
+                  style: "currency",
+                  currency: usage!.cost.currency,
+                  maximumFractionDigits: 2,
+                }).format(usage!.cost.amount)}`
+              : null}
+          </span>
+        )}
+        {settings}
       </div>
-    </form>
+    </div>
   );
 }
 
@@ -523,13 +540,18 @@ const hairline = {
 } as const;
 
 const styles = stylex.create({
-  composer: {
-    position: "relative",
+  dock: {
     display: "flex",
     flex: "0 0 auto",
     flexDirection: "column",
+    gap: "6px",
+    margin: "12px 16px 12px",
+  },
+  composer: {
+    position: "relative",
+    display: "flex",
+    flexDirection: "column",
     gap: "10px",
-    margin: "12px 16px 16px",
     padding: "12px 12px 10px 14px",
     ...hairline,
     borderColor: {
@@ -538,6 +560,14 @@ const styles = stylex.create({
     },
     borderRadius: radius.surface,
     backgroundColor: tokens.raised,
+  },
+  // Quiet, like the agent's own controls under its prompt.
+  settings: {
+    display: "flex",
+    alignItems: "center",
+    gap: "2px",
+    minWidth: 0,
+    paddingInline: "2px",
   },
   // Opens upward, over the thread.
   list: {
@@ -620,7 +650,9 @@ const styles = stylex.create({
     cursor: "pointer",
   },
   question: {
-    minHeight: "44px",
+    flex: "1 1 auto",
+    minWidth: 0,
+    minHeight: "22px",
     maxHeight: "160px",
     padding: 0,
     ...noBorder,
@@ -636,18 +668,21 @@ const styles = stylex.create({
       color: tokens.inkFaint,
     },
   },
-  footer: {
+  // The question, with its buttons beside it.
+  inputRow: {
     display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
+    alignItems: "flex-end",
     gap: "8px",
-    color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
-    fontSize: fontSize.micro,
-    lineHeight: "14px",
   },
+  // Fills the row between the settings, pushing the model and effort to its
+  // end.
   status: {
+    flex: "1 1 0",
     minWidth: 0,
+    paddingInline: "6px",
+    color: tokens.inkMuted,
+    fontSize: fontSize.small,
+    lineHeight: "16px",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
@@ -659,6 +694,9 @@ const styles = stylex.create({
     gap: "8px",
   },
   usage: {
+    color: tokens.inkMuted,
+    fontSize: fontSize.small,
+    lineHeight: "16px",
     whiteSpace: "nowrap",
   },
   attach: {
