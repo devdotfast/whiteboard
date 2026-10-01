@@ -382,6 +382,9 @@ export class AskThread {
   private shown: boolean;
   /** The config option that sets each choice the agent offers. */
   private readonly configIds = new Map<AskChoiceKind, string>();
+  /** The agent's other settings as last seen, to say when it changes one
+   * itself, as Codex's /plan does. */
+  private readonly settings = new Map<string, string>();
   /** The model and effort in use, which a new agent process starts with. */
   private readonly picks: AskPicks;
   /** The question being answered, until its turn ends; after a failure,
@@ -850,6 +853,8 @@ export class AskThread {
   private useConfig(options: SessionConfigOption[] | null | undefined) {
     const found = choicesOf(options);
 
+    this.noteSettings(options, found);
+
     if (!found.size) return;
     const choices: AskChoices = {};
 
@@ -860,6 +865,42 @@ export class AskThread {
 
     this.emit({ type: "set", choices });
     this.announce();
+  }
+
+  /** Says when a setting the panel does not show changes, which can be
+   * all a command does. */
+  private noteSettings(
+    options: SessionConfigOption[] | null | undefined,
+    choices: ReturnType<typeof choicesOf>,
+  ) {
+    const shown = new Set(
+      [...choices.values()].map(({ configId }) => configId),
+    );
+
+    for (const option of options ?? []) {
+      if (option.type !== "select" || shown.has(option.id)) continue;
+      const before = this.settings.get(option.id);
+
+      this.settings.set(option.id, option.currentValue);
+
+      if (before === undefined || before === option.currentValue) continue;
+
+      const value =
+        selectOptionsSchema
+          .safeParse(option.options)
+          .data?.flatMap((choice) =>
+            "group" in choice ? choice.options : [choice],
+          )
+          .find((choice) => choice.value === option.currentValue)?.name ??
+        option.currentValue;
+
+      this.push({
+        kind: "notice",
+        id: randomUUID(),
+        severity: "info",
+        title: `${this.state.agentName} set ${option.name.toLowerCase()} to ${value}.`,
+      });
+    }
   }
 
   /** Tells the host what the agent offers now. */
@@ -991,6 +1032,10 @@ export class AskThread {
     if (withSelection) this.needsContext = false;
     this.asking = undefined;
 
+    const asked = this.state.entries.findLastIndex(
+      (entry) => entry.kind === "user",
+    );
+
     // An answer cut off by Stop ends mid-sentence; say where it stopped.
     if (stopReason === "cancelled")
       this.push({
@@ -998,6 +1043,17 @@ export class AskThread {
         id: randomUUID(),
         severity: "info",
         title: "Stopped here.",
+      });
+    // A command can end the turn having said nothing.
+    else if (
+      stopReason === "end_turn" &&
+      asked === this.state.entries.length - 1
+    )
+      this.push({
+        kind: "notice",
+        id: randomUUID(),
+        severity: "info",
+        title: `${this.state.agentName} finished without replying.`,
       });
 
     this.emit({
@@ -1162,6 +1218,17 @@ export class AskThread {
 
         return;
       case "notice": {
+        // Some agents repeat a warning every turn; once is enough.
+        if (
+          this.state.entries.some(
+            (entry) =>
+              entry.kind === "notice" &&
+              entry.title === update.title &&
+              entry.description === (update.description ?? undefined),
+          )
+        )
+          return;
+
         const notice: NoticeEntry = {
           kind: "notice",
           id: randomUUID(),
