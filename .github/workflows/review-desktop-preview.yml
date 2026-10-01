@@ -437,8 +437,8 @@ jobs:
 
   publish-macos:
     name: Publish macOS preview
-    needs: [version, build]
-    if: ${{ !cancelled() && !inputs.dry_run && needs.version.result == 'success' && needs.build.result == 'success' }}
+    needs: [version, build, linux, windows]
+    if: ${{ !cancelled() && !inputs.dry_run && needs.version.result == 'success' && needs.build.result == 'success' && (inputs.platforms == 'macos' || (needs.linux.result == 'success' && needs.windows.result == 'success')) }}
     runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
@@ -526,8 +526,8 @@ jobs:
     name: Publish Linux preview repository
     permissions:
       contents: write
-    needs: [version, build, linux]
-    if: ${{ !cancelled() && !inputs.dry_run && needs.version.result == 'success' && needs.linux.result == 'success' && (inputs.platforms == 'linux' || needs.build.result == 'success') }}
+    needs: [version, build, linux, windows]
+    if: ${{ !cancelled() && !inputs.dry_run && needs.version.result == 'success' && needs.linux.result == 'success' && (inputs.platforms == 'linux' || (needs.build.result == 'success' && needs.windows.result == 'success')) }}
     uses: ./.github/workflows/review-linux-publish.yml
     with:
       channel: preview
@@ -536,8 +536,8 @@ jobs:
   publish-windows:
     name: Publish Windows preview installers
     environment: review-release
-    needs: [version, build, windows]
-    if: ${{ !cancelled() && !inputs.dry_run && needs.version.result == 'success' && needs.windows.result == 'success' && (inputs.platforms == 'windows' || needs.build.result == 'success') }}
+    needs: [version, build, linux, windows]
+    if: ${{ !cancelled() && !inputs.dry_run && needs.version.result == 'success' && needs.windows.result == 'success' && (inputs.platforms == 'windows' || (needs.build.result == 'success' && needs.linux.result == 'success')) }}
     runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
