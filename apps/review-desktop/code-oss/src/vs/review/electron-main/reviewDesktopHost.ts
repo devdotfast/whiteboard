@@ -299,6 +299,7 @@ export class ReviewDesktopHost extends Disposable {
         reviewRemoteInstallConsentPath(userDataPath),
       ),
       confirm: async (request) => {
+        // The relay closes the prompt in every window when `signal` aborts.
         const answer = await reviewRemoteInstallPromptRelay.prompt({
           ...request,
           kind: "confirm",

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -313,4 +313,94 @@ test("two hosts asking at once are asked one after the other", async (t) => {
 	await sentUntil((hosts) => hosts.every((host) => host.endpoint));
 
 	assert.deepEqual(asked.sort(), ["wb-test-a", "wb-test-b"]);
+});
+
+/** A flow whose prompt stays open until the test answers it, or it is cancelled. */
+async function promptingFlow(t: test.TestContext) {
+	const dir = await mkdtemp(join(tmpdir(), "wb-consent-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
+	const consentFile = join(dir, "c.json");
+	const asked: { alias: string; signal?: AbortSignal; answer(value: boolean | undefined): void }[] = [];
+	const runs: string[] = [];
+	const flow: ReviewRemoteInstallFlow = {
+		mode: () => "ask",
+		consent: openRemoteInstallConsent(consentFile),
+		confirm: (request) =>
+			new Promise((resolve) => {
+				asked.push({ alias: request.alias, signal: request.signal, answer: resolve });
+				request.signal?.addEventListener("abort", () => resolve(undefined));
+			}),
+		run: async (input) => {
+			runs.push(input.version);
+			return INSTALLED;
+		},
+	};
+	return { flow, asked, runs, consentFile };
+}
+
+test("a retry while the install prompt is open joins it: one prompt, one answer applied", async (t) => {
+	const { flow, asked, runs } = await promptingFlow(t);
+	const { manager, sentUntil } = await managerFor(t, { "wb-test-a": {} }, undefined, undefined, flow);
+
+	manager.update(true, ["wb-test-a"]);
+	await until(() => asked.length === 1);
+	manager.retry("wb-test-a");
+	// The new connection reaches the question again, and waits on the same one.
+	await new Promise((resolve) => setTimeout(resolve, 100));
+	assert.equal(asked.length, 1);
+	assert.equal(asked[0].signal?.aborted, false);
+	asked[0].answer(true);
+	await sentUntil((hosts) => hosts[0].endpoint !== undefined);
+
+	assert.equal(asked.length, 1);
+	assert.deepEqual(runs, ["0.1.6"]);
+	assert.equal(await flow.consent.get("wb-test-a"), "allow");
+});
+
+test("removing a host while its prompt is open closes the prompt and writes nothing", async (t) => {
+	const { flow, asked, consentFile } = await promptingFlow(t);
+	const { manager } = await managerFor(t, { "wb-test-a": {} }, undefined, undefined, flow);
+
+	manager.update(true, ["wb-test-a"]);
+	await until(() => asked.length === 1);
+	manager.update(true, []);
+
+	await until(() => asked[0].signal?.aborted === true);
+	await new Promise((resolve) => setTimeout(resolve, 50));
+	await assert.rejects(readFile(consentFile), { code: "ENOENT" });
+});
+
+test("a dropped connection closes the host's prompt, and the next connection asks again", async (t) => {
+	const { flow, asked, consentFile } = await promptingFlow(t);
+	const { manager, ssh, clock } = await managerFor(t, { "wb-test-a": {} }, undefined, undefined, flow);
+
+	manager.update(true, ["wb-test-a"]);
+	await until(() => asked.length === 1);
+	ssh.master("wb-test-a")!.finish(255, { stderr: "Connection reset by peer\n" });
+	await until(() => asked[0].signal?.aborted === true);
+	await assert.rejects(readFile(consentFile), { code: "ENOENT" });
+
+	// The backoff's reconnect asks a fresh question.
+	await until(() => {
+		clock.next();
+		return asked.length === 2;
+	});
+	assert.equal(asked[1].signal?.aborted, false);
+});
+
+test("quitting while a prompt is open closes it without an unhandled rejection", async (t) => {
+	const rejections: unknown[] = [];
+	const record = (reason: unknown) => rejections.push(reason);
+	process.on("unhandledRejection", record);
+	t.after(() => void process.off("unhandledRejection", record));
+	const { flow, asked } = await promptingFlow(t);
+	const { manager } = await managerFor(t, { "wb-test-a": {} }, undefined, undefined, flow);
+
+	manager.update(true, ["wb-test-a"]);
+	await until(() => asked.length === 1);
+	await manager.dispose();
+	await new Promise((resolve) => setTimeout(resolve, 50));
+
+	assert.equal(asked[0].signal?.aborted, true);
+	assert.deepEqual(rejections, []);
 });

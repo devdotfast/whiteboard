@@ -86,20 +86,32 @@ export class ReviewRemoteHosts {
 	private disposed = false;
 	private disposing: Promise<void> | undefined;
 
-	/** The install flow, asking one question at a time: a window shows one prompt, and a second would dismiss the first. */
+	/**
+	 * The install flow, asking one question at a time: a window shows one
+	 * prompt, and a second would dismiss the first. A host has one question
+	 * at most; asking again joins it.
+	 */
 	private readonly flow: ReviewRemoteInstallFlow | undefined;
 
 	constructor(private readonly options: ReviewRemoteHostsOptions) {
 		this.clock = options.clock ?? systemClock;
 		const flow = options.install;
 		let asking: Promise<unknown> = Promise.resolve();
+		const questions = new Map<string, { answer: Promise<boolean | undefined>; abort: AbortController }>();
 		this.flow = flow && {
 			...flow,
 			confirm: (request) => {
-				const asked = asking.then(() => flow.confirm(request));
-				asking = asked.catch(() => undefined);
-				return asked;
+				const open = questions.get(request.alias);
+				if (open) return open.answer;
+				const abort = new AbortController();
+				const answer = asking
+					.then(() => (abort.signal.aborted ? undefined : flow.confirm({ ...request, signal: abort.signal })))
+					.finally(() => questions.get(request.alias)?.abort === abort && questions.delete(request.alias));
+				asking = answer.catch(() => undefined);
+				questions.set(request.alias, { answer, abort });
+				return answer;
 			},
+			cancel: (alias) => questions.get(alias)?.abort.abort(),
 		};
 	}
 

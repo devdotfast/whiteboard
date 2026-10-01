@@ -232,8 +232,10 @@ export type ReviewRemoteInstallRunInput = Pick<ReviewRemoteInstallInput, "sessio
 export interface ReviewRemoteInstallFlow {
 	mode(): ReviewRemoteInstallMode;
 	readonly consent: ReviewRemoteInstallConsent;
-	/** Asks the user: true installs, false declines, undefined (no answer) decides nothing. */
-	confirm(request: { alias: string; text: string }): Promise<boolean | undefined>;
+	/** Asks the user: true installs, false declines, undefined (no answer, or cancelled) decides nothing. */
+	confirm(request: { alias: string; text: string; signal?: AbortSignal }): Promise<boolean | undefined>;
+	/** Closes the host's open or queued question, unanswered. */
+	cancel?(alias: string): void;
 	/** `installRemote` with this build's artifacts. */
 	run(input: ReviewRemoteInstallRunInput): Promise<ReviewRemoteInstallResult>;
 }
@@ -477,6 +479,7 @@ export class ReviewRemoteHost {
 	async dispose(): Promise<void> {
 		this.disposed = true;
 		this.generation++;
+		this.options.install?.cancel?.(this.alias);
 		this.cancelTimer?.();
 		this.cancelTimer = undefined;
 		this.cancelReattach?.();
@@ -608,6 +611,8 @@ export class ReviewRemoteHost {
 	private masterGone(master: SshChildProcess, code: number | null, error?: NodeJS.ErrnoException): void {
 		if (master !== this.master) return;
 		this.master = undefined;
+		// The question was about a host this Desktop no longer reaches.
+		this.options.install?.cancel?.(this.alias);
 		if (error?.code === "ENOENT") return this.fail({ state: "unreachable", detail: OPENSSH_NEEDED });
 		const exited = error?.message || `ssh exited with code ${code ?? "none"}.`;
 		// An authenticated master cannot fail authentication: earlier prompts' text in its stderr says nothing now.
@@ -658,7 +663,7 @@ export class ReviewRemoteHost {
 		if (!support.supported) throw new HostFailure({ state: "unsupported", detail: support.reason });
 		const version = await this.options.desktopVersion();
 		const present = probed.probe.installed.includes(version);
-		if (!present && mode === "ask" && !(await this.agreed(flow, probed.probe, version))) {
+		if (!present && mode === "ask" && !(await this.agreed(flow, probed.probe, version, stale))) {
 			// A CLI the user installed by hand still attaches; without one the host is not-installed.
 			this.declined = true;
 			return stale() ? undefined : reviewRemoteAttachScript;
@@ -673,12 +678,13 @@ export class ReviewRemoteHost {
 	}
 
 	/** Asks once per host; an answer is kept, a prompt nobody answered is not. */
-	private async agreed(flow: ReviewRemoteInstallFlow, probe: ReviewRemoteProbe, version: string): Promise<boolean> {
+	private async agreed(flow: ReviewRemoteInstallFlow, probe: ReviewRemoteProbe, version: string, stale: () => boolean): Promise<boolean> {
 		const log = (error: Error) => this.options.log(`${this.alias}: install consent: ${error.message}`);
 		const stored = await flow.consent.get(this.alias).catch(log);
 		if (stored) return stored === "allow";
 		const answer = await flow.confirm({ alias: this.alias, text: installPromptText(this.alias, version, probe) });
-		if (answer !== undefined) await flow.consent.set(this.alias, answer ? "allow" : "deny").catch(log);
+		// A replaced connection's answer is the new one's too: the question is shared, so it is written once.
+		if (answer !== undefined && !stale()) await flow.consent.set(this.alias, answer ? "allow" : "deny").catch(log);
 		return answer === true;
 	}
 
@@ -739,7 +745,7 @@ export class ReviewRemoteHost {
 					detail:
 						incompatibleRunning.startedBy === "user"
 							? `A Whiteboard server ${incompatibleRunning.version} started by a user is running on ${this.alias}; stop it to use this Desktop's version.`
-							: `A newer Whiteboard ${incompatibleRunning.version} is running on ${this.alias}, started by another Desktop; update this Desktop to use it.`,
+							: `A newer Whiteboard ${incompatibleRunning.version} is running on ${this.alias}, started by ${incompatibleRunning.startedBy === "cli" ? "the CLI" : "another Desktop"}; update this Desktop to use it.`,
 				});
 			}
 			if (replaced) this.options.log(`${this.alias}: replaced its Whiteboard server ${replaced} with ${parsed.attach.version}.`);

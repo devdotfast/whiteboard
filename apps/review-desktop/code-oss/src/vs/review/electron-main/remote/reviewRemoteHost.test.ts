@@ -1067,3 +1067,20 @@ test("a server id that is not a UUID is not used for the install consent", async
 	assert.equal(await flow.consent.get("wb-test-a"), "allow");
 	assert.deepEqual(JSON.parse(await readFile(consentFile, "utf8")), { servers: {}, aliases: { "wb-test-a": "allow" } });
 });
+
+test("a newer server the CLI started says so", async (t) => {
+	const { flow } = await installFlow(t, "always");
+	const { host, last } = hostFor(
+		t,
+		{ attach: { code: 0, stdout: attachOutput(41234, "t", { version: "0.1.7", incompatibleRunning: { version: "0.1.7", pid: 77, startedBy: "cli" } }) } },
+		1,
+		"wb-test-a",
+		"/tmp/wb-ssh-test",
+		flow,
+	);
+
+	host.start();
+	await until(() => last()?.problem !== undefined);
+
+	assert.equal(last()?.problem?.detail, "A newer Whiteboard 0.1.7 is running on wb-test-a, started by the CLI; update this Desktop to use it.");
+});
