@@ -232,7 +232,7 @@ test("an existing ~/.local/bin/whiteboard that Desktop did not write is left alo
 	assert.equal(JSON.parse(await inContainer("node", `'${result.launcher}' version --json`)).version, "0.0.1");
 });
 
-test("with three versions installed and one running, an install leaves the running one and the newest", { skip, timeout: 10 * 60_000 }, async () => {
+test("with three versions installed and one running, an install leaves the running one and the newest", { skip, timeout: 10 * 60_000 }, async (t) => {
 	await reset("node");
 	await installRemote(input("node").value);
 	// Two earlier versions beside it: copies with their own name, one running a process from its directory.
@@ -241,10 +241,10 @@ test("with three versions installed and one running, an install leaves the runni
 		`cd ~/.dev/whiteboard-remote/versions && for v in 0.0.1-old.1 0.0.1-old.2; do cp -a 0.0.1 $v && sed -i "s#/versions/0.0.1/#/versions/$v/#g" $v/.whiteboard-install.json; done
 		setsid nohup node -e 'setInterval(() => {}, 1000)' "$HOME/.dev/whiteboard-remote/versions/0.0.1-old.1/node_modules/@dev.fast/whiteboard/dist/cli.js" >/dev/null 2>&1 < /dev/null &`,
 	);
+	t.after(() => inContainer("node", "pkill -f '[0]\\.0\\.1-old\\.1/' || true"));
 	await inContainer("node", "rm -rf ~/.dev/whiteboard-remote/versions/0.0.1");
 
 	await installRemote(input("node").value);
 
 	assert.equal(await inContainer("node", "ls ~/.dev/whiteboard-remote/versions | tr '\\n' ' '"), "0.0.1 0.0.1-old.1");
-	await inContainer("node", "pkill -f '[0]\\.0\\.1-old\\.1/' || true");
 });

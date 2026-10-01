@@ -4,14 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { runSsh, type SpawnSsh } from "./reviewRemoteHost.js";
-import { compareVersions } from "./reviewRemoteInstaller.js";
+import { compareVersions, REVIEW_REMOTE_VERSION } from "./reviewRemoteInstaller.js";
 import { REVIEW_REMOTE_INSTALL_MARKER, REVIEW_REMOTE_INSTALL_SAY, shellQuote } from "./reviewRemoteInstallScript.js";
 import { sshExecArgs, type ReviewSshSession } from "./reviewSshCommand.js";
 
 /** Stopping a server takes up to 10 s; removing the install a few more. */
 export const REVIEW_REMOTE_UNINSTALL_TIMEOUT = 60_000;
-
-const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 
 const LIST = `root="$HOME/.dev/whiteboard-remote"
 for d in "$root"/versions/*; do
@@ -52,7 +50,7 @@ export async function uninstallRemote(input: {
 			.map((line) => line.slice(REVIEW_REMOTE_INSTALL_SAY.length + word.length + 2).trim());
 	if (!said("LISTED").length) throw failed(sshProblem(listed));
 	const newest = said("HAVE")
-		.filter((name) => VERSION.test(name))
+		.filter((name) => REVIEW_REMOTE_VERSION.test(name))
 		.sort(compareVersions)
 		.at(-1);
 	if (!newest) throw failed("Whiteboard Desktop installed nothing there.");
@@ -70,7 +68,8 @@ export async function uninstallRemote(input: {
 		.filter((value) => value?.event === "remote.uninstall")
 		.at(-1);
 	if (result?.ok === true) return;
-	throw failed(typeof result?.reason === "string" ? result.reason : sshProblem(ran));
+	// The remote's words, bounded and on one line, as the probe treats remote text.
+	throw failed(typeof result?.reason === "string" ? result.reason.replace(/[\x00-\x1f\x7f-\x9f]+/g, " ").slice(0, 300) : sshProblem(ran));
 }
 
 function sshProblem(result: Awaited<ReturnType<typeof runSsh>>): string {

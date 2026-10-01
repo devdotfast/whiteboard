@@ -154,7 +154,9 @@ elif [ -e "$v" ]; then
 	mv "$v" ${shellQuote(versionPart(context, input.version))} && rm -rf ${shellQuote(versionPart(context, input.version))} || fail cannot remove "$v"
 fi
 for dir in "$root"/versions/*; do
-	[ -f "$dir/${REVIEW_REMOTE_INSTALL_MARKER}" ] && say HAVE "\${dir##*/}"
+	[ -f "$dir/${REVIEW_REMOTE_INSTALL_MARKER}" ] && say HAVE "\${dir##*/}" && continue
+	# A version whose removal was cut short: its marker went first.
+	case "\${dir##*/}" in [0-9]*.[0-9]*.[0-9]*) rm -rf "$dir" ;; esac
 done
 n=${shellQuote(`${nodeDir}/bin/node`)}
 [ -x "$n" ] && [ "$("$n" --version 2>/dev/null)" = v${input.nodeVersion} ] && say MANAGED-NODE
@@ -331,7 +333,8 @@ say FINISHED
 export function cleanupScript(context: ReviewRemoteInstallContext, input: { candidates: readonly string[]; room: number }): string {
 	const names = input.candidates.map((name) => shellQuote(name)).join(" ");
 	return `${prelude(context)}own
-# Every command line, read once: a grep below must not find itself.
+# Every command line, read once: a grep below must not find itself. The
+# launchers run the CLI by absolute path, so its version's path is there.
 if [ -d /proc/self ]; then
 	procs=$(for f in /proc/[0-9]*/cmdline; do tr '\\000' ' ' < "$f" 2>/dev/null; echo; done)
 else

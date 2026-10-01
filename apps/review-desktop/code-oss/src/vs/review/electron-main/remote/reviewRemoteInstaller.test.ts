@@ -204,10 +204,12 @@ async function earlierVersion(remoteRoot: string, version: string): Promise<stri
 	return dir;
 }
 
-test("after an install, versions other than the newest two are removed", async (t) => {
+test("after an install, versions other than the newest two are removed, and a version left without its marker", async (t) => {
 	const f = await fixture(t);
 	for (const version of ["1.0.0", "2.0.0", "2.0.0-preview.1", "10.0.0-preview.3"]) await earlierVersion(f.remoteRoot, version);
 	await mkdir(join(f.remoteRoot, "versions", "notes"));
+	// A removal cut short after its marker went.
+	await mkdir(join(f.remoteRoot, "versions", "3.0.0", "node_modules"), { recursive: true });
 	await mkdir(join(f.remoteRoot, "node", "v24.18.0"), { recursive: true });
 
 	await installRemote(f.input());

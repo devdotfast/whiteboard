@@ -92,7 +92,8 @@ export interface ReviewRemoteInstallResult {
 	readonly diffr: boolean;
 }
 
-const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+/** A version directory's name. */
+export const REVIEW_REMOTE_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 const BIN = /^[\w.-]+(\/[\w.-]+)*$/;
 
 /**
@@ -109,7 +110,7 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 	for (const path of [probe.home, probe.node?.path, probe.npm]) {
 		if (path && /['"\\]/.test(path)) throw new Error(`Whiteboard cannot install on ${alias}: ${JSON.stringify(path)} holds a quote or backslash.`);
 	}
-	if (!VERSION.test(input.version)) throw new Error(`${JSON.stringify(input.version)} is not a version.`);
+	if (!REVIEW_REMOTE_VERSION.test(input.version)) throw new Error(`${JSON.stringify(input.version)} is not a version.`);
 	const { integrity, sha512, nodeVersion, nodeSha256 } = pinned(input.artifacts);
 	if (!input.artifacts.node.name.endsWith(`-${input.target}.tar.xz`)) throw new Error(`${input.artifacts.node.name} is not the Node for ${input.target}.`);
 
@@ -212,7 +213,7 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 		const dir = reviewRemoteVersionDir(probe.home, input.version);
 		const cliPath = `${dir}/node_modules/@dev.fast/whiteboard/${bin}`;
 		const launcher = `${dir}/whiteboard`;
-		const newest = [input.version, ...prepared.all("HAVE").filter((name) => VERSION.test(name))].sort(compareVersions).at(-1);
+		const newest = [input.version, ...prepared.all("HAVE").filter((name) => REVIEW_REMOTE_VERSION.test(name))].sort(compareVersions).at(-1);
 		const finished = await run(
 			"finishing",
 			finishScript(context, {
@@ -230,7 +231,7 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 	/** Keeps this version, the newest and one more, preferring one a process runs from; the version is installed whatever happens here. */
 	async function cleanup(have: string[], newest: string | undefined): Promise<void> {
 		const keep = new Set([input.version, newest]);
-		const candidates = have.filter((name) => VERSION.test(name) && !keep.has(name)).sort(compareVersions).reverse();
+		const candidates = have.filter((name) => REVIEW_REMOTE_VERSION.test(name) && !keep.has(name)).sort(compareVersions).reverse();
 		if (!candidates.length) return;
 		await run("removing old versions", cleanupScript(context, { candidates, room: 2 - keep.size })).catch((error: unknown) => {
 			if (signal.aborted) throw error;
