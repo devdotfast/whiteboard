@@ -727,8 +727,10 @@ const pickerStyles = stylex.create({
     maxWidth: "min(150px, 100%)",
     paddingLeft: "8px",
   },
-  // Like text, until pointed at.
+  // Like text, until pointed at. Under the composer the row has room, so
+  // it truncates only once the row is full.
   quiet: {
+    maxWidth: "100%",
     gap: "6px",
     padding: "4px 6px",
     borderColor: tokens.transparent,
