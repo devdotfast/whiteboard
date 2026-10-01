@@ -49,38 +49,66 @@ export const logos: Record<
   (props: { xstyle?: stylex.StyleXStyles }) => ReactElement
 > = AGENT_LOGOS;
 
-const agentsBySession = new WeakMap<
-  ReviewSession,
-  Promise<AskAgent[] | null>
->();
+// The last answer per canvas session, shown while the next is asked; and the
+// request under way, which the toolbar and the panel share.
+const knownAgents = new WeakMap<ReviewSession, AskAgent[] | null>();
 
-/** Which local agents can answer, or null where this host has no Ask. Read
- * once per canvas session: installing an agent means reopening the review. */
+const askingAgents = new WeakMap<ReviewSession, Promise<AskAgent[] | null>>();
+
+function askAgentsOf(session: ReviewSession): Promise<AskAgent[] | null> {
+  let request = askingAgents.get(session);
+
+  if (!request) {
+    request = session
+      .fetch("/ask/agents")
+      .then(async (response) =>
+        response.ok ? agentsSchema.parse(await response.json()).agents : null,
+      )
+      // A check that fails keeps the last answer; a host without Ask refuses
+      // the request instead.
+      .catch(() => knownAgents.get(session) ?? null)
+      .then((agents) => {
+        knownAgents.set(session, agents);
+        askingAgents.delete(session);
+
+        return agents;
+      });
+    askingAgents.set(session, request);
+  }
+
+  return request;
+}
+
+/** Which local agents can answer, or null where this host has no Ask. Asked
+ * again each time Ask opens and each time the review comes back into focus,
+ * so an agent installed during the review shows up. */
 export function useAskAgents(session: ReviewSession | null): AskAgent[] | null {
-  const [agents, setAgents] = useState<AskAgent[] | null>(null);
+  const [agents, setAgents] = useState<AskAgent[] | null>(() =>
+    session ? (knownAgents.get(session) ?? null) : null,
+  );
 
   useEffect(() => {
     if (!session) return;
     let current = true;
 
-    let request = agentsBySession.get(session);
+    const refresh = () => {
+      void askAgentsOf(session).then((value) => {
+        if (current) setAgents(value);
+      });
+    };
 
-    if (!request) {
-      request = session
-        .fetch("/ask/agents")
-        .then(async (response) =>
-          response.ok ? agentsSchema.parse(await response.json()).agents : null,
-        )
-        .catch(() => null);
-      agentsBySession.set(session, request);
-    }
+    const refreshIfShown = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
 
-    void request.then((value) => {
-      if (current) setAgents(value);
-    });
+    refresh();
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshIfShown);
 
     return () => {
       current = false;
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshIfShown);
     };
   }, [session]);
 
