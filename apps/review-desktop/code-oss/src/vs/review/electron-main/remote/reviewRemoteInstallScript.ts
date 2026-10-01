@@ -166,16 +166,25 @@ say PREPARED
 `;
 }
 
+/**
+ * An sh function: `completeIntegrity <marker>` prints the integrity the
+ * marker records when its Node runs and its CLI exists, and nothing
+ * otherwise. What "complete" means for the installer and the probe alike.
+ */
+export const REVIEW_REMOTE_COMPLETE_INTEGRITY = `completeIntegrity() {
+	ci=$(sed -n 's/.*"integrity":"\\([^"][^"]*\\)".*/\\1/p' "$1" 2>/dev/null)
+	cn=$(sed -n 's/.*"node":"\\([^"]*\\)".*/\\1/p' "$1" 2>/dev/null)
+	cc=$(sed -n 's/.*"cli":"\\([^"]*\\)".*/\\1/p' "$1" 2>/dev/null)
+	[ -n "$ci" ] && [ -x "$cn" ] && [ -f "$cc" ] && printf '%s' "$ci"
+}`;
+
 /** Sets `v` (the version's directory), `m` (its marker) and `complete` when the marker has the pinned integrity and its Node and CLI exist. */
 function markerCheck(context: ReviewRemoteInstallContext, input: { version: string; integrity: string }): string {
 	return `v=${shellQuote(reviewRemoteVersionDir(context.home, input.version))}
 m="$v/${REVIEW_REMOTE_INSTALL_MARKER}"
+${REVIEW_REMOTE_COMPLETE_INTEGRITY}
 complete=
-if [ -f "$m" ] && [ "$(sed -n 's/.*"integrity":"\\([^"]*\\)".*/\\1/p' "$m")" = ${shellQuote(input.integrity)} ]; then
-	node=$(sed -n 's/.*"node":"\\([^"]*\\)".*/\\1/p' "$m")
-	cli=$(sed -n 's/.*"cli":"\\([^"]*\\)".*/\\1/p' "$m")
-	[ -x "$node" ] && [ -f "$cli" ] && complete=1
-fi`;
+[ -f "$m" ] && [ "$(completeIntegrity "$m")" = ${shellQuote(input.integrity)} ] && complete=1`;
 }
 
 /**

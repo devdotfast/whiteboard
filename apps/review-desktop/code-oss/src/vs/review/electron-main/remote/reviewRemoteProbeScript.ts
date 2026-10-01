@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { REVIEW_REMOTE_INSTALL_MARKER } from "./reviewRemoteInstallScript.js";
+import { REVIEW_REMOTE_COMPLETE_INTEGRITY, REVIEW_REMOTE_INSTALL_MARKER } from "./reviewRemoteInstallScript.js";
 
 export const REVIEW_REMOTE_PROBE_BEGIN = "WHITEBOARD-PROBE-BEGIN";
 export const REVIEW_REMOTE_PROBE_END = "WHITEBOARD-PROBE-END";
@@ -17,7 +17,8 @@ export const REVIEW_REMOTE_PROBE_END = "WHITEBOARD-PROBE-END";
  * Node 24 is looked for on PATH, in /usr/local/bin and /usr/bin, and under
  * nvm, fnm, volta, asdf, mise, nodenv and n; each candidate is run once for
  * its version, and the highest 24.x wins. A version is listed, with the
- * integrity its marker names, only when the marker names one.
+ * integrity its marker names, only when it is complete as the installer
+ * judges it: an integrity, a Node that runs and a CLI that exists.
  */
 export const REVIEW_REMOTE_PROBE_SCRIPT = `LC_ALL=C
 export LC_ALL
@@ -77,11 +78,12 @@ bestVersion=
 pick "$remote"/node/v24*/bin/node
 managed=$best
 
+${REVIEW_REMOTE_COMPLETE_INTEGRITY}
 installed=
 for dir in "$remote"/versions/*; do
 	[ -d "$dir" ] || continue
 	case "$dir" in *.part) continue ;; esac
-	integrity=$(sed -n 's/.*"integrity":"\\([^"][^"]*\\)".*/\\1/p' "$dir/${REVIEW_REMOTE_INSTALL_MARKER}" 2>/dev/null)
+	integrity=$(completeIntegrity "$dir/${REVIEW_REMOTE_INSTALL_MARKER}")
 	[ -n "$integrity" ] || continue
 	installed="$installed\${installed:+,}{\\"version\\":$(str "\${dir##*/}"),\\"integrity\\":$(str "$integrity")}"
 done

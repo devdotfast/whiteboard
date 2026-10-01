@@ -137,7 +137,7 @@ async function executable(path: string, body: string) {
 	await chmod(path, 0o755);
 }
 
-/** A home with Node 20 on PATH, three Node 24s under version managers, one complete version beside half-written ones, and a curl that cannot connect. */
+/** A home with Node 20 on PATH, three Node 24s under version managers, one complete version beside half-written and broken ones, and a curl that cannot connect. */
 async function fakeRemote(t: test.TestContext) {
 	const home = await mkdtemp(join(tmpdir(), "wb-probe-"));
 	t.after(() => rm(home, { recursive: true, force: true }));
@@ -152,10 +152,17 @@ async function fakeRemote(t: test.TestContext) {
 	await executable(join(home, ".asdf/installs/nodejs/24.99.0/bin/node"), "echo v20.0.0");
 	await executable(join(home, ".dev/whiteboard-remote/node/v24.18.0/bin/node"), "echo v24.18.0");
 	const versions = join(home, ".dev/whiteboard-remote/versions");
-	for (const version of ["0.1.6", "0.1.7.part", "0.1.8", "0.1.9"]) await mkdir(join(versions, version), { recursive: true });
-	await writeFile(join(versions, "0.1.6", REVIEW_REMOTE_INSTALL_MARKER), `${JSON.stringify({ version: "0.1.6", integrity: INTEGRITY })}\n`);
+	for (const version of ["0.1.6", "0.1.7.part", "0.1.8", "0.1.9", "0.2.0"]) await mkdir(join(versions, version), { recursive: true });
+	const node = join(home, ".dev/whiteboard-remote/node/v24.18.0/bin/node");
+	const cli = (version: string) => join(versions, version, "cli.js");
+	const marker = (version: string, integrity: string) => writeFile(join(versions, version, REVIEW_REMOTE_INSTALL_MARKER), `${JSON.stringify({ version, integrity, node, cli: cli(version) })}\n`);
+	await marker("0.1.6", INTEGRITY);
+	await writeFile(cli("0.1.6"), "");
 	// Half-written: no marker, and a marker without an integrity.
-	await writeFile(join(versions, "0.1.9", REVIEW_REMOTE_INSTALL_MARKER), '{"version":"0.1.9","integrity":""}\n');
+	await marker("0.1.9", "");
+	await writeFile(cli("0.1.9"), "");
+	// Complete by its marker, but its CLI is gone: the installer would install it again.
+	await marker("0.2.0", INTEGRITY);
 	return { home, env: { HOME: home, PATH: `${bin}:/usr/bin:/bin` } };
 }
 
