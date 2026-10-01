@@ -120,13 +120,7 @@ export function AgentSelectionProvider({
           ...value,
           anchorContainer: container ?? undefined,
           anchor: {
-            x: Math.max(
-              8,
-              Math.min(
-                anchor.x - (rect?.left ?? 0),
-                (rect?.width || window.innerWidth) - 220,
-              ),
-            ),
+            x: Math.max(8, anchor.x - (rect?.left ?? 0)),
             y: anchor.y - (rect?.top ?? 0) - 38,
           },
         };
@@ -294,77 +288,87 @@ export function AgentSelectionProvider({
                   selection.apiSource,
                 ]) &&
               createPortal(
+                // The toolbar starts at the selection, after a lead that
+                // gives way so it never runs past the container's edge.
                 <div
-                  ref={actions}
-                  {...stylex.props(surfaceStyles.popover, styles.actions)}
-                  style={{
-                    position: "absolute",
-                    left: selection.anchor?.x,
-                    top: selection.anchor?.y,
-                  }}
-                  onMouseDown={(event) => event.preventDefault()}
+                  {...stylex.props(styles.lane)}
+                  style={{ top: selection.anchor?.y }}
                 >
-                  {askAgents && askAgent ? (
-                    <>
-                      <button
-                        type="button"
-                        {...stylex.props(styles.action, styles.ask)}
-                        aria-keyshortcuts="Meta+L"
-                        onClick={() => ask()}
-                      >
-                        <AskIcon xstyle={askIconSizes.toolbar} />
-                        <span>Ask {askAgent.name}</span>
-                        <kbd
-                          aria-hidden="true"
-                          {...stylex.props(styles.askKey)}
-                        >
-                          ⌘L
-                        </kbd>
-                      </button>
-                      <button
-                        type="button"
-                        {...stylex.props(
-                          styles.action,
-                          styles.quiet,
-                          styles.switch,
-                          choosing && styles.quietOpen,
-                        )}
-                        aria-label="Ask another agent"
-                        aria-haspopup="menu"
-                        aria-expanded={choosing}
-                        onClick={() => setChoosing((value) => !value)}
-                      >
-                        <AskChevronIcon />
-                      </button>
-                      <span
-                        {...stylex.props(styles.divider)}
-                        aria-hidden="true"
-                      />
-                      {choosing ? (
-                        <AskAgentMenu
-                          agents={askAgents}
-                          current={askAgent.id}
-                          within={actions}
-                          onPick={ask}
-                          onDismiss={() => setChoosing(false)}
-                        />
-                      ) : null}
-                    </>
-                  ) : null}
-                  <button
-                    type="button"
-                    {...stylex.props(styles.action, styles.quiet, styles.copy)}
-                    aria-keyshortcuts="Meta+Shift+C"
-                    aria-label="Copy for Agent"
-                    disabled={busy}
-                    onClick={() => void copy()}
+                  <span
+                    {...stylex.props(styles.lead)}
+                    style={{ flexBasis: selection.anchor?.x }}
+                  />
+                  <div
+                    ref={actions}
+                    {...stylex.props(surfaceStyles.popover, styles.actions)}
+                    onMouseDown={(event) => event.preventDefault()}
                   >
-                    <AskCopyIcon xstyle={askIconSizes.toolbar} />
-                    <span>{busy ? "Copying…" : "Copy for agent"}</span>
-                    <kbd aria-hidden="true" {...stylex.props(styles.copyKey)}>
-                      ⇧⌘C
-                    </kbd>
-                  </button>
+                    {askAgents && askAgent ? (
+                      <>
+                        <button
+                          type="button"
+                          {...stylex.props(styles.action, styles.ask)}
+                          aria-keyshortcuts="Meta+L"
+                          onClick={() => ask()}
+                        >
+                          <AskIcon xstyle={askIconSizes.toolbar} />
+                          <span>Ask {askAgent.name}</span>
+                          <kbd
+                            aria-hidden="true"
+                            {...stylex.props(styles.askKey)}
+                          >
+                            ⌘L
+                          </kbd>
+                        </button>
+                        <button
+                          type="button"
+                          {...stylex.props(
+                            styles.action,
+                            styles.quiet,
+                            styles.switch,
+                            choosing && styles.quietOpen,
+                          )}
+                          aria-label="Ask another agent"
+                          aria-haspopup="menu"
+                          aria-expanded={choosing}
+                          onClick={() => setChoosing((value) => !value)}
+                        >
+                          <AskChevronIcon />
+                        </button>
+                        <span
+                          {...stylex.props(styles.divider)}
+                          aria-hidden="true"
+                        />
+                        {choosing ? (
+                          <AskAgentMenu
+                            agents={askAgents}
+                            current={askAgent.id}
+                            within={actions}
+                            onPick={ask}
+                            onDismiss={() => setChoosing(false)}
+                          />
+                        ) : null}
+                      </>
+                    ) : null}
+                    <button
+                      type="button"
+                      {...stylex.props(
+                        styles.action,
+                        styles.quiet,
+                        styles.copy,
+                      )}
+                      aria-keyshortcuts="Meta+Shift+C"
+                      aria-label="Copy for Agent"
+                      disabled={busy}
+                      onClick={() => void copy()}
+                    >
+                      <AskCopyIcon xstyle={askIconSizes.toolbar} />
+                      <span>{busy ? "Copying…" : "Copy for agent"}</span>
+                      <kbd aria-hidden="true" {...stylex.props(styles.copyKey)}>
+                        ⇧⌘C
+                      </kbd>
+                    </button>
+                  </div>
                 </div>,
                 selection.anchorContainer ?? overlayHost,
               )}
@@ -379,8 +383,25 @@ export function AgentSelectionProvider({
 // The selection's agent actions, beside the selected text: Ask the preferred
 // agent (or pick another), or copy the selection for an agent elsewhere.
 const styles = stylex.create({
-  actions: {
+  // Spans its container, short of the right edge; only the toolbar takes
+  // the pointer.
+  lane: {
+    position: "absolute",
+    left: 0,
+    right: "8px",
     zIndex: layer.agentSelection,
+    display: "flex",
+    pointerEvents: "none",
+  },
+  lead: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  actions: {
+    position: "relative",
+    flex: "none",
+    pointerEvents: "auto",
     display: "inline-flex",
     alignItems: "center",
     gap: "2px",

@@ -81,11 +81,12 @@ it("copies only on click or Shift+Cmd+C, reports failures, and clears on revisio
       container.querySelector('[aria-label="Copy for Agent"]'),
     ).not.toBeNull();
 
-    // The selection's actions move together; their group holds the position.
+    // The selection's actions move together; the lane around their group
+    // holds the position.
     const popover = () =>
       container.querySelector<HTMLButtonElement>(
         '[aria-label="Copy for Agent"]',
-      )!.parentElement!;
+      )!.parentElement!.parentElement!;
 
     expect(popover().style.top).toBe("82px");
     await act(async () => {
@@ -109,7 +110,6 @@ it("copies only on click or Shift+Cmd+C, reports failures, and clears on revisio
       scroller.dispatchEvent(new Event("scroll"));
     });
     // Its article-relative position stays constant: scrolling is browser-owned.
-    expect(popover().style.position).toBe("absolute");
     expect(popover().style.top).toBe("82px");
     expect(fetch).not.toHaveBeenCalled();
     await act(async () =>
