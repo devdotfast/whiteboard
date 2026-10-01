@@ -67,6 +67,10 @@ export interface FakeRemote {
 	exitDelayMs?: number;
 	/** Each `-O check` (1, 2, ...) answers as the master was when asked, once this settles. */
 	checkAnswered?: (call: number) => Promise<unknown> | undefined;
+	/** The answer to `whiteboard connect --detect`; no agents by default. */
+	detect?: Attach;
+	/** The answer to `whiteboard connect --yes`; every agent asked for connected by default. */
+	connect?: Attach;
 }
 
 type Attach = { code: number; stdout?: string; stderr?: string };
@@ -74,7 +78,7 @@ type Attach = { code: number; stdout?: string; stderr?: string };
 export interface FakeCall {
 	readonly alias: string;
 	/** An exec is a `probe` once its script shows it is one. */
-	kind: "master" | "check" | "exec" | "probe" | "forward" | "cancel" | "exit";
+	kind: "master" | "check" | "exec" | "probe" | "detect" | "connect" | "forward" | "cancel" | "exit";
 	readonly args: readonly string[];
 	/** What an exec got on stdin. */
 	input?: string;
@@ -84,6 +88,12 @@ export interface FakeCall {
 }
 
 export const FAKE_SERVER_ID = "0199a3f2-7c1e-7d4a-9b2f-3e5d6c7b8a90";
+
+export const detectOutput = (agents: readonly Record<string, unknown>[]) => `${JSON.stringify({ event: "connect.detect", agents })}\n`;
+
+/** `connect --yes` connecting the agents its script names. */
+const connectedOutput = (input: string) =>
+	`${JSON.stringify({ event: "connect.run", agents: [...input.matchAll(/'(claude|codex|opencode|pi)'/g)].map(([, id]) => ({ id, name: id, connected: true, output: "" })) })}\n`;
 
 export const attachOutput = (port: number, token = "remote-token", extra: Record<string, unknown> = {}) =>
 	`WHITEBOARD-REMOTE-BEGIN\n${JSON.stringify({ event: "remote.attach", version: "0.1.6", commit: "abc", serverId: FAKE_SERVER_ID, url: `http://127.0.0.1:${port}`, token, startedServer: true, diffr: true, ...extra })}\nWHITEBOARD-REMOTE-END\n`;
@@ -174,6 +184,16 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 					if (child.input.includes(REVIEW_REMOTE_PROBE_BEGIN)) {
 						entry.kind = "probe";
 						return child.finish(0, { stdout: probeOutput(remote.probe) });
+					}
+					if (child.input.includes("'connect' '--detect'")) {
+						entry.kind = "detect";
+						const answer = remote.detect ?? { code: 0, stdout: detectOutput([]) };
+						return child.finish(answer.code, answer);
+					}
+					if (child.input.includes("'connect' '--yes'")) {
+						entry.kind = "connect";
+						const answer = remote.connect ?? { code: 0, stdout: connectedOutput(child.input) };
+						return child.finish(answer.code, answer);
 					}
 					const call = calls.filter((c) => c.alias === alias && c.kind === "exec").length;
 					const attach =

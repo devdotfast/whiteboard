@@ -599,6 +599,37 @@ export interface ReviewRemoteHostsSettings {
   retry(alias: string): Promise<void>;
   // Agrees to Desktop's install on a host declined earlier, and connects again.
   install(alias: string): Promise<void>;
+  // The agents found on an online host; null before it is online, or when they could not be read.
+  agents(alias: string): Promise<ReviewRemoteAgent[] | null>;
+  // Runs each agent's connect commands on the host. Rejects an agent it did not find, or one it cannot connect alone.
+  connectAgents(
+    alias: string,
+    agents: ReviewRemoteAgentId[],
+  ): Promise<ReviewRemoteAgentResult[]>;
+}
+
+/** The agents `whiteboard connect --detect` finds and `--yes` connects: trace-core's harnesses. */
+export const REVIEW_REMOTE_AGENT_IDS = [
+  "claude",
+  "codex",
+  "opencode",
+  "pi",
+] as const satisfies readonly ReviewCliInstallTarget[];
+
+export type ReviewRemoteAgentId = (typeof REVIEW_REMOTE_AGENT_IDS)[number];
+
+export interface ReviewRemoteAgent {
+  id: ReviewRemoteAgentId;
+  connected: boolean;
+  // Its command is not on the host's PATH: only the agent itself can follow the prompt.
+  manual?: true;
+}
+
+export interface ReviewRemoteAgentResult {
+  id: ReviewRemoteAgentId;
+  connected: boolean;
+  // What the commands printed, as plain text.
+  output: string;
 }
 
 /** Workspace attachment identity is independent of the displayed source generation. */

@@ -27,6 +27,9 @@ parseReviewTutorialOpenResponse,
 type ReviewCliInstallApplyResponse,
 type ReviewCliInstallStatus,
 type ReviewGatewayHostState,
+type ReviewRemoteAgent,
+type ReviewRemoteAgentId,
+type ReviewRemoteAgentResult,
 type ReviewTutorialOpenResponse,
 type ReviewVerbResponse
 } from "../common/reviewProtocol.js";
@@ -81,6 +84,9 @@ export interface IReviewDesktopConnectionService {
 	getRemoteLanguageEndpoint(serverId: string): Promise<ReviewRemoteLanguageEndpoint | undefined>;
 	/** Agrees to Desktop's install on a host declined earlier. */
 	installRemoteHost(alias: string): Promise<void>;
+	/** The agents found on an online host; null when they are not known. */
+	detectRemoteAgents(alias: string): Promise<ReviewRemoteAgent[] | null>;
+	connectRemoteAgents(alias: string, agents: ReviewRemoteAgentId[]): Promise<ReviewRemoteAgentResult[]>;
 	getTutorialStatus(): Promise<{ version: 1; reviewUuid: string | null }>;
 	prepareTutorial(): Promise<void>;
 	openTutorial(): Promise<ReviewTutorialOpenResponse>;
@@ -254,6 +260,14 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 
 	async installRemoteHost(alias: string): Promise<void> {
 		await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("installRemoteHost", alias);
+	}
+
+	detectRemoteAgents(alias: string): Promise<ReviewRemoteAgent[] | null> {
+		return this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("detectRemoteAgents", alias);
+	}
+
+	connectRemoteAgents(alias: string, agents: ReviewRemoteAgentId[]): Promise<ReviewRemoteAgentResult[]> {
+		return this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("connectRemoteAgents", { alias, agents });
 	}
 
 	async saveDiffrSummarizer(input: ReviewDiffrSummarizerInput): Promise<ReviewDiffrConfig> {

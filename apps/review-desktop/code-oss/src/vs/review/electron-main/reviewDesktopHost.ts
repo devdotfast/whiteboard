@@ -21,7 +21,11 @@ import { NullTelemetryService } from "../../platform/telemetry/common/telemetryU
 import { IUpdateService } from "../../platform/update/common/update.js";
 import { UtilityProcess } from "../../platform/utilityProcess/electron-main/utilityProcess.js";
 import type { ReviewDesktopConnection } from "../common/reviewDesktopBootstrap.js";
-import type { ReviewGatewayHostState } from "../common/reviewProtocol.js";
+import type {
+  ReviewGatewayHostState,
+  ReviewRemoteAgent,
+  ReviewRemoteAgentResult,
+} from "../common/reviewProtocol.js";
 import {
   REVIEW_REMOTE_HOSTS_ENABLED_SETTING,
   REVIEW_REMOTE_HOSTS_SETTING,
@@ -278,6 +282,15 @@ export class ReviewDesktopHost extends Disposable {
 
   installRemoteHost(alias: string): Promise<void> {
     return this.remoteHosts?.install(alias) ?? Promise.resolve();
+  }
+
+  detectRemoteAgents(alias: string): Promise<ReviewRemoteAgent[] | undefined> {
+    return this.remoteHosts?.detectAgents(alias) ?? Promise.resolve(undefined);
+  }
+
+  connectRemoteAgents(alias: string, ids: readonly unknown[]): Promise<ReviewRemoteAgentResult[]> {
+    if (!this.remoteHosts) return Promise.reject(new Error("Remote hosts are off."));
+    return this.remoteHosts.connectAgents(alias, ids);
   }
 
   /** Probe, ask, install this Desktop's version, then attach through it. */

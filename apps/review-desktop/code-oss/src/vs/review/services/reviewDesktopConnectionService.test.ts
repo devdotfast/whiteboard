@@ -161,7 +161,7 @@ test("reads the remote hosts' states from the Desktop server, and refuses a malf
 		await assert.rejects(service.readRemoteHosts(), /remote hosts/);
 });
 
-test("asks the main process for SSH aliases, host retries and installs", async () => {
+test("asks the main process for SSH aliases, host retries, installs and agents", async () => {
 	const calls: unknown[][] = [];
 	const service = new ReviewDesktopConnectionService({
 		getChannel: () => ({
@@ -174,6 +174,14 @@ test("asks the main process for SSH aliases, host retries and installs", async (
 	assert.deepEqual(await service.listSshAliases(), ["devbox"]);
 	await service.retryRemoteHost("devbox");
 	await service.installRemoteHost("devbox");
-	assert.deepEqual(calls, [["listSshAliases"], ["retryRemoteHost", "devbox"], ["installRemoteHost", "devbox"]]);
+	await service.detectRemoteAgents("devbox");
+	await service.connectRemoteAgents("devbox", ["pi"]);
+	assert.deepEqual(calls, [
+		["listSshAliases"],
+		["retryRemoteHost", "devbox"],
+		["installRemoteHost", "devbox"],
+		["detectRemoteAgents", "devbox"],
+		["connectRemoteAgents", { alias: "devbox", agents: ["pi"] }],
+	]);
 	service.dispose();
 });

@@ -9,13 +9,9 @@ import { shellQuote } from "./reviewRemoteInstallScript.js";
  * POSIX sh, sent to `sh -s` on the remote. Finds the CLI on PATH, in
  * ~/.local/bin, then through the login shell (Node version managers), and
  * exits 127 when there is none. The CLI's directory goes first on PATH, so
- * a `#!/usr/bin/env node` next to it is found. `groups` are the optional
- * extension groups this Desktop has enabled.
+ * a `#!/usr/bin/env node` next to it is found. `words` follow the CLI as they are.
  */
-export function reviewRemoteAttachScript(groups: readonly string[] = []): string {
-	for (const group of groups) {
-		if (!/^[a-z0-9-]+$/.test(group)) throw new Error(`Invalid extension group ${JSON.stringify(group)}.`);
-	}
+export function pathCliScript(words: string): string {
 	return `wb=$(command -v whiteboard 2>/dev/null)
 case "$wb" in /*) ;; *) wb= ;; esac
 if [ -z "$wb" ] && [ -x "$HOME/.local/bin/whiteboard" ]; then wb="$HOME/.local/bin/whiteboard"; fi
@@ -25,8 +21,16 @@ fi
 if [ -z "$wb" ] || [ ! -x "$wb" ]; then exit 127; fi
 PATH="\${wb%/*}:$PATH"
 export PATH
-exec "$wb" remote attach --json${groups.length ? ` --groups ${groups.join(",")}` : ""}
+exec "$wb" ${words}
 `;
+}
+
+/** Stage 1's attach through the CLI on PATH; `groups` are the optional extension groups this Desktop has enabled. */
+export function reviewRemoteAttachScript(groups: readonly string[] = []): string {
+	for (const group of groups) {
+		if (!/^[a-z0-9-]+$/.test(group)) throw new Error(`Invalid extension group ${JSON.stringify(group)}.`);
+	}
+	return pathCliScript(`remote attach --json${groups.length ? ` --groups ${groups.join(",")}` : ""}`);
 }
 
 /** The CLI of the version Desktop installed, by its exact path; `--replace` restarts a server of another version that was not a user's. */
