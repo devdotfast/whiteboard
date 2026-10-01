@@ -43,6 +43,9 @@ export function RemoteHostsSection({
   const [alias, setAlias] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  // The host whose removal waits for a confirmation, and whether Whiteboard goes too.
+  const [removing, setRemoving] = useState<string>();
+  const [uninstall, setUninstall] = useState(false);
 
   useEffect(() => {
     void hosts
@@ -98,6 +101,25 @@ export function RemoteHostsSection({
 
   const add = async () => {
     if (await save([...configured, alias.trim()])) setAlias("");
+  };
+
+  // The uninstall runs over the host's connection, so before the alias goes.
+  const remove = async (name: string) => {
+    setRemoving(undefined);
+    let problem: string | undefined;
+
+    if (uninstall) {
+      setBusy(true);
+
+      try {
+        await hosts.uninstall(name);
+      } catch (cause) {
+        problem = cause instanceof Error ? cause.message : String(cause);
+      }
+    }
+
+    await save(configured.filter((other) => other !== name));
+    if (problem) setError(problem);
   };
 
   return (
@@ -165,14 +187,48 @@ export function RemoteHostsSection({
               ) : null}
               <Button
                 aria-label={`Remove ${name}`}
+                aria-expanded={removing === name}
                 disabled={busy}
-                onClick={() =>
-                  void save(configured.filter((other) => other !== name))
-                }
+                onClick={() => {
+                  setUninstall(false);
+                  setRemoving(removing === name ? undefined : name);
+                }}
               >
                 Remove
               </Button>
             </div>
+            {removing === name ? (
+              <div
+                {...stylex.props(local.confirm)}
+                role="group"
+                aria-label={`Remove ${name}`}
+              >
+                <label {...stylex.props(styles.toggle)}>
+                  <input
+                    {...stylex.props(styles.checkbox)}
+                    type="checkbox"
+                    checked={uninstall}
+                    onChange={(event) => setUninstall(event.target.checked)}
+                  />
+                  Also remove Whiteboard from {name}
+                </label>
+                <button
+                  type="button"
+                  {...stylex.props(styles.button)}
+                  disabled={busy}
+                  onClick={() => void remove(name)}
+                >
+                  Remove host
+                </button>
+                <button
+                  type="button"
+                  {...stylex.props(styles.button)}
+                  onClick={() => setRemoving(undefined)}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : null}
           </div>
         );
       })}
@@ -326,6 +382,13 @@ const local = stylex.create({
     userSelect: "text",
   },
   actions: {
+    gap: "8px",
+  },
+  confirm: {
+    display: "flex",
+    gridColumn: "1 / -1",
+    flexWrap: "wrap",
+    alignItems: "center",
     gap: "8px",
   },
   alias: {
