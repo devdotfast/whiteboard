@@ -111,6 +111,7 @@ it("keeps what the panel showed, and what each agent offered", () => {
         effort: { current: "high", options: [{ value: "high", name: "High" }] },
       },
       commands: [{ name: "review", description: "Review the change" }],
+      accepts: { image: true },
     };
 
     expect(history.offer("claude")).toBeUndefined();

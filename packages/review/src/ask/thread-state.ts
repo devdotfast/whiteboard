@@ -18,9 +18,11 @@ const permissionOptionSchema = z.object({
   kind: z.enum(["allow_once", "allow_always", "reject_once", "reject_always"]),
 });
 
-/** What a question carries besides its text, as the thread shows it. */
+/** What a question carries besides its text, as the thread shows it. An
+ * image shows by name: its bytes go to the agent, not into the thread. */
 const askAttachmentSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("file"), path: z.string() }),
+  z.object({ kind: z.literal("image"), name: z.string() }),
 ]);
 
 export type AskAttachment = z.infer<typeof askAttachmentSchema>;
@@ -118,20 +120,47 @@ export const askCommandSchema = z.object({
 
 export type AskCommand = z.infer<typeof askCommandSchema>;
 
+/** What a question to the agent may carry besides text and file links. */
+export const askAcceptsSchema = z.object({ image: z.boolean() });
+
+export type AskAccepts = z.infer<typeof askAcceptsSchema>;
+
 /** What an agent offers before anything is asked of it, as it last said. */
 export const askOfferSchema = z.object({
   choices: askChoicesSchema,
   commands: z.array(askCommandSchema).optional(),
+  accepts: askAcceptsSchema.optional(),
 });
 
 export type AskOffer = z.infer<typeof askOfferSchema>;
 
-/** A question as the reviewer asks it: its text, and the checkout files it
- * mentions. */
+/** The images a question can carry, as agents take them. */
+export const askImageTypes = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+] as const;
+
+/** An image's base64 bytes: up to 5 MB of image. */
+const IMAGE_DATA_MAX = 7_000_000;
+
+/** A question as the reviewer asks it: its text, the checkout files it
+ * mentions, and any images. */
 export const askQuestionSchema = z.strictObject({
   text: z.string().trim().min(1).max(8_000),
   /** Paths relative to the checkout's root. */
   mentions: z.array(z.string().min(1).max(400)).max(20).optional(),
+  images: z
+    .array(
+      z.strictObject({
+        name: z.string().min(1).max(200),
+        mimeType: z.enum(askImageTypes),
+        data: z.string().min(1).max(IMAGE_DATA_MAX),
+      }),
+    )
+    .max(4)
+    .optional(),
 });
 
 export type AskQuestion = z.infer<typeof askQuestionSchema>;
@@ -163,6 +192,7 @@ export const askThreadStateSchema = z.object({
   choices: askChoicesSchema.optional(),
   /** Absent until the agent says, or when it takes none. */
   commands: z.array(askCommandSchema).optional(),
+  accepts: askAcceptsSchema.optional(),
   selection: z.object({ title: z.string(), quote: z.string().optional() }),
   entries: z.array(askEntrySchema),
 });
@@ -180,6 +210,7 @@ export const askChangeSchema = z.discriminatedUnion("type", [
     readOnly: z.boolean().optional(),
     choices: askChoicesSchema.optional(),
     commands: z.array(askCommandSchema).optional(),
+    accepts: askAcceptsSchema.optional(),
     /** `null` clears the error; absent leaves it. */
     error: z.string().nullable().optional(),
     /** `null` clears it; absent leaves it. */
@@ -228,6 +259,9 @@ export function applyAskChange(
       const commands = change.commands ?? state.commands;
 
       if (commands) next.commands = commands;
+      const accepts = change.accepts ?? state.accepts;
+
+      if (accepts) next.accepts = accepts;
 
       // Absent keeps the error, null clears it, a message replaces it.
       const error = change.error === undefined ? state.error : change.error;

@@ -39,6 +39,7 @@ import {
   AskCopyIcon,
   AskHistoryIcon,
   AskIcon,
+  AskImageIcon,
   AskLockIcon,
   askIconSizes,
 } from "./ask-icons";
@@ -124,9 +125,9 @@ export function useAskAgents(session: ReviewSession | null): AskAgent[] | null {
 
 const offeredSchema = z.object({ offer: askOfferSchema });
 
-/** What the agent offers, for a question not yet asked: its choices and
- * its commands. Asked again each time: a conversation can teach the server
- * something newer. */
+/** What the agent offers, for a question not yet asked: its choices, its
+ * commands and whether it reads images. Asked again each time: a
+ * conversation can teach the server something newer. */
 function useOffer(
   session: ReviewSession,
   agent: AskAgentId | undefined,
@@ -940,6 +941,7 @@ export function AskPanelContent({
             : composerStatus(thread, busy)
         }
         commands={thread?.commands ?? offered?.commands}
+        acceptsImages={(thread?.accepts ?? offered?.accepts)?.image === true}
         findFiles={findFiles}
         onAsk={ask}
       />
@@ -1162,6 +1164,31 @@ function shortPath(path: string) {
   return parts.length > 2 ? `…/${parts.slice(-2).join("/")}` : path;
 }
 
+/** The images sent with a question. Its files show as its @ mentions. */
+function AskUserImages({
+  entry,
+}: {
+  entry: Extract<AskEntry, { kind: "user" }>;
+}): ReactElement | null {
+  const names = (entry.attachments ?? []).flatMap((attachment) =>
+    attachment.kind === "image" ? [attachment.name] : [],
+  );
+
+  if (!names.length) return null;
+
+  return (
+    <span {...stylex.props(styles.attachments)}>
+      {names.map((name, index) => (
+        // An image's name can repeat.
+        <span key={index} {...stylex.props(styles.attachment)} title={name}>
+          <AskImageIcon xstyle={askIconSizes.small} />
+          {name}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 /** The conversation so far. It changes only with the thread, so typing a
  * question does not render every answer again. */
 const AskTurns = memo(function AskTurns({
@@ -1186,6 +1213,7 @@ const AskTurns = memo(function AskTurns({
             }
           >
             {turn.entry.text}
+            <AskUserImages entry={turn.entry} />
           </AgentChatUserMessage>
         ) : (
           <AskAgentTurn
@@ -1751,6 +1779,29 @@ const styles = stylex.create({
     textDecorationLine: "underline",
     textUnderlineOffset: "3px",
     cursor: "pointer",
+  },
+  attachments: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "6px",
+    marginTop: "8px",
+  },
+  attachment: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "4px",
+    maxWidth: "100%",
+    padding: "2px 6px",
+    overflow: "hidden",
+    ...hairline,
+    borderColor: tokens.ruleSoft,
+    borderRadius: radius.small,
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    lineHeight: "14px",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
   // Showing the list it opens: pressed, not dimmed as disabled.
   historyButtonOn: {

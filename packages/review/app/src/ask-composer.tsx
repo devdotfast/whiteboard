@@ -1,22 +1,67 @@
-import type { AskCommand, AskQuestion } from "@review/ask/thread-state";
+import {
+  type AskCommand,
+  type AskQuestion,
+  askImageTypes,
+} from "@review/ask/thread-state";
 import { fuzzyRank } from "@review/fuzzy-match";
 import * as stylex from "@stylexjs/stylex";
 import {
+  type ClipboardEvent,
+  type DragEvent,
   type KeyboardEvent,
   type ReactElement,
   type ReactNode,
   type RefObject,
   useEffect,
   useId,
+  useRef,
   useState,
 } from "react";
 
-import { AskArrowIcon, askIconSizes } from "./ask-icons";
+import {
+  AskArrowIcon,
+  AskCrossIcon,
+  AskImageIcon,
+  askIconSizes,
+} from "./ask-icons";
 import { fontSize, layer, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { surfaceStyles } from "./ui/surface";
 
+type ImageType = (typeof askImageTypes)[number];
+
+interface Attached {
+  id: string;
+  name: string;
+  mimeType: ImageType;
+  /** Base64, as ACP sends it. */
+  data: string;
+}
+
+const IMAGES_MAX = 4;
+
+const IMAGE_BYTES_MAX = 5 * 1024 * 1024;
+
 const FIND_DELAY_MS = 80;
+
+const isImageType = (type: string): type is ImageType =>
+  askImageTypes.some((allowed) => allowed === type);
+
+/** A file read as base64. */
+function readImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const url = String(reader.result);
+
+      resolve(url.slice(url.indexOf(",") + 1));
+    };
+
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
 
 /** What the caret is completing: a slash command at the start of the
  * question, or a file after an @. */
@@ -72,8 +117,11 @@ function useFiles(
   return query === null ? [] : (found?.paths ?? []);
 }
 
-/** Where a question is written: `/` lists the agent's commands, and `@`
- * finds a file in the checkout. */
+/**
+ * Where a question is written: `/` lists the agent's commands, `@` finds a
+ * file in the checkout, and an agent that reads images takes pasted,
+ * dropped or attached ones.
+ */
 export function AskComposer({
   inputRef,
   placeholder,
@@ -82,6 +130,7 @@ export function AskComposer({
   stop,
   status,
   commands,
+  acceptsImages,
   findFiles,
   onAsk,
 }: {
@@ -94,6 +143,7 @@ export function AskComposer({
   stop?: () => void;
   status: ReactNode;
   commands: AskCommand[] | undefined;
+  acceptsImages: boolean;
   findFiles: (query: string, signal: AbortSignal) => Promise<string[]>;
   /** Resolves true once the question is sent, to clear it. */
   onAsk: (question: AskQuestion) => Promise<boolean>;
@@ -101,9 +151,12 @@ export function AskComposer({
   const [draft, setDraft] = useState("");
   const [caret, setCaret] = useState(0);
   const [mentions, setMentions] = useState<string[]>([]);
+  const [images, setImages] = useState<Attached[]>([]);
+  const [note, setNote] = useState<string | null>(null);
   const [active, setActive] = useState(0);
   // Escape hides the list until the question changes.
   const [dismissed, setDismissed] = useState<string | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
   const listId = useId();
 
   const completion = dismissed === draft ? null : completionAt(draft, caret);
@@ -174,6 +227,37 @@ export function AskComposer({
     );
   };
 
+  const attach = async (files: File[]) => {
+    const wanted = files.flatMap((file) => {
+      const { type } = file;
+
+      return isImageType(type) ? [{ file, mimeType: type }] : [];
+    });
+
+    if (!wanted.length) return;
+    const room = IMAGES_MAX - images.length;
+    const fitting = wanted.filter(({ file }) => file.size <= IMAGE_BYTES_MAX);
+
+    setNote(
+      fitting.length < wanted.length
+        ? "Images over 5 MB were left out."
+        : wanted.length > room
+          ? `A question takes up to ${IMAGES_MAX} images.`
+          : null,
+    );
+
+    const read = await Promise.all(
+      fitting.slice(0, Math.max(room, 0)).map(async ({ file, mimeType }) => ({
+        id: crypto.randomUUID(),
+        name: file.name || "Pasted image",
+        mimeType,
+        data: await readImage(file),
+      })),
+    );
+
+    setImages((current) => [...current, ...read].slice(0, IMAGES_MAX));
+  };
+
   const submit = async () => {
     const text = draft.trim();
 
@@ -186,12 +270,21 @@ export function AskComposer({
 
     if (mentioned.length) question.mentions = mentioned;
 
+    if (images.length)
+      question.images = images.map(({ name, mimeType, data }) => ({
+        name,
+        mimeType,
+        data,
+      }));
+
     const sent = await onAsk(question);
 
     if (!sent) return;
     setDraft("");
     setCaret(0);
     setMentions([]);
+    setImages([]);
+    setNote(null);
   };
 
   const keydown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -230,6 +323,29 @@ export function AskComposer({
     }
   };
 
+  const paste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!acceptsImages) return;
+
+    const files = [...event.clipboardData.files].filter((file) =>
+      isImageType(file.type),
+    );
+
+    if (!files.length) return;
+    event.preventDefault();
+    void attach(files);
+  };
+
+  const dragOver = (event: DragEvent) => {
+    if (acceptsImages && event.dataTransfer.types.includes("Files"))
+      event.preventDefault();
+  };
+
+  const drop = (event: DragEvent) => {
+    if (!acceptsImages) return;
+    event.preventDefault();
+    void attach([...event.dataTransfer.files]);
+  };
+
   return (
     <form
       {...stylex.props(styles.composer)}
@@ -237,6 +353,8 @@ export function AskComposer({
         event.preventDefault();
         void submit();
       }}
+      onDragOver={dragOver}
+      onDrop={drop}
     >
       {open ? (
         <div
@@ -272,6 +390,33 @@ export function AskComposer({
         </div>
       ) : null}
 
+      {images.length ? (
+        <ul {...stylex.props(styles.images)} aria-label="Attached images">
+          {images.map((image) => (
+            <li key={image.id} {...stylex.props(styles.image)}>
+              <img
+                {...stylex.props(styles.thumbnail)}
+                src={`data:${image.mimeType};base64,${image.data}`}
+                alt={image.name}
+              />
+              <button
+                type="button"
+                {...stylex.props(styles.remove)}
+                aria-label={`Remove ${image.name}`}
+                title={`Remove ${image.name}`}
+                onClick={() =>
+                  setImages((current) =>
+                    current.filter((other) => other.id !== image.id),
+                  )
+                }
+              >
+                <AskCrossIcon xstyle={askIconSizes.small} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       <textarea
         ref={inputRef}
         {...stylex.props(styles.question)}
@@ -291,29 +436,57 @@ export function AskComposer({
         }}
         onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
         onKeyDown={keydown}
+        onPaste={paste}
       />
 
       <div {...stylex.props(styles.footer)}>
-        <span {...stylex.props(styles.status)}>{status}</span>
-        {stop ? (
-          <button
-            type="button"
-            {...stylex.props(styles.send, styles.stop)}
-            onClick={stop}
-          >
-            <span aria-hidden="true" {...stylex.props(styles.stopMark)} />
-            Stop
-          </button>
-        ) : (
-          <button
-            type="submit"
-            {...stylex.props(styles.send, styles.submit)}
-            disabled={!draft.trim() || !canAsk}
-          >
-            Ask
-            <AskArrowIcon xstyle={[askIconSizes.small, styles.submitIcon]} />
-          </button>
-        )}
+        <span {...stylex.props(styles.status)}>{note ?? status}</span>
+        <span {...stylex.props(styles.actions)}>
+          {acceptsImages ? (
+            <>
+              <input
+                ref={picker}
+                type="file"
+                accept={askImageTypes.join(",")}
+                multiple
+                hidden
+                onChange={(event) => {
+                  void attach([...(event.target.files ?? [])]);
+                  event.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                {...stylex.props(styles.attach)}
+                aria-label="Attach images"
+                title="Attach images"
+                disabled={disabled || images.length >= IMAGES_MAX}
+                onClick={() => picker.current?.click()}
+              >
+                <AskImageIcon xstyle={askIconSizes.toolbar} />
+              </button>
+            </>
+          ) : null}
+          {stop ? (
+            <button
+              type="button"
+              {...stylex.props(styles.send, styles.stop)}
+              onClick={stop}
+            >
+              <span aria-hidden="true" {...stylex.props(styles.stopMark)} />
+              Stop
+            </button>
+          ) : (
+            <button
+              type="submit"
+              {...stylex.props(styles.send, styles.submit)}
+              disabled={!draft.trim() || !canAsk}
+            >
+              Ask
+              <AskArrowIcon xstyle={[askIconSizes.small, styles.submitIcon]} />
+            </button>
+          )}
+        </span>
       </div>
     </form>
   );
@@ -388,6 +561,44 @@ const styles = stylex.create({
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
+  images: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "8px",
+    margin: 0,
+    padding: 0,
+    listStyle: "none",
+  },
+  image: {
+    position: "relative",
+    width: "48px",
+    height: "48px",
+  },
+  thumbnail: {
+    width: "100%",
+    height: "100%",
+    ...hairline,
+    borderColor: tokens.ruleSoft,
+    borderRadius: radius.small,
+    objectFit: "cover",
+  },
+  remove: {
+    position: "absolute",
+    top: "-6px",
+    right: "-6px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "18px",
+    height: "18px",
+    padding: 0,
+    ...hairline,
+    borderColor: tokens.ruleSoft,
+    borderRadius: radius.round,
+    backgroundColor: tokens.surfaceRaised,
+    color: tokens.inkMuted,
+    cursor: "pointer",
+  },
   question: {
     minHeight: "44px",
     maxHeight: "160px",
@@ -420,6 +631,26 @@ const styles = stylex.create({
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
+  },
+  actions: {
+    display: "inline-flex",
+    flex: "0 0 auto",
+    alignItems: "center",
+    gap: "8px",
+  },
+  attach: {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "4px",
+    ...noBorder,
+    borderRadius: radius.small,
+    backgroundColor: {
+      default: tokens.transparent,
+      ":not(:disabled):hover": tokens.accentWash,
+    },
+    color: tokens.inkMuted,
+    cursor: { default: "pointer", ":disabled": "default" },
+    opacity: { default: null, ":disabled": 0.45 },
   },
   send: {
     display: "inline-flex",

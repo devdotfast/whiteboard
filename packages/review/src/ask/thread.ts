@@ -229,8 +229,14 @@ function commandOf({ name, description, input }: AvailableCommand): AskCommand {
 }
 
 /** What a question carries, as its entry shows it. */
-function attachmentsOf({ mentions = [] }: AskQuestion): AskAttachment[] {
-  return mentions.map((mention) => ({ kind: "file" as const, path: mention }));
+function attachmentsOf({
+  mentions = [],
+  images = [],
+}: AskQuestion): AskAttachment[] {
+  return [
+    ...mentions.map((mention) => ({ kind: "file" as const, path: mention })),
+    ...images.map(({ name }) => ({ kind: "image" as const, name })),
+  ];
 }
 
 const toolInputSchema = z.object({
@@ -734,6 +740,14 @@ export class AskThread {
       clientInfo: { name: "whiteboard", title: "Whiteboard", version: "1" },
     });
 
+    this.emit({
+      type: "set",
+      accepts: {
+        image:
+          initialized.agentCapabilities?.promptCapabilities?.image === true,
+      },
+    });
+
     const session = await this.session(
       connection,
       generation,
@@ -848,10 +862,12 @@ export class AskThread {
 
   /** Tells the host what the agent offers now. */
   private announce() {
-    const { choices = {}, commands } = this.state;
+    const { choices = {}, commands, accepts } = this.state;
     const offer: AskOffer = { choices };
 
     if (commands) offer.commands = commands;
+
+    if (accepts) offer.accepts = accepts;
     this.start.onOffer?.(offer);
   }
 
@@ -1321,7 +1337,8 @@ export class AskThread {
     return id;
   }
 
-  /** A question's files, as links into the checkout. */
+  /** A question's files, as links into the checkout, and its images, for
+   * an agent that reads them. */
   private attachments(question: AskQuestion): ContentBlock[] {
     const root = path.resolve(this.start.cwd);
     const blocks: ContentBlock[] = [];
@@ -1338,6 +1355,24 @@ export class AskThread {
         title: mention,
       });
     }
+
+    const images = question.images ?? [];
+
+    if (!images.length) return blocks;
+
+    if (!this.state.accepts?.image) {
+      this.push({
+        kind: "notice",
+        id: randomUUID(),
+        severity: "warning",
+        title: `${this.state.agentName} does not read images, so they were left out.`,
+      });
+
+      return blocks;
+    }
+
+    for (const { mimeType, data } of images)
+      blocks.push({ type: "image", mimeType, data });
 
     return blocks;
   }
@@ -1437,11 +1472,14 @@ async function offeredBy(
       ),
     );
 
-    await connection.agent.request(methods.agent.initialize, {
-      protocolVersion: PROTOCOL_VERSION,
-      clientCapabilities: { _meta: { parameterizedModelPicker: true } },
-      clientInfo: { name: "whiteboard", title: "Whiteboard", version: "1" },
-    });
+    const initialized = await connection.agent.request(
+      methods.agent.initialize,
+      {
+        protocolVersion: PROTOCOL_VERSION,
+        clientCapabilities: { _meta: { parameterizedModelPicker: true } },
+        clientInfo: { name: "whiteboard", title: "Whiteboard", version: "1" },
+      },
+    );
 
     const session = await connection.agent.request(methods.agent.session.new, {
       cwd,
@@ -1449,7 +1487,13 @@ async function offeredBy(
       _meta: askAgents[agent].sessionMeta,
     });
 
-    const offer: AskOffer = { choices: {} };
+    const offer: AskOffer = {
+      choices: {},
+      accepts: {
+        image:
+          initialized.agentCapabilities?.promptCapabilities?.image === true,
+      },
+    };
 
     for (const [kind, { select }] of choicesOf(session.configOptions))
       offer.choices[kind] = select;

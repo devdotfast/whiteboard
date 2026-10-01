@@ -92,6 +92,9 @@ const askFilesSchema = z.strictObject({
 
 const askFollowUpSchema = z.strictObject({ question: askQuestionSchema });
 
+/** A question with its images: four of up to 5 MB each, base64. */
+const ASK_REQUEST_MAX_BYTES = 30 * 1024 * 1024;
+
 const askMentionsSchema = z.object({
   query: z.string().max(400).default(""),
   /** A conversation's checkout, which can be an earlier version's. */
@@ -1218,7 +1221,7 @@ export function createReviewApi(
         .parse(context.req.query());
 
       const input = askStartSchema.parse(
-        await readBoundedRequestJson(context.req.raw),
+        await readBoundedRequestJson(context.req.raw, ASK_REQUEST_MAX_BYTES),
       );
 
       const snapshot = readReview(reviewId, version);
@@ -1340,7 +1343,7 @@ export function createReviewApi(
       );
 
       const { question } = askFollowUpSchema.parse(
-        await readBoundedRequestJson(context.req.raw),
+        await readBoundedRequestJson(context.req.raw, ASK_REQUEST_MAX_BYTES),
       );
 
       const refusal = thread.askRefusal();

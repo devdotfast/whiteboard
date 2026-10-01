@@ -49,9 +49,11 @@ function fakeAgent(
     greeting?: string;
     /** The slash commands it lists once a session starts. */
     commands?: AvailableCommand[];
+    /** Whether it reads images. */
+    images?: boolean;
   } = {},
 ) {
-  const { greeting, commands } = options;
+  const { greeting, commands, images = false } = options;
   const modes: string[] = [];
   const mcpServers: McpServer[][] = [];
   const metas: unknown[] = [];
@@ -98,7 +100,10 @@ function fakeAgent(
   const app = agent({ name: "fake" })
     .onRequest(methods.agent.initialize, () => ({
       protocolVersion: 1,
-      agentCapabilities: { loadSession: Boolean(load) },
+      agentCapabilities: {
+        loadSession: Boolean(load),
+        promptCapabilities: { image: images },
+      },
       authMethods: [],
     }))
     .onRequest(methods.agent.session.new, ({ params, client }) => {
@@ -1045,6 +1050,7 @@ it("says what an agent offers before anything is asked, starting it once for eve
         input: { hint: "focus" },
       },
     ],
+    images: true,
   });
 
   const stopped = vi.fn<() => void>();
@@ -1081,6 +1087,7 @@ it("says what an agent offers before anything is asked, starting it once for eve
     commands: [
       { name: "review", description: "Review the change", hint: "focus" },
     ],
+    accepts: { image: true },
   });
   expect(second).toBe(first);
   expect(launch).toHaveBeenCalledTimes(1);

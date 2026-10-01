@@ -87,6 +87,16 @@ export function AskCrossIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
+export function AskImageIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <AskGlyph viewBox="0 0 16 16" xstyle={xstyle}>
+      <rect x="2.5" y="3" width="11" height="10" rx="1.5" />
+      <circle cx="6" cy="6.5" r="1" />
+      <path d="M13.5 10.5 10.5 7.5 4 13" />
+    </AskGlyph>
+  );
+}
+
 export function AskTrashIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <AskGlyph viewBox="0 0 16 16" xstyle={xstyle}>
