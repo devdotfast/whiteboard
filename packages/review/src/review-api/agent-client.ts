@@ -103,17 +103,10 @@ export async function callAuthoringTool(
   signal?: AbortSignal,
 ) {
   if (tool.commandType) {
-    // Agents may omit the id; the host's receipts make a retry with it safe.
-    const { commandId = randomUUID(), leaseId, ...fields } = input;
-
     try {
       return await client.post<JsonValue>(
         tool.path,
-        {
-          commandId,
-          leaseId,
-          operation: { ...fields, type: tool.commandType },
-        },
+        { operation: { ...input, type: tool.commandType } },
         signal,
       );
     } catch (error) {
@@ -121,7 +114,7 @@ export async function callAuthoringTool(
       if (error instanceof ReviewApiError || signal?.aborted) throw error;
 
       throw new Error(
-        `Whiteboard may or may not have applied ${tool.name} (${error instanceof Error ? error.message : String(error)}). Retry with identical input, including leaseId, and commandId "${String(commandId)}": if the first attempt was applied, you get its result back instead of a second write.`,
+        `Whiteboard may or may not have applied ${tool.name} (${error instanceof Error ? error.message : String(error)}). Check with review_get before retrying.`,
         { cause: error },
       );
     }
@@ -184,8 +177,6 @@ export function toolResultText(
     ? result
     : JSON.stringify(result);
 }
-
-import { randomUUID } from "node:crypto";
 
 import {
   isBooleanValue,

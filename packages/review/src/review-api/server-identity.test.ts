@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -78,7 +77,6 @@ it("resets the id without changing any review id", async () => {
   const store = open();
 
   const { reviewId } = await store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "create",
       title: "Kept",

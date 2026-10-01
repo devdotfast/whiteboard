@@ -102,7 +102,6 @@ it.skipIf(!electron && !process.env.CI)(
     writeFileSync(
       script,
       `
-import { randomUUID } from "node:crypto";
 import { openLocalReviewStore } from ${JSON.stringify(path.join(packageRoot, "src/review-api/local-data.ts"))};
 
 const local = openLocalReviewStore(${JSON.stringify(path.join(directory, "reviews.db"))});
@@ -110,7 +109,6 @@ const local = openLocalReviewStore(${JSON.stringify(path.join(directory, "review
 try {
   const { id } = await local.data.register(${JSON.stringify(repository)});
   const { reviewId } = await local.store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "create",
       title: "Working copy",

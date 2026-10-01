@@ -126,7 +126,6 @@ export async function run(ctx) {
 
   const command = (operation) =>
     ctx.apiOk("/reviews-api/commands", "POST", {
-      commandId: randomUUID(),
       operation,
     });
 

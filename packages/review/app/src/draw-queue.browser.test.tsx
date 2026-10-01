@@ -68,7 +68,11 @@ const blocks: Block[] = [
 
 const data = testApiDocumentData(blocks);
 
-const working = { workingCount: 1, expiresAt: null, focuses: [] };
+const working = {
+  workingCount: 1,
+  expiresAt: null,
+  activities: [{ activityId: "a", slot: 0 }],
+};
 
 /** A clock the test drives by hand: `advance` moves it forward and, inside
  * `act`, fires the pending timeout once its due time has passed. This is

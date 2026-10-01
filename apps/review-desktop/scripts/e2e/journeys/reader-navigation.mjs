@@ -1,6 +1,5 @@
 /** One reader's path through a review: every view, the Find widget, the table of contents, and the version a rename seals. */
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 
 import { createReview, orderReviewBlocks } from "../harness.mjs";
 
@@ -234,7 +233,6 @@ export async function run(ctx) {
   const before = await history();
 
   const renamed = await ctx.api("/reviews-api/commands", "POST", {
-    commandId: randomUUID(),
     operation: { type: "rename", reviewId: review.reviewId, title: RENAMED },
   });
 

@@ -35,7 +35,6 @@ async function seed(existing?: string) {
   const repositoryId = (await local.data.register(repo.root)).id;
 
   const { reviewId } = await local.store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "create",
       title: "Already authored",

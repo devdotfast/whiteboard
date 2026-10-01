@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -37,8 +36,7 @@ const git = (...args: string[]) =>
 
 type Operation = z.infer<typeof commandSchema>["operation"];
 
-const command = (operation: Operation) =>
-  local.store.execute({ commandId: randomUUID(), operation });
+const command = (operation: Operation) => local.store.execute({ operation });
 
 beforeEach(async () => {
   directory = mkdtempSync(path.join(tmpdir(), "pinned-language-"));
@@ -84,7 +82,6 @@ it("keeps Desktop preparation owned while a headless connection edits and delete
     expect(() => headless.data.workspaces).toThrow(/Desktop/);
     expect(local.data.workspaces.list(reviewId)).toContainEqual(preparing);
     await headless.store.execute({
-      commandId: randomUUID(),
       operation: { type: "delete", reviewId },
     });
     await vi.waitFor(
@@ -402,7 +399,6 @@ it("removes checkouts left by reviews dismissed while Desktop was closed", async
   await local.store.close();
   const headless = openLocalReviewStore(database, { manageWorkspaces: false });
   await headless.store.execute({
-    commandId: randomUUID(),
     operation: { type: "attention", reviewId, action: "dismiss" },
   });
   await headless.data.close();
@@ -450,7 +446,6 @@ const attentionWhileClosed = async (
 
   for (const action of actions) {
     await headless.store.execute({
-      commandId: randomUUID(),
       operation: { type: "attention", reviewId, action },
     });
     await new Promise((resolve) => setTimeout(resolve, 5));

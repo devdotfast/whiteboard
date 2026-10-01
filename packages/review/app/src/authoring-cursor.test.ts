@@ -1,4 +1,7 @@
-import type { ActivitySnapshot } from "@review/review-api/activity";
+import type {
+  ActivityFocus,
+  ActivitySnapshot,
+} from "@review/review-api/activity";
 import type { EditSummary } from "@review/review-api/document";
 import { describe, expect, it } from "vitest";
 
@@ -8,10 +11,16 @@ import {
   scopeLive,
 } from "./authoring-cursor";
 
-const working = (targetId?: string) => ({
+const working = (targetId?: string): ActivitySnapshot => ({
   workingCount: 1,
   expiresAt: null,
-  focuses: targetId ? [{ targetId, description: "Working" }] : [],
+  activities: [
+    {
+      activityId: "a",
+      slot: 0,
+      ...(targetId && { focus: { targetId, description: "Working" } }),
+    },
+  ],
 });
 
 describe("nextCursor", () => {
@@ -133,13 +142,16 @@ describe("nextCursor", () => {
       kind: "markdown",
     };
 
-    const both = (
-      focuses: ActivitySnapshot["focuses"] = [],
-    ): ActivitySnapshot => ({
+    const both = ([documentFocus, lensFocus]: (
+      | ActivityFocus
+      | undefined
+    )[] = []): ActivitySnapshot => ({
       workingCount: 2,
       expiresAt: null,
-      scopes: ["document", "lenses"],
-      focuses,
+      activities: [
+        { activityId: "writer", slot: 0, focus: documentFocus },
+        { activityId: "lenses", slot: 1, surface: "lenses", focus: lensFocus },
+      ],
     });
 
     let documentCursor = nextCursor(null, documentMemory, {
@@ -170,12 +182,12 @@ describe("nextCursor", () => {
       edit: lensInsert,
     });
 
-    // Each lease's focus moves its own courier.
+    // Each agent's focus moves its own courier.
     const focused = {
       version: 2,
       activity: both([
         { description: "Explaining", targetId: "block-9" },
-        { description: "Grouping tests", targetId: "lens-5", scope: "lenses" },
+        { description: "Grouping tests", targetId: "lens-5" },
       ]),
     };
 
@@ -188,27 +200,26 @@ describe("nextCursor", () => {
     expect(lensCursor).toMatchObject({ targetId: "lens-5", source: "focus" });
   });
 
-  it("reads a scope as live from the lease scopes, or from a bare count as the document's", () => {
+  it("reads a page as live where an agent last wrote, the document until it writes", () => {
+    const lensWriter: ActivitySnapshot = {
+      workingCount: 1,
+      expiresAt: null,
+      activities: [{ activityId: "a", slot: 0, surface: "lenses" }],
+    };
+
     expect(scopeLive(undefined, "document")).toBe(false);
     expect(scopeLive("unknown", "lenses")).toBe(false);
+    expect(scopeLive(lensWriter, "document")).toBe(false);
+    expect(scopeLive(lensWriter, "lenses")).toBe(true);
     expect(
       scopeLive(
-        { workingCount: 1, expiresAt: null, scopes: ["lenses"] },
+        {
+          workingCount: 1,
+          expiresAt: null,
+          activities: [{ activityId: "a", slot: 0 }],
+        },
         "document",
       ),
-    ).toBe(false);
-    expect(
-      scopeLive(
-        { workingCount: 1, expiresAt: null, scopes: ["lenses"] },
-        "lenses",
-      ),
     ).toBe(true);
-    // A host from before scopes reports only its one lease.
-    expect(scopeLive({ workingCount: 1, expiresAt: null }, "document")).toBe(
-      true,
-    );
-    expect(scopeLive({ workingCount: 1, expiresAt: null }, "lenses")).toBe(
-      false,
-    );
   });
 });

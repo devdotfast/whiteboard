@@ -15,7 +15,7 @@ import "./styles.css";
 const working: ActivitySnapshot = {
   workingCount: 1,
   expiresAt: null,
-  focuses: [],
+  activities: [{ activityId: "a", slot: 0 }],
 };
 
 const idle: ActivitySnapshot = { workingCount: 0, expiresAt: null };
@@ -100,7 +100,9 @@ const longDescription =
 
 const longUpdate: ActivitySnapshot = {
   ...working,
-  focuses: [{ description: longDescription }],
+  activities: [
+    { activityId: "a", slot: 0, focus: { description: longDescription } },
+  ],
 };
 
 it("keeps a long update inside the badge and puts the whole of it in the tooltip", async () => {

@@ -1,6 +1,5 @@
 /** The JSON review API must reject the pitfalls the old render gate caught, and an accepted edit must render live. */
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 
 import { createReview, orderReviewBlocks } from "../harness.mjs";
 import {
@@ -41,7 +40,6 @@ export async function run(ctx) {
 
   const edit = (content) =>
     api("/reviews-api/commands", "POST", {
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId: metadata.sourceUuid,

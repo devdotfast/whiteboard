@@ -466,6 +466,8 @@ export interface EditSummary {
   /** A diagram written whole: its units in the order a hand would draw
    * them, so the canvas can trace the whole diagram in one quick pass. */
   units?: string[];
+  /** The agent whose courier draws this edit, when the host could tell. */
+  activityId?: string;
 }
 
 /** A component an edit wrote, named so the author can address it. */

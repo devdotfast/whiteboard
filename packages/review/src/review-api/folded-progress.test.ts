@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -250,8 +249,7 @@ const records: {
 ];
 
 async function progressApi() {
-  const run = <Operation>(operation: Operation) =>
-    store.execute({ commandId: randomUUID(), operation });
+  const run = <Operation>(operation: Operation) => store.execute({ operation });
 
   const { reviewId } = await run({ type: "create", title: "Folds", pins });
   await run({

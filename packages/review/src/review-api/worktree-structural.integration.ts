@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -84,7 +83,6 @@ it.each([
       git("add", "value.ts");
 
       const { reviewId } = await local.store.execute({
-        commandId: randomUUID(),
         operation: {
           type: "create",
           title: "Live",
@@ -97,7 +95,6 @@ it.each([
       });
 
       await local.store.execute({
-        commandId: randomUUID(),
         operation: {
           type: "edit",
           reviewId,
@@ -215,7 +212,6 @@ it("streams added, deleted, renamed and binary working files and respects path f
     const { id } = await local.data.register(repository);
 
     const { reviewId } = await local.store.execute({
-      commandId: randomUUID(),
       operation: {
         type: "create",
         title: "Changed files",
@@ -295,7 +291,6 @@ it("compares a staged file in an unborn repository with empty source", async () 
     const { id } = await local.data.register(repository);
 
     const { reviewId } = await local.store.execute({
-      commandId: randomUUID(),
       operation: {
         type: "create",
         title: "Unborn",

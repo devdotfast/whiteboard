@@ -102,7 +102,6 @@ export async function createNativeTutorial(input: {
 
   const result = await input.store.execute(
     {
-      commandId: randomUUID(),
       operation: { type: "create", title: assets.authored.title, pins },
     },
     { document: assets.authored.document, origin: { tutorial: true } },
@@ -162,7 +161,6 @@ export function createTutorialService(input: {
   async function cleanup() {
     for (const reviewId of input.store.tutorialIds())
       await input.store.execute({
-        commandId: randomUUID(),
         operation: { type: "delete", reviewId },
       });
 

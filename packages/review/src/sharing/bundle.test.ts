@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -68,7 +67,6 @@ it("checks every quote in a reused trace and rejects duplicate event IDs", async
     )!;
 
     await fixture.store.execute({
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId: fixture.reviewId,

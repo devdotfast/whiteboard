@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -47,7 +46,6 @@ let directory: string, database: string, store: ReviewStore;
 let providers: ReviewProviders;
 
 const request = <Operation>(operation: Operation) => ({
-  commandId: randomUUID(),
   operation,
 });
 
@@ -57,11 +55,8 @@ const create = () =>
 const edit = <Content>(reviewId: string, value: Content) =>
   store.execute(request({ type: "edit", reviewId, edit: value }));
 
-const writeLens = <Edit>(reviewId: string, value: Edit, leaseId?: string) =>
-  store.execute({
-    ...request({ type: "lens_edit", reviewId, edit: value }),
-    leaseId,
-  });
+const writeLens = <Edit>(reviewId: string, value: Edit) =>
+  store.execute(request({ type: "lens_edit", reviewId, edit: value }));
 
 beforeEach(() => {
   directory = mkdtempSync(path.join(tmpdir(), "review-lean-"));
@@ -114,8 +109,7 @@ describe("snapshot authoring", () => {
       pullRequestUrl: "https://github.com/devdotfast/review/pull/311",
     });
 
-    const bound = await store.execute(rebinding);
-    expect(await store.execute(rebinding)).toEqual(bound);
+    await store.execute(rebinding);
     expect(store.read(reviewId).document).toEqual(authored.document);
     expect(store.read(reviewId).pins).toEqual(pins);
     expect(store.read(reviewId).origin?.pullRequestNumber).toBe(311);
@@ -205,9 +199,11 @@ describe("snapshot authoring", () => {
     expect(store.list()).toEqual([]);
   });
 
-  it("deletes one review and its history, keeps other reviews, and cannot replay deleted content", async () => {
-    const input = request({ type: "create", title: "Delete me", pins });
-    const { reviewId } = await store.execute(input);
+  it("deletes one review and its history and keeps other reviews", async () => {
+    const { reviewId } = await store.execute(
+      request({ type: "create", title: "Delete me", pins }),
+    );
+
     const other = await create();
     await edit(reviewId, {
       type: "insert",
@@ -216,7 +212,6 @@ describe("snapshot authoring", () => {
     const deletion = request({ type: "delete", reviewId });
     const result = await store.execute(deletion);
     expect(result).toMatchObject({ reviewId, deleted: true });
-    expect(await store.execute(deletion)).toEqual(result);
     expect(() => store.read(reviewId)).toThrow(/not found/);
     expect(store.history(reviewId)).toEqual([]);
     expect(store.read(other.reviewId)).toMatchObject({
@@ -228,8 +223,7 @@ describe("snapshot authoring", () => {
     expect(store.list().map((review) => review.reviewId)).toEqual([
       other.reviewId,
     ]);
-    await expect(store.execute(input)).rejects.toThrow(/was deleted/);
-    expect(await store.execute(deletion)).toEqual(result);
+    await expect(store.execute(deletion)).rejects.toThrow(/not found/);
   });
   it("persists attention without creating a document version or notifying its readers", async () => {
     const { reviewId } = await create();
@@ -243,7 +237,6 @@ describe("snapshot authoring", () => {
     store.subscribeCatalog(catalog);
     const dismiss = request({ type: "attention", reviewId, action: "dismiss" });
     const result = await store.execute(dismiss);
-    await store.execute(dismiss);
     await store.execute(
       request({ type: "attention", reviewId, action: "view" }),
     );
@@ -429,7 +422,6 @@ describe("snapshot authoring", () => {
       "block-2 (software_map): Map does not match this review's source pins.",
       "head/src/store.ts#L1-L5: File is unavailable at the pinned commit.",
     ]);
-    expect(await store.execute(command)).toEqual(result);
     expect(store.read(reviewId).document).toEqual(original.document);
     expect(store.read(reviewId, original.version)).toEqual(original);
     await edit(reviewId, {
@@ -1403,28 +1395,6 @@ describe("snapshot authoring", () => {
       caption: "second",
     });
   });
-
-  it("replays a lost response after restart, but rejects reuse with a different edit", async () => {
-    const { reviewId } = await create();
-
-    const command = request({
-      type: "edit",
-      reviewId,
-      edit: { type: "insert", content: { type: "divider" } },
-    });
-
-    const result = await store.execute(command);
-    await store.close();
-    store = new ReviewStore(database, providers);
-    expect(await store.execute(command)).toEqual(result);
-    expect(store.read(reviewId).document).toHaveLength(1);
-    await expect(
-      store.execute({
-        ...command,
-        operation: { type: "rename", reviewId, title: "Different" },
-      }),
-    ).rejects.toThrow(/already used/);
-  });
 });
 
 describe("create for a pull request", () => {
@@ -1473,7 +1443,7 @@ describe("create for a pull request", () => {
       headMoved: false,
     });
     expect(again.note).toEqual(expect.any(String));
-    expect(again.activeLeaseId).toBeUndefined();
+    expect(again.working).toBeUndefined();
     expect(again.otherReviewIds).toBeUndefined();
     expect(store.list()).toHaveLength(1);
     expect(store.read(first.reviewId)).toMatchObject({
@@ -1564,47 +1534,17 @@ describe("create for a pull request", () => {
     expect(store.list()).toHaveLength(2);
   });
 
-  it("names the live lease on the review it returns", async () => {
+  it("says an agent is working on the review it returns", async () => {
     const { reviewId } = await createFor(url);
-    const leaseId = randomUUID();
-    store.activity.update(reviewId, { action: "begin", leaseId });
+    store.activity.update(reviewId, {
+      action: "begin",
+      focus: { description: "Writing the summary" },
+    });
 
     const found = await createFor(url);
 
-    expect(found).toMatchObject({
-      created: false,
-      reviewId,
-      activeLeaseId: leaseId,
-    });
-    expect(found.note).toContain(`Lease ${leaseId} is currently authoring it.`);
-  });
-
-  it("replays a found review for a repeated command and rejects a changed one", async () => {
-    const { reviewId } = await createFor(url);
-
-    const repeat = request({
-      type: "create",
-      title: "PR",
-      pins,
-      pullRequestUrl: url,
-    });
-
-    const found = await store.execute(repeat);
-    await edit(reviewId, { type: "insert", content: { type: "divider" } });
-    await store.close();
-    store = new ReviewStore(database, providers);
-
-    expect(await store.execute(repeat)).toEqual(found);
-    await expect(
-      store.execute({
-        ...repeat,
-        operation: { ...repeat.operation, reuseExisting: false },
-      }),
-    ).rejects.toThrow(/already used/);
-    expect(store.list()).toHaveLength(1);
-
-    await store.execute(request({ type: "delete", reviewId }));
-    await expect(store.execute(repeat)).rejects.toThrow(/was deleted/);
+    expect(found).toMatchObject({ created: false, reviewId, working: true });
+    expect(found.note).toContain("Writing the summary");
   });
 
   it("leaves creates without a PR, other PRs and the scratchpad alone", async () => {
@@ -1826,7 +1766,6 @@ it("serves the experiment through the real desktop HTTP server and existing auth
     );
     await expect(
       callAuthoringTool(client, tools.find((t) => t.name === "review_edit")!, {
-        commandId: randomUUID(),
         reviewId,
         edit: {
           type: "insert",

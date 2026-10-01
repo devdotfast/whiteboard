@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import {
   mkdtempSync,
   rmSync,
@@ -61,7 +60,6 @@ it.each([false, true])(
       const { id } = await local.data.register(root);
 
       const { reviewId } = await local.store.execute({
-        commandId: randomUUID(),
         operation: {
           type: "create",
           title: "Unsupported files",

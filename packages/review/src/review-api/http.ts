@@ -465,12 +465,8 @@ export function createReviewApi(
   });
 
   // One route per agent tool; the path names the action.
-  for (const [path, action] of [
-    ["begin", "begin"],
-    ["update", "renew"],
-    ["end", "end"],
-  ] as const)
-    app.post(`/:id/activity/${path}`, async (context) => {
+  for (const action of ["begin", "update", "end"] as const)
+    app.post(`/:id/activity/${action}`, async (context) => {
       const input = await readBoundedRequestJson(context.req.raw);
       const id = context.req.param("id");
       store.assertExists(id);
@@ -1742,8 +1738,7 @@ export function createReviewApi(
 
     if (input.operation.type !== "create") return context.json(result);
 
-    // False when an existing review for the same PR came back. A replayed
-    // command returns its first receipt, so this can repeat for one review.
+    // False when an existing review for the same PR came back.
     if (result.created !== false)
       hooks.onReviewCreated?.({
         reviewId: result.reviewId,
@@ -1775,8 +1770,8 @@ function failureKind(error: Error): string {
 
 /**
  * `open` steers presentation, not the saved review, so it stays out of the
- * command and its receipt: a retry may choose differently. Anything else,
- * including `open` off create, is left for commandSchema to reject.
+ * command. Anything else, including `open` off create, is left for
+ * commandSchema to reject.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Request body boundary: commandSchema parses the result.
 function takeCreateOpen(body: unknown) {
