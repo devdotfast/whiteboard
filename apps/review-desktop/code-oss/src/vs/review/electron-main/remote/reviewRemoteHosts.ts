@@ -149,9 +149,10 @@ export class ReviewRemoteHosts {
 			const existing = this.hosts.get(alias);
 			// A changed setting is the user's cue to try a refused login or a missing install again.
 			if (existing) {
-				// Its uninstall failed, and the alias stays.
-				if (existing.quiesced) existing.unquiesce();
-				else if (existing.state.problem && existing.state.problem.state !== "unreachable") existing.retry();
+				// Its uninstall failed, and the alias stays; one still running keeps it quiesced, and the next change decides.
+				if (existing.quiesced) {
+					if (!this.uninstalling.has(alias)) existing.unquiesce();
+				} else if (existing.state.problem && existing.state.problem.state !== "unreachable") existing.retry();
 				continue;
 			}
 			const host = this.createHost(alias);
@@ -220,8 +221,12 @@ export class ReviewRemoteHosts {
 			this.publish();
 		}
 		if (!host) return;
-		const closed = host.dispose().finally(() => this.closing.delete(host));
-		this.closing.set(host, closed);
+		// Removed from the setting meanwhile, it is closing already.
+		let closed = this.closing.get(host);
+		if (!closed) {
+			closed = host.dispose().finally(() => this.closing.delete(host));
+			this.closing.set(host, closed);
+		}
 		await closed;
 	}
 
