@@ -783,19 +783,6 @@ export function createReviewApi(
 
       return context.json(await data!.register(input.path));
     });
-    app.post("/pins", async (context) => {
-      const input = z
-        .strictObject({
-          repositoryId: z.string(),
-          base: z.string(),
-          head: z.string(),
-        })
-        .parse(await readBoundedRequestJson(context.req.raw));
-
-      return context.json(
-        await data!.resolvePins(input.repositoryId, input.base, input.head),
-      );
-    });
     app.post("/resources", async (context) =>
       context.json(
         await data!.upload(

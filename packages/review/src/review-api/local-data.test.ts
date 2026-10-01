@@ -1345,16 +1345,6 @@ it("reads pinned Git objects, rejects invalid evidence before saving, and retain
   await expect(local.data.file(pins, "head", "../outside.ts")).rejects.toThrow(
     /relative/,
   );
-  await expect(
-    local.store.execute(
-      command({
-        type: "repin",
-        reviewId: review.reviewId,
-        pins: { ...pins, head: "HEAD" },
-      }),
-    ),
-  ).rejects.toThrow(/resolved commit/);
-  expect(local.store.read(review.reviewId).version).toBe(1);
   await local.store.close();
   await local.data.close();
   local = openLocalReviewStore(database);
@@ -2185,15 +2175,6 @@ it("exposes real source and resource operations through the authenticated deskto
     expect(
       await (await post("/repositories", { path: repository })).json(),
     ).toEqual({ id: pins.repositoryId, name: "repository" });
-    expect(
-      await (
-        await post("/pins", {
-          repositoryId: pins.repositoryId,
-          base: "HEAD^",
-          head: "HEAD",
-        })
-      ).json(),
-    ).toEqual(pins);
 
     const review = await (
       await post(
@@ -3137,89 +3118,82 @@ it("worktree language contexts never prepare or create checkouts, including hist
   expect(existsSync(path.join(repository, "prepared"))).toBe(false);
 });
 
-it.each(["repin", "set_target"] as const)(
-  "recovers persisted stale source and clears flags on %s",
-  async (operation) => {
-    const original = "const first = 1;\nconst second = 2;\n";
-    writeFileSync(path.join(repository, "recover.ts"), original);
+it("recovers persisted stale source and clears flags on set_target", async () => {
+  const original = "const first = 1;\nconst second = 2;\n";
+  writeFileSync(path.join(repository, "recover.ts"), original);
 
-    const created = await local.store.execute(
-      command({
-        type: "create",
-        title: "Recovery",
-        target: {
-          kind: "worktree",
-          repositoryId: pins.repositoryId,
-          base: pins.head,
-        },
-      }),
-    );
+  const created = await local.store.execute(
+    command({
+      type: "create",
+      title: "Recovery",
+      target: {
+        kind: "worktree",
+        repositoryId: pins.repositoryId,
+        base: pins.head,
+      },
+    }),
+  );
 
-    await insert(created.reviewId, {
+  await insert(created.reviewId, {
+    type: "code_peek",
+    source: rangeAnchor({
+      side: "head",
+      file: "recover.ts",
+      fromLine: 2,
+      toLine: 2,
+    }),
+  });
+  writeFileSync(path.join(repository, "recover.ts"), "const first = 99;\n");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  const renamed = await local.store.execute(
+    command({
+      type: "rename",
+      reviewId: created.reviewId,
+      title: "Still editable",
+    }),
+  );
+
+  expect(renamed.warnings?.length).toBeGreaterThan(0);
+  expect(local.store.read(created.reviewId).staleSources).toHaveLength(1);
+  await expect(
+    insert(created.reviewId, {
       type: "code_peek",
       source: rangeAnchor({
         side: "head",
         file: "recover.ts",
-        fromLine: 2,
-        toLine: 2,
+        fromLine: 99,
+        toLine: 99,
       }),
-    });
-    writeFileSync(path.join(repository, "recover.ts"), "const first = 99;\n");
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    const renamed = await local.store.execute(
-      command({
-        type: "rename",
-        reviewId: created.reviewId,
-        title: "Still editable",
-      }),
-    );
-
-    expect(renamed.warnings?.length).toBeGreaterThan(0);
-    expect(local.store.read(created.reviewId).staleSources).toHaveLength(1);
-    await expect(
-      insert(created.reviewId, {
-        type: "code_peek",
-        source: rangeAnchor({
-          side: "head",
-          file: "recover.ts",
-          fromLine: 99,
-          toLine: 99,
-        }),
-      }),
-    ).rejects.toThrow("exceeds the pinned file");
-    writeFileSync(path.join(repository, "recover.ts"), original);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    await local.store.refreshWorktrees();
-    expect(local.store.read(created.reviewId).staleSources).toEqual([]);
-    expect(local.store.read(created.reviewId).document[0]).toMatchObject({
-      source: "head/recover.ts#L2",
-    });
-    expect(
-      local.store.read(created.reviewId, renamed.version).staleSources,
-    ).toHaveLength(1);
-    await local.store.execute(
-      command({
-        type: "restore",
-        reviewId: created.reviewId,
-        version: renamed.version,
-      }),
-    );
-    expect(local.store.read(created.reviewId).staleSources).toHaveLength(1);
-    await local.store.execute(
-      command(
-        operation === "repin"
-          ? { type: "repin", reviewId: created.reviewId, pins }
-          : {
-              type: "set_target",
-              reviewId: created.reviewId,
-              target: { kind: "commits", ...pins },
-            },
-      ),
-    );
-    expect(local.store.read(created.reviewId).staleSources).toEqual([]);
-  },
-);
+    }),
+  ).rejects.toThrow("exceeds the pinned file");
+  writeFileSync(path.join(repository, "recover.ts"), original);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await local.store.refreshWorktrees();
+  expect(local.store.read(created.reviewId).staleSources).toEqual([]);
+  expect(local.store.read(created.reviewId).document[0]).toMatchObject({
+    source: "head/recover.ts#L2",
+  });
+  expect(
+    local.store.read(created.reviewId, renamed.version).staleSources,
+  ).toHaveLength(1);
+  await local.store.execute(
+    command({
+      type: "restore",
+      reviewId: created.reviewId,
+      version: renamed.version,
+    }),
+  );
+  expect(local.store.read(created.reviewId).staleSources).toHaveLength(1);
+  await local.store.execute(
+    command({
+      type: "set_target",
+      reviewId: created.reviewId,
+      target: { kind: "commits", ...pins },
+    }),
+  );
+  expect(local.store.read(created.reviewId).staleSources).toEqual([]);
+});
 
 it("does not report clean tracked symlinks and submodules as modified", async () => {
   symlinkSync("example.ts", path.join(repository, "tracked-link.ts"));

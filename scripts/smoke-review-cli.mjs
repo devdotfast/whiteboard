@@ -165,15 +165,9 @@ try {
     path: repository,
   });
 
-  const pins = await api("session_resolve_pins", {
-    repositoryId: registered.id,
-    base: head,
-    head,
-  });
-
   const created = await api("session_create", {
     title: "Packed CLI smoke",
-    target: { kind: "commits", ...pins },
+    target: { kind: "commits", repositoryId: registered.id, base: head, head },
     open: false,
   });
 
