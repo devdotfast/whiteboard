@@ -161,13 +161,13 @@ test("reads the remote hosts' states from the Desktop server, and refuses a malf
 		await assert.rejects(service.readRemoteHosts(), /remote hosts/);
 });
 
-test("asks the main process for SSH aliases, host retries, installs and agents", async () => {
+test("asks the main process for SSH aliases, host retries, installs, agents and uninstalls", async () => {
 	const calls: unknown[][] = [];
 	const service = new ReviewDesktopConnectionService({
 		getChannel: () => ({
 			call: async (...args: unknown[]) => {
 				calls.push(args);
-				return args[0] === "listSshAliases" ? ["devbox"] : undefined;
+				return args[0] === "listSshAliases" ? ["devbox"] : args[0] === "uninstallRemoteHost" ? (args[1] === "gpu" ? "Could not remove Whiteboard from gpu." : null) : undefined;
 			},
 		}),
 	} as never, new TestStorage() as never);
@@ -176,12 +176,16 @@ test("asks the main process for SSH aliases, host retries, installs and agents",
 	await service.installRemoteHost("devbox");
 	await service.detectRemoteAgents("devbox");
 	await service.connectRemoteAgents("devbox", ["pi"]);
+	await service.uninstallRemoteHost("devbox");
+	await assert.rejects(service.uninstallRemoteHost("gpu"), { message: "Could not remove Whiteboard from gpu." });
 	assert.deepEqual(calls, [
 		["listSshAliases"],
 		["retryRemoteHost", "devbox"],
 		["installRemoteHost", "devbox"],
 		["detectRemoteAgents", "devbox"],
 		["connectRemoteAgents", { alias: "devbox", agents: ["pi"] }],
+		["uninstallRemoteHost", "devbox"],
+		["uninstallRemoteHost", "gpu"],
 	]);
 	service.dispose();
 });

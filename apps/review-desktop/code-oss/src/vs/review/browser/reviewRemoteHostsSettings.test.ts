@@ -13,6 +13,7 @@ function fixture(values: Record<string, unknown>) {
 	const settings = new Map(Object.entries(values));
 	const writes: unknown[] = [];
 	const retried: string[] = [];
+	const uninstalled: string[] = [];
 	const hosts = reviewRemoteHostsSettings({
 		get: (key) => settings.get(key),
 		update: async (key, value) => {
@@ -26,9 +27,10 @@ function fixture(values: Record<string, unknown>) {
 			installRemoteHost: async (alias) => { retried.push(`install ${alias}`); },
 			detectRemoteAgents: async () => null,
 			connectRemoteAgents: async () => [],
+			uninstallRemoteHost: async (alias) => { uninstalled.push(alias); },
 		},
 	});
-	return { hosts, writes, retried };
+	return { hosts, writes, retried, uninstalled };
 }
 
 test("reads the two settings as main does", () => {
@@ -54,11 +56,13 @@ test("writes the aliases once each and answers with the stored list", async () =
 	assert.deepEqual(writes, [["devbox", "other"]]);
 });
 
-test("passes suggestions, states, retries and installs through to Desktop", async () => {
-	const { hosts, retried } = fixture({});
+test("passes suggestions, states, retries, installs and uninstalls through to Desktop", async () => {
+	const { hosts, retried, uninstalled } = fixture({});
 	assert.deepEqual(await hosts.suggestions(), ["devbox"]);
 	assert.deepEqual(await hosts.states(), [{ alias: "devbox", state: "online" }]);
 	await hosts.retry("devbox");
 	await hosts.install("devbox");
 	assert.deepEqual(retried, ["devbox", "install devbox"]);
+	await hosts.uninstall("devbox");
+	assert.deepEqual(uninstalled, ["devbox"]);
 });

@@ -606,6 +606,8 @@ export interface ReviewRemoteHostsSettings {
     alias: string,
     agents: ReviewRemoteAgentId[],
   ): Promise<ReviewRemoteAgentResult[]>;
+  // Removes Whiteboard from the host, keeping its reviews; rejects with why it could not.
+  uninstall(alias: string): Promise<void>;
 }
 
 /** The line that marks `~/.local/bin/whiteboard` on a remote host as the launcher Desktop writes and replaces with each install. */

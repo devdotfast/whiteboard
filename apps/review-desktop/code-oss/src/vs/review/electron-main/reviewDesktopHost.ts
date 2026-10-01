@@ -293,6 +293,17 @@ export class ReviewDesktopHost extends Disposable {
     return this.remoteHosts.connectAgents(alias, ids);
   }
 
+  /** Why Whiteboard could not be removed from the host, or null once it was. */
+  async uninstallRemoteHost(alias: string): Promise<string | null> {
+    if (!this.remoteHosts) return "Remote hosts are off.";
+    try {
+      await this.remoteHosts.uninstall(alias);
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  }
+
   /** Probe, ask, install this Desktop's version, then attach through it. */
   private remoteInstallFlow(): ReviewRemoteInstallFlow {
     const { userDataPath, isBuilt, appRoot } = this.environmentMainService;

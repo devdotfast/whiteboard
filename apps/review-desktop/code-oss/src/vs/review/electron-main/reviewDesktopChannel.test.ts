@@ -128,3 +128,12 @@ test("hands a window a remote machine's VS Code server by its server id, and not
 	assert.equal(await channel.call("window", "getRemoteLanguageEndpoint", { serverId: "s1" }), undefined);
 	assert.deepEqual(asked, ["s1", "s2"]);
 });
+
+test("answers an uninstall with the host's reason, or null", async () => {
+	const host = { uninstallRemoteHost: async (alias: string) => (alias === "devbox" ? null : `Could not remove Whiteboard from ${alias}.`) };
+	const channel = new ReviewDesktopChannel(host as never, { getWindows: () => [] } as never);
+
+	assert.equal(await channel.call("", "uninstallRemoteHost", "devbox"), null);
+	assert.equal(await channel.call("", "uninstallRemoteHost", "gpu"), "Could not remove Whiteboard from gpu.");
+	await assert.rejects(channel.call("", "uninstallRemoteHost", 7), /needs an alias/);
+});
