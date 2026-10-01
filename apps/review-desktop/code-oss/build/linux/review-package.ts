@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { execFileSync } from 'node:child_process';
-import { chmod, cp, mkdir, open, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, open, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { additionalDeps, recommendedDeps } from './rpm/dep-lists.ts';
 
@@ -98,14 +98,6 @@ exec ${share}/${app} ${share}/resources/app/review-runtime/dist/cli.js "$@"
 unset ELECTRON_RUN_AS_NODE VSCODE_DEV VSCODE_CLI
 exec ${share}/${app} "$@"
 `, 0o755);
-	// Preserve existing CLI shims and scripts.
-	const link = async (target: string, path: string) => {
-		await mkdir(dirname(join(destination, path)), { recursive: true });
-		await symlink(target, join(destination, path));
-	};
-	await link(`${app}-desktop`, `usr/bin/${legacyApp}-desktop`);
-	await link(`${share}/${app}`, `usr/share/${legacyApp}/${legacyApp}`);
-	await link(`${share}/resources/app/review-runtime/dist/cli.js`, `usr/share/${legacyApp}/resources/app/review-runtime/dist/cli.js`);
 	await write(`usr/share/applications/${name}.desktop`, `[Desktop Entry]
 Name=${appName}
 Comment=Guided code reviews with your coding agents
@@ -151,7 +143,7 @@ export async function prepareReviewRpmPackage(codeRoot: string, arch: string): P
 	if (arch !== 'x86_64') { throw new Error('Review Linux packages currently support x86_64 only'); }
 	const rpmRoot = join(codeRoot, '.build/linux/rpm/x86_64/rpmbuild');
 	const { pkg, share } = await stageReviewPackage(codeRoot, join(rpmRoot, 'BUILD'));
-	const { name, app, appName, legacyName, legacyApp } = pkg;
+	const { name, app, appName, legacyName } = pkg;
 	const dependencies = [...additionalDeps.filter(dep => !dep.startsWith('rpmlib(')), 'git', 'libsecret-1.so.0()(64bit)', 'libkrb5.so.3()(64bit)', 'libnotify.so.4()(64bit)', '/bin/sh'];
 	await mkdir(join(rpmRoot, 'SPECS'), { recursive: true });
 	await writeFile(join(rpmRoot, 'SPECS/review.spec'), String.raw`Name: ${name}
@@ -198,8 +190,6 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then gtk-update-icon-cache 
 %defattr(-,root,root)
 /usr/bin/${app}
 /usr/bin/${app}-desktop
-/usr/bin/${legacyApp}-desktop
-/usr/share/${legacyApp}/
 ${share}/
 %attr(4755,root,root) ${share}/chrome-sandbox
 /usr/share/applications/${legacyName}.desktop

@@ -29,9 +29,9 @@ pnpm --filter @dev.fast/review-desktop app:package:linux:distributions
 
 The RPM tasks package the assembled application. They retain ELF dependency
 discovery but exclude system Node requirements for scripts run by bundled
-Electron. Both the desktop app and CLI live under `/usr/share/review`.
-`/usr/bin/review-desktop` starts the app; `/usr/bin/review` runs the bundled CLI.
-The package includes Review's desktop entry, icon, tutorial, and curated extensions.
+Electron. Both the desktop app and CLI live under `/usr/share/whiteboard`.
+`/usr/bin/whiteboard-desktop` starts the app; `/usr/bin/whiteboard` runs the bundled CLI.
+The package includes Whiteboard's desktop entry, icon, tutorial, and curated extensions.
 
 Package hooks refresh desktop/icon caches. They do not enroll a repository,
 install agent skills, change editor alternatives, or edit user profiles. The
