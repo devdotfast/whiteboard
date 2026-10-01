@@ -4,6 +4,7 @@ import { Readable } from "node:stream";
 import {
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
+  type REVIEW_REMOTE_INSTALL_STEPS,
   type ReviewGatewayHost,
   type ReviewGatewayHostState,
 } from "@dev.fast/review-protocol";
@@ -40,6 +41,18 @@ const INSTALLS = new Set<ReviewGatewayHostState["state"]>([
   "not-installed",
 ]);
 
+const INSTALL_STEPS: Record<
+  (typeof REVIEW_REMOTE_INSTALL_STEPS)[number],
+  string
+> = {
+  preparing: "Preparing to install Whiteboard",
+  "waiting-for-lock": "Waiting for another install to finish",
+  node: "Installing Node 24",
+  package: "Installing the Whiteboard package",
+  verifying: "Checking the install",
+  done: "Installed; starting the server",
+};
+
 const healthSchema = z.object({
   ok: z.literal(true),
   // Absent unless the token is the server's.
@@ -66,6 +79,7 @@ interface Host extends GatewayRemote {
   languageFeatures?: boolean;
   languageFeaturesDetail?: string;
   languageGroups?: ReviewGatewayHost["languageGroups"];
+  installing?: ReviewGatewayHost["installing"];
   serverId?: string;
   instanceId?: string;
   status: ReviewGatewayHostState["state"];
@@ -195,9 +209,12 @@ export function createGatewayHosts(input: {
       ...known,
       state: host.status,
       ...(host.detail !== undefined && { detail: host.detail }),
-      ...(INSTALLS.has(host.status) && {
-        installCommand: `npm install -g @dev.fast/whiteboard@${input.version}`,
-      }),
+      // Desktop's incompatible is a server a user started, which installing cannot fix.
+      ...(INSTALLS.has(host.status) &&
+        host.problem?.state !== "incompatible" && {
+          installCommand: `npm install -g @dev.fast/whiteboard@${input.version}`,
+        }),
+      ...(host.problem?.declined && { declined: true as const }),
       ...(host.status === "online" && languageOf(host)),
     };
   }
@@ -265,6 +282,11 @@ export function createGatewayHosts(input: {
       host.problem = given.problem;
       host.status = given.problem.state;
       host.detail = given.problem.detail;
+    } else if (given.installing && !given.endpoint) {
+      const { step, detail } = given.installing;
+      host.installing = given.installing;
+      host.status = "installing";
+      host.detail = `${INSTALL_STEPS[step]}${detail ? ` (${detail})` : ""}.`;
     } else if (!given.endpoint)
       host.detail = `Waiting for a connection to ${given.alias}.`;
     else {
@@ -404,8 +426,12 @@ export function createGatewayHosts(input: {
 
         if (
           current &&
-          JSON.stringify([current.endpoint, current.problem]) ===
-            JSON.stringify([given.endpoint, given.problem])
+          JSON.stringify([
+            current.endpoint,
+            current.problem,
+            current.installing,
+          ]) ===
+            JSON.stringify([given.endpoint, given.problem, given.installing])
         ) {
           previous.delete(given.alias);
           current.retryMs = FIRST_RETRY_MS;

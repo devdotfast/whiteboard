@@ -597,6 +597,8 @@ export interface ReviewRemoteHostsSettings {
   // Rejects, with the reason, an alias the SSH command would refuse.
   set(aliases: string[]): Promise<string[]>;
   retry(alias: string): Promise<void>;
+  // Agrees to Desktop's install on a host declined earlier, and connects again.
+  install(alias: string): Promise<void>;
 }
 
 /** Workspace attachment identity is independent of the displayed source generation. */
@@ -882,6 +884,16 @@ export interface ReviewServerHealthWithToken extends ReviewServerHealth {
  * A remote as Electron main hands it to the gateway. Every alias gets an
  * endpoint or a problem within a bounded time; until then later aliases wait.
  */
+/** Desktop's install on a remote, in order. */
+export const REVIEW_REMOTE_INSTALL_STEPS = [
+  "preparing",
+  "waiting-for-lock",
+  "node",
+  "package",
+  "verifying",
+  "done",
+] as const;
+
 export const ReviewGatewayHostSchema = z.strictObject({
   alias: requiredString,
   // url is http://127.0.0.1:<forwarded port>
@@ -895,8 +907,18 @@ export const ReviewGatewayHostSchema = z.strictObject({
         "not-installed",
         "auth-failed",
         "unsupported",
+        "incompatible",
       ]),
       detail: stringAllowEmpty,
+      // Not installed because the user did not agree to the install.
+      declined: z.literal(true).optional(),
+    })
+    .optional(),
+  // Desktop is installing on the host; it has no endpoint yet.
+  installing: z
+    .strictObject({
+      step: z.enum(REVIEW_REMOTE_INSTALL_STEPS),
+      detail: stringAllowEmpty.optional(),
     })
     .optional(),
   // Its VS Code server answers through a forward and matches this Desktop.
@@ -940,6 +962,8 @@ export interface ReviewGatewayHostState {
   languageFeatures?: boolean;
   languageFeaturesDetail?: string;
   languageGroups?: ReviewGatewayHost["languageGroups"];
+  /** `not-installed` because the user declined Desktop's install; Settings offers it again. */
+  declined?: true;
 }
 
 export const ReviewRepositoryIdentitySchema = z.strictObject({
