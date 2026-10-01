@@ -6,11 +6,12 @@ import { useOptionalReviewSession } from "./host/review-session";
 /**
  * Attach the host's tooltip to an element, or a native `title` without a
  * Desktop host. `instant` asks for the Whiteboard tooltip with no delay, for
- * small targets; `detail` is its fainter second line.
+ * small targets; `quick` for half the delay; `detail` is its fainter second
+ * line.
  */
 export function useTooltip<T extends HTMLElement = HTMLButtonElement>(
   text: string,
-  { instant, detail }: ReviewTooltipOptions = {},
+  { instant, quick, detail }: ReviewTooltipOptions = {},
 ) {
   const setupTooltip = useOptionalReviewSession()?.bridge.setupTooltip;
 
@@ -19,7 +20,7 @@ export function useTooltip<T extends HTMLElement = HTMLButtonElement>(
       if (!target) return;
 
       if (setupTooltip) {
-        const tooltip = setupTooltip(target, text, { instant, detail });
+        const tooltip = setupTooltip(target, text, { instant, quick, detail });
 
         return () => tooltip.dispose();
       }
@@ -28,6 +29,6 @@ export function useTooltip<T extends HTMLElement = HTMLButtonElement>(
 
       return () => target.removeAttribute("title");
     },
-    [setupTooltip, text, instant, detail],
+    [setupTooltip, text, instant, quick, detail],
   );
 }

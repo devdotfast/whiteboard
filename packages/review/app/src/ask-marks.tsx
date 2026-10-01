@@ -592,6 +592,7 @@ function AskPin({
     count === 1
       ? truncate(question, 120)
       : `${count} conversations · ${truncate(question, 100)}`,
+    { quick: true },
   );
 
   return (

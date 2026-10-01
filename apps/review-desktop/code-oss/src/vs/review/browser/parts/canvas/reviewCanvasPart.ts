@@ -1127,16 +1127,24 @@ export class ReviewCanvasEditorPane extends EditorPane {
 					appearance: { compact: true, showPointer: true },
 					persistence: { hideOnKeyDown: true },
 				};
+				const quick = store.add(new MutableDisposable());
 				store.add(addDisposableListener(target, "mouseenter", () => {
 					if (target.getAttribute("aria-expanded") === "true") return;
-					hover.value = this.hoverService.showDelayedHover(options, { groupId: "review-topbar", reducedDelay: true });
+					if (!tooltip?.quick) {
+						hover.value = this.hoverService.showDelayedHover(options, { groupId: "review-topbar", reducedDelay: true });
+						return;
+					}
+					const delay = this.configurationService.getValue<number>("workbench.hover.reducedDelay") / 2;
+					const timer = setTimeout(() => { hover.value = this.hoverService.showInstantHover(options); }, delay);
+					quick.value = toDisposable(() => clearTimeout(timer));
 				}));
+				store.add(addDisposableListener(target, "mouseleave", () => quick.clear()));
 				store.add(addDisposableListener(target, "focus", () => {
 					if (!target.matches(":focus-visible") || target.getAttribute("aria-expanded") === "true") return;
 					hover.value = this.hoverService.showInstantHover(options);
 				}));
 				for (const event of ["blur", "pointerdown", "click", "keydown"]) {
-					store.add(addDisposableListener(target, event, () => hover.clear()));
+					store.add(addDisposableListener(target, event, () => { quick.clear(); hover.clear(); }));
 				}
 				return store;
 			},
