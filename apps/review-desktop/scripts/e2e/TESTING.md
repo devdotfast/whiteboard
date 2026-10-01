@@ -73,8 +73,8 @@ when that heading is not in `KNOWN_BUGS.md`.
 `remote/remote.mjs` gives a live check a real SSH server: a Docker container
 (`up`) or an AWS instance (`aws-up`). Each run keeps its key pair,
 `ssh_config`, `known_hosts` and `state.json` in `/tmp/wbt.<run id>/`. Nothing
-reads or writes `~/.ssh`. Run `remote.mjs` with no arguments for its commands;
-`04-test-environments.md` in the remote-servers plan specifies them.
+reads or writes `~/.ssh`. Run `remote.mjs` with no arguments for its commands
+and options. Its own test creates a container only with `WB_TEST_CONTAINERS=1`.
 
 ```sh
 R="node apps/review-desktop/scripts/e2e/remote/remote.mjs"
