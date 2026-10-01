@@ -15,7 +15,8 @@ import type {
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
-import { AskHistoryButton, AskHistoryList, AskPanelContent } from "./ask-panel";
+import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
+import { AskPanelContent } from "./ask-panel";
 import { AuthoredCodeSurface } from "./authored-code-surface";
 import { CodePeekCard } from "./CodePeek";
 import { controlStyles } from "./controls-styles";

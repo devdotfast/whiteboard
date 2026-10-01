@@ -10,7 +10,8 @@ import {
   useShowOpenThread,
 } from "./ask-delete";
 import { AskHistoryProvider, useAskHistory } from "./ask-history";
-import { AskHistoryList, AskPanelContent } from "./ask-panel";
+import { AskHistoryList } from "./ask-history-list";
+import { AskPanelContent } from "./ask-panel";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewPanelProvider, useReviewPanel } from "./review-panel";
 import { testReviewSession } from "./review-session-test-utils";

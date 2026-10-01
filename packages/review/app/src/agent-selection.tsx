@@ -12,6 +12,12 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import {
+  AskAgentMenu,
+  preferredAskAgent,
+  rememberAskAgent,
+  useAskAgents,
+} from "./ask-agent-picker";
 import { askAnchor } from "./ask-anchor";
 import {
   AskChevronIcon,
@@ -19,12 +25,6 @@ import {
   AskIcon,
   askIconSizes,
 } from "./ask-icons";
-import {
-  AskAgentMenu,
-  preferredAskAgent,
-  rememberAskAgent,
-  useAskAgents,
-} from "./ask-panel";
 import { copyAgentContext } from "./copy-agent-context";
 import { useReviewSession } from "./host/review-session";
 import { useOptionalReviewPanelStore } from "./review-panel";

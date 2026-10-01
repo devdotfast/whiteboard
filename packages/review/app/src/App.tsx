@@ -25,8 +25,8 @@ import {
 import { AgentSelectionProvider, useAgentSelection } from "./agent-selection";
 import { observeAgentTextSelection } from "./agent-text-selection";
 import { AskHistoryProvider } from "./ask-history";
+import { AskHistoryControl } from "./ask-history-list";
 import { AskThreadMarks } from "./ask-marks";
-import { AskHistoryControl } from "./ask-panel";
 import {
   AuthoringActivityBadge,
   ReviewSurfaceLabel,
