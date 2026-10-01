@@ -1462,15 +1462,17 @@ function AskOutdatedNote({
 /** The Ask panel's header button for its history. */
 export function AskHistoryButton({ view }: { view: AskView }): ReactElement {
   const openHistory = useOpenAskHistory();
+  // One passage's conversations are a step away from all of them.
+  const allShown = view.type === "history" && !view.passage;
 
   return (
     <IconButton
       size="large"
-      xstyle={view.type === "history" && styles.historyButtonOn}
+      xstyle={allShown && styles.historyButtonOn}
       aria-label="Saved conversations"
       title="Saved conversations"
-      aria-pressed={view.type === "history"}
-      disabled={!openHistory || view.type === "history"}
+      aria-pressed={allShown}
+      disabled={!openHistory || allShown}
       onClick={openHistory}
     >
       <AskHistoryIcon xstyle={[controlStyles.inertIcon, askIconSizes.header]} />
@@ -1499,10 +1501,20 @@ export function AskHistoryControl(): ReactElement | null {
 }
 
 /** This review's saved conversations, newest first. */
-export function AskHistoryList(): ReactElement {
+export function AskHistoryList({
+  passage,
+}: {
+  /** Only the conversations about this passage. */
+  passage?: { quote: string; threadIds: string[] };
+}): ReactElement {
   const history = useAskHistory();
   const panels = useOptionalReviewPanelStore();
-  const entries = history?.entries ?? null;
+  const openHistory = useOpenAskHistory();
+
+  const entries =
+    history?.entries?.filter(
+      (entry) => !passage || passage.threadIds.includes(entry.id),
+    ) ?? null;
 
   const error = history
     ? history.error
@@ -1523,8 +1535,15 @@ export function AskHistoryList(): ReactElement {
             styles.historyHeading,
           )}
         >
-          Saved conversations
+          {passage ? "About this passage" : "Saved conversations"}
         </h3>
+        {passage ? (
+          <figure {...stylex.props(styles.selection)}>
+            <blockquote {...stylex.props(styles.selectionQuote)}>
+              {passage.quote}
+            </blockquote>
+          </figure>
+        ) : null}
         {error ? (
           <p {...stylex.props(styles.error)} role="alert">
             {error}
@@ -1534,8 +1553,9 @@ export function AskHistoryList(): ReactElement {
           <p {...stylex.props(styles.historyEmpty)}>Loading…</p>
         ) : entries?.length === 0 ? (
           <p {...stylex.props(styles.historyEmpty)}>
-            Nothing yet. Select text or code in the review and choose Ask; the
-            conversation is saved here.
+            {passage
+              ? "No saved conversations about this passage."
+              : "Nothing yet. Select text or code in the review and choose Ask; the conversation is saved here."}
           </p>
         ) : (
           <ul {...stylex.props(styles.list)}>
@@ -1570,11 +1590,14 @@ export function AskHistoryList(): ReactElement {
                       <span {...stylex.props(styles.historyTitle)}>
                         {entry.title}
                       </span>
-                      <span {...stylex.props(styles.historyQuote)}>
-                        {target.kind === "text"
-                          ? target.quote
-                          : entry.selection.title}
-                      </span>
+                      {/* One passage's list quotes it once, above. */}
+                      {passage ? null : (
+                        <span {...stylex.props(styles.historyQuote)}>
+                          {target.kind === "text"
+                            ? target.quote
+                            : entry.selection.title}
+                        </span>
+                      )}
                       <span {...stylex.props(styles.historyMeta)}>
                         {formatRelativeTime(entry.updatedAt)} ·{" "}
                         {entry.head.slice(0, 7)}
@@ -1594,6 +1617,15 @@ export function AskHistoryList(): ReactElement {
             })}
           </ul>
         )}
+        {passage && openHistory ? (
+          <button
+            type="button"
+            {...stylex.props(styles.errorAction, styles.allConversations)}
+            onClick={openHistory}
+          >
+            All saved conversations
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -1803,6 +1835,12 @@ const styles = stylex.create({
     lineHeight: "14px",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
+  },
+  allConversations: {
+    alignSelf: "flex-start",
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
   },
   // Showing the list it opens: pressed, not dimmed as disabled.
   historyButtonOn: {

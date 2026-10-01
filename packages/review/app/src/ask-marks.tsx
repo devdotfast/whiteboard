@@ -361,7 +361,7 @@ export function AskThreadMarks({
             data-active={mark.key === active || undefined}
             style={{ top: mark.pinTop, left: mark.pinLeft }}
             aria-label={label}
-            title={newest?.title}
+            title={count === 1 ? newest?.title : label}
             onPointerEnter={() => setActive(mark.key)}
             onPointerLeave={() => setActive(null)}
             onFocus={() => setActive(mark.key)}
@@ -376,11 +376,24 @@ export function AskThreadMarks({
                       selection: newest.selection,
                       agent: newest.agent,
                     }
-                  : { type: "history" },
+                  : {
+                      type: "history",
+                      passage: {
+                        quote: mark.quote,
+                        threadIds: mark.entries.map((entry) => entry.id),
+                      },
+                    },
               )
             }
           >
-            {AGENT_LOGOS[newest?.agent ?? "claude"]({ xstyle: styles.logo })}
+            {/* Each agent asked, newest first. */}
+            {[...new Set(mark.entries.map((entry) => entry.agent))].map(
+              (agent) => (
+                <span key={agent} {...stylex.props(styles.logoSlot)}>
+                  {AGENT_LOGOS[agent]({ xstyle: styles.logo })}
+                </span>
+              ),
+            )}
             {/* One conversation needs no count. */}
             {count > 1 ? (
               <span {...stylex.props(styles.count)}>{count}</span>
@@ -439,6 +452,9 @@ const styles = stylex.create({
     whiteSpace: "nowrap",
     cursor: "pointer",
     outline: { default: null, ":focus-visible": "none" },
+  },
+  logoSlot: {
+    display: "flex",
   },
   logo: {
     width: "12px",

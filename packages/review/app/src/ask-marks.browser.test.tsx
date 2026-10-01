@@ -243,7 +243,14 @@ it("marks each asked-about passage beside it and reopens its conversation", asyn
   expect(view).toMatchObject({ type: "saved", threadId: "single" });
 
   await act(async () => second!.click());
-  expect(view).toEqual({ type: "history" });
+  // Only the conversations about its passage.
+  expect(view).toEqual({
+    type: "history",
+    passage: {
+      quote: "created concurrently, so the migration",
+      threadIds: ["newest", "older"],
+    },
+  });
 
   await act(async () => root.unmount());
   expect(CSS.highlights.has("ask-thread")).toBe(false);

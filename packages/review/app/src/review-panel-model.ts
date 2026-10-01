@@ -46,7 +46,7 @@ export interface PeekPanel {
 }
 
 /** What the Ask panel shows: a new question about a selection, a saved
- * conversation, or the list of saved ones. */
+ * conversation, or the list of saved ones, all or those about one passage. */
 export type AskView =
   | {
       type: "new";
@@ -60,7 +60,11 @@ export type AskView =
       selection: AgentSelection;
       agent: AskAgentId;
     }
-  | { type: "history" };
+  | {
+      type: "history";
+      /** Only the conversations about this passage, from its pin. */
+      passage?: { quote: string; threadIds: string[] };
+    };
 
 /** Conversations with a local agent about selections. Each view change
  * remounts the panel through `key`. */

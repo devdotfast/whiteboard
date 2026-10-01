@@ -475,7 +475,7 @@ export function ReviewPanelHost() {
         }
       >
         {activePanel.view.type === "history" ? (
-          <AskHistoryList />
+          <AskHistoryList passage={activePanel.view.passage} />
         ) : (
           <AskPanelContent
             selection={activePanel.view.selection}
