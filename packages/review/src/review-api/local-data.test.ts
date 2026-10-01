@@ -40,7 +40,6 @@ let directory: string, repository: string, database: string, pins: Pins;
 let local: ReturnType<typeof openLocalReviewStore>;
 
 const command = <Operation>(operation: Operation) => ({
-  commandId: randomUUID(),
   operation,
 });
 
@@ -356,20 +355,6 @@ it("opens a created review in Desktop unless the author opts out", async () => {
   const quietReview = await quiet.json();
   expect(quietReview).toMatchObject({ opened: false });
   expect(opened).toEqual([shownReview.reviewId]);
-
-  // Opening is not part of the saved command: a retry may choose to show it.
-  const { open: _open, ...retried } = background.operation;
-
-  const retry = await postJson(app, "/commands", {
-    ...background,
-    operation: retried,
-  });
-
-  expect(await retry.json()).toMatchObject({
-    reviewId: quietReview.reviewId,
-    opened: true,
-  });
-  expect(opened).toEqual([shownReview.reviewId, quietReview.reviewId]);
 });
 
 it("opens the PR's existing review that create returns instead of a new one", async () => {
@@ -2495,7 +2480,6 @@ it("reads current working source across authored versions, commits and retargeti
     ).text,
   ).toContain("live = 2");
   expect(local.store.history(result.reviewId)).toHaveLength(1);
-  expect(await local.store.execute(request)).toEqual(result);
   expect(git("diff", "--cached")).toBe(beforeIndex);
   git("add", ".");
   git("commit", "-qm", "Save changes");

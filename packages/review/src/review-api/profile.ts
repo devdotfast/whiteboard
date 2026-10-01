@@ -115,15 +115,6 @@ async function importHeadlessStore(home: string, source: string) {
               `Cannot merge ${source}: a resource ID has different content. Both databases are unchanged.`,
             );
 
-          if (
-            database
-              .prepare(`SELECT 1 FROM headless.receipts s JOIN receipts t ON s.command_id=t.command_id
-          WHERE s.request!=t.request OR s.response!=t.response LIMIT 1`)
-              .get()
-          )
-            throw new Error(
-              `Cannot merge ${source}: a command ID has different history. Both databases are unchanged.`,
-            );
           database.exec(`
           INSERT OR IGNORE INTO resources SELECT s.id,r.new_id,s.kind,s.mime_type,s.data FROM headless.resources s JOIN repository_ids r ON s.repository_id=r.old_id;
           INSERT INTO reviews SELECT * FROM headless.reviews;
@@ -133,37 +124,8 @@ async function importHeadlessStore(home: string, source: string) {
               ELSE json_set(s.snapshot,'$.pins.repositoryId',r.new_id) END
             FROM headless.versions s JOIN repository_ids r ON json_extract(s.snapshot,'$.pins.repositoryId')=r.old_id;
           INSERT INTO review_attention SELECT * FROM headless.review_attention;
-          INSERT OR IGNORE INTO receipts SELECT * FROM headless.receipts;
           INSERT OR IGNORE INTO legacy_imports SELECT * FROM headless.legacy_imports;
         `);
-
-          if (
-            database
-              .prepare(
-                "SELECT 1 FROM headless.sqlite_master WHERE name='authoring_sessions'",
-              )
-              .get()
-          ) {
-            // Leases are keyed by (review, scope); either side may predate
-            // scopes, and a lease from before them is the document's.
-            database.exec(
-              `CREATE TABLE IF NOT EXISTS authoring_sessions(review_id TEXT NOT NULL,scope TEXT NOT NULL,lease_id TEXT NOT NULL,expires_at INTEGER NOT NULL,focus TEXT,PRIMARY KEY(review_id,scope))`,
-            );
-
-            const scoped = (schema: string) =>
-              database
-                .prepare(`PRAGMA ${schema}.table_info(authoring_sessions)`)
-                .all()
-                .some((column) => String(column.name) === "scope");
-
-            const scope = scoped("headless") ? "scope" : "'document'";
-
-            database.exec(
-              scoped("main")
-                ? `INSERT INTO authoring_sessions(review_id,scope,lease_id,expires_at,focus) SELECT review_id,${scope},lease_id,expires_at,focus FROM headless.authoring_sessions`
-                : `INSERT INTO authoring_sessions(review_id,lease_id,expires_at,focus) SELECT review_id,lease_id,expires_at,focus FROM headless.authoring_sessions WHERE ${scope}='document'`,
-            );
-          }
 
           database
             .prepare("INSERT INTO headless_imports VALUES(?)")

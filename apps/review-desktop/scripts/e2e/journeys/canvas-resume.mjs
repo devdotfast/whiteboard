@@ -126,7 +126,6 @@ export async function run(ctx) {
 
   const command = (operation) =>
     ctx.apiOk("/reviews-api/commands", "POST", {
-      commandId: randomUUID(),
       operation,
     });
 
@@ -207,9 +206,7 @@ export async function run(ctx) {
   await option("Trace 2").click();
   await until(
     async () =>
-      (
-        await trigger.locator("span").nth(1).innerText()
-      ).trim() === "Trace 2",
+      (await trigger.locator("span").nth(1).innerText()).trim() === "Trace 2",
     "the picked trace to show",
   );
   await reloadWindow(ctx, page);

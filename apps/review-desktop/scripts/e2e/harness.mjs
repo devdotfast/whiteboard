@@ -1,7 +1,6 @@
 /** Shared launch/attach/report harness for scripts/e2e/journeys/*. */
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import {
   mkdir,
   mkdtemp,
@@ -628,7 +627,6 @@ export async function createReview(ctx, spec) {
 
   const command = async (operation) => {
     const result = await ctx.api("/reviews-api/commands", "POST", {
-      commandId: randomUUID(),
       operation,
     });
 

@@ -10,66 +10,53 @@ const focusSchema = z.strictObject({
   targetId: z.string().min(1).optional(),
 });
 
-/** What a lease covers: the document, or the Diff view's lenses. Each scope
- * has its own exclusive lease, so one agent can write lenses while another
- * writes the document. */
-export const leaseScopeSchema = z.enum(["document", "lenses"]);
-
-export type LeaseScope = z.infer<typeof leaseScopeSchema>;
-
-const scope = leaseScopeSchema
-  .optional()
-  .describe(
-    'What the lease covers. Default "document": review_edit and every other document write. "lenses": review_lens_edit writes only.',
-  );
+/** Which page an agent last wrote on, so the app knows where its courier is. */
+export type ActivitySurface = "document" | "lenses";
 
 // One schema per action, so each agent tool states exactly what it needs.
 export const activityBeginSchema = z.strictObject({
-  leaseId: z
-    .uuid()
-    .optional()
-    .describe(
-      "Omit it: the result gives you one. Pass the one you sent only to retry a begin.",
-    ),
-  scope,
   focus: focusSchema.nullable().optional(),
 });
 
 export const activityUpdateSchema = z.strictObject({
-  leaseId: z.uuid(),
-  scope,
+  activityId: z.string().min(1),
   focus: focusSchema.nullable().optional(),
 });
 
-export const activityEndSchema = z.strictObject({ leaseId: z.uuid(), scope });
+export const activityEndSchema = z.strictObject({
+  activityId: z.string().min(1),
+});
 
 export const activitySchema = z.discriminatedUnion("action", [
   activityBeginSchema.extend({ action: z.literal("begin") }),
-  activityUpdateSchema.extend({ action: z.literal("renew") }),
+  activityUpdateSchema.extend({ action: z.literal("update") }),
   activityEndSchema.extend({ action: z.literal("end") }),
 ]);
 
-export type ActivityFocus = z.infer<typeof focusSchema> & {
-  /** The lease this focus belongs to; absent means the document's. */
-  scope?: LeaseScope;
-};
+export type ActivityFocus = z.infer<typeof focusSchema>;
 
-export interface ActivitySnapshot {
-  /** Live leases across scopes. */
-  workingCount: number;
-  /** The latest expiry among live leases. */
-  expiresAt: number | null;
-  /** The scopes with a live lease, document first. */
-  scopes?: LeaseScope[];
-  /** Each live lease's focus, document first. */
-  focuses?: ActivityFocus[];
+/** One agent working on a review. */
+export interface ActivityPresence {
+  activityId: string;
+  /** The agent's color: the lowest slot free when it began, kept until it ends. */
+  slot: number;
+  focus?: ActivityFocus;
+  /** Where it last wrote; absent until its first attributed write. */
+  surface?: ActivitySurface;
 }
 
-// The author owns the scope until end or three minutes without an accepted
-// write or renewal. A crashed author blocks others for at most this long.
-export const ACTIVITY_TTL_MS = 180_000;
+export interface ActivitySnapshot {
+  /** Live presences. */
+  workingCount: number;
+  /** The latest expiry among live presences. */
+  expiresAt: number | null;
+  /** Each live presence, in the order they began. */
+  activities?: ActivityPresence[];
+}
 
-const SCOPES = leaseScopeSchema.options;
+// A presence lasts until end, or three minutes without an attributed write or
+// an update, so a crashed agent stops showing within that long.
+export const ACTIVITY_TTL_MS = 180_000;
 
 export class ReviewActivity {
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -81,11 +68,16 @@ export class ReviewActivity {
     private readonly db: DatabaseSync,
     private readonly assertReview?: (reviewId: string) => void,
   ) {
-    migrateLeaseScopes(db);
+    // Presences replace the per-scope leases; both last minutes, so the old
+    // table is dropped rather than migrated.
+    db.exec(`CREATE TABLE IF NOT EXISTS authoring_presences(
+      activity_id TEXT PRIMARY KEY, review_id TEXT NOT NULL, slot INTEGER NOT NULL,
+      started_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, focus TEXT, surface TEXT);
+      DROP TABLE IF EXISTS authoring_sessions;`);
 
     for (const row of db
       .prepare(
-        "SELECT DISTINCT review_id FROM authoring_sessions WHERE expires_at>?",
+        "SELECT DISTINCT review_id FROM authoring_presences WHERE expires_at>?",
       )
       .all(Date.now())) {
       this.working.add(String(row.review_id));
@@ -115,7 +107,7 @@ export class ReviewActivity {
     const working =
       this.db
         .prepare(
-          "SELECT 1 FROM authoring_sessions WHERE review_id=? AND expires_at>? LIMIT 1",
+          "SELECT 1 FROM authoring_presences WHERE review_id=? AND expires_at>? LIMIT 1",
         )
         .get(reviewId, Date.now()) !== undefined;
 
@@ -128,157 +120,148 @@ export class ReviewActivity {
 
     for (const notify of this.listeners) notify(reviewId);
   }
-  private active(reviewId: string, scope: LeaseScope) {
+  private live(reviewId: string) {
     return this.db
       .prepare(
-        "SELECT lease_id,expires_at,focus FROM authoring_sessions WHERE review_id=? AND scope=? AND expires_at>?",
+        "SELECT activity_id,slot,expires_at,focus,surface FROM authoring_presences WHERE review_id=? AND expires_at>? ORDER BY rowid",
       )
-      .get(reviewId, scope, Date.now());
+      .all(reviewId, Date.now());
   }
 
   read(reviewId: string): ActivitySnapshot {
-    const live = SCOPES.flatMap((scope) => {
-      const active = this.active(reviewId, scope);
-
-      return active ? [{ scope, active }] : [];
-    });
+    const live = this.live(reviewId);
 
     const snapshot: ActivitySnapshot = {
       workingCount: live.length,
       expiresAt: live.length
-        ? Math.max(...live.map(({ active }) => Number(active.expires_at)))
+        ? Math.max(...live.map((row) => Number(row.expires_at)))
         : null,
     };
 
-    if (live.length) snapshot.scopes = live.map(({ scope }) => scope);
+    if (live.length)
+      snapshot.activities = live.map((row) => {
+        const presence: ActivityPresence = {
+          activityId: String(row.activity_id),
+          slot: Number(row.slot),
+        };
 
-    const focuses = live.flatMap(({ scope, active }) =>
-      active.focus
-        ? [
-            {
-              ...focusSchema.parse(JSON.parse(String(active.focus))),
-              // The document's focus reads as it always has.
-              ...(scope !== "document" && { scope }),
-            },
-          ]
-        : [],
-    );
+        if (row.focus)
+          presence.focus = focusSchema.parse(JSON.parse(String(row.focus)));
 
-    if (focuses.length) snapshot.focuses = focuses;
+        if (row.surface === "document" || row.surface === "lenses")
+          presence.surface = row.surface;
+
+        return presence;
+      });
 
     return snapshot;
   }
 
-  /** The id of the live lease on `scope`, if any. */
-  liveLeaseId(
+  /** Inside the caller's write transaction: the presence a write belongs to,
+   * renewed and moved to the write's surface. The named one if it is live;
+   * otherwise, with none named, the review's only presence. A write is never
+   * refused for this. Call `extended` once the transaction commits. */
+  attribute(
     reviewId: string,
-    scope: LeaseScope = "document",
+    surface: ActivitySurface,
+    activityId?: string,
   ): string | undefined {
-    const active = this.active(reviewId, scope);
+    const live = this.live(reviewId);
 
-    return active && String(active.lease_id);
+    const owner =
+      activityId === undefined
+        ? live.length === 1
+          ? String(live[0]!.activity_id)
+          : undefined
+        : live.some((row) => row.activity_id === activityId)
+          ? activityId
+          : undefined;
+
+    if (owner === undefined) return undefined;
+    this.db
+      .prepare(
+        "UPDATE authoring_presences SET expires_at=?,surface=? WHERE activity_id=?",
+      )
+      .run(Date.now() + ACTIVITY_TTL_MS, surface, owner);
+
+    return owner;
   }
 
-  /** Recheck inside the write transaction as validation may outlive the lease. */
-  assertWrite(
-    reviewId: string,
-    leaseId?: string,
-    scope: LeaseScope = "document",
-  ) {
-    const active = this.active(reviewId, scope);
-
-    const what =
-      scope === "lenses" ? "This review's lenses are" : "This review is";
-
-    if (active && active.lease_id !== leaseId)
-      throw new ReviewInputError(
-        `${what} being authored by another session. Wait for it to finish or expire, then begin your own session.`,
-        409,
-      );
-
-    if (leaseId && !active)
-      throw new ReviewInputError(
-        scope === "lenses"
-          ? 'No live lenses lease. Begin one with review_activity_begin scope:"lenses" and reread the lenses before editing them.'
-          : "Authoring session ended or expired. Begin a new session and reread the review before editing.",
-        409,
-      );
-  }
-  /** Inside the caller's write transaction, after `assertWrite`: a write
-   * under the live lease keeps it alive like a renewal, focus unchanged. It
-   * rolls back with the write, so a rejected edit extends nothing. Call
-   * `extended` once the transaction commits. */
-  extend(
-    reviewId: string,
-    leaseId?: string,
-    scope: LeaseScope = "document",
-  ): boolean {
-    if (!leaseId) return false;
-    const now = Date.now();
-
-    return (
-      this.db
-        .prepare(
-          "UPDATE authoring_sessions SET expires_at=? WHERE review_id=? AND scope=? AND lease_id=? AND expires_at>?",
-        )
-        .run(now + ACTIVITY_TTL_MS, reviewId, scope, leaseId, now).changes > 0
-    );
-  }
-
-  /** Move the expiry timer after a committed `extend`. */
+  /** Move the expiry timer after a committed `attribute`. */
   extended(reviewId: string) {
     this.scheduleExpiry(reviewId);
+    this.changed(reviewId);
   }
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Activity boundary: activitySchema.parse below validates incoming JSON.
   update(reviewId: string, value: unknown) {
     const input = activitySchema.parse(value);
-    const { action, scope = "document" } = input;
-    const focus = input.action === "end" ? undefined : input.focus;
+    const now = Date.now();
 
-    // The host assigns a lease when begin names none; a named one is reused, so a
-    // retried begin stays harmless.
-    const leaseId = input.leaseId ?? randomUUID();
+    let activityId: string;
 
     this.db.exec("BEGIN IMMEDIATE");
 
     try {
       this.assertReview?.(reviewId);
-      const previous = this.active(reviewId, scope);
 
-      if (action === "end") {
-        // Repeated end and attempts to end somebody else's session are harmless.
+      if (input.action === "begin") {
+        activityId = randomUUID();
+
+        const taken = new Set(
+          this.live(reviewId).map((row) => Number(row.slot)),
+        );
+
+        let slot = 0;
+
+        while (taken.has(slot)) slot += 1;
         this.db
           .prepare(
-            "DELETE FROM authoring_sessions WHERE review_id=? AND scope=? AND lease_id=?",
+            "INSERT INTO authoring_presences(activity_id,review_id,slot,started_at,expires_at,focus) VALUES(?,?,?,?,?,?)",
           )
-          .run(reviewId, scope, leaseId);
-      } else {
-        if (previous && previous.lease_id !== leaseId)
-          this.assertWrite(reviewId, leaseId, scope);
-
-        if (action === "renew" && !previous)
-          throw new ReviewInputError(
-            "Authoring session expired. Begin a new session.",
-            409,
-          );
-
-        const savedFocus =
-          focus === undefined
-            ? (previous?.focus ?? null)
-            : focus === null
-              ? null
-              : JSON.stringify(focus);
-
-        this.db
-          .prepare(`INSERT INTO authoring_sessions(review_id,scope,lease_id,expires_at,focus) VALUES(?,?,?,?,?)
-          ON CONFLICT(review_id,scope) DO UPDATE SET lease_id=excluded.lease_id,expires_at=excluded.expires_at,focus=excluded.focus`)
           .run(
+            activityId,
             reviewId,
-            scope,
-            leaseId,
-            Date.now() + ACTIVITY_TTL_MS,
-            savedFocus,
+            slot,
+            now,
+            now + ACTIVITY_TTL_MS,
+            input.focus ? JSON.stringify(input.focus) : null,
           );
+      } else {
+        activityId = input.activityId;
+
+        if (input.action === "end") {
+          // Ending twice, or ending an expired presence, is harmless.
+          this.db
+            .prepare(
+              "DELETE FROM authoring_presences WHERE activity_id=? AND review_id=?",
+            )
+            .run(activityId, reviewId);
+        } else {
+          const renewed = this.db
+            .prepare(
+              `UPDATE authoring_presences SET expires_at=?${input.focus === undefined ? "" : ",focus=?"}
+              WHERE activity_id=? AND review_id=? AND expires_at>?`,
+            )
+            .run(
+              ...[
+                now + ACTIVITY_TTL_MS,
+                ...(input.focus === undefined
+                  ? []
+                  : [
+                      input.focus === null ? null : JSON.stringify(input.focus),
+                    ]),
+                activityId,
+                reviewId,
+                now,
+              ],
+            );
+
+          if (renewed.changes === 0)
+            throw new ReviewInputError(
+              "This activity ended or expired. Begin a new one.",
+              409,
+            );
+        }
       }
 
       this.db.exec("COMMIT");
@@ -291,21 +274,22 @@ export class ReviewActivity {
 
     this.changed(reviewId);
 
-    const result: ActivitySnapshot & { leaseId?: string } = this.read(reviewId);
+    const result: ActivitySnapshot & { activityId?: string } =
+      this.read(reviewId);
 
-    if (action !== "end") result.leaseId = leaseId;
+    if (input.action === "begin") result.activityId = activityId;
 
     return result;
   }
 
-  /** One timer per review, for its soonest-expiring live lease. */
+  /** One timer per review, for its soonest-expiring presence. */
   private scheduleExpiry(reviewId: string) {
     clearTimeout(this.timers.get(reviewId));
     this.timers.delete(reviewId);
 
     const next = this.db
       .prepare(
-        "SELECT MIN(expires_at) AS expires_at FROM authoring_sessions WHERE review_id=? AND expires_at>?",
+        "SELECT MIN(expires_at) AS expires_at FROM authoring_presences WHERE review_id=? AND expires_at>?",
       )
       .get(reviewId, Date.now());
 
@@ -329,7 +313,7 @@ export class ReviewActivity {
 
     for (const row of this.db
       .prepare(
-        "SELECT DISTINCT review_id FROM authoring_sessions WHERE expires_at>?",
+        "SELECT DISTINCT review_id FROM authoring_presences WHERE expires_at>?",
       )
       .all(Date.now()))
       ids.add(String(row.review_id));
@@ -352,47 +336,5 @@ export class ReviewActivity {
 
     for (const timer of this.timers.values()) clearTimeout(timer);
     this.timers.clear();
-  }
-}
-
-/** Leases were once one per review. Rebuild the table keyed by (review,
- * scope), keeping any live lease as the document's. */
-function migrateLeaseScopes(db: DatabaseSync) {
-  const columns = () =>
-    db
-      .prepare("PRAGMA table_info(authoring_sessions)")
-      .all()
-      .map((column) => String(column.name));
-
-  if (columns().includes("scope")) return;
-
-  // Another host on the same home may be migrating too: recheck under lock.
-  db.exec("BEGIN IMMEDIATE");
-
-  try {
-    const existing = columns();
-
-    if (existing.includes("scope")) {
-      db.exec("COMMIT");
-
-      return;
-    }
-
-    db.exec(`CREATE TABLE authoring_sessions_scoped(
-      review_id TEXT NOT NULL, scope TEXT NOT NULL, lease_id TEXT NOT NULL,
-      expires_at INTEGER NOT NULL, focus TEXT, PRIMARY KEY(review_id, scope)
-    )`);
-
-    if (existing.length)
-      db.exec(`INSERT INTO authoring_sessions_scoped(review_id,scope,lease_id,expires_at,focus)
-        SELECT review_id,'document',lease_id,expires_at,focus FROM authoring_sessions;
-        DROP TABLE authoring_sessions;`);
-    db.exec(
-      "ALTER TABLE authoring_sessions_scoped RENAME TO authoring_sessions",
-    );
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
   }
 }

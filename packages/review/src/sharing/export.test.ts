@@ -64,7 +64,6 @@ async function fixture() {
   const pins = { repositoryId: repository.id, base, head };
 
   const created = await local.store.execute({
-    commandId: randomUUID(),
     operation: { type: "create", title: "A shared review", pins },
   });
 
@@ -109,7 +108,6 @@ async function fixture() {
     },
   ])
     await local.store.execute({
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId: created.reviewId,
@@ -211,7 +209,6 @@ it("exports a review saved with the retired section status and imports a bundle 
   const { imported, id, bundle } = await importFixture(
     async ({ root, local, reviewId }) => {
       const { version } = await local.store.execute({
-        commandId: randomUUID(),
         operation: {
           type: "edit",
           reviewId,
@@ -303,7 +300,6 @@ it("shares a review's lenses and reads a bundle that holds them as document bloc
 
   const { imported, id } = await importFixture(async ({ local, reviewId }) => {
     const { targetId } = await local.store.execute({
-      commandId: randomUUID(),
       operation: {
         type: "lens_edit",
         reviewId,
@@ -418,7 +414,6 @@ it("uses normal source and workspace routes but rejects authoring mutations", as
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      commandId: randomUUID(),
       operation: { type: "rename", reviewId: id, title: "Changed" },
     }),
   });
@@ -560,7 +555,6 @@ it("keeps the published snapshot and code after author edits and branch movement
     stdio: "pipe",
   });
   await local.store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "edit",
       reviewId,
@@ -581,7 +575,6 @@ it("requires a pinned review before sharing saved worktree changes", async () =>
   const { local, reviewId, repo } = await fixture();
   const snapshot = local.store.read(reviewId);
   await local.store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "set_target",
       reviewId,
@@ -597,7 +590,6 @@ it("requires a pinned review before sharing saved worktree changes", async () =>
     "Pin this review to commits before sharing it.",
   );
   await local.store.execute({
-    commandId: randomUUID(),
     operation: { type: "repin", reviewId, pins: snapshot.pins },
   });
   const bundle = await exportShare({ ...local, reviewId, repository });

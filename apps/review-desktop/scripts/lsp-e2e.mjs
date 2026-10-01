@@ -421,8 +421,7 @@ async function api(route, method = "GET", body) {
   return result;
 }
 
-const command = (operation) =>
-  api("/commands", "POST", { commandId: randomUUID(), operation });
+const command = (operation) => api("/commands", "POST", { operation });
 
 async function createReview(fix, title, kind = "commits") {
   const repository = await api("/repositories", "POST", { path: fix.repo });

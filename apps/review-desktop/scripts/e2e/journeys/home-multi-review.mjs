@@ -1,6 +1,5 @@
 /** Three reviews over two worktrees: Home lists, searches and opens them, and dismiss / restore / delete reach the store. */
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -42,7 +41,6 @@ async function listedReviewIds(ctx) {
 /** The same command Home's dismiss and restore controls send. */
 const attention = (ctx, reviewId, action) =>
   ctx.apiOk("/reviews-api/commands", "POST", {
-    commandId: randomUUID(),
     operation: { type: "attention", reviewId, action },
   });
 

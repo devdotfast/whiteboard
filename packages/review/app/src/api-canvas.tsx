@@ -313,7 +313,6 @@ export function ApiCanvas({
           ).layers,
         dismiss: async () => {
           await client.post("/commands", {
-            commandId: crypto.randomUUID(),
             operation: {
               type: "attention",
               reviewId: content.reviewId,
@@ -335,7 +334,6 @@ export function ApiCanvas({
         ? (blockId: string, markdown: string) =>
             void client
               .post("/commands", {
-                commandId: crypto.randomUUID(),
                 operation: {
                   type: "edit",
                   reviewId: content.reviewId,

@@ -444,7 +444,6 @@ async function importPresentedMap(
   const replaced = head.document.find(isMapSection);
 
   const result = await store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "edit",
       reviewId,

@@ -1,6 +1,5 @@
 /** The JSON review API must reject the pitfalls the old render gate caught, and an accepted edit must render live. */
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 
 import { createReview, orderReviewBlocks } from "../harness.mjs";
 import {
@@ -41,7 +40,6 @@ export async function run(ctx) {
 
   const edit = (content) =>
     api("/reviews-api/commands", "POST", {
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId: metadata.sourceUuid,
@@ -88,7 +86,11 @@ export async function run(ctx) {
 
   const after = await apiOk(`/reviews-api/${metadata.sourceUuid}?full=true`);
 
-  assert.deepEqual(after, before, "rejected edits must not change the document");
+  assert.deepEqual(
+    after,
+    before,
+    "rejected edits must not change the document",
+  );
 
   const accepted = await edit({
     type: "callout",
@@ -118,7 +120,10 @@ export async function run(ctx) {
   await created.canvas
     .getByRole("heading", { name: "Overview", exact: true })
     .waitFor();
-  await created.canvas.getByText("moves from draft to queued").first().waitFor();
+  await created.canvas
+    .getByText("moves from draft to queued")
+    .first()
+    .waitFor();
   assert.doesNotMatch(await created.canvas.innerText(), /Layout failed:/);
   ctx.check("createReview helper opens an API review");
 }

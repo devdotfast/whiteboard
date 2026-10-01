@@ -344,7 +344,7 @@ export const drawStyles = stylex.create({
   // The section ring: the top-level block the agent is editing wears the
   // marker hairline, outside its content so nothing shifts, and no wash.
   // While the agent writes only its color breathes; idle, it holds; when the
-  // agent moves on or the lease ends, it fades.
+  // agent moves on or stops, it fades.
   region: {
     borderRadius: radius.surface,
     outline: {
