@@ -843,6 +843,8 @@ test("a declined host with another version's CLI on PATH attaches it, and still 
 	assert.equal(last()?.declined, true);
 	assert.equal(runs.length, 0);
 	assert.match(ssh.of("wb-test-a", "exec")[0].input!, /command -v whiteboard/);
+	// Calls on the store run in turn: this waits for the move of the answer after the attach.
+	assert.equal(await flow.consent.get("wb-test-a"), "deny");
 });
 
 test("a prompt nobody answered is not remembered, offers Install, and the next connect asks again", async (t) => {

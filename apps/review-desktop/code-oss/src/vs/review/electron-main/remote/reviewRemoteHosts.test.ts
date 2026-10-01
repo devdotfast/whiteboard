@@ -307,12 +307,17 @@ test("two hosts asking at once are asked one after the other", async (t) => {
 		},
 		run: async () => INSTALLED,
 	};
-	const { manager, sentUntil } = await managerFor(t, { "wb-test-a": {}, "wb-test-b": {} }, undefined, undefined, flow);
+	// Two servers: an answer moves to the server its host reached, and one server keeps one alias.
+	const other = { code: 0, stdout: attachOutput(41234, "remote-token", { serverId: "wb-test-b-server" }) };
+	const { manager, sentUntil } = await managerFor(t, { "wb-test-a": {}, "wb-test-b": { attach: other } }, undefined, undefined, flow);
 
 	manager.update(true, ["wb-test-a", "wb-test-b"]);
 	await sentUntil((hosts) => hosts.every((host) => host.endpoint));
 
 	assert.deepEqual(asked.sort(), ["wb-test-a", "wb-test-b"]);
+	// Calls on the store run in turn: these wait for the moves of the answers after the attaches.
+	assert.equal(await flow.consent.get("wb-test-a"), "allow");
+	assert.equal(await flow.consent.get("wb-test-b"), "allow");
 });
 
 /** A flow whose prompt stays open until the test answers it, or it is cancelled. */
@@ -403,4 +408,28 @@ test("quitting while a prompt is open closes it without an unhandled rejection",
 
 	assert.equal(asked[0].signal?.aborted, true);
 	assert.deepEqual(rejections, []);
+});
+
+test("a question cancelled while still queued is not joined: the next connection is asked", async (t) => {
+	const { flow, asked } = await promptingFlow(t);
+	const { manager, ssh, clock } = await managerFor(t, { "wb-test-a": {}, "wb-test-b": {} }, undefined, undefined, flow);
+
+	manager.update(true, ["wb-test-a", "wb-test-b"]);
+	await until(() => asked.length === 1);
+	const other = asked[0].alias === "wb-test-a" ? "wb-test-b" : "wb-test-a";
+	// The other host's question waits behind the open one; its connection drops.
+	await until(() => ssh.of(other, "probe").length === 1);
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	ssh.master(other)!.finish(255, { stderr: "Connection reset by peer\n" });
+	await until(() => {
+		clock.next();
+		return ssh.of(other, "probe").length === 2;
+	});
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	asked[0].answer(undefined);
+
+	await until(() => asked.length === 2);
+	assert.equal(asked[1].alias, other);
+	assert.equal(asked[1].signal?.aborted, false);
+	asked[1].answer(undefined);
 });

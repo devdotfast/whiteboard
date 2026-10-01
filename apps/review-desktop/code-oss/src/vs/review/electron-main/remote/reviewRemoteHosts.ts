@@ -111,7 +111,11 @@ export class ReviewRemoteHosts {
 				questions.set(request.alias, { answer, abort });
 				return answer;
 			},
-			cancel: (alias) => questions.get(alias)?.abort.abort(),
+			// The next request asks afresh: a cancelled question, shown or queued, is never joined.
+			cancel: (alias) => {
+				questions.get(alias)?.abort.abort();
+				questions.delete(alias);
+			},
 		};
 	}
 
