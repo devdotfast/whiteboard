@@ -473,7 +473,6 @@ export interface ReviewDiffrConfig {
   credentialSource: "config" | "environment" | "missing";
   providers?: ReviewDiffrProvider[];
   defaultPrompt?: string;
-  defaultPromptUrl?: string;
   changed?: boolean;
   error?: string;
 }
@@ -509,7 +508,6 @@ const reviewDiffrConfigSchema = z.object({
     )
     .optional(),
   defaultPrompt: z.string().optional(),
-  defaultPromptUrl: z.string().optional(),
   changed: z.boolean().optional(),
   error: z.string().optional(),
 });

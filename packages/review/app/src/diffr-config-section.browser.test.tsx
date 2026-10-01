@@ -17,9 +17,6 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
-const PROMPT_URL =
-  "https://github.com/devdotfast/diffr/blob/main/plugins/summarize/plugin.toml#L68-L74";
-
 function config(): ReviewDiffrConfig {
   return {
     credentialSource: "config",
@@ -47,7 +44,6 @@ function config(): ReviewDiffrConfig {
       keylessCustomEndpoint: id === "openai",
     })),
     defaultPrompt: "Default prompt.",
-    defaultPromptUrl: PROMPT_URL,
     values: {
       plugins: {
         bundled: {
@@ -347,9 +343,6 @@ test("edits the prompt, links its default, and resets it", async () => {
   await expect
     .element(page.getByText("Default", { exact: true }))
     .toBeVisible();
-  await expect
-    .element(page.getByRole("link", { name: "Default prompt on GitHub" }))
-    .toHaveAttribute("href", PROMPT_URL);
   await act(async () => {
     await prompt.fill("Be terse.");
   });

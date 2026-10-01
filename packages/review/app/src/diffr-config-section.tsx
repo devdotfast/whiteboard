@@ -342,17 +342,8 @@ export function DiffrConfigSection({
                     </label>
                     <p {...stylex.props(styles.rowDescription)}>
                       Sent with every request. diffr adds the file and the folds
-                      to summarize.{" "}
-                      {config.defaultPromptUrl && (
-                        <a
-                          {...stylex.props(styles.link)}
-                          href={config.defaultPromptUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Default prompt on GitHub
-                        </a>
-                      )}{" "}
+                      to summarize, and asks for structured output where the
+                      provider supports it.{" "}
                       {config.defaultPrompt &&
                         draft.systemPrompt !== config.defaultPrompt && (
                           <Button

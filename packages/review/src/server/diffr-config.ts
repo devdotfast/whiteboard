@@ -157,9 +157,7 @@ function strings(value: JsonValue | undefined): string[] {
  */
 async function summaryDefaults(
   rootPath?: string,
-): Promise<
-  Pick<ReviewDiffrConfig, "providers" | "defaultPrompt" | "defaultPromptUrl">
-> {
+): Promise<Pick<ReviewDiffrConfig, "providers" | "defaultPrompt">> {
   let schema: JsonObject;
 
   try {
@@ -201,14 +199,9 @@ async function summaryDefaults(
 
   const prompt = option("system_prompt");
 
-  const description = isStringValue(prompt.description)
-    ? prompt.description
-    : "";
-
   return {
     providers,
     defaultPrompt: isStringValue(prompt.default) ? prompt.default : undefined,
-    defaultPromptUrl: /https:\/\/\S+/.exec(description)?.[0],
   };
 }
 

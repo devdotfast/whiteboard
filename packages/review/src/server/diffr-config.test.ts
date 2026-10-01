@@ -33,9 +33,6 @@ afterEach(async () => {
 
 const DEFAULT_PROMPT = "Summarize each fold.";
 
-const PROMPT_URL =
-  "https://github.com/devdotfast/diffr/blob/main/plugins/summarize/plugin.toml#L68-L74";
-
 // What diffr's schema says about each provider. "mistral" exists only here:
 // Whiteboard must handle a provider it has never heard of.
 const PROVIDERS = [
@@ -104,7 +101,6 @@ const SUMMARIZE_SCHEMA = {
     system_prompt: {
       type: "string",
       default: DEFAULT_PROMPT,
-      description: `Unset uses the default: ${PROMPT_URL}`,
     },
   },
 };
@@ -395,11 +391,10 @@ test("saved changes invalidate cached comparisons while no-op saves reuse them",
   }
 });
 
-test("reads the default prompt and its source link from diffr's schema", async () => {
+test("reads the default prompt from diffr's schema", async () => {
   await fakeDiffr();
   expect(await readDiffrConfig()).toMatchObject({
     defaultPrompt: DEFAULT_PROMPT,
-    defaultPromptUrl: PROMPT_URL,
   });
 });
 

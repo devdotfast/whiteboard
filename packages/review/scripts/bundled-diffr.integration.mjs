@@ -220,10 +220,6 @@ describe("Relocated runtime diffr integrates with Review streams and settings", 
     );
     const current = await readDiffrConfig(repository);
     assert.ok(current.defaultPrompt);
-    assert.match(
-      current.defaultPromptUrl,
-      /^https:\/\/github\.com\/devdotfast\/diffr\//,
-    );
 
     const saved = await saveDiffrSummarizer(
       {
