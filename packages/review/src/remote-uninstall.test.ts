@@ -16,12 +16,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 
+import { REVIEW_REMOTE_WRAPPER_MARK } from "@dev.fast/review-protocol";
 import { runReviewCli } from "@review/cli-runner.js";
-import {
-  REMOTE_WRAPPER_MARK,
-  remoteUninstall,
-  takeInstallLock,
-} from "@review/remote-uninstall.js";
+import { remoteUninstall, takeInstallLock } from "@review/remote-uninstall.js";
 import { reviewServerDiscoveryPath } from "@review/server-discovery.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
@@ -55,7 +52,7 @@ beforeEach(async () => {
   await mkdir(path.dirname(wrapper), { recursive: true });
   await writeFile(
     wrapper,
-    `#!/bin/sh\n${REMOTE_WRAPPER_MARK}\nexec '${version}/whiteboard' "$@"\n`,
+    `#!/bin/sh\n${REVIEW_REMOTE_WRAPPER_MARK}\nexec '${version}/whiteboard' "$@"\n`,
     { mode: 0o755 },
   );
 
