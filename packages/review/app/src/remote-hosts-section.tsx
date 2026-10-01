@@ -119,6 +119,7 @@ export function RemoteHostsSection({
     }
 
     await save(configured.filter((other) => other !== name));
+
     if (problem) setError(problem);
   };
 

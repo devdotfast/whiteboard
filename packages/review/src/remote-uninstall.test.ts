@@ -5,13 +5,13 @@ import { existsSync } from "node:fs";
 import {
   mkdir,
   mkdtemp,
-  readdir,
   readFile,
+  readdir,
   realpath,
   rm,
   writeFile,
 } from "node:fs/promises";
-import { createServer, type Server } from "node:http";
+import { type Server, createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -25,11 +25,17 @@ import { reviewServerDiscoveryPath } from "@review/server-discovery.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
 let root: string;
+
 let home: string;
+
 let stateDir: string;
+
 let install: string;
+
 let wrapper: string;
+
 const children: ChildProcess[] = [];
+
 const servers: Server[] = [];
 
 beforeEach(async () => {
@@ -51,6 +57,7 @@ beforeEach(async () => {
     `#!/bin/sh\n${REMOTE_WRAPPER_MARK}\nexec '${version}/whiteboard' "$@"\n`,
     { mode: 0o755 },
   );
+
   // The review store, and what else lives in the review home.
   for (const name of [
     "review-api.db",
@@ -64,6 +71,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   for (const child of children.splice(0)) child.kill("SIGKILL");
+
   for (const server of servers.splice(0)) server.close();
   await rm(root, { recursive: true, force: true });
 });
@@ -77,6 +85,7 @@ async function runningFrom(cli: string) {
     ["-e", "setInterval(() => {}, 1000)", cli],
     { stdio: "ignore" },
   );
+
   children.push(child);
   await once(child, "spawn");
 
@@ -90,6 +99,7 @@ async function serverRecord(
 ) {
   const instanceId = randomUUID();
   const token = "token";
+
   const server = createServer((request, response) => {
     response.setHeader("content-type", "application/json");
     response.end(
@@ -103,6 +113,7 @@ async function serverRecord(
         : "{}",
     );
   });
+
   servers.push(server);
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -190,6 +201,7 @@ it("stops a server Desktop started and reports it", async () => {
   const server = await runningFrom(
     path.join(install, "versions", "0.1.6", "cli.js"),
   );
+
   await serverRecord(server.pid!, "desktop");
 
   const result = await remoteUninstall({
@@ -210,6 +222,7 @@ it("refuses while a server the user started runs from the install, and removes n
   const server = await runningFrom(
     path.join(install, "versions", "0.1.6", "cli.js"),
   );
+
   await serverRecord(server.pid!, "user");
 
   const result = await remoteUninstall({
@@ -256,6 +269,7 @@ async function cli(argv: string[]) {
   let err = "";
   stdout.on("data", (chunk) => (out += String(chunk)));
   stderr.on("data", (chunk) => (err += String(chunk)));
+
   const code = await runReviewCli({
     argv,
     stdout,

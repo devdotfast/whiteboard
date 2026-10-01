@@ -477,6 +477,7 @@ test("also removing Whiteboard uninstalls before the host goes, and a failure is
 
   vi.mocked(hosts.uninstall).mockImplementation(async (alias) => {
     order.push(`uninstall ${alias}`);
+
     if (alias === "box2")
       throw new Error(
         "Could not remove Whiteboard from box2: A Whiteboard server you started (process 7) runs from it.",

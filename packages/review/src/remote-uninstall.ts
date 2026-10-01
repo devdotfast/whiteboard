@@ -48,6 +48,7 @@ export async function remoteUninstall(input: {
 }): Promise<RemoteUninstallResult> {
   const install = path.join(input.home, ".dev", "whiteboard-remote");
   const wrapper = path.join(input.home, ".local", "bin", "whiteboard");
+
   const refuse = (reason: string): RemoteUninstallResult => ({
     event: "remote.uninstall",
     ok: false,
@@ -115,13 +116,16 @@ export async function remoteUninstall(input: {
       }
     }
 
-  return {
+  const result: RemoteUninstallResult = {
     event: "remote.uninstall",
     ok: true,
     removed,
     keptReviews: !input.deleteReviews,
-    ...(stoppedServer ? { stoppedServer } : {}),
   };
+
+  if (stoppedServer) result.stoppedServer = stoppedServer;
+
+  return result;
 }
 
 /** The holder of a live install lock, or undefined when none is held. */
