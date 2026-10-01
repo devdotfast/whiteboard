@@ -249,6 +249,16 @@ async function findAgent(
   return undefined;
 }
 
+/** Whether the agent's model gets the MCP servers its sessions are given. */
+export async function askAgentTakesMcp(agent: AskAgentId): Promise<boolean> {
+  const spec = askAgents[agent];
+
+  if (!spec.mcp) return true;
+  const executable = await findAgent(spec);
+
+  return executable !== undefined && spec.mcp.supported(executable);
+}
+
 export async function detectAskAgents(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<AskAgentStatus[]> {
