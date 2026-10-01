@@ -183,12 +183,14 @@ export async function ensureRemoteLanguageServer(
       ]),
     });
 
-    if (failed.length > 0 && capped.signal.aborted && !input.signal?.aborted) {
-      await installDetached(files, input);
-
-      // The cap's aborts are not failures: the detached install goes on.
+    // The cap's aborts are not failures while a detached install goes on.
+    if (
+      failed.length > 0 &&
+      capped.signal.aborted &&
+      !input.signal?.aborted &&
+      (await installDetached(files, input))
+    )
       return { ...PENDING, languageGroups };
-    }
 
     if (groups) languageGroups = groups;
 
@@ -243,12 +245,15 @@ async function installing(files: ReturnType<typeof remoteLanguageServerFiles>) {
   );
 }
 
-/** `whiteboard remote extensions ensure` in the background, unless one runs. */
+/**
+ * `whiteboard remote extensions ensure` in the background, unless one runs.
+ * False when its lock was not had, so nothing was started.
+ */
 async function installDetached(
   files: ReturnType<typeof remoteLanguageServerFiles>,
   input: EnsureRemoteLanguageServerInput,
 ) {
-  await withFileLock(
+  const outcome = await withFileLock(
     files.installLock,
     { ...LOCK, timeoutMs: 10_000 },
     async () => {
@@ -286,6 +291,8 @@ async function installDetached(
         );
     },
   );
+
+  return outcome.acquired;
 }
 
 /** Stops the VS Code server this home started, if it still runs. */

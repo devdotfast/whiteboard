@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { withFileLock } from "@dev.fast/trace-core";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
 import { remoteServerPaths } from "./remote-extensions.js";
@@ -232,6 +233,45 @@ it("hands downloads that outlast the attach to one detached install, and reports
   });
 
   expect(done.languageServer?.commit).toBe(COMMIT);
+}, 30_000);
+
+it("reports the download failure, not pending, when the detached install's lock cannot be had", async () => {
+  const error =
+    "Network error reaching open-vsx.org: This operation was aborted";
+
+  const stalled = async ({ signal }: { signal?: AbortSignal }) => {
+    await new Promise((resolve) => signal?.addEventListener("abort", resolve));
+
+    return {
+      failed: [{ id: "golang.go", error }],
+      groups: [
+        { group: "go", installed: false, detail: `golang.go: ${error}` },
+      ],
+    };
+  };
+
+  // Another attach holds the install lock for longer than one waits for it.
+  const held = await withFileLock(
+    remoteLanguageServerFiles(env).installLock,
+    { retryMs: 100, staleMs: 60_000, timeoutMs: 1_000 },
+    () =>
+      ensureRemoteLanguageServer({
+        env,
+        packageRoot,
+        groups: ["go"],
+        ensure: stalled,
+        installTimeoutMs: 200,
+        cli: [process.execPath, "-e", "process.exit(9)"],
+      }),
+  );
+
+  expect(held.result).toEqual({
+    languageServer: null,
+    languageServerDetail: `Could not install the language extensions: golang.go: ${error}`,
+    languageGroups: [
+      { group: "go", installed: false, detail: `golang.go: ${error}` },
+    ],
+  });
 }, 30_000);
 
 it("reports a package without a VS Code server", async () => {
