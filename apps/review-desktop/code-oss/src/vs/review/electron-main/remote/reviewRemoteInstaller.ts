@@ -9,6 +9,7 @@ import { hostname } from "node:os";
 import { fetchToLaptopCache, type ReviewRemoteArtifact } from "./reviewRemoteArtifacts.js";
 import { runSsh, type RunResult, type SpawnSsh, type SshChildProcess } from "./reviewRemoteHost.js";
 import {
+	completeScript,
 	diffrScript,
 	downloadScript,
 	finishScript,
@@ -140,14 +141,31 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 	};
 
 	let relay: { server: ReviewRegistryRelay; forwarded: boolean } | undefined;
+	let locking = false;
 	try {
+		const complete = await alreadyComplete();
+		if (complete) return complete;
+		locking = true;
 		await takeLock();
 		return await install();
 	} finally {
 		signal.removeEventListener("abort", onAbort);
 		if (relay) await closeRelay(relay);
 		// Also when taking it failed: a lock script ended midway may have taken it. It releases only this install's lock.
-		await runSsh(input.spawn, input.env, sshExecArgs(session, input.env), timeouts.release, releaseScript(context));
+		if (locking) await runSsh(input.spawn, input.env, sshExecArgs(session, input.env), timeouts.release, releaseScript(context));
+	}
+
+	/** The version already complete, read and its diffr ensured in one script, without the lock. */
+	async function alreadyComplete(): Promise<ReviewRemoteInstallResult | undefined> {
+		const checked = await run("checking the installed version", completeScript(context, { version: input.version, integrity }), timeouts.diffr).catch((error: unknown) => {
+			if (signal.aborted) throw error;
+			return undefined;
+		});
+		const marker = checked?.has("COMPLETE") ? readMarker(checked.get("MARKER")) : undefined;
+		if (!marker) return undefined;
+		const launcher = `${reviewRemoteVersionDir(probe.home, input.version)}/whiteboard`;
+		input.onProgress({ step: "done", cliPath: marker.cli });
+		return { nodePath: marker.node, cliPath: marker.cli, launcher, diffr: diffrReady(checked!.lines) };
 	}
 
 	async function takeLock(): Promise<void> {
@@ -212,7 +230,7 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 			if (signal.aborted) throw error;
 			return undefined;
 		});
-		const diffr = fetched?.lines.some((line) => /^\{"event":"remote\.diffr","diffr":true\}$/.test(line.trim())) ?? false;
+		const diffr = diffrReady(fetched?.lines ?? []);
 		input.onProgress({ step: "done", cliPath: paths.cliPath });
 		return { ...paths, diffr };
 	}
@@ -307,6 +325,8 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 		await server.close();
 	}
 }
+
+const diffrReady = (lines: string[]) => lines.some((line) => /^\{"event":"remote\.diffr","diffr":true\}$/.test(line.trim()));
 
 /** The checksums the remote checks against, and the pinned Node's version. */
 function pinned(artifacts: ReviewRemoteInstallInput["artifacts"]) {
