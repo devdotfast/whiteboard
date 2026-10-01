@@ -118,6 +118,25 @@ it("keeps what the panel showed, and what each agent offered", () => {
     expect(history.offer("claude")).toBeUndefined();
     history.saveOffer("claude", offer);
     expect(new AskHistory(db).offer("claude")).toEqual(offer);
+
+    // And last with each model: the efforts on offer depend on it.
+    const haiku = {
+      choices: {
+        model: {
+          current: "haiku",
+          options: [
+            { value: "default", name: "Default" },
+            { value: "haiku", name: "Haiku" },
+          ],
+        },
+      },
+    };
+
+    expect(history.offer("claude", "default")).toEqual(offer);
+    expect(history.offer("claude", "haiku")).toBeUndefined();
+    history.saveModelOffer("claude", haiku);
+    expect(history.offer("claude", "haiku")).toEqual(haiku);
+    expect(history.offer("claude")).toEqual(offer);
   } finally {
     db.close();
   }

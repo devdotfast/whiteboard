@@ -27,11 +27,13 @@ const OFFER_TIMEOUT_MS = 30_000;
 const COMMANDS_WAIT_MS = 2_000;
 
 /** What an agent offers, from a session it starts and leaves without
- * asking anything. */
+ * asking anything: with the model given, where it offers that model, since
+ * the efforts on offer depend on it. */
 async function offeredBy(
   launch: AskAgentLauncher,
   agent: AskAgentId,
   cwd: string,
+  model?: string,
 ): Promise<AskOffer> {
   const process = await launch(agent, cwd);
   // Stopping the process ends the connection, which fails its requests.
@@ -76,8 +78,29 @@ async function offeredBy(
       },
     };
 
-    for (const [kind, { select }] of choicesOf(session.configOptions))
-      offer.choices[kind] = select;
+    let found = choicesOf(session.configOptions);
+    const models = found.get("model");
+
+    if (
+      model &&
+      models &&
+      model !== models.select.current &&
+      models.select.options.some((option) => option.value === model)
+    )
+      found = choicesOf(
+        (
+          await connection.agent.request(
+            methods.agent.session.setConfigOption,
+            {
+              sessionId: session.sessionId,
+              configId: models.configId,
+              value: model,
+            },
+          )
+        ).configOptions,
+      );
+
+    for (const [kind, { select }] of found) offer.choices[kind] = select;
 
     let wait: ReturnType<typeof setTimeout> | undefined;
 
@@ -124,8 +147,9 @@ export type AskToolsReach =
 /** The live Ask threads of one server; they end with it. */
 export class AskThreads {
   private readonly threads = new Map<string, AskThread>();
-  /** One question to each agent at a time about what it offers. */
-  private readonly offers = new Map<AskAgentId, Promise<AskOffer>>();
+  /** One question to each agent at a time about what it offers with a
+   * model. */
+  private readonly offers = new Map<string, Promise<AskOffer>>();
 
   private readonly mcpServers: AskMcpServers;
 
@@ -168,15 +192,17 @@ export class AskThreads {
     return this.threads.get(id);
   }
 
-  /** What the agent offers to choose before anything is asked of it. */
-  offered(agent: AskAgentId, cwd: string) {
-    let offer = this.offers.get(agent);
+  /** What the agent offers to choose before anything is asked of it, with
+   * its own model or the one given. */
+  offered(agent: AskAgentId, cwd: string, model?: string) {
+    const key = JSON.stringify([agent, model]);
+    let offer = this.offers.get(key);
 
     if (!offer) {
-      offer = offeredBy(this.launch, agent, cwd).finally(() =>
-        this.offers.delete(agent),
+      offer = offeredBy(this.launch, agent, cwd, model).finally(() =>
+        this.offers.delete(key),
       );
-      this.offers.set(agent, offer);
+      this.offers.set(key, offer);
     }
 
     return offer;

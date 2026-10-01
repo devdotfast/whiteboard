@@ -98,6 +98,10 @@ export class AskHistory {
     db.exec(
       "CREATE TABLE IF NOT EXISTS ask_agent_offers(agent TEXT PRIMARY KEY, offer TEXT NOT NULL)",
     );
+    // And with each model it ran, since the efforts on offer depend on it.
+    db.exec(
+      "CREATE TABLE IF NOT EXISTS ask_agent_model_offers(agent TEXT NOT NULL, model TEXT NOT NULL, offer TEXT NOT NULL, PRIMARY KEY(agent, model))",
+    );
   }
 
   save(record: AskRecord) {
@@ -157,15 +161,36 @@ export class AskHistory {
         "INSERT OR REPLACE INTO ask_agent_offers(agent, offer) VALUES(?, ?)",
       )
       .run(agent, JSON.stringify(offer));
+    this.saveModelOffer(agent, offer);
   }
 
-  offer(agent: AskAgentId): AskOffer | undefined {
+  /** Keeps what the agent offers with the offer's model, without making
+   * it what the agent offered last. */
+  saveModelOffer(agent: AskAgentId, offer: AskOffer) {
+    const model = offer.choices.model?.current;
+
+    if (!model) return;
+    this.db
+      .prepare(
+        "INSERT OR REPLACE INTO ask_agent_model_offers(agent, model, offer) VALUES(?, ?, ?)",
+      )
+      .run(agent, model, JSON.stringify(offer));
+  }
+
+  /** What the agent offered last, or last with the model given. */
+  offer(agent: AskAgentId, model?: string): AskOffer | undefined {
     const row = z
       .object({ offer: z.string() })
       .safeParse(
-        this.db
-          .prepare("SELECT offer FROM ask_agent_offers WHERE agent=?")
-          .get(agent),
+        model === undefined
+          ? this.db
+              .prepare("SELECT offer FROM ask_agent_offers WHERE agent=?")
+              .get(agent)
+          : this.db
+              .prepare(
+                "SELECT offer FROM ask_agent_model_offers WHERE agent=? AND model=?",
+              )
+              .get(agent, model),
       ).data;
 
     return row && askOfferSchema.safeParse(JSON.parse(row.offer)).data;

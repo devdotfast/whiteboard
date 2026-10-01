@@ -122,11 +122,13 @@ const offeredSchema = z.object({ offer: askOfferSchema });
 
 /** What the agent offers, for a question not yet asked: its choices, its
  * commands and whether it reads images. Asked again each time: a
- * conversation can teach the server something newer. */
+ * conversation can teach the server something newer. And again for each
+ * model picked: the efforts on offer depend on it. */
 export function useOffer(
   session: ReviewSession,
   agent: AskAgentId | undefined,
   wanted: boolean,
+  model?: string,
 ): AskOffer | undefined {
   const [offered, setOffered] = useState<{
     agent: AskAgentId;
@@ -138,7 +140,9 @@ export function useOffer(
     let current = true;
 
     void session
-      .fetch(`/ask/agents/${agent}/offer`)
+      .fetch(
+        `/ask/agents/${agent}/offer${model ? `?${new URLSearchParams({ model })}` : ""}`,
+      )
       .then(async (response) => {
         if (!response.ok) return;
         const { offer } = offeredSchema.parse(await response.json());
@@ -151,7 +155,7 @@ export function useOffer(
     return () => {
       current = false;
     };
-  }, [session, agent, wanted]);
+  }, [session, agent, wanted, model]);
 
   return offered && offered.agent === agent ? offered.offer : undefined;
 }

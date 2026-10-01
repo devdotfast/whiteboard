@@ -1089,6 +1089,17 @@ it("says what an agent offers before anything is asked, starting it once for eve
   expect(second).toBe(first);
   expect(launch).toHaveBeenCalledTimes(1);
   expect(stopped).toHaveBeenCalled();
+
+  // With another model, what the agent offers once it has that model.
+  expect(
+    (await threads.offered("codex", "/checkouts/payments", "sonnet")).choices,
+  ).toMatchObject({
+    model: { current: "sonnet" },
+    effort: {
+      current: "medium",
+      options: [{ value: "low" }, { value: "medium" }],
+    },
+  });
 });
 
 const quick: AskThreadLimits = { startMs: 50, stopGraceMs: 50 };

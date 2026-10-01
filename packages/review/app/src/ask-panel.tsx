@@ -111,6 +111,7 @@ export function AskPanelContent({
     session,
     agent,
     threadId === null && savedThreadId === undefined,
+    picks.model ?? (agent ? storedChoice(session, agent, "model") : undefined),
   );
 
   const composer = useRef<HTMLTextAreaElement>(null);
