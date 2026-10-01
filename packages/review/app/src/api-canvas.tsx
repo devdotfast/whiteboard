@@ -385,8 +385,12 @@ export function ApiCanvas({
   }, [Boolean(data), content.bridge]);
 
   useEffect(() => {
-    if (data) content.setTutorial?.(data.snapshot.origin?.tutorial === true);
-  }, [data?.snapshot.origin?.tutorial, content.setTutorial]);
+    // Only the laptop's own tutorial gets the tutorial controls.
+    if (data)
+      content.setTutorial?.(
+        !content.host && data.snapshot.origin?.tutorial === true,
+      );
+  }, [data?.snapshot.origin?.tutorial, content.host, content.setTutorial]);
 
   // Sharing is the laptop's, for reviews the laptop holds.
   const sharing = useMemo(

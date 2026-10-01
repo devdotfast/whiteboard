@@ -34,6 +34,7 @@ import {
   createGatewayStreams,
   downDetail,
   isSnapshotOf,
+  withoutTutorial,
 } from "./review-gateway-streams.js";
 import { serverJson } from "./review-server-core.js";
 
@@ -426,8 +427,16 @@ export function createReviewGateway(input: {
       }
 
       if (snapshot) {
-        if (isSnapshotOf(parseBody(body), options.reviewId))
-          return new Response(new Uint8Array(body), { status, headers: out });
+        const value = parseBody(body);
+
+        if (isSnapshotOf(value, options.reviewId)) {
+          const stripped = withoutTutorial(value);
+
+          return new Response(
+            stripped ? JSON.stringify(stripped) : new Uint8Array(body),
+            { status, headers: out },
+          );
+        }
 
         log(
           `Refused ${remote.alias}'s answer for ${options.reviewId}: it carried another review.`,

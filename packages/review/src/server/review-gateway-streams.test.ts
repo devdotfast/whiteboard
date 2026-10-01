@@ -893,3 +893,53 @@ it("refuses a remote's review line that carries another review, once in the log"
     `Refused wb-a's update for ${reviewId}: it carried another review.`,
   ]);
 });
+
+it("takes the tutorial marker off a remote's snapshot, in a read and in a line", async () => {
+  const reviewId = randomUUID();
+
+  const snapshot = JSON.stringify({
+    reviewId,
+    version: 1,
+    origin: { tutorial: true, branch: "main" },
+  });
+
+  const fake = await startFake({
+    version,
+    reviewIds: [reviewId],
+    handle(request, response) {
+      if (request.url?.startsWith("/reviews-api/watch")) {
+        response.setHeader("content-type", "application/x-ndjson");
+        response.write(
+          `{"kind":"review","reviewId":"${reviewId}","value":${snapshot}}\n`,
+        );
+
+        return true;
+      }
+
+      if (!request.url?.startsWith(`/reviews-api/${reviewId}?`)) return false;
+      response.setHeader("content-type", "application/json");
+      response.end(snapshot);
+
+      return true;
+    },
+  });
+
+  const laptop = await startGateway(root, [
+    { alias: "wb-a", endpoint: fake.endpoint },
+  ]);
+
+  await expect.poll(() => laptop.gateway.hosts()[0]?.state).toBe("online");
+
+  expect(await laptop.api(`/${reviewId}?full=true`)).toMatchObject({
+    reviewId,
+    origin: { branch: "main" },
+  });
+  expect(
+    (await laptop.api<{ origin: object }>(`/${reviewId}?full=true`)).origin,
+  ).not.toHaveProperty("tutorial");
+
+  const stream = follow(laptop.url, [{ reviewId, mode: "structural" }]);
+  const line = await stream.until((next) => !!valueOf(next, reviewId));
+  expect(valueOf(line, reviewId)).toMatchObject({ origin: { branch: "main" } });
+  expect(valueOf(line, reviewId)?.origin).not.toHaveProperty("tutorial");
+});

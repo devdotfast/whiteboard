@@ -1,6 +1,7 @@
 import type http from "node:http";
 
 import {
+  type JsonObject,
   type ReviewApiSummary,
   type ReviewGatewayHostState,
   isJsonObject,
@@ -70,8 +71,21 @@ export const downDetail = (down: ReviewGatewayHostState) =>
 
 /** A remote's snapshot is the review it was asked for, so the canvas never
  * picks another review's sources from it. */
-export const isSnapshotOf = (value: unknown, reviewId: string) =>
+export const isSnapshotOf = (
+  value: unknown,
+  reviewId: string,
+): value is JsonObject =>
   UUID.test(reviewId) && isJsonObject(value) && value.reviewId === reviewId;
+
+/** A remote's snapshot without the tutorial marker, which grants the
+ * laptop's tutorial controls; undefined when it carries none. */
+export function withoutTutorial(value: JsonObject): JsonObject | undefined {
+  if (!isJsonObject(value.origin) || !("tutorial" in value.origin))
+    return undefined;
+  const { tutorial: _, ...origin } = value.origin;
+
+  return { ...value, origin };
+}
 
 const watchPath = (subscriptions: object[]) =>
   `/reviews-api/watch?subscriptions=${encodeURIComponent(JSON.stringify(subscriptions))}`;
@@ -328,9 +342,23 @@ export function createGatewayStreams(input: {
             if (line?.kind !== "review" || !ids.has(line.reviewId)) return;
             const { reviewId, value } = line;
 
-            // Forwarded as the remote sent it.
-            if (value === undefined || isSnapshotOf(value, reviewId))
-              return emitReview(reviewId, text);
+            if (value === undefined) return emitReview(reviewId, text);
+
+            if (isSnapshotOf(value, reviewId)) {
+              const stripped = withoutTutorial(value);
+
+              // Otherwise forwarded as the remote sent it.
+              return emitReview(
+                reviewId,
+                stripped
+                  ? JSON.stringify({
+                      kind: "review",
+                      reviewId,
+                      value: stripped,
+                    })
+                  : text,
+              );
+            }
 
             if (!refused.has(`${remote.alias} ${reviewId}`)) {
               refused.add(`${remote.alias} ${reviewId}`);

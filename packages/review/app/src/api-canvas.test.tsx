@@ -1151,6 +1151,47 @@ it("binds sources and resources to the review the tab asked for, not the one an 
   );
 });
 
+it("gives a review on another machine no tutorial controls, whatever its snapshot says", async () => {
+  const review = await command({ type: "create", title: "Remote", pins });
+  const app = new Hono().route("/reviews-api", createReviewApi(store));
+  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+  const tutorial = vi.fn<(enabled: boolean) => void>();
+
+  const bridge = testReviewBridge(
+    {},
+    {
+      request: rewrittenWatch(
+        app,
+        (line) => {
+          if (line.value) line.value.origin = { tutorial: true };
+        },
+        [],
+      ),
+    },
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  await act(async () => {
+    canvas = mount(container, {
+      kind: "api",
+      reviewId: review.reviewId,
+      host: "wb-a",
+      bridge,
+      setSourceView: () => {},
+      setTutorial: tutorial,
+    });
+  });
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(container.querySelector("h1")?.textContent).toBe("Remote"),
+    );
+  });
+
+  expect(tutorial).toHaveBeenCalled();
+  expect(tutorial).not.toHaveBeenCalledWith(true);
+});
+
 async function mountPeekReview(content: {
   host?: string;
   available?: { sourceWindows: boolean; languageFeatures: boolean };
