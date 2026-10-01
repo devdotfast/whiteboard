@@ -102,17 +102,20 @@ it("keeps what the panel showed, and what each agent offered", () => {
     expect(new AskHistory(db).get("thread")?.entries).toEqual(entries);
 
     // What an agent offered last, for picking before it starts.
-    const choices = {
-      model: {
-        current: "default",
-        options: [{ value: "default", name: "Default" }],
+    const offer = {
+      choices: {
+        model: {
+          current: "default",
+          options: [{ value: "default", name: "Default" }],
+        },
+        effort: { current: "high", options: [{ value: "high", name: "High" }] },
       },
-      effort: { current: "high", options: [{ value: "high", name: "High" }] },
+      commands: [{ name: "review", description: "Review the change" }],
     };
 
-    expect(history.choices("claude")).toBeUndefined();
-    history.saveChoices("claude", choices);
-    expect(new AskHistory(db).choices("claude")).toEqual(choices);
+    expect(history.offer("claude")).toBeUndefined();
+    history.saveOffer("claude", offer);
+    expect(new AskHistory(db).offer("claude")).toEqual(offer);
   } finally {
     db.close();
   }

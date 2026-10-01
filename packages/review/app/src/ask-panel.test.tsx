@@ -614,8 +614,8 @@ it("asks with the model and effort the reviewer picks, and switches them between
           agents: [{ id: "codex", name: "Codex", available: true }],
         });
 
-      if (endpoint === "/ask/agents/codex/choices")
-        return Response.json({ choices });
+      if (endpoint === "/ask/agents/codex/offer")
+        return Response.json({ offer: { choices } });
 
       if (endpoint === "/ask") return Response.json({ threadId: "thread" });
 
@@ -716,6 +716,95 @@ it("asks with the model and effort the reviewer picks, and switches them between
     expect(bodies("/ask/thread/choice")).toEqual([
       { kind: "effort", value: "medium" },
     ]);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("completes the agent's commands after /", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const session = testReviewSession();
+
+  const fetch = vi
+    .spyOn(session, "fetch")
+    .mockImplementation(async (endpoint) => {
+      if (endpoint === "/ask/agents")
+        return Response.json({
+          agents: [{ id: "codex", name: "Codex", available: true }],
+        });
+
+      if (endpoint === "/ask/agents/codex/offer")
+        return Response.json({
+          offer: {
+            choices: {},
+            commands: [
+              { name: "review", description: "Review the change" },
+              { name: "compact", description: "Summarize the conversation" },
+            ],
+          },
+        });
+
+      if (endpoint === "/ask") return Response.json({ threadId: "thread" });
+
+      if (endpoint === "/ask/thread/watch")
+        return new Response(new ReadableStream<Uint8Array>());
+
+      return Response.json({ ok: true });
+    });
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  const type = (text: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      )!.set!.call(textarea(), text);
+      textarea().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+  const press = (key: string) =>
+    act(async () =>
+      textarea().dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true }),
+      ),
+    );
+
+  const textarea = () => container.querySelector("textarea")!;
+
+  const options = () =>
+    [...container.querySelectorAll('[role="option"]')].map(
+      (option) => option.firstElementChild?.textContent,
+    );
+
+  try {
+    await act(async () =>
+      root.render(
+        <ReviewSessionProvider session={session}>
+          <AskPanelContent selection={selection} agent="codex" />
+        </ReviewSessionProvider>,
+      ),
+    );
+
+    await type("/rev");
+    expect(options()).toEqual(["/review"]);
+    await press("Enter");
+    expect(textarea().value).toBe("/review ");
+
+    await type("/review the locks");
+    expect(options()).toEqual([]);
+    await press("Enter");
+
+    expect(
+      fetch.mock.calls
+        .filter(([endpoint]) => endpoint === "/ask")
+        .map(([, init]) => JSON.parse(String(init?.body)).question),
+    ).toEqual([{ text: "/review the locks" }]);
   } finally {
     await act(async () => root.unmount());
     container.remove();

@@ -2,12 +2,12 @@ import type { DatabaseSync } from "node:sqlite";
 
 import {
   type AskAgentId,
-  type AskChoices,
   type AskEntry,
   type AskHistoryEntry,
-  askChoicesSchema,
+  type AskOffer,
   askEntrySchema,
   askHistoryEntrySchema,
+  askOfferSchema,
 } from "@review/ask/thread-state.js";
 import { z } from "zod";
 
@@ -78,9 +78,9 @@ export class AskHistory {
     CREATE INDEX IF NOT EXISTS ask_conversations_review ON ask_conversations(review_id, updated_at);`);
 
     // What each agent offered last, so a new question can pick a model and
-    // effort before its agent starts.
+    // effort, and a command, before its agent starts.
     db.exec(
-      "CREATE TABLE IF NOT EXISTS ask_agent_choices(agent TEXT PRIMARY KEY, choices TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS ask_agent_offers(agent TEXT PRIMARY KEY, offer TEXT NOT NULL)",
     );
   }
 
@@ -120,24 +120,24 @@ export class AskHistory {
       .run(JSON.stringify(entries), id);
   }
 
-  saveChoices(agent: AskAgentId, choices: AskChoices) {
+  saveOffer(agent: AskAgentId, offer: AskOffer) {
     this.db
       .prepare(
-        "INSERT OR REPLACE INTO ask_agent_choices(agent, choices) VALUES(?, ?)",
+        "INSERT OR REPLACE INTO ask_agent_offers(agent, offer) VALUES(?, ?)",
       )
-      .run(agent, JSON.stringify(choices));
+      .run(agent, JSON.stringify(offer));
   }
 
-  choices(agent: AskAgentId): AskChoices | undefined {
+  offer(agent: AskAgentId): AskOffer | undefined {
     const row = z
-      .object({ choices: z.string() })
+      .object({ offer: z.string() })
       .safeParse(
         this.db
-          .prepare("SELECT choices FROM ask_agent_choices WHERE agent=?")
+          .prepare("SELECT offer FROM ask_agent_offers WHERE agent=?")
           .get(agent),
       ).data;
 
-    return row && askChoicesSchema.safeParse(JSON.parse(row.choices)).data;
+    return row && askOfferSchema.safeParse(JSON.parse(row.offer)).data;
   }
 
   touch(id: string, at = new Date().toISOString()) {

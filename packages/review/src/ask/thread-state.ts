@@ -100,6 +100,24 @@ export const askPicksSchema = z.strictObject({
 
 export type AskPicks = z.infer<typeof askPicksSchema>;
 
+/** A slash command the agent takes, its skills among them. */
+export const askCommandSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  /** What it takes after its name, when it takes anything. */
+  hint: z.string().optional(),
+});
+
+export type AskCommand = z.infer<typeof askCommandSchema>;
+
+/** What an agent offers before anything is asked of it, as it last said. */
+export const askOfferSchema = z.object({
+  choices: askChoicesSchema,
+  commands: z.array(askCommandSchema).optional(),
+});
+
+export type AskOffer = z.infer<typeof askOfferSchema>;
+
 /** A question as the reviewer asks it. */
 export const askQuestionSchema = z.strictObject({
   text: z.string().trim().min(1).max(8_000),
@@ -132,6 +150,8 @@ export const askThreadStateSchema = z.object({
   cwd: z.string(),
   /** Absent until the agent says, or when it offers no choice. */
   choices: askChoicesSchema.optional(),
+  /** Absent until the agent says, or when it takes none. */
+  commands: z.array(askCommandSchema).optional(),
   selection: z.object({ title: z.string(), quote: z.string().optional() }),
   entries: z.array(askEntrySchema),
 });
@@ -148,6 +168,7 @@ export const askChangeSchema = z.discriminatedUnion("type", [
     status: statusSchema.optional(),
     readOnly: z.boolean().optional(),
     choices: askChoicesSchema.optional(),
+    commands: z.array(askCommandSchema).optional(),
     /** `null` clears the error; absent leaves it. */
     error: z.string().nullable().optional(),
     /** `null` clears it; absent leaves it. */
@@ -193,6 +214,9 @@ export function applyAskChange(
       const choices = change.choices ?? state.choices;
 
       if (choices) next.choices = choices;
+      const commands = change.commands ?? state.commands;
+
+      if (commands) next.commands = commands;
 
       // Absent keeps the error, null clears it, a message replaces it.
       const error = change.error === undefined ? state.error : change.error;

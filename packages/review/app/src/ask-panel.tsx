@@ -2,8 +2,8 @@ import type { AgentSelection } from "@review/agent-selection";
 import {
   type AskAgentId,
   type AskChoiceKind,
-  type AskChoices,
   type AskEntry,
+  type AskOffer,
   type AskPicks,
   type AskQuestion,
   type AskSelect,
@@ -11,7 +11,7 @@ import {
   applyAskChange,
   askAgentIds,
   askChoiceKinds,
-  askChoicesSchema,
+  askOfferSchema,
   askUpdateSchema,
 } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
@@ -122,18 +122,19 @@ export function useAskAgents(session: ReviewSession | null): AskAgent[] | null {
   return agents;
 }
 
-const offeredSchema = z.object({ choices: askChoicesSchema });
+const offeredSchema = z.object({ offer: askOfferSchema });
 
-/** What the agent offers to choose, for a question not yet asked. Asked
- * again each time: a conversation can teach the server something newer. */
-function useOfferedChoices(
+/** What the agent offers, for a question not yet asked: its choices and
+ * its commands. Asked again each time: a conversation can teach the server
+ * something newer. */
+function useOffer(
   session: ReviewSession,
   agent: AskAgentId | undefined,
   wanted: boolean,
-): AskChoices | undefined {
+): AskOffer | undefined {
   const [offered, setOffered] = useState<{
     agent: AskAgentId;
-    choices: AskChoices;
+    offer: AskOffer;
   }>();
 
   useEffect(() => {
@@ -141,12 +142,12 @@ function useOfferedChoices(
     let current = true;
 
     void session
-      .fetch(`/ask/agents/${agent}/choices`)
+      .fetch(`/ask/agents/${agent}/offer`)
       .then(async (response) => {
         if (!response.ok) return;
-        const { choices } = offeredSchema.parse(await response.json());
+        const { offer } = offeredSchema.parse(await response.json());
 
-        if (current) setOffered({ agent, choices });
+        if (current) setOffered({ agent, offer });
       })
       // Without them the agent answers with its own defaults.
       .catch(() => {});
@@ -156,7 +157,7 @@ function useOfferedChoices(
     };
   }, [session, agent, wanted]);
 
-  return offered && offered.agent === agent ? offered.choices : undefined;
+  return offered && offered.agent === agent ? offered.offer : undefined;
 }
 
 const preferredAgentKey = (session: ReviewSession) =>
@@ -521,7 +522,7 @@ export function AskPanelContent({
 
   useShowOpenThread(threadId ?? savedThreadId ?? null);
 
-  const offered = useOfferedChoices(
+  const offered = useOffer(
     session,
     agent,
     threadId === null && savedThreadId === undefined,
@@ -676,7 +677,7 @@ export function AskPanelContent({
   const chosen = agents?.find((candidate) => candidate.id === agent);
   // A running thread offers its agent's choices; before one, what the
   // agent offers when it starts.
-  const choices = thread?.choices ?? offered;
+  const choices = thread?.choices ?? offered?.choices;
 
   const currentChoice = (kind: AskChoiceKind) => {
     const select = choices?.[kind];
@@ -919,6 +920,7 @@ export function AskPanelContent({
               : "Loading the conversation…"
             : composerStatus(thread, busy)
         }
+        commands={thread?.commands ?? offered?.commands}
         onAsk={ask}
       />
     </div>
@@ -928,7 +930,7 @@ export function AskPanelContent({
 function composerStatus(thread: AskThreadState | null, busy: boolean) {
   if (thread?.status === "waiting") return "Waiting for your approval";
 
-  if (!busy) return "↵ to ask · ⇧↵ new line";
+  if (!busy) return "↵ to ask · / commands";
 
   const sinceQuestion = thread?.entries.slice(
     thread.entries.findLastIndex((entry) => entry.kind === "user") + 1,

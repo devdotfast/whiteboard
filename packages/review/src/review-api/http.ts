@@ -1163,24 +1163,23 @@ export function createReviewApi(
       context.json({ agents: await ask.agents() }),
     );
 
-    // What an agent offers to choose: what it said last, else what a
-    // session started in the review's checkout says.
-    app.get("/:id/ask/agents/:agent/choices", async (context) => {
+    // What an agent offers: what it said last, else what a session
+    // started in the review's checkout says.
+    app.get("/:id/ask/agents/:agent/offer", async (context) => {
       const agent = z.enum(askAgentIds).parse(context.req.param("agent"));
-      const stored = store.askHistory.choices(agent);
+      const stored = store.askHistory.offer(agent);
 
-      if (stored) return context.json({ choices: stored });
+      if (stored) return context.json({ offer: stored });
 
       const checkout = await data.agentCheckout(
         readReview(context.req.param("id")),
       );
 
-      const choices = await ask.threads.offered(agent, checkout.rootPath);
+      const offer = await ask.threads.offered(agent, checkout.rootPath);
 
-      if (Object.keys(choices).length)
-        store.askHistory.saveChoices(agent, choices);
+      store.askHistory.saveOffer(agent, offer);
 
-      return context.json({ choices });
+      return context.json({ offer });
     });
 
     app.post("/:id/ask", async (context) => {
@@ -1225,8 +1224,7 @@ export function createReviewApi(
         onTurn: () => store.askHistory.touch(id),
         onSave: (entries) => store.askHistory.saveEntries(id, entries),
         picks: input.picks,
-        onChoices: (choices) =>
-          store.askHistory.saveChoices(input.agent, choices),
+        onOffer: (offer) => store.askHistory.saveOffer(input.agent, offer),
         cwd: checkout.rootPath,
         head: checkout.head,
         selection: {
@@ -1292,8 +1290,7 @@ export function createReviewApi(
         onTurn: () => store.askHistory.touch(record.id),
         onSave: (entries) => store.askHistory.saveEntries(record.id, entries),
         picks,
-        onChoices: (choices) =>
-          store.askHistory.saveChoices(record.agent, choices),
+        onOffer: (offer) => store.askHistory.saveOffer(record.agent, offer),
       });
 
       return context.json({ threadId: record.id });

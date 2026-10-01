@@ -1,5 +1,6 @@
 import {
   type AgentContext,
+  type AvailableCommand,
   type ClientConnection,
   type McpServer,
   RequestError,
@@ -12,9 +13,10 @@ import {
 import type { AskAgentLauncher } from "@review/ask/agents.js";
 import {
   type AskAgentId,
-  type AskChoices,
   type AskEntry,
+  type AskOffer,
   type AskPicks,
+  type AskQuestion,
   type AskThreadState,
   applyAskChange,
   askUpdateSchema,
@@ -36,10 +38,15 @@ function fakeAgent(
   turn: (client: AgentContext, prompt: string) => Promise<void>,
   /** Replays a saved session; without it the agent cannot load one. */
   load?: (client: AgentContext, sessionId: string) => Promise<void>,
-  /** What the agent says to a new session before anything is asked, as Pi
-   * does. */
-  greeting?: string,
+  options: {
+    /** What the agent says to a new session before anything is asked, as Pi
+     * does. */
+    greeting?: string;
+    /** The slash commands it lists once a session starts. */
+    commands?: AvailableCommand[];
+  } = {},
 ) {
+  const { greeting, commands } = options;
   const modes: string[] = [];
   const mcpServers: McpServer[][] = [];
   const metas: unknown[] = [];
@@ -92,6 +99,20 @@ function fakeAgent(
     .onRequest(methods.agent.session.new, ({ params, client }) => {
       mcpServers.push(params.mcpServers);
       metas.push(params._meta);
+
+      // Like the real adapters: just after the session's response.
+      if (commands)
+        setTimeout(
+          () =>
+            void client.notify(methods.client.session.update, {
+              sessionId: "session",
+              update: {
+                sessionUpdate: "available_commands_update",
+                availableCommands: commands,
+              },
+            }),
+          0,
+        );
 
       if (!greeting)
         return { sessionId: "session", configOptions: configOptions() };
@@ -228,7 +249,8 @@ function openThread(
   options: {
     agent?: AskAgentId;
     picks?: AskPicks;
-    onChoices?: (choices: AskChoices) => void;
+    question?: AskQuestion;
+    onOffer?: (offer: AskOffer) => void;
     limits?: AskThreadLimits;
   } = {},
 ) {
@@ -891,12 +913,12 @@ it("answers with Claude's plan and does not let it leave the read-only mode", as
 });
 
 it("starts Claude without its file tools, in a mode that asks, with the chosen model and effort", async () => {
-  const offered: AskChoices[] = [];
+  const offered: AskOffer[] = [];
   const { launch, metas } = fakeAgent(async () => {});
 
   const thread = openThread(launch, () => [], {
     picks: { model: "sonnet", effort: "low" },
-    onChoices: (choices) => offered.push(choices),
+    onOffer: (offer) => offered.push(offer),
   });
 
   const state = await until(thread, ({ status }) => status === "idle");
@@ -928,7 +950,7 @@ it("starts Claude without its file tools, in a mode that asks, with the chosen m
       ],
     },
   });
-  expect(offered.at(-1)?.effort?.current).toBe("low");
+  expect(offered.at(-1)?.choices.effort?.current).toBe("low");
 
   // Another model offers other efforts; the choice follows the agent.
   await thread.choose("model", "default");
@@ -1009,7 +1031,16 @@ it("shows what a command ran or a search looked for, why, and what came back", a
 });
 
 it("says what an agent offers before anything is asked, starting it once for everyone waiting", async () => {
-  const fake = fakeAgent(async () => {});
+  const fake = fakeAgent(async () => {}, undefined, {
+    commands: [
+      {
+        name: "review",
+        description: "Review the change",
+        input: { hint: "focus" },
+      },
+    ],
+  });
+
   const stopped = vi.fn<() => void>();
 
   const launch = vi.fn<AskAgentLauncher>(async (...args) => ({
@@ -1025,20 +1056,25 @@ it("says what an agent offers before anything is asked, starting it once for eve
   ]);
 
   expect(first).toEqual({
-    model: {
-      current: "default",
-      options: [
-        { value: "default", name: "Default", description: "Opus 5" },
-        { value: "sonnet", name: "Sonnet" },
-      ],
+    choices: {
+      model: {
+        current: "default",
+        options: [
+          { value: "default", name: "Default", description: "Opus 5" },
+          { value: "sonnet", name: "Sonnet" },
+        ],
+      },
+      effort: {
+        current: "medium",
+        options: ["low", "medium", "high"].map((value) => ({
+          value,
+          name: value,
+        })),
+      },
     },
-    effort: {
-      current: "medium",
-      options: ["low", "medium", "high"].map((value) => ({
-        value,
-        name: value,
-      })),
-    },
+    commands: [
+      { name: "review", description: "Review the change", hint: "focus" },
+    ],
   });
   expect(second).toBe(first);
   expect(launch).toHaveBeenCalledTimes(1);
@@ -1309,7 +1345,7 @@ it("leaves the greeting Pi opens a session with out of the answer", async () => 
   const { launch } = fakeAgent(
     (client) => say(client, "It is safe."),
     undefined,
-    "pi v1\n---\n\n## Skills\n- review",
+    { greeting: "pi v1\n---\n\n## Skills\n- review" },
   );
 
   const thread = openThread(launch, () => [], { agent: "pi" });
@@ -1318,6 +1354,38 @@ it("leaves the greeting Pi opens a session with out of the answer", async () => 
   expect(state.entries.filter((entry) => entry.kind === "agent")).toEqual([
     { kind: "agent", id: expect.any(String), text: "It is safe." },
   ]);
+  thread.close();
+});
+
+it("lists the agent's commands, and sends one alone, keeping the selection for the next question", async () => {
+  const prompts: string[] = [];
+
+  const { launch } = fakeAgent(
+    async (_client, prompt) => {
+      prompts.push(prompt);
+    },
+    undefined,
+    { commands: [{ name: "review", description: "Review the change" }] },
+  );
+
+  const thread = openThread(launch, () => [], {
+    question: { text: "/review" },
+  });
+
+  const state = await until(
+    thread,
+    ({ status, commands }) => status === "idle" && Boolean(commands),
+  );
+
+  expect(state.commands).toEqual([
+    { name: "review", description: "Review the change" },
+  ]);
+  expect(prompts).toEqual(["/review"]);
+
+  await thread.ask({ text: "Is this safe?" });
+
+  expect(prompts[1]).toContain("Selected text from Whiteboard.");
+  expect(prompts[1]).toMatch(/Is this safe\?$/);
   thread.close();
 });
 

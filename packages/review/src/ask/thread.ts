@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  type AvailableCommand,
   type ClientConnection,
   type ContentBlock,
   type McpServer,
@@ -28,7 +29,9 @@ import {
   type AskChange,
   type AskChoiceKind,
   type AskChoices,
+  type AskCommand,
   type AskEntry,
+  type AskOffer,
   type AskPicks,
   type AskQuestion,
   type AskSelect,
@@ -113,8 +116,9 @@ interface AskThreadBase {
   onSave?: (entries: AskEntry[]) => void;
   /** The model and effort to answer with, when the agent offers them. */
   picks?: AskPicks;
-  /** The agent said what it offers. */
-  onChoices?: (choices: AskChoices) => void;
+  /** The agent said what it offers: choices, commands, or what a question
+   * may carry. */
+  onOffer?: (offer: AskOffer) => void;
 }
 
 /** A new conversation, or an earlier one to load from the agent. */
@@ -212,6 +216,13 @@ function choicesOf(options: SessionConfigOption[] | null | undefined) {
   }
 
   return found;
+}
+
+/** A slash command as the panel offers it. */
+function commandOf({ name, description, input }: AvailableCommand): AskCommand {
+  return input?.hint
+    ? { name, description, hint: input.hint }
+    : { name, description };
 }
 
 const toolInputSchema = z.object({
@@ -824,7 +835,16 @@ export class AskThread {
     }
 
     this.emit({ type: "set", choices });
-    this.start.onChoices?.(choices);
+    this.announce();
+  }
+
+  /** Tells the host what the agent offers now. */
+  private announce() {
+    const { choices = {}, commands } = this.state;
+    const offer: AskOffer = { choices };
+
+    if (commands) offer.commands = commands;
+    this.start.onOffer?.(offer);
   }
 
   /** The agent says which mode it is in now; only its read-only one keeps
@@ -913,7 +933,9 @@ export class AskThread {
     if (!connection || !sessionId)
       throw new Error(`${this.state.agentName} is not running.`);
 
-    const withSelection = this.needsContext;
+    // Agents read a slash command only at the start of a prompt, so it goes
+    // alone; the selection goes with the next question instead.
+    const withSelection = this.needsContext && !question.text.startsWith("/");
 
     this.emit({ type: "set", status: "running", error: null });
 
@@ -1057,6 +1079,8 @@ export class AskThread {
   }
 
   private apply(update: SessionUpdate) {
+    if (this.useSessionState(update)) return;
+
     // The saved copy already shows what the agent replays.
     if (this.replaying && this.shown) return;
 
@@ -1182,6 +1206,23 @@ export class AskThread {
 
         return;
       default:
+    }
+  }
+
+  /** What the session says about itself rather than the turn: its
+   * commands. A reload's replay keeps them. */
+  private useSessionState(update: SessionUpdate) {
+    switch (update.sessionUpdate) {
+      case "available_commands_update":
+        this.emit({
+          type: "set",
+          commands: update.availableCommands.map(commandOf),
+        });
+        this.announce();
+
+        return true;
+      default:
+        return false;
     }
   }
 
@@ -1324,23 +1365,40 @@ export class AskThread {
 /** How long an agent may take to say what it offers. */
 const OFFER_TIMEOUT_MS = 30_000;
 
-/** What an agent offers to choose, from a session it starts and leaves
- * without asking anything. */
-async function offeredChoices(
+/** How long after its session opens an agent may take to list its
+ * commands, which it sends on its own rather than in the response. */
+const COMMANDS_WAIT_MS = 2_000;
+
+/** What an agent offers, from a session it starts and leaves without
+ * asking anything. */
+async function offeredBy(
   launch: AskAgentLauncher,
   agent: AskAgentId,
   cwd: string,
-): Promise<AskChoices> {
+): Promise<AskOffer> {
   const process = await launch(agent, cwd);
   // Stopping the process ends the connection, which fails its requests.
   const timer = setTimeout(() => process.stop(), OFFER_TIMEOUT_MS);
+  let listed: (commands: AskCommand[]) => void = () => {};
+
+  const commands = new Promise<AskCommand[]>((resolve) => {
+    listed = resolve;
+  });
 
   try {
-    const connection = process.connect(client({ name: "whiteboard" }));
+    const connection = process.connect(
+      client({ name: "whiteboard" }).onNotification(
+        methods.client.session.update,
+        ({ params: { update } }) => {
+          if (update.sessionUpdate === "available_commands_update")
+            listed(update.availableCommands.map(commandOf));
+        },
+      ),
+    );
 
     await connection.agent.request(methods.agent.initialize, {
       protocolVersion: PROTOCOL_VERSION,
-      clientCapabilities: {},
+      clientCapabilities: { _meta: { parameterizedModelPicker: true } },
       clientInfo: { name: "whiteboard", title: "Whiteboard", version: "1" },
     });
 
@@ -1350,12 +1408,23 @@ async function offeredChoices(
       _meta: askAgents[agent].sessionMeta,
     });
 
-    const choices: AskChoices = {};
+    const offer: AskOffer = { choices: {} };
 
     for (const [kind, { select }] of choicesOf(session.configOptions))
-      choices[kind] = select;
+      offer.choices[kind] = select;
 
-    return choices;
+    let wait: ReturnType<typeof setTimeout> | undefined;
+
+    const offered = await Promise.race([
+      commands,
+      new Promise<undefined>((resolve) => {
+        wait = setTimeout(() => resolve(undefined), COMMANDS_WAIT_MS);
+      }),
+    ]).finally(() => clearTimeout(wait));
+
+    if (offered) offer.commands = offered;
+
+    return offer;
   } catch (error) {
     const diagnostics = process.diagnostics().trim();
 
@@ -1373,7 +1442,7 @@ async function offeredChoices(
 export class AskThreads {
   private readonly threads = new Map<string, AskThread>();
   /** One question to each agent at a time about what it offers. */
-  private readonly offers = new Map<AskAgentId, Promise<AskChoices>>();
+  private readonly offers = new Map<AskAgentId, Promise<AskOffer>>();
 
   constructor(
     private readonly launch: AskAgentLauncher,
@@ -1409,7 +1478,7 @@ export class AskThreads {
     let offer = this.offers.get(agent);
 
     if (!offer) {
-      offer = offeredChoices(this.launch, agent, cwd).finally(() =>
+      offer = offeredBy(this.launch, agent, cwd).finally(() =>
         this.offers.delete(agent),
       );
       this.offers.set(agent, offer);
