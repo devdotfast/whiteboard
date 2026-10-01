@@ -283,8 +283,7 @@ export const choiceLabels = new Map<AskChoiceKind, string>([
   ["effort", "Effort"],
 ]);
 
-/** "Answer with": every agent Ask knows, with the uninstalled ones disabled.
- * Closes on a pointer down outside `within` or on Escape. */
+/** "Answer with": the agents installed on this machine. Closes on a pointer down outside `within` or on Escape. */
 export function AskAgentMenu({
   agents,
   current,
@@ -341,37 +340,31 @@ export function AskAgentMenu({
       >
         Answer with
       </div>
-      {agents.map((candidate) => (
-        <button
-          key={candidate.id}
-          type="button"
-          role="menuitemradio"
-          aria-checked={candidate.id === current}
-          {...stylex.props(
-            menuStyles.item,
-            candidate.id === current && menuStyles.itemChecked,
-          )}
-          disabled={!candidate.available}
-          onClick={() => onPick(candidate.id)}
-        >
-          <span
+      {agents
+        .filter((candidate) => candidate.available)
+        .map((candidate) => (
+          <button
+            key={candidate.id}
+            type="button"
+            role="menuitemradio"
+            aria-checked={candidate.id === current}
             {...stylex.props(
-              menuStyles.logo,
-              !candidate.available && menuStyles.logoUnavailable,
+              menuStyles.item,
+              candidate.id === current && menuStyles.itemChecked,
             )}
+            onClick={() => onPick(candidate.id)}
           >
-            {logos[candidate.id]({})}
-          </span>
-          <span {...stylex.props(menuStyles.name)}>{candidate.name}</span>
-          <span {...stylex.props(menuStyles.trail)}>
-            {candidate.id === current ? (
-              <AskCheckIcon xstyle={menuStyles.check} />
-            ) : candidate.available ? null : (
-              "Not installed"
-            )}
-          </span>
-        </button>
-      ))}
+            <span {...stylex.props(menuStyles.logo)}>
+              {logos[candidate.id]({})}
+            </span>
+            <span {...stylex.props(menuStyles.name)}>{candidate.name}</span>
+            <span {...stylex.props(menuStyles.trail)}>
+              {candidate.id === current ? (
+                <AskCheckIcon xstyle={menuStyles.check} />
+              ) : null}
+            </span>
+          </button>
+        ))}
     </div>
   );
 }
@@ -881,9 +874,6 @@ const menuStyles = stylex.create({
     display: "flex",
     flex: "0 0 16px",
     justifyContent: "center",
-  },
-  logoUnavailable: {
-    opacity: 0.45,
   },
   name: {
     flex: "1 1 0",

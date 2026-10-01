@@ -47,8 +47,8 @@ export function AskSetup({
           </h3>
           <p {...stylex.props(setupStyles.text)}>
             Whiteboard runs a coding agent on your machine, against the pinned
-            checkout. Install one and sign in to it once in a terminal, then
-            reopen this review.
+            checkout. Install one and sign in to it once in a terminal; it shows
+            up here when you come back.
           </p>
         </div>
         <ul {...stylex.props(askPanelStyles.list)}>
