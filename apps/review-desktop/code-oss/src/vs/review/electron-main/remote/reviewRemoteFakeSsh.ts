@@ -62,6 +62,8 @@ export interface FakeRemote {
 	masterStderr?: string;
 	/** How long an up master takes to exit after -O exit. */
 	exitDelayMs?: number;
+	/** Each `-O check` (1, 2, ...) answers as the master was when asked, once this settles. */
+	checkAnswered?: (call: number) => Promise<unknown> | undefined;
 }
 
 type Attach = { code: number; stdout?: string; stderr?: string };
@@ -134,7 +136,10 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 				else if (how === "missing") child.emit("error", Object.assign(new Error("spawn ssh ENOENT"), { code: "ENOENT" }));
 				else if (how !== "hang") child.finish(how.code, { stderr: how.stderr });
 			} else if (kind === "check") {
-				child.finish(master && master.alive && up.has(master) ? 0 : 255, master?.alive ? {} : { stderr: "Control socket connect: No such file or directory\n" });
+				const code = master && master.alive && up.has(master) ? 0 : 255;
+				const output = master?.alive ? {} : { stderr: "Control socket connect: No such file or directory\n" };
+				const call = calls.filter((c) => c.alias === alias && c.kind === "check").length;
+				void Promise.resolve(remote.checkAnswered?.(call)).then(() => child.finish(code, output));
 			} else if (kind === "exec") {
 				const answer = () => {
 					const call = calls.filter((c) => c.alias === alias && c.kind === "exec").length;

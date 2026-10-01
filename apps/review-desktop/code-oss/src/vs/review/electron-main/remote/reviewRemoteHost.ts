@@ -313,7 +313,7 @@ export class ReviewRemoteHost {
 			if (check.code !== 0) throw unreachable(`The SSH connection to ${this.alias} did not answer. ${firstLines(check.stderr)}`.trim());
 			const attach = await this.attach(env);
 			if (stale()) return;
-			const url = await this.forward(env, attach);
+			const url = await this.forward(env, attach, stale);
 			if (stale()) return;
 			await this.run(sshCancelForwardArgs(this.options.session, old.local, old.remote, env), this.timeouts.operation);
 			if (stale()) return;
@@ -385,7 +385,7 @@ export class ReviewRemoteHost {
 			await this.waitForMaster(master, env, stale);
 			const attach = await this.attach(env);
 			if (stale()) return;
-			const url = await this.forward(env, attach);
+			const url = await this.forward(env, attach, stale);
 			if (stale()) return;
 			this.connectedAt = this.clock.now();
 			// What authentication printed says nothing about why the connection may end later.
@@ -444,6 +444,8 @@ export class ReviewRemoteHost {
 		for (;;) {
 			if (stale() || gone(master)) throw unreachable("The SSH connection ended.");
 			const check = await this.run(sshCheckArgs(this.options.session, env), this.timeouts.operation);
+			// A check that answers after a dispose or retry must not let the attach run.
+			if (stale()) throw unreachable("The SSH connection ended.");
 			if (check.code === 0) return;
 			// A prompt waits for the user, not for the network.
 			if (this.prompts > 0) since = Date.now();
@@ -470,9 +472,10 @@ export class ReviewRemoteHost {
 		throw unreachable(firstLines(result.stderr) || `whiteboard remote attach on ${this.alias} exited with code ${result.code ?? "none"}.`);
 	}
 
-	private async forward(env: NodeJS.ProcessEnv, attach: ReviewRemoteAttach): Promise<string> {
+	private async forward(env: NodeJS.ProcessEnv, attach: ReviewRemoteAttach, stale: () => boolean): Promise<string> {
 		this.forwarded = undefined;
 		const port = await this.options.freePort();
+		if (stale()) throw unreachable("The SSH connection ended.");
 		const forward = await this.run(sshForwardArgs(this.options.session, port, attach.port, env), this.timeouts.operation);
 		if (forward.code !== 0) throw unreachable(`Could not forward a local port to ${this.alias}: ${firstLines(forward.stderr) || `ssh exited with code ${forward.code}`}`);
 		try {

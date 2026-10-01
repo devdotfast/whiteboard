@@ -27,8 +27,14 @@ async function healthServer(t: test.TestContext, servers?: Server[]): Promise<nu
 }
 
 /** `ports` are handed out in turn as the free local ports. */
-function hostFor(t: test.TestContext, remote: FakeRemote, ports: number | number[], alias = "wb-test-a", controlDirectory = "/tmp/wb-ssh-test") {
-	const free = [ports].flat();
+function hostFor(
+	t: test.TestContext,
+	remote: FakeRemote,
+	ports: number | number[] | (() => Promise<number>),
+	alias = "wb-test-a",
+	controlDirectory = "/tmp/wb-ssh-test",
+) {
+	const free = typeof ports === "function" ? [] : [ports].flat();
 	let next = 0;
 	const clock = fakeClock();
 	const ssh = fakeSsh({ [alias]: remote }, clock);
@@ -38,7 +44,7 @@ function hostFor(t: test.TestContext, remote: FakeRemote, ports: number | number
 		spawn: ssh.spawn,
 		environment: async () => ({ PATH: "/usr/bin" }),
 		desktopVersion: async () => "0.1.6",
-		freePort: async () => free[next++ % free.length],
+		freePort: typeof ports === "function" ? ports : async () => free[next++ % free.length],
 		report: (state) => reports.push(state),
 		log: () => {},
 		clock,
@@ -353,4 +359,37 @@ test("dispose closes the master with -O exit", async (t) => {
 
 	assert.equal(ssh.of("wb-test-a", "exit").length, 1);
 	assert.equal(ssh.alive(), 0);
+});
+
+test("a dispose while -O check is pending starts no attach, even if the check then succeeds", async (t) => {
+	const port = await healthServer(t);
+	const checked = Promise.withResolvers<void>();
+	// The first check finds no master yet; the second is the one held.
+	const { host, ssh } = hostFor(t, { checkAnswered: (call) => (call === 2 ? checked.promise : undefined) }, port);
+
+	host.start();
+	await until(() => ssh.of("wb-test-a", "check").length === 2);
+	await host.dispose();
+	checked.resolve();
+	await new Promise((resolve) => setTimeout(resolve, 20));
+
+	assert.deepEqual(
+		ssh.calls.map((c) => c.kind),
+		["master", "check", "check", "exit"],
+	);
+});
+
+test("a dispose while the forward's port is chosen starts no forward", async (t) => {
+	const port = await healthServer(t);
+	const chosen = Promise.withResolvers<number>();
+	const { host, ssh } = hostFor(t, {}, () => chosen.promise);
+
+	host.start();
+	await until(() => ssh.of("wb-test-a", "exec").length === 1);
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	await host.dispose();
+	chosen.resolve(port);
+	await new Promise((resolve) => setTimeout(resolve, 20));
+
+	assert.equal(ssh.of("wb-test-a", "forward").length, 0);
 });
