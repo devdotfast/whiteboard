@@ -106,6 +106,10 @@ interface AskThreadBase {
   onSave?: (entries: AskEntry[]) => void;
   /** The model and effort to answer with, when the agent offers them. */
   picks?: AskPicks;
+  /** Edit and run commands without asking. */
+  bypass?: boolean;
+  /** The reviewer started or stopped bypassing permissions. */
+  onBypass?: (bypass: boolean) => void;
   /** The agent said what it offers: choices, commands, or what a question
    * may carry. */
   onOffer?: (offer: AskOffer) => void;
@@ -188,6 +192,8 @@ export class AskThread {
   /** The session has not had the selection yet: a new conversation, or a
    * new session for one the agent could not reopen. */
   private needsContext: boolean;
+  /** The reviewer changed what the agent may do since it was last told. */
+  private permitted = false;
   /** The agent could not reopen the session, for a reason signing in would
    * not fix, so trying again starts a new one. */
   private unloadable = false;
@@ -213,6 +219,7 @@ export class AskThread {
       agentName: askAgents[start.agent].name,
       status: "starting",
       readOnly: false,
+      bypass: start.bypass ?? false,
       head: start.head,
       cwd: start.cwd,
       selection: start.selection,
@@ -497,7 +504,10 @@ export class AskThread {
 
   private async startAgent() {
     const generation = ++this.generation;
-    const launched = await this.launch(this.start.agent, this.start.cwd);
+
+    const launched = await this.launch(this.start.agent, this.start.cwd, {
+      bypass: this.state.bypass,
+    });
 
     // Closed, stopped or given up on while the process started.
     if (this.closed || this.halted || generation !== this.generation) {
@@ -554,7 +564,9 @@ export class AskThread {
       initialized.agentCapabilities?.loadSession === true,
     );
 
-    const mode = askAgents[this.start.agent].readOnlyMode;
+    const { bypass } = this.state;
+    const spec = askAgents[this.start.agent];
+    const mode = bypass ? spec.bypass?.mode : spec.readOnlyMode;
 
     // An agent without a read-only mode still answers, as it is.
     const configurable =
@@ -594,7 +606,10 @@ export class AskThread {
         modeId: mode,
       });
 
-    this.emit({ type: "set", readOnly: Boolean(configurable || selectable) });
+    this.emit({
+      type: "set",
+      readOnly: !bypass && Boolean(configurable || selectable),
+    });
     this.useConfig(config);
 
     // The model first: the efforts on offer depend on it. A pick the agent
@@ -709,10 +724,42 @@ export class AskThread {
     this.start.onOffer?.(offer);
   }
 
+  /** Edits and runs commands without asking from the next answer, or stops:
+   * the agent starts again in that mode and reopens the conversation. */
+  async permit(bypass: boolean) {
+    if (this.state.status !== "idle")
+      throw new Error("Settings can change between answers.");
+
+    if (bypass === this.state.bypass) return;
+
+    if (bypass && !askAgents[this.start.agent].bypass)
+      throw new Error(`${this.state.agentName} cannot bypass permissions.`);
+
+    this.emit({ type: "set", bypass });
+    this.permitted = true;
+    this.start.onBypass?.(bypass);
+    this.disconnect();
+    // Its mode is Whiteboard's change, not one to announce as the agent's.
+    this.settings.clear();
+    this.emit({ type: "set", status: "starting" });
+    await this.attempt(async () => {
+      await this.connect();
+      this.emit({ type: "set", status: "idle" });
+    });
+  }
+
+  /** What the session starts with: read-only, or bypassing permissions. */
+  private sessionMeta() {
+    const spec = askAgents[this.start.agent];
+
+    return (this.state.bypass && spec.bypass?.sessionMeta) || spec.sessionMeta;
+  }
+
   /** The agent says which mode it is in now; only its read-only one keeps
    * the checkout as it is. */
   private useMode(mode: string) {
-    const readOnly = mode === askAgents[this.start.agent].readOnlyMode;
+    const readOnly =
+      !this.state.bypass && mode === askAgents[this.start.agent].readOnlyMode;
 
     if (readOnly !== this.state.readOnly) this.emit({ type: "set", readOnly });
   }
@@ -733,7 +780,7 @@ export class AskThread {
       const response = await agent.request(methods.agent.session.new, {
         cwd: start.cwd,
         mcpServers: this.mcpServers,
-        _meta: askAgents[start.agent].sessionMeta,
+        _meta: this.sessionMeta(),
       });
 
       this.sessionId = response.sessionId;
@@ -766,7 +813,7 @@ export class AskThread {
         sessionId: earlier,
         cwd: start.cwd,
         mcpServers: this.mcpServers,
-        _meta: askAgents[start.agent].sessionMeta,
+        _meta: this.sessionMeta(),
       });
 
       return { sessionId: earlier, response };
@@ -797,13 +844,27 @@ export class AskThread {
 
     // Agents read a slash command only at the start of a prompt, so it goes
     // alone; the selection goes with the next question instead.
-    const withSelection = this.needsContext && !question.text.startsWith("/");
+    const command = question.text.startsWith("/");
+    const withSelection = this.needsContext && !command;
+    // What the agent may do goes with the selection, and again once changed.
+    const withPermission = (withSelection || this.permitted) && !command;
+
+    const context = [
+      ...(withSelection ? [this.start.context] : []),
+      ...(withPermission
+        ? [
+            this.state.bypass
+              ? "The reviewer lets you change files in the checkout and run commands without asking."
+              : "Do not change files in the checkout.",
+          ]
+        : []),
+    ].join("\n");
 
     this.emit({ type: "set", status: "running", error: null });
 
     const prompt: ContentBlock[] = [
-      ...(withSelection
-        ? withContext(this.start.context, question.text)
+      ...(context
+        ? withContext(context, question.text)
         : [{ type: "text" as const, text: question.text }]),
       ...this.attachments(question),
     ];
@@ -825,6 +886,8 @@ export class AskThread {
     }
 
     if (withSelection) this.needsContext = false;
+
+    if (withPermission) this.permitted = false;
     this.asking = undefined;
 
     const asked = this.state.entries.findLastIndex(
@@ -878,14 +941,15 @@ export class AskThread {
       (option) => option.kind === "allow_once",
     );
 
-    // Whiteboard's own tools, and tools that only read, run without asking.
-    // Allow once, never "always": an adapter may save an "always" rule into
-    // the checkout's settings.
+    // Bypassing permissions, everything runs; otherwise Whiteboard's own
+    // tools, and tools that only read. Allow once, never "always": an adapter
+    // may save an "always" rule into the checkout's settings.
     if (
       allowOnce &&
-      server &&
-      (READ_ONLY_MCP_SERVERS.has(server) ||
-        this.mcpServers.some((provided) => provided.name === server))
+      (this.state.bypass ||
+        (server &&
+          (READ_ONLY_MCP_SERVERS.has(server) ||
+            this.mcpServers.some((provided) => provided.name === server))))
     )
       return { outcome: { outcome: "selected", optionId: allowOnce.optionId } };
 

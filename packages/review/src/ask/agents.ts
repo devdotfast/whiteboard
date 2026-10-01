@@ -43,6 +43,16 @@ interface AskAgentSpec {
   env?: Record<string, string>;
   /** Signs the user's CLI in again, run in a terminal. */
   signIn: string;
+  /** How it edits and runs commands without asking, in place of its
+   * read-only mode and settings, when the reviewer bypasses permissions.
+   * Whiteboard also allows whatever it still asks. */
+  bypass?: AskAgentBypass;
+}
+
+export interface AskAgentBypass {
+  mode?: string;
+  sessionMeta?: NewSessionRequest["_meta"];
+  env?: Record<string, string>;
 }
 
 export const askAgents: Record<AskAgentId, AskAgentSpec> = {
@@ -74,6 +84,15 @@ export const askAgents: Record<AskAgentId, AskAgentSpec> = {
         },
       },
     },
+    // Its file tools back, and its own bypass, where its settings allow it.
+    bypass: {
+      mode: "bypassPermissions",
+      sessionMeta: {
+        claudeCode: {
+          options: { disallowedTools: ["EnterPlanMode", "ExitPlanMode"] },
+        },
+      },
+    },
   },
   codex: {
     name: "Codex",
@@ -84,6 +103,7 @@ export const askAgents: Record<AskAgentId, AskAgentSpec> = {
     },
     signIn: "codex login",
     readOnlyMode: "read-only",
+    bypass: { mode: "agent-full-access" },
   },
   cursor: {
     name: "Cursor",
@@ -95,6 +115,8 @@ export const askAgents: Record<AskAgentId, AskAgentSpec> = {
     signIn: "cursor-agent login",
     // Ask mode answers without editing or running commands.
     readOnlyMode: "ask",
+    // Agent mode asks before it edits or runs a command.
+    bypass: { mode: "agent" },
   },
   opencode: {
     name: "OpenCode",
@@ -111,6 +133,14 @@ export const askAgents: Record<AskAgentId, AskAgentSpec> = {
       OPENCODE_CONFIG_CONTENT: JSON.stringify({
         permission: { edit: "deny", bash: "ask", webfetch: "ask" },
       }),
+    },
+    bypass: {
+      mode: "build",
+      env: {
+        OPENCODE_CONFIG_CONTENT: JSON.stringify({
+          permission: { edit: "allow", bash: "allow", webfetch: "allow" },
+        }),
+      },
     },
   },
   pi: {
@@ -133,6 +163,8 @@ export interface AskAgentStatus {
   available: boolean;
   /** Whether it has a mode that keeps the checkout as it is. */
   readOnly: boolean;
+  /** Whether Whiteboard can have it edit and run commands without asking. */
+  bypass: boolean;
 }
 
 /** An Ask agent process, connected as the given ACP client. */
@@ -146,6 +178,7 @@ export interface AskAgentProcess {
 export type AskAgentLauncher = (
   agent: AskAgentId,
   cwd: string,
+  options?: { bypass?: boolean },
 ) => Promise<AskAgentProcess>;
 
 /** Desktop inherits the login shell's PATH, so this sees what a terminal sees.
@@ -203,6 +236,7 @@ export async function detectAskAgents(
       name: askAgents[id].name,
       available: (await findAgent(askAgents[id], env)) !== undefined,
       readOnly: askAgents[id].readOnlyMode !== undefined,
+      bypass: askAgents[id].bypass !== undefined,
     })),
   );
 }
@@ -211,13 +245,21 @@ const STDERR_LIMIT = 8_000;
 
 /** Runs an adapter with this server's runtime, Desktop's being Electron, or
  * the user's CLI itself. */
-export const launchAskAgent: AskAgentLauncher = async (agent, cwd) => {
+export const launchAskAgent: AskAgentLauncher = async (
+  agent,
+  cwd,
+  { bypass = false } = {},
+) => {
   const spec = askAgents[agent];
   const executable = await findAgent(spec);
 
   if (!executable) throw new Error(`${spec.name} is not installed.`);
 
-  const env: NodeJS.ProcessEnv = { ...process.env, ...spec.env };
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...((bypass && spec.bypass?.env) || spec.env),
+  };
+
   // A server started from inside a Claude Code session must not look nested.
   delete env.CLAUDECODE;
   delete env.CLAUDE_CODE_ENTRYPOINT;

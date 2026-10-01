@@ -35,6 +35,8 @@ const agentsSchema = z.object({
       available: z.boolean(),
       /** Whether it has a mode that keeps the checkout as it is. */
       readOnly: z.boolean().default(true),
+      /** Whether it can edit and run commands without asking. */
+      bypass: z.boolean().default(false),
     }),
   ),
 });
@@ -155,8 +157,50 @@ export function rememberAskAgent(session: ReviewSession, agent: AskAgentId) {
 const choiceKey = (
   session: ReviewSession,
   agent: AskAgentId,
-  kind: AskChoiceKind,
+  kind: AskChoiceKind | "bypass",
 ) => session.storageKey(`ask-${kind}-${agent}`);
+
+/** Whether the reviewer last had this agent bypass permissions. */
+export function storedBypass(session: ReviewSession, agent: AskAgentId) {
+  try {
+    return localStorage.getItem(choiceKey(session, agent, "bypass")) === "on";
+  } catch {
+    /* Storage can be unavailable; the agent asks first. */
+    return false;
+  }
+}
+
+export function rememberBypass(
+  session: ReviewSession,
+  agent: AskAgentId,
+  bypass: boolean,
+) {
+  try {
+    localStorage.setItem(
+      choiceKey(session, agent, "bypass"),
+      bypass ? "on" : "off",
+    );
+  } catch {
+    /* The choice is a convenience; forgetting it is harmless. */
+  }
+}
+
+/** The permissions a conversation can have. */
+export const permissionsSelect = (bypass: boolean): AskSelect => ({
+  current: bypass ? "bypass" : "ask",
+  options: [
+    {
+      value: "ask",
+      name: "Read-only",
+      description: "Cannot change the checkout; asks before running commands.",
+    },
+    {
+      value: "bypass",
+      name: "Bypass permissions",
+      description: "Edits the checkout and runs commands without asking.",
+    },
+  ],
+});
 
 /** The model or effort the reviewer chose last for this agent. */
 export function storedChoice(

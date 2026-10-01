@@ -30,6 +30,7 @@ const state = (change: Partial<AskThreadState>): AskThreadState => ({
   agentName: "Claude Code",
   status: "running",
   readOnly: true,
+  bypass: false,
   head: "7fd03b8e2",
   cwd: "/checkouts/payments-service",
   selection: { title: "Paragraph 3" },

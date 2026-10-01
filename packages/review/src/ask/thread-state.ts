@@ -194,6 +194,8 @@ export const askThreadStateSchema = z.object({
   signIn: z.string().optional(),
   /** The mode that keeps the agent from changing files was accepted. */
   readOnly: z.boolean(),
+  /** The agent edits and runs commands without asking. */
+  bypass: z.boolean(),
   head: z.string(),
   /** The checkout the agent works in. */
   cwd: z.string(),
@@ -220,6 +222,7 @@ export const askChangeSchema = z.discriminatedUnion("type", [
     type: z.literal("set"),
     status: statusSchema.optional(),
     readOnly: z.boolean().optional(),
+    bypass: z.boolean().optional(),
     choices: askChoicesSchema.optional(),
     commands: z.array(askCommandSchema).optional(),
     accepts: askAcceptsSchema.optional(),
@@ -265,6 +268,7 @@ export function applyAskChange(
         ...rest,
         status: change.status ?? state.status,
         readOnly: change.readOnly ?? state.readOnly,
+        bypass: change.bypass ?? state.bypass,
       };
 
       const choices = change.choices ?? state.choices;

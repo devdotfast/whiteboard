@@ -54,6 +54,7 @@ it("links the files an answer names to the Source window, once the checkout has 
     agentName: "Codex",
     status: "idle",
     readOnly: true,
+    bypass: false,
     head: "7fd03b8e2",
     cwd: "/checkouts/whiteboard",
     selection: { title: "review-files extension" },

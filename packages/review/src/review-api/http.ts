@@ -77,7 +77,10 @@ const askStartSchema = z.strictObject({
   question: askQuestionSchema,
   selection: AgentSelectionSchema,
   picks: askPicksSchema.optional(),
+  bypass: z.boolean().optional(),
 });
+
+const askPermitSchema = z.strictObject({ bypass: z.boolean() });
 
 const askOpenSchema = z.strictObject({ picks: askPicksSchema.optional() });
 
@@ -1159,7 +1162,7 @@ export function createReviewApi(
         checkout.live
           ? "Your working directory is the repository the review describes."
           : `Your working directory is a checkout of the review's head commit, ${checkout.head}. Answer from this code, not from other branches.`,
-        "Answer the question. Do not change files in the checkout.",
+        "Answer the question.",
         "Name files by their path from the checkout root, with a line where it helps, as in `src/app.ts:42`; the reviewer can open them from your answer.",
         ...(ask.threads.providesMcp
           ? [
@@ -1251,10 +1254,13 @@ export function createReviewApi(
                 title: input.question.text.slice(0, 200),
                 createdAt,
                 updatedAt: createdAt,
+                bypass: input.bypass,
               }),
         onTurn: () => store.askHistory.touch(id),
         onSave: (entries) => store.askHistory.saveEntries(id, entries),
         picks: input.picks,
+        bypass: input.bypass,
+        onBypass: (bypass) => store.askHistory.setBypass(id, bypass),
         onOffer: (offer) => store.askHistory.saveOffer(input.agent, offer),
         onTitle: (title) => store.askHistory.rename(id, title),
         cwd: checkout.rootPath,
@@ -1322,6 +1328,8 @@ export function createReviewApi(
         onTurn: () => store.askHistory.touch(record.id),
         onSave: (entries) => store.askHistory.saveEntries(record.id, entries),
         picks,
+        bypass: record.bypass,
+        onBypass: (bypass) => store.askHistory.setBypass(record.id, bypass),
         onOffer: (offer) => store.askHistory.saveOffer(record.agent, offer),
         onTitle: (title) => store.askHistory.rename(record.id, title),
       });
@@ -1426,6 +1434,32 @@ export function createReviewApi(
 
       try {
         await thread.choose(kind, value);
+      } catch (error) {
+        throw new ReviewInputError(errorMessage(error), 409);
+      }
+
+      return context.json({ ok: true });
+    });
+
+    // Bypasses permissions from the next answer, or stops.
+    app.post("/:id/ask/:threadId/permissions", async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      const { bypass } = askPermitSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
+      );
+
+      if (thread.read().status !== "idle")
+        throw new ReviewInputError(
+          "Settings can change once the agent finishes answering.",
+          409,
+        );
+
+      try {
+        await thread.permit(bypass);
       } catch (error) {
         throw new ReviewInputError(errorMessage(error), 409);
       }

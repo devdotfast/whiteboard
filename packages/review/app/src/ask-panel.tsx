@@ -24,9 +24,12 @@ import {
   AskAgentPicker,
   AskChoicePicker,
   choiceLabels,
+  permissionsSelect,
   preferredAskAgent,
   rememberAskAgent,
+  rememberBypass,
   rememberChoice,
+  storedBypass,
   storedChoice,
   storedPicks,
   useAskAgents,
@@ -63,8 +66,10 @@ type AskRequest =
       question: AskQuestion;
       selection: AgentSelection;
       picks: AskPicks;
+      bypass: boolean;
     }
   | { question: AskQuestion }
+  | { bypass: boolean }
   | { kind: AskChoiceKind; value: string }
   | { permissionId: string; optionId: string }
   | Record<string, never>;
@@ -93,6 +98,7 @@ export function AskPanelContent({
   const [requestError, setRequestError] = useState<string | null>(null);
   // Choices for a question not yet asked; a thread says its own.
   const [picks, setPicks] = useState<AskPicks>({});
+  const [bypassPick, setBypassPick] = useState<boolean>();
   const { thread, lost } = useThread(session, threadId);
 
   useShowOpenThread(threadId ?? savedThreadId ?? null);
@@ -209,6 +215,7 @@ export function AskPanelContent({
           question,
           selection,
           picks: currentPicks(),
+          bypass,
         });
 
         const { threadId: id } = z
@@ -314,6 +321,29 @@ export function AskPanelContent({
     );
   };
 
+  // A thread says its own; before a new one, what was chosen last for the
+  // agent. A saved one says once it is open.
+  const bypass =
+    thread?.bypass ??
+    (savedThreadId === undefined &&
+      chosen?.bypass === true &&
+      (bypassPick ?? (agent ? storedBypass(session, agent) : false)));
+
+  const permit = (value: boolean) => {
+    if (!agent) return;
+    rememberBypass(session, agent, value);
+
+    if (!threadId) {
+      setBypassPick(value);
+
+      return;
+    }
+
+    void post(`/ask/${threadId}/permissions`, { bypass: value }).catch(
+      (error: Error) => setRequestError(error.message),
+    );
+  };
+
   const chosenName = chosen?.name ?? "the agent";
 
   const error =
@@ -374,7 +404,7 @@ export function AskPanelContent({
   const readOnly =
     thread && thread.status !== "starting"
       ? thread.readOnly
-      : (chosen?.readOnly ?? true);
+      : !bypass && (chosen?.readOnly ?? true);
 
   return (
     <div {...stylex.props(askPanelStyles.body)}>
@@ -386,6 +416,7 @@ export function AskPanelContent({
           onPick={(picked) => {
             setAgent(picked);
             setPicks({});
+            setBypassPick(undefined);
           }}
         />
         {askChoiceKinds.map((kind) => {
@@ -405,12 +436,25 @@ export function AskPanelContent({
             />
           ) : null;
         })}
+        {chosen?.bypass && (thread || savedThreadId === undefined) ? (
+          <AskChoicePicker
+            label="Permissions"
+            select={permissionsSelect(bypass)}
+            current={bypass ? "bypass" : "ask"}
+            disabled={
+              (busy && threadId !== null) || thread?.status === "failed"
+            }
+            onPick={(value) => permit(value === "bypass")}
+          />
+        ) : null}
         <span
           {...stylex.props(styles.mode)}
           title={
             readOnly
               ? "The agent cannot change files in the checkout, and asks before running commands. It can edit this review."
-              : `${agentName} is not in a read-only mode, so it may change files in the checkout.`
+              : bypass
+                ? `${agentName} bypasses permissions: it may change files in the checkout and run commands without asking.`
+                : `${agentName} is not in a read-only mode, so it may change files in the checkout.`
           }
         >
           {readOnly ? (
