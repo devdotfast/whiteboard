@@ -992,7 +992,7 @@ it("refuses a remote's snapshot of another review, and passes its own byte for b
   expect(await mine.text()).toBe(own);
 });
 
-it("answers 504 for a whole answer that stalls after its headers, and takes the host offline", async () => {
+it("answers 504 for an answer that stalls after its headers, and keeps the host online", async () => {
   const reviewId = randomUUID();
 
   const fake = await startFake({
@@ -1020,11 +1020,55 @@ it("answers 504 for a whole answer that stalls after its headers, and takes the 
   expect(stalled.status).toBe(504);
   expect(await stalled.json()).toEqual({
     ok: false,
-    error: "wb-a did not answer: it did not answer within 10 seconds.",
+    error: "wb-a did not answer: its answer stalled for 10 seconds.",
   });
   expect(Date.now() - started).toBeLessThan(11_500);
-  expect(gateway.hosts()[0]?.state).toBe("offline");
+  // /health decides whether the host is down, not one slow answer.
+  expect(gateway.hosts()[0]?.state).toBe("online");
 }, 15_000);
+
+it("passes a whole answer that arrives slowly but steadily, past 10 seconds", async () => {
+  const reviewId = randomUUID();
+  const timers: NodeJS.Timeout[] = [];
+
+  cleanups.push(async () => {
+    for (const timer of timers) clearInterval(timer);
+  });
+
+  const fake = await startFake({
+    version,
+    reviewIds: [reviewId],
+    handle(request, response) {
+      if (!request.url?.startsWith(`/reviews-api/${reviewId}/file`))
+        return false;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.write('{"text":"');
+      let sent = 0;
+
+      const timer = setInterval(() => {
+        if (++sent <= 12) return void response.write("x");
+        clearInterval(timer);
+        response.end('"}');
+      }, 1_000);
+
+      timers.push(timer);
+
+      return true;
+    },
+  });
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: fake.endpoint },
+  ]);
+
+  await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+
+  const slow = await request(`/${reviewId}/file?side=head&file=a.ts`);
+
+  expect(slow.status).toBe(200);
+  expect(await slow.json()).toEqual({ text: "x".repeat(12) });
+  expect(gateway.hosts()[0]?.state).toBe("online");
+}, 20_000);
 
 it("ends a forwarded stream when the heartbeat finds its host gone", async () => {
   const reviewId = randomUUID();

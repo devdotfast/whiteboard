@@ -84,6 +84,15 @@ const PATH_FIELDS = new Set([
 
 const PATH_ROUTE_MAX_BYTES = 64 * 1024 * 1024;
 
+/** A whole answer that sends nothing this long, or takes this long in all, is cut. */
+const BODY_IDLE_MS = 10_000;
+
+const BODY_MAX_MS = 120_000;
+
+const STALLED = `its answer stalled for ${BODY_IDLE_MS / 1_000} seconds`;
+
+const TOO_LONG = `its answer took longer than ${BODY_MAX_MS / 1_000} seconds`;
+
 const HOP_HEADERS = new Set([
   "connection",
   "keep-alive",
@@ -344,13 +353,10 @@ export function createReviewGateway(input: {
 
     let timedOut = false;
 
-    const deadline = () =>
-      setTimeout(() => {
-        timedOut = true;
-        abort.abort();
-      }, FIRST_BYTE_TIMEOUT_MS);
-
-    const firstByte = deadline();
+    const firstByte = setTimeout(() => {
+      timedOut = true;
+      abort.abort();
+    }, FIRST_BYTE_TIMEOUT_MS);
 
     // SAFETY: Node's Request body is its own web stream; the DOM type only
     // names the same object.
@@ -420,22 +426,32 @@ export function createReviewGateway(input: {
       url.searchParams.get("full") === "true";
 
     if (snapshot || (options.route && PATH_ROUTES.has(options.route))) {
-      // The whole answer within the same limit again, from its first byte.
-      const whole = deadline();
+      // A whole answer keeps coming, and ends in time. Cutting one fails
+      // only this request: /health decides whether the host is down.
+      let cut: string | undefined;
+
+      const cutAfter = (ms: number, reason: string) =>
+        setTimeout(() => {
+          cut = reason;
+          abort.abort();
+        }, ms);
+
+      let idle = cutAfter(BODY_IDLE_MS, STALLED);
+      const whole = cutAfter(BODY_MAX_MS, TOO_LONG);
       let body: Buffer;
 
       try {
-        body = await readBody(response, PATH_ROUTE_MAX_BYTES);
+        body = await readBody(response, PATH_ROUTE_MAX_BYTES, () => {
+          clearTimeout(idle);
+          idle = cutAfter(BODY_IDLE_MS, STALLED);
+        });
       } catch (error) {
-        const reason = timedOut ? NO_ANSWER : errorText(error);
-
-        if (timedOut) hosts.failed(remote, reason);
-
-        return answer(remote.alias, timedOut ? 504 : 502, {
+        return answer(remote.alias, cut ? 504 : 502, {
           ok: false,
-          error: `${remote.alias} did not answer: ${reason}.`,
+          error: `${remote.alias} did not answer: ${cut ?? errorText(error)}.`,
         });
       } finally {
+        clearTimeout(idle);
         clearTimeout(whole);
       }
 

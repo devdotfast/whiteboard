@@ -514,14 +514,19 @@ export function send(
   });
 }
 
-/** A whole answer, refused past `limit` bytes. */
-export async function readBody(response: http.IncomingMessage, limit: number) {
+/** A whole answer, refused past `limit` bytes; `received` hears each chunk. */
+export async function readBody(
+  response: http.IncomingMessage,
+  limit: number,
+  received?: () => void,
+) {
   const parts: Buffer[] = [];
   let size = 0;
 
   for await (const part of response) {
     // SAFETY: an IncomingMessage without an encoding yields Buffers.
     const chunk = part as Buffer;
+    received?.();
     size += chunk.byteLength;
 
     if (size > limit) {
