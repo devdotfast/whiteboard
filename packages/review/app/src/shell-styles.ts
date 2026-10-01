@@ -133,10 +133,8 @@ export const shellStyles = stylex.create({
       content: "''",
     },
   },
-  // The rule sits flush with the pane on its left, and the grab area extends
-  // over the panel's padding. Rightward only: the scrollbar beside a divider
-  // belongs to the pane on its left. Only for panels with at least 8px of
-  // padding, so it covers no controls.
+  // Rule flush left; grabs rightward over the panel's padding, never the
+  // scrollbar.
   resizerGrabPanel: {
     "::before": { left: 0, transform: "none" },
     "::after": {
@@ -148,8 +146,7 @@ export const shellStyles = stylex.create({
       content: "''",
     },
   },
-  // The divider's column is the panel's, so the panel header continues to
-  // the rule.
+  // The column continues the panel and its header.
   peekResizer: {
     height: "100%",
     borderColor: tokens.transparent,
