@@ -781,6 +781,20 @@ test("the version present: no prompt and no install shown; the installed CLI att
 	);
 });
 
+test("a version directory without a complete marker is not listed by the probe, so the user is asked and the install is shown", async (t) => {
+	const port = await healthServer(t);
+	const { flow, prompts, runs } = await installFlow(t, "ask", { answers: [true], steps: STEPS });
+	// The probe lists 0.1.5 only: 0.1.6's directory has no marker with an integrity.
+	const { host, reports, last } = hostFor(t, { probe: { installed: ["0.1.5"] } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(prompts.length, 1);
+	assert.equal(runs.length, 1);
+	assert.deepEqual(reports.find((report) => report.installing)?.installing, { step: "preparing" });
+});
+
 test("the version absent with installs always: each step is reported, then the host attaches", async (t) => {
 	const port = await healthServer(t);
 	const { flow, prompts, runs } = await installFlow(t, "always", { steps: STEPS });

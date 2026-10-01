@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { REVIEW_REMOTE_INSTALL_MARKER } from "./reviewRemoteInstallScript.js";
+
 export const REVIEW_REMOTE_PROBE_BEGIN = "WHITEBOARD-PROBE-BEGIN";
 export const REVIEW_REMOTE_PROBE_END = "WHITEBOARD-PROBE-END";
 
@@ -14,7 +16,8 @@ export const REVIEW_REMOTE_PROBE_END = "WHITEBOARD-PROBE-END";
  *
  * Node 24 is looked for on PATH, in /usr/local/bin and /usr/bin, and under
  * nvm, fnm, volta, asdf, mise, nodenv and n; each candidate is run once for
- * its version, and the highest 24.x wins.
+ * its version, and the highest 24.x wins. A version counts as installed only
+ * when its marker names an integrity.
  */
 export const REVIEW_REMOTE_PROBE_SCRIPT = `LC_ALL=C
 export LC_ALL
@@ -78,6 +81,7 @@ installed=
 for dir in "$remote"/versions/*; do
 	[ -d "$dir" ] || continue
 	case "$dir" in *.part) continue ;; esac
+	[ -n "$(sed -n 's/.*"integrity":"\\([^"][^"]*\\)".*/\\1/p' "$dir/${REVIEW_REMOTE_INSTALL_MARKER}" 2>/dev/null)" ] || continue
 	installed="$installed\${installed:+,}$(str "\${dir##*/}")"
 done
 

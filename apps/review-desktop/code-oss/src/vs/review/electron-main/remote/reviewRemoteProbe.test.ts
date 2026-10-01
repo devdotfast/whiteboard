@@ -11,6 +11,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import type { SpawnSsh } from "./reviewRemoteHost.js";
+import { REVIEW_REMOTE_INSTALL_MARKER } from "./reviewRemoteInstallScript.js";
 import { judgeRemote, parseRemoteProbe, probeRemote, type ReviewRemoteProbe } from "./reviewRemoteProbe.js";
 import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END } from "./reviewRemoteProbeScript.js";
 import { reviewSshSession } from "./reviewSshCommand.js";
@@ -117,7 +118,7 @@ async function executable(path: string, body: string) {
 	await chmod(path, 0o755);
 }
 
-/** A home with Node 20 on PATH, three Node 24s under version managers, and a curl that cannot connect. */
+/** A home with Node 20 on PATH, three Node 24s under version managers, one complete version beside half-written ones, and a curl that cannot connect. */
 async function fakeRemote(t: test.TestContext) {
 	const home = await mkdtemp(join(tmpdir(), "wb-probe-"));
 	t.after(() => rm(home, { recursive: true, force: true }));
@@ -131,7 +132,11 @@ async function fakeRemote(t: test.TestContext) {
 	// A directory named 24 whose binary is not Node 24 is not taken.
 	await executable(join(home, ".asdf/installs/nodejs/24.99.0/bin/node"), "echo v20.0.0");
 	await executable(join(home, ".dev/whiteboard-remote/node/v24.18.0/bin/node"), "echo v24.18.0");
-	for (const version of ["0.1.6", "0.1.7.part"]) await mkdir(join(home, ".dev/whiteboard-remote/versions", version), { recursive: true });
+	const versions = join(home, ".dev/whiteboard-remote/versions");
+	for (const version of ["0.1.6", "0.1.7.part", "0.1.8", "0.1.9"]) await mkdir(join(versions, version), { recursive: true });
+	await writeFile(join(versions, "0.1.6", REVIEW_REMOTE_INSTALL_MARKER), '{"version":"0.1.6","integrity":"sha512-abc"}\n');
+	// Half-written: no marker, and a marker without an integrity.
+	await writeFile(join(versions, "0.1.9", REVIEW_REMOTE_INSTALL_MARKER), '{"version":"0.1.9","integrity":""}\n');
 	return { home, env: { HOME: home, PATH: `${bin}:/usr/bin:/bin` } };
 }
 
@@ -148,7 +153,7 @@ async function tree(dir: string): Promise<string[]> {
 	return Promise.all(entries.sort().map(async (entry) => `${entry} ${(await stat(join(dir, entry))).mtimeMs}`));
 }
 
-test("the script finds the highest Node 24, the installed versions and the managed Node, and writes nothing", async (t) => {
+test("the script finds the highest Node 24, the complete installed versions and the managed Node, and writes nothing", async (t) => {
 	const { home, env } = await fakeRemote(t);
 	const before = await tree(home);
 
