@@ -782,12 +782,14 @@ const styles = stylex.create({
     fontSize: fontSize.small,
     whiteSpace: "nowrap",
   },
+  // Four choices, the rest scrolled: 4 × 28px rows and their gaps.
   results: {
     display: "flex",
     flex: "1 1 auto",
     flexDirection: "column",
     gap: "2px",
     minHeight: 0,
+    maxHeight: "118px",
     overflowY: "auto",
     overscrollBehavior: "contain",
   },
