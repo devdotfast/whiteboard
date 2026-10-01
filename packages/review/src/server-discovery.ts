@@ -29,6 +29,10 @@ export function reviewServerDiscoveryPath(stateDir: string) {
   return path.join(stateDir, "review-server", "server.json");
 }
 
+export function headlessServerLockPath(stateDir: string) {
+  return path.join(stateDir, "headless-server.lock");
+}
+
 export async function readReviewServerDiscovery(
   stateDir: string,
 ): Promise<ReviewServerDiscovery | null> {

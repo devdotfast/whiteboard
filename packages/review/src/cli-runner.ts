@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import type { Writable } from "node:stream";
@@ -6,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   StoreApiError,
+  processIsAlive,
   readStoreAuth,
   withStoreAuthorization,
 } from "@dev.fast/trace-core";
@@ -376,7 +378,8 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         `No saved reviews in ${stateDir}, so there is no server id to reset. Check --state-dir.`,
       );
 
-    // Any live record holds the store, attached Desktop window or not.
+    // Any live Desktop holds the store, attached window or not. Only a gone
+    // process counts as stopped: a paused or busy one may not answer /health.
     const desktops = await readReviewInstances({
       env: { ...env, [DEV_REVIEW_HOME_ENV]: stateDir },
     });
@@ -388,34 +391,46 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         `Cannot tell whether a Whiteboard Desktop is using ${stateDir}: ${problem.message}`,
       );
 
-    const records = [
-      await readReviewServerDiscovery(stateDir),
-      ...desktops.instances.map((instance) => instance.discovery),
-    ];
-
-    const answers = await Promise.all(
-      records.map((record) => record && readReviewServerHealth(record)),
-    );
-
-    if (answers.some(Boolean))
-      throw new Error(
+    const inUse = () =>
+      new Error(
         `A Whiteboard server is using ${stateDir}. Stop it first, then run whiteboard server reset-id again.`,
       );
 
-    const { openReviewProfile } = await import("./review-api/profile.js");
+    if (
+      desktops.instances.some(({ discovery }) =>
+        [discovery.appPid, discovery.serverPid].some((pid) =>
+          processIsAlive(pid),
+        ),
+      )
+    )
+      throw inUse();
 
-    const local = await openReviewProfile(stateDir, {
-      manageWorkspaces: false,
-    });
+    const [{ openReviewProfile }, { withHeadlessServerLock }] =
+      await Promise.all([
+        import("./review-api/profile.js"),
+        import("./server/headless-host.js"),
+      ]);
 
-    let serverId: string;
+    // The headless server's own lock (at the path it resolves): refused while
+    // a live server holds it, and no server can start during the reset.
+    const reset = await withHeadlessServerLock(
+      await realpath(stateDir),
+      async () => {
+        const local = await openReviewProfile(stateDir, {
+          manageWorkspaces: false,
+        });
 
-    try {
-      serverId = local.store.resetServerId();
-    } finally {
-      await local.data.close();
-      await local.store.close();
-    }
+        try {
+          return local.store.resetServerId();
+        } finally {
+          await local.data.close();
+          await local.store.close();
+        }
+      },
+    );
+
+    if (!reset.acquired) throw inUse();
+    const serverId = reset.result;
 
     input.stdout.write(
       options.json

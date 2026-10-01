@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
   access,
@@ -36,6 +36,7 @@ import { writeScratchpadEnabled } from "@review/review-preferences.js";
 import { ReviewTelemetry } from "@review/review-telemetry.js";
 import {
   type ReviewServerDiscovery,
+  headlessServerLockPath,
   readReviewServerDiscovery,
   reviewServerDiscoveryPath,
   reviewServerIsHealthy,
@@ -1010,6 +1011,23 @@ it("resets the server id only while no server holds the store", async () => {
 
   const restarted = await start(server.stateDir);
   expect(await serverId(restarted.discovery.url)).toBe(after);
+});
+
+it("resets the id over a lock its dead server left behind", async () => {
+  const server = await start();
+  await server.stop();
+  const lock = headlessServerLockPath(await realpath(server.stateDir));
+  await mkdir(lock);
+  const { pid } = spawnSync(process.execPath, ["-e", ""]);
+  await writeFile(path.join(lock, "owner.json"), JSON.stringify({ pid }));
+
+  const done = await cli(
+    ["--state-dir", server.stateDir, "server", "reset-id", "--json"],
+    process.env,
+  );
+
+  expect(done).toMatchObject({ exitCode: 0, errors: "" });
+  await expect(access(lock)).rejects.toThrow(/ENOENT/);
 });
 
 it.each(["attached", "not yet attached"])(

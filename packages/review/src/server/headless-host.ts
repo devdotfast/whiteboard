@@ -2,7 +2,6 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import { createServer } from "node:http";
-import path from "node:path";
 
 import { isObjectValue } from "@dev.fast/json";
 import {
@@ -14,6 +13,7 @@ import { createReviewApi } from "@review/review-api/http.js";
 import { openReviewProfile } from "@review/review-api/profile.js";
 import {
   type ReviewServerDiscovery,
+  headlessServerLockPath,
   reviewServerDiscoveryPath,
 } from "@review/server-discovery.js";
 import { mountSharingPublisher } from "@review/sharing/host.js";
@@ -48,22 +48,34 @@ export async function runHeadlessServer(input: HeadlessServerInput) {
   const stopErrorTelemetry =
     input.telemetry && installProcessErrorTelemetry(input.telemetry);
 
-  const outcome = await withFileLock(
-    path.join(stateDir, "headless-server.lock"),
-    {
-      timeoutMs: 0,
-      retryMs: 20,
-      // A paused live owner must never lose exclusive access to its store.
-      staleMs: Infinity,
-      unownedGraceMs: 1_000,
-    },
-    () => serve({ ...input, stateDir }),
+  const outcome = await withHeadlessServerLock(stateDir, () =>
+    serve({ ...input, stateDir }),
   ).finally(() => stopErrorTelemetry?.());
 
   if (!outcome.acquired)
     throw new Error(
       `A Whiteboard server already owns ${stateDir}. Stop it first, or choose another --state-dir.`,
     );
+}
+
+/** Held by a running server, so also by anything that must not run beside one. */
+export function withHeadlessServerLock<T>(
+  stateDir: string,
+  operation: () => Promise<T>,
+) {
+  return withFileLock(
+    headlessServerLockPath(stateDir),
+    {
+      timeoutMs: 0,
+      retryMs: 20,
+      // A paused live owner must never lose exclusive access to its store.
+      staleMs: Infinity,
+      unownedGraceMs: 1_000,
+      // A reboot or kill can hand the pid to an unrelated live process.
+      identifyOwner: true,
+    },
+    operation,
+  );
 }
 
 async function serve(input: HeadlessServerInput) {

@@ -331,6 +331,54 @@ it.each([
   20_000,
 );
 
+it("refuses to reset the id while a paused headless server holds the store", async ({
+  onTestFinished,
+}) => {
+  const stateDir = path.join(root, "server");
+  const child = processes.headless(root, stateDir);
+  const exited = once(child, "exit");
+
+  onTestFinished(async () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill("SIGCONT");
+      child.kill("SIGKILL");
+    }
+
+    await exited;
+  });
+
+  const server = await discovery("headless", child, stateDir);
+
+  const serverId = async () =>
+    (await (await fetch(`${server.url}/health`)).json()).serverId;
+
+  const before = await serverId();
+  child.kill("SIGSTOP");
+
+  const reset = spawnSource(
+    "src/cli.ts",
+    ["--state-dir", stateDir, "server", "reset-id", "--json"],
+    { DEV_REVIEW_HOME: root },
+  );
+
+  let output = "";
+  reset.stdout!.on("data", (chunk) => (output += chunk));
+  const [code] = await once(reset, "exit");
+
+  expect(code).toBe(1);
+  expect(JSON.parse(output).error.message).toMatch(/Stop it first/);
+
+  child.kill("SIGCONT");
+  expect(await serverId()).toBe(before);
+
+  const local = openLocalReviewStore(path.join(stateDir, "review-api.db"));
+  onTestFinished(async () => {
+    await local.data.close();
+    await local.store.close();
+  });
+  expect(local.store.serverId()).toBe(before);
+}, 30_000);
+
 function spawnSource(
   entry: string,
   args: string[],
