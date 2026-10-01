@@ -1,0 +1,34 @@
+name: Whiteboard Linux package CI
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/review-linux-*.yml"
+      - "apps/review-desktop/code-oss/build/linux/**"
+      - "apps/review-desktop/code-oss/build/gulpfile.vscode.linux.ts"
+      - "apps/review-desktop/scripts/*linux*"
+      - "apps/review-desktop/scripts/linux/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: review-linux-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packages:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - channel: stable
+            version: "0.0.1"
+          - channel: preview
+            version: "0.0.2-preview.20000101.1"
+    uses: ./.github/workflows/review-linux-build.yml
+    with:
+      commit: ${{ github.event.pull_request.head.sha || github.sha }}
+      version: ${{ matrix.version }}
+      artifact_name: linux-packages-${{ matrix.channel }}
