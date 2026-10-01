@@ -54,11 +54,16 @@ const installErrors = new Map<string, string>();
 
 const SHIM_MARKER = "Managed by Whiteboard";
 
+/** The fork's `REVIEW_REMOTE_WRAPPER_MARK`: the launcher Desktop writes on a remote host. */
+const REMOTE_LAUNCHER_MARK =
+  "# Written by Whiteboard Desktop, which replaces it with each install.";
+
 function hasManagedShimMarker(source: string): boolean {
   return (
     source.includes(SHIM_MARKER) ||
     source.includes("Managed by Review Desktop") ||
-    source.includes("Managed by Whiteboard Desktop")
+    source.includes("Managed by Whiteboard Desktop") ||
+    source.includes(REMOTE_LAUNCHER_MARK)
   );
 }
 

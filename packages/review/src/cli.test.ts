@@ -4,6 +4,7 @@ import {
   readFile,
   readdir,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -111,6 +112,111 @@ describe("Whiteboard CLI", () => {
     expect(code).toBe(0);
     expect(event.event).toBe("connect");
     expect(Object.keys(event.prompts)).toEqual(["claude"]);
+  });
+
+  it("counts the launcher Desktop writes on a remote host as the managed command", async () => {
+    const { code, stdout } = await runConnect(
+      ["connect", "claude", "--json"],
+      async (home) => {
+        await mkdir(path.join(home, ".local", "bin"), { recursive: true });
+        await writeFile(
+          path.join(home, ".local", "bin", "whiteboard"),
+          `#!/bin/sh\n# Written by Whiteboard Desktop, which replaces it with each install.\nexec '${home}/.dev/whiteboard-remote/versions/0.1.6/whiteboard' "$@"\n`,
+        );
+      },
+    );
+
+    expect(code).toBe(0);
+    const prompt = JSON.parse(stdout).prompts.claude;
+    expect(prompt).toContain("claude plugin install whiteboard@devfast");
+    expect(prompt).not.toContain("install the whiteboard command");
+  });
+
+  it("lists the agents whose configuration exists, as one JSON line", async () => {
+    const { code, stdout } = await runConnect(
+      ["connect", "--detect", "--json"],
+      async (home) => {
+        await mkdir(path.join(home, ".codex"));
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(stdout.trimEnd().split("\n")).toHaveLength(1);
+    expect(JSON.parse(stdout)).toEqual({
+      event: "connect.detect",
+      agents: [
+        {
+          id: "codex",
+          name: "Codex",
+          present: true,
+          connected: false,
+          manual: true,
+        },
+      ],
+    });
+  });
+
+  it("detects without changing any file", async () => {
+    let before = "";
+    let after = "";
+
+    const { code, stdout } = await runConnect(
+      ["connect", "--detect", "--json"],
+      async (home) => {
+        await installTestShim(home);
+        await mkdir(path.join(home, ".claude", "plugins"), { recursive: true });
+        await writeFile(
+          path.join(home, ".claude", "plugins", "installed_plugins.json"),
+          "{}",
+        );
+        await mkdir(path.join(home, ".pi"));
+        before = await fileTree(home);
+      },
+      { after: async (home) => void (after = await fileTree(home)) },
+    );
+
+    expect(code).toBe(0);
+    expect(
+      JSON.parse(stdout).agents.map((agent: { id: string }) => agent.id),
+    ).toEqual(["claude", "pi"]);
+    expect(after).toBe(before);
+  });
+
+  it("connects one agent with its prompt's commands, and reports it connected", async () => {
+    const { code, stdout } = await runConnect(
+      ["connect", "--yes", "pi", "--json"],
+      async (home) => {
+        await installTestShim(home);
+        await mkdir(path.join(home, ".pi"));
+        await mkdir(path.join(home, "bin"));
+        await writeFile(
+          path.join(home, "bin", "pi"),
+          `#!/bin/sh\nmkdir -p "$HOME/.pi/agent" && printf '{"packages":["%s"]}' "$2" > "$HOME/.pi/agent/settings.json"\n`,
+          { mode: 0o755 },
+        );
+      },
+      { env: (home) => ({ PATH: `${path.join(home, "bin")}:/usr/bin:/bin` }) },
+    );
+
+    expect(code).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({
+      event: "connect.run",
+      agents: [{ id: "pi", name: "Pi", connected: true }],
+    });
+  });
+
+  it("refuses to run commands for an agent it cannot connect alone", async () => {
+    const { code, stdout } = await runConnect([
+      "connect",
+      "--yes",
+      "cursor",
+      "--json",
+    ]);
+
+    expect(code).toBe(1);
+    expect(JSON.parse(stdout).error.message).toContain(
+      "claude, codex, opencode or pi",
+    );
   });
 
   it("routes own-upload status filters without requesting trace content", async () => {
@@ -621,6 +727,23 @@ function outputStream(): PassThrough {
   return new PassThrough();
 }
 
+/** Every path under `root`, with its size, mode and modification time. */
+async function fileTree(root: string): Promise<string> {
+  const entries = await readdir(root, { recursive: true, withFileTypes: true });
+  const lines = await Promise.all(
+    entries.map(async (entry) => {
+      const file = path.join(entry.parentPath, entry.name);
+      const info = await stat(file);
+
+      return `${path.relative(root, file)} ${info.size} ${info.mode} ${info.mtimeMs}`;
+    }),
+  );
+
+  const top = await stat(root);
+
+  return [`. ${top.mtimeMs}`, ...lines.sort()].join("\n");
+}
+
 async function installTestShim(home: string): Promise<void> {
   const bin = path.join(home, ".local", "bin");
   await mkdir(bin, { recursive: true });
@@ -630,6 +753,10 @@ async function installTestShim(home: string): Promise<void> {
 async function runConnect(
   argv: string[],
   setup?: (homeDir: string) => Promise<void>,
+  extra?: {
+    env?: (homeDir: string) => NodeJS.ProcessEnv;
+    after?: (homeDir: string) => Promise<void>;
+  },
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const homeDir = await mkdtemp(path.join(os.tmpdir(), "review-connect-"));
 
@@ -652,10 +779,13 @@ async function runConnect(
         HOME: homeDir,
         TRACE_HOME_DIR: homeDir,
         DEV_REVIEW_HOME: path.join(homeDir, ".dev"),
+        ...extra?.env?.(homeDir),
       },
       stdout,
       stderr,
     });
+
+    await extra?.after?.(homeDir);
 
     return { code, stdout: stdoutText, stderr: stderrText };
   } finally {
