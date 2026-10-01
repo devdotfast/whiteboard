@@ -140,6 +140,24 @@ export function AskMinimizeIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
+/** The Command key, drawn: the canvas's mono font has no ⌘. */
+export function AskCommandKeyIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <AskGlyph viewBox="0 0 12 12" xstyle={[styles.key, xstyle]}>
+      <path d="M4.5 4.5h3v3h-3zM4.5 4.5V3.25A1.25 1.25 0 1 0 3.25 4.5H4.5M7.5 4.5V3.25A1.25 1.25 0 1 1 8.75 4.5H7.5M4.5 7.5v1.25A1.25 1.25 0 1 1 3.25 7.5H4.5M7.5 7.5v1.25A1.25 1.25 0 1 0 8.75 7.5H7.5" />
+    </AskGlyph>
+  );
+}
+
+/** The Shift key, drawn: the canvas's mono font has no ⇧. */
+export function AskShiftKeyIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <AskGlyph viewBox="0 0 12 12" xstyle={[styles.key, xstyle]}>
+      <path d="M6 2.25 2.5 6.25h2v3.5h3v-3.5h2z" />
+    </AskGlyph>
+  );
+}
+
 /** Where Ask's window is dragged from. */
 export function AskGripIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
@@ -177,6 +195,12 @@ const styles = stylex.create({
   },
   strong: {
     strokeWidth: "1.5px",
+  },
+  // As tall as a shortcut's letter.
+  key: {
+    width: "10px",
+    height: "10px",
+    strokeWidth: "1.1px",
   },
 });
 

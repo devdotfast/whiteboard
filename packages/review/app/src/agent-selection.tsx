@@ -21,8 +21,10 @@ import {
 import { askAnchor } from "./ask-anchor";
 import {
   AskChevronIcon,
+  AskCommandKeyIcon,
   AskCopyIcon,
   AskIcon,
+  AskShiftKeyIcon,
   askIconSizes,
 } from "./ask-icons";
 import { copyAgentContext } from "./copy-agent-context";
@@ -315,9 +317,9 @@ export function AgentSelectionProvider({
                           <span>Ask {askAgent.name}</span>
                           <kbd
                             aria-hidden="true"
-                            {...stylex.props(styles.askKey)}
+                            {...stylex.props(styles.key, styles.askKey)}
                           >
-                            ⌘L
+                            <AskCommandKeyIcon />L
                           </kbd>
                         </button>
                         <button
@@ -364,8 +366,12 @@ export function AgentSelectionProvider({
                     >
                       <AskCopyIcon xstyle={askIconSizes.toolbar} />
                       <span>{busy ? "Copying…" : "Copy for agent"}</span>
-                      <kbd aria-hidden="true" {...stylex.props(styles.copyKey)}>
-                        ⇧⌘C
+                      <kbd
+                        aria-hidden="true"
+                        {...stylex.props(styles.key, styles.copyKey)}
+                      >
+                        <AskShiftKeyIcon />
+                        <AskCommandKeyIcon />C
                       </kbd>
                     </button>
                   </div>
@@ -433,11 +439,17 @@ const styles = stylex.create({
     },
     color: tokens.onAccent,
   },
-  askKey: {
-    color: `color-mix(in srgb, ${tokens.onAccent} 65%, transparent)`,
+  // Drawn modifiers, then the key's letter.
+  key: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "1px",
     fontFamily: tokens.fontMono,
     fontSize: fontSize.micro,
     lineHeight: "14px",
+  },
+  askKey: {
+    color: `color-mix(in srgb, ${tokens.onAccent} 65%, transparent)`,
   },
   quiet: {
     backgroundColor: { default: tokens.transparent, ":hover": tokens.tray },
@@ -465,8 +477,5 @@ const styles = stylex.create({
   copyKey: {
     marginInlineStart: "1px",
     color: "color-mix(in srgb, currentColor 65%, transparent)",
-    fontFamily: tokens.fontMono,
-    fontSize: fontSize.micro,
-    lineHeight: "14px",
   },
 });
