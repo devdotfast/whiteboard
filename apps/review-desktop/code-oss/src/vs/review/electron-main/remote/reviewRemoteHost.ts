@@ -614,7 +614,7 @@ export class ReviewRemoteHost {
 			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language, ...groupsOf(attach), ...this.facts() });
 			this.whilePending(attach);
 			const serverId = attach.serverId;
-			this.serverId = serverId;
+			this.serverId = serverId ?? undefined;
 			if (serverId) void this.options.install?.consent.attached(this.alias, serverId).catch((error: Error) => this.options.log(`${this.alias}: could not keep its install consent: ${error.message}`));
 			// Reading changes nothing on the host; Settings offers what it finds.
 			if (this.options.firstAttach?.(serverId ?? `alias:${this.alias}`)) void this.detectAgents();
