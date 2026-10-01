@@ -8,6 +8,7 @@ import {
   askChoiceKinds,
   askOfferSchema,
 } from "@review/ask/thread-state";
+import { fuzzyRank } from "@review/fuzzy-match";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
@@ -15,13 +16,15 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 import { z } from "zod";
 
 import { AGENT_LOGOS } from "./agent-logos";
-import { AskCheckIcon, AskChevronIcon } from "./ask-icons";
+import { AskCheckIcon, AskChevronIcon, AskSearchIcon } from "./ask-icons";
 import type { ReviewSession } from "./host/review-session";
 import { fontSize, layer, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
@@ -480,12 +483,22 @@ export function AskChoicePicker({
     };
 
     window.addEventListener("pointerdown", outside, true);
-    menu.current
-      ?.querySelector<HTMLButtonElement>('[aria-checked="true"], button')
-      ?.focus();
+    (
+      menu.current?.querySelector<HTMLElement>("input") ??
+      menu.current?.querySelector<HTMLElement>('[aria-checked="true"]') ??
+      menu.current?.querySelector<HTMLElement>("button")
+    )?.focus();
 
     return () => window.removeEventListener("pointerdown", outside, true);
   }, [open, dismiss]);
+
+  const searchable = select.options.length > SEARCH_FROM;
+
+  const pick = (value: string) => {
+    dismiss();
+
+    if (value !== current) onPick(value);
+  };
 
   return (
     <div ref={anchor} {...stylex.props(pickerStyles.anchor)}>
@@ -523,6 +536,7 @@ export function AskChoicePicker({
             surfaceStyles.popover,
             menuStyles.menu,
             menuStyles.choices,
+            searchable && menuStyles.searchable,
             quiet && menuStyles.up,
             end && menuStyles.end,
           )}
@@ -533,46 +547,198 @@ export function AskChoicePicker({
             dismiss();
           }}
         >
-          <div
-            {...stylex.props(textStyles.eyebrow, menuStyles.label)}
-            aria-hidden="true"
-          >
-            {label}
-          </div>
-          {select.options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="menuitemradio"
-              aria-checked={option.value === current}
-              {...stylex.props(
-                menuStyles.item,
-                option.value === current && menuStyles.itemChecked,
-              )}
-              onClick={() => {
-                dismiss();
-
-                if (option.value !== current) onPick(option.value);
-              }}
-            >
-              <span {...stylex.props(menuStyles.choiceText)}>
-                <span {...stylex.props(menuStyles.name)}>{option.name}</span>
-                {option.description ? (
-                  <span {...stylex.props(menuStyles.description)}>
-                    {option.description}
-                  </span>
-                ) : null}
-              </span>
-              <span {...stylex.props(menuStyles.trail)}>
-                {option.value === current ? (
-                  <AskCheckIcon xstyle={menuStyles.check} />
-                ) : null}
-              </span>
-            </button>
-          ))}
+          {searchable ? (
+            <AskChoiceSearch
+              label={label}
+              options={select.options}
+              current={current}
+              onPick={pick}
+            />
+          ) : (
+            <>
+              <div
+                {...stylex.props(textStyles.eyebrow, menuStyles.label)}
+                aria-hidden="true"
+              >
+                {label}
+              </div>
+              {select.options.map((option) => (
+                <AskChoiceItem
+                  key={option.value}
+                  option={option}
+                  checked={option.value === current}
+                  highlighted={option.value === current}
+                  onPick={pick}
+                />
+              ))}
+            </>
+          )}
         </div>
       ) : null}
     </div>
+  );
+}
+
+// A list longer than this opens with a search field: OpenCode and Pi offer
+// every model of every provider, an effort list stays as it is.
+const SEARCH_FROM = 8;
+
+type AskOption = AskSelect["options"][number];
+
+function AskChoiceItem({
+  option,
+  checked,
+  highlighted,
+  id,
+  onPick,
+  onPoint,
+}: {
+  option: AskOption;
+  checked: boolean;
+  highlighted: boolean;
+  id?: string;
+  onPick: (value: string) => void;
+  onPoint?: () => void;
+}): ReactElement {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="menuitemradio"
+      aria-checked={checked}
+      data-highlighted={highlighted || undefined}
+      {...stylex.props(menuStyles.item, highlighted && menuStyles.itemChecked)}
+      onPointerMove={onPoint}
+      onClick={() => onPick(option.value)}
+    >
+      <span {...stylex.props(menuStyles.choiceText)}>
+        <span {...stylex.props(menuStyles.name)}>{option.name}</span>
+        {option.description ? (
+          <span {...stylex.props(menuStyles.description)}>
+            {option.description}
+          </span>
+        ) : null}
+      </span>
+      <span {...stylex.props(menuStyles.trail)}>
+        {checked ? <AskCheckIcon xstyle={menuStyles.check} /> : null}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * A long list of choices, filtered as the reviewer types, best match first.
+ * The highlight starts on the current choice and moves with ↑ and ↓; ↵ picks
+ * it, and Escape clears the search before it closes the menu.
+ */
+function AskChoiceSearch({
+  label,
+  options,
+  current,
+  onPick,
+}: {
+  label: string;
+  options: readonly AskOption[];
+  current: string;
+  onPick: (value: string) => void;
+}): ReactElement {
+  const [query, setQuery] = useState("");
+
+  const results = fuzzyRank(query, options, (option) => [
+    option.name,
+    option.value,
+  ]);
+
+  const [highlight, setHighlight] = useState(() =>
+    Math.max(
+      0,
+      options.findIndex((option) => option.value === current),
+    ),
+  );
+
+  const list = useRef<HTMLDivElement>(null);
+  const ids = useId();
+  const highlightIndex = Math.min(highlight, results.length - 1);
+  const highlighted = results[highlightIndex];
+  const noun = label.toLowerCase();
+
+  useLayoutEffect(() => {
+    list.current
+      ?.querySelector(`[data-highlighted="true"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [highlight, query]);
+
+  return (
+    <>
+      <label {...stylex.props(menuStyles.search)}>
+        <AskSearchIcon xstyle={menuStyles.searchIcon} />
+        <input
+          {...stylex.props(menuStyles.searchInput)}
+          value={query}
+          placeholder={`Search ${noun}s`}
+          aria-label={`Search ${noun}s`}
+          aria-controls={`${ids}-results`}
+          aria-activedescendant={
+            highlighted ? `${ids}-${highlightIndex}` : undefined
+          }
+          spellCheck={false}
+          autoComplete="off"
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setHighlight(0);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              const step = event.key === "ArrowDown" ? 1 : -1;
+
+              setHighlight((index) =>
+                Math.max(0, Math.min(index + step, results.length - 1)),
+              );
+            } else if (event.key === "Enter") {
+              event.preventDefault();
+
+              if (highlighted) onPick(highlighted.value);
+            } else if (event.key === "Escape" && query) {
+              event.stopPropagation();
+              setQuery("");
+              setHighlight(
+                Math.max(
+                  0,
+                  options.findIndex((option) => option.value === current),
+                ),
+              );
+            }
+          }}
+        />
+        <span {...stylex.props(menuStyles.count)}>
+          {query ? `${results.length} of ${options.length}` : options.length}
+        </span>
+      </label>
+      <div
+        ref={list}
+        id={`${ids}-results`}
+        {...stylex.props(menuStyles.results)}
+      >
+        {results.length ? (
+          results.map((option, index) => (
+            <AskChoiceItem
+              key={option.value}
+              id={`${ids}-${index}`}
+              option={option}
+              checked={option.value === current}
+              highlighted={option === highlighted}
+              onPick={onPick}
+              onPoint={() => setHighlight(index)}
+            />
+          ))
+        ) : (
+          <p {...stylex.props(menuStyles.empty)}>
+            No {noun} matches “{query.trim()}”
+          </p>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -609,6 +775,71 @@ const menuStyles = stylex.create({
     width: "max-content",
     minWidth: "160px",
     maxWidth: "260px",
+  },
+  // A field above results that scroll beneath it, at one width so the menu
+  // does not jump as they change.
+  searchable: {
+    width: "320px",
+    minWidth: "320px",
+    maxWidth: "320px",
+    padding: 0,
+    overflowY: "hidden",
+  },
+  search: {
+    display: "flex",
+    flex: "0 0 auto",
+    alignItems: "center",
+    gap: "8px",
+    padding: "10px 14px",
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.rule,
+    cursor: "text",
+  },
+  searchIcon: {
+    width: "12px",
+    height: "12px",
+    color: tokens.inkFaint,
+  },
+  searchInput: {
+    flex: "1 1 auto",
+    minWidth: 0,
+    padding: 0,
+    ...noBorder,
+    backgroundColor: tokens.transparent,
+    color: tokens.ink,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.body,
+    lineHeight: "16px",
+    outline: { default: null, ":focus": "none" },
+    "::placeholder": {
+      color: tokens.inkFaint,
+    },
+  },
+  count: {
+    flex: "0 0 auto",
+    color: tokens.inkFaint,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    lineHeight: "14px",
+    whiteSpace: "nowrap",
+  },
+  results: {
+    display: "flex",
+    flex: "1 1 auto",
+    flexDirection: "column",
+    minHeight: 0,
+    padding: "4px",
+    overflowY: "auto",
+    overscrollBehavior: "contain",
+  },
+  empty: {
+    margin: 0,
+    padding: "12px 10px 14px",
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.body,
+    lineHeight: "16px",
   },
   up: {
     top: "auto",

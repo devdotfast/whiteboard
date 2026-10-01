@@ -105,6 +105,15 @@ export function AskTrashIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
+export function AskSearchIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <AskGlyph viewBox="0 0 16 16" xstyle={xstyle}>
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M10.5 10.5 13.5 13.5" />
+    </AskGlyph>
+  );
+}
+
 export function AskPopOutIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <AskGlyph viewBox="0 0 16 16" xstyle={xstyle}>
