@@ -84,3 +84,21 @@ test("an unchanged answer is not written again, and __proto__ is an ordinary key
 	assert.equal(await openRemoteInstallConsent(path).get("__proto__"), "deny");
 	assert.equal(await consent.get("box"), "allow");
 });
+
+test("forgetting a host clears its answer by alias and by server id, and leaves other hosts", async (t) => {
+	const path = await file(t);
+	const consent = openRemoteInstallConsent(path);
+
+	await consent.set("box", "allow");
+	await consent.attached("box", "server-1");
+	await consent.set("pending", "deny");
+	await consent.set("other", "allow");
+	await consent.attached("other", "server-2");
+	await consent.set("renamed", "allow");
+	await consent.attached("renamed", "server-3");
+
+	await consent.forget("box", "server-3");
+	await consent.forget("pending");
+
+	assert.deepEqual(JSON.parse(await readFile(path, "utf8")), { servers: { "server-2": { consent: "allow", alias: "other" } }, aliases: {} });
+});

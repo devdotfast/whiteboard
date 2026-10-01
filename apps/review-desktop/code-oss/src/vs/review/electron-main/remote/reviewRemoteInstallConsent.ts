@@ -15,6 +15,8 @@ export interface ReviewRemoteInstallConsent {
 	set(alias: string, answer: ReviewRemoteInstallAnswer): Promise<void>;
 	/** `alias` reached `serverId`: an answer given before the first attach moves to the id. */
 	attached(alias: string, serverId: string): Promise<void>;
+	/** Whiteboard was removed from the host: the next connect asks again. */
+	forget(alias: string, serverId?: string): Promise<void>;
 }
 
 interface Stored {
@@ -101,6 +103,14 @@ export function openRemoteInstallConsent(path: string): ReviewRemoteInstallConse
 				for (const entry of Object.values(stored.servers)) if (entry.alias === alias) entry.alias = "";
 				stored.servers[serverId] = { consent, alias };
 				delete stored.aliases[alias];
+				await write(stored, before);
+			}),
+		forget: (alias, serverId) =>
+			serial(async () => {
+				const stored = await read();
+				const before = JSON.stringify(stored);
+				delete stored.aliases[alias];
+				for (const [id, entry] of Object.entries(stored.servers)) if (id === serverId || entry.alias === alias) delete stored.servers[id];
 				await write(stored, before);
 			}),
 	};

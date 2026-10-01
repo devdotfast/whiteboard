@@ -63,7 +63,8 @@ already has. This check only reads.
   newer." Desktop writes nothing on it.
 - **A machine without Desktop's version** gets a question in Desktop's
   window: "Install Whiteboard on `<alias>`?", with the space it takes. Desktop
-  asks once per host and remembers the answer.
+  asks once per host and remembers the answer until you remove Whiteboard
+  from that host.
   - **Install:** Settings shows each step (preparing, installing Node 24,
     installing the Whiteboard package, checking the install, starting the
     server), and then the host is `online`, usually well within a minute.
@@ -165,6 +166,9 @@ In Settings, click **Remove** on the host, check **Also remove Whiteboard from
   Desktop wrote it;
 - keeps your reviews in `~/.dev`.
 
+Desktop also forgets your answer to the install question, so adding the host
+again asks again.
+
 It refuses, and removes nothing, while an install runs there, or while a
 server you started yourself or another process (such as an agent's MCP
 server) runs from the install. Settings shows why; stop that process and try
@@ -174,7 +178,7 @@ On the remote, `whiteboard remote uninstall --keep-reviews` does the same, and
 `--delete-reviews` also deletes the saved reviews.
 
 Without the box, **Remove** only takes the host out of Desktop; nothing on the
-remote changes.
+remote changes, and Desktop keeps your answer.
 
 ## States
 

@@ -183,8 +183,8 @@ export class ReviewRemoteHosts {
 
 	/**
 	 * Runs the host's own uninstall, keeping reviews, over its master while
-	 * nothing may reconnect or install; then closes the host. A failed
-	 * uninstall leaves the host connecting afresh.
+	 * nothing may reconnect or install; then forgets the install answer and
+	 * closes the host. A failed uninstall leaves the host connecting afresh.
 	 */
 	async uninstall(alias: string): Promise<void> {
 		const valid = validateSshAlias(alias);
@@ -198,6 +198,7 @@ export class ReviewRemoteHosts {
 			if (host && this.hosts.get(alias) === host) host.unquiesce();
 			throw error;
 		}
+		await this.options.install?.consent.forget(alias, host?.serverId);
 		if (host && this.hosts.get(alias) === host) {
 			this.hosts.delete(alias);
 			this.removed.add(alias);

@@ -323,7 +323,6 @@ export class ReviewRemoteHost {
 	/** Attaches in a row that found the language extensions still installing. */
 	private pendingAttaches = 0;
 	private cancelPending: (() => void) | undefined;
-	private serverId: string | null = null;
 	private reattaching = false;
 	/** A reattach the gateway asked for while another was running; it runs next. */
 	private queuedReattach = false;
@@ -352,6 +351,8 @@ export class ReviewRemoteHost {
 	private installing: AbortController | undefined;
 	/** An uninstall runs over the master: nothing connects, attaches again or installs. */
 	private removing = false;
+	/** The server id of the last attach. */
+	serverId: string | undefined;
 
 	constructor(private readonly options: ReviewRemoteHostOptions) {
 		this.alias = options.session.alias;
@@ -461,7 +462,7 @@ export class ReviewRemoteHost {
 				if (stale()) return;
 			}
 			this.connectedAt = this.clock.now();
-			this.serverId = attach.serverId;
+			this.serverId = attach.serverId ?? undefined;
 			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language, ...groupsOf(attach), ...this.facts() });
 			this.whilePending(attach);
 		} catch (error) {
@@ -608,12 +609,12 @@ export class ReviewRemoteHost {
 			this.attachScript = prepared.script;
 			this.cli = prepared.cli;
 			this.connectedAt = this.clock.now();
-			this.serverId = attach.serverId;
 			// What authentication printed says nothing about why the connection may end later.
 			this.masterStderr = "";
 			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language, ...groupsOf(attach), ...this.facts() });
 			this.whilePending(attach);
 			const serverId = attach.serverId;
+			this.serverId = serverId;
 			if (serverId) void this.options.install?.consent.attached(this.alias, serverId).catch((error: Error) => this.options.log(`${this.alias}: could not keep its install consent: ${error.message}`));
 			// Reading changes nothing on the host; Settings offers what it finds.
 			if (this.options.firstAttach?.(serverId ?? `alias:${this.alias}`)) void this.detectAgents();
