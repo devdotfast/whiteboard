@@ -280,7 +280,7 @@ test("offers Retry to a host that failed to authenticate, is unreachable, not in
 
 test("shows the install step, offers Install to a declined host, and Retry after a failed install", async () => {
   const hosts = remoteHosts(
-    ["box1", "box2", "box3"],
+    ["box1", "box2", "box3", "box4"],
     [
       {
         alias: "box1",
@@ -298,7 +298,14 @@ test("shows the install step, offers Install to a declined host, and Retry after
         alias: "box3",
         state: "not-installed",
         detail:
-          "Installing Whiteboard 0.1.6 on box3 failed at the package step: the package does not match its pinned integrity.",
+          "Installing Whiteboard 0.1.6 on box3 failed while installing the package: the package does not match its pinned integrity.",
+      },
+      {
+        alias: "box4",
+        state: "incompatible",
+        detail:
+          "box4 runs Whiteboard 0.1.5; this Desktop runs 0.1.6. Install Whiteboard 0.1.6 on box4.",
+        declined: true,
       },
     ],
   );
@@ -314,7 +321,13 @@ test("shows the install step, offers Install to a declined host, and Retry after
       .getByRole("button", { name: /^(Retry|Install) / })
       .elements()
       .map((button) => button.getAttribute("aria-label")),
-  ).toEqual(["Install box2", "Retry box2", "Retry box3"]);
+  ).toEqual([
+    "Install box2",
+    "Retry box2",
+    "Retry box3",
+    "Install box4",
+    "Retry box4",
+  ]);
   await page.getByRole("button", { name: "Install box2" }).click();
   expect(hosts.install).toHaveBeenCalledWith("box2");
   await page.getByRole("button", { name: "Retry box3" }).click();
