@@ -7,7 +7,16 @@ import { readdir, rm } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { join } from "node:path";
 import type { ReviewGatewayHost, ReviewGatewayHostState } from "../../common/reviewProtocol.js";
-import { REVIEW_REMOTE_TIMEOUTS, ReviewRemoteHost, runSsh, systemClock, type ReviewRemoteClock, type ReviewRemoteHostOptions, type SpawnSsh } from "./reviewRemoteHost.js";
+import {
+	REVIEW_REMOTE_TIMEOUTS,
+	ReviewRemoteHost,
+	runSsh,
+	systemClock,
+	type ReviewRemoteClock,
+	type ReviewRemoteHostOptions,
+	type ReviewRemoteInstallFlow,
+	type SpawnSsh,
+} from "./reviewRemoteHost.js";
 import type { ReviewSshAskpass, SshPromptRequest } from "./reviewSshAskpass.js";
 import {
 	prepareSshControlDirectory,
@@ -43,6 +52,8 @@ export interface ReviewRemoteHostsOptions {
 	log(message: string): void;
 	readonly clock?: ReviewRemoteClock;
 	readonly timeouts?: ReviewRemoteHostOptions["timeouts"];
+	/** Desktop installs its version on each host; without it, hosts need the CLI installed by hand. */
+	readonly install?: ReviewRemoteInstallFlow;
 }
 
 export function freeLoopbackPort(): Promise<number> {
@@ -117,6 +128,12 @@ export class ReviewRemoteHosts {
 		this.hosts.get(alias)?.retry();
 	}
 
+	/** The user agreed to the install on a host declined earlier. */
+	async install(alias: string): Promise<void> {
+		await this.options.install?.consent.set(alias, "allow");
+		this.hosts.get(alias)?.retry();
+	}
+
 	/** The local server saw the host's server restart with a new token. */
 	reattach(alias: string): void {
 		void this.hosts.get(alias)?.reattach();
@@ -166,6 +183,7 @@ export class ReviewRemoteHosts {
 			log: this.options.log,
 			clock: this.clock,
 			timeouts: this.options.timeouts,
+			install: this.options.install,
 		});
 	}
 

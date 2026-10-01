@@ -82,3 +82,6 @@ export class ReviewSshPromptRelay {
 
 /** The main process's one relay, shared by the Desktop channel and whoever starts ssh. */
 export const reviewSshPromptRelay = new ReviewSshPromptRelay();
+
+/** The same relay for Desktop's question before it installs on a host. */
+export const reviewRemoteInstallPromptRelay = new ReviewSshPromptRelay();

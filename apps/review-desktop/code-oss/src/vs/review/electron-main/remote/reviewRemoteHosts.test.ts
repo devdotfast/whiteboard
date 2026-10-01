@@ -13,7 +13,9 @@ import test from "node:test";
 
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
 import { attachOutput, fakeClock, fakeSsh, until, type FakeRemote } from "./reviewRemoteFakeSsh.js";
+import type { ReviewRemoteInstallFlow } from "./reviewRemoteHost.js";
 import { ReviewRemoteHosts } from "./reviewRemoteHosts.js";
+import { openRemoteInstallConsent } from "./reviewRemoteInstallConsent.js";
 import type { SshPromptRequest } from "./reviewSshAskpass.js";
 import { reviewSshInstancePrefix } from "./reviewSshCommand.js";
 
@@ -27,7 +29,13 @@ async function healthServer(t: test.TestContext): Promise<number> {
 	return (server.address() as AddressInfo).port;
 }
 
-async function managerFor(t: test.TestContext, remotes: Record<string, FakeRemote>, answer?: string, before?: (directory: string) => Promise<void>) {
+async function managerFor(
+	t: test.TestContext,
+	remotes: Record<string, FakeRemote>,
+	answer?: string,
+	before?: (directory: string) => Promise<void>,
+	install?: ReviewRemoteInstallFlow,
+) {
 	const port = await healthServer(t);
 	const directory = await mkdtemp(join(tmpdir(), "wb-hosts-"));
 	await before?.(directory);
@@ -51,6 +59,7 @@ async function managerFor(t: test.TestContext, remotes: Record<string, FakeRemot
 		log: () => {},
 		clock,
 		timeouts: { poll: 1 },
+		install,
 	});
 	t.after(async () => {
 		await manager.dispose();
@@ -203,7 +212,7 @@ test("an entry the sweep cannot remove does not stop the sweep or the hosts", as
 });
 
 test("a window gets the VS Code server of a machine only while the gateway has it online", async (t) => {
-	const attach = { code: 0, stdout: attachOutput(41234, "remote-token", { port: 45678, connectionToken: "vscode-token", commit: COMMIT }) };
+	const attach = { code: 0, stdout: attachOutput(41234, "remote-token", { languageServer: { port: 45678, connectionToken: "vscode-token", commit: COMMIT } }) };
 	const { manager, sentUntil, port } = await managerFor(t, { "wb-test-a": { attach } });
 
 	manager.update(true, ["wb-test-a"]);
@@ -214,4 +223,69 @@ test("a window gets the VS Code server of a machine only while the gateway has i
 	assert.equal(await manager.languageEndpoint("s1", [{ ...online[0], state: "duplicate" }]), undefined);
 	assert.equal(await manager.languageEndpoint("s1", [{ ...online[0], serverId: "s2" }]), undefined);
 	assert.equal(await manager.languageEndpoint("s1", []), undefined);
+});
+
+const INSTALLED = { nodePath: "/n/bin/node", cliPath: "/v/cli.js", launcher: "/v/whiteboard", diffr: true };
+
+test("install progress is sent at most once a second, the latest step only", async (t) => {
+	const gate = Promise.withResolvers<void>();
+	let reported = false;
+	const dir = await mkdtemp(join(tmpdir(), "wb-consent-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
+	const flow: ReviewRemoteInstallFlow = {
+		mode: () => "always",
+		consent: openRemoteInstallConsent(join(dir, "c.json")),
+		confirm: async () => true,
+		run: async (input) => {
+			for (let i = 0; i < 40; i++) input.onProgress(i % 2 ? { step: "package", via: "upload" } : { step: "node", via: "upload" });
+			input.onProgress({ step: "verifying" });
+			reported = true;
+			await gate.promise;
+			return INSTALLED;
+		},
+	};
+	const { manager, sent, sentUntil } = await managerFor(t, { "wb-test-a": {} }, undefined, undefined, flow);
+
+	manager.update(true, ["wb-test-a"]);
+	await until(() => reported);
+	await sentUntil((hosts) => hosts[0].installing !== undefined);
+	gate.resolve();
+	await sentUntil((hosts) => hosts[0].endpoint !== undefined);
+
+	assert.deepEqual(
+		sent.filter((send) => send.hosts[0].installing).map((send) => send.hosts[0].installing),
+		[{ step: "verifying" }],
+	);
+	for (let i = 1; i < sent.length; i++) assert.ok(sent[i].at - sent[i - 1].at >= 1000);
+});
+
+test("Install on a declined host stores the agreement, installs and attaches", async (t) => {
+	const dir = await mkdtemp(join(tmpdir(), "wb-consent-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
+	const consentFile = join(dir, "c.json");
+	const runs: string[] = [];
+	const flow: ReviewRemoteInstallFlow = {
+		mode: () => "ask",
+		consent: openRemoteInstallConsent(consentFile),
+		confirm: async () => false,
+		run: async (input) => {
+			runs.push(input.version);
+			return INSTALLED;
+		},
+	};
+	const { manager, sentUntil } = await managerFor(
+		t,
+		{ "wb-test-a": { attach: (call) => (call === 1 ? { code: 127 } : { code: 0, stdout: attachOutput(41234) }) } },
+		undefined,
+		undefined,
+		flow,
+	);
+
+	manager.update(true, ["wb-test-a"]);
+	await sentUntil((hosts) => hosts[0].problem?.declined === true);
+	await manager.install("wb-test-a");
+	await sentUntil((hosts) => hosts[0].endpoint !== undefined);
+
+	assert.deepEqual(runs, ["0.1.6"]);
+	assert.equal(await flow.consent.get("wb-test-a"), "allow");
 });

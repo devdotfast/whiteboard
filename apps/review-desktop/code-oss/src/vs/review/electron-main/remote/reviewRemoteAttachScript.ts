@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { shellQuote } from "./reviewRemoteInstallScript.js";
+
 /**
  * POSIX sh, sent to `sh -s` on the remote. Finds the CLI on PATH, in
  * ~/.local/bin, then through the login shell (Node version managers), and
@@ -25,6 +27,11 @@ PATH="\${wb%/*}:$PATH"
 export PATH
 exec "$wb" remote attach --json${groups.length ? ` --groups ${groups.join(",")}` : ""}
 `;
+}
+
+/** The CLI of the version Desktop installed, by its exact path; `--replace` restarts a server of another version that was not a user's. */
+export function installedAttachScript(nodePath: string, cliPath: string): string {
+	return `exec ${shellQuote(nodePath)} ${shellQuote(cliPath)} remote attach --json --replace\n`;
 }
 
 export const REVIEW_REMOTE_ATTACH_BEGIN = "WHITEBOARD-REMOTE-BEGIN";
@@ -57,6 +64,10 @@ export interface ReviewRemoteAttach {
 	readonly languageServerPending?: true;
 	/** Each optional extension group this Desktop asked for. */
 	readonly languageGroups: readonly ReviewRemoteLanguageGroup[];
+	/** `--replace` stopped a server of this other version. */
+	readonly replaced?: string;
+	/** `--replace` left a server of another version that a user started. */
+	readonly incompatibleRunning?: { readonly version: string };
 }
 
 /**
@@ -89,6 +100,7 @@ export function parseRemoteAttach(stdout: string): { attach: ReviewRemoteAttach 
 		if (port === undefined || typeof record.token !== "string" || !record.token) {
 			return { error: "remote attach answered without a loopback URL and a token." };
 		}
+		const running = record.incompatibleRunning as Record<string, unknown> | undefined;
 		return {
 			attach: {
 				version: typeof record.version === "string" ? record.version : null,
@@ -97,6 +109,8 @@ export function parseRemoteAttach(stdout: string): { attach: ReviewRemoteAttach 
 				port,
 				...languageServerOf(record),
 				languageGroups: languageGroupsOf(record.languageGroups),
+				...(record.replaced === true && { replaced: versionText(record.previousVersion) }),
+				...(running && typeof running === "object" && { incompatibleRunning: { version: versionText(running.version) } }),
 			},
 		};
 	}
@@ -134,6 +148,8 @@ function languageGroupsOf(value: unknown): ReviewRemoteLanguageGroup[] {
 		return [{ group, installed, ...(typeof detail === "string" && detail && { detail: detail.slice(0, 500) }) }];
 	});
 }
+/** A remote's version reaches the UI: anything but a version is "unknown". */
+const versionText = (value: unknown) => (typeof value === "string" && /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(value) ? value : "unknown");
 
 /** Remote data is untrusted: only a port on the remote's loopback is used. */
 function loopbackPort(url: unknown): number | undefined {

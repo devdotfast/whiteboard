@@ -8,6 +8,7 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { ReviewRemoteClock, SpawnSsh, SshChildProcess } from "./reviewRemoteHost.js";
+import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END } from "./reviewRemoteProbeScript.js";
 
 class FakeChild extends EventEmitter {
 	static nextPid = 1000;
@@ -57,6 +58,8 @@ export interface FakeRemote {
 	master?: MasterOutcome | ((alias: string) => MasterOutcome);
 	/** The answer to `sh -s`; a function answers each exec in turn (1, 2, ...). */
 	attach?: Attach | ((call: number) => Attach);
+	/** The answer to the probe script; a supported host with nothing installed by default. */
+	probe?: Partial<Record<string, unknown>>;
 	remotePort?: number;
 	/** Written by an up master as it starts, as a prompt's retries leave it. */
 	masterStderr?: string;
@@ -70,17 +73,37 @@ type Attach = { code: number; stdout?: string; stderr?: string };
 
 export interface FakeCall {
 	readonly alias: string;
-	readonly kind: "master" | "check" | "exec" | "forward" | "cancel" | "exit";
+	/** An exec is a `probe` once its script shows it is one. */
+	kind: "master" | "check" | "exec" | "probe" | "forward" | "cancel" | "exit";
 	readonly args: readonly string[];
+	/** What an exec got on stdin. */
+	input?: string;
 	readonly at: number;
 	/** Real time, for ordering against a child's `exitedAt`. */
 	readonly wall: number;
-	/** What was written to its stdin so far. */
-	input(): string;
 }
 
-export const attachOutput = (port: number, token = "remote-token", languageServer?: { port: number; connectionToken: string; commit: string }) =>
-	`WHITEBOARD-REMOTE-BEGIN\n${JSON.stringify({ event: "remote.attach", version: "0.1.6", commit: "abc", serverId: "s1", url: `http://127.0.0.1:${port}`, token, startedServer: true, diffr: true, ...(languageServer && { languageServer }) })}\nWHITEBOARD-REMOTE-END\n`;
+export const attachOutput = (port: number, token = "remote-token", extra: Record<string, unknown> = {}) =>
+	`WHITEBOARD-REMOTE-BEGIN\n${JSON.stringify({ event: "remote.attach", version: "0.1.6", commit: "abc", serverId: "s1", url: `http://127.0.0.1:${port}`, token, startedServer: true, diffr: true, ...extra })}\nWHITEBOARD-REMOTE-END\n`;
+
+/** A supported Linux host with no Node and nothing installed, unless `probe` says otherwise. */
+export const probeOutput = (probe: Partial<Record<string, unknown>> = {}) =>
+	`${REVIEW_REMOTE_PROBE_BEGIN}\n${JSON.stringify({
+		os: "Linux",
+		arch: "aarch64",
+		glibc: "2.35",
+		home: "/home/dev",
+		homeWritable: true,
+		freeBytes: 50e9,
+		node: null,
+		npm: null,
+		installed: [],
+		managedNode: null,
+		downloader: "curl",
+		registryReachable: true,
+		tools: ["tar", "xz", "sha256sum", "sha512sum"],
+		...probe,
+	})}\n${REVIEW_REMOTE_PROBE_END}\n`;
 
 /** A virtual clock: scheduled work runs only when the test calls `next`. */
 export function fakeClock() {
@@ -125,7 +148,8 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 		const remote = remotes[alias] ?? {};
 		const operation = args.includes("-O") ? args[args.indexOf("-O") + 1] : undefined;
 		const kind: FakeCall["kind"] = args.includes("-M") ? "master" : args.at(-1) === "-s" ? "exec" : (operation as FakeCall["kind"]);
-		calls.push({ alias, kind, args, at: clock?.now() ?? Date.now(), wall: Date.now(), input: () => child.input });
+		const entry: FakeCall = { alias, kind, args, at: clock?.now() ?? Date.now(), wall: Date.now() };
+		calls.push(entry);
 		const master = masters.get(alias);
 		setImmediate(() => {
 			if (kind === "master") {
@@ -144,6 +168,11 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 				void Promise.resolve(remote.checkAnswered?.(call)).then(() => child.finish(code, output));
 			} else if (kind === "exec") {
 				const answer = () => {
+					entry.input = child.input;
+					if (child.input.includes(REVIEW_REMOTE_PROBE_BEGIN)) {
+						entry.kind = "probe";
+						return child.finish(0, { stdout: probeOutput(remote.probe) });
+					}
 					const call = calls.filter((c) => c.alias === alias && c.kind === "exec").length;
 					const attach =
 						typeof remote.attach === "function"

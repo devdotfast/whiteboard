@@ -7,7 +7,10 @@ import { rm } from "node:fs/promises";
 import { get } from "node:http";
 import type { Readable, Writable } from "node:stream";
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
-import { parseRemoteAttach, reviewRemoteAttachScript, type ReviewRemoteAttach } from "./reviewRemoteAttachScript.js";
+import { installedAttachScript, parseRemoteAttach, reviewRemoteAttachScript, type ReviewRemoteAttach } from "./reviewRemoteAttachScript.js";
+import type { ReviewRemoteInstallConsent } from "./reviewRemoteInstallConsent.js";
+import type { ReviewRemoteInstallInput, ReviewRemoteInstallResult } from "./reviewRemoteInstaller.js";
+import { judgeRemote, probeRemote, type ReviewRemoteProbe, type ReviewRemoteTarget } from "./reviewRemoteProbe.js";
 import {
 	sshCancelForwardArgs,
 	sshCheckArgs,
@@ -219,6 +222,44 @@ export function runSsh(spawn: SpawnSsh, env: NodeJS.ProcessEnv, args: string[], 
 	});
 }
 
+/** `review.remote.install`. */
+export type ReviewRemoteInstallMode = "ask" | "always" | "never";
+
+export type ReviewRemoteInstallRunInput = Pick<ReviewRemoteInstallInput, "session" | "probe" | "target" | "version" | "onProgress" | "signal" | "spawn" | "env">;
+
+/** Desktop installs its own version on a host before it attaches. */
+export interface ReviewRemoteInstallFlow {
+	mode(): ReviewRemoteInstallMode;
+	readonly consent: ReviewRemoteInstallConsent;
+	/** Asks the user: true installs, false declines, undefined (no answer) decides nothing. */
+	confirm(request: { alias: string; text: string }): Promise<boolean | undefined>;
+	/** `installRemote` with this build's artifacts. */
+	run(input: ReviewRemoteInstallRunInput): Promise<ReviewRemoteInstallResult>;
+}
+
+type InstallStep = NonNullable<ReviewGatewayHost["installing"]>["step"];
+
+/** The attach command for the optional extension groups this Desktop has enabled. */
+type AttachScript = (groups: readonly string[]) => string;
+
+/** What a step was doing, for a failure's detail. */
+const STEP_WORDS: Record<InstallStep, string> = {
+	preparing: "preparing",
+	"waiting-for-lock": "waiting for another install",
+	node: "installing Node",
+	package: "installing the package",
+	verifying: "checking the install",
+	done: "finishing",
+};
+
+const VIA = { "remote-download": "downloaded on the host", upload: "uploaded from this computer" } as const;
+
+/** Sizes from installs on Ubuntu 22.04: the package with its dependencies, and Node 24 unpacked. */
+export function installPromptText(alias: string, version: string, probe: ReviewRemoteProbe): string {
+	const node = probe.node || probe.managedNode ? "" : `, and about 200 MB for Node 24, which ${alias} does not have`;
+	return `Whiteboard ${version} is not installed on ${alias}. Install it in ${probe.home}/.dev/whiteboard-remote? It takes about 60 MB${node}. Whiteboard also adds ~/.local/bin/whiteboard if that path is free.`;
+}
+
 export interface ReviewRemoteHostOptions {
 	readonly session: ReviewSshSession;
 	readonly spawn: SpawnSsh;
@@ -236,6 +277,8 @@ export interface ReviewRemoteHostOptions {
 	readonly clock?: ReviewRemoteClock;
 	readonly timeouts?: Partial<typeof REVIEW_REMOTE_TIMEOUTS>;
 	readonly random?: () => number;
+	/** Without it, or with `never`, the CLI the user installed is attached through PATH. */
+	readonly install?: ReviewRemoteInstallFlow;
 }
 
 /**
@@ -276,6 +319,11 @@ export class ReviewRemoteHost {
 	private prompts = 0;
 	private promptCancelled = false;
 	private disposed = false;
+	/** What attaches: stage 1's script, or the installed version's CLI. */
+	private attachScript: AttachScript = reviewRemoteAttachScript;
+	/** This connection did not install because the user did not agree. */
+	private declined = false;
+	private installing: AbortController | undefined;
 
 	constructor(private readonly options: ReviewRemoteHostOptions) {
 		this.alias = options.session.alias;
@@ -368,7 +416,7 @@ export class ReviewRemoteHost {
 			const check = await this.run(sshCheckArgs(this.options.session, env), this.timeouts.operation);
 			if (stale()) return;
 			if (check.code !== 0) throw unreachable(`The SSH connection to ${this.alias} did not answer. ${firstLines(check.stderr)}`.trim());
-			const attach = await this.attach(env);
+			const attach = await this.attach(env, this.attachScript);
 			if (stale()) return;
 			// The same server keeps its forward, so the gateway keeps the host online.
 			const kept = reuse && attach.port === old.remote && (await probeHealth(old.local, this.timeouts.operation).then(() => true, () => false));
@@ -417,6 +465,7 @@ export class ReviewRemoteHost {
 		this.cancelReattach = undefined;
 		this.cancelPending?.();
 		this.cancelPending = undefined;
+		this.installing?.abort();
 		const master = this.master;
 		this.master = undefined;
 		await this.close(master);
@@ -480,6 +529,7 @@ export class ReviewRemoteHost {
 		this.queuedReattach = false;
 		this.connectedAt = undefined;
 		this.promptCancelled = false;
+		this.declined = false;
 		try {
 			const env = await this.options.environment();
 			if (stale()) return;
@@ -490,18 +540,23 @@ export class ReviewRemoteHost {
 			if (stale()) return;
 			const master = this.startMaster(env);
 			await this.waitForMaster(master, env, stale);
-			const attach = await this.attach(env);
+			const script = await this.prepareAttach(env, stale);
+			if (script === undefined) return;
+			const attach = await this.attach(env, script);
 			if (stale()) return;
 			const url = await this.forward(env, attach, stale);
 			if (stale()) return;
 			const language = await this.forwardLanguage(env, attach, stale);
 			if (stale()) return;
+			this.attachScript = script;
 			this.connectedAt = this.clock.now();
 			this.serverId = attach.serverId;
 			// What authentication printed says nothing about why the connection may end later.
 			this.masterStderr = "";
 			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language, ...groupsOf(attach) });
 			this.whilePending(attach);
+			const serverId = attach.serverId;
+			if (serverId) void this.options.install?.consent.attached(this.alias, serverId).catch((error: Error) => this.options.log(`${this.alias}: could not keep its install consent: ${error.message}`));
 		} catch (error) {
 			if (stale()) return;
 			this.fail(error instanceof HostFailure ? error.problem : { state: "unreachable", detail: (error as Error).message });
@@ -567,12 +622,100 @@ export class ReviewRemoteHost {
 		}
 	}
 
-	private async attach(env: NodeJS.ProcessEnv): Promise<ReviewRemoteAttach> {
+	/**
+	 * The script that attaches, or undefined once stale. With installs off,
+	 * stage 1's, which finds a CLI the user installed. Otherwise the host is
+	 * probed, the user asked, this Desktop's version installed beside any
+	 * other, and that version's CLI attaches by its path.
+	 */
+	private async prepareAttach(env: NodeJS.ProcessEnv, stale: () => boolean): Promise<AttachScript | undefined> {
+		const flow = this.options.install;
+		const mode = flow?.mode() ?? "never";
+		if (!flow || mode === "never") return reviewRemoteAttachScript;
+		const probed = await probeRemote({ session: this.options.session, spawn: this.options.spawn, env });
+		if (stale()) return;
+		if ("error" in probed) throw unreachable(probed.error);
+		const support = judgeRemote(probed.probe);
+		if (!support.supported) throw new HostFailure({ state: "unsupported", detail: support.reason });
+		const version = await this.options.desktopVersion();
+		const present = probed.probe.installed.includes(version);
+		if (!present && mode === "ask" && !(await this.agreed(flow, probed.probe, version))) {
+			// A CLI the user installed by hand still attaches; without one the host is not-installed.
+			this.declined = true;
+			return stale() ? undefined : reviewRemoteAttachScript;
+		}
+		if (stale()) return;
+		const installed = await this.install(flow, env, probed.probe, support.target, version, present, stale);
+		return installed && (() => installedAttachScript(installed.nodePath, installed.cliPath));
+	}
+
+	/** Asks once per host; an answer is kept, a prompt nobody answered is not. */
+	private async agreed(flow: ReviewRemoteInstallFlow, probe: ReviewRemoteProbe, version: string): Promise<boolean> {
+		const log = (error: Error) => this.options.log(`${this.alias}: install consent: ${error.message}`);
+		const stored = await flow.consent.get(this.alias).catch(log);
+		if (stored) return stored === "allow";
+		const answer = await flow.confirm({ alias: this.alias, text: installPromptText(this.alias, version, probe) });
+		if (answer !== undefined) await flow.consent.set(this.alias, answer ? "allow" : "deny").catch(log);
+		return answer === true;
+	}
+
+	/** Installs `version`, or only checks it when `present`; undefined once stale. */
+	private async install(
+		flow: ReviewRemoteInstallFlow,
+		env: NodeJS.ProcessEnv,
+		probe: ReviewRemoteProbe,
+		target: ReviewRemoteTarget,
+		version: string,
+		present: boolean,
+		stale: () => boolean,
+	): Promise<ReviewRemoteInstallResult | undefined> {
+		const abort = new AbortController();
+		this.installing = abort;
+		let step: InstallStep = "preparing";
+		// A version already there is only checked: it shows as installing only if it is installed again.
+		if (!present) this.set({ alias: this.alias, installing: { step } });
+		try {
+			return await flow.run({
+				session: this.options.session,
+				probe,
+				target,
+				version,
+				spawn: this.options.spawn,
+				env,
+				signal: abort.signal,
+				onProgress: (progress) => {
+					if (stale()) return;
+					step = progress.step;
+					if (step === "done" && !this.reported.installing) return;
+					this.set({ alias: this.alias, installing: { step, ...("via" in progress && { detail: VIA[progress.via] }) } });
+				},
+			});
+		} catch (error) {
+			if (stale()) return undefined;
+			const message = (error as Error).message;
+			// ssh exits 255 when the connection drops.
+			if (/\bexit 255\b/.test(message) || !this.master || gone(this.master)) {
+				throw unreachable(`The connection to ${this.alias} dropped while installing Whiteboard ${version} (${STEP_WORDS[step]}).`);
+			}
+			throw new HostFailure({ state: "not-installed", detail: `Installing Whiteboard ${version} on ${this.alias} failed while ${STEP_WORDS[step]}: ${message}` });
+		} finally {
+			if (this.installing === abort) this.installing = undefined;
+		}
+	}
+
+	private async attach(env: NodeJS.ProcessEnv, script: AttachScript): Promise<ReviewRemoteAttach> {
 		const groups = (await this.options.groups?.()) ?? [];
-		const script = reviewRemoteAttachScript(groups);
-		const result = await this.run(sshExecArgs(this.options.session, env), this.timeouts.attach, script);
+		const result = await this.run(sshExecArgs(this.options.session, env), this.timeouts.attach, script(groups));
 		const parsed = parseRemoteAttach(result.stdout);
 		if (parsed && "attach" in parsed) {
+			const { incompatibleRunning, replaced } = parsed.attach;
+			if (incompatibleRunning) {
+				throw new HostFailure({
+					state: "incompatible",
+					detail: `A Whiteboard server ${incompatibleRunning.version} started by a user is running on ${this.alias}; stop it to use this Desktop's version.`,
+				});
+			}
+			if (replaced) this.options.log(`${this.alias}: replaced its Whiteboard server ${replaced} with ${parsed.attach.version}.`);
 			// Only the groups this Desktop asked for, once each.
 			const languageGroups = parsed.attach.languageGroups.filter(
 				(entry, index, all) => groups.includes(entry.group) && all.findIndex((other) => other.group === entry.group) === index,
@@ -586,6 +729,7 @@ export class ReviewRemoteHost {
 			throw new HostFailure({
 				state: "not-installed",
 				detail: `Whiteboard is not installed on ${this.alias}. Install Whiteboard ${version} there; Node 24 is needed.`,
+				...(this.declined && { declined: true as const }),
 			});
 		}
 		throw unreachable(firstLines(result.stderr) || `whiteboard remote attach on ${this.alias} exited with code ${result.code ?? "none"}.`);
@@ -659,6 +803,7 @@ export class ReviewRemoteHost {
 		this.master = undefined;
 		this.forwarded = undefined;
 		this.language = undefined;
+		this.installing?.abort();
 		void this.close(master);
 	}
 
