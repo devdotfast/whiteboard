@@ -4,23 +4,24 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  REVIEW_REMOTE_AGENT_IDS,
+  type ReviewRemoteAgentId,
+} from "@dev.fast/review-protocol";
+import {
   type AgentTraceHookAgent,
   agentTraceHomeDirectory,
 } from "@dev.fast/trace-core";
 import { parse as parseToml } from "smol-toml";
+import { z } from "zod";
 
 import { CONNECT_COMMANDS } from "./connect-prompts";
 import { isDirectory } from "./fs-utils";
 
 /** The harnesses this machine can be found to have, and connected without a person: trace-core's. */
-export const AGENT_CONNECT_TARGETS = [
-  "claude",
-  "codex",
-  "opencode",
-  "pi",
-] as const satisfies readonly AgentTraceHookAgent[];
+export const AGENT_CONNECT_TARGETS: readonly (ReviewRemoteAgentId &
+  AgentTraceHookAgent)[] = REVIEW_REMOTE_AGENT_IDS;
 
-export type AgentConnectTarget = (typeof AGENT_CONNECT_TARGETS)[number];
+export type AgentConnectTarget = ReviewRemoteAgentId;
 
 export const AGENT_NAMES: Record<AgentConnectTarget, string> = {
   claude: "Claude Code",
@@ -113,72 +114,77 @@ export async function connectAgents(
   return results;
 }
 
+const WHITEBOARD_PLUGIN = "whiteboard@devfast";
+
+/** Claude Code's record of installed plugins: a list of installs per plugin. */
+const ClaudePluginsSchema = z.object({
+  plugins: z.record(z.string(), z.unknown()),
+});
+
+const CodexConfigSchema = z.object({
+  plugins: z
+    .record(z.string(), z.object({ enabled: z.boolean().optional() }))
+    .optional(),
+});
+
+const PiSettingsSchema = z.object({
+  packages: z.array(
+    z.union([
+      z.string(),
+      z.object({ source: z.string() }).transform((entry) => entry.source),
+    ]),
+  ),
+});
+
+const PI_PACKAGE = /^npm:@dev\.fast\/pi-whiteboard(@.*)?$/;
+
+const OPENCODE_PLUGIN =
+  /"plugin"\s*:\s*\[[^\]]*"@dev\.fast\/opencode-whiteboard(@[^"]*)?"/;
+
+/** Whether the harness's own record holds what its connect prompt installs; any unreadable record is no. */
 async function connected(
   id: AgentConnectTarget,
   scope: Scope,
 ): Promise<boolean> {
   const home = agentTraceHomeDirectory(id, scope.homeDir, scope.env);
 
+  const read = (...parts: string[]) =>
+    readFile(path.join(home, ...parts), "utf8");
+
   try {
     switch (id) {
       case "claude": {
-        const record = JSON.parse(
-          await readFile(
-            path.join(home, "plugins", "installed_plugins.json"),
-            "utf8",
-          ),
-        );
-        const installs = record?.plugins?.["whiteboard@devfast"];
+        const installs = ClaudePluginsSchema.parse(
+          JSON.parse(await read("plugins", "installed_plugins.json")),
+        ).plugins[WHITEBOARD_PLUGIN];
 
         return Array.isArray(installs)
           ? installs.length > 0
           : Boolean(installs);
       }
+
       case "codex": {
-        const config = parseToml(
-          await readFile(path.join(home, "config.toml"), "utf8"),
-        );
-        const plugin = (
-          config.plugins as Record<string, { enabled?: unknown }> | undefined
-        )?.["whiteboard@devfast"];
+        const plugin = CodexConfigSchema.parse(
+          parseToml(await read("config.toml")),
+        ).plugins?.[WHITEBOARD_PLUGIN];
 
         return plugin !== undefined && plugin.enabled !== false;
       }
-      case "opencode": {
-        for (const name of ["opencode.json", "opencode.jsonc", "config.json"]) {
-          const text = await readFile(path.join(home, name), "utf8").catch(
-            () => "",
-          );
 
-          if (
-            /"plugin"\s*:\s*\[[^\]]*"@dev\.fast\/opencode-whiteboard(@[^"]*)?"/.test(
-              text,
-            )
-          )
+      case "opencode": {
+        // JSONC: read as text, not parsed.
+        for (const name of ["opencode.json", "opencode.jsonc", "config.json"]) {
+          if (OPENCODE_PLUGIN.test(await read(name).catch(() => "")))
             return true;
         }
 
         return false;
       }
-      case "pi": {
-        const settings = JSON.parse(
-          await readFile(path.join(home, "agent", "settings.json"), "utf8"),
-        );
 
-        return (
-          Array.isArray(settings?.packages) ? settings.packages : []
-        ).some((entry: unknown) => {
-          const source =
-            typeof entry === "string"
-              ? entry
-              : (entry as { source?: unknown } | null)?.source;
-
-          return (
-            typeof source === "string" &&
-            /^npm:@dev\.fast\/pi-whiteboard(@.*)?$/.test(source)
-          );
-        });
-      }
+      case "pi":
+        return PiSettingsSchema.parse(
+          JSON.parse(await read("agent", "settings.json")),
+        ).packages.some((entry) => PI_PACKAGE.test(entry));
     }
   } catch {
     return false;
@@ -218,16 +224,20 @@ async function run(
 
   return new Promise((resolve) => {
     let output = "";
+
     const keep = (chunk: Buffer) => {
       output = (output + chunk.toString("utf8")).slice(-OUTPUT_LIMIT);
     };
+
     const child = spawn(file, args, {
       env,
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,
     });
+
     const timer = setTimeout(() => {
       output += `\n${command} did not finish within ${Math.round(timeoutMs / 1000)} seconds.\n`;
+
       // The whole group: a harness CLI may have started its own children.
       try {
         process.kill(-child.pid!, "SIGKILL");

@@ -66,6 +66,7 @@ describe("detectAgents", () => {
 
   it("reads each harness's own record of the plugin or package", async () => {
     const { homeDir, bin, env } = await fakeHome();
+
     for (const cli of ["claude", "codex", "opencode", "pi"])
       await fakeCli(bin, cli);
     await write(

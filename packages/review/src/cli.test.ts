@@ -730,6 +730,7 @@ function outputStream(): PassThrough {
 /** Every path under `root`, with its size, mode and modification time. */
 async function fileTree(root: string): Promise<string> {
   const entries = await readdir(root, { recursive: true, withFileTypes: true });
+
   const lines = await Promise.all(
     entries.map(async (entry) => {
       const file = path.join(entry.parentPath, entry.name);
