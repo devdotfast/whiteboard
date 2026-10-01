@@ -356,12 +356,14 @@ export function AgentSelectionProvider({
                     {...stylex.props(styles.action, styles.quiet, styles.copy)}
                     aria-keyshortcuts="Meta+Shift+C"
                     aria-label="Copy for Agent"
-                    title="Copy for agent (⇧⌘C)"
                     disabled={busy}
                     onClick={() => void copy()}
                   >
                     <AskCopyIcon xstyle={askIconSizes.toolbar} />
                     <span>{busy ? "Copying…" : "Copy for agent"}</span>
+                    <kbd aria-hidden="true" {...stylex.props(styles.copyKey)}>
+                      ⇧⌘C
+                    </kbd>
                   </button>
                 </div>,
                 selection.anchorContainer ?? overlayHost,
@@ -438,5 +440,12 @@ const styles = stylex.create({
   copy: {
     gap: "6px",
     padding: "5px 8px",
+  },
+  copyKey: {
+    marginInlineStart: "1px",
+    color: "color-mix(in srgb, currentColor 65%, transparent)",
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.micro,
+    lineHeight: "14px",
   },
 });
