@@ -175,3 +175,10 @@ listens on a public address. So the remote's `sshd` must allow TCP
 forwarding, which is OpenSSH's default. If `sshd_config` sets
 `AllowTcpForwarding no`, the host shows `unreachable`, and the detail quotes
 OpenSSH's "administratively prohibited" message.
+
+Language features use a second forward, to the remote's VS Code server on its
+loopback interface. That server has its own connection token, new each time it
+starts. Unlike the review server's token, it reaches the Desktop window: the
+window connects to the VS Code server itself. Desktop hands it only to a window
+that asks for an `online` host running the same Whiteboard version, never on a
+command line, and never writes it to a log.
