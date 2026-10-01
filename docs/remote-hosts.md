@@ -110,7 +110,7 @@ login shell (`~/.profile` or your shell's own start-up file is enough):
 | Group | Needs on the remote | Extensions the remote downloads |
 |---|---|---|
 | Go | `go` | Go |
-| Rust | `cargo` and `rustc`, glibc 2.28 or newer | rust-analyzer, about 16 MB |
+| Rust | `cargo` and `rustc` | rust-analyzer, about 16 MB |
 | Swift | `swift` | Swift and LLDB DAP, about 16 MB |
 | C# | `dotnet` (a .NET SDK) | C# and .NET Runtime, about 80 MB |
 
@@ -119,7 +119,8 @@ login shell (`~/.profile` or your shell's own start-up file is enough):
   "swift: installed — swift was not found on the login shell's PATH".
 - **Memory:** a small Rust project needs about 1 GB for the VS Code server,
   its extension host and rust-analyzer.
-- **Rust** gives hover and go to definition on remotes.
+- **Rust** gives hover and go to definition on remotes. The glibc a remote
+  needs for Whiteboard (2.34 or newer) is enough for rust-analyzer.
 - **Swift and C#** are installed on a remote but do not answer hovers yet,
   on a remote or on your laptop. Swift's extension needs the task API, which
   Whiteboard does not expose yet, and on a remote also `node-pty`, which the
