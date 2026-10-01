@@ -1,4 +1,15 @@
+import { execFile, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 
 import {
   REVIEW_DESKTOP_DISCOVERY_VERSION,
@@ -81,13 +92,16 @@ describe("Review Desktop launcher", () => {
 
     await expect(
       runReviewAppLaunch(
-        { timeoutMs: 1_000 },
+        { timeoutMs: 1_000, noSandbox: true },
         launcherRuntime([healthyResponse()], launchDesktop, async () =>
           readCount++ === 0 ? null : discovery,
         ),
       ),
     ).resolves.toMatchObject({ state: "launched" });
-    expect(launchDesktop).toHaveBeenCalledOnce();
+    expect(launchDesktop).toHaveBeenCalledWith({
+      focus: undefined,
+      noSandbox: true,
+    });
   });
 
   it.each([
@@ -115,7 +129,9 @@ describe("Review Desktop launcher", () => {
         ),
       );
       expect(launchDesktop).toHaveBeenCalledWith(
-        instance ? { focus: undefined, instance } : { focus: undefined },
+        instance
+          ? { focus: undefined, noSandbox: undefined, instance }
+          : { focus: undefined, noSandbox: undefined },
       );
     },
   );
@@ -430,11 +446,12 @@ describe("Review Desktop launcher", () => {
   });
 
   it.each([
-    [false, "/usr/bin/review-desktop"],
-    [true, "/usr/share/review/review"],
+    [false, "/usr/bin/review-desktop", false],
+    [true, "/usr/share/review/review", false],
+    [true, "/usr/share/review/review", true],
   ])(
     "launches Linux with bundled Electron=%s and preserves the isolated profile",
-    (electron, executable) => {
+    (electron, executable, noSandbox) => {
       const child = new FakeChild();
 
       const spawn = vi.fn<NonNullable<LaunchDesktopApplicationInput["spawn"]>>(
@@ -451,6 +468,7 @@ describe("Review Desktop launcher", () => {
       launchDesktopApplication({
         platform: "linux",
         electron,
+        noSandbox,
         execPath: "/usr/share/review/review",
         env: environment,
         spawn,
@@ -461,6 +479,7 @@ describe("Review Desktop launcher", () => {
         [
           "--user-data-dir=/tmp/linux-profile/user-data",
           "--extensions-dir=/tmp/linux-profile/extensions",
+          ...(noSandbox ? ["--no-sandbox"] : []),
         ],
         expect.objectContaining({
           env: {
@@ -468,6 +487,7 @@ describe("Review Desktop launcher", () => {
             DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "1",
           },
           detached: true,
+          stdio: ["ignore", "ignore", expect.any(Number)],
         }),
       );
       expect(environment.ELECTRON_RUN_AS_NODE).toBe("1");
@@ -555,6 +575,113 @@ describe("Review Desktop launcher", () => {
     expect(options?.env).not.toHaveProperty(
       "DEV_FAST_REVIEW_DESKTOP_BACKGROUND",
     );
+  });
+
+  it("releases captured output while Desktop is still running", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "launch-capture-test-"));
+    const metadata = path.join(root, "child.json");
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const script = `
+      import { spawn } from "node:child_process";
+      import { writeFileSync } from "node:fs";
+      import { launchDesktopApplication } from ${JSON.stringify(new URL("./review-app-launcher.ts", import.meta.url).href)};
+      let pid;
+      const attempt = launchDesktopApplication({
+        platform: "linux", electron: false,
+        spawn: (_command, _args, options) => {
+          const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], options);
+          pid = child.pid;
+          return child;
+        },
+      });
+      writeFileSync(${JSON.stringify(metadata)}, JSON.stringify({ pid, logPath: attempt.logPath }));
+      console.log("parent done");
+    `;
+
+    try {
+      const captured = promisify(execFile)(process.execPath, [
+        "--import",
+        import.meta.resolve("tsx"),
+        "--input-type=module",
+        "--eval",
+        script,
+      ]);
+
+      const result = await Promise.race([
+        captured,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("Captured output remained open")),
+            5_000,
+          );
+        }),
+      ]);
+
+      expect(result.stdout.trim()).toBe("parent done");
+      expect(result.stderr).toBe("");
+      const { pid, logPath } = JSON.parse(readFileSync(metadata, "utf8"));
+      expect(() => process.kill(pid, 0)).not.toThrow();
+      expect(statSync(logPath).mode & 0o777).toBe(0o600);
+    } finally {
+      clearTimeout(timer);
+
+      if (existsSync(metadata)) {
+        const { pid, logPath } = JSON.parse(readFileSync(metadata, "utf8"));
+        process.kill(pid, "SIGTERM");
+        rmSync(path.dirname(logPath), { recursive: true, force: true });
+      }
+
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("includes bounded Desktop diagnostics on startup failure", async () => {
+    let logPath: string | undefined;
+    const diagnostic = "Running as root without --no-sandbox is not supported.";
+
+    try {
+      await expect(
+        runReviewAppLaunch(
+          {},
+          {
+            selectInstance: async () => ({
+              key: "stable",
+              source: "fallback",
+              instances: [],
+            }),
+            launchDesktop: () => {
+              const attempt = launchDesktopApplication({
+                platform: "linux",
+                electron: false,
+                spawn: (_command, _args, options) =>
+                  spawn(
+                    process.execPath,
+                    [
+                      "-e",
+                      `process.stderr.write(${JSON.stringify("x".repeat(20_000) + "\n" + diagnostic)}); process.exitCode = 1;`,
+                    ],
+                    options,
+                  ),
+              });
+
+              logPath = attempt.logPath;
+
+              return attempt;
+            },
+          },
+        ),
+      ).rejects.toSatisfy((error: Error) => {
+        expect(error.message).toContain(diagnostic);
+        expect(error.message).toContain(logPath);
+        expect(error.message.length).toBeLessThan(17_000);
+
+        return true;
+      });
+    } finally {
+      if (logPath)
+        rmSync(path.dirname(logPath), { recursive: true, force: true });
+    }
   });
 
   it("reports a missing Linux package launcher", async () => {

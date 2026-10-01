@@ -1,4 +1,6 @@
 import { type SpawnOptions, spawn } from "node:child_process";
+import { closeSync, fstatSync, mkdtempSync, openSync, readSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
@@ -57,6 +59,8 @@ export interface RunReviewAppLaunchInput {
   timeoutMs?: number;
   /** Bring Whiteboard Desktop forward. */
   focus?: boolean;
+  /** Explicit Linux container opt-out from the Chromium sandbox. */
+  noSandbox?: boolean;
 }
 
 export interface ReviewAppLaunchEvent {
@@ -68,6 +72,7 @@ export interface ReviewAppLaunchEvent {
 
 export interface DesktopLaunchAttempt {
   method: string;
+  logPath?: string;
   completion: Promise<DesktopLaunchCompletion>;
 }
 
@@ -82,6 +87,7 @@ export interface LaunchDesktopApplicationInput {
   electron?: boolean;
   env?: NodeJS.ProcessEnv;
   focus?: boolean;
+  noSandbox?: boolean;
   /** An explicitly selected release instance; absent, the installed app's own. */
   instance?: { key: "stable" | "preview"; appPath?: string };
   spawn?: (
@@ -129,7 +135,10 @@ export async function runReviewAppLaunch(
   if (selection.source === "fallback" && running.length > 1)
     throw reviewInstanceUnavailable(selection);
 
-  const launch: LaunchDesktopApplicationInput = { focus: input.focus };
+  const launch: LaunchDesktopApplicationInput = {
+    focus: input.focus,
+    noSandbox: input.noSandbox,
+  };
 
   if (selection.source !== "fallback")
     launch.instance = {
@@ -159,7 +168,7 @@ export async function runReviewAppLaunch(
       runtime.now() - unexpectedSuccessfulExitAt >= EARLY_EXIT_GRACE_MS
     ) {
       throw launchFailure(
-        attempt.method,
+        attempt,
         new Error("the launch process exited before Desktop became ready"),
       );
     }
@@ -178,7 +187,7 @@ export async function runReviewAppLaunch(
           .then(() => ({ completion: null }));
 
     if (outcome.completion) {
-      assertSuccessfulLaunchCompletion(attempt.method, outcome.completion);
+      assertSuccessfulLaunchCompletion(attempt, outcome.completion);
 
       unexpectedSuccessfulExitAt = runtime.now();
       completion = undefined;
@@ -187,13 +196,13 @@ export async function runReviewAppLaunch(
 
   if (unexpectedSuccessfulExitAt !== undefined) {
     throw launchFailure(
-      attempt.method,
+      attempt,
       new Error("the launch process exited before Desktop became ready"),
     );
   }
 
   throw new Error(
-    `Whiteboard Desktop did not become ready within ${Math.ceil((input.timeoutMs ?? DEFAULT_LAUNCH_TIMEOUT_MS) / 1_000)} seconds after ${attempt.method}. Open Whiteboard Desktop once, then run \`whiteboard app launch\` again.`,
+    `Whiteboard Desktop did not become ready within ${Math.ceil((input.timeoutMs ?? DEFAULT_LAUNCH_TIMEOUT_MS) / 1_000)} seconds after ${attempt.method}. Open Whiteboard Desktop once, then run \`whiteboard app launch\` again.${launchDiagnostics(attempt.logPath)}`,
   );
 }
 
@@ -231,6 +240,14 @@ export function launchDesktopApplication(
       ),
     };
   }
+
+  if (input.noSandbox && platform !== "linux")
+    return {
+      method: `the ${platform} application launcher`,
+      completion: Promise.reject(
+        new Error("--no-sandbox is only supported for Linux Desktop launches."),
+      ),
+    };
 
   const electron = input.electron ?? Boolean(process.versions.electron);
   const env = { ...(input.env ?? process.env) };
@@ -273,6 +290,8 @@ export function launchDesktopApplication(
     }
 
     args = profileArgs;
+
+    if (input.noSandbox) args.push("--no-sandbox");
   } else {
     // Direct app execs abort in AppKit under Codex's sandbox.
     const appPath = input.instance
@@ -301,36 +320,46 @@ export function launchDesktopApplication(
     if (profileArgs.length > 0) args.push("--args", ...profileArgs);
   }
 
-  let resolveCompletion: (result: DesktopLaunchCompletion) => void = () =>
-    undefined;
+  const {
+    promise: completion,
+    resolve,
+    reject,
+  } = Promise.withResolvers<DesktopLaunchCompletion>();
 
-  let rejectCompletion: (error: Error) => void = () => undefined;
-
-  const completion = new Promise<DesktopLaunchCompletion>((resolve, reject) => {
-    resolveCompletion = resolve;
-    rejectCompletion = reject;
-  });
+  let logPath: string | undefined;
+  let logFd: number | undefined;
 
   try {
+    if (platform === "linux") {
+      logPath = path.join(
+        mkdtempSync(path.join(tmpdir(), "whiteboard-launch-")),
+        "stderr.log",
+      );
+      logFd = openSync(logPath, "wx", 0o600);
+    }
+
     const spawnProcess = input.spawn ?? spawn;
 
     const child = spawnProcess(command, args, {
       detached: true,
       env,
-      stdio: "ignore",
+      stdio: logFd === undefined ? "ignore" : ["ignore", "ignore", logFd],
     });
 
-    child.once("error", (error) => rejectCompletion(error));
+    child.once("error", (error) => reject(error));
     child.once("exit", (code, signal) => {
-      resolveCompletion({ code, signal });
+      resolve({ code, signal });
     });
     child.unref();
   } catch (error) {
-    rejectCompletion(error instanceof Error ? error : new Error(String(error)));
+    reject(error instanceof Error ? error : new Error(String(error)));
+  } finally {
+    if (logFd !== undefined) closeSync(logFd);
   }
 
   return {
     method,
+    logPath,
     completion,
   };
 }
@@ -342,19 +371,19 @@ function launchEvent(
   return { event: "app", action: "launch", state, instanceId };
 }
 
-function launchFailure(method: string, error: Error): Error {
+function launchFailure(attempt: DesktopLaunchAttempt, error: Error): Error {
   return new Error(
-    `Could not launch Whiteboard with ${method}: ${error.message}. Open Whiteboard once, then run \`whiteboard app launch\` again. A sandboxed agent must run it outside the sandbox.`,
+    `Could not launch Whiteboard with ${attempt.method}: ${error.message}. Open Whiteboard once, then run \`whiteboard app launch\` again. A sandboxed agent must run it outside the sandbox.${launchDiagnostics(attempt.logPath)}`,
   );
 }
 
 function assertSuccessfulLaunchCompletion(
-  method: string,
+  attempt: DesktopLaunchAttempt,
   completion: DesktopLaunchCompletion,
 ): void {
   if (completion.code === 0 && !completion.signal) return;
   throw launchFailure(
-    method,
+    attempt,
     new Error(
       completion.signal
         ? `the launch process exited on ${completion.signal}`
@@ -368,8 +397,36 @@ function observedCompletion(
 ): Promise<DesktopLaunchCompletion> {
   return attempt.completion.catch((error) => {
     throw launchFailure(
-      attempt.method,
+      attempt,
       error instanceof Error ? error : new Error(String(error)),
     );
   });
+}
+
+function launchDiagnostics(logPath: string | undefined): string {
+  if (!logPath) return "";
+  let tail = "";
+
+  try {
+    const fd = openSync(logPath, "r");
+
+    try {
+      const size = fstatSync(fd).size;
+      const buffer = Buffer.alloc(Math.min(size, 16_384));
+      const read = readSync(fd, buffer, 0, buffer.length, size - buffer.length);
+      tail = buffer
+        .subarray(0, read)
+        .toString("utf8")
+        .trim()
+        .split("\n")
+        .slice(-20)
+        .join("\n");
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    // A missing log must not hide the launch failure.
+  }
+
+  return `\nDesktop log: ${logPath}${tail ? `\n${tail}` : ""}`;
 }

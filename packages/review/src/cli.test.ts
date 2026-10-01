@@ -179,13 +179,15 @@ describe("Whiteboard CLI", () => {
   );
 
   it.each([
-    [["app", "launch"], "launched", undefined],
-    [["app"], "running", undefined],
-    [["app", "launch", "--focus"], "running", true],
-    [["app", "--focus"], "launched", true],
+    [["app", "launch"], "launched", undefined, false],
+    [["app"], "running", undefined, false],
+    [["app", "launch", "--focus"], "running", true, false],
+    [["app", "--focus"], "launched", true, false],
+    [["app", "launch", "--no-sandbox"], "launched", undefined, true],
+    [["app", "--no-sandbox"], "launched", undefined, true],
   ] as const)(
     "supports the app launch command and bare alias: %j",
-    async (argv, state, focus) => {
+    async (argv, state, focus, noSandbox) => {
       const runReviewAppLaunch = vi.fn<typeof runReviewAppLaunchActual>(
         async () => ({
           event: "app",
@@ -209,7 +211,10 @@ describe("Whiteboard CLI", () => {
           runtime: { runReviewAppLaunch },
         }),
       ).resolves.toBe(0);
-      expect(runReviewAppLaunch).toHaveBeenCalledWith({ focus });
+      expect(runReviewAppLaunch).toHaveBeenCalledWith({
+        focus,
+        noSandbox,
+      });
       expect(JSON.parse(output)).toEqual({
         event: "app",
         action: "launch",

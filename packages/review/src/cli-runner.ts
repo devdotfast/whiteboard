@@ -434,8 +434,15 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     state.exitCode = 0;
   };
 
-  const launchApp = async (options: { focus?: boolean; json?: boolean }) => {
-    const event = await runtime.runReviewAppLaunch({ focus: options.focus });
+  const launchApp = async (options: {
+    focus?: boolean;
+    json?: boolean;
+    sandbox?: boolean;
+  }) => {
+    const event = await runtime.runReviewAppLaunch({
+      focus: options.focus,
+      noSandbox: options.sandbox === false,
+    });
 
     writeAppEvent(event, options);
     state.exitCode = 0;
@@ -445,7 +452,11 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     program
       .command("app")
       .description("Start Whiteboard Desktop in the background")
-      .option("--focus", "bring Whiteboard Desktop to the foreground"),
+      .option("--focus", "bring Whiteboard Desktop to the foreground")
+      .option(
+        "--no-sandbox",
+        "disable the Chromium sandbox for a Linux container",
+      ),
     "plain",
   ).action(launchApp);
 
@@ -453,7 +464,11 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     app
       .command("launch")
       .description("Start Whiteboard Desktop in the background")
-      .option("--focus", "bring Whiteboard Desktop to the foreground"),
+      .option("--focus", "bring Whiteboard Desktop to the foreground")
+      .option(
+        "--no-sandbox",
+        "disable the Chromium sandbox for a Linux container",
+      ),
     "plain",
   ).action(launchApp);
   configureJsonOutput(
