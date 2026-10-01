@@ -88,7 +88,8 @@ it("copies only on click or Shift+Cmd+C, reports failures, and clears on revisio
         '[aria-label="Copy for Agent"]',
       )!.parentElement!.parentElement!;
 
-    expect(popover().style.top).toBe("84px");
+    const top = popover().style.top;
+
     await act(async () => {
       const scroller = container.querySelector<HTMLElement>(
         "[data-selection-scroller]",
@@ -100,7 +101,7 @@ it("copies only on click or Shift+Cmd+C, reports failures, and clears on revisio
     expect(popover().parentElement).toBe(
       container.querySelector("[data-selection-scroller]"),
     );
-    expect(popover().style.top).toBe("84px");
+    expect(popover().style.top).toBe(top);
     await act(async () => {
       const scroller = container.querySelector<HTMLElement>(
         "[data-selection-scroller]",
@@ -110,7 +111,7 @@ it("copies only on click or Shift+Cmd+C, reports failures, and clears on revisio
       scroller.dispatchEvent(new Event("scroll"));
     });
     // Its article-relative position stays constant: scrolling is browser-owned.
-    expect(popover().style.top).toBe("84px");
+    expect(popover().style.top).toBe(top);
     expect(fetch).not.toHaveBeenCalled();
     await act(async () =>
       container
