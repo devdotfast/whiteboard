@@ -350,6 +350,8 @@ export class ReviewRemoteHost {
 	/** This Desktop's version failed to install; an older one attached. */
 	private installFailure: string | undefined;
 	private installing: AbortController | undefined;
+	/** An uninstall runs over the master: nothing connects, attaches again or installs. */
+	private removing = false;
 
 	constructor(private readonly options: ReviewRemoteHostOptions) {
 		this.alias = options.session.alias;
@@ -368,7 +370,7 @@ export class ReviewRemoteHost {
 
 	/** Forgets the backoff and any problem, and connects at once. */
 	retry(): void {
-		if (this.disposed) return;
+		if (this.disposed || this.removing) return;
 		this.generation++;
 		this.failures = 0;
 		this.pendingAttaches = 0;
@@ -385,7 +387,7 @@ export class ReviewRemoteHost {
 	 * while the TCP session may be dead; if it does not answer, the master is replaced.
 	 */
 	async resume(): Promise<void> {
-		if (this.disposed) return;
+		if (this.disposed || this.removing) return;
 		if (this.cancelTimer) return void this.connect();
 		const master = this.master;
 		const port = this.forwarded?.local;
@@ -408,7 +410,7 @@ export class ReviewRemoteHost {
 	 * reconnect backoff, reset once a connection stays up `stable`.
 	 */
 	reattach(): Promise<void> {
-		if (this.disposed || this.cancelReattach || !this.master || this.connectedAt === undefined) return Promise.resolve();
+		if (this.disposed || this.removing || this.cancelReattach || !this.master || this.connectedAt === undefined) return Promise.resolve();
 		// Never dropped: the attach running may have read the remote before it restarted.
 		if (this.reattaching) {
 			this.queuedReattach = true;
@@ -435,7 +437,7 @@ export class ReviewRemoteHost {
 		const env = this.env;
 		const old = this.forwarded;
 		const oldLanguage = this.language;
-		if (this.disposed || this.reattaching || !this.master || this.connectedAt === undefined || !env || !old) return;
+		if (this.disposed || this.removing || this.reattaching || !this.master || this.connectedAt === undefined || !env || !old) return;
 		const generation = this.generation;
 		const stale = () => generation !== this.generation || this.disposed;
 		this.reattaching = true;
@@ -472,6 +474,29 @@ export class ReviewRemoteHost {
 				void this.reattach();
 			}
 		}
+	}
+
+	/**
+	 * Before an uninstall over the master, which stays up: what is under way
+	 * stops, and nothing reconnects, attaches again or installs until `unquiesce`.
+	 */
+	quiesce(): void {
+		this.removing = true;
+		this.generation++;
+		this.cancelTimer?.();
+		this.cancelTimer = undefined;
+		this.cancelReattach?.();
+		this.cancelReattach = undefined;
+		this.cancelPending?.();
+		this.cancelPending = undefined;
+		this.installing?.abort();
+		this.options.install?.cancel?.(this.alias);
+	}
+
+	/** The uninstall failed: the host connects afresh. */
+	unquiesce(): void {
+		this.removing = false;
+		this.retry();
 	}
 
 	promptOpened(): void {
@@ -546,6 +571,7 @@ export class ReviewRemoteHost {
 	}
 
 	private async connect(): Promise<void> {
+		if (this.removing) return;
 		const generation = ++this.generation;
 		const stale = () => generation !== this.generation || this.disposed;
 		this.cancelTimer?.();

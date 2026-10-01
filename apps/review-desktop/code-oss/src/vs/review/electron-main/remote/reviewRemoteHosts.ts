@@ -77,6 +77,8 @@ export class ReviewRemoteHosts {
 	private readonly hosts = new Map<string, ReviewRemoteHost>();
 	/** Removed from the setting, still closing, with the promise of its close. */
 	private readonly closing = new Map<ReviewRemoteHost, Promise<void>>();
+	/** Aliases Whiteboard was removed from, until they leave the setting. */
+	private readonly removed = new Set<string>();
 	/** Aliases refused before reaching ssh. */
 	private readonly refused = new Map<string, ReviewGatewayHost>();
 	private order: string[] = [];
@@ -134,7 +136,9 @@ export class ReviewRemoteHosts {
 		}
 		this.order = wanted;
 		this.refused.clear();
+		for (const alias of this.removed) if (!wanted.includes(alias)) this.removed.delete(alias);
 		for (const alias of wanted) {
+			if (this.removed.has(alias)) continue;
 			const valid = validateSshAlias(alias);
 			if (!valid.ok) {
 				this.refused.set(alias, { alias, problem: { state: "unreachable", detail: `The SSH alias ${JSON.stringify(alias)} ${valid.reason}.` } });
@@ -177,12 +181,29 @@ export class ReviewRemoteHosts {
 		return host.connectAgents(ids);
 	}
 
-	/** Runs the host's own uninstall, keeping reviews; the caller removes the alias afterwards, which closes the master. */
+	/**
+	 * Runs the host's own uninstall, keeping reviews, over its master while
+	 * nothing may reconnect or install; then closes the host. A failed
+	 * uninstall leaves the host connecting afresh.
+	 */
 	async uninstall(alias: string): Promise<void> {
 		const valid = validateSshAlias(alias);
 		if (!valid.ok) throw new Error(`The SSH alias ${JSON.stringify(alias)} ${valid.reason}.`);
-		const env = { ...(await this.options.environment()), ...(await this.askpass()).env(alias) };
-		await uninstallRemote({ session: reviewSshSession(alias, this.options.controlDirectory, this.options.instance), spawn: this.options.spawn, env });
+		const host = this.hosts.get(alias);
+		host?.quiesce();
+		try {
+			const env = { ...(await this.options.environment()), ...(await this.askpass()).env(alias) };
+			await uninstallRemote({ session: reviewSshSession(alias, this.options.controlDirectory, this.options.instance), spawn: this.options.spawn, env });
+		} catch (error) {
+			if (host && this.hosts.get(alias) === host) host.unquiesce();
+			throw error;
+		}
+		if (host && this.hosts.get(alias) === host) {
+			this.hosts.delete(alias);
+			this.removed.add(alias);
+			this.publish();
+		}
+		await host?.dispose();
 	}
 
 	/** The local server saw the host's server restart with a new token. */
@@ -296,7 +317,7 @@ export class ReviewRemoteHosts {
 			this.cancelSend = undefined;
 			this.lastSent = this.clock.now();
 			this.sentAny = true;
-			this.options.send(this.order.map((alias) => this.refused.get(alias) ?? this.hosts.get(alias)!.state));
+			this.options.send(this.order.flatMap((alias) => this.refused.get(alias) ?? this.hosts.get(alias)?.state ?? []));
 		});
 	}
 }

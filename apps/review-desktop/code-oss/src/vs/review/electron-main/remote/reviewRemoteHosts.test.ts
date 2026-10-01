@@ -434,6 +434,60 @@ test("a question cancelled while still queued is not joined: the next connection
 	asked[1].answer(undefined);
 });
 
+test("removing Whiteboard runs while nothing reconnects, then closes the host", async (t) => {
+	const { flow, asked } = await promptingFlow(t);
+	let finish!: () => void;
+	const after = new Promise<void>((resolve) => (finish = resolve));
+	t.after(() => finish());
+	const { manager, ssh, clock, sentUntil } = await managerFor(t, { "wb-test-a": { uninstall: { ok: true, after } } }, undefined, undefined, flow);
+
+	manager.update(true, ["wb-test-a"]);
+	await until(() => asked.length === 1);
+	asked[0].answer(true);
+	await sentUntil((hosts) => hosts[0]?.endpoint !== undefined);
+
+	const before = ssh.calls.length;
+	const removed = manager.uninstall("wb-test-a");
+	await until(() => ssh.of("wb-test-a", "uninstall").length === 2);
+	// The stopped server fails the gateway's health check, which asks for a reattach; a wake asks for a check.
+	manager.reattach("wb-test-a");
+	manager.resume();
+	manager.retry("wb-test-a");
+	while (clock.next());
+	await new Promise((resolve) => setTimeout(resolve, 50));
+	assert.deepEqual(ssh.calls.slice(before).map((call) => call.kind), ["uninstall", "uninstall"]);
+	assert.ok(ssh.master("wb-test-a")!.alive);
+	finish();
+	await removed;
+
+	await until(() => !ssh.master("wb-test-a")!.alive);
+	await sentUntil((hosts) => hosts.length === 0);
+	// Still in the setting until Settings saves: it stays closed.
+	manager.update(true, ["wb-test-a"]);
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	assert.equal(ssh.of("wb-test-a", "master").length, 1);
+});
+
+test("a host removed without removing Whiteboard keeps the answer; a failed uninstall keeps it and connects afresh", async (t) => {
+	const { flow, asked } = await promptingFlow(t);
+	const { manager, ssh, sentUntil } = await managerFor(t, { "wb-test-a": { uninstall: { ok: false } } }, undefined, undefined, flow);
+
+	manager.update(true, ["wb-test-a"]);
+	await until(() => asked.length === 1);
+	asked[0].answer(true);
+	await sentUntil((hosts) => hosts[0]?.endpoint !== undefined);
+
+	await assert.rejects(manager.uninstall("wb-test-a"), /Could not remove Whiteboard from wb-test-a: refused/);
+	await until(() => ssh.of("wb-test-a", "master").length === 2);
+	await sentUntil((hosts) => hosts[0]?.endpoint !== undefined);
+	assert.equal(await flow.consent.get("wb-test-a"), "allow");
+
+	manager.update(true, []);
+	await until(() => !ssh.master("wb-test-a")!.alive);
+	assert.equal(await flow.consent.get("wb-test-a"), "allow");
+	assert.equal(asked.length, 1);
+});
+
 test("a server's agents are read on their own once a session, and again only when asked", async (t) => {
 	const { manager, ssh, sentUntil } = await managerFor(t, { "wb-test-a": { detect: { code: 0, stdout: detectOutput([{ id: "pi", present: true, connected: false }]) } } });
 
