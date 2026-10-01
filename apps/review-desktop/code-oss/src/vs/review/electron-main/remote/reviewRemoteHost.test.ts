@@ -793,6 +793,8 @@ test("a version directory without a complete marker is not listed by the probe, 
 	assert.equal(prompts.length, 1);
 	assert.equal(runs.length, 1);
 	assert.deepEqual(reports.find((report) => report.installing)?.installing, { step: "preparing" });
+	// Calls on the store run in turn: this waits for the move of the answer after the attach.
+	assert.equal(await flow.consent.get("wb-test-a"), "allow");
 });
 
 test("the version absent with installs always: each step is reported, then the host attaches", async (t) => {
