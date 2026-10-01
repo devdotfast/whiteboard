@@ -928,7 +928,7 @@ it("says how to sign a signed-out agent back in, and tries again once it is", as
   }
 });
 
-it("offers a new chat when a conversation cannot be reopened: one lost before it was saved, or one the server no longer has", async () => {
+it("offers a new conversation when one cannot be reopened: one lost before it was saved, or one the server no longer has", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const session = testReviewSession();
   let stream!: ReadableStreamDefaultController<Uint8Array>;
@@ -1027,7 +1027,9 @@ it("offers a new chat when a conversation cannot be reopened: one lost before it
     await act(async () => new Promise((resolve) => setTimeout(resolve)));
 
     expect(buttonNamed(container, "Reconnect")).toBeNull();
-    await act(async () => buttonNamed(container, "Start a new chat")!.click());
+    await act(async () =>
+      buttonNamed(container, "Start a new conversation")!.click(),
+    );
     expect(view).toMatchObject({ type: "new", selection, agent: "claude" });
 
     // A saved conversation the server no longer has.
@@ -1035,7 +1037,9 @@ it("offers a new chat when a conversation cannot be reopened: one lost before it
     await act(async () => new Promise((resolve) => setTimeout(resolve)));
 
     expect(container.textContent).toContain("This conversation was not found.");
-    await act(async () => buttonNamed(container, "Start a new chat")!.click());
+    await act(async () =>
+      buttonNamed(container, "Start a new conversation")!.click(),
+    );
     expect(view).toMatchObject({ type: "new", selection, agent: "claude" });
   } finally {
     await act(async () => root.unmount());

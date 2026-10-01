@@ -442,6 +442,21 @@ export function AskAgentTurn({
         // read-only mode shows as its plan.
         if (permission?.automatic || entry.toolKind === "switch_mode") break;
 
+        // Still asking: the request below says what it would do; nothing
+        // has run yet.
+        if (permission && !permission.outcome) break;
+
+        // Stopped while asking, it never ran either.
+        if (permission?.outcome === "cancelled") {
+          add({
+            ...toolActivity(entry, permission, thread.cwd),
+            category: "stopped",
+            status: "failed",
+            label: `Stopped before ${permissionSubject(permission, thread.cwd)}`,
+          });
+          break;
+        }
+
         // Denied, it never ran: it reads as the denial, not as what it did.
         if (permission && denied(permission)) {
           add({

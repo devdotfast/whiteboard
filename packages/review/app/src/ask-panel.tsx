@@ -74,6 +74,8 @@ const agentsSchema = z.object({
       id: z.enum(askAgentIds),
       name: z.string(),
       available: z.boolean(),
+      /** Whether it has a mode that keeps the checkout as it is. */
+      readOnly: z.boolean().default(true),
     }),
   ),
 });
@@ -465,6 +467,21 @@ function useThread(session: ReviewSession, threadId: string | null) {
   };
 }
 
+/** Closes a menu; focus that went with it returns to its button. */
+function useMenuClose(
+  setOpen: (open: boolean) => void,
+  trigger: RefObject<HTMLButtonElement | null>,
+) {
+  return useCallback(() => {
+    setOpen(false);
+    requestAnimationFrame(() => {
+      const focused = document.activeElement;
+
+      if (!focused || focused === document.body) trigger.current?.focus();
+    });
+  }, [setOpen, trigger]);
+}
+
 /** The latest value, for effects that must not restart when it changes. */
 function useLatest<Value>(value: Value) {
   const ref = useRef(value);
@@ -490,9 +507,7 @@ function AskSelectionQuote({
           styles.selectionCaption,
         )}
       >
-        {target.kind === "text"
-          ? "Selection"
-          : `Selection · ${selection.title}`}
+        {target.kind === "text" ? "Selection" : "Code"}
       </figcaption>
       <blockquote {...stylex.props(styles.selectionQuote)}>
         {target.kind === "text" ? target.quote : selection.title}
@@ -795,6 +810,13 @@ export function AskPanelContent({
 
   const agentName = thread?.agentName ?? chosenName;
 
+  // Until the agent says, what its kind of agent does: a starting thread
+  // has not yet been put in its read-only mode.
+  const readOnly =
+    thread && thread.status !== "starting"
+      ? thread.readOnly
+      : (chosen?.readOnly ?? true);
+
   return (
     <div {...stylex.props(styles.body)}>
       <div {...stylex.props(styles.agentBar)}>
@@ -817,7 +839,9 @@ export function AskPanelContent({
               label={choiceLabels.get(kind) ?? kind}
               select={select}
               current={current}
-              disabled={busy && threadId !== null}
+              disabled={
+                (busy && threadId !== null) || thread?.status === "failed"
+              }
               onPick={(value) => choose(kind, value)}
             />
           ) : null;
@@ -825,12 +849,12 @@ export function AskPanelContent({
         <span
           {...stylex.props(styles.mode)}
           title={
-            !thread || thread.readOnly
+            readOnly
               ? "The agent cannot change files in the checkout, and asks before running commands. It can edit this review."
-              : `${thread.agentName} has no read-only mode, so it may change files in the checkout.`
+              : `${agentName} is not in a read-only mode, so it may change files in the checkout.`
           }
         >
-          {!thread || thread.readOnly ? (
+          {readOnly ? (
             <>
               <AskLockIcon />
               Read-only
@@ -900,7 +924,7 @@ export function AskPanelContent({
                         ? "Reconnect"
                         : retry
                           ? "Try again"
-                          : "Start a new chat"}
+                          : "Start a new conversation"}
                     </button>
                   </>
                 ) : null}
@@ -935,10 +959,15 @@ export function AskPanelContent({
         stop={busy && threadId ? stop : undefined}
         status={
           connecting
-            ? thread?.entries.length
+            ? // Without the saved copy, the thread itself says it is loading.
+              thread?.entries.length
               ? `Connecting to ${agentName}…`
-              : "Loading the conversation…"
-            : composerStatus(thread, busy)
+              : ""
+            : composerStatus(
+                thread,
+                busy,
+                Boolean((thread?.commands ?? offered?.commands)?.length),
+              )
         }
         commands={thread?.commands ?? offered?.commands}
         acceptsImages={(thread?.accepts ?? offered?.accepts)?.image === true}
@@ -950,10 +979,18 @@ export function AskPanelContent({
   );
 }
 
-function composerStatus(thread: AskThreadState | null, busy: boolean) {
+function composerStatus(
+  thread: AskThreadState | null,
+  busy: boolean,
+  commands: boolean,
+) {
   if (thread?.status === "waiting") return "Waiting for your approval";
 
-  if (!busy) return "↵ to ask · / commands · @ files";
+  // Nothing can be asked; the thread says what to do instead.
+  if (thread?.status === "failed") return "";
+
+  if (!busy)
+    return commands ? "↵ to ask · / commands · @ files" : "↵ to ask · @ files";
 
   const sinceQuestion = thread?.entries.slice(
     thread.entries.findLastIndex((entry) => entry.kind === "user") + 1,
@@ -985,12 +1022,14 @@ function AskAgentPicker({
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLDivElement>(null);
-  const dismiss = useCallback(() => setOpen(false), []);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const dismiss = useMenuClose(setOpen, trigger);
   const chosen = agents?.find((candidate) => candidate.id === agent);
 
   return (
     <div ref={anchor} {...stylex.props(pickerStyles.anchor)}>
       <button
+        ref={trigger}
         type="button"
         {...stylex.props(pickerStyles.picker, open && pickerStyles.open)}
         aria-haspopup="menu"
@@ -1011,7 +1050,7 @@ function AskAgentPicker({
           autoFocus
           onPick={(picked) => {
             onPick(picked);
-            setOpen(false);
+            dismiss();
           }}
           onDismiss={dismiss}
         />
@@ -1038,7 +1077,8 @@ function AskChoicePicker({
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLDivElement>(null);
-  const dismiss = useCallback(() => setOpen(false), []);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const dismiss = useMenuClose(setOpen, trigger);
   const chosen = select.options.find((option) => option.value === current);
 
   useEffect(() => {
@@ -1060,6 +1100,7 @@ function AskChoicePicker({
   return (
     <div ref={anchor} {...stylex.props(pickerStyles.anchor)}>
       <button
+        ref={trigger}
         type="button"
         {...stylex.props(
           pickerStyles.picker,
@@ -1151,7 +1192,7 @@ const actions = new Map([
 
 const optionLabels = {
   allow_once: "Allow once",
-  allow_always: "Allow for thread",
+  allow_always: "Always allow",
   reject_once: "Deny",
   reject_always: "Always deny",
 } as const;
@@ -1491,8 +1532,8 @@ export function AskHistoryControl(): ReactElement | null {
   return (
     <IconButton
       xstyle={shellStyles.topbarItem}
-      aria-label="Ask conversations"
-      title="Ask conversations"
+      aria-label="Saved conversations"
+      title="Saved conversations"
       onClick={openHistory}
     >
       <AskIcon xstyle={[controlStyles.chromeIcon, askIconSizes.chrome]} />
@@ -1557,9 +1598,9 @@ export function AskHistoryList({
               ? "No saved conversations about this passage."
               : "Nothing yet. Select text or code in the review and choose Ask; the conversation is saved here."}
           </p>
-        ) : (
+        ) : entries?.length ? (
           <ul {...stylex.props(styles.list)}>
-            {entries?.map((entry) => {
+            {entries.map((entry) => {
               const target = entry.selection.target;
 
               return (
@@ -1616,7 +1657,7 @@ export function AskHistoryList({
               );
             })}
           </ul>
-        )}
+        ) : null}
         {passage && openHistory ? (
           <button
             type="button"

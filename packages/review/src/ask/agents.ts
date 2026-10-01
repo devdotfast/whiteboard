@@ -131,6 +131,8 @@ export interface AskAgentStatus {
   id: AskAgentId;
   name: string;
   available: boolean;
+  /** Whether it has a mode that keeps the checkout as it is. */
+  readOnly: boolean;
 }
 
 /** An Ask agent process, connected as the given ACP client. */
@@ -200,6 +202,7 @@ export async function detectAskAgents(
       id,
       name: askAgents[id].name,
       available: (await findAgent(askAgents[id], env)) !== undefined,
+      readOnly: askAgents[id].readOnlyMode !== undefined,
     })),
   );
 }
