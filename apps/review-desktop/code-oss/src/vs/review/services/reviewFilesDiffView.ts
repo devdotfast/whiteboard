@@ -273,6 +273,8 @@ export class ReviewFilesDiffView extends Disposable {
 		factory.alwaysShowScrollbars = Boolean(document);
 		// A document embed shows one file, so its header stays pinned at the top.
 		factory.scrollbarBelowResourceHeader = Boolean(document);
+		// The Dock clearance is for full-height views; an embed would scroll into it.
+		if (document) factory.bottomScrollPadding = 0;
 		this.headerFactory = factory;
 
 		this.widget = this._register(

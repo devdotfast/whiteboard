@@ -75,6 +75,26 @@ it.each(["sequence-diagram", "flow-diagram", "database-lens", "code-peek"])(
   },
 );
 
+it("leaves vertical gestures to a code peek the reader clicked into", () => {
+  const { region, embed, content } = mount("code-peek");
+  const embeddedWheel = vi.fn<(event: WheelEvent) => void>();
+  embed.addEventListener("wheel", embeddedWheel);
+  embed.tabIndex = 0;
+  embed.focus();
+
+  const wheel = new WheelEvent("wheel", {
+    bubbles: true,
+    cancelable: true,
+    deltaY: 100,
+  });
+
+  content.dispatchEvent(wheel);
+
+  expect(wheel.defaultPrevented).toBe(false);
+  expect(embeddedWheel).toHaveBeenCalledOnce();
+  expect(region.scrollTop).toBe(0);
+});
+
 it("routes a diagonal tie to the document, not the code peek", () => {
   const { region, embed, content } = mount("code-peek");
   const embeddedWheel = vi.fn<(event: WheelEvent) => void>();

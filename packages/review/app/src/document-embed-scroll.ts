@@ -1,7 +1,8 @@
 import { type RefObject, useEffect } from "react";
 
 /** Ordinary vertical wheel gestures belong to the document, even when an
- * embedded native editor handles wheel input. Other gestures stay with embeds. */
+ * embedded native editor handles wheel input. Other gestures stay with embeds,
+ * as do all gestures over a code peek the reader has clicked into. */
 export function useDocumentEmbedScroll(
   regionRef: RefObject<HTMLElement | null>,
 ) {
@@ -30,7 +31,12 @@ export function routeDocumentEmbedScroll(region: HTMLElement) {
       ".sequence-diagram, .flow-diagram, .database-lens, .code-peek",
     );
 
-    if (!embed?.closest(".review-document") || !region.contains(embed)) return;
+    if (
+      !embed?.closest(".review-document") ||
+      !region.contains(embed) ||
+      embed.matches(".code-peek:focus-within")
+    )
+      return;
 
     // Capture vertical gestures before React Flow/Monaco or native overflow can
     // consume them. Leave horizontal and modified gestures to the embed.
