@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
@@ -677,6 +678,103 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       options.json
         ? `${JSON.stringify({ event: "remote.diffr", diffr })}\n`
         : `Structural diff: ${diffr ? "available" : "unavailable (no diffr)"}\n`,
+    );
+  });
+
+  configureJsonOutput(
+    remote
+      .command("uninstall")
+      .description(
+        "Remove what Whiteboard Desktop installed on this host, stopping a server it started",
+      )
+      .addOption(
+        new Option(
+          "--keep-reviews",
+          "leave the saved reviews in place",
+        ).conflicts("deleteReviews"),
+      )
+      .addOption(
+        new Option("--delete-reviews", "also delete the saved reviews"),
+      )
+      .option(
+        "--state-dir <path>",
+        "directory for saved reviews and server discovery",
+      ),
+    "plain",
+  ).action(async (_options, command: Command) => {
+    const options = command.optsWithGlobals<{
+      stateDir?: string;
+      json?: boolean;
+      keepReviews?: boolean;
+      deleteReviews?: boolean;
+    }>();
+
+    const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
+    // Loaded before the install it runs from is removed.
+    const { remoteUninstall } = await import("./remote-uninstall.js");
+
+    let deleteReviews = options.deleteReviews
+      ? true
+      : options.keepReviews
+        ? false
+        : undefined;
+
+    if (deleteReviews === undefined && !options.json && input.stdin?.isTTY) {
+      const prompt = createInterface({
+        input: input.stdin,
+        output: input.stderr,
+      });
+
+      try {
+        deleteReviews = /^y(es)?$/i.test(
+          (
+            await prompt.question(
+              `Also delete the saved reviews in ${stateDir}? [y/N] `,
+            )
+          ).trim(),
+        );
+      } finally {
+        prompt.close();
+      }
+    }
+
+    const result =
+      deleteReviews === undefined
+        ? {
+            event: "remote.uninstall" as const,
+            ok: false as const,
+            reason:
+              "Say what happens to the saved reviews: pass --keep-reviews or --delete-reviews.",
+          }
+        : await remoteUninstall({
+            home: env.HOME || homedir(),
+            stateDir,
+            deleteReviews,
+          });
+
+    if (!result.ok) {
+      if (!options.json) throw new Error(result.reason);
+      input.stdout.write(`${JSON.stringify(result)}\n`);
+      state.exitCode = 1;
+
+      return;
+    }
+
+    input.stdout.write(
+      options.json
+        ? `${JSON.stringify(result)}\n`
+        : [
+            ...(result.stoppedServer
+              ? [
+                  `Stopped the Whiteboard server (process ${result.stoppedServer.pid}).`,
+                ]
+              : []),
+            ...result.removed.map((removed) => `Removed ${removed}`),
+            result.keptReviews
+              ? `Saved reviews kept in ${stateDir}`
+              : "Saved reviews deleted.",
+            "",
+          ].join("\n"),
     );
   });
 
