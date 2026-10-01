@@ -80,18 +80,17 @@ export async function remoteUninstall(input: {
   const wrapper = path.join(input.home, ".local", "bin", "whiteboard");
   const lock = path.join(install, "install.lock");
 
-  const holder = await installRunning(lock);
+  // Nothing installed, nothing to lock: the tree is then left alone.
+  const taken = existsSync(install)
+    ? await takeInstallLock(install)
+    : undefined;
 
-  if (holder !== undefined)
+  if (taken && "holder" in taken)
     return refuse(
-      `Desktop on ${holder || "another computer"} is installing Whiteboard here. Try again when it is done.`,
+      `Desktop on ${taken.holder || "another computer"} is installing Whiteboard here. Try again when it is done.`,
     );
 
-  if (existsSync(install) && !(await takeLock(install, lock)))
-    return refuse(
-      "Desktop started installing Whiteboard here just now. Try again when it is done.",
-    );
-
+  const held = taken?.token;
   let removedInstall = false;
 
   try {
@@ -143,7 +142,7 @@ export async function remoteUninstall(input: {
 
     const removed: string[] = [];
 
-    if (existsSync(install)) {
+    if (held) {
       // The lock goes with the tree.
       await rm(install, { recursive: true, force: true });
       removedInstall = true;
@@ -176,61 +175,127 @@ export async function remoteUninstall(input: {
 
     return result;
   } finally {
-    if (!removedInstall) await rm(lock, { recursive: true, force: true });
+    if (held && !removedInstall) await releaseLock(lock, held);
   }
-}
-
-/** The holder of a live install lock, or undefined when none is held. */
-async function installRunning(lock: string) {
-  const started = await readFile(path.join(lock, "started"), "utf8").then(
-    (text) => Number(text.trim()) * 1000,
-    () => undefined,
-  );
-
-  const since =
-    started && Number.isFinite(started)
-      ? started
-      : (await stat(lock).catch(() => undefined))?.mtimeMs;
-
-  if (since === undefined || Date.now() - since >= LOCK_STALE_MS)
-    return undefined;
-
-  return readFile(path.join(lock, "owner"), "utf8").then(
-    (text) => text.trim(),
-    () => "",
-  );
 }
 
 /**
- * Takes the installer's lock as an install does, a stale one moved aside
- * first, so no install starts while the tree is removed. False when another
- * took it first.
+ * Task 3's `lockScript`, in Node: `mkdir` takes the lock; a held one is
+ * judged by its `token` (read first) and `started`, an empty or unreadable
+ * `started` counting as fresh. Only a stale lock is moved aside, by rename,
+ * and it is removed only if the moved directory is still the stale one that
+ * was judged; otherwise it is given back and the take is tried again.
  */
-async function takeLock(install: string, lock: string) {
+export async function takeInstallLock(
+  install: string,
+  hooks: {
+    /** Tests: between judging a lock stale and moving it. */
+    beforeMove?(): Promise<void>;
+    /** Tests: right after `mkdir`, before the lock's files are written. */
+    afterMkdir?(): Promise<void>;
+  } = {},
+): Promise<{ token: string } | { holder: string }> {
+  const lock = path.join(install, "install.lock");
   const token = randomBytes(8).toString("hex");
 
-  if (existsSync(lock)) {
-    const stale = path.join(install, `install.lock.${token}.stale`);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (attempt) await new Promise((resolve) => setTimeout(resolve, 200));
 
-    await rename(lock, stale).catch(() => undefined);
-    await rm(stale, { recursive: true, force: true });
+    if (
+      await mkdir(lock).then(
+        () => true,
+        () => false,
+      )
+    ) {
+      try {
+        await hooks.afterMkdir?.();
+        await writeFile(path.join(lock, "token"), `${token}\n`);
+        await writeFile(
+          path.join(lock, "owner"),
+          "whiteboard-remote-uninstall\n",
+        );
+        await stamp(lock, token);
+      } catch (error) {
+        await rm(lock, { recursive: true, force: true });
+        throw error;
+      }
+
+      return { token };
+    }
+
+    const judged = await readText(path.join(lock, "token"));
+
+    if (!(await stale(lock)))
+      return { holder: await readText(path.join(lock, "owner")) };
+
+    await hooks.beforeMove?.();
+    const aside = path.join(install, `install.lock.${token}.stale`);
+
+    // Gone or replaced meanwhile: try again.
+    if (
+      !(await rename(lock, aside).then(
+        () => true,
+        () => false,
+      ))
+    )
+      continue;
+
+    if (
+      (await readText(path.join(aside, "token"))) === judged &&
+      (await stale(aside))
+    )
+      await rm(aside, { recursive: true, force: true });
+    // A holder refreshed or replaced it: back where it was, never removed.
+    else await rename(aside, lock).catch(() => undefined);
   }
 
-  try {
-    await mkdir(lock);
-  } catch {
-    return false;
-  }
-
-  await writeFile(path.join(lock, "token"), `${token}\n`);
-  await writeFile(path.join(lock, "owner"), "whiteboard-remote-uninstall\n");
-  await writeFile(
-    path.join(lock, "started"),
-    `${Math.floor(Date.now() / 1000)}\n`,
-  );
-
-  return true;
+  return { holder: await readText(path.join(lock, "owner")) };
 }
+
+/** Not refreshed for the stale threshold; with no `started`, by the directory's age. */
+async function stale(lock: string) {
+  const started = await readText(path.join(lock, "started"));
+
+  if (started !== "")
+    return (
+      /^\d+$/.test(started) &&
+      Date.now() - Number(started) * 1000 >= LOCK_STALE_MS
+    );
+
+  if (existsSync(path.join(lock, "started"))) return false;
+
+  const since = (await stat(lock).catch(() => undefined))?.mtimeMs;
+
+  return since !== undefined && Date.now() - since >= LOCK_STALE_MS;
+}
+
+/** As the installer's `stamp`: a rename, so no reader sees it half written. */
+async function stamp(lock: string, token: string) {
+  const next = path.join(lock, `started.${token}`);
+
+  await writeFile(next, `${Math.floor(Date.now() / 1000)}\n`);
+  await rename(next, path.join(lock, "started"));
+}
+
+/** Only while the lock is still this uninstall's. */
+async function releaseLock(lock: string, token: string) {
+  if ((await readText(path.join(lock, "token"))) !== token) return;
+  const done = `${lock}.${token}.done`;
+
+  if (
+    await rename(lock, done).then(
+      () => true,
+      () => false,
+    )
+  )
+    await rm(done, { recursive: true, force: true });
+}
+
+const readText = (file: string) =>
+  readFile(file, "utf8").then(
+    (text) => text.trim(),
+    () => "",
+  );
 
 /**
  * The pids, other than this one, whose command line holds `prefix`: the

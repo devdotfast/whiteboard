@@ -20,6 +20,7 @@ import { runReviewCli } from "@review/cli-runner.js";
 import {
   REMOTE_WRAPPER_MARK,
   remoteUninstall,
+  takeInstallLock,
 } from "@review/remote-uninstall.js";
 import { reviewServerDiscoveryPath } from "@review/server-discovery.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -288,6 +289,77 @@ it("takes over a stale install lock", async () => {
   });
 
   expect(result).toMatchObject({ ok: true, removed: [install, wrapper] });
+});
+
+/** An install's lock, started `ago` seconds back. */
+async function installLock(token: string, ago: number) {
+  const lock = path.join(install, "install.lock");
+
+  await mkdir(lock, { recursive: true });
+  await writeFile(path.join(lock, "token"), `${token}\n`);
+  await writeFile(path.join(lock, "owner"), "laptop\n");
+  await writeFile(
+    path.join(lock, "started"),
+    `${Math.floor(Date.now() / 1000) - ago}\n`,
+  );
+
+  return lock;
+}
+
+const lockEntries = async () =>
+  (await readdir(install)).filter((name) => name.startsWith("install.lock"));
+
+it("leaves a stale lock its holder refreshes during the check, and refuses", async () => {
+  const lock = await installLock("installer", 16 * 60);
+
+  const taken = await takeInstallLock(install, {
+    beforeMove: () =>
+      writeFile(
+        path.join(lock, "started"),
+        `${Math.floor(Date.now() / 1000)}\n`,
+      ),
+  });
+
+  expect(taken).toEqual({ holder: "laptop" });
+  expect(await readFile(path.join(lock, "token"), "utf8")).toBe("installer\n");
+  expect(await lockEntries()).toEqual(["install.lock"]);
+});
+
+it("leaves a lock another install took over during the check", async () => {
+  const lock = await installLock("installer", 16 * 60);
+
+  const taken = await takeInstallLock(install, {
+    beforeMove: async () => {
+      await rm(lock, { recursive: true });
+      await installLock("winner", 0);
+    },
+  });
+
+  expect(taken).toEqual({ holder: "laptop" });
+  expect(await readFile(path.join(lock, "token"), "utf8")).toBe("winner\n");
+  expect(await lockEntries()).toEqual(["install.lock"]);
+});
+
+it("moves a stale lock aside and takes its place", async () => {
+  await installLock("installer", 16 * 60);
+
+  const taken = await takeInstallLock(install);
+
+  expect(taken).toEqual({ token: expect.stringMatching(/^[0-9a-f]{16}$/) });
+  expect(
+    await readFile(path.join(install, "install.lock", "token"), "utf8"),
+  ).toBe(`${(taken as { token: string }).token}\n`);
+  expect(await lockEntries()).toEqual(["install.lock"]);
+});
+
+it("releases the lock when writing it fails", async () => {
+  await expect(
+    takeInstallLock(install, {
+      // A directory where the token file goes.
+      afterMkdir: () => mkdir(path.join(install, "install.lock", "token")),
+    }),
+  ).rejects.toThrow(/EISDIR/);
+  expect(await lockEntries()).toEqual([]);
 });
 
 it("removes nothing without an absolute home", async () => {
