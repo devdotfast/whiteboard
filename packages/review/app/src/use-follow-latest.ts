@@ -50,10 +50,9 @@ export function useFollowLatest(
     onScroll();
   }, [onScroll]);
 
-  // After what it shows changes: answer text, a tool's row, the working
-  // line. A smooth jump under way retargets to the new end, so what arrives
-  // during it does not leave it short.
-  useLayoutEffect(() => {
+  // A smooth jump under way retargets to the new end, so what arrives during
+  // it does not leave it short.
+  const follow = useCallback(() => {
     const element = scroller.current;
 
     if (!element || !following.current) return;
@@ -63,6 +62,51 @@ export function useFollowLatest(
       jumping.current = element.scrollHeight;
       element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
     }
+  }, [scroller]);
+
+  // The thread also grows, or first gets a size, without what it shows
+  // changing: when the panel or window it moves into lays it out, as an
+  // answer's Markdown and code finish rendering, and as fonts load.
+  const resizes = useRef<{
+    observer: ResizeObserver;
+    watched: Set<Element>;
+  } | null>(null);
+
+  useLayoutEffect(
+    () => () => {
+      resizes.current?.observer.disconnect();
+      resizes.current = null;
+    },
+    [],
+  );
+
+  // After what it shows changes: answer text, a tool's row, the working
+  // line.
+  useLayoutEffect(() => {
+    const element = scroller.current;
+
+    if (!element) return;
+    resizes.current ??= {
+      observer: new ResizeObserver(follow),
+      watched: new Set(),
+    };
+
+    const { observer, watched } = resizes.current;
+    const current = new Set([element, ...element.children]);
+
+    for (const old of watched)
+      if (!current.has(old)) {
+        observer.unobserve(old);
+        watched.delete(old);
+      }
+
+    for (const next of current)
+      if (!watched.has(next)) {
+        observer.observe(next);
+        watched.add(next);
+      }
+
+    follow();
   }, content);
 
   /** Back to the newest, following again: smoothly from the arrow, at once
