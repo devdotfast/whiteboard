@@ -303,6 +303,7 @@ container step and never removes the run. `aws-up` keeps at most two
 instances at a time, so run the sealed host on its own:
 
 ```sh
+R="node apps/review-desktop/scripts/e2e/remote/remote.mjs"
 export WB_TEST_RUN=aws-$$
 trap '$R down --all; $R verify-clean' EXIT
 $R aws-up a --arch x64

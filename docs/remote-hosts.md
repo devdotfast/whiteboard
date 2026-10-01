@@ -56,7 +56,9 @@ never stored.
 
 When Desktop connects to a host, it first checks the machine: its system,
 CPU, glibc, home directory, free space, Node, and which Whiteboard versions it
-already has. This check only reads.
+already has. This check only reads, except that it runs `node --version` on
+each Node it finds, and a version manager's shim (such as Volta's) may fetch
+its Node when run.
 
 - **A machine Whiteboard cannot run on** shows `unsupported`, with the
   reason, such as "This host runs glibc 2.31; Whiteboard needs 2.34 or
@@ -80,10 +82,15 @@ anything. The host downloads them when it can reach the internet. When it
 cannot, Desktop downloads them on the laptop and uploads them through the SSH
 connection, and the host's npm fetches the package's dependencies through a
 relay on the laptop, reached over that same connection only while it installs.
-Desktop never uses `sudo`, and never writes outside the paths below.
+Desktop never uses `sudo`. The install writes only the paths below; npm's
+cache and log stay in the unfinished version's directory and go with it. The
+review server it starts writes under `~/.dev`, as below, and **Connect**
+writes the agent's own configuration.
 
-A Node 24 already on the host (on the `PATH` or in `/usr/local/bin`) is used,
-and then Desktop installs no Node.
+A Node 24 already on the host is used, and then Desktop installs no Node: one
+on the `PATH` of a non-login shell, in `/usr/local/bin` or `/usr/bin`, or under
+a version manager such as nvm, fnm, volta, asdf or mise. A Node only on your
+login shell's `PATH` is not seen.
 
 If the connection drops while installing, the next connection starts the
 install again; nothing half-written is left. Two Desktops installing on one
@@ -190,7 +197,7 @@ remote changes, and Desktop keeps your answer.
 | `offline` | The connection is up, but the review server did not answer. Whiteboard checks every 10 seconds, so a host that hangs shows `offline` within about 15 seconds. | It returns by itself when the server answers. If it stays offline, check the remote's load. |
 | `unreachable` | `ssh` could not connect, or the connection ended. | Whiteboard tries again by itself, waiting 1 to 60 seconds between tries; **Retry** tries now. Check that `ssh <alias>` works in a terminal. |
 | `auth-failed` | The login was refused, a prompt was cancelled, or the host key did not match. | Fix the login, then click **Retry**. Whiteboard does not retry this by itself. |
-| `not-installed` | You declined the install, `review.remote.install` is `never` and `whiteboard` was not found, or an install failed (the detail says where). | Click **Install**, or install by hand with the command that Settings shows, then click **Retry**. Whiteboard does not retry this by itself. |
+| `not-installed` | You declined the install, `review.remote.install` is `never` and `whiteboard` was not found, or an install failed (the detail says where). | After **Don't install**, click **Install**; otherwise install by hand with the command that Settings shows and click **Retry**. Whiteboard does not retry this by itself. |
 | `unsupported` | Whiteboard cannot run on this machine; the detail says why. Nothing was written there. | Use another machine. |
 | `incompatible` | The remote runs another version of Whiteboard: a server you started yourself, a newer one started by a newer Desktop, or a version you installed by hand. | Stop your server (`whiteboard server stop`) and click **Retry**, update this Desktop, or install the version that Settings shows. |
 | `duplicate` | Two hosts report the same server id. This happens when a review store was copied to a second machine. | If both aliases are one machine, remove one of them. If they are two machines, remove the copy's host, run `whiteboard server stop` and then `whiteboard server reset-id` on the copy, and add it again. |
