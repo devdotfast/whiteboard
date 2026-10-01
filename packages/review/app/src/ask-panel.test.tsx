@@ -2,7 +2,7 @@
 import type { AskThreadState, AskUpdate } from "@review/ask/thread-state";
 import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 
 import {
   AskDeleteThreadButton,
@@ -15,6 +15,18 @@ import { AskPanelContent } from "./ask-panel";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewPanelProvider, useReviewPanel } from "./review-panel";
 import { testReviewSession } from "./review-session-test-utils";
+
+// jsdom lays nothing out, so nothing resizes.
+beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+});
 
 const selection = {
   title: "Paragraph 3",
