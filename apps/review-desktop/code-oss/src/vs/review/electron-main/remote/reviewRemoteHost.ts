@@ -496,7 +496,11 @@ export class ReviewRemoteHost {
 		this.options.install?.cancel?.(this.alias);
 	}
 
-	/** The uninstall failed: the host connects afresh. */
+	get quiesced(): boolean {
+		return this.removing;
+	}
+
+	/** The uninstall failed and the host stays: it connects afresh. */
 	unquiesce(): void {
 		this.removing = false;
 		this.retry();
@@ -704,7 +708,10 @@ export class ReviewRemoteHost {
 		const support = judgeRemote(probed.probe);
 		if (!support.supported) throw new HostFailure({ state: "unsupported", detail: support.reason });
 		const version = await this.options.desktopVersion();
-		const integrity = await flow.integrity().catch((error: Error) => void this.options.log(`${this.alias}: no package integrity to compare: ${error.message}`));
+		// Only a listed version needs this build's integrity, which a development build packs for.
+		const integrity = probed.probe.installed.some((entry) => entry.version === version)
+			? await flow.integrity().catch((error: Error) => void this.options.log(`${this.alias}: no package integrity to compare: ${error.message}`))
+			: undefined;
 		if (stale()) return;
 		// Another pack under the same version is not this build's: it is installed again, as any absent version.
 		const present = probed.probe.installed.some((entry) => entry.version === version && entry.integrity === integrity);

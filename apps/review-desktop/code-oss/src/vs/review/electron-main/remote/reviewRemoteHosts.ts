@@ -77,6 +77,8 @@ export class ReviewRemoteHosts {
 	private readonly hosts = new Map<string, ReviewRemoteHost>();
 	/** Removed from the setting, still closing, with the promise of its close. */
 	private readonly closing = new Map<ReviewRemoteHost, Promise<void>>();
+	/** Uninstalls under way, by alias: a second request joins the first. */
+	private readonly uninstalling = new Map<string, Promise<void>>();
 	/** Aliases Whiteboard was removed from, until they leave the setting. */
 	private readonly removed = new Set<string>();
 	/** Aliases refused before reaching ssh. */
@@ -147,7 +149,9 @@ export class ReviewRemoteHosts {
 			const existing = this.hosts.get(alias);
 			// A changed setting is the user's cue to try a refused login or a missing install again.
 			if (existing) {
-				if (existing.state.problem && existing.state.problem.state !== "unreachable") existing.retry();
+				// Its uninstall failed, and the alias stays.
+				if (existing.quiesced) existing.unquiesce();
+				else if (existing.state.problem && existing.state.problem.state !== "unreachable") existing.retry();
 				continue;
 			}
 			const host = this.createHost(alias);
@@ -161,7 +165,9 @@ export class ReviewRemoteHosts {
 	}
 
 	retry(alias: string): void {
-		this.hosts.get(alias)?.retry();
+		const host = this.hosts.get(alias);
+		if (host?.quiesced && !this.uninstalling.has(alias)) host.unquiesce();
+		else host?.retry();
 	}
 
 	/** The user agreed to the install on a host declined earlier. */
@@ -184,9 +190,18 @@ export class ReviewRemoteHosts {
 	/**
 	 * Runs the host's own uninstall, keeping reviews, over its master while
 	 * nothing may reconnect or install; then forgets the install answer and
-	 * closes the host. A failed uninstall leaves the host connecting afresh.
+	 * closes the host. After a failure the host waits, quiesced, for Settings,
+	 * which removes the alias; one kept in the setting connects afresh.
 	 */
-	async uninstall(alias: string): Promise<void> {
+	uninstall(alias: string): Promise<void> {
+		const running = this.uninstalling.get(alias);
+		if (running) return running;
+		const done = this.uninstallOnce(alias).finally(() => this.uninstalling.delete(alias));
+		this.uninstalling.set(alias, done);
+		return done;
+	}
+
+	private async uninstallOnce(alias: string): Promise<void> {
 		const valid = validateSshAlias(alias);
 		if (!valid.ok) throw new Error(`The SSH alias ${JSON.stringify(alias)} ${valid.reason}.`);
 		const host = this.hosts.get(alias);
@@ -195,7 +210,7 @@ export class ReviewRemoteHosts {
 			const env = { ...(await this.options.environment()), ...(await this.askpass()).env(alias) };
 			await uninstallRemote({ session: reviewSshSession(alias, this.options.controlDirectory, this.options.instance), spawn: this.options.spawn, env });
 		} catch (error) {
-			if (host && this.hosts.get(alias) === host) host.unquiesce();
+			this.options.log(`${alias}: Whiteboard was not removed; the host waits for the setting.`);
 			throw error;
 		}
 		await this.options.install?.consent.forget(alias, host?.serverId);
@@ -204,7 +219,10 @@ export class ReviewRemoteHosts {
 			this.removed.add(alias);
 			this.publish();
 		}
-		await host?.dispose();
+		if (!host) return;
+		const closed = host.dispose().finally(() => this.closing.delete(host));
+		this.closing.set(host, closed);
+		await closed;
 	}
 
 	/** The local server saw the host's server restart with a new token. */
@@ -231,9 +249,10 @@ export class ReviewRemoteHosts {
 		return (this.disposing ??= (async () => {
 			this.disposed = true;
 			this.cancelSend?.();
-			const hosts = [...this.hosts.values(), ...this.closing.keys()];
+			const hosts = [...this.hosts.values()];
 			this.hosts.clear();
-			await Promise.all(hosts.map((host) => host.dispose()));
+			// A closing host was disposed already; its close is what is left to wait for.
+			await Promise.all([...hosts.map((host) => host.dispose()), ...this.closing.values()]);
 			(await this.prepared?.catch(() => undefined))?.dispose();
 		})());
 	}

@@ -454,6 +454,8 @@ test("removing Whiteboard runs while nothing reconnects, then forgets the answer
 
 	const before = ssh.calls.length;
 	const removed = manager.uninstall("wb-test-a");
+	// A second request, as from another Settings window, joins the first.
+	assert.equal(manager.uninstall("wb-test-a"), removed);
 	await until(() => ssh.of("wb-test-a", "uninstall").length === 2);
 	// The stopped server fails the gateway's health check, which asks for a reattach; a wake asks for a check.
 	manager.reattach("wb-test-a");
@@ -480,7 +482,7 @@ test("removing Whiteboard runs while nothing reconnects, then forgets the answer
 	assert.deepEqual(runs, ["0.1.6"]);
 });
 
-test("a host removed without removing Whiteboard keeps the answer; a failed uninstall keeps it and connects afresh", async (t) => {
+test("a host removed without removing Whiteboard keeps the answer; a failed uninstall keeps it, and the host waits for the setting", async (t) => {
 	const { flow, asked } = await promptingFlow(t);
 	const { manager, ssh, sentUntil } = await managerFor(t, { "wb-test-a": { uninstall: { ok: false } } }, undefined, undefined, flow);
 
@@ -490,14 +492,35 @@ test("a host removed without removing Whiteboard keeps the answer; a failed unin
 	await sentUntil((hosts) => hosts[0]?.endpoint !== undefined);
 
 	await assert.rejects(manager.uninstall("wb-test-a"), /Could not remove Whiteboard from wb-test-a: refused/);
+	assert.equal(await flow.consent.get("wb-test-a"), "allow");
+	// Settings removes the alias next; nothing reconnects before it does.
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	assert.equal(ssh.of("wb-test-a", "master").length, 1);
+	// An alias the setting keeps connects afresh.
+	manager.update(true, ["wb-test-a"]);
 	await until(() => ssh.of("wb-test-a", "master").length === 2);
 	await sentUntil((hosts) => hosts[0]?.endpoint !== undefined);
-	assert.equal(await flow.consent.get("wb-test-a"), "allow");
 
 	manager.update(true, []);
 	await until(() => !ssh.master("wb-test-a")!.alive);
 	assert.equal(await flow.consent.get("wb-test-a"), "allow");
 	assert.equal(asked.length, 1);
+});
+
+test("quitting while a removed host's master closes waits for it", async (t) => {
+	const { flow, asked } = await promptingFlow(t);
+	const { manager, ssh, sentUntil } = await managerFor(t, { "wb-test-a": { uninstall: { ok: true }, exitDelayMs: 150 } }, undefined, undefined, flow);
+
+	manager.update(true, ["wb-test-a"]);
+	await until(() => asked.length === 1);
+	asked[0].answer(true);
+	await sentUntil((hosts) => hosts[0]?.endpoint !== undefined);
+	const removed = manager.uninstall("wb-test-a");
+	await until(() => ssh.of("wb-test-a", "exit").length === 1);
+	await manager.dispose();
+
+	assert.equal(ssh.master("wb-test-a")!.alive, false);
+	await removed;
 });
 
 test("a server's agents are read on their own once a session, and again only when asked", async (t) => {
