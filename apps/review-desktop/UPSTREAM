@@ -255,7 +255,8 @@ one of these entries:
   one static flag that ends every connection in the window; with several
   remotes per window a failed remote must end only its own connection. A
   failed connection also sets upstream's never-written per-instance flag so
-  it does not reconnect again.
+  it does not reconnect again. With the option, a Management connection's
+  reconnection failure is not fatal either: it ends that connection only.
 - `src/vs/workbench/services/extensions/common/remoteExtensionHost.ts`:
   `RemoteExtensionHost` builds its own connection options, so its data
   provider can now pass `isolatePermanentFailure` into them. Every remote's
