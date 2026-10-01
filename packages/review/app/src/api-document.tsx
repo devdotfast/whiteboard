@@ -14,10 +14,11 @@ import type { NormalizedSoftwareModel } from "@review/software-map-model";
 import * as stylex from "@stylexjs/stylex";
 import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
 
+import { agentColor } from "./agent-colors";
 import { markdownHasTitle } from "./agent-markdown";
 import { type ApiHeadingIds, apiHeadingIds } from "./api-document-headings";
 import { AuthoringActivityContext } from "./authoring-activity-context";
-import { scopeLive } from "./authoring-cursor";
+import { scopeLive, scopePresence } from "./authoring-cursor";
 import {
   BlockErrorBoundary,
   type StoredBlock,
@@ -253,9 +254,10 @@ const WRITING_MS = 3000;
  * idle once he sits. */
 function useEditingRegion(
   document: Block[],
-): { id: string; writing: boolean } | null {
+): { id: string; writing: boolean; slot?: number } | null {
   const cursor = useContext(AuthoringCursorContext);
-  const live = scopeLive(useContext(AuthoringActivityContext), "document");
+  const activity = useContext(AuthoringActivityContext);
+  const live = scopeLive(activity, "document");
   const [quietSeq, setQuietSeq] = useState<number>();
   const seq = cursor?.seq;
 
@@ -278,7 +280,12 @@ function useEditingRegion(
 
   if (!live || !cursor || id === undefined) return null;
 
-  return { id, writing: quietSeq !== cursor.seq };
+  return {
+    id,
+    writing: quietSeq !== cursor.seq,
+    // The ring wears the color of the agent writing there.
+    slot: scopePresence(activity, "document")?.slot,
+  };
 }
 
 /** Follows a `#fragment` link to one of the document's headings, which can sit
@@ -330,7 +337,7 @@ function DocumentBlocks({
   data: ApiDocumentData;
   softwareMapEnabled: boolean;
   /** Only the top level has a region: the block the agent is editing. */
-  region?: { id: string; writing: boolean } | null;
+  region?: { id: string; writing: boolean; slot?: number } | null;
 }) {
   const phases = useMotionPhases();
   const previous = useRef(nodes);
@@ -355,6 +362,7 @@ function DocumentBlocks({
               ? "writing"
               : "idle"
       }
+      regionSlot={region?.id === node.id ? region?.slot : undefined}
     />
   ));
 }
@@ -365,11 +373,14 @@ export const DocumentNode = memo(function DocumentNode({
   data,
   softwareMapEnabled,
   region,
+  regionSlot,
 }: {
   node: Block;
   data: ApiDocumentData;
   softwareMapEnabled: boolean;
   region?: "writing" | "idle" | "off";
+  /** The color slot of the agent whose editing ring this block wears. */
+  regionSlot?: number;
 }) {
   const session = useReviewSession();
   const motion = useMotionPhase(node.id);
@@ -412,6 +423,7 @@ export const DocumentNode = memo(function DocumentNode({
         motion === "erasing" && drawStyles.erasing,
         region && drawStyles.region,
         (region === "writing" || region === "idle") && drawStyles.regionOn,
+        (region === "writing" || region === "idle") && agentColor(regionSlot),
         region === "writing"
           ? drawStyles.blockPulse
           : motion === "erasing"
