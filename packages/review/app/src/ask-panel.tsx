@@ -942,6 +942,7 @@ export function AskPanelContent({
         }
         commands={thread?.commands ?? offered?.commands}
         acceptsImages={(thread?.accepts ?? offered?.accepts)?.image === true}
+        usage={thread?.usage}
         findFiles={findFiles}
         onAsk={ask}
       />

@@ -120,6 +120,13 @@ export class AskHistory {
       .run(JSON.stringify(entries), id);
   }
 
+  /** The agent's name for the conversation, which the list shows. */
+  rename(id: string, title: string) {
+    this.db
+      .prepare("UPDATE ask_conversations SET title=? WHERE id=?")
+      .run(title.slice(0, 200), id);
+  }
+
   saveOffer(agent: AskAgentId, offer: AskOffer) {
     this.db
       .prepare(

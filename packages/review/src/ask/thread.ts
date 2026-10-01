@@ -122,6 +122,8 @@ interface AskThreadBase {
   /** The agent said what it offers: choices, commands, or what a question
    * may carry. */
   onOffer?: (offer: AskOffer) => void;
+  /** The agent named the conversation. */
+  onTitle?: (title: string) => void;
 }
 
 /** A new conversation, or an earlier one to load from the agent. */
@@ -1237,7 +1239,7 @@ export class AskThread {
   }
 
   /** What the session says about itself rather than the turn: its
-   * commands. A reload's replay keeps them. */
+   * commands, how full it is, and its name. A reload's replay keeps them. */
   private useSessionState(update: SessionUpdate) {
     switch (update.sessionUpdate) {
       case "available_commands_update":
@@ -1248,6 +1250,34 @@ export class AskThread {
         this.announce();
 
         return true;
+      case "usage_update": {
+        const { used, size, cost } = update;
+
+        this.emit({
+          type: "set",
+          usage: cost
+            ? {
+                used,
+                size,
+                cost: { amount: cost.amount, currency: cost.currency },
+              }
+            : { used, size },
+        });
+
+        return true;
+      }
+
+      case "session_info_update": {
+        const title = update.title?.trim();
+
+        if (title && title !== this.state.title) {
+          this.emit({ type: "set", title });
+          this.start.onTitle?.(title);
+        }
+
+        return true;
+      }
+
       default:
         return false;
     }

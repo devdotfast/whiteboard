@@ -1256,6 +1256,7 @@ export function createReviewApi(
         onSave: (entries) => store.askHistory.saveEntries(id, entries),
         picks: input.picks,
         onOffer: (offer) => store.askHistory.saveOffer(input.agent, offer),
+        onTitle: (title) => store.askHistory.rename(id, title),
         cwd: checkout.rootPath,
         head: checkout.head,
         selection: {
@@ -1322,6 +1323,7 @@ export function createReviewApi(
         onSave: (entries) => store.askHistory.saveEntries(record.id, entries),
         picks,
         onOffer: (offer) => store.askHistory.saveOffer(record.agent, offer),
+        onTitle: (title) => store.askHistory.rename(record.id, title),
       });
 
       return context.json({ threadId: record.id });

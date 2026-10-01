@@ -1,6 +1,7 @@
 import {
   type AskCommand,
   type AskQuestion,
+  type AskUsage,
   askImageTypes,
 } from "@review/ask/thread-state";
 import { fuzzyRank } from "@review/fuzzy-match";
@@ -131,6 +132,7 @@ export function AskComposer({
   status,
   commands,
   acceptsImages,
+  usage,
   findFiles,
   onAsk,
 }: {
@@ -144,6 +146,7 @@ export function AskComposer({
   status: ReactNode;
   commands: AskCommand[] | undefined;
   acceptsImages: boolean;
+  usage: AskUsage | undefined;
   findFiles: (query: string, signal: AbortSignal) => Promise<string[]>;
   /** Resolves true once the question is sent, to clear it. */
   onAsk: (question: AskQuestion) => Promise<boolean>;
@@ -346,6 +349,8 @@ export function AskComposer({
     void attach([...event.dataTransfer.files]);
   };
 
+  const share = usage && usage.size > 0 ? usage.used / usage.size : undefined;
+
   return (
     <form
       {...stylex.props(styles.composer)}
@@ -442,6 +447,21 @@ export function AskComposer({
       <div {...stylex.props(styles.footer)}>
         <span {...stylex.props(styles.status)}>{note ?? status}</span>
         <span {...stylex.props(styles.actions)}>
+          {share === undefined ? null : (
+            <span
+              {...stylex.props(styles.usage)}
+              title={`${usage!.used.toLocaleString()} of ${usage!.size.toLocaleString()} tokens of context used`}
+            >
+              {Math.round(share * 100)}% context
+              {usage!.cost
+                ? ` · ${new Intl.NumberFormat(undefined, {
+                    style: "currency",
+                    currency: usage!.cost.currency,
+                    maximumFractionDigits: 2,
+                  }).format(usage!.cost.amount)}`
+                : null}
+            </span>
+          )}
           {acceptsImages ? (
             <>
               <input
@@ -637,6 +657,9 @@ const styles = stylex.create({
     flex: "0 0 auto",
     alignItems: "center",
     gap: "8px",
+  },
+  usage: {
+    whiteSpace: "nowrap",
   },
   attach: {
     display: "inline-flex",

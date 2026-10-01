@@ -165,6 +165,15 @@ export const askQuestionSchema = z.strictObject({
 
 export type AskQuestion = z.infer<typeof askQuestionSchema>;
 
+/** How full the agent's context window is, and what the session cost. */
+export const askUsageSchema = z.object({
+  used: z.number(),
+  size: z.number(),
+  cost: z.object({ amount: z.number(), currency: z.string() }).optional(),
+});
+
+export type AskUsage = z.infer<typeof askUsageSchema>;
+
 const statusSchema = z.enum([
   "starting",
   "running",
@@ -193,6 +202,9 @@ export const askThreadStateSchema = z.object({
   /** Absent until the agent says, or when it takes none. */
   commands: z.array(askCommandSchema).optional(),
   accepts: askAcceptsSchema.optional(),
+  usage: askUsageSchema.optional(),
+  /** What the agent calls the conversation. */
+  title: z.string().optional(),
   selection: z.object({ title: z.string(), quote: z.string().optional() }),
   entries: z.array(askEntrySchema),
 });
@@ -211,6 +223,8 @@ export const askChangeSchema = z.discriminatedUnion("type", [
     choices: askChoicesSchema.optional(),
     commands: z.array(askCommandSchema).optional(),
     accepts: askAcceptsSchema.optional(),
+    usage: askUsageSchema.optional(),
+    title: z.string().optional(),
     /** `null` clears the error; absent leaves it. */
     error: z.string().nullable().optional(),
     /** `null` clears it; absent leaves it. */
@@ -262,6 +276,12 @@ export function applyAskChange(
       const accepts = change.accepts ?? state.accepts;
 
       if (accepts) next.accepts = accepts;
+      const usage = change.usage ?? state.usage;
+
+      if (usage) next.usage = usage;
+      const title = change.title ?? state.title;
+
+      if (title) next.title = title;
 
       // Absent keeps the error, null clears it, a message replaces it.
       const error = change.error === undefined ? state.error : change.error;
@@ -312,7 +332,7 @@ export function applyAskChange(
 export const askHistoryEntrySchema = z.object({
   id: z.string(),
   agent: z.enum(askAgentIds),
-  /** The first question. */
+  /** What the agent calls it, else the first question. */
   title: z.string(),
   selection: AgentSelectionSchema,
   /** The commit the agent read. */
