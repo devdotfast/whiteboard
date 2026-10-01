@@ -38,7 +38,8 @@ interface AskMark {
   quote: string;
   /** Newest first, like the history. */
   entries: AskHistoryEntry[];
-  range: Range;
+  /** Its words, which are washed; code in an editor has none to wash. */
+  range?: Range;
   /** Where its words are, for telling when the pointer is on them. */
   boxes: MarkBox[];
   /** Level with the passage's first line. */
@@ -128,6 +129,53 @@ function highlights(document: Document) {
     : null;
 }
 
+type CodeTarget = Extract<
+  AskHistoryEntry["selection"]["target"],
+  { kind: "code" }
+>;
+
+/** An editor the canvas shows a file in; it names the file. */
+const EDITOR = "[data-review-inline-editor]";
+
+/** Where asked-about code is in the review as rendered now: its lines in
+ * an editor showing its file, on the side asked about, or that editor
+ * where the lines are not drawn. None when no editor shows the file. */
+function placeCode(
+  article: HTMLElement,
+  target: CodeTarget,
+): { editor: HTMLElement; rects: DOMRect[] } | null {
+  const editors = [...article.querySelectorAll<HTMLElement>(EDITOR)].filter(
+    (editor) => editor.dataset.reviewInlineEditor === target.path,
+  );
+
+  for (const editor of editors) {
+    const box = editor.getBoundingClientRect();
+
+    const side =
+      editor.querySelector(
+        target.side === "base" ? ".editor.original" : ".editor.modified",
+      ) ?? editor;
+
+    // The editor numbers each line it draws; a line spans the editor.
+    const rects = [...side.querySelectorAll(".line-numbers")].flatMap(
+      (number) => {
+        const line = Number(number.textContent);
+        const at = number.getBoundingClientRect();
+
+        return line >= target.startLine && line <= target.endLine && at.height
+          ? [new DOMRect(box.left, at.top, box.width, at.height)]
+          : [];
+      },
+    );
+
+    if (rects.length) return { editor, rects };
+  }
+
+  const [editor] = editors;
+
+  return editor ? { editor, rects: [editor.getBoundingClientRect()] } : null;
+}
+
 interface PlacedMarks {
   marks: AskMark[];
   rows: PinRow[];
@@ -144,13 +192,29 @@ function placeMarks(
 ): PlacedMarks {
   // Conversations about the same words share a mark.
   const found = new Map<string, { range: Range; entries: AskHistoryEntry[] }>();
+
+  // And those about the same lines of a file.
+  const code = new Map<
+    string,
+    { target: CodeTarget; entries: AskHistoryEntry[] }
+  >();
+
   const outdated = new Set<string>();
 
   for (const entry of entries) {
     const { target } = entry.selection;
 
+    if (target.kind === "code") {
+      const key = `code:${target.path}:${target.side}:${target.startLine}:${target.endLine}`;
+      const mark = code.get(key);
+
+      if (mark) mark.entries.push(entry);
+      else code.set(key, { target, entries: [entry] });
+      continue;
+    }
+
     // Only a selection in a review block has a place to mark.
-    if (target.kind !== "text" || !target.anchor) continue;
+    if (!target.anchor) continue;
     const at = resolveAskAnchor(article, target.anchor);
 
     if (!at) {
@@ -219,12 +283,50 @@ function placeMarks(
     });
   }
 
+  for (const [key, { target, entries: asked }] of code) {
+    const at = placeCode(article, target);
+
+    // This version shows the file nowhere, or its section is collapsed.
+    if (!at) continue;
+    const rects = at.rects.filter((rect) => rect.width > 0 && rect.height > 0);
+
+    if (!rects.length) continue;
+
+    const first = rects.reduce((line, rect) =>
+      rect.top < line.top ? rect : line,
+    );
+
+    // Level with the line where the editor has drawn it, else with the
+    // editor's top; outside an editor wider than the prose.
+    const level = Math.min(first.height, PIN_HEIGHT);
+
+    marks.push({
+      key,
+      quote: asked[0]!.selection.title,
+      entries: asked,
+      boxes: rects.map((rect) => ({
+        top: rect.top - origin.top,
+        left: rect.left - origin.left,
+        right: rect.right - origin.left,
+        bottom: rect.bottom - origin.top,
+      })),
+      pinTop: first.top + level / 2 - PIN_HEIGHT / 2 - origin.top,
+      pinLeft:
+        Math.max(column.right, at.editor.getBoundingClientRect().right) -
+        origin.left +
+        10,
+      lineLeft: first.left - origin.left,
+    });
+  }
+
   const api = highlights(article.ownerDocument);
 
   if (api)
     api.registry.set(
       ASK_HIGHLIGHT,
-      new api.Highlight(...marks.map((mark) => mark.range)),
+      new api.Highlight(
+        ...marks.flatMap(({ range }) => (range ? [range] : [])),
+      ),
     );
 
   // In reading order, which is also the order Tab reaches the pins. Pins
@@ -314,11 +416,43 @@ export function AskThreadMarks({
     const observer = new ResizeObserver(place);
 
     observer.observe(article);
+
+    // An editor draws its lines once it nears the screen, after the marks
+    // were placed; asked-about code is then found on its line.
+    // Watched only until then: an editor in use changes all the time.
+    const files = new Set(
+      entries.flatMap(({ selection: { target } }) =>
+        target.kind === "code" ? [target.path] : [],
+      ),
+    );
+
+    const waiting = [...article.querySelectorAll<HTMLElement>(EDITOR)].flatMap(
+      (editor) => {
+        if (
+          !files.has(editor.dataset.reviewInlineEditor ?? "") ||
+          editor.querySelector(".line-numbers")
+        )
+          return [];
+
+        const drawn = new MutationObserver(() => {
+          if (!editor.querySelector(".line-numbers")) return;
+          drawn.disconnect();
+          place();
+        });
+
+        drawn.observe(editor, { childList: true, subtree: true });
+
+        return [drawn];
+      },
+    );
+
     place();
 
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+
+      for (const drawn of waiting) drawn.disconnect();
 
       highlights(article.ownerDocument)?.registry.delete(ASK_HIGHLIGHT);
     };

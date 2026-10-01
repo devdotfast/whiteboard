@@ -254,6 +254,115 @@ it("marks each asked-about passage beside it and reopens its conversation", asyn
   expect(CSS.highlights.has("ask-thread")).toBe(false);
 });
 
+/** A file in an editor, as the Desktop draws one in a code block: the
+ * editor numbers each line it has drawn. */
+function CodeBlock({
+  path,
+  from,
+  lines,
+}: {
+  path: string;
+  from: number;
+  lines: number;
+}) {
+  return (
+    <div data-review-node-id="code" data-review-inline-editor={path}>
+      <div className="editor modified">
+        {Array.from({ length: lines }, (_, index) => (
+          <div key={index} style={{ display: "flex", height: 20 }}>
+            <span className="line-numbers">{from + index}</span>
+            <span>line {from + index}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+it("marks asked-about code beside its line in the editor showing its file, without washing it", async () => {
+  const session = testReviewSession();
+
+  const about = (id: string, path: string, line: number) => ({
+    ...saved(id, `${path}:${line}`, undefined),
+    selection: {
+      title: `${path}:${line}–${line}`,
+      target: {
+        kind: "code",
+        path,
+        side: "head",
+        startLine: line,
+        endLine: line,
+      },
+    },
+  });
+
+  vi.spyOn(session, "fetch").mockImplementation(async () =>
+    Response.json({
+      threads: [
+        about("tab-size", "app/src/code-block.tsx", 299),
+        // A file this version shows nowhere.
+        about("elsewhere", "app/src/other.tsx", 3),
+      ],
+    }),
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () =>
+    root.render(
+      <ReviewSessionProvider session={session}>
+        <ReviewPanelProvider>
+          <AskHistoryProvider>
+            <Document revision="1">
+              <Blocks
+                blocks={[{ id: "block-1", text: "The tab size changes." }]}
+              />
+              <CodeBlock path="app/src/code-block.tsx" from={296} lines={6} />
+            </Document>
+            <Probe />
+          </AskHistoryProvider>
+        </ReviewPanelProvider>
+      </ReviewSessionProvider>,
+    ),
+  );
+
+  const pins = () => [
+    ...container.querySelectorAll<HTMLButtonElement>(".ask-mark-pin"),
+  ];
+
+  await vi.waitFor(async () => {
+    await frame();
+    expect(pins()).toHaveLength(1);
+  });
+
+  const [pin] = pins();
+
+  const line = [...container.querySelectorAll(".line-numbers")]
+    .find((number) => number.textContent === "299")!
+    .getBoundingClientRect();
+
+  const editor = container
+    .querySelector("[data-review-inline-editor]")!
+    .getBoundingClientRect();
+
+  // Level with the line asked about, outside the editor.
+  const at = pin!.getBoundingClientRect();
+
+  expect(
+    Math.abs(at.top + at.height / 2 - (line.top + line.height / 2)),
+  ).toBeLessThan(2);
+  expect(at.left).toBeGreaterThanOrEqual(editor.right);
+  expect(CSS.highlights.get("ask-thread")?.size).toBe(0);
+  expect(outdated).toEqual(new Set());
+
+  await act(async () => pin!.click());
+  expect(view).toMatchObject({ type: "saved", threadId: "tab-size" });
+
+  await act(async () => root.unmount());
+});
+
 it("follows the words asked about through later versions, and calls them outdated once an edit touches them", async () => {
   const session = testReviewSession();
 
