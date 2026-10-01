@@ -1068,13 +1068,16 @@ try {
   );
   await record("selected-commit source retains its own pinned coordinates");
 
-  const newerPins = await api("/pins", "POST", {
-    repositoryId: review.pins.repositoryId,
-    base: first.base,
-    head: first.base,
+  await command({
+    type: "set_target",
+    reviewId: review.reviewId,
+    target: {
+      kind: "commits",
+      repositoryId: review.pins.repositoryId,
+      base: first.base,
+      head: first.base,
+    },
   });
-
-  await command({ type: "repin", reviewId: review.reviewId, pins: newerPins });
   const newerReview = await api(`/${review.reviewId}?full=true`);
   const historical = await expectHover(uri(review), greetAt, "string");
   assert.equal(historical.document.text, mainText("head"));

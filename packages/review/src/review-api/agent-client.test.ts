@@ -484,10 +484,15 @@ it("binds existing content through the host-advertised PR tool", async () => {
 
   await callAuthoringTool(
     client,
-    tools.find((tool) => tool.name === "review_repin")!,
+    tools.find((tool) => tool.name === "review_set_target")!,
     {
       reviewId: created.reviewId,
-      pins: { repositoryId: "repo", base: "base", head: "head" },
+      target: {
+        kind: "commits",
+        repositoryId: "repo",
+        base: "base",
+        head: "head",
+      },
       pullRequestUrl: "https://github.com/devdotfast/review/pull/310",
     },
   );
