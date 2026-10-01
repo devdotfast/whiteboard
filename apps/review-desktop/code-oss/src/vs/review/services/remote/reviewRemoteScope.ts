@@ -80,7 +80,7 @@ import { reviewRemoteEditorService } from "./guard/reviewRemoteEditorService.js"
 import { reviewRemoteEnvironmentService } from "./guard/reviewRemoteEnvironmentService.js";
 import { reviewRemoteExtensionService } from "./guard/reviewRemoteExtensionService.js";
 import { reviewRemoteFileService } from "./guard/reviewRemoteFileService.js";
-import { IReviewRemoteExtensions, IReviewRemoteRefusals, override, ownsRemoteResource, ReviewRemoteRefusals } from "./guard/reviewRemoteGuard.js";
+import { IReviewRemoteExtensions, IReviewRemoteRefusals, override, ownsRemoteResource, type ReviewRemoteRefusals } from "./guard/reviewRemoteGuard.js";
 import { reviewRemoteLabelService } from "./guard/reviewRemoteLabelService.js";
 import { reviewRemoteLanguagePackService } from "./guard/reviewRemoteLanguagePackService.js";
 import { reviewRemoteLanguageStatusService } from "./guard/reviewRemoteLanguageStatusService.js";
@@ -251,8 +251,8 @@ export class ReviewRemoteWorkspace extends Disposable implements IWorkspaceConte
  */
 export function reviewRemoteScope(input: {
 	authority: string;
-	/** The alias for refusals, once known. */
-	name: () => string;
+	/** The host's own, shared with the window's review code. */
+	refusals: ReviewRemoteRefusals;
 	extensions: readonly IExtensionDescription[];
 	/** Activates an event in this host's extension host. */
 	activate: (event: string) => Promise<void>;
@@ -264,7 +264,7 @@ export function reviewRemoteScope(input: {
 }, window: ServicesAccessor): ServiceCollection {
 	const { authority } = input;
 	const logService = window.get(ILogService);
-	const refusals = new ReviewRemoteRefusals(authority, input.name, logService);
+	const { refusals } = input;
 	const groups = reviewRemoteEditorGroupsService(window.get(IEditorGroupsService), refusals);
 	const environment = reviewRemoteEnvironmentService(window.get(IWorkbenchEnvironmentService));
 	return new ServiceCollection(

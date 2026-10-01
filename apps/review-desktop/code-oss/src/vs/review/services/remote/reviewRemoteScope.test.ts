@@ -49,6 +49,7 @@ import { ITextFileService } from "../../../workbench/services/textfile/common/te
 import { IWorkingCopyFileService } from "../../../workbench/services/workingCopy/common/workingCopyFileService.js";
 import { IWebviewWorkbenchServiceId } from "./guard/reviewRemoteWebviewWorkbenchService.js";
 import { ReviewRemoteTextEditors } from "./guard/reviewRemoteTextEditors.js";
+import { ReviewRemoteRefusals } from "./guard/reviewRemoteGuard.js";
 import { ICodeEditorService } from "../../../editor/browser/services/codeEditorService.js";
 import { ILanguageStatusService } from "../../../workbench/services/languageStatus/common/languageStatusService.js";
 import {
@@ -190,7 +191,7 @@ test("a host's main-thread peers are created with the guarded services", async (
 	const parent = new InstantiationService(window, true);
 	const scope = parent.createChild(parent.invokeFunction((accessor) => reviewRemoteScope({
 		authority: A,
-		name: () => "wb-test-a",
+		refusals: new ReviewRemoteRefusals(A, () => "wb-test-a", accessor.get(ILogService)),
 		extensions: [],
 		activate: async () => { },
 		languageFeatures: {} as never,

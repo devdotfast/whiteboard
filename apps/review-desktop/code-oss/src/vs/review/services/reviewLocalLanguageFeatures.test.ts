@@ -7,6 +7,7 @@ import { Position } from "../../editor/common/core/position.js";
 import { Range } from "../../editor/common/core/range.js";
 import { LanguageFeaturesService } from "../../editor/common/services/languageFeaturesService.js";
 import { URI } from "../../base/common/uri.js";
+import { ReviewRemoteRefusals } from "./remote/guard/reviewRemoteGuard.js";
 
 const { JSDOM } = createRequire(import.meta.url)("jsdom");
 const dom = new JSDOM("<html><body></body></html>");
@@ -230,9 +231,11 @@ function remoteSetup(connect?: () => Promise<unknown>) {
 	const asked: string[] = [];
 	const activated: string[] = [];
 	const windowActivations: string[] = [];
+	const warnings: string[] = [];
 	const host = {
 		authority: AUTHORITY,
 		languageFeatures: remote,
+		refusals: new ReviewRemoteRefusals(AUTHORITY, () => "wb-test-a", { warn: (message: string) => warnings.push(message) } as any),
 		addRoot: async (root: URI) => { roots.push(root.toString()); return Disposable.None; },
 		activateByEvent: async (event: string) => { activated.push(event); },
 	};
@@ -260,7 +263,7 @@ function remoteSetup(connect?: () => Promise<unknown>) {
 	);
 	const internal = service as any;
 	internal.environment = async () => ({ remoteRootPath: ROOT, identity: "hash", serverId: SERVER_ID });
-	return { service, internal, review, window, remote, roots, asked, activated, windowActivations, opening };
+	return { service, internal, review, window, remote, roots, asked, activated, windowActivations, opening, warnings };
 }
 
 test("a remote review is rooted on its host and asks that host's registry, never the window's", async (t) => {
@@ -280,7 +283,7 @@ test("a remote review is rooted on its host and asks that host's registry, never
 });
 
 test("a remote hover is untrusted, and a command link it carries is dropped rather than run in the window", async (t) => {
-	const { service, internal, review, remote } = remoteSetup();
+	const { service, internal, review, remote, warnings } = remoteSetup();
 	t.after(() => service.dispose());
 	remote.hoverProvider.register({ language: "typescript" }, { provideHover: () => ({
 		range: new Range(1, 1, 1, 5),
@@ -293,6 +296,7 @@ test("a remote hover is untrusted, and a command link it carries is dropped rath
 	assert.match(content.value, /\\<a href/, "the HTML is inert text");
 	assert.match(content.value, /42/);
 	assert.match(content.value, /\(https:\/\/example\.com\)/);
+	assert.deepEqual(warnings, [`[Remote guard] ${AUTHORITY}: refused links other than http, https and mailto in text a remote shows`], "logged once, by the host's own refusals");
 });
 
 test("a remote definition inside the review's repository maps to the review's file; one outside stays on its host", async (t) => {

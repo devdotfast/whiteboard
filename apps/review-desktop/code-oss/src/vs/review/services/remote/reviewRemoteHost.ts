@@ -45,6 +45,7 @@ import { RemoteExtensionHost } from "../../../workbench/services/extensions/comm
 import { RemoteExtensionEnvironmentChannelClient } from "../../../workbench/services/remote/common/remoteAgentEnvironmentChannel.js";
 import { REMOTE_FILE_SYSTEM_CHANNEL_NAME } from "../../../workbench/services/remote/common/remoteFileSystemProviderClient.js";
 import { IReviewDesktopConnectionService, type ReviewRemoteLanguageEndpoint } from "../reviewDesktopConnectionService.js";
+import { ReviewRemoteRefusals } from "./guard/reviewRemoteGuard.js";
 import type { ReviewRemoteFileSystemRouter } from "./reviewRemoteFileSystemRouter.js";
 import { ownsRemoteResource, ReviewRemoteWorkspace, reviewRemoteResolver, reviewRemoteScope } from "./reviewRemoteScope.js";
 
@@ -54,6 +55,8 @@ export interface IReviewRemoteHost {
 	readonly authority: string;
 	/** This host's own registry. Its providers never enter the window's. */
 	readonly languageFeatures: ILanguageFeaturesService;
+	/** What its extensions may not do; each kind is logged once for this host. */
+	readonly refusals: ReviewRemoteRefusals;
 	addRoot(root: URI): Promise<IDisposable>;
 	activateByEvent(event: string): Promise<void>;
 }
@@ -83,6 +86,7 @@ const STABLE_MS = 60_000;
 export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	readonly languageFeatures: ILanguageFeaturesService = new LanguageFeaturesService();
 	readonly workspace: ReviewRemoteWorkspace;
+	readonly refusals: ReviewRemoteRefusals;
 	/** From `/remote-hosts`, for the refusals a remote's extensions get. */
 	alias: string | undefined;
 	private session: IReviewRemoteSession | undefined;
@@ -101,6 +105,7 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	) {
 		super();
 		this.workspace = this._register(new ReviewRemoteWorkspace(`whiteboard-remote-${serverId}`));
+		this.refusals = new ReviewRemoteRefusals(authority, () => this.alias ?? serverId.slice(0, 8), logService);
 	}
 
 	/** True once connected; false when it cannot connect now. Between attempts it waits for the delay. */
@@ -284,7 +289,7 @@ export class ReviewRemoteSession extends Disposable implements IReviewRemoteSess
 
 		const scope = this._register(this.instantiationService.createChild(this.instantiationService.invokeFunction((window) => reviewRemoteScope({
 			authority,
-			name: () => this.host.alias ?? this.host.serverId.slice(0, 8),
+			refusals: this.host.refusals,
 			extensions,
 			activate: (event) => this.activateByEvent(event),
 			languageFeatures: this.host.languageFeatures,
