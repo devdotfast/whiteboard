@@ -63,6 +63,7 @@ beforeEach(async () => {
     "review-api.db",
     "review-api.db-wal",
     "review-api.db-shm",
+    "review-api.db.workspaces",
   ])
     await writeFile(path.join(stateDir, name), "reviews");
   await mkdir(path.join(stateDir, "review-tools"), { recursive: true });
@@ -163,6 +164,7 @@ it("with --keep-reviews removes the install and Desktop's script, and leaves the
     "review-api.db",
     "review-api.db-shm",
     "review-api.db-wal",
+    "review-api.db.workspaces",
     "review-tools",
   ]);
 });
@@ -179,6 +181,7 @@ it("with --delete-reviews also removes the review store and nothing else in the 
       path.join(stateDir, "review-api.db"),
       path.join(stateDir, "review-api.db-wal"),
       path.join(stateDir, "review-api.db-shm"),
+      path.join(stateDir, "review-api.db.workspaces"),
     ],
   });
   expect(await homeEntries()).toEqual(["review-tools"]);

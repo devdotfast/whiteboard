@@ -18,11 +18,14 @@ export const REMOTE_WRAPPER_MARK =
 /** An install refreshes its lock at least this often; an older one is stale. */
 const LOCK_STALE_MS = 15 * 60_000;
 
-/** The review store: the database and its write-ahead files in the review home. */
+/** The review store: the reviews' database and its workspaces database, with their write-ahead files, in the review home. */
 const REVIEW_STORE = [
   "review-api.db",
   "review-api.db-wal",
   "review-api.db-shm",
+  "review-api.db.workspaces",
+  "review-api.db.workspaces-wal",
+  "review-api.db.workspaces-shm",
 ];
 
 export type RemoteUninstallResult =
