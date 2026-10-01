@@ -45,8 +45,8 @@ importers:
         version: link:../../packages/review-protocol
     devDependencies:
       '@dev.fast/diffr':
-        specifier: 0.1.8
-        version: 0.1.8(zod@4.4.3)
+        specifier: 0.1.9
+        version: 0.1.9(zod@4.4.3)
       '@dev.fast/review-canvas':
         specifier: workspace:*
         version: link:../../packages/review/app
@@ -163,8 +163,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@dev.fast/diffr':
-        specifier: 0.1.8
-        version: 0.1.8(zod@4.4.3)
+        specifier: 0.1.9
+        version: 0.1.9(zod@4.4.3)
       '@dev.fast/json':
         specifier: workspace:*
         version: link:../json
@@ -217,8 +217,8 @@ importers:
   packages/review-protocol:
     dependencies:
       '@dev.fast/diffr':
-        specifier: 0.1.8
-        version: 0.1.8(zod@4.4.3)
+        specifier: 0.1.9
+        version: 0.1.9(zod@4.4.3)
       '@dev.fast/json':
         specifier: workspace:*
         version: link:../json
@@ -554,8 +554,8 @@ packages:
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
     engines: {node: '>=20.19.0'}
 
-  '@dev.fast/diffr@0.1.8':
-    resolution: {integrity: sha512-zY6AY9Nz0tGFfFr74rX2Y3+PZQA/h9pAV3e4xdsOVxYwXv4lzlbveks0N25T6NMRAqykqj25RWNz1aFgxmPlWQ==}
+  '@dev.fast/diffr@0.1.9':
+    resolution: {integrity: sha512-wptgLZ7OZIR72i7E0Jj6sMQDZM5+pT6nAY8e/lQeBLVsfyRnlg/K5vGMi7gp6nQCn2PJ+NRNEQBPSDGy7WuQ9g==}
     engines: {node: '>=20'}
     hasBin: true
     peerDependencies:
@@ -3676,7 +3676,7 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.0': {}
 
-  '@dev.fast/diffr@0.1.8(zod@4.4.3)':
+  '@dev.fast/diffr@0.1.9(zod@4.4.3)':
     dependencies:
       zod: 4.4.3
 

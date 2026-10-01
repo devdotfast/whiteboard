@@ -12,7 +12,7 @@ verifyDepsBeforeRun: false
 minimumReleaseAge: 10080
 minimumReleaseAgeStrict: true
 minimumReleaseAgeExclude:
-  - "@dev.fast/diffr@0.1.8"
+  - "@dev.fast/diffr@0.1.9"
   # Ask tracks the latest ACP SDK and adapters, and the CLI packages they pin.
   - "@agentclientprotocol/sdk@1.5.1"
   - "@agentclientprotocol/claude-agent-acp@0.84.0"
