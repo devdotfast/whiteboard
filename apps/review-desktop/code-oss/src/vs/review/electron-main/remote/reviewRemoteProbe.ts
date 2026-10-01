@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { runSsh, type SpawnSsh } from "./reviewRemoteHost.js";
+import { REVIEW_REMOTE_VERSION } from "./reviewRemoteInstallScript.js";
 import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_SCRIPT } from "./reviewRemoteProbeScript.js";
 import { sshExecArgs, type ReviewSshSession } from "./reviewSshCommand.js";
 
@@ -89,7 +90,6 @@ export async function probeRemote(input: {
 const LINE_LIMIT = 64 * 1024;
 const STRING_LIMIT = 4096;
 const INSTALLED_LIMIT = 256;
-const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 const WORD = /^[\w.-]{1,64}$/;
 const CONTROL = /[\x00-\x1f\x7f-\x9f]/;
 
@@ -141,7 +141,7 @@ function readProbe(value: unknown): ReviewRemoteProbe {
 		node: node && { path: path(node.path, "node.path"), version: string(node.version, "node.version", /^24\.\d{1,4}\.\d{1,4}$/) },
 		npm: nullable(record.npm, "npm", (v) => path(v, "npm")),
 		// A directory that is not a version is not ours; it is left out, not trusted.
-		installed: installed.filter((entry): entry is string => typeof entry === "string" && entry.length <= 128 && VERSION.test(entry) && !entry.endsWith(".part")),
+		installed: installed.filter((entry): entry is string => typeof entry === "string" && entry.length <= 128 && REVIEW_REMOTE_VERSION.test(entry) && !entry.endsWith(".part")),
 		managedNode: nullable(record.managedNode, "managedNode", (v) => path(v, "managedNode")),
 		downloader,
 		registryReachable: boolean(record.registryReachable, "registryReachable"),

@@ -25,6 +25,7 @@ import {
 	releaseScript,
 	REVIEW_REMOTE_INSTALL_SAY,
 	REVIEW_REMOTE_LOCK_STALE_SECONDS,
+	REVIEW_REMOTE_VERSION,
 	REVIEW_REMOTE_WRAPPER_MARK,
 	reviewRemoteNodeDir,
 	reviewRemoteVersionDir,
@@ -92,8 +93,6 @@ export interface ReviewRemoteInstallResult {
 	readonly diffr: boolean;
 }
 
-/** A version directory's name. */
-export const REVIEW_REMOTE_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 const BIN = /^[\w.-]+(\/[\w.-]+)*$/;
 
 /**

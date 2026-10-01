@@ -54,7 +54,7 @@ test("rejects with the reason the remote gave, on one line and bounded", async (
 	const f = await fixture(t);
 	await f.version("0.10.0", `console.log(JSON.stringify({ event: "remote.uninstall", ok: false, reason: "A Whiteboard server you started (process 7)\\n\\u001b[31mruns from it." }))`);
 
-	await assert.rejects(f.uninstall(), { message: "Could not remove Whiteboard from devbox: A Whiteboard server you started (process 7) [31mruns from it." });
+	await assert.rejects(f.uninstall(), { message: "Could not remove Whiteboard from devbox: A Whiteboard server you started (process 7) runs from it." });
 
 	await f.version("0.10.0", `console.log(JSON.stringify({ event: "remote.uninstall", ok: false, reason: "x".repeat(5000) }))`);
 	await assert.rejects(f.uninstall(), { message: `Could not remove Whiteboard from devbox: ${"x".repeat(300)}` });

@@ -22,6 +22,8 @@ export { REVIEW_REMOTE_WRAPPER_MARK };
 
 export const REVIEW_REMOTE_INSTALL_SAY = "WHITEBOARD-INSTALL";
 export const REVIEW_REMOTE_INSTALL_MARKER = ".whiteboard-install.json";
+/** A version, and a version directory's name. */
+export const REVIEW_REMOTE_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 /** A lock not refreshed for this long is taken over; every step refreshes it. */
 export const REVIEW_REMOTE_LOCK_STALE_SECONDS = 15 * 60;
 

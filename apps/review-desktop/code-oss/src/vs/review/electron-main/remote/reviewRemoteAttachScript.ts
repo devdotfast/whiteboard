@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { shellQuote } from "./reviewRemoteInstallScript.js";
+import { REVIEW_REMOTE_VERSION, shellQuote } from "./reviewRemoteInstallScript.js";
 
 /**
  * POSIX sh, sent to `sh -s` on the remote. Finds the CLI on PATH, in
@@ -160,7 +160,7 @@ function languageGroupsOf(value: unknown): ReviewRemoteLanguageGroup[] {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A remote's version reaches the UI: anything but a version is "unknown". */
-const versionText = (value: unknown) => (typeof value === "string" && /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(value) ? value : "unknown");
+const versionText = (value: unknown) => (typeof value === "string" && REVIEW_REMOTE_VERSION.test(value) ? value : "unknown");
 
 /** Remote data is untrusted: only a port on the remote's loopback is used. */
 function loopbackPort(url: unknown): number | undefined {
