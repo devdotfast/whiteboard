@@ -991,3 +991,76 @@ it("refuses a remote's snapshot of another review, and passes its own byte for b
   expect(mine.status).toBe(200);
   expect(await mine.text()).toBe(own);
 });
+
+it("answers 504 for a whole answer that stalls after its headers, and takes the host offline", async () => {
+  const reviewId = randomUUID();
+
+  const fake = await startFake({
+    version,
+    reviewIds: [reviewId],
+    handle(request, response) {
+      if (!request.url?.startsWith(`/reviews-api/${reviewId}/file`))
+        return false;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.write('{"text":"');
+
+      return true;
+    },
+  });
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: fake.endpoint },
+  ]);
+
+  await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+
+  const started = Date.now();
+  const stalled = await request(`/${reviewId}/file?side=head&file=a.ts`);
+
+  expect(stalled.status).toBe(504);
+  expect(await stalled.json()).toEqual({
+    ok: false,
+    error: "wb-a did not answer: it did not answer within 10 seconds.",
+  });
+  expect(Date.now() - started).toBeLessThan(11_500);
+  expect(gateway.hosts()[0]?.state).toBe("offline");
+}, 15_000);
+
+it("ends a forwarded stream when the heartbeat finds its host gone", async () => {
+  const reviewId = randomUUID();
+  let hang = false;
+
+  const fake = await startFake({
+    version,
+    reviewIds: [reviewId],
+    handle(request, response) {
+      if (request.url?.startsWith(`/reviews-api/${reviewId}/structural-diff`)) {
+        response.writeHead(200, { "content-type": "application/x-ndjson" });
+        response.write('{"type":"file"}\n');
+
+        return true;
+      }
+
+      return hang;
+    },
+  });
+
+  const laptop = await startLaptopGateway(
+    root,
+    [{ alias: "wb-a", endpoint: fake.endpoint }],
+    { heartbeatMs: 1_000 },
+  );
+
+  await expect.poll(() => laptop.gateway.hosts()[0]?.state).toBe("online");
+
+  const stream = await laptop.request(`/${reviewId}/structural-diff`);
+  expect(stream.status).toBe(200);
+  const read = stream.text();
+
+  hang = true;
+  const started = Date.now();
+
+  await expect(read).rejects.toThrow("terminated");
+  expect(laptop.gateway.hosts()[0]?.state).toBe("offline");
+  expect(Date.now() - started).toBeLessThan(1_000 + 3_000 + 500);
+}, 10_000);

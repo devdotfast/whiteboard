@@ -155,6 +155,10 @@ export function createReviewGateway(input: {
         changing = false;
 
         if (closed) return;
+        const online = new Set(hosts.online());
+
+        for (const [abort, remote] of streaming)
+          if (!online.has(remote)) abort.abort();
         streams.changed();
         pushes.changed();
       });
@@ -164,6 +168,8 @@ export function createReviewGateway(input: {
   /** Whether the laptop's store held each id when last asked. */
   const onLaptopIds = new Map<string, boolean>();
   const lookups = new Map<string, Promise<Owner>>();
+  /** Forwarded answers still streaming, by the host sending each. */
+  const streaming = new Map<AbortController, GatewayRemote>();
 
   /** The status a host gives the ownership check, or undefined on failure. */
   async function ownership(remote: GatewayRemote, reviewId: string) {
@@ -342,10 +348,13 @@ export function createReviewGateway(input: {
 
     let timedOut = false;
 
-    const firstByte = setTimeout(() => {
-      timedOut = true;
-      abort.abort();
-    }, FIRST_BYTE_TIMEOUT_MS);
+    const deadline = () =>
+      setTimeout(() => {
+        timedOut = true;
+        abort.abort();
+      }, FIRST_BYTE_TIMEOUT_MS);
+
+    const firstByte = deadline();
 
     // SAFETY: Node's Request body is its own web stream; the DOM type only
     // names the same object.
@@ -415,15 +424,23 @@ export function createReviewGateway(input: {
       url.searchParams.get("full") === "true";
 
     if (snapshot || (options.route && PATH_ROUTES.has(options.route))) {
+      // The whole answer within the same limit again, from its first byte.
+      const whole = deadline();
       let body: Buffer;
 
       try {
         body = await readBody(response, PATH_ROUTE_MAX_BYTES);
       } catch (error) {
-        return answer(remote.alias, 502, {
+        const reason = timedOut ? NO_ANSWER : errorText(error);
+
+        if (timedOut) hosts.failed(remote, reason);
+
+        return answer(remote.alias, timedOut ? 504 : 502, {
           ok: false,
-          error: `${remote.alias} did not answer: ${errorText(error)}.`,
+          error: `${remote.alias} did not answer: ${reason}.`,
         });
+      } finally {
+        clearTimeout(whole);
       }
 
       if (snapshot) {
@@ -469,6 +486,10 @@ export function createReviewGateway(input: {
 
       return new Response(null, { status, headers: out });
     }
+
+    // A stream has no deadline; it ends when the heartbeat finds its host gone.
+    streaming.set(abort, remote);
+    response.on("close", () => streaming.delete(abort));
 
     // SAFETY: Node's Response takes its own web stream; the DOM type only
     // names the same object.
