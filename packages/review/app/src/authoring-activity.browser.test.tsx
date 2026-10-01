@@ -131,3 +131,51 @@ it("keeps a long update inside the badge and puts the whole of it in the tooltip
   // Without a Desktop host the tooltip falls back to a native title.
   expect(badge.title).toContain(longDescription);
 });
+
+const two: ActivitySnapshot = {
+  workingCount: 2,
+  expiresAt: null,
+  activities: [
+    {
+      activityId: "writer",
+      slot: 0,
+      focus: { description: "Writing §3 · failure modes" },
+    },
+    {
+      activityId: "lenses",
+      slot: 1,
+      surface: "lenses",
+      focus: { description: "Grouping files into lenses" },
+    },
+  ],
+};
+
+it("shows one pill per agent, each in its own color, opening the page it writes on", async () => {
+  const located: string[] = [];
+  container.className = "review-canvas-root";
+
+  await act(async () =>
+    root.render(
+      <AuthoringActivityContext.Provider value={two}>
+        <AuthoringActivityBadge onLocate={(view) => located.push(view)} />
+      </AuthoringActivityContext.Provider>,
+    ),
+  );
+
+  const pills = [
+    ...container.querySelectorAll<HTMLElement>(".host-authoring-activity"),
+  ];
+
+  expect(pills.map((pill) => pill.textContent)).toEqual([
+    "Writing §3 · failure modes",
+    "Grouping files into lenses",
+  ]);
+
+  const accents = pills.map((pill) =>
+    getComputedStyle(pill).getPropertyValue("--accent").trim(),
+  );
+
+  expect(accents[0]).not.toBe(accents[1]);
+  await act(async () => pills[1]!.click());
+  expect(located).toEqual(["diff"]);
+});

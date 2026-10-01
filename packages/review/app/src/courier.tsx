@@ -12,11 +12,12 @@ import {
   useState,
 } from "react";
 
+import { agentColor } from "./agent-colors";
 import { AuthoringActivityContext } from "./authoring-activity-context";
 import {
   type AuthoringCursor,
-  scopeFocus,
   scopeLive,
+  scopePresence,
 } from "./authoring-cursor";
 import { CourierFigure } from "./courier-figure";
 import { cursorElement } from "./cursor-element";
@@ -258,7 +259,7 @@ export function Courier({
 
   const description =
     activity !== "unknown"
-      ? scopeFocus(activity, scope)?.description
+      ? scopePresence(activity, scope)?.focus?.description
       : undefined;
 
   // The classes are markers: the badge finds him by them, and tests read
@@ -267,7 +268,12 @@ export function Courier({
   return (
     <div
       ref={node}
-      {...withClass("courier", styles.courier, unknown && styles.unknown)}
+      {...withClass(
+        "courier",
+        styles.courier,
+        agentColor(scopePresence(activity, scope)?.slot),
+        unknown && styles.unknown,
+      )}
       data-scope={scope}
       data-state={unknown ? "unknown" : live ? "live" : "ended"}
       data-idle={idle}
