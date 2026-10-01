@@ -7,6 +7,7 @@ import type { Writable } from "node:stream";
 import { promisify } from "node:util";
 
 import { jsonObject, jsonString, parseJsonText } from "@dev.fast/json";
+import { gt as greaterVersion, valid as validVersion } from "semver";
 
 import {
   findReviewPackageRoot,
@@ -50,8 +51,9 @@ interface EnsureDiffrInput {
 /**
  * The review server Desktop reaches over SSH, started if none is healthy,
  * and the VS Code server for language features, which may be missing.
- * With `replace`, a running server of another version is stopped first when
- * the CLI or Desktop started it; one a user started is left and reported.
+ * With `replace`, a running server of an older version is stopped first when
+ * the CLI or Desktop started it. One a user started, or a newer one, is left
+ * and reported: the newest Desktop wins, and two never take turns.
  */
 export async function remoteAttach(
   input: EnsureDiffrInput & {
@@ -85,23 +87,18 @@ export async function remoteAttach(
   let previousVersion: string | undefined;
 
   let incompatibleRunning:
-    | { version: string; pid: number; startedBy: "user" }
+    | { version: string; pid: number; startedBy: "user" | "cli" | "desktop" }
     | undefined;
 
   try {
+    const version = input.version ?? readReviewPackageVersion(import.meta.url);
+
     const other = input.replace
-      ? await otherVersionRunning(
-          input.stateDir,
-          input.version ?? readReviewPackageVersion(import.meta.url),
-        )
+      ? await otherVersionRunning(input.stateDir, version)
       : undefined;
 
-    if (other?.startedBy === "user")
-      incompatibleRunning = {
-        version: other.version,
-        pid: other.pid,
-        startedBy: "user",
-      };
+    if (other && (other.startedBy === "user" || newer(other.version, version)))
+      incompatibleRunning = other;
     else if (other) {
       await stopBackgroundServer({ serverPid: other.pid });
       previousVersion = other.version;
@@ -158,6 +155,12 @@ export async function remoteAttach(
     ...(incompatibleRunning && { incompatibleRunning }),
   };
 }
+
+/** An unreadable version counts as older, so a server that reports none is replaced. */
+const newer = (running: string, own: string) =>
+  validVersion(running) !== null &&
+  validVersion(own) !== null &&
+  greaterVersion(running, own);
 
 /** The healthy server in `stateDir` when it reports a version other than `version`. */
 async function otherVersionRunning(stateDir: string, version: string) {

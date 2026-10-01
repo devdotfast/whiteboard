@@ -314,6 +314,35 @@ it("with --replace, leaves a server of another version a user started, and repor
   expect(alive(running.serverPid)).toBe(true);
 }, 60_000);
 
+it("with --replace, leaves a newer server another Desktop started, and reports it", async () => {
+  const newer = await ensureBackgroundServer({
+    stateDir,
+    env,
+    cli: sourceCli,
+    startedBy: "desktop",
+  });
+
+  const attach = await remoteAttach({
+    stateDir,
+    env: { ...env, ...(await fakeDiffr()) },
+    stderr: discard(),
+    cli: sourceCli,
+    replace: true,
+    version: "0.0.0",
+  });
+
+  expect(attach).toMatchObject({
+    startedServer: false,
+    incompatibleRunning: {
+      version: (await readReviewServerHealth(newer.discovery))!.version,
+      pid: newer.discovery.serverPid,
+      startedBy: "desktop",
+    },
+  });
+  expect(attach).not.toHaveProperty("replaced");
+  expect(alive(newer.discovery.serverPid)).toBe(true);
+}, 60_000);
+
 it("with --replace, keeps a server of the same version", async () => {
   const diffr = await fakeDiffr();
   const first = await cli(["remote", "attach", "--json", "--replace"], diffr);
