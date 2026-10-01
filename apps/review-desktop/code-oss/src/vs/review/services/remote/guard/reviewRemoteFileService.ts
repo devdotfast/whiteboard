@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Event } from "../../../../base/common/event.js";
-import { Disposable } from "../../../../base/common/lifecycle.js";
 import { Schemas } from "../../../../base/common/network.js";
 import type { URI } from "../../../../base/common/uri.js";
 import { FileChangesEvent, FileChangeType, type IFileService } from "../../../../platform/files/common/files.js";
@@ -12,6 +11,7 @@ import { override, type ReviewRemoteRefusals } from "./reviewRemoteGuard.js";
 
 const READ_ELSEWHERE = "reading files outside this remote";
 const WRITE_ELSEWHERE = "changing files outside this remote";
+const WATCH_ELSEWHERE = "watching files outside this remote";
 
 /**
  * Files of this host only. The laptop's disk (`file:`, which is what the
@@ -72,9 +72,12 @@ export function reviewRemoteFileService(base: IFileService, refusals: ReviewRemo
 		exists: (resource) => (mine(resource) ? base.exists(resource) : elsewhere()),
 		readFile: (resource, options, token) => (mine(resource) ? base.readFile(resource, options, token) : elsewhere()),
 		readFileStream: (resource, options, token) => (mine(resource) ? base.readFileStream(resource, options, token) : elsewhere()),
-		watch: (resource, options) => (mine(resource) ? base.watch(resource, options) : Disposable.None),
+		watch: (resource, options) => {
+			if (!mine(resource)) throw refusals.refuse(WATCH_ELSEWHERE);
+			return base.watch(resource, options);
+		},
 		createWatcher: (resource, options) => {
-			if (!mine(resource)) throw refusals.refuse("watching files outside this remote");
+			if (!mine(resource)) throw refusals.refuse(WATCH_ELSEWHERE);
 			return base.createWatcher(resource, options);
 		},
 	});

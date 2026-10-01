@@ -82,3 +82,14 @@ test("a change reaches the host only for its own keys", (t) => {
 	listener.dispose();
 	assert.deepEqual(seen, [{ keys: ["typescript.tsdk"], overrides: [] }]);
 });
+
+test("a change answers which keys changed for the host's own keys and telemetry only; asking about others is refused, logged once", (t) => {
+	const { configuration, changed, warnings } = setup(t);
+	const answers: boolean[][] = [];
+	const listener = configuration.onDidChangeConfiguration((e) => answers.push(["typescript.tsdk", "typescript", "laptopext.token", "editor.fontSize", "editor", "telemetry.telemetryLevel"].map((section) => e.affectsConfiguration(section))));
+	const keys = ["typescript.tsdk", "laptopext.token", "editor.fontSize", "telemetry.telemetryLevel"];
+	changed.fire({ source: ConfigurationTarget.USER, affectedKeys: new Set(keys), change: { keys, overrides: [] }, affectsConfiguration: () => true });
+	listener.dispose();
+	assert.deepEqual(answers, [[true, true, false, false, false, true]]);
+	assert.deepEqual(warnings, [`[Remote guard] ${A}: refused telling which of your settings changed`]);
+});

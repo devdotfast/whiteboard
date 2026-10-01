@@ -112,3 +112,12 @@ test("change events carry only this host's files", () => {
 	listener.dispose();
 	assert.deepEqual(seen, [[own.toString()]]);
 });
+
+test("watching outside this remote is refused, logged once", () => {
+	const { files, warnings } = setup();
+	for (const uri of [URI.file("/Users/me/.ssh"), URI.parse("vscode-remote://whiteboard+bbbb-2222/home/dev")]) {
+		assert.throws(() => files.watch(uri), refused);
+		assert.throws(() => files.createWatcher(uri, { recursive: false, excludes: [] }), refused);
+	}
+	assert.deepEqual(warnings, [`[Remote guard] ${A}: refused watching files outside this remote`]);
+});
