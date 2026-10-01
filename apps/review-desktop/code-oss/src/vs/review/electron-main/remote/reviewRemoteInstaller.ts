@@ -9,6 +9,7 @@ import { hostname } from "node:os";
 import { fetchToLaptopCache, type ReviewRemoteArtifact } from "./reviewRemoteArtifacts.js";
 import { runSsh, type RunResult, type SpawnSsh, type SshChildProcess } from "./reviewRemoteHost.js";
 import {
+	cleanupScript,
 	completeScript,
 	diffrScript,
 	downloadScript,
@@ -222,7 +223,18 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 			}),
 		);
 		if (!finished.has("COMPLETE")) throw finished.failure();
+		await cleanup(prepared.all("HAVE"), newest);
 		return finish({ nodePath: node, cliPath, launcher });
+	}
+
+	/** Keeps this version, the newest and one more, preferring one a process runs from; the version is installed whatever happens here. */
+	async function cleanup(have: string[], newest: string | undefined): Promise<void> {
+		const keep = new Set([input.version, newest]);
+		const candidates = have.filter((name) => VERSION.test(name) && !keep.has(name)).sort(compareVersions).reverse();
+		if (!candidates.length) return;
+		await run("removing old versions", cleanupScript(context, { candidates, room: 2 - keep.size })).catch((error: unknown) => {
+			if (signal.aborted) throw error;
+		});
 	}
 
 	async function finish(paths: Omit<ReviewRemoteInstallResult, "diffr">): Promise<ReviewRemoteInstallResult> {

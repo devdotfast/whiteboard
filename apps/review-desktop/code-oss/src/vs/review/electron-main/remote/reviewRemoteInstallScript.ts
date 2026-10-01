@@ -322,6 +322,35 @@ say FINISHED
 `;
 }
 
+/**
+ * Keeps `keep` and at most `room` more versions: first every candidate a live
+ * process runs from (a server, an MCP), then the newest of the rest. The
+ * others are removed (`REMOVED <v>`), marker first, so a removal cut short
+ * leaves no version that looks complete. `candidates` come newest first.
+ */
+export function cleanupScript(context: ReviewRemoteInstallContext, input: { candidates: readonly string[]; room: number }): string {
+	const names = input.candidates.map((name) => shellQuote(name)).join(" ");
+	return `${prelude(context)}own
+# Every command line, read once: a grep below must not find itself.
+if [ -d /proc/self ]; then
+	procs=$(for f in /proc/[0-9]*/cmdline; do tr '\\000' ' ' < "$f" 2>/dev/null; echo; done)
+else
+	procs=$(ps -eo args= 2>/dev/null)
+fi
+running() { printf '%s\\n' "$procs" | grep -qF -- "$root/versions/$1/"; }
+kept=0
+for v in ${names}; do running "$v" && kept=$((kept + 1)); done
+for v in ${names}; do
+	if running "$v"; then say IN-USE "$v"; continue; fi
+	if [ "$kept" -lt ${input.room} ]; then kept=$((kept + 1)); continue; fi
+	d="$root/versions/$v"
+	[ -f "$d/${REVIEW_REMOTE_INSTALL_MARKER}" ] || continue
+	rm -f "$d/${REVIEW_REMOTE_INSTALL_MARKER}" && rm -rf "$d" && say REMOVED "$v"
+done
+say CLEANED
+`;
+}
+
 /** Runs the version's own `remote diffr ensure`; its JSON line is on stdout. */
 export function diffrScript(context: ReviewRemoteInstallContext, input: { launcher: string }): string {
 	return `${prelude(context)}own
