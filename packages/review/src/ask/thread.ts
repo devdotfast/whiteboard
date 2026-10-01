@@ -30,6 +30,7 @@ import {
   type AskChoices,
   type AskEntry,
   type AskPicks,
+  type AskQuestion,
   type AskSelect,
   type AskThreadState,
   type AskUpdate,
@@ -119,7 +120,7 @@ interface AskThreadBase {
 /** A new conversation, or an earlier one to load from the agent. */
 export type AskThreadStart = AskThreadBase &
   (
-    | { question: string }
+    | { question: AskQuestion }
     | {
         resume: {
           sessionId: string;
@@ -358,7 +359,7 @@ export class AskThread {
   private readonly picks: AskPicks;
   /** The question being answered, until its turn ends; after a failure,
    * the one trying again asks. */
-  private asking?: string;
+  private asking?: { id: string; question: AskQuestion };
   /** The session has not had the selection yet: a new conversation, or a
    * new session for one the agent could not reopen. */
   private needsContext: boolean;
@@ -431,7 +432,10 @@ export class AskThread {
       return;
     }
 
-    this.asking = this.addUser(start.question);
+    this.asking = {
+      id: this.addUser(start.question),
+      question: start.question,
+    };
     await this.attempt(async () => {
       await this.connect();
       await this.prompt(start.question);
@@ -451,12 +455,12 @@ export class AskThread {
   }
 
   /** Asks a follow-up, starting the agent again if it has stopped since. */
-  async ask(question: string) {
+  async ask(question: AskQuestion) {
     const refusal = this.askRefusal();
 
     if (refusal) throw new Error(refusal);
 
-    this.asking = this.addUser(question);
+    this.asking = { id: this.addUser(question), question };
     await this.attempt(async () => {
       await this.reconnect();
       await this.prompt(question);
@@ -472,10 +476,10 @@ export class AskThread {
     this.disconnect();
 
     const asked = this.state.entries.findIndex(
-      (entry) => entry.kind === "user" && entry.id === this.asking,
+      (entry) => entry.kind === "user" && entry.id === this.asking?.id,
     );
 
-    const question = this.state.entries[asked];
+    const question = asked === -1 ? undefined : this.asking?.question;
 
     // What the failed turn left, such as the agent's own login notice. A
     // reopen that failed left nothing: its last answer stays.
@@ -494,7 +498,7 @@ export class AskThread {
     await this.attempt(async () => {
       await this.connect();
 
-      if (question?.kind === "user") await this.prompt(question.text);
+      if (question) await this.prompt(question);
       else this.emit({ type: "set", status: "idle" });
     });
   }
@@ -903,7 +907,7 @@ export class AskThread {
 
   /** Asks a question in the session, with the selection first if the
    * session has not had it. */
-  private async prompt(question: string) {
+  private async prompt(question: AskQuestion) {
     const { connection, sessionId } = this;
 
     if (!connection || !sessionId)
@@ -913,17 +917,16 @@ export class AskThread {
 
     this.emit({ type: "set", status: "running", error: null });
 
+    const prompt: ContentBlock[] = withSelection
+      ? withContext(this.start.context, question.text)
+      : [{ type: "text", text: question.text }];
+
     let stopReason: StopReason;
 
     try {
       ({ stopReason } = await connection.agent.request(
         methods.agent.session.prompt,
-        {
-          sessionId,
-          prompt: withSelection
-            ? withContext(this.start.context, question)
-            : [{ type: "text", text: question }],
-        },
+        { sessionId, prompt },
       ));
     } catch (error) {
       // Stop ended an agent that would not stop the turn itself.
@@ -1249,10 +1252,10 @@ export class AskThread {
     this.push({ kind: "user", id, text: withoutContext(text) });
   }
 
-  private addUser(text: string) {
+  private addUser(question: AskQuestion) {
     const id = randomUUID();
 
-    this.push({ kind: "user", id, text, at: Date.now() });
+    this.push({ kind: "user", id, text: question.text, at: Date.now() });
 
     return id;
   }

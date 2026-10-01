@@ -142,7 +142,7 @@ it("asks the chosen agent, streams its answer, relays a decision, and closes the
     expect(posted("/ask")).toEqual([
       {
         agent: "codex",
-        question: "Is this safe on replicas?",
+        question: { text: "Is this safe on replicas?" },
         selection,
         picks: {},
       },

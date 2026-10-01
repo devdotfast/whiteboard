@@ -243,7 +243,7 @@ function openThread(
       head: "abc123",
       selection: { title: "Paragraph 3", quote: "The index is concurrent." },
       context: "Selected text from Whiteboard.",
-      question: "Is this safe?",
+      question: { text: "Is this safe?" },
       ...start,
     },
     mcpServers,
@@ -331,7 +331,7 @@ it("asks in read-only mode and streams the answer and tool activity", async () =
     },
   ]);
 
-  await thread.ask("And on replicas?");
+  await thread.ask({ text: "And on replicas?" });
   await until(thread, ({ status }) => status === "idle");
 
   expect(prompts[1]).toBe("And on replicas?");
@@ -463,7 +463,7 @@ it("streams changes that rebuild the thread exactly, in order", async () => {
 
   await until(thread, ({ status }) => status === "idle");
   // The turn ends only after the decision, so the ask is not awaited.
-  const asked = thread.ask("Prove it.");
+  const asked = thread.ask({ text: "Prove it." });
   await until(thread, ({ status }) => status === "waiting");
   thread.decide("call-execute", "allow");
   await asked;
@@ -686,7 +686,7 @@ it("reopens a saved conversation as the reviewer saw it and continues it", async
     },
   ]);
 
-  await thread.ask("And on replicas?");
+  await thread.ask({ text: "And on replicas?" });
   const answered = await until(thread, ({ status }) => status === "idle");
 
   expect(prompts).toEqual(["And on replicas?"]);
@@ -784,7 +784,7 @@ it("shows the saved conversation at once and keeps it as it goes", async () => {
   expect(idle.entries).toEqual(entries);
 
   // A follow-up that is closed while it waits on the reviewer.
-  void thread.ask("And on replicas?").catch(() => {});
+  void thread.ask({ text: "And on replicas?" }).catch(() => {});
   await until(thread, ({ status }) => status === "waiting");
   thread.close();
 
@@ -1123,7 +1123,7 @@ it("stops an agent that is still starting, and starts it again for the next ques
     "notice",
   ]);
 
-  await thread.ask("Is it safe now?");
+  await thread.ask({ text: "Is it safe now?" });
   await until(thread, ({ status }) => status === "idle");
 
   // The agent never saw the selection, so the next question brings it.
@@ -1162,7 +1162,7 @@ it("stops the agent when a turn does not stop, and starts it again for the next 
     title: "Stopped here.",
   });
 
-  await thread.ask("And now?");
+  await thread.ask({ text: "And now?" });
   const state = await until(thread, ({ status }) => status === "idle");
 
   expect(launches()).toBe(2);
@@ -1205,7 +1205,7 @@ it("continues a conversation its agent can no longer reopen in a new session", a
 
   expect(sessions).toEqual(["session"]);
 
-  await thread.ask("Are you still there?");
+  await thread.ask({ text: "Are you still there?" });
   const state = await until(thread, ({ status }) => status === "idle");
 
   // The new session has not seen the selection.
@@ -1276,7 +1276,7 @@ it("starts the agent again for a follow-up after it exited", async () => {
 
   await until(thread, ({ status }) => status === "idle");
   exit();
-  await thread.ask("And on replicas?");
+  await thread.ask({ text: "And on replicas?" });
 
   const state = await until(
     thread,

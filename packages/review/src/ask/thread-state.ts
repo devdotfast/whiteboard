@@ -100,6 +100,13 @@ export const askPicksSchema = z.strictObject({
 
 export type AskPicks = z.infer<typeof askPicksSchema>;
 
+/** A question as the reviewer asks it. */
+export const askQuestionSchema = z.strictObject({
+  text: z.string().trim().min(1).max(8_000),
+});
+
+export type AskQuestion = z.infer<typeof askQuestionSchema>;
+
 const statusSchema = z.enum([
   "starting",
   "running",

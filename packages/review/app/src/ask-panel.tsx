@@ -5,6 +5,7 @@ import {
   type AskChoices,
   type AskEntry,
   type AskPicks,
+  type AskQuestion,
   type AskSelect,
   type AskThreadState,
   applyAskChange,
@@ -15,8 +16,6 @@ import {
 } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
 import {
-  type FormEvent,
-  type KeyboardEvent,
   type ReactElement,
   type RefObject,
   memo,
@@ -29,6 +28,7 @@ import { z } from "zod";
 
 import { AgentChatUserMessage } from "./agent-chat";
 import { AGENT_LOGOS } from "./agent-logos";
+import { AskComposer } from "./ask-composer";
 import { AskDeleteButton, useShowOpenThread } from "./ask-delete";
 import { AskFilesProvider } from "./ask-files";
 import { useAskHistory } from "./ask-history";
@@ -338,11 +338,11 @@ export function AskAgentMenu({
 type AskRequest =
   | {
       agent: AskAgentId;
-      question: string;
+      question: AskQuestion;
       selection: AgentSelection;
       picks: AskPicks;
     }
-  | { question: string }
+  | { question: AskQuestion }
   | { kind: AskChoiceKind; value: string }
   | { permissionId: string; optionId: string }
   | Record<string, never>;
@@ -513,7 +513,6 @@ export function AskPanelContent({
   const agents = useAskAgents(session);
   const [agent, setAgent] = useState<AskAgentId | undefined>(requestedAgent);
   const [threadId, setThreadId] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
   // Choices for a question not yet asked; a thread says its own.
@@ -620,11 +619,8 @@ export function AskPanelContent({
     [session],
   );
 
-  const submit = async (event?: FormEvent) => {
-    event?.preventDefault();
-    const question = draft.trim();
-
-    if (!question || !agent || busy || thread?.status === "failed") return;
+  const ask = async (question: AskQuestion) => {
+    if (!agent || busy || thread?.status === "failed") return false;
     setSending(true);
     setRequestError(null);
 
@@ -647,24 +643,16 @@ export function AskPanelContent({
         setThreadId(id);
       }
 
-      setDraft("");
       // Asking returns to the newest, where the answer will be.
       latest.jump("instant");
+
+      return true;
     } catch (error) {
       setRequestError(error instanceof Error ? error.message : String(error));
+
+      return false;
     } finally {
       setSending(false);
-    }
-  };
-
-  const keydown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (
-      event.key === "Enter" &&
-      !event.shiftKey &&
-      !event.nativeEvent.isComposing
-    ) {
-      event.preventDefault();
-      void submit();
     }
   };
 
@@ -914,54 +902,25 @@ export function AskPanelContent({
         </div>
       </AskFilesProvider>
 
-      <form
-        {...stylex.props(styles.composer)}
-        onSubmit={(event) => void submit(event)}
-      >
-        <textarea
-          ref={composer}
-          {...stylex.props(styles.question)}
-          value={draft}
-          rows={2}
-          placeholder={
-            threadId || savedThreadId
-              ? "Ask a follow-up…"
-              : `Ask ${chosen?.name ?? "an agent"} about this selection…`
-          }
-          aria-label="Question"
-          disabled={thread?.status === "failed"}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={keydown}
-        />
-        <div {...stylex.props(styles.composerFooter)}>
-          <span>
-            {connecting
-              ? thread?.entries.length
-                ? `Connecting to ${agentName}…`
-                : "Loading the conversation…"
-              : composerStatus(thread, busy)}
-          </span>
-          {busy && threadId ? (
-            <button
-              type="button"
-              {...stylex.props(styles.send, styles.stop)}
-              onClick={stop}
-            >
-              <span aria-hidden="true" {...stylex.props(styles.stopMark)} />
-              Stop
-            </button>
-          ) : (
-            <button
-              type="submit"
-              {...stylex.props(styles.send, styles.submit)}
-              disabled={!draft.trim() || !agent || busy}
-            >
-              Ask
-              <AskArrowIcon xstyle={[askIconSizes.small, styles.submitIcon]} />
-            </button>
-          )}
-        </div>
-      </form>
+      <AskComposer
+        inputRef={composer}
+        placeholder={
+          threadId || savedThreadId
+            ? "Ask a follow-up…"
+            : `Ask ${chosen?.name ?? "an agent"} about this selection…`
+        }
+        disabled={thread?.status === "failed"}
+        canAsk={Boolean(agent) && !busy}
+        stop={busy && threadId ? stop : undefined}
+        status={
+          connecting
+            ? thread?.entries.length
+              ? `Connecting to ${agentName}…`
+              : "Loading the conversation…"
+            : composerStatus(thread, busy)
+        }
+        onAsk={ask}
+      />
     </div>
   );
 }
@@ -1770,82 +1729,6 @@ const styles = stylex.create({
     textDecorationLine: "underline",
     textUnderlineOffset: "3px",
     cursor: "pointer",
-  },
-  composer: {
-    display: "flex",
-    flex: "0 0 auto",
-    flexDirection: "column",
-    gap: "10px",
-    margin: "12px 16px 16px",
-    padding: "12px 12px 10px 14px",
-    ...hairline,
-    borderColor: {
-      default: tokens.ruleSoft,
-      ":focus-within": tokens.accentOutline,
-    },
-    borderRadius: radius.surface,
-    backgroundColor: tokens.raised,
-  },
-  question: {
-    minHeight: "44px",
-    maxHeight: "160px",
-    padding: 0,
-    ...noBorder,
-    resize: "none",
-    backgroundColor: tokens.transparent,
-    color: tokens.ink,
-    fontFamily: tokens.fontSerif,
-    fontSize: fontSize.reading,
-    lineHeight: "22px",
-    fieldSizing: "content",
-    outline: { default: null, ":focus": "none" },
-    "::placeholder": {
-      color: tokens.inkFaint,
-    },
-  },
-  composerFooter: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "8px",
-    color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
-    fontSize: fontSize.micro,
-    lineHeight: "14px",
-  },
-  send: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "6px",
-    padding: "4px 10px",
-    ...hairline,
-    borderRadius: radius.surface,
-    fontFamily: tokens.fontMono,
-    fontSize: fontSize.small,
-    lineHeight: "14px",
-    cursor: "pointer",
-  },
-  submit: {
-    borderColor: tokens.accent,
-    backgroundColor: tokens.accent,
-    color: tokens.onAccent,
-    opacity: { default: null, ":disabled": 0.45 },
-    cursor: { default: "pointer", ":disabled": "default" },
-  },
-  submitIcon: {
-    strokeWidth: "1.4px",
-  },
-  stop: {
-    paddingLeft: "8px",
-    borderColor: tokens.ruleSoft,
-    backgroundColor: tokens.transparent,
-    color: tokens.ink,
-  },
-  stopMark: {
-    width: "8px",
-    height: "8px",
-    borderRadius: radius.hairline,
-    backgroundColor: "currentColor",
   },
   // Showing the list it opens: pressed, not dimmed as disabled.
   historyButtonOn: {

@@ -13,6 +13,7 @@ import {
   askAgentIds,
   askChoiceKinds,
   askPicksSchema,
+  askQuestionSchema,
 } from "@review/ask/thread-state.js";
 import type { AskThreads } from "@review/ask/thread.js";
 import { watchAskThread } from "@review/ask/watch.js";
@@ -72,7 +73,7 @@ export interface AskHost {
 
 const askStartSchema = z.strictObject({
   agent: z.enum(askAgentIds),
-  question: z.string().trim().min(1).max(8_000),
+  question: askQuestionSchema,
   selection: AgentSelectionSchema,
   picks: askPicksSchema.optional(),
 });
@@ -88,9 +89,7 @@ const askFilesSchema = z.strictObject({
   paths: z.array(z.string().min(1).max(400)).max(100),
 });
 
-const askFollowUpSchema = z.strictObject({
-  question: z.string().trim().min(1).max(8_000),
-});
+const askFollowUpSchema = z.strictObject({ question: askQuestionSchema });
 
 const askDecisionSchema = z.strictObject({
   permissionId: z.string().min(1),
@@ -1219,7 +1218,7 @@ export function createReviewApi(
                 head: checkout.head,
                 cwd: checkout.rootPath,
                 selection: input.selection,
-                title: input.question.slice(0, 200),
+                title: input.question.text.slice(0, 200),
                 createdAt,
                 updatedAt: createdAt,
               }),
