@@ -203,6 +203,8 @@ it("a declined host on this Desktop's version is online, with no install offered
   const gateway = hosts("0.1.6");
 
   gateway.set([{ alias: "box", endpoint: fake.endpoint, declined: true }]);
+  expect(gateway.states()[0]).toMatchObject({ state: "connecting" });
+  expect(gateway.states()[0]).not.toHaveProperty("declined");
 
   await expect.poll(() => gateway.states()[0]?.state).toBe("online");
   expect(gateway.states()[0]).not.toHaveProperty("declined");

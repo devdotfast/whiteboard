@@ -222,8 +222,10 @@ export function createGatewayHosts(input: {
         host.problem?.state !== "incompatible" && {
           installCommand: `npm install -g @dev.fast/whiteboard@${input.version}`,
         }),
+      // Not before the first health check says which version answers.
       ...(host.declined &&
-        host.status !== "online" && { declined: true as const }),
+        host.status !== "online" &&
+        host.status !== "connecting" && { declined: true as const }),
       ...(host.status === "online" && languageOf(host)),
     };
   }
