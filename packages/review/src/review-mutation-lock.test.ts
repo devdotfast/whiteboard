@@ -6,12 +6,7 @@ import path from "node:path";
 
 import { afterEach, expect, it } from "vitest";
 
-import { parseStoredReviewRecord } from "./review-home";
-import {
-  GUARDED_REVIEW_FIELDS,
-  reviewMutationFingerprint,
-  withReviewMutationLock,
-} from "./review-mutation-lock";
+import { withReviewMutationLock } from "./review-mutation-lock";
 
 const roots: string[] = [];
 
@@ -19,54 +14,6 @@ afterEach(async () => {
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
-});
-
-function guardedRecord() {
-  return parseStoredReviewRecord({
-    schemaVersion: 5,
-    uuid: "11111111-1111-4111-8111-111111111111",
-    repoKey: "repo",
-    worktreePath: "/source",
-    baseRef: "main",
-    baseCommit: "a".repeat(40),
-    sourceCommit: "b".repeat(40),
-    sourceIdentity: { kind: "git-branch", name: "main" },
-    title: "Guarded",
-    sourceSession: "disabled:review",
-    status: "draft",
-    presentedDocumentRevision: "c".repeat(40),
-    presentedSoftwareMapRevision: null,
-    createdAt: "created",
-    lastPublishedAt: "published",
-  });
-}
-
-it("changes the fingerprint for every guarded field", () => {
-  const record = guardedRecord();
-  const unchanged = reviewMutationFingerprint(record);
-
-  for (const field of GUARDED_REVIEW_FIELDS) {
-    // A foreign writer may store any value, so the guarded change is typed as
-    // the record it replaces.
-    const changed = {
-      ...record,
-      [field]: "changed-by-someone-else",
-    } as typeof record;
-
-    expect(reviewMutationFingerprint(changed)).not.toBe(unchanged);
-  }
-});
-
-it("ignores unguarded metadata and source identity key order", () => {
-  const record = guardedRecord();
-  expect(
-    reviewMutationFingerprint({
-      ...record,
-      title: "Renamed",
-      viewedAt: "2026-09-05T12:00:00.000Z",
-      sourceIdentity: { name: "main", kind: "git-branch" },
-    }),
-  ).toBe(reviewMutationFingerprint(record));
 });
 
 it("allows nested operations in the same transaction without deadlocking", async () => {

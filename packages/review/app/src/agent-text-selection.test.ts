@@ -26,7 +26,9 @@ it("captures exact prose and its anchor, clears collapsed selections, and ignore
       title: "selected words",
       anchor: { x: 70, y: 50 },
       anchorElement: article.querySelector("strong"),
+      range: expect.any(Range),
     });
+    const selected = select.mock.lastCall?.[0]?.range;
     selection.removeAllRanges();
     document.dispatchEvent(new Event("selectionchange"));
     expect(select).toHaveBeenLastCalledWith(null);
@@ -35,6 +37,8 @@ it("captures exact prose and its anchor, clears collapsed selections, and ignore
     selection.addRange(range);
     document.dispatchEvent(new Event("selectionchange"));
     expect(select).not.toHaveBeenCalled();
+    // A copy, so asking later reads the words that were selected.
+    expect(selected?.toString()).toBe("selected words");
     stop();
     range.selectNodeContents(article.querySelector("strong")!);
     document.dispatchEvent(new Event("selectionchange"));

@@ -19,6 +19,10 @@ import {
   reviewViewStateKey,
 } from "./review-view-state";
 
+// jsdom has no Element.scrollTo, and a diagram tour scrolls its active stop
+// into view on the next frame.
+HTMLElement.prototype.scrollTo = () => {};
+
 let store: ReviewStore, directory: string;
 
 let canvas: ReturnType<typeof mount> | undefined;

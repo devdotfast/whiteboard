@@ -421,6 +421,10 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 				'!version',
 				...(platform === 'darwin' ? ['!**/Contents/Applications', '!**/Contents/Applications/**'] : []),
 				...(platform === 'win32' ? ['!**/electron_proxy.exe'] : []),
+				// Review's UI is English only; drop Chromium's other UI translations.
+				'!**/locales/!(en-US|en-GB).pak',
+				'!**/Electron Framework.framework/**/!(en|en_*).lproj{,/**}',
+				'!**/Contents/Resources/!(en).lproj{,/**}',
 			], { dot: true }));
 
 		if (platform === 'linux') {

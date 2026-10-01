@@ -100,7 +100,8 @@ export function utf16Column(text: string, byteColumn: number): number {
 		units = 0;
 	for (const character of text) {
 		if (bytes >= byteColumn) break;
-		bytes += new TextEncoder().encode(character).length;
+		const code = character.codePointAt(0)!;
+		bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
 		units += character.length;
 	}
 	return units + 1;

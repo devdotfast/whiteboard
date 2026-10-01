@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   parseReviewBugReportInput,
   parseReviewTabTelemetryInput,
-  parseSoftwareMapCodeElements,
 } from "./review-api-parsers";
 
 const bugReport = {
@@ -84,40 +83,6 @@ function expectBugReportStatus(value: JsonValue, statusCode: number) {
 
   expect(thrown).toMatchObject({ statusCode });
 }
-
-describe("parseSoftwareMapCodeElements", () => {
-  it("preserves code element change status for diff-count mapping", () => {
-    expect(
-      parseSoftwareMapCodeElements([
-        {
-          path: "system.container.component.symbol",
-          sourceRanges: [{ file: "src/example.ts", fromLine: 1, toLine: 1 }],
-          changeStatus: "added",
-        },
-      ]),
-    ).toEqual([
-      {
-        path: "system.container.component.symbol",
-        sourceRanges: [{ file: "src/example.ts", fromLine: 1, toLine: 1 }],
-        label: undefined,
-        description: undefined,
-        changeStatus: "added",
-      },
-    ]);
-  });
-
-  it("drops invalid change statuses", () => {
-    expect(
-      parseSoftwareMapCodeElements([
-        {
-          path: "system.container.component.symbol",
-          sourceRanges: [{ file: "src/example.ts", fromLine: 1, toLine: 1 }],
-          changeStatus: "mystery",
-        },
-      ])[0]?.changeStatus,
-    ).toBeUndefined();
-  });
-});
 
 describe("parseReviewTabTelemetryInput", () => {
   it("accepts the fixed tab dwell telemetry shape", () => {

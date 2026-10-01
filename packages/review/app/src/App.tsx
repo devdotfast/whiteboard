@@ -1,5 +1,4 @@
 import { Button, IconButton } from "@canvas/ui/button";
-import { EmptyState } from "@canvas/ui/empty-state";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
 import {
@@ -25,6 +24,9 @@ import {
 
 import { AgentSelectionProvider, useAgentSelection } from "./agent-selection";
 import { observeAgentTextSelection } from "./agent-text-selection";
+import { AskHistoryProvider } from "./ask-history";
+import { AskHistoryControl } from "./ask-history-list";
+import { AskThreadMarks } from "./ask-marks";
 import {
   AuthoringActivityBadge,
   ReviewSurfaceLabel,
@@ -73,8 +75,9 @@ import {
   useReviewPanelStore,
   useSuppressPanelMotionOnCanvasResume,
 } from "./review-panel";
-import type { ReviewDiffScope } from "./review-panel-store";
+import { type ReviewDiffScope, askShown } from "./review-panel-store";
 import { ReviewRootsProvider, useReviewContainer } from "./review-root-context";
+import { ReviewStackSelector } from "./review-stack-selector";
 import { ReviewToc } from "./review-toc";
 import { offeredReviewViews, reviewViewLabel } from "./review-view-route";
 import { useReviewViewStateSync } from "./review-view-state";
@@ -117,31 +120,28 @@ const MAX_SIDE_PEEK_WIDTH = 920;
 const MIN_DOCUMENT_WIDTH = 560;
 
 export function App({
-  documentState,
-  softwareMapState,
+  document,
+  softwareMap,
   softwareMapEnabled,
   range,
   commits,
   findHost,
 }: {
-  documentState: ReviewDocumentAppState;
-  softwareMapState: ReviewSoftwareMapAppState;
+  document: RenderedReviewDocument;
+  softwareMap: PublishedSoftwareMap;
   softwareMapEnabled: boolean;
   range: ReviewCanvasRange;
   commits: readonly ReviewCommitSummary[];
   findHost?: ReviewFindHost;
 }): ReactElement {
-  const resolved = useResolvedReviewDocument(documentState);
-
   return (
     <ReviewDiffFilesProvider
-      documentKey={resolved.diffDocumentKey}
+      documentKey={[document.routePath, document.filePath].join("\0")}
       revision={range.worktreeRevision}
     >
       <ReviewLayout
-        resolved={resolved}
-        documentState={documentState}
-        softwareMapState={softwareMapState}
+        document={document}
+        softwareMap={softwareMap}
         softwareMapEnabled={softwareMapEnabled}
         range={range}
         commits={commits}
@@ -171,62 +171,6 @@ export interface RenderedReviewDocument {
   empty?: boolean;
 }
 
-export type ReviewDocumentAppState =
-  | { state: "loading" }
-  | {
-      state: "ready";
-      document: RenderedReviewDocument;
-    }
-  | {
-      state: "unavailable";
-      message: string;
-      currentReviewUuid?: string;
-      /** The failure the loader raised, when the message came from one. */
-      cause?: Error;
-    };
-
-export type ReviewSoftwareMapAppState =
-  | { state: "loading" }
-  | { state: "ready"; softwareMap: PublishedSoftwareMap }
-  | { state: "absent" }
-  | {
-      state: "unavailable";
-      message: string;
-      currentReviewUuid?: string;
-      cause?: Error;
-    };
-
-interface ResolvedReviewDocument {
-  document: RenderedReviewDocument | null;
-  routePath: string;
-  filePath: string;
-  /** Identity of what the panes render: content hash, or the load state. */
-  revision: string;
-  diffDocumentKey: string;
-}
-
-function useResolvedReviewDocument(
-  documentState: ReviewDocumentAppState,
-): ResolvedReviewDocument {
-  const session = useReviewSession();
-
-  return useMemo(() => {
-    const document =
-      documentState.state === "ready" ? documentState.document : null;
-
-    const routePath = document?.routePath ?? "/";
-    const filePath = document?.filePath ?? routePath;
-
-    return {
-      document,
-      routePath,
-      filePath,
-      revision: document?.key ?? `${documentState.state}:${routePath}`,
-      diffDocumentKey: [routePath, filePath].join("\0"),
-    };
-  }, [documentState, session]);
-}
-
 /** A commit-scoped diff stays "commit"; otherwise it follows the reader's
  * structural-diff setting. */
 function diffOpenedKind(
@@ -239,32 +183,23 @@ function diffOpenedKind(
 }
 
 function ReviewLayout({
-  resolved,
-  documentState,
-  softwareMapState,
+  document,
+  softwareMap,
   softwareMapEnabled,
   range,
   commits,
   findHost,
 }: {
-  resolved: ResolvedReviewDocument;
-  documentState: ReviewDocumentAppState;
-  softwareMapState: ReviewSoftwareMapAppState;
+  document: RenderedReviewDocument;
+  softwareMap: PublishedSoftwareMap;
   softwareMapEnabled: boolean;
   range: ReviewCanvasRange;
   commits: readonly ReviewCommitSummary[];
   findHost?: ReviewFindHost;
 }): ReactElement {
-  const {
-    document,
-    routePath: documentRoute,
-    revision: documentRevision,
-  } = resolved;
-
+  const documentRoute = document.routePath;
+  const documentRevision = document.key;
   const panelStore = useReviewPanelStore();
-
-  const softwareMap =
-    softwareMapState.state === "ready" ? softwareMapState.softwareMap : null;
 
   const articleRef = useRef<HTMLElement | null>(null);
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -290,31 +225,31 @@ function ReviewLayout({
             softwareMapEnabled={softwareMapEnabled}
             openTraceSession={panelStore.getState().openTrace}
           >
-            <AgentSelectionProvider revision={documentRevision}>
-              <ReviewLayoutContent
-                appRef={appRef}
-                shellRef={shellRef}
-                scrollRegionRef={scrollRegionRef}
-                articleRef={articleRef}
-                documentState={documentState}
-                documentRevision={documentRevision}
-                softwareModels={[
-                  ...(softwareMap?.head ? [softwareMap.head] : []),
-                  ...(document?.documentSoftwareModels ?? []),
-                ]}
-                softwareMapState={softwareMapState}
-                repoSoftwareMap={softwareMap?.head ?? null}
-                baseSoftwareMap={softwareMap?.base ?? null}
-                softwareMapTopologyDiff={
-                  softwareMap
-                    ? diffSoftwareMaps(softwareMap.base, softwareMap.head)
-                    : null
-                }
-                softwareMapEnabled={softwareMapEnabled}
-                range={range}
-                commits={commits}
-              />
-            </AgentSelectionProvider>
+            <AskHistoryProvider>
+              <AgentSelectionProvider revision={documentRevision}>
+                <ReviewLayoutContent
+                  appRef={appRef}
+                  shellRef={shellRef}
+                  scrollRegionRef={scrollRegionRef}
+                  articleRef={articleRef}
+                  document={document}
+                  documentRevision={documentRevision}
+                  softwareModels={[
+                    ...(softwareMap.head ? [softwareMap.head] : []),
+                    ...document.documentSoftwareModels,
+                  ]}
+                  repoSoftwareMap={softwareMap.head ?? null}
+                  baseSoftwareMap={softwareMap.base ?? null}
+                  softwareMapTopologyDiff={diffSoftwareMaps(
+                    softwareMap.base,
+                    softwareMap.head,
+                  )}
+                  softwareMapEnabled={softwareMapEnabled}
+                  range={range}
+                  commits={commits}
+                />
+              </AgentSelectionProvider>
+            </AskHistoryProvider>
           </ReviewProvider>
         </ReviewDebugSettingsProvider>
       </ReviewFindProvider>
@@ -327,10 +262,9 @@ function ReviewLayoutContent({
   shellRef,
   scrollRegionRef,
   articleRef,
-  documentState,
+  document,
   documentRevision,
   softwareModels,
-  softwareMapState,
   repoSoftwareMap,
   baseSoftwareMap,
   softwareMapTopologyDiff,
@@ -342,10 +276,9 @@ function ReviewLayoutContent({
   shellRef: RefObject<HTMLElement | null>;
   scrollRegionRef: RefObject<HTMLElement | null>;
   articleRef: RefObject<HTMLElement | null>;
-  documentState: ReviewDocumentAppState;
+  document: RenderedReviewDocument;
   documentRevision: string;
   softwareModels: NormalizedSoftwareModel[];
-  softwareMapState: ReviewSoftwareMapAppState;
   repoSoftwareMap: NormalizedSoftwareModel | null;
   baseSoftwareMap: NormalizedSoftwareModel | null;
   softwareMapTopologyDiff: SoftwareMapTopologyDiff | null;
@@ -366,6 +299,7 @@ function ReviewLayoutContent({
   const panelStore = useReviewPanelStore();
   useSuppressPanelMotionOnCanvasResume(appRef);
   const activePanel = useReviewPanel((state) => state.active);
+  const askDocked = useReviewPanel((state) => askShown(state) === "panel");
   const panelMotion = useReviewPanel((state) => state.motion);
   const activeView = useReviewPanel((state) => state.view);
   const diffScope = useReviewPanel((state) => state.diffScope);
@@ -394,18 +328,13 @@ function ReviewLayoutContent({
   // no longer in the document would sit in the store unrendered. The
   // document and its tour overlay commit before this effect runs.
   const canvasRoot = useReviewContainer();
-  const documentReady = documentState.state === "ready";
   useEffect(() => {
     const { overlayTour, closeOverlayTour } = panelStore.getState();
 
-    if (
-      documentReady &&
-      overlayTour &&
-      !canvasRoot?.querySelector(".diagram-tour-overlay")
-    ) {
+    if (overlayTour && !canvasRoot?.querySelector(".diagram-tour-overlay")) {
       closeOverlayTour();
     }
-  }, [canvasRoot, documentReady, documentRevision, panelStore]);
+  }, [canvasRoot, documentRevision, panelStore]);
 
   const hasChangeRange =
     !!range.worktreeRevision || range.baseCommit !== range.headCommit;
@@ -463,10 +392,7 @@ function ReviewLayoutContent({
 
   const tutorial = useTutorial() !== null;
 
-  const tocEntries =
-    documentState.state === "ready"
-      ? (documentState.document.tocEntries ?? [])
-      : [];
+  const tocEntries = document.tocEntries ?? [];
 
   // Subscribe before the canvas signals ready so a reveal immediately after
   // mounting cannot outrun the listener.
@@ -497,7 +423,7 @@ function ReviewLayoutContent({
     [activeSoftwareMapSource, softwareMapTopologyDiff],
   );
 
-  const rightPanelOpen = activePanel !== null;
+  const rightPanelOpen = activePanel !== null || askDocked;
 
   // SAFETY: `--side-peek-width` is a CSS custom property, which React forwards
   // to style.setProperty; the CSSProperties typings only omit custom names.
@@ -586,10 +512,7 @@ function ReviewLayoutContent({
                     {view === "review" ? (
                       <ReviewSurfaceLabel
                         label={scratchpad ? "Scratchpad" : "Whiteboard"}
-                        hasContent={
-                          documentState.state === "ready" &&
-                          documentState.document.empty === false
-                        }
+                        hasContent={document.empty === false}
                         active={activeView === "review"}
                       />
                     ) : (
@@ -667,6 +590,8 @@ function ReviewLayoutContent({
                   }}
                 />
               </div>
+              <ReviewStackSelector />
+              <AskHistoryControl />
               <ShareControl />
               <IconButton
                 xstyle={shellStyles.topbarItem}
@@ -716,8 +641,9 @@ function ReviewLayoutContent({
               </Button>
             </div>
           ) : null}
-          {activeView === "review" && documentState.state === "ready" && (
-            <ReviewToc entries={tocEntries} />
+          {activeView === "review" && (
+            // Every document but the scratchpad opens with a review header.
+            <ReviewToc entries={tocEntries} besideHeader={!scratchpad} />
           )}
           <section
             ref={scrollRegionRef}
@@ -737,33 +663,33 @@ function ReviewLayoutContent({
               )}
               hidden={activeView !== "review"}
             >
-              {documentState.state === "ready" ? (
-                <>
-                  <article
-                    ref={articleRef}
-                    {...withClass(
-                      "review-document",
-                      documentStyles.article,
-                      documentMarker,
-                      rightPanelOpen && documentStyles.articlePeekOpen,
-                    )}
-                    data-kind={scratchpad ? "scratchpad" : undefined}
+              <>
+                <article
+                  ref={articleRef}
+                  {...withClass(
+                    "review-document",
+                    documentStyles.article,
+                    documentMarker,
+                    rightPanelOpen && documentStyles.articlePeekOpen,
+                  )}
+                  data-kind={scratchpad ? "scratchpad" : undefined}
+                >
+                  <ReviewDocumentBoundary
+                    key={documentRevision}
+                    session={session}
+                    revision={documentRevision}
+                    onError={(_revision, error) =>
+                      reportReviewDocumentRenderError(session, error)
+                    }
                   >
-                    <ReviewDocumentBoundary
-                      key={documentRevision}
-                      session={session}
-                      revision={documentRevision}
-                      onError={(_revision, error) =>
-                        reportReviewDocumentRenderError(session, error)
-                      }
-                    >
-                      <documentState.document.render />
-                    </ReviewDocumentBoundary>
-                  </article>
-                </>
-              ) : (
-                <ReviewDocumentLoadState state={documentState} />
-              )}
+                    <document.render />
+                  </ReviewDocumentBoundary>
+                </article>
+                <AskThreadMarks
+                  articleRef={articleRef}
+                  revision={documentRevision}
+                />
+              </>
             </div>
             {softwareMapEnabled && activeView === "map" && (
               <div
@@ -779,36 +705,29 @@ function ReviewLayoutContent({
                     mapViewStyles.canvasShell,
                   )}
                 >
-                  {softwareMapState.state === "ready" ||
-                  softwareMapState.state === "absent" ? (
-                    <>
-                      <SoftwareMapTopologyUnavailable
-                        repoSoftwareMap={repoSoftwareMap}
-                        baseSoftwareMap={baseSoftwareMap}
-                        baseRef={review.resolvedBaseRef ?? undefined}
-                        headRef={review.resolvedHeadRef ?? undefined}
-                      />
-                      <SoftwareMap
-                        model={activeSoftwareMap ?? undefined}
-                        pinnedData={
-                          activeSoftwareMapSource
-                            ? session.softwareMapData?.(activeSoftwareMapSource)
-                            : undefined
-                        }
-                        focusRequest={mapFocus?.pending ? mapFocus : null}
-                        onFocusRequestHandled={
-                          panelStore.getState().consumeMapFocus
-                        }
-                        height="100%"
-                        showChrome={false}
-                        showFloatingActions={!activePanel}
-                        variant="view"
-                      />
-                      <MapSettingsControl />
-                    </>
-                  ) : (
-                    <ReviewSoftwareMapLoadState state={softwareMapState} />
-                  )}
+                  <SoftwareMapTopologyUnavailable
+                    repoSoftwareMap={repoSoftwareMap}
+                    baseSoftwareMap={baseSoftwareMap}
+                    baseRef={review.resolvedBaseRef ?? undefined}
+                    headRef={review.resolvedHeadRef ?? undefined}
+                  />
+                  <SoftwareMap
+                    model={activeSoftwareMap ?? undefined}
+                    pinnedData={
+                      activeSoftwareMapSource
+                        ? session.softwareMapData?.(activeSoftwareMapSource)
+                        : undefined
+                    }
+                    focusRequest={mapFocus?.pending ? mapFocus : null}
+                    onFocusRequestHandled={
+                      panelStore.getState().consumeMapFocus
+                    }
+                    height="100%"
+                    showChrome={false}
+                    showFloatingActions={!rightPanelOpen}
+                    variant="view"
+                  />
+                  <MapSettingsControl />
                 </div>
               </div>
             )}
@@ -866,7 +785,11 @@ function ReviewLayoutContent({
       </main>
       {rightPanelOpen && (
         <div
-          {...stylex.props(shellStyles.resizer, shellStyles.peekResizer)}
+          {...stylex.props(
+            shellStyles.resizer,
+            shellStyles.peekResizer,
+            askDocked && shellStyles.peekResizerTray,
+          )}
           {...sidePeekResize.separatorProps}
         />
       )}
@@ -874,93 +797,6 @@ function ReviewLayoutContent({
         <ReviewPanelHost />
       </div>
     </div>
-  );
-}
-
-function ReviewDocumentLoadState({
-  state,
-}: {
-  state: Exclude<ReviewDocumentAppState, { state: "ready" }>;
-}): ReactElement | null {
-  switch (state.state) {
-    case "loading":
-      return null;
-    case "unavailable":
-      return (
-        <EmptyState
-          variant="document"
-          title="Session unavailable"
-          message={state.message}
-          action={
-            state.currentReviewUuid ? (
-              <OpenCurrentReview reviewUuid={state.currentReviewUuid} />
-            ) : null
-          }
-        />
-      );
-    default: {
-      const unhandled: never = state;
-      throw new Error(
-        `Unhandled review document state ${JSON.stringify(unhandled)}.`,
-      );
-    }
-  }
-}
-
-function ReviewSoftwareMapLoadState({
-  state,
-}: {
-  state: Exclude<
-    ReviewSoftwareMapAppState,
-    { state: "ready" } | { state: "absent" }
-  >;
-}): ReactElement | null {
-  switch (state.state) {
-    case "loading":
-      return null;
-    case "unavailable":
-      return (
-        <EmptyState
-          variant="document"
-          message={`Software map unavailable: ${state.message}`}
-          action={
-            state.currentReviewUuid ? (
-              <OpenCurrentReview reviewUuid={state.currentReviewUuid} />
-            ) : null
-          }
-        />
-      );
-    default: {
-      // A new software-map state has to choose here: the map chrome renders
-      // for ready and absent (an absent map still shows document-authored
-      // models), everything else is a load state.
-      const unhandled: never = state;
-      throw new Error(
-        `Unhandled software map state ${JSON.stringify(unhandled)}.`,
-      );
-    }
-  }
-}
-
-function OpenCurrentReview({
-  reviewUuid,
-}: {
-  reviewUuid: string;
-}): ReactElement {
-  const session = useReviewSession();
-
-  return (
-    <button
-      type="button"
-      onClick={() =>
-        void session.surface.post({
-          name: "openReview",
-          args: { reviewUuid, active: true },
-        })
-      }
-    >
-      Open current review
-    </button>
   );
 }
 

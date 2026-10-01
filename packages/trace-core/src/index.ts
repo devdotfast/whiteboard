@@ -63,6 +63,7 @@ export {
   type TraceScope,
   renderTraceCommand,
   resolveTraceCommand,
+  shellQuote,
   traceCommandExecutable,
   traceCliName,
   traceHomeDir,

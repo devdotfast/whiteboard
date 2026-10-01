@@ -124,6 +124,10 @@ export const shellStyles = stylex.create({
     height: "100%",
     borderColor: tokens.transparent,
   },
+  // The divider's right half is the panel's, so a tray panel meets the rule.
+  peekResizerTray: {
+    backgroundImage: `linear-gradient(to right, transparent 50%, ${tokens.tray} 50%)`,
+  },
   // Horizontal twin of the divider for the narrow-layout bottom sheet: it
   // drags the sheet height. Hidden on wide layouts, where the vertical
   // divider owns resizing.

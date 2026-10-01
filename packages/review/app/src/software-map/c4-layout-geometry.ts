@@ -1,3 +1,4 @@
+import { loadElk } from "@canvas/elk";
 import {
   type ElkGraph as LibavoidElkGraph,
   init as initLibavoidEdgeRouter,
@@ -9,10 +10,7 @@ import {
   type ReactFlowInstance,
   type Viewport,
 } from "@xyflow/react";
-import ELK, {
-  type ElkNode,
-  type LayoutOptions,
-} from "elkjs/lib/elk.bundled.js";
+import type { ElkNode, LayoutOptions } from "elkjs/lib/elk.bundled.js";
 import type { CSSProperties } from "react";
 
 import {
@@ -108,8 +106,6 @@ const C4_LOCAL_SIBLING_X_GAP = 96;
 const C4_LOCAL_SIBLING_Y_GAP = 72;
 
 const C4_LOCAL_ROW_CLUSTER_GAP = 24;
-
-const c4Elk = new ELK();
 
 let c4LibavoidInitPromise: Promise<void> | null = null;
 
@@ -2109,7 +2105,9 @@ async function runC4ElkLayout(
     } satisfies LayoutOptions);
   }
 
-  const result: C4ElkLayoutGraph = await c4Elk.layout({
+  const elk = await loadElk();
+
+  const result: C4ElkLayoutGraph = await elk.layout({
     id: "software-map-c4",
     layoutOptions,
     children: rootNodes.map((node) =>

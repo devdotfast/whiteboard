@@ -4,10 +4,30 @@ import {
 } from "@dev.fast/review-protocol";
 import { z } from "zod";
 
+/** The most block text an anchor keeps; a selection in a longer block is
+ * not anchored. */
+export const ASK_ANCHOR_TEXT_LIMIT = 20_000;
+
 /** A semantic selection, independent of comment/thread creation. */
 export const AgentSelectionSchema = z.strictObject({
   target: z.discriminatedUnion("kind", [
-    z.strictObject({ kind: z.literal("text"), quote: z.string() }),
+    z.strictObject({
+      kind: z.literal("text"),
+      quote: z.string(),
+      /** Where the quote is: characters `start` to `end` of the text of the
+       * review block `blockId`, which was `text` then. The block keeps its
+       * id across versions; comparing its text then and now finds the quote
+       * again, or tells that it changed. */
+      anchor: z
+        .strictObject({
+          blockId: z.string().min(1).max(200),
+          start: z.number().int().nonnegative(),
+          end: z.number().int().positive(),
+          text: z.string().max(ASK_ANCHOR_TEXT_LIMIT),
+        })
+        .refine((anchor) => anchor.start < anchor.end, "an empty anchor")
+        .optional(),
+    }),
     z.strictObject({
       kind: z.literal("code"),
       path: z.string(),

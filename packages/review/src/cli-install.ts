@@ -454,9 +454,8 @@ function connectPlugins(
         }
       : { label: "Install in Cursor" },
     opencode: {
-      label: "Install the OpenCode plugin",
-      command:
-        'Add "@dev.fast/opencode-whiteboard" to "plugin" in ~/.config/opencode/opencode.json,\nthen quit and reopen OpenCode to load it.',
+      label: "Add the OpenCode MCP server (OpenCode 2+)",
+      command: `opencode mcp add --global whiteboard -- ${launchCommand(reviewMcpLaunch(hasShim))}`,
     },
     pi: {
       label: "Add the Pi MCP server (Pi 0.99+)",

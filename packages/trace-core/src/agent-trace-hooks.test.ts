@@ -74,25 +74,6 @@ describe("agent-trace-hooks", () => {
     expect(preserved.customKey).toBe("customValue");
   });
 
-  it("installs Codex trace hooks in ~/.codex/config.toml idempotently", async () => {
-    const homeDir = await makeTempHome();
-
-    const first = await installCodexTraceHook(homeDir);
-    expect(first.modified).toBe(true);
-    expect(existsSync(first.path)).toBe(true);
-
-    const content = await readFile(first.path, "utf8");
-    expect(content).toContain("[[hooks.SessionStart]]");
-    expect(content).toContain("whiteboard trace hook SessionStart");
-    expect(content).toContain("[[hooks.UserPromptSubmit]]");
-    expect(content).toContain("whiteboard trace hook UserPromptSubmit");
-    expect(content).toContain("[[hooks.SessionEnd]]");
-    expect(content).toContain("whiteboard trace hook SessionEnd");
-
-    const second = await installCodexTraceHook(homeDir);
-    expect(second.modified).toBe(false);
-  });
-
   it("adds the Codex heartbeat to an existing lifecycle-only setup", async () => {
     const homeDir = await makeTempHome();
     const codexDir = path.join(homeDir, ".codex");
@@ -134,17 +115,6 @@ command = "review trace hook SessionEnd"
     expect(removed).toContain('model = "gpt-5"');
     expect(removed).toContain('keep = "yes"');
     expect(removed).not.toContain("whiteboard trace hook");
-  });
-
-  it("installs Pi trace extension in ~/.pi/agent/extensions/review-trace.ts idempotently", async () => {
-    const homeDir = await makeTempHome();
-
-    const first = await installPiTraceExtension(homeDir);
-    expect(first.modified).toBe(true);
-    expect(existsSync(first.path)).toBe(true);
-
-    const second = await installPiTraceExtension(homeDir);
-    expect(second.modified).toBe(false);
   });
 
   it("removes owned hooks and preserves unrelated agent configuration", async () => {

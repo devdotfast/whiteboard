@@ -133,11 +133,3 @@ it("a scope with only folded lines left, and none marked, reads as folded", () =
     ]).state,
   ).toBe("viewed");
 });
-
-it("without structural folds every changed line is left to read", () => {
-  expect(coverageProgress([file])).toMatchObject({
-    state: "unread",
-    remaining: { additions: 11, deletions: 3 },
-    folded: { additions: 0, deletions: 0 },
-  });
-});

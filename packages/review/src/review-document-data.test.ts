@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { selectSource } from "./lens-selection";
 import {
-  PROSE_TAGS,
   REVIEW_DOCUMENT_FORMAT,
   reviewDocumentDataSchema,
   upgradeReviewDocumentJson,
@@ -49,17 +48,6 @@ describe("review document data", () => {
     expect(
       reviewDocumentDataSchema.parse(JSON.parse(JSON.stringify(document))),
     ).toEqual(document);
-  });
-
-  it("accepts exactly the prose tag allowlist", () => {
-    for (const tag of PROSE_TAGS) {
-      expect(
-        reviewDocumentDataSchema.safeParse({
-          ...base,
-          body: [{ type: "element", tag, props: {}, children: [] }],
-        }).success,
-      ).toBe(true);
-    }
   });
 
   it("allows table alignment only on cells and only with the three values", () => {

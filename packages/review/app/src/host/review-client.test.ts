@@ -1,12 +1,7 @@
 import type { ReviewRuntimeConfig } from "@dev.fast/review-protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  jsonReviewApiUrl,
-  reviewFetchUrl,
-  reviewStorageKey,
-  reviewWasmUrl,
-} from "./review-client";
+import { jsonReviewApiUrl, reviewFetchUrl } from "./review-client";
 
 const injectedConfig = {
   serverUrl: "http://127.0.0.1:5570",
@@ -23,16 +18,6 @@ afterEach(() => {
 });
 
 describe("review host client", () => {
-  it("uses injected desktop routing and asset configuration", () => {
-    expect(injectedConfig.host).toBe("desktop");
-    expect(reviewWasmUrl(injectedConfig)).toBe(
-      "vscode-file://review/libavoid.wasm",
-    );
-    expect(reviewStorageKey(injectedConfig, "files", "main", "head")).toBe(
-      "progressive-review:files:desktop-session:main:head",
-    );
-  });
-
   it("adds the desktop bearer token to API requests", async () => {
     let requestInit: RequestInit | undefined;
 

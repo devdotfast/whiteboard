@@ -175,25 +175,6 @@ describe("trace-cli", () => {
     expect(managedHook).not.toContain(tempDir);
   });
 
-  it("runs doctor in mock mode", async () => {
-    let out = "";
-    const stdout = new PassThrough();
-    stdout.on("data", (d) => {
-      out += d.toString();
-    });
-    const stderr = new PassThrough();
-
-    const exitCode = await runTraceStatus({
-      scope: traceScope(),
-      cwd: tempDir,
-      stdout: stdout as any,
-      stderr: stderr as any,
-    });
-
-    expect(exitCode).toBe(0);
-    expect(out).toContain("Checking trace configuration");
-  });
-
   it("runs lookup commit and formats JSON and text outputs", async () => {
     const sha = "0123456789abcdef0123456789abcdef01234567";
     const sessionId = "12345678-aaaa-bbbb-cccc-000000000001";

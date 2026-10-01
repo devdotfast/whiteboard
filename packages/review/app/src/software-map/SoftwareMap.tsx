@@ -35,6 +35,7 @@ import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
+import { useCanvasScrollLock } from "@canvas/use-canvas-scroll-lock";
 import { codePeekSource } from "@review/source";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -728,24 +729,7 @@ function SoftwareMapWithModel({
 
   const handleCloseCodeInspector = () => setInspectedNode(null);
 
-  useEffect(() => {
-    if (!expanded) return;
-
-    // Lock the canvas scroller (not document.body: the canvas composes into
-    // the host DOM, so the element that actually scrolls the review is the
-    // view region).
-    const scroller = document.querySelector<HTMLElement>(
-      ".review-view-region--review",
-    );
-
-    const originalOverflow = scroller?.style.overflow ?? "";
-
-    if (scroller) scroller.style.overflow = "hidden";
-
-    return () => {
-      if (scroller) scroller.style.overflow = originalOverflow;
-    };
-  }, [expanded]);
+  useCanvasScrollLock(expanded);
 
   const frame = (
     <SoftwareMapFrame

@@ -3,10 +3,8 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-/* The workbench grid reserves a bottom gutter (`gutterBottom` in
-   review/browser/workbench.ts), so a strip of the workbench root stays exposed
-   below the editor. Without this rule it falls through to the stock
-   WORKBENCH_BACKGROUND (#252526 on dark) and reads as a band under the canvas. */
+/* Wherever the workbench root shows around the parts, it reads as the editor
+   rather than the stock WORKBENCH_BACKGROUND (#252526 on dark). */
 .monaco-workbench.review-workbench {
   background: var(--vscode-editor-background);
 }

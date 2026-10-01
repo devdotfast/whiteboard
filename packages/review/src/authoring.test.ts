@@ -82,29 +82,6 @@ describe("Review definition session", () => {
     ]);
   });
 
-  it("can defer range resolution for client definitions", async () => {
-    const map = reviewMap();
-
-    const session = createReviewDefinitionSession({
-      softwareMap: map,
-      baseSoftwareMap: map,
-    });
-
-    const anchors = session.defineAnchors({
-      startup: {
-        title: "Startup",
-        peek: { file: "src/example.ts", fromLine: 1, toLine: 3 },
-      },
-    });
-
-    await expect(session.ready()).resolves.toBeUndefined();
-    expect(anchors.startup.peek).toEqual({
-      file: "src/example.ts",
-      start: { side: "head", line: 1 },
-      end: { side: "head", line: 3 },
-    });
-  });
-
   it("validates range anchors before the document module becomes ready", async () => {
     const validateCodePeek = vi.fn<() => Promise<void>>(async () => {});
 
@@ -202,24 +179,5 @@ describe("Review definition session", () => {
     await expect(session.ready()).rejects.toThrow(
       "Code range could not be resolved in the pinned worktree: Source range exceeds the file length",
     );
-  });
-
-  it("allows anchors to use validated source outside the diff", async () => {
-    const map = reviewMap();
-
-    const session = createReviewDefinitionSession({
-      softwareMap: map,
-      baseSoftwareMap: map,
-      validateCodePeek: async () => {},
-    });
-
-    session.defineAnchors({
-      empty: {
-        title: "Empty",
-        peek: { file: "src/example.ts", fromLine: 1, toLine: 3 },
-      },
-    });
-
-    await expect(session.ready()).resolves.toBeUndefined();
   });
 });

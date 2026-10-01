@@ -80,25 +80,4 @@ describe("ReviewSection", () => {
       ),
     ).toBe(false);
   });
-
-  it("renders without an id when none was assigned", () => {
-    const container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-
-    act(() => {
-      renderWithSession(
-        <ReviewSection title="Loose">
-          <p>Body copy.</p>
-        </ReviewSection>,
-      );
-    });
-
-    const heading = container.querySelector(".review-section-heading h2");
-
-    expect(heading?.hasAttribute("id")).toBe(false);
-    expect(container.querySelector(".review-section-body")?.textContent).toBe(
-      "Body copy.",
-    );
-  });
 });

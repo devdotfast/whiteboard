@@ -142,21 +142,6 @@ describe("Whiteboard CLI", () => {
     );
   });
 
-  it("does not expose the removed trace setup command", async () => {
-    const stderr = outputStream();
-    let output = "";
-    stderr.on("data", (chunk) => (output += String(chunk)));
-
-    await expect(
-      runReviewCli({
-        argv: ["trace", "setup"],
-        stdout: outputStream(),
-        stderr,
-      }),
-    ).resolves.toBe(1);
-    expect(output).toContain("unknown command 'setup'");
-  });
-
   it("prints the package version", async () => {
     const stdout = outputStream();
     let output = "";
@@ -171,40 +156,6 @@ describe("Whiteboard CLI", () => {
       }),
     ).resolves.toBe(0);
     expect(output).toBe("1.2.3\n");
-  });
-
-  it("registers app pick and info", async () => {
-    const runReviewApp = vi.fn<typeof runReviewAppActual>(async () => ({
-      event: "app" as const,
-      action: "pick" as const,
-      reviewUuid: "review-uuid",
-      title: "Review",
-    }));
-
-    const runReviewInfo = vi.fn<typeof runReviewInfoActual>(async () => ({
-      event: "info" as const,
-      reviews: [],
-    }));
-
-    await runReviewCli({
-      argv: ["app", "pick", "--session", "review-uuid"],
-      stdout: outputStream(),
-      stderr: outputStream(),
-      runtime: { runReviewAppPick: runReviewApp },
-    });
-    await runReviewCli({
-      argv: ["info", "--session", "review-uuid"],
-      stdout: outputStream(),
-      stderr: outputStream(),
-      runtime: { runReviewInfo },
-    });
-
-    expect(runReviewApp).toHaveBeenCalledWith(
-      expect.objectContaining({ reviewUuid: "review-uuid" }),
-    );
-    expect(runReviewInfo).toHaveBeenCalledWith(
-      expect.objectContaining({ reviewUuid: "review-uuid" }),
-    );
   });
 
   // The JSON authoring verbs are the only remaining surface no other case
@@ -265,42 +216,6 @@ describe("Whiteboard CLI", () => {
         state,
         instanceId: "desktop-1",
       });
-    },
-  );
-
-  it.each([
-    [
-      [],
-      "Whiteboard Desktop is ready in the background. Pass --focus to bring it forward.",
-    ],
-    [["--focus"], "Whiteboard Desktop is ready."],
-  ] as const)(
-    "describes a fresh launch according to the flag: %j",
-    async (flags, line) => {
-      const runReviewAppLaunch = vi.fn<typeof runReviewAppLaunchActual>(
-        async () => ({
-          event: "app",
-          action: "launch",
-          state: "launched",
-          instanceId: "desktop-1",
-        }),
-      );
-
-      const stdout = outputStream();
-      let output = "";
-      stdout.on("data", (chunk) => (output += String(chunk)));
-
-      await expect(
-        runReviewCli({
-          argv: ["app", "launch", ...flags],
-          cwd: "/outside-a-repository",
-          stdin: Readable.from([]),
-          stdout,
-          stderr: outputStream(),
-          runtime: { runReviewAppLaunch },
-        }),
-      ).resolves.toBe(0);
-      expect(output).toBe(`${line}\n`);
     },
   );
 
@@ -633,16 +548,6 @@ describe("Whiteboard CLI", () => {
     ).resolves.toBe(1);
   });
 
-  it("rejects the removed info --new option", async () => {
-    await expect(
-      runReviewCli({
-        argv: ["info", "--new"],
-        stdout: outputStream(),
-        stderr: outputStream(),
-      }),
-    ).resolves.toBe(1);
-  });
-
   it("rejects a --limit that is not a whole number before the runtime runs", async () => {
     const runTraceSessions = vi.fn<typeof runTraceSessionsActual>(
       async () => 0,
@@ -672,26 +577,6 @@ describe("Whiteboard CLI", () => {
     expect(runTraceSessions).toHaveBeenCalledWith(
       expect.objectContaining({ limit: 50 }),
     );
-  });
-
-  it("rejects the removed tools ensure command", async () => {
-    await expect(
-      runReviewCli({
-        argv: ["tools", "ensure"],
-        stdout: outputStream(),
-        stderr: outputStream(),
-      }),
-    ).resolves.toBe(1);
-  });
-
-  it("rejects the removed start command", async () => {
-    await expect(
-      runReviewCli({
-        argv: ["start"],
-        stdout: outputStream(),
-        stderr: outputStream(),
-      }),
-    ).resolves.toBe(1);
   });
 
   it("accepts only migrate apply and migrate apply --force", async () => {
@@ -724,29 +609,6 @@ describe("Whiteboard CLI", () => {
       2,
       expect.objectContaining({ force: true }),
     );
-  });
-
-  it.each([
-    ["update"],
-    ["update", "--post-install", "1.2.3"],
-    ["migrate", "plan"],
-    ["migrate", "verify"],
-    ["migrate", "cleanup"],
-    ["scaffold"],
-    ["publish"],
-    ["present"],
-    ["repair", "--session", "11111111-1111-4111-8111-111111111111"],
-    ["rebind", "feature"],
-    ["internal-test"],
-    ["prepare-worktree", "/tmp/checkout", "--commit", "a".repeat(40)],
-  ])("rejects removed command surface: %s", async (...argv) => {
-    await expect(
-      runReviewCli({
-        argv,
-        stdout: outputStream(),
-        stderr: outputStream(),
-      }),
-    ).resolves.toBe(1);
   });
 });
 

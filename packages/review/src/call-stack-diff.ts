@@ -67,39 +67,6 @@ export function diffCallStacks(
   return rows;
 }
 
-// Tree-util connectors ("│  ", "├─ ", "└─ ") derived from the row depths,
-// exactly like the `tree` command draws them. The glyph column sits at
-// depth-1; a continuation bar fills each shallower column whose branch
-// continues below the row.
-export function callStackConnectorPrefix(
-  rows: readonly CallStackDiffRow[],
-  index: number,
-): string {
-  const depth = rows[index]!.depth;
-
-  if (depth === 0) return "";
-
-  const continuesAt = (column: number): boolean => {
-    for (let next = index + 1; next < rows.length; next += 1) {
-      const nextDepth = rows[next]!.depth;
-
-      if (nextDepth <= column) return false;
-
-      if (nextDepth === column + 1) return true;
-    }
-
-    return false;
-  };
-
-  let prefix = "";
-
-  for (let column = 0; column < depth - 1; column += 1) {
-    prefix += continuesAt(column) ? "│  " : "   ";
-  }
-
-  return `${prefix}${continuesAt(depth - 1) ? "├─ " : "└─ "}`;
-}
-
 // The line numbers a diff deletes (base numbering) and adds (head numbering).
 export interface CallStackChangedLines {
   deleted: ReadonlySet<number>;

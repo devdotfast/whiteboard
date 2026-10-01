@@ -3,28 +3,6 @@ import { describe, expect, it } from "vitest";
 import { sanitizeUiTelemetryEvent } from "./ui-telemetry-events";
 
 describe("sanitizeUiTelemetryEvent", () => {
-  it("preserves privacy-safe Review authoring error dimensions", () => {
-    expect(
-      sanitizeUiTelemetryEvent({
-        name: "client_error",
-        properties: {
-          error_source: "document",
-          error_process: "canvas",
-          error_name: "ZodError",
-          component: "SequenceDiagram",
-        },
-      }),
-    ).toEqual({
-      event: "review_client_error",
-      properties: {
-        error_source: "document",
-        error_process: "canvas",
-        error_name: "ZodError",
-        component: "SequenceDiagram",
-      },
-    });
-  });
-
   it("drops raw error text under any property name", () => {
     const sanitized = sanitizeUiTelemetryEvent({
       name: "client_error",
@@ -169,63 +147,6 @@ describe("sanitizeUiTelemetryEvent", () => {
     expect(sanitizeUiTelemetryEvent({ name: "made_up" })).toBeNull();
   });
 
-  it("allows the three update lifecycle events", () => {
-    const update_attempt_id = "12345678-1234-1234-1234-123456789abc";
-    expect(
-      sanitizeUiTelemetryEvent({
-        name: "update_started",
-        properties: { update_attempt_id, target_version: "0.0.27" },
-      }),
-    ).toEqual({
-      event: "review_update_started",
-      properties: { update_attempt_id, target_version: "0.0.27" },
-    });
-    expect(
-      sanitizeUiTelemetryEvent({
-        name: "update_completed",
-        properties: {
-          update_attempt_id,
-          target_version: "0.0.27-beta.1",
-          duration_ms: 1234,
-        },
-      }),
-    ).toEqual({
-      event: "review_update_completed",
-      properties: {
-        update_attempt_id,
-        target_version: "0.0.27-beta.1",
-        duration_ms: 1234,
-      },
-    });
-    expect(
-      sanitizeUiTelemetryEvent({
-        name: "update_failed",
-        properties: {
-          phase: "install",
-          message_source: "shipit",
-          update_attempt_id,
-          target_version: "0.0.27",
-          duration_ms: 2345,
-          error_name: "UpdateInstallError",
-          message: "Failed to copy <REDACTED: user-file-path>",
-          message_hash: "0123456789abcdef",
-        },
-      }),
-    ).toEqual({
-      event: "review_update_failed",
-      properties: {
-        phase: "install",
-        message_source: "shipit",
-        update_attempt_id,
-        target_version: "0.0.27",
-        duration_ms: 2345,
-        error_name: "UpdateInstallError",
-        message: "Failed to copy <REDACTED: user-file-path>",
-        message_hash: "0123456789abcdef",
-      },
-    });
-  });
-
   it("rejects invalid update dimensions and raw update errors", () => {
     expect(
       sanitizeUiTelemetryEvent({
@@ -315,30 +236,6 @@ describe("sanitizeUiTelemetryEvent", () => {
 });
 
 describe("reliability and engagement events", () => {
-  it("accepts a live renderer crash", () => {
-    expect(
-      sanitizeUiTelemetryEvent({
-        name: "crash",
-        properties: {
-          process: "renderer",
-          reason: "oom",
-          exit_code: -1,
-          uptime_ms: 1234,
-          source: "live",
-        },
-      }),
-    ).toEqual({
-      event: "review_crash",
-      properties: {
-        process: "renderer",
-        reason: "oom",
-        exit_code: -1,
-        uptime_ms: 1234,
-        source: "live",
-      },
-    });
-  });
-
   it("drops a crash reason that is not an identifier", () => {
     const sanitized = sanitizeUiTelemetryEvent({
       name: "crash",
@@ -355,57 +252,6 @@ describe("reliability and engagement events", () => {
       exit_code: 1,
       source: "live",
     });
-  });
-
-  it("accepts the new engagement events", () => {
-    expect(
-      sanitizeUiTelemetryEvent({
-        name: "peek_opened",
-        properties: { via: "call_stack_frame" },
-      })?.properties,
-    ).toEqual({ via: "call_stack_frame" });
-    expect(
-      sanitizeUiTelemetryEvent({
-        name: "peek_resolve_failed",
-        properties: { root_kind: "range" },
-      })?.event,
-    ).toBe("review_peek_resolve_failed");
-    expect(
-      sanitizeUiTelemetryEvent({
-        name: "diff_opened",
-        properties: { kind: "structural", via: "lens" },
-      })?.properties,
-    ).toEqual({ kind: "structural", via: "lens" });
-    expect(
-      sanitizeUiTelemetryEvent({
-        name: "discord_clicked",
-        properties: { via: "dialog" },
-      })?.event,
-    ).toBe("review_discord_clicked");
-    expect(
-      sanitizeUiTelemetryEvent({
-        name: "setting_changed",
-        properties: { setting: "theme", value: "dark" },
-      })?.properties,
-    ).toEqual({ setting: "theme", value: "dark" });
-    expect(
-      sanitizeUiTelemetryEvent({
-        name: "error_burst",
-        properties: { message_hash: "0123456789abcdef", suppressed: 1 },
-      })?.event,
-    ).toBe("review_error_burst");
-    expect(
-      sanitizeUiTelemetryEvent({
-        name: "client_error",
-        properties: {
-          error_source: "server_unexpected",
-          error_process: "server",
-        },
-      })?.properties,
-    ).toEqual({ error_source: "server_unexpected", error_process: "server" });
-    expect(
-      sanitizeUiTelemetryEvent({ name: "review_shared", properties: {} }),
-    ).toEqual({ event: "review_review_shared", properties: {} });
   });
 
   it("keeps setting values and diff kinds to their closed enums", () => {

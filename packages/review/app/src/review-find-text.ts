@@ -5,6 +5,7 @@ const NON_FIND_TEXT_SELECTOR = [
   ".review-find-widget",
   "[data-review-inline-editor]",
   ".side-panel",
+  ".ask-marks",
 ].join(", ");
 
 const BLOCK_TEXT_TAGS = new Set([
@@ -62,21 +63,68 @@ export function reviewFindRanges(
   article: HTMLElement,
   expression: RegExp,
 ): Range[] {
-  const index = buildFindTextIndex(article);
+  const index = reviewTextIndex(article);
 
   return regularExpressionMatches(index.text, expression).flatMap(
-    ({ start, end }) => {
-      const startPoint = rangePoint(index.segments, start, true);
-      const endPoint = rangePoint(index.segments, end, false);
+    ({ start, end }) => index.range(start, end) ?? [],
+  );
+}
 
-      if (!startPoint || !endPoint) return [];
+/** The document's text as find sees it, with whitespace collapsed and
+ * blocks separated, and a way back and forth between it and the DOM. */
+export interface ReviewTextIndex {
+  text: string;
+  range(start: number, end: number): Range | null;
+  /** Where a DOM point falls in `text`. */
+  offset(container: Node, offset: number): number | null;
+}
+
+export function reviewTextIndex(article: HTMLElement): ReviewTextIndex {
+  const { text, segments } = buildFindTextIndex(article);
+
+  return {
+    text,
+    range(start, end) {
+      const startPoint = rangePoint(segments, start, true);
+      const endPoint = rangePoint(segments, end, false);
+
+      if (!startPoint || !endPoint) return null;
       const range = article.ownerDocument.createRange();
       range.setStart(startPoint.node, startPoint.offset);
       range.setEnd(endPoint.node, endPoint.offset);
 
-      return [range];
+      return range;
     },
-  );
+    offset(container, offset) {
+      for (const segment of segments) {
+        if (segment.node !== container) continue;
+        const nodeStart = segment.nodeStart ?? 0;
+        const nodeEnd = segment.nodeEnd ?? nodeStart;
+
+        if (offset < nodeStart || offset > nodeEnd) continue;
+
+        // Collapsed whitespace has no inner offsets.
+        return segment.outputEnd - segment.outputStart === nodeEnd - nodeStart
+          ? segment.outputStart + offset - nodeStart
+          : offset === nodeStart
+            ? segment.outputStart
+            : segment.outputEnd;
+      }
+
+      // A point between nodes: the first text after it.
+      const point = article.ownerDocument.createRange();
+      point.setStart(container, offset);
+
+      for (const segment of segments)
+        if (
+          segment.node &&
+          point.comparePoint(segment.node, segment.nodeStart ?? 0) >= 0
+        )
+          return segment.outputStart;
+
+      return null;
+    },
+  };
 }
 
 function buildFindTextIndex(article: HTMLElement): FindTextIndex {

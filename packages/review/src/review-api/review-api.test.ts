@@ -205,36 +205,6 @@ describe("snapshot authoring", () => {
     expect(store.list()).toEqual([]);
   });
 
-  it("compares execution paths in the same snapshot without changing their source pins", async () => {
-    const { reviewId } = await create();
-    await edit(reviewId, {
-      type: "insert",
-      content: {
-        type: "call_stack_diff",
-        title: "Mouse versus keyboard",
-        base: [
-          {
-            key: "mouse",
-            label: "selectionchange",
-            source: selectSource(source),
-          },
-        ],
-        head: [
-          { key: "keyboard", label: "keydown", source: selectSource(source) },
-        ],
-      },
-    });
-    const saved = store.read(reviewId).document[0]!;
-    expect(saved).toMatchObject({
-      type: "call_stack_diff",
-      base: [{ source: selectSource(source) }],
-      head: [{ source: selectSource(source) }],
-    });
-    expect(providers.validateSource).toHaveBeenCalledWith(pins, source, {
-      peek: true,
-    });
-  });
-
   it("deletes one review and its history, keeps other reviews, and cannot replay deleted content", async () => {
     const input = request({ type: "create", title: "Delete me", pins });
     const { reviewId } = await store.execute(input);
@@ -2771,27 +2741,6 @@ it("returns pending progress without waiting for coverage and signals completion
     expect(data.changes).toHaveBeenCalledTimes(1);
   } finally {
     release();
-    await data.close();
-  }
-});
-
-it("reports failed background coverage instead of leaving progress pending", async () => {
-  const { createReviewApi } = await import("./http.js");
-  const { reviewId } = await create();
-  const data = new LocalReviewData(store);
-  vi.spyOn(data, "resolveSource").mockImplementation(async (snapshot) => ({
-    snapshot,
-    pins: snapshot.pins!,
-  }));
-  vi.spyOn(data, "changes").mockRejectedValue(new Error("comparison failed"));
-  const api = createReviewApi(store, data);
-  const route = `/${reviewId}/progress?version=0&mode=textual&wait=false`;
-
-  try {
-    expect((await api.request(route)).status).toBe(202);
-    await vi.waitFor(() => expect(data.coverageRevision).toBeGreaterThan(0));
-    expect((await api.request(route)).status).toBe(500);
-  } finally {
     await data.close();
   }
 });

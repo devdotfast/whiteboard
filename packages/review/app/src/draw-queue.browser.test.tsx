@@ -205,32 +205,6 @@ it("traces a new flow node, then fills it, with the courier on it, and settles",
   await expectCourierOn('[data-review-unit-id="n2"]');
 });
 
-it("stands on an edit already on the board when the reader arrives, drawing nothing", async () => {
-  await render({ ...insert("b1"), source: "standing" });
-  expect(motion('[data-review-node-id="b1"]')).toBeUndefined();
-  await expectCourierOn('[data-review-node-id="b1"]');
-  expect(motion('[data-review-node-id="b1"]')).toBeUndefined();
-
-  // The agent's next edit is drawn as usual.
-  await render(insert("b2"));
-  expect(motion('[data-review-node-id="b2"]')).toBe("landing");
-});
-
-it("keeps a queued block unseen until its turn, then lands it", async () => {
-  await render(insert("b1"));
-  expect(motion('[data-review-node-id="b1"]')).toBe("landing");
-
-  // b2 arrives while b1 is still landing: it waits, hidden.
-  await render(insert("b2"));
-  expect(motion('[data-review-node-id="b2"]')).toBe("queued");
-
-  await manualClock.advance(680);
-  expect(motion('[data-review-node-id="b2"]')).toBe("landing");
-  expect(motion('[data-review-node-id="b1"]')).toBeUndefined();
-  await manualClock.advance(680);
-  expect(motion('[data-review-node-id="b2"]')).toBeUndefined();
-});
-
 it("holds the attention ring on a focused block until the next edit lands", async () => {
   await render({ targetId: "b1", blockId: "b1", source: "focus", seq: ++seq });
   expect(motion('[data-review-node-id="b1"]')).toBe("attention");

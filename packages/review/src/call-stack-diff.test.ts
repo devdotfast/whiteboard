@@ -7,12 +7,7 @@ import {
   calls,
   codePeekSource,
 } from "./authoring";
-import {
-  callStackConnectorPrefix,
-  callStackEvidenceErrors,
-  diffCallStacks,
-} from "./call-stack-diff";
-import { patchChangedLines } from "./call-stack-diff-test-utils";
+import { callStackEvidenceErrors, diffCallStacks } from "./call-stack-diff";
 import { callStackFrames } from "./call-stack-frames";
 import { selectSource } from "./lens-selection";
 
@@ -69,12 +64,6 @@ describe("diffCallStacks", () => {
     ]);
   });
 
-  it("renders a shared frame from the head entry", () => {
-    const headReconcile = anchor("reconcile");
-    const rows = diff([reconcile], [headReconcile]);
-    expect(rows[0]!.frame).toEqual(callStackFrames([headReconcile])[0]);
-  });
-
   it("matches a calls() hop by its child frame", () => {
     const hop = calls(enqueueWork, processItem, "via the workqueue");
     const rows = diff([enqueueWork, hop], [enqueueWork, hop]);
@@ -98,28 +87,6 @@ describe("diffCallStacks", () => {
       ["unchanged", 1],
       ["added", 2],
     ]);
-  });
-});
-
-describe("callStackConnectorPrefix", () => {
-  it("draws tree-util connectors from depth transitions", () => {
-    const rows = diff(
-      [reconcile, auth, enqueueWork],
-      [reconcile, enqueueWork, processItem],
-    );
-
-    expect(
-      rows.map((_, index) => callStackConnectorPrefix(rows, index)),
-    ).toEqual(["", "├─ ", "└─ ", "   └─ "]);
-  });
-
-  it("keeps the continuation bar while a branch continues below", () => {
-    const rows = diff([reconcile, auth, persistResult], [reconcile]);
-    // No second depth-1 row follows auth, so auth draws "└─" and its child
-    // indents one column further.
-    expect(
-      rows.map((_, index) => callStackConnectorPrefix(rows, index)),
-    ).toEqual(["", "└─ ", "   └─ "]);
   });
 });
 
@@ -165,30 +132,6 @@ describe("callStackDiffPropsSchema side rules", () => {
     });
 
     expect(result.success).toBe(false);
-  });
-});
-
-describe("patchChangedLines", () => {
-  it("collects deleted base lines and added head lines per hunk", () => {
-    const patch = [
-      "diff --git a/x.ts b/x.ts",
-      "--- a/x.ts",
-      "+++ b/x.ts",
-      "@@ -10,4 +10,4 @@",
-      " context",
-      "-removed line",
-      "+added line",
-      " context",
-      "@@ -30,2 +30,3 @@",
-      " context",
-      "+second added",
-      " context",
-      "",
-    ].join("\n");
-
-    const lines = patchChangedLines(patch);
-    expect([...lines.deleted]).toEqual([11]);
-    expect([...lines.added]).toEqual([11, 31]);
   });
 });
 

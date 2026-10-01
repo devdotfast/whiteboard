@@ -8,7 +8,6 @@ import { selectSource } from "@review/lens-selection.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { type AuthoringTool, callAuthoringTool } from "./agent-client.js";
-import { authoringTools } from "./authoring-tools.js";
 import { ReviewApiClient } from "./client.js";
 import { documentText } from "./document-text.js";
 import { createReviewApi } from "./http.js";

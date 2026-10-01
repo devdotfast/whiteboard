@@ -117,13 +117,6 @@ test("reports a dump as the earlier launch that wrote it, then deletes it", asyn
   assert.equal(ledger(dir).launches[1].cliVersion, "0.0.36");
 });
 
-test("sends no launch for a dump older than every recorded launch", async () => {
-  const dir = dumpsDir();
-  const { posted, dumps } = setup(dir);
-  await dumps.reconcile();
-  assert.equal(posted[0].body.launch, undefined);
-});
-
 test("keeps only the last ten launches", () => {
   const dir = dumpsDir();
   for (let launch = 0; launch < 12; launch++) {

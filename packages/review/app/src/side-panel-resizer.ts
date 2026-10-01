@@ -4,7 +4,7 @@ import type {
   PointerEvent,
   RefObject,
 } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useReviewUiState } from "./review-ui-state";
 
@@ -17,6 +17,8 @@ type RightPanelResizeOptions = {
   maxWidth: number;
   minMainWidth: number;
   separatorWidth?: number;
+  /** Dragging past `minWidth` folds the panel to this width. */
+  collapsedWidth?: number;
   label: string;
   containerRef?: RefObject<HTMLElement | null>;
 };
@@ -187,6 +189,7 @@ export function useRightPanelResize({
   maxWidth,
   minMainWidth,
   separatorWidth = 0,
+  collapsedWidth,
   label,
   containerRef,
 }: RightPanelResizeOptions) {
@@ -198,6 +201,17 @@ export function useRightPanelResize({
     stateKey,
     defaultWidth,
   );
+
+  const [storedCollapsed, setCollapsed] = useReviewUiState(
+    `${stateKey}-collapsed`,
+    false,
+  );
+
+  const collapsible = collapsedWidth !== undefined;
+  const foldedWidth = storedCollapsed ? collapsedWidth : undefined;
+  const collapsed = foldedWidth !== undefined;
+  // Unfolding restores the width from before the drag.
+  const dragStartWidth = useRef(requestedWidth);
 
   const [isResizing, setIsResizing] = useState(false);
   const [, setLayoutRevision] = useState(0);
@@ -277,19 +291,38 @@ export function useRightPanelResize({
   const resizeFromClientX = useCallback(
     (clientX: number) => {
       const { left, right } = containerMetrics();
-      setWidth(side === "left" ? clientX - left : right - clientX);
+      const nextWidth = side === "left" ? clientX - left : right - clientX;
+
+      if (collapsible && nextWidth < minWidth) {
+        setCollapsed(true);
+        setRequestedWidth(dragStartWidth.current);
+
+        return;
+      }
+
+      if (collapsible) setCollapsed(false);
+      setWidth(nextWidth);
     },
-    [containerMetrics, setWidth, side],
+    [
+      collapsible,
+      containerMetrics,
+      minWidth,
+      setCollapsed,
+      setRequestedWidth,
+      setWidth,
+      side,
+    ],
   );
 
+  // Resize on move, not press, so a press at the minimum can't fold.
   const startResize = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
+      dragStartWidth.current = requestedWidth;
       setIsResizing(true);
-      resizeFromClientX(event.clientX);
     },
-    [resizeFromClientX],
+    [requestedWidth],
   );
 
   const resize = useCallback(
@@ -310,27 +343,34 @@ export function useRightPanelResize({
 
   const resizeWithKeyboard = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        setWidth((currentWidth) => currentWidth + (side === "left" ? -32 : 32));
-      }
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
 
-      if (event.key === "ArrowRight") {
-        event.preventDefault();
-        setWidth((currentWidth) => currentWidth + (side === "left" ? 32 : -32));
+      const delta =
+        (event.key === "ArrowLeft") === (side === "left") ? -32 : 32;
+
+      if (collapsed) {
+        if (delta > 0) setCollapsed(false);
+      } else if (collapsible && delta < 0 && width <= minWidth) {
+        setCollapsed(true);
+      } else {
+        setWidth((currentWidth) => currentWidth + delta);
       }
     },
-    [setWidth, side],
+    [collapsed, collapsible, minWidth, setCollapsed, setWidth, side, width],
   );
+
+  const expand = useCallback(() => setCollapsed(false), [setCollapsed]);
+  const renderedWidth = foldedWidth ?? width;
 
   const separatorProps = useMemo<SeparatorProps>(
     () => ({
       role: "separator",
       "aria-label": label,
       "aria-orientation": "vertical",
-      "aria-valuemin": minWidth,
+      "aria-valuemin": collapsedWidth ?? minWidth,
       "aria-valuemax": maxWidth,
-      "aria-valuenow": Math.round(width),
+      "aria-valuenow": Math.round(renderedWidth),
       tabIndex: 0,
       onPointerDown: startResize,
       onPointerMove: resize,
@@ -340,20 +380,23 @@ export function useRightPanelResize({
       onKeyDown: resizeWithKeyboard,
     }),
     [
+      collapsedWidth,
       label,
       maxWidth,
       minWidth,
+      renderedWidth,
       resize,
       resizeWithKeyboard,
       startResize,
       stopResize,
-      width,
     ],
   );
 
   return {
-    width,
+    width: renderedWidth,
     setWidth,
+    collapsed,
+    expand,
     isResizing,
     separatorProps,
   };

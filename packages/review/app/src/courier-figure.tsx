@@ -20,12 +20,15 @@ export function CourierFigure({
   xstyle,
   pose,
   marching = false,
+  thinking = false,
 }: {
   xstyle?: stylex.StyleXStyles;
   /** The board courier's pose; the badge's mini courier has none. */
   pose?: CourierPose;
   /** The badge's mini courier marches while an agent works. */
   marching?: boolean;
+  /** Standing still, looking about while he works something out. */
+  thinking?: boolean;
 }) {
   const board = pose !== undefined;
   const march = pose?.idle === "march";
@@ -68,7 +71,13 @@ export function CourierFigure({
         height="16"
         rx="6"
       />
-      <g {...stylex.props(board && styles.still, sit && styles.dozing)}>
+      <g
+        {...stylex.props(
+          board && styles.still,
+          sit && styles.dozing,
+          thinking && styles.pondering,
+        )}
+      >
         <circle {...stylex.props(styles.eye)} cx="11" cy="15" r="1.3" />
         <circle {...stylex.props(styles.eye)} cx="18" cy="15" r="1.3" />
         <path
@@ -100,6 +109,14 @@ const marchRight = stylex.keyframes({
 const doze = stylex.keyframes({
   "0%, 80%": { transform: "translateY(0)" },
   "81%, 100%": { transform: "translateY(1.5px)" },
+});
+
+// Looks one way, then the other, then up, as if working it out.
+const ponder = stylex.keyframes({
+  "0%, 100%": { transform: "translate(0, 0)" },
+  "25%": { transform: "translate(-2px, 0)" },
+  "50%": { transform: "translate(2px, 0)" },
+  "75%": { transform: "translate(1px, -2px)" },
 });
 
 const happy = stylex.keyframes({
@@ -177,6 +194,15 @@ const styles = stylex.create({
     animationName: { default: doze, [REDUCED]: "none" },
     animationDuration: {
       default: courierMotion.doze,
+      [REDUCED]: motion.instant,
+    },
+    animationTimingFunction: { default: "steps(1)", [REDUCED]: "ease" },
+    animationIterationCount: { default: "infinite", [REDUCED]: 1 },
+  },
+  pondering: {
+    animationName: { default: ponder, [REDUCED]: "none" },
+    animationDuration: {
+      default: courierMotion.ponder,
       [REDUCED]: motion.instant,
     },
     animationTimingFunction: { default: "steps(1)", [REDUCED]: "ease" },

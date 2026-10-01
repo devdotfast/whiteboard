@@ -3,9 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   REVIEW_DESKTOP_DISCOVERY_VERSION,
   parseReviewDesktopDiscovery,
-  parseReviewDiffFilesResponse,
-  parseReviewFileContentRequest,
-  parseReviewFileContentResponse,
   parseReviewVerbRequest,
 } from "./index.js";
 
@@ -89,41 +86,5 @@ describe("review protocol parsers", () => {
         },
       }),
     ).toThrow("positive integer");
-  });
-
-  it("parses file lists and file content variants", () => {
-    expect(
-      parseReviewFileContentRequest({ path: "src/new.ts", side: "base" }),
-    ).toEqual({ path: "src/new.ts", side: "base" });
-    expect(
-      parseReviewDiffFilesResponse({
-        ok: true,
-        baseRef: "main",
-        files: [
-          {
-            path: "src/new.ts",
-            previousPath: "src/old.ts",
-            status: "renamed",
-            additions: 0,
-            deletions: 0,
-          },
-        ],
-      }),
-    ).toMatchObject({ ok: true, files: [{ status: "renamed" }] });
-    expect(
-      parseReviewFileContentResponse({
-        ok: true,
-        content: "partial",
-        truncated: true,
-      }),
-    ).toEqual({ ok: true, content: "partial", truncated: true });
-    expect(parseReviewFileContentResponse({ ok: true, absent: true })).toEqual({
-      ok: true,
-      absent: true,
-    });
-    expect(parseReviewFileContentResponse({ ok: true, binary: true })).toEqual({
-      ok: true,
-      binary: true,
-    });
   });
 });

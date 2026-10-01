@@ -7,7 +7,6 @@ import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useState } from "react";
 
 import { ContentsIcon } from "./icons";
-import { appMarker } from "./markers.stylex";
 import type { ReviewTocEntry } from "./review-document-headings";
 import {
   cssIdentifier,
@@ -44,8 +43,14 @@ const TAIL_CSS_PROPERTY = "--review-toc-tail";
 
 export function ReviewToc({
   entries,
+  besideHeader = false,
 }: {
   entries: readonly ReviewTocEntry[];
+  /** The document opens with a review header: the rail lines up with the
+   * page and sets its entries larger. A prop, not a :has() over the app,
+   * which restyled every element on each change anywhere in it, such as
+   * each keystroke in a text field. */
+  besideHeader?: boolean;
 }): ReactElement | null {
   const roots = useReviewRoots();
   const shellRef = roots?.shellRef;
@@ -281,6 +286,7 @@ export function ReviewToc({
         styles.toc,
         showList && styles.tocOpen,
         showRail && styles.tocRail,
+        showRail && besideHeader && styles.tocRailBesideHeader,
       )}
       aria-label="Contents"
       onKeyDown={(event) => {
@@ -314,11 +320,18 @@ export function ReviewToc({
             textStyles.eyebrow,
             styles.head,
             showRail && styles.headRail,
+            showRail && besideHeader && styles.headRailBesideHeader,
           )}
         >
           Contents
         </div>
-        <ul {...stylex.props(styles.list, showRail && styles.listRail)}>
+        <ul
+          {...stylex.props(
+            styles.list,
+            showRail && styles.listRail,
+            showRail && besideHeader && styles.listRailBesideHeader,
+          )}
+        >
           {numberedEntries.map((entry) => (
             <li
               key={entry.id}
@@ -331,7 +344,7 @@ export function ReviewToc({
                 type="button"
                 {...stylex.props(
                   styles.link,
-                  showRail && styles.linkRail,
+                  showRail && besideHeader && styles.linkRailBesideHeader,
                   active === entry.id && styles.linkActive,
                 )}
                 onClick={() => scrollTo(entry.id)}
@@ -339,7 +352,7 @@ export function ReviewToc({
                 <span
                   {...stylex.props(
                     styles.number,
-                    showRail && styles.numberRail,
+                    showRail && besideHeader && styles.numberRailBesideHeader,
                     entry.level === "h3" && styles.numberH3,
                     active === entry.id && styles.numberActive,
                   )}
@@ -390,11 +403,6 @@ const narrow = "@media (max-width: 720px)";
 
 const reducedMotion = "@media (prefers-reduced-motion: reduce)";
 
-// Beside a review header the rail lines up with the left edge of a 1320px
-// page and gives each entry a taller row and larger type.
-const besideDocumentHeader = () =>
-  stylex.when.ancestor(":has([data-review-document-header])", appMarker);
-
 // On a narrow shell the nav is the pill and the card in one: a 32px square at
 // the pill's anchor that grows in place, top-left corner pinned, into the
 // 248px contents card. Width and height animate; the list only fades, late in
@@ -435,32 +443,22 @@ const styles = stylex.create({
   // card's inner layout but never grows or shrinks.
   tocRail: {
     top: `calc(48px + ${tokens.reviewPageTop} + 40px)`,
-    left: {
-      default: "24px",
-      [besideDocumentHeader()]: "max(24px, calc((100% - 1320px) / 2))",
-      [narrow]: {
-        default: "8px",
-        [besideDocumentHeader()]: "max(24px, calc((100% - 1320px) / 2))",
-      },
-    },
+    left: { default: "24px", [narrow]: "8px" },
     zIndex: tocLayer.rail,
-    width: {
-      default: "248px",
-      [besideDocumentHeader()]: "240px",
-      [narrow]: {
-        default: "min(248px, calc(100cqi - 16px))",
-        [besideDocumentHeader()]: "240px",
-      },
-    },
+    width: { default: "248px", [narrow]: "min(248px, calc(100cqi - 16px))" },
     overflow: "visible",
-    padding: {
-      default: "20px 18px 22px 20px",
-      [besideDocumentHeader()]: "6px 0 0",
-    },
+    padding: "20px 18px 22px 20px",
     transition: "none",
     borderColor: tokens.transparent,
     backgroundColor: tokens.transparent,
     boxShadow: "none",
+  },
+  // Beside a review header the rail lines up with the left edge of a 1320px
+  // page and gives each entry a taller row and larger type.
+  tocRailBesideHeader: {
+    left: "max(24px, calc((100% - 1320px) / 2))",
+    width: "240px",
+    padding: "6px 0 0",
   },
   toggle: {
     position: "absolute",
@@ -510,9 +508,12 @@ const styles = stylex.create({
   headRail: {
     height: "auto",
     marginBottom: "14px",
-    paddingBottom: { default: null, [besideDocumentHeader()]: "10px" },
-    paddingLeft: { default: 0, [besideDocumentHeader()]: "14px" },
+    paddingLeft: 0,
     lineHeight: "normal",
+  },
+  headRailBesideHeader: {
+    paddingBottom: "10px",
+    paddingLeft: "14px",
   },
   list: {
     display: "grid",
@@ -523,7 +524,9 @@ const styles = stylex.create({
   },
   listRail: {
     padding: 0,
-    gap: { default: "6px", [besideDocumentHeader()]: "4px" },
+  },
+  listRailBesideHeader: {
+    gap: "4px",
   },
   item: {
     margin: 0,
@@ -556,11 +559,11 @@ const styles = stylex.create({
     lineHeight: "18px",
     outline: { default: null, ":hover": "none", ":focus-visible": "none" },
   },
-  linkRail: {
-    minHeight: { default: null, [besideDocumentHeader()]: "30px" },
-    gap: { default: "10px", [besideDocumentHeader()]: "12px" },
-    paddingBlock: { default: null, [besideDocumentHeader()]: 0 },
-    fontSize: { default: fontSize.body, [besideDocumentHeader()]: fontSize.ui },
+  linkRailBesideHeader: {
+    minHeight: "30px",
+    gap: "12px",
+    paddingBlock: 0,
+    fontSize: fontSize.ui,
   },
   linkActive: {
     color: tokens.ink,
@@ -574,12 +577,9 @@ const styles = stylex.create({
     minWidth: "22px",
     fontSize: fontSize.small,
   },
-  numberRail: {
-    minWidth: { default: "22px", [besideDocumentHeader()]: "12px" },
-    fontSize: {
-      default: fontSize.small,
-      [besideDocumentHeader()]: fontSize.body,
-    },
+  numberRailBesideHeader: {
+    minWidth: "12px",
+    fontSize: fontSize.body,
   },
   // Fits "5.10".
   numberH3: {

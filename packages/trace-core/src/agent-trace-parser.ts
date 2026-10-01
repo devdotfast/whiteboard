@@ -15,6 +15,7 @@ import {
 import {
   type ReviewAgentTraceEvent,
   type ReviewAgentTraceSession,
+  extractTraceEventText as eventText,
 } from "@dev.fast/trace-protocol";
 
 export const AGENT_TRACE_PARSER_VERSION = "1";
@@ -25,23 +26,8 @@ export type AgentTraceEvent = ReviewAgentTraceEvent;
 
 export type AgentTraceToolEvent = Extract<AgentTraceEvent, { kind: "tool" }>;
 
-// The one text projection of an event. TraceQuote validation matches quotes
-// against this text, so any surface that shows event text for quote picking
-// must use the same projection.
 export function extractTraceEventText(event: AgentTraceEvent): string {
-  if (event.kind === "user") return event.text;
-
-  if (event.kind === "assistant") return event.markdown;
-
-  if (event.kind === "tool") {
-    return [event.title, event.command, event.input, event.output]
-      .filter(Boolean)
-      .join(" ");
-  }
-
-  if (event.kind === "separator") return event.label;
-
-  return "";
+  return eventText(event);
 }
 
 export interface AgentTraceParseResult {
@@ -84,32 +70,6 @@ const OUTPUT_LIMIT = 20_000;
 const INPUT_LIMIT = 4_000;
 
 const TITLE_LIMIT = 160;
-
-export function sniffAgentTraceHarness(
-  jsonlFirstChunk: string,
-): AgentTraceHarness {
-  for (const line of jsonlFirstChunk.split("\n")) {
-    const trimmed = line.trim();
-
-    if (!trimmed) continue;
-
-    try {
-      const type = jsonObject(parseJsonText(trimmed))?.type;
-
-      if (type === "session_meta") return "codex";
-
-      if (type === "session") return "pi";
-
-      if (type === "opencode_session") return "opencode";
-
-      return "claude-code";
-    } catch {
-      continue;
-    }
-  }
-
-  return "unknown";
-}
 
 export function parseAgentTraceJsonl(
   jsonl: string,

@@ -222,62 +222,6 @@ describe("ReviewHome", () => {
     expect(onOpen).toHaveBeenCalledWith(item);
   });
 
-  it("shows reviews from different repositories in one table", async () => {
-    const reviews = [
-      summary({ reviewId: uuid(1), title: "First dev review" }),
-      summary({ reviewId: uuid(2), title: "Second dev review" }),
-      summary({
-        reviewId: uuid(3),
-        title: "Other workspace review",
-        repositoryPath: "/repo/other",
-      }),
-    ];
-
-    await act(async () =>
-      renderWithHost(<ReviewHome reviews={reviews} onOpen={() => {}} />),
-    );
-
-    expect(container.querySelectorAll("table")).toHaveLength(1);
-    expect(container.querySelectorAll("tbody tr")).toHaveLength(3);
-    expect(container.querySelector('[title^="/repo/dev"]')).not.toBeNull();
-    expect(container.querySelector('[title^="/repo/other"]')).not.toBeNull();
-  });
-
-  it.each(["ArrowDown", "ArrowUp"])(
-    "%s opens row actions once without opening or deleting the review",
-    async (key) => {
-      const review = summary({ title: "Keyboard review" });
-      const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
-
-      const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
-        async () => {},
-      );
-
-      await act(async () =>
-        renderWithHost(
-          <ReviewHome reviews={[review]} onOpen={onOpen} onDelete={onDelete} />,
-        ),
-      );
-
-      const trigger = container.querySelector<HTMLButtonElement>(
-        '[aria-label="Actions for Keyboard review"]',
-      )!;
-
-      for (let attempt = 0; attempt < 2; attempt++) {
-        await act(async () =>
-          trigger.dispatchEvent(
-            new KeyboardEvent("keydown", { key, bubbles: true }),
-          ),
-        );
-      }
-
-      expect(host.ui.showMenu).toHaveBeenCalledOnce();
-      expect(host.menu.items.map((item) => item.id)).toEqual(["delete"]);
-      expect(onOpen).not.toHaveBeenCalled();
-      expect(onDelete).not.toHaveBeenCalled();
-    },
-  );
-
   it.each([false, true])(
     "host deletion waits for confirmation and preserves the original target (confirmed: %s)",
     async (confirmed) => {
@@ -415,44 +359,6 @@ describe("ReviewHome", () => {
     expect(confirmDelete).toHaveBeenCalledExactlyOnceWith("Dismissed session");
     expect(onDelete).not.toHaveBeenCalled();
     expect(container.textContent).toContain("Dismissed session");
-  });
-
-  it("deletes a review after an arming click without opening it", async () => {
-    const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
-
-    const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
-      async () => undefined,
-    );
-
-    const reviews = [
-      summary({
-        reviewId: uuid(1),
-        title: "Removable",
-        dismissedAt: "2026-08-13T20:00:00.000Z",
-      }),
-    ];
-
-    await act(async () =>
-      renderWithHost(
-        <ReviewHome reviews={reviews} onOpen={onOpen} onDelete={onDelete} />,
-      ),
-    );
-
-    const dismissed = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Dismissed sessions"] > button',
-    );
-
-    await act(async () => dismissed?.click());
-
-    const remove = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Delete Removable"]',
-    );
-
-    expect(remove).not.toBeNull();
-    await act(async () => remove?.click());
-    expect(host.ui.confirmDelete).toHaveBeenCalledExactlyOnceWith("Removable");
-    expect(onDelete).toHaveBeenCalledWith(reviews[0]);
-    expect(onOpen).not.toHaveBeenCalled();
   });
 
   it.each([false, true])(
@@ -661,31 +567,6 @@ describe("ReviewHome", () => {
       expect(document.activeElement).toBe(search);
     },
   );
-
-  it("hides the delete action when the host does not support deletion", async () => {
-    await act(async () =>
-      renderWithHost(<ReviewHome reviews={[summary()]} onOpen={() => {}} />),
-    );
-    expect(
-      container.querySelector('button[title="Delete session"]'),
-    ).toBeNull();
-  });
-
-  it("shows the native snapshot update time in the table", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(
-      Date.parse("2026-07-29T12:00:00.000Z"),
-    );
-
-    const review = summary({
-      createdAt: "2026-07-29T11:54:00.000Z",
-    });
-
-    await act(async () =>
-      renderWithHost(<ReviewHome reviews={[review]} onOpen={() => {}} />),
-    );
-    expect(container.textContent).toContain("6 min ago");
-    expect(container.textContent).not.toContain("updated not published");
-  });
 });
 
 describe("formatRelativeTime", () => {

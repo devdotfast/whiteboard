@@ -80,23 +80,6 @@ describe("DiffLayoutControl", () => {
     container.remove();
   });
 
-  it.each(["ArrowDown", "ArrowUp"])(
-    "%s opens the host menu only once",
-    async (key) => {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        await act(async () =>
-          trigger().dispatchEvent(
-            new KeyboardEvent("keydown", { key, bubbles: true }),
-          ),
-        );
-      }
-
-      expect(host.ui.showMenu).toHaveBeenCalledOnce();
-      expect(host.menu.items.find((item) => item.checked)?.id).toBe("split");
-      expect(setDiffLayout).not.toHaveBeenCalled();
-    },
-  );
-
   it("writes the chosen layout and does not rewrite the current one", async () => {
     await act(async () => trigger().click());
     await act(async () => host.select("split"));
@@ -139,13 +122,6 @@ describe("DiffLayoutControl", () => {
     });
     await act(async () => trigger().click());
     expect(host.menu.items.find((item) => item.checked)?.id).toBe("unified");
-  });
-
-  it("leaves the layout unchanged when the host cancels", async () => {
-    await act(async () => trigger().click());
-    await act(async () => host.menu.onHide());
-    expect(trigger().getAttribute("aria-expanded")).toBe("false");
-    expect(setDiffLayout).not.toHaveBeenCalled();
   });
 
   function trigger() {

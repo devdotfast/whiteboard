@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { documentStyles } from "./document-styles";
-import { appMarker, documentMarker } from "./markers.stylex";
+import { documentMarker } from "./markers.stylex";
 import { type ReviewRoots, ReviewRootsProvider } from "./review-root-context";
 import { ReviewToc } from "./review-toc";
 import { shellStyles } from "./shell-styles";
@@ -164,10 +164,8 @@ describe("ReviewToc", () => {
   );
   it("keeps two-digit subsection numbers clear of their labels", async () => {
     const app = document.createElement("div");
-    app.className = `review-canvas-root review-app ${stylex.props(appMarker).className}`;
-    const header = document.createElement("header");
-    header.dataset.reviewDocumentHeader = "";
-    app.append(header, shell);
+    app.className = "review-canvas-root review-app";
+    app.append(shell);
     document.body.append(app);
     shell.style.width = "1600px";
 
@@ -194,7 +192,7 @@ describe("ReviewToc", () => {
     act(() => {
       root.render(
         <ReviewRootsProvider roots={reviewRoots}>
-          <ReviewToc entries={entries} />
+          <ReviewToc entries={entries} besideHeader />
         </ReviewRootsProvider>,
       );
     });

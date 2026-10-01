@@ -488,6 +488,43 @@ describe("local vcs", () => {
     expect(files[1]!.patch).toContain("@@ -1 +0,0 @@");
   });
 
+  it("counts header-looking hunk content without changing file paths", () => {
+    const patch = [
+      "diff --git a/schema.sql b/schema.sql",
+      "deleted file mode 100644",
+      "--- a/schema.sql",
+      "+++ /dev/null",
+      "@@ -1,2 +0,0 @@",
+      "--- a sql comment",
+      "-SELECT 1;",
+      "diff --git a/example.txt b/example.txt",
+      "--- a/example.txt",
+      "+++ b/example.txt",
+      "@@ -1 +1 @@",
+      "-old",
+      "+++ literal content",
+      "\\ No newline at end of file",
+      "",
+    ].join("\n");
+
+    expect(splitGitPatchFiles(patch).map((entry) => entry.file)).toEqual([
+      {
+        path: "schema.sql",
+        previousPath: undefined,
+        status: "deleted",
+        additions: 0,
+        deletions: 2,
+      },
+      {
+        path: "example.txt",
+        previousPath: undefined,
+        status: "modified",
+        additions: 1,
+        deletions: 1,
+      },
+    ]);
+  });
+
   it("marks binary files in a patch, which carry no line counts", () => {
     const patch = [
       "diff --git a/icon.png b/icon.png",

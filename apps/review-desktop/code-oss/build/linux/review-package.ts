@@ -103,7 +103,6 @@ exec ${share}/${app} "$@"
 		await mkdir(dirname(join(destination, path)), { recursive: true });
 		await symlink(target, join(destination, path));
 	};
-	await link(app, `usr/bin/${legacyApp}`);
 	await link(`${app}-desktop`, `usr/bin/${legacyApp}-desktop`);
 	await link(`${share}/${app}`, `usr/share/${legacyApp}/${legacyApp}`);
 	await link(`${share}/resources/app/review-runtime/dist/cli.js`, `usr/share/${legacyApp}/resources/app/review-runtime/dist/cli.js`);
@@ -199,7 +198,6 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then gtk-update-icon-cache 
 %defattr(-,root,root)
 /usr/bin/${app}
 /usr/bin/${app}-desktop
-/usr/bin/${legacyApp}
 /usr/bin/${legacyApp}-desktop
 /usr/share/${legacyApp}/
 ${share}/

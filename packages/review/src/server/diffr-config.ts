@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -257,9 +257,9 @@ export async function testDiffrSummarizer(
     };
 
     delete options.api_key;
-    const configPath = join(directory, "config.toml");
+    await mkdir(join(directory, "diffr"));
     await writeFile(
-      configPath,
+      join(directory, "diffr", "config.toml"),
       stringify({
         version: 1,
         plugins: {
@@ -278,8 +278,6 @@ export async function testDiffrSummarizer(
 
     const output = await diffr(
       [
-        "--config",
-        configPath,
         "--no-index",
         "--format",
         "ndjson",
@@ -290,7 +288,12 @@ export async function testDiffrSummarizer(
       ],
       directory,
       {
-        env: { ...process.env, GEMINI_API_KEY: apiKey, GOOGLE_API_KEY: "" },
+        env: {
+          ...process.env,
+          XDG_CONFIG_HOME: directory,
+          GEMINI_API_KEY: apiKey,
+          GOOGLE_API_KEY: "",
+        },
         signal: deadline,
       },
     );

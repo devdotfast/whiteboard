@@ -11,4 +11,5 @@ export const courierMotion = stylex.defineConsts({
   march: "480ms",
   bounce: "520ms",
   doze: "5s",
+  ponder: "2.4s",
 });

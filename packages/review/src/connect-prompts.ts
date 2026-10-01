@@ -1,7 +1,7 @@
 import { cursorInstallDeeplink } from "./cursor-deeplink";
 import type { InstallTarget } from "./install";
 
-/** The macOS and Linux launch form; the Claude, Cursor and OpenCode plugins must match it byte for byte, and the Codex plugin's bin/whiteboard-mcp runs the same command. */
+/** The macOS and Linux launch form; the Claude and Cursor plugins must match it byte for byte, and the Codex plugin's bin/whiteboard-mcp runs the same command. */
 export const REVIEW_MCP_LAUNCH = {
   command: "sh",
   args: ["-c", 'exec "$HOME/.local/bin/whiteboard" mcp'],
@@ -10,7 +10,7 @@ export const REVIEW_MCP_LAUNCH = {
 /**
  * Windows has no sh, and Node-based harnesses cannot start a .cmd file
  * directly. cmd finds whiteboard.cmd on PATH, whether the first-run step or
- * the installer put it there. The OpenCode plugin must match it on Windows.
+ * the installer put it there.
  */
 export const WINDOWS_MCP_LAUNCH = {
   command: "cmd",
@@ -107,10 +107,26 @@ function pluginSteps(
       return [
         "Run:\n\n```sh\ncodex plugin marketplace add devdotfast/whiteboard\ncodex plugin add whiteboard@devfast\ncodex mcp remove whiteboard # old manual registration, if any\n```",
       ];
-    case "opencode":
+    case "opencode": {
+      const launch = reviewMcpLaunch(true, platform);
+
+      const entry = JSON.stringify(
+        {
+          whiteboard: {
+            type: "local",
+            command: [launch.command, ...launch.args],
+          },
+        },
+        null,
+        2,
+      );
+
       return [
-        "Run:\n\n```sh\nopencode plugin @dev.fast/opencode-whiteboard --global\n```",
+        `On OpenCode 2.0 or later, run:\n\n\`\`\`sh\nopencode mcp add --global whiteboard -- ${launchCommand(launch)}\n\`\`\`\n\nOn older OpenCode, add this entry to "mcp" in ~/.config/opencode/opencode.json, keeping the rest of the file:\n\n\`\`\`json\n${entry}\n\`\`\``,
+        `Remove "@dev.fast/opencode-whiteboard" from "plugin" in ~/.config/opencode/opencode.json if it is there.`,
       ];
+    }
+
     case "copilot":
       if (platform === "win32")
         return [
@@ -178,7 +194,7 @@ export function connectPrompt(
       : target === "omp"
         ? "Ask me to run /mcp reload, then call `session_get_instructions` on the Whiteboard server. Do not author anything yet."
         : target === "opencode"
-          ? "Stop and tell me to quit and reopen OpenCode: it loads plugins and MCP servers only at startup. After I reopen it, call `session_get_instructions` on the Whiteboard server to confirm the connection. Do not author anything yet."
+          ? "Stop and tell me to quit and reopen OpenCode: it loads MCP servers only at startup. After I reopen it, call `session_get_instructions` on the Whiteboard server to confirm the connection. Do not author anything yet."
           : "Reload your MCP tools and call `session_get_instructions` on the Whiteboard server. If a restart is needed, tell me and verify after it. Do not author anything yet.";
 
   return [

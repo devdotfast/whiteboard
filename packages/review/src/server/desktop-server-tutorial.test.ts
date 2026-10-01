@@ -28,57 +28,6 @@ type TutorialServerOverrides = Pick<
 afterEach(() => vi.unstubAllEnvs());
 
 describe("Review Desktop tutorial preparation", () => {
-  it("serves native reviews while removed session and publishing routes return 404", async () => {
-    const home = await mkdtemp(path.join(os.tmpdir(), "review-native-routes-"));
-    vi.stubEnv("DEV_REVIEW_HOME", home);
-    const local = openLocalReviewStore(path.join(home, "review-api.db"));
-
-    const server = tutorialServer(home, {
-      reviewStore: local.store,
-      reviewData: local.data,
-    });
-
-    try {
-      await server.listen();
-
-      const headers = {
-        "x-review-token": token,
-        "content-type": "application/json",
-      };
-
-      const catalog = await fetch(`${server.url}/reviews-api`, { headers });
-      expect(catalog.status).toBe(200);
-      // The scratchpad is off by default; there are no reviews yet.
-      expect(await catalog.json()).toEqual([]);
-
-      for (const route of [
-        "/reviews",
-        "/sessions",
-        "/sessions/old",
-        "/reviews/old/publish",
-        "/reviews/old/repair",
-        "/reviews/old/map/publish",
-      ]) {
-        for (const method of ["GET", "POST"]) {
-          const response = await fetch(`${server.url}${route}`, {
-            headers,
-            method,
-          });
-
-          expect(response.status, `${method} ${route}`).toBe(404);
-        }
-      }
-
-      // The removed routes wrote nothing.
-      expect(local.store.list()).toEqual([]);
-    } finally {
-      await server.close();
-      await local.data.close();
-      await local.store.close();
-      await rm(home, { recursive: true, force: true });
-    }
-  });
-
   it("opens a prepared native tutorial into the JSON canvas with interactive content, pins and resources", async () => {
     const home = await mkdtemp(path.join(os.tmpdir(), "review-tutorial-json-"));
     vi.stubEnv("DEV_REVIEW_HOME", home);

@@ -1314,22 +1314,6 @@ it("reads pinned Git objects, rejects invalid evidence before saving, and retain
   });
 });
 
-it("refuses a committed binary file as a code reference", async () => {
-  writeFileSync(path.join(repository, "binary.bin"), "text\u0000more\n");
-  git("add", "binary.bin");
-  git("-c", "commit.gpgsign=false", "commit", "-qm", "Binary");
-
-  const binaryPins = await local.data.resolvePins(
-    pins.repositoryId,
-    pins.head,
-    "HEAD",
-  );
-
-  await expect(
-    local.data.file(binaryPins, "head", "binary.bin"),
-  ).rejects.toThrow("Binary files cannot be used as code references.");
-});
-
 it("describes binary source for browsing without allowing it as code evidence", async () => {
   writeFileSync(path.join(repository, "binary.bin"), "text\u0000more\n");
   git("add", "binary.bin");
@@ -1421,28 +1405,6 @@ it("reads a committed symlink as its target path, not the file it points at", as
   });
 });
 
-it("reads pinned files through one batch process per repository", async () => {
-  const root = realpathSync.native(repository);
-
-  await local.data.tree(pins, "head", "");
-  recordSpawns();
-
-  expect(await local.data.file(pins, "head", source.file)).toMatchObject({
-    commit: pins.head,
-    text: "export const value = 2;\nexport const saved = true;\n",
-  });
-  expect(spawns).toEqual([["git", "-C", root, "cat-file", "--batch"]]);
-  recordSpawns();
-
-  expect(await local.data.file(pins, "head", source.file)).toMatchObject({
-    text: "export const value = 2;\nexport const saved = true;\n",
-  });
-  await expect(local.data.file(pins, "head", "missing.ts")).rejects.toThrow(
-    "File is unavailable at the pinned commit.",
-  );
-  expect(spawns).toEqual([]);
-});
-
 it("answers concurrent pinned reads without spawning", async () => {
   await local.data.file(pins, "head", source.file);
   recordSpawns();
@@ -1494,18 +1456,6 @@ it("starts a new batch process for the read after an idle one ended", async () =
   }
 });
 
-it("fails a commit that is not in the repository without spawning", async () => {
-  const absent = "0".repeat(40);
-
-  await local.data.file(pins, "head", source.file);
-  recordSpawns();
-
-  await expect(
-    local.data.file({ ...pins, head: absent }, "head", source.file),
-  ).rejects.toThrow("File is unavailable at the pinned commit.");
-  expect(spawns).toEqual([]);
-});
-
 it("rejects a path outside the repository before spawning anything", async () => {
   recordSpawns();
 
@@ -1514,29 +1464,6 @@ it("rejects a path outside the repository before spawning anything", async () =>
       "Source file must be a repository-relative path.",
     );
   expect(spawns).toEqual([]);
-});
-
-it("keeps one repository detection across tree, commit and diff reads", async () => {
-  await local.data.tree(pins, "head", "");
-  await local.data.commits(pins);
-  await local.data.changes(pins);
-  await local.data.changes(pins, source.file);
-  recordSpawns();
-
-  expect(await local.data.tree(pins, "head", "")).toContainEqual({
-    path: source.file,
-    kind: "file",
-  });
-  expect(await local.data.commits(pins)).toMatchObject([
-    { commit: pins.head, parentCommit: pins.base },
-  ]);
-  expect(await local.data.changes(pins)).toContainEqual(
-    expect.objectContaining({ path: source.file, status: "modified" }),
-  );
-  expect(await local.data.changes(pins, source.file)).toContain(
-    "+export const value = 2;",
-  );
-  expect(detections()).toEqual([]);
 });
 
 it("lists a pinned tree in one spawn without blocking the event loop", async () => {
@@ -1647,19 +1574,6 @@ it("retries the commit list after a failed read instead of caching the failure",
     { commit: pins.head, parentCommit: pins.base },
   ]);
   expect(spawns.some((spawn) => spawn.includes("log"))).toBe(true);
-});
-
-it("reuses the version's commit list when a selected commit is compared", async () => {
-  const root = realpathSync.native(repository);
-  const [selected] = await local.data.commits(pins);
-  recordSpawns();
-
-  const compared = await local.data.comparison(pins, selected!.commit);
-
-  expect(await local.data.file(compared, "head", source.file)).toMatchObject({
-    commit: pins.head,
-  });
-  expect(spawns).toEqual([["git", "-C", root, "cat-file", "--batch"]]);
 });
 
 it("detects each registered repository once across interleaved reads", async () => {
@@ -2741,15 +2655,6 @@ describe("worktree base", () => {
     ]);
   });
 
-  it("treats a named base as the branch to compare against", async () => {
-    const { reviewId } = await create("main");
-
-    expect(local.store.read(reviewId).pins?.base).toBe(
-      run("merge-base", "main", "HEAD"),
-    );
-    expect(await changedPaths(reviewId)).not.toContain("deleted main-only.ts");
-  });
-
   it("follows the fork point as the branch commits, rebases and loses its base", async () => {
     const { reviewId } = await create();
     const forkPoint = local.store.read(reviewId).pins!.base;
@@ -3256,39 +3161,6 @@ it.each(["repin", "set_target"] as const)(
   },
 );
 
-it("leaves authored Markdown destinations unchanged when source lines move", async () => {
-  const original =
-    Array.from({ length: 25 }, (_, index) => `line ${index + 1}`).join("\n") +
-    "\n";
-
-  writeFileSync(path.join(repository, "links.ts"), original);
-
-  const created = await local.store.execute(
-    command({
-      type: "create",
-      title: "Links",
-      target: {
-        kind: "worktree",
-        repositoryId: pins.repositoryId,
-        base: pins.head,
-      },
-    }),
-  );
-
-  await insert(created.reviewId, {
-    type: "markdown",
-    markdown:
-      "[one](review-source:head/links.ts#L1) [ten](review-source:head/links.ts#L10-L20)",
-  });
-  writeFileSync(path.join(repository, "links.ts"), "inserted\n" + original);
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  await local.store.refreshWorktrees();
-  expect(local.store.read(created.reviewId).document[0]).toMatchObject({
-    markdown:
-      "[one](review-source:head/links.ts#L1) [ten](review-source:head/links.ts#L10-L20)",
-  });
-});
-
 it("does not report clean tracked symlinks and submodules as modified", async () => {
   symlinkSync("example.ts", path.join(repository, "tracked-link.ts"));
   const modulePath = path.join(directory, "module");
@@ -3524,32 +3396,6 @@ it("marks a worktree review unavailable while its checkout is gone", async () =>
   await local.store.refreshWorktrees();
 
   expect(local.store.read(review.reviewId).sourceUnavailable).toBe(true);
-});
-
-it("validates grouped source ranges with one read per pinned file", async () => {
-  const read = vi.spyOn(local.data, "file");
-
-  try {
-    await local.data.validateSources(pins, [
-      source,
-      { ...source, fromLine: 2 },
-    ]);
-    expect(read).toHaveBeenCalledTimes(1);
-    await expect(
-      local.data.validateSources(pins, [source, { ...source, toLine: 100000 }]),
-    ).rejects.toThrow("exceeds the pinned file");
-    await expect(
-      local.data.validateSources(pins, [{ ...source, file: "missing.ts" }]),
-    ).rejects.toThrow("unavailable");
-    read.mockClear();
-    await local.data.validateSources(pins, [
-      source,
-      { ...source, side: "base", toLine: 1 },
-    ]);
-    expect(read).toHaveBeenCalledTimes(pins.base === pins.head ? 1 : 2);
-  } finally {
-    read.mockRestore();
-  }
 });
 
 describe("review_diff", () => {

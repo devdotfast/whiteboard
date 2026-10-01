@@ -22,8 +22,13 @@ grep -qx DisableSandbox /etc/pacman.conf
 # The pinned image's archlinux-keyring can predate keys used to sign current
 # packages; refresh it before syncing, or -Syu fails on signature checks.
 pacman -Sy --noconfirm archlinux-keyring
+pacman -Syu --noconfirm archlinux-contrib
+pacman -Qqo /usr/bin/review | grep -qx archlinux-contrib
+REVIEW_CHECKSUM="$(sha256sum /usr/bin/review)"
 # The databases carry no embedded signatures, so this install also proves pacman fetched <pkg>.sig.
-pacman -Syu --noconfirm "$PACKAGE"
+pacman -S --needed --noconfirm "$PACKAGE"
+pacman -Qqo /usr/bin/review | grep -qx archlinux-contrib
+test "$(sha256sum /usr/bin/review)" = "$REVIEW_CHECKSUM"
 "$APP" --help >/dev/null
 test "$(stat -c %u:%g:%a "/usr/share/$APP/chrome-sandbox")" = "0:0:4755"
 test -f "/usr/share/licenses/$PACKAGE/LICENSE"
@@ -38,6 +43,8 @@ mkdir -p /root/.dev/reviews /root/.config/Review/User
 for SENTINEL in /root/.dev/reviews/package-test /root/.config/Review/User/settings.json; do printf 'keep me\n' > "$SENTINEL"; done
 pacman -R --noconfirm "$PACKAGE"
 test ! -e "/usr/share/$APP"
+pacman -Qqo /usr/bin/review | grep -qx archlinux-contrib
+test "$(sha256sum /usr/bin/review)" = "$REVIEW_CHECKSUM"
 for SENTINEL in /root/.dev/reviews/package-test /root/.config/Review/User/settings.json; do test "$(cat "$SENTINEL")" = 'keep me'; done
 
 # A changed package must fail the signed database's checksum check (%SHA256SUM%).
