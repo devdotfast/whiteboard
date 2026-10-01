@@ -242,6 +242,8 @@ export interface ReviewRemoteInstallFlow {
 	cancel?(alias: string): void;
 	/** `installRemote` with this build's artifacts. */
 	run(input: ReviewRemoteInstallRunInput): Promise<ReviewRemoteInstallResult>;
+	/** The integrity of the package this build installs; a version is installed only with it. */
+	integrity(): Promise<string>;
 }
 
 type InstallStep = NonNullable<ReviewGatewayHost["installing"]>["step"];
@@ -702,7 +704,10 @@ export class ReviewRemoteHost {
 		const support = judgeRemote(probed.probe);
 		if (!support.supported) throw new HostFailure({ state: "unsupported", detail: support.reason });
 		const version = await this.options.desktopVersion();
-		const present = probed.probe.installed.includes(version);
+		const integrity = await flow.integrity().catch((error: Error) => void this.options.log(`${this.alias}: no package integrity to compare: ${error.message}`));
+		if (stale()) return;
+		// Another pack under the same version is not this build's: it is installed again, as any absent version.
+		const present = probed.probe.installed.some((entry) => entry.version === version && entry.integrity === integrity);
 		if (!present && mode === "ask" && !(await this.agreed(flow, probed.probe, version, stale))) {
 			// A CLI the user installed by hand still attaches; without one the host is not-installed.
 			this.declined = true;
@@ -716,7 +721,7 @@ export class ReviewRemoteHost {
 			return { script: () => installedAttachScript(nodePath, cliPath), cli: { nodePath, cliPath } };
 		}
 		// An older complete version still serves: attached as it is, so the host is incompatible and says why.
-		if (!probed.probe.installed.some((other) => other !== version)) throw new HostFailure({ state: "not-installed", detail: installed.failed });
+		if (!probed.probe.installed.some((other) => other.version !== version)) throw new HostFailure({ state: "not-installed", detail: installed.failed });
 		this.installFailure = installed.failed;
 		return onPath;
 	}

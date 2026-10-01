@@ -45,6 +45,7 @@ import { ReviewMainErrorTelemetry } from "./reviewMainErrorTelemetry.js";
 import { reviewEnabledExtensionGroups } from "./remote/reviewEnabledExtensionGroups.js";
 import {
   remoteArtifacts,
+  remotePackageIntegrity,
   reviewRemoteCacheDirectory,
 } from "./remote/reviewRemoteArtifacts.js";
 import type {
@@ -308,6 +309,13 @@ export class ReviewDesktopHost extends Disposable {
   private remoteInstallFlow(): ReviewRemoteInstallFlow {
     const { userDataPath, isBuilt, appRoot } = this.environmentMainService;
     const cacheDirectory = reviewRemoteCacheDirectory(userDataPath);
+    const pin = this.productService.whiteboardRemote;
+    const artifactsOptions = {
+      pin,
+      // A development build packs its own checkout: appRoot is apps/review-desktop/code-oss.
+      checkout: isBuilt ? undefined : join(appRoot, "..", "..", ".."),
+      cacheDirectory,
+    };
     return {
       mode: () => {
         const mode = this.configurationService.getValue(
@@ -335,13 +343,7 @@ export class ReviewDesktopHost extends Disposable {
             : undefined;
       },
       run: async (input) => {
-        const pin = this.productService.whiteboardRemote;
-        const artifacts = await remoteArtifacts(input.target, {
-          pin,
-          // A development build packs its own checkout: appRoot is apps/review-desktop/code-oss.
-          checkout: isBuilt ? undefined : join(appRoot, "..", "..", ".."),
-          cacheDirectory,
-        });
+        const artifacts = await remoteArtifacts(input.target, artifactsOptions);
         return installRemote({
           ...input,
           artifacts,
@@ -349,6 +351,7 @@ export class ReviewDesktopHost extends Disposable {
           cacheDirectory,
         });
       },
+      integrity: () => remotePackageIntegrity(artifactsOptions),
     };
   }
 

@@ -16,6 +16,8 @@ import { judgeRemote, parseRemoteProbe, probeRemote, type ReviewRemoteProbe } fr
 import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END } from "./reviewRemoteProbeScript.js";
 import { reviewSshSession } from "./reviewSshCommand.js";
 
+const INTEGRITY = `sha512-${"A".repeat(86)}==`;
+
 const supported: ReviewRemoteProbe = {
 	os: "Linux",
 	arch: "x86_64",
@@ -25,7 +27,7 @@ const supported: ReviewRemoteProbe = {
 	freeBytes: 20e9,
 	node: { path: "/home/dev/.nvm/versions/node/v24.18.0/bin/node", version: "24.18.0" },
 	npm: "/home/dev/.nvm/versions/node/v24.18.0/bin/npm",
-	installed: ["0.1.6"],
+	installed: [{ version: "0.1.6", integrity: INTEGRITY }],
 	managedNode: null,
 	downloader: "curl",
 	registryReachable: true,
@@ -86,7 +88,7 @@ test("a malformed answer is an error, never an exception", () => {
 		{ node: "/usr/bin/node" },
 		{ npm: "npm" },
 		{ installed: "0.1.6" },
-		{ installed: Array(300).fill("0.1.6") },
+		{ installed: Array(300).fill({ version: "0.1.6", integrity: INTEGRITY }) },
 		{ managedNode: 7 },
 		{ downloader: "fetch" },
 		{ registryReachable: 1 },
@@ -104,12 +106,29 @@ test("tools keeps only the tools asked about", () => {
 	assert.deepEqual(parsed.probe.tools, ["tar", "openssl"]);
 });
 
-test("installed keeps only version names", () => {
+test("installed keeps only versions with an npm sha512 integrity", () => {
+	const entry = (version: unknown, integrity: unknown = INTEGRITY) => ({ version, integrity });
 	const parsed = parseRemoteProbe(
-		answer({ ...supported, installed: ["0.1.6", "0.1.7-preview.20261003.2", "0.1.8.part", "0.1.9-preview.1.part", "x; rm", 5, "latest"] }),
+		answer({
+			...supported,
+			installed: [
+				entry("0.1.6"),
+				entry("0.1.7-preview.20261003.2"),
+				entry("0.1.8.part"),
+				entry("0.1.9-preview.1.part"),
+				entry("x; rm"),
+				entry(5),
+				entry("latest"),
+				entry("0.2.0", "sha512-abc"),
+				entry("0.2.1", `sha1-${"A".repeat(26)}=`),
+				entry("0.2.2", null),
+				"0.2.3",
+				null,
+			],
+		}),
 	);
 	assert.ok("probe" in parsed);
-	assert.deepEqual(parsed.probe.installed, ["0.1.6", "0.1.7-preview.20261003.2"]);
+	assert.deepEqual(parsed.probe.installed, [entry("0.1.6"), entry("0.1.7-preview.20261003.2")]);
 });
 
 async function executable(path: string, body: string) {
@@ -134,7 +153,7 @@ async function fakeRemote(t: test.TestContext) {
 	await executable(join(home, ".dev/whiteboard-remote/node/v24.18.0/bin/node"), "echo v24.18.0");
 	const versions = join(home, ".dev/whiteboard-remote/versions");
 	for (const version of ["0.1.6", "0.1.7.part", "0.1.8", "0.1.9"]) await mkdir(join(versions, version), { recursive: true });
-	await writeFile(join(versions, "0.1.6", REVIEW_REMOTE_INSTALL_MARKER), '{"version":"0.1.6","integrity":"sha512-abc"}\n');
+	await writeFile(join(versions, "0.1.6", REVIEW_REMOTE_INSTALL_MARKER), `${JSON.stringify({ version: "0.1.6", integrity: INTEGRITY })}\n`);
 	// Half-written: no marker, and a marker without an integrity.
 	await writeFile(join(versions, "0.1.9", REVIEW_REMOTE_INSTALL_MARKER), '{"version":"0.1.9","integrity":""}\n');
 	return { home, env: { HOME: home, PATH: `${bin}:/usr/bin:/bin` } };
@@ -164,7 +183,7 @@ test("the script finds the highest Node 24, the complete installed versions and 
 	assert.deepEqual(probe.node, { path: join(home, ".nvm/versions/node/v24.10.0/bin/node"), version: "24.10.0" });
 	assert.equal(probe.npm, join(home, ".nvm/versions/node/v24.10.0/bin/npm"));
 	assert.equal(probe.managedNode, join(home, ".dev/whiteboard-remote/node/v24.18.0/bin/node"));
-	assert.deepEqual(probe.installed, ["0.1.6"]);
+	assert.deepEqual(probe.installed, [{ version: "0.1.6", integrity: INTEGRITY }]);
 	assert.equal(probe.home, home);
 	assert.equal(probe.homeWritable, true);
 	assert.ok(probe.freeBytes > 0);

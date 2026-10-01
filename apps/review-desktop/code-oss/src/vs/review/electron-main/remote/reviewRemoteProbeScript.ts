@@ -16,8 +16,8 @@ export const REVIEW_REMOTE_PROBE_END = "WHITEBOARD-PROBE-END";
  *
  * Node 24 is looked for on PATH, in /usr/local/bin and /usr/bin, and under
  * nvm, fnm, volta, asdf, mise, nodenv and n; each candidate is run once for
- * its version, and the highest 24.x wins. A version counts as installed only
- * when its marker names an integrity.
+ * its version, and the highest 24.x wins. A version is listed, with the
+ * integrity its marker names, only when the marker names one.
  */
 export const REVIEW_REMOTE_PROBE_SCRIPT = `LC_ALL=C
 export LC_ALL
@@ -81,8 +81,9 @@ installed=
 for dir in "$remote"/versions/*; do
 	[ -d "$dir" ] || continue
 	case "$dir" in *.part) continue ;; esac
-	[ -n "$(sed -n 's/.*"integrity":"\\([^"][^"]*\\)".*/\\1/p' "$dir/${REVIEW_REMOTE_INSTALL_MARKER}" 2>/dev/null)" ] || continue
-	installed="$installed\${installed:+,}$(str "\${dir##*/}")"
+	integrity=$(sed -n 's/.*"integrity":"\\([^"][^"]*\\)".*/\\1/p' "$dir/${REVIEW_REMOTE_INSTALL_MARKER}" 2>/dev/null)
+	[ -n "$integrity" ] || continue
+	installed="$installed\${installed:+,}{\\"version\\":$(str "\${dir##*/}"),\\"integrity\\":$(str "$integrity")}"
 done
 
 tools=

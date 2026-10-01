@@ -69,6 +69,15 @@ export async function remoteArtifacts(
 	};
 }
 
+/** The package's integrity, which keys an install: pinned in a release, the development pack's otherwise. */
+export async function remotePackageIntegrity(options: ReviewRemoteArtifactsOptions): Promise<string> {
+	if (options.pin) return options.pin.package.integrity;
+	if (!options.checkout) throw new Error("This build has no pinned remote package and no checkout to pack one from.");
+	await mkdir(options.cacheDirectory, { recursive: true });
+	const { integrity } = await packCheckout(options.checkout, options.cacheDirectory);
+	return integrity!;
+}
+
 /** npm's name for a scoped tarball: `@dev.fast/whiteboard` 0.1.6 → `dev.fast-whiteboard-0.1.6.tgz`. */
 const tarballName = (name: string, version: string) => `${name.replace(/^@/, "").replace("/", "-")}-${version}.tgz`;
 

@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 
 import type { IWhiteboardRemoteProduct } from "../../../base/common/product.js";
-import { fetchToLaptopCache, remoteArtifacts } from "./reviewRemoteArtifacts.js";
+import { fetchToLaptopCache, remoteArtifacts, remotePackageIntegrity } from "./reviewRemoteArtifacts.js";
 
 const roots: string[] = [];
 const servers: Server[] = [];
@@ -99,6 +99,7 @@ test("a release build installs what it pinned", async () => {
 		node: { name: "node-v24.18.0-linux-arm64.tar.xz", url: PIN.node["linux-arm64"].url, sha256: "b".repeat(64) },
 	});
 	await assert.rejects(remoteArtifacts("linux-x64", { pin: undefined, cacheDirectory }), /no pinned remote package/);
+	assert.equal(await remotePackageIntegrity({ pin: PIN, cacheDirectory }), PIN.package.integrity);
 });
 
 /** A repository with a package whose prepack counts its runs. */
@@ -132,6 +133,7 @@ test("a development build packs its checkout once per state and fetches Node's c
 	const again = await remoteArtifacts("linux-x64", options);
 
 	assert.deepEqual(again, first);
+	assert.equal(await remotePackageIntegrity(options), first.package.integrity);
 	assert.equal(await packs(), 1);
 	assert.equal(first.package.name, "dev.fast-whiteboard-0.0.1.tgz");
 	const packed = await fetchToLaptopCache(first.package, { cacheDirectory });

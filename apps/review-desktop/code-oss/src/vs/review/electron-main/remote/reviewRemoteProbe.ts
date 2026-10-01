@@ -22,8 +22,8 @@ export interface ReviewRemoteProbe {
 	node: { path: string; version: string } | null;
 	/** The npm beside `node`. */
 	npm: string | null;
-	/** Complete versions under ~/.dev/whiteboard-remote/versions. */
-	installed: string[];
+	/** Complete versions under ~/.dev/whiteboard-remote/versions, with the package integrity each marker records. */
+	installed: ReviewRemoteInstalled[];
 	/** The highest Node 24 under ~/.dev/whiteboard-remote/node. */
 	managedNode: string | null;
 	downloader: "curl" | "wget" | null;
@@ -37,6 +37,12 @@ export const REVIEW_REMOTE_PROBE_TOOLS = ["tar", "xz", "sha256sum", "sha512sum",
 export type ReviewRemoteTool = (typeof REVIEW_REMOTE_PROBE_TOOLS)[number];
 
 export type ReviewRemoteTarget = "linux-x64" | "linux-arm64";
+
+export interface ReviewRemoteInstalled {
+	version: string;
+	/** npm's `sha512-<base64>`. */
+	integrity: string;
+}
 
 export type ReviewRemoteSupport = { supported: true; target: ReviewRemoteTarget } | { supported: false; reason: string };
 
@@ -91,6 +97,7 @@ const LINE_LIMIT = 64 * 1024;
 const STRING_LIMIT = 4096;
 const INSTALLED_LIMIT = 256;
 const WORD = /^[\w.-]{1,64}$/;
+const INTEGRITY = /^sha512-[A-Za-z0-9+/]{86}==$/;
 const CONTROL = /[\x00-\x1f\x7f-\x9f]/;
 
 /**
@@ -140,8 +147,14 @@ function readProbe(value: unknown): ReviewRemoteProbe {
 		freeBytes,
 		node: node && { path: path(node.path, "node.path"), version: string(node.version, "node.version", /^24\.\d{1,4}\.\d{1,4}$/) },
 		npm: nullable(record.npm, "npm", (v) => path(v, "npm")),
-		// A directory that is not a version is not ours; it is left out, not trusted.
-		installed: installed.filter((entry): entry is string => typeof entry === "string" && entry.length <= 128 && REVIEW_REMOTE_VERSION.test(entry) && !entry.endsWith(".part")),
+		// An entry that is not a version with an integrity is not ours; it is left out, not trusted.
+		installed: installed.flatMap((entry): ReviewRemoteInstalled[] => {
+			if (!entry || typeof entry !== "object") return [];
+			const { version, integrity } = entry as Record<string, unknown>;
+			return typeof version === "string" && version.length <= 128 && REVIEW_REMOTE_VERSION.test(version) && !version.endsWith(".part") && typeof integrity === "string" && INTEGRITY.test(integrity)
+				? [{ version, integrity }]
+				: [];
+		}),
 		managedNode: nullable(record.managedNode, "managedNode", (v) => path(v, "managedNode")),
 		downloader,
 		registryReachable: boolean(record.registryReachable, "registryReachable"),

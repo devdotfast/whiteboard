@@ -225,6 +225,7 @@ test("a window gets the VS Code server of a machine only while the gateway has i
 	assert.equal(await manager.languageEndpoint(FAKE_SERVER_ID, []), undefined);
 });
 
+const INSTALLED_INTEGRITY = `sha512-${"A".repeat(86)}==`;
 const INSTALLED = { nodePath: "/n/bin/node", cliPath: "/v/cli.js", launcher: "/v/whiteboard", diffr: true };
 
 test("install progress is sent at most once a second, the latest step only", async (t) => {
@@ -243,6 +244,7 @@ test("install progress is sent at most once a second, the latest step only", asy
 			await gate.promise;
 			return INSTALLED;
 		},
+		integrity: async () => INSTALLED_INTEGRITY,
 	};
 	const { manager, sent, sentUntil } = await managerFor(t, { "wb-test-a": {} }, undefined, undefined, flow);
 
@@ -272,6 +274,7 @@ test("Install on a declined host stores the agreement, installs and attaches", a
 			runs.push(input.version);
 			return INSTALLED;
 		},
+		integrity: async () => INSTALLED_INTEGRITY,
 	};
 	const { manager, sentUntil } = await managerFor(
 		t,
@@ -306,6 +309,7 @@ test("two hosts asking at once are asked one after the other", async (t) => {
 			return true;
 		},
 		run: async () => INSTALLED,
+		integrity: async () => INSTALLED_INTEGRITY,
 	};
 	// Two servers: an answer moves to the server its host reached, and one server keeps one alias.
 	const other = { code: 0, stdout: attachOutput(41234, "remote-token", { serverId: "wb-test-b-server" }) };
@@ -339,6 +343,7 @@ async function promptingFlow(t: test.TestContext) {
 			runs.push(input.version);
 			return INSTALLED;
 		},
+		integrity: async () => INSTALLED_INTEGRITY,
 	};
 	return { flow, asked, runs, consentFile };
 }
