@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { hash } from "../../../base/common/hash.js";
 import { Disposable, DisposableMap } from "../../../base/common/lifecycle.js";
 import { Schemas } from "../../../base/common/network.js";
 import { IFileService } from "../../../platform/files/common/files.js";
@@ -65,7 +66,7 @@ export class ReviewRemoteHostsService extends Disposable implements IReviewRemot
 		if (!authority || this.closing) return undefined;
 		let host = this.hosts.get(authority);
 		if (!host) {
-			host = new ReviewRemoteHost(serverId, authority, (target) => this.open(target), this.logService);
+			host = new ReviewRemoteHost(serverId, authority, (target) => this.open(target), () => this.endpoint(serverId), this.logService);
 			this.hosts.set(authority, host);
 		}
 		return (await host.connect()) ? host : undefined;
@@ -84,6 +85,12 @@ export class ReviewRemoteHostsService extends Disposable implements IReviewRemot
 			session.dispose();
 			throw error;
 		}
+	}
+
+	/** Tells endpoints apart without keeping the token. */
+	private async endpoint(serverId: string): Promise<string | undefined> {
+		const endpoint = this.closing ? undefined : await this.connection.getRemoteLanguageEndpoint(serverId);
+		return endpoint && `${endpoint.host}:${endpoint.port}:${hash(endpoint.connectionToken)}`;
 	}
 
 	private async label(host: ReviewRemoteHost): Promise<void> {

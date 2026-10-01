@@ -78,6 +78,9 @@ export function reviewRemoteRetryDelay(failures: number): number {
 /** A session that lasted this long starts the delays from 1 s again. */
 const STABLE_MS = 60_000;
 
+/** During a delay, a request asks main for a new endpoint at most this often. */
+const PROBE_MS = 5_000;
+
 /**
  * Lasts as long as the window. Each session is one connection; when it fails,
  * or the endpoint is not there, the host opens a new one after a delay. Roots,
@@ -93,6 +96,10 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	private connecting: Promise<boolean> | undefined;
 	private failures = 0;
 	private waiting = false;
+	private probing: Promise<boolean> | undefined;
+	private probed = -Infinity;
+	/** The endpoint a probe last connected to, as a fingerprint; never the token. */
+	private probedEndpoint: string | undefined;
 	private readonly retry = this._register(new TimeoutTimer());
 	private readonly activations = new Set<string>();
 
@@ -101,6 +108,8 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 		readonly authority: string,
 		/** Resolves undefined when the host has no endpoint now. */
 		private readonly open: (host: ReviewRemoteHost) => Promise<IReviewRemoteSession | undefined>,
+		/** Main's endpoint for this host now, as a fingerprint; undefined when it has none. */
+		private readonly endpoint: () => Promise<string | undefined>,
 		private readonly logService: ILogService,
 	) {
 		super();
@@ -108,12 +117,37 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 		this.refusals = new ReviewRemoteRefusals(authority, () => this.alias ?? serverId.slice(0, 8), logService);
 	}
 
-	/** True once connected; false when it cannot connect now. Between attempts it waits for the delay. */
+	/**
+	 * True once connected; false when it cannot connect now. Between attempts
+	 * it waits for the delay, unless main has a new endpoint by then.
+	 */
 	connect(): Promise<boolean> {
 		if (this.session) return Promise.resolve(true);
-		if (this._store.isDisposed || this.waiting) return Promise.resolve(false);
+		if (this._store.isDisposed) return Promise.resolve(false);
+		if (this.waiting) return this.probe();
 		this.connecting ??= this.attempt().finally(() => (this.connecting = undefined));
 		return this.connecting;
+	}
+
+	/**
+	 * A restarted server has a new endpoint once main has attached again, often
+	 * long before the delay ends: a request then connects at once. An endpoint
+	 * already tried, or none, keeps the delay.
+	 */
+	private probe(): Promise<boolean> {
+		if (this.probing || Date.now() - this.probed < PROBE_MS) return this.probing ?? Promise.resolve(false);
+		this.probed = Date.now();
+		this.probing = (async () => {
+			const endpoint = await this.endpoint().catch(() => undefined);
+			if (this.waiting && endpoint && endpoint !== this.probedEndpoint) {
+				this.probedEndpoint = endpoint;
+				this.retry.cancel();
+				this.waiting = false;
+				this.failures = 0;
+			}
+			return this.waiting ? false : this.connect();
+		})().finally(() => (this.probing = undefined));
+		return this.probing;
 	}
 
 	private async attempt(): Promise<boolean> {
