@@ -136,12 +136,6 @@ export const commandSchema = z.strictObject({
       title: z.string().trim().min(1),
     }),
     z.strictObject({
-      type: z.literal("repin"),
-      reviewId,
-      pins: pinsSchema,
-      pullRequestUrl: pullRequestUrl.nullable().optional(),
-    }),
-    z.strictObject({
       type: z.literal("restore"),
       reviewId,
       version: z.number().int().nonnegative(),
@@ -188,7 +182,7 @@ export interface Snapshot {
   createdAt: string;
   origin?: SnapshotOrigin;
   /** The edit that produced this version, when one did; absent for a
-   * rename, repin, restore or import, which the canvas does not draw. */
+   * rename, set_target, restore or import, which the canvas does not draw. */
   lastEdit?: EditSummary;
 }
 
@@ -1177,14 +1171,10 @@ export class ReviewStore {
       let lensTarget: { targetId: string; type: "lens" } | undefined;
 
       if (
-        (op.type === "create" ||
-          op.type === "set_target" ||
-          op.type === "repin") &&
+        (op.type === "create" || op.type === "set_target") &&
         this.providers.headBranch
       ) {
-        const pins =
-          resolvedTarget?.pins ??
-          (op.type === "repin" ? op.pins : snapshot.pins);
+        const pins = resolvedTarget?.pins ?? snapshot.pins;
 
         if (pins) {
           const headRef =
@@ -1228,20 +1218,6 @@ export class ReviewStore {
           snapshot.staleSources = [];
           snapshot.target = resolvedTarget!.target;
           snapshot.pins = resolvedTarget!.pins;
-          break;
-        case "repin":
-          setPullRequest(
-            snapshot,
-            op.pullRequestUrl ??
-              (op.pullRequestUrl === null ||
-              snapshot.pins?.repositoryId !== op.pins.repositoryId
-                ? null
-                : undefined),
-          );
-
-          snapshot.staleSources = [];
-          snapshot.pins = op.pins;
-          snapshot.target = { kind: "commits", ...op.pins };
           break;
         case "restore":
           snapshot = this.read(id, op.version);
@@ -1337,7 +1313,7 @@ export class ReviewStore {
       const warnings = await this.validateExternal(
         snapshot,
         previous,
-        op.type === "repin" || op.type === "set_target",
+        op.type === "set_target",
       );
 
       snapshot.version = previous ? previous.version + 1 : 0;

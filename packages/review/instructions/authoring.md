@@ -26,7 +26,7 @@ follow these first six steps exactly, without any extraneous tool calls.
 - before finishing, read the whole whiteboard back and fix any contradictions/unverified claims.
 
 **updating existing whiteboard**
-- repin the whiteboard
+- move the whiteboard to the new commits with `session_set_target`
 - read the existing whiteboard (if you haven't already,) read the diff since last whiteboard, make any necessary updates to the whiteboard.
 
 **guidelines**
