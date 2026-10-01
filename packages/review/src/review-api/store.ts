@@ -92,7 +92,6 @@ export const commandSchema = z.strictObject({
       type: z.literal("create"),
       /** Required unless pullRequestUrl alone names the source; then the PR title. */
       title: z.string().trim().min(1).optional(),
-      pins: pinsSchema.optional(),
       target: reviewTargetSchema.optional(),
       pullRequestUrl: pullRequestUrl.optional(),
       /** With pullRequestUrl and no target: the checkout to fetch the PR into. */
@@ -1003,30 +1002,21 @@ export class ReviewStore {
         );
 
       if (op.type === "create" && op.kind === "scratchpad") {
-        if (op.pins || op.target)
-          throw new ReviewInputError(
-            "A scratchpad has no target or pins of its own.",
-          );
+        if (op.target)
+          throw new ReviewInputError("A scratchpad has no target of its own.");
 
         if (this.has(SCRATCHPAD_ID))
           throw new ReviewInputError("The scratchpad already exists.", 409);
       } else if (op.type === "create") {
-        if (op.pins && op.target)
-          throw new ReviewInputError(
-            "Supply exactly one of target or legacy pins.",
-          );
+        if (!op.target && !op.pullRequestUrl)
+          throw new ReviewInputError("Supply a target or a pullRequestUrl.");
 
-        if (!op.pins && !op.target && !op.pullRequestUrl)
-          throw new ReviewInputError(
-            "Supply a target, legacy pins, or a pullRequestUrl.",
-          );
-
-        if (op.repositoryId && (op.pins || op.target))
+        if (op.repositoryId && op.target)
           throw new ReviewInputError(
             "repositoryId applies only to a create from pullRequestUrl alone; put it in the target instead.",
           );
 
-        if (!op.title && (op.pins || op.target))
+        if (!op.title && op.target)
           throw new ReviewInputError("Supply a title.");
       }
 
@@ -1058,7 +1048,7 @@ export class ReviewStore {
           const result = this.existingReview(
             found,
             others,
-            resolvedTarget?.pins ?? op.pins!,
+            resolvedTarget!.pins,
           );
 
           return result;
@@ -1374,13 +1364,7 @@ export class ReviewStore {
   ): Promise<ResolvedPullRequest> | undefined {
     const op = command.operation;
 
-    if (
-      op.type !== "create" ||
-      op.kind ||
-      op.pins ||
-      op.target ||
-      !op.pullRequestUrl
-    )
+    if (op.type !== "create" || op.kind || op.target || !op.pullRequestUrl)
       return undefined;
 
     if (!this.providers.resolvePullRequest)
@@ -1844,20 +1828,15 @@ function namedCommits(target: ReviewTarget) {
  * is kept so stored JSON reads as it always has. */
 function createdSnapshot(
   id: string,
-  op: {
-    title?: string;
-    kind?: "scratchpad";
-    pins?: z.infer<typeof pinsSchema>;
-  },
+  op: { title?: string; kind?: "scratchpad" },
   resolved: { target: ReviewTarget; pins: Pins } | undefined,
   defaultTitle?: string,
 ): Snapshot {
-  const pins = resolved?.pins ?? op.pins;
   const title = op.title ?? defaultTitle;
 
   if (!title) throw new ReviewInputError("Supply a title.");
 
-  if (!pins)
+  if (!resolved)
     return {
       reviewId: id,
       version: 0,
@@ -1871,8 +1850,8 @@ function createdSnapshot(
     reviewId: id,
     version: 0,
     title,
-    pins,
-    target: resolved?.target ?? { kind: "commits", ...pins },
+    pins: resolved.pins,
+    target: resolved.target,
     document: [],
     createdAt: "",
   };
