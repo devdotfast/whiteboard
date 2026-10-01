@@ -165,8 +165,9 @@ export function createReviewGateway(input: {
     },
   });
 
-  /** Whether the laptop's store held each id when last asked. */
-  const onLaptopIds = new Map<string, boolean>();
+  /** Ids the laptop's store holds; "not the laptop's" is never remembered,
+   * so a review the laptop gains is routed to it at once. */
+  const laptopIds = new Set<string>();
   const lookups = new Map<string, Promise<Owner>>();
   /** Forwarded answers still streaming, by the host sending each. */
   const streaming = new Map<AbortController, GatewayRemote>();
@@ -199,7 +200,7 @@ export function createReviewGateway(input: {
   /** The laptop holds the review; asked in process. A local review wins
    * over any remote's claim, so this comes before every remote owner. */
   async function onLaptop(reviewId: string) {
-    if (onLaptopIds.get(reviewId)) return true;
+    if (laptopIds.has(reviewId)) return true;
 
     const laptop = await input.local(
       new Request(
@@ -208,7 +209,8 @@ export function createReviewGateway(input: {
     );
 
     await laptop.body?.cancel();
-    onLaptopIds.set(reviewId, laptop.ok);
+
+    if (laptop.ok) laptopIds.add(reviewId);
 
     return laptop.ok;
   }
@@ -261,13 +263,7 @@ export function createReviewGateway(input: {
   function locate(reviewId: string): Located {
     // Remotes hold only UUID reviews; the scratchpad and shared reviews are
     // always the laptop's.
-    if (!UUID.test(reviewId)) return "laptop";
-    const local = onLaptopIds.get(reviewId);
-
-    if (local) return "laptop";
-
-    // The laptop has not been asked: no remote's claim counts yet.
-    if (local === undefined) return undefined;
+    if (!UUID.test(reviewId) || laptopIds.has(reviewId)) return "laptop";
     const known = memory.owner(reviewId, order());
 
     if (!known) return undefined;
@@ -280,8 +276,8 @@ export function createReviewGateway(input: {
   }
 
   async function ownerOf(reviewId: string): Promise<Owner> {
-    if (UUID.test(reviewId) && !onLaptopIds.has(reviewId))
-      await onLaptop(reviewId);
+    // Every decision asks the laptop's store first: a local review wins.
+    if (UUID.test(reviewId)) await onLaptop(reviewId);
     const located = locate(reviewId);
 
     if (located === "laptop") return undefined;
@@ -570,7 +566,15 @@ export function createReviewGateway(input: {
     if (!reviewId || LAPTOP_ROUTES.has(reviewId)) return input.local(request);
     const owner = await ownerOf(reviewId);
 
-    if (!owner) return input.local(request);
+    if (!owner) {
+      const response = await input.local(request);
+
+      // Deleted on the laptop: the next decision asks its store again.
+      if (response.status === 404) laptopIds.delete(reviewId);
+
+      return response;
+    }
+
     const route = rest.join("/");
     const alias = "remote" in owner ? owner.remote.alias : owner.down.alias;
 
@@ -603,7 +607,7 @@ export function createReviewGateway(input: {
     local: input.local,
     locate,
     lookup: ownerOf,
-    onLaptop: (reviewId) => onLaptopIds.set(reviewId, true),
+    onLaptop: (reviewId) => laptopIds.add(reviewId),
     log,
   });
 

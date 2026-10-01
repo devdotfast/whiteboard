@@ -215,6 +215,8 @@ export function createGatewayStreams(input: {
     /** Reviews whose host is down, already told so. */
     const reportedDown = new Set<string>();
     const resolving = new Set<string>();
+    /** Reviews whose owner this client has looked up. */
+    const looked = new Set<string>();
     /** Reviews no machine claimed; the laptop answers for them. */
     const unclaimed = new Set<string>();
 
@@ -378,8 +380,13 @@ export function createGatewayStreams(input: {
           }),
       });
 
+    // Until its lookup has asked the laptop, no remote owner counts.
     const where = (reviewId: string): Located =>
-      unclaimed.has(reviewId) ? "laptop" : input.locate(reviewId);
+      unclaimed.has(reviewId)
+        ? "laptop"
+        : looked.has(reviewId)
+          ? input.locate(reviewId)
+          : undefined;
 
     const resolve = (reviewId: string) => {
       if (resolving.has(reviewId)) return;
@@ -390,6 +397,7 @@ export function createGatewayStreams(input: {
         .catch(() => undefined)
         .then(() => {
           resolving.delete(reviewId);
+          looked.add(reviewId);
 
           if (input.locate(reviewId) === undefined) unclaimed.add(reviewId);
           client.refresh();
