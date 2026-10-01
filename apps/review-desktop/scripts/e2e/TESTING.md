@@ -196,6 +196,12 @@ commit check, the journey writes `code-oss/product.overrides.json` with the
 remote runtime's commit and removes it when the run ends; it refuses to run
 over a different one. Each check is printed on stderr as it passes.
 
+Two development-only variables, set in the environment of `whiteboard remote
+attach` on a remote, change only that remote's VS Code server:
+
+- `DEV_FAST_REVIEW_REMOTE_SHUTDOWN_WITHOUT_DELAY=1` makes it exit as soon as the last window leaves, not 5 minutes later.
+- `DEV_FAST_REVIEW_REMOTE_RECONNECTION_GRACE_SECONDS=<1–9999>` replaces its 10-minute reconnection grace; the journey gives B 20 s for step 6.
+
 Against two hosts you prepared, such as AWS instances, set
 `REVIEW_E2E_REMOTE_HOSTS` to their two names in the `WB_TEST_RUN` run. Install
 Node 24 and the package on each by hand, from `$R pack --out <file.tgz>`. The
