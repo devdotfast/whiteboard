@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
-import { homedir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
@@ -747,7 +746,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
               "Say what happens to the saved reviews: pass --keep-reviews or --delete-reviews.",
           }
         : await remoteUninstall({
-            home: env.HOME || homedir(),
+            home: env.HOME ?? "",
             stateDir,
             deleteReviews,
           });

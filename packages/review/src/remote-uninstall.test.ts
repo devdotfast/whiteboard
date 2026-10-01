@@ -242,6 +242,70 @@ it("refuses while a server the user started runs from the install, and removes n
   expect(alive(server.pid!)).toBe(true);
   expect(existsSync(install)).toBe(true);
   expect(existsSync(wrapper)).toBe(true);
+  // The lock it took is released.
+  expect(existsSync(path.join(install, "install.lock"))).toBe(false);
+});
+
+it("refuses while any other process runs from the install, naming it, and stops nothing", async () => {
+  const desktopServer = await runningFrom(
+    path.join(install, "versions", "0.1.6", "cli.js"),
+  );
+
+  await serverRecord(desktopServer.pid!, "desktop");
+
+  // An agent's MCP, or a server recorded in another review home.
+  const mcp = await runningFrom(
+    path.join(install, "versions", "0.1.6", "cli.js mcp"),
+  );
+
+  const result = await remoteUninstall({
+    home,
+    stateDir,
+    deleteReviews: false,
+  });
+
+  expect(result).toEqual({
+    event: "remote.uninstall",
+    ok: false,
+    reason: `Process ${mcp.pid} runs from ${install}. Stop it, then run whiteboard remote uninstall again.`,
+  });
+  expect(alive(mcp.pid!)).toBe(true);
+  expect(alive(desktopServer.pid!)).toBe(true);
+  expect(existsSync(install)).toBe(true);
+});
+
+it("takes over a stale install lock", async () => {
+  await mkdir(path.join(install, "install.lock"));
+  await writeFile(
+    path.join(install, "install.lock", "started"),
+    `${Math.floor(Date.now() / 1000) - 16 * 60}\n`,
+  );
+
+  const result = await remoteUninstall({
+    home,
+    stateDir,
+    deleteReviews: false,
+  });
+
+  expect(result).toMatchObject({ ok: true, removed: [install, wrapper] });
+});
+
+it("removes nothing without an absolute home", async () => {
+  for (const relative of ["", ".dev"]) {
+    const result = await remoteUninstall({
+      home: relative,
+      stateDir,
+      deleteReviews: true,
+    });
+
+    expect(result).toMatchObject({ ok: false });
+  }
+
+  expect(
+    await remoteUninstall({ home, stateDir: ".dev", deleteReviews: true }),
+  ).toMatchObject({ ok: false });
+  expect(existsSync(install)).toBe(true);
+  expect(await homeEntries()).toContain("review-api.db");
 });
 
 it("refuses while an install holds the lock", async () => {
@@ -265,7 +329,7 @@ it("refuses while an install holds the lock", async () => {
   expect(existsSync(path.join(install, "versions"))).toBe(true);
 });
 
-async function cli(argv: string[]) {
+async function cli(argv: string[], change: NodeJS.ProcessEnv = {}) {
   const stdout = new PassThrough();
   const stderr = new PassThrough();
   let out = "";
@@ -283,6 +347,7 @@ async function cli(argv: string[]) {
       DEV_REVIEW_HOME: stateDir,
       DEV_FAST_REVIEW_TELEMETRY_DISABLED: "1",
       DEV_FAST_REVIEW_CLI_NO_DELEGATE: "1",
+      ...change,
     },
   });
 
@@ -300,6 +365,24 @@ it("in --json mode with neither flag refuses and removes nothing", async () => {
   });
   expect(existsSync(install)).toBe(true);
   expect(existsSync(wrapper)).toBe(true);
+});
+
+it("with HOME empty refuses and removes nothing", async () => {
+  const result = await cli(
+    ["remote", "uninstall", "--keep-reviews", "--json"],
+    {
+      HOME: "",
+    },
+  );
+
+  expect(result.code).toBe(1);
+  expect(JSON.parse(result.stdout)).toEqual({
+    event: "remote.uninstall",
+    ok: false,
+    reason:
+      "HOME is not set; Whiteboard removes nothing without an absolute home.",
+  });
+  expect(existsSync(install)).toBe(true);
 });
 
 it("prints one JSON line on success", async () => {

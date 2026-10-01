@@ -1,6 +1,16 @@
 import { execFile } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { lstat, readFile, rm, stat } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -41,7 +51,7 @@ export type RemoteUninstallResult =
 /**
  * Removes what Desktop installed on this host: `~/.dev/whiteboard-remote/`
  * and its `~/.local/bin/whiteboard`. A server Desktop or the CLI started is
- * stopped first; one the user started from the install is a refusal.
+ * stopped first. Any other process running from the install is a refusal.
  */
 export async function remoteUninstall(input: {
   home: string;
@@ -49,86 +59,125 @@ export async function remoteUninstall(input: {
   stateDir: string;
   deleteReviews: boolean;
 }): Promise<RemoteUninstallResult> {
-  const install = path.join(input.home, ".dev", "whiteboard-remote");
-  const wrapper = path.join(input.home, ".local", "bin", "whiteboard");
-
   const refuse = (reason: string): RemoteUninstallResult => ({
     event: "remote.uninstall",
     ok: false,
     reason,
   });
 
-  const holder = await installRunning(path.join(install, "install.lock"));
+  // A relative home would aim every removal at the working directory.
+  if (!path.isAbsolute(input.home))
+    return refuse(
+      `HOME is ${input.home ? JSON.stringify(input.home) : "not set"}; Whiteboard removes nothing without an absolute home.`,
+    );
+
+  if (!path.isAbsolute(input.stateDir))
+    return refuse(
+      `The review home ${JSON.stringify(input.stateDir)} is not an absolute path.`,
+    );
+
+  const install = path.join(input.home, ".dev", "whiteboard-remote");
+  const wrapper = path.join(input.home, ".local", "bin", "whiteboard");
+  const lock = path.join(install, "install.lock");
+
+  const holder = await installRunning(lock);
 
   if (holder !== undefined)
     return refuse(
       `Desktop on ${holder || "another computer"} is installing Whiteboard here. Try again when it is done.`,
     );
 
-  const discovery = await readReviewServerDiscovery(input.stateDir).catch(
-    () => null,
-  );
+  if (existsSync(install) && !(await takeLock(install, lock)))
+    return refuse(
+      "Desktop started installing Whiteboard here just now. Try again when it is done.",
+    );
 
-  const health = discovery && (await readReviewServerHealth(discovery));
-  let stoppedServer: { pid: number; version: string | null } | undefined;
+  let removedInstall = false;
 
-  // Only the recorded instance's own answer proves the pid is still its.
-  if (discovery && health?.serverPid === discovery.serverPid) {
-    const pid = discovery.serverPid;
+  try {
+    const discovery = await readReviewServerDiscovery(input.stateDir).catch(
+      () => null,
+    );
 
-    if (discovery.startedBy === "user") {
-      const command = await commandLine(pid);
+    const health = discovery && (await readReviewServerHealth(discovery));
 
-      if (command === undefined || command.includes(`${install}/`))
+    // Only the recorded instance's own answer proves the pid is still its.
+    const recorded =
+      discovery && health?.serverPid === discovery.serverPid
+        ? { ...discovery, version: health.version ?? null }
+        : undefined;
+
+    const stoppable =
+      recorded && recorded.startedBy !== "user"
+        ? recorded.serverPid
+        : undefined;
+
+    const running = await processesFrom(`${install}/`);
+
+    if (running === undefined)
+      return refuse(
+        `Cannot list this host's processes to check that none runs from ${install}.`,
+      );
+
+    const others = running.filter((pid) => pid !== stoppable);
+
+    if (others.length)
+      return refuse(
+        `${others.map((pid) => (pid === recorded?.serverPid ? `A Whiteboard server you started (process ${pid})` : `Process ${pid}`)).join(", ")} ${others.length > 1 ? "run" : "runs"} from ${install}. Stop ${others.length > 1 ? "them" : "it"}, then run whiteboard remote uninstall again.`,
+      );
+
+    if (recorded?.startedBy === "user" && input.deleteReviews)
+      return refuse(
+        `A Whiteboard server you started (process ${recorded.serverPid}) uses the reviews in ${input.stateDir}. Stop it, then run whiteboard remote uninstall again.`,
+      );
+
+    let stoppedServer: { pid: number; version: string | null } | undefined;
+
+    if (recorded && stoppable !== undefined) {
+      if (!(await stop(stoppable)))
         return refuse(
-          `A Whiteboard server you started (process ${pid}) runs from ${install}. Stop it, then run whiteboard remote uninstall again.`,
+          `The Whiteboard server (process ${stoppable}) did not stop within 10 s.`,
         );
-
-      if (input.deleteReviews)
-        return refuse(
-          `A Whiteboard server you started (process ${pid}) uses the reviews in ${input.stateDir}. Stop it, then run whiteboard remote uninstall again.`,
-        );
-    } else {
-      if (!(await stop(pid)))
-        return refuse(
-          `The Whiteboard server (process ${pid}) did not stop within 10 s.`,
-        );
-      stoppedServer = { pid, version: health.version ?? null };
+      stoppedServer = { pid: stoppable, version: recorded.version };
     }
-  }
 
-  const removed: string[] = [];
+    const removed: string[] = [];
 
-  if (existsSync(install)) {
-    await rm(install, { recursive: true, force: true });
-    removed.push(install);
-  }
+    if (existsSync(install)) {
+      // The lock goes with the tree.
+      await rm(install, { recursive: true, force: true });
+      removedInstall = true;
+      removed.push(install);
+    }
 
-  if (await desktopWrote(wrapper)) {
-    await rm(wrapper, { force: true });
-    removed.push(wrapper);
-  }
+    if (await desktopWrote(wrapper)) {
+      await rm(wrapper, { force: true });
+      removed.push(wrapper);
+    }
 
-  if (input.deleteReviews)
-    for (const name of REVIEW_STORE) {
-      const file = path.join(input.stateDir, name);
+    if (input.deleteReviews)
+      for (const name of REVIEW_STORE) {
+        const file = path.join(input.stateDir, name);
 
-      if (existsSync(file)) {
-        await rm(file, { force: true });
-        removed.push(file);
+        if (existsSync(file)) {
+          await rm(file, { force: true });
+          removed.push(file);
+        }
       }
-    }
 
-  const result: RemoteUninstallResult = {
-    event: "remote.uninstall",
-    ok: true,
-    removed,
-    keptReviews: !input.deleteReviews,
-  };
+    const result: RemoteUninstallResult = {
+      event: "remote.uninstall",
+      ok: true,
+      removed,
+      keptReviews: !input.deleteReviews,
+    };
 
-  if (stoppedServer) result.stoppedServer = stoppedServer;
+    if (stoppedServer) result.stoppedServer = stoppedServer;
 
-  return result;
+    return result;
+  } finally {
+    if (!removedInstall) await rm(lock, { recursive: true, force: true });
+  }
 }
 
 /** The holder of a live install lock, or undefined when none is held. */
@@ -152,18 +201,81 @@ async function installRunning(lock: string) {
   );
 }
 
-async function commandLine(pid: number) {
+/**
+ * Takes the installer's lock as an install does, a stale one moved aside
+ * first, so no install starts while the tree is removed. False when another
+ * took it first.
+ */
+async function takeLock(install: string, lock: string) {
+  const token = randomBytes(8).toString("hex");
+
+  if (existsSync(lock)) {
+    const stale = path.join(install, `install.lock.${token}.stale`);
+
+    await rename(lock, stale).catch(() => undefined);
+    await rm(stale, { recursive: true, force: true });
+  }
+
   try {
-    return (await readFile(`/proc/${pid}/cmdline`, "utf8")).replaceAll(
-      "\0",
-      " ",
+    await mkdir(lock);
+  } catch {
+    return false;
+  }
+
+  await writeFile(path.join(lock, "token"), `${token}\n`);
+  await writeFile(path.join(lock, "owner"), "whiteboard-remote-uninstall\n");
+  await writeFile(
+    path.join(lock, "started"),
+    `${Math.floor(Date.now() / 1000)}\n`,
+  );
+
+  return true;
+}
+
+/**
+ * The pids, other than this one, whose command line holds `prefix`: the
+ * same scan the installer's cleanup makes. Undefined when none can be read.
+ */
+async function processesFrom(prefix: string) {
+  let lines: [number, string][];
+
+  try {
+    const pids = (await readdir("/proc")).filter((name) => /^\d+$/.test(name));
+
+    lines = await Promise.all(
+      pids.map(
+        async (pid): Promise<[number, string]> => [
+          Number(pid),
+          await readFile(`/proc/${pid}/cmdline`, "utf8").then(
+            (text) => text.replaceAll("\0", " "),
+            () => "",
+          ),
+        ],
+      ),
     );
   } catch {
-    return promisify(execFile)("ps", ["-o", "args=", "-p", String(pid)]).then(
-      ({ stdout }) => stdout.trim() || undefined,
-      () => undefined,
-    );
+    try {
+      const { stdout } = await promisify(execFile)(
+        "ps",
+        ["-eo", "pid=,args="],
+        { maxBuffer: 16 << 20 },
+      );
+
+      lines = stdout.split("\n").map((line): [number, string] => {
+        const [, pid = "", args = ""] = /^\s*(\d+)\s(.*)$/.exec(line) ?? [];
+
+        return [Number(pid), args];
+      });
+    } catch {
+      return undefined;
+    }
   }
+
+  return lines
+    .filter(
+      ([pid, args]) => pid && pid !== process.pid && args.includes(prefix),
+    )
+    .map(([pid]) => pid);
 }
 
 async function stop(pid: number) {
