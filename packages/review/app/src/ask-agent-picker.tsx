@@ -732,7 +732,6 @@ function AskChoiceSearch({
   );
 }
 
-// "Answer with", the model and effort menus, and the pickers that open them.
 const styles = stylex.create({
   agentMenu: {
     width: "300px",

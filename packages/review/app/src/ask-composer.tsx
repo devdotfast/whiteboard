@@ -45,7 +45,6 @@ interface Attached {
   data: string;
 }
 
-// The context ring appears once half the window is used.
 const CONTEXT_SHOWN_FROM = 0.5;
 
 const IMAGES_MAX = 4;
@@ -691,7 +690,6 @@ const styles = stylex.create({
     gap: "6px",
     margin: "12px 16px 12px",
   },
-  // A field shell: the question inside draws no box of its own.
   composer: {
     display: "flex",
     flexDirection: "column",
@@ -707,7 +705,6 @@ const styles = stylex.create({
     minWidth: 0,
     paddingInline: "2px",
   },
-  // Opens upward, over the thread, as wide as the composer.
   list: {
     width: "anchor-size(width)",
     maxHeight: "min(280px, 40vh)",
@@ -814,7 +811,6 @@ const styles = stylex.create({
     alignItems: "center",
     gap: "8px",
   },
-  // The arrow alone, square.
   square: {
     width: tokens.chromeControlHeight,
     padding: 0,

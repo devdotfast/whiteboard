@@ -83,8 +83,7 @@ export const askPanelStyles = stylex.create({
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: { default: null, ":focus-visible": "1px" },
   },
-  // A highlight passing across a background wider than its box, while
-  // something loads; sites set the gradient and its size.
+  // A loading shimmer; sites set the gradient and its size.
   sweep: {
     animationName: { default: sweep, [reducedMotion]: "none" },
     animationDuration: motion.pulse,

@@ -40,8 +40,7 @@ interface AskMark {
   code?: CodeTarget;
   /** What its pin is level with: the passage's block, or the editor. */
   block: HTMLElement;
-  /** What its pin stays clear of: the outermost list or table, or the
-   * editor. */
+  /** The outermost list, table or editor, which its pin stays clear of. */
   lane: HTMLElement;
   /** From the block's top to the pin, level with the passage's line. */
   offset: number;
@@ -169,8 +168,7 @@ function firstLineOffset(block: HTMLElement) {
 
 /** Finds each asked-about passage in the document by its anchor, washes
  * it, and names what its pin is laid out by. A passage whose block is
- * gone, or whose words an edit touched, is outdated. Where the pins go is
- * CSS's: they follow the document as it reflows. */
+ * gone, or whose words an edit touched, is outdated. */
 function findMarks(
   article: HTMLElement,
   entries: readonly AskHistoryEntry[],
@@ -304,7 +302,6 @@ function findMarks(
   return { marks, rows, outdated };
 }
 
-/** Names what a pin row is laid out by, for the row style's anchors. */
 function rowStyle(
   prefix: string,
   index: number,
@@ -639,14 +636,11 @@ function AskPin({
 }
 
 const styles = stylex.create({
-  // Lays out nothing: the rows are positioned against the article.
   layer: {
     display: "contents",
   },
-  // In the gutter right of the prose column, or of a wider block, level
-  // with the passage's line, two pins wide and growing down; never over the
-  // row above. All CSS, so the pins follow the document as it reflows.
-  // Hidden with a collapsed section.
+  // Two wide, in the gutter past the prose or a wider block, below the row
+  // above; hidden with a collapsed section.
   row: {
     position: "absolute",
     display: "grid",

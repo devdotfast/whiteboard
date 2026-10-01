@@ -305,10 +305,9 @@ export interface ReviewCanvasDiagnostic {
 
 /**
  * `instant` shows the Whiteboard tooltip the moment the pointer lands, for
- * small targets like the viewed box and the diff counts; `quick` shows the
- * host's hover after half its delay, for targets read by hovering, like
- * Ask's pins; `detail` is its fainter second line. Without options the host
- * shows its delayed hover.
+ * small targets like the viewed box and the diff counts; `quick` shows it
+ * after half the delay; `detail` is its fainter second line. Without options
+ * the host shows its delayed hover.
  */
 export interface ReviewTooltipOptions {
   instant?: boolean;

@@ -39,7 +39,7 @@ export const menuStyles = stylex.create({
   },
   item: {
     display: "flex",
-    // A scrolling list must not squeeze two-line items.
+    // A scrolling list must not squeeze its items.
     flex: "none",
     alignItems: "center",
     gap: "8px",

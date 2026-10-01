@@ -638,7 +638,6 @@ export function AskPanelContent({
   );
 }
 
-/** Back to the newest, floating over the thread's foot. */
 function ToLatestButton({ onClick }: { onClick: () => void }): ReactElement {
   const label = "Scroll to the latest";
 
@@ -655,7 +654,6 @@ function ToLatestButton({ onClick }: { onClick: () => void }): ReactElement {
   );
 }
 
-/** A label whose tooltip says more than it can. */
 function TooltipLabel({
   tooltip,
   xstyle,
@@ -845,8 +843,6 @@ const styles = stylex.create({
     maxWidth: "88%",
     marginTop: 0,
   },
-  // Raised off the panel's tray in either theme; --surface-raised is the
-  // workbench's widget color, which matches the tray in light themes.
   userBubble: {
     padding: "10px 14px",
     backgroundColor: tokens.trayRaised,

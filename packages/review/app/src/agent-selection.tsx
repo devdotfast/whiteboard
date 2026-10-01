@@ -374,8 +374,7 @@ export function AgentSelectionProvider({
 // agent (or pick another), or copy the selection for an agent elsewhere.
 const styles = stylex.create({
   // Spans its container, short of the right edge; only the toolbar takes
-  // the pointer. The chrome tokens come along (themeStyles.vars) for the
-  // fallback host, the canvas root, which is outside .review-app.
+  // the pointer. Outside .review-app it brings the chrome tokens.
   lane: {
     position: "absolute",
     left: 0,
@@ -399,7 +398,6 @@ const styles = stylex.create({
     padding: "4px",
     whiteSpace: "nowrap",
   },
-  // A quiet hint inside its button: drawn modifiers, then the key's letter.
   key: {
     display: "inline-flex",
     alignItems: "center",
