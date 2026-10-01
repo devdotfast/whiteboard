@@ -83,8 +83,10 @@ export interface FakeCall {
 	readonly wall: number;
 }
 
+export const FAKE_SERVER_ID = "0199a3f2-7c1e-7d4a-9b2f-3e5d6c7b8a90";
+
 export const attachOutput = (port: number, token = "remote-token", extra: Record<string, unknown> = {}) =>
-	`WHITEBOARD-REMOTE-BEGIN\n${JSON.stringify({ event: "remote.attach", version: "0.1.6", commit: "abc", serverId: "s1", url: `http://127.0.0.1:${port}`, token, startedServer: true, diffr: true, ...extra })}\nWHITEBOARD-REMOTE-END\n`;
+	`WHITEBOARD-REMOTE-BEGIN\n${JSON.stringify({ event: "remote.attach", version: "0.1.6", commit: "abc", serverId: FAKE_SERVER_ID, url: `http://127.0.0.1:${port}`, token, startedServer: true, diffr: true, ...extra })}\nWHITEBOARD-REMOTE-END\n`;
 
 /** A supported Linux host with no Node and nothing installed, unless `probe` says otherwise. */
 export const probeOutput = (probe: Partial<Record<string, unknown>> = {}) =>

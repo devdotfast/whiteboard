@@ -38,7 +38,8 @@ export function openRemoteInstallConsent(path: string): ReviewRemoteInstallConse
 	};
 
 	async function read(): Promise<Stored> {
-		const stored: Stored = { servers: {}, aliases: {} };
+		// No prototype: a key such as `__proto__` is a plain entry.
+		const stored: Stored = { servers: Object.create(null), aliases: Object.create(null) };
 		let value: { servers?: Record<string, { consent?: unknown; alias?: unknown }>; aliases?: Record<string, unknown> };
 		try {
 			value = JSON.parse(await readFile(path, "utf8"));
@@ -56,7 +57,9 @@ export function openRemoteInstallConsent(path: string): ReviewRemoteInstallConse
 		return stored;
 	}
 
-	async function write(stored: Stored): Promise<void> {
+	/** Writes only a change. */
+	async function write(stored: Stored, before: string): Promise<void> {
+		if (JSON.stringify(stored) === before) return;
 		await mkdir(dirname(path), { recursive: true });
 		const part = `${path}.${randomBytes(4).toString("hex")}.part`;
 		try {
@@ -79,24 +82,26 @@ export function openRemoteInstallConsent(path: string): ReviewRemoteInstallConse
 		set: (alias, consent) =>
 			serial(async () => {
 				const stored = await read();
+				const before = JSON.stringify(stored);
 				const serverId = serverOf(stored, alias);
 				if (serverId === undefined) stored.aliases[alias] = consent;
 				else {
 					stored.servers[serverId] = { consent, alias };
 					delete stored.aliases[alias];
 				}
-				await write(stored);
+				await write(stored, before);
 			}),
 		attached: (alias, serverId) =>
 			serial(async () => {
 				const stored = await read();
+				const before = JSON.stringify(stored);
 				const consent = stored.aliases[alias] ?? stored.servers[serverId]?.consent;
 				if (!consent) return;
 				// An alias names one server: another server it named before keeps its answer, under no alias.
 				for (const entry of Object.values(stored.servers)) if (entry.alias === alias) entry.alias = "";
 				stored.servers[serverId] = { consent, alias };
 				delete stored.aliases[alias];
-				await write(stored);
+				await write(stored, before);
 			}),
 	};
 }

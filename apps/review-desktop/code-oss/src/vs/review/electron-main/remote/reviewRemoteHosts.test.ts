@@ -12,7 +12,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
-import { attachOutput, fakeClock, fakeSsh, until, type FakeRemote } from "./reviewRemoteFakeSsh.js";
+import { attachOutput, FAKE_SERVER_ID, fakeClock, fakeSsh, until, type FakeRemote } from "./reviewRemoteFakeSsh.js";
 import type { ReviewRemoteInstallFlow } from "./reviewRemoteHost.js";
 import { ReviewRemoteHosts } from "./reviewRemoteHosts.js";
 import { openRemoteInstallConsent } from "./reviewRemoteInstallConsent.js";
@@ -218,11 +218,11 @@ test("a window gets the VS Code server of a machine only while the gateway has i
 	manager.update(true, ["wb-test-a"]);
 	await sentUntil((hosts) => byAlias(hosts, "wb-test-a")?.languageFeatures === true);
 
-	const online = [{ alias: "wb-test-a", serverId: "s1", state: "online" as const }];
-	assert.deepEqual(await manager.languageEndpoint("s1", online), { host: "127.0.0.1", port, connectionToken: "vscode-token" });
-	assert.equal(await manager.languageEndpoint("s1", [{ ...online[0], state: "duplicate" }]), undefined);
-	assert.equal(await manager.languageEndpoint("s1", [{ ...online[0], serverId: "s2" }]), undefined);
-	assert.equal(await manager.languageEndpoint("s1", []), undefined);
+	const online = [{ alias: "wb-test-a", serverId: FAKE_SERVER_ID, state: "online" as const }];
+	assert.deepEqual(await manager.languageEndpoint(FAKE_SERVER_ID, online), { host: "127.0.0.1", port, connectionToken: "vscode-token" });
+	assert.equal(await manager.languageEndpoint(FAKE_SERVER_ID, [{ ...online[0], state: "duplicate" }]), undefined);
+	assert.equal(await manager.languageEndpoint(FAKE_SERVER_ID, [{ ...online[0], serverId: "s2" }]), undefined);
+	assert.equal(await manager.languageEndpoint(FAKE_SERVER_ID, []), undefined);
 });
 
 const INSTALLED = { nodePath: "/n/bin/node", cliPath: "/v/cli.js", launcher: "/v/whiteboard", diffr: true };
@@ -282,10 +282,35 @@ test("Install on a declined host stores the agreement, installs and attaches", a
 	);
 
 	manager.update(true, ["wb-test-a"]);
-	await sentUntil((hosts) => hosts[0].problem?.declined === true);
+	await sentUntil((hosts) => hosts[0].declined === true);
 	await manager.install("wb-test-a");
 	await sentUntil((hosts) => hosts[0].endpoint !== undefined);
 
 	assert.deepEqual(runs, ["0.1.6"]);
 	assert.equal(await flow.consent.get("wb-test-a"), "allow");
+});
+
+test("two hosts asking at once are asked one after the other", async (t) => {
+	const dir = await mkdtemp(join(tmpdir(), "wb-consent-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
+	let open = 0;
+	const asked: string[] = [];
+	const flow: ReviewRemoteInstallFlow = {
+		mode: () => "ask",
+		consent: openRemoteInstallConsent(join(dir, "c.json")),
+		confirm: async ({ alias }) => {
+			assert.equal(open++, 0, `${alias} was asked while another prompt was open`);
+			asked.push(alias);
+			await new Promise((resolve) => setTimeout(resolve, 30));
+			open--;
+			return true;
+		},
+		run: async () => INSTALLED,
+	};
+	const { manager, sentUntil } = await managerFor(t, { "wb-test-a": {}, "wb-test-b": {} }, undefined, undefined, flow);
+
+	manager.update(true, ["wb-test-a", "wb-test-b"]);
+	await sentUntil((hosts) => hosts.every((host) => host.endpoint));
+
+	assert.deepEqual(asked.sort(), ["wb-test-a", "wb-test-b"]);
 });

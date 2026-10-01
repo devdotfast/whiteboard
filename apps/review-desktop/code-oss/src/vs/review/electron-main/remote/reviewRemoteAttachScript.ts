@@ -66,8 +66,8 @@ export interface ReviewRemoteAttach {
 	readonly languageGroups: readonly ReviewRemoteLanguageGroup[];
 	/** `--replace` stopped a server of this other version. */
 	readonly replaced?: string;
-	/** `--replace` left a server of another version that a user started. */
-	readonly incompatibleRunning?: { readonly version: string };
+	/** `--replace` left a server a user started, or a newer one. */
+	readonly incompatibleRunning?: { readonly version: string; readonly startedBy: "user" | "cli" | "desktop" };
 }
 
 /**
@@ -104,13 +104,17 @@ export function parseRemoteAttach(stdout: string): { attach: ReviewRemoteAttach 
 		return {
 			attach: {
 				version: typeof record.version === "string" ? record.version : null,
-				serverId: typeof record.serverId === "string" ? record.serverId : null,
+				// It keys the install consent: only an id of the server's own shape.
+				serverId: typeof record.serverId === "string" && UUID.test(record.serverId) ? record.serverId : null,
 				token: record.token,
 				port,
 				...languageServerOf(record),
 				languageGroups: languageGroupsOf(record.languageGroups),
 				...(record.replaced === true && { replaced: versionText(record.previousVersion) }),
-				...(running && typeof running === "object" && { incompatibleRunning: { version: versionText(running.version) } }),
+				...(running &&
+					typeof running === "object" && {
+						incompatibleRunning: { version: versionText(running.version), startedBy: running.startedBy === "cli" || running.startedBy === "desktop" ? running.startedBy : "user" },
+					}),
 			},
 		};
 	}
@@ -148,6 +152,9 @@ function languageGroupsOf(value: unknown): ReviewRemoteLanguageGroup[] {
 		return [{ group, installed, ...(typeof detail === "string" && detail && { detail: detail.slice(0, 500) }) }];
 	});
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** A remote's version reaches the UI: anything but a version is "unknown". */
 const versionText = (value: unknown) => (typeof value === "string" && /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(value) ? value : "unknown");
 

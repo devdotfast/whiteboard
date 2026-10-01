@@ -5,6 +5,7 @@
 
 import { rm } from "node:fs/promises";
 import { get } from "node:http";
+import { stripVTControlCharacters } from "node:util";
 import type { Readable, Writable } from "node:stream";
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
 import { installedAttachScript, parseRemoteAttach, reviewRemoteAttachScript, type ReviewRemoteAttach } from "./reviewRemoteAttachScript.js";
@@ -254,10 +255,23 @@ const STEP_WORDS: Record<InstallStep, string> = {
 
 const VIA = { "remote-download": "downloaded on the host", upload: "uploaded from this computer" } as const;
 
-/** Sizes from installs on Ubuntu 22.04: the package with its dependencies, and Node 24 unpacked. */
+/**
+ * Sizes from installs on Ubuntu 22.04: the package with its dependencies, and
+ * Node 24 unpacked. Paths are written as `~`: the remote's text never shapes the question.
+ */
 export function installPromptText(alias: string, version: string, probe: ReviewRemoteProbe): string {
 	const node = probe.node || probe.managedNode ? "" : `, and about 200 MB for Node 24, which ${alias} does not have`;
-	return `Whiteboard ${version} is not installed on ${alias}. Install it in ${probe.home}/.dev/whiteboard-remote? It takes about 60 MB${node}. Whiteboard also adds ~/.local/bin/whiteboard if that path is free.`;
+	return `Whiteboard ${version} is not installed on ${alias}. Install it in ~/.dev/whiteboard-remote? It takes about 60 MB${node}. Whiteboard also adds ~/.local/bin/whiteboard if that path is free.`;
+}
+
+/** The remote's words, as plain text: no escape sequences or control characters. */
+const plain = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x1f\x7f-\x9f]+/g, " ").trim();
+
+/** One sentence naming the version, the step and the reason; the installer's own errors name the step more closely. */
+export function installFailureText(alias: string, version: string, step: InstallStep, message: string): string {
+	const said = /^Installing on .+? failed( while .+?)?: ([\s\S]*)$/.exec(message);
+	const what = said ? (said[1] ?? "") : ` while ${STEP_WORDS[step]}`;
+	return plain(`Installing Whiteboard ${version} on ${alias} failed${what}: ${said ? said[2] : message}`);
 }
 
 export interface ReviewRemoteHostOptions {
@@ -321,8 +335,10 @@ export class ReviewRemoteHost {
 	private disposed = false;
 	/** What attaches: stage 1's script, or the installed version's CLI. */
 	private attachScript: AttachScript = reviewRemoteAttachScript;
-	/** This connection did not install because the user did not agree. */
+	/** The user has not agreed to the install: Settings offers it. */
 	private declined = false;
+	/** This Desktop's version failed to install; an older one attached. */
+	private installFailure: string | undefined;
 	private installing: AbortController | undefined;
 
 	constructor(private readonly options: ReviewRemoteHostOptions) {
@@ -347,6 +363,8 @@ export class ReviewRemoteHost {
 		this.failures = 0;
 		this.pendingAttaches = 0;
 		this.dropMaster();
+		this.declined = false;
+		this.installFailure = undefined;
 		this.set({ alias: this.alias });
 		void this.connect();
 	}
@@ -432,7 +450,7 @@ export class ReviewRemoteHost {
 			}
 			this.connectedAt = this.clock.now();
 			this.serverId = attach.serverId;
-			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language, ...groupsOf(attach) });
+			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language, ...groupsOf(attach), ...this.facts() });
 			this.whilePending(attach);
 		} catch (error) {
 			if (stale()) return;
@@ -530,6 +548,7 @@ export class ReviewRemoteHost {
 		this.connectedAt = undefined;
 		this.promptCancelled = false;
 		this.declined = false;
+		this.installFailure = undefined;
 		try {
 			const env = await this.options.environment();
 			if (stale()) return;
@@ -553,7 +572,7 @@ export class ReviewRemoteHost {
 			this.serverId = attach.serverId;
 			// What authentication printed says nothing about why the connection may end later.
 			this.masterStderr = "";
-			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language, ...groupsOf(attach) });
+			this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language, ...groupsOf(attach), ...this.facts() });
 			this.whilePending(attach);
 			const serverId = attach.serverId;
 			if (serverId) void this.options.install?.consent.attached(this.alias, serverId).catch((error: Error) => this.options.log(`${this.alias}: could not keep its install consent: ${error.message}`));
@@ -646,7 +665,11 @@ export class ReviewRemoteHost {
 		}
 		if (stale()) return;
 		const installed = await this.install(flow, env, probed.probe, support.target, version, present, stale);
-		return installed && (() => installedAttachScript(installed.nodePath, installed.cliPath));
+		if (!installed || "path" in installed) return installed && (() => installedAttachScript(installed.path.nodePath, installed.path.cliPath));
+		// An older complete version still serves: attached as it is, so the host is incompatible and says why.
+		if (!probed.probe.installed.some((other) => other !== version)) throw new HostFailure({ state: "not-installed", detail: installed.failed });
+		this.installFailure = installed.failed;
+		return reviewRemoteAttachScript;
 	}
 
 	/** Asks once per host; an answer is kept, a prompt nobody answered is not. */
@@ -659,7 +682,7 @@ export class ReviewRemoteHost {
 		return answer === true;
 	}
 
-	/** Installs `version`, or only checks it when `present`; undefined once stale. */
+	/** Installs `version`, or only checks it when `present`; undefined once stale, or why it failed. */
 	private async install(
 		flow: ReviewRemoteInstallFlow,
 		env: NodeJS.ProcessEnv,
@@ -668,14 +691,14 @@ export class ReviewRemoteHost {
 		version: string,
 		present: boolean,
 		stale: () => boolean,
-	): Promise<ReviewRemoteInstallResult | undefined> {
+	): Promise<{ path: ReviewRemoteInstallResult } | { failed: string } | undefined> {
 		const abort = new AbortController();
 		this.installing = abort;
 		let step: InstallStep = "preparing";
 		// A version already there is only checked: it shows as installing only if it is installed again.
 		if (!present) this.set({ alias: this.alias, installing: { step } });
 		try {
-			return await flow.run({
+			const path = await flow.run({
 				session: this.options.session,
 				probe,
 				target,
@@ -690,6 +713,7 @@ export class ReviewRemoteHost {
 					this.set({ alias: this.alias, installing: { step, ...("via" in progress && { detail: VIA[progress.via] }) } });
 				},
 			});
+			return { path };
 		} catch (error) {
 			if (stale()) return undefined;
 			const message = (error as Error).message;
@@ -697,7 +721,7 @@ export class ReviewRemoteHost {
 			if (/\bexit 255\b/.test(message) || !this.master || gone(this.master)) {
 				throw unreachable(`The connection to ${this.alias} dropped while installing Whiteboard ${version} (${STEP_WORDS[step]}).`);
 			}
-			throw new HostFailure({ state: "not-installed", detail: `Installing Whiteboard ${version} on ${this.alias} failed while ${STEP_WORDS[step]}: ${message}` });
+			return { failed: installFailureText(this.alias, version, step, message) };
 		} finally {
 			if (this.installing === abort) this.installing = undefined;
 		}
@@ -712,7 +736,10 @@ export class ReviewRemoteHost {
 			if (incompatibleRunning) {
 				throw new HostFailure({
 					state: "incompatible",
-					detail: `A Whiteboard server ${incompatibleRunning.version} started by a user is running on ${this.alias}; stop it to use this Desktop's version.`,
+					detail:
+						incompatibleRunning.startedBy === "user"
+							? `A Whiteboard server ${incompatibleRunning.version} started by a user is running on ${this.alias}; stop it to use this Desktop's version.`
+							: `A newer Whiteboard ${incompatibleRunning.version} is running on ${this.alias}, started by another Desktop; update this Desktop to use it.`,
 				});
 			}
 			if (replaced) this.options.log(`${this.alias}: replaced its Whiteboard server ${replaced} with ${parsed.attach.version}.`);
@@ -728,8 +755,7 @@ export class ReviewRemoteHost {
 			const version = await this.options.desktopVersion();
 			throw new HostFailure({
 				state: "not-installed",
-				detail: `Whiteboard is not installed on ${this.alias}. Install Whiteboard ${version} there; Node 24 is needed.`,
-				...(this.declined && { declined: true as const }),
+				detail: this.installFailure ?? `Whiteboard is not installed on ${this.alias}. Install Whiteboard ${version} there; Node 24 is needed.`,
 			});
 		}
 		throw unreachable(firstLines(result.stderr) || `whiteboard remote attach on ${this.alias} exited with code ${result.code ?? "none"}.`);
@@ -779,6 +805,11 @@ export class ReviewRemoteHost {
 		return { languageFeatures: true };
 	}
 
+	/** What this connection adds to an endpoint: no consent, or a failed upgrade. */
+	private facts(): Pick<ReviewGatewayHost, "declined" | "installFailure"> {
+		return { ...(this.declined && { declined: true as const }), ...(this.installFailure && { installFailure: this.installFailure }) };
+	}
+
 	private fail(problem: Problem): void {
 		this.generation++;
 		this.queuedReattach = false;
@@ -788,7 +819,7 @@ export class ReviewRemoteHost {
 		this.cancelPending = undefined;
 		this.connectedAt = undefined;
 		this.dropMaster();
-		this.set({ alias: this.alias, problem });
+		this.set({ alias: this.alias, problem, ...(this.declined && { declined: true as const }) });
 		// Retrying cannot fix a refused login or a missing install: wait for a retry or a setting change.
 		if (problem.state !== "unreachable" || this.disposed) return;
 		const delay = reconnectDelay(this.failures++, this.options.random);

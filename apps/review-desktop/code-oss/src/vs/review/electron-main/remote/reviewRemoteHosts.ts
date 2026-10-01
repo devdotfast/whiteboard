@@ -86,8 +86,21 @@ export class ReviewRemoteHosts {
 	private disposed = false;
 	private disposing: Promise<void> | undefined;
 
+	/** The install flow, asking one question at a time: a window shows one prompt, and a second would dismiss the first. */
+	private readonly flow: ReviewRemoteInstallFlow | undefined;
+
 	constructor(private readonly options: ReviewRemoteHostsOptions) {
 		this.clock = options.clock ?? systemClock;
+		const flow = options.install;
+		let asking: Promise<unknown> = Promise.resolve();
+		this.flow = flow && {
+			...flow,
+			confirm: (request) => {
+				const asked = asking.then(() => flow.confirm(request));
+				asking = asked.catch(() => undefined);
+				return asked;
+			},
+		};
 	}
 
 	/** Connects added aliases and closes removed ones. Returns at once. */
@@ -183,7 +196,7 @@ export class ReviewRemoteHosts {
 			log: this.options.log,
 			clock: this.clock,
 			timeouts: this.options.timeouts,
-			install: this.options.install,
+			install: this.flow,
 		});
 	}
 

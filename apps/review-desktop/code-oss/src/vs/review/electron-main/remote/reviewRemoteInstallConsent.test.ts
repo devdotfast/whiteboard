@@ -67,3 +67,20 @@ test("an unreadable file is no consent, and is replaced on the next answer", asy
 	await consent.set("box", "allow");
 	assert.equal(await consent.get("box"), "allow");
 });
+
+test("an unchanged answer is not written again, and __proto__ is an ordinary key", async (t) => {
+	const path = await file(t);
+	const consent = openRemoteInstallConsent(path);
+
+	await consent.set("box", "allow");
+	await consent.attached("box", "server-1");
+	const written = (await stat(path)).mtimeMs;
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	await consent.attached("box", "server-1");
+	await consent.set("box", "allow");
+	assert.equal((await stat(path)).mtimeMs, written);
+
+	await consent.set("__proto__", "deny");
+	assert.equal(await openRemoteInstallConsent(path).get("__proto__"), "deny");
+	assert.equal(await consent.get("box"), "allow");
+});
