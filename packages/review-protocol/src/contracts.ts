@@ -910,10 +910,12 @@ export const ReviewGatewayHostSchema = z.strictObject({
         "incompatible",
       ]),
       detail: stringAllowEmpty,
-      // Not installed because the user did not agree to the install.
-      declined: z.literal(true).optional(),
     })
     .optional(),
+  // The user has not agreed to Desktop's install; Settings offers it.
+  declined: z.literal(true).optional(),
+  // Desktop's install of its version failed; the host serves an older one.
+  installFailure: stringAllowEmpty.optional(),
   // Desktop is installing on the host; it has no endpoint yet.
   installing: z
     .strictObject({
@@ -962,7 +964,7 @@ export interface ReviewGatewayHostState {
   languageFeatures?: boolean;
   languageFeaturesDetail?: string;
   languageGroups?: ReviewGatewayHost["languageGroups"];
-  /** `not-installed` because the user declined Desktop's install; Settings offers it again. */
+  /** Not on this Desktop's version, and the user has not agreed to Desktop's install; Settings offers it. */
   declined?: true;
 }
 

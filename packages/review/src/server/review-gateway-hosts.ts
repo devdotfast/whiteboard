@@ -80,6 +80,8 @@ interface Host extends GatewayRemote {
   languageFeaturesDetail?: string;
   languageGroups?: ReviewGatewayHost["languageGroups"];
   installing?: ReviewGatewayHost["installing"];
+  declined?: true;
+  installFailure?: string;
   serverId?: string;
   instanceId?: string;
   status: ReviewGatewayHostState["state"];
@@ -205,16 +207,23 @@ export function createGatewayHosts(input: {
         detail: `${first?.alias} and ${host.alias} report the same server id. If they are one machine, remove one of the aliases. If they are two machines, run \`whiteboard server reset-id\` on ${host.alias}.`,
       };
 
+    // A failed upgrade leaves the host on its older version: incompatible, with why.
+    const detail =
+      host.status === "incompatible" && host.installFailure
+        ? `${host.detail ? `${host.detail} ` : ""}${host.installFailure}`
+        : host.detail;
+
     return {
       ...known,
       state: host.status,
-      ...(host.detail !== undefined && { detail: host.detail }),
+      ...(detail !== undefined && { detail }),
       // Desktop's incompatible is a server a user started, which installing cannot fix.
       ...(INSTALLS.has(host.status) &&
         host.problem?.state !== "incompatible" && {
           installCommand: `npm install -g @dev.fast/whiteboard@${input.version}`,
         }),
-      ...(host.problem?.declined && { declined: true as const }),
+      ...(host.declined &&
+        host.status !== "online" && { declined: true as const }),
       ...(host.status === "online" && languageOf(host)),
     };
   }
@@ -277,6 +286,10 @@ export function createGatewayHosts(input: {
     };
 
     if (given.endpoint) host.endpoint = given.endpoint;
+
+    if (given.declined) host.declined = true;
+
+    if (given.installFailure) host.installFailure = given.installFailure;
 
     if (given.problem) {
       host.problem = given.problem;
@@ -430,8 +443,16 @@ export function createGatewayHosts(input: {
             current.endpoint,
             current.problem,
             current.installing,
+            current.declined,
+            current.installFailure,
           ]) ===
-            JSON.stringify([given.endpoint, given.problem, given.installing])
+            JSON.stringify([
+              given.endpoint,
+              given.problem,
+              given.installing,
+              given.declined,
+              given.installFailure,
+            ])
         ) {
           previous.delete(given.alias);
           current.retryMs = FIRST_RETRY_MS;

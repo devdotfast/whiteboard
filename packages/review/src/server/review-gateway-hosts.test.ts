@@ -162,7 +162,8 @@ it("a declined host keeps the install command and says it was declined", () => {
   gateway.set([
     {
       alias: "box",
-      problem: { state: "not-installed", detail, declined: true },
+      problem: { state: "not-installed", detail },
+      declined: true,
     },
   ]);
 
@@ -175,6 +176,36 @@ it("a declined host keeps the install command and says it was declined", () => {
       declined: true,
     },
   ]);
+});
+
+it("an older server after a failed or declined install is incompatible, says why, and offers the install", async () => {
+  const fake = await startFake({ version: "0.1.5" });
+  const gateway = hosts("0.1.6");
+
+  const installFailure =
+    "Installing Whiteboard 0.1.6 on box failed while installing the package: npm ERR! 404.";
+
+  gateway.set([
+    { alias: "box", endpoint: fake.endpoint, installFailure, declined: true },
+  ]);
+
+  await expect
+    .poll(() => gateway.states()[0])
+    .toMatchObject({
+      state: "incompatible",
+      detail: `box runs Whiteboard 0.1.5; this Desktop runs 0.1.6. Install Whiteboard 0.1.6 on box. ${installFailure}`,
+      declined: true,
+    });
+});
+
+it("a declined host on this Desktop's version is online, with no install offered", async () => {
+  const fake = await startFake({ version: "0.1.6" });
+  const gateway = hosts("0.1.6");
+
+  gateway.set([{ alias: "box", endpoint: fake.endpoint, declined: true }]);
+
+  await expect.poll(() => gateway.states()[0]?.state).toBe("online");
+  expect(gateway.states()[0]).not.toHaveProperty("declined");
 });
 
 it("a server a user started at another version is incompatible, with no install command", () => {
