@@ -77,7 +77,11 @@ beforeEach(async () => {
   const pins = await local.data.resolvePins(repo.id, "HEAD^", "HEAD");
 
   const result = await local.store.execute({
-    operation: { type: "create", title: "Trace test", pins },
+    operation: {
+      type: "create",
+      title: "Trace test",
+      target: { kind: "commits", ...pins },
+    },
   });
 
   id = result.reviewId;

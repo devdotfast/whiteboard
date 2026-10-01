@@ -191,7 +191,11 @@ it("shares review identity, resources, sessions and live changes with Desktop in
     };
 
     const created = await server.client.post<Result>("/commands", {
-      operation: { type: "create", title: "Shared review", pins },
+      operation: {
+        type: "create",
+        title: "Shared review",
+        target: { kind: "commits", ...pins },
+      },
     });
 
     // Catalog refreshes can also report repository registration before creation.
@@ -327,7 +331,7 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
       "session_create",
       JSON.stringify({
         title: "CI review",
-        pins,
+        target: { kind: "commits", ...pins },
       }),
     ],
     process.env,
@@ -574,7 +578,12 @@ it("authenticates clients, reports capabilities and readiness without exposing t
     operation: {
       type: "create",
       title: "No UI",
-      pins: { repositoryId: registered.id, base: repo.base, head: repo.head },
+      target: {
+        kind: "commits",
+        repositoryId: registered.id,
+        base: repo.base,
+        head: repo.head,
+      },
     },
   });
 
@@ -920,7 +929,12 @@ it("rejects a second owner and keeps separate CI job stores independent", async 
     operation: {
       type: "create",
       title: "First job only",
-      pins: { repositoryId: registered.id, base: repo.base, head: repo.head },
+      target: {
+        kind: "commits",
+        repositoryId: registered.id,
+        base: repo.base,
+        head: repo.head,
+      },
     },
   });
   expect(await first.client.read("")).toMatchObject([

@@ -50,7 +50,13 @@ const request = <Operation>(operation: Operation) => ({
 });
 
 const create = () =>
-  store.execute(request({ type: "create", title: "Example", pins }));
+  store.execute(
+    request({
+      type: "create",
+      title: "Example",
+      target: { kind: "commits", ...pins },
+    }),
+  );
 
 const edit = <Content>(reviewId: string, value: Content) =>
   store.execute(request({ type: "edit", reviewId, edit: value }));
@@ -87,7 +93,7 @@ describe("snapshot authoring", () => {
       request({
         type: "create",
         title: "PR review",
-        pins,
+        target: { kind: "commits", ...pins },
         pullRequestUrl: url,
       }),
     );
@@ -191,7 +197,7 @@ describe("snapshot authoring", () => {
         request({
           type: "create",
           title: "Bad identity",
-          pins,
+          target: { kind: "commits", ...pins },
           pullRequestUrl: url,
         }),
       ),
@@ -201,7 +207,11 @@ describe("snapshot authoring", () => {
 
   it("deletes one review and its history and keeps other reviews", async () => {
     const { reviewId } = await store.execute(
-      request({ type: "create", title: "Delete me", pins }),
+      request({
+        type: "create",
+        title: "Delete me",
+        target: { kind: "commits", ...pins },
+      }),
     );
 
     const other = await create();
@@ -1412,7 +1422,7 @@ describe("create for a pull request", () => {
       request({
         type: "create",
         title: fields.title ?? "PR review",
-        pins: fields.pins ?? pins,
+        target: { kind: "commits", ...(fields.pins ?? pins) },
         pullRequestUrl,
         ...(fields.reuseExisting !== undefined && {
           reuseExisting: fields.reuseExisting,
@@ -1609,14 +1619,16 @@ describe("create for a pull request", () => {
       store.execute(request({ type: "create", title: "Nothing" })),
     ).rejects.toThrow(/target, legacy pins, or a pullRequestUrl/);
     await expect(
-      store.execute(request({ type: "create", pins })),
+      store.execute(
+        request({ type: "create", target: { kind: "commits", ...pins } }),
+      ),
     ).rejects.toThrow(/Supply a title/);
     await expect(
       store.execute(
         request({
           type: "create",
           title: "Both",
-          pins,
+          target: { kind: "commits", ...pins },
           pullRequestUrl: url,
           repositoryId: "repo",
         }),
@@ -1669,7 +1681,12 @@ it("serves the experiment through the real desktop HTTP server and existing auth
         body: JSON.stringify(request(operation)),
       });
 
-    const response = await post({ type: "create", title: "HTTP review", pins });
+    const response = await post({
+      type: "create",
+      title: "HTTP review",
+      target: { kind: "commits", ...pins },
+    });
+
     expect(response.status).toBe(200);
     const created = await response.json();
     const { reviewId } = created;
@@ -2897,7 +2914,13 @@ it("reports a created review with the origin its headers claim", async () => {
     api.request("/commands", {
       method: "POST",
       headers: { "content-type": "application/json", ...headers },
-      body: JSON.stringify(request({ type: "create", title, pins })),
+      body: JSON.stringify(
+        request({
+          type: "create",
+          title,
+          target: { kind: "commits", ...pins },
+        }),
+      ),
     });
 
   expect(

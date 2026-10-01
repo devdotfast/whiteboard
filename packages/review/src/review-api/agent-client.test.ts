@@ -59,7 +59,12 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
 
   const created = (await call("create", {
     title: "Authoring",
-    pins: { repositoryId: "repo", base: "base", head: "head" },
+    target: {
+      kind: "commits",
+      repositoryId: "repo",
+      base: "base",
+      head: "head",
+    },
   })) as { reviewId: string };
 
   const input = {
@@ -171,7 +176,12 @@ it("says a write whose reply was lost may or may not have applied", async () => 
 
   const { reviewId } = (await callAuthoringTool(lossy, tool("create"), {
     title: "Minted",
-    pins: { repositoryId: "repo", base: "base", head: "head" },
+    target: {
+      kind: "commits",
+      repositoryId: "repo",
+      base: "base",
+      head: "head",
+    },
   })) as { reviewId: string };
 
   const insert = {
@@ -285,7 +295,12 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
       operation: {
         type: "create",
         title: "Readable review",
-        pins: { repositoryId: "repo", base: "base", head: "head" },
+        target: {
+          kind: "commits",
+          repositoryId: "repo",
+          base: "base",
+          head: "head",
+        },
       },
     });
 
@@ -454,7 +469,12 @@ it("prints readable CLI output by default and raw objects with --json", async ()
     operation: {
       type: "create",
       title: "CLI reading",
-      pins: { repositoryId: "repo", base: "base", head: "head" },
+      target: {
+        kind: "commits",
+        repositoryId: "repo",
+        base: "base",
+        head: "head",
+      },
     },
   });
 
@@ -502,7 +522,12 @@ it("binds existing content through the host-advertised PR tool", async () => {
     operation: {
       type: "create",
       title: "PR",
-      pins: { repositoryId: "repo", base: "base", head: "head" },
+      target: {
+        kind: "commits",
+        repositoryId: "repo",
+        base: "base",
+        head: "head",
+      },
     },
   });
 

@@ -42,7 +42,12 @@ afterEach(async () => {
 
 const run = <Operation>(operation: Operation) => store.execute({ operation });
 
-const create = () => run({ type: "create", title: "Lenses", pins });
+const create = () =>
+  run({
+    type: "create",
+    title: "Lenses",
+    target: { kind: "commits", ...pins },
+  });
 
 const lens = <Edit>(reviewId: string, edit: Edit, activityId?: string) =>
   run({ type: "lens_edit", reviewId, edit, activityId });
@@ -169,13 +174,12 @@ it("lets two agents write the document and lenses at once, each credited and ren
   vi.useFakeTimers({ toFake: ["Date"] });
   const { reviewId } = await create();
 
-  const writer = store.activity.update(reviewId, {
-      action: "begin",
-    }).activityId!,
-    lensWriter = store.activity.update(reviewId, {
-      action: "begin",
-      focus: { description: "Grouping the API files", targetId: "lens-1" },
-    }).activityId!;
+  store.activity.update(reviewId, { action: "begin" });
+
+  const lensWriter = store.activity.update(reviewId, {
+    action: "begin",
+    focus: { description: "Grouping the API files", targetId: "lens-1" },
+  }).activityId!;
 
   vi.advanceTimersByTime(120_000);
   await Promise.all([

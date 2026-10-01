@@ -426,18 +426,13 @@ const command = (operation) => api("/commands", "POST", { operation });
 async function createReview(fix, title, kind = "commits") {
   const repository = await api("/repositories", "POST", { path: fix.repo });
 
-  const pins = await api("/pins", "POST", {
-    repositoryId: repository.id,
-    base: fix.base,
-    head: fix.head,
-  });
-
   const review = await command({
     type: "create",
     title,
-    ...(kind === "worktree"
-      ? { target: { kind, repositoryId: repository.id, base: fix.base } }
-      : { pins }),
+    target:
+      kind === "worktree"
+        ? { kind, repositoryId: repository.id, base: fix.base }
+        : { kind, repositoryId: repository.id, base: fix.base, head: fix.head },
   });
 
   const reviewId = review.reviewId;

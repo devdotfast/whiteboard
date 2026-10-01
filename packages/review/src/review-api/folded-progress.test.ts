@@ -251,7 +251,12 @@ const records: {
 async function progressApi() {
   const run = <Operation>(operation: Operation) => store.execute({ operation });
 
-  const { reviewId } = await run({ type: "create", title: "Folds", pins });
+  const { reviewId } = await run({
+    type: "create",
+    title: "Folds",
+    target: { kind: "commits", ...pins },
+  });
+
   await run({
     type: "lens_edit",
     reviewId,

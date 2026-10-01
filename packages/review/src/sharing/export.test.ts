@@ -64,7 +64,11 @@ async function fixture() {
   const pins = { repositoryId: repository.id, base, head };
 
   const created = await local.store.execute({
-    operation: { type: "create", title: "A shared review", pins },
+    operation: {
+      type: "create",
+      title: "A shared review",
+      target: { kind: "commits", ...pins },
+    },
   });
 
   const traceId = randomUUID();
