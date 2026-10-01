@@ -47,8 +47,11 @@ interface AskMark {
   pinLeft: number;
 }
 
+/** A pin's height: its line, padding and border. */
+const PIN_HEIGHT = 22;
+
 /** A pin's height and the gap below it, before the next pin down. */
-const PIN_STEP = 26;
+const PIN_STEP = PIN_HEIGHT + 4;
 
 /** Room for a pin with a two-digit count. */
 const PIN_WIDTH = 48;
@@ -171,7 +174,10 @@ function placeMarks(
         : range.startContainer.parentElement;
 
     const passage = start?.closest(PASSAGE_BLOCKS);
-    const top = Math.min(...rects.map((rect) => rect.top));
+
+    const first = rects.reduce((line, rect) =>
+      rect.top < line.top ? rect : line,
+    );
 
     // Pins run in one lane for every kind of block, right of the prose
     // column: level with a table narrower than the column, and outside a
@@ -196,7 +202,8 @@ function placeMarks(
         right: rect.right - origin.left,
         bottom: rect.bottom - origin.top,
       })),
-      pinTop: top - origin.top + 3,
+      // Level with the passage's first line, whatever its type size.
+      pinTop: first.top + first.height / 2 - PIN_HEIGHT / 2 - origin.top,
       // A narrow document has little margin; the pin stays inside it
       // rather than making the page scroll sideways.
       pinLeft: Math.min(right - origin.left + 10, origin.width - PIN_WIDTH),
