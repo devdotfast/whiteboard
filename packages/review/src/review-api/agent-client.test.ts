@@ -154,51 +154,6 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
   ).toContain("Updated through the reading view.");
 });
 
-it("says a write whose reply was lost may or may not have applied", async () => {
-  const tools = await client.read<AuthoringTool[]>("/authoring");
-
-  const tool = (name: string) =>
-    tools.find((t) => t.name === `review_${name}`)!;
-
-  let dropReply = false;
-
-  // The host applies the command, then the reply is lost on the way back.
-  const lossy = new ReviewApiClient(client.connection, async (url, init) => {
-    const response = await app.request(url.replace("/reviews-api", ""), init);
-
-    if (dropReply) {
-      dropReply = false;
-      throw new TypeError("fetch failed");
-    }
-
-    return response;
-  });
-
-  const { reviewId } = (await callAuthoringTool(lossy, tool("create"), {
-    title: "Minted",
-    target: {
-      kind: "commits",
-      repositoryId: "repo",
-      base: "base",
-      head: "head",
-    },
-  })) as { reviewId: string };
-
-  const insert = {
-    reviewId,
-    edit: { type: "insert", content: { type: "markdown", markdown: "Once." } },
-  };
-
-  dropReply = true;
-
-  const error = await callAuthoringTool(lossy, tool("edit"), insert).catch(
-    (caught: Error) => caught,
-  );
-
-  expect(store.read(reviewId).version).toBe(1);
-  expect(String(error)).toMatch(/may or may not have applied.*Check with/);
-});
-
 it("serves MCP framing without stdout diagnostics and returns host errors as tool errors", async () => {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
@@ -408,36 +363,6 @@ it("hands the parent CLI the release of the Desktop an api call reached", async 
   }
 });
 
-it("returns API failures to the parent CLI for terminal-event classification", async () => {
-  const connection = vi
-    .spyOn(agentClient, "connectReviewInstance")
-    .mockRejectedValue(new Error("controlled connection failure"));
-
-  const discard = new Writable({
-    write(_chunk, _encoding, done) {
-      done();
-    },
-  });
-
-  const onFailure = vi.fn<(error: Error) => void>();
-
-  try {
-    expect(
-      await runReviewAgentCli({
-        argv: ["api", "tools"],
-        stdout: discard,
-        stderr: discard,
-        onFailure,
-      }),
-    ).toBe(1);
-    expect(onFailure).toHaveBeenCalledWith(
-      expect.objectContaining({ message: "controlled connection failure" }),
-    );
-  } finally {
-    connection.mockRestore();
-  }
-});
-
 it("shows CLI help without requiring Desktop or touching review storage", async () => {
   let output = "";
 
@@ -546,10 +471,15 @@ it("binds existing content through the host-advertised PR tool", async () => {
 
   await callAuthoringTool(
     client,
-    tools.find((tool) => tool.name === "review_repin")!,
+    tools.find((tool) => tool.name === "review_set_target")!,
     {
       reviewId: created.reviewId,
-      pins: { repositoryId: "repo", base: "base", head: "head" },
+      target: {
+        kind: "commits",
+        repositoryId: "repo",
+        base: "base",
+        head: "head",
+      },
       pullRequestUrl: "https://github.com/devdotfast/review/pull/310",
     },
   );

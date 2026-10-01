@@ -858,9 +858,9 @@ it("lists the version's commits and reads a selected commit's diff against its p
   );
   await local.store.execute(
     command({
-      type: "repin",
+      type: "set_target",
       reviewId: review.reviewId,
-      pins: { ...updatedPins, base: firstHead },
+      target: { kind: "commits", ...updatedPins, base: firstHead },
     }),
   );
   expect((await app.request(`${route}/diff?commit=${firstHead}`)).status).toBe(
@@ -891,7 +891,13 @@ it("reads each version of one review at its own pins", async () => {
     "HEAD",
   );
 
-  await local.store.execute(command({ type: "repin", reviewId, pins: later }));
+  await local.store.execute(
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...later },
+    }),
+  );
   const first = local.store.read(reviewId, 0).pins!;
   const second = local.store.read(reviewId, 1).pins!;
 
@@ -939,7 +945,13 @@ it("serves a historical version's file at the pins that version was saved with",
     "HEAD",
   );
 
-  await local.store.execute(command({ type: "repin", reviewId, pins: later }));
+  await local.store.execute(
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...later },
+    }),
+  );
   expect(local.store.read(reviewId).version).toBe(2);
 
   const app = new Hono().route(
@@ -1053,7 +1065,13 @@ it("opens a stable native workspace on the Review's pinned checkout at the selec
     "HEAD",
   );
 
-  await local.store.execute(command({ type: "repin", reviewId, pins: later }));
+  await local.store.execute(
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...later },
+    }),
+  );
   const app = createReviewApi(local.store, local.data);
 
   const open = async (query = "") => {
@@ -1350,7 +1368,13 @@ it("browses committed directories, including history, without listing untracked 
   );
   expect((await app.request(`${route}?path=../outside`)).status).toBe(400);
   expect((await app.request(`${route}?path=example.ts`)).status).toBe(404);
-  await local.store.execute(command({ type: "repin", reviewId, pins }));
+  await local.store.execute(
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...pins },
+    }),
+  );
   expect((await app.request(`${route}?path=nested`)).status).toBe(404);
   expect((await app.request(`${route}?version=0&path=nested`)).status).toBe(
     200,
@@ -2387,7 +2411,11 @@ it("copies code from historical pins after a repin, never from working-tree cont
   );
 
   await local.store.execute(
-    command({ type: "repin", reviewId, pins: { ...pins, head: pins.base } }),
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...pins, head: pins.base },
+    }),
   );
   const app = createReviewApi(local.store, local.data);
 
@@ -2434,7 +2462,11 @@ it("copies a diff selection from its pinned version and selected commit, and rej
   );
 
   await local.store.execute(
-    command({ type: "repin", reviewId, pins: { ...pins, head: pins.base } }),
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...pins, head: pins.base },
+    }),
   );
   const app = createReviewApi(local.store, local.data);
 

@@ -116,6 +116,7 @@ export const commandSchema = z.strictObject({
       type: z.literal("set_target"),
       reviewId,
       target: reviewTargetSchema,
+      pullRequestUrl: pullRequestUrl.nullable().optional(),
     }),
     z.strictObject({
       type: z.literal("edit"),
@@ -1216,8 +1217,14 @@ export class ReviewStore {
           snapshot.title = op.title;
           break;
         case "set_target":
-          if (snapshot.pins?.repositoryId !== resolvedTarget!.pins.repositoryId)
-            setPullRequest(snapshot, null);
+          setPullRequest(
+            snapshot,
+            op.pullRequestUrl ??
+              (op.pullRequestUrl === null ||
+              snapshot.pins?.repositoryId !== resolvedTarget!.pins.repositoryId
+                ? null
+                : undefined),
+          );
           snapshot.staleSources = [];
           snapshot.target = resolvedTarget!.target;
           snapshot.pins = resolvedTarget!.pins;

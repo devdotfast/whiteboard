@@ -594,7 +594,11 @@ it("requires a pinned review before sharing saved worktree changes", async () =>
     "Pin this review to commits before sharing it.",
   );
   await local.store.execute({
-    operation: { type: "repin", reviewId, pins: snapshot.pins },
+    operation: {
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...snapshot.pins },
+    },
   });
   const bundle = await exportShare({ ...local, reviewId, repository });
   expect(validateShareBundle(bundle).snapshot.pins!.head).toBe(

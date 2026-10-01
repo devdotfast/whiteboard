@@ -92,7 +92,7 @@ The canvas continues to use the JSON snapshot routes above.
 }
 ```
 
-Commands: `create {title,target,pullRequestUrl?,reuseExisting?}` or `create {pullRequestUrl,title?,repositoryId?,reuseExisting?}`, `set_target {reviewId,target}`, `edit {reviewId,edit}`, `rename {reviewId,title}`,
+Commands: `create {title,target,pullRequestUrl?,reuseExisting?}` or `create {pullRequestUrl,title?,repositoryId?,reuseExisting?}`, `set_target {reviewId,target,pullRequestUrl?}`, `edit {reviewId,edit}`, `rename {reviewId,title}`,
 `repin {reviewId,pins,pullRequestUrl?}`, `restore {reviewId,version}`. Pins contain
 `{repositoryId,base,head}` and must identify immutable commits.
 Retargeting preserves content and component IDs. Restore restores title, target, PR identity, and content. Live targets still read the current checkout.
