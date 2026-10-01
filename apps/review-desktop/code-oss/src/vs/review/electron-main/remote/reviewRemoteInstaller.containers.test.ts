@@ -131,6 +131,12 @@ test("a host with Node 24 gets the package; whiteboard version prints it", { ski
 		["package", "verifying", "done"],
 	);
 	assert.equal(await inContainer("node", "ls ~/.dev/whiteboard-remote/versions"), "0.0.1");
+
+	// Complete now: read without the lock, in one script.
+	const again = input("node");
+	assert.deepEqual(await installRemote(again.value), result);
+	assert.deepEqual(again.progress.map((p) => p.step), ["done"]);
+	assert.equal(await inContainer("node", "ls -d ~/.dev/whiteboard-remote/install.lock 2>/dev/null | wc -l"), "0");
 });
 
 test("a host with no Node gets Node and the package", { skip, timeout: 10 * 60_000 }, async () => {
