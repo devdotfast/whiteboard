@@ -2,10 +2,23 @@ import { type JsonObject, isJsonObject } from "@dev.fast/json";
 import type { ReviewStructuralDiffEvent } from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
 import {
+  type AgentSelection,
   AgentSelectionSchema,
   selectionMarkdown,
 } from "@review/agent-selection.js";
-import { resolveReviewBranchLinks } from "@review/review-branch-links.js";
+import type { AskAgentStatus } from "@review/ask/agents.js";
+import { checkoutFiles, mentionableFiles } from "@review/ask/checkout-files.js";
+import { parseFileRef, resolveFileRefs } from "@review/ask/file-refs.js";
+import {
+  type AskAgentId,
+  askAgentIds,
+  askChoiceKinds,
+  askPicksSchema,
+  askQuestionSchema,
+} from "@review/ask/thread-state.js";
+import type { AskThreads } from "@review/ask/threads.js";
+import { watchAskThread } from "@review/ask/watch.js";
+import { fuzzyRank } from "@review/fuzzy-match.js";
 import { resolveReviewStackLayers } from "@review/review-stack.js";
 import { readBoundedRequestJson } from "@review/server/hono-http.js";
 import { HttpJsonError } from "@review/server/http-json.js";
@@ -55,6 +68,51 @@ import {
 } from "./store.js";
 import { listPinnedTraces, readStoredTrace } from "./traces.js";
 
+export interface AskHost {
+  threads: AskThreads;
+  agents: () => Promise<AskAgentStatus[]>;
+}
+
+const askStartSchema = z.strictObject({
+  agent: z.enum(askAgentIds),
+  question: askQuestionSchema,
+  selection: AgentSelectionSchema,
+  picks: askPicksSchema.optional(),
+  bypass: z.boolean().optional(),
+});
+
+const askPermitSchema = z.strictObject({ bypass: z.boolean() });
+
+const askOpenSchema = z.strictObject({ picks: askPicksSchema.optional() });
+
+const askChoiceSchema = z.strictObject({
+  kind: z.enum(askChoiceKinds),
+  value: z.string().min(1).max(200),
+});
+
+const askFilesSchema = z.strictObject({
+  paths: z.array(z.string().min(1).max(400)).max(100),
+});
+
+const askFollowUpSchema = z.strictObject({ question: askQuestionSchema });
+
+/** A question with its images: four of up to 5 MB each, base64. */
+const ASK_REQUEST_MAX_BYTES = 30 * 1024 * 1024;
+
+const askMentionsSchema = z.object({
+  query: z.string().max(400).default(""),
+  /** A conversation's checkout, which can be an earlier version's. */
+  thread: z.string().optional(),
+});
+
+/** How many files a mention picker shows. */
+const MENTION_LIMIT = 20;
+
+const askDecisionSchema = z.strictObject({
+  permissionId: z.string().min(1),
+  optionId: z.string().min(1),
+});
+
 export interface AuthoringCapabilities {
   desktopAvailable: boolean;
   softwareMapEnabled: boolean;
@@ -103,6 +161,8 @@ export function createReviewApi(
   /** Which server this is, for whiteboard_status. */
   status: () => JsonObject = () => ({}),
   hooks: ReviewApiHooks = {},
+  /** Desktop's Ask: local agents answering questions about a selection. */
+  ask?: AskHost,
 ) {
   const app = new Hono();
   app.onError((error, context) => {
@@ -986,14 +1046,27 @@ export function createReviewApi(
       await readBoundedRequestJson(context.req.raw),
     );
 
-    const reviewId = context.req.param("id");
+    return context.json({
+      text: await selectionContext(
+        context.req.param("id"),
+        selection,
+        query.version,
+      ),
+    });
+  });
 
+  /** The Markdown an agent gets for a selection, copied or asked about. */
+  async function selectionContext(
+    reviewId: string,
+    selection: AgentSelection,
+    version?: number,
+  ) {
     if (selection.apiSource && selection.apiSource.reviewId !== reviewId)
       throw new ReviewInputError("Selection belongs to another review.");
 
     const snapshot = readReview(
       reviewId,
-      selection.apiSource?.version ?? query.version,
+      selection.apiSource?.version ?? version,
     );
 
     const target = selection.target;
@@ -1036,75 +1109,431 @@ export function createReviewApi(
         : undefined,
     );
 
-    return context.json({
-      text: [
-        `Selected ${target.kind === "text" ? "text" : "code"} from Whiteboard: ${snapshot.title}`,
-        `Session ID: ${snapshot.reviewId}`,
-        `Version: ${snapshot.version}`,
-        ...(selection.apiSource?.commit
-          ? [`Selected commit: ${selection.apiSource.commit}`]
-          : []),
-        ...(selection.apiSource?.pins
-          ? [
-              `Selected repository ID: ${selection.apiSource.pins.repositoryId}`,
-              ...(selection.apiSource.pins.base
-                ? [`Selected base: ${selection.apiSource.pins.base}`]
-                : []),
-              `Selected head: ${selection.apiSource.pins.head}`,
-            ]
-          : []),
-        ...(snapshot.pins
-          ? [
-              `Repository ID: ${snapshot.pins.repositoryId}`,
-              `Session base: ${snapshot.pins.base}`,
-              `Session head: ${snapshot.pins.head}`,
-            ]
-          : []),
-        `Read this version with session_get({"sessionId":"${snapshot.reviewId}","version":${snapshot.version},"full":true}).`,
-        "",
-        text,
-        "",
-        "",
-      ].join("\n"),
-    });
-  });
+    return [
+      `Selected ${target.kind === "text" ? "text" : "code"} from Whiteboard: ${snapshot.title}`,
+      `Session ID: ${snapshot.reviewId}`,
+      `Version: ${snapshot.version}`,
+      ...(selection.apiSource?.commit
+        ? [`Selected commit: ${selection.apiSource.commit}`]
+        : []),
+      ...(selection.apiSource?.pins
+        ? [
+            `Selected repository ID: ${selection.apiSource.pins.repositoryId}`,
+            ...(selection.apiSource.pins.base
+              ? [`Selected base: ${selection.apiSource.pins.base}`]
+              : []),
+            `Selected head: ${selection.apiSource.pins.head}`,
+          ]
+        : []),
+      ...(snapshot.pins
+        ? [
+            `Repository ID: ${snapshot.pins.repositoryId}`,
+            `Session base: ${snapshot.pins.base}`,
+            `Session head: ${snapshot.pins.head}`,
+          ]
+        : []),
+      `Read this version with session_get({"sessionId":"${snapshot.reviewId}","version":${snapshot.version},"full":true}).`,
+      "",
+      text,
+      "",
+      "",
+    ].join("\n");
+  }
 
-  app.get("/:id/branch-links", async (context) => {
-    const query = readQuerySchemas.get.parse(context.req.query());
-    const id = context.req.param("id");
-    const snapshot = readReview(id, query.version);
+  if (ask && data) {
+    const readThread = (reviewId: string, threadId: string) => {
+      const thread = ask.threads.get(threadId);
 
-    if (!snapshot.pins)
-      throw new ReviewInputError(
-        "This document has no source pins of its own.",
-        409,
+      if (!thread || thread.reviewId !== reviewId)
+        throw new ReviewInputError("This conversation has ended.", 404);
+
+      return thread;
+    };
+
+    /** What an agent reads before a session's first question: the review,
+     * the checkout, and the selection. */
+    const askContext = async (
+      agent: AskAgentId,
+      snapshot: Snapshot,
+      checkout: { head: string; live: boolean },
+      selection: AgentSelection,
+      version: number | undefined,
+    ) => {
+      const reach = await ask.threads.reach(agent);
+      const { reviewId } = snapshot;
+
+      return [
+        `A reviewer is reading "${snapshot.title}" in Whiteboard and has a question about a selection.`,
+        checkout.live
+          ? "Your working directory is the repository the review describes."
+          : `Your working directory is a checkout of the review's head commit, ${checkout.head}. Answer from this code, not from other branches.`,
+        "Answer the question.",
+        "Name files by their path from the checkout root, with a line where it helps, as in `src/app.ts:42`; the reviewer can open them from your answer.",
+        ...(reach?.kind === "mcp"
+          ? [
+              `The whiteboard MCP tools read and change this review: its sessionId is "${reviewId}". Read it with session_get. If the reviewer asks you to change the review, edit it with session_edit; do not write files to do it.`,
+            ]
+          : reach?.kind === "cli"
+            ? [
+                `Whiteboard's CLI reads and changes this review from your shell: its sessionId is "${reviewId}". Read it with \`${reach.command} api session_get '{"sessionId":"${reviewId}"}'\`. If the reviewer asks you to change the review, edit it with \`${reach.command} api session_edit '<json>'\`; do not write files to do it. \`${reach.command} api tools\` lists each tool's input.`,
+              ]
+            : []),
+        "",
+        await selectionContext(reviewId, selection, version),
+      ].join("\n");
+    };
+
+    // Each agent with the models and efforts it offered last; none until
+    // it has run.
+    app.get("/:id/ask/agents", async (context) =>
+      context.json({ agents: await ask.agents() }),
+    );
+
+    // What an agent offers: what it said last, else what a session
+    // started in the review's checkout says.
+    app.get("/:id/ask/agents/:agent/offer", async (context) => {
+      const agent = z.enum(askAgentIds).parse(context.req.param("agent"));
+      const stored = store.askHistory.offer(agent);
+
+      if (stored) return context.json({ offer: stored });
+
+      const checkout = await data.agentCheckout(
+        readReview(context.req.param("id")),
       );
 
-    const baseRef =
-      snapshot.origin?.baseRef ?? snapshot.target?.base ?? snapshot.pins.base;
+      const offer = await ask.threads.offered(agent, checkout.rootPath);
 
-    const headRef =
-      snapshot.origin?.branch ??
-      (snapshot.target?.kind === "commits" ? snapshot.target.head : "HEAD");
+      store.askHistory.saveOffer(agent, offer);
 
-    if (isShared(id))
-      return context.json({
-        ok: true,
-        baseRef,
-        headRef,
-        baseUrl: null,
-        headUrl: null,
-      });
-
-    const links = await resolveReviewBranchLinks({
-      rootPath: store.repositoryPath(snapshot.pins.repositoryId),
-      baseRef,
-      headRef,
-      pullRequestUrl: snapshot.origin?.pullRequestUrl,
+      return context.json({ offer });
     });
 
-    return context.json({ ok: true, baseRef, headRef, ...links });
-  });
+    // The checkout's files a mention could mean, best first.
+    app.get("/:id/ask/mentions", async (context) => {
+      const reviewId = context.req.param("id");
+
+      const { query, thread } = askMentionsSchema.parse(context.req.query());
+
+      const cwd = thread
+        ? readThread(reviewId, thread).read().cwd
+        : (await data.agentCheckout(readReview(reviewId))).rootPath;
+
+      const files = fuzzyRank(query, await mentionableFiles(cwd), (file) => [
+        file,
+        file.slice(file.lastIndexOf("/") + 1),
+      ]);
+
+      return context.json({ paths: files.slice(0, MENTION_LIMIT) });
+    });
+
+    app.post("/:id/ask", async (context) => {
+      const reviewId = context.req.param("id");
+
+      const { version } = readQuerySchemas.get
+        .pick({ version: true })
+        .parse(context.req.query());
+
+      const input = askStartSchema.parse(
+        await readBoundedRequestJson(context.req.raw, ASK_REQUEST_MAX_BYTES),
+      );
+
+      const snapshot = readReview(reviewId, version);
+      const checkout = await data.agentCheckout(snapshot);
+      const target = input.selection.target;
+      const id = crypto.randomUUID();
+      const createdAt = new Date().toISOString();
+
+      const thread = ask.threads.open({
+        id,
+        reviewId,
+        agent: input.agent,
+        // Saved once the agent has a session to reopen; a later one
+        // replaces a session the agent could not reopen.
+        onSession: (sessionId) =>
+          store.askHistory.get(id)
+            ? store.askHistory.updateSession(id, sessionId)
+            : store.askHistory.save({
+                id,
+                reviewId,
+                agent: input.agent,
+                sessionId,
+                version: snapshot.version,
+                head: checkout.head,
+                cwd: checkout.rootPath,
+                selection: input.selection,
+                title: input.question.text.slice(0, 200),
+                createdAt,
+                updatedAt: createdAt,
+                bypass: input.bypass,
+              }),
+        onTurn: () => store.askHistory.touch(id),
+        onSave: (entries) => store.askHistory.saveEntries(id, entries),
+        picks: input.picks,
+        bypass: input.bypass,
+        onBypass: (bypass) => store.askHistory.setBypass(id, bypass),
+        onOffer: (offer) => store.askHistory.saveOffer(input.agent, offer),
+        onTitle: (title) => store.askHistory.rename(id, title),
+        cwd: checkout.rootPath,
+        head: checkout.head,
+        selection: {
+          title: input.selection.title,
+          quote: target.kind === "text" ? target.quote : undefined,
+        },
+        context: await askContext(
+          input.agent,
+          snapshot,
+          checkout,
+          input.selection,
+          version,
+        ),
+        question: input.question,
+      });
+
+      return context.json({ threadId: thread.id });
+    });
+
+    app.get("/:id/ask/threads", (context) => {
+      const reviewId = context.req.param("id");
+
+      readReview(reviewId);
+
+      return context.json({ threads: store.askHistory.list(reviewId) });
+    });
+
+    // A saved conversation: attach to it if it is still running, else start
+    // the agent and load it, at the commit it was asked about.
+    app.post("/:id/ask/:threadId/open", async (context) => {
+      const reviewId = context.req.param("id");
+      const threadId = context.req.param("threadId");
+      const live = ask.threads.get(threadId);
+
+      if (live?.reviewId === reviewId) return context.json({ threadId });
+      const record = store.askHistory.get(threadId);
+
+      const { picks } = askOpenSchema.parse(
+        await readBoundedRequestJson(context.req.raw, undefined, {}),
+      );
+
+      if (record?.reviewId !== reviewId)
+        throw new ReviewInputError("This conversation was not found.", 404);
+
+      const snapshot = readReview(reviewId, record.version);
+      const checkout = await data.agentCheckout(snapshot);
+      const target = record.selection.target;
+
+      ask.threads.open({
+        id: record.id,
+        reviewId,
+        agent: record.agent,
+        cwd: checkout.rootPath,
+        head: checkout.head,
+        selection: {
+          title: record.selection.title,
+          quote: target.kind === "text" ? target.quote : undefined,
+        },
+        resume: { sessionId: record.sessionId, entries: record.entries },
+        // For a new session, should the agent no longer have this one.
+        context: await askContext(
+          record.agent,
+          snapshot,
+          checkout,
+          record.selection,
+          record.version,
+        ),
+        onSession: (sessionId) =>
+          store.askHistory.updateSession(record.id, sessionId),
+        onTurn: () => store.askHistory.touch(record.id),
+        onSave: (entries) => store.askHistory.saveEntries(record.id, entries),
+        picks,
+        bypass: record.bypass,
+        onBypass: (bypass) => store.askHistory.setBypass(record.id, bypass),
+        onOffer: (offer) => store.askHistory.saveOffer(record.agent, offer),
+        onTitle: (title) => store.askHistory.rename(record.id, title),
+      });
+
+      return context.json({ threadId: record.id });
+    });
+
+    app.get("/:id/ask/:threadId/watch", (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      return watchAskThread(thread);
+    });
+
+    app.post("/:id/ask/:threadId/prompt", async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      const { question } = askFollowUpSchema.parse(
+        await readBoundedRequestJson(context.req.raw, ASK_REQUEST_MAX_BYTES),
+      );
+
+      const refusal = thread.askRefusal();
+
+      if (refusal) throw new ReviewInputError(refusal, 409);
+
+      void thread.ask(question);
+
+      return context.json({ ok: true });
+    });
+
+    app.post("/:id/ask/:threadId/permission", async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      const decision = askDecisionSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
+      );
+
+      if (!thread.decide(decision.permissionId, decision.optionId))
+        throw new ReviewInputError("This request was already answered.", 409);
+
+      return context.json({ ok: true });
+    });
+
+    // The files an answer names, as the checkout's own paths, so the panel
+    // can open them.
+    app.post("/:id/ask/:threadId/files", async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      const { paths } = askFilesSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
+      );
+
+      const { cwd, entries } = thread.read();
+
+      const touched = entries.flatMap((entry) =>
+        entry.kind === "tool"
+          ? `${entry.title} ${entry.input ?? ""}`
+              .split(/\s+/)
+              .flatMap((token) => parseFileRef(token)?.path ?? [])
+          : [],
+      );
+
+      const files = resolveFileRefs(
+        cwd,
+        await checkoutFiles(cwd),
+        paths,
+        touched,
+      );
+
+      return context.json({
+        files: [...files].map(([path, file]) => ({ path, file })),
+      });
+    });
+
+    // Another model or effort for the next answer.
+    app.post("/:id/ask/:threadId/choice", async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      const { kind, value } = askChoiceSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
+      );
+
+      if (thread.read().status !== "idle")
+        throw new ReviewInputError(
+          "Settings can change once the agent finishes answering.",
+          409,
+        );
+
+      try {
+        await thread.choose(kind, value);
+      } catch (error) {
+        throw new ReviewInputError(errorMessage(error), 409);
+      }
+
+      return context.json({ ok: true });
+    });
+
+    // Bypasses permissions from the next answer, or stops.
+    app.post("/:id/ask/:threadId/permissions", async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      const { bypass } = askPermitSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
+      );
+
+      if (thread.read().status !== "idle")
+        throw new ReviewInputError(
+          "Settings can change once the agent finishes answering.",
+          409,
+        );
+
+      try {
+        await thread.permit(bypass);
+      } catch (error) {
+        throw new ReviewInputError(errorMessage(error), 409);
+      }
+
+      return context.json({ ok: true });
+    });
+
+    // Starts a failed agent again, as after signing it back in, and asks
+    // again what it did not answer. The state reports how that goes.
+    app.post("/:id/ask/:threadId/retry", (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      if (thread.read().status !== "failed")
+        throw new ReviewInputError(
+          "Only a conversation that failed can try again.",
+          409,
+        );
+      void thread.retry();
+
+      return context.json({ ok: true });
+    });
+
+    app.post("/:id/ask/:threadId/cancel", async (context) => {
+      await readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      ).cancel();
+
+      return context.json({ ok: true });
+    });
+
+    // Closing the panel ends the agent; the conversation stays saved.
+    app.post("/:id/ask/:threadId/close", (context) => {
+      readThread(context.req.param("id"), context.req.param("threadId"));
+      ask.threads.close(context.req.param("threadId"));
+
+      return context.json({ ok: true });
+    });
+
+    // Forgets a saved conversation. The agent keeps its own transcript.
+    app.delete("/:id/ask/:threadId", (context) => {
+      const reviewId = context.req.param("id");
+      const threadId = context.req.param("threadId");
+
+      if (store.askHistory.get(threadId)?.reviewId !== reviewId)
+        throw new ReviewInputError("This conversation was not found.", 404);
+
+      if (ask.threads.get(threadId)?.reviewId === reviewId)
+        ask.threads.close(threadId);
+      store.askHistory.delete(threadId);
+
+      return context.json({ ok: true });
+    });
+  }
 
   app.get("/:id/stack", async (context) => {
     const query = readQuerySchemas.get.parse(context.req.query());

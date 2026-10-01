@@ -264,6 +264,12 @@ function sanitizeManifest(directory, extension) {
   return { engine, id: `${manifest.publisher}.${manifest.name}` };
 }
 
+function prunePayload(directory, extension) {
+  for (const relative of extension.prunePaths ?? []) {
+    fs.rmSync(path.join(directory, relative), { recursive: true, force: true });
+  }
+}
+
 /** Fails loudly when a payload's layout drifts instead of shipping a broken server. */
 function ensureExecutables(directory, extension, targetKey) {
   for (const relative of extension.executables) {
@@ -387,6 +393,7 @@ async function extractVsix(vsix, extension, targetKey, sha256) {
     }
 
     const { engine, id } = sanitizeManifest(payload, extension);
+    prunePayload(payload, extension);
 
     if (id.toLowerCase() !== extension.id.toLowerCase()) {
       throw new Error(
@@ -499,6 +506,12 @@ export function verifyCuratedExtensions({
         throw new Error(
           `${extension.id}: packaged manifest is missing ${activationEvent}`,
         );
+      }
+    }
+
+    for (const relative of extension.prunePaths ?? []) {
+      if (fs.existsSync(path.join(directory, relative))) {
+        throw new Error(`${extension.id}: pruned path ${relative} is present`);
       }
     }
 
@@ -645,6 +658,7 @@ async function main() {
     const destination = path.join(EXTENSIONS_DIR, extension.id);
 
     if (stampMatches(readStamp(destination), extension, targetKey, sha256)) {
+      prunePayload(destination, extension);
       verifyEngine(destination, extension);
       continue;
     }

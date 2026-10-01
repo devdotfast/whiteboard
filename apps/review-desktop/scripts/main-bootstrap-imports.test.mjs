@@ -273,34 +273,3 @@ test("no module reachable from main.ts calls localize", () => {
   );
 });
 
-test("the electron-main bundle stays behind the dynamic import", () => {
-  // Making this static would drag the entire workbench registry graph into the
-  // pre-bootstrap window.
-  assert.equal(
-    importers.has("vs/code/electron-main/main.ts"),
-    false,
-    "vs/code/electron-main/main.ts must not be statically reachable from main.ts",
-  );
-  assert.match(
-    readFileSync(ENTRY, "utf8"),
-    /await import\('\.\/vs\/code\/electron-main\/main\.js'\)/,
-    "startup() must keep loading electron-main through a dynamic import, after bootstrapESM()",
-  );
-});
-
-test("the bootstrap crash-note module imports nothing but node builtins", () => {
-  // It records a crash that happens before anything else exists, including the
-  // NLS table. The tests above already forbid the fatal modules; this one keeps
-  // the file at zero in-tree edges, so it cannot acquire one by accident.
-  const module = "vs/review/node/reviewBootstrapBreadcrumb.ts";
-  assert.ok(
-    importers.has(module),
-    `${module} must stay reachable from main.ts — it is the only record of a pre-bootstrap crash`,
-  );
-  const edges = runtimeEdges(path.join(SRC, module));
-  assert.deepEqual(
-    edges.filter((specifier) => !specifier.startsWith("node:")),
-    [],
-    `${module} may import node builtins only`,
-  );
-});

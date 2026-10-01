@@ -36,7 +36,7 @@ export function SlidersIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
-export function UnifiedLayoutIcon({ xstyle }: IconProps = {}): ReactElement {
+export function StackIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
@@ -44,22 +44,8 @@ export function UnifiedLayoutIcon({ xstyle }: IconProps = {}): ReactElement {
       focusable="false"
       viewBox="0 0 24 24"
     >
-      <rect x="4" y="5" width="16" height="14" rx="2" />
-      <path d="M8 10h8M8 14h8" />
-    </svg>
-  );
-}
-
-export function SplitLayoutIcon({ xstyle }: IconProps = {}): ReactElement {
-  return (
-    <svg
-      aria-hidden="true"
-      {...stylex.props(styles.icon, xstyle)}
-      focusable="false"
-      viewBox="0 0 24 24"
-    >
-      <rect x="4" y="5" width="16" height="14" rx="2" />
-      <path d="M12 5v14" />
+      <path d="M12 4 20 8.5 12 13 4 8.5Z" />
+      <path d="M4 12.5 12 17l8-4.5M4 16.5 12 21l8-4.5" />
     </svg>
   );
 }

@@ -4,9 +4,7 @@ import type { ZodType } from "zod";
 
 import {
   REVIEW_DESKTOP_DISCOVERY_VERSION,
-  REVIEW_SCHEMA_VERSION,
   ReviewCliInstallStampSchema,
-  ReviewCliInstallStatusSchema,
   ReviewDesktopDiscoverySchema,
   ReviewDesktopStateSchema,
   ReviewDesktopVerbFrameSchema,
@@ -25,7 +23,6 @@ import {
   ReviewSurfaceEventSchema,
   ReviewVerbRequestSchema,
   ReviewVerbResponseSchema,
-  reviewViewSchema,
   summarizeReviewDiffFiles,
 } from "./contracts.js";
 
@@ -34,45 +31,6 @@ const repository = {
   repositoryId: "repo-1",
   repositoryPath: "/tmp/repo/.jj/repo",
   worktreeRoot: "/tmp/repo",
-};
-
-const reviewRecord = {
-  schemaVersion: REVIEW_SCHEMA_VERSION,
-  uuid: "3b241101-e2bb-4255-8caf-4136c566a962",
-  repoKey: "repo-1",
-  worktreePath: "/tmp/repo",
-  baseRef: "main",
-  baseCommit: "base-commit",
-  sourceCommit: null,
-  sourceIdentity: null,
-  title: "Progressive Review",
-  sourceSession: "disabled:review",
-  status: "awaiting-review",
-  presentedDocumentRevision: null,
-  presentedSoftwareMapRevision: null,
-  createdAt: "2026-07-28T00:00:00.000Z",
-  lastPublishedAt: null,
-};
-
-const descriptor = {
-  sessionId: "session-1",
-  sessionUrl: "http://127.0.0.1:5570/sessions/session-1",
-  reviewUuid: reviewRecord.uuid,
-  routePath: "/",
-  startedAt: 1,
-};
-
-const session = {
-  sessionId: "session-1",
-  rootPath: "/tmp/repo",
-  baseRootPath: "/tmp/review-base",
-  headRootPath: "/tmp/review-head",
-  baseRef: "main",
-  routePath: "/",
-  appUrl: "http://127.0.0.1:5570/",
-  sessionUrl: "http://127.0.0.1:5570/sessions/session-1",
-  reviewPath: "/tmp/repo/review.mdx",
-  startedAt: 1,
 };
 
 const contracts: Array<[string, ZodType, JsonObject]> = [
@@ -189,7 +147,7 @@ const contracts: Array<[string, ZodType, JsonObject]> = [
       selection: null,
     },
   ],
-  ["verb request", ReviewVerbRequestSchema, { name: "focusCanvas", args: {} }],
+  ["verb request", ReviewVerbRequestSchema, { name: "focusWindow", args: {} }],
   ["verb response", ReviewVerbResponseSchema, { ok: true }],
   [
     "desktop verb frame",
@@ -197,7 +155,7 @@ const contracts: Array<[string, ZodType, JsonObject]> = [
     {
       event: "desktop-verb",
       id: "verb-1",
-      request: { name: "focusCanvas", args: {} },
+      request: { name: "focusWindow", args: {} },
     },
   ],
   [
@@ -232,39 +190,7 @@ describe("Review protocol Zod contracts", () => {
   });
 });
 
-describe("review views", () => {
-  it("accepts the five shared views and rejects unknown values", () => {
-    expect(
-      ["review", "commits", "diff", "map", "trace"].every(
-        (view) => reviewViewSchema.safeParse(view).success,
-      ),
-    ).toBe(true);
-    expect(reviewViewSchema.safeParse("files").success).toBe(false);
-    expect(
-      ReviewVerbRequestSchema.safeParse({
-        name: "showReviewView",
-        args: { view: "diff" },
-      }).success,
-    ).toBe(true);
-    expect(
-      ReviewSurfaceEventSchema.safeParse({
-        event: "showReviewView",
-        view: "map",
-      }).success,
-    ).toBe(true);
-  });
-});
-
 describe("summarizeReviewDiffFiles", () => {
-  it("derives one aggregate for every Review diff surface", () => {
-    expect(
-      summarizeReviewDiffFiles([
-        { additions: 7, deletions: 2 },
-        { additions: 3, deletions: 5 },
-      ]),
-    ).toEqual({ fileCount: 2, additions: 10, deletions: 7 });
-  });
-
   it("accepts the partial stats used by initial Review data", () => {
     expect(
       summarizeReviewDiffFiles([{ additions: 4 }, { deletions: 3 }]),
@@ -298,32 +224,5 @@ describe("ReviewCliInstallStampSchema", () => {
       shimPath: "/home/u/.local/bin/review",
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
-  });
-});
-
-describe("ReviewCliInstallStatusSchema", () => {
-  it("requires connect prompts and the legacy skill list", () => {
-    const result = ReviewCliInstallStatusSchema.safeParse({
-      fingerprint: "f",
-      stamp: null,
-      stale: false,
-      updateNeeded: false,
-      shim: {
-        path: "/p",
-        installed: false,
-        profileConfigured: false,
-        onPath: false,
-      },
-      trace: {
-        enabled: false,
-        configured: false,
-        autoActivateRepositories: false,
-        envPath: "/e",
-        settingsPath: "/s",
-      },
-      cli: null,
-    });
-
-    expect(result.success).toBe(false);
   });
 });

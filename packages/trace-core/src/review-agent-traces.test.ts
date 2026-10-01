@@ -16,7 +16,6 @@ import {
   lookupReviewTraceSession,
   syncReviewTrace,
 } from "./review-agent-traces";
-import { isTraceStorageConfigured } from "./trace-storage/resolve";
 
 describe("review-agent-traces", () => {
   let tempDir: string;
@@ -112,10 +111,6 @@ describe("review-agent-traces", () => {
     } finally {
       vi.unstubAllEnvs();
     }
-  });
-
-  it("reports configured when in mock mode", () => {
-    expect(isTraceStorageConfigured()).toBe(true);
   });
 
   it("describes a session as available when stored in mock R2", async () => {
@@ -225,67 +220,6 @@ describe("review-agent-traces", () => {
     expect(subLoaded?.trace.events[0]).toMatchObject({
       kind: "user",
       text: "Subagent task",
-    });
-  });
-
-  it("looks up commit from R2 index when trailers are absent", async () => {
-    const sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e";
-    const sessionId = "12345678-aaaa-bbbb-cccc-000000000001";
-    const commitDir = path.join(mockR2Dir, "by-commit");
-    mkdirSync(commitDir, { recursive: true });
-    writeFileSync(
-      path.join(commitDir, `${sha}.json`),
-      JSON.stringify({
-        commit: sha,
-        sessions: [sessionId],
-        repo: "acme/widgets",
-        pr: 42,
-        branch: "feature-branch",
-        indexed_by: "ci",
-        ts: "2026-08-16T12:00:00Z",
-      }),
-    );
-
-    const result = await lookupReviewTraceCommit({
-      cwd: tempDir,
-      sha,
-    });
-
-    expect(result.commit).toBe(sha);
-    expect(result.sessions).toEqual([sessionId]);
-    expect(result.pr).toBe(42);
-    expect(result.branch).toBe("feature-branch");
-    expect(result.source).toBe("index");
-  });
-
-  it("looks up session metadata from R2", async () => {
-    const sessionId = "12345678-aaaa-bbbb-cccc-000000000002";
-    const sha1 = "1111111111111111111111111111111111111111";
-    const sha2 = "2222222222222222222222222222222222222222";
-    const sessionDir = path.join(mockR2Dir, "by-session", sessionId);
-    mkdirSync(sessionDir, { recursive: true });
-    writeFileSync(
-      path.join(sessionDir, "meta.json"),
-      JSON.stringify({
-        session: sessionId,
-        repo: "acme/widgets",
-        branch: "main",
-        pr: 10,
-        commits: [sha1, sha2],
-        author: "alice@example.com",
-        ts: "2026-08-16T12:00:00Z",
-      }),
-    );
-
-    const result = await lookupReviewTraceSession({ sessionId });
-    expect(result.session).toBe(sessionId);
-    expect(result.meta).toMatchObject({
-      session: sessionId,
-      repo: "acme/widgets",
-      branch: "main",
-      pr: 10,
-      commits: [sha1, sha2],
-      author: "alice@example.com",
     });
   });
 

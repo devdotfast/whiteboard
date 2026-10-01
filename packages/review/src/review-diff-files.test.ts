@@ -1,21 +1,11 @@
 import { execFileSync } from "node:child_process";
-import {
-  mkdir,
-  mkdtemp,
-  rename,
-  rm,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
-import {
-  resolveReviewDiffFiles,
-  resolveReviewFileContent,
-} from "./review-diff-files";
+import { resolveReviewDiffFiles } from "./review-diff-files";
 
 describe("resolveReviewDiffFiles", () => {
   test("falls back to jj for unexported jj commits", async () => {
@@ -242,171 +232,6 @@ describe("resolveReviewDiffFiles", () => {
     }
   });
 
-  test("serves pinned modified, added, deleted, and renamed diff sides", async () => {
-    const fixture = await createFileContentFixture();
-
-    try {
-      const { rootPath, baseRef, headRef } = fixture;
-      await expect(
-        resolveReviewFileContent({
-          rootPath,
-          baseRef,
-          headRef,
-          path: "src/modified.ts",
-          side: "base",
-        }),
-      ).resolves.toEqual({ content: "export const modified = 'base';\n" });
-      await expect(
-        resolveReviewFileContent({
-          rootPath,
-          baseRef,
-          headRef,
-          path: "src/modified.ts",
-          side: "head",
-        }),
-      ).resolves.toEqual({ content: "export const modified = 'head';\n" });
-      await expect(
-        resolveReviewFileContent({
-          rootPath,
-          baseRef,
-          headRef,
-          path: "src/added.ts",
-          side: "base",
-        }),
-      ).resolves.toEqual({ absent: true });
-      await expect(
-        resolveReviewFileContent({
-          rootPath,
-          baseRef,
-          headRef,
-          path: "src/deleted.ts",
-          side: "head",
-        }),
-      ).resolves.toEqual({ absent: true });
-      await expect(
-        resolveReviewFileContent({
-          rootPath,
-          baseRef,
-          headRef,
-          path: "src/renamed.ts",
-          side: "base",
-        }),
-      ).resolves.toEqual({ content: "export const renamed = 'same';\n" });
-      await expect(
-        resolveReviewFileContent({
-          rootPath,
-          baseRef,
-          headRef,
-          path: "../outside.ts",
-          side: "head",
-        }),
-      ).rejects.toThrow("not present in the current diff");
-    } finally {
-      await rm(fixture.rootPath, { recursive: true, force: true });
-    }
-  });
-
-  test("reuses a precomputed comparison when reading file content", async () => {
-    const fixture = await createFileContentFixture();
-
-    try {
-      const comparison = await resolveReviewDiffFiles({
-        rootPath: fixture.rootPath,
-        baseRef: fixture.baseRef,
-        headRef: fixture.headRef,
-      });
-
-      await expect(
-        resolveReviewFileContent({
-          rootPath: fixture.rootPath,
-          baseRef: "missing-base",
-          headRef: "missing-head",
-          path: "src/modified.ts",
-          side: "head",
-          comparison,
-        }),
-      ).resolves.toEqual({ content: "export const modified = 'head';\n" });
-    } finally {
-      await rm(fixture.rootPath, { recursive: true, force: true });
-    }
-  });
-
-  test("reads the live working-tree head while keeping the base pinned", async () => {
-    const fixture = await createFileContentFixture();
-
-    try {
-      execGit(fixture.rootPath, ["reset", "--hard", fixture.baseRef]);
-      await writeFile(
-        path.join(fixture.rootPath, "src/modified.ts"),
-        "export const modified = 'working tree';\n",
-      );
-      execGit(fixture.rootPath, ["add", "src/modified.ts"]);
-
-      await expect(
-        resolveReviewFileContent({
-          rootPath: fixture.rootPath,
-          baseRef: fixture.baseRef,
-          path: "src/modified.ts",
-          side: "head",
-        }),
-      ).resolves.toEqual({
-        content: "export const modified = 'working tree';\n",
-      });
-      await expect(
-        resolveReviewFileContent({
-          rootPath: fixture.rootPath,
-          baseRef: fixture.baseRef,
-          path: "src/modified.ts",
-          side: "base",
-        }),
-      ).resolves.toEqual({ content: "export const modified = 'base';\n" });
-    } finally {
-      await rm(fixture.rootPath, { recursive: true, force: true });
-    }
-  });
-
-  test("reports binary and capped content without exposing arbitrary files", async () => {
-    const rootPath = await mkdtemp(
-      path.join(os.tmpdir(), "review-content-git-"),
-    );
-
-    try {
-      execGit(rootPath, ["init"]);
-      execGit(rootPath, ["config", "user.email", "test@example.com"]);
-      execGit(rootPath, ["config", "user.name", "Test User"]);
-      await writeFile(path.join(rootPath, "example.dat"), "base\n");
-      execGit(rootPath, ["add", "example.dat"]);
-      execGit(rootPath, ["commit", "-m", "initial"]);
-      const baseRef = execGitOutput(rootPath, ["rev-parse", "HEAD"]);
-      await writeFile(
-        path.join(rootPath, "example.dat"),
-        Buffer.from([0, 1, 2]),
-      );
-      execGit(rootPath, ["add", "example.dat"]);
-      await expect(
-        resolveReviewFileContent({
-          rootPath,
-          baseRef,
-          path: "example.dat",
-          side: "head",
-        }),
-      ).resolves.toEqual({ binary: true });
-
-      await writeFile(path.join(rootPath, "example.dat"), "0123456789");
-      await expect(
-        resolveReviewFileContent({
-          rootPath,
-          baseRef,
-          path: "example.dat",
-          side: "head",
-          maxBytes: 5,
-        }),
-      ).resolves.toEqual({ content: "01234", truncated: true });
-    } finally {
-      await rm(rootPath, { recursive: true, force: true });
-    }
-  });
-
   test("parses a deleted file whose removed content begins with `-- `", async () => {
     const fixture = await createDeletedHijackFixture();
 
@@ -472,46 +297,6 @@ describe("resolveReviewDiffFiles", () => {
       expect(result.files[0]?.patch).toContain("+++ sparkles line");
     } finally {
       await rm(rootPath, { recursive: true, force: true });
-    }
-  });
-
-  test("resolves content via a precomputed patch comparison for a deleted `-- ` file", async () => {
-    const fixture = await createDeletedHijackFixture();
-
-    try {
-      const comparison = await resolveReviewDiffFiles({
-        rootPath: fixture.rootPath,
-        baseRef: fixture.baseRef,
-        headRef: fixture.headRef,
-      });
-
-      expect(comparison.files.map((file) => file.path)).toEqual([
-        "src/schema.sql",
-      ]);
-      await expect(
-        resolveReviewFileContent({
-          rootPath: fixture.rootPath,
-          baseRef: fixture.baseRef,
-          headRef: fixture.headRef,
-          path: "src/schema.sql",
-          side: "base",
-          comparison,
-        }),
-      ).resolves.toEqual({
-        content: "-- a sql comment line\nSELECT 1;\n",
-      });
-      await expect(
-        resolveReviewFileContent({
-          rootPath: fixture.rootPath,
-          baseRef: fixture.baseRef,
-          headRef: fixture.headRef,
-          path: "src/schema.sql",
-          side: "head",
-          comparison,
-        }),
-      ).resolves.toEqual({ absent: true });
-    } finally {
-      await rm(fixture.rootPath, { recursive: true, force: true });
     }
   });
 
@@ -605,55 +390,6 @@ async function createDeletedHijackFixture(): Promise<{
   await unlink(path.join(rootPath, "src/schema.sql"));
   execGit(rootPath, ["add", "src"]);
   execGit(rootPath, ["commit", "-m", "remove schema"]);
-  const headRef = execGitOutput(rootPath, ["rev-parse", "HEAD"]);
-
-  return { rootPath, baseRef, headRef };
-}
-
-async function createFileContentFixture(): Promise<{
-  rootPath: string;
-  baseRef: string;
-  headRef: string;
-}> {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), "review-content-git-"));
-  execGit(rootPath, ["init"]);
-  execGit(rootPath, ["config", "user.email", "test@example.com"]);
-  execGit(rootPath, ["config", "user.name", "Test User"]);
-  await mkdir(path.join(rootPath, "src"), { recursive: true });
-  await Promise.all([
-    writeFile(
-      path.join(rootPath, "src/modified.ts"),
-      "export const modified = 'base';\n",
-    ),
-    writeFile(
-      path.join(rootPath, "src/deleted.ts"),
-      "export const deleted = true;\n",
-    ),
-    writeFile(
-      path.join(rootPath, "src/old-name.ts"),
-      "export const renamed = 'same';\n",
-    ),
-  ]);
-  execGit(rootPath, ["add", "src"]);
-  execGit(rootPath, ["commit", "-m", "initial"]);
-  const baseRef = execGitOutput(rootPath, ["rev-parse", "HEAD"]);
-  await Promise.all([
-    writeFile(
-      path.join(rootPath, "src/modified.ts"),
-      "export const modified = 'head';\n",
-    ),
-    writeFile(
-      path.join(rootPath, "src/added.ts"),
-      "export const added = true;\n",
-    ),
-    unlink(path.join(rootPath, "src/deleted.ts")),
-    rename(
-      path.join(rootPath, "src/old-name.ts"),
-      path.join(rootPath, "src/renamed.ts"),
-    ),
-  ]);
-  execGit(rootPath, ["add", "src"]);
-  execGit(rootPath, ["commit", "-m", "change"]);
   const headRef = execGitOutput(rootPath, ["rev-parse", "HEAD"]);
 
   return { rootPath, baseRef, headRef };

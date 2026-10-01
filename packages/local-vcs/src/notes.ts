@@ -11,7 +11,7 @@ import {
   gitArgsSync,
   gitCommonDir,
   gitCommonDirSync,
-} from "./index";
+} from "./vcs";
 
 const NOTES_LOCK_STALE_MS = 60_000;
 

@@ -20,9 +20,12 @@ import {
   reviewDiffrSummarizerInputSchema,
 } from "@dev.fast/review-protocol";
 import {
+  shellQuote,
   traceMachineEnabled,
   writePrivateJsonAtomic,
 } from "@dev.fast/trace-core";
+import { detectAskAgents, launchAskAgent } from "@review/ask/agents.js";
+import { AskThreads } from "@review/ask/threads.js";
 import {
   applyCliInstall,
   declineCliInstall,
@@ -33,7 +36,10 @@ import {
   resolveCliInstallStatus,
   skipCliInstall,
 } from "@review/cli-install";
-import type { ReviewInstanceIdentity } from "@review/desktop-discovery";
+import {
+  REVIEW_INSTANCE_ENV,
+  type ReviewInstanceIdentity,
+} from "@review/desktop-discovery";
 import { readReviewPackageVersion } from "@review/package-paths";
 import { ReviewInputError } from "@review/review-api/document.js";
 import { createReviewApi } from "@review/review-api/http.js";
@@ -139,6 +145,42 @@ export function createGlobalReviewServer(
 
   const telemetry = input.telemetry ?? ReviewTelemetry.fromEnv();
   const relay = input.relay ?? new GlobalReviewDesktopVerbRelay();
+
+  // This Desktop's own CLI, pinned to this instance so another running
+  // Whiteboard never answers it.
+  const askCliEnv = () => [
+    { name: REVIEW_INSTANCE_ENV, value: identity.key },
+    ...(process.versions.electron
+      ? [{ name: "ELECTRON_RUN_AS_NODE", value: "1" }]
+      : []),
+    ...(process.env.DEV_REVIEW_HOME
+      ? [{ name: "DEV_REVIEW_HOME", value: process.env.DEV_REVIEW_HOME }]
+      : []),
+  ];
+
+  // Ask sessions get its MCP server, `whiteboard mcp`; an agent whose model
+  // would not get it uses `whiteboard api` from its shell instead.
+  const askThreads = new AskThreads(launchAskAgent, {
+    mcpServers: () =>
+      discovery.cliPath
+        ? [
+            {
+              name: "whiteboard",
+              command: process.execPath,
+              args: [discovery.cliPath, "mcp"],
+              env: askCliEnv(),
+            },
+          ]
+        : [],
+    cli: () =>
+      discovery.cliPath &&
+      [
+        ...askCliEnv().map(({ name, value }) => `${name}=${shellQuote(value)}`),
+        shellQuote(process.execPath),
+        shellQuote(discovery.cliPath),
+      ].join(" "),
+  });
+
   const reviewStore = input.reviewStore;
 
   const reviewLocks = new Map<string, Promise<void>>();
@@ -277,6 +319,7 @@ export function createGlobalReviewServer(
         (reviewId) => reviewStore.summary(reviewId)?.firstCreatedAt,
         () => aliasInstallationToAccount(telemetry),
       ),
+      { threads: askThreads, agents: () => detectAskAgents() },
     ),
   );
   app.get("/preferences/scratchpad", () =>
@@ -397,22 +440,6 @@ export function createGlobalReviewServer(
     return globalJson(200, {
       ok: true,
       reviewUuid: prepared.reviewId,
-    });
-  });
-  // The tutorial descriptor is not in `GET /reviews`, so tooling and
-  // integration checks fetch it here.
-  app.get("/tutorial/review", async () => {
-    const stored = await tutorial.find();
-
-    if (!stored) {
-      throw new ReviewServerError("Review not found.", 404);
-    }
-
-    return globalJson(200, {
-      reviewId: stored.reviewId,
-      title: stored.title,
-      pins: stored.pins,
-      version: stored.version,
     });
   });
   app.post("/tutorial/open", async () => {
@@ -691,6 +718,7 @@ export function createGlobalReviewServer(
     close: async () => {
       if (closing) return;
       closing = true;
+      askThreads.closeAll();
 
       for (const discoveryPath of discoveryPaths)
         await removeMatchingDiscovery(discoveryPath, discovery);

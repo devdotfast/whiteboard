@@ -24,6 +24,9 @@
  * `executables` are paths (relative to the unpacked extension root) that must
  * exist and stay executable. They are asserted at materialize time so a payload
  * layout change fails the build instead of silently shipping a broken server.
+ *
+ * `prunePaths` are removed from the unpacked extension because Review never
+ * runs them.
  */
 export const curatedExtensions = Object.freeze([
   {
@@ -241,6 +244,9 @@ export const curatedExtensions = Object.freeze([
     // Its extension pack points at Pylance (proprietary, not redistributable)
     // and debugpy, none of which Review ships.
     stripExtensionPack: true,
+    // The bundled Jedi language server; Review defaults
+    // `python.languageServer` to "None" and ty serves Python instead.
+    prunePaths: ["python_files/lib/jedilsp"],
   },
   {
     id: "astral-sh.ty",

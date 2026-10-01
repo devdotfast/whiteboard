@@ -3,13 +3,35 @@ import {
   type ReviewView,
   reviewViewSchema,
 } from "@dev.fast/review-protocol";
+import type { AgentSelection } from "@review/agent-selection";
+import type { AskAgentId } from "@review/ask/thread-state";
 import { createStore } from "zustand/vanilla";
 
-import type { PeekPanel, ReviewPanelMotion } from "./review-panel-model";
+import type {
+  AskAnchor,
+  AskPanel,
+  AskPlace,
+  AskShown,
+  AskSize,
+  AskView,
+  PeekPanel,
+  ReviewPanelMotion,
+} from "./review-panel-model";
 import { shouldCloseSidePeekForReviewView } from "./review-view-route";
+import type { AgentTraceStorage } from "./use-agent-trace";
 
 export interface ReviewPanelState {
+  /** The peek in the side panel. */
   active: PeekPanel | null;
+  /** The open conversation, wherever it shows. */
+  ask: AskPanel | null;
+  askPlace: AskPlace;
+  askMinimized: boolean;
+  /** Where the window and the pill were dragged to; until then, the bottom
+   * right. */
+  askAnchor: AskAnchor | null;
+  /** How big the window was made; until then, as wide as the docked panel. */
+  askSize: AskSize | null;
   motion: ReviewPanelMotion;
 }
 
@@ -40,11 +62,13 @@ export interface MapFocus {
   pending: boolean;
 }
 
+export type OverlayTourKind = "sequence" | "database" | "flow";
+
 /** A fullscreen diagram tour. `kind` is absent on one restored from an
  * older build's in-panel record. */
 export interface OverlayTour {
   tourId: string;
-  kind?: "sequence" | "database";
+  kind?: OverlayTourKind;
   anchor: string;
   revealRequest: number;
 }
@@ -56,6 +80,8 @@ export interface ReviewNavigationState {
   availableViews: readonly ReviewView[];
   diffScope: ReviewDiffScope | null;
   traceSelection: TraceSelection | undefined;
+  /** null reads the configured default. */
+  traceStorage: AgentTraceStorage | null;
   lens: ReviewLensSelection | null;
   mapFocus: MapFocus | null;
   overlayTour: OverlayTour | null;
@@ -64,7 +90,19 @@ export interface ReviewNavigationState {
 export interface ReviewPanelActions {
   suppressMotion: () => void;
   openPeek: (panel: PeekPanel) => void;
+  openAsk: (selection: AgentSelection, agent?: AskAgentId) => void;
+  openAskView: (view: AskView) => void;
+  /** Closes the peek; a docked Ask it covered comes back. */
   close: () => void;
+  closeAsk: () => void;
+  popOutAsk: () => void;
+  /** Puts Ask back in the side panel, in place of any peek. */
+  dockAsk: () => void;
+  minimizeAsk: () => void;
+  /** The pill opens Ask in its window. */
+  restoreAsk: () => void;
+  /** Moves the window and the pill together, resizing the window too. */
+  placeAsk: (anchor: AskAnchor, size?: AskSize) => void;
 }
 
 export interface ReviewNavigationActions {
@@ -75,11 +113,12 @@ export interface ReviewNavigationActions {
   clearLens: () => void;
   openTrace: (selection: TraceSelection) => void;
   selectTrace: (selection: TraceSelection) => void;
+  selectTraceStorage: (storage: AgentTraceStorage | null) => void;
   setAvailableViews: (views: readonly ReviewView[]) => void;
   focusMapElement: (elementPath: string) => void;
   consumeMapFocus: (requestId: number) => void;
   openOverlayTour: (
-    tour: { tourId: string; kind: "sequence" | "database" },
+    tour: { tourId: string; kind: OverlayTourKind },
     anchor: string,
   ) => void;
   moveOverlayTour: (anchor: string, options: { reveal: boolean }) => void;
@@ -100,6 +139,7 @@ export type ReviewNavigationRestore = Partial<
     | "availableViews"
     | "diffScope"
     | "traceSelection"
+    | "traceStorage"
     | "lens"
     | "overlayTour"
   >
@@ -110,24 +150,65 @@ export function createReviewPanelStore({
   availableViews = reviewViewSchema.options,
   diffScope = null,
   traceSelection,
+  traceStorage = null,
   lens = null,
   overlayTour = null,
 }: ReviewNavigationRestore = {}) {
   const initialView = availableViews.includes(view) ? view : "review";
 
+  // Asking shows Ask where it was; docked, it takes the peek's place.
+  const showAsk = (
+    state: ReviewPanelState,
+    view: AskView,
+  ): Partial<ReviewPanelState> => ({
+    ask: { kind: "ask", key: state.ask ? state.ask.key + 1 : 0, view },
+    askMinimized: false,
+    active: state.askPlace === "docked" ? null : state.active,
+  });
+
   return createStore<ReviewPanelStoreState>()((set) => ({
     active: null,
+    ask: null,
+    askPlace: "docked",
+    askMinimized: false,
+    askAnchor: null,
+    askSize: null,
     motion: "live",
     view: initialView,
     availableViews,
     diffScope: initialView === "diff" ? diffScope : null,
     traceSelection,
+    traceStorage,
     lens,
     mapFocus: null,
     overlayTour: initialView === "review" ? overlayTour : null,
     suppressMotion: () => set({ motion: "restored" }),
     openPeek: (panel) => set({ active: panel, motion: "live" }),
+    openAsk: (selection, agent) =>
+      set((state) => ({
+        ...showAsk(state, { type: "new", selection, agent }),
+        motion: "live",
+      })),
+    openAskView: (view) =>
+      set((state) => ({
+        ...showAsk(state, view),
+        // Switching views inside an open panel is not a new panel.
+        motion: askShown(state) === "panel" ? "restored" : "live",
+      })),
     close: () => set({ active: null, motion: "live" }),
+    closeAsk: () => set({ ask: null, askMinimized: false }),
+    popOutAsk: () => set({ askPlace: "window", askMinimized: false }),
+    dockAsk: () =>
+      set({
+        askPlace: "docked",
+        askMinimized: false,
+        active: null,
+        motion: "live",
+      }),
+    minimizeAsk: () => set({ askMinimized: true }),
+    restoreAsk: () => set({ askPlace: "window", askMinimized: false }),
+    placeAsk: (askAnchor, askSize) =>
+      set(askSize ? { askAnchor, askSize } : { askAnchor }),
     showView: (next) => set((state) => viewTransition(state, next)),
     openCommitDiff: (scope) =>
       set((state) => {
@@ -152,6 +233,7 @@ export function createReviewPanelStore({
         traceSelection: selection,
       })),
     selectTrace: (selection) => set({ traceSelection: selection }),
+    selectTraceStorage: (traceStorage) => set({ traceStorage }),
     focusMapElement: (elementPath) =>
       set((state) =>
         state.availableViews.includes("map")
@@ -203,6 +285,18 @@ export function createReviewPanelStore({
             },
       ),
   }));
+}
+
+export function askShown(
+  state: ReviewPanelState & Pick<ReviewNavigationState, "overlayTour">,
+): AskShown | null {
+  if (!state.ask) return null;
+
+  if (state.askMinimized) return "pill";
+
+  if (state.askPlace === "window") return "window";
+
+  return state.active || state.overlayTour ? "pill" : "panel";
 }
 
 function viewTransition(

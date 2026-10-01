@@ -17,28 +17,6 @@ afterEach(async () => {
 });
 
 describe("ReviewSessionProvider", () => {
-  it("routes data requests through the owning desktop model", async () => {
-    const request = vi.fn<
-      (url: string, init?: RequestInit) => Promise<Response>
-    >(
-      async (_url: string, _init?: RequestInit) =>
-        new Response(null, { status: 204 }),
-    );
-
-    const session = testReviewSession({}, { request });
-
-    await session.fetch("/versions");
-
-    expect(request).toHaveBeenCalledWith(
-      "http://127.0.0.1:5570/reviews-api/test-review/versions",
-      expect.objectContaining({
-        headers: expect.any(Headers),
-      }),
-    );
-    const requestHeaders = new Headers(request.mock.calls[0]?.[1]?.headers);
-    expect(requestHeaders.get("x-review-token")).toBe("secret-token");
-  });
-
   it("keeps mounted sessions independent when a sibling session unmounts", async () => {
     const postedA: ReviewVerbRequest[] = [];
     const postedB: ReviewVerbRequest[] = [];

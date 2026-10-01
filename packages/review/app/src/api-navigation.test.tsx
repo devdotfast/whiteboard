@@ -159,5 +159,7 @@ it("exposes JSON section and Markdown headings plus imported PR and stack naviga
 
   for (const link of links) await act(async () => link.click());
   expect(scroll).toHaveBeenCalledTimes(4);
-  expect(container.textContent).toContain("2 of 2");
+  expect(
+    container.querySelector('[aria-label="Pull request stack, 2 of 2"]'),
+  ).not.toBeNull();
 });

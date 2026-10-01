@@ -19,10 +19,12 @@ function Panel({
   stateKey,
   cramped = false,
   side = "right",
+  collapsedWidth,
 }: {
   stateKey: string;
   cramped?: boolean;
   side?: "left" | "right";
+  collapsedWidth?: number;
 }) {
   // Exercise the pre-layout path with an explicit zero-width container.
   const containerRef = useRef<HTMLElement | null>(null);
@@ -35,6 +37,7 @@ function Panel({
     maxWidth: 920,
     minMainWidth: 560,
     separatorWidth: 10,
+    collapsedWidth,
     label: "Resize test panel",
     containerRef: cramped ? containerRef : undefined,
   });
@@ -64,7 +67,11 @@ function widenWithKeyboard() {
 
 function mountPanel(
   stateKey: string,
-  options: { cramped?: boolean; side?: "left" | "right" } = {},
+  options: {
+    cramped?: boolean;
+    side?: "left" | "right";
+    collapsedWidth?: number;
+  } = {},
 ) {
   host = document.createElement("div");
   document.body.append(host);
@@ -76,6 +83,7 @@ function mountPanel(
           stateKey={stateKey}
           cramped={options.cramped}
           side={options.side}
+          collapsedWidth={options.collapsedWidth}
         />
       </ReviewSessionProvider>,
     );
@@ -185,4 +193,56 @@ it("grows a left sidebar toward the right and remembers its width", () => {
   expect(separator().getAttribute("aria-valuenow")).toBe("392");
   widenWithKeyboard();
   expect(separator().getAttribute("aria-valuenow")).toBe("360");
+});
+
+describe("useRightPanelResize folding", () => {
+  const width = () => separator().getAttribute("aria-valuenow");
+
+  function pointer(type: string, clientX: number) {
+    act(() => {
+      separator().dispatchEvent(
+        new PointerEvent(type, { clientX, pointerId: 1, bubbles: true }),
+      );
+    });
+  }
+
+  function key(key: "ArrowLeft" | "ArrowRight") {
+    act(() => {
+      separator().dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true }),
+      );
+    });
+  }
+
+  beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, "setPointerCapture").mockImplementation(
+      () => {},
+    );
+  });
+
+  it("folds past the minimum and reopens at the width the drag started from", () => {
+    mountPanel("folding-panel", { side: "left", collapsedWidth: 42 });
+    key("ArrowRight");
+    expect(width()).toBe("392");
+    pointer("pointerdown", 392);
+    pointer("pointermove", 300);
+    pointer("pointermove", 100);
+    expect(width()).toBe("42");
+    pointer("pointermove", 400);
+    expect(width()).toBe("400");
+    pointer("pointermove", 100);
+    pointer("pointerup", 100);
+    key("ArrowRight");
+    expect(width()).toBe("392");
+  });
+
+  it("folds from the keyboard at the minimum and stays folded after a remount", () => {
+    mountPanel("folding-panel", { side: "left", collapsedWidth: 42 });
+    key("ArrowLeft");
+    expect(width()).toBe("42");
+    unmountPanel();
+
+    mountPanel("folding-panel", { side: "left", collapsedWidth: 42 });
+    expect(width()).toBe("42");
+  });
 });

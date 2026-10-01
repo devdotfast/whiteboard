@@ -3,18 +3,13 @@ import { describe, expect, it } from "vitest";
 import { collapseInlineC4Node, projectInlineC4 } from "./c4-projection";
 import { defineSoftwareModel } from "./model";
 import {
-  c4MapReactFlowInteractionProps,
-  c4SpatialDirectionForKey,
   findSpatialC4Node,
   firstSoftwareMapChildNodeId,
   parentSoftwareMapNodeId,
   selectedSoftwareMapNodeIdForNodes,
-  shouldAutoFocusC4MapKeyboardTarget,
-  shouldShowSoftwareMapFloatingActions,
   softwareMapChildNodeIdForDrill,
   softwareMapNodeForKeyboardExpansion,
   softwareMapNodeIdForDrill,
-  softwareMapOverlayClassName,
   softwareMapViewportFocusNodeId,
   softwareMapViewportFocusTargetReady,
   toggledSoftwareMapExpandedNodeIds,
@@ -23,51 +18,6 @@ import {
 import { softwareMapSnapshotFromInlineC4Projection } from "./software-map-snapshot";
 
 describe("SoftwareMap keyboard navigation", () => {
-  it("keeps full-canvas map interactions enabled outside inline review content", () => {
-    expect(c4MapReactFlowInteractionProps("standalone")).toEqual({
-      panOnScroll: false,
-      preventScrolling: true,
-      zoomOnPinch: true,
-      zoomOnScroll: true,
-    });
-    expect(shouldAutoFocusC4MapKeyboardTarget("inline")).toBe(false);
-    expect(shouldAutoFocusC4MapKeyboardTarget("standalone")).toBe(true);
-  });
-
-  it("keeps expanded map portals inside the active review theme scope", () => {
-    const classNames = softwareMapOverlayClassName({
-      theme: "light",
-      nodeTint: "slate",
-    }).split(" ");
-
-    expect(classNames).toEqual([
-      "software-map-overlay",
-      "review-canvas-root",
-      "review-app",
-      "review-app--theme-light",
-      "review-app--tint-slate",
-    ]);
-  });
-
-  it("hides map floating refresh actions while the code inspector is open", () => {
-    expect(
-      shouldShowSoftwareMapFloatingActions({
-        showChrome: false,
-        showFloatingActions: true,
-        hasCodeInspector: false,
-        hasRefreshAction: true,
-      }),
-    ).toBe(true);
-    expect(
-      shouldShowSoftwareMapFloatingActions({
-        showChrome: false,
-        showFloatingActions: true,
-        hasCodeInspector: true,
-        hasRefreshAction: true,
-      }),
-    ).toBe(false);
-  });
-
   it("defaults selection to the first visible node when selected id is missing", () => {
     const nodes = [{ id: "a" }, { id: "b" }, { id: "c" }];
 
@@ -469,18 +419,6 @@ describe("SoftwareMap keyboard navigation", () => {
     expect(findSpatialC4Node("current", positions, "left")).toBe("left");
     expect(findSpatialC4Node("current", positions, "up")).toBe("up");
     expect(findSpatialC4Node(null, positions, "right")).toBe("up");
-  });
-
-  it("maps hjkl and arrow keys to C4 navigation directions", () => {
-    expect(c4SpatialDirectionForKey("h")).toBe("left");
-    expect(c4SpatialDirectionForKey("ArrowLeft")).toBe("left");
-    expect(c4SpatialDirectionForKey("j")).toBe("down");
-    expect(c4SpatialDirectionForKey("ArrowDown")).toBe("down");
-    expect(c4SpatialDirectionForKey("k")).toBe("up");
-    expect(c4SpatialDirectionForKey("ArrowUp")).toBe("up");
-    expect(c4SpatialDirectionForKey("l")).toBe("right");
-    expect(c4SpatialDirectionForKey("ArrowRight")).toBe("right");
-    expect(c4SpatialDirectionForKey("x")).toBe(null);
   });
 
   it("keeps keyboard navigation within the selected C4 hierarchy level", () => {

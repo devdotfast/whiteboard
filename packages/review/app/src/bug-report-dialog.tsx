@@ -83,9 +83,6 @@ export function BugReportControl({
         include_review: includeContext,
         include_map: includeContext,
         include_diff: includeDiff,
-        // No JSON-review snapshot records its authoring session yet, so
-        // there is no complete trace to attach.
-        include_trace: false,
         app_session_id: session.appSessionId,
         app_version: session.config.appVersion,
       };

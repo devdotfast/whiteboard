@@ -274,13 +274,6 @@ export function DatabaseLens(block: DatabaseLensProps) {
 
   const panelStore = useReviewPanelStore();
 
-  // An open tour of this lens picks the use case it walks.
-  const tourUseCase = useReviewPanel((state) =>
-    useCases.find(
-      (useCase) => tourIdFor(lensId, useCase.id) === state.overlayTour?.tourId,
-    ),
-  );
-
   const storageKey = session.storageKey("database-lens", lensId);
   const useCaseIdsKey = JSON.stringify(useCases.map((useCase) => useCase.id));
 
@@ -296,12 +289,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
   const activeUseCaseId = useStore(lensState, (state) => state.activeUseCaseId);
   const { setActiveUseCaseId } = lensState.getState();
 
-  useEffect(() => {
-    if (tourUseCase) setActiveUseCaseId(tourUseCase.id);
-  }, [tourUseCase, setActiveUseCaseId]);
-
   const activeUseCase =
-    tourUseCase ??
     useCases.find((useCase) => useCase.id === activeUseCaseId) ??
     useCases[0] ??
     null;

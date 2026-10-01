@@ -18,6 +18,7 @@ import {
   testReviewSession,
 } from "./review-session-test-utils";
 import { ReviewTraceView } from "./ReviewTraceView";
+import type { AgentTraceStorage } from "./use-agent-trace";
 import { type TraceListState, useTraceList } from "./use-trace-list";
 
 const mockListResponse: Extract<ReviewAgentTraceListResponse, { ok: true }> = {
@@ -79,6 +80,7 @@ function ControlledHost({
           storedList={list}
           selection={selection}
           onSelect={setSelection}
+          onSelectStorage={noop}
         />
       )}
     </>
@@ -86,6 +88,18 @@ function ControlledHost({
 }
 
 const noop = () => {};
+
+function StorageHost() {
+  const [storage, setStorage] = useState<AgentTraceStorage | null>(null);
+
+  return (
+    <ReviewTraceView
+      onSelect={noop}
+      storage={storage}
+      onSelectStorage={setStorage}
+    />
+  );
+}
 
 let root: Root | null = null;
 
@@ -243,6 +257,7 @@ describe("ReviewTraceView", () => {
             <ReviewTraceView
               selection={{ sessionId: "session-1", trace: "sub-1" }}
               onSelect={noop}
+              onSelectStorage={noop}
             />
           </ReviewSessionProvider>
         </TestCanvasQuery>,
@@ -299,7 +314,7 @@ describe("ReviewTraceView", () => {
         root?.render(
           <TestCanvasQuery>
             <ReviewSessionProvider session={session}>
-              <ReviewTraceView onSelect={noop} />
+              <ReviewTraceView onSelect={noop} onSelectStorage={noop} />
             </ReviewSessionProvider>
           </TestCanvasQuery>,
         );
@@ -354,7 +369,7 @@ describe("ReviewTraceView", () => {
       root?.render(
         <TestCanvasQuery>
           <ReviewSessionProvider session={session}>
-            <ReviewTraceView onSelect={noop} />
+            <StorageHost />
           </ReviewSessionProvider>
         </TestCanvasQuery>,
       );
@@ -429,7 +444,7 @@ describe("ReviewTraceView", () => {
       root?.render(
         <TestCanvasQuery>
           <ReviewSessionProvider session={session}>
-            <ReviewTraceView onSelect={noop} />
+            <ReviewTraceView onSelect={noop} onSelectStorage={noop} />
           </ReviewSessionProvider>
         </TestCanvasQuery>,
       );
@@ -472,7 +487,7 @@ describe("ReviewTraceView", () => {
       root?.render(
         <TestCanvasQuery>
           <ReviewSessionProvider session={session}>
-            <ReviewTraceView onSelect={noop} />
+            <ReviewTraceView onSelect={noop} onSelectStorage={noop} />
           </ReviewSessionProvider>
         </TestCanvasQuery>,
       );
@@ -557,7 +572,7 @@ describe("ReviewTraceView", () => {
       root?.render(
         <TestCanvasQuery>
           <ReviewSessionProvider session={session}>
-            <ReviewTraceView onSelect={noop} />
+            <ReviewTraceView onSelect={noop} onSelectStorage={noop} />
           </ReviewSessionProvider>
         </TestCanvasQuery>,
       );

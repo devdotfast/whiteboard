@@ -2,6 +2,7 @@ import { documentType } from "@canvas/document-type.stylex";
 import { fontSize, fontWeight } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { textStyles } from "@canvas/ui/text";
+import { extractTraceEventText } from "@dev.fast/trace-protocol";
 import type { ReviewComponentProps } from "@review/review-document-data";
 import * as stylex from "@stylexjs/stylex";
 import type {
@@ -12,7 +13,13 @@ import type {
   Ref,
 } from "react";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
+import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
+import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
+import { AskPopOutIcon, askIconSizes } from "./ask-icons";
+import { AskPanelContent } from "./ask-panel";
+import { AskPill, type AskPresence, AskSlot, AskWindow } from "./ask-window";
 import { AuthoredCodeSurface } from "./authored-code-surface";
 import { CodePeekCard } from "./CodePeek";
 import { controlStyles } from "./controls-styles";
@@ -34,6 +41,7 @@ import type {
   PeekAnchor,
   ReviewPeekContent,
 } from "./review-panel-model";
+import { askShown } from "./review-panel-store";
 import { useReviewRoots } from "./review-root-context";
 import type { ReviewSectionSummary } from "./review-section-summary";
 import { useReviewUiState } from "./review-ui-state";
@@ -46,7 +54,7 @@ import { useBottomSheetResize } from "./side-panel-resizer";
 import { panelStyles, tourStyles } from "./side-panel-styles";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
-import { TraceDocument, extractEventText } from "./trace-document";
+import { TraceDocument } from "./trace-document";
 import { traceStyles } from "./trace-styles";
 import { useTutorialSection } from "./tutorial-section-context";
 import { captureUiEvent } from "./ui-telemetry";
@@ -67,11 +75,13 @@ function ReviewPanelFrame({
   onClose,
   closeLabel,
   titleAccessory,
+  headerActions,
   floatingFooter,
   bodyRef,
   onBodyScroll,
   tour = false,
   docked = false,
+  tray = false,
   children,
 }: {
   label: string;
@@ -79,11 +89,15 @@ function ReviewPanelFrame({
   onClose: () => void;
   closeLabel: string;
   titleAccessory?: ReactNode;
+  /** Buttons beside the close button. */
+  headerActions?: ReactNode;
   floatingFooter?: ReactNode;
   bodyRef?: Ref<HTMLDivElement>;
   onBodyScroll?: () => void;
   tour?: boolean;
   docked?: boolean;
+  /** On the tray, as a conversation is, with a quieter kicker. */
+  tray?: boolean;
   children: ReactNode;
 }) {
   const appRef = useReviewRoots()?.appRef;
@@ -122,6 +136,7 @@ function ReviewPanelFrame({
         panelMotion === "restored" && panelStyles.restored,
         tour && panelStyles.tour,
         docked && panelStyles.docked,
+        tray && panelStyles.tray,
       )}
       role="complementary"
       aria-label={title ?? label}
@@ -131,26 +146,35 @@ function ReviewPanelFrame({
         {...stylex.props(shellStyles.sheetResizer)}
         {...sheet.separatorProps}
       />
-      <header {...stylex.props(panelStyles.header)}>
+      <header {...stylex.props(panelStyles.header, tray && panelStyles.tray)}>
         <div {...stylex.props(panelStyles.title)}>
-          <span {...stylex.props(textStyles.eyebrow, panelStyles.kicker)}>
+          <span
+            {...stylex.props(
+              textStyles.eyebrow,
+              panelStyles.kicker,
+              tray && panelStyles.trayKicker,
+            )}
+          >
             {label}
           </span>
           {title && <h2 {...stylex.props(panelStyles.heading)}>{title}</h2>}
           {titleAccessory}
         </div>
-        <IconButton
-          size="large"
-          xstyle={panelStyles.close}
-          onClick={onClose}
-          aria-label={closeLabel}
-        >
-          <CloseIcon xstyle={controlStyles.inertIcon} />
-        </IconButton>
+        <div {...stylex.props(panelStyles.actions)}>
+          {headerActions}
+          <IconButton
+            size="large"
+            xstyle={panelStyles.close}
+            onClick={onClose}
+            aria-label={closeLabel}
+          >
+            <CloseIcon xstyle={controlStyles.inertIcon} />
+          </IconButton>
+        </div>
       </header>
       <div
         ref={bodyRef}
-        {...stylex.props(panelStyles.body)}
+        {...stylex.props(panelStyles.body, tray && panelStyles.trayBody)}
         onScroll={onBodyScroll}
       >
         {children}
@@ -433,14 +457,104 @@ export function ReviewPanelHost() {
   const activePanel = useReviewPanel((state) => state.active);
   const close = useReviewPanel((state) => state.close);
 
-  if (!activePanel) return null;
+  return (
+    <>
+      {activePanel ? (
+        <ReviewPeekPanel
+          anchor={activePanel.anchor}
+          content={activePanel.content}
+          onClose={close}
+        />
+      ) : null}
+      <AskHost />
+    </>
+  );
+}
+
+const historyPresence: AskPresence = {
+  agentName: "Ask",
+  status: "Conversations",
+  tone: "quiet",
+};
+
+/**
+ * The open conversation, in the side panel, its window or the pill. It
+ * renders once, into an element of its own that moves between them, so
+ * popping out, docking or minimizing never restarts it.
+ */
+function AskHost() {
+  const ask = useReviewPanel((state) => state.ask);
+  const shown = useReviewPanel(askShown);
+  const closeAsk = useReviewPanel((state) => state.closeAsk);
+  const popOutAsk = useReviewPanel((state) => state.popOutAsk);
+  const [node] = useState(() => document.createElement("div"));
+
+  const [presence, setPresence] = useState<AskPresence>({
+    agentName: "Ask",
+    status: "New question",
+    tone: "quiet",
+  });
+
+  if (!ask || !shown) return null;
+
+  const actions = (
+    <>
+      <AskDeleteThreadButton />
+      <AskHistoryButton view={ask.view} />
+    </>
+  );
 
   return (
-    <ReviewPeekPanel
-      anchor={activePanel.anchor}
-      content={activePanel.content}
-      onClose={close}
-    />
+    <AskOpenThreadProvider key={ask.key}>
+      {createPortal(
+        ask.view.type === "history" ? (
+          <AskHistoryList passage={ask.view.passage} />
+        ) : (
+          <AskPanelContent
+            selection={ask.view.selection}
+            agent={ask.view.agent}
+            savedThreadId={
+              ask.view.type === "saved" ? ask.view.threadId : undefined
+            }
+            onPresence={setPresence}
+          />
+        ),
+        node,
+      )}
+      {shown === "panel" ? (
+        <ReviewPanelFrame
+          tray
+          label="Ask"
+          onClose={closeAsk}
+          closeLabel="Close Ask"
+          headerActions={
+            <>
+              {actions}
+              <IconButton
+                size="large"
+                aria-label="Pop out Ask"
+                title="Pop out"
+                onClick={popOutAsk}
+              >
+                <AskPopOutIcon
+                  xstyle={[controlStyles.inertIcon, askIconSizes.header]}
+                />
+              </IconButton>
+            </>
+          }
+        >
+          <AskSlot node={node} />
+        </ReviewPanelFrame>
+      ) : shown === "window" ? (
+        <AskWindow actions={actions}>
+          <AskSlot node={node} />
+        </AskWindow>
+      ) : (
+        <AskPill
+          presence={ask.view.type === "history" ? historyPresence : presence}
+        />
+      )}
+    </AskOpenThreadProvider>
   );
 }
 
@@ -467,7 +581,7 @@ function TraceQuotePeekPanel({
 
     if (event !== undefined && event >= 0 && event < traceEvents.length) {
       const e = traceEvents[event];
-      const text = extractEventText(e);
+      const text = extractTraceEventText(e);
 
       if (findWhitespaceNormalizedSpan(text, quote)) {
         return event;
@@ -475,7 +589,7 @@ function TraceQuotePeekPanel({
     }
 
     for (let i = 0; i < traceEvents.length; i++) {
-      const text = extractEventText(traceEvents[i]);
+      const text = extractTraceEventText(traceEvents[i]);
 
       if (findWhitespaceNormalizedSpan(text, quote)) {
         return i;

@@ -6,15 +6,14 @@ import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import {
-  AuthoringActivityBadge,
-  AuthoringActivityContext,
-} from "./authoring-activity";
+import { AuthoringActivityBadge } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import type { AuthoringCursor } from "./authoring-cursor";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { AuthoringCursorContext } from "./courier";
 import { ReviewDiffView } from "./DiffView";
 import { type DrawQueueClock, DrawQueueProvider } from "./draw-queue-provider";
+import { reviewPreferenceKey } from "./host/review-client";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewLensesProvider } from "./review-lenses";
 import { ReviewPanelProvider } from "./review-panel";
@@ -306,4 +305,42 @@ it("sends the top-bar badge to the Diffs page while only lenses are written", as
       .click(),
   );
   expect(onLocate).toHaveBeenCalledWith("review");
+});
+
+it("folds the sidebar to a rail that still filters and opens again", async () => {
+  window.localStorage.setItem(
+    reviewPreferenceKey("ui", "diff-sidebar-width-collapsed"),
+    "true",
+  );
+
+  try {
+    await render({ lenses: [api, docs], version: 1, lensCursor: null });
+
+    const railLens = (title: string) =>
+      app.querySelector<HTMLButtonElement>(
+        `nav[aria-label="Lens rail"] button[aria-label="${title}"]`,
+      );
+
+    await vi.waitFor(() =>
+      expect(railLens("Uncategorized changes")?.textContent).toBe("n/a"),
+    );
+    expect(railLens(api.title)?.textContent).toBe("API");
+
+    await act(async () => railLens(api.title)!.click());
+    expect(railLens(api.title)?.getAttribute("aria-pressed")).toBe("true");
+
+    await act(async () =>
+      app
+        .querySelector<HTMLButtonElement>('button[aria-label="Show lenses"]')!
+        .click(),
+    );
+    expect(app.querySelector('nav[aria-label="Lens rail"]')).toBeNull();
+    expect(
+      row(api.id)
+        ?.querySelector("button[aria-pressed]")
+        ?.getAttribute("aria-pressed"),
+    ).toBe("true");
+  } finally {
+    window.localStorage.clear();
+  }
 });

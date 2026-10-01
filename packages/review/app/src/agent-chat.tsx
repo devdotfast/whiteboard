@@ -12,13 +12,18 @@ import { tokens } from "./tokens.stylex";
 export function AgentChatUserMessage({
   children,
   caption,
+  xstyle,
+  bubbleXstyle,
 }: {
   children: ReactNode;
   caption?: ReactNode;
+  xstyle?: stylex.StyleXStyles;
+  /** Restyles the bubble, as on a tray. */
+  bubbleXstyle?: stylex.StyleXStyles;
 }): ReactElement {
   return (
-    <div {...stylex.props(styles.message)}>
-      <div {...stylex.props(styles.bubble)}>{children}</div>
+    <div {...stylex.props(styles.message, xstyle)}>
+      <div {...stylex.props(styles.bubble, bubbleXstyle)}>{children}</div>
       {caption != null && (
         <span {...stylex.props(styles.caption)}>{caption}</span>
       )}

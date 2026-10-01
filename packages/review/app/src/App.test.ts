@@ -1,29 +1,10 @@
-import { type ReactElement, createElement } from "react";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { a as ReviewMdxLink } from "./review-components";
-import {
-  reviewSessionElement,
-  testReviewSession,
-} from "./review-session-test-utils";
-import { shouldCloseSidePeekForReviewView } from "./review-view-route";
 import { selectActiveSoftwareMapModel } from "./software-map-selection";
 import { defineSoftwareModel } from "./software-map/model";
-
-const testSession = testReviewSession();
-
-function renderWithTestSession(element: ReactElement): string {
-  return renderToStaticMarkup(reviewSessionElement(testSession, element));
-}
-
-describe("review app initial view", () => {
-  it("closes side peeks when leaving the rendered review document", () => {
-    expect(shouldCloseSidePeekForReviewView("review")).toBe(false);
-    expect(shouldCloseSidePeekForReviewView("map")).toBe(true);
-    expect(shouldCloseSidePeekForReviewView("diff")).toBe(true);
-  });
-});
 
 describe("review app software map selection", () => {
   it("selects the model that contains a side-peek map focus target", () => {

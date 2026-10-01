@@ -1,5 +1,4 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
 
 import { routeDocumentEmbedScroll } from "./document-embed-scroll";
 
@@ -95,15 +94,6 @@ it("routes a diagonal tie to the document, not the code peek", () => {
   expect(region.scrollTop).toBe(301);
   expect(embed.scrollTop).toBe(50);
   expect(embeddedWheel).not.toHaveBeenCalled();
-});
-
-it("scrolls a wide sequence diagram horizontally with a trackpad gesture", async () => {
-  const { region, embed, content } = mount("sequence-diagram");
-
-  await userEvent.wheel(content, { delta: { x: 120, y: 0 } });
-
-  await vi.waitFor(() => expect(embed.scrollLeft).toBeGreaterThan(0));
-  expect(region.scrollTop).toBe(0);
 });
 
 it.each([

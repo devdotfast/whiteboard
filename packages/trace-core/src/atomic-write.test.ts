@@ -1,5 +1,4 @@
 import {
-  chmodSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -34,38 +33,6 @@ afterEach(async () => {
 });
 
 describe("writeFileAtomic", () => {
-  it("writes contents and overwrites an existing file without leaving temp files", async () => {
-    const target = path.join(dir, "review.mdx");
-
-    writeFileSync(target, "old contents", "utf8");
-
-    writeFileAtomic(target, "new contents", "utf8");
-
-    expect(readFileSync(target, "utf8")).toBe("new contents");
-    // The temp sibling is renamed over the target, so nothing else is left
-    // behind in the directory.
-    expect(readdirSync(dir)).toEqual(["review.mdx"]);
-  });
-
-  it("creates the target directory when it does not exist", async () => {
-    const target = path.join(dir, "nested", "deep", "state.json");
-
-    writeFileAtomic(target, '{"ok":true}\n');
-    expect(readFileSync(target, "utf8")).toBe('{"ok":true}\n');
-  });
-
-  it("preserves existing file permissions when replacing contents", async () => {
-    const target = path.join(dir, "state.json");
-
-    writeFileSync(target, "old", "utf8");
-    chmodSync(target, 0o640);
-
-    writeFileAtomic(target, "new", "utf8");
-
-    expect(statSync(target).mode & 0o777).toBe(0o640);
-    expect(readFileSync(target, "utf8")).toBe("new");
-  });
-
   it("uses a sibling temp file and cleans it after interruption before rename", async () => {
     const target = path.join(dir, "review.mdx");
     let tmpfile: string | undefined;

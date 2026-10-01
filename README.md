@@ -9,6 +9,7 @@
   <p>
     <a href="https://dev.fast/install">Download for macOS, Windows, and Linux</a> ·
     <a href="https://dev.fast">Website</a> ·
+    <a href="https://github.com/devdotfast/whiteboard/wiki/Roadmap">Roadmap</a> ·
     <a href="https://discord.gg/wYvd2cpMQg">Discord</a>
   </p>
 </div>
@@ -19,7 +20,7 @@ Whiteboard plugs into the tools you already use - e.g. Claude Code, Codex, etc. 
 
 <p align="center">
   <img
-    src="docs/assets/whiteboard-demo.gif"
+    src=".github/assets/whiteboard-demo.gif"
     width="880"
     alt="An agent writes a Whiteboard review from a terminal prompt, which includes a sequence diagram"
   />

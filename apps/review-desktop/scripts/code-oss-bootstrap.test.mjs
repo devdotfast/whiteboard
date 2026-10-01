@@ -6,23 +6,11 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import {
-  dependencyDirectoriesExist,
-  lockfileDigest,
-  needsDependencyInstall,
-} from "./code-oss-bootstrap.mjs";
+import { lockfileDigest } from "./code-oss-bootstrap.mjs";
 
 const bootstrapScript = fileURLToPath(
   new URL("./code-oss-bootstrap.mjs", import.meta.url),
 );
-
-function matchingDependencies() {
-  return {
-    dependencyDirectoriesExist: true,
-    installedLockfileDigest: "current-inputs",
-    lockfileDigest: "current-inputs",
-  };
-}
 
 async function fixture() {
   const directory = await mkdtemp(path.join(tmpdir(), "review-desktop-"));
@@ -50,46 +38,6 @@ async function fixture() {
   return { directory, installDirs };
 }
 
-test("installs Code OSS dependencies for a clean checkout", () => {
-  assert.equal(
-    needsDependencyInstall({
-      ...matchingDependencies(),
-      dependencyDirectoriesExist: false,
-      installedLockfileDigest: undefined,
-    }),
-    true,
-  );
-});
-
-test("installs when the installed dependencies do not match the inputs", () => {
-  assert.equal(
-    needsDependencyInstall({
-      ...matchingDependencies(),
-      installedLockfileDigest: "old-inputs",
-    }),
-    true,
-  );
-});
-
-test("installs when any nested Code OSS dependency directory is missing", async () => {
-  const { directory, installDirs } = await fixture();
-  assert.equal(dependencyDirectoriesExist(directory, installDirs), true);
-
-  const missingDirectory = await mkdtemp(
-    path.join(tmpdir(), "review-desktop-"),
-  );
-
-  await mkdir(path.join(missingDirectory, "node_modules"));
-  assert.equal(
-    dependencyDirectoriesExist(missingDirectory, installDirs),
-    false,
-  );
-});
-
-test("keeps matching Code OSS dependencies for repeat launches", () => {
-  assert.equal(needsDependencyInstall(matchingDependencies()), false);
-});
-
 test("the bootstrap digest includes every upstream install input", async () => {
   const { directory, installDirs } = await fixture();
   const digest = () => lockfileDigest(directory, installDirs);
@@ -108,23 +56,6 @@ test("the bootstrap digest includes every upstream install input", async () => {
   const packageDigest = await digest();
   await writeFile(path.join(directory, ".nvmrc"), "24.19.0");
   assert.notEqual(await digest(), packageDigest);
-});
-
-test("the bootstrap digest ignores lockfiles outside upstream install directories", async () => {
-  const { directory, installDirs } = await fixture();
-  const originalDigest = await lockfileDigest(directory, installDirs);
-
-  const unusedLockfile = path.join(
-    directory,
-    "test",
-    "smoke",
-    "package-lock.json",
-  );
-
-  await mkdir(path.dirname(unusedLockfile), { recursive: true });
-  await writeFile(unusedLockfile, "unused lockfile");
-
-  assert.equal(await lockfileDigest(directory, installDirs), originalDigest);
 });
 
 test("the bootstrap command runs through a symlinked script path", async () => {

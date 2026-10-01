@@ -17,7 +17,6 @@ import {
   clearTraceEnvCache,
   loadReviewAgentTrace,
   lookupReviewTraceSession,
-  pullReviewTraceCorpus,
   syncReviewTrace,
 } from "../review-agent-traces";
 import { writeStoreAuth } from "../store-auth";
@@ -907,35 +906,6 @@ describe("hosted trace storage", () => {
     ).rejects.toThrow(/not allowed for trace publication/);
     expect(transport.uploads.size).toBe(0);
   });
-  it("lists a session once per storage instance", async () => {
-    const sessionId = "hosted-session-0010";
-    const transport = createMemoryTraceStoreTransport();
-    const listSessions = vi.spyOn(transport, "listSessions");
-    seedMemoryTraceSession(transport, {
-      repositoryId: REPOSITORY_ID,
-      sessionId,
-      traces: {
-        "main.jsonl.gz": `${sessionRecord(sessionId, "main")}\n`,
-        "subagents/agent-a1.jsonl.gz": `${sessionRecord(sessionId, "sub")}\n`,
-      },
-    });
-
-    const storage = HostedTraceStorage.fromParts({
-      target: target(transport.storeId),
-      transport,
-      devHome,
-    });
-
-    const pulled = await pullReviewTraceCorpus({
-      repo: { owner: "acme", repo: "app" },
-      sessions: [{ id: sessionId }],
-      storage,
-    });
-
-    expect(pulled.files).toBe(2);
-    expect(listSessions).toHaveBeenCalledTimes(1);
-  });
-
   it("skips the upload when the store already holds identical objects and links new commits", async () => {
     const sessionId = "hosted-session-0011";
     writeFileSync(

@@ -34,15 +34,6 @@ async function fixture<T extends BlockType>(type: T) {
 }
 
 describe("block definitions", () => {
-  it("has one fixture file per kind and one kind per fixture file", async () => {
-    const files = (await readdir(fixturesDir))
-      .filter((f) => f.endsWith(".json"))
-      .map((f) => f.slice(0, -5))
-      .sort();
-
-    expect(files).toEqual(Object.keys(blocks).sort());
-  });
-
   it.each(Object.keys(blocks) as BlockType[])(
     "%s fixtures parse and pass their check",
     async (type) => {

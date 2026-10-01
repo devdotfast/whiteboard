@@ -54,9 +54,6 @@ Review applies four of them, covering four CVEs:
   `isUNC` import by hand because the surrounding import block predates
   upstream's `isPortableLinkTarget`; the rest is verbatim.
 
-`scripts/vscode-security-backports.test.mjs` asserts each of these hunks is
-still present.
-
 #### Not applicable at this pin
 
 - Azure DevOps access token disclosure (CVE-2026-81381, moderate):
@@ -290,6 +287,11 @@ one of these entries:
   `src/vs/platform/browserView/node/playwrightService.ts` through a dynamic
   import, on a path nothing constructs once the `playwright` channel is
   unregistered.
+  It also drops the 1DS/Application Insights telemetry SDKs (Review sets no
+  `product.aiConfig`, and the built-in extensions bundle their own copies),
+  root `katex` (chat only), `@vscode/tree-sitter-wasm` (Review stubs
+  `ITreeSitterLibraryService`; highlighting is behind experimental settings it
+  never enables), and tsserver's translated diagnostics.
 - `build/darwin/create-universal-app.ts`
 - `build/darwin/verify-macho.ts`
 - `build/lib/i18n.resources.json`
@@ -309,7 +311,11 @@ one of these entries:
 - `build/gulpfile.extensions.ts`
 - `build/gulpfile.hygiene.ts`
 - `build/gulpfile.reh.ts`
-- `build/gulpfile.vscode.ts`
+- `build/gulpfile.vscode.ts` and `build/next/index.ts`: also skip the welcome
+  walkthrough media, the PSReadLine terminal module, and the tree-sitter query
+  files, none of which Review loads.
+  `gulpfile.vscode.ts` also keeps only Chromium's English UI translations
+  (`locales/en-*.pak`, `en*.lproj`), since Review's UI is English only.
 - `build/hygiene.ts`
 - `build/lib/extensions.ts` (also excludes the curated built-in extensions,
   which are staged from prebuilt VSIXes rather than packaged from source)

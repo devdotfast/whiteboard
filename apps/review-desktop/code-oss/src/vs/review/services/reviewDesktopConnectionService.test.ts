@@ -144,14 +144,3 @@ test("tutorial deletion suppresses auto-prepare across restarts until explicit o
 	assert.match(requests[2] ?? "", /POST .*\/tutorial\/prepare$/);
 	restoredService.dispose();
 });
-
-test("passes automatic command updates to the server without enabling optional integrations", async (t) => {
-	const service = serviceWith();
-	let requestBody: unknown;
-	mockFetch(t, async (_url, init) => {
-		requestBody = JSON.parse(String(init?.body));
-		return Response.json({ ok: true, output: "updated" });
-	});
-	await service.applyCliInstall({ shim: false, autoUpdate: true });
-	assert.deepEqual(requestBody, { shim: false, autoUpdate: true });
-});

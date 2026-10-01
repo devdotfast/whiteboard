@@ -1,6 +1,7 @@
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import { surfaceStyles } from "@canvas/ui/surface";
 import type { ReviewAgentTraceEvent } from "@dev.fast/review-protocol";
+import { extractTraceEventText } from "@dev.fast/trace-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactNode,
@@ -16,7 +17,6 @@ import { tokens } from "./tokens.stylex";
 import {
   type IndexedTraceTurnGroup,
   buildIndexedTraceTurns,
-  extractEventText,
 } from "./trace-document";
 import { findScrollContainer } from "./trace-scroll-anchor";
 
@@ -141,13 +141,13 @@ export function rulerPreview(
   turn: IndexedTraceTurnGroup | undefined,
 ): { title: string; snippet: string } | null {
   if (!turn?.user) return null;
-  const title = collapseWhitespace(extractEventText(turn.user.event));
+  const title = collapseWhitespace(extractTraceEventText(turn.user.event));
 
   if (!title) return null;
   let snippet = "";
 
   for (const item of turn.final) {
-    snippet = collapseWhitespace(extractEventText(item.event));
+    snippet = collapseWhitespace(extractTraceEventText(item.event));
 
     if (snippet) break;
   }

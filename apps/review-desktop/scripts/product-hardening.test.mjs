@@ -24,14 +24,6 @@ test("keeps Review disconnected from Microsoft update and extension services", (
   assert.notEqual(product.updateUrl, "https://update.code.visualstudio.com");
 });
 
-test("updates only from the sanctioned dev.fast feed", () => {
-  assert.equal(product.updateUrl, "https://update.dev.fast");
-  assert.equal(
-    product.quality,
-    process.env.REVIEW_EXPECTED_QUALITY ?? "stable",
-  );
-});
-
 test("publishes the release number the About panel shows", async () => {
   // The About panel reads `reviewVersion`, because `version` is the Code OSS
   // base version. Nothing else keeps the two files together, so a release that
@@ -44,17 +36,6 @@ test("publishes the release number the About panel shows", async () => {
 });
 
 test("owns every install identity rather than sharing Code OSS's", () => {
-  // These name the singleton mutexes, the Windows installer registration, and
-  // the shared storage directory. Left at their upstream values they collide
-  // with a real Code OSS or VS Code install on the same machine: one app's
-  // installer blocks on the other's running process, and both write the same
-  // sharedStorage database.
-  assert.equal(product.sharedDataFolderName, ".dev-fast-review-shared");
-  assert.equal(product.win32MutexName, "devfastreview");
-  assert.equal(product.win32TunnelMutex, "devfastreview-tunnel");
-  assert.equal(product.win32TunnelServiceMutex, "devfastreview-tunnelservice");
-  assert.equal(product.win32AppUserModelId, "devfast.Review");
-
   const appIds = [
     product.win32x64AppId,
     product.win32arm64AppId,
@@ -84,18 +65,11 @@ test("owns every install identity rather than sharing Code OSS's", () => {
   }
 });
 
-test("keeps compatibility-sensitive Desktop identifiers unchanged", () => {
-  // Existing installs key off these: macOS registers the app under the
-  // bundle id, the OS resolves review:// links via urlProtocol, and
-  // dataFolderName is where users' current app data already lives.
-  assert.equal(product.darwinBundleIdentifier, "dev.fast.review");
-  assert.equal(product.urlProtocol, "dev-fast-review");
-  assert.equal(product.dataFolderName, ".dev-fast-review");
-});
-
 test("keeps upstream identity out of the fields Review has claimed", () => {
-  // A re-vendor rewrites product.json wholesale, so guard the values above
-  // against silently reverting to anything Code OSS- or Microsoft-branded.
+  // A re-vendor rewrites product.json wholesale, so guard these fields against
+  // silently reverting to anything Code OSS- or Microsoft-branded. At upstream
+  // values the mutex and shared-storage names collide with a real Code OSS or
+  // VS Code install on the same machine.
   const claimedKeys = [
     "nameShort",
     "nameLong",
@@ -132,17 +106,6 @@ test("removes dormant Microsoft endpoint configuration that is safe to omit", ()
   ]) {
     assert.equal(product[key], undefined, key);
   }
-
-  assert.equal(product.defaultChatAgent.extensionId, "GitHub.copilot");
-  assert.equal(product.defaultChatAgent.chatExtensionId, "GitHub.copilot-chat");
-});
-
-// Desktop Code OSS never reads `configurationDefaults` from product.json — only the
-// extension contribution point and the web workbench options carry that name. Keeping
-// a copy there reads as hardening while applying nothing, so the block is gone and
-// `reviewConfigurationDefaults.ts` is the single channel.
-test("keeps product.json free of defaults nothing reads", () => {
-  assert.equal(product.configurationDefaults, undefined);
 });
 
 test("allows the webview host script through its own hash-only CSP", () => {

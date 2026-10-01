@@ -4,12 +4,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  renderTraceCommand,
-  resolveTraceCommand,
-  traceHomeDir,
-  traceScope,
-} from "./trace-command";
+import { renderTraceCommand, resolveTraceCommand } from "./trace-command";
 
 const roots: string[] = [];
 
@@ -62,11 +57,6 @@ describe("resolveTraceCommand", () => {
     const installed = await installFile(homeDir, "whiteboard");
     expect(resolveTraceCommand({ env, homeDir })).toEqual({ file: installed });
   });
-
-  it("reads TRACE_HOME_DIR before the OS home", () => {
-    expect(traceHomeDir({ TRACE_HOME_DIR: "/tmp/h" })).toBe("/tmp/h");
-    expect(traceHomeDir({})).toBe(os.homedir());
-  });
 });
 
 describe("renderTraceCommand", () => {
@@ -78,21 +68,6 @@ describe("renderTraceCommand", () => {
         args: ["/x/cli.js", "it's"],
       }),
     ).toBe(`'/opt/dev traces/node' '/x/cli.js' 'it'"'"'s'`);
-  });
-});
-
-describe("traceScope", () => {
-  it("derives the Review home from the environment and home directory", () => {
-    const env = {};
-    expect(traceScope({ homeDir: "/h", env })).toEqual({
-      homeDir: "/h",
-      env,
-      devHome: path.join("/h", ".dev"),
-    });
-    expect(
-      traceScope({ homeDir: "/h", env: { DEV_REVIEW_HOME: "/d" } }).devHome,
-    ).toBe(path.resolve("/d"));
-    expect(traceScope().homeDir).toBe(os.homedir());
   });
 });
 

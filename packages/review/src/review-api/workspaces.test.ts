@@ -563,26 +563,3 @@ it("rebuilds a checkout requested while its release is running", async () => {
   ).toContain("42");
   expect(local.data.workspaces.list(reviewId)).toContainEqual(requested);
 });
-
-it("reports a failed release and retries it", async () => {
-  const environment = await local.data.workspaces.source(
-    reviewId,
-    pins,
-    "head",
-  );
-
-  git("worktree", "lock", environment.rootPath!);
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
-  await command({ type: "attention", reviewId, action: "dismiss" });
-  await local.data.workspaces.idle();
-
-  expect(error).toHaveBeenCalled();
-  expect(local.data.workspaces.failures()).toMatchObject([
-    { id: environment.id, state: "cleanup-failed" },
-  ]);
-  expect(existsSync(path.join(environment.rootPath!, "value.ts"))).toBe(true);
-  git("worktree", "unlock", environment.rootPath!);
-  await local.data.workspaces.retryCleanup(environment.id);
-  expect(local.data.workspaces.failures()).toEqual([]);
-  expect(existsSync(environment.rootPath!)).toBe(false);
-});

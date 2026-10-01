@@ -224,29 +224,6 @@ it("uploads on open for a signed-in user, retries after a failure, and copies th
   delete (document as Partial<Document>).execCommand;
 });
 
-it("shows the uploading state until the upload resolves", async () => {
-  let release: (() => void) | undefined;
-
-  const harness = mount({
-    signedIn: true,
-    holdPublish: new Promise<void>((resolve) => {
-      release = resolve;
-    }),
-  });
-
-  const { container } = harness;
-
-  await harness.render(1);
-  await harness.click("Share review");
-  await harness.settle();
-  expect(container.textContent).toContain("Uploading…");
-  expect(container.querySelector("input")).toBeNull();
-  release?.();
-  await harness.settle();
-  expect(container.querySelector("input")?.value).toContain("#capability");
-  expect(container.textContent).not.toContain("Uploading");
-});
-
 it("knows the sign-in state before the popover opens and refreshes it on focus", async () => {
   const harness = mount({ signedIn: true });
   const { container } = harness;

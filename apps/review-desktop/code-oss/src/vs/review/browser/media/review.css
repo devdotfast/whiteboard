@@ -3,10 +3,8 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-/* The workbench grid reserves a bottom gutter (`gutterBottom` in
-   review/browser/workbench.ts), so a strip of the workbench root stays exposed
-   below the editor. Without this rule it falls through to the stock
-   WORKBENCH_BACKGROUND (#252526 on dark) and reads as a band under the canvas. */
+/* Wherever the workbench root shows around the parts, it reads as the editor
+   rather than the stock WORKBENCH_BACKGROUND (#252526 on dark). */
 .monaco-workbench.review-workbench {
   background: var(--vscode-editor-background);
 }
@@ -341,25 +339,24 @@
    --------------------------------------------------------------------------- */
 
 .monaco-workbench.review-workbench {
-  /* Each pill color mixes over the tab-strip background, so a theme change
-     carries into the pill. */
-  /* Whiteboard: the active tab is a board-colored pill with a hairline, the
-     same surface and rule the canvas uses, so the tab reads as a piece of the
-     board lifted onto the tray. No drop shadow in either theme. */
-  --review-tab-fill: var(--vscode-editor-background);
-  --review-tab-border: var(--vscode-panel-border);
+  /* Dark boards are darker than the tray, so the active pill mixes lighter. */
+  --review-tab-fill: color-mix(
+    in srgb,
+    #ffffff 8%,
+    var(--vscode-editorGroupHeader-tabsBackground)
+  );
+  --review-tab-border: var(--vscode-editorWidget-border);
   --review-tab-hover-fill: color-mix(
     in srgb,
     #ffffff 4%,
     var(--vscode-editorGroupHeader-tabsBackground)
   );
   --review-tab-separator: var(--vscode-panel-border);
-  --review-tab-shadow: none;
   --review-chrome-font: "Geist Mono", ui-monospace, SFMono-Regular, Menlo,
     monospace;
 }
 
-/* The light themes use weaker mixes, so the pill stays subtle. */
+/* Light themes: a board-colored pill. */
 .monaco-workbench.review-workbench.vs,
 .monaco-workbench.review-workbench.hc-light {
   --review-tab-fill: var(--vscode-editor-background);
@@ -369,8 +366,6 @@
     #ffffff 40%,
     var(--vscode-editorGroupHeader-tabsBackground)
   );
-  --review-tab-separator: var(--vscode-panel-border);
-  --review-tab-shadow: none;
 }
 
 /* 28px pill + 6px above + 6px below = the 40px row. EditorTabsControl reports
@@ -489,7 +484,6 @@ body
   display: none;
 }
 
-/* The raised pill. The first shadow is the 1px outline. */
 body
   .monaco-workbench.review-workbench
   .part.editor
@@ -499,9 +493,7 @@ body
   .tabs-container
   > .tab.active {
   background-color: var(--review-tab-fill);
-  box-shadow:
-    inset 0 0 0 1px var(--review-tab-border),
-    var(--review-tab-shadow);
+  box-shadow: inset 0 0 0 1px var(--review-tab-border);
 }
 
 body

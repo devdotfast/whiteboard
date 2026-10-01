@@ -16,7 +16,6 @@ import {
   type LensStores,
   type ResolvedOperation,
   databaseC4Snapshot,
-  databaseTourStopDetail,
   initialDatabaseC4ExpandedNodeIds,
   lensTarget,
   seedDatabaseC4DefaultExpandedNodeIds,
@@ -647,26 +646,5 @@ describe("database lens operation highlighting", () => {
       writeAudit: "inactive",
       refreshCache: "inactive",
     });
-  });
-});
-
-describe("database lens guided tour steps", () => {
-  it("keeps tour stop detail visible when the operation anchor omits detail", () => {
-    expect(
-      databaseTourStopDetail({
-        useCaseLabel: "Publish review",
-        operationLabel: "write submitted status",
-      }),
-    ).toBe("Publish review: write submitted status");
-  });
-
-  it("prefers operation anchor detail when present", () => {
-    expect(
-      databaseTourStopDetail({
-        useCaseLabel: "Publish review",
-        operationLabel: "write submitted status",
-        anchorDetail: "Persist the submitted review event.",
-      }),
-    ).toBe("Persist the submitted review event.");
   });
 });

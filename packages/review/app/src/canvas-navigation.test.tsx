@@ -19,6 +19,10 @@ import {
   reviewViewStateKey,
 } from "./review-view-state";
 
+// jsdom has no Element.scrollTo, and a diagram tour scrolls its active stop
+// into view on the next frame.
+HTMLElement.prototype.scrollTo = () => {};
+
 let store: ReviewStore, directory: string;
 
 let canvas: ReturnType<typeof mount> | undefined;
@@ -266,6 +270,76 @@ it("reopens a stored fullscreen tour only while its diagram is in the document",
   expect(readPersistedReviewViewState(bridge.config)).not.toHaveProperty(
     "overlayTour",
   );
+});
+
+it("keeps a flow diagram's tour in the canvas navigation", async () => {
+  const review = await command({
+    type: "create",
+    title: "Flow review",
+    pins: { repositoryId: "repo", base: "base", head: "head" },
+  });
+
+  await command({
+    type: "edit",
+    reviewId: review.reviewId,
+    edit: {
+      type: "insert",
+      content: {
+        type: "flow_diagram",
+        title: "Queue an order",
+        nodes: [{ key: "start", label: "Start" }],
+        edges: [],
+      },
+    },
+  });
+
+  const app = new Hono();
+  app.route("/reviews-api", createReviewApi(store));
+  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+
+  const bridge = testReviewBridge(
+    {},
+    { request: async (url, init) => app.request(url, init) },
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+
+  const open = async () => {
+    await act(async () => canvas?.dispose());
+    await act(async () => {
+      canvas = mount(container, {
+        kind: "api",
+        reviewId: review.reviewId,
+        bridge,
+      });
+    });
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(
+          container.querySelector(".review-document .flow-diagram"),
+        ).toBeTruthy(),
+      );
+    });
+  };
+
+  const overlay = () => container.querySelector(".diagram-tour-overlay");
+
+  await open();
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Expand diagram"]')!
+      .click(),
+  );
+  expect(overlay()).toBeTruthy();
+  expect(readPersistedReviewViewState(bridge.config)).toMatchObject({
+    overlayTour: { kind: "flow" },
+  });
+
+  await open();
+  expect(overlay()).toBeTruthy();
+  await act(async () => tab(container, "Commits")!.click());
+  expect(overlay()).toBeNull();
 });
 
 it("resumes a commit diff with its scope", async () => {

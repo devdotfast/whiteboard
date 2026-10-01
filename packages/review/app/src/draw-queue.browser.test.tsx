@@ -5,7 +5,7 @@ import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ApiDocument } from "./api-document";
-import { AuthoringActivityContext } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import type { AuthoringCursor } from "./authoring-cursor";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
@@ -203,32 +203,6 @@ it("traces a new flow node, then fills it, with the courier on it, and settles",
 
   // The courier is still on the node once the queue is empty.
   await expectCourierOn('[data-review-unit-id="n2"]');
-});
-
-it("stands on an edit already on the board when the reader arrives, drawing nothing", async () => {
-  await render({ ...insert("b1"), source: "standing" });
-  expect(motion('[data-review-node-id="b1"]')).toBeUndefined();
-  await expectCourierOn('[data-review-node-id="b1"]');
-  expect(motion('[data-review-node-id="b1"]')).toBeUndefined();
-
-  // The agent's next edit is drawn as usual.
-  await render(insert("b2"));
-  expect(motion('[data-review-node-id="b2"]')).toBe("landing");
-});
-
-it("keeps a queued block unseen until its turn, then lands it", async () => {
-  await render(insert("b1"));
-  expect(motion('[data-review-node-id="b1"]')).toBe("landing");
-
-  // b2 arrives while b1 is still landing: it waits, hidden.
-  await render(insert("b2"));
-  expect(motion('[data-review-node-id="b2"]')).toBe("queued");
-
-  await manualClock.advance(680);
-  expect(motion('[data-review-node-id="b2"]')).toBe("landing");
-  expect(motion('[data-review-node-id="b1"]')).toBeUndefined();
-  await manualClock.advance(680);
-  expect(motion('[data-review-node-id="b2"]')).toBeUndefined();
 });
 
 it("holds the attention ring on a focused block until the next edit lands", async () => {

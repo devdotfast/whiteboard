@@ -17,6 +17,7 @@ import { useRightPanelResize } from "./side-panel-resizer";
 import { withClass } from "./stylex-props";
 import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
+import { useCanvasScrollLock } from "./use-canvas-scroll-lock";
 
 /**
  * Fullscreen guided tour shell shared by every diagram kind: the inline
@@ -128,23 +129,10 @@ export function useDiagramTourShell(open: boolean, onClose: () => void) {
 
     window.addEventListener("keydown", onKeyDown);
 
-    // Lock the canvas scroller (not document.body: the canvas composes into
-    // the host DOM, so the element that actually scrolls the review is the
-    // view region).
-    const scroller = document.querySelector<HTMLElement>(
-      ".review-view-region--review",
-    );
-
-    const originalOverflow = scroller?.style.overflow ?? "";
-
-    if (scroller) scroller.style.overflow = "hidden";
-
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-
-      if (scroller) scroller.style.overflow = originalOverflow;
-    };
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose, open]);
+
+  useCanvasScrollLock(open);
 
   return { overlayRef, portalTarget, paneResize };
 }

@@ -624,26 +624,6 @@ export function elideByKeep(
   return segments;
 }
 
-export function extractEventText(
-  event: ReviewAgentTraceEvent | undefined,
-): string {
-  if (!event) return "";
-
-  if (event.kind === "user") return event.text;
-
-  if (event.kind === "assistant") return event.markdown;
-
-  if (event.kind === "tool") {
-    return [event.title, event.command, event.input, event.output]
-      .filter(Boolean)
-      .join(" ");
-  }
-
-  if (event.kind === "separator") return event.label;
-
-  return "";
-}
-
 export function ElidedMessage({
   event,
   keep,

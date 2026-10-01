@@ -31,6 +31,15 @@ type LinkRenderer = (href: string, children: ReactNode) => ReactNode;
 
 const DocumentLink = createContext<LinkRenderer | undefined>(undefined);
 
+/** Renders inline code another way, given the code element it would be
+ * (with more style, if asked), or leaves it as that element with undefined. */
+type CodeRenderer = (
+  value: string,
+  code: (xstyle?: stylex.StyleXStyles) => ReactElement,
+) => ReactNode;
+
+const InlineCodeRenderer = createContext<CodeRenderer | undefined>(undefined);
+
 /** Whether a remote image may be fetched and shown where it was authored. */
 const RemoteImages = createContext(false);
 
@@ -44,6 +53,8 @@ const TaskToggle = createContext<((item: MarkdownNode) => void) | undefined>(
 interface RenderContext {
   chat: boolean;
   highlightQuote?: string;
+  /** Restyles a chat message's inline code, as on a tray. */
+  codeXstyle?: stylex.StyleXStyles;
 }
 
 const documentContext: RenderContext = { chat: false };
@@ -51,20 +62,31 @@ const documentContext: RenderContext = { chat: false };
 export function AgentMarkdown({
   source,
   xstyle,
+  codeXstyle,
   highlightQuote,
+  renderLink,
+  renderInlineCode,
 }: {
   source: string;
   xstyle?: stylex.StyleXStyles;
+  /** Restyles inline code, as on a tray. */
+  codeXstyle?: stylex.StyleXStyles;
   highlightQuote?: string;
+  renderLink?: LinkRenderer;
+  renderInlineCode?: CodeRenderer;
 }): ReactElement {
   const { body, footnotes } = splitFootnotes(parseMarkdown(source));
-  const context = { chat: true, highlightQuote };
+  const context = { chat: true, highlightQuote, codeXstyle };
 
   return (
-    <div {...stylex.props(chat.root, xstyle)}>
-      {renderMarkdownChildren(body, "root", context)}
-      {renderFootnotes(footnotes, "root", context)}
-    </div>
+    <DocumentLink.Provider value={renderLink}>
+      <InlineCodeRenderer.Provider value={renderInlineCode}>
+        <div {...stylex.props(chat.root, xstyle)}>
+          {renderMarkdownChildren(body, "root", context)}
+          {renderFootnotes(footnotes, "root", context)}
+        </div>
+      </InlineCodeRenderer.Provider>
+    </DocumentLink.Provider>
   );
 }
 
@@ -230,6 +252,7 @@ function renderMarkdownNode(
   paragraph?: stylex.StyleXStyles,
 ): ReactNode {
   const { chat: inChat, highlightQuote } = context;
+  const codeStyle = inChat ? [chat.code, context.codeXstyle] : doc.code;
 
   switch (node.type) {
     case "root":
@@ -283,16 +306,14 @@ function renderMarkdownNode(
     case "inlineCode":
       if (highlightQuote) {
         return (
-          <code key={key} {...stylex.props(inChat ? chat.code : doc.code)}>
+          <code key={key} {...stylex.props(codeStyle)}>
             <HighlightedText text={node.value ?? ""} quote={highlightQuote} />
           </code>
         );
       }
 
       return (
-        <code key={key} {...stylex.props(inChat ? chat.code : doc.code)}>
-          {node.value ?? ""}
-        </code>
+        <InlineCode key={key} value={node.value ?? ""} xstyle={codeStyle} />
       );
     case "code":
       return (
@@ -577,6 +598,22 @@ function MarkdownImage({ url, alt }: { url: string; alt: string }): ReactNode {
 
   // Chat has no store to resolve an image against, so its alt text stands in.
   return alt ? <em>{alt}</em> : null;
+}
+
+function InlineCode({
+  value,
+  xstyle,
+}: {
+  value: string;
+  xstyle: stylex.StyleXStyles;
+}): ReactElement {
+  const code = (more?: stylex.StyleXStyles) => (
+    <code {...stylex.props(xstyle, more)}>{value}</code>
+  );
+
+  const custom = useContext(InlineCodeRenderer)?.(value, code);
+
+  return custom === undefined ? code() : <>{custom}</>;
 }
 
 function MarkdownLink({

@@ -1,9 +1,9 @@
 import { courierMotion } from "@canvas/courier-motion.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
-import type { ActivitySnapshot } from "@review/review-api/activity";
 import * as stylex from "@stylexjs/stylex";
-import { createContext, useContext, useState } from "react";
+import { useContext, useState } from "react";
 
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import { scopeLive } from "./authoring-cursor";
 import {
   AuthoringCursorContext,
@@ -18,10 +18,6 @@ import { useReviewRoots } from "./review-root-context";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { useTooltip } from "./use-tooltip";
-
-export const AuthoringActivityContext = createContext<
-  ActivitySnapshot | "unknown" | undefined
->(undefined);
 
 /**
  * The top-bar badge: the mini courier and what the agent is doing. While an

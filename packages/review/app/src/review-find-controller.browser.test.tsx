@@ -5,7 +5,7 @@ import type {
 import * as stylex from "@stylexjs/stylex";
 import { act, useLayoutEffect, useMemo, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 import { scopeReviewCanvasCss } from "../desktop-css-scope";
 import { documentStyles } from "./document-styles";
@@ -36,8 +36,6 @@ const cx = (...styles: stylex.StyleXArray<stylex.CompiledStyles | false>[]) =>
 
 const findCount = (container: HTMLElement) =>
   container.querySelector('[role="search"] [aria-live]');
-
-beforeEach(() => {});
 
 afterEach(async () => {
   await act(async () => root?.unmount());
@@ -125,38 +123,33 @@ it("ignores results from an older query generation", async () => {
   expect(findCount(container)?.textContent).toBe("1 of 3");
 });
 
-it("uses equal action controls and describes every Find option", async () => {
+it("searches editors once for a query typed in quick succession", async () => {
+  const first = findHandle();
+  const second = findHandle();
   const container = document.createElement("div");
   document.body.append(container);
   const host = createReviewFindHost();
   root = createRoot(container);
   await act(async () => {
-    root?.render(<FindHarness host={host} handles={[findHandle()]} />);
+    root?.render(<FindHarness host={host} handles={[first, second]} />);
   });
   await act(async () => {
-    expect(host.showFind()).toBe(true);
+    host.showFind();
   });
 
-  const actions = [
-    button(container, "Previous Match"),
-    button(container, "Next Match"),
-    button(container, "Close Find"),
-  ];
+  for (const text of ["A", "Al", "Alp", "Alph", "Alpha"]) {
+    await setInput(container, text);
+  }
 
-  expect(
-    actions.map((action) =>
-      action.querySelector("svg")?.getAttribute("viewBox"),
-    ),
-  ).toEqual(["0 0 16 16", "0 0 16 16", "0 0 16 16"]);
-  expect(button(container, "Match Case").title).toContain(
-    "uppercase and lowercase",
-  );
-  expect(button(container, "Match Whole Word").title).toContain(
-    "complete words only",
-  );
-  expect(button(container, "Use Regular Expression").title).toContain(
-    "regular expression",
-  );
+  await vi.waitFor(() => {
+    expect(findCount(container)?.textContent).toBe("1 of 4");
+  });
+
+  for (const handle of [first, second]) {
+    expect(handle.setFindQuery.mock.calls.map(([query]) => query.text)).toEqual(
+      ["Alpha"],
+    );
+  }
 });
 
 it("keeps late editor results from reviving a closed search", async () => {

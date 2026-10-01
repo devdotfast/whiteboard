@@ -26,7 +26,7 @@ import {
 import { retainedTrace } from "./api-trace";
 import { App } from "./App";
 import type { RenderedReviewDocument } from "./App";
-import { AuthoringActivityContext } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import {
   type AuthoringCursor,
   type CursorMemory,
@@ -488,19 +488,16 @@ const CanvasDocument = memo(function CanvasDocument({
 
   return (
     <App
-      documentState={{ state: "ready", document }}
-      softwareMapState={{
-        state: "ready",
-        softwareMap: {
-          head:
-            [...data.maps.values()].find(
-              (map) => map.pinnedData.side === "head",
-            ) ?? null,
-          base:
-            [...data.maps.values()].find(
-              (map) => map.pinnedData.side === "base",
-            ) ?? null,
-        },
+      document={document}
+      softwareMap={{
+        head:
+          [...data.maps.values()].find(
+            (map) => map.pinnedData.side === "head",
+          ) ?? null,
+        base:
+          [...data.maps.values()].find(
+            (map) => map.pinnedData.side === "base",
+          ) ?? null,
       }}
       softwareMapEnabled={softwareMapEnabled && data.maps.size > 0}
       // A document without pins of its own has no change range: the Diff and

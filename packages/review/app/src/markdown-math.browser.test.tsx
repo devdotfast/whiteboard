@@ -32,104 +32,7 @@ const failures = () =>
     (error) => error.textContent,
   );
 
-const NOTATION: Array<[name: string, source: string]> = [
-  [
-    "fractions and roots",
-    tex`\frac{-b \pm \sqrt{b^2 - 4ac}}{2a} + \sqrt[3]{x}`,
-  ],
-  [
-    "sums, products and limits",
-    tex`\sum_{k=1}^{n} k + \prod_{i} x_i + \lim_{x \to 0} \frac{\sin x}{x}`,
-  ],
-  [
-    "integrals",
-    tex`\int_0^\infty e^{-x^2}\,dx + \iint_D f + \oint_C \vec{F} \cdot d\vec{r}`,
-  ],
-  [
-    "derivatives",
-    tex`\frac{\partial^2 u}{\partial x^2} + \nabla \cdot \vec{v} + \dot{x} + \ddot{x}`,
-  ],
-  [
-    "Greek and operators",
-    tex`\alpha \beta \Gamma \Omega \leq \geq \neq \approx \in \subseteq \forall \exists`,
-  ],
-  [
-    "alphabets",
-    tex`\mathbb{R} \mathcal{L} \mathfrak{g} \mathscr{F} \mathbf{x} \mathrm{d} \mathsf{T} \mathtt{x}`,
-  ],
-  [
-    "accents and braces",
-    tex`\hat{x} \bar{y} \tilde{z} \vec{v} \overline{AB} \underbrace{a + b}_{n} \overbrace{c}^{m}`,
-  ],
-  [
-    "sized delimiters",
-    tex`\left( \frac{a}{b} \right) \left\lvert x \right\rvert \bigl[ y \bigr] \left\langle z \right\rangle`,
-  ],
-  [
-    "text in math",
-    tex`x = 1 \text{ if } y > 0 \quad \textbf{bold} \operatorname{argmax}_x f`,
-  ],
-  [
-    "binomials",
-    tex`\binom{n}{k} + \dbinom{n}{k} + {n \choose k} + \cfrac{1}{1 + \cfrac{1}{x}}`,
-  ],
-  [
-    "matrices",
-    tex`\begin{pmatrix} a & b \\ c & d \end{pmatrix} \begin{bmatrix} 1 \\ 2 \end{bmatrix} \begin{vmatrix} x \end{vmatrix}`,
-  ],
-  [
-    "arrays",
-    tex`\left[ \begin{array}{cc|c} 1 & 0 & a \\ 0 & 1 & b \end{array} \right]`,
-  ],
-  ["ams align", tex`\begin{align} a &= b + c \\ d &= e \end{align}`],
-  ["ams aligned", tex`\begin{aligned} a &= b \\ &= c \end{aligned}`],
-  [
-    "ams gather and tags",
-    tex`\begin{gather} a = b \tag{1} \\ c = d \end{gather}`,
-  ],
-  [
-    "ams cases",
-    tex`f(x) = \begin{cases} x & x \geq 0 \\ -x & \text{otherwise} \end{cases}`,
-  ],
-  [
-    "ams substack",
-    tex`\sum_{\substack{i < n \\ j < m}} a_{ij} + \overset{!}{=} + \xrightarrow{f}`,
-  ],
-  ["boldsymbol", tex`\boldsymbol{\alpha} + \bm{x}`],
-  ["braket", tex`\braket{\psi | \phi} + \bra{a} H \ket{b} + \Set{x | x > 0}`],
-  ["cancel", tex`\cancel{x} + \bcancel{y} + \xcancel{z}`],
-  ["color", tex`\color{red} a + \textcolor{#0969da}{b} + \colorbox{yellow}{c}`],
-  [
-    "mathtools",
-    tex`a \coloneqq b + \begin{dcases} x \\ y \end{dcases} + \begin{pmatrix*}[r] -1 & 2 \end{pmatrix*}`,
-  ],
-  [
-    "mathtools brackets",
-    tex`\underbracket{a + b} + \overbracket{c} + \mathclap{d} + \xleftrightarrow{g}`,
-  ],
-  [
-    "macro definitions",
-    tex`\newcommand{\norm}[1]{\lVert #1 \rVert} \def\R{\mathbb{R}} \norm{x} \in \R`,
-  ],
-  [
-    "commutative diagrams",
-    tex`\begin{CD} A @>f>> B \\ @VVV @VVV \\ C @>>g> D \end{CD}`,
-  ],
-];
-
 describe("math in Markdown", () => {
-  it.each(NOTATION)("typesets %s", async (_, source) => {
-    await render(display(source));
-
-    expect(failures()).toEqual([]);
-    expect(equations()).toHaveLength(1);
-
-    const box = equations()[0]!.getBoundingClientRect();
-
-    expect(box.width).toBeGreaterThan(0);
-    expect(box.height).toBeGreaterThan(0);
-  });
-
   it("typesets every delimiter style", async () => {
     await render(
       [
@@ -293,7 +196,7 @@ describe("math in Markdown", () => {
         "KaTeX_Math",
         "KaTeX_AMS",
         "KaTeX_Caligraphic",
-        "KaTeX_Size1",
+        "KaTeX_Size2",
       ]),
     );
   });

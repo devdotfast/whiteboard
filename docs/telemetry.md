@@ -450,9 +450,6 @@ independent controls choose what else is attached:
   default.
 - **Changed-file diffs used by CodePeeks**. On by default.
 
-**Agent session trace attachment is not available yet.** The dialog has no
-trace control, and reports never include agent traces.
-
 Whiteboard also captures a screenshot before the dialog opens and attaches it
 by default. The dialog shows a removable preview and accepts a replacement
 image by paste or drag.

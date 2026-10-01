@@ -10,9 +10,6 @@ import {
   createSequenceTourEntry,
   sequenceActiveMessageScrollTarget,
   sequenceActiveMessageScrollTopTarget,
-  sequenceMessageColor,
-  sequenceMessageHandleTop,
-  sequenceSelfMessagePath,
   sequenceView,
 } from "./diagrams";
 import { createTestReviewDefinitionSession } from "./review-definition-test-utils";
@@ -27,30 +24,6 @@ const view = (props: AuthoredSequenceProps) =>
   sequenceView(sequenceBlockFromProps(props));
 
 describe("sequence diagram guided tour", () => {
-  it("uses the same colours for sequence lines and arrowheads", () => {
-    expect(sequenceMessageColor(false)).toBe("var(--edge-muted)");
-    expect(sequenceMessageColor(true)).toBe("var(--accent)");
-  });
-
-  it("separates self-message handles and connects the loop to its target", () => {
-    const selfMessage = {
-      from: { id: "worker" },
-      to: { id: "worker" },
-    };
-
-    expect(sequenceMessageHandleTop(selfMessage, "source", 112)).toBe(112);
-    expect(sequenceMessageHandleTop(selfMessage, "target", 112)).toBe(136);
-    expect(
-      sequenceSelfMessagePath({
-        sourceX: 100,
-        sourceY: 112,
-        targetX: 100,
-        targetY: 136,
-        width: 400,
-      }),
-    ).toBe("M 100 112 H 154 V 136 H 100");
-  });
-
   it("turns anchored messages into ordered code-tour stops", async () => {
     const actors = defineActors({
       auth: { label: "Better Auth" },

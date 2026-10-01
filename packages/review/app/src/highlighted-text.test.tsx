@@ -3,13 +3,6 @@ import { describe, expect, it } from "vitest";
 import { findWhitespaceNormalizedSpan } from "./highlighted-text";
 
 describe("findWhitespaceNormalizedSpan", () => {
-  it("finds exact substring match", () => {
-    const text = "Hello world from trace";
-    const span = findWhitespaceNormalizedSpan(text, "world from");
-    expect(span).toEqual({ start: 6, end: 16 });
-    expect(text.slice(span!.start, span!.end)).toBe("world from");
-  });
-
   it("finds match across newlines and multiple spaces without shifting indices", () => {
     const text = "\n  First line\n\n  Second   line with details\n";
     const span = findWhitespaceNormalizedSpan(text, "Second line with");

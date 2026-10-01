@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -7,42 +7,16 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { readStoredReview, sealReviewCandidate } from "./review-home";
 import { createLegacyReviewDir } from "./review-test-utils";
-import { reviewVcs } from "./review-vcs";
 import { migrateStoredReview } from "./stored-review-migration";
 
 const roots: string[] = [];
 
 afterEach(async () => {
-  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
 });
-
-it.each(["document", "seal"])(
-  "keeps the record unchanged until %s validation succeeds",
-  async (failure) => {
-    const { review, original } = await fixture(failure === "document");
-
-    const failedSeal =
-      failure === "seal"
-        ? vi
-            .spyOn(reviewVcs, "seal")
-            .mockRejectedValue(new Error("candidate seal failed"))
-        : undefined;
-
-    await expect(
-      migrateStoredReview({ reviewDir: review.dir }),
-    ).rejects.toThrow(
-      failure === "document" ? "broken document" : "candidate seal failed",
-    );
-    expect(await readFile(path.join(review.dir, "review.json"), "utf8")).toBe(
-      original,
-    );
-    failedSeal?.mockRestore();
-  },
-);
 
 it("binds the legacy authoring session as the source session", async () => {
   const { review } = await fixture();
@@ -57,7 +31,7 @@ it("binds the legacy authoring session as the source session", async () => {
   });
 });
 
-async function fixture(broken = false) {
+async function fixture() {
   const home = await mkdtemp(path.join(tmpdir(), "review-source-migration-"));
   roots.push(home);
   vi.stubEnv("DEV_REVIEW_HOME", home);
@@ -89,25 +63,21 @@ async function fixture(broken = false) {
     path.join(bundle, "manifest.json"),
     JSON.stringify({ version: 1, routePath: "/", sourcePath: "review.mdx" }),
   );
-  await writeFile(
-    path.join(bundle, "review-document.js"),
-    broken
-      ? 'import { jsx } from "review-doc-runtime"; throw new Error("broken document");'
-      : legacyDocument,
-  );
+  await writeFile(path.join(bundle, "review-document.js"), legacyDocument);
   const revision = await sealReviewCandidate(review.dir, "Legacy document");
 
-  const original = JSON.stringify({
-    ...review.review,
-    schemaVersion: 3,
-    agentSession: "codex:original",
-    sourceSession: undefined,
-    presentedDocumentRevision: revision,
-  });
+  await writeFile(
+    path.join(review.dir, "review.json"),
+    JSON.stringify({
+      ...review.review,
+      schemaVersion: 3,
+      agentSession: "codex:original",
+      sourceSession: undefined,
+      presentedDocumentRevision: revision,
+    }),
+  );
 
-  await writeFile(path.join(review.dir, "review.json"), original);
-
-  return { review, original };
+  return { review };
 }
 
 const legacyDocument =

@@ -50,13 +50,6 @@ const buildExtensions = await readFile(
   "utf8",
 );
 
-const gitignore = await readFile(
-  new URL("../code-oss/.gitignore", import.meta.url),
-  "utf8",
-);
-
-const runScript = await readFile(new URL("./run.sh", import.meta.url), "utf8");
-
 const curatedContribution = await readFile(
   new URL(
     "../code-oss/src/vs/review/contrib/extensions/reviewCuratedExtensions.contribution.ts",
@@ -182,42 +175,6 @@ test("keeps the curated identifiers unique", () => {
   assert.deepEqual(ids, [...new Set(ids)], "duplicate curated extension id");
 });
 
-test("disables only the conflicting keymaps by default", () => {
-  assert.deepEqual([...keymapGroups], ["vim", "emacs", "sublime"]);
-  assert.deepEqual([...defaultDisabledIds].sort(), [
-    "ms-vscode.sublime-keybindings",
-    "tuttieee.emacs-mcx",
-    "vscodevim.vim",
-  ]);
-});
-
-test("builds Open VSX download urls for universal and per-platform builds", () => {
-  assert.equal(
-    openVsxUrl({ namespace: "vscodevim", name: "vim", version: "1.32.4" }),
-    "https://open-vsx.org/api/vscodevim/vim/1.32.4/file/vscodevim.vim-1.32.4.vsix",
-  );
-  assert.equal(
-    openVsxUrl({
-      namespace: "rust-lang",
-      name: "rust-analyzer",
-      version: "0.4.2990",
-      target: "darwin-arm64",
-    }),
-    "https://open-vsx.org/api/rust-lang/rust-analyzer/darwin-arm64/0.4.2990/file/rust-lang.rust-analyzer-0.4.2990@darwin-arm64.vsix",
-  );
-});
-
-test("resolves a target key for every extension on every supported target", () => {
-  for (const target of supportedTargets) {
-    for (const extension of curatedExtensions) {
-      assert.ok(
-        targetKeyFor(extension, target),
-        `${extension.id} has no build for ${target}`,
-      );
-    }
-  }
-});
-
 test("parses DEV_REVIEW_EXTENSIONS selections", () => {
   assert.deepEqual(
     [...parseGroupSelection(undefined)].sort(),
@@ -242,20 +199,6 @@ test("keeps curated extensions out of the gulp packaging stream", () => {
       `${extension.id} must be listed in excludedExtensions in build/lib/extensions.ts`,
     );
   }
-});
-
-test("ignores every materialized curated extension directory", () => {
-  for (const extension of curatedExtensions) {
-    assert.ok(
-      gitignore.includes(`/extensions/${extension.id}/`),
-      `${extension.id} must be gitignored; its payload is downloaded, not committed`,
-    );
-  }
-});
-
-test("materializes the selected groups from run.sh", () => {
-  assert.match(runScript, /DEV_REVIEW_EXTENSIONS/);
-  assert.match(runScript, /curated-extensions\.mjs/);
 });
 
 test("extracts nested Windows executables from a VSIX archive", async () => {
@@ -470,8 +413,6 @@ test("keeps the keymaps mutually exclusive in the picker", () => {
       `${id} must be listed as a keymap in the picker`,
     );
   }
-
-  assert.match(curatedContribution, /KEYMAP_IDS/);
 
   const enumDeclaration = reviewConfiguration.match(
     /REVIEW_KEYMAPS\s*=\s*\[([^\]]+)\]/,

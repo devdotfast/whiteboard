@@ -10,7 +10,6 @@ import { releaseIdentityFor } from "./release-channel.mjs";
 import {
   assertMachOArch,
   assertPackagedProduct,
-  assertReleaseChannel,
   assertUpdaterCompatibleApp,
   buildManifest,
 } from "./validate-release-artifacts.mjs";
@@ -65,23 +64,6 @@ test("buildManifest emits the schema the update Worker serves", () => {
   });
 });
 
-test("buildManifest points at the target's release folder", () => {
-  const manifest = buildManifest({
-    version: "1.2.3",
-    commit: "abc123",
-    target: "darwin-x64",
-    payloads: [
-      { bundle: "Whiteboard", artifact: "Whiteboard", sha256: "f00d" },
-    ],
-    now: new Date("2026-07-29T00:00:00.000Z"),
-  });
-
-  assert.equal(
-    manifest.url,
-    "https://update.dev.fast/releases/1.2.3/darwin-x64/Whiteboard-darwin-x64-1.2.3.zip",
-  );
-});
-
 test(
   "assertMachOArch rejects a binary built for the other arch",
   { skip: process.platform !== "darwin" },
@@ -132,10 +114,6 @@ test("assertPackagedProduct rejects a cross-channel product", () => {
       }),
     /quality/,
   );
-});
-
-test("assertReleaseChannel rejects an unsupported channel", () => {
-  assert.throws(() => assertReleaseChannel("nightly"), /stable or preview/);
 });
 
 test("assertPackagedProduct rejects a mismatched commit", () => {

@@ -19,6 +19,7 @@
   "dependencies": {
     "@dev.fast/review": "workspace:*",
     "@dev.fast/review-protocol": "workspace:*",
+    "@dev.fast/trace-protocol": "workspace:*",
     "@mr_mint/elkjs-libavoid": "0.5.0",
     "@speed-highlight/core": "1.2.15",
     "@stylexjs/stylex": "0.19.1",
@@ -30,7 +31,7 @@
     "react": "19.2.5",
     "react-dom": "19.2.5",
     "zod": "4.4.3",
-    "zustand": "4.5.7"
+    "zustand": "5.0.15"
   },
   "devDependencies": {
     "@stylexjs/unplugin": "0.19.1",
