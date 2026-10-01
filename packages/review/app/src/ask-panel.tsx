@@ -1982,7 +1982,12 @@ const menuStyles = stylex.create({
     display: "flex",
     flexDirection: "column",
     width: "300px",
+    // OpenCode offers every model of every provider: a long list scrolls
+    // in the menu rather than stretching the panel.
+    maxHeight: "min(420px, 60vh)",
     padding: "4px",
+    overflowY: "auto",
+    overscrollBehavior: "contain",
     whiteSpace: "normal",
   },
   choices: {
