@@ -132,7 +132,7 @@ test("installs the package, its launcher and ~/.local/bin/whiteboard; a second c
 	assert.equal(run(wrapper, "a b"), "ran a b");
 	const marker = JSON.parse(await readFile(join(dir, REVIEW_REMOTE_INSTALL_MARKER), "utf8"));
 	assert.deepEqual({ ...marker, installedAt: 0 }, { version: VERSION, integrity: f.pack.integrity, node: process.execPath, cli: result.cliPath, installedAt: 0 });
-	assert.deepEqual((await readdir(f.remoteRoot)).sort(), ["node", "versions"]);
+	assert.deepEqual((await readdir(f.remoteRoot)).sort(), ["versions"]);
 	assert.deepEqual(await f.versions(), [VERSION]);
 
 	f.progress.length = 0;
@@ -181,7 +181,7 @@ test("a package the remote downloaded that does not match fails the install and 
 
 	assert.deepEqual(f.progress, [{ step: "package", via: "remote-download" }]);
 	assert.deepEqual(await f.versions(), []);
-	assert.deepEqual((await readdir(f.remoteRoot)).sort(), ["node", "versions"]);
+	assert.deepEqual((await readdir(f.remoteRoot)).sort(), ["versions"]);
 });
 
 test("an existing ~/.local/bin/whiteboard that Desktop did not write is left alone", async (t) => {

@@ -145,7 +145,7 @@ export function prepareScript(context: ReviewRemoteInstallContext, input: { vers
 	const nodeDir = reviewRemoteNodeDir(context.home, input.nodeVersion);
 	return `${prelude(context)}own
 rm -rf "$root"/versions/*.part "$root"/node/*.part "$root"/install.lock.*.stale "$root"/install.lock.*.done
-mkdir -p "$root/versions" "$root/node" || fail cannot create "$root/versions"
+mkdir -p "$root/versions" || fail cannot create "$root/versions"
 ${markerCheck(context, input)}
 if [ -n "$complete" ]; then
 	say COMPLETE
