@@ -60,6 +60,7 @@ import { SearchService } from "../../../workbench/services/search/common/searchS
 import { ITextFileService } from "../../../workbench/services/textfile/common/textfiles.js";
 import { IWorkingCopyFileService } from "../../../workbench/services/workingCopy/common/workingCopyFileService.js";
 import { IWorkspaceEditingService } from "../../../workbench/services/workspaces/common/workspaceEditing.js";
+import { ILanguageStatusService } from "../../../workbench/services/languageStatus/common/languageStatusService.js";
 import { ReviewRemoteBulkEditService } from "./guard/reviewRemoteBulkEditService.js";
 import { ReviewRemoteCanonicalUriService } from "./guard/reviewRemoteCanonicalUriService.js";
 import { ReviewRemoteClipboardService } from "./guard/reviewRemoteClipboardService.js";
@@ -82,6 +83,7 @@ import { reviewRemoteFileService } from "./guard/reviewRemoteFileService.js";
 import { IReviewRemoteExtensions, IReviewRemoteRefusals, override, ownsRemoteResource, ReviewRemoteRefusals } from "./guard/reviewRemoteGuard.js";
 import { reviewRemoteLabelService } from "./guard/reviewRemoteLabelService.js";
 import { reviewRemoteLanguagePackService } from "./guard/reviewRemoteLanguagePackService.js";
+import { reviewRemoteLanguageStatusService } from "./guard/reviewRemoteLanguageStatusService.js";
 import { ReviewRemoteLoggerService } from "./guard/reviewRemoteLoggerService.js";
 import { reviewRemoteOpenerService } from "./guard/reviewRemoteOpenerService.js";
 import "./guard/reviewRemotePeers.js";
@@ -312,5 +314,6 @@ export function reviewRemoteScope(input: {
 		[INotificationService, reviewRemoteNotificationService(window.get(INotificationService), refusals)],
 		[IProgressService, reviewRemoteProgressService(window.get(IProgressService), refusals)],
 		[IExtensionStatusBarItemService, new SyncDescriptor(ReviewRemoteStatusBarItemService, [window.get(IExtensionStatusBarItemService)])],
+		[ILanguageStatusService, reviewRemoteLanguageStatusService(window.get(ILanguageStatusService), refusals)],
 	);
 }

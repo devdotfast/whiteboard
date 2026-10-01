@@ -48,6 +48,9 @@ import { IHostService } from "../../../workbench/services/host/browser/host.js";
 import { ITextFileService } from "../../../workbench/services/textfile/common/textfiles.js";
 import { IWorkingCopyFileService } from "../../../workbench/services/workingCopy/common/workingCopyFileService.js";
 import { IWebviewWorkbenchServiceId } from "./guard/reviewRemoteWebviewWorkbenchService.js";
+import { ReviewRemoteTextEditors } from "./guard/reviewRemoteTextEditors.js";
+import { ICodeEditorService } from "../../../editor/browser/services/codeEditorService.js";
+import { ILanguageStatusService } from "../../../workbench/services/languageStatus/common/languageStatusService.js";
 import {
 	ReviewRemoteWorkspace,
 	reviewRemoteAuthority,
@@ -179,6 +182,8 @@ test("a host's main-thread peers are created with the guarded services", async (
 	fake(ILoggerService, { createLogger: record("createLogger"), onDidChangeLogLevel: Event.None });
 	fake(ITextFileService, { files: {}, untitled: {} });
 	fake(IUriIdentityService, { asCanonicalUri: (uri: URI) => uri });
+	fake(ILanguageStatusService, { addStatus: record("addStatus") });
+	fake(ICodeEditorService, { listCodeEditors: () => [] });
 	for (const id of [IExtensionStatusBarItemService, INotificationService, IProgressService, IExtensionsWorkbenchService, IWorkbenchExtensionEnablementService, IModelService, IMarkerService, ITextModelService, IWorkingCopyFileService, IEditorGroupsService, IEditorService, IConfigurationService, IStorageService, ISecretStorageService, IWebviewWorkbenchServiceId, IWebviewViewService, ILabelService, IDecorationsService, IWorkspaceTrustRequestService, IRequestService, ILanguagePackService, ITelemetryService, IExtensionService, IWorkbenchEnvironmentService, IEnvironmentService, IBulkEditService] as ServiceIdentifier<unknown>[]) {
 		if (!window.has(id)) fake(id);
 	}
@@ -210,6 +215,10 @@ test("a host's main-thread peers are created with the guarded services", async (
 	await assert.rejects(peer(MainThreadDownloadService).$download(URI.parse("https://example.com/"), laptop), refused);
 	assert.equal(await peer(MainThreadBulkEdits).$tryApplyWorkspaceEdit({ value: { edits: [] } } as never), false);
 	await assert.rejects(peer(MainThreadLoggerService).$createLogger(URI.file("/Users/me/.zshrc")), refused);
+	await assert.rejects(peer(ReviewRemoteTextEditors).$tryShowTextDocument(laptop, {}), refused);
+	await assert.rejects(peer(ReviewRemoteTextEditors).$tryApplyEdits(), refused);
+	scope.invokeFunction((accessor) => accessor.get(ILanguageStatusService)).addStatus({ command: { id: "vscode.openFolder" } } as never);
 	assert.deepEqual(reached, [`readFile ${onA}`, `own copy ${onA}`, "open https://example.com/"]);
-	assert.ok(warnings.some((warning) => warning.includes("refused editing documents or files")));
+	for (const kind of ["editing documents or files", "opening editors outside this remote", "showing language status items"])
+		assert.ok(warnings.some((warning) => warning.includes(`refused ${kind}`)), kind);
 });

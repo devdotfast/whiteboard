@@ -23,6 +23,10 @@ import { ILabelService } from "../../../../platform/label/common/label.js";
 import { ICustomEditorLabelService } from "../../../../workbench/services/editor/common/customEditorLabelService.js";
 import { IModelService } from "../../../../editor/common/services/model.js";
 import { ILanguageService } from "../../../../editor/common/languages/language.js";
+import { ICodeEditorService } from "../../../../editor/browser/services/codeEditorService.js";
+import { IEditorService } from "../../../../workbench/services/editor/common/editorService.js";
+import { IEditorGroupsService } from "../../../../workbench/services/editor/common/editorGroupsService.js";
+import { ReviewRemoteTextEditors } from "./reviewRemoteTextEditors.js";
 
 function scope() {
 	return new InstantiationService(new ServiceCollection(
@@ -38,22 +42,35 @@ function scope() {
 		[ICustomEditorLabelService, {}],
 		[IModelService, {}],
 		[ILanguageService, {}],
+		[ICodeEditorService, {}],
+		[IEditorService, {}],
+		[IEditorGroupsService, {}],
 	), true);
 }
 
 function context(remoteAuthority: string | null) {
 	const set = new Map<string, unknown>();
-	const value = { remoteAuthority, getProxy: () => ({ $setVisibleChannel() { } }), set: (id: { sid: string }, instance: unknown) => set.set(id.sid, instance) };
+	const value = { remoteAuthority, getProxy: () => ({ $setVisibleChannel() { } }), set: (id: { sid: string }, instance: unknown) => (set.set(id.sid, instance), instance) };
 	return { context: value as unknown as IExtHostContext, set };
 }
 
-test("a remote host's commands, output, quick input and tree view peers are the guarded ones", () => {
+test("a remote host's commands, output, quick input, tree view and editor peers are the guarded ones", () => {
 	const { context: remote, set } = context("whiteboard+aaaa-1111");
 	scope().createInstance(ReviewRemoteGuardedPeers, remote).dispose();
 	assert.ok(set.get(MainContext.MainThreadCommands.sid) instanceof ReviewRemoteCommands);
 	assert.ok(set.get(MainContext.MainThreadOutputService.sid) instanceof ReviewRemoteOutputService);
 	assert.ok(set.get(MainContext.MainThreadQuickOpen.sid) instanceof ReviewRemoteQuickOpen);
 	assert.ok(set.get(MainContext.MainThreadTreeViews.sid) instanceof ReviewRemoteTreeViews);
+	assert.ok(set.get(MainContext.MainThreadTextEditors.sid) instanceof ReviewRemoteTextEditors);
+});
+
+test("upstream's documents customer setting its editor peer after the guard leaves the guarded one", () => {
+	const { context: remote, set } = context("whiteboard+aaaa-1111");
+	scope().createInstance(ReviewRemoteGuardedPeers, remote).dispose();
+	remote.set(MainContext.MainThreadTextEditors, { upstream: true } as never);
+	remote.set(MainContext.MainThreadDocuments, { upstream: true } as never);
+	assert.ok(set.get(MainContext.MainThreadTextEditors.sid) instanceof ReviewRemoteTextEditors);
+	assert.deepEqual(set.get(MainContext.MainThreadDocuments.sid), { upstream: true });
 });
 
 test("the window's own extension host keeps upstream's peers", () => {

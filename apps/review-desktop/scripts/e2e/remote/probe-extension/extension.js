@@ -43,6 +43,15 @@ function windowUri(scheme, fsPath) {
   return vscode.Uri.from({ scheme, path: fsPath });
 }
 
+// The window's editor on one of this remote's own files, if the check opens
+// one within 15 s: only those reach this extension host.
+async function ownEditor() {
+  for (let i = 0; i < 30 && !vscode.window.visibleTextEditors.length; i++)
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+  return vscode.window.visibleTextEditors[0];
+}
+
 function readConfig(context) {
   try {
     return JSON.parse(
@@ -320,6 +329,91 @@ async function run(context) {
       context.subscriptions.push(box);
 
       return "SENT (window check)";
+    },
+    log,
+  );
+
+  // 16-19. An editor on this remote's own file, opened by the check (the
+  // probe opens none): a decoration whose hover holds a trusted command: link
+  // and whose icons and CSS point elsewhere, then the edits and options a
+  // read-only review refuses. The live check inspects the window's editor.
+  const editor = await ownEditor();
+
+  if (editor) {
+    await observe(
+      "decoration with a trusted command: hover, a laptop icon and CSS",
+      () => {
+        const hover = new vscode.MarkdownString(
+          `wb probe hover [open](${openFolder})`,
+        );
+
+        hover.isTrusted = true;
+
+        const type = vscode.window.createTextEditorDecorationType({
+          gutterIconPath: windowUri("vscode-local", "/etc/hosts"),
+          backgroundColor:
+            "red; background-image: url(https://example.com/wb-probe.png)",
+          after: {
+            contentText: " wb probe after",
+            contentIconPath: vscode.Uri.parse(
+              "https://example.com/wb-probe.png",
+            ),
+          },
+        });
+
+        editor.setDecorations(type, [
+          { range: new vscode.Range(0, 0, 0, 1), hoverMessage: hover },
+        ]);
+        context.subscriptions.push(type);
+
+        return "SENT (window check)";
+      },
+      log,
+    );
+    await refuses(
+      "edit this remote's editor",
+      async () =>
+        `edit returned ${await editor.edit((edit) => edit.insert(new vscode.Position(0, 0), "wb-probe"))}`,
+      log,
+    );
+    await refuses(
+      "insertSnippet in this remote's editor",
+      async () =>
+        `returned ${await editor.insertSnippet(new vscode.SnippetString("wb-probe"))}`,
+      log,
+    );
+    await observe(
+      "set this remote's editor options",
+      () => {
+        editor.options = { tabSize: 7 };
+
+        return "SENT (window check)";
+      },
+      log,
+    );
+  } else {
+    log(
+      "decorations and edits in this remote's editor: SKIPPED (no editor on this remote's files)",
+    );
+  }
+
+  await observe(
+    "language status item with a command",
+    () => {
+      const item = vscode.languages.createLanguageStatusItem(
+        "wbProbe.status",
+        "*",
+      );
+
+      item.text = "wb probe status";
+      item.command = {
+        command: "vscode.openFolder",
+        title: "Open",
+        arguments: [vscode.Uri.file("/")],
+      };
+      context.subscriptions.push(item);
+
+      return "SENT (the window guard log)";
     },
     log,
   );
