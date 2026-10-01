@@ -420,24 +420,9 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         `The Whiteboard server in ${stateDir} (process ${serverPid}) runs in the foreground of \`whiteboard server start\`. Stop it there with Ctrl-C.`,
       );
 
-    try {
-      process.kill(serverPid, "SIGTERM");
-    } catch (error) {
-      // It exited between the health check and the signal.
-      if (
-        !(error instanceof Error && "code" in error && error.code === "ESRCH")
-      )
-        throw error;
-    }
-
-    // Shutdown force-closes open streams after 5 s.
-    for (let waited = 0; processIsAlive(serverPid); waited += 100) {
-      if (waited >= 10_000)
-        throw new Error(
-          `The Whiteboard server (process ${serverPid}) did not stop within 10 s.`,
-        );
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+    const { stopBackgroundServer } =
+      await import("./server/background-server.js");
+    await stopBackgroundServer(discovery);
 
     input.stdout.write(
       options.json
@@ -551,6 +536,10 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       .option(
         "--groups <groups>",
         "comma-separated optional extension groups the Desktop has enabled, such as go",
+      )
+      .option(
+        "--replace",
+        "stop a running server of another version that the CLI or Desktop started, and start this one",
       ),
     "plain",
   ).action(async (_options, command: Command) => {
@@ -558,6 +547,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       stateDir?: string;
       json?: boolean;
       groups?: string;
+      replace?: boolean;
     }>();
 
     const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
@@ -573,6 +563,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         env,
         stderr: input.stderr,
         groups: options.groups?.split(",").map((group) => group.trim()),
+        replace: options.replace,
       });
     } catch (error) {
       if (!options.json) throw error;

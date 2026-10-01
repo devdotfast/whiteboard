@@ -4,6 +4,7 @@ import { mkdir, open, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { processIsAlive } from "@dev.fast/trace-core";
 import { findReviewPackageRoot } from "@review/package-paths.js";
 import {
   type ReviewServerDiscovery,
@@ -66,6 +67,33 @@ export async function ensureBackgroundServer(
   throw new Error(
     `The Whiteboard server did not become ready${child.exited ? "" : ` within ${Math.round((input.timeoutMs ?? 15_000) / 1_000)} s; process ${child.pid} is still starting`}. The end of ${logPath}:\n${await logTail(logPath, logStart)}`,
   );
+}
+
+/**
+ * SIGTERMs a server the CLI or Desktop started and waits for it to exit.
+ * The caller has checked the pid answers for the recorded instance.
+ */
+export async function stopBackgroundServer(
+  discovery: Pick<ReviewServerDiscovery, "serverPid">,
+) {
+  const { serverPid } = discovery;
+
+  try {
+    process.kill(serverPid, "SIGTERM");
+  } catch (error) {
+    // It exited between the health check and the signal.
+    if (!(error instanceof Error && "code" in error && error.code === "ESRCH"))
+      throw error;
+  }
+
+  // Shutdown force-closes open streams after 5 s.
+  for (let waited = 0; processIsAlive(serverPid); waited += 100) {
+    if (waited >= 10_000)
+      throw new Error(
+        `The Whiteboard server (process ${serverPid}) did not stop within 10 s.`,
+      );
+    await delay(100);
+  }
 }
 
 interface ServerChild {

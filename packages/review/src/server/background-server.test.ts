@@ -251,6 +251,83 @@ it("attaches with one JSON line between the sentinels, and its token reaches the
   ).not.toContain(attach.token);
 }, 60_000);
 
+it("with --replace, stops a server of another version the CLI started and starts this one", async () => {
+  const old = await ensureBackgroundServer({ stateDir, env, cli: sourceCli });
+  const oldVersion = (await readReviewServerHealth(old.discovery))!.version;
+
+  const attach = await remoteAttach({
+    stateDir,
+    env: { ...env, ...(await fakeDiffr()) },
+    stderr: discard(),
+    cli: sourceCli,
+    replace: true,
+    version: "9.9.9",
+  });
+
+  expect(attach).toMatchObject({
+    startedServer: true,
+    replaced: true,
+    previousVersion: oldVersion,
+  });
+  expect(attach).not.toHaveProperty("incompatibleRunning");
+  expect(alive(old.discovery.serverPid)).toBe(false);
+  const discovery = (await readReviewServerDiscovery(stateDir))!;
+  expect(discovery.serverPid).not.toBe(old.discovery.serverPid);
+  expect(discovery.startedBy).toBe("desktop");
+}, 60_000);
+
+it("with --replace, leaves a server of another version a user started, and reports it", async () => {
+  const server = spawn(
+    sourceCli[0]!,
+    [
+      ...sourceCli.slice(1),
+      "server",
+      "start",
+      "--json",
+      "--state-dir",
+      stateDir,
+    ],
+    { env, stdio: ["ignore", "pipe", "pipe"] },
+  );
+
+  await readyLine(server);
+  const running = (await readReviewServerDiscovery(stateDir))!;
+
+  const attach = await remoteAttach({
+    stateDir,
+    env: { ...env, ...(await fakeDiffr()) },
+    stderr: discard(),
+    cli: sourceCli,
+    replace: true,
+    version: "9.9.9",
+  });
+
+  expect(attach).toMatchObject({
+    startedServer: false,
+    incompatibleRunning: {
+      version: (await readReviewServerHealth(running))!.version,
+      pid: running.serverPid,
+      startedBy: "user",
+    },
+  });
+  expect(attach).not.toHaveProperty("replaced");
+  expect(alive(running.serverPid)).toBe(true);
+}, 60_000);
+
+it("with --replace, keeps a server of the same version", async () => {
+  const diffr = await fakeDiffr();
+  const first = await cli(["remote", "attach", "--json", "--replace"], diffr);
+  const second = await cli(["remote", "attach", "--json", "--replace"], diffr);
+
+  expect(first.code).toBe(0);
+  const [started, kept] = [first, second].map((result) =>
+    JSON.parse(result.stdout.split("\n")[1]!),
+  );
+  expect(started).toMatchObject({ startedServer: true });
+  expect(kept).toMatchObject({ startedServer: false, token: started.token });
+  expect(kept).not.toHaveProperty("replaced");
+}, 60_000);
+
 it("prints a failed attach between the sentinels and exits non-zero", async () => {
   await writeFile(path.join(root, "file"), "");
 
