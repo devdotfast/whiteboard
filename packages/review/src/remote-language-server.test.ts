@@ -246,7 +246,7 @@ it("reports the download failure, not pending, when the detached install's lock 
   // Another attach holds the install lock for longer than one waits for it.
   const held = await withFileLock(
     serverFiles().installLock,
-    { retryMs: 100, staleMs: 60_000, timeoutMs: 1_000 },
+    { retryMs: 100, staleMs: 60_000, unownedGraceMs: 5_000, timeoutMs: 1_000 },
     () =>
       ensureRemoteLanguageServer({
         env,
@@ -258,12 +258,15 @@ it("reports the download failure, not pending, when the detached install's lock 
       }),
   );
 
-  expect(held.result).toEqual({
-    languageServer: null,
-    languageServerDetail: `Could not install the language extensions: golang.go: ${error}`,
-    languageGroups: [
-      { group: "go", installed: false, detail: `golang.go: ${error}` },
-    ],
+  expect(held).toEqual({
+    acquired: true,
+    result: {
+      languageServer: null,
+      languageServerDetail: `Could not install the language extensions: golang.go: ${error}`,
+      languageGroups: [
+        { group: "go", installed: false, detail: `golang.go: ${error}` },
+      ],
+    },
   });
 }, 30_000);
 
