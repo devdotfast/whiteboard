@@ -634,6 +634,67 @@ function HistoryDocument() {
   );
 }
 
+it("keeps a pin in the gutter beside its passage as the document narrows", async () => {
+  const session = testReviewSession();
+  const quote = "A paragraph passage";
+
+  const document_ = (
+    <MarkdownBlock
+      id="block-1"
+      source={`${quote}, long enough to wrap onto several lines once the document narrows to a column far slimmer than the prose width it starts at.`}
+    />
+  );
+
+  const [anchor] = await anchorsIn(document_, [{ words: quote }]);
+
+  vi.spyOn(session, "fetch").mockImplementation(async () =>
+    Response.json({ threads: [saved(quote, quote, anchor)] }),
+  );
+
+  const container = document.createElement("div");
+  container.style.width = "1100px";
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () =>
+    root.render(
+      <ReviewSessionProvider session={session}>
+        <ReviewPanelProvider>
+          <AskHistoryProvider>
+            <Document revision="1">{document_}</Document>
+          </AskHistoryProvider>
+        </ReviewPanelProvider>
+      </ReviewSessionProvider>,
+    ),
+  );
+
+  const pin = () => container.querySelector<HTMLElement>(".ask-mark-pin");
+  const paragraph = () => container.querySelector("p")!;
+
+  await vi.waitFor(async () => {
+    await frame();
+    expect(pin()).toBeTruthy();
+  });
+
+  const wide = pin()!.getBoundingClientRect();
+  const wideText = paragraph().getBoundingClientRect();
+
+  expect(wide.left).toBeGreaterThan(wideText.right);
+
+  container.style.width = "640px";
+  await frame();
+
+  const narrow = pin()!.getBoundingClientRect();
+  const text = paragraph().getBoundingClientRect();
+
+  expect(narrow.left).toBeLessThan(wide.left);
+  expect(narrow.left).toBeGreaterThan(text.right);
+  // Still level with the passage's first line.
+  expect(narrow.top - text.top).toBeCloseTo(wide.top - wideText.top, 0);
+
+  await act(async () => root.unmount());
+});
+
 it("scrolls to a history passage on hover, keyboard focus, and activation", async () => {
   const quote = "built concurrently";
 
