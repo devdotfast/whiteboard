@@ -161,15 +161,20 @@ export async function comparisonCoverage(
 
       if (event.type !== "file") continue;
 
-      if (event.error)
-        throw new Error(
-          `Cannot count ${event.file.rhs?.path ?? event.file.lhs?.path}: ${event.error.message}`,
-        );
-      const diff = event.diff;
       const path = (event.file.rhs ?? event.file.lhs)!.path;
 
       if (!remaining.delete(path))
         throw new Error(`Unexpected structural result: ${path}`);
+
+      if (event.error) {
+        if (event.error.code !== "unsupported_file_type")
+          throw new Error(`Cannot count ${path}: ${event.error.message}`);
+
+        if (!remaining.size) break;
+        continue;
+      }
+
+      const diff = event.diff;
 
       const previousPath =
         event.file.lhs?.path !== path ? event.file.lhs?.path : undefined;

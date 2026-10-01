@@ -2285,6 +2285,36 @@ it("preserves unchanged partial file coverage across pins and rejects stale writ
   ).toEqual([]);
 });
 
+it("still reports structural read failures", async () => {
+  const { reviewProgress } = await import("./review-progress.js");
+  const { reviewId } = await create();
+  const data = new LocalReviewData(store);
+  vi.spyOn(data, "resolveSource").mockImplementation(async (snapshot) => ({
+    snapshot,
+    pins: snapshot.pins!,
+  }));
+  vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
+    const file = { rhs: { path: "a.ts", oid: pins.head, mode: "100644" } };
+
+    yield {
+      type: "start",
+      version: 4,
+      lhs: { type: "revision", rev: pins.base },
+      rhs: { type: "revision", rev: pins.head },
+      files: [{ file, status: "added" }],
+    };
+    yield {
+      type: "file",
+      file,
+      error: { code: "read_failed", message: "unreadable" },
+    };
+    yield { type: "complete", succeeded: 0, failed: 1 };
+  });
+  await expect(
+    reviewProgress(store, data, store.read(reviewId)),
+  ).rejects.toThrow("Cannot count a.ts: unreadable");
+});
+
 it("textual coverage uses Git ranges without launching diffr", async () => {
   const { createReviewApi } = await import("./http.js");
   const { coverageProgress } = await import("@review/viewed-coverage.js");
