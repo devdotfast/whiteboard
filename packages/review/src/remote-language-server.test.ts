@@ -15,11 +15,7 @@ import { withFileLock } from "@dev.fast/trace-core";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
 import { remoteServerPaths } from "./remote-extensions.js";
-import {
-  ensureRemoteLanguageServer,
-  remoteLanguageServerFiles,
-  stopRemoteLanguageServer,
-} from "./remote-language-server.js";
+import { ensureRemoteLanguageServer } from "./remote-language-server.js";
 import {
   isolatedEnv,
   stopServersUnder,
@@ -43,7 +39,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await stopRemoteLanguageServer(env);
   await stopServersUnder(root);
   await rm(root, { recursive: true, force: true });
 });
@@ -67,7 +62,7 @@ it("starts the server on loopback with a private token, and a second call report
   expect(await text(port, "/version")).toBe(COMMIT);
   expect(await text(port, "/token")).toBe(connectionToken);
 
-  const { tokenFile, logFile } = remoteLanguageServerFiles(env);
+  const { tokenFile, logFile } = serverFiles();
   expect((await stat(tokenFile)).mode & 0o777).toBe(0o600);
   expect(await readFile(logFile, "utf8")).not.toContain(connectionToken);
   expect(
@@ -160,9 +155,7 @@ it("runs extensions ensure first, with the groups, and starts nothing when it fa
       "Could not install the language extensions: astral-sh.ty: Network error reaching open-vsx.org: ENETUNREACH",
     languageGroups: [{ group: "go", installed: false }],
   });
-  expect(
-    await stat(remoteLanguageServerFiles(env).runningFile).catch(() => null),
-  ).toBeNull();
+  expect(await stat(serverFiles().runningFile).catch(() => null)).toBeNull();
 });
 
 it("hands downloads that outlast the attach to one detached install, and reports pending until it is done", async () => {
@@ -221,7 +214,7 @@ it("hands downloads that outlast the attach to one detached install, and reports
     "remote extensions ensure --json --groups go\n",
   );
 
-  const { installLog } = remoteLanguageServerFiles(env);
+  const { installLog } = serverFiles();
   expect((await stat(installLog)).mode & 0o777).toBe(0o600);
 
   await stopServersUnder(root);
@@ -252,7 +245,7 @@ it("reports the download failure, not pending, when the detached install's lock 
 
   // Another attach holds the install lock for longer than one waits for it.
   const held = await withFileLock(
-    remoteLanguageServerFiles(env).installLock,
+    serverFiles().installLock,
     { retryMs: 100, staleMs: 60_000, timeoutMs: 1_000 },
     () =>
       ensureRemoteLanguageServer({
@@ -302,6 +295,20 @@ it("reports a server that exits at start with the end of its log", async () => {
     /did not start\. The end of .*server\.log:\ncannot start/,
   );
 });
+
+/** The files the module keeps in the server's data directory. */
+function serverFiles() {
+  const file = (name: string) =>
+    path.join(remoteServerPaths(env).serverDataDir, name);
+
+  return {
+    tokenFile: file("connection-token"),
+    logFile: file("server.log"),
+    runningFile: file("server.json"),
+    installLog: file("install.log"),
+    installLock: file("install.lock"),
+  };
+}
 
 /**
  * Stands in for server-main: reads the token file it is given, answers

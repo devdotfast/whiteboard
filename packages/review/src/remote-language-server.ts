@@ -6,7 +6,6 @@ import {
   open,
   readFile,
   rename,
-  rm,
   stat,
   writeFile,
 } from "node:fs/promises";
@@ -117,7 +116,7 @@ export interface EnsureRemoteLanguageServerInput {
 }
 
 /** Where the VS Code server keeps its token, pid, log and start lock. */
-export function remoteLanguageServerFiles(env: NodeJS.ProcessEnv) {
+function remoteLanguageServerFiles(env: NodeJS.ProcessEnv) {
   const { serverDataDir } = remoteServerPaths(env);
 
   return {
@@ -293,15 +292,6 @@ async function installDetached(
   );
 
   return outcome.acquired;
-}
-
-/** Stops the VS Code server this home started, if it still runs. */
-export async function stopRemoteLanguageServer(env: NodeJS.ProcessEnv) {
-  const files = remoteLanguageServerFiles(env);
-  const running = await readRunning(files.runningFile);
-
-  if (running) await stop(running);
-  await rm(files.runningFile, { force: true });
 }
 
 async function readCommit(root: string) {
