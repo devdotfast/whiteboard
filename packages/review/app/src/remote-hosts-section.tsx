@@ -141,16 +141,14 @@ export function RemoteHostsSection({
             </div>
             <div {...stylex.props(styles.rowControl, local.actions)}>
               {state?.declined ? (
-                <button
-                  type="button"
-                  {...stylex.props(styles.button)}
+                <Button
                   aria-label={`Install ${name}`}
                   onClick={() =>
                     void hosts.install(name).catch(() => undefined)
                   }
                 >
                   Install
-                </button>
+                </Button>
               ) : null}
               {state && RETRIED.has(state.state) ? (
                 <Button
