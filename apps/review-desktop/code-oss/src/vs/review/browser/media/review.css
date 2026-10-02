@@ -3,10 +3,8 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-/* The workbench grid reserves a bottom gutter (`gutterBottom` in
-   review/browser/workbench.ts), so a strip of the workbench root stays exposed
-   below the editor. Without this rule it falls through to the stock
-   WORKBENCH_BACKGROUND (#252526 on dark) and reads as a band under the canvas. */
+/* Wherever the workbench root shows around the parts, it reads as the editor
+   rather than the stock WORKBENCH_BACKGROUND (#252526 on dark). */
 .monaco-workbench.review-workbench {
   background: var(--vscode-editor-background);
 }
@@ -28,6 +26,26 @@
 
 .monaco-workbench.review-workbench.nomaineditorarea.hc-black {
   background-image: url("./review-letterpress-hc-dark.svg");
+}
+
+/* Monaco's scrollbars take the canvas pill (packages/review/app/src/styles.css).
+   The slider fills its 10px lane (the scrollable element's default, and the
+   editor.scrollbar.* sizes in reviewConfigurationDefaults.ts), and a transparent
+   border insets the paint to a 6px rounded pill, the same construction as the
+   canvas's ::-webkit-scrollbar-thumb. The stock hover and active rules reset
+   `background-clip` through their shorthand, which this rule outranks. */
+.monaco-workbench.review-workbench
+  .monaco-scrollable-element
+  > .scrollbar
+  > .slider {
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.monaco-workbench.review-workbench .monaco-scrollable-element > .scrollbar {
+  overflow: hidden;
 }
 
 /* KEEP IN SYNC WITH REVIEW_CHROME_HEIGHT in review/common/reviewChrome.ts. The
@@ -321,25 +339,24 @@
    --------------------------------------------------------------------------- */
 
 .monaco-workbench.review-workbench {
-  /* Each pill color mixes over the tab-strip background, so a theme change
-     carries into the pill. */
-  /* Whiteboard: the active tab is a board-colored pill with a hairline, the
-     same surface and rule the canvas uses, so the tab reads as a piece of the
-     board lifted onto the tray. No drop shadow in either theme. */
-  --review-tab-fill: var(--vscode-editor-background);
-  --review-tab-border: var(--vscode-panel-border);
+  /* Dark boards are darker than the tray, so the active pill mixes lighter. */
+  --review-tab-fill: color-mix(
+    in srgb,
+    #ffffff 8%,
+    var(--vscode-editorGroupHeader-tabsBackground)
+  );
+  --review-tab-border: var(--vscode-editorWidget-border);
   --review-tab-hover-fill: color-mix(
     in srgb,
     #ffffff 4%,
     var(--vscode-editorGroupHeader-tabsBackground)
   );
   --review-tab-separator: var(--vscode-panel-border);
-  --review-tab-shadow: none;
   --review-chrome-font: "Geist Mono", ui-monospace, SFMono-Regular, Menlo,
     monospace;
 }
 
-/* The light themes use weaker mixes, so the pill stays subtle. */
+/* Light themes: a board-colored pill. */
 .monaco-workbench.review-workbench.vs,
 .monaco-workbench.review-workbench.hc-light {
   --review-tab-fill: var(--vscode-editor-background);
@@ -349,8 +366,6 @@
     #ffffff 40%,
     var(--vscode-editorGroupHeader-tabsBackground)
   );
-  --review-tab-separator: var(--vscode-panel-border);
-  --review-tab-shadow: none;
 }
 
 /* 28px pill + 6px above + 6px below = the 40px row. EditorTabsControl reports
@@ -469,7 +484,6 @@ body
   display: none;
 }
 
-/* The raised pill. The first shadow is the 1px outline. */
 body
   .monaco-workbench.review-workbench
   .part.editor
@@ -479,9 +493,7 @@ body
   .tabs-container
   > .tab.active {
   background-color: var(--review-tab-fill);
-  box-shadow:
-    inset 0 0 0 1px var(--review-tab-border),
-    var(--review-tab-shadow);
+  box-shadow: inset 0 0 0 1px var(--review-tab-border);
 }
 
 body
@@ -701,17 +713,6 @@ body
 .review-canvas-part .review-canvas-host {
   width: 100%;
   height: 100%;
-}
-
-/* The canvas topbar dresses itself as workbench chrome and reads its colors and
-   its type ramp straight from the --vscode-* theme variables, but there is no
-   such variable for the workbench UI font: style.css hardcodes a stack per
-   platform and per language. `system-ui` resolves to the same platform UI face
-   without copying that matrix. The selector outranks the canvas stylesheet's own
-   default, which keeps the standalone browser build on its mono face. Every text
-   item in the topbar reads this token, so the bar shows one face throughout. */
-.review-canvas-host .review-app {
-  --chrome-font: var(--review-chrome-font, var(--font-mono));
 }
 
 /* Whiteboard: every label on the tray is set in the same mono face as the

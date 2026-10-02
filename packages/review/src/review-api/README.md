@@ -1,6 +1,6 @@
 # JSON review API
 
-Desktop and `review server start` share `review-api.db` under `DEV_REVIEW_HOME`.
+Desktop and `whiteboard server start` share `review-api.db` under `DEV_REVIEW_HOME`.
 A headless `--state-dir` or `DEV_REVIEW_SERVER_DIR` selects an isolated profile;
 Desktop can view it by using the same directory as `DEV_REVIEW_HOME`.
 Both hosts mount the same routes behind token authentication and a bounded JSON request reader.
@@ -48,7 +48,7 @@ All paths below are relative to `/reviews-api`.
 | `GET /authoring` | Tool names, host input schemas and HTTP mappings for CLI/MCP adapters |
 | `GET /capabilities` | Desktop availability and permission for optional software-map generation, independent of opening a review |
 | `GET /:id/activity` | Currently reported authoring work, not stored in document history |
-| `POST /:id/activity {action,leaseId,scope?,focus?}` | Begin, renew or end a working signal in `scope` (`document`, the default, or `lenses`); return count, expiry and live scopes |
+| `POST /:id/activity/{begin,update,end} {leaseId,scope?,focus?}` | Begin, update (renew) or end a working signal in `scope` (`document`, the default, or `lenses`); return count, expiry and live scopes, plus the `leaseId` for begin and update. `leaseId` is optional on begin: the host assigns one |
 | `GET /watch` | NDJSON review summaries: initial list, then saved changes |
 | `GET /watch?subscriptions=…` | One NDJSON connection for multiple `{reviewId}` subscriptions; `reviewId:null` selects the catalog. Each line is an ordered array of `{value}` or `{error}` results, with `null` where a subscription is unchanged since the previous line. |
 | `GET /:id`                                | Compact outline                                                        |
@@ -59,8 +59,8 @@ All paths below are relative to `/reviews-api`.
 | `GET /:id/inspect` | Agent reading view: nested text outline with IDs; `targetId` reads one component completely, `full=true` includes all content, `version` selects history. `format=json` returns raw data instead. |
 | `POST /:id/open` | Open the review in the attached Desktop; report an error when none is attached |
 | `GET /:id/watch`                          | NDJSON snapshots: current state immediately, then committed updates    |
-| `POST /commands`                          | Apply one command; return review ID, version, and for an edit the target ID, its `type`, and — after an insert or replace — `children`: its first-level children as `{id,type}` (a container's blocks; a diagram's steps, or nodes then edges), so new components are addressable without a read. A `create` with `pullRequestUrl` returns the newest existing review for that PR instead (owner/repository matched case-insensitively) unless `operation.reuseExisting` is `false`: `created:false`, a `note`, its stored `target`, `headMoved`, and `ownedBy`/`otherReviewIds` when they apply; its target is never moved. A new review reports `created:true`. Either way the result carries `review`, the review's `GET /` catalog entry (target, origin, repository name and path). An interactive `create` also opens the new review in an attached Desktop unless `operation.open` is `false`, and reports `opened` with the open result or an `openError`; the review is saved either way |
-| `POST /commands {operation:{type:"lens",reviewId,edit}}` | Write one file lens under the `lenses` lease: `insert {title,targets,afterId?}` (host id `lens-N`), `update {targetId,title?,targets?}` or `remove {targetId}`. Returns `{targetId, type:"lens", uncategorized}`, where `uncategorized` lists changed files and ranges no lens covers yet (at most 50 files) |
+| `POST /commands`                          | Apply one command; return review ID, version, and for an edit the target ID, its `type`, and — after an insert or replace — `children`: its first-level children as `{id,type}` (a container's blocks; a diagram's steps, or nodes then edges), so new components are addressable without a read. A `create` with `pullRequestUrl` returns the newest existing review for that PR instead (owner/repository matched case-insensitively) unless `operation.reuseExisting` is `false`: `created:false`, a `note`, its stored `target`, `headMoved`, and `activeLeaseId`/`otherReviewIds` when they apply; its target is never moved. A new review reports `created:true`. Either way the result carries `review`, the review's `GET /` catalog entry (target, origin, repository name and path). An interactive `create` also opens the new review in an attached Desktop unless `operation.open` is `false`, and reports `opened` with the open result or an `openError`; the review is saved either way |
+| `POST /commands {operation:{type:"lens_edit",reviewId,edit}}` | Write one file lens under the `lenses` lease: `insert {title,targets,afterId?}` (host id `lens-N`), `update {targetId,title?,targets?}` or `remove {targetId}`. Returns `{targetId, type:"lens", uncategorized}`, where `uncategorized` lists changed files and ranges no lens covers yet (at most 50 files) |
 | `GET /:id/lenses` | The current version's file lenses with each one's file count, plus the same `uncategorized` report |
 | `POST /repositories {path}`               | Register a local Git/jj repository; return ID/name                     |
 | `POST /pins {repositoryId,base,head}`     | Resolve revisions to immutable commit IDs                              |
@@ -76,7 +76,7 @@ All paths below are relative to `/reviews-api`.
 Example request:
 
 `review_get` uses `/inspect`. MCP returns its text directly, and
-`review api review_get '{"reviewId":"…","full":true}'` prints it without JSON
+`whiteboard api review_get '{"reviewId":"…","full":true}'` prints it without JSON
 escaping. Use `format:"json"` (or CLI `--json`) when raw objects are needed.
 The canvas continues to use the JSON snapshot routes above.
 
@@ -84,7 +84,7 @@ The canvas continues to use the JSON snapshot routes above.
 pathspec (files or directories, matching either side of a rename; omitted means
 every changed file) and `format` chooses the reply. `format:"files"` (the
 default) returns `[{path, previousPath?, status, additions, deletions}]`.
-`format:"patch"` returns `text/plain`, which MCP and `review api` pass through
+`format:"patch"` returns `text/plain`, which MCP and `whiteboard api` pass through
 unescaped: each file keeps its `diff --git`, mode, rename and `@@` lines, drops
 `index`/`---`/`+++`, and prefixes every hunk line with its base and head line
 numbers:
@@ -217,8 +217,8 @@ The Map tab uses the retained head/base maps and updates as they arrive.
 The Trace tab and quote side panels read retained trace resources; imported
 labels are preserved without claiming a harness, commit association, or timestamps.
 
-The thin agent clients use `review api <tool-name> '<json>'` (or `-` for stdin)
-and `review mcp` (stdio). `review api tools` lists the host's tool schemas.
+The thin agent clients use `whiteboard api <tool-name> '<json>'` (or `-` for stdin)
+and `whiteboard mcp` (stdio). `whiteboard api tools` lists the host's tool schemas.
 Both adapters use existing desktop discovery/authentication and the same HTTP
 routes as the canvas. Neither imports the store or validates document content.
 Command/resource schemas come from the server's existing Zod definitions and
@@ -257,7 +257,7 @@ only loads document data when its version changes.
 This avoids another long-lived browser connection. The badge is hidden while
 idle or viewing history, and reports unknown activity on a lost connection.
 Optional `focus:{description,targetId?}` identifies the current work; description is 1–160 characters and targetId is an existing component ID. Omitted focus retains the lease’s current focus; null clears it. Snapshots include `focuses` when any leases have a focus. The header shows descriptions, and matching components show an inline working indicator. Focus is ephemeral, disappears when its lease ends or expires, and is hidden when activity is unknown or history is displayed.
-There is no applying-update state. CLI/MCP expose this as `review_activity`.
+There is no applying-update state. CLI/MCP expose this as `review_activity_begin`, `review_activity_update` (renew) and `review_activity_end`.
 
 Profile migration remains later work.
 
@@ -320,8 +320,12 @@ Omitted commit base means source at head with no diff, exactly as base=head;
 supply its parent to review the changes introduced by a single commit.
 
 A worktree target follows saved files in that registered checkout, including
-staged, unstaged and nonignored untracked files. Without base, Working changes
-compares with current HEAD (empty for unborn repositories). No checkout is created.
+staged, unstaged and nonignored untracked files. `base` names the branch to
+compare against, by default the default branch (`origin/HEAD`, `origin/main`,
+`origin/master`, `main`, then `master`); an unborn repository compares with
+empty source. The comparison starts at the merge base of `base` and HEAD,
+resolved again whenever the checkout or its refs change, so it follows a rebase;
+if `base` stops resolving, the last merge base stays. No checkout is created.
 Source ranges default to the head side. File saves refresh source without changing
 authored history. All versions of a live target read the current checkout; authors
 maintain their source references. Use a commit target for fixed source.

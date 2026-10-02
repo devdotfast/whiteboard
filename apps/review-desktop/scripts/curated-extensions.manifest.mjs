@@ -24,6 +24,9 @@
  * `executables` are paths (relative to the unpacked extension root) that must
  * exist and stay executable. They are asserted at materialize time so a payload
  * layout change fails the build instead of silently shipping a broken server.
+ *
+ * `prunePaths` are removed from the unpacked extension because Review never
+ * runs them.
  */
 export const curatedExtensions = Object.freeze([
   {
@@ -55,6 +58,23 @@ export const curatedExtensions = Object.freeze([
       universal: {
         sha256:
           "fb4c080bfef16ee9f659ff3078f53a35247d50c35dd11bcbcfa51d00cdd7e58e",
+      },
+    },
+    executables: [],
+    stripExtensionPack: false,
+  },
+  {
+    id: "ms-vscode.sublime-keybindings",
+    tier: "bundled",
+    namespace: "ms-vscode",
+    name: "sublime-keybindings",
+    version: "4.1.10",
+    group: "sublime",
+    label: "Sublime Text keybindings",
+    targets: {
+      universal: {
+        sha256:
+          "fe064eb9f0b83466ede5ed1c7b1a8289b11af8abba82005f7187d571fdb26a34",
       },
     },
     executables: [],
@@ -97,14 +117,6 @@ export const curatedExtensions = Object.freeze([
     },
     executables: ["server/rust-analyzer"],
     stripExtensionPack: false,
-    // rust-analyzer ships only `workspaceContains:` activation events. Review
-    // now roots the workspace at the reviewed repository, so those can fire,
-    // but two gaps remain: the extension host only re-evaluates
-    // `workspaceContains:` for folders added while it is already running, and
-    // the patterns miss a Rust file whose Cargo.toml is not at the folder
-    // root. Every other curated language extension already declares an
-    // `onLanguage:` event; this gives rust-analyzer the same trigger.
-    addActivationEvents: ["onLanguage:rust"],
   },
   {
     id: "swiftlang.swift-vscode",
@@ -224,6 +236,9 @@ export const curatedExtensions = Object.freeze([
     // Its extension pack points at Pylance (proprietary, not redistributable)
     // and debugpy, none of which Review ships.
     stripExtensionPack: true,
+    // The bundled Jedi language server; Review defaults
+    // `python.languageServer` to "None" and ty serves Python instead.
+    prunePaths: ["python_files/lib/jedilsp"],
   },
   {
     id: "astral-sh.ty",
@@ -332,6 +347,7 @@ export const curatedGroups = Object.freeze([
   "go",
   "vim",
   "emacs",
+  "sublime",
 ]);
 
 /** Extensions that release builds materialize and package. */
@@ -352,7 +368,7 @@ export const bundledGroups = Object.freeze(
 );
 
 /** Keymaps conflict with each other, so at most one may be enabled at a time. */
-export const keymapGroups = Object.freeze(["vim", "emacs"]);
+export const keymapGroups = Object.freeze(["vim", "emacs", "sublime"]);
 
 /** Extensions that start out disabled on a fresh profile. */
 export const defaultDisabledIds = Object.freeze(

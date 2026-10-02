@@ -1,8 +1,5 @@
-import type {
-  ActivitySnapshot,
-  LeaseScope,
-} from "../../src/review-api/activity";
-import type { EditSummary } from "../../src/review-api/document";
+import type { ActivitySnapshot, LeaseScope } from "@review/review-api/activity";
+import type { EditSummary } from "@review/review-api/document";
 
 /**
  * Where the agent is on the board. The stream carries two signals: the edit

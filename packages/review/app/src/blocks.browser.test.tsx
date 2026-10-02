@@ -3,27 +3,27 @@ import {
   type ReviewCanvasTutorialBridge,
   parseJsonText,
 } from "@dev.fast/review-protocol";
-import { type ReactNode, act } from "react";
-import { createRoot } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
 import {
   FIXTURE_IMAGE_ID,
   FIXTURE_MAP_ID,
   FIXTURE_TRACE_EVENT_ID,
   FIXTURE_TRACE_ID,
-} from "../../src/fixtures/blocks/ids";
-import { selectionKey } from "../../src/lens-selection";
+} from "@review/fixtures/blocks/ids";
+import { selectionKey } from "@review/lens-selection";
 import {
   assignFreshIds,
   documentSchema,
   elements,
   isUnit,
-} from "../../src/review-api/document";
-import { mapInputSchema } from "../../src/review-api/map-input";
-import type { ReviewProgress } from "../../src/review-api/review-progress";
-import type { Snapshot } from "../../src/review-api/store";
-import { defineSoftwareMap } from "../../src/software-map-model";
+} from "@review/review-api/document";
+import { mapInputSchema } from "@review/review-api/map-input";
+import type { ReviewProgress } from "@review/review-api/review-progress";
+import type { Snapshot } from "@review/review-api/store";
+import { defineSoftwareMap } from "@review/software-map-model";
+import { type ReactNode, act } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
 import tutorialDocument from "../../tutorial/document.json";
 import tutorialModel from "../../tutorial/software-map.json";
 import tutorialTrace from "../../tutorial/trace.json";
@@ -134,10 +134,13 @@ const rendered: Record<
   divider: (c) => has(c, "hr"),
   // The peek asked the host for an inline editor on the fixture's file.
   code_peek: (c) =>
-    has(c, ".code-peek .fixture-inline-editor[data-path='order.ts']"),
+    has(
+      c,
+      "[data-code-rendering] .fixture-inline-editor[data-path='order.ts']",
+    ),
   // Every step is laid out as a routed message once the diagram settles.
   sequence: (c) =>
-    has(c, ".sequence-diagram-body") &&
+    has(c, ".sequence-diagram .react-flow") &&
     has(c, "[data-review-anchor-id='step-1']") &&
     has(c, "[data-review-anchor-id='step-2']") &&
     text(c).includes("set status"),
@@ -146,13 +149,12 @@ const rendered: Record<
     text(c).includes("Queue an order") &&
     text(c).includes("write queued"),
   image: (c) =>
-    has(c, "figure.review-image img[src^='blob:']") &&
-    text(c).includes("An image"),
+    has(c, "figure img[src^='blob:']") && text(c).includes("An image"),
   trace_quote: (c) =>
-    has(c, ".review-trace-quote") && text(c).includes("queue the order"),
+    has(c, 'a[href^="#trace-"]') && text(c).includes("queue the order"),
   // The map has drawn its system and is neither refreshing nor failed.
   flow_diagram: (c) =>
-    has(c, ".flow-node") &&
+    has(c, ".lens-flow-node") &&
     text(c).includes("Queue order") &&
     !text(c).includes("Laying out"),
   software_map: (c) =>
@@ -162,7 +164,7 @@ const rendered: Record<
   section: (c) =>
     has(c, "button[aria-expanded='true']") && text(c).includes("Hello."),
   tutorial: (c) =>
-    has(c, ".tutorial-authoring-conversation") &&
+    text(c).includes("Representative authoring conversation") &&
     text(c).includes("Explain this change."),
   callout: (c) =>
     c.querySelector("blockquote[data-tone='warning'] strong")?.textContent ===
@@ -278,32 +280,32 @@ describe("block components", () => {
   it.each([
     {
       kind: "sequence",
-      selector: ".diagram-header-title",
+      selector: "figure [data-review-copy-prose]",
       label: "sequence title",
     },
     {
       kind: "flow_diagram",
-      selector: ".diagram-header-title",
+      selector: "figure [data-review-copy-prose]",
       label: "flow title",
     },
     {
       kind: "database_lens",
-      selector: ".diagram-header-title",
+      selector: "figure [data-review-copy-prose]",
       label: "database title",
     },
     {
       kind: "software_map",
-      selector: ".diagram-header-title",
+      selector: "figure [data-review-copy-prose]",
       label: "map title",
     },
     {
       kind: "code",
-      selector: ".rendered-code-body code",
+      selector: "pre > code[data-review-copy-prose]",
       label: "authored code",
     },
     {
       kind: "markdown",
-      selector: ".rendered-code-body code",
+      selector: "pre > code[data-review-copy-prose]",
       label: "fenced Markdown code",
     },
   ] as const)(
@@ -363,7 +365,7 @@ describe("block components", () => {
         });
 
         const copy = container.querySelector<HTMLButtonElement>(
-          '[aria-label="Copy for Agent"]',
+          '[aria-label="Copy ref"]',
         );
 
         expect(copy).not.toBeNull();
@@ -413,7 +415,7 @@ describe("block components", () => {
       await settled(
         () =>
           has(container, ".tutorial-keymap-picker") &&
-          has(container, ".tutorial-authoring-conversation"),
+          text(container).includes("Representative authoring conversation"),
       ),
     ).toBe(true);
 
@@ -441,7 +443,7 @@ describe("block components", () => {
   });
 
   it.each(["sequence", "database_lens", "software_map"] as const)(
-    "keeps %s interactions without offering Copy for Agent",
+    "keeps %s interactions without offering Copy ref",
     async (kind) => {
       const { container } = await mountFixture(kind);
       expect(await settled(() => rendered[kind](container))).toBe(true);
@@ -454,9 +456,9 @@ describe("block components", () => {
 
       const target = container.querySelector<HTMLElement>(
         kind === "sequence"
-          ? ".sequence-participant-label"
+          ? ".sequence-diagram .react-flow__node span[title]"
           : kind === "database_lens"
-            ? ".database-lens-header"
+            ? ".database-lens header"
             : ".software-map .react-flow__node",
       );
 
@@ -464,7 +466,7 @@ describe("block components", () => {
       await act(async () => target!.click());
       expect(
         [...container.querySelectorAll("button")].some(
-          (button) => button.textContent === "Copy for Agent",
+          (button) => button.textContent === "Copy ref",
         ),
       ).toBe(false);
     },
@@ -631,9 +633,11 @@ describe("tutorial guide placement", () => {
       "position: relative; height: 700px; overflow: hidden;",
     );
 
-    expect(await settled(() => has(container, ".tutorial-guide"))).toBe(true);
+    expect(
+      await settled(() => has(container, 'aside[aria-label="Tutorial guide"]')),
+    ).toBe(true);
 
-    const contentsElement = container.querySelector(".review-toc")!;
+    const contentsElement = container.querySelector("#review-toc")!;
     const appElement = container.querySelector(".review-app")!;
 
     const contentsOffset =
@@ -651,11 +655,11 @@ describe("tutorial guide placement", () => {
     const status = statusRow.getBoundingClientRect();
 
     const contents = container
-      .querySelector(".review-toc")!
+      .querySelector("#review-toc")!
       .getBoundingClientRect();
 
     const guide = container
-      .querySelector(".tutorial-guide")!
+      .querySelector('aside[aria-label="Tutorial guide"]')!
       .getBoundingClientRect();
 
     expect(app.bottom).toBeLessThanOrEqual(host.bottom);
@@ -669,31 +673,32 @@ describe("tutorial guide placement", () => {
 
 it("opens a flow node in a full-screen tour with all its code attachments", async () => {
   const { container } = await mountFixture("flow_diagram");
-  await settled(() => container.querySelector(".flow-node"));
+  await settled(() => container.querySelector(".lens-flow-node"));
   await act(async () =>
     container
-      .querySelector(".flow-node")!
+      .querySelector(".lens-flow-node")!
       .dispatchEvent(new MouseEvent("click", { bubbles: true })),
   );
   expect(
     await settled(
       () =>
-        container.querySelectorAll(".diagram-tour-panel .fixture-inline-editor")
-          .length === 2,
+        container.querySelectorAll(
+          '[role="dialog"] > :last-child .fixture-inline-editor',
+        ).length === 2,
     ),
   ).toBe(true);
-  expect(container.querySelector(".diagram-tour-panel")?.textContent).toContain(
-    "Validation",
-  );
+  expect(
+    container.querySelector('[role="dialog"] > :last-child')?.textContent,
+  ).toContain("Validation");
   expect(
     container.querySelector('[role="dialog"][aria-modal="true"]'),
   ).not.toBeNull();
-  expect(container.querySelector(".flow-diagram aside")).toBeNull();
+  expect(container.querySelector("figure aside")).toBeNull();
   await act(async () =>
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
   );
   expect(container.querySelector('[role="dialog"]')).toBeNull();
-  expect(container.querySelector(".flow-node")).not.toBeNull();
+  expect(container.querySelector(".lens-flow-node")).not.toBeNull();
 });
 
 it("grows a tall, wide sequence diagram to its height instead of scrolling it vertically", async () => {
@@ -723,8 +728,10 @@ it("grows a tall, wide sequence diagram to its height instead of scrolling it ve
     "position: relative; height: 700px; overflow: hidden",
   );
 
-  const body = await settled(() =>
-    container.querySelector<HTMLElement>(".sequence-diagram-body"),
+  const body = await settled(
+    () =>
+      container.querySelector<HTMLElement>(".sequence-diagram .react-flow")
+        ?.parentElement,
   );
 
   await settled(() => body!.querySelector(".react-flow__node"));

@@ -40,7 +40,7 @@ const SERVER_READY = /\[Review Desktop\] server ready at (https?:\/\/\S+)/;
 
 const POLL_INTERVAL_MS = 500;
 
-// posthog-capture-client.ts waits this long before its first flush.
+// Allow transport time after the renderer has executed the probe.
 const FLUSH_WINDOW_MS = 20_000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -176,12 +176,36 @@ export async function smokeTelemetryDelivery({
 
     if (!page) throw new Error("The app opened no window to drive.");
 
-    const throwInWindow = (message) =>
-      page.evaluate((text) => {
-        setTimeout(() => {
-          throw new Error(text);
-        }, 0);
-      }, message);
+    // Fresh profiles reload after keymap seeding; the notice waits for that reload.
+    await page.getByText(
+      "Whiteboard sends anonymous usage data. You can change this in Settings.",
+      { exact: true },
+    ).waitFor({ state: "attached", timeout: timeoutMs });
+
+    const throwInWindow = async (message) => {
+      let timer;
+
+      try {
+        await Promise.race([
+          page.evaluate(
+            (text) => new Promise((resolve) => {
+              setTimeout(() => {
+                resolve();
+                throw new Error(text);
+              }, 0);
+            }),
+            message,
+          ),
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error(
+              `Timed out after ${timeoutMs}ms waiting for the renderer to execute the probe.`,
+            )), timeoutMs);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    };
 
     // The window installs its error handlers slightly after the debugger
     // accepts a connection, so the probe cannot simply be thrown once and
@@ -216,7 +240,9 @@ export async function smokeTelemetryDelivery({
       "the delivery path to become live",
     );
 
+    const probeStartedAt = Date.now();
     await throwInWindow(thrown);
+    console.log(`Renderer executed the delivery probe in ${Date.now() - probeStartedAt}ms.`);
 
     const batch = await waitFor(
       async () => capture.batches.find((entry) => entry.body.includes(digest)),
@@ -320,6 +346,17 @@ export async function smokeTelemetryDelivery({
       otherQueued: queued.length - stillQueued.length,
       root,
     };
+  } catch (error) {
+    console.error(`Received batches: ${JSON.stringify(capture.batches)}`);
+    const queueDir = path.join(reviewHome, "telemetry", "events");
+
+    for (const name of await readdir(queueDir).catch(() => [])) {
+      if (!name.endsWith(".json")) continue;
+      console.error(`Queued ${name}: ${await readFile(path.join(queueDir, name), "utf8").catch(() => "(unavailable)")}`);
+    }
+
+    console.error(await readFile(logPath, "utf8").catch(() => "(no app log)"));
+    throw error;
   } finally {
     child?.kill("SIGKILL");
     await sleep(1000);

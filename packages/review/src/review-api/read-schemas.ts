@@ -1,6 +1,6 @@
+import type { SourcePins } from "@review/source.js";
 import { z } from "zod";
 
-import type { SourcePins } from "../source.js";
 import { ReviewInputError } from "./input-error.js";
 
 // Query schemas for the read routes. http.ts parses query strings with them

@@ -1,3 +1,4 @@
+import { loadElk } from "@canvas/elk";
 import {
   type ElkGraph as LibavoidElkGraph,
   init as initLibavoidEdgeRouter,
@@ -9,10 +10,7 @@ import {
   type ReactFlowInstance,
   type Viewport,
 } from "@xyflow/react";
-import ELK, {
-  type ElkNode,
-  type LayoutOptions,
-} from "elkjs/lib/elk.bundled.js";
+import type { ElkNode, LayoutOptions } from "elkjs/lib/elk.bundled.js";
 import type { CSSProperties } from "react";
 
 import {
@@ -108,8 +106,6 @@ const C4_LOCAL_SIBLING_X_GAP = 96;
 const C4_LOCAL_SIBLING_Y_GAP = 72;
 
 const C4_LOCAL_ROW_CLUSTER_GAP = 24;
-
-const c4Elk = new ELK();
 
 let c4LibavoidInitPromise: Promise<void> | null = null;
 
@@ -217,6 +213,8 @@ export function createC4MapFlowFromLayout(
     nodeDimensions?: ReadonlyMap<string, C4NodeDimensions> | null;
     relationshipStateById?: ReadonlyMap<string, "active" | "inactive">;
     onOpenRelationship?: (relationshipId: string) => void;
+    nodeClassName?: string;
+    edgeClassName?: string;
   } = {},
 ): C4MapFlow {
   const latestNodesById = new Map(
@@ -245,6 +243,7 @@ export function createC4MapFlowFromLayout(
         },
         draggable: false,
         selectable: true,
+        className: options.nodeClassName,
         domAttributes: softwareMapKeyboardNodeDomAttributes(renderNode.id),
         style: { width: renderedWidth, height: renderedHeight },
       };
@@ -299,11 +298,6 @@ export function createC4MapFlowFromLayout(
       const relationshipId = relationship.id ?? edgeId;
       const operationState = options.relationshipStateById?.get(relationshipId);
 
-      const operationHighlightState =
-        operationState && operationState !== "inactive"
-          ? operationState
-          : undefined;
-
       const operationActive = operationState === "active";
 
       const color = attachedToSelectedNode
@@ -342,20 +336,15 @@ export function createC4MapFlowFromLayout(
           type: "softwareMapC4Edge",
           markerEnd: { type: MarkerType.ArrowClosed, color },
           label,
-          className: [
-            "software-map-c4-edge",
-            `software-map-c4-edge--${kind}`,
-            attachedToSelectedNode ? "software-map-c4-edge--selected-node" : "",
-            operationHighlightState
-              ? `software-map-c4-edge--operation-${operationHighlightState}`
-              : "",
-          ]
-            .filter(Boolean)
-            .join(" "),
+          className: options.edgeClassName,
           zIndex: operationActive ? 4 : attachedToSelectedNode ? 3 : 1,
+          // The line is quiet unless it touches the selected node; the
+          // arrowhead also marks an active operation.
           style: {
-            stroke: color,
-            strokeWidth: operationActive ? 3 : attachedToSelectedNode ? 2.5 : 2,
+            stroke: attachedToSelectedNode
+              ? "var(--accent)"
+              : "var(--ink-faint)",
+            strokeWidth: 1.5,
             strokeDasharray: c4EdgeDasharray(
               kind,
               sourceNodeType,
@@ -2116,7 +2105,9 @@ async function runC4ElkLayout(
     } satisfies LayoutOptions);
   }
 
-  const result: C4ElkLayoutGraph = await c4Elk.layout({
+  const elk = await loadElk();
+
+  const result: C4ElkLayoutGraph = await elk.layout({
     id: "software-map-c4",
     layoutOptions,
     children: rootNodes.map((node) =>

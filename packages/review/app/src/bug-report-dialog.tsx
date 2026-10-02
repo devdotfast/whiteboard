@@ -1,7 +1,11 @@
+import { Button, IconButton } from "@canvas/ui/button";
+import { surfaceStyles } from "@canvas/ui/surface";
+import { fieldStyles } from "@canvas/ui/text-field";
 import {
   type ReviewBugReportRequest,
   parseReviewBugReportResponse,
 } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import {
   type ClipboardEvent,
   type DragEvent,
@@ -16,9 +20,14 @@ import {
   imageFileFromDataTransfer,
   normalizeScreenshot,
 } from "./bug-report-screenshot";
+import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
 import { BugIcon } from "./icons";
+import { appMarker } from "./markers.stylex";
+import { fontSize, fontWeight, layer, radius } from "./scale.stylex";
+import { shellStyles } from "./shell-styles";
 import { useToast } from "./toast";
+import { tokens } from "./tokens.stylex";
 import { useTutorial } from "./tutorial-context";
 import { captureUiEvent, clientErrorName } from "./ui-telemetry";
 import { useTooltip } from "./use-tooltip";
@@ -74,9 +83,6 @@ export function BugReportControl({
         include_review: includeContext,
         include_map: includeContext,
         include_diff: includeDiff,
-        // No JSON-review snapshot records its authoring session yet, so
-        // there is no complete trace to attach.
-        include_trace: false,
         app_session_id: session.appSessionId,
         app_version: session.config.appVersion,
       };
@@ -196,24 +202,26 @@ export function BugReportControl({
 
   return (
     <>
-      <button
-        type="button"
-        className="topbar-report-bug-button"
+      <IconButton
+        xstyle={shellStyles.topbarItem}
         aria-label="Report a bug"
         ref={tooltip}
         disabled={tutorial !== null || capturing}
         onClick={() => void openDialog()}
       >
-        <BugIcon />
-      </button>
+        <BugIcon xstyle={controlStyles.chromeIcon} />
+      </IconButton>
       {open && (
-        <div className="bug-report-backdrop" onMouseDown={cancel}>
+        <div
+          {...stylex.props(shellStyles.topbarItem, styles.backdrop)}
+          onMouseDown={cancel}
+        >
           <section
-            className={
-              dropActive
-                ? "bug-report-dialog bug-report-dialog--drop-target"
-                : "bug-report-dialog"
-            }
+            {...stylex.props(
+              surfaceStyles.dialog,
+              styles.dialog,
+              dropActive && styles.dropTarget,
+            )}
             role="dialog"
             aria-modal="true"
             aria-labelledby="bug-report-title"
@@ -234,11 +242,18 @@ export function BugReportControl({
             }}
             onDrop={dropScreenshot}
           >
-            <form onSubmit={submit}>
-              <h2 id="bug-report-title">Report a bug</h2>
-              <label className="bug-report-description">
+            <form {...stylex.props(styles.form)} onSubmit={submit}>
+              <h2 {...stylex.props(styles.title)} id="bug-report-title">
+                Report a bug
+              </h2>
+              <label {...stylex.props(styles.description)}>
                 <span>What happened? (optional)</span>
                 <textarea
+                  {...stylex.props(
+                    fieldStyles.box,
+                    fieldStyles.multiline,
+                    styles.textarea,
+                  )}
                   autoFocus
                   rows={7}
                   value={description}
@@ -247,17 +262,19 @@ export function BugReportControl({
                 />
               </label>
               <div
-                className={
-                  descriptionBytes > MAX_DESCRIPTION_BYTES
-                    ? "bug-report-byte-count bug-report-byte-count--error"
-                    : "bug-report-byte-count"
-                }
+                {...stylex.props(
+                  styles.byteCount,
+                  descriptionBytes > MAX_DESCRIPTION_BYTES &&
+                    styles.byteCountError,
+                )}
               >
                 {descriptionBytes.toLocaleString()} / 65,536 bytes
               </div>
-              <fieldset>
-                <legend>Include diagnostic attachments</legend>
-                <label>
+              <fieldset {...stylex.props(styles.fieldset)}>
+                <legend {...stylex.props(styles.small)}>
+                  Include diagnostic attachments
+                </legend>
+                <label {...stylex.props(styles.small, styles.option)}>
                   <input
                     type="checkbox"
                     checked={includeContext}
@@ -267,7 +284,7 @@ export function BugReportControl({
                   />
                   Session
                 </label>
-                <label>
+                <label {...stylex.props(styles.small, styles.option)}>
                   <input
                     type="checkbox"
                     checked={includeDiff}
@@ -275,40 +292,54 @@ export function BugReportControl({
                   />
                   Changed-file diffs used by CodePeeks
                 </label>
-                <div className="bug-report-screenshot">
+                <div {...stylex.props(styles.screenshot)}>
                   {screenshot ? (
                     <>
-                      <img src={screenshot} alt="Screenshot preview" />
-                      <button
-                        type="button"
-                        className="bug-report-screenshot-remove"
+                      <img
+                        {...stylex.props(styles.screenshotImage)}
+                        src={screenshot}
+                        alt="Screenshot preview"
+                      />
+                      <IconButton
+                        xstyle={styles.screenshotRemove}
                         aria-label="Remove screenshot"
                         title="Remove screenshot"
                         onClick={() => setScreenshot(null)}
                       >
                         ×
-                      </button>
+                      </IconButton>
                     </>
                   ) : (
-                    <span className="bug-report-screenshot-hint">
+                    <span {...stylex.props(styles.small, styles.faint)}>
                       Paste or drop an image to attach a screenshot.
                     </span>
                   )}
                 </div>
               </fieldset>
-              <p className="bug-report-privacy">
+              <p {...stylex.props(styles.small, styles.privacy)}>
                 Reports are sent securely to /dev/fast. Only authorized
                 /dev/fast team members can access them. Reports are deleted
                 after 90 days. The screenshot above is included unless you
                 remove it.
               </p>
-              <div className="bug-report-actions">
-                <button type="button" onClick={cancel} disabled={sending}>
+              <div {...stylex.props(styles.actions)}>
+                <Button
+                  size="large"
+                  xstyle={styles.action}
+                  onClick={cancel}
+                  disabled={sending}
+                >
                   Cancel
-                </button>
-                <button type="submit" disabled={!canSend}>
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="large"
+                  xstyle={styles.action}
+                  disabled={!canSend}
+                >
                   {sending ? "Sending..." : "Send"}
-                </button>
+                </Button>
               </div>
             </form>
           </section>
@@ -318,3 +349,119 @@ export function BugReportControl({
     </>
   );
 }
+
+// Only the app root defines the chrome tokens, and the border and font came
+// from shorthands that drop out without them: outside the app there are none.
+const inApp = () => stylex.when.ancestor(":is(*)", appMarker);
+
+const chromeBorder = () =>
+  ({
+    borderWidth: { default: 0, [inApp()]: "1px" },
+    borderStyle: { default: "none", [inApp()]: "solid" },
+    borderColor: tokens.chromeBorder,
+  }) as const;
+
+const styles = stylex.create({
+  backdrop: {
+    position: "fixed",
+    zIndex: layer.dialog,
+    inset: 0,
+    display: "grid",
+    placeItems: "center",
+    padding: "24px",
+    backgroundColor: tokens.backdrop,
+  },
+  dialog: {
+    width: "min(540px, 100%)",
+  },
+  dropTarget: {
+    outline: `2px dashed ${tokens.accent}`,
+    outlineOffset: "-7px",
+  },
+  form: {
+    display: "grid",
+    gap: "14px",
+    padding: "20px",
+  },
+  title: {
+    margin: 0,
+    fontSize: fontSize.heading,
+  },
+  description: {
+    display: "grid",
+    gap: "7px",
+    fontSize: fontSize.body,
+    fontWeight: fontWeight.semibold,
+  },
+  textarea: {
+    width: "100%",
+  },
+  byteCount: {
+    marginTop: "-10px",
+    color: tokens.inkFaint,
+    font: `${fontSize.micro}/1.3 ${tokens.fontMono}`,
+    textAlign: "right",
+  },
+  byteCountError: {
+    color: tokens.diffModified,
+  },
+  fieldset: {
+    display: "grid",
+    gap: "8px",
+    margin: 0,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.ruleSoft,
+    borderRadius: radius.small,
+    padding: "10px 12px 12px",
+  },
+  small: {
+    font: `${fontSize.small}/1.45 ${tokens.fontMono}`,
+  },
+  option: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "center",
+  },
+  screenshot: {
+    display: "flex",
+    minHeight: "54px",
+    alignItems: "center",
+    gap: "8px",
+    borderWidth: "1px",
+    borderStyle: "dashed",
+    borderColor: tokens.ruleSoft,
+    borderRadius: radius.small,
+    padding: "8px",
+  },
+  screenshotImage: {
+    display: "block",
+    maxWidth: "calc(100% - 34px)",
+    maxHeight: "72px",
+    ...chromeBorder(),
+    borderRadius: radius.small,
+  },
+  screenshotRemove: {
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.chromeBorder,
+    backgroundColor: tokens.tray,
+    fontSize: fontSize.heading,
+    fontWeight: fontWeight.regular,
+  },
+  faint: {
+    color: tokens.inkFaint,
+  },
+  privacy: {
+    margin: 0,
+    color: tokens.inkFaint,
+  },
+  actions: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "8px",
+  },
+  action: {
+    minWidth: "76px",
+  },
+});

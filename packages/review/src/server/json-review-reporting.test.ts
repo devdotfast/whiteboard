@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 
 import type { JsonValue } from "@dev.fast/review-protocol";
+import { ReviewStore } from "@review/review-api/store";
+import type { ReviewTelemetry } from "@review/telemetry";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { ReviewStore } from "../review-api/store";
-import type { ReviewTelemetry } from "../telemetry";
 import { type BugReportPayload, submitReviewBugReport } from "./bug-report";
 import { createJsonReviewReporting } from "./json-review-reporting";
 
@@ -186,7 +186,6 @@ it("routes sanitized telemetry and uploads only opted-in JSON context from the d
   expect(payloads[1].review).toBeUndefined();
   expect(payloads[1].map).toBeUndefined();
   expect(payloads[1].diff).toBeUndefined();
-  expect(payloads[1].trace).toBeUndefined();
   expect((await post("bug-report?version=999", report)).status).not.toBe(200);
   expect(payloads).toHaveLength(2);
 });

@@ -10,7 +10,8 @@ export const ReviewBugReportRequestSchema = z.strictObject({
   include_review: z.boolean(),
   include_map: z.boolean(),
   include_diff: z.boolean(),
-  include_trace: z.boolean().default(false),
+  /** @deprecated Ignored: reports never attach an agent trace. */
+  include_trace: z.boolean().optional(),
   screenshot: z
     .strictObject({
       mime: z.literal("image/jpeg"),

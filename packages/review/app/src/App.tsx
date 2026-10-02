@@ -1,11 +1,16 @@
+import { Button, IconButton } from "@canvas/ui/button";
+import { surfaceStyles } from "@canvas/ui/surface";
+import { textStyles } from "@canvas/ui/text";
 import {
   type ReviewCanvasRange,
   type ReviewCommitSummary,
+  type ReviewDocumentWidthChoice,
 } from "@dev.fast/review-protocol";
 import {
   type SoftwareMapTopologyDiff,
   diffSoftwareMaps,
 } from "@review/software-map-topology-diff";
+import * as stylex from "@stylexjs/stylex";
 import {
   type CSSProperties,
   type ComponentType,
@@ -20,11 +25,15 @@ import {
 
 import { AgentSelectionProvider, useAgentSelection } from "./agent-selection";
 import { observeAgentTextSelection } from "./agent-text-selection";
+import { AskHistoryProvider } from "./ask-history";
+import { AskHistoryControl } from "./ask-history-list";
+import { AskThreadMarks } from "./ask-marks";
 import {
   AuthoringActivityBadge,
   ReviewSurfaceLabel,
 } from "./authoring-activity";
 import { BugReportControl } from "./bug-report-dialog";
+import { controlStyles } from "./controls-styles";
 import {
   ReviewDebugSettingsProvider,
   type ReviewNodeTint,
@@ -32,8 +41,19 @@ import {
 } from "./debug-settings";
 import { DiffLayoutControl } from "./diff-layout-control";
 import { ReviewDiffView } from "./DiffView";
+import { useDocumentEmbedScroll } from "./document-embed-scroll";
+import { documentStyles } from "./document-styles";
 import { useReviewSession } from "./host/review-session";
 import { DiscordIcon, MarkerUnderline, SettingsSlidersIcon } from "./icons";
+import {
+  appMarker,
+  detailHostMarker,
+  documentMarker,
+  scopedDiffMarker,
+  segmentMarker,
+  topbarActionsMarker,
+  topbarTabsMarker,
+} from "./markers.stylex";
 import { ReviewPanelHost } from "./review-components";
 import {
   ReviewProvider,
@@ -45,7 +65,6 @@ import { useReviewDiffFiles } from "./review-diff-files-context";
 import { ReviewDiffFilesProvider } from "./review-diff-files-context";
 import { ReviewDocumentBoundary } from "./review-document-boundary";
 import { reportReviewDocumentRenderError } from "./review-document-error-report";
-import { ReviewUnavailable } from "./review-empty-state";
 import {
   type ReviewFindHost,
   ReviewFindProvider,
@@ -53,26 +72,27 @@ import {
 } from "./review-find";
 import { useReviewLenses } from "./review-lenses";
 import {
-  ReviewPanelProvider,
   useReviewPanel,
   useReviewPanelStore,
   useSuppressPanelMotionOnCanvasResume,
 } from "./review-panel";
-import { ReviewRootsProvider } from "./review-root-context";
+import { type ReviewDiffScope, askShown } from "./review-panel-store";
+import { ReviewRootsProvider, useReviewContainer } from "./review-root-context";
+import { ReviewStackSelector } from "./review-stack-selector";
 import { ReviewToc } from "./review-toc";
-import {
-  type ReviewView,
-  normalizeReviewView,
-  reviewViewLabel,
-  shouldCloseSidePeekForReviewView,
-} from "./review-view-route";
-import {
-  ReviewViewStateProvider,
-  useReviewViewStateSync,
-} from "./review-view-state";
+import { offeredReviewViews, reviewViewLabel } from "./review-view-route";
+import { useReviewViewStateSync } from "./review-view-state";
 import { ReviewCommitsView } from "./ReviewCommitsView";
-import { ReviewTraceView, type TraceSelection } from "./ReviewTraceView";
+import { ReviewTraceView } from "./ReviewTraceView";
+import {
+  elevation,
+  fontSize,
+  fontWeight,
+  motion,
+  radius,
+} from "./scale.stylex";
 import { ShareControl } from "./share-control";
+import { shellStyles } from "./shell-styles";
 import { useRightPanelResize } from "./side-panel-resizer";
 import { selectActiveSoftwareMapModel } from "./software-map-selection";
 import type {
@@ -81,6 +101,10 @@ import type {
 } from "./software-map/model";
 import { SoftwareMapTopologyUnavailable } from "./software-map/software-map-absence";
 import { SoftwareMap } from "./software-map/SoftwareMap";
+import { withClass } from "./stylex-props";
+import { themeStyles } from "./theme-styles";
+import { tokens } from "./tokens.stylex";
+import { traceStyles } from "./trace-styles";
 import { useTutorial } from "./tutorial-context";
 import { TutorialExperienceProvider } from "./tutorial-experience";
 import { captureUiEvent } from "./ui-telemetry";
@@ -97,28 +121,28 @@ const MAX_SIDE_PEEK_WIDTH = 920;
 const MIN_DOCUMENT_WIDTH = 560;
 
 export function App({
-  documentState,
-  softwareMapState,
+  document,
+  softwareMap,
   softwareMapEnabled,
   range,
   commits,
   findHost,
 }: {
-  documentState: ReviewDocumentAppState;
-  softwareMapState: ReviewSoftwareMapAppState;
+  document: RenderedReviewDocument;
+  softwareMap: PublishedSoftwareMap;
   softwareMapEnabled: boolean;
   range: ReviewCanvasRange;
   commits: readonly ReviewCommitSummary[];
   findHost?: ReviewFindHost;
 }): ReactElement {
-  const resolved = useResolvedReviewDocument(documentState);
-
   return (
-    <ReviewDiffFilesProvider documentKey={resolved.diffDocumentKey}>
+    <ReviewDiffFilesProvider
+      documentKey={[document.routePath, document.filePath].join("\0")}
+      revision={range.worktreeRevision}
+    >
       <ReviewLayout
-        resolved={resolved}
-        documentState={documentState}
-        softwareMapState={softwareMapState}
+        document={document}
+        softwareMap={softwareMap}
         softwareMapEnabled={softwareMapEnabled}
         range={range}
         commits={commits}
@@ -146,68 +170,15 @@ export interface RenderedReviewDocument {
   tocEntries?: import("./review-document-headings").ReviewTocEntry[];
   /** True while the document has no blocks at all, as right after creation. */
   empty?: boolean;
-}
-
-export type ReviewDocumentAppState =
-  | { state: "loading" }
-  | {
-      state: "ready";
-      document: RenderedReviewDocument;
-    }
-  | {
-      state: "unavailable";
-      message: string;
-      currentReviewUuid?: string;
-      /** The failure the loader raised, when the message came from one. */
-      cause?: Error;
-    };
-
-export type ReviewSoftwareMapAppState =
-  | { state: "loading" }
-  | { state: "ready"; softwareMap: PublishedSoftwareMap }
-  | { state: "absent" }
-  | {
-      state: "unavailable";
-      message: string;
-      currentReviewUuid?: string;
-      cause?: Error;
-    };
-
-interface ResolvedReviewDocument {
-  document: RenderedReviewDocument | null;
-  routePath: string;
-  filePath: string;
-  /** Identity of what the panes render: content hash, or the load state. */
-  revision: string;
-  diffDocumentKey: string;
-}
-
-function useResolvedReviewDocument(
-  documentState: ReviewDocumentAppState,
-): ResolvedReviewDocument {
-  const session = useReviewSession();
-
-  return useMemo(() => {
-    const document =
-      documentState.state === "ready" ? documentState.document : null;
-
-    const routePath = document?.routePath ?? "/";
-    const filePath = document?.filePath ?? routePath;
-
-    return {
-      document,
-      routePath,
-      filePath,
-      revision: document?.key ?? `${documentState.state}:${routePath}`,
-      diffDocumentKey: [routePath, filePath].join("\0"),
-    };
-  }, [documentState, session]);
+  header: boolean;
+  databaseLens: boolean;
+  width?: ReviewDocumentWidthChoice;
 }
 
 /** A commit-scoped diff stays "commit"; otherwise it follows the reader's
  * structural-diff setting. */
 function diffOpenedKind(
-  diffScope: { commit: ReviewCommitSummary } | null,
+  diffScope: ReviewDiffScope | null,
   structuralDiffEnabled: boolean,
 ): "commit" | "file" | "structural" {
   if (diffScope) return "commit";
@@ -216,39 +187,28 @@ function diffOpenedKind(
 }
 
 function ReviewLayout({
-  resolved,
-  documentState,
-  softwareMapState,
+  document,
+  softwareMap,
   softwareMapEnabled,
   range,
   commits,
   findHost,
 }: {
-  resolved: ResolvedReviewDocument;
-  documentState: ReviewDocumentAppState;
-  softwareMapState: ReviewSoftwareMapAppState;
+  document: RenderedReviewDocument;
+  softwareMap: PublishedSoftwareMap;
   softwareMapEnabled: boolean;
   range: ReviewCanvasRange;
   commits: readonly ReviewCommitSummary[];
   findHost?: ReviewFindHost;
 }): ReactElement {
-  const {
-    document,
-    routePath: documentRoute,
-    revision: documentRevision,
-  } = resolved;
-
-  const softwareMap =
-    softwareMapState.state === "ready" ? softwareMapState.softwareMap : null;
+  const documentRoute = document.routePath;
+  const documentRevision = document.key;
+  const panelStore = useReviewPanelStore();
 
   const articleRef = useRef<HTMLElement | null>(null);
   const appRef = useRef<HTMLDivElement | null>(null);
   const shellRef = useRef<HTMLElement | null>(null);
   const scrollRegionRef = useRef<HTMLElement | null>(null);
-
-  const [traceSelection, setTraceSelection] = useState<
-    TraceSelection | undefined
-  >(undefined);
 
   const roots = useMemo(
     () => ({ appRef, shellRef, scrollRegionRef, articleRef }),
@@ -259,7 +219,6 @@ function ReviewLayout({
     <ReviewRootsProvider roots={roots}>
       <ReviewFindProvider
         articleRef={articleRef}
-        scrollRegionRef={scrollRegionRef}
         documentKey={documentRevision}
         host={findHost}
       >
@@ -268,36 +227,33 @@ function ReviewLayout({
             key={documentRoute}
             documentRoute={documentRoute}
             softwareMapEnabled={softwareMapEnabled}
-            openTraceSession={setTraceSelection}
+            openTraceSession={panelStore.getState().openTrace}
           >
-            <AgentSelectionProvider revision={documentRevision}>
-              <ReviewPanelProvider detailRevision={documentRevision}>
+            <AskHistoryProvider>
+              <AgentSelectionProvider revision={documentRevision}>
                 <ReviewLayoutContent
                   appRef={appRef}
                   shellRef={shellRef}
                   scrollRegionRef={scrollRegionRef}
                   articleRef={articleRef}
-                  documentState={documentState}
+                  document={document}
                   documentRevision={documentRevision}
                   softwareModels={[
-                    ...(softwareMap?.head ? [softwareMap.head] : []),
-                    ...(document?.documentSoftwareModels ?? []),
+                    ...(softwareMap.head ? [softwareMap.head] : []),
+                    ...document.documentSoftwareModels,
                   ]}
-                  softwareMapState={softwareMapState}
-                  repoSoftwareMap={softwareMap?.head ?? null}
-                  baseSoftwareMap={softwareMap?.base ?? null}
-                  softwareMapTopologyDiff={
-                    softwareMap
-                      ? diffSoftwareMaps(softwareMap.base, softwareMap.head)
-                      : null
-                  }
+                  repoSoftwareMap={softwareMap.head ?? null}
+                  baseSoftwareMap={softwareMap.base ?? null}
+                  softwareMapTopologyDiff={diffSoftwareMaps(
+                    softwareMap.base,
+                    softwareMap.head,
+                  )}
                   softwareMapEnabled={softwareMapEnabled}
                   range={range}
                   commits={commits}
-                  traceSelection={traceSelection}
                 />
-              </ReviewPanelProvider>
-            </AgentSelectionProvider>
+              </AgentSelectionProvider>
+            </AskHistoryProvider>
           </ReviewProvider>
         </ReviewDebugSettingsProvider>
       </ReviewFindProvider>
@@ -310,33 +266,29 @@ function ReviewLayoutContent({
   shellRef,
   scrollRegionRef,
   articleRef,
-  documentState,
+  document,
   documentRevision,
   softwareModels,
-  softwareMapState,
   repoSoftwareMap,
   baseSoftwareMap,
   softwareMapTopologyDiff,
   softwareMapEnabled,
   range,
   commits,
-  traceSelection,
 }: {
   appRef: RefObject<HTMLDivElement | null>;
   shellRef: RefObject<HTMLElement | null>;
   scrollRegionRef: RefObject<HTMLElement | null>;
   articleRef: RefObject<HTMLElement | null>;
-  documentState: ReviewDocumentAppState;
+  document: RenderedReviewDocument;
   documentRevision: string;
   softwareModels: NormalizedSoftwareModel[];
-  softwareMapState: ReviewSoftwareMapAppState;
   repoSoftwareMap: NormalizedSoftwareModel | null;
   baseSoftwareMap: NormalizedSoftwareModel | null;
   softwareMapTopologyDiff: SoftwareMapTopologyDiff | null;
   softwareMapEnabled: boolean;
   range: ReviewCanvasRange;
   commits: readonly ReviewCommitSummary[];
-  traceSelection?: TraceSelection;
 }): ReactElement {
   const session = useReviewSession();
   const review = useReview();
@@ -351,40 +303,69 @@ function ReviewLayoutContent({
   const panelStore = useReviewPanelStore();
   useSuppressPanelMotionOnCanvasResume(appRef);
   const activePanel = useReviewPanel((state) => state.active);
+  const askDocked = useReviewPanel((state) => askShown(state) === "panel");
   const panelMotion = useReviewPanel((state) => state.motion);
+  const activeView = useReviewPanel((state) => state.view);
+  const diffScope = useReviewPanel((state) => state.diffScope);
 
-  const closeForDocumentChange = useReviewPanel(
-    (state) => state.closeForDocumentChange,
-  );
+  // The full diff stays mounted while another view shows, at the width it
+  // had when it was hidden: following the column through a side peek's
+  // resize would lay out every editor in it on each step. Shown, it fills the
+  // column again and lays out once.
+  const diffHostRef = useRef<HTMLDivElement | null>(null);
+  const diffPreloaded = activeView !== "diff" || diffScope !== null;
+  const [frozenDiffWidth, setFrozenDiffWidth] = useState<number>();
+
+  useLayoutEffect(() => {
+    const width = diffHostRef.current?.getBoundingClientRect().width;
+
+    setFrozenDiffWidth(diffPreloaded && width ? width : undefined);
+  }, [diffPreloaded]);
+
+  const frozenDiffStyle =
+    diffPreloaded && frozenDiffWidth
+      ? { right: "auto", width: `${frozenDiffWidth}px` }
+      : undefined;
+
+  const traceSelection = useReviewPanel((state) => state.traceSelection);
+  const traceStorage = useReviewPanel((state) => state.traceStorage);
+  const mapFocus = useReviewPanel((state) => state.mapFocus);
+  const showView = useReviewPanel((state) => state.showView);
 
   const debugSettings = useReviewDebugSettings();
+
+  const rightPanelOpen = activePanel !== null || askDocked;
 
   const sidePeekResize = useRightPanelResize({
     stateKey: "side-peek-width",
     defaultWidth: DEFAULT_SIDE_PEEK_WIDTH,
     minWidth: MIN_SIDE_PEEK_WIDTH,
     maxWidth: MAX_SIDE_PEEK_WIDTH,
+    maxContainerFraction: 0.5,
     minMainWidth: MIN_DOCUMENT_WIDTH,
     separatorWidth: 10,
     label: "Resize side peek",
     containerRef: appRef,
+    active: rightPanelOpen,
   });
 
-  const viewStateSync = useReviewViewStateSync({ scrollRegionRef, panelStore });
-  const hasChangeRange = range.baseCommit !== range.headCommit;
+  useDocumentEmbedScroll(scrollRegionRef);
+  useReviewViewStateSync({ scrollRegionRef, panelStore });
 
-  const [activeView, setActiveView] = useState<ReviewView>(() =>
-    normalizeReviewView(
-      viewStateSync.initialActiveView ?? "review",
-      softwareMapEnabled,
-      hasChangeRange,
-    ),
-  );
+  // Diagrams only read the open tour, so a restored tour whose diagram is
+  // no longer in the document would sit in the store unrendered. The
+  // document and its tour overlay commit before this effect runs.
+  const canvasRoot = useReviewContainer();
+  useEffect(() => {
+    const { overlayTour, closeOverlayTour } = panelStore.getState();
 
-  const [diffScope, setDiffScope] = useState<{
-    commit: ReviewCommitSummary;
-    file?: string;
-  } | null>(null);
+    if (overlayTour && !canvasRoot?.querySelector(".diagram-tour-overlay")) {
+      closeOverlayTour();
+    }
+  }, [canvasRoot, documentRevision, panelStore]);
+
+  const hasChangeRange =
+    !!range.worktreeRevision || range.baseCommit !== range.headCommit;
 
   const selectForAgent = useAgentSelection();
   useEffect(() => {
@@ -419,99 +400,46 @@ function ReviewLayoutContent({
       ? diffFiles.files.length
       : null;
 
-  const reviewViews: readonly ReviewView[] = [
-    "review",
-    ...(hasChangeRange ? (["commits", "diff"] as const) : []),
-    ...(softwareMapEnabled ? (["map"] as const) : []),
-    ...(hasTraceSessions ? (["trace"] as const) : []),
-  ];
+  const reviewViews = useMemo(
+    () =>
+      offeredReviewViews({
+        hasChangeRange,
+        softwareMapEnabled,
+        hasTraceSessions,
+      }),
+    [hasChangeRange, hasTraceSessions, softwareMapEnabled],
+  );
+
+  useLayoutEffect(() => {
+    panelStore.getState().setAvailableViews(reviewViews);
+  }, [panelStore, reviewViews]);
 
   const lenses = useReviewLenses();
-  useEffect(() => {
-    if (lenses?.active) {
-      setDiffScope(null);
-      captureUiEvent(session, "diff_opened", {
-        kind: diffOpenedKind(null, Boolean(lenses.structuralDiffEnabled)),
-        via: "lens",
-      });
-      setActiveView("diff");
-    }
-  }, [lenses?.active, lenses?.structuralDiffEnabled, session]);
 
-  const reviewViewsRef = useRef(reviewViews);
-  reviewViewsRef.current = reviewViews;
-
-  const applyReviewView = (view: ReviewView) => {
-    const normalizedView = normalizeReviewView(
-      view,
-      softwareMapEnabled,
-      hasChangeRange,
-      hasTraceSessions !== false,
-    );
-
-    if (normalizedView !== "diff") setDiffScope(null);
-
-    if (shouldCloseSidePeekForReviewView(normalizedView)) {
-      closeForDocumentChange();
-    }
-
-    setActiveView(normalizedView);
-    viewStateSync.persistActiveView(normalizedView);
-  };
-
-  useEffect(() => {
-    if (
-      normalizeReviewView(
-        activeView,
-        softwareMapEnabled,
-        hasChangeRange,
-        hasTraceSessions !== false,
-      ) !== activeView
-    ) {
-      applyReviewView("review");
-    }
-  }, [activeView, hasChangeRange, hasTraceSessions, softwareMapEnabled]);
   useReviewTabTelemetry(activeView);
-  useEffect(() => {
-    if (traceSelection) {
-      applyReviewView("trace");
-    }
-  }, [traceSelection]);
-
-  useEffect(() => {
-    if (!softwareMapEnabled || !review.softwareMapFocusRequest) return;
-    applyReviewView("map");
-  }, [review.softwareMapFocusRequest, softwareMapEnabled]);
-  const applyReviewViewRef = useRef(applyReviewView);
-  applyReviewViewRef.current = applyReviewView;
 
   const tutorial = useTutorial() !== null;
 
-  const tocEntries =
-    documentState.state === "ready"
-      ? (documentState.document.tocEntries ?? [])
-      : [];
+  const tocEntries = document.tocEntries ?? [];
 
   // Subscribe before the canvas signals ready so a reveal immediately after
   // mounting cannot outrun the listener.
   useLayoutEffect(() => {
     return session.surface.subscribe((event) => {
-      if (
-        event.event === "showReviewView" &&
-        reviewViewsRef.current.includes(event.view)
-      ) {
-        applyReviewViewRef.current(event.view);
-      }
+      if (event.event !== "showReviewView") return;
+      const { availableViews, showView } = panelStore.getState();
+
+      if (availableViews.includes(event.view)) showView(event.view);
     });
-  }, [session.surface]);
+  }, [panelStore, session.surface]);
 
   const activeSoftwareMapSource = useMemo(
     () =>
       selectActiveSoftwareMapModel({
         softwareModels,
-        focusElementPath: review.softwareMapFocusRequest?.elementPath,
+        focusElementPath: mapFocus?.elementPath,
       }),
-    [review.softwareMapFocusRequest?.elementPath, softwareModels],
+    [mapFocus?.elementPath, softwareModels],
   );
 
   const activeSoftwareMap = useMemo(
@@ -522,8 +450,6 @@ function ReviewLayoutContent({
       ),
     [activeSoftwareMapSource, softwareMapTopologyDiff],
   );
-
-  const rightPanelOpen = activePanel !== null;
 
   // SAFETY: `--side-peek-width` is a CSS custom property, which React forwards
   // to style.setProperty; the CSSProperties typings only omit custom names.
@@ -537,31 +463,46 @@ function ReviewLayoutContent({
     "review-app",
     `review-app--theme-${debugSettings.theme}`,
     `review-app--tint-${debugSettings.nodeTint}`,
-    rightPanelOpen ? "review-app--peek-open" : null,
-    sidePeekResize.isResizing ? "review-app--resizing" : null,
-    panelMotion === "restored" ? "review-app--restored-panel" : null,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  ].join(" ");
 
   return (
-    <div ref={appRef} className={appClassName} style={appStyle}>
+    <div
+      ref={appRef}
+      {...withClass(
+        appClassName,
+        appMarker,
+        themeStyles.vars,
+        themeStyles.app,
+        debugSettings.theme === "light" && themeStyles.light,
+        rightPanelOpen && shellStyles.appPeekOpen,
+        sidePeekResize.isResizing && shellStyles.appResizing,
+        panelMotion === "restored" && shellStyles.appRestoredPanel,
+      )}
+      style={appStyle}
+      data-peek-open={rightPanelOpen || undefined}
+      data-document-header={document.header || undefined}
+      data-database-lens={document.databaseLens || undefined}
+      data-document-width={document.width}
+    >
       <main
         ref={shellRef}
-        className={
-          review.historicalRevision
-            ? "review-document-shell review-document-shell--historical"
-            : "review-document-shell"
-        }
+        {...withClass(
+          "review-document-shell",
+          shellStyles.documentShell,
+          !!review.historicalRevision && shellStyles.documentShellHistorical,
+        )}
       >
         <TutorialExperienceProvider
           shellRef={shellRef}
           scrollRegionRef={scrollRegionRef}
         >
-          <header className="review-topbar">
-            <div className="review-topbar-left">
+          <header {...stylex.props(shellStyles.topbar)}>
+            <div {...stylex.props(shellStyles.topbarLeft, topbarTabsMarker)}>
               <div
-                className="review-segmented"
+                {...stylex.props(
+                  controlStyles.segmented,
+                  controlStyles.segmentedTopbar,
+                )}
                 role="group"
                 aria-label="Session views"
               >
@@ -576,11 +517,14 @@ function ReviewLayoutContent({
                     }
                     aria-pressed={activeView === view}
                     title={view === "map" ? "Map (Experimental)" : undefined}
-                    className={
-                      activeView === view
-                        ? "review-segment review-segment--active"
-                        : "review-segment"
-                    }
+                    {...withClass(
+                      "review-segment",
+                      segmentMarker,
+                      controlStyles.segment,
+                      controlStyles.segmentTopbar,
+                      activeView === view && controlStyles.segmentActive,
+                      activeView === view && controlStyles.segmentTopbarActive,
+                    )}
                     onClick={() => {
                       if (view === "diff")
                         captureUiEvent(session, "diff_opened", {
@@ -590,42 +534,58 @@ function ReviewLayoutContent({
                           ),
                           via: "topbar",
                         });
-                      applyReviewView(view);
+                      showView(view);
                     }}
                   >
                     {view === "review" ? (
                       <ReviewSurfaceLabel
                         label={scratchpad ? "Scratchpad" : "Whiteboard"}
-                        hasContent={
-                          documentState.state === "ready" &&
-                          documentState.document.empty === false
-                        }
+                        hasContent={document.empty === false}
                         active={activeView === "review"}
                       />
                     ) : (
                       <span>{reviewViewLabel(view)}</span>
                     )}
                     {view === "diff" && filesTabFileCount !== null && (
-                      <span className="review-segment-count">
+                      <span
+                        {...stylex.props(
+                          controlStyles.segmentCount,
+                          activeView === view &&
+                            controlStyles.segmentCountActive,
+                        )}
+                      >
                         {filesTabFileCount}
                       </span>
                     )}
                     {view === "commits" && (
-                      <span className="review-segment-count">
+                      <span
+                        {...stylex.props(
+                          controlStyles.segmentCount,
+                          activeView === view &&
+                            controlStyles.segmentCountActive,
+                        )}
+                      >
                         {commits.length}
                       </span>
                     )}
-                    <MarkerUnderline />
+                    <MarkerUnderline active={activeView === view} />
                   </button>
                 ))}
               </div>
             </div>
-            <div className="review-topbar-actions">
-              <div className="review-topbar-context">
+            <div
+              {...stylex.props(shellStyles.topbarActions, topbarActionsMarker)}
+            >
+              <div
+                {...stylex.props(
+                  shellStyles.topbarItem,
+                  shellStyles.topbarContext,
+                )}
+              >
                 {!scratchpad && (
-                  <button
-                    type="button"
-                    className="review-open-source-tree"
+                  <Button
+                    variant="ghost"
+                    xstyle={shellStyles.openSourceTree}
                     aria-label="Source tree ↗"
                     ref={sourceTreeTooltip}
                     onClick={() => {
@@ -638,11 +598,11 @@ function ReviewLayoutContent({
                       });
                     }}
                   >
-                    <span className="review-open-source-tree-label">
+                    <span {...stylex.props(shellStyles.openSourceTreeLabel)}>
                       Source tree
                     </span>
                     <span aria-hidden="true">↗</span>
-                  </button>
+                  </Button>
                 )}
                 <AuthoringActivityBadge
                   onLocate={(view) => {
@@ -654,14 +614,15 @@ function ReviewLayoutContent({
                         ),
                         via: "locate",
                       });
-                    applyReviewView(view);
+                    showView(view);
                   }}
                 />
               </div>
-              {!scratchpad && <ShareControl />}
-              <button
-                type="button"
-                className="review-topbar-icon-button"
+              <ReviewStackSelector />
+              <AskHistoryControl />
+              <ShareControl />
+              <IconButton
+                xstyle={shellStyles.topbarItem}
                 ref={discordTooltip}
                 aria-label="Join our Discord community"
                 onClick={() => {
@@ -671,15 +632,20 @@ function ReviewLayoutContent({
                   session.surface.post({ name: "joinDiscord", args: {} });
                 }}
               >
-                <DiscordIcon />
-              </button>
+                <DiscordIcon xstyle={controlStyles.chromeIcon} />
+              </IconButton>
               <BugReportControl />
               <ReviewBatonChip outcome={review.submissionOutcome} />
               <DiffLayoutControl />
               {!scratchpad &&
                 !review.historicalRevision &&
                 !review.submissionOutcome && (
-                  <div className="topbar-actions-divider" />
+                  <div
+                    {...stylex.props(
+                      shellStyles.topbarItem,
+                      shellStyles.actionsDivider,
+                    )}
+                  />
                 )}
               {!scratchpad &&
               !review.historicalRevision &&
@@ -689,10 +655,9 @@ function ReviewLayoutContent({
             </div>
           </header>
           {review.historicalRevision ? (
-            <div className="review-history-banner" role="status">
+            <div {...stylex.props(shellStyles.historyBanner)} role="status">
               <span>You are viewing an older version of this session.</span>
-              <button
-                type="button"
+              <Button
                 onClick={() =>
                   void session.surface.post({
                     name: "openReviewRevision",
@@ -701,77 +666,99 @@ function ReviewLayoutContent({
                 }
               >
                 Back to latest
-              </button>
+              </Button>
             </div>
           ) : null}
-          {activeView === "review" && documentState.state === "ready" && (
-            <ReviewToc entries={tocEntries} />
+          {activeView === "review" && (
+            <ReviewToc
+              entries={tocEntries}
+              besideHeader={document.header}
+              documentWidth={document.width}
+            />
           )}
           <section
             ref={scrollRegionRef}
-            className={`review-view-region review-view-region--${activeView}`}
+            {...withClass(
+              `review-view-region review-view-region--${activeView}`,
+              shellStyles.viewRegion,
+              activeView === "commits" && shellStyles.commitsRegion,
+              activeView === "review" && shellStyles.reviewRegion,
+              activeView === "trace" && traceStyles.region,
+            )}
           >
             <div
-              className="review-document-view"
+              {...withClass(
+                "review-document-view",
+                shellStyles.documentView,
+                activeView !== "review" && shellStyles.hidden,
+              )}
               hidden={activeView !== "review"}
             >
-              {documentState.state === "ready" ? (
-                <>
-                  <article
-                    ref={articleRef}
-                    className="review-document"
-                    data-kind={scratchpad ? "scratchpad" : undefined}
+              <>
+                <article
+                  ref={articleRef}
+                  {...withClass(
+                    "review-document",
+                    documentStyles.article,
+                    documentMarker,
+                    rightPanelOpen && documentStyles.articlePeekOpen,
+                  )}
+                  data-kind={scratchpad ? "scratchpad" : undefined}
+                >
+                  <ReviewDocumentBoundary
+                    key={documentRevision}
+                    session={session}
+                    revision={documentRevision}
+                    onError={(_revision, error) =>
+                      reportReviewDocumentRenderError(session, error)
+                    }
                   >
-                    <ReviewDocumentBoundary
-                      key={documentRevision}
-                      session={session}
-                      revision={documentRevision}
-                      onError={(_revision, error) =>
-                        reportReviewDocumentRenderError(session, error)
-                      }
-                    >
-                      <ReviewViewStateProvider
-                        tourRestore={viewStateSync.tourRestore}
-                        persistOverlayTour={viewStateSync.persistOverlayTour}
-                      >
-                        <documentState.document.render />
-                      </ReviewViewStateProvider>
-                    </ReviewDocumentBoundary>
-                  </article>
-                </>
-              ) : (
-                <ReviewDocumentLoadState state={documentState} />
-              )}
+                    <document.render />
+                  </ReviewDocumentBoundary>
+                </article>
+                <AskThreadMarks
+                  articleRef={articleRef}
+                  revision={documentRevision}
+                />
+              </>
             </div>
             {softwareMapEnabled && activeView === "map" && (
-              <div className="review-map-view">
-                <div className="review-map-canvas-shell">
-                  {softwareMapState.state === "ready" ||
-                  softwareMapState.state === "absent" ? (
-                    <>
-                      <SoftwareMapTopologyUnavailable
-                        repoSoftwareMap={repoSoftwareMap}
-                        baseSoftwareMap={baseSoftwareMap}
-                        baseRef={review.resolvedBaseRef ?? undefined}
-                        headRef={review.resolvedHeadRef ?? undefined}
-                      />
-                      <SoftwareMap
-                        model={activeSoftwareMap ?? undefined}
-                        pinnedData={
-                          activeSoftwareMapSource
-                            ? session.softwareMapData?.(activeSoftwareMapSource)
-                            : undefined
-                        }
-                        focusRequest={review.softwareMapFocusRequest}
-                        height="100%"
-                        showChrome={false}
-                        showFloatingActions={!activePanel}
-                      />
-                      <MapSettingsControl />
-                    </>
-                  ) : (
-                    <ReviewSoftwareMapLoadState state={softwareMapState} />
+              <div
+                {...withClass(
+                  "review-map-view",
+                  shellStyles.mapView,
+                  mapViewStyles.view,
+                )}
+              >
+                <div
+                  {...stylex.props(
+                    shellStyles.mapCanvasShell,
+                    mapViewStyles.canvasShell,
                   )}
+                >
+                  <SoftwareMapTopologyUnavailable
+                    repoSoftwareMap={repoSoftwareMap}
+                    baseSoftwareMap={baseSoftwareMap}
+                    baseRef={review.resolvedBaseRef ?? undefined}
+                    headRef={review.resolvedHeadRef ?? undefined}
+                  />
+                  <SoftwareMap
+                    model={activeSoftwareMap ?? undefined}
+                    pinnedData={
+                      activeSoftwareMapSource
+                        ? session.softwareMapData?.(activeSoftwareMapSource)
+                        : undefined
+                    }
+                    focusRequest={mapFocus?.pending ? mapFocus : null}
+                    onFocusRequestHandled={
+                      panelStore.getState().consumeMapFocus
+                    }
+                    height="100%"
+                    showChrome={false}
+                    showFloatingActions={!rightPanelOpen}
+                    variant="view"
+                  />
+                  <MapSettingsControl />
                 </div>
               </div>
             )}
@@ -780,40 +767,48 @@ function ReviewLayoutContent({
                 commits={commits}
                 range={range}
                 onOpenDiff={(commit, via, file) => {
-                  setDiffScope({ commit, file });
                   captureUiEvent(session, "commit_diff_opened", { via });
-                  applyReviewView("diff");
+                  panelStore.getState().openCommitDiff({ commit, file });
                 }}
               />
             )}
             <div
-              aria-hidden={activeView !== "diff" || diffScope !== null}
-              className={
-                activeView === "diff" && diffScope === null
-                  ? "review-diff-view"
-                  : "review-diff-view review-diff-view--preloaded"
-              }
+              ref={diffHostRef}
+              aria-hidden={diffPreloaded}
+              {...stylex.props(
+                shellStyles.diffView,
+                diffPreloaded && shellStyles.diffViewPreloaded,
+              )}
+              style={frozenDiffStyle}
             >
               <ReviewDiffView />
             </div>
             {activeView === "diff" && diffScope !== null && (
-              <div className="review-diff-view review-diff-view--scoped">
+              <div
+                {...withClass(
+                  "review-diff-view--scoped",
+                  shellStyles.diffView,
+                  shellStyles.diffViewScoped,
+                  scopedDiffMarker,
+                )}
+              >
                 <CommitDiffScopeBar
                   commit={diffScope.commit}
-                  onBack={() => {
-                    setDiffScope(null);
-                    applyReviewView("commits");
-                  }}
+                  onBack={() => showView("commits")}
                 />
                 <ReviewDiffView
                   scope={{ commit: diffScope.commit.commit }}
                   revealFile={diffScope.file}
+                  restoreFile={diffScope.restoreFile}
                 />
               </div>
             )}
             {activeView === "trace" && (
               <ReviewTraceView
-                initialSelection={traceSelection}
+                selection={traceSelection}
+                onSelect={panelStore.getState().selectTrace}
+                storage={traceStorage}
+                onSelectStorage={panelStore.getState().selectTraceStorage}
                 storedList={storedList}
               />
             )}
@@ -822,99 +817,20 @@ function ReviewLayoutContent({
       </main>
       {rightPanelOpen && (
         <div
-          className="side-panel-resizer side-peek-resizer"
+          {...stylex.props(
+            shellStyles.resizer,
+            shellStyles.peekResizer,
+            shellStyles.resizerGrabPanel,
+            askDocked && shellStyles.peekResizerTray,
+            sidePeekResize.isResizing && shellStyles.peekResizerActive,
+          )}
           {...sidePeekResize.separatorProps}
         />
       )}
-      <div className="review-detail-host">
+      <div {...stylex.props(shellStyles.detailHost, detailHostMarker)}>
         <ReviewPanelHost />
       </div>
     </div>
-  );
-}
-
-function ReviewDocumentLoadState({
-  state,
-}: {
-  state: Exclude<ReviewDocumentAppState, { state: "ready" }>;
-}): ReactElement | null {
-  switch (state.state) {
-    case "loading":
-      return null;
-    case "unavailable":
-      return (
-        <ReviewUnavailable
-          title="Session unavailable"
-          message={state.message}
-          action={
-            state.currentReviewUuid ? (
-              <OpenCurrentReview reviewUuid={state.currentReviewUuid} />
-            ) : null
-          }
-        />
-      );
-    default: {
-      const unhandled: never = state;
-      throw new Error(
-        `Unhandled review document state ${JSON.stringify(unhandled)}.`,
-      );
-    }
-  }
-}
-
-function ReviewSoftwareMapLoadState({
-  state,
-}: {
-  state: Exclude<
-    ReviewSoftwareMapAppState,
-    { state: "ready" } | { state: "absent" }
-  >;
-}): ReactElement | null {
-  switch (state.state) {
-    case "loading":
-      return null;
-    case "unavailable":
-      return (
-        <ReviewUnavailable
-          message={`Software map unavailable: ${state.message}`}
-          action={
-            state.currentReviewUuid ? (
-              <OpenCurrentReview reviewUuid={state.currentReviewUuid} />
-            ) : null
-          }
-        />
-      );
-    default: {
-      // A new software-map state has to choose here: the map chrome renders
-      // for ready and absent (an absent map still shows document-authored
-      // models), everything else is a load state.
-      const unhandled: never = state;
-      throw new Error(
-        `Unhandled software map state ${JSON.stringify(unhandled)}.`,
-      );
-    }
-  }
-}
-
-function OpenCurrentReview({
-  reviewUuid,
-}: {
-  reviewUuid: string;
-}): ReactElement {
-  const session = useReviewSession();
-
-  return (
-    <button
-      type="button"
-      onClick={() =>
-        void session.surface.post({
-          name: "openReview",
-          args: { reviewUuid, active: true },
-        })
-      }
-    >
-      Open current review
-    </button>
   );
 }
 
@@ -926,17 +842,61 @@ function CommitDiffScopeBar({
   onBack: () => void;
 }) {
   return (
-    <div className="review-diff-scope-bar">
-      <button type="button" onClick={onBack}>
+    <div {...stylex.props(scopeBarStyles.bar)}>
+      <button
+        type="button"
+        {...stylex.props(scopeBarStyles.back)}
+        onClick={onBack}
+      >
         <span aria-hidden="true">←</span> Commits
       </button>
-      <code title={commit.commit}>{commit.commit.slice(0, 8)}</code>
-      <span className="review-diff-scope-subject" title={commit.subject}>
+      <code {...stylex.props(scopeBarStyles.sha)} title={commit.commit}>
+        {commit.commit.slice(0, 8)}
+      </code>
+      <span {...stylex.props(scopeBarStyles.subject)} title={commit.subject}>
         {commit.subject}
       </span>
     </div>
   );
 }
+
+const scopeBarStyles = stylex.create({
+  bar: {
+    display: "flex",
+    height: "30px",
+    flex: "0 0 30px",
+    alignItems: "center",
+    gap: "12px",
+    padding: "0 12px",
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.ruleSoft,
+    backgroundColor: tokens.surface,
+  },
+  back: {
+    height: "20px",
+    flex: "0 0 auto",
+    padding: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    backgroundColor: "transparent",
+    color: tokens.accent,
+    fontSize: fontSize.micro,
+  },
+  sha: {
+    color: tokens.inkMuted,
+    font: `${fontSize.micro} ${tokens.fontMono}`,
+  },
+  subject: {
+    minWidth: 0,
+    overflow: "hidden",
+    color: tokens.ink,
+    fontSize: fontSize.small,
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+});
 
 /**
  * Reports where the baton sits after the reader acts. It renders nothing while
@@ -955,10 +915,10 @@ function ReviewBatonChip({
   return (
     <span
       ref={tooltip}
-      className={`review-baton-chip review-baton-chip--${outcome}`}
+      {...stylex.props(shellStyles.topbarItem, batonStyles.chip)}
     >
       <svg
-        className="review-baton-glyph"
+        {...stylex.props(batonStyles.glyph)}
         viewBox="0 0 16 16"
         width="12"
         height="12"
@@ -1019,16 +979,12 @@ function MapSettingsControl(): ReactElement {
   }, [isOpen]);
 
   return (
-    <div
-      ref={controlRef}
-      className={
-        isOpen
-          ? "map-settings-control map-settings-control--open"
-          : "map-settings-control"
-      }
-    >
+    <div ref={controlRef} {...stylex.props(mapSettingsStyles.control)}>
       {isOpen && (
-        <section className="map-settings-popover" aria-label="Map settings">
+        <section
+          {...stylex.props(surfaceStyles.popover, mapSettingsStyles.popover)}
+          aria-label="Map settings"
+        >
           <DebugSwitch
             label="Show modified nodes only"
             checked={showModifiedOnly}
@@ -1040,20 +996,26 @@ function MapSettingsControl(): ReactElement {
             onChange={setShowRemovedNodes}
           />
           <div
-            className="review-debug-theme review-debug-theme--triple"
+            {...stylex.props(mapSettingsStyles.tints)}
             role="group"
             aria-label="Node tint"
           >
-            <span className="review-debug-group-label">Map node tint</span>
+            <span
+              {...stylex.props(
+                textStyles.eyebrow,
+                mapSettingsStyles.groupLabel,
+              )}
+            >
+              Map node tint
+            </span>
             {(["none", "slate", "mineral"] as const).map((option) => (
               <button
                 key={option}
                 type="button"
-                className={
-                  nodeTint === option
-                    ? "review-debug-theme-option review-debug-theme-option--active"
-                    : "review-debug-theme-option"
-                }
+                {...stylex.props(
+                  mapSettingsStyles.tint,
+                  nodeTint === option && mapSettingsStyles.tintActive,
+                )}
                 aria-pressed={nodeTint === option}
                 onClick={() => setNodeTint(option)}
               >
@@ -1063,19 +1025,18 @@ function MapSettingsControl(): ReactElement {
           </div>
         </section>
       )}
-      <button
-        type="button"
-        className={
-          isOpen
-            ? "map-settings-trigger map-settings-trigger--active"
-            : "map-settings-trigger"
-        }
+      <IconButton
+        size="large"
+        xstyle={[
+          mapSettingsStyles.trigger,
+          isOpen && mapSettingsStyles.triggerActive,
+        ]}
         aria-label="Map settings"
         aria-expanded={isOpen}
         onClick={() => setIsOpen((open) => !open)}
       >
         <SettingsSlidersIcon />
-      </button>
+      </IconButton>
     </div>
   );
 }
@@ -1090,14 +1051,21 @@ function DebugSwitch({
   onChange: (checked: boolean) => void;
 }): ReactElement {
   return (
-    <label className="review-debug-switch">
+    <label {...stylex.props(mapSettingsStyles.switch)}>
       <span>{label}</span>
       <input
         type="checkbox"
+        {...stylex.props(mapSettingsStyles.switchInput)}
         checked={checked}
         onChange={(event) => onChange(event.currentTarget.checked)}
       />
-      <i aria-hidden="true" />
+      <i
+        {...stylex.props(
+          mapSettingsStyles.switchTrack,
+          checked && mapSettingsStyles.switchTrackOn,
+        )}
+        aria-hidden="true"
+      />
     </label>
   );
 }
@@ -1128,3 +1096,162 @@ export function applySoftwareMapTopologyStatuses(
     elementsByPath: new Map(elements.map((element) => [element.path, element])),
   };
 }
+
+const batonStyles = stylex.create({
+  chip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "7px",
+    color: tokens.diffRemoved,
+    fontFamily: tokens.chromeFont,
+    fontSize: tokens.chromeFontSizeSmall,
+    fontWeight: tokens.chromeFontWeightStrong,
+    lineHeight: 1,
+    letterSpacing: tokens.chromeTracking,
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
+  },
+  glyph: {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    strokeWidth: "1.4",
+  },
+});
+
+// Map settings float over the map canvas instead of sitting behind a topbar
+// gear, so map-only controls stay with the map.
+const mapSettingsStyles = stylex.create({
+  control: {
+    position: "absolute",
+    right: "16px",
+    bottom: "16px",
+    zIndex: 3,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: "8px",
+  },
+  // A floating corner control, so it keeps a border and lifts off the map.
+  trigger: {
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: { default: tokens.ruleSoft, ":hover": tokens.accent },
+    borderRadius: radius.surface,
+    backgroundColor: tokens.surfaceRaised,
+    boxShadow: elevation.popover,
+  },
+  triggerActive: {
+    borderColor: tokens.accent,
+    color: tokens.ink,
+  },
+  popover: {
+    display: "flex",
+    width: "268px",
+    flexDirection: "column",
+  },
+  switch: {
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "14px",
+    minHeight: "50px",
+    padding: "10px 13px",
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.rule,
+    color: tokens.ink,
+    fontSize: fontSize.ui,
+  },
+  switchInput: {
+    position: "absolute",
+    opacity: 0,
+    pointerEvents: "none",
+  },
+  switchTrack: {
+    position: "relative",
+    flex: "0 0 auto",
+    width: "38px",
+    height: "22px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.ruleSoft,
+    borderRadius: radius.pill,
+    backgroundColor: tokens.controlBg,
+    "::before": {
+      position: "absolute",
+      top: "3px",
+      left: "3px",
+      width: "14px",
+      height: "14px",
+      borderRadius: radius.pill,
+      backgroundColor: tokens.inkFaint,
+      transition: `transform ${motion.fast} ${motion.ease}, background ${motion.fast} ${motion.ease}`,
+      content: "''",
+    },
+  },
+  switchTrackOn: {
+    borderColor: tokens.accent,
+    backgroundColor: tokens.accentSoft,
+    "::before": {
+      backgroundColor: tokens.accent,
+      transform: "translateX(16px)",
+    },
+  },
+  tints: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: "6px",
+    padding: "10px",
+  },
+  groupLabel: {
+    gridColumn: "1 / -1",
+    fontFamily: tokens.fontMono,
+  },
+  tint: {
+    minHeight: "32px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: {
+      default: tokens.rule,
+      ":hover": tokens.accent,
+      ":focus-visible": tokens.accent,
+    },
+    borderRadius: radius.control,
+    backgroundColor: {
+      default: tokens.tray,
+      ":hover": tokens.accentSoft,
+      ":focus-visible": tokens.accentSoft,
+    },
+    color: {
+      default: tokens.inkMuted,
+      ":hover": tokens.accent,
+      ":focus-visible": tokens.accent,
+    },
+    fontSize: fontSize.body,
+    fontWeight: fontWeight.bold,
+    outline: { default: null, ":hover": "none", ":focus-visible": "none" },
+  },
+  tintActive: {
+    borderColor: tokens.accent,
+    backgroundColor: tokens.accentSoft,
+    color: tokens.accent,
+    outline: "none",
+  },
+});
+
+const mapViewStyles = stylex.create({
+  view: {
+    backgroundColor: tokens.bg,
+  },
+  canvasShell: {
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    borderRadius: 0,
+    backgroundColor: tokens.bg,
+    boxShadow: "none",
+  },
+});

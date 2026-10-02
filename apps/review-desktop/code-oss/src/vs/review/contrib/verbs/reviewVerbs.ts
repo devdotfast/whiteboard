@@ -131,9 +131,6 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 				case "reveal":
 				case "openReviewRevision":
 					throw new Error("This action requires a pinned session canvas.");
-				case "focusCanvas":
-					this._onDidRequestCanvasFocus.fire();
-					break;
 				case "captureScreenshot":
 					return { ok: true, result: await this.captureScreenshot() };
 				case "openReview": {

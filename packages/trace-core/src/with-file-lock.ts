@@ -1,8 +1,15 @@
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { jsonNumber, jsonObject, parseJsonText } from "@dev.fast/json";
+import {
+  jsonNumber,
+  jsonObject,
+  jsonString,
+  parseJsonText,
+} from "@dev.fast/json";
 
 const LOCK_OWNER_FILE = "owner.json";
 
@@ -17,6 +24,11 @@ export interface FileLockOptions {
   unownedGraceMs: number;
   /** How often the holder refreshes the lock mtime. */
   heartbeatMs?: number;
+  /**
+   * Record the holder's start too, so a live process that merely reuses its
+   * pid (after a reboot or a kill) is not mistaken for it.
+   */
+  identifyOwner?: boolean;
 }
 
 export type FileLockOutcome<T> =
@@ -51,7 +63,12 @@ export async function withFileLock<T>(
       try {
         await writeFile(
           path.join(lockPath, LOCK_OWNER_FILE),
-          JSON.stringify({ pid: process.pid }),
+          JSON.stringify({
+            pid: process.pid,
+            ...(options.identifyOwner && {
+              started: processStartIdentity(process.pid),
+            }),
+          }),
           "utf8",
         );
       } catch (error) {
@@ -71,8 +88,13 @@ export async function withFileLock<T>(
         .then((metadata) => Date.now() - metadata.mtimeMs)
         .catch(() => 0);
 
-      const ownerPid = await readLockOwner(lockPath);
-      const ownerDead = ownerPid !== null && !processIsAlive(ownerPid);
+      const owner = await readLockOwner(lockPath);
+      const ownerPid = owner?.pid ?? null;
+
+      const ownerDead =
+        ownerPid !== null &&
+        (!processIsAlive(ownerPid) || pidReused(ownerPid, owner?.started));
+
       const neverOwned = ownerPid === null && lockAge > options.unownedGraceMs;
       const heartbeatSilent = lockAge > options.staleMs;
 
@@ -122,11 +144,50 @@ function startHeartbeat(lockPath: string, intervalMs: number): NodeJS.Timeout {
   return timer;
 }
 
-async function readLockOwner(lockPath: string): Promise<number | null> {
+async function readLockOwner(lockPath: string) {
   return readFile(path.join(lockPath, LOCK_OWNER_FILE), "utf8")
-    .then(
-      (contents) =>
-        jsonNumber(jsonObject(parseJsonText(contents))?.pid) ?? null,
-    )
+    .then((contents) => {
+      const owner = jsonObject(parseJsonText(contents));
+      const pid = jsonNumber(owner?.pid);
+
+      return pid === undefined
+        ? null
+        : { pid, started: jsonString(owner?.started) };
+    })
     .catch(() => null);
+}
+
+/** Only a recorded start that differs proves reuse; unknown is the same process. */
+function pidReused(pid: number, started: string | undefined) {
+  if (!started) return false;
+  const current = processStartIdentity(pid);
+
+  return current !== null && current !== started;
+}
+
+/**
+ * Fixed for a process's life and unaffected by clock changes: the boot id and
+ * start ticks on Linux, the kernel's recorded start elsewhere. Null if unknown.
+ */
+export function processStartIdentity(pid: number): string | null {
+  try {
+    if (process.platform === "linux") {
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      // Field 22, counted after the parenthesised command name (field 2).
+      const ticks = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+      const boot = readFileSync("/proc/sys/kernel/random/boot_id", "utf8");
+
+      return ticks ? `${boot.trim()}:${ticks}` : null;
+    }
+
+    const ps = spawnSync("ps", ["-o", "lstart=", "-p", String(pid)], {
+      encoding: "utf8",
+      // lstart prints local time: pin language and zone so every reader agrees.
+      env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
+    });
+
+    return (ps.status === 0 && ps.stdout.trim()) || null;
+  } catch {
+    return null;
+  }
 }

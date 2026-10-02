@@ -4,11 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { selectSource } from "@review/lens-selection.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { selectSource } from "../lens-selection.js";
 import { type AuthoringTool, callAuthoringTool } from "./agent-client.js";
-import { authoringTools } from "./authoring-tools.js";
 import { ReviewApiClient } from "./client.js";
 import { documentText } from "./document-text.js";
 import { createReviewApi } from "./http.js";
@@ -48,7 +47,7 @@ const run = <Operation>(operation: Operation, leaseId?: string) =>
 const create = () => run({ type: "create", title: "Lenses", pins });
 
 const lens = <Edit>(reviewId: string, edit: Edit, leaseId?: string) =>
-  run({ type: "lens", reviewId, edit }, leaseId);
+  run({ type: "lens_edit", reviewId, edit }, leaseId);
 
 const markdown = (reviewId: string, text: string, leaseId?: string) =>
   run(
@@ -144,7 +143,7 @@ it("keeps lenses in history, restores them, and replays a lens command's receipt
   const command = {
     commandId: randomUUID(),
     operation: {
-      type: "lens",
+      type: "lens_edit",
       reviewId,
       edit: { type: "insert", title: "API", targets: files("src/**") },
     },
@@ -378,8 +377,6 @@ it("keeps a live lease from before scopes as the document's", async () => {
     scopes: ["document"],
     focuses: [{ description: "Writing" }],
   });
-  expect(store.activity.heldByAnother("review", leaseId)).toBe(false);
-  expect(store.activity.heldByAnother("review", leaseId, "lenses")).toBe(false);
 });
 
 it("reports the changed lines no lens selects after each lens write", async () => {

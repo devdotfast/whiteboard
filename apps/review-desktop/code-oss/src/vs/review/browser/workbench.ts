@@ -1398,18 +1398,11 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 
 		size(this.mainContainer, this._mainContainerDimension.width, this._mainContainerDimension.height);
 
-		// A deliberate 10px breathing gap along the bottom edge, kept to match the window
-		// shape of stock VS Code. Review draws no part cards, so this is bare workbench
-		// ground rather than a margin around a card; review.css paints it with the editor
-		// background so it reads as one surface.
-		//
-		// The right edge takes no gutter: stock VS Code runs its parts flush to the window
-		// edge, and Review has no right-edge card to inset -- the card margins that would
-		// have needed one live under `.agent-sessions-workbench`, a class `workbenchClasses`
-		// never includes.
-		const gutterBottom = 10;
+		// The parts run flush to the window's bottom and right edges. Review draws no
+		// part cards to inset, and a bottom gap would show as a band under any part
+		// whose background is not the editor's, such as the canvas's Ask panel.
 		const gridWidth = this._mainContainerDimension.width;
-		const gridHeight = this._mainContainerDimension.height - gutterBottom;
+		const gridHeight = this._mainContainerDimension.height;
 
 		// Layout the grid widget
 		this.workbenchGrid.layout(gridWidth, gridHeight);

@@ -1,0 +1,327 @@
+/* The canvas CSS that StyleX cannot express. Everything else is StyleX,
+   written next to the component that renders it. */
+
+/* The scope root: the canvas container the workbench mounts into. Inside
+   @scope only :scope reaches it, so its box and the dark palette live here.
+   One board, one marker: chrome is the tray, content is the board, committed
+   things are crisp vector, anything the agent is still thinking about is
+   marker ink trailing one blue dot, and erased history lingers as ghost ink. */
+.review-canvas-root {
+  --ghost: #343a46;
+  --well: #1a1f29;
+  --raised: #1a1f29;
+  --tray: #12161e;
+  --tray-raised: color-mix(in srgb, var(--ink) 6%, var(--tray));
+  --chevron-down: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 4.25 6 8l3.5-3.75' fill='none' stroke='%239AA0AB' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  --check-mark: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 5.2 4.2 7.4 8 3.2' fill='none' stroke='%230C0F15' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  --marker-tint: rgba(91, 124, 255, 0.14);
+  --marker-glow: rgba(91, 124, 255, 0.3);
+  --board-grid: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='1' cy='1' r='0.8' fill='%231A1F2A'/></svg>");
+  --review-header-height: 35px;
+  --font-serif: "Newsreader", Georgia, serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-display: var(--font-mono);
+  --transparent: transparent;
+  /* Ground bridge. Same principle as the --chrome-* tokens on .review-app: the
+     canvas mounts straight into the Code OSS DOM, so --vscode-* is in scope and
+     the neutral surfaces can resolve to the active color theme, with the canvas
+     palette as the standalone fallback. Unlike --chrome-*, these can live on
+     .review-canvas-root because every fallback is a literal rather than another
+     canvas token, so nothing is frozen by declaring them this far up.
+     Only neutrals bridge; the accent, diff and syntax colors stay the canvas's
+     own. The rules bridge editorWidget.border rather than widget.border: the
+     latter is null on both stock themes, so its variable is never emitted and
+     the dark fallback would leak into light. */
+  --bg: var(--vscode-editor-background, #0c0f15);
+  --surface: var(--vscode-editor-background, #0c0f15);
+  --surface-raised: var(--vscode-editorWidget-background, #1a1f29);
+  --control-bg: var(--vscode-input-background, #1a1f29);
+  --ink: var(--vscode-editor-foreground, #eef0f4);
+  --ink-muted: var(--vscode-descriptionForeground, #9199a8);
+  --ink-faint: var(--vscode-disabledForeground, #5f6776);
+  --rule: var(--vscode-panel-border, #262c37);
+  --rule-soft: var(--vscode-editorWidget-border, #39404d);
+  /* The canvas shares the workbench DOM, but selection already reads through
+     its background and row highlights, so suppress the inherited
+     focus/list/input chrome. The map is the exception: its selection ring is
+     the only cue a node is selected, so it draws in the accent. */
+  --selection: var(--accent);
+  --selection-shadow: color-mix(in srgb, var(--accent) 40%, transparent);
+  --map-storage-border: #a4cedb;
+  --vscode-focusBorder: transparent;
+  --vscode-list-focusOutline: transparent;
+  --vscode-list-focusAndSelectionOutline: transparent;
+  --vscode-list-inactiveFocusOutline: transparent;
+  --vscode-inputOption-activeBorder: transparent;
+  --accent: #5b7cff;
+  --accent-soft: #1a2240;
+  --on-accent: #ffffff;
+  --on-accent-wash: rgba(255, 255, 255, 0.22);
+  --rpc: #8fa6ff;
+  --text-selection-bg: rgba(91, 124, 255, 0.35);
+  --text-selection-color: #ffffff;
+  --canvas-grid: #1a1f2a;
+  --minimap-mask: rgba(12, 15, 21, 0.78);
+  --minimap-node: #8796ad;
+  --minimap-node-selected: transparent;
+  --edge-muted: #6f7786;
+  --change-added: #4ed990;
+  --change-removed: #f26a55;
+  --change-modified: #f2c14e;
+  --warning-wash: rgba(242, 193, 78, 0.12);
+  --warning-outline: rgba(242, 193, 78, 0.52);
+  --on-warning: #1a1405;
+  --diff-added: #4ed990;
+  --diff-added-bg: #132019;
+  --diff-modified: #f2c14e;
+  --diff-modified-bg: #1d1b12;
+  --diff-removed: #f26a55;
+  --diff-removed-bg: #211517;
+  --shadow-color: rgb(0 0 0 / 45%);
+  --shadow-color-strong: rgba(0, 0, 0, 0.55);
+  --backdrop: rgba(0, 0, 0, 0.56);
+  --accent-shadow: rgba(91, 124, 255, 0.2);
+  --accent-stripe: rgba(91, 124, 255, 0.18);
+  --accent-wash: rgba(91, 124, 255, 0.14);
+  --accent-outline: rgb(91 124 255 / 32%);
+  --link-open-wash: rgba(91, 124, 255, 0.15);
+  --rpc-wash: rgba(143, 166, 255, 0.12);
+  --review-home-bg: var(--bg);
+  --review-home-rule: #262c37;
+  --review-home-rule-soft: #39404d;
+  --review-home-meta: #9199a8;
+  /* Code (Whiteboard Dark): ink at three strengths, the marker for keywords,
+     sky and periwinkle for types and functions, straw strings, orchid
+     numbers. Every value clears WCAG AA on the editor background. */
+  --syntax-comment: #778090;
+  --syntax-type: #6fc3e6;
+  --syntax-function: #b7c4ff;
+  --syntax-string: #d9a85c;
+  --syntax-number: #d48fd6;
+  --syntax-operator: #9199a8;
+  --syntax-inserted: #4ed990;
+  --syntax-deleted: #f26a55;
+  --review-debug-layer: 2147483000;
+  --review-find-match-background: color-mix(
+    in srgb,
+    var(--vscode-editor-findMatchHighlightBackground, #ea5c0055) 82%,
+    transparent
+  );
+  --review-find-match-active-background: color-mix(
+    in srgb,
+    #ff7a1a 60%,
+    transparent
+  );
+  /* Scrollbar slider, bridged from the workbench so the canvas pill and the
+     Monaco sliders share one color on any theme. The fallbacks are the
+     Whiteboard recipe: ink-faint at 45% at rest, ink-faint on hover, ink-muted
+     while dragging. */
+  --review-scrollbar-size: 10px;
+  --review-scrollbar-thumb: var(
+    --vscode-scrollbarSlider-background,
+    color-mix(in srgb, #5f6776 45%, transparent)
+  );
+  --review-scrollbar-thumb-hover: var(
+    --vscode-scrollbarSlider-hoverBackground,
+    #5f6776
+  );
+  --review-scrollbar-thumb-active: var(
+    --vscode-scrollbarSlider-activeBackground,
+    #9199a8
+  );
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  margin: 0;
+  height: 100%;
+  min-width: 0;
+  min-height: 100%;
+  overflow: hidden;
+  contain: layout;
+  container: review-canvas / inline-size;
+  background: var(--bg);
+}
+
+/* Element resets and the text selection colours. */
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* One scrollbar for every native scroller in the canvas: a 6px pill centered
+   in a 10px lane, with no visible track. Chromium ignores these rules on an
+   element with a non-auto `scrollbar-width` or `scrollbar-color` (and the
+   latter inherits), so keep both unset except on the review document scroller,
+   which follows platform scrollbar visibility. Scoped to the canvas: it shares
+   the workbench document, and these variables exist only here. */
+:where(.review-canvas-root, .review-canvas-root *)::-webkit-scrollbar {
+  width: var(--review-scrollbar-size);
+  height: var(--review-scrollbar-size);
+}
+
+:where(.review-canvas-root, .review-canvas-root *)::-webkit-scrollbar-track,
+:where(.review-canvas-root, .review-canvas-root *)::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+:where(.review-canvas-root, .review-canvas-root *)::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--review-scrollbar-thumb) padding-box;
+}
+
+:where(
+    .review-canvas-root,
+    .review-canvas-root *
+  )::-webkit-scrollbar-thumb:vertical {
+  min-height: 32px;
+}
+
+:where(
+    .review-canvas-root,
+    .review-canvas-root *
+  )::-webkit-scrollbar-thumb:horizontal {
+  min-width: 32px;
+}
+
+:where(
+    .review-canvas-root,
+    .review-canvas-root *
+  )::-webkit-scrollbar-thumb:hover {
+  background: var(--review-scrollbar-thumb-hover) padding-box;
+}
+
+:where(
+    .review-canvas-root,
+    .review-canvas-root *
+  )::-webkit-scrollbar-thumb:active {
+  background: var(--review-scrollbar-thumb-active) padding-box;
+}
+
+.review-app::selection,
+.review-app *::selection {
+  background-color: var(--text-selection-bg);
+  color: var(--text-selection-color);
+}
+
+.review-app::-moz-selection,
+.review-app *::-moz-selection {
+  background-color: var(--text-selection-bg);
+  color: var(--text-selection-color);
+}
+
+/* DOM the canvas does not render itself: the workbench's, React Flow's,
+   KaTeX's, and the CSS Custom Highlight API's. */
+
+/* The workbench mounts its diff view and file tree into the diff workspace;
+   its buttons and viewed sections (and the shared viewed box, which the
+   workbench's review.css styles) take the workspace's type and fade. */
+.diff-workspace button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: transparent;
+}
+
+.diff-workspace button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.diff-native-tree > .review-files-editor-tree {
+  width: 100%;
+  height: 100%;
+}
+
+.diff-workspace .is-viewed {
+  opacity: 0.55;
+}
+
+/* KaTeX sets math at 1.21em; this matches its x-height to the prose. */
+.review-app .katex {
+  font-size: 1.04em;
+}
+
+/* A pin row past a narrow document's edge moves inside it. StyleX has no
+   @position-try. */
+@position-try --ask-pin-inside {
+  right: 4px;
+  left: auto;
+}
+
+/* The software map's React Flow layers: edges under the cards, edge labels
+   selectable like prose, and the map view's pane on the board grid. */
+
+.software-map-c4-canvas .react-flow__edges {
+  z-index: 1;
+}
+
+.software-map-c4-canvas .react-flow__edgelabel-renderer {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.review-map-view :is(.react-flow__renderer, .react-flow__pane) {
+  background: var(--bg);
+}
+
+.review-map-view .react-flow__pane {
+  background-image: var(--board-grid);
+  background-repeat: repeat;
+}
+
+/* React Flow's edge label layer: diagram text selects like the prose around
+   it. */
+
+.sequence-diagram .react-flow__edgelabel-renderer {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* An inline flow draws on its figure's dotted canvas. */
+
+.lens-flow .react-flow__pane,
+.lens-flow .react-flow__viewport {
+  background: var(--transparent);
+}
+
+/* The drawing's wipe and eraser sweep (draw-styles.ts) animate these. StyleX
+   typed variables (stylex.types) always register as inheriting. */
+
+@property --wb-wipe {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
+@property --wb-sweep {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: -20%;
+}
+
+/* Only the tour overlay's grid reads it; inheriting restyled the whole tour on every resize step. */
+
+@property --diagram-tour-pane-width {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 424px;
+}
+
+/* Only the app root's grid reads it; inheriting restyled the whole document on every resize step. */
+
+@property --side-peek-width {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 560px;
+}

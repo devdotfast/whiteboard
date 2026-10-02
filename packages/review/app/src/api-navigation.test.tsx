@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { randomUUID } from "node:crypto";
 
+import { createReviewApi } from "@review/review-api/http";
+import { ReviewStore } from "@review/review-api/store";
 import { Hono } from "hono";
 import { act } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { createReviewApi } from "../../src/review-api/http";
-import { ReviewStore } from "../../src/review-api/store";
 import { mountReviewCanvas } from "./desktop-entry";
 import { testReviewBridge } from "./review-session-test-utils";
 
@@ -137,18 +137,19 @@ it("exposes JSON section and Markdown headings plus imported PR and stack naviga
     "details-2",
   ]);
 
-  const contents =
-    container.querySelector<HTMLButtonElement>(".review-toc-toggle")!;
+  const contents = container.querySelector<HTMLButtonElement>(
+    '[aria-controls="review-toc-body"]',
+  )!;
 
   expect(contents).toBeTruthy();
   await act(async () => contents.click());
 
   const links = [
-    ...container.querySelectorAll<HTMLButtonElement>(".review-toc-link"),
+    ...container.querySelectorAll<HTMLButtonElement>("#review-toc li > button"),
   ];
 
   expect(
-    links.map((link) => link.querySelector(".review-toc-text")?.textContent),
+    links.map((link) => link.querySelector("span:last-child")?.textContent),
   ).toEqual(headings.map((heading) => heading.textContent));
   const scroll = vi.fn<() => void>();
   container.querySelectorAll<HTMLElement>("*").forEach((element) => {
@@ -158,5 +159,7 @@ it("exposes JSON section and Markdown headings plus imported PR and stack naviga
 
   for (const link of links) await act(async () => link.click());
   expect(scroll).toHaveBeenCalledTimes(4);
-  expect(container.textContent).toContain("2 of 2");
+  expect(
+    container.querySelector('[aria-label="Pull request stack, 2 of 2"]'),
+  ).not.toBeNull();
 });

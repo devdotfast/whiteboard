@@ -1,3 +1,3 @@
-export * from "../../../src/software-map-model";
+export * from "@review/software-map-model";
 
-export { defineSoftwareMap as defineSoftwareModel } from "../../../src/software-map-model";
+export { defineSoftwareMap as defineSoftwareModel } from "@review/software-map-model";

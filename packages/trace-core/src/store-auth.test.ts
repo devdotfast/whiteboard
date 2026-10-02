@@ -6,12 +6,7 @@ import { PassThrough } from "node:stream";
 import type { JsonValue } from "@dev.fast/json";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  browserOpenCommand,
-  readStoreAuth,
-  runStoreLogin,
-  writeStoreAuth,
-} from "./store-auth";
+import { readStoreAuth, runStoreLogin, writeStoreAuth } from "./store-auth";
 
 function json(body: JsonValue, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -34,11 +29,6 @@ describe("store-auth", () => {
   afterEach(async () => {
     vi.unstubAllEnvs();
     await rm(tmp, { recursive: true, force: true });
-  });
-
-  it("opens the browser with the platform's opener", () => {
-    expect(browserOpenCommand("darwin")).toBe("open");
-    expect(browserOpenCommand("linux")).toBe("xdg-open");
   });
 
   it("writes auth.json under DEV_REVIEW_HOME with mode 0600", async () => {

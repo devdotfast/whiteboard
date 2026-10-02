@@ -1,3 +1,4 @@
+import type { LeaseScope } from "@review/review-api/activity";
 import {
   type Context,
   type ReactNode,
@@ -8,7 +9,6 @@ import {
   useState,
 } from "react";
 
-import type { LeaseScope } from "../../src/review-api/activity";
 import type { AuthoringCursor } from "./authoring-cursor";
 import { cursorContext } from "./courier";
 import {

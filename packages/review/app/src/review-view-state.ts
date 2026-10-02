@@ -1,37 +1,32 @@
 import {
   type JsonObject,
   type JsonValue,
+  type ReviewCommitSummary,
   isJsonObject,
   jsonNumber,
   jsonObject,
   jsonProperty,
   jsonString,
-  parseJsonText,
+  reviewViewSchema,
 } from "@dev.fast/review-protocol";
-import type { ReactNode, RefObject } from "react";
-import {
-  createContext,
-  createElement,
-  useCallback,
-  useContext,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import type { RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { persist } from "zustand/middleware";
+import { createStore } from "zustand/vanilla";
 
 import type { ReviewClientConfig } from "./host/review-client";
 import { useReviewSession } from "./host/review-session";
-import type { GuidedTour } from "./review-panel-model";
-import type { ReviewPanelState, ReviewPanelStore } from "./review-panel-store";
-import {
-  readReviewUiState,
-  removeReviewUiState,
-  reviewUiStateKey,
-  writeReviewUiState,
-} from "./review-ui-state";
-import type { ReviewView } from "./review-view-route";
+import type {
+  OverlayTour,
+  ReviewLensSelection,
+  ReviewNavigationRestore,
+  ReviewPanelStore,
+  TraceSelection,
+} from "./review-panel-store";
+import { reviewPersistence } from "./review-persistence";
+import { removeReviewUiState, reviewUiStateKey } from "./review-ui-state";
+import { type ReviewView, offeredReviewViews } from "./review-view-route";
+import type { AgentTraceStorage } from "./use-agent-trace";
 
 const REVIEW_VIEW_STATE_NAMESPACE = "view-state";
 
@@ -40,9 +35,24 @@ const SCROLL_RESTORE_DEADLINE_MS = 30_000;
 export interface PersistedReviewViewState {
   scrollTop?: number;
   activeView?: ReviewView;
-  panel?: PersistedReviewPanel;
-  /** A fullscreen diagram tour (sequence or database lens) that was open. */
-  overlayTour?: { tourId: string; activeAnchor: string };
+  /** The lens applied to the diff; restored only on its own version. */
+  lens?: ReviewLensSelection;
+  /** Written by older builds for an in-panel tour; read only as a fallback. */
+  panel?: PersistedTourPanel;
+  /** A fullscreen diagram tour that was open. */
+  overlayTour?: PersistedOverlayTour;
+  /** The commit the diff was scoped to; restored while the version lists it. */
+  diffScope?: { commit: string; file?: string };
+  trace?: TraceSelection;
+  traceStorage?: AgentTraceStorage;
+  /** The view `scrollTop` was taken on; absent on older records ("review"). */
+  scrollView?: ReviewView;
+}
+
+export interface PersistedOverlayTour {
+  tourId: string;
+  activeAnchor: string;
+  kind?: OverlayTour["kind"];
 }
 
 export interface PersistedTourPanel {
@@ -51,191 +61,156 @@ export interface PersistedTourPanel {
   activeAnchor: string;
 }
 
-export type PersistedReviewPanel = PersistedTourPanel;
-
-export interface ReviewTourRestore {
-  tour: GuidedTour;
-  activeAnchor: string;
-}
-
-interface ReviewTourRestoreClaim {
-  claim(tours: GuidedTour | readonly GuidedTour[]): ReviewTourRestore | null;
-}
-
-interface ReviewViewStateSync {
-  initialActiveView: ReviewView | undefined;
-  persistActiveView(view: ReviewView): void;
-  tourRestore: ReviewTourRestoreClaim;
-  persistOverlayTour(
-    open: { tourId: string; activeAnchor: string } | null,
-  ): void;
-}
-
-interface ReviewTourStateContextValue {
-  tourRestore: ReviewTourRestoreClaim;
-  persistOverlayTour(
-    open: { tourId: string; activeAnchor: string } | null,
-  ): void;
-}
-
-const ReviewTourStateContext =
-  createContext<ReviewTourStateContextValue | null>(null);
-
-export function ReviewViewStateProvider({
-  tourRestore,
-  persistOverlayTour,
-  children,
-}: {
-  tourRestore: ReviewTourRestoreClaim;
-  persistOverlayTour?: (
-    open: { tourId: string; activeAnchor: string } | null,
-  ) => void;
-  children: ReactNode;
-}) {
-  const value = useMemo(
-    () => ({
-      tourRestore,
-      persistOverlayTour: persistOverlayTour ?? (() => {}),
-    }),
-    [persistOverlayTour, tourRestore],
-  );
-
-  return createElement(ReviewTourStateContext.Provider, { value }, children);
-}
-
 export function useReviewViewStateSync({
   scrollRegionRef,
   panelStore,
 }: {
   scrollRegionRef: RefObject<HTMLElement | null>;
   panelStore: ReviewPanelStore;
-}): ReviewViewStateSync {
+}): void {
   const session = useReviewSession();
   const key = reviewViewStateKey(session.config);
 
-  const initialState = useMemo(
-    () => readPersistedReviewViewState(session.config),
-    [session.config],
-  );
+  const saved = useMemo(() => createReviewViewStateStore(key), [key]);
+  const initialState = useMemo(() => saved.getState(), [saved]);
 
-  const persistedRef = useRef(initialState);
-
-  // Overlay tours claim first; the panel slot keeps older in-panel tours
-  // restorable.
-  const tourRestore = useMemo(
+  // Layout, so navigation from a host event right after mount still persists.
+  useLayoutEffect(
     () =>
-      createReviewTourRestoreClaim(
-        initialState.overlayTour ??
-          (initialState.panel?.kind === "tour"
+      panelStore.subscribe((state, previous) => {
+        if (
+          state.view === previous.view &&
+          state.lens === previous.lens &&
+          state.overlayTour === previous.overlayTour &&
+          state.diffScope === previous.diffScope &&
+          state.traceSelection === previous.traceSelection &&
+          state.traceStorage === previous.traceStorage
+        ) {
+          return;
+        }
+
+        // The store holds the tour a legacy panel record restored, so the
+        // record is rewritten as an overlay tour, never as a panel.
+        saved.setState({
+          panel: undefined,
+          ...(state.view !== previous.view && { activeView: state.view }),
+          ...(state.lens !== previous.lens && {
+            lens: state.lens ?? undefined,
+          }),
+          // Written on every change: a scope a restore dropped must not
+          // come back on another version.
+          diffScope: state.diffScope
             ? {
-                tourId: initialState.panel.tourId,
-                activeAnchor: initialState.panel.activeAnchor,
+                commit: state.diffScope.commit.commit,
+                file: state.diffScope.file,
               }
-            : undefined),
-      ),
-    [initialState],
-  );
-
-  const persist = useCallback(
-    (next: PersistedReviewViewState) => {
-      // Normalise exactly as a stored value reads back.
-      const normalized = parsePersistedReviewViewState(
-        parseJsonText(JSON.stringify(next)),
-      );
-
-      if (JSON.stringify(normalized) === JSON.stringify(persistedRef.current)) {
-        return;
-      }
-
-      persistedRef.current = normalized;
-      writeReviewUiState("session", key, normalized);
-    },
-    [key],
-  );
-
-  const persistActiveView = useCallback(
-    (view: ReviewView) => {
-      persist({ ...persistedRef.current, activeView: view });
-    },
-    [persist],
-  );
-
-  const persistOverlayTour = useCallback(
-    (open: { tourId: string; activeAnchor: string } | null) => {
-      persist({ ...persistedRef.current, overlayTour: open ?? undefined });
-    },
-    [persist],
-  );
-
-  useEffect(
-    () =>
-      panelStore.subscribe((state) => {
-        persist({
-          ...persistedRef.current,
-          panel: persistedPanelState(state),
+            : undefined,
+          ...(state.traceSelection !== previous.traceSelection && {
+            trace: state.traceSelection
+              ? {
+                  sessionId: state.traceSelection.sessionId,
+                  trace: state.traceSelection.trace,
+                  eventIndex: state.traceSelection.eventIndex,
+                }
+              : undefined,
+          }),
+          traceStorage: state.traceStorage ?? undefined,
+          overlayTour: state.overlayTour
+            ? {
+                tourId: state.overlayTour.tourId,
+                activeAnchor: state.overlayTour.anchor,
+                kind: state.overlayTour.kind,
+              }
+            : undefined,
         });
       }),
-    [panelStore, persist],
+    [panelStore, saved],
+  );
+
+  // A scroll position belongs to the view it was taken on.
+  const restoreScrollTop = useMemo(
+    () =>
+      (initialState.scrollView ?? "review") === panelStore.getState().view
+        ? initialState.scrollTop
+        : undefined,
+    [initialState, panelStore],
   );
 
   const scrollRestorationPending = useScrollRestoration(
     scrollRegionRef,
-    initialState.scrollTop,
+    panelStore,
+    restoreScrollTop,
   );
 
   useScrollCapture(
     scrollRegionRef,
-    persist,
-    persistedRef,
+    panelStore,
+    saved,
     scrollRestorationPending,
   );
+}
+
+/** The navigation a canvas resumes: its stored view where the canvas still
+ * offers it, its stored lens when that lens belongs to this version, the
+ * commit its diff was scoped to while this version lists it, the picked
+ * trace, and the fullscreen tour that was open. */
+export function readReviewNavigationRestore(
+  config: ReviewClientConfig,
+  canvas: {
+    softwareMapEnabled: boolean;
+    hasChangeRange: boolean;
+    version: number;
+    lensMode: ReviewLensSelection["mode"];
+    commits: readonly ReviewCommitSummary[];
+  },
+): ReviewNavigationRestore {
+  const stored = readPersistedReviewViewState(config);
+
+  const tour: PersistedOverlayTour | undefined =
+    stored.overlayTour ??
+    (stored.panel && {
+      tourId: stored.panel.tourId,
+      activeAnchor: stored.panel.activeAnchor,
+    });
+
+  const scopedCommit =
+    stored.activeView === "diff" && stored.diffScope
+      ? canvas.commits.find(
+          (summary) => summary.commit === stored.diffScope!.commit,
+        )
+      : undefined;
 
   return {
-    initialActiveView: initialState.activeView,
-    persistActiveView,
-    tourRestore,
-    persistOverlayTour,
+    view: stored.activeView ?? "review",
+    // Traces are listed after mount; the canvas narrows this once they are.
+    availableViews: offeredReviewViews({
+      hasChangeRange: canvas.hasChangeRange,
+      softwareMapEnabled: canvas.softwareMapEnabled,
+      hasTraceSessions: true,
+    }),
+    lens:
+      stored.lens?.version === canvas.version &&
+      stored.lens.mode === canvas.lensMode
+        ? stored.lens
+        : null,
+    diffScope: scopedCommit
+      ? {
+          commit: scopedCommit,
+          file: stored.diffScope!.file,
+          restoreFile: true,
+        }
+      : null,
+    traceSelection: stored.trace,
+    traceStorage: stored.traceStorage ?? null,
+    overlayTour: tour
+      ? {
+          tourId: tour.tourId,
+          kind: tour.kind,
+          anchor: tour.activeAnchor,
+          revealRequest: 0,
+        }
+      : null,
   };
-}
-
-export function useTourRestore(
-  tours: GuidedTour | readonly GuidedTour[],
-): ReviewTourRestore | null {
-  const claim = useContext(ReviewTourStateContext)?.tourRestore;
-  const attemptedRef = useRef(false);
-  const [restore, setRestore] = useState<ReviewTourRestore | null>(null);
-  useLayoutEffect(() => {
-    if (attemptedRef.current) return;
-    attemptedRef.current = true;
-    setRestore(claim?.claim(tours) ?? null);
-  }, [claim, tours]);
-
-  return restore;
-}
-
-/** Keeps the persisted view state in step with a fullscreen diagram tour:
- * pass the open tour and its active anchor, or null when closed. An owner
- * that has not opened a tour in this mount never writes: a stored tour may
- * belong to another diagram that has yet to claim it. */
-export function useTourPersist(
-  tour: GuidedTour | null,
-  activeAnchor: string | null,
-): void {
-  const persistOverlayTour = useContext(
-    ReviewTourStateContext,
-  )?.persistOverlayTour;
-
-  const openedRef = useRef(false);
-
-  useEffect(() => {
-    const open =
-      tour && activeAnchor ? { tourId: tour.id, activeAnchor } : null;
-
-    if (open) openedRef.current = true;
-    else if (!openedRef.current) return;
-
-    persistOverlayTour?.(open);
-  }, [activeAnchor, persistOverlayTour, tour]);
 }
 
 export function reviewViewStateKey(config: ReviewClientConfig): string {
@@ -245,12 +220,7 @@ export function reviewViewStateKey(config: ReviewClientConfig): string {
 export function readPersistedReviewViewState(
   config: ReviewClientConfig,
 ): PersistedReviewViewState {
-  const value = readReviewUiState<JsonValue>(
-    "session",
-    reviewViewStateKey(config),
-  );
-
-  return parsePersistedReviewViewState(value);
+  return createReviewViewStateStore(reviewViewStateKey(config)).getState();
 }
 
 export function clearPersistedReviewViewState(
@@ -259,37 +229,24 @@ export function clearPersistedReviewViewState(
   removeReviewUiState("session", reviewViewStateKey(config));
 }
 
-export function createReviewTourRestoreClaim(
-  pending: { tourId: string; activeAnchor: string } | null | undefined,
-): ReviewTourRestoreClaim {
-  let claimed = false;
-
-  return {
-    claim(tours) {
-      if (claimed || !pending) return null;
-
-      const candidates: readonly GuidedTour[] = Array.isArray(tours)
-        ? tours
-        : [tours];
-
-      const tour = candidates.find(
-        (candidate) => candidate.id === pending.tourId,
-      );
-
-      if (!tour) return null;
-      claimed = true;
-
-      if (!tour.stops.some((stop) => stop.anchor.id === pending.activeAnchor)) {
-        return null;
-      }
-
-      return { tour, activeAnchor: pending.activeAnchor };
-    },
-  };
+function createReviewViewStateStore(key: string) {
+  return createStore<PersistedReviewViewState>()(
+    persist(
+      () => ({}),
+      reviewPersistence<PersistedReviewViewState, PersistedReviewViewState>({
+        key,
+        scope: "session",
+        legacy: true,
+        partialize: (state) => state,
+        parse: parsePersistedReviewViewState,
+      }),
+    ),
+  );
 }
 
 function useScrollRestoration(
   scrollRegionRef: RefObject<HTMLElement | null>,
+  panelStore: ReviewPanelStore,
   scrollTop: number | undefined,
 ): RefObject<boolean> {
   const pendingRef = useRef(false);
@@ -307,6 +264,7 @@ function useScrollRestoration(
       scrollRegion.removeEventListener("pointerdown", abortForUserInput);
       scrollRegion.removeEventListener("touchstart", abortForUserInput);
       scrollRegion.removeEventListener("keydown", abortForNavigationKey);
+      unsubscribeView();
     };
 
     const finish = () => {
@@ -366,6 +324,12 @@ function useScrollRestoration(
       passive: true,
     });
     scrollRegion.addEventListener("keydown", abortForNavigationKey);
+
+    // The position belongs to the view it was taken on.
+    const unsubscribeView = panelStore.subscribe((state, previous) => {
+      if (state.view !== previous.view) finish();
+    });
+
     resizeObserver =
       typeof ResizeObserver === "undefined"
         ? null
@@ -388,7 +352,7 @@ function useScrollRestoration(
       removeUserListeners();
       pendingRef.current = false;
     };
-  }, [scrollRegionRef, scrollTop]);
+  }, [panelStore, scrollRegionRef, scrollTop]);
 
   return pendingRef;
 }
@@ -410,8 +374,8 @@ function* layoutChildren(element: Element): Generator<Element> {
 
 function useScrollCapture(
   scrollRegionRef: RefObject<HTMLElement | null>,
-  persist: (state: PersistedReviewViewState) => void,
-  persistedRef: RefObject<PersistedReviewViewState>,
+  panelStore: ReviewPanelStore,
+  saved: ReturnType<typeof createReviewViewStateStore>,
   restorationPending: RefObject<boolean>,
 ): void {
   useEffect(() => {
@@ -428,9 +392,9 @@ function useScrollCapture(
       dirty = false;
 
       if (restorationPending.current) return;
-      persist({
-        ...persistedRef.current,
+      saved.setState({
         scrollTop: scrollRegion.scrollTop,
+        scrollView: panelStore.getState().view,
       });
     };
 
@@ -449,21 +413,7 @@ function useScrollCapture(
 
       if (dirty) write();
     };
-  }, [persist, persistedRef, restorationPending, scrollRegionRef]);
-}
-
-function persistedPanelState(
-  state: ReviewPanelState,
-): PersistedReviewViewState["panel"] {
-  if (state.active?.kind === "tour") {
-    return {
-      kind: "tour",
-      tourId: state.active.tour.id,
-      activeAnchor: state.active.activeAnchor,
-    };
-  }
-
-  return undefined;
+  }, [panelStore, saved, restorationPending, scrollRegionRef]);
 }
 
 function parsePersistedReviewViewState(
@@ -476,14 +426,44 @@ function parsePersistedReviewViewState(
   if (scrollTop !== undefined && scrollTop >= 0) state.scrollTop = scrollTop;
   const activeView = jsonString(jsonProperty(value, "activeView"));
 
-  if (
-    activeView === "review" ||
-    activeView === "commits" ||
-    activeView === "map" ||
-    activeView === "diff"
-  ) {
-    state.activeView = activeView;
+  if (isReviewView(activeView)) state.activeView = activeView;
+  const scrollView = jsonString(jsonProperty(value, "scrollView"));
+
+  if (isReviewView(scrollView)) state.scrollView = scrollView;
+  const diffScope = jsonObject(jsonProperty(value, "diffScope"));
+  const commit = jsonString(diffScope && jsonProperty(diffScope, "commit"));
+
+  if (commit && /^[0-9a-f]{40}$/i.test(commit)) {
+    const file = jsonString(diffScope && jsonProperty(diffScope, "file"));
+    state.diffScope = file === undefined ? { commit } : { commit, file };
   }
+
+  const trace = jsonObject(jsonProperty(value, "trace"));
+  const sessionId = jsonString(trace && jsonProperty(trace, "sessionId"));
+
+  if (sessionId !== undefined) {
+    const id = jsonString(trace && jsonProperty(trace, "trace"));
+    const eventIndex = jsonNumber(trace?.eventIndex);
+    state.trace = {
+      sessionId,
+      trace: id,
+      eventIndex:
+        eventIndex !== undefined &&
+        Number.isInteger(eventIndex) &&
+        eventIndex >= 0
+          ? eventIndex
+          : undefined,
+    };
+  }
+
+  const traceStorage = jsonString(jsonProperty(value, "traceStorage"));
+
+  if (traceStorage === "s3" || traceStorage === "hosted")
+    state.traceStorage = traceStorage;
+
+  const lens = parsePersistedLens(jsonObject(jsonProperty(value, "lens")));
+
+  if (lens) state.lens = lens;
 
   const panel = parsePersistedPanel(jsonObject(jsonProperty(value, "panel")));
 
@@ -498,25 +478,53 @@ function parsePersistedReviewViewState(
   return state;
 }
 
+function isReviewView(value: string | undefined): value is ReviewView {
+  return reviewViewSchema.safeParse(value).success;
+}
+
+function parsePersistedLens(
+  lens: JsonObject | undefined,
+): ReviewLensSelection | undefined {
+  if (!lens) return undefined;
+  const id = jsonString(jsonProperty(lens, "id"));
+  const version = jsonNumber(jsonProperty(lens, "version"));
+  const mode = jsonString(jsonProperty(lens, "mode"));
+
+  return id !== undefined &&
+    version !== undefined &&
+    (mode === "structural" || mode === "textual")
+    ? { id, version, mode }
+    : undefined;
+}
+
 function parsePersistedPanel(
   panel: JsonObject | undefined,
-): PersistedReviewPanel | undefined {
+): PersistedTourPanel | undefined {
   if (!panel) return undefined;
   const kind = jsonString(jsonProperty(panel, "kind"));
   const tour = parsePersistedTourState(panel);
 
-  if (kind === "tour" && tour) return { kind: "tour", ...tour };
+  if (kind === "tour" && tour) {
+    return {
+      kind: "tour",
+      tourId: tour.tourId,
+      activeAnchor: tour.activeAnchor,
+    };
+  }
 
   return undefined;
 }
 
 function parsePersistedTourState(
   tour: JsonObject | undefined,
-): PersistedReviewViewState["overlayTour"] {
+): PersistedOverlayTour | undefined {
   const tourId = jsonString(tour && jsonProperty(tour, "tourId"));
   const activeAnchor = jsonString(tour && jsonProperty(tour, "activeAnchor"));
+  const kind = jsonString(tour && jsonProperty(tour, "kind"));
 
-  return tourId !== undefined && activeAnchor !== undefined
-    ? { tourId, activeAnchor }
-    : undefined;
+  if (tourId === undefined || activeAnchor === undefined) return undefined;
+
+  return kind === "sequence" || kind === "database" || kind === "flow"
+    ? { tourId, activeAnchor, kind }
+    : { tourId, activeAnchor };
 }

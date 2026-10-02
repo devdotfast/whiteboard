@@ -100,34 +100,15 @@ describe("renderInstructions", () => {
     }
   });
 
-  describe("trace-archaeology gating", () => {
-    const off = {
-      desktopAvailable: true,
-      scratchpadEnabled: false,
-      traceEnabled: false,
-    };
+  it("omits trace guidance from authoring when capture is off", async () => {
+    const text = await renderInstructions(
+      "authoring",
+      { desktopAvailable: true, scratchpadEnabled: false, traceEnabled: false },
+      root,
+    );
 
-    const on = { ...off, traceEnabled: true };
-
-    it("omits trace guidance from authoring when capture is off", async () => {
-      const text = await renderInstructions("authoring", off, root);
-      expect(text).not.toContain("trace-archaeology");
-      expect(text).not.toContain("check if traces are available");
-    });
-
-    it("includes trace guidance when capture is on", async () => {
-      const text = await renderInstructions("authoring", on, root);
-      expect(text).toContain(
-        'session_get_instructions({topic:"trace-archaeology"})',
-      );
-      expect(text).toContain("check if traces are available");
-    });
-
-    it("answers the trace-archaeology topic with an off message when capture is off", async () => {
-      expect(await renderInstructions("trace-archaeology", off, root)).toBe(
-        "Trace capture is off on this machine, so no agent traces are available. It can be turned on in Whiteboard Desktop Settings under Experimental Features.",
-      );
-    });
+    expect(text).not.toContain("trace-archaeology");
+    expect(text).not.toContain("check if traces are available");
   });
 
   it("accepts only named topics, defaulting to authoring", () => {
@@ -439,7 +420,7 @@ const initialize = {
   clientInfo: { name: "test", version: "1" },
 };
 
-describe("review mcp instructions", () => {
+describe("whiteboard mcp instructions", () => {
   it("lists and answers while down, then serves guidance through a restart", async () => {
     let up = false;
     let connections = 0;

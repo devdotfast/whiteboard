@@ -1,4 +1,4 @@
-name: Review Windows packages
+name: Whiteboard Windows packages
 
 on:
   workflow_call:
@@ -83,8 +83,6 @@ jobs:
         with:
           path: apps/review-desktop/code-oss/**/node_modules
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
-      - name: Install Rust toolchain
-        run: rustup update stable
       - name: Build desktop
         run: pnpm desktop:build
       - name: Log in to Azure for code signing

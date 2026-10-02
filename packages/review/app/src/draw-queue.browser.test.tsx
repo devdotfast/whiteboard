@@ -1,15 +1,19 @@
+import type { Block } from "@review/review-api/document";
+import * as stylex from "@stylexjs/stylex";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { Block } from "../../src/review-api/document";
 import { ApiDocument } from "./api-document";
-import { AuthoringActivityContext } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import type { AuthoringCursor } from "./authoring-cursor";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
+import { documentStyles } from "./document-styles";
 import type { DrawQueueClock } from "./draw-queue-provider";
 import { DrawQueueProvider } from "./draw-queue-provider";
 import { ReviewSessionProvider } from "./host/review-session";
+import { documentMarker } from "./markers.stylex";
 import { ReviewPanelProvider } from "./review-panel";
 import type { ReviewRoots } from "./review-root-context";
 import { ReviewRootsProvider } from "./review-root-context";
@@ -108,7 +112,7 @@ let manualClock: ReturnType<typeof createManualClock>;
 
 beforeEach(() => {
   article = document.createElement("article");
-  article.className = "review-document";
+  article.className = `review-document ${stylex.props(documentStyles.article, documentMarker).className}`;
   article.style.position = "relative";
   article.style.width = "900px";
   container = document.createElement("div");
@@ -133,19 +137,21 @@ const render = async (cursor: AuthoringCursor | null, shown = data) => {
 
   await act(async () =>
     root.render(
-      <ReviewSessionProvider session={testReviewSession()}>
-        <ReviewDebugSettingsProvider>
-          <ReviewPanelProvider>
-            <ReviewRootsProvider roots={roots}>
-              <AuthoringActivityContext.Provider value={working}>
-                <DrawQueueProvider cursor={cursor} clock={manualClock.clock}>
-                  <ApiDocument data={shown} />
-                </DrawQueueProvider>
-              </AuthoringActivityContext.Provider>
-            </ReviewRootsProvider>
-          </ReviewPanelProvider>
-        </ReviewDebugSettingsProvider>
-      </ReviewSessionProvider>,
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={testReviewSession()}>
+          <ReviewDebugSettingsProvider>
+            <ReviewPanelProvider>
+              <ReviewRootsProvider roots={roots}>
+                <AuthoringActivityContext.Provider value={working}>
+                  <DrawQueueProvider cursor={cursor} clock={manualClock.clock}>
+                    <ApiDocument data={shown} />
+                  </DrawQueueProvider>
+                </AuthoringActivityContext.Provider>
+              </ReviewRootsProvider>
+            </ReviewPanelProvider>
+          </ReviewDebugSettingsProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     ),
   );
 };
@@ -169,10 +175,27 @@ const motion = (selector: string) =>
 
 const courier = () => article.querySelector<HTMLElement>(".courier");
 
+/** The courier re-measures a frame after the document reflows, so wait for
+ * him to catch up with the element. */
+const expectCourierOn = (selector: string) =>
+  vi.waitFor(
+    () => {
+      const target = article.querySelector(selector)!.getBoundingClientRect();
+      const base = article.getBoundingClientRect();
+      expect(parseFloat(courier()!.style.top)).toBeCloseTo(
+        target.top - base.top,
+        0,
+      );
+    },
+    { timeout: 5000 },
+  );
+
 it("traces a new flow node, then fills it, with the courier on it, and settles", async () => {
   await render(null);
-  await vi.waitFor(() =>
-    expect(article.querySelector('[data-review-unit-id="n2"]')).toBeTruthy(),
+  await vi.waitFor(
+    () =>
+      expect(article.querySelector('[data-review-unit-id="n2"]')).toBeTruthy(),
+    { timeout: 5000 },
   );
 
   await render(insert("n2", "d1", "flow_node"));
@@ -184,45 +207,7 @@ it("traces a new flow node, then fills it, with the courier on it, and settles",
   expect(motion('[data-review-unit-id="n2"]')).toBeUndefined();
 
   // The courier is still on the node once the queue is empty.
-  const node = article
-    .querySelector('[data-review-unit-id="n2"]')!
-    .getBoundingClientRect();
-
-  const base = article.getBoundingClientRect();
-  expect(parseFloat(courier()!.style.top)).toBeCloseTo(node.top - base.top, 0);
-});
-
-it("stands on an edit already on the board when the reader arrives, drawing nothing", async () => {
-  await render({ ...insert("b1"), source: "standing" });
-  expect(motion('[data-review-node-id="b1"]')).toBeUndefined();
-  await vi.waitFor(() => expect(courier()).toBeTruthy());
-
-  const block = article
-    .querySelector('[data-review-node-id="b1"]')!
-    .getBoundingClientRect();
-
-  const base = article.getBoundingClientRect();
-  expect(parseFloat(courier()!.style.top)).toBeCloseTo(block.top - base.top, 0);
-  expect(motion('[data-review-node-id="b1"]')).toBeUndefined();
-
-  // The agent's next edit is drawn as usual.
-  await render(insert("b2"));
-  expect(motion('[data-review-node-id="b2"]')).toBe("landing");
-});
-
-it("keeps a queued block unseen until its turn, then lands it", async () => {
-  await render(insert("b1"));
-  expect(motion('[data-review-node-id="b1"]')).toBe("landing");
-
-  // b2 arrives while b1 is still landing: it waits, hidden.
-  await render(insert("b2"));
-  expect(motion('[data-review-node-id="b2"]')).toBe("queued");
-
-  await manualClock.advance(680);
-  expect(motion('[data-review-node-id="b2"]')).toBe("landing");
-  expect(motion('[data-review-node-id="b1"]')).toBeUndefined();
-  await manualClock.advance(680);
-  expect(motion('[data-review-node-id="b2"]')).toBeUndefined();
+  await expectCourierOn('[data-review-unit-id="n2"]');
 });
 
 it("holds the attention ring on a focused block until the next edit lands", async () => {
@@ -231,8 +216,10 @@ it("holds the attention ring on a focused block until the next edit lands", asyn
 
   // The diagram lays out asynchronously; the edge has to be on the board
   // before an edit can be drawn on it.
-  await vi.waitFor(() =>
-    expect(article.querySelector('[data-review-unit-id="e1"]')).toBeTruthy(),
+  await vi.waitFor(
+    () =>
+      expect(article.querySelector('[data-review-unit-id="e1"]')).toBeTruthy(),
+    { timeout: 5000 },
   );
   expect(motion('[data-review-node-id="b1"]')).toBe("attention");
 

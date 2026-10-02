@@ -9,14 +9,17 @@ import {
   jsonObject,
   parseJsonText,
 } from "@dev.fast/review-protocol";
+import { LEGACY_REVIEW_FIXTURES_ROOT } from "@review/fixtures/legacy-reviews/legacy-review-fixture";
+import { openLocalReviewStore } from "@review/review-api/local-data";
+import type { ProseTag, ReviewNode } from "@review/review-document-data";
+import {
+  type StoredReview,
+  parseStoredReviewRecord,
+} from "@review/review-home";
+import type { ReviewVcsLogEntry } from "@review/review-vcs";
+import { REVIEW_SOFTWARE_MAP_BUNDLE_DIR } from "@review/software-map-bundle";
 import { onTestFinished } from "vitest";
 
-import { LEGACY_REVIEW_FIXTURES_ROOT } from "../fixtures/legacy-reviews/legacy-review-fixture";
-import { openLocalReviewStore } from "../review-api/local-data";
-import type { ProseTag, ReviewNode } from "../review-document-data";
-import { type StoredReview, parseStoredReviewRecord } from "../review-home";
-import type { ReviewVcsLogEntry } from "../review-vcs";
-import { REVIEW_SOFTWARE_MAP_BUNDLE_DIR } from "../software-map-bundle";
 import {
   type ImportLegacyReviewInput,
   importLegacyReview,
@@ -223,7 +226,7 @@ export async function runImport(
   };
 }
 
-/** Seals a map bundle as a revision of its own, as `review map publish` did. */
+/** Seals a map bundle as a revision of its own, as `whiteboard map publish` did. */
 export async function sealLegacyMapRevision(
   dir: string,
   oid: string,

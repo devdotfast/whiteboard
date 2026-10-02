@@ -14,8 +14,7 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import whiteboardOpencodePlugin from "../../agent-plugins/opencode/index.js";
-import { REVIEW_MCP_LAUNCH, WINDOWS_MCP_LAUNCH } from "./connect-prompts";
+import { REVIEW_MCP_LAUNCH } from "./connect-prompts";
 import { findReviewPackageRoot } from "./package-paths";
 
 const repoRoot = path.resolve(
@@ -103,38 +102,4 @@ describe("agent plugin manifests", () => {
       }
     },
   );
-
-  for (const [platform, launch] of [
-    ["darwin", REVIEW_MCP_LAUNCH],
-    ["win32", WINDOWS_MCP_LAUNCH],
-  ] as const) {
-    it(`the OpenCode plugin's config hook launches whiteboard the shared way on ${platform}`, async () => {
-      const original = Object.getOwnPropertyDescriptor(process, "platform")!;
-      Object.defineProperty(process, "platform", { value: platform });
-
-      try {
-        const { config } = await whiteboardOpencodePlugin();
-
-        const other = {
-          type: "remote",
-          url: "https://example.invalid",
-        } satisfies { type: "remote"; url: string };
-
-        const opencodeConfig = { mcp: { other } };
-
-        await config(opencodeConfig);
-
-        expect(opencodeConfig.mcp).toEqual({
-          other,
-          whiteboard: {
-            type: "local",
-            command: [launch.command, ...launch.args],
-            enabled: true,
-          },
-        });
-      } finally {
-        Object.defineProperty(process, "platform", original);
-      }
-    });
-  }
 });

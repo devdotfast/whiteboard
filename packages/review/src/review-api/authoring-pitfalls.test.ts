@@ -5,18 +5,18 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { type JsonValue, parseJsonText } from "@dev.fast/review-protocol";
-import type { Hono } from "hono";
-import sharp from "sharp";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
 import {
   FIXTURE_IMAGE_ID,
   FIXTURE_MAP_ID,
   FIXTURE_TRACE_EVENT_ID,
   FIXTURE_TRACE_ID,
   readBlockFixtures,
-} from "../fixtures/blocks/fixtures.js";
-import { selectSource } from "../lens-selection.js";
+} from "@review/fixtures/blocks/fixtures.js";
+import { selectSource } from "@review/lens-selection.js";
+import type { Hono } from "hono";
+import sharp from "sharp";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import { type Pins, elements } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { openLocalReviewStore } from "./local-data.js";
@@ -42,7 +42,7 @@ interface Reply {
   body: { error?: string; targetId?: string; reviewId?: string };
 }
 
-/** Post a command the way `review mcp` does and return status and body. */
+/** Post a command the way `whiteboard mcp` does and return status and body. */
 async function post(route: string, body: JsonValue): Promise<Reply> {
   const response = await app.request(route, {
     method: "POST",

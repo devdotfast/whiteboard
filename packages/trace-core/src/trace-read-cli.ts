@@ -20,7 +20,6 @@ import {
   parseRepo,
   pullReviewTraceCorpus,
 } from "./review-agent-traces";
-import { traceCommandPrefix } from "./trace-command";
 import { resolveTraceStorage } from "./trace-storage/resolve";
 import type { TraceStorage, TraceStorageKind } from "./trace-storage/types";
 
@@ -518,7 +517,7 @@ function printCommitResolution(
     stdout.write(`    ${session}${metaSuffix}\n`);
     stdout.write(`      trace: by-session/${session}/trace.jsonl\n`);
     stdout.write(
-      `      pull for FFF: ${traceCommandPrefix()} pull --agent-session ${session}\n`,
+      `      pull for FFF: whiteboard trace pull --agent-session ${session}\n`,
     );
   }
 }

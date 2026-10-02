@@ -538,7 +538,10 @@ export async function createHarness({
   /** Quits the way a reader does, through `workbench.action.quit` (Cmd/Ctrl+Q), then relaunches. */
   async function quitAndRelaunchDesktop() {
     lifecycle("Quitting through workbench.action.quit");
+    const closed = page.waitForEvent("close", { timeout: 30000 });
     await page.keyboard.press("ControlOrMeta+KeyQ");
+    await closed;
+    await closeBrowser();
     await waitForExit("Desktop quit");
     await relaunch();
   }
@@ -723,7 +726,7 @@ export async function closeSourceWindow(source) {
   await closed;
 }
 
-/** Opens a review the way a reader does, with `review app pick --session`. */
+/** Opens a review the way a reader does, with `whiteboard app pick --session`. */
 export async function pickReview(ctx, reviewId, cwd = ctx.repo) {
   const picked = await ctx.cliRaw(
     ["app", "pick", "--session", reviewId, "--json"],
@@ -736,9 +739,9 @@ export async function pickReview(ctx, reviewId, cwd = ctx.repo) {
 
 /** Opens the Settings page on the current `ctx.page`; `ControlOrMeta+Comma` repeats because a fresh profile reloads the workbench. */
 export async function openSettings(ctx) {
-  const settings = ctx.page.locator(
-    ".review-home-content.review-settings-page",
-  );
+  const settings = ctx.page.locator("main.review-home").filter({
+    has: ctx.page.getByRole("heading", { name: "Settings", level: 1 }),
+  });
 
   await ctx.until(
     async () => {
@@ -764,8 +767,7 @@ export async function installExtensionGroup(
   const settings = await openSettings(ctx);
 
   await settings
-    .locator(".review-settings-row")
-    .filter({ hasText: "Extensions" })
+    .getByRole("region", { name: "Tools" })
     .getByRole("button", { name: "Manage" })
     .click();
 

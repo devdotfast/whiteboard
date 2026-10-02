@@ -1,9 +1,8 @@
-import { z } from "zod";
-
 import {
   type ReviewSessionAgent,
   SESSION_AGENT_KIND,
-} from "../ui-telemetry-events.js";
+} from "@review/ui-telemetry-events.js";
+import { z } from "zod";
 
 /**
  * Headers the agent CLI sets so the server can say where a review came from.

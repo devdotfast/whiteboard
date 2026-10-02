@@ -1247,7 +1247,7 @@ export class CodeApplication extends Disposable {
 		// Review Desktop hands the renderer its server endpoint over IPC rather
 		// than through bootstrap environment variables.
 		if (this.reviewDesktopHost) {
-			mainProcessElectronServer.registerChannel(REVIEW_DESKTOP_CHANNEL, new ReviewDesktopChannel(this.reviewDesktopHost));
+			mainProcessElectronServer.registerChannel(REVIEW_DESKTOP_CHANNEL, new ReviewDesktopChannel(this.reviewDesktopHost, accessor.get(IWindowsMainService)));
 		}
 
 		const launchChannel = ProxyChannel.fromService(accessor.get(ILaunchMainService), disposables, { disableMarshalling: true });
@@ -1329,7 +1329,10 @@ export class CodeApplication extends Disposable {
 		sharedProcessClient.then(client => client.registerChannel('nativeHost', nativeHostChannel));
 
 		// Workspaces
-		const workspacesChannel = ProxyChannel.fromService(accessor.get(IWorkspacesService), disposables);
+		const workspacesChannel = ProxyChannel.fromService(accessor.get(IWorkspacesService), disposables, {
+			// Only VS Code's menubar consumes this over IPC, and Whiteboard installs its own menus.
+			unbufferedEvents: ['onDidChangeRecentlyOpened']
+		});
 		mainProcessElectronServer.registerChannel('workspaces', workspacesChannel);
 
 		// Menubar

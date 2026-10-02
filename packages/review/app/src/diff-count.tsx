@@ -1,4 +1,8 @@
+import { fontSize } from "@canvas/scale.stylex";
+import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
+
+import { tokens } from "./tokens.stylex";
 
 export const compactDiffCount = (count: number) =>
   new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 })
@@ -13,14 +17,45 @@ export const compactDiffCount = (count: number) =>
 export function DiffCount({
   additions,
   deletions,
+  large = false,
 }: {
   additions: number;
   deletions: number;
+  /** The review header's size. */
+  large?: boolean;
 }): ReactElement {
   return (
-    <span className="diff-counts">
-      <span className="diff-count-added">+{compactDiffCount(additions)}</span>
-      <span className="diff-count-removed">−{compactDiffCount(deletions)}</span>
+    <span {...stylex.props(diffCountStyles.counts, large && styles.large)}>
+      <span {...stylex.props(diffCountStyles.added)}>
+        +{compactDiffCount(additions)}
+      </span>
+      <span {...stylex.props(diffCountStyles.removed)}>
+        −{compactDiffCount(deletions)}
+      </span>
     </span>
   );
 }
+
+export const diffCountStyles = stylex.create({
+  counts: {
+    display: "inline-flex",
+    gap: "6px",
+    font: `${fontSize.small} ${tokens.fontMono}`,
+    fontVariantNumeric: "tabular-nums",
+    whiteSpace: "nowrap",
+    fontSize: fontSize.small,
+  },
+  added: {
+    color: tokens.changeAdded,
+  },
+  removed: {
+    color: tokens.changeRemoved,
+  },
+});
+
+const styles = stylex.create({
+  large: {
+    fontSize: fontSize.ui,
+    gap: "10px",
+  },
+});

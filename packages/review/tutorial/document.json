@@ -1,9 +1,9 @@
 {
-  "title": "Review Desktop: three-minute tour",
+  "title": "Whiteboard Desktop: three-minute tour",
   "document": [
     {
       "type": "markdown",
-      "markdown": "# Review Desktop: three-minute tour\n"
+      "markdown": "# Whiteboard Desktop: three-minute tour\n"
     },
     {
       "type": "section",
@@ -33,7 +33,7 @@
         },
         {
           "type": "markdown",
-          "markdown": "### Your keybindings\n\nChoose your editor keys. Review highlights the active choice and uses its\nexisting extension and reload flow for Vim and Emacs.\n"
+          "markdown": "### Your keybindings\n\nChoose your editor keys. Whiteboard highlights the active choice and uses its\nexisting extension and reload flow for Vim, Emacs, and Sublime Text.\n"
         },
         {
           "type": "tutorial",
@@ -70,7 +70,7 @@
       "children": [
         {
           "type": "markdown",
-          "markdown": "Review pins an exact base and head before the agent starts writing. Open\n**Commits** to see the change in author order. Expand the sample commit to see\nits files, then choose the **<>** button to inspect only that commit.\n\nThe **Diff** tab shows the complete change between the pinned base and head.\nChoose **Review** when you are ready to return to this tour.\n"
+          "markdown": "Whiteboard pins an exact base and head before the agent starts writing. Open\n**Commits** to see the change in author order. Expand the sample commit to see\nits files, then choose the **<>** button to inspect only that commit.\n\nThe **Diff** tab shows the complete change between the pinned base and head.\nChoose **Review** when you are ready to return to this tour.\n"
         },
         {
           "type": "tutorial",
@@ -339,7 +339,7 @@
       "children": [
         {
           "type": "markdown",
-          "markdown": "To connect Review to your agents, open **Preferences \u2192\nSettings**. To revisit setup or take this tour again, open **Preferences \u2192\nGetting Started**.\n"
+          "markdown": "To connect Whiteboard to your agents, open **Preferences \u2192\nSettings**. To revisit setup or take this tour again, open **Preferences \u2192\nGetting Started**.\n"
         }
       ]
     },

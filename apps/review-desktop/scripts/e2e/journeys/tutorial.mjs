@@ -11,7 +11,7 @@ export const phase = 1;
 
 export const options = { seedRepo: false };
 
-const TITLE = "Review Desktop: three-minute tour";
+const TITLE = "Whiteboard Desktop: three-minute tour";
 
 const PROGRESS_KEY = "review.tutorial.progress.v1";
 
@@ -79,7 +79,7 @@ export async function run(ctx) {
   const canvas = page.locator(".review-canvas-root [data-review-api]");
 
   const guide = page.locator(
-    'aside.tutorial-guide[aria-label="Tutorial guide"]',
+    'aside[aria-label="Tutorial guide"]',
   );
 
   const viewTab = (label) =>
@@ -91,7 +91,7 @@ export async function run(ctx) {
   await waitChecked(ctx, "chooseKeymap");
 
   const editor = canvas
-    .locator('[data-review-section="Welcome"] .review-inline-editor')
+    .locator('[data-review-section="Welcome"] [data-review-inline-editor]')
     .first();
 
   await editor.locator(".view-line").first().waitFor();
@@ -221,7 +221,7 @@ export async function run(ctx) {
   await page.keyboard.press("Escape");
 
   await canvas
-    .locator('[data-review-section="Agent traces"] .review-trace-quote')
+    .locator('[data-review-section="Agent traces"] a[href^="#trace-"]')
     .first()
     .click();
   await waitChecked(ctx, "openTraceQuote");

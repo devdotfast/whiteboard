@@ -2,9 +2,9 @@ import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { openLocalReviewStore } from "@review/review-api/local-data";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { openLocalReviewStore } from "../review-api/local-data";
 import { createGlobalReviewServer } from "./desktop-server";
 
 afterEach(() => vi.unstubAllEnvs());

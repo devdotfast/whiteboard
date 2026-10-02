@@ -4,18 +4,13 @@ import {
   MAX_TRACE_OBJECT_BYTES,
   MAX_TRACE_SESSIONS_PAGE,
   MAX_TRACE_SESSION_BYTES,
-  TRACE_STORE_API_PREFIX,
   beginUploadRequestSchema,
-  beginUploadResponseSchema,
   completeUploadRequestSchema,
-  completeUploadResponseSchema,
   createStoreRequestSchema,
   listSessionsQuerySchema,
   listSessionsResponseSchema,
   listUploadsQuerySchema,
   listUploadsResponseSchema,
-  sessionDownloadSchema,
-  storeResponseSchema,
   traceObjectKey,
   traceObjectNameSchema,
   uploadManifestMismatch,
@@ -35,10 +30,6 @@ describe("store-api contracts", () => {
     expect(
       listUploadsResponseSchema.parse({ storeId: id, uploads: [] }),
     ).toEqual({ storeId: id, uploads: [] });
-  });
-
-  it("fixes the versioned prefix", () => {
-    expect(TRACE_STORE_API_PREFIX).toBe("/api/trace/v1");
   });
 
   it("accepts main and subagent object names only", () => {
@@ -119,32 +110,6 @@ describe("store-api contracts", () => {
     expect(completeUploadRequestSchema.parse({})).toEqual({ commits: [] });
   });
 
-  it("names the upload in the begin response and the receipt", () => {
-    expect(
-      beginUploadResponseSchema.safeParse({
-        storeId: id,
-        baseGeneration: 0,
-        uploads: [],
-      }).success,
-    ).toBe(false);
-    expect(
-      completeUploadResponseSchema.safeParse({
-        sessionId: "session_1234",
-        objects: [],
-        commits: [],
-      }).success,
-    ).toBe(false);
-    expect(
-      completeUploadResponseSchema.safeParse({
-        sessionId: "session_1234",
-        uploadId: id,
-        generation: 1,
-        objects: [],
-        commits: [],
-      }).success,
-    ).toBe(true);
-  });
-
   it("finds every way a begin response can miss the manifest", () => {
     const manifest = [
       { name: "main.jsonl.gz" },
@@ -196,62 +161,6 @@ describe("store-api contracts", () => {
     expect(
       createStoreRequestSchema.safeParse({ owner: "a/b", name: "c" }).success,
     ).toBe(false);
-  });
-  it("accepts the optional byte counter on a store", () => {
-    const base = {
-      repositoryId: 1,
-      storeId: id,
-      displayName: "acme/app",
-      status: "active",
-      createdAt: "2026-09-01T00:00:00.000Z",
-    };
-
-    expect(storeResponseSchema.safeParse(base).success).toBe(true);
-    expect(
-      storeResponseSchema.safeParse({ ...base, bytesStored: 12 }).success,
-    ).toBe(true);
-    expect(
-      storeResponseSchema.safeParse({ ...base, bytesStored: -1 }).success,
-    ).toBe(false);
-  });
-
-  it("carries optional branch and author through completion and listing", () => {
-    expect(
-      completeUploadRequestSchema.safeParse({
-        commits: [],
-        branch: "main",
-        author: "dev@example.test",
-      }).success,
-    ).toBe(true);
-    expect(
-      completeUploadRequestSchema.safeParse({ commits: [], branch: null })
-        .success,
-    ).toBe(true);
-    expect(
-      completeUploadRequestSchema.safeParse({
-        commits: [],
-        branch: "x".repeat(201),
-      }).success,
-    ).toBe(false);
-
-    const session = {
-      sessionId: "session-0001",
-      harness: "claude",
-      uploadId: id,
-      generation: 1,
-      updatedAt: "2026-09-01T00:00:00.000Z",
-      commits: [],
-      objects: [],
-    };
-
-    expect(sessionDownloadSchema.safeParse(session).success).toBe(true);
-    expect(
-      sessionDownloadSchema.safeParse({
-        ...session,
-        branch: "main",
-        author: null,
-      }).success,
-    ).toBe(true);
   });
 
   it("pages the session listing with a bounded limit and a session cursor", () => {

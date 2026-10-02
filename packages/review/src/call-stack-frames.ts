@@ -28,13 +28,3 @@ export function callStackFrames(entries: readonly CallStackEntry[]): Frame[] {
 export function frameIdentity(frame: Frame): string {
   return frame.key ?? selectionKey(frame.source);
 }
-
-export function frameName(frame: Frame): string {
-  return (
-    frame.label ??
-    frame.key ??
-    frame.id ??
-    frame.source.file.split("/").pop() ??
-    frame.source.file
-  );
-}

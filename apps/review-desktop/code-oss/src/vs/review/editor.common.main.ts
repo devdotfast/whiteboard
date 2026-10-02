@@ -34,8 +34,10 @@ import "../editor/common/services/languageFeaturesService.js";
 import { IMarkerDecorationsService } from "../editor/common/services/markerDecorations.js";
 import { MarkerDecorationsService } from "../editor/common/services/markerDecorationsService.js";
 import "../editor/common/services/semanticTokensStylingService.js";
+import type { Parser, Query } from "@vscode/tree-sitter-wasm";
 import { ITextResourceConfigurationService } from "../editor/common/services/textResourceConfiguration.js";
 import { TextResourceConfigurationService } from "../editor/common/services/textResourceConfigurationService.js";
+import { ITreeSitterLibraryService } from "../editor/common/services/treeSitter/treeSitterLibraryService.js";
 import "../editor/common/services/treeViewsDndService.js";
 import "../platform/actions/common/actions.contribution.js";
 import { ContextKeyService } from "../platform/contextkey/browser/contextKeyService.js";
@@ -126,7 +128,6 @@ import "../workbench/services/textMate/browser/textMateTokenizationFeature.contr
 import "../workbench/services/textmodelResolver/common/textModelResolverService.js";
 import "../workbench/services/textresourceProperties/common/textResourcePropertiesService.js";
 import "../workbench/services/themes/browser/workbenchThemeService.js";
-import "../workbench/services/treeSitter/browser/treeSitter.contribution.js";
 import "../workbench/services/untitled/common/untitledTextEditorService.js";
 import "../workbench/services/userActivity/browser/userActivityBrowser.js";
 import "../workbench/services/userActivity/common/userActivityService.js";
@@ -188,6 +189,40 @@ class ReviewChatWidgetService implements IChatWidgetService {
 	}
 }
 
+// Tree-sitter highlighting is opt-in behind experimental settings that Review
+// never enables, so it ships no grammars. Every text model still injects this.
+class ReviewTreeSitterLibraryService implements ITreeSitterLibraryService {
+	declare readonly _serviceBrand: undefined;
+
+	getParserClass(): Promise<typeof Parser> {
+		return Promise.reject(new Error("Review does not ship tree-sitter"));
+	}
+
+	supportsLanguage(): boolean {
+		return false;
+	}
+
+	getLanguage(): undefined {
+		return undefined;
+	}
+
+	getLanguagePromise(): Promise<undefined> {
+		return Promise.resolve(undefined);
+	}
+
+	getInjectionQueries(): null {
+		return null;
+	}
+
+	getHighlightingQueries(): null {
+		return null;
+	}
+
+	createQuery(): Promise<Query> {
+		return Promise.reject(new Error("Review does not ship tree-sitter"));
+	}
+}
+
 registerSingleton(IUserDataSyncLogService, UserDataSyncLogService, InstantiationType.Delayed);
 registerSingleton(IAllowedExtensionsService, AllowedExtensionsService, InstantiationType.Delayed);
 registerSingleton(IIgnoredExtensionsManagementService, IgnoredExtensionsManagementService, InstantiationType.Delayed);
@@ -200,6 +235,7 @@ registerSingleton(IMarkerService, MarkerService, InstantiationType.Delayed);
 registerSingleton(IContextKeyService, ContextKeyService, InstantiationType.Delayed);
 registerSingleton(IChatContextPickService, ChatContextPickService, InstantiationType.Delayed);
 registerSingleton(IChatWidgetService, ReviewChatWidgetService, InstantiationType.Delayed);
+registerSingleton(ITreeSitterLibraryService, ReviewTreeSitterLibraryService, InstantiationType.Delayed);
 // The webview API bridge wires chat output renderers (a proposed API Review
 // does not enable); keep upstream's service so that bridge can construct.
 registerSingleton(IChatOutputRendererService, ChatOutputRendererService, InstantiationType.Delayed);

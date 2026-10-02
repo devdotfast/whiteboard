@@ -26,7 +26,6 @@ import {
   parseGitRemoteSlug,
   parseJjDiffSummary,
   readFileAtCommit,
-  readFileAtRevision,
   resolveRepoContext,
   resolveRepoContextSync,
   setLocalVcsCommandObserver,
@@ -316,6 +315,7 @@ describe("local vcs", () => {
           status: "modified",
           additions: 0,
           deletions: 0,
+          binary: true,
         },
         {
           path: "src/deleted.ts",
@@ -486,6 +486,64 @@ describe("local vcs", () => {
     ]);
     expect(files[0]!.patch).toMatch(/^diff --git a\/old.ts b\/new.ts\n/);
     expect(files[1]!.patch).toContain("@@ -1 +0,0 @@");
+  });
+
+  it("counts header-looking hunk content without changing file paths", () => {
+    const patch = [
+      "diff --git a/schema.sql b/schema.sql",
+      "deleted file mode 100644",
+      "--- a/schema.sql",
+      "+++ /dev/null",
+      "@@ -1,2 +0,0 @@",
+      "--- a sql comment",
+      "-SELECT 1;",
+      "diff --git a/example.txt b/example.txt",
+      "--- a/example.txt",
+      "+++ b/example.txt",
+      "@@ -1 +1 @@",
+      "-old",
+      "+++ literal content",
+      "\\ No newline at end of file",
+      "",
+    ].join("\n");
+
+    expect(splitGitPatchFiles(patch).map((entry) => entry.file)).toEqual([
+      {
+        path: "schema.sql",
+        previousPath: undefined,
+        status: "deleted",
+        additions: 0,
+        deletions: 2,
+      },
+      {
+        path: "example.txt",
+        previousPath: undefined,
+        status: "modified",
+        additions: 1,
+        deletions: 1,
+      },
+    ]);
+  });
+
+  it("marks binary files in a patch, which carry no line counts", () => {
+    const patch = [
+      "diff --git a/icon.png b/icon.png",
+      "new file mode 100644",
+      "index 0000000..9c2e1f3",
+      "Binary files /dev/null and b/icon.png differ",
+      "",
+    ].join("\n");
+
+    expect(splitGitPatchFiles(patch).map((entry) => entry.file)).toEqual([
+      {
+        path: "icon.png",
+        previousPath: undefined,
+        status: "added",
+        additions: 0,
+        deletions: 0,
+        binary: true,
+      },
+    ]);
   });
 
   it("refuses a diff whose counts arrive before its records", () => {
@@ -838,34 +896,6 @@ describe("local vcs", () => {
       changedFiles: ["src/app.ts", "src/new.ts"],
       deletedFiles: ["src/old.ts"],
     });
-  });
-
-  it("reads file source at a revision asynchronously", async () => {
-    const rootPath = await mkdtemp(
-      path.join(tmpdir(), "local-vcs-read-file-revision-"),
-    );
-
-    execGit(rootPath, ["init"]);
-    execGit(rootPath, ["config", "user.email", "test@example.com"]);
-    execGit(rootPath, ["config", "user.name", "Test User"]);
-    mkdirSync(path.join(rootPath, "src"));
-    writeFileSync(
-      path.join(rootPath, "src", "app.ts"),
-      "export const app = 1;\n",
-    );
-    execGit(rootPath, ["add", "src/app.ts"]);
-    execGit(rootPath, ["commit", "-m", "initial"]);
-
-    await expect(
-      readFileAtRevision({ rootPath, ref: "HEAD", relativePath: "src/app.ts" }),
-    ).resolves.toMatchObject({ source: "export const app = 1;\n" });
-    await expect(
-      readFileAtRevision({
-        rootPath,
-        ref: "HEAD",
-        relativePath: "src/missing.ts",
-      }),
-    ).resolves.toBeNull();
   });
 
   it("falls back to colocated Git when a jj root cannot answer", async () => {

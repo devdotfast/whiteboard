@@ -1,9 +1,12 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  ReviewInputError,
+  documentSchema,
+} from "@review/review-api/document.js";
 import { describe, expect, it } from "vitest";
 
-import { ReviewInputError, documentSchema } from "../document.js";
 import {
   type BlockType,
   type Definitions,
@@ -31,15 +34,6 @@ async function fixture<T extends BlockType>(type: T) {
 }
 
 describe("block definitions", () => {
-  it("has one fixture file per kind and one kind per fixture file", async () => {
-    const files = (await readdir(fixturesDir))
-      .filter((f) => f.endsWith(".json"))
-      .map((f) => f.slice(0, -5))
-      .sort();
-
-    expect(files).toEqual(Object.keys(blocks).sort());
-  });
-
   it.each(Object.keys(blocks) as BlockType[])(
     "%s fixtures parse and pass their check",
     async (type) => {

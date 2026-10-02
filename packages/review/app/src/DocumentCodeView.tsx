@@ -1,3 +1,4 @@
+import { fontSize, radius } from "@canvas/scale.stylex";
 import type {
   ReviewDiffProgress,
   ReviewDiffSide,
@@ -7,13 +8,15 @@ import type {
   ReviewInlineEditorRange,
   ReviewSourcePins,
 } from "@dev.fast/review-protocol";
+import { coverageProgress, coverageSources } from "@review/viewed-coverage";
+import * as stylex from "@stylexjs/stylex";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
-import { coverageProgress, coverageSources } from "../../src/viewed-coverage";
 import { useReviewSession } from "./host/review-session";
 import { useReviewFindRegistration } from "./review-find";
 import { emitReviewInteraction } from "./review-interaction-event";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
+import { tokens } from "./tokens.stylex";
 
 const LINE_HEIGHT = 20;
 
@@ -307,13 +310,13 @@ export function DocumentCodeView({
     <>
       <div
         ref={setContainer}
-        className="review-inline-editor"
+        {...stylex.props(styles.editor)}
         data-review-inline-editor={path}
         data-review-inline-editor-active={active ? "true" : "false"}
         style={{ height }}
       />
       {error ? (
-        <div className="review-inline-editor-error" title={error}>
+        <div {...stylex.props(styles.error)} title={error}>
           Inline preview unavailable
         </div>
       ) : null}
@@ -338,3 +341,27 @@ function estimatedHeight(
 
   return Math.max(1, lines) * LINE_HEIGHT + INLINE_HEADER_HEIGHT;
 }
+
+const styles = stylex.create({
+  editor: {
+    position: "relative",
+    width: "100%",
+    minWidth: 0,
+    overflow: "hidden",
+    contentVisibility: "auto",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.rule,
+    borderRadius: radius.control,
+    backgroundColor: tokens.bg,
+  },
+  error: {
+    display: "flex",
+    alignItems: "center",
+    padding: "0 10px",
+    borderColor: tokens.ruleSoft,
+    backgroundColor: tokens.surface,
+    color: tokens.inkFaint,
+    font: `${fontSize.small}/1 ${tokens.fontMono}`,
+  },
+});

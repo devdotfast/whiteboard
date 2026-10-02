@@ -7,16 +7,19 @@ import { act, useState } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import {
   ReviewSessionProvider,
   createReviewSession,
 } from "./host/review-session";
+import type { TraceSelection } from "./review-panel-store";
 import {
   testReviewBridge,
   testReviewSession,
 } from "./review-session-test-utils";
 import { ReviewTraceView } from "./ReviewTraceView";
-import { useTraceList } from "./use-trace-list";
+import type { AgentTraceStorage } from "./use-agent-trace";
+import { type TraceListState, useTraceList } from "./use-trace-list";
 
 const mockListResponse: Extract<ReviewAgentTraceListResponse, { ok: true }> = {
   ok: true,
@@ -59,6 +62,45 @@ const mockTraceDetail: Extract<ReviewAgentTraceResponse, { ok: true }> = {
   ],
 };
 
+function ControlledHost({
+  list,
+  initiallyOpen = true,
+}: {
+  list: TraceListState;
+  initiallyOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(initiallyOpen);
+  const [selection, setSelection] = useState<TraceSelection>();
+
+  return (
+    <>
+      <button onClick={() => setOpen(!open)}>Toggle trace</button>
+      {open && (
+        <ReviewTraceView
+          storedList={list}
+          selection={selection}
+          onSelect={setSelection}
+          onSelectStorage={noop}
+        />
+      )}
+    </>
+  );
+}
+
+const noop = () => {};
+
+function StorageHost() {
+  const [storage, setStorage] = useState<AgentTraceStorage | null>(null);
+
+  return (
+    <ReviewTraceView
+      onSelect={noop}
+      storage={storage}
+      onSelectStorage={setStorage}
+    />
+  );
+}
+
 let root: Root | null = null;
 
 let container: HTMLDivElement;
@@ -93,21 +135,17 @@ describe("ReviewTraceView", () => {
 
     function Host() {
       const list = useTraceList();
-      const [open, setOpen] = useState(false);
 
-      return (
-        <>
-          <button onClick={() => setOpen(!open)}>Toggle trace</button>
-          {open && <ReviewTraceView storedList={list} />}
-        </>
-      );
+      return <ControlledHost list={list} initiallyOpen={false} />;
     }
 
     await act(async () =>
       root?.render(
-        <ReviewSessionProvider session={session}>
-          <Host />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <Host />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
     await act(async () => container.querySelector("button")!.click());
@@ -126,6 +164,68 @@ describe("ReviewTraceView", () => {
         ([url]) => !String(url).includes("/agent-traces/session-1"),
       ),
     ).toHaveLength(1);
+  });
+
+  it("keeps the trace the reader picked when they leave and come back", async () => {
+    const request = vi.fn<ReviewCanvasBridge["request"]>(async (url) =>
+      Response.json({
+        ...mockTraceDetail,
+        session: {
+          ...mockTraceDetail.session,
+          sessionId: url.includes("session-2") ? "session-2" : "session-1",
+        },
+      }),
+    );
+
+    const session = testReviewSession({}, { request });
+
+    const list: TraceListState = {
+      status: "loaded",
+      configured: true,
+      storage: null,
+      sources: [],
+      storageError: null,
+      sessions: [
+        ...mockListResponse.sessions,
+        {
+          ...mockListResponse.sessions[0]!,
+          sessionId: "session-2",
+          subagents: [],
+        },
+      ],
+    };
+
+    await act(async () =>
+      root?.render(
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ControlledHost list={list} />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("User turn text"),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
+        .click(),
+    );
+
+    const options = () => [
+      ...container.querySelectorAll<HTMLElement>('[role="option"]'),
+    ];
+
+    await act(async () => options().at(-1)!.click());
+    await act(async () => container.querySelector("button")!.click());
+    await act(async () => container.querySelector("button")!.click());
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
+        .click(),
+    );
+    expect(options().at(-1)?.getAttribute("aria-selected")).toBe("true");
   });
 
   it("renders retained subagent events without downloading them", async () => {
@@ -152,11 +252,15 @@ describe("ReviewTraceView", () => {
     ]);
     await act(async () => {
       root?.render(
-        <ReviewSessionProvider session={session}>
-          <ReviewTraceView
-            initialSelection={{ sessionId: "session-1", trace: "sub-1" }}
-          />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ReviewTraceView
+              selection={{ sessionId: "session-1", trace: "sub-1" }}
+              onSelect={noop}
+              onSelectStorage={noop}
+            />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       );
     });
     await vi.waitFor(() =>
@@ -202,16 +306,17 @@ describe("ReviewTraceView", () => {
           historicalRevision: null,
           updatedAtMs: 0,
           traces: new Map(),
-          listVersions: async () => [],
           stack: async () => [],
           dismiss: async () => {},
         };
 
       await act(async () => {
         root?.render(
-          <ReviewSessionProvider session={session}>
-            <ReviewTraceView />
-          </ReviewSessionProvider>,
+          <TestCanvasQuery>
+            <ReviewSessionProvider session={session}>
+              <ReviewTraceView onSelect={noop} onSelectStorage={noop} />
+            </ReviewSessionProvider>
+          </TestCanvasQuery>,
         );
       });
 
@@ -262,9 +367,11 @@ describe("ReviewTraceView", () => {
 
     await act(async () => {
       root?.render(
-        <ReviewSessionProvider session={session}>
-          <ReviewTraceView />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <StorageHost />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       );
     });
     await vi.waitFor(() => {
@@ -335,9 +442,11 @@ describe("ReviewTraceView", () => {
     const session = testReviewSession({}, { request: requestMock });
     await act(async () => {
       root?.render(
-        <ReviewSessionProvider session={session}>
-          <ReviewTraceView />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ReviewTraceView onSelect={noop} onSelectStorage={noop} />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       );
     });
     await vi.waitFor(() => {
@@ -376,9 +485,11 @@ describe("ReviewTraceView", () => {
 
     await act(async () => {
       root?.render(
-        <ReviewSessionProvider session={session}>
-          <ReviewTraceView />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ReviewTraceView onSelect={noop} onSelectStorage={noop} />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       );
     });
 
@@ -459,22 +570,25 @@ describe("ReviewTraceView", () => {
 
     await act(async () => {
       root?.render(
-        <ReviewSessionProvider session={session}>
-          <ReviewTraceView />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ReviewTraceView onSelect={noop} onSelectStorage={noop} />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       );
     });
 
+    const summaryDetails = (label: string) =>
+      [...container.querySelectorAll("details")].find((details) =>
+        details.querySelector("summary")?.textContent?.startsWith(label),
+      );
+
     await vi.waitFor(() => {
-      expect(
-        container.querySelector("details.review-trace-worked"),
-      ).not.toBeNull();
+      expect(summaryDetails("Worked")).toBeDefined();
     });
 
     // Expand the turn's worked section
-    const workedDetails = container.querySelector(
-      "details.review-trace-worked",
-    ) as HTMLDetailsElement;
+    const workedDetails = summaryDetails("Worked") as HTMLDetailsElement;
 
     expect(workedDetails).not.toBeNull();
     act(() => {
@@ -482,25 +596,19 @@ describe("ReviewTraceView", () => {
     });
 
     // Find the thinking details element
-    const thinkingDetails = Array.from(
-      container.querySelectorAll("details.review-trace-tool--expandable"),
-    ).find(
-      (el) =>
-        el.querySelector(".review-trace-tool-verb")?.textContent === "Thinking",
-    ) as HTMLDetailsElement | undefined;
+    const thinkingDetails = summaryDetails("Thinking");
 
     expect(thinkingDetails).toBeDefined();
     // Should be collapsed by default
     expect(thinkingDetails?.open).toBe(false);
+    expect(thinkingDetails?.querySelector("summary")?.textContent).toBe(
+      "Thinking",
+    );
+    expect(thinkingDetails?.querySelector("figcaption")?.textContent).toBe(
+      "Thinking",
+    );
     expect(
-      thinkingDetails?.querySelector(".review-trace-tool-verb")?.textContent,
-    ).toBe("Thinking");
-    expect(
-      thinkingDetails?.querySelector(".review-trace-figure-head")?.textContent,
-    ).toBe("Thinking");
-    expect(
-      thinkingDetails?.querySelector(".review-trace-figure-body--thinking")
-        ?.textContent,
+      thinkingDetails?.querySelector("figure > div")?.textContent,
     ).toContain("Let me think about how to solve this problem...");
   });
 });

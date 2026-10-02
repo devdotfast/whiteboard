@@ -1,17 +1,21 @@
-import { z } from "zod";
-
 import {
   type LensSource,
   selectSource,
   sourceAnchors,
-} from "../lens-selection.js";
-import { markdownNodes, markdownText, parseMarkdown } from "../markdown.js";
+} from "@review/lens-selection.js";
+import {
+  markdownNodes,
+  markdownText,
+  parseMarkdown,
+} from "@review/markdown.js";
 import {
   type FileLineRange,
   type SourcePins,
   fileLineRangeSchema,
   sourcePinsSchema,
-} from "../source.js";
+} from "@review/source.js";
+import { z } from "zod";
+
 import {
   type FlowDiagramEdge,
   type FlowDiagramNode,
@@ -21,6 +25,7 @@ import {
 } from "./blocks/flow_diagram.js";
 import { type Block, blockSchema } from "./blocks/index.js";
 import { type Step, stepSchema } from "./blocks/sequence.js";
+import type { Lens } from "./diff-lenses.js";
 import { ReviewInputError } from "./input-error.js";
 
 export { ReviewInputError } from "./input-error.js";
@@ -341,6 +346,20 @@ export function sourceReferences(
 ) {
   return selectionReferences(document, options).flatMap((ref) =>
     sourceAnchors(ref.source).map((source) => ({ ...ref, source })),
+  );
+}
+
+/** Includes lenses and maps without inline ranges. */
+export function hasCodeReferences(review: {
+  document: Block[];
+  lenses?: readonly Lens[];
+}): boolean {
+  return Boolean(
+    sourceReferences(review.document).length ||
+    review.lenses?.length ||
+    resourceReferences(review.document).some(
+      (block) => block.type === "software_map",
+    ),
   );
 }
 

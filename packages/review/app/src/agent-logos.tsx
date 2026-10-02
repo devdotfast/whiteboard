@@ -1,15 +1,18 @@
+import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
+
+import type { IconProps } from "./icons";
 
 // Brand marks vendored from lobe-icons (MIT), unmodified paths:
 // https://github.com/lobehub/lobe-icons/tree/master/packages/static-svg/icons
 // Pi: pi.dev logo-auto.svg (MIT). oh-my-pi: drawn after its hero image (MIT).
 // All marks are their owners' trademarks, used nominatively to label agents.
 
-export function ClaudeCodeLogo(): ReactElement {
+export function ClaudeCodeLogo({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="review-agent-logo review-agent-logo--claude"
+      {...stylex.props(styles.logo, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -23,11 +26,11 @@ export function ClaudeCodeLogo(): ReactElement {
   );
 }
 
-export function CodexLogo(): ReactElement {
+export function CodexLogo({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="review-agent-logo review-agent-logo--codex"
+      {...stylex.props(styles.logo, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -41,11 +44,11 @@ export function CodexLogo(): ReactElement {
   );
 }
 
-export function CursorLogo(): ReactElement {
+export function CursorLogo({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="review-agent-logo review-agent-logo--cursor"
+      {...stylex.props(styles.logo, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -58,11 +61,11 @@ export function CursorLogo(): ReactElement {
   );
 }
 
-export function PiLogo(): ReactElement {
+export function PiLogo({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="review-agent-logo review-agent-logo--pi"
+      {...stylex.props(styles.logo, xstyle)}
       focusable="false"
       viewBox="120 120 560 560"
     >
@@ -76,11 +79,11 @@ export function PiLogo(): ReactElement {
   );
 }
 
-export function OmpLogo(): ReactElement {
+export function OmpLogo({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="review-agent-logo review-agent-logo--omp"
+      {...stylex.props(styles.logo, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -104,11 +107,11 @@ export function OmpLogo(): ReactElement {
   );
 }
 
-export function OpenCodeLogo(): ReactElement {
+export function OpenCodeLogo({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="review-agent-logo review-agent-logo--opencode"
+      {...stylex.props(styles.logo, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -120,11 +123,11 @@ export function OpenCodeLogo(): ReactElement {
   );
 }
 
-export function CopilotLogo(): ReactElement {
+export function CopilotLogo({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      className="review-agent-logo review-agent-logo--copilot"
+      {...stylex.props(styles.logo, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -146,3 +149,10 @@ export const AGENT_LOGOS = {
   omp: OmpLogo,
   copilot: CopilotLogo,
 } as const;
+
+const styles = stylex.create({
+  logo: {
+    width: "16px",
+    height: "16px",
+  },
+});

@@ -1,3 +1,10 @@
+import { documentType } from "@canvas/document-type.stylex";
+import { fontSize, fontWeight } from "@canvas/scale.stylex";
+import { IconButton } from "@canvas/ui/button";
+import { textStyles } from "@canvas/ui/text";
+import { extractTraceEventText } from "@dev.fast/trace-protocol";
+import type { ReviewComponentProps } from "@review/review-document-data";
+import * as stylex from "@stylexjs/stylex";
 import type {
   CSSProperties,
   ComponentPropsWithoutRef,
@@ -6,17 +13,25 @@ import type {
   Ref,
 } from "react";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
-import type { ReviewComponentProps } from "../../src/review-document-data";
+import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
+import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
+import { AskPanelContent } from "./ask-panel";
+import { AskPill, type AskPresence, AskSlot, AskWindow } from "./ask-window";
 import { AuthoredCodeSurface } from "./authored-code-surface";
 import { CodePeekCard } from "./CodePeek";
+import { controlStyles } from "./controls-styles";
+import { documentStyles } from "./document-styles";
+import { drawStyles } from "./draw-styles";
 import { findWhitespaceNormalizedSpan } from "./highlighted-text";
 import {
   useOptionalReviewSession,
   useReviewSession,
 } from "./host/review-session";
-import { CloseIcon, DisclosureChevron, MapPinIcon } from "./icons";
+import { CloseIcon, DisclosureChevron, MapPinIcon, PopOutIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
+import { chevronMarker, documentMarker } from "./markers.stylex";
 import { useReviewActions } from "./review-context";
 import { useOptionalReviewPanelStore, useReviewPanel } from "./review-panel";
 import type {
@@ -25,6 +40,7 @@ import type {
   PeekAnchor,
   ReviewPeekContent,
 } from "./review-panel-model";
+import { askShown } from "./review-panel-store";
 import { useReviewRoots } from "./review-root-context";
 import type { ReviewSectionSummary } from "./review-section-summary";
 import { useReviewUiState } from "./review-ui-state";
@@ -32,11 +48,17 @@ import {
   activeTargetForScroll,
   scrollTailHeight,
 } from "./scroll-active-tracking";
+import { shellStyles } from "./shell-styles";
 import { useBottomSheetResize } from "./side-panel-resizer";
-import { TraceDocument, extractEventText } from "./trace-document";
+import { panelStyles, tourStyles } from "./side-panel-styles";
+import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
+import { TraceDocument } from "./trace-document";
+import { traceStyles } from "./trace-styles";
 import { useTutorialSection } from "./tutorial-section-context";
 import { captureUiEvent } from "./ui-telemetry";
 import { useAgentTrace } from "./use-agent-trace";
+import { useTooltip } from "./use-tooltip";
 
 const TOUR_ACTIVE_TOP_SLACK_PX = 18;
 
@@ -53,10 +75,13 @@ function ReviewPanelFrame({
   onClose,
   closeLabel,
   titleAccessory,
+  headerActions,
   floatingFooter,
   bodyRef,
   onBodyScroll,
-  className,
+  tour = false,
+  docked = false,
+  tray = false,
   children,
 }: {
   label: string;
@@ -64,10 +89,15 @@ function ReviewPanelFrame({
   onClose: () => void;
   closeLabel: string;
   titleAccessory?: ReactNode;
+  /** Buttons beside the close button. */
+  headerActions?: ReactNode;
   floatingFooter?: ReactNode;
   bodyRef?: Ref<HTMLDivElement>;
   onBodyScroll?: () => void;
-  className?: string;
+  tour?: boolean;
+  docked?: boolean;
+  /** On the tray, as a conversation is, with a quieter kicker. */
+  tray?: boolean;
   children: ReactNode;
 }) {
   const appRef = useReviewRoots()?.appRef;
@@ -100,34 +130,53 @@ function ReviewPanelFrame({
 
   return (
     <aside
-      className={[
+      {...withClass(
         "side-panel",
-        className,
-        panelMotion === "restored" ? "side-panel--restored" : null,
-      ]
-        .filter(Boolean)
-        .join(" ")}
+        panelStyles.panel,
+        panelMotion === "restored" && panelStyles.restored,
+        tour && panelStyles.tour,
+        docked && panelStyles.docked,
+        tray && panelStyles.tray,
+      )}
       role="complementary"
       aria-label={title ?? label}
       style={panelStyle}
     >
-      <div className="side-panel-sheet-resizer" {...sheet.separatorProps} />
-      <header className="side-panel-header">
-        <div className="side-panel-title">
-          <span className="side-panel-kicker">{label}</span>
-          {title && <h2>{title}</h2>}
+      <div
+        {...stylex.props(shellStyles.sheetResizer)}
+        {...sheet.separatorProps}
+      />
+      <header {...stylex.props(panelStyles.header, tray && panelStyles.tray)}>
+        <div {...stylex.props(panelStyles.title)}>
+          <span
+            {...stylex.props(
+              textStyles.eyebrow,
+              panelStyles.kicker,
+              tray && panelStyles.trayKicker,
+            )}
+          >
+            {label}
+          </span>
+          {title && <h2 {...stylex.props(panelStyles.heading)}>{title}</h2>}
           {titleAccessory}
         </div>
-        <button
-          type="button"
-          className="icon-button side-panel-close"
-          onClick={onClose}
-          aria-label={closeLabel}
-        >
-          <CloseIcon />
-        </button>
+        <div {...stylex.props(panelStyles.actions)}>
+          {headerActions}
+          <IconButton
+            size="large"
+            xstyle={panelStyles.close}
+            onClick={onClose}
+            aria-label={closeLabel}
+          >
+            <CloseIcon xstyle={controlStyles.inertIcon} />
+          </IconButton>
+        </div>
       </header>
-      <div ref={bodyRef} className="review-panel-body" onScroll={onBodyScroll}>
+      <div
+        ref={bodyRef}
+        {...stylex.props(panelStyles.body, tray && panelStyles.trayBody)}
+        onScroll={onBodyScroll}
+      >
         {children}
       </div>
       {floatingFooter}
@@ -190,33 +239,52 @@ export function ReviewSection({
     };
   }, []);
 
+  // The classes are markers: find, the code view and the section ring look
+  // for a (collapsed) section, and the tutorial targets a section's body.
   return (
     <section
-      className={
+      {...withClass(
         collapsed
           ? "review-section review-section--collapsed"
-          : "review-section"
-      }
+          : "review-section",
+        sectionStyles.section,
+        drawStyles.blockChild,
+        drawStyles.sectionRing,
+      )}
       data-review-section={title}
       data-tutorial-chapter-state={tutorialSection.state ?? undefined}
     >
-      <div className="review-section-header">
-        <button
-          type="button"
-          className="review-section-toggle"
+      <div
+        {...stylex.props(
+          sectionStyles.header,
+          tutorialSection.state === "complete" && sectionStyles.complete,
+        )}
+      >
+        <IconButton
+          size="small"
+          xstyle={[chevronMarker, sectionStyles.toggle]}
           aria-expanded={!collapsed}
           aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
           onClick={toggleCollapsed}
         >
           <DisclosureChevron expanded={!collapsed} />
-        </button>
-        <div className="review-section-heading">
-          <h2 id={id} data-review-copy-prose>
+        </IconButton>
+        <div {...withClass("review-section-heading", sectionStyles.heading)}>
+          <h2
+            id={id}
+            data-review-copy-prose
+            {...stylex.props(
+              sectionStyles.title,
+              tutorialSection.state === "active" && sectionStyles.titleActive,
+              collapsed && sectionStyles.titleCollapsed,
+              drawStyles.retitledHeading,
+            )}
+          >
             {title}
           </h2>
         </div>
         {collapsed && summary && (
-          <span className="review-section-meta">
+          <span {...stylex.props(sectionStyles.meta)}>
             {reviewSectionSummaryLabel(summary)}
           </span>
         )}
@@ -263,7 +331,7 @@ interface ProsePeekAnchorProps {
   isOpen: boolean;
   onOpen: (text: string) => void;
   onAlreadyOpen?: () => void;
-  className?: string;
+  xstyle?: stylex.StyleXStyles;
   anchorId?: string;
   inertFallback?: ReactNode;
   children: ReactNode;
@@ -278,7 +346,7 @@ export function ProsePeekAnchor({
   isOpen,
   onOpen,
   onAlreadyOpen,
-  className,
+  xstyle,
   anchorId,
   inertFallback,
   children,
@@ -293,7 +361,7 @@ export function ProsePeekAnchor({
   return (
     <a
       href={href}
-      className={className}
+      {...stylex.props(documentStyles.link, xstyle)}
       data-review-anchor-id={anchorId}
       data-review-anchor-open={isOpen ? "true" : undefined}
       onClick={(event) => {
@@ -384,35 +452,121 @@ function keepAnchorLinkVisible(link: HTMLElement) {
   }, 240);
 }
 
-/** The only top-level renderer for Review's detail panel modes. */
+/** The only top-level renderer for Review's side peek. */
 export function ReviewPanelHost() {
   const activePanel = useReviewPanel((state) => state.active);
   const close = useReviewPanel((state) => state.close);
 
-  const activateTourAnchor = useReviewPanel(
-    (state) => state.activateTourAnchor,
-  );
-
-  if (!activePanel) return null;
-
   return (
     <>
-      {activePanel.kind === "peek" ? (
+      {activePanel ? (
         <ReviewPeekPanel
           anchor={activePanel.anchor}
           content={activePanel.content}
           onClose={close}
         />
+      ) : null}
+      <AskHost />
+    </>
+  );
+}
+
+const historyPresence: AskPresence = {
+  agentName: "Ask",
+  status: "Conversations",
+  tone: "quiet",
+};
+
+/**
+ * The open conversation, in the side panel, its window or the pill. It
+ * renders once, into an element of its own that moves between them, so
+ * popping out, docking or minimizing never restarts it.
+ */
+function AskHost() {
+  const ask = useReviewPanel((state) => state.ask);
+  const shown = useReviewPanel(askShown);
+  const closeAsk = useReviewPanel((state) => state.closeAsk);
+  const popOutAsk = useReviewPanel((state) => state.popOutAsk);
+  const popOutTooltip = useTooltip("Pop out");
+  const [node] = useState(() => document.createElement("div"));
+
+  const [header, setHeader] = useState<HTMLDivElement | null>(null);
+
+  const [presence, setPresence] = useState<AskPresence>({
+    agentName: "Ask",
+    status: "New question",
+    tone: "quiet",
+  });
+
+  if (!ask || !shown) return null;
+
+  const actions = (
+    <>
+      <AskDeleteThreadButton />
+      <AskHistoryButton view={ask.view} />
+    </>
+  );
+
+  return (
+    <AskOpenThreadProvider key={ask.key}>
+      {createPortal(
+        ask.view.type === "history" ? (
+          <AskHistoryList passage={ask.view.passage} />
+        ) : (
+          <AskPanelContent
+            selection={ask.view.selection}
+            agent={ask.view.agent}
+            savedThreadId={
+              ask.view.type === "saved" ? ask.view.threadId : undefined
+            }
+            onPresence={setPresence}
+            header={header}
+          />
+        ),
+        node,
+      )}
+      {shown === "panel" ? (
+        <ReviewPanelFrame
+          tray
+          label="Ask"
+          titleAccessory={
+            <div ref={setHeader} {...stylex.props(panelStyles.title)} />
+          }
+          onClose={closeAsk}
+          closeLabel="Close Ask"
+          headerActions={
+            <>
+              {actions}
+              <IconButton
+                ref={popOutTooltip}
+                size="large"
+                aria-label="Pop out Ask"
+                onClick={popOutAsk}
+              >
+                <PopOutIcon
+                  xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
+                />
+              </IconButton>
+            </>
+          }
+        >
+          <AskSlot node={node} />
+        </ReviewPanelFrame>
+      ) : shown === "window" ? (
+        <AskWindow
+          actions={actions}
+          titleAccessory={
+            <div ref={setHeader} {...stylex.props(panelStyles.title)} />
+          }
+        >
+          <AskSlot node={node} />
+        </AskWindow>
       ) : (
-        <GuidedTourPanel
-          tour={activePanel.tour}
-          activeAnchor={activePanel.activeAnchor}
-          revealRequest={activePanel.revealRequest}
-          onActiveAnchorChange={activateTourAnchor}
-          onClose={close}
+        <AskPill
+          presence={ask.view.type === "history" ? historyPresence : presence}
         />
       )}
-    </>
+    </AskOpenThreadProvider>
   );
 }
 
@@ -439,7 +593,7 @@ function TraceQuotePeekPanel({
 
     if (event !== undefined && event >= 0 && event < traceEvents.length) {
       const e = traceEvents[event];
-      const text = extractEventText(e);
+      const text = extractTraceEventText(e);
 
       if (findWhitespaceNormalizedSpan(text, quote)) {
         return event;
@@ -447,7 +601,7 @@ function TraceQuotePeekPanel({
     }
 
     for (let i = 0; i < traceEvents.length; i++) {
-      const text = extractEventText(traceEvents[i]);
+      const text = extractTraceEventText(traceEvents[i]);
 
       if (findWhitespaceNormalizedSpan(text, quote)) {
         return i;
@@ -492,7 +646,6 @@ function TraceQuotePeekPanel({
   if (data.status === "loading" || data.status === "idle") {
     return (
       <ReviewPanelFrame
-        className="side-peek trace-quote-panel"
         label="Agent trace"
         title={
           trace ? `${sessionId.slice(0, 8)} · ${trace}` : sessionId.slice(0, 8)
@@ -500,8 +653,8 @@ function TraceQuotePeekPanel({
         onClose={onClose}
         closeLabel="Close side peek"
       >
-        <div className="side-peek-body">
-          <p className="review-trace-note">Loading trace…</p>
+        <div {...stylex.props(panelStyles.peekBody)}>
+          <p {...stylex.props(traceStyles.note)}>Loading trace…</p>
         </div>
       </ReviewPanelFrame>
     );
@@ -510,14 +663,13 @@ function TraceQuotePeekPanel({
   if (data.status === "error") {
     return (
       <ReviewPanelFrame
-        className="side-peek trace-quote-panel"
         label="Agent trace"
         title={sessionId.slice(0, 8)}
         onClose={onClose}
         closeLabel="Close side peek"
       >
-        <div className="side-peek-body">
-          <p className="review-trace-note review-trace-note--error">
+        <div {...stylex.props(panelStyles.peekBody)}>
+          <p {...stylex.props(traceStyles.note, traceStyles.noteError)}>
             {data.error}
           </p>
         </div>
@@ -531,7 +683,7 @@ function TraceQuotePeekPanel({
   const headerAccessory = (
     <button
       type="button"
-      className="review-trace-peek-open-full"
+      {...stylex.props(traceStyles.peekOpenFull)}
       onClick={() => {
         openTraceSession?.({
           sessionId,
@@ -547,7 +699,6 @@ function TraceQuotePeekPanel({
 
   return (
     <ReviewPanelFrame
-      className="side-peek trace-quote-panel"
       label="Agent trace"
       title={
         loadedTrace.title ??
@@ -557,9 +708,9 @@ function TraceQuotePeekPanel({
       onClose={onClose}
       closeLabel="Close side peek"
     >
-      <div className="side-peek-body">
+      <div {...stylex.props(panelStyles.peekBody)}>
         {targetEventIndex === -1 ? (
-          <p className="review-trace-note">
+          <p {...stylex.props(traceStyles.note)}>
             Quote not found in this session transcript.
           </p>
         ) : (
@@ -569,7 +720,7 @@ function TraceQuotePeekPanel({
             targetEventIndex={targetEventIndex}
             highlightQuote={quote}
             picks={picks}
-            className="review-trace-events--scoped"
+            scoped
           />
         )}
       </div>
@@ -621,30 +772,28 @@ function CodeReviewPeekPanel({
 
   return (
     <ReviewPanelFrame
-      className="side-peek"
       label="Peek"
       title={anchor.title}
       onClose={onClose}
       closeLabel="Close side peek"
     >
-      <div className="side-peek-body">
+      <div {...stylex.props(panelStyles.peekBody)}>
         {softwareMapEnabled && anchor.softwareMapPath ? (
-          <div className="peek-actions">
-            <button
-              type="button"
+          <div {...stylex.props(panelStyles.peekActions)}>
+            <IconButton
+              size="large"
               onClick={() => {
                 openSoftwareMapElement(anchor.softwareMapPath!);
                 onClose();
               }}
-              className="icon-button icon-button--map"
               aria-label={`Show ${anchor.title} in software map`}
             >
-              <MapPinIcon />
-            </button>
+              <MapPinIcon xstyle={controlStyles.inertIcon} />
+            </IconButton>
           </div>
         ) : null}
 
-        <div className="peek-content">
+        <div {...stylex.props(panelStyles.peekContent)}>
           <ReviewPeekContentView
             anchor={anchor}
             content={content}
@@ -662,12 +811,15 @@ export function GuidedTourPanel({
   revealRequest,
   onActiveAnchorChange,
   onClose,
+  docked = false,
 }: {
   tour: GuidedTour;
   activeAnchor: string;
   revealRequest: number;
   onActiveAnchorChange: (anchor: string, options: { reveal: boolean }) => void;
   onClose: () => void;
+  /** Keeps the panel in its column at every width (a diagram tour's pane). */
+  docked?: boolean;
 }) {
   const session = useReviewSession();
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -853,49 +1005,57 @@ export function GuidedTourPanel({
 
   return (
     <ReviewPanelFrame
-      className="side-peek side-peek--tour"
+      tour
+      docked={docked}
       label="Tour"
       title={tour.title ?? "Guided tour"}
       onClose={onClose}
       closeLabel="Close guided tour"
       floatingFooter={
         tour.stops.length > 0 ? (
-          <div className="tour-floating-footer">
+          <div {...stylex.props(tourStyles.floatingFooter)}>
             {showIntroPill ? (
               <button
                 type="button"
-                className="tour-pill tour-pill--intro"
+                {...stylex.props(tourStyles.pill, tourStyles.pillIntro)}
                 onClick={() => {
                   setHasScrolled(true);
                   stepTo(1);
                 }}
               >
                 <span>{tour.stops.length - 1} more steps</span>
-                <span className="tour-pill-chevron" aria-hidden="true">
+                <span
+                  {...stylex.props(tourStyles.pillChevron)}
+                  aria-hidden="true"
+                >
                   ↓
                 </span>
               </button>
             ) : (
-              <div className="tour-pill" role="group" aria-label="Tour steps">
-                <button
-                  type="button"
+              <div
+                {...stylex.props(tourStyles.pill)}
+                role="group"
+                aria-label="Tour steps"
+              >
+                <IconButton
+                  xstyle={tourStyles.pillButton}
                   aria-label="Previous step"
                   disabled={displayIndex === 0}
                   onClick={() => stepTo(displayIndex - 1)}
                 >
                   ↑
-                </button>
+                </IconButton>
                 <span className="tour-pill-count" aria-live="polite">
                   {displayIndex + 1}/{tour.stops.length}
                 </span>
-                <button
-                  type="button"
+                <IconButton
+                  xstyle={tourStyles.pillButton}
                   aria-label="Next step"
                   disabled={displayIndex === lastIndex}
                   onClick={() => stepTo(displayIndex + 1)}
                 >
                   ↓
-                </button>
+                </IconButton>
               </div>
             )}
           </div>
@@ -904,8 +1064,8 @@ export function GuidedTourPanel({
       bodyRef={scrollerRef}
       onBodyScroll={syncActiveStopToScroll}
     >
-      <div className="tour-feed-shell">
-        <div className="side-peek-body tour-feed">
+      <div {...stylex.props(tourStyles.feedShell)}>
+        <div {...stylex.props(panelStyles.peekBody, tourStyles.feed)}>
           {tour.stops.map((stop, index) => {
             const isActive = stop.anchor.id === activeAnchor;
 
@@ -916,11 +1076,18 @@ export function GuidedTourPanel({
                   if (node) sectionRefs.current.set(stop.anchor.id, node);
                   else sectionRefs.current.delete(stop.anchor.id);
                 }}
-                className={isActive ? "tour-stop active" : "tour-stop"}
+                {...stylex.props(tourStyles.stop)}
                 data-review-anchor-id={stop.anchor.id}
               >
-                <div className="tour-stop-rail">
-                  <div>{index + 1}</div>
+                <div {...stylex.props(tourStyles.rail)}>
+                  <div
+                    {...stylex.props(
+                      tourStyles.railNumber,
+                      isActive && tourStyles.railNumberActive,
+                    )}
+                  >
+                    {index + 1}
+                  </div>
                 </div>
                 <GuidedTourStopMain
                   stop={stop}
@@ -938,15 +1105,19 @@ export function GuidedTourPanel({
           })}
           {tour.stops.length > 0 && (
             <>
-              <div className="tour-end-cap">
+              <div {...stylex.props(tourStyles.endCap)}>
                 <span>End of tour</span>
-                <button type="button" onClick={() => stepTo(0)}>
+                <button
+                  type="button"
+                  {...stylex.props(tourStyles.endCapButton)}
+                  onClick={() => stepTo(0)}
+                >
                   ↑ Back to step 1
                 </button>
               </div>
               <div
                 ref={tailRef}
-                className="tour-scroll-tail"
+                {...stylex.props(tourStyles.scrollTail)}
                 style={{ height: tailHeight }}
                 aria-hidden="true"
               />
@@ -976,35 +1147,43 @@ function GuidedTourStopMain({
   const { softwareMapEnabled, openSoftwareMapElement } = useReviewActions();
 
   return (
-    <div className="tour-stop-main">
-      <header className="tour-stop-header">
+    <div {...stylex.props(tourStyles.main, active && tourStyles.mainActive)}>
+      <header {...stylex.props(tourStyles.header)}>
         <div>
-          <div className="tour-stop-count">
+          <div {...stylex.props(textStyles.eyebrow, textStyles.count)}>
             Step {index + 1} of {total}
           </div>
-          <div className="tour-stop-title-row">
-            <h3>{stop.label}</h3>
+          <div {...stylex.props(tourStyles.titleRow)}>
+            <h3
+              {...stylex.props(
+                tourStyles.title,
+                active && tourStyles.titleActive,
+              )}
+            >
+              {stop.label}
+            </h3>
           </div>
-          {stop.detail && <p>{stop.detail}</p>}
+          {stop.detail && (
+            <p {...stylex.props(tourStyles.detail)}>{stop.detail}</p>
+          )}
         </div>
         {softwareMapEnabled && stop.anchor.softwareMapPath ? (
-          <div className="peek-actions">
-            <button
-              type="button"
-              className="icon-button icon-button--map"
+          <div {...stylex.props(panelStyles.peekActions)}>
+            <IconButton
+              size="large"
               aria-label={`Show ${stop.anchor.title} in software map`}
               onClick={() => {
                 openSoftwareMapElement(stop.anchor.softwareMapPath!);
                 onClose();
               }}
             >
-              <MapPinIcon />
-            </button>
+              <MapPinIcon xstyle={controlStyles.inertIcon} />
+            </IconButton>
           </div>
         ) : null}
       </header>
 
-      <div className="peek-content">
+      <div {...stylex.props(panelStyles.peekContent, tourStyles.content)}>
         <ReviewPeekContentView
           anchor={stop.anchor}
           content={stop.content}
@@ -1055,3 +1234,63 @@ function ReviewPeekContentView({
 
   return null;
 }
+
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
+
+const sectionStyles = stylex.create({
+  section: {
+    position: "relative",
+    width: "100%",
+  },
+  header: {
+    position: "relative",
+    display: "flex",
+    alignItems: "baseline",
+    gap: "12px",
+    width: `min(100%, ${tokens.reviewProseMaxWidth})`,
+    maxWidth: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
+    marginBlock: "40px 12px",
+    marginInline: "auto",
+  },
+  // A finished tutorial chapter says so at the end of its heading row.
+  complete: {
+    "::after": {
+      content: "'Complete ✓'",
+      marginLeft: "auto",
+      color: tokens.tutorialRing,
+      font: `${fontSize.micro}/16px ${tokens.fontMono}`,
+    },
+  },
+  // Expanded sections keep a faint chevron so "this collapses" is legible
+  // without hovering the header first.
+  toggle: {
+    position: "absolute",
+    top: "4px",
+    left: "-29px",
+  },
+  heading: {
+    minWidth: 0,
+  },
+  title: {
+    scrollMarginTop: { default: null, [inDocument()]: "24px" },
+    margin: 0,
+    color: { default: null, [inDocument()]: tokens.ink },
+    fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
+    fontSize: { default: null, [inDocument()]: documentType.h2 },
+    fontWeight: { default: null, [inDocument()]: fontWeight.medium },
+    lineHeight: { default: null, [inDocument()]: "32px" },
+  },
+  titleActive: {
+    color: tokens.ink,
+  },
+  titleCollapsed: {
+    color: tokens.ghost,
+  },
+  meta: {
+    flex: "0 0 auto",
+    color: tokens.inkFaint,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    whiteSpace: "nowrap",
+  },
+});

@@ -5,4 +5,6 @@ description: "Explain code in Whiteboard, the architecture-visualization tool: a
 
 # dev.fast Whiteboard
 
+If `mcp__whiteboard__*` tools are available, use them instead of this skill.
+
 Whiteboard serves its own instructions. Before authoring, run `whiteboard api session_get_instructions '{}'` and follow the result. Pass `'{"topic":"scratchpad"}'` to explain code visually, or `'{"topic":"trace-archaeology"}'` to research why code exists. If Whiteboard is not running, the response says how to start it.

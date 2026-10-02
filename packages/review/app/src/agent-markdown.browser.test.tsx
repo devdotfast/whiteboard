@@ -49,7 +49,7 @@ describe("MarkdownContent", () => {
       ),
     );
 
-    const image = container.querySelector("p img.review-image-inline");
+    const image = container.querySelector("p img");
 
     expect(image?.getAttribute("alt")).toBe("A shot");
     expect(image?.getAttribute("src")).toBe(REMOTE);

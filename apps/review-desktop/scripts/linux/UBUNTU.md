@@ -49,8 +49,8 @@ Old packages, snapshots, and hashes remain available for in-flight downloads.
 DEBs rely on APT's signed metadata and package checksums. They are not individually
 OpenPGP-signed RPMs. The release also includes the downloadable `.deb` artifact.
 
-After publication, install instructions are at `https://install.dev.fast/linux/ubuntu`
-and `https://install.dev.fast/linux/preview/ubuntu`. Sources use repository-scoped
+After publication, install instructions are at `https://dev.fast/install#linux`
+and `https://dev.fast/install/preview#linux`. Sources use repository-scoped
 keys in `/etc/apt/keyrings`. Package installation does not add repositories,
 change editor alternatives, or edit user profiles. The app-specific AppArmor
 profile permits Chromium user namespaces without changing global policy.

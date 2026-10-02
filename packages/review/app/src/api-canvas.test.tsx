@@ -9,15 +9,15 @@ import type {
   ReviewInlineEditorSpec,
   ReviewSurfaceEvent,
 } from "@dev.fast/review-protocol";
+import { selectSource } from "@review/lens-selection";
+import { createReviewApi } from "@review/review-api/http";
+import { ReviewInputError } from "@review/review-api/input-error";
+import { LocalReviewData } from "@review/review-api/local-data";
+import { ReviewStore } from "@review/review-api/store";
 import { Hono } from "hono";
 import { act } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { selectSource } from "../../src/lens-selection";
-import { createReviewApi } from "../../src/review-api/http";
-import { ReviewInputError } from "../../src/review-api/input-error";
-import { LocalReviewData } from "../../src/review-api/local-data";
-import { ReviewStore } from "../../src/review-api/store";
 import * as clipboard from "./copy-text";
 import { mountReviewCanvas as mount } from "./desktop-entry";
 import { createSequenceTourEntry, sequenceView } from "./diagrams";
@@ -474,7 +474,7 @@ it.each([false, true])(
     await act(async () => {
       await vi.waitFor(() => expect(traceTab()).toBeTruthy());
     });
-    expect(container.querySelector(".review-trace-quote")).toBeTruthy();
+    expect(container.querySelector('a[href^="#trace-"]')).toBeTruthy();
 
     expect(container.querySelector("li")?.textContent).toBe(
       inline ? "Before source remains pinned after." : undefined,
@@ -695,7 +695,7 @@ it("copies prose and code from the displayed historical JSON review", async () =
     const copy = async () => {
       await act(async () =>
         container
-          .querySelector<HTMLButtonElement>('[aria-label="Copy for Agent"]')!
+          .querySelector<HTMLButtonElement>('[aria-label="Copy ref"]')!
           .click(),
       );
 
@@ -755,7 +755,7 @@ it("copies prose and code from the displayed historical JSON review", async () =
           path: "unrelated.ts",
         });
     });
-    expect(container.querySelector('[aria-label="Copy for Agent"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Copy ref"]')).toBeNull();
     await act(async () => {
       for (const listener of listeners)
         listener({
@@ -779,6 +779,89 @@ it("copies prose and code from the displayed historical JSON review", async () =
     await data.close();
     write.mockRestore();
     document.getSelection()!.removeAllRanges();
+  }
+});
+
+it("reads a worktree review's range as its base against the working tree, and a commit review's as two commits", async () => {
+  const head = "c14db2183b0e6c1f4a4a5c3f2d9e8b7a6f5e4d3c";
+
+  const store = new ReviewStore(path.join(directory, "worktree.db"), {
+    resolveTarget: async (target) => ({
+      target,
+      pins: { repositoryId: target.repositoryId, base: head, head },
+    }),
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+  });
+
+  const create = async (
+    title: string,
+    source:
+      | { target: { kind: "worktree"; repositoryId: string } }
+      | { pins: { repositoryId: string; base: string; head: string } },
+  ) =>
+    (
+      await store.execute({
+        commandId: randomUUID(),
+        operation: { type: "create", title, ...source },
+      })
+    ).reviewId;
+
+  const app = new Hono().route("/reviews-api", createReviewApi(store));
+  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+
+  const bridge = testReviewBridge(
+    {},
+    { request: async (url, init) => app.request(url, init) },
+  );
+
+  const open = async (reviewId: string, title: string) => {
+    await act(async () => canvas?.dispose());
+    document.body.innerHTML = "";
+    const container = document.createElement("div");
+    document.body.append(container);
+    await act(async () => {
+      canvas = mount(container, { kind: "api", reviewId, bridge });
+    });
+    await act(async () =>
+      vi.waitFor(() =>
+        expect(container.querySelector("h1")?.textContent).toBe(title),
+      ),
+    );
+
+    return container;
+  };
+
+  const range = (container: HTMLElement) =>
+    container
+      .querySelector('[role="group"][aria-label^="Session commits"]')
+      ?.getAttribute("aria-label");
+
+  try {
+    const worktree = await open(
+      await create("Uncommitted work", {
+        target: { kind: "worktree", repositoryId: "repo" },
+      }),
+      "Uncommitted work",
+    );
+
+    expect(range(worktree)).toBe(
+      "Session commits: base c14db218, head working tree",
+    );
+    expect(worktree.textContent?.match(/Working tree/g)).toHaveLength(1);
+
+    const committed = await open(
+      await create("Committed work", {
+        pins: { repositoryId: "repo", base: head, head },
+      }),
+      "Committed work",
+    );
+
+    expect(range(committed)).toContain("head c14db218");
+    expect(committed.textContent).not.toContain("Working tree");
+  } finally {
+    await store.close();
   }
 });
 
@@ -826,7 +909,7 @@ it("degrades to the retained document and an unavailable Commits tab when the ch
       ),
     );
 
-    expect(container.querySelector(".review-source-context")?.textContent).toBe(
+    expect(container.querySelector(".review-document > p")?.textContent).toBe(
       "Local checkout unavailable. Showing retained source.",
     );
 
@@ -840,6 +923,89 @@ it("degrades to the retained document and an unavailable Commits tab when the ch
     expect(commits).not.toHaveBeenCalled();
   } finally {
     await gone.close();
+  }
+});
+
+it("offers the Diff view for a live worktree review and refreshes it on each save", async () => {
+  const live = { ...pins, base: "head", worktreeRevision: "first-save" };
+
+  const worktree = new ReviewStore(path.join(directory, "worktree.db"), {
+    resolveTarget: async (target) => ({ target, pins: { ...live } }),
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+  });
+
+  try {
+    const { reviewId } = await worktree.execute({
+      commandId: randomUUID(),
+      operation: {
+        type: "create",
+        title: "Working files",
+        target: { kind: "worktree", repositoryId: pins.repositoryId },
+      },
+    });
+
+    const app = new Hono().route("/reviews-api", createReviewApi(worktree));
+    app.get("/reviews-api/:id/commits", (context) => context.json([]));
+    app.get("/reviews-api/:id/progress", (context) =>
+      context.json({ files: [], resolvedSelections: {}, lenses: [] }),
+    );
+    let progressReads = 0;
+    const files = vi.fn<() => Promise<never[]>>(async () => []);
+
+    const bridge = testReviewBridge(
+      {},
+      {
+        request: async (url, init) => {
+          if (new URL(String(url)).pathname.endsWith("/progress"))
+            progressReads++;
+
+          return app.request(url, init);
+        },
+        diffView: {
+          files,
+          create: () => {
+            throw new Error("Diff is not mounted by this test.");
+          },
+        },
+      },
+    );
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    await act(async () => {
+      canvas = mount(container, { kind: "api", reviewId, bridge });
+    });
+    await act(async () =>
+      vi.waitFor(() => {
+        expect(container.querySelector("h1")?.textContent).toBe(
+          "Working files",
+        );
+        expect(files).toHaveBeenCalled();
+        expect(progressReads).toBeGreaterThan(0);
+      }),
+    );
+
+    expect(container.querySelector('button[aria-label="Diff"]')).not.toBeNull();
+
+    const [filesBefore, progressBefore] = [
+      files.mock.calls.length,
+      progressReads,
+    ];
+
+    live.worktreeRevision = "second-save";
+    await act(async () => {
+      await worktree.refreshWorktrees();
+    });
+
+    await vi.waitFor(async () => {
+      await act(async () => {});
+      expect(files.mock.calls.length).toBeGreaterThan(filesBefore);
+      expect(progressReads).toBeGreaterThan(progressBefore);
+    });
+  } finally {
+    await worktree.close();
   }
 });
 

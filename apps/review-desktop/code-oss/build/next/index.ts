@@ -135,10 +135,6 @@ const cssBundleEntryPoints = new Set([
 
 // Common resources needed by all targets
 const commonResourcePatterns = [
-	// Tree-sitter queries
-	'vs/editor/common/languages/highlights/*.scm',
-	'vs/editor/common/languages/injections/*.scm',
-
 	// SVGs referenced from CSS (needed for transpile/dev builds where CSS is copied as-is)
 	'vs/workbench/browser/media/code-icon.svg',
 	'vs/workbench/browser/parts/editor/media/letterpress*.svg'
@@ -164,21 +160,12 @@ const desktopResourcePatterns = [
 	'vs/workbench/contrib/terminal/common/scripts/*.psm1',
 	'vs/workbench/contrib/terminal/common/scripts/*.fish',
 	'vs/workbench/contrib/terminal/common/scripts/*.zsh',
-	'vs/workbench/contrib/terminal/common/scripts/psreadline/*.psd1',
-	'vs/workbench/contrib/terminal/common/scripts/psreadline/*.psm1',
-	'vs/workbench/contrib/terminal/common/scripts/psreadline/*.dll',
-	'vs/workbench/contrib/terminal/common/scripts/psreadline/*.ps1xml',
-	'vs/workbench/contrib/terminal/common/scripts/psreadline/net6plus/*.dll',
-	'vs/workbench/contrib/terminal/common/scripts/psreadline/netstd/*.dll',
 	'vs/workbench/contrib/externalTerminal/**/*.scpt',
 
 	// Media - audio
 	'vs/platform/accessibilitySignal/browser/media/*.mp3',
 
 	// Media - images
-	'vs/workbench/contrib/welcomeGettingStarted/common/media/**/*.svg',
-	'vs/workbench/contrib/welcomeGettingStarted/common/media/**/*.png',
-	'vs/workbench/contrib/welcomeOnboarding/browser/media/*.svg',
 	'vs/workbench/contrib/extensions/browser/media/{theme-icon.png,language-icon.svg}',
 	'vs/workbench/services/extensionManagement/common/media/*.svg',
 	'vs/workbench/services/extensionManagement/common/media/*.png',

@@ -4,11 +4,7 @@ import { installHarnessHooks, skippedHarnessesLine } from "./agent-trace-hooks";
 import { type CliJsonOutput, emitJsonEvent, humanStream } from "./cli-output";
 import { errorMessage } from "./error-message";
 import { inferRepoFromGit, syncReviewTrace } from "./review-agent-traces";
-import {
-  type TraceCommand,
-  type TraceScope,
-  traceCommandPrefix,
-} from "./trace-command";
+import { type TraceCommand, type TraceScope } from "./trace-command";
 import { runTraceGitHook } from "./trace-git-hook-runner";
 import { runTraceHook } from "./trace-hook-runner";
 import { writeHostedTraceStatus } from "./trace-hosted-cli";
@@ -149,7 +145,7 @@ export async function runTraceEnable(input: {
 }): Promise<number> {
   if (!(await traceMachineStatus(input.scope)).enabled) {
     input.stderr.write(
-      `trace enable: Trace capture is not enabled. Run \`${traceCommandPrefix()} allow .\`\n`,
+      `trace enable: Trace capture is not enabled. Run \`whiteboard trace allow .\`\n`,
     );
 
     return 1;
@@ -244,7 +240,7 @@ export async function runTraceRepair(input: {
 }): Promise<number> {
   if (!(await traceMachineStatus(input.scope)).enabled) {
     input.stderr.write(
-      `trace repair: Trace capture is not enabled. Run \`${traceCommandPrefix()} allow .\`\n`,
+      `trace repair: Trace capture is not enabled. Run \`whiteboard trace allow .\`\n`,
     );
 
     return 1;
@@ -284,7 +280,7 @@ export async function runTraceSync(input: {
 
       if (current !== input.expectStorage) {
         throw new Error(
-          `The trace storage selection changed since this capture started (expected ${input.expectStorage}, now ${current}). Run \`${traceCommandPrefix()} sync ${input.sessionId}\` to publish to the current selection.`,
+          `The trace storage selection changed since this capture started (expected ${input.expectStorage}, now ${current}). Run \`whiteboard trace sync ${input.sessionId}\` to publish to the current selection.`,
         );
       }
     }

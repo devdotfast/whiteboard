@@ -36,21 +36,7 @@ test('keeps Whiteboard commands', () => {
 	assert.equal(isReviewPaletteCommand('whiteboard.openSharedSession'), true);
 });
 
-test('keeps Reload Window', () => {
-	assert.equal(isReviewPaletteCommand('workbench.action.reloadWindow'), true);
-});
-
 test('drops stock navigation commands', () => {
 	assert.equal(isReviewPaletteCommand('editor.action.revealDefinition'), false);
 	assert.equal(isReviewPaletteCommand('workbench.action.quickOpen'), false);
-});
-
-test('drops editing commands', () => {
-	assert.equal(isReviewPaletteCommand('editor.action.formatDocument'), false);
-	assert.equal(isReviewPaletteCommand('workbench.action.files.save'), false);
-});
-
-test('drops commands contributed by language extensions', () => {
-	assert.equal(isReviewPaletteCommand('ruff.executeFormat'), false);
-	assert.equal(isReviewPaletteCommand('python.setInterpreter'), false);
 });

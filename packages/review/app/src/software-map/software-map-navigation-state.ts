@@ -1,31 +1,5 @@
-import {
-  type JsonValue,
-  isJsonObject,
-  jsonArray,
-  jsonProperty,
-  jsonString,
-} from "@dev.fast/review-protocol";
-
-import type { ReviewSession } from "../host/review-session";
-import {
-  forgetReviewUiState,
-  readReviewUiState,
-  writeReviewUiState,
-} from "../review-ui-state";
 import { isInlineC4Expandable } from "./c4-projection";
 import type { NormalizedSoftwareModel } from "./model";
-
-export interface SoftwareMapNavigationState {
-  modelKey: string | undefined;
-  expandedNodeIds: string[];
-  selectedNodeId: string | null;
-  expanded: boolean;
-}
-
-const softwareMapNavigationStateByKey = new Map<
-  string,
-  SoftwareMapNavigationState
->();
 
 export function softwareMapNavigationKey({
   title,
@@ -48,52 +22,6 @@ export function softwareMapAncestorPaths(path: string): string[] {
   }
 
   return ancestors;
-}
-
-function defaultSoftwareMapNavigationState(
-  modelKey: string | undefined,
-): SoftwareMapNavigationState {
-  return {
-    modelKey,
-    expandedNodeIds: [],
-    selectedNodeId: null,
-    expanded: false,
-  };
-}
-
-function cachedSoftwareMapNavigationState(session: ReviewSession, key: string) {
-  return (
-    softwareMapNavigationStateByKey.get(
-      softwareMapNavigationStorageKey(session, key),
-    ) ?? readStoredSoftwareMapNavigationState(session, key)
-  );
-}
-
-export function hasStoredSoftwareMapNavigationState(
-  session: ReviewSession,
-  key: string,
-  modelKey: string | undefined,
-) {
-  return cachedSoftwareMapNavigationState(session, key)?.modelKey === modelKey;
-}
-
-export function restoreSoftwareMapNavigationState(
-  session: ReviewSession,
-  key: string,
-  modelKey: string | undefined,
-): SoftwareMapNavigationState {
-  const cached = cachedSoftwareMapNavigationState(session, key);
-
-  if (!cached || cached.modelKey !== modelKey) {
-    return defaultSoftwareMapNavigationState(modelKey);
-  }
-
-  return {
-    modelKey,
-    expandedNodeIds: [...cached.expandedNodeIds],
-    selectedNodeId: cached.selectedNodeId,
-    expanded: cached.expanded,
-  };
 }
 
 export function initialSoftwareMapExpandedNodeIds(
@@ -125,67 +53,4 @@ export function seedSoftwareMapDefaultExpandedNodeIds(input: {
   }
 
   return expandedNodeIds;
-}
-
-export function rememberSoftwareMapNavigationState(
-  session: ReviewSession,
-  key: string,
-  state: SoftwareMapNavigationState,
-) {
-  softwareMapNavigationStateByKey.set(
-    softwareMapNavigationStorageKey(session, key),
-    {
-      ...state,
-      expandedNodeIds: [...state.expandedNodeIds],
-    },
-  );
-  writeStoredSoftwareMapNavigationState(session, key, state);
-}
-
-export function clearSoftwareMapNavigationStateForTests(
-  session: ReviewSession,
-) {
-  softwareMapNavigationStateByKey.clear();
-
-  if (typeof window !== "undefined") {
-    forgetReviewUiState("window", (key) =>
-      key.startsWith(session.storageKey("software-map-navigation")),
-    );
-  }
-}
-
-function softwareMapNavigationStorageKey(session: ReviewSession, key: string) {
-  return session.storageKey("software-map-navigation", key);
-}
-
-function readStoredSoftwareMapNavigationState(
-  session: ReviewSession,
-  key: string,
-): SoftwareMapNavigationState | null {
-  const parsed = readReviewUiState<JsonValue>(
-    "window",
-    softwareMapNavigationStorageKey(session, key),
-  );
-
-  if (!isJsonObject(parsed)) return null;
-
-  return {
-    modelKey: jsonString(jsonProperty(parsed, "modelKey")),
-    expandedNodeIds: (jsonArray(jsonProperty(parsed, "expandedNodeIds")) ?? [])
-      .map(jsonString)
-      .filter((entry): entry is string => entry !== undefined),
-    selectedNodeId: jsonString(jsonProperty(parsed, "selectedNodeId")) ?? null,
-    expanded: jsonProperty(parsed, "expanded") === true,
-  };
-}
-
-function writeStoredSoftwareMapNavigationState(
-  session: ReviewSession,
-  key: string,
-  state: SoftwareMapNavigationState,
-) {
-  writeReviewUiState("window", softwareMapNavigationStorageKey(session, key), {
-    ...state,
-    expandedNodeIds: [...state.expandedNodeIds],
-  });
 }

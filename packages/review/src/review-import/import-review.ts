@@ -4,32 +4,35 @@ import path from "node:path";
 
 import { parseJsonText } from "@dev.fast/review-protocol";
 import { errorMessage, loadReviewAgentTrace } from "@dev.fast/trace-core";
-
-import { textIncludesQuote } from "../evidence";
-import { isMissingFileError } from "../fs-utils";
+import { textIncludesQuote } from "@review/evidence";
+import { isMissingFileError } from "@review/fs-utils";
 import {
   type Block,
   type Pins,
   ReviewInputError,
   sourceReferences,
-} from "../review-api/document";
-import { decodeImage } from "../review-api/image-decode";
-import type { LocalReviewData } from "../review-api/local-data";
+} from "@review/review-api/document";
+import { decodeImage } from "@review/review-api/image-decode";
+import type { LocalReviewData } from "@review/review-api/local-data";
 import type {
   ImportedVersionInput,
   ReviewStore,
   SnapshotOrigin,
-} from "../review-api/store";
-import { REVIEW_DOCUMENT_BUNDLE_DIR } from "../review-bundle";
+} from "@review/review-api/store";
+import { REVIEW_DOCUMENT_BUNDLE_DIR } from "@review/review-bundle";
 import {
   reviewDocumentDataSchema,
   upgradeReviewDocumentJson,
-} from "../review-document-data";
-import { type StoredReview, parseAnyStoredReviewRecord } from "../review-home";
-import { evaluateSealedReviewDocument } from "../review-sealed-document";
-import { type ReviewVcsLogEntry, reviewVcs } from "../review-vcs";
-import { readReviewSoftwareMapBundle } from "../software-map-bundle";
-import { legacySoftwareMapBundle } from "../stored-review-migration";
+} from "@review/review-document-data";
+import {
+  type StoredReview,
+  parseAnyStoredReviewRecord,
+} from "@review/review-home";
+import { evaluateSealedReviewDocument } from "@review/review-sealed-document";
+import { type ReviewVcsLogEntry, reviewVcs } from "@review/review-vcs";
+import { readReviewSoftwareMapBundle } from "@review/software-map-bundle";
+import { legacySoftwareMapBundle } from "@review/stored-review-migration";
+
 import {
   type ImageRequest,
   type TraceRequest,

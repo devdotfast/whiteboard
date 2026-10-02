@@ -1,6 +1,11 @@
+import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { tokens } from "@canvas/tokens.stylex";
+import { EmptyState } from "@canvas/ui/empty-state";
+import * as stylex from "@stylexjs/stylex";
 import type { CSSProperties, ReactElement } from "react";
 
 import type { NormalizedSoftwareModel } from "./model";
+import { softwareMapRootProps } from "./software-map-styles";
 
 /** The CSS length for a size prop: bare numbers are pixel counts. */
 export function softwareMapCssLength(value: number | string): string {
@@ -11,10 +16,12 @@ export function SoftwareMapUnavailable({
   title,
   height,
   className,
+  variant,
 }: {
   title?: string;
   height?: number | string;
   className?: string;
+  variant?: "view";
 }): ReactElement {
   // SAFETY: React passes "--*" keys through to style.setProperty; CSSProperties
   // only lacks an index signature for custom properties.
@@ -27,21 +34,23 @@ export function SoftwareMapUnavailable({
 
   return (
     <section
-      className={["software-map", className].filter(Boolean).join(" ")}
+      {...softwareMapRootProps(className, variant)}
       aria-label={title ?? "Software map unavailable"}
       style={style}
     >
-      <div className="software-map-unavailable">
-        <h3>No software map for this repo yet</h3>
-        <p>
-          A software map adds a structural view of the systems, containers, and
-          components in this repo.
-        </p>
-        <p>
-          Author one with <code>review map</code>.
-        </p>
-        <p>The rest of the document works without it.</p>
-      </div>
+      <EmptyState
+        variant="boxed"
+        xstyle={styles.unavailable}
+        title="No software map for this repo yet"
+        message={
+          <>
+            A software map adds a structural view of the systems, containers,
+            and components in this repo. Author one with{" "}
+            <code {...stylex.props(styles.code)}>whiteboard map</code>. The rest
+            of the document works without it.
+          </>
+        }
+      />
     </section>
   );
 }
@@ -65,7 +74,7 @@ export function SoftwareMapTopologyUnavailable({
   if (missingSides.length === 0) return null;
 
   return (
-    <p className="software-map-topology-unavailable" role="status">
+    <p {...stylex.props(styles.topologyUnavailable)} role="status">
       Structural diff unavailable: no software map at{" "}
       {missingSides.join(" or ")}.
     </p>
@@ -78,3 +87,31 @@ function softwareMapSideLabel(
 ): string {
   return ref ? `${side} ${ref}` : side;
 }
+
+const styles = stylex.create({
+  unavailable: {
+    minHeight: "var(--software-map-empty-height, 520px)",
+  },
+  code: {
+    padding: "2px 5px",
+    borderRadius: radius.small,
+    backgroundColor: tokens.well,
+    color: tokens.ink,
+    fontFamily: tokens.fontMono,
+    fontSize: "0.85em",
+    fontWeight: fontWeight.bold,
+  },
+  topologyUnavailable: {
+    flex: "none",
+    margin: 0,
+    padding: "7px 12px",
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.rule,
+    backgroundColor: tokens.tray,
+    color: tokens.inkFaint,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    lineHeight: "16px",
+  },
+});

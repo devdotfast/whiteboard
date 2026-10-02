@@ -1,7 +1,7 @@
+import type { ActivitySnapshot } from "@review/review-api/activity";
+import type { EditSummary } from "@review/review-api/document";
 import { describe, expect, it } from "vitest";
 
-import type { ActivitySnapshot } from "../../src/review-api/activity";
-import type { EditSummary } from "../../src/review-api/document";
 import {
   type AuthoringCursor,
   nextCursor,

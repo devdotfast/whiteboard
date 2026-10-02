@@ -6,7 +6,7 @@ import {
   REVIEW_MCP_LAUNCH,
   WINDOWS_MCP_LAUNCH,
   connectPrompt,
-  connectPrompts,
+  launchCommand,
   reviewMcpLaunch,
 } from "./connect-prompts";
 import { ALL_INSTALL_TARGETS } from "./install";
@@ -70,19 +70,26 @@ describe("connectPrompt", () => {
     }
   });
 
-  it("installs the Pi package in oh-my-pi and reloads its plugins", () => {
-    const prompt = connectPrompt("omp", input);
+  it("registers the shared MCP launch in Pi, oh-my-pi and OpenCode", () => {
+    for (const platform of ["darwin", "win32"] as const) {
+      const launch = reviewMcpLaunch(true, platform);
 
-    expect(prompt).toContain("omp install npm:@dev.fast/pi-whiteboard");
-    expect(prompt).toContain("/reload-plugins");
-    expect(prompt).toContain("whiteboard api session_get_instructions '{}'");
+      expect(connectPrompt("opencode", { ...input, platform })).toContain(
+        `opencode mcp add --global whiteboard -- ${launchCommand(launch)}\n`,
+      );
+
+      expect(connectPrompt("pi", { ...input, platform })).toContain(
+        `pi mcp add whiteboard -- ${launchCommand(launch)}\n`,
+      );
+      expect(connectPrompt("omp", { ...input, platform })).toContain(
+        JSON.stringify({ whiteboard: launch }, null, 2),
+      );
+    }
   });
-});
 
-describe("connectPrompts", () => {
-  it("returns one prompt per target", () => {
-    expect(Object.keys(connectPrompts(input)).sort()).toEqual(
-      [...ALL_INSTALL_TARGETS].sort(),
+  it("quotes the sh launch so Pi stores it unchanged", () => {
+    expect(launchCommand(reviewMcpLaunch(true, "darwin"))).toBe(
+      `sh -c 'exec "$HOME/.local/bin/whiteboard" mcp'`,
     );
   });
 });

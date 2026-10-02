@@ -9,7 +9,6 @@ import {
   RULER_TICK_PITCH,
   TraceRuler,
   rulerBucketRange,
-  rulerCombWidth,
   rulerNearestTick,
   rulerPreview,
   rulerTickCount,
@@ -50,16 +49,6 @@ describe("ruler geometry", () => {
     }
 
     expect(next).toBe(eventCount);
-  });
-
-  it("elongates the hovered tick most and tapers to rest width", () => {
-    expect(rulerCombWidth(10, null)).toBe(6);
-    expect(rulerCombWidth(10, 10)).toBe(30);
-    const near = rulerCombWidth(11, 10);
-    const far = rulerCombWidth(13, 10);
-    expect(near).toBeGreaterThan(far);
-    expect(far).toBeGreaterThanOrEqual(6);
-    expect(rulerCombWidth(20, 10)).toBe(6);
   });
 });
 
@@ -181,13 +170,40 @@ describe("TraceRuler", () => {
     await act(async () => {
       root?.render(<TraceRuler events={[]} />);
     });
-    expect(container.querySelector(".review-trace-ruler")).toBe(null);
+    expect(container.firstElementChild).toBe(null);
   });
 
-  it("renders the ruler anchor for a populated trace", async () => {
+  it("reports the event chosen on the ruler for restoration", async () => {
+    container.style.height = "400px";
+    container.style.overflowY = "auto";
+    const selected: number[] = [];
     await act(async () => {
-      root?.render(<TraceRuler events={[userEvent("hi")]} />);
+      root?.render(
+        <TraceRuler
+          events={[
+            userEvent("First"),
+            assistantEvent("Reply"),
+            userEvent("Second"),
+          ]}
+          onSelectEvent={(index) => selected.push(index)}
+        />,
+      );
     });
-    expect(container.querySelector(".review-trace-ruler")).not.toBe(null);
+
+    const tick = container.querySelectorAll<HTMLElement>(
+      ".review-trace-ruler-tick",
+    )[1]!;
+
+    expect(tick).toBeTruthy();
+    const rect = tick.getBoundingClientRect();
+    await act(async () => {
+      tick.dispatchEvent(
+        new MouseEvent("click", {
+          bubbles: true,
+          clientY: (rect.top + rect.bottom) / 2,
+        }),
+      );
+    });
+    expect(selected).toEqual([2]);
   });
 });

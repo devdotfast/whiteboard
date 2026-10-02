@@ -5,7 +5,7 @@
 
 import { FocusMode } from "../../platform/native/common/native.js";
 
-/** "1" on `review app` launches without --focus. */
+/** "1" on `whiteboard app` launches without --focus. */
 export const REVIEW_DESKTOP_BACKGROUND_ENV = "DEV_FAST_REVIEW_DESKTOP_BACKGROUND";
 
 interface BackgroundWindow {

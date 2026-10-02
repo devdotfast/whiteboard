@@ -6,13 +6,18 @@ import { type ReactElement, act, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { controlStyles } from "./controls-styles";
 import {
   type ReviewSession,
   ReviewSessionProvider,
 } from "./host/review-session";
 import { ReviewSection } from "./review-components";
 import { ReviewProvider } from "./review-context";
+import { ReviewPanelProvider, useReviewPanelStore } from "./review-panel";
+import type { ReviewPanelStore } from "./review-panel-store";
 import { testReviewSession } from "./review-session-test-utils";
+import { shellStyles } from "./shell-styles";
+import { withClass } from "./stylex-props";
 import { TutorialProvider } from "./tutorial-context";
 import { TutorialExperienceProvider } from "./tutorial-experience";
 
@@ -29,6 +34,8 @@ let session: ReviewSession;
 let root: ReturnType<typeof createRoot> | null = null;
 
 let canvasRoot: HTMLElement;
+
+let panelStore: ReviewPanelStore;
 
 beforeEach(() => {
   session = testReviewSession(
@@ -63,12 +70,19 @@ function Shell({
   const regionRef = useRef<HTMLElement | null>(null);
 
   return (
-    <main ref={shellRef} className="review-document-shell">
+    <main
+      ref={shellRef}
+      {...withClass("review-document-shell", shellStyles.documentShell)}
+    >
       <TutorialExperienceProvider
         shellRef={shellRef}
         scrollRegionRef={regionRef}
       >
-        <button type="button" className="review-segment" aria-label="Commits">
+        <button
+          type="button"
+          {...withClass("review-segment", controlStyles.segment)}
+          aria-label="Commits"
+        >
           Commits
         </button>
         <button
@@ -78,9 +92,16 @@ function Shell({
         >
           Explore the sample commits
         </button>
-        <section ref={regionRef} className="review-view-region">
+        <section
+          ref={regionRef}
+          {...withClass("review-view-region", shellStyles.viewRegion)}
+        >
           <div
-            className="review-document-view"
+            {...withClass(
+              "review-document-view",
+              shellStyles.documentView,
+              activeView !== "review" && shellStyles.hidden,
+            )}
             hidden={activeView !== "review"}
           >
             {CHAPTER_TITLES.map((title) => (
@@ -116,13 +137,22 @@ function render(
     root?.render(
       <ReviewSessionProvider session={session}>
         <ReviewProvider>
-          <TutorialProvider tutorial={tutorial}>
-            <Shell {...props} />
-          </TutorialProvider>
+          <ReviewPanelProvider>
+            <PanelStoreProbe />
+            <TutorialProvider tutorial={tutorial}>
+              <Shell {...props} />
+            </TutorialProvider>
+          </ReviewPanelProvider>
         </ReviewProvider>
       </ReviewSessionProvider>,
     );
   });
+}
+
+function PanelStoreProbe(): null {
+  panelStore = useReviewPanelStore();
+
+  return null;
 }
 
 function section(title: string): HTMLElement {
@@ -136,7 +166,17 @@ function section(title: string): HTMLElement {
 }
 
 function card(): HTMLElement | null {
-  return canvasRoot.querySelector(".tutorial-guide");
+  return canvasRoot.querySelector('aside[aria-label="Tutorial guide"]');
+}
+
+/** Rings drawn in the shell overlay, beside the guide card. */
+function shellRings() {
+  return card()?.parentElement?.querySelectorAll(":scope > div") ?? [];
+}
+
+/** The ring layer inside the scroll region. */
+function regionLayer() {
+  return canvasRoot.querySelector(".review-view-region > [aria-hidden]");
 }
 
 describe("TutorialExperience", () => {
@@ -145,9 +185,10 @@ describe("TutorialExperience", () => {
     render(tutorial);
 
     expect(card()?.textContent).toContain("Choose your keybindings");
-    expect(canvasRoot.querySelectorAll(".tutorial-guide")).toHaveLength(1);
-    expect(card()?.parentElement?.className).toBe("tutorial-experience");
-    expect(card()?.parentElement?.parentElement?.className).toBe(
+    expect(
+      canvasRoot.querySelectorAll('aside[aria-label="Tutorial guide"]'),
+    ).toHaveLength(1);
+    expect(card()?.parentElement?.parentElement).toHaveClass(
       "review-document-shell",
     );
     expect(section("Welcome").dataset.tutorialChapterState).toBe("active");
@@ -159,8 +200,6 @@ describe("TutorialExperience", () => {
         .querySelector(".tutorial-keymap-picker")
         ?.getAttribute("data-tutorial-target"),
     ).toBe("chooseKeymap");
-    expect(canvasRoot.querySelector(".tutorial-scrim")).toBeNull();
-    expect(canvasRoot.querySelector(".tutorial-spotlight")).toBeNull();
   });
 
   it("draws target rings in a layer inside the scroll region", () => {
@@ -178,14 +217,9 @@ describe("TutorialExperience", () => {
       vi.unstubAllGlobals();
     }
 
-    const layer = canvasRoot.querySelector(
-      ".review-view-region > .tutorial-target-layer",
-    );
-
-    expect(layer?.querySelectorAll(".tutorial-target-ring")).toHaveLength(1);
-    expect(
-      canvasRoot.querySelectorAll(".tutorial-experience .tutorial-target-ring"),
-    ).toHaveLength(0);
+    expect(card()).not.toBeNull();
+    expect(regionLayer()?.children).toHaveLength(1);
+    expect(shellRings()).toHaveLength(0);
   });
 
   it("draws a toolbar target's ring in the shell overlay", () => {
@@ -210,12 +244,8 @@ describe("TutorialExperience", () => {
     }
 
     // The Commits tab sits outside the region; the prose button inside it.
-    expect(
-      canvasRoot.querySelectorAll(".tutorial-experience .tutorial-target-ring"),
-    ).toHaveLength(2);
-    expect(
-      canvasRoot.querySelector(".review-view-region > .tutorial-target-layer"),
-    ).toBeNull();
+    expect(shellRings()).toHaveLength(2);
+    expect(regionLayer()).toBeNull();
   });
 
   it("expands the active chapter without collapsing the others", () => {
@@ -223,9 +253,7 @@ describe("TutorialExperience", () => {
     render(tutorial);
 
     const toggle = (title: string) =>
-      section(title).querySelector<HTMLButtonElement>(
-        ".review-section-toggle",
-      )!;
+      section(title).querySelector<HTMLButtonElement>("button[aria-expanded]")!;
 
     act(() => toggle("Interactive Diagrams").click());
     expect(toggle("Interactive Diagrams").getAttribute("aria-expanded")).toBe(
@@ -305,76 +333,6 @@ describe("TutorialExperience", () => {
     ).toBe("openDiff");
   });
 
-  it("coalesces target discovery after several DOM mutations", async () => {
-    const frames: FrameRequestCallback[] = [];
-
-    const requestFrame = vi.fn<(callback: FrameRequestCallback) => number>(
-      (callback) => {
-        frames.push(callback);
-
-        return frames.length;
-      },
-    );
-
-    class TestMutationObserver implements MutationObserver {
-      static readonly instances: TestMutationObserver[] = [];
-
-      observedOptions: MutationObserverInit | undefined;
-
-      constructor(readonly callback: MutationCallback) {
-        TestMutationObserver.instances.push(this);
-      }
-
-      disconnect(): void {}
-
-      observe(_target: Node, options?: MutationObserverInit): void {
-        this.observedOptions = options;
-      }
-
-      takeRecords(): MutationRecord[] {
-        return [];
-      }
-
-      notify(): void {
-        this.callback([], this);
-      }
-    }
-
-    vi.stubGlobal("requestAnimationFrame", requestFrame);
-    vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    vi.stubGlobal("MutationObserver", TestMutationObserver);
-    // Ring resizing schedules unrelated frames during browser layout.
-    vi.stubGlobal("ResizeObserver", undefined);
-
-    render(tutorialBridge([]));
-    await act(async () => Promise.resolve());
-
-    const targetDiscoveryObserver = TestMutationObserver.instances.find(
-      ({ observedOptions }) =>
-        observedOptions?.attributeFilter?.includes("hidden"),
-    );
-
-    expect(targetDiscoveryObserver).toBeDefined();
-    requestFrame.mockClear();
-    frames.length = 0;
-
-    const firstTarget = document.createElement("div");
-    firstTarget.className = "tutorial-keymap-picker";
-    const secondTarget = document.createElement("div");
-    secondTarget.className = "tutorial-keymap-picker";
-    await act(async () => {
-      section("Welcome").append(firstTarget);
-      section("Welcome").append(secondTarget);
-      targetDiscoveryObserver?.notify();
-      targetDiscoveryObserver?.notify();
-    });
-
-    expect(requestFrame).toHaveBeenCalledOnce();
-    act(() => frames[0]?.(0));
-    expect(firstTarget.dataset.tutorialTarget).toBe("chooseKeymap");
-    expect(secondTarget.dataset.tutorialTarget).toBe("chooseKeymap");
-  });
-
   it("gets out of the way and completes the sequence step when its real tour opens", async () => {
     const tutorial = tutorialBridge([
       "chooseKeymap",
@@ -388,13 +346,10 @@ describe("TutorialExperience", () => {
     render(tutorial);
 
     expect(card()?.textContent).toContain("Walk the sequence");
-    const diagramTour = document.createElement("div");
-    diagramTour.className = "diagram-tour-overlay";
-    const sequence = document.createElement("div");
-    sequence.className = "sequence-diagram";
-    diagramTour.append(sequence);
     await act(async () => {
-      canvasRoot.append(diagramTour);
+      panelStore
+        .getState()
+        .openOverlayTour({ tourId: "t", kind: "sequence" }, "a");
       await Promise.resolve();
     });
 
@@ -416,13 +371,10 @@ describe("TutorialExperience", () => {
     render(tutorial);
 
     expect(card()?.textContent).toContain("Inspect the database flow");
-    const diagramTour = document.createElement("div");
-    diagramTour.className = "diagram-tour-overlay";
-    const database = document.createElement("div");
-    database.className = "database-lens";
-    diagramTour.append(database);
     await act(async () => {
-      canvasRoot.append(diagramTour);
+      panelStore
+        .getState()
+        .openOverlayTour({ tourId: "t", kind: "database" }, "a");
       await Promise.resolve();
     });
 
@@ -532,11 +484,11 @@ describe("TutorialExperience", () => {
     render(tutorial);
 
     const pill = canvasRoot.querySelector<HTMLButtonElement>(
-      ".tutorial-experience > .tutorial-guide-pill",
+      'button[aria-label="Show tutorial"]',
     );
 
     expect(pill?.getAttribute("aria-label")).toBe("Show tutorial");
-    expect(pill?.querySelector(".ui-icon--tutorial")).not.toBeNull();
+    expect(pill?.querySelector("svg")).not.toBeNull();
     expect(card()).toBeNull();
     act(() => pill?.click());
     expect(tutorial.reopen).toHaveBeenCalledOnce();

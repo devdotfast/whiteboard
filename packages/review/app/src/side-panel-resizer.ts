@@ -4,7 +4,7 @@ import type {
   PointerEvent,
   RefObject,
 } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useReviewUiState } from "./review-ui-state";
 
@@ -15,10 +15,16 @@ type RightPanelResizeOptions = {
   defaultWidth: number;
   minWidth: number;
   maxWidth: number;
+  /** Lets the panel grow past `maxWidth` to this share of its container. */
+  maxContainerFraction?: number;
   minMainWidth: number;
   separatorWidth?: number;
+  /** Dragging past `minWidth` folds the panel to this width. */
+  collapsedWidth?: number;
   label: string;
   containerRef?: RefObject<HTMLElement | null>;
+  /** Whether the panel shows; a hidden one skips re-clamping on resize. */
+  active?: boolean;
 };
 
 type SeparatorProps = HTMLAttributes<HTMLDivElement> & {
@@ -185,10 +191,13 @@ export function useRightPanelResize({
   defaultWidth,
   minWidth,
   maxWidth,
+  maxContainerFraction = 0,
   minMainWidth,
   separatorWidth = 0,
+  collapsedWidth,
   label,
   containerRef,
+  active = true,
 }: RightPanelResizeOptions) {
   // Persist the width the reader asked for and clamp only for rendering. A
   // panel can mount before its container has been laid out — the map frame does
@@ -198,6 +207,19 @@ export function useRightPanelResize({
     stateKey,
     defaultWidth,
   );
+
+  const [storedCollapsed, setCollapsed] = useReviewUiState(
+    `${stateKey}-collapsed`,
+    false,
+  );
+
+  const collapsible = collapsedWidth !== undefined;
+  const foldedWidth = storedCollapsed ? collapsedWidth : undefined;
+  const collapsed = foldedWidth !== undefined;
+  // Unfolding restores the width from before the drag.
+  const dragStartWidth = useRef(requestedWidth);
+  // Keeps the grabbed point of the divider under the pointer.
+  const grabOffset = useRef(0);
 
   const [isResizing, setIsResizing] = useState(false);
   const [, setLayoutRevision] = useState(0);
@@ -225,7 +247,7 @@ export function useRightPanelResize({
       const { width: containerWidth } = containerMetrics();
 
       const availableMax = Math.min(
-        maxWidth,
+        Math.max(maxWidth, containerWidth * maxContainerFraction),
         containerWidth - minMainWidth - separatorWidth,
       );
 
@@ -234,7 +256,14 @@ export function useRightPanelResize({
         Math.max(minWidth, availableMax),
       );
     },
-    [containerMetrics, maxWidth, minMainWidth, minWidth, separatorWidth],
+    [
+      containerMetrics,
+      maxContainerFraction,
+      maxWidth,
+      minMainWidth,
+      minWidth,
+      separatorWidth,
+    ],
   );
 
   const width = constrainWidth(requestedWidth);
@@ -252,44 +281,71 @@ export function useRightPanelResize({
 
   // The Review canvas can shrink without the browser window changing when a
   // native Code OSS editor opens beside it. Observe the actual owning
-  // container as well as the window so the document keeps its minimum width
+  // container, or the window without one, so the document keeps its minimum width
   // in both layouts. The rendered width is derived, so a re-render is all this
   // needs; the requested width stays untouched and the panel returns to it once
   // there is room again.
   useEffect(() => {
+    if (!active) return;
     const reclampWidth = () => setLayoutRevision((revision) => revision + 1);
-    window.addEventListener("resize", reclampWidth);
     const container = containerRef?.current;
 
-    const resizeObserver =
-      container && typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(reclampWidth)
-        : null;
+    if (!container || typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", reclampWidth);
 
-    if (container && resizeObserver) resizeObserver.observe(container);
+      return () => window.removeEventListener("resize", reclampWidth);
+    }
 
-    return () => {
-      window.removeEventListener("resize", reclampWidth);
-      resizeObserver?.disconnect();
-    };
-  }, [containerRef]);
+    const resizeObserver = new ResizeObserver(reclampWidth);
+
+    resizeObserver.observe(container);
+
+    return () => resizeObserver.disconnect();
+  }, [active, containerRef]);
+
+  const pointerWidth = useCallback(
+    (clientX: number) => {
+      const { left, right } = containerMetrics();
+
+      return side === "left" ? clientX - left : right - clientX;
+    },
+    [containerMetrics, side],
+  );
 
   const resizeFromClientX = useCallback(
     (clientX: number) => {
-      const { left, right } = containerMetrics();
-      setWidth(side === "left" ? clientX - left : right - clientX);
+      const nextWidth = pointerWidth(clientX) - grabOffset.current;
+
+      if (collapsible && nextWidth < minWidth) {
+        setCollapsed(true);
+        setRequestedWidth(dragStartWidth.current);
+
+        return;
+      }
+
+      if (collapsible) setCollapsed(false);
+      setWidth(nextWidth);
     },
-    [containerMetrics, setWidth, side],
+    [
+      collapsible,
+      minWidth,
+      pointerWidth,
+      setCollapsed,
+      setRequestedWidth,
+      setWidth,
+    ],
   );
 
+  // Resize on move, not press, so a press at the minimum can't fold.
   const startResize = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
+      dragStartWidth.current = requestedWidth;
+      grabOffset.current = pointerWidth(event.clientX) - (foldedWidth ?? width);
       setIsResizing(true);
-      resizeFromClientX(event.clientX);
     },
-    [resizeFromClientX],
+    [foldedWidth, pointerWidth, requestedWidth, width],
   );
 
   const resize = useCallback(
@@ -310,27 +366,35 @@ export function useRightPanelResize({
 
   const resizeWithKeyboard = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        setWidth((currentWidth) => currentWidth + (side === "left" ? -32 : 32));
-      }
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
 
-      if (event.key === "ArrowRight") {
-        event.preventDefault();
-        setWidth((currentWidth) => currentWidth + (side === "left" ? 32 : -32));
+      const delta =
+        (event.key === "ArrowLeft") === (side === "left") ? -32 : 32;
+
+      if (collapsed) {
+        if (delta > 0) setCollapsed(false);
+      } else if (collapsible && delta < 0 && width <= minWidth) {
+        setCollapsed(true);
+      } else {
+        setWidth((currentWidth) => currentWidth + delta);
       }
     },
-    [setWidth, side],
+    [collapsed, collapsible, minWidth, setCollapsed, setWidth, side, width],
   );
+
+  const expand = useCallback(() => setCollapsed(false), [setCollapsed]);
+  const renderedWidth = foldedWidth ?? width;
+  const widest = Math.round(constrainWidth(Number.POSITIVE_INFINITY));
 
   const separatorProps = useMemo<SeparatorProps>(
     () => ({
       role: "separator",
       "aria-label": label,
       "aria-orientation": "vertical",
-      "aria-valuemin": minWidth,
-      "aria-valuemax": maxWidth,
-      "aria-valuenow": Math.round(width),
+      "aria-valuemin": collapsedWidth ?? minWidth,
+      "aria-valuemax": widest,
+      "aria-valuenow": Math.round(renderedWidth),
       tabIndex: 0,
       onPointerDown: startResize,
       onPointerMove: resize,
@@ -340,20 +404,23 @@ export function useRightPanelResize({
       onKeyDown: resizeWithKeyboard,
     }),
     [
+      collapsedWidth,
       label,
-      maxWidth,
       minWidth,
+      renderedWidth,
       resize,
       resizeWithKeyboard,
       startResize,
       stopResize,
-      width,
+      widest,
     ],
   );
 
   return {
-    width,
+    width: renderedWidth,
     setWidth,
+    collapsed,
+    expand,
     isResizing,
     separatorProps,
   };

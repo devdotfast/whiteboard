@@ -3,10 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { traceSchema } from "@review/review-api/trace-schema.js";
 import { expect, it } from "vitest";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
-import { traceSchema } from "../review-api/trace-schema.js";
 import { digestBytes, exportShare } from "./export.js";
 import { validateShareBundle } from "./import.js";
 

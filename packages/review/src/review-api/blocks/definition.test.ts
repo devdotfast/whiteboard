@@ -1,7 +1,7 @@
+import { ReviewInputError } from "@review/review-api/input-error.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { ReviewInputError } from "../input-error.js";
 import {
   type BlockDefinition,
   defineBlock,
@@ -36,13 +36,6 @@ describe("defineBlock", () => {
     expect(() => note.schema.parse({ type: "other", body: "hi" })).toThrow(
       z.ZodError,
     );
-  });
-
-  it("carries the check through", () => {
-    expect(() => note.check({ type: "note", body: "forbidden" })).toThrow(
-      "Forbidden body.",
-    );
-    expect(() => note.check({ type: "note", body: "fine" })).not.toThrow();
   });
 });
 

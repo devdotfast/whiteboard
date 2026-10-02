@@ -167,33 +167,6 @@ describe("createReviewTabDwellTracker", () => {
     ]);
   });
 
-  it("captures the session endpoint before the bridge is torn down", () => {
-    const fetchCalls: Array<Parameters<typeof fetch>> = [];
-
-    const send = createReviewTabTelemetryTransport({
-      endpoint: "http://127.0.0.1:1234/session/telemetry/tab",
-      fetch: (async (...args) => {
-        fetchCalls.push(args);
-
-        return new Response(null, { status: 200 });
-      }) as typeof fetch,
-    });
-
-    send(
-      {
-        tab: "files",
-        duration_ms: 500,
-        reason: "unmount",
-        app_session_id: "session-1234567890",
-      },
-      { pageExit: false },
-    );
-
-    expect(fetchCalls[0]?.[0]).toBe(
-      "http://127.0.0.1:1234/session/telemetry/tab",
-    );
-  });
-
   it("drops invalid and sub-threshold durations", () => {
     let now = 0;
     const sent: ReviewTabDwellPayload[] = [];

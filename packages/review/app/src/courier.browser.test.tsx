@@ -1,17 +1,19 @@
+import type { ActivitySnapshot } from "@review/review-api/activity";
+import type { Block } from "@review/review-api/document";
+import * as stylex from "@stylexjs/stylex";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { ActivitySnapshot } from "../../src/review-api/activity";
-import type { Block } from "../../src/review-api/document";
 import { ApiDocument } from "./api-document";
-import {
-  AuthoringActivityBadge,
-  AuthoringActivityContext,
-} from "./authoring-activity";
+import { AuthoringActivityBadge } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import type { AuthoringCursor } from "./authoring-cursor";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { AuthoringCursorContext } from "./courier";
+import { documentStyles } from "./document-styles";
 import { ReviewSessionProvider } from "./host/review-session";
+import { documentMarker } from "./markers.stylex";
 import type { ReviewRoots } from "./review-root-context";
 import { ReviewRootsProvider } from "./review-root-context";
 import {
@@ -47,7 +49,7 @@ const onLocate = vi.fn<() => void>();
 
 beforeEach(() => {
   article = document.createElement("article");
-  article.className = "review-document";
+  article.className = `review-document ${stylex.props(documentStyles.article, documentMarker).className}`;
   article.style.position = "relative";
   container = document.createElement("div");
   article.append(container);
@@ -73,16 +75,18 @@ const render = async (
 
   await act(async () =>
     root.render(
-      <ReviewSessionProvider session={testReviewSession()}>
-        <ReviewRootsProvider roots={roots}>
-          <AuthoringActivityContext.Provider value={activity}>
-            <AuthoringCursorContext.Provider value={cursor}>
-              <AuthoringActivityBadge onLocate={onLocate} />
-              <ApiDocument data={data} />
-            </AuthoringCursorContext.Provider>
-          </AuthoringActivityContext.Provider>
-        </ReviewRootsProvider>
-      </ReviewSessionProvider>,
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={testReviewSession()}>
+          <ReviewRootsProvider roots={roots}>
+            <AuthoringActivityContext.Provider value={activity}>
+              <AuthoringCursorContext.Provider value={cursor}>
+                <AuthoringActivityBadge onLocate={onLocate} />
+                <ApiDocument data={data} />
+              </AuthoringCursorContext.Provider>
+            </AuthoringActivityContext.Provider>
+          </ReviewRootsProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     ),
   );
 };
@@ -112,8 +116,7 @@ const standsOn = (id: string) => {
 
 it("stands on the cursor's block, hops when it moves, and stands in for a hidden block with its section", async () => {
   await render(working("Adding evidence"), at("b1", "focus", 1));
-  await vi.waitFor(() => expect(courier()).toBeTruthy());
-  standsOn("b1");
+  await vi.waitFor(() => standsOn("b1"));
   expect(courier()!.dataset.state).toBe("live");
   expect(courier()!.dataset.motion).toBeUndefined();
   await vi.waitFor(() => expect(courier()!.dataset.idle).toBe("march"));

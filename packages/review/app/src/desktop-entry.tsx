@@ -1,18 +1,26 @@
+import { fontSize } from "@canvas/scale.stylex";
+import { EmptyState } from "@canvas/ui/empty-state";
+import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCanvasContent,
   ReviewCanvasHandle,
+  ReviewCanvasUi,
 } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import { createRoot } from "react-dom/client";
 
 import { ApiCanvas } from "./api-canvas";
+import { CanvasUiContext } from "./host/canvas-ui";
 import { type ReviewFindHost, createReviewFindHost } from "./review-find";
 import { ReviewHome } from "./review-home-view";
 import { ReviewContainerProvider } from "./review-root-context";
 import { SettingsPage } from "./settings-page";
+import { shellStyles } from "./shell-styles";
+import { themeStyles } from "./theme-styles";
+import { tokens } from "./tokens.stylex";
 import { WelcomePage } from "./welcome-page";
 
 import "./styles.css";
-import "./whiteboard.css";
 
 export { clearPersistedReviewViewState as clearReviewViewState } from "./review-view-state";
 
@@ -25,7 +33,7 @@ function ReviewCanvas({
 }) {
   if (content.kind === "api")
     return (
-      <div data-review-api="" className="review-api-canvas">
+      <div data-review-api="" {...stylex.props(shellStyles.apiCanvas)}>
         <ApiCanvas
           key={content.reviewId}
           content={content}
@@ -39,18 +47,20 @@ function ReviewCanvas({
   if (content.kind === "source") {
     if (content.error) {
       return (
-        <div className="review-source-empty">
-          <p>Worktree unavailable</p>
-          <p className="review-source-empty-hint">{content.error}</p>
-        </div>
+        <EmptyState
+          xstyle={styles.sourceEmpty}
+          title="Worktree unavailable"
+          message={content.error}
+        />
       );
     }
 
     return (
-      <div className="review-source-empty">
-        <p>Select a file in the source tree</p>
-        <p className="review-source-empty-hint">⌘B toggles the tree</p>
-      </div>
+      <EmptyState
+        xstyle={styles.sourceEmpty}
+        title="Select a file in the source tree"
+        message="⌘B toggles the tree"
+      />
     );
   }
 
@@ -73,7 +83,7 @@ function ReviewCanvas({
   if (content.kind === "error") {
     return (
       <CanvasShell title="Session unavailable">
-        <p>{content.message}</p>
+        <p {...stylex.props(styles.shellText)}>{content.message}</p>
       </CanvasShell>
     );
   }
@@ -119,9 +129,11 @@ function CanvasShell({
   children: React.ReactNode;
 }) {
   return (
-    <main className="review-canvas-shell">
-      <div className="review-shell-brand">/dev/fast Whiteboard</div>
-      <h1>{title}</h1>
+    <main {...stylex.props(styles.shell)}>
+      <div {...stylex.props(textStyles.eyebrow, styles.brand)}>
+        /dev/fast Whiteboard
+      </div>
+      <h1 {...stylex.props(styles.shellTitle)}>{title}</h1>
       {children}
     </main>
   );
@@ -143,6 +155,7 @@ function workbenchColorTheme(container: HTMLElement): "dark" | "light" {
 export function mountReviewCanvas(
   container: HTMLElement,
   initialContent: ReviewCanvasContent,
+  ui?: ReviewCanvasUi,
 ): ReviewCanvasHandle {
   let content = initialContent;
 
@@ -156,14 +169,27 @@ export function mountReviewCanvas(
   // must live on an in-scope descendant, so all content renders inside this
   // host element.
   const themeHost = container.ownerDocument.createElement("div");
-  themeHost.className = "review-theme-host";
+
+  // Recomposed on every change so StyleX settles vars against light.
+  const applyTheme = (theme: "dark" | "light") => {
+    const light = theme === "light";
+
+    container.dataset.reviewTheme = theme;
+    themeHost.className = [
+      light && "review-app--theme-light",
+      stylex.props(
+        themeStyles.vars,
+        styles.themeHost,
+        light && themeStyles.light,
+      ).className,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  };
+
+  applyTheme("dark");
   container.appendChild(themeHost);
   const root = createRoot(themeHost);
-
-  const applyTheme = (theme: "dark" | "light") => {
-    container.dataset.reviewTheme = theme;
-    themeHost.classList.toggle("review-app--theme-light", theme === "light");
-  };
 
   const render = () => {
     themeSubscription?.dispose();
@@ -195,7 +221,9 @@ export function mountReviewCanvas(
 
     root.render(
       <ReviewContainerProvider container={container}>
-        <ReviewCanvas content={content} findHost={findHost} />
+        <CanvasUiContext.Provider value={ui}>
+          <ReviewCanvas content={content} findHost={findHost} />
+        </CanvasUiContext.Provider>
       </ReviewContainerProvider>,
     );
   };
@@ -232,3 +260,36 @@ function resetSessionDiagnostics(container: HTMLElement): void {
   delete container.dataset.reviewDiffSummaryStartedAfterMount;
   delete container.dataset.reviewDiffSummaryIncludePatch;
 }
+
+const styles = stylex.create({
+  // Layout-neutral: it only carries the theme inside the scope boundary.
+  themeHost: {
+    display: "contents",
+  },
+  // The Source tab's VS Code-like watermark: quiet text centered in the
+  // empty editor area, next to the native file tree.
+  sourceEmpty: {
+    alignItems: "center",
+    justifyContent: "center",
+    height: "100%",
+    textAlign: "center",
+    userSelect: "none",
+  },
+  shell: {
+    width: "min(760px, 100%)",
+    margin: "0 auto",
+    padding: "32px",
+    color: tokens.ink,
+    font: `${fontSize.ui}/1.55 ${tokens.fontDisplay}`,
+  },
+  shellTitle: {
+    margin: "10px 0 6px",
+    fontSize: fontSize.display,
+  },
+  shellText: {
+    color: tokens.inkMuted,
+  },
+  brand: {
+    color: tokens.inkMuted,
+  },
+});

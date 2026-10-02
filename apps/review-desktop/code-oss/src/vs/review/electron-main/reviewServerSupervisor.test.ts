@@ -229,3 +229,58 @@ test('the app path names the macOS bundle, else the executable', () => {
 	assert.equal(applicationPath('/Applications/Review.app/Contents/MacOS/Review'), '/Applications/Review.app');
 	assert.equal(applicationPath('/usr/share/review-desktop/review-desktop'), '/usr/share/review-desktop/review-desktop');
 });
+
+test('a server that never announces readiness still times out', async (t) => {
+	t.mock.timers.enable({ apis: ['setTimeout'] });
+	const errors: string[] = [];
+	const supervisor = new ReviewServerSupervisor({
+		appRoot: '/app',
+		appVersion: '0.0.34',
+		isBuilt: true,
+		channel: 'stable',
+		logInfo: () => { },
+		logError: message => errors.push(message),
+		createProcess: () => new FakeServerProcess(),
+	});
+	t.after(() => supervisor.dispose());
+	const rejected = assert.rejects(supervisor.whenConnected(), /did not become ready within 120000ms/);
+	supervisor.start();
+	t.mock.timers.tick(119_999);
+	assert.deepEqual(errors, []);
+	t.mock.timers.tick(1);
+	await rejected;
+});
+
+for (const exitsOnShutdown of [true, false]) {
+	test(`shutdown ${exitsOnShutdown ? 'handles an immediate exit' : 'forces a hung process to exit'}`, async (t) => {
+		t.mock.timers.enable({ apis: ['setTimeout'] });
+		let killed = false;
+		const serverProcess = new class extends FakeServerProcess {
+			override postMessage(): void {
+				if (exitsOnShutdown) this.exitWith(0, '');
+			}
+			override kill(): void { killed = true; }
+		}();
+		const supervisor = new ReviewServerSupervisor({
+			appRoot: '/app',
+			appVersion: '0.0.34',
+			isBuilt: true,
+			channel: 'stable',
+			logInfo: () => { },
+			logError: () => { },
+			createProcess: () => serverProcess,
+		});
+		t.after(() => supervisor.dispose());
+		supervisor.start();
+		serverProcess.announceReady();
+		const stopping = supervisor.stop();
+		if (!exitsOnShutdown) {
+			t.mock.timers.tick(1_999);
+			await Promise.resolve();
+			assert.equal(killed, false);
+			t.mock.timers.tick(1);
+		}
+		await stopping;
+		assert.equal(killed, true);
+	});
+}

@@ -1,28 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createHash } from "node:crypto";
 import path from "node:path";
 
-import { type JsonValue, isJsonObject } from "@dev.fast/review-protocol";
 import { withFileLock } from "@dev.fast/trace-core";
 
-import type { StoredReviewRecord } from "./review-home";
-
 const heldLocks = new AsyncLocalStorage<ReadonlySet<string>>();
-
-/** Pins, lifecycle and presentation pointers. A mount prepared against these
- * values may only be written while they still hold. */
-export const GUARDED_REVIEW_FIELDS = [
-  "sourceCommit",
-  "baseCommit",
-  "baseRef",
-  "worktreePath",
-  "sourceIdentity",
-  "status",
-  "presentedDocumentRevision",
-  "presentedSoftwareMapRevision",
-] as const;
-
-export type GuardedReviewField = (typeof GUARDED_REVIEW_FIELDS)[number];
 
 export class ReviewBusyError extends Error {
   override readonly name = "ReviewBusyError";
@@ -37,35 +18,6 @@ export class ReviewBusyError extends Error {
     );
     this.reviewUuid = reviewUuid;
   }
-}
-
-export function reviewMutationFingerprint<
-  Review extends Pick<StoredReviewRecord, GuardedReviewField>,
->(record: Review): string {
-  const digest = createHash("sha256");
-
-  for (const field of GUARDED_REVIEW_FIELDS) {
-    digest.update(`${field}\0`);
-    digest.update(stableJson(record[field]));
-    digest.update("\0");
-  }
-
-  return digest.digest("hex");
-}
-
-/** Key-order independent, so a rewritten record with reordered
- * `sourceIdentity` keys still compares equal, as deep equality did. */
-function stableJson(value: JsonValue | undefined): string {
-  if (value === undefined) return "\0undefined";
-
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-
-  if (!isJsonObject(value)) return JSON.stringify(value);
-
-  return `{${Object.entries(value)
-    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
-    .join(",")}}`;
 }
 
 /** Shared by the desktop and migration CLI; stored outside the sealed tree. */

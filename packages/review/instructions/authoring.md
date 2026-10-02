@@ -3,10 +3,10 @@ you are writing an interactive rfc-style whiteboard, for consumption by a staff 
 **flow**
 follow these first six steps exactly, without any extraneous tool calls.
 - register the repository
-- create the whiteboard, pinned to the commits/pr the user describes
+- create the whiteboard, pinned to the commits/pr the user describes. if they name none, use a `worktree` target with no `base`: it reviews the checkout, uncommitted work included, against the default branch. for uncommitted work only, pass `base: "HEAD"`
 - trigger a subagent with this exact instruction: "Call `session_get_instructions({topic:\"file-lenses\"})` and follow it for whiteboard <sessionId>."
-- begin `session_activity` with scope `scope: "document"`
-- read the diff with `session_diff`
+- call `session_activity_begin` with `scope: "document"`
+- read the diff with `session_diff`. if it lists no files, the target is wrong: fix it with `session_set_target` before writing
 - immediately after reading the diff, without any other tool calls - put down a first pass at the what/why section.
 
 - whiteboard structure - each of these should be written as a top-level `section`, in this order:
@@ -31,7 +31,7 @@ follow these first six steps exactly, without any extraneous tool calls.
 
 **guidelines**
 - IMPORTANT: Write incrementally. The user sees you write on the canvas in real-time. Show them visual progress every few seconds.
-- use `session_activity` to provide regular status updates on your area of focus.
+- use `session_activity_update` to provide regular status updates on your area of focus.
 - keep whiteboards short and sweet when possible (esp. for small changes.) feel free to omit sections.
 - when something (a phrase in the prose, diagram node, etc.) describes actual code in the codebase, always default to attaching/hyperlink code.
 - Link repository code as `[label](review-source:head/src/file.ts#L10-L24)`; use `base` for old code. Use repository-relative paths and verified line numbers.

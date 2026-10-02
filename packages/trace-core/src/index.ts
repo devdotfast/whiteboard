@@ -63,9 +63,9 @@ export {
   type TraceScope,
   renderTraceCommand,
   resolveTraceCommand,
+  shellQuote,
   traceCommandExecutable,
   traceCliName,
-  traceCommandPrefix,
   traceHomeDir,
   traceScope,
 } from "./trace-command";
@@ -195,7 +195,11 @@ export {
   traceMachineStatus,
 } from "./trace-machine-setup";
 
-export { processIsAlive, withFileLock } from "./with-file-lock";
+export {
+  processIsAlive,
+  processStartIdentity,
+  withFileLock,
+} from "./with-file-lock";
 
 export {
   writeFileAtomic,

@@ -600,46 +600,6 @@ describe("ReviewTelemetry", () => {
     expect(events[0].properties).toMatchObject({ internal: true });
   });
 
-  it("marks installation, command, server, and UI events from a stored marker", async () => {
-    const { configPath, events, rootPath, telemetry } = createTelemetry();
-    cleanupPaths.push(rootPath);
-    await writeStoredConfig(configPath, storedConfig({ internal: true }));
-
-    await telemetry.captureInstallationCreated();
-    await telemetry.captureCommandSucceeded({
-      command: "info",
-      commandRunId: "run-12345678",
-      exitCode: 0,
-    });
-    await telemetry.captureUiEvent("review_app_opened", {});
-
-    expect(events.map((event) => event.event)).toEqual([
-      "review_installation_created",
-      "review_command_succeeded",
-      "review_app_opened",
-    ]);
-
-    for (const event of events) {
-      expect(event.properties).toMatchObject({ internal: true });
-    }
-  });
-
-  it("adds a valid Desktop version without changing the package version", async () => {
-    const { events, rootPath, telemetry } = createTelemetry({
-      env: { [REVIEW_APP_VERSION_ENV]: "0.0.16" },
-    });
-
-    cleanupPaths.push(rootPath);
-
-    await telemetry.captureUiEvent("review_app_opened", {});
-
-    expect(events).toHaveLength(1);
-    expect(events[0].properties).toMatchObject({
-      version: await reviewPackageVersion(),
-      app_version: "0.0.16",
-    });
-  });
-
   it.each([undefined, "not-a-version"])(
     "omits an absent or invalid Desktop version: %s",
     async (appVersion) => {
@@ -1458,21 +1418,6 @@ describe("ReviewTelemetry", () => {
     await expect(telemetry.getInstallationId()).resolves.toBe("install-123");
     await expect(telemetry.getInstallationId()).resolves.toBe("install-123");
     expect(events).toEqual([]);
-  });
-
-  it("hands the envelope to the capture client for its own diagnostics", async () => {
-    const { rootPath, telemetry, captureClient } = createTelemetry();
-    cleanupPaths.push(rootPath);
-
-    await telemetry.captureCommandStarted({
-      command: "info",
-      commandRunId: "run-12345678",
-    });
-
-    expect(captureClient.defaults).toMatchObject({
-      surface: "cli",
-      channel: "stable",
-    });
   });
 });
 

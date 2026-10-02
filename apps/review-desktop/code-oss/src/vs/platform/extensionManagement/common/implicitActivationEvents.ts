@@ -15,9 +15,15 @@ export class ImplicitActivationEventsImpl {
 
 	private readonly _generators = new Map<string, IActivationEventsGenerator<unknown>>();
 	private readonly _cache = new WeakMap<IExtensionDescription, string[]>();
+	private _rewrite: ((desc: IExtensionDescription, activationEvents: string[]) => string[]) | undefined;
 
 	public register<T>(extensionPointName: string, generator: IActivationEventsGenerator<T>): void {
 		this._generators.set(extensionPointName, generator as IActivationEventsGenerator<unknown>);
+	}
+
+	/** Set before scanning extensions; rewritten events are cached per description. */
+	public setRewrite(rewrite: ((desc: IExtensionDescription, activationEvents: string[]) => string[]) | undefined): void {
+		this._rewrite = rewrite;
 	}
 
 	/**
@@ -26,7 +32,8 @@ export class ImplicitActivationEventsImpl {
 	 */
 	public readActivationEvents(extensionDescription: IExtensionDescription): string[] {
 		if (!this._cache.has(extensionDescription)) {
-			this._cache.set(extensionDescription, this._readActivationEvents(extensionDescription));
+			const activationEvents = this._readActivationEvents(extensionDescription);
+			this._cache.set(extensionDescription, this._rewrite ? this._rewrite(extensionDescription, activationEvents) : activationEvents);
 		}
 		return this._cache.get(extensionDescription)!;
 	}

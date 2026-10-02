@@ -232,6 +232,12 @@ export async function smokeErrorTelemetry({
 
     if (!page) throw new Error("The app opened no window to drive.");
 
+    // Fresh profiles reload after keymap seeding; the notice waits for that reload.
+    await page.getByText(
+      "Whiteboard sends anonymous usage data. You can change this in Settings.",
+      { exact: true },
+    ).waitFor({ state: "attached", timeout: timeoutMs });
+
     // The debugger accepts a connection before the window installs its error
     // handlers, so the first probe can be thrown into a window that is not
     // listening yet and simply vanish. Throw a warm-up error and wait for it to
@@ -266,7 +272,7 @@ export async function smokeErrorTelemetry({
       timeoutMs,
       "the window to start reporting errors",
     );
-    const warmUpCount = (await readSentEvents(logPath)).length;
+    const warmUpHash = digestOf(warmUp);
 
     for (const probe of probes) {
       // Each error is thrown from a timer so it reaches the window's own
@@ -292,35 +298,40 @@ export async function smokeErrorTelemetry({
 
     await browser.close();
 
-    // Only the reports raised after the warm-up belong to the probes.
-    const reportsSinceWarmUp = async () =>
-      (await readSentEvents(logPath))
-        .slice(warmUpCount)
-        .filter((event) => event.event === "review_client_error");
+    const matchesProbe = (event, probe) =>
+      probe.match.errorName
+        ? event.properties?.error_name === probe.match.errorName
+        : event.properties?.message_hash === digestOf(probe.match.hashOf);
+
+    // Warm-up reports can arrive after the first one has been observed.
+    const readProbeReports = async () =>
+      (await readSentEvents(logPath)).filter(
+        (event) =>
+          event.event === "review_client_error" &&
+          event.properties?.message_hash !== warmUpHash,
+      );
 
     const events = await waitFor(
       async () => {
-        const sent = await reportsSinceWarmUp();
+        const sent = await readProbeReports();
 
-        return sent.length >= probes.length ? sent : undefined;
+        return probes.every((probe) =>
+          sent.some((event) => matchesProbe(event, probe)),
+        )
+          ? sent
+          : undefined;
       },
       30_000,
       `all ${probes.length} error reports to reach the server`,
     ).catch(async (error) => {
-      const sent = await reportsSinceWarmUp();
-      failures.push(
-        `${error.message} Only ${sent.length} of ${probes.length} arrived.`,
-      );
+      const sent = await readProbeReports();
+      failures.push(error.message);
 
       return sent;
     });
 
     for (const probe of probes) {
-      const report = events.find((event) =>
-        probe.match.errorName
-          ? event.properties?.error_name === probe.match.errorName
-          : event.properties?.message_hash === digestOf(probe.match.hashOf),
-      );
+      const report = events.find((event) => matchesProbe(event, probe));
 
       if (!report) {
         failures.push(`${probe.name}: no report arrived for it`);
@@ -362,7 +373,14 @@ export async function smokeErrorTelemetry({
       }
     }
 
+    if (failures.length) {
+      console.error(await readFile(logPath, "utf8").catch(() => "(no app log)"));
+    }
+
     return { events, failures, logPath };
+  } catch (error) {
+    console.error(await readFile(logPath, "utf8").catch(() => "(no app log)"));
+    throw error;
   } finally {
     child?.kill("SIGKILL");
     await sleep(1000);

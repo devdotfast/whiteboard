@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { parseReviewDesktopVerbFrame } from "@dev.fast/review-protocol";
+import { connectReviewApi } from "@review/review-api/agent-client.js";
+import { openLocalReviewStore } from "@review/review-api/local-data.js";
+import { ReviewTelemetry } from "@review/review-telemetry.js";
 import { expect, it } from "vitest";
 
-import { connectReviewApi } from "../review-api/agent-client.js";
-import { openLocalReviewStore } from "../review-api/local-data.js";
-import { ReviewTelemetry } from "../review-telemetry.js";
 import { createGlobalReviewServer } from "./desktop-server.js";
 import { GlobalReviewDesktopVerbRelay } from "./global-verb-relay.js";
 
@@ -82,7 +82,7 @@ it("discovers the live Desktop map preference without opening a review", async (
     expect(opened).toBe(false);
     await expect(
       connectReviewApi({ ...env, DEV_REVIEW_SERVER_DIR: home }),
-    ).rejects.toThrow(/review server start/);
+    ).rejects.toThrow(/whiteboard server start/g);
     relay.close();
     expect(await client.read("/capabilities")).toMatchObject({
       desktopAvailable: false,
@@ -93,7 +93,7 @@ it("discovers the live Desktop map preference without opening a review", async (
         ...env,
         DEV_REVIEW_SERVER_DIR: path.join(home, "missing"),
       }),
-    ).rejects.toThrow(/review server start/);
+    ).rejects.toThrow(/whiteboard server start/g);
   } finally {
     await server.close();
     await local.data.close();

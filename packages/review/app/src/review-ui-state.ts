@@ -99,7 +99,13 @@ export function writeReviewUiState<T>(
   value: T,
 ): void {
   try {
-    reviewUiStorage(scope)?.setItem(key, JSON.stringify(value));
+    const storage = reviewUiStorage(scope);
+    const serialized = JSON.stringify(value);
+
+    // Zustand also calls its storage adapter for changes to transient fields.
+    if (storage && storage.getItem(key) !== serialized) {
+      storage.setItem(key, serialized);
+    }
   } catch {
     // Persisting review UI state is always best-effort.
   }

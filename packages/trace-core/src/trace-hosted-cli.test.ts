@@ -955,26 +955,6 @@ describe("hosted trace commands", () => {
     );
   });
 
-  it("names the verify command the CLI registers", async () => {
-    await login();
-    const out = collect();
-
-    const code = await runTraceAllow({
-      cwd: repo,
-      scope: traceScope({ homeDir: home, env }),
-      harnessHooks: false,
-      verifyCommand: "review check",
-      client: client(() => Response.json(STORE)),
-      stdout: out.stream,
-      stderr: out.stream,
-    });
-
-    expect(code).toBe(0);
-    expect(out.text()).toBe(
-      `Traces from acme/app may be published to ${ORIGIN}. Run \`review check\` to verify.\n`,
-    );
-  });
-
   it("writes a harness hook only for a harness this machine holds", async () => {
     await login();
     mkdirSync(path.join(home, ".claude"), { recursive: true });
@@ -1082,10 +1062,10 @@ describe("hosted trace commands", () => {
       event: "error",
       stage: "allow",
       message:
-        "This machine sends traces to a bucket. Run `review trace storage use hosted` first.",
+        "This machine sends traces to a bucket. Run `whiteboard trace storage use hosted` first.",
     });
     expect(err.text()).toBe(
-      "This machine sends traces to a bucket. Run `review trace storage use hosted` first.\n",
+      "This machine sends traces to a bucket. Run `whiteboard trace storage use hosted` first.\n",
     );
     expect((await readTraceUserConfig(devHome)).repositories).toEqual([]);
   });

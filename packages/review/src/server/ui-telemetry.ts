@@ -4,17 +4,17 @@ import {
   isJsonObject,
   jsonString,
 } from "@dev.fast/review-protocol";
-import { z } from "zod";
-
-import { mergeErrorTelemetryProperties } from "../error-telemetry";
+import { mergeErrorTelemetryProperties } from "@review/error-telemetry";
 import type {
   ReviewTabTelemetryEvent,
   ReviewTelemetryContext,
-} from "../telemetry";
+} from "@review/telemetry";
 import {
   REVIEW_APP_SESSION_ID_HEADER,
   sanitizeUiTelemetryEvent,
-} from "../ui-telemetry-events";
+} from "@review/ui-telemetry-events";
+import { z } from "zod";
+
 import { ClientErrorBudget } from "./client-error-budget";
 
 const contextSchema = z.object({

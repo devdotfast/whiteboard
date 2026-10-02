@@ -1,9 +1,9 @@
-import { type DiffSelection, sourceAnchor } from "../lens-selection";
+import { type DiffSelection, sourceAnchor } from "@review/lens-selection";
 import type {
   ReviewComponentNode,
   ReviewElementProps,
   ReviewNode,
-} from "../review-document-data";
+} from "@review/review-document-data";
 
 interface FileLineRange {
   side: "base" | "head";
@@ -491,7 +491,7 @@ function longestRun(text: string, ch: string): number {
 /** Escape a run of text so markdown renders it verbatim. */
 export function escapeMarkdownText(value: string): string {
   return value
-    .replace(/([\\`*_[\]<>])/g, "\\$1")
+    .replace(/([\\`*_[\]<>$])/g, "\\$1")
     .replace(/^(\s*)(\d+)\./gm, "$1$2\\.")
     .replace(/^(\s*)([#+-])/gm, "$1\\$2");
 }

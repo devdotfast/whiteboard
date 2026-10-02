@@ -7,10 +7,9 @@ import {
   type StructuralVisibility,
   structuralRows,
 } from "@dev.fast/review-protocol";
-
-import type { AlignmentRow } from "../lens-selection.js";
-import type { FileLineRange } from "../source.js";
-import { parseUnifiedPatch } from "../unified-diff.js";
+import type { AlignmentRow } from "@review/lens-selection.js";
+import type { FileLineRange } from "@review/source.js";
+import { parseUnifiedPatch } from "@review/unified-diff.js";
 import {
   type Coverage,
   type CoverageFile,
@@ -19,7 +18,8 @@ import {
   intersectIntervals,
   subtractIntervals,
   unionIntervals,
-} from "../viewed-coverage.js";
+} from "@review/viewed-coverage.js";
+
 import type { Pins } from "./document.js";
 import { textualRows } from "./lens-alignment.js";
 import type { LocalReviewData } from "./local-data.js";
@@ -161,15 +161,20 @@ export async function comparisonCoverage(
 
       if (event.type !== "file") continue;
 
-      if (event.error)
-        throw new Error(
-          `Cannot count ${event.file.rhs?.path ?? event.file.lhs?.path}: ${event.error.message}`,
-        );
-      const diff = event.diff;
       const path = (event.file.rhs ?? event.file.lhs)!.path;
 
       if (!remaining.delete(path))
         throw new Error(`Unexpected structural result: ${path}`);
+
+      if (event.error) {
+        if (event.error.code !== "unsupported_file_type")
+          throw new Error(`Cannot count ${path}: ${event.error.message}`);
+
+        if (!remaining.size) break;
+        continue;
+      }
+
+      const diff = event.diff;
 
       const previousPath =
         event.file.lhs?.path !== path ? event.file.lhs?.path : undefined;

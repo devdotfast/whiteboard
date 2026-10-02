@@ -1,3 +1,6 @@
+import { drawMotion } from "@canvas/draw-motion.stylex";
+import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCommitScope,
   ReviewDiffLens,
@@ -5,7 +8,18 @@ import type {
   ReviewDiffViewHandle,
 } from "@dev.fast/review-protocol";
 import {
+  type Lens,
+  UNCATEGORIZED_LENS_ID,
+} from "@review/review-api/diff-lenses";
+import {
+  type CoverageProgress,
+  coverageProgress,
+  coverageSources,
+} from "@review/viewed-coverage";
+import * as stylex from "@stylexjs/stylex";
+import {
   type CSSProperties,
+  type ReactNode,
   useCallback,
   useContext,
   useEffect,
@@ -15,29 +29,34 @@ import {
   useState,
 } from "react";
 
-import type { Lens } from "../../src/review-api/diff-lenses";
-import {
-  type CoverageProgress,
-  coverageProgress,
-  coverageSources,
-} from "../../src/viewed-coverage";
-import { AuthoringActivityContext } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import { scopeLive } from "./authoring-cursor";
 import { Courier, LensCursorContext, lensRowElement } from "./courier";
-import { compactDiffCount } from "./diff-count";
-import { withErasedBlocks } from "./draw-queue";
+import { compactDiffCount, diffCountStyles } from "./diff-count";
+import { type MotionPhase, withErasedBlocks } from "./draw-queue";
 import { useMotionPhases } from "./draw-queue-provider";
+import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
+import {
+  diffWorkspaceMarker,
+  lensToggleMarker,
+  scopedDiffMarker,
+} from "./markers.stylex";
+import { useReviewDiffFiles } from "./review-diff-files-context";
 import { useReviewLenses } from "./review-lenses";
+import { shellStyles } from "./shell-styles";
 import {
   useBottomSheetResize,
   useRightPanelResize,
 } from "./side-panel-resizer";
+import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
+import { ProgressRing } from "./ui/progress-ring";
 import { useTooltip } from "./use-tooltip";
 import { ViewedButton } from "./viewed-button";
 
 // An empty label shows no tooltip, so only a truncated name gets one.
-function LensName({ title }: { title: string }) {
+function LensName({ title, phase }: { title: string; phase?: MotionPhase }) {
   const [truncated, setTruncated] = useState(false);
 
   const tooltip = useTooltip<HTMLSpanElement>(truncated ? title : "", {
@@ -64,13 +83,22 @@ function LensName({ title }: { title: string }) {
   );
 
   return (
-    <span ref={ref} className="diff-lens-name">
+    <span
+      ref={ref}
+      {...stylex.props(styles.name, phase === "relabel" && styles.nameRelabel)}
+    >
       {title}
     </span>
   );
 }
 
-export function DiffCounts({ progress }: { progress: CoverageProgress }) {
+export function DiffCounts({
+  progress,
+  xstyle,
+}: {
+  progress: CoverageProgress;
+  xstyle?: stylex.StyleXStyles;
+}) {
   const { remaining, total, folded } = progress;
 
   const tooltip = useTooltip<HTMLSpanElement>(
@@ -84,7 +112,12 @@ export function DiffCounts({ progress }: { progress: CoverageProgress }) {
   return (
     <span
       ref={tooltip}
-      className={`diff-counts ${progress.state === "viewed" || progress.state === "folded" ? "is-viewed" : ""}`}
+      {...stylex.props(
+        diffCountStyles.counts,
+        (progress.state === "viewed" || progress.state === "folded") &&
+          styles.faded,
+        xstyle,
+      )}
     >
       {progress.state === "viewed" ? (
         "Viewed"
@@ -92,10 +125,10 @@ export function DiffCounts({ progress }: { progress: CoverageProgress }) {
         "Folded"
       ) : (
         <>
-          <span className="diff-count-added">
+          <span {...stylex.props(diffCountStyles.added)}>
             +{compactDiffCount(remaining.additions)}
           </span>
-          <span className="diff-count-removed">
+          <span {...stylex.props(diffCountStyles.removed)}>
             −{compactDiffCount(remaining.deletions)}
           </span>
         </>
@@ -107,10 +140,13 @@ export function DiffCounts({ progress }: { progress: CoverageProgress }) {
 export function ReviewDiffView({
   scope,
   revealFile,
+  restoreFile,
 }: {
   scope?: ReviewCommitScope;
   /** The path of a file to scroll to once the diff loads. */
   revealFile?: string;
+  /** A saved diff position wins over `revealFile`. */
+  restoreFile?: boolean;
 }) {
   const workspaceRef = useRef<HTMLDivElement>(null);
   const cabinetsRef = useRef<HTMLDivElement>(null);
@@ -122,6 +158,7 @@ export function ReviewDiffView({
     minWidth: 250,
     maxWidth: 800,
     minMainWidth: 320,
+    collapsedWidth: 44,
     label: "Resize diff sidebar",
     containerRef: workspaceRef,
   });
@@ -210,20 +247,51 @@ export function ReviewDiffView({
   };
 
   if (scope || !lenses)
-    return <NativeDiffView scope={scope} revealFile={revealFile} />;
+    return (
+      <NativeDiffView
+        scope={scope}
+        revealFile={revealFile}
+        restoreFile={restoreFile}
+      />
+    );
   const global = lenses.stats();
   const total = global.total.additions + global.total.deletions;
   const remaining = global.remaining.additions + global.remaining.deletions;
   const percent = total ? Math.round((100 * (total - remaining)) / total) : 0;
 
+  const viewed =
+    lenses.progress && lenses.progress.complete !== false
+      ? {
+          percent,
+          title: `${total - remaining} of ${total} changed lines viewed or folded`,
+        }
+      : undefined;
+
+  // diff-workspace is a marker global.css keys on.
   return (
-    <div className="diff-workspace" ref={workspaceRef}>
+    <div
+      {...withClass("diff-workspace", styles.workspace, diffWorkspaceMarker)}
+      ref={workspaceRef}
+    >
+      {sidebarResize.collapsed && (
+        <DiffRail
+          rows={rows}
+          lenses={lenses}
+          activeId={lens?.id}
+          viewed={viewed}
+          onExpand={sidebarResize.expand}
+        />
+      )}
+      {/* Stays mounted while folded: it hosts the diff views' file trees. */}
       <aside
-        className="diff-workspace-sidebar"
+        {...stylex.props(
+          styles.sidebar,
+          sidebarResize.collapsed && styles.hidden,
+        )}
         style={{ width: sidebarResize.width }}
       >
-        <div className="diff-global-progress">
-          <span>
+        <div {...stylex.props(styles.progress)}>
+          <span {...stylex.props(styles.progressLabel)}>
             {lenses.error &&
             !(lenses.progress && lenses.progress.complete !== false) ? (
               "Counts unavailable"
@@ -233,46 +301,36 @@ export function ReviewDiffView({
                 {lenses.progress && lenses.progress.complete !== false ? (
                   <DiffCounts progress={global} />
                 ) : (
-                  <span className="diff-counts" aria-label="Counting changes">
+                  <span
+                    {...stylex.props(diffCountStyles.counts)}
+                    aria-label="Counting changes"
+                  >
                     …
                   </span>
                 )}
               </>
             )}
           </span>
-          {lenses.progress && lenses.progress.complete !== false && (
-            <span
-              className="diff-progress-ring"
-              role="progressbar"
-              aria-label="Changed lines viewed"
-              aria-valuenow={percent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              title={`${total - remaining} of ${total} changed lines viewed or folded`}
-            >
-              <svg width="18" height="18" viewBox="0 0 20 20">
-                <circle cx="10" cy="10" r="7" />
-                <circle
-                  cx="10"
-                  cy="10"
-                  r="7"
-                  pathLength="100"
-                  strokeDasharray={`${percent} 100`}
-                />
-              </svg>
-              {percent}%
-            </span>
-          )}
+          {viewed && <ViewedRing {...viewed} />}
         </div>
-        <div className="diff-sidebar-cabinets" ref={cabinetsRef}>
+        <div {...stylex.props(styles.cabinets)} ref={cabinetsRef}>
           <div
-            className="diff-sidebar-lenses"
+            {...withClass("diff-sidebar-lenses", styles.lenses)}
             aria-label="Lenses"
             ref={setLensList}
             style={{ flexBasis: `${(1 - cabinetsResize.fraction) * 100}%` }}
           >
-            <div className="diff-sidebar-heading">Lenses</div>
-            <div className="diff-lens-hint">
+            <div
+              {...stylex.props(
+                textStyles.eyebrow,
+                styles.heading,
+                styles.lensesHeading,
+              )}
+            >
+              Lenses
+              <MagnifierIcon />
+            </div>
+            <div {...stylex.props(styles.hint)}>
               Click any lens to filter the diff
             </div>
             {rows.items.map((item) => {
@@ -286,13 +344,29 @@ export function ReviewDiffView({
               return (
                 <section
                   key={item.id}
-                  className={`diff-lens-section ${selected ? "is-expanded" : ""}`}
+                  {...stylex.props(
+                    styles.section,
+                    selected && styles.sectionExpanded,
+                    phase && sectionMotionStyle(phase),
+                  )}
                   data-lens-id={item.id}
                   data-motion={phase}
                 >
-                  <div className="diff-lens-row">
+                  <div
+                    {...stylex.props(
+                      styles.row,
+                      phase === "landing" && drawStyles.rowLanding,
+                      phase === "erasing" && drawStyles.rowErasing,
+                    )}
+                  >
                     <button
-                      className={`diff-lens-toggle ${selected ? "is-active" : ""} ${stats.state === "viewed" ? "is-viewed" : ""} ${empty ? "is-empty" : ""}`}
+                      {...stylex.props(
+                        lensToggleMarker,
+                        styles.toggle,
+                        empty && styles.toggleEmpty,
+                        selected && styles.toggleActive,
+                        stats.state === "viewed" && !selected && styles.faded,
+                      )}
                       aria-pressed={selected}
                       disabled={!!item.unavailable || (empty && !selected)}
                       onClick={() =>
@@ -302,33 +376,54 @@ export function ReviewDiffView({
                       {/* The title sits on the chip, not the toggle, so it
                           never stacks on the counts' own tooltip. */}
                       <span
-                        className="diff-lens-chip"
+                        {...stylex.props(
+                          styles.chip,
+                          selected && styles.chipActive,
+                        )}
                         title={
                           item.unavailable ??
                           (selected ? "Clear lens filter" : undefined)
                         }
                       >
-                        <FilterIcon />
-                        <LensName title={item.title} />
+                        <LensName title={item.title} phase={phase} />
                         {selected && (
-                          <span className="diff-lens-clear" aria-hidden="true">
+                          <span
+                            {...stylex.props(styles.clear)}
+                            aria-hidden="true"
+                          >
                             <svg width="10" height="10" viewBox="0 0 10 10">
-                              <path d="M2 2l6 6M8 2L2 8" />
+                              <path
+                                {...stylex.props(styles.clearMark)}
+                                d="M2 2l6 6M8 2L2 8"
+                              />
                             </svg>
                           </span>
                         )}
                       </span>
                       {item.pending ? (
                         <span
-                          className="diff-counts"
+                          {...stylex.props(
+                            diffCountStyles.counts,
+                            styles.toggleCounts,
+                          )}
                           aria-label="Counting changes"
                         >
                           …
                         </span>
                       ) : empty ? (
-                        <span className="diff-counts">0 files</span>
+                        <span
+                          {...stylex.props(
+                            diffCountStyles.counts,
+                            styles.toggleCounts,
+                          )}
+                        >
+                          0 files
+                        </span>
                       ) : (
-                        <DiffCounts progress={stats} />
+                        <DiffCounts
+                          progress={stats}
+                          xstyle={styles.toggleCounts}
+                        />
                       )}
                     </button>
                     <ViewedButton
@@ -357,10 +452,20 @@ export function ReviewDiffView({
           </div>
           <div
             {...cabinetsResize.separatorProps}
-            className={`side-panel-sheet-resizer diff-cabinets-resizer ${cabinetsResize.isResizing ? "is-resizing" : ""}`}
+            {...stylex.props(
+              shellStyles.sheetResizer,
+              styles.cabinetsResizer,
+              cabinetsResize.isResizing && styles.resizing,
+            )}
           />
-          <div className="diff-sidebar-files">
-            <div className="diff-sidebar-heading diff-files-heading">
+          <div {...stylex.props(styles.files)}>
+            <div
+              {...stylex.props(
+                textStyles.eyebrow,
+                styles.heading,
+                styles.filesHeading,
+              )}
+            >
               Files <span aria-hidden="true">·</span>{" "}
               {lenses.progress
                 ? lens
@@ -380,12 +485,12 @@ export function ReviewDiffView({
                 : "…"}
             </div>
             <div
-              className="diff-native-tree"
+              {...withClass("diff-native-tree", styles.nativeTree)}
               ref={setFullTree}
               style={lens ? { display: "none" } : undefined}
             />
             <div
-              className="diff-native-tree"
+              {...withClass("diff-native-tree", styles.nativeTree)}
               ref={setLensTree}
               style={!lens ? { display: "none" } : undefined}
             />
@@ -394,15 +499,20 @@ export function ReviewDiffView({
       </aside>
       <div
         {...sidebarResize.separatorProps}
-        className={`side-panel-resizer diff-sidebar-resizer ${sidebarResize.isResizing ? "is-resizing" : ""}`}
+        {...stylex.props(
+          shellStyles.resizer,
+          styles.sidebarResizer,
+          sidebarResize.isResizing && styles.resizing,
+        )}
       />
-      <div className="diff-workspace-editor">
+      <div {...stylex.props(styles.editor)}>
         {fullTree && (
           <NativeDiffView
             treeContainer={fullTree}
             progress={fullProgress}
             onToggleViewed={(path) => markFile(path, false)}
             hidden={!!lens}
+            inWorkspace
           />
         )}
         {lens && lensTree && (
@@ -411,10 +521,11 @@ export function ReviewDiffView({
             treeContainer={lensTree}
             progress={lensProgress}
             onToggleViewed={(path) => markFile(path, true)}
+            inWorkspace
           />
         )}
         {lenses.error && (
-          <div className="diff-workspace-error" role="alert">
+          <div {...stylex.props(styles.error)} role="alert">
             {lenses.error}
           </div>
         )}
@@ -426,24 +537,32 @@ export function ReviewDiffView({
 function NativeDiffView({
   scope,
   revealFile,
+  restoreFile,
   lens,
   treeContainer,
   progress,
   onToggleViewed,
   hidden = false,
+  inWorkspace = false,
 }: {
   scope?: ReviewCommitScope;
   revealFile?: string;
+  restoreFile?: boolean;
   lens?: ReviewDiffLens;
   treeContainer?: HTMLElement;
   progress?: ReviewDiffProgress;
   onToggleViewed?(path: string): void;
   hidden?: boolean;
+  /** Fills the workspace's editor column. */
+  inWorkspace?: boolean;
 }) {
   const session = useReviewSession();
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const handle = useRef<ReviewDiffViewHandle | null>(null);
+  // A save in a live checkout changes the comparison; a commit's never does.
+  const revision = useReviewDiffFiles().revision;
+  const liveRevision = scope ? undefined : revision;
 
   const current = useRef({ progress, onToggleViewed });
 
@@ -482,23 +601,29 @@ function NativeDiffView({
     scope?.commit,
     lens,
     treeContainer,
+    liveRevision,
   ]);
   useLayoutEffect(() => {
     if (progress) handle.current?.setProgress?.(progress);
   }, [progress]);
   useLayoutEffect(() => {
-    if (revealFile) handle.current?.revealFile?.(revealFile);
-  }, [revealFile, container, scope?.commit]);
+    if (revealFile)
+      handle.current?.revealFile?.(revealFile, { restore: restoreFile });
+  }, [revealFile, restoreFile, container, scope?.commit]);
 
   return (
     <>
       <div
         ref={setContainer}
-        className="review-diff-view-host"
+        {...withClass(
+          "review-diff-view-host",
+          styles.host,
+          inWorkspace && styles.hostInWorkspace,
+        )}
         style={hidden ? { display: "none" } : undefined}
       />
       {!hidden && error && (
-        <div role="alert" className="review-diff-view-error">
+        <div role="alert" {...stylex.props(styles.viewError)}>
           {error}
         </div>
       )}
@@ -520,10 +645,152 @@ function useLensRows<Item extends { id: string }>(items: Item[]) {
   return { items: shown, phases };
 }
 
-function FilterIcon() {
+function ViewedRing({
+  percent,
+  title,
+  xstyle,
+}: {
+  percent: number;
+  title: string;
+  xstyle?: stylex.StyleXStyles;
+}) {
+  return (
+    <span
+      {...stylex.props(styles.ring, xstyle)}
+      role="progressbar"
+      aria-label="Changed lines viewed"
+      aria-valuenow={percent}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      title={title}
+    >
+      <ProgressRing percent={percent} size={18} />
+      {percent}%
+    </span>
+  );
+}
+
+type ReviewLenses = NonNullable<ReturnType<typeof useReviewLenses>>;
+
+type LensItem = ReviewLenses["lenses"][number];
+
+function DiffRail({
+  rows,
+  lenses,
+  activeId,
+  viewed,
+  onExpand,
+}: {
+  rows: { items: LensItem[]; phases: Map<string, MotionPhase> };
+  lenses: ReviewLenses;
+  activeId: string | undefined;
+  viewed: { percent: number; title: string } | undefined;
+  onExpand: () => void;
+}) {
+  return (
+    <nav {...stylex.props(styles.rail)} aria-label="Lens rail">
+      <div {...stylex.props(styles.railProgress)}>
+        {viewed && <ViewedRing {...viewed} xstyle={styles.railRing} />}
+      </div>
+      <RailButton label="Show lenses" onClick={onExpand}>
+        <MagnifierIcon />
+      </RailButton>
+      {rows.items.map((item) => (
+        <RailLens
+          key={item.id}
+          item={item}
+          lenses={lenses}
+          selected={activeId === item.id}
+          phase={rows.phases.get(item.id)}
+        />
+      ))}
+      <div {...stylex.props(styles.railFiles)}>
+        <RailButton label="Show files" onClick={onExpand}>
+          <FileIcon />
+        </RailButton>
+      </div>
+    </nav>
+  );
+}
+
+function RailLens({
+  item,
+  lenses,
+  selected,
+  phase,
+}: {
+  item: LensItem;
+  lenses: ReviewLenses;
+  selected: boolean;
+  phase: MotionPhase | undefined;
+}) {
+  const stats = lenses.stats(item.sources),
+    empty = !item.pending && item.fileCount === 0;
+
+  // On the name: disabled buttons get no pointer events.
+  const tooltip = useTooltip<HTMLSpanElement>(item.title, {
+    instant: true,
+    detail: item.pending ? undefined : empty ? "0 files" : countsLabel(stats),
+  });
+
+  return (
+    <button
+      {...stylex.props(
+        styles.railLens,
+        empty && styles.toggleEmpty,
+        selected && styles.railLensActive,
+        stats.state === "viewed" && !selected && styles.faded,
+        phase && sectionMotionStyle(phase),
+      )}
+      aria-label={item.title}
+      aria-pressed={selected}
+      disabled={!!item.unavailable || (empty && !selected)}
+      onClick={() => (selected ? lenses.clear() : lenses.select(item.id))}
+    >
+      <span ref={tooltip}>
+        {item.id === UNCATEGORIZED_LENS_ID
+          ? "n/a"
+          : item.title.slice(0, 5).trimEnd()}
+      </span>
+    </button>
+  );
+}
+
+function countsLabel({ state, remaining }: CoverageProgress) {
+  return state === "viewed"
+    ? "Viewed"
+    : state === "folded"
+      ? "Folded"
+      : `+${remaining.additions} −${remaining.deletions} remaining`;
+}
+
+function RailButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const tooltip = useTooltip(label, { instant: true });
+
+  return (
+    <button
+      ref={tooltip}
+      {...stylex.props(styles.railButton)}
+      aria-label={label}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function FileIcon() {
   return (
     <svg
-      className="diff-lens-icon"
+      {...stylex.props(styles.icon)}
       width="14"
       height="14"
       viewBox="0 0 16 16"
@@ -533,7 +800,471 @@ function FilterIcon() {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M2.5 3h11L9.25 8v4.5l-2.5 1.25V8z" />
+      <path d="M4 1.75h5l3.25 3.25v9.25H4z" />
+      <path d="M9 1.75V5h3.25" />
     </svg>
   );
 }
+
+function MagnifierIcon() {
+  return (
+    <svg
+      {...stylex.props(styles.icon)}
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx="6" cy="6" r="4.25" />
+      <path d="M9.2 9.2l3.3 3.3" />
+    </svg>
+  );
+}
+
+// The lens list draws like the document: a new row lands in a slot and wipes
+// in, a retitle recomposes the name, a removed row is erased and the list
+// closes over it. Reduced motion shows each phase's finished frame. The row's
+// wipe and erase share the document's keyframes in draw-styles.ts.
+const EASE = "cubic-bezier(0.2, 0.7, 0.2, 1)";
+
+const REDUCED = "@media (prefers-reduced-motion: reduce)";
+
+const landSlot = stylex.keyframes({
+  "0%": {
+    outline: `1px dashed ${tokens.ruleSoft}`,
+    outlineOffset: "-1px",
+    backgroundColor: tokens.transparent,
+  },
+  "38%": {
+    outline: `1px solid ${tokens.accent}`,
+    outlineOffset: "-1px",
+    backgroundColor: tokens.markerTint,
+  },
+  "70%": {
+    outline: `1px solid ${tokens.accent}`,
+    backgroundColor: tokens.markerTint,
+  },
+  "100%": {
+    outline: `1px solid ${tokens.transparent}`,
+    outlineOffset: "-1px",
+    backgroundColor: tokens.transparent,
+  },
+});
+
+const attention = stylex.keyframes({
+  from: {
+    outlineColor: tokens.transparent,
+    backgroundColor: tokens.transparent,
+  },
+});
+
+const collapse = stylex.keyframes({
+  from: { height: "auto", marginBlock: 0 },
+  to: { height: 0, marginBlock: 0 },
+});
+
+const relabel = stylex.keyframes({
+  from: { opacity: 0, clipPath: "inset(0 100% 0 0)" },
+  to: { opacity: 1, clipPath: "inset(0 0 0 0)" },
+});
+
+const inScopedDiff = () => stylex.when.ancestor(":is(*)", scopedDiffMarker);
+
+const styles = stylex.create({
+  workspace: {
+    display: "flex",
+    minHeight: 0,
+    height: "100%",
+    color: tokens.ink,
+    font: `${fontSize.small}/1.5 ${tokens.fontMono}`,
+  },
+  // The sidebar is the tray; its right padding holds the divider.
+  sidebar: {
+    width: "320px",
+    minWidth: "250px",
+    flexShrink: 0,
+    overflow: "hidden",
+    display: "flex",
+    flexDirection: "column",
+    paddingRight: "16px",
+    backgroundColor: tokens.tray,
+  },
+  hidden: {
+    display: "none",
+  },
+  rail: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "6px",
+    flexShrink: 0,
+    width: "44px",
+    paddingBottom: "8px",
+    overflowX: "hidden",
+    overflowY: "auto",
+    backgroundColor: tokens.tray,
+    borderRightWidth: "1px",
+    borderRightStyle: "solid",
+    borderRightColor: tokens.rule,
+  },
+  railProgress: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "stretch",
+    flexShrink: 0,
+    minHeight: "52px",
+    marginBottom: "2px",
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.rule,
+    color: tokens.inkMuted,
+  },
+  railRing: {
+    flexDirection: "column",
+    gap: "3px",
+    lineHeight: 1,
+  },
+  railButton: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    width: "28px",
+    height: "28px",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    borderRadius: radius.control,
+    padding: 0,
+    color: tokens.inkMuted,
+    cursor: "pointer",
+    backgroundColor: { default: "transparent", ":hover": tokens.well },
+    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
+    outlineOffset: { default: null, ":focus-visible": "-2px" },
+  },
+  // 5ch is five letters in Geist Mono.
+  railLens: {
+    flexShrink: 0,
+    boxSizing: "content-box",
+    width: "5ch",
+    height: "24px",
+    padding: "0 5px",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    borderRadius: radius.pill,
+    font: "inherit",
+    color: "inherit",
+    textAlign: "center",
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+    backgroundColor: { default: "transparent", ":hover": tokens.well },
+    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
+    outlineOffset: { default: null, ":focus-visible": "-2px" },
+  },
+  railLensActive: {
+    color: tokens.ink,
+    fontWeight: fontWeight.semibold,
+    backgroundColor: tokens.markerTint,
+  },
+  railFiles: {
+    display: "flex",
+    justifyContent: "center",
+    flexShrink: 0,
+    width: "22px",
+    marginTop: "2px",
+    paddingTop: "8px",
+    borderTopWidth: "1px",
+    borderTopStyle: "solid",
+    borderTopColor: tokens.rule,
+  },
+  progress: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
+    flexShrink: 0,
+    minHeight: "52px",
+    padding: "0 14px 0 16px",
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.rule,
+    color: tokens.inkMuted,
+    fontSize: fontSize.small,
+  },
+  progressLabel: {
+    display: "flex",
+    alignItems: "center",
+    gap: "9px",
+  },
+  ring: {
+    display: "flex",
+    alignItems: "center",
+    gap: "5px",
+    fontVariantNumeric: "tabular-nums",
+  },
+  cabinets: {
+    display: "flex",
+    flexDirection: "column",
+    flex: 1,
+    minHeight: 0,
+  },
+  // The courier stands on the row being written.
+  lenses: {
+    flex: "0 0 auto",
+    minHeight: 0,
+    overflow: "auto",
+    position: "relative",
+    paddingTop: { default: null, ":has(> .courier)": "14px" },
+  },
+  files: {
+    display: "flex",
+    flexDirection: "column",
+    flex: 1,
+    minHeight: 0,
+    overflow: "hidden",
+  },
+  heading: {
+    padding: "10px 14px 6px 16px",
+  },
+  lensesHeading: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: "2px",
+  },
+  filesHeading: {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  hint: {
+    padding: "0 14px 6px 16px",
+    color: tokens.inkFaint,
+    font: `${fontSize.small}/16px ${tokens.fontMono}`,
+  },
+  nativeTree: {
+    flex: 1,
+    minHeight: 0,
+    position: "relative",
+  },
+  section: {
+    borderBottomWidth: 0,
+    borderBottomStyle: "none",
+    borderBottomColor: "currentcolor",
+  },
+  // The section wears no wash; the pressed toggle already says open.
+  sectionExpanded: {
+    backgroundColor: tokens.transparent,
+  },
+  row: {
+    display: "flex",
+    alignItems: "center",
+    paddingRight: "10px",
+    gap: "7px",
+  },
+  toggle: {
+    display: "flex",
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+    gap: "8px",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    textAlign: "left",
+    padding: "3px 4px 3px 8px",
+    font: "inherit",
+    color: "inherit",
+    cursor: "pointer",
+    backgroundColor: { default: "transparent", ":hover": tokens.well },
+    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
+    outlineOffset: { default: null, ":focus-visible": "-2px" },
+  },
+  // A lens with no changes (usually Uncategorized) has nothing to filter to.
+  toggleEmpty: {
+    color: tokens.inkFaint,
+    cursor: "default",
+    backgroundColor: "transparent",
+  },
+  toggleActive: {
+    color: tokens.ink,
+    fontWeight: fontWeight.semibold,
+    backgroundColor: "transparent",
+  },
+  // The filter outranks the viewed fade; the checkbox beside it says viewed.
+  faded: {
+    opacity: 0.55,
+  },
+  toggleCounts: {
+    marginLeft: "auto",
+  },
+  // A selected lens is a filter chip around its funnel, name and clear mark;
+  // the counts stay outside it so they keep their column.
+  chip: {
+    display: "flex",
+    minWidth: 0,
+    alignItems: "center",
+    gap: "8px",
+    height: "24px",
+    padding: "0 8px",
+    borderRadius: radius.pill,
+  },
+  chipActive: {
+    paddingRight: "4px",
+    backgroundColor: tokens.markerTint,
+  },
+  icon: {
+    flexShrink: 0,
+    color: tokens.inkMuted,
+  },
+  name: {
+    minWidth: 0,
+    flex: "0 1 auto",
+    lineHeight: 1.5,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  nameRelabel: {
+    animationName: { default: relabel, [REDUCED]: "none" },
+    animationDuration: {
+      default: drawMotion.stroke,
+      [REDUCED]: motion.instant,
+    },
+    animationTimingFunction: { default: "steps(14)", [REDUCED]: "ease" },
+    animationFillMode: { default: "both", [REDUCED]: "none" },
+  },
+  clear: {
+    display: "inline-flex",
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "18px",
+    height: "18px",
+    borderRadius: radius.pill,
+    backgroundColor: {
+      default: null,
+      [stylex.when.ancestor(":hover", lensToggleMarker)]: tokens.markerGlow,
+    },
+  },
+  clearMark: {
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.4",
+    strokeLinecap: "round",
+  },
+  // Inside the sidebar, clear of its scrollbar; line on the editor's edge.
+  sidebarResizer: {
+    flex: "0 0 16px",
+    width: "16px",
+    minWidth: "16px",
+    marginLeft: "-16px",
+    backgroundColor: tokens.tray,
+    "::before": {
+      left: "auto",
+      right: 0,
+      transform: "none",
+    },
+    // 3px past the line, short of the editor's controls.
+    "::after": {
+      position: "absolute",
+      top: 0,
+      bottom: 0,
+      left: 0,
+      right: "-3px",
+      content: "''",
+    },
+  },
+  // Overlaps the files pane; the line stays on the pane edge.
+  cabinetsResizer: {
+    display: "block",
+    margin: "-5px 0",
+    zIndex: 2,
+  },
+  resizing: {
+    "::before": {
+      backgroundColor: tokens.inkFaint,
+    },
+  },
+  editor: {
+    position: "relative",
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    display: "flex",
+    flexDirection: "column",
+  },
+  // The workbench mounts its diff widgets here and sizes them from this box.
+  host: {
+    position: "relative",
+    gridRow: { default: 1, [inScopedDiff()]: 2 },
+    minHeight: 0,
+    height: "100%",
+  },
+  hostInWorkspace: {
+    flex: 1,
+    height: "auto",
+  },
+  viewError: {
+    display: "flex",
+    alignItems: "center",
+    gridRow: 1,
+    alignSelf: "start",
+    padding: "0 10px",
+    backgroundColor: tokens.surface,
+    color: tokens.inkFaint,
+    font: `${fontSize.small}/1 ${tokens.fontMono}`,
+  },
+  error: {
+    padding: "8px 12px",
+    color: tokens.changeRemoved,
+  },
+});
+
+const sectionMotion = stylex.create({
+  queued: {
+    visibility: "hidden",
+  },
+  landing: {
+    animationName: { default: landSlot, [REDUCED]: "none" },
+    animationDuration: {
+      default: drawMotion.lensLand,
+      [REDUCED]: motion.instant,
+    },
+    animationTimingFunction: { default: EASE, [REDUCED]: "ease" },
+    animationFillMode: { default: "both", [REDUCED]: "none" },
+  },
+  attention: {
+    outline: `1px solid ${tokens.accent}`,
+    outlineOffset: "-1px",
+    backgroundColor: tokens.markerTint,
+    animationName: { default: attention, [REDUCED]: "none" },
+    animationDuration: { default: drawMotion.ring, [REDUCED]: motion.instant },
+    animationTimingFunction: { default: "ease-out", [REDUCED]: "ease" },
+    animationFillMode: { default: "both", [REDUCED]: "none" },
+  },
+  erasing: {
+    overflow: "clip",
+    interpolateSize: "allow-keywords",
+    animationName: { default: collapse, [REDUCED]: "none" },
+    animationDuration: { default: drawMotion.beat, [REDUCED]: motion.instant },
+    animationTimingFunction: { default: EASE, [REDUCED]: "ease" },
+    animationDelay: { default: "320ms", [REDUCED]: "0s" },
+    animationFillMode: { default: "both", [REDUCED]: "none" },
+    display: { default: null, [REDUCED]: "none" },
+  },
+});
+
+const sectionMotionStyle = (phase: MotionPhase) =>
+  phase === "queued" ||
+  phase === "landing" ||
+  phase === "attention" ||
+  phase === "erasing"
+    ? sectionMotion[phase]
+    : null;

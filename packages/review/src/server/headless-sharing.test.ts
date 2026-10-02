@@ -5,13 +5,13 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 
 import { shareManifestSchema } from "@dev.fast/review-share-protocol";
+import { runReviewCli } from "@review/cli-runner.js";
+import { ReviewApiClient } from "@review/review-api/client.js";
+import type { ReviewServerDiscovery } from "@review/server-discovery.js";
+import * as repository from "@review/sharing/repository.js";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
-import { runReviewCli } from "../cli-runner.js";
-import { ReviewApiClient } from "../review-api/client.js";
-import type { ReviewServerDiscovery } from "../server-discovery.js";
-import * as repository from "../sharing/repository.js";
 import { runHeadlessServer } from "./headless-host.js";
 
 afterEach(() => {
@@ -261,7 +261,7 @@ for (const json of [false, true]) {
 
       expect(code).toBe(1);
       expect(diagnostic).toContain("Whiteboard server is not ready");
-      expect(diagnostic).toContain("review server start");
+      expect(diagnostic).toContain("whiteboard server start");
       expect(json ? JSON.parse(output) : output).toEqual(
         json
           ? { error: { code: "share_failed", message: diagnostic.trim() } }

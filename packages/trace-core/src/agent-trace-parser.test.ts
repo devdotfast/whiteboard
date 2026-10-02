@@ -1,37 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  AGENT_TRACE_PARSER_VERSION,
-  parseAgentTraceJsonl,
-  sniffAgentTraceHarness,
-} from "./agent-trace-parser";
+import { parseAgentTraceJsonl } from "./agent-trace-parser";
 
 describe("agent-trace-parser", () => {
-  it("exports the parser version", () => {
-    expect(AGENT_TRACE_PARSER_VERSION).toBe("1");
-  });
-
-  describe("sniffAgentTraceHarness", () => {
-    it("sniffs codex harness from session_meta", () => {
-      const chunk = JSON.stringify({
-        type: "session_meta",
-        payload: { id: "123" },
-      });
-
-      expect(sniffAgentTraceHarness(chunk)).toBe("codex");
-    });
-
-    it("sniffs pi harness from session", () => {
-      const chunk = JSON.stringify({ type: "session", id: "123" });
-      expect(sniffAgentTraceHarness(chunk)).toBe("pi");
-    });
-
-    it("sniffs claude-code harness from first claude record", () => {
-      const chunk = JSON.stringify({ type: "ai-title", aiTitle: "Fix bug" });
-      expect(sniffAgentTraceHarness(chunk)).toBe("claude-code");
-    });
-  });
-
   describe("Claude Code transcripts", () => {
     it("parses user turns, thinking blocks, assistant prose, and tool calls", () => {
       const jsonl = [

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { jsonObject, jsonString, parseJsonText } from "@dev.fast/json";
 import { findPackageRoot } from "@dev.fast/trace-core";
@@ -27,4 +28,26 @@ export function readReviewPackageVersion(
   } catch {
     return "unknown";
   }
+}
+
+/** `build-info.json` in a built package's `dist`, when present. */
+export function readBuildInfo(distDirectory: string) {
+  try {
+    return jsonObject(
+      parseJsonText(
+        readFileSync(path.join(distDirectory, "build-info.json"), "utf8"),
+      ),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+/** The build's commit; null from source, where an old `dist` may linger. */
+export function readBuildCommit(moduleUrl: string): string | null {
+  const dist = path.join(findReviewPackageRoot(moduleUrl), "dist");
+
+  if (!fileURLToPath(moduleUrl).startsWith(`${dist}${path.sep}`)) return null;
+
+  return jsonString(readBuildInfo(dist)?.commit) ?? null;
 }

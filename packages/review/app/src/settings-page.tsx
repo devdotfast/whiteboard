@@ -1,14 +1,23 @@
+import { Button } from "@canvas/ui/button";
+import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCanvasSettingsContent,
   ReviewCliInstallStatus,
   ReviewCtrlTabChoice,
+  ReviewDocumentWidthChoice,
   ReviewKeymapChoice,
+  ReviewReadyNotificationChoice,
   ReviewThemeChoice,
 } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
 import { DiffrConfigSection } from "./diffr-config-section";
+import { homeStyles } from "./home-styles";
+import { Choice } from "./settings-choice";
+import { settingsStyles as styles } from "./settings-styles";
+import { withClass } from "./stylex-props";
 import { TraceCaptureSection } from "./trace-capture-section";
 
 const THEME_LABELS: Record<ReviewThemeChoice, string> = {
@@ -21,12 +30,26 @@ const KEYMAP_LABELS: Record<ReviewKeymapChoice, string> = {
   none: "Default",
   vim: "Vim",
   emacs: "Emacs",
+  sublime: "Sublime Text",
 };
 
 const CTRL_TAB_LABELS: Record<ReviewCtrlTabChoice, string> = {
   recent: "Last used tab",
   next: "Next tab",
 };
+
+const DOCUMENT_WIDTH_LABELS: Record<ReviewDocumentWidthChoice, string> = {
+  standard: "Standard",
+  wide: "Wide",
+  full: "Full",
+};
+
+const READY_NOTIFICATION_LABELS: Record<ReviewReadyNotificationChoice, string> =
+  {
+    notificationAndBadge: "Notification and badge",
+    notification: "Notification only",
+    off: "Off",
+  };
 
 /**
  * The Settings page. It opens from the application menu (Preferences →
@@ -48,6 +71,11 @@ export function SettingsPage({
   const [theme, setTheme] = useState(settings.theme);
   const [keymap, setKeymap] = useState(settings.keymap);
   const [ctrlTab, setCtrlTab] = useState(settings.ctrlTab);
+  const [documentWidth, setDocumentWidth] = useState(settings.documentWidth);
+
+  const [readyNotification, setReadyNotification] = useState(
+    settings.readyNotification,
+  );
 
   const [softwareMapEnabled, setSoftwareMapEnabled] = useState(
     settings.softwareMapEnabled,
@@ -96,13 +124,13 @@ export function SettingsPage({
   };
 
   return (
-    <main className="review-home">
-      <div className="review-home-scroll">
-        <div className="review-home-content review-settings-page">
-          <div className="review-home-page-header">
-            <h1>Settings</h1>
+    <main {...withClass("review-home", homeStyles.page)}>
+      <div {...stylex.props(homeStyles.scroll)}>
+        <div {...stylex.props(homeStyles.content, styles.page)}>
+          <div {...stylex.props(homeStyles.header)}>
+            <h1 {...stylex.props(homeStyles.heading)}>Settings</h1>
           </div>
-          <p className="review-settings-lede">
+          <p {...stylex.props(styles.lede)}>
             Settings apply to Whiteboard on this machine.
           </p>
 
@@ -127,9 +155,7 @@ export function SettingsPage({
                 }
               >
                 {install.status.shim.installer ? null : (
-                  <button
-                    type="button"
-                    className="review-settings-button"
+                  <Button
                     disabled={busy !== null}
                     onClick={() =>
                       void run(
@@ -143,7 +169,7 @@ export function SettingsPage({
                     }
                   >
                     {install.status.shim.installed ? "Remove" : "Install"}
-                  </button>
+                  </Button>
                 )}
               </Row>
             </Section>
@@ -155,10 +181,11 @@ export function SettingsPage({
               description="Counts and timings only. Never code, file paths, or repository names."
             >
               <label
-                className="review-settings-toggle"
+                {...stylex.props(styles.toggle)}
                 aria-label="Share anonymous usage data"
               >
                 <input
+                  {...stylex.props(styles.checkbox)}
                   type="checkbox"
                   checked={telemetryEnabled}
                   disabled={busy !== null}
@@ -188,8 +215,26 @@ export function SettingsPage({
               />
             </Row>
             <Row
+              label="Document width"
+              description="Wide and Full give diagrams and code more room. Text keeps a reading width."
+            >
+              <Choice
+                label="Document width"
+                value={documentWidth}
+                labels={DOCUMENT_WIDTH_LABELS}
+                disabled={busy !== null}
+                onChange={(choice) =>
+                  void run(
+                    "document-width",
+                    () => settings.setDocumentWidth(choice),
+                    setDocumentWidth,
+                  )
+                }
+              />
+            </Row>
+            <Row
               label="Keymap"
-              description="Vim and Emacs keys come from a bundled extension. A change needs a reload."
+              description="Vim, Emacs, and Sublime Text keys come from a bundled extension. A change needs a reload."
             >
               <Choice
                 label="Keymap"
@@ -225,18 +270,33 @@ export function SettingsPage({
             </Row>
           </Section>
 
+          <Section label="Notifications">
+            <Row
+              label="Review ready"
+              description="When an agent finishes a review you aren't looking at."
+            >
+              <Choice
+                label="Review ready"
+                value={readyNotification}
+                labels={READY_NOTIFICATION_LABELS}
+                disabled={busy !== null}
+                onChange={(choice) =>
+                  void run(
+                    "ready-notification",
+                    () => settings.setReadyNotification(choice),
+                    setReadyNotification,
+                  )
+                }
+              />
+            </Row>
+          </Section>
+
           <Section label="Tools">
             <Row
               label="Extensions"
               description="Install or turn on language extensions."
             >
-              <button
-                type="button"
-                className="review-settings-button"
-                onClick={settings.manageExtensions}
-              >
-                Manage…
-              </button>
+              <Button onClick={settings.manageExtensions}>Manage…</Button>
             </Row>
           </Section>
 
@@ -245,8 +305,9 @@ export function SettingsPage({
               label="Structural Diffs"
               description="Replace the standard diff view with syntax-aware diffs and linked folds."
             >
-              <label className="review-settings-toggle">
+              <label {...stylex.props(styles.toggle)}>
                 <input
+                  {...stylex.props(styles.checkbox)}
                   type="checkbox"
                   aria-label="Structural Diffs"
                   checked={structuralDiffEnabled}
@@ -272,8 +333,9 @@ export function SettingsPage({
               label="Software Map"
               description="Show the experimental Software Map view in sessions."
             >
-              <label className="review-settings-toggle">
+              <label {...stylex.props(styles.toggle)}>
                 <input
+                  {...stylex.props(styles.checkbox)}
                   type="checkbox"
                   aria-label="Software Map"
                   checked={softwareMapEnabled}
@@ -293,8 +355,9 @@ export function SettingsPage({
               label="Scratchpad"
               description="Show the experimental scratchpad on Home. Agents draw on it through Whiteboard's MCP tools."
             >
-              <label className="review-settings-toggle">
+              <label {...stylex.props(styles.toggle)}>
                 <input
+                  {...stylex.props(styles.checkbox)}
                   type="checkbox"
                   aria-label="Scratchpad"
                   checked={scratchpadEnabled}
@@ -318,7 +381,7 @@ export function SettingsPage({
             ) : null}
           </Section>
 
-          {error ? <p className="review-settings-error">{error}</p> : null}
+          {error ? <p {...stylex.props(styles.error)}>{error}</p> : null}
         </div>
       </div>
     </main>
@@ -327,8 +390,10 @@ export function SettingsPage({
 
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <section className="review-settings-section" aria-label={label}>
-      <h2 className="review-settings-section-label">{label}</h2>
+    <section {...stylex.props(styles.section)} aria-label={label}>
+      <h2 {...stylex.props(textStyles.eyebrow, styles.sectionLabel)}>
+        {label}
+      </h2>
       {children}
     </section>
   );
@@ -344,52 +409,12 @@ function Row({
   children: ReactNode;
 }) {
   return (
-    <div className="review-settings-row">
-      <div className="review-settings-row-text">
-        <span className="review-settings-row-label">{label}</span>
-        <span className="review-settings-row-description">{description}</span>
+    <div {...stylex.props(styles.row)}>
+      <div {...stylex.props(styles.rowText)}>
+        <span {...stylex.props(styles.rowLabel)}>{label}</span>
+        <span {...stylex.props(styles.rowDescription)}>{description}</span>
       </div>
-      <div className="review-settings-row-control">{children}</div>
-    </div>
-  );
-}
-
-function Choice<T extends string>({
-  label,
-  value,
-  labels,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  labels: Record<T, string>;
-  disabled: boolean;
-  onChange: (choice: T) => void;
-}) {
-  // SAFETY: `labels` is declared as Record<T, string>, so its own keys are
-  // exactly the T choices this control offers.
-  const choices = Object.keys(labels) as T[];
-
-  return (
-    <div className="review-segmented" role="radiogroup" aria-label={label}>
-      {choices.map((choice) => (
-        <button
-          key={choice}
-          type="button"
-          role="radio"
-          aria-checked={choice === value}
-          disabled={disabled}
-          className={
-            choice === value
-              ? "review-segment review-segment--active"
-              : "review-segment"
-          }
-          onClick={() => onChange(choice)}
-        >
-          {labels[choice]}
-        </button>
-      ))}
+      <div {...stylex.props(styles.rowControl)}>{children}</div>
     </div>
   );
 }

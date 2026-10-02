@@ -1,3 +1,5 @@
+import { IconButton } from "@canvas/ui/button";
+import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useState } from "react";
 
 import { CheckIcon, CopyIcon as CopyGlyph } from "./icons";
@@ -48,11 +50,22 @@ export async function copyText(text: string): Promise<boolean> {
   return copied;
 }
 
+/** The prompt cards' copy glyph. */
 export function CopyIcon() {
   return (
-    <svg viewBox="0 0 12 12" aria-hidden="true">
-      <rect x="3.5" y="3.5" width="7" height="7" rx="1" />
-      <path d="M8.5 3.5v-1a1 1 0 0 0-1-1h-5a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1" />
+    <svg {...stylex.props(styles.icon)} viewBox="0 0 12 12" aria-hidden="true">
+      <rect
+        {...stylex.props(styles.stroke)}
+        x="3.5"
+        y="3.5"
+        width="7"
+        height="7"
+        rx="1"
+      />
+      <path
+        {...stylex.props(styles.stroke)}
+        d="M8.5 3.5v-1a1 1 0 0 0-1-1h-5a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1"
+      />
     </svg>
   );
 }
@@ -64,10 +77,14 @@ export function CopyButton({
   text,
   label,
   className,
+  xstyle,
+  iconStyle,
 }: {
   text: string;
   label: string;
-  className: string;
+  className?: string;
+  xstyle?: stylex.StyleXStyles;
+  iconStyle: stylex.StyleXStyles;
 }): ReactElement {
   const [copied, setCopied] = useState(false);
   const tooltip = useTooltip(label);
@@ -80,10 +97,10 @@ export function CopyButton({
   }, [copied]);
 
   return (
-    <button
+    <IconButton
       ref={tooltip}
-      type="button"
       className={className}
+      xstyle={xstyle}
       aria-label={label}
       data-copied={copied ? "" : undefined}
       onClick={() => {
@@ -94,7 +111,25 @@ export function CopyButton({
         });
       }}
     >
-      {copied ? <CheckIcon /> : <CopyGlyph />}
-    </button>
+      {copied ? (
+        <CheckIcon xstyle={iconStyle} />
+      ) : (
+        <CopyGlyph xstyle={iconStyle} />
+      )}
+    </IconButton>
   );
 }
+
+const styles = stylex.create({
+  icon: {
+    width: "12px",
+    height: "12px",
+  },
+  stroke: {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    strokeWidth: "1.2",
+  },
+});

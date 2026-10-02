@@ -10,12 +10,14 @@ import { HoverPosition } from "../../../../base/browser/ui/hover/hoverWidget.js"
 import { createTrustedTypesPolicy } from "../../../../base/browser/trustedTypes.js";
 import type { CancellationToken } from "../../../../base/common/cancellation.js";
 import { Emitter } from "../../../../base/common/event.js";
-import { Disposable, DisposableStore, MutableDisposable, toDisposable } from "../../../../base/common/lifecycle.js";
+import { Disposable, DisposableStore, MutableDisposable, toDisposable, type IDisposable } from "../../../../base/common/lifecycle.js";
 import { FileAccess } from "../../../../base/common/network.js";
 import type { ICursorPositionChangedEvent } from "../../../../editor/common/cursorEvents.js";
 import { ICommandService } from "../../../../platform/commands/common/commands.js";
 import { ConfigurationTarget, IConfigurationService } from "../../../../platform/configuration/common/configuration.js";
 import { TextEditorSelectionSource, type IEditorOptions } from "../../../../platform/editor/common/editor.js";
+import { IDialogService } from "../../../../platform/dialogs/common/dialogs.js";
+import { IContextMenuService, IContextViewService } from "../../../../platform/contextview/browser/contextView.js";
 import { IHoverService } from "../../../../platform/hover/browser/hover.js";
 import { createDecorator, IInstantiationService } from "../../../../platform/instantiation/common/instantiation.js";
 import { ILogService } from "../../../../platform/log/common/log.js";
@@ -42,7 +44,10 @@ import { ILifecycleService } from "../../../../workbench/services/lifecycle/comm
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import {
 	REVIEW_CTRL_TAB_SETTING,
+	REVIEW_DOCUMENT_WIDTH_SETTING,
 	REVIEW_KEYMAP_SETTING,
+	REVIEW_KEYMAPS,
+	REVIEW_READY_NOTIFICATION_SETTING,
 	REVIEW_SOFTWARE_MAP_SETTING,
 	REVIEW_STRUCTURAL_DIFF_SETTING,
 	REVIEW_TELEMETRY_SETTING,
@@ -61,7 +66,9 @@ import type {
 	ReviewCanvasTutorialBridge,
 	ReviewCliInstallStatus,
 	ReviewCtrlTabChoice,
+	ReviewDocumentWidthChoice,
 	ReviewKeymapChoice,
+	ReviewReadyNotificationChoice,
 	ReviewRuntimeConfig,
 	ReviewSurfaceEvent,
 	ReviewTheme,
@@ -75,6 +82,8 @@ import {
 	REVIEW_TUTORIAL_STEP_IDS
 } from "../../../common/reviewProtocol.js";
 import { IReviewVerbsService } from "../../../contrib/verbs/reviewVerbs.js";
+import { confirmReviewDeletion } from "../../reviewDeleteConfirmation.js";
+import { showReviewCanvasMenu } from "../../reviewCanvasMenu.js";
 import { ReviewTooltip } from "../../reviewTooltip.js";
 import { IReviewApiCatalogService } from "../../../services/reviewApiCatalogService.js";
 import { IReviewApiSourceService } from "../../../services/reviewApiSourceService.js";
@@ -138,6 +147,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	static readonly ID = ReviewCanvasEditorInput.EDITOR_ID;
 
 	private readonly canvas = this._register(new MutableDisposable<ReviewCanvasHandle>());
+	private readonly canvasMenu = this._register(new MutableDisposable<IDisposable>());
 	private readonly surfaceEvents = this._register(new Emitter<ReviewSurfaceEvent>());
 	private readonly _onDidChangeSelection = this._register(new Emitter<IEditorPaneSelectionChangeEvent>());
 	readonly onDidChangeSelection = this._onDidChangeSelection.event;
@@ -183,6 +193,9 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		private readonly reviewTelemetryService: IReviewTelemetryService,
 		@ILogService private readonly logService: ILogService,
 		@IHoverService private readonly hoverService: IHoverService,
+		@IContextMenuService private readonly contextMenuService: IContextMenuService,
+		@IContextViewService private readonly contextViewService: IContextViewService,
+		@IDialogService private readonly dialogService: IDialogService,
 		@INotificationService private readonly notificationService: INotificationService,
 		@IEditorProgressService editorProgressService: IEditorProgressService,
 		@ILifecycleService lifecycleService: ILifecycleService,
@@ -239,7 +252,8 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			configurationService.onDidChangeConfiguration((event) => {
 				if (
 					!event.affectsConfiguration(REVIEW_SOFTWARE_MAP_SETTING) &&
-					!event.affectsConfiguration(REVIEW_STRUCTURAL_DIFF_SETTING)
+					!event.affectsConfiguration(REVIEW_STRUCTURAL_DIFF_SETTING) &&
+					!event.affectsConfiguration(REVIEW_DOCUMENT_WIDTH_SETTING)
 				)
 					return;
 				if (this.apiContent) {
@@ -247,6 +261,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 						...this.apiContent,
 						structuralDiffEnabled: this.currentStructuralDiffEnabled(),
 						softwareMapEnabled: this.currentSoftwareMapEnabled(),
+						documentWidth: this.currentDocumentWidth(),
 					};
 					this.canvas.value?.update(this.apiContent);
 					return;
@@ -303,6 +318,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		token: CancellationToken,
 	): Promise<void> {
 		const generation = ++this.loadGeneration;
+		this.canvasMenu.clear();
 		this.refreshProgress.stop();
 		this.openingGeneration = generation;
 		try {
@@ -401,6 +417,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 						reviewId,
 						structuralDiffEnabled: this.currentStructuralDiffEnabled(),
 						softwareMapEnabled: this.currentSoftwareMapEnabled(),
+						documentWidth: this.currentDocumentWidth(),
 						setTitle: (title) => input.setApiTitle(title),
 						setSourceView: (selection, next) => {
 							sourceSelection = selection;
@@ -570,6 +587,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 
 	override async clearInput(): Promise<void> {
+		this.canvasMenu.clear();
 		// Keep apiContent with the mounted canvas so resuming it preserves its review identity.
 		// render() replaces both when another input is shown.
 		this.refreshProgress.stop();
@@ -579,7 +597,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	protected override setEditorVisible(visible: boolean): void {
 		super.setEditorVisible(visible);
-		if (!visible) this.refreshProgress.stop();
+		if (!visible) {
+			this.canvasMenu.clear();
+			this.refreshProgress.stop();
+		}
 	}
 
 	override focus(): void {
@@ -776,6 +797,24 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.configurationService.updateValue(REVIEW_CTRL_TAB_SETTING, choice, ConfigurationTarget.USER);
 				return this.currentCtrlTab();
 			},
+			documentWidth: this.currentDocumentWidth(),
+			setDocumentWidth: async (choice) => {
+				this.reviewTelemetryService.capture("setting_changed", {
+					setting: "document_width",
+					enabled: choice !== "standard",
+				});
+				await this.configurationService.updateValue(REVIEW_DOCUMENT_WIDTH_SETTING, choice, ConfigurationTarget.USER);
+				return this.currentDocumentWidth();
+			},
+			readyNotification: this.currentReadyNotification(),
+			setReadyNotification: async (choice) => {
+				this.reviewTelemetryService.capture("setting_changed", {
+					setting: "ready_notification",
+					enabled: choice !== "off",
+				});
+				await this.configurationService.updateValue(REVIEW_READY_NOTIFICATION_SETTING, choice, ConfigurationTarget.USER);
+				return this.currentReadyNotification();
+			},
 			softwareMapEnabled: this.currentSoftwareMapEnabled(),
 			setSoftwareMapEnabled: async (enabled) => {
 				this.reviewTelemetryService.capture("setting_changed", {
@@ -829,6 +868,15 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	private currentCtrlTab(): ReviewCtrlTabChoice {
 		return this.configurationService.getValue<ReviewCtrlTabChoice>(REVIEW_CTRL_TAB_SETTING) === "next" ? "next" : "recent";
+	}
+
+	private currentDocumentWidth(): ReviewDocumentWidthChoice {
+		const choice = this.configurationService.getValue<ReviewDocumentWidthChoice>(REVIEW_DOCUMENT_WIDTH_SETTING);
+		return choice === "wide" || choice === "full" ? choice : "standard";
+	}
+
+	private currentReadyNotification(): ReviewReadyNotificationChoice {
+		return this.configurationService.getValue<ReviewReadyNotificationChoice>(REVIEW_READY_NOTIFICATION_SETTING) ?? "off";
 	}
 
 	private currentStructuralDiffEnabled(): boolean {
@@ -890,7 +938,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			dismiss: () => onChange({ ...this.readTutorialProgress(), dismissed: true }),
 			reopen: () => onChange({ ...this.readTutorialProgress(), dismissed: false }),
 			selectKeymap: async (keymap) => {
-				if (keymap !== "none" && keymap !== "vim" && keymap !== "emacs") {
+				if (!REVIEW_KEYMAPS.includes(keymap)) {
 					throw new Error("Unsupported tutorial keymap choice.");
 				}
 				setStep("chooseKeymap", true);
@@ -993,7 +1041,20 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		if (this.canvas.value) {
 			this.canvas.value.update(content);
 		} else {
-			this.canvas.value = assets.mountReviewCanvas(this.canvasMount, content);
+			this.canvas.value = assets.mountReviewCanvas(this.canvasMount, content, {
+				confirmDelete: title => {
+					const openedGeneration = this.loadGeneration;
+					return confirmReviewDeletion(this.dialogService, title,
+						() => openedGeneration === this.loadGeneration && this.isVisible());
+				},
+				showMenu: request => {
+					const openedGeneration = this.loadGeneration;
+					const menu = showReviewCanvasMenu(this.contextMenuService, request,
+						() => openedGeneration === this.loadGeneration && this.isVisible(), this.contextViewService);
+					this.canvasMenu.value = menu;
+					return menu;
+				},
+			});
 		}
 	}
 
@@ -1066,16 +1127,24 @@ export class ReviewCanvasEditorPane extends EditorPane {
 					appearance: { compact: true, showPointer: true },
 					persistence: { hideOnKeyDown: true },
 				};
+				const quick = store.add(new MutableDisposable());
 				store.add(addDisposableListener(target, "mouseenter", () => {
 					if (target.getAttribute("aria-expanded") === "true") return;
-					hover.value = this.hoverService.showDelayedHover(options, { groupId: "review-topbar", reducedDelay: true });
+					if (!tooltip?.quick) {
+						hover.value = this.hoverService.showDelayedHover(options, { groupId: "review-topbar", reducedDelay: true });
+						return;
+					}
+					const delay = this.configurationService.getValue<number>("workbench.hover.reducedDelay") / 2;
+					const timer = setTimeout(() => { hover.value = this.hoverService.showInstantHover(options); }, delay);
+					quick.value = toDisposable(() => clearTimeout(timer));
 				}));
+				store.add(addDisposableListener(target, "mouseleave", () => quick.clear()));
 				store.add(addDisposableListener(target, "focus", () => {
 					if (!target.matches(":focus-visible") || target.getAttribute("aria-expanded") === "true") return;
 					hover.value = this.hoverService.showInstantHover(options);
 				}));
 				for (const event of ["blur", "pointerdown", "click", "keydown"]) {
-					store.add(addDisposableListener(target, event, () => hover.clear()));
+					store.add(addDisposableListener(target, event, () => { quick.clear(); hover.clear(); }));
 				}
 				return store;
 			},

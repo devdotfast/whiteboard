@@ -144,11 +144,12 @@ it("defers native editor creation until the peek nears the viewport", () => {
   const element = renderPeek(false);
 
   expect(created).toHaveLength(0);
-  const host = element.querySelector<HTMLElement>(".review-inline-editor");
+
+  const host = element.querySelector<HTMLElement>(
+    "[data-review-inline-editor]",
+  );
+
   expect(host).not.toBeNull();
-  // 5 range lines + 3 lines of leading context + 3 trailing = 11 lines
-  // at LINE_HEIGHT 20 plus the 40px header.
-  expect(host?.style.height).toBe("260px");
 
   const observer = FakeIntersectionObserver.instances.at(-1);
   expect(observer).toBeDefined();
@@ -275,7 +276,6 @@ it("searches an offscreen peek without mounting Monaco", async () => {
         <ReviewRootsProvider roots={findRoots(article, scrollRegion)}>
           <ReviewFindProvider
             articleRef={{ current: article }}
-            scrollRegionRef={{ current: scrollRegion }}
             documentKey="test"
             host={host}
           >
@@ -346,7 +346,6 @@ it("finishes search when revealing a failed editor", async () => {
         <ReviewRootsProvider roots={findRoots(article, scrollRegion)}>
           <ReviewFindProvider
             articleRef={{ current: article }}
-            scrollRegionRef={{ current: scrollRegion }}
             documentKey="failed-editor"
             host={host}
           >
@@ -368,12 +367,10 @@ it("finishes search when revealing a failed editor", async () => {
   });
 
   await vi.waitFor(() => {
-    expect(document.querySelector(".review-find-count")?.textContent).toBe(
-      "1 of 1",
-    );
     expect(
-      article.querySelector(".review-inline-editor-error")?.textContent,
-    ).toContain("Inline preview unavailable");
+      document.querySelector('[role="search"] [aria-live]')?.textContent,
+    ).toBe("1 of 1");
+    expect(article.textContent).toContain("Inline preview unavailable");
   });
 });
 

@@ -908,10 +908,10 @@
   },
   "dependencies": {
     "@vscode/markdown-editor": "^0.0.2-16",
-    "dompurify": "^3.4.10",
+    "dompurify": "^3.4.16",
     "highlight.js": "^11.8.0",
     "katex": "^0.16.33",
-    "markdown-it": "^14.2.0",
+    "markdown-it": "^14.3.1",
     "mermaid": "^11.15.0",
     "morphdom": "^2.7.7",
     "picomatch": "^2.3.2",

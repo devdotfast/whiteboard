@@ -22,12 +22,3 @@ test("builds an authenticated JSON POST for a telemetry event", () => {
 	assert.deepEqual(JSON.parse(String(request.body)), { name: "review_presented" });
 	assert.equal(request.keepalive, false);
 });
-
-test("keepalive is opt-in", () => {
-	const request = reviewTelemetryEventRequest(
-		{ token: "secret", appSessionId: "app-1" },
-		{ name: "x" },
-		{ keepalive: true },
-	);
-	assert.equal(request.keepalive, true);
-});

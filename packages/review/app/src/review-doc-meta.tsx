@@ -1,24 +1,25 @@
+import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import {
   type ReviewDiffStats,
-  type ReviewStackLayer,
   summarizeReviewDiffFiles,
 } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import {
   Fragment,
-  type MouseEvent,
   type ReactElement,
   type ReactNode,
   useContext,
   useEffect,
-  useRef,
   useState,
 } from "react";
 
 import { DiffCount } from "./diff-count";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
+import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
-import { ReviewBranchRange } from "./review-branch-range";
+import { ReviewBranchRange, WORKING_TREE } from "./review-branch-range";
 import { useReviewDiffFiles } from "./review-diff-files-context";
+import { tokens } from "./tokens.stylex";
 
 interface ReviewDocumentMetaState {
   pullRequestNumber: number | null;
@@ -37,7 +38,6 @@ export function ReviewDocumentMetaLine({
   children?: ReactNode;
 }): ReactElement {
   const session = useReviewSession();
-  const reviewFetch = session.fetch;
   const displayedVersion = useContext(DisplayedReviewVersionContext);
   const diffFiles = useReviewDiffFiles();
 
@@ -48,37 +48,9 @@ export function ReviewDocumentMetaLine({
     null,
   );
 
-  const [stackLayers, setStackLayers] = useState<ReviewStackLayer[]>([]);
-
   useEffect(() => {
     setRelativeTimeNowMs(Date.now());
   }, [displayedVersion]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    if (!meta?.pullRequestNumber) {
-      setStackLayers([]);
-
-      return () => controller.abort();
-    }
-
-    const layers = review.stack(controller.signal);
-
-    layers
-      .then((next) => {
-        if (!controller.signal.aborted) setStackLayers(next);
-      })
-      .catch(() => {});
-
-    return () => controller.abort();
-  }, [
-    meta?.pullRequestNumber,
-    meta?.pullRequestUrl,
-    reviewFetch,
-    review,
-    displayedVersion,
-  ]);
 
   const diff =
     diffFiles.status === "loaded" ? reviewDiffStats(diffFiles) : null;
@@ -100,17 +72,20 @@ export function ReviewDocumentMetaLine({
     facts.push({
       key: "branch",
       node: (
-        <span
-          className="review-doc-meta-branch"
-          title={`Head branch: ${branch}`}
-        >
-          <svg width="13" height="13" viewBox="0 0 20 20" aria-hidden="true">
+        <span {...stylex.props(styles.branch)} title={`Head branch: ${branch}`}>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 20 20"
+            aria-hidden="true"
+            {...stylex.props(styles.icon, styles.branchIcon)}
+          >
             <circle cx="5" cy="4.5" r="2" />
             <circle cx="5" cy="15.5" r="2" />
             <circle cx="15" cy="6.5" r="2" />
             <path d="M5 6.5v7M15 8.5c0 3-10 2-10 5" />
           </svg>
-          <span>{branch}</span>
+          <span {...stylex.props(styles.branchName)}>{branch}</span>
         </span>
       ),
     });
@@ -128,16 +103,23 @@ export function ReviewDocumentMetaLine({
     facts.push({
       key: "changes",
       node: (
-        <span className="review-header-stats">
-          <DiffCount additions={diff.additions} deletions={diff.deletions} />
+        <span {...stylex.props(styles.row, styles.stats)}>
+          <DiffCount
+            additions={diff.additions}
+            deletions={diff.deletions}
+            large
+          />
           {diff.additions + diff.deletions > 0 ? (
-            <span className="review-header-change-bar" aria-hidden="true">
+            <span {...stylex.props(styles.changeBar)} aria-hidden="true">
               {diff.additions > 0 ? (
-                <span style={{ flexGrow: diff.additions }} />
+                <span
+                  {...stylex.props(styles.change)}
+                  style={{ flexGrow: diff.additions }}
+                />
               ) : null}
               {diff.deletions > 0 ? (
                 <span
-                  className="is-removed"
+                  {...stylex.props(styles.change, styles.removed)}
                   style={{ flexGrow: diff.deletions }}
                 />
               ) : null}
@@ -154,33 +136,39 @@ export function ReviewDocumentMetaLine({
       node: (
         <ReviewBranchRange
           baseRef={review.pins.base}
-          headRef={review.pins.head}
+          headRef={
+            review.targetKind === "worktree" ? WORKING_TREE : review.pins.head
+          }
         />
       ),
     });
   }
 
   return (
-    <header className="review-document-header">
-      <div className="review-header-top" data-review-copy-ignore>
-        <div className="review-header-identity">
+    // The attribute is a marker for tests.
+    <header
+      {...stylex.props(styles.header, drawStyles.blockChild)}
+      data-review-document-header
+    >
+      <div {...stylex.props(styles.row, styles.top)} data-review-copy-ignore>
+        <div {...stylex.props(styles.row, styles.identity)}>
           {repository ? (
             <span>
               {repository[1]} / {repository[2]}
             </span>
           ) : null}
           {repository && meta.pullRequestNumber != null ? (
-            <span className="review-header-separator" aria-hidden="true">
+            <span {...stylex.props(styles.separator)} aria-hidden="true">
               ·
             </span>
           ) : null}
           {meta.pullRequestNumber != null &&
             (meta.pullRequestUrl ? (
               <a
-                className="review-doc-meta-pr"
                 href={meta.pullRequestUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                {...stylex.props(styles.pullRequest, styles.pullRequestLink)}
               >
                 PR #{meta.pullRequestNumber}
                 <svg
@@ -188,30 +176,26 @@ export function ReviewDocumentMetaLine({
                   height="11"
                   viewBox="0 0 20 20"
                   aria-hidden="true"
+                  {...stylex.props(styles.icon)}
                 >
                   <path d="M7 4h9v9M16 4 5 15" />
                 </svg>
               </a>
             ) : (
-              <span className="review-doc-meta-pr">
+              <span {...stylex.props(styles.pullRequest)}>
                 PR #{meta.pullRequestNumber}
               </span>
             ))}
-          {stackLayers.length > 1 ? (
-            <>
-              <span className="review-header-separator" aria-hidden="true">
-                ·
-              </span>
-              <ReviewStackSelector layers={stackLayers} />
-            </>
-          ) : null}
         </div>
         {updatedLabel && (
-          <span className="review-header-updated">Updated {updatedLabel}</span>
+          <span {...stylex.props(styles.updated)}>Updated {updatedLabel}</span>
         )}
       </div>
       {children}
-      <div className="review-header-details" data-review-copy-ignore>
+      <div
+        {...stylex.props(styles.row, styles.details)}
+        data-review-copy-ignore
+      >
         {withFactDots(facts)}
       </div>
     </header>
@@ -225,131 +209,11 @@ function withFactDots(
   return facts.map(({ key, node }, index) => (
     <Fragment key={key}>
       {index > 0 ? (
-        <span className="review-header-dot" aria-hidden="true" />
+        <span {...stylex.props(styles.dot)} aria-hidden="true" />
       ) : null}
       {node}
     </Fragment>
   ));
-}
-
-function ReviewStackSelector({
-  layers,
-}: {
-  layers: readonly ReviewStackLayer[];
-}): ReactElement {
-  const session = useReviewSession();
-  const detailsRef = useRef<HTMLDetailsElement>(null);
-
-  const currentIndex = layers.findIndex(
-    (layer) => layer.relation === "current",
-  );
-
-  const position = currentIndex < 0 ? 1 : currentIndex + 1;
-
-  const openLayer = (
-    layer: ReviewStackLayer,
-    event: Pick<MouseEvent, "metaKey" | "ctrlKey" | "shiftKey" | "button">,
-  ) => {
-    if (!layer.reviewUuid) return;
-    detailsRef.current?.removeAttribute("open");
-    void session.surface.post({
-      name: "openReview",
-      args: {
-        reviewUuid: layer.reviewUuid,
-        active: !(
-          event.metaKey ||
-          event.ctrlKey ||
-          event.shiftKey ||
-          event.button === 1
-        ),
-      },
-    });
-  };
-
-  return (
-    <details className="review-stack-selector" ref={detailsRef}>
-      <summary>
-        <span className="review-stack-position">
-          {position} of {layers.length}
-        </span>
-        <span className="review-stack-label">stack</span>
-        <svg viewBox="0 0 12 12" aria-hidden="true">
-          <path d="m3 4.5 3 3 3-3" />
-        </svg>
-      </summary>
-      <div className="review-stack-menu">
-        {layers.map((layer, index) => (
-          <ReviewStackLayerRow
-            key={layer.pullRequestNumber}
-            layer={layer}
-            position={index + 1}
-            onOpen={openLayer}
-          />
-        ))}
-      </div>
-    </details>
-  );
-}
-
-function ReviewStackLayerRow({
-  layer,
-  position,
-  onOpen,
-}: {
-  layer: ReviewStackLayer;
-  position: number;
-  onOpen: (
-    layer: ReviewStackLayer,
-    event: Pick<MouseEvent, "metaKey" | "ctrlKey" | "shiftKey" | "button">,
-  ) => void;
-}): ReactElement {
-  const current = layer.relation === "current";
-
-  const content = (
-    <>
-      <span className="review-stack-indicator">
-        <span className="review-stack-position-marker">{position}</span>
-      </span>
-      <span className="review-stack-layer-copy">
-        <span className="review-stack-layer-title">
-          PR #{layer.pullRequestNumber}
-          {layer.reviewTitle ? ` · ${layer.reviewTitle}` : ""}
-        </span>
-        <span className="review-stack-branch">{layer.branch}</span>
-      </span>
-      <span className="review-stack-relation">
-        {!layer.reviewUuid && !current ? "No session" : layer.relation}
-      </span>
-    </>
-  );
-
-  if (current) {
-    return (
-      <div className="review-stack-row is-current" aria-current="true">
-        {content}
-      </div>
-    );
-  }
-
-  return (
-    <button
-      className="review-stack-row"
-      type="button"
-      data-relation={layer.relation}
-      disabled={!layer.reviewUuid}
-      title={
-        layer.reviewUuid
-          ? "Open session (Cmd/Ctrl-click to open in the background)"
-          : "No generated session exists for this pull request"
-      }
-      onClick={(event) => onOpen(layer, event)}
-      onAuxClick={(event) => {
-        if (event.button === 1) onOpen(layer, event);
-      }}
-    >
-      {content}
-    </button>
-  );
 }
 
 function documentMetaState(meta: {
@@ -392,3 +256,109 @@ function relativeTimeLabel(timeMs: number, nowMs: number): string | null {
     day: "numeric",
   });
 }
+
+// Paper's review header: identity, title, then source and diff metadata.
+const styles = stylex.create({
+  header: {
+    width: `min(100%, ${tokens.reviewProseMaxWidth})`,
+    margin: "28px auto 0",
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+    paddingBottom: "28px",
+    font: `${fontSize.ui}/18px ${tokens.fontMono}`,
+    color: tokens.inkFaint,
+  },
+  row: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  top: {
+    justifyContent: "space-between",
+    gap: "10px 24px",
+  },
+  identity: {
+    gap: "10px",
+    minWidth: 0,
+    overflowWrap: "anywhere",
+  },
+  separator: {
+    color: tokens.inkFaint,
+  },
+  updated: {
+    marginLeft: "auto",
+  },
+  icon: {
+    flexShrink: 0,
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  },
+  pullRequest: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "5px",
+    color: tokens.accent,
+    fontWeight: fontWeight.medium,
+    textDecoration: "none",
+  },
+  pullRequestLink: {
+    textDecoration: { default: "none", ":hover": "underline" },
+  },
+  // Facts in the details row are divided by small ink-faint dots.
+  details: {
+    gap: "8px 10px",
+    paddingTop: "12px",
+  },
+  dot: {
+    flex: "0 0 3px",
+    width: "3px",
+    height: "3px",
+    borderRadius: radius.round,
+    backgroundColor: tokens.inkFaint,
+  },
+  branch: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "7px",
+    boxSizing: "border-box",
+    minWidth: 0,
+    minHeight: "26px",
+    maxWidth: "100%",
+    padding: "3px 10px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.rule,
+    borderRadius: radius.control,
+    backgroundColor: tokens.well,
+    color: tokens.ink,
+    overflowWrap: "anywhere",
+  },
+  branchIcon: {
+    color: tokens.inkFaint,
+  },
+  branchName: {
+    minWidth: 0,
+    overflowWrap: "anywhere",
+  },
+  stats: {
+    gap: "10px",
+  },
+  changeBar: {
+    display: "flex",
+    flex: "0 0 42px",
+    gap: "2px",
+    height: "8px",
+  },
+  change: {
+    minWidth: "1px",
+    borderRadius: radius.hairline,
+    backgroundColor: tokens.changeAdded,
+  },
+  removed: {
+    backgroundColor: tokens.changeRemoved,
+  },
+});

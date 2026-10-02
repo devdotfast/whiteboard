@@ -32,6 +32,7 @@ export interface IReviewCanvasEditorTabsService {
 	readonly _serviceBrand: undefined;
 	inputFor(target: Extract<ReviewCanvasEditorTarget, { kind: "api" | "api-source" | "home" }>): ReviewCanvasEditorInput;
 	openApiReview(reviewId: string, title: string, active?: boolean): Promise<ReviewCanvasEditorInput>;
+	isActiveReview(reviewId: string): boolean;
 	openApiSource(selection: ReviewSourceSelection, title: string): Promise<void>;
 	openSourceEditor(editor: IUntypedEditorInput): Promise<boolean>;
 	openSourceReferences(resource: URI, position: { readonly lineNumber: number; readonly column: number }): Promise<boolean>;
@@ -89,6 +90,11 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		}
 		if (target.kind !== "home") input.setApiTitle(target.title);
 		return input;
+	}
+
+	isActiveReview(reviewId: string): boolean {
+		const editor = this.editorService.activeEditor;
+		return editor instanceof ReviewCanvasEditorInput && editor.target.kind === "api" && editor.target.reviewId === reviewId;
 	}
 
 	async openApiReview(reviewId: string, title: string, active = true): Promise<ReviewCanvasEditorInput> {
@@ -206,7 +212,11 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		await this.editorService.openEditor(input, { pinned: true, inactive: !active, revealIfVisible: true }, targetGroup);
 	}
 
+	/** Closes the review's tabs and its source windows. */
 	async closeReview(reviewUuid: string): Promise<void> {
+		void this.desktopConnection
+			.closeSourceWindows([reviewUuid])
+			.catch((error) => this.logService.warn("[Whiteboard] Could not close source windows:", error));
 		const keys = [...this.inputs.keys()].filter(
 			(key) =>
 				key === reviewUuid ||

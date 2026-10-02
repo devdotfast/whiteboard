@@ -1,6 +1,9 @@
+import * as stylex from "@stylexjs/stylex";
 import { useEffect, useRef, useState } from "react";
 
+import { controlStyles } from "./controls-styles";
 import { CopyIcon, copyText } from "./copy-text";
+import { promptStyles } from "./prompt-styles";
 
 /** What the review covers. This is the only choice the reader makes. */
 export type PromptKind = "change" | "architecture";
@@ -70,9 +73,9 @@ export function PromptCard() {
   };
 
   return (
-    <section className="review-home-prompt-card" aria-label="Whiteboard prompt">
+    <section {...stylex.props(styles.card)} aria-label="Whiteboard prompt">
       <div
-        className="review-home-prompt-tabs"
+        {...stylex.props(controlStyles.segmented, promptStyles.tabs)}
         role="group"
         aria-label="What to review"
       >
@@ -80,7 +83,11 @@ export function PromptCard() {
           <button
             key={tab}
             type="button"
-            className={kind === tab ? "is-active" : undefined}
+            {...stylex.props(
+              controlStyles.segment,
+              controlStyles.segmentLarge,
+              kind === tab && controlStyles.segmentActive,
+            )}
             aria-pressed={kind === tab}
             onClick={() => selectKind(tab)}
           >
@@ -88,11 +95,11 @@ export function PromptCard() {
           </button>
         ))}
       </div>
-      <pre className="review-home-prompt-body">{PROMPTS[kind]}</pre>
-      <div className="review-home-prompt-actions">
+      <pre {...stylex.props(promptStyles.body)}>{PROMPTS[kind]}</pre>
+      <div {...stylex.props(promptStyles.actions)}>
         <button
           type="button"
-          className="review-home-prompt-copy"
+          {...stylex.props(promptStyles.copy)}
           aria-live="polite"
           aria-label={copied ? "Prompt copied" : "Copy prompt"}
           onClick={copyPrompt}
@@ -120,3 +127,14 @@ function readStoredPromptKind(): PromptKind {
 
   return "change";
 }
+
+const styles = stylex.create({
+  // It sits inside an accordion step, which already draws the surface, so it
+  // adds no frame of its own.
+  card: {
+    display: "flex",
+    flexDirection: "column",
+    width: "min(720px, 100%)",
+    margin: 0,
+  },
+});

@@ -10,7 +10,13 @@ export const phase = 1;
 
 export const options = {
   settings: { "review.experimental.structuralDiff.enabled": true },
-  env: { REVIEW_DIFFR_BINARY: "", GEMINI_API_KEY: "", GOOGLE_API_KEY: "" },
+  env: {
+    REVIEW_DIFFR_BINARY: "",
+    GEMINI_API_KEY: "",
+    GOOGLE_API_KEY: "",
+    OPENAI_API_KEY: "",
+    ANTHROPIC_API_KEY: "",
+  },
   async beforeLaunch(ctx) {
     ctx.env.XDG_CONFIG_HOME = path.join(ctx.root, "config");
     await mkdir(path.join(ctx.repo, "tests"), { recursive: true });

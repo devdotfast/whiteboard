@@ -3,19 +3,24 @@ import type {
   ReviewInlineEditorHeightMode,
   ReviewInlineEditorRange,
 } from "@dev.fast/review-protocol";
-import { useEffect, useMemo, useRef } from "react";
-
 import {
   type DiffSelection,
   selectionKey,
   sourceAnchor,
-} from "../../src/lens-selection";
-import type { ReviewComponentProps } from "../../src/review-document-data";
-import { type FileLineRange, codePeekSource } from "../../src/source";
+} from "@review/lens-selection";
+import type { ReviewComponentProps } from "@review/review-document-data";
+import { type FileLineRange, codePeekSource } from "@review/source";
+import * as stylex from "@stylexjs/stylex";
+import { useEffect, useMemo, useRef } from "react";
+
 import { DocumentCodeView } from "./DocumentCodeView";
+import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
+import { codeInspectorMarker, documentMarker } from "./markers.stylex";
 import { peekResolutionOutcome } from "./peek-telemetry";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
+import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
 
 /** The software-map inspector's peek input: a range on one diff side. */
@@ -81,7 +86,7 @@ export function CodePeekGroup({
         return (
           <section
             key={group.key}
-            className="code-peek"
+            {...withClass("code-peek", styles.peek)}
             data-code-rendering="inline-editor"
           >
             <DocumentCodeView
@@ -170,7 +175,10 @@ export function CodePeekCard({
 
   if (!ranges.length)
     return (
-      <section className="code-peek" role="status">
+      <section
+        {...withClass("code-peek", styles.peek, drawStyles.blockChild)}
+        role="status"
+      >
         {outcome === "failed"
           ? "Diff selection unavailable"
           : "Loading diff selection…"}
@@ -178,7 +186,10 @@ export function CodePeekCard({
     );
 
   return (
-    <section className="code-peek" data-code-rendering="inline-editor">
+    <section
+      {...withClass("code-peek", styles.peek, drawStyles.blockChild)}
+      data-code-rendering="inline-editor"
+    >
       <DocumentCodeView
         path={source.file}
         title={
@@ -231,7 +242,10 @@ function FileSnippetCard({
   onNativeFocusRef.current = onNativeFocus;
 
   return (
-    <section className="code-peek" data-code-rendering="inline-editor">
+    <section
+      {...withClass("code-peek", styles.peek, drawStyles.blockChild)}
+      data-code-rendering="inline-editor"
+    >
       <DocumentCodeView
         path={subject.file}
         title={subject.title}
@@ -353,3 +367,40 @@ function mergedCodePeekRanges(
 
   return merged;
 }
+
+const narrow = "@media (max-width: 720px)";
+
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
+
+// A block in a Review document shares the prose column.
+const inDocumentBlock = () => `${inDocument()}:is([data-review-node-id] > *)`;
+
+const inMapInspector = () =>
+  stylex.when.ancestor(":is(*)", codeInspectorMarker);
+
+// Peeks keep the `code-peek` class: document-embed-scroll.ts finds embeds by it.
+const styles = stylex.create({
+  peek: {
+    width: {
+      default: null,
+      [inDocumentBlock()]: `min(100%, ${tokens.reviewBlockMaxWidth})`,
+    },
+    minWidth: 0,
+    maxWidth: {
+      default: "100%",
+      [inDocumentBlock()]: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
+    },
+    marginInline: { default: null, [inDocumentBlock()]: "auto" },
+    overflow: { default: null, [inMapInspector()]: "visible" },
+    padding: {
+      default: null,
+      [inMapInspector()]: { default: 0, [narrow]: "0 8px 8px" },
+    },
+    overscrollBehavior: {
+      default: null,
+      [inMapInspector()]: { default: null, [narrow]: "contain" },
+    },
+    color: tokens.ink,
+    fontFamily: tokens.fontMono,
+  },
+});

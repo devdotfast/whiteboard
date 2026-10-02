@@ -1,14 +1,18 @@
+import type { ActivitySnapshot } from "@review/review-api/activity";
+import type { Block } from "@review/review-api/document";
+import * as stylex from "@stylexjs/stylex";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { ActivitySnapshot } from "../../src/review-api/activity";
-import type { Block } from "../../src/review-api/document";
 import { ApiDocument } from "./api-document";
-import { AuthoringActivityContext } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import type { AuthoringCursor } from "./authoring-cursor";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { AuthoringCursorContext } from "./courier";
+import { documentStyles } from "./document-styles";
 import { ReviewSessionProvider } from "./host/review-session";
+import { documentMarker } from "./markers.stylex";
 import type { ReviewRoots } from "./review-root-context";
 import { ReviewRootsProvider } from "./review-root-context";
 import {
@@ -17,7 +21,6 @@ import {
 } from "./review-session-test-utils";
 
 import "./styles.css";
-import "./whiteboard.css";
 
 const blocks: Block[] = [
   { id: "intro", type: "markdown", markdown: "Before the sections.\n" },
@@ -53,7 +56,7 @@ let container: HTMLElement, article: HTMLElement, root: Root;
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   article = document.createElement("article");
-  article.className = "review-document";
+  article.className = `review-document ${stylex.props(documentStyles.article, documentMarker).className}`;
   container = document.createElement("div");
   article.append(container);
   document.body.append(article);
@@ -79,15 +82,17 @@ const render = async (
 
   await act(async () =>
     root.render(
-      <ReviewSessionProvider session={testReviewSession()}>
-        <ReviewRootsProvider roots={roots}>
-          <AuthoringActivityContext.Provider value={activity}>
-            <AuthoringCursorContext.Provider value={cursor}>
-              <ApiDocument data={data} />
-            </AuthoringCursorContext.Provider>
-          </AuthoringActivityContext.Provider>
-        </ReviewRootsProvider>
-      </ReviewSessionProvider>,
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={testReviewSession()}>
+          <ReviewRootsProvider roots={roots}>
+            <AuthoringActivityContext.Provider value={activity}>
+              <AuthoringCursorContext.Provider value={cursor}>
+                <ApiDocument data={data} />
+              </AuthoringCursorContext.Provider>
+            </AuthoringActivityContext.Provider>
+          </ReviewRootsProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     ),
   );
 };
@@ -141,7 +146,7 @@ it("draws a section's ring around its chevron, not through it", async () => {
   )!;
 
   const section = node.querySelector<HTMLElement>(".review-section")!;
-  const chevron = node.querySelector(".review-section-toggle")!;
+  const chevron = node.querySelector("button[aria-expanded]")!;
   const ring = getComputedStyle(section, "::before");
 
   expect(getComputedStyle(node).outlineStyle).toBe("none");

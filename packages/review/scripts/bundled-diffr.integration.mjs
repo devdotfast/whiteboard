@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -15,7 +16,11 @@ import {
   tempDir,
 } from "../src/review-test-utils.ts";
 
-let structuralDiff, readDiffrConfig, setDiffrConfigValue;
+let structuralDiff,
+  readDiffrConfig,
+  setDiffrConfigValue,
+  saveDiffrSummarizer,
+  testDiffrSummarizer;
 
 const source = path.resolve(import.meta.dirname, "../bin/diffr");
 
@@ -123,7 +128,12 @@ describe("Relocated runtime diffr integrates with Review streams and settings", 
       );
 
     ({ structuralDiff } = await load("structural-diff"));
-    ({ readDiffrConfig, setDiffrConfigValue } = await load("diffr-config"));
+    ({
+      readDiffrConfig,
+      setDiffrConfigValue,
+      saveDiffrSummarizer,
+      testDiffrSummarizer,
+    } = await load("diffr-config"));
     await writeFile(
       path.join(trap, "diffr"),
       `#!/bin/sh\ntouch '${sentinel}'\nexit 97\n`,
@@ -201,6 +211,99 @@ describe("Relocated runtime diffr integrates with Review streams and settings", 
     assert.equal(existsSync(sentinel), false);
   });
 
+  test("a provider switch saves through the binary, clears the old key and keeps the file sparse", async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    await setDiffrConfigValue(
+      "plugins.bundled.summarize.api_key",
+      "old-secret",
+      repository,
+    );
+    const current = await readDiffrConfig(repository);
+    assert.ok(current.defaultPrompt);
+
+    const saved = await saveDiffrSummarizer(
+      {
+        enabled: false,
+        provider: "anthropic",
+        model: "claude-haiku-4-5",
+        endpoint: "",
+        systemPrompt: current.defaultPrompt,
+        tests: true,
+        apiKey: "",
+      },
+      repository,
+    );
+
+    assert.equal(saved.error, undefined);
+    assert.equal(saved.values.plugins.bundled.summarize.provider, "anthropic");
+    assert.equal(saved.credentialSource, "missing");
+
+    const file = await readFile(
+      path.join(process.env.XDG_CONFIG_HOME, "diffr", "config.toml"),
+      "utf8",
+    );
+
+    assert.doesNotMatch(file, /system_prompt/);
+  });
+
+  test("setup summarizes through a keyless OpenAI-compatible server", async () => {
+    delete process.env.OPENAI_API_KEY;
+    let received;
+
+    const server = createServer((request, response) => {
+      let body = "";
+      request.on("data", (chunk) => (body += chunk));
+      request.on("end", () => {
+        received = {
+          url: request.url,
+          authorization: request.headers.authorization,
+          body: JSON.parse(body),
+        };
+
+        const id = Number(
+          /fold (\d+):/.exec(received.body.messages[1].content)[1],
+        );
+
+        const content = JSON.stringify({
+          summaries: [
+            {
+              id,
+              summary: "",
+              pseudocode: "count and average positive values",
+            },
+          ],
+        });
+
+        response.setHeader("content-type", "application/json");
+        response.end(JSON.stringify({ choices: [{ message: { content } }] }));
+      });
+    });
+
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+    try {
+      const summary = await testDiffrSummarizer(
+        {
+          enabled: true,
+          provider: "openai",
+          model: "local-model",
+          endpoint: `http://127.0.0.1:${server.address().port}/v1`,
+          systemPrompt: "Be terse.",
+          tests: true,
+          apiKey: "",
+        },
+        repository,
+      );
+
+      assert.equal(summary, "count and average positive values");
+      assert.equal(received.url, "/v1/chat/completions");
+      assert.equal(received.authorization, undefined);
+      assert.equal(received.body.model, "local-model");
+      assert.equal(received.body.messages[0].content, "Be terse.");
+    } finally {
+      server.close();
+    }
+  });
   test("an explicit executable override takes precedence over the bundle", async () => {
     const override = path.join(root, "override");
     await writeFile(

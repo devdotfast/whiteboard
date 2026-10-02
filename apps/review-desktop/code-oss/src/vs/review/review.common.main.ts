@@ -9,6 +9,10 @@ import { getColorRegistry } from "../platform/theme/common/colorUtils.js";
 import { agentsPanelBackground } from "../workbench/common/agentTheme.js";
 import { PANEL_BACKGROUND } from "../workbench/common/theme.js";
 getColorRegistry().updateDefaultColor(PANEL_BACKGROUND, agentsPanelBackground);
+import { ImplicitActivationEvents } from "../platform/extensionManagement/common/implicitActivationEvents.js";
+import { rewriteReviewActivationEvents } from "./common/reviewWorkspaceLanguageActivation.js";
+// Before any extension is scanned: workspace-bound language extensions wait for the review checkout.
+ImplicitActivationEvents.setRewrite(rewriteReviewActivationEvents);
 import "./browser/parts/canvas/reviewCanvasEditor.contribution.js";
 import "./browser/parts/canvas/reviewFind.contribution.js";
 import "./browser/reviewCommunity.contribution.js";
@@ -57,3 +61,4 @@ registerSingleton(IReviewCanvasPartsService, ReviewCanvasParts, InstantiationTyp
 registerSingleton(IReviewExplorerPartsService, ReviewExplorerParts, InstantiationType.Eager);
 
 import "./contrib/sharing/reviewSharing.contribution.js";
+import "./contrib/notifications/reviewDoneNotification.contribution.js";

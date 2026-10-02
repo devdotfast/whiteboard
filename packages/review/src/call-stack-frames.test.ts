@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { type PeekableAnchorRef, calls } from "./authoring";
-import { callStackFrames, frameIdentity, frameName } from "./call-stack-frames";
+import { callStackFrames, frameIdentity } from "./call-stack-frames";
 import { selectSource } from "./lens-selection";
 
 const anchor = (id: string): PeekableAnchorRef => ({
@@ -49,7 +49,7 @@ describe("callStackFrames", () => {
   });
 });
 
-describe("frame identity and name", () => {
+describe("frame identity", () => {
   it("prefers the explicit key and falls back to the source range", () => {
     const source = {
       file: "src/a.ts",
@@ -62,7 +62,5 @@ describe("frame identity and name", () => {
     expect(frameIdentity({ source })).not.toBe(
       frameIdentity({ source: { ...source, end: { side: "head", line: 5 } } }),
     );
-    expect(frameName({ id: "x", source })).toBe("x");
-    expect(frameName({ source })).toBe("a.ts");
   });
 });

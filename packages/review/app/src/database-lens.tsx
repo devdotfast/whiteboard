@@ -1,25 +1,37 @@
+import { radius } from "@canvas/scale.stylex";
+import { Chip } from "@canvas/ui/chip";
+import { EmptyState } from "@canvas/ui/empty-state";
 import { type JsonValue, isStringValue } from "@dev.fast/review-protocol";
+import type { DatabaseLensBlockProps } from "@review/database-lens-block";
+import { type DiffSelection } from "@review/lens-selection";
+import type {
+  DatabaseField,
+  DatabaseOperation,
+  DatabaseStore,
+} from "@review/review-api/document";
+import * as stylex from "@stylexjs/stylex";
 import {
   type ChangeEvent,
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useStore } from "zustand";
 
-import type { DatabaseLensBlockProps } from "../../src/database-lens-block";
-import { type DiffSelection } from "../../src/lens-selection";
-import type {
-  DatabaseField,
-  DatabaseOperation,
-  DatabaseStore,
-} from "../../src/review-api/document";
+import { createDatabaseLensStore } from "./database-lens-store";
+import {
+  type DiagramNavigationStore,
+  createDiagramNavigationStore,
+} from "./diagram-navigation-store";
+import { diagramStyles } from "./diagram-styles";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
+import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
+import { appMarker, documentMarker } from "./markers.stylex";
+import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type { GuidedTour, PeekAnchor } from "./review-panel-model";
-import { useTourPersist, useTourRestore } from "./review-view-state";
 import { formatSchemaExample } from "./software-map/c4-projection";
 import {
   type SoftwareMapDataStoreSchemaRowSnapshot,
@@ -28,6 +40,8 @@ import {
   type SoftwareMapRelationshipSnapshot,
   type SoftwareMapResolvedSnapshot,
 } from "./software-map/SoftwareMap";
+import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
 
 type OperationKind = "read" | "write";
@@ -258,14 +272,43 @@ export function DatabaseLens(block: DatabaseLensProps) {
 
   const session = useReviewSession();
 
-  const [activeUseCaseId, setActiveUseCaseId] = useState<string | null>(
-    () => useCases[0]?.id ?? null,
+  const panelStore = useReviewPanelStore();
+
+  const storageKey = session.storageKey("database-lens", lensId);
+  const useCaseIdsKey = JSON.stringify(useCases.map((useCase) => useCase.id));
+
+  const lensState = useMemo(
+    () =>
+      createDatabaseLensStore(
+        storageKey,
+        useCases.map((useCase) => useCase.id),
+      ),
+    [storageKey, useCaseIdsKey],
   );
+
+  const activeUseCaseId = useStore(lensState, (state) => state.activeUseCaseId);
+  const { setActiveUseCaseId } = lensState.getState();
 
   const activeUseCase =
     useCases.find((useCase) => useCase.id === activeUseCaseId) ??
     useCases[0] ??
     null;
+
+  const diagramKey = session.storageKey(
+    "database-diagram",
+    lensId,
+    activeUseCase?.id,
+  );
+
+  const navigation = useMemo(
+    () =>
+      createDiagramNavigationStore(
+        diagramKey,
+        activeUseCase?.id,
+        initialDatabaseC4ExpandedNodeIds(activeUseCase?.operations ?? []),
+      ),
+    [diagramKey],
+  );
 
   const tourEntries: GuidedTour[] = useMemo(
     () =>
@@ -289,43 +332,42 @@ export function DatabaseLens(block: DatabaseLensProps) {
     [lensId, title, useCases],
   );
 
-  const restoredTour = useTourRestore(tourEntries);
-
-  // The tour IS the fullscreen mode, exactly as for sequence diagrams: the
-  // lens card becomes the stage and GuidedTourPanel docks beside it.
-  const [tourState, setTourState] = useState<{
-    anchor: string;
-    revealRequest: number;
-  } | null>(null);
-
-  const tourAnchor = tourState?.anchor ?? null;
-  const tourOpen = tourState !== null;
-
-  useEffect(() => {
-    if (!restoredTour) return;
-
-    const restoredUseCase = useCases.find(
-      (useCase) => tourIdFor(lensId, useCase.id) === restoredTour.tour.id,
-    );
-
-    if (restoredUseCase) setActiveUseCaseId(restoredUseCase.id);
-    setTourState({ anchor: restoredTour.activeAnchor, revealRequest: 0 });
-  }, [lensId, restoredTour, useCases]);
-
   const tourForUseCase = (useCase: ParsedUseCase) =>
     tourEntries.find((tour) => tour.id === tourIdFor(lensId, useCase.id)) ??
     null;
 
+  const activeTour = activeUseCase ? tourForUseCase(activeUseCase) : null;
+  const activeTourId = activeTour?.id ?? null;
+
+  // The tour IS the fullscreen mode, exactly as for sequence diagrams: the
+  // lens card becomes the stage and GuidedTourPanel docks beside it.
+  const tourState = useReviewPanel((state) =>
+    activeTour &&
+    state.overlayTour?.tourId === activeTour.id &&
+    activeTour.stops.some(
+      (stop) => stop.anchor.id === state.overlayTour!.anchor,
+    )
+      ? state.overlayTour
+      : null,
+  );
+
+  const tourAnchor = tourState?.anchor ?? null;
+  const tourOpen = tourState !== null;
+
   const openUseCase = (useCase: ParsedUseCase) => {
     setActiveUseCaseId(useCase.id);
     const firstAnchor = useCase.operations[0]?.id;
+
     // Inline, the select only switches the diagram; with the tour open it
     // stays fullscreen and steps onto the new use case's tour.
-    setTourState((state) =>
-      state && firstAnchor
-        ? { anchor: firstAnchor, revealRequest: state.revealRequest + 1 }
-        : state,
-    );
+    if (tourOpen && firstAnchor) {
+      panelStore
+        .getState()
+        .openOverlayTour(
+          { tourId: tourIdFor(lensId, useCase.id), kind: "database" },
+          firstAnchor,
+        );
+    }
   };
 
   const handleUseCaseChange = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -335,10 +377,6 @@ export function DatabaseLens(block: DatabaseLensProps) {
 
     if (nextUseCase) openUseCase(nextUseCase);
   };
-
-  const activeTour = activeUseCase ? tourForUseCase(activeUseCase) : null;
-  const activeTourId = activeTour?.id ?? null;
-  useTourPersist(tourOpen ? activeTour : null, tourAnchor);
 
   const openLensTour = useCallback(
     (anchor?: string) => {
@@ -359,55 +397,44 @@ export function DatabaseLens(block: DatabaseLensProps) {
         });
       }
 
-      setTourState((state) => ({
-        anchor: nextAnchor,
-        revealRequest: (state?.revealRequest ?? 0) + 1,
-      }));
+      panelStore
+        .getState()
+        .openOverlayTour(
+          { tourId: activeTour.id, kind: "database" },
+          nextAnchor,
+        );
     },
-    [activeTour, activeUseCase, session, tourAnchor, tourOpen],
+    [activeTour, activeUseCase, panelStore, session, tourAnchor, tourOpen],
   );
 
-  const closeTour = useCallback(() => setTourState(null), []);
+  const { closeOverlayTour: closeTour, moveOverlayTour: changeTourAnchor } =
+    panelStore.getState();
 
-  const changeTourAnchor = useCallback(
-    (anchor: string, options: { reveal: boolean }) => {
-      setTourState((state) =>
-        state
-          ? {
-              anchor,
-              revealRequest: options.reveal
-                ? state.revealRequest + 1
-                : state.revealRequest,
-            }
-          : state,
-      );
-    },
-    [],
-  );
+  const { portalTarget } = useDiagramTourShell(tourOpen, closeTour);
 
-  const {
-    overlayRef,
-    portalTarget,
-    paneResize: tourPaneResize,
-  } = useDiagramTourShell(tourOpen, closeTour);
-
+  // database-lens is a marker: the tutorial and document-embed-scroll.ts find it.
   const renderLensFigure = (stage: boolean) => (
     <figure
-      className="database-lens"
+      {...withClass(
+        "database-lens",
+        styles.figure,
+        stage && styles.stage,
+        drawStyles.blockChild,
+      )}
       style={{ height: stage ? "100%" : height }}
     >
-      <header className="diagram-header database-lens-header">
-        <div className="diagram-header-main">
-          <span className="diagram-kind-badge">DB</span>
-          <span className="diagram-header-title" data-review-copy-prose>
+      <header {...stylex.props(diagramStyles.header, styles.header)}>
+        <div {...stylex.props(diagramStyles.headerMain)}>
+          <Chip>DB</Chip>
+          <span {...stylex.props(diagramStyles.title)} data-review-copy-prose>
             {title ?? "Database lens"}
           </span>
         </div>
-        <div className="diagram-header-actions">
+        <div {...stylex.props(styles.actions)}>
           {activeUseCase && (
-            <div className="database-use-case-select-target">
+            <div {...stylex.props(styles.selectTarget)}>
               <select
-                className="database-use-case-select"
+                {...stylex.props(diagramStyles.control, diagramStyles.select)}
                 aria-label="Database use case"
                 value={activeUseCase.id}
                 onChange={handleUseCaseChange}
@@ -423,7 +450,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
           {!stage && activeTourId && (
             <button
               type="button"
-              className="diagram-tour-button"
+              {...withClass("diagram-tour-button", diagramStyles.control)}
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -435,16 +462,21 @@ export function DatabaseLens(block: DatabaseLensProps) {
           )}
         </div>
       </header>
-      <div className="database-lens-diagram">
+      <div {...stylex.props(styles.diagram)}>
         {activeUseCase ? (
           <DatabaseUseCaseDiagram
+            navigation={navigation}
             useCase={activeUseCase}
             stores={stores}
             activeAnchor={stage ? tourAnchor : null}
             onOpenAnchor={(anchor) => openLensTour(anchor)}
           />
         ) : (
-          <div className="database-empty">No database use-cases declared.</div>
+          <EmptyState
+            variant="boxed"
+            xstyle={styles.empty}
+            message="No database use-cases declared."
+          />
         )}
       </div>
     </figure>
@@ -453,15 +485,12 @@ export function DatabaseLens(block: DatabaseLensProps) {
   return (
     <>
       {renderLensFigure(false)}
-      {tourOpen && activeTour && tourAnchor && portalTarget
+      {tourOpen && activeTour && portalTarget
         ? createPortal(
             <DiagramTourOverlay
               tour={activeTour}
-              activeAnchor={tourAnchor}
-              revealRequest={tourState?.revealRequest ?? 0}
-              paneWidth={tourPaneResize.width}
-              separatorProps={tourPaneResize.separatorProps}
-              overlayRef={overlayRef}
+              activeAnchor={tourState.anchor}
+              revealRequest={tourState.revealRequest}
               onActiveAnchorChange={changeTourAnchor}
               onClose={closeTour}
             >
@@ -487,11 +516,13 @@ function databaseUseCaseOptionLabel(useCase: ParsedUseCase) {
 }
 
 function DatabaseUseCaseDiagram({
+  navigation,
   useCase,
   stores,
   activeAnchor,
   onOpenAnchor,
 }: {
+  navigation: DiagramNavigationStore;
   useCase: ParsedUseCase;
   stores: LensStores;
   activeAnchor: string | null;
@@ -509,6 +540,7 @@ function DatabaseUseCaseDiagram({
 
   return (
     <DatabaseC4UseCaseDiagram
+      navigation={navigation}
       useCase={useCase}
       stores={stores}
       resolvedOperations={resolvedOperations}
@@ -519,31 +551,37 @@ function DatabaseUseCaseDiagram({
 }
 
 function DatabaseC4UseCaseDiagram({
+  navigation,
   useCase,
   stores,
   resolvedOperations,
   highlights,
   onOpenAnchor,
 }: {
+  navigation: DiagramNavigationStore;
   useCase: ParsedUseCase;
   stores: LensStores;
   resolvedOperations: ResolvedOperation[];
   highlights: ReturnType<typeof selectDatabaseOperationHighlights>;
   onOpenAnchor: (anchor: string) => void;
 }) {
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const selectedNodeId = useStore(navigation, (state) => state.selectedNodeId);
+
+  const expandedNodeIds = useStore(
+    navigation,
+    (state) => state.expandedNodeIds,
+  );
+
+  const { setSelectedNodeId, setExpandedNodeIds } = navigation.getState();
 
   const defaultExpandedNodeIds = useMemo(
     () => initialDatabaseC4ExpandedNodeIds(resolvedOperations),
     [resolvedOperations],
   );
 
-  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(
-    () => new Set(defaultExpandedNodeIds),
-  );
-
-  const seededDefaultNodeIdsRef = useRef<Set<string>>(
-    new Set(defaultExpandedNodeIds),
+  const seededDefaultNodeIdsRef = useMemo(
+    () => ({ current: new Set(defaultExpandedNodeIds) }),
+    [navigation],
   );
 
   const defaultExpandedNodeIdKey = useMemo(
@@ -569,7 +607,7 @@ function DatabaseC4UseCaseDiagram({
         ? current
         : next.expandedNodeIds;
     });
-  }, [defaultExpandedNodeIdKey, defaultExpandedNodeIds]);
+  }, [defaultExpandedNodeIdKey, defaultExpandedNodeIds, navigation]);
 
   const snapshot = useMemo(
     () =>
@@ -650,7 +688,7 @@ function DatabaseC4UseCaseDiagram({
   const relationshipStateById = highlights.operationStates;
 
   return (
-    <div className="database-diagram-canvas database-diagram-canvas--c4">
+    <div {...stylex.props(styles.canvas)}>
       <SoftwareMapFrame
         snapshot={frameSnapshot}
         hasResolvedSnapshot
@@ -659,6 +697,7 @@ function DatabaseC4UseCaseDiagram({
         expanded={false}
         showChrome={false}
         showFloatingActions={false}
+        variant="lens"
         interactionMode="inline"
         onSelectNode={handleSelectNode}
         onExpandNode={handleExpandNode}
@@ -1141,3 +1180,108 @@ function fieldExample(field: DatabaseField): JsonValue | undefined {
 function tourIdFor(lensId: string, useCaseId: string): string {
   return `${lensId}-${useCaseId}`;
 }
+
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
+
+// Where the theme defines --diagram-border: inside the app root.
+const inApp = () => stylex.when.ancestor(":is(*)", appMarker);
+
+const narrow = "@container review-content (max-width: 760px)";
+
+const styles = stylex.create({
+  // Inline it sits centered on the prose column, no narrower than the
+  // block measure; the tour stage fills the overlay without card chrome.
+  figure: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gridTemplateRows: "auto minmax(0, 1fr)",
+    width: {
+      default: "100%",
+      [inDocument()]: "fit-content",
+      "@media (max-width: 720px)": {
+        default: "100%",
+        [inDocument()]: "calc(100cqi - 16px)",
+      },
+    },
+    minWidth: {
+      default: null,
+      [inDocument()]: `min(${tokens.reviewBlockMaxWidth}, calc(100cqi - ${tokens.reviewDocumentPaddingInline} - ${tokens.reviewDocumentPaddingInline}))`,
+    },
+    maxWidth: {
+      default: "100%",
+      [inDocument()]: `min(${tokens.reviewInlineDiagramMaxWidth}, calc(100cqi - ${tokens.reviewDocumentPaddingInline} - ${tokens.reviewDocumentPaddingInline}))`,
+      "@media (max-width: 720px)": {
+        default: "100%",
+        [inDocument()]: "none",
+      },
+    },
+    marginBlock: "24px",
+    marginInline: { default: 0, [inDocument()]: "auto" },
+    overflow: "hidden",
+    // Without --diagram-border the border drops out whole, as the shorthand
+    // it replaces did.
+    borderWidth: { default: null, [inApp()]: "1px" },
+    borderStyle: { default: null, [inApp()]: "solid" },
+    borderColor: { default: null, [inApp()]: tokens.diagramBorder },
+    borderRadius: radius.control,
+    backgroundColor: tokens.diagramSurface,
+    boxShadow: "none",
+  },
+  stage: {
+    width: "100%",
+    minWidth: 0,
+    maxWidth: "none",
+    height: "100%",
+    minHeight: 0,
+    marginBlock: 0,
+    marginInline: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    borderRadius: 0,
+    boxShadow: "none",
+  },
+  header: {
+    justifyContent: "space-between",
+    alignItems: { default: "center", [narrow]: "flex-start" },
+    flexDirection: { default: null, [narrow]: "column" },
+    height: { default: null, [narrow]: "auto" },
+  },
+  actions: {
+    display: { default: "inline-flex", [narrow]: "grid" },
+    flex: { default: "0 1 min(58%, 460px)", [narrow]: "0 0 auto" },
+    gridTemplateColumns: { default: null, [narrow]: "minmax(0, 1fr) auto" },
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: "8px",
+    width: { default: null, [narrow]: "100%" },
+    minWidth: 0,
+  },
+  selectTarget: {
+    position: "relative",
+    display: "inline-flex",
+    flex: { default: "1 1 320px", [narrow]: "1 1 auto" },
+    alignItems: "center",
+    width: { default: null, [narrow]: "auto" },
+    minWidth: { default: "180px", [narrow]: 0 },
+    maxWidth: { default: "360px", [narrow]: "none" },
+  },
+  diagram: {
+    position: "relative",
+    overflow: "auto",
+    minWidth: 0,
+    minHeight: 0,
+    backgroundColor: tokens.diagramCanvasBg,
+  },
+  canvas: {
+    position: "relative",
+    width: "100%",
+    height: "100%",
+    minWidth: 0,
+    minHeight: 0,
+    backgroundColor: tokens.diagramCanvasBg,
+  },
+  empty: {
+    height: "100%",
+  },
+});

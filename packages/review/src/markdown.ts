@@ -1,6 +1,10 @@
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { gfmFromMarkdown } from "mdast-util-gfm";
+import { mathFromMarkdown } from "mdast-util-math";
 import { gfm } from "micromark-extension-gfm";
+import { math } from "micromark-extension-math";
+
+import { latexMath, latexMathFromMarkdown } from "./markdown-latex-math";
 
 export interface MarkdownNode {
   type: string;
@@ -34,9 +38,26 @@ export function markdownText(node: MarkdownNode): string {
 /** Shared syntax for submit-time source checks and safe Markdown rendering. */
 export function parseMarkdown(source: string): MarkdownNode {
   const tree: MarkdownNode = fromMarkdown(source, {
-    extensions: [gfm()],
-    mdastExtensions: [gfmFromMarkdown()],
+    extensions: [gfm(), math(), latexMath()],
+    mdastExtensions: [
+      gfmFromMarkdown(),
+      mathFromMarkdown(),
+      latexMathFromMarkdown(),
+    ],
   });
+
+  // `$$x$$` alone in its paragraph is a display equation written on one line.
+  for (const node of markdownNodes(tree)) {
+    const [only, ...others] = node.children ?? [];
+
+    if (
+      node.type === "paragraph" &&
+      only?.type === "inlineMath" &&
+      others.length === 0 &&
+      source.startsWith("$$", only.position?.start.offset)
+    )
+      only.type = "math";
+  }
 
   const definitions = new Map<string, MarkdownNode>();
 

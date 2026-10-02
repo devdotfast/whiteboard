@@ -1,3 +1,6 @@
+import type { AgentSelection } from "@review/agent-selection";
+import type { AskAgentId } from "@review/ask/thread-state";
+import * as stylex from "@stylexjs/stylex";
 import {
   type ReactNode,
   createContext,
@@ -8,17 +11,38 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { z } from "zod";
 
-import type { AgentSelection } from "../../src/agent-selection";
-import { copyText } from "./copy-text";
+import {
+  AskAgentMenu,
+  preferredAskAgent,
+  rememberAskAgent,
+  useAskAgents,
+} from "./ask-agent-picker";
+import { askAnchor } from "./ask-anchor";
+import { controlStyles } from "./controls-styles";
+import { copyAgentContext } from "./copy-agent-context";
 import { useReviewSession } from "./host/review-session";
+import {
+  ChatIcon,
+  ChevronDownIcon,
+  CommandKeyIcon,
+  CopyIcon,
+  ShiftKeyIcon,
+} from "./icons";
+import { useOptionalReviewPanelStore } from "./review-panel";
+import { fontSize, layer } from "./scale.stylex";
+import { themeStyles } from "./theme-styles";
 import { useToast } from "./toast";
+import { tokens } from "./tokens.stylex";
+import { Button, IconButton } from "./ui/button";
+import { surfaceStyles } from "./ui/surface";
 
 type Selection = Omit<AgentSelection, "revision"> & {
   anchor?: { x: number; y: number };
   anchorElement?: Element;
   anchorContainer?: HTMLElement;
+  /** The selected document text, read for its context only when asked. */
+  range?: Range;
 };
 
 type Select = (selection: Selection | null) => void;
@@ -38,6 +62,9 @@ export function AgentSelectionProvider({
   children: ReactNode;
 }) {
   const session = useReviewSession();
+  const panels = useOptionalReviewPanelStore();
+  // Ask needs a panel to answer in and a host that runs agents (Desktop).
+  const askAgents = useAskAgents(panels ? session : null);
   const [overlayHost, setOverlayHost] = useState<HTMLElement | null>(null);
 
   const bindOverlay = useCallback((node: HTMLSpanElement | null) => {
@@ -50,7 +77,8 @@ export function AgentSelectionProvider({
 
   const [selection, setSelection] = useState<Selection | null>(null);
   const [copiedSelection, setCopiedSelection] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const actions = useRef<HTMLDivElement>(null);
   const copying = useRef(false);
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const pointerElement = useRef<Element | null>(null);
@@ -95,19 +123,15 @@ export function AgentSelectionProvider({
           ...value,
           anchorContainer: container ?? undefined,
           anchor: {
-            x: Math.max(
-              8,
-              Math.min(
-                anchor.x - (rect?.left ?? 0),
-                (rect?.width || window.innerWidth) - 220,
-              ),
-            ),
-            y: anchor.y - (rect?.top ?? 0) - 38,
+            x: Math.max(8, anchor.x - (rect?.left ?? 0)),
+            // Above the selection: the toolbar's 34px and a 2px gap.
+            y: anchor.y - (rect?.top ?? 0) - 36,
           },
         };
       }
 
       if (!value) setCopiedSelection(null);
+      setChoosing(false);
       setSelection(value);
     },
     [overlayHost],
@@ -153,50 +177,68 @@ export function AgentSelectionProvider({
   const copy = useCallback(async () => {
     if (!selection || copying.current) return;
     copying.current = true;
-    setBusy(true);
 
     const {
       anchor: _anchor,
       anchorElement: _anchorElement,
       anchorContainer: _anchorContainer,
+      range: _range,
       ...payload
     } = selection;
 
+    setCopiedSelection(
+      JSON.stringify([
+        selection.target,
+        selection.selectedDiff,
+        selection.apiSource,
+      ]),
+    );
+
     try {
-      const response = await session.fetch("/copy-context", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...payload, revision }),
-      });
-
-      if (!response.ok) throw new Error("Context unavailable");
-
-      const { text } = z
-        .object({ text: z.string() })
-        .parse(await response.json());
-
-      if (!(await copyText(text))) throw new Error("Clipboard unavailable");
-      setCopiedSelection(
-        JSON.stringify([
-          selection.target,
-          selection.selectedDiff,
-          selection.apiSource,
-        ]),
-      );
+      await copyAgentContext(session, { ...payload, revision });
       setToast({
         kind: "success",
         text: "Selection copied to clipboard. Paste into your agent to chat about it.",
       });
     } catch {
+      setCopiedSelection(null);
       setToast({
         kind: "error",
         text: "Could not copy selection. Please try again.",
       });
     } finally {
       copying.current = false;
-      setBusy(false);
     }
   }, [selection, session, revision]);
+
+  const askAgent = askAgents && preferredAskAgent(session, askAgents);
+
+  const ask = useCallback(
+    (agent?: AskAgentId) => {
+      if (!selection || !panels) return;
+
+      const {
+        anchor: _anchor,
+        anchorElement: _anchorElement,
+        anchorContainer: _anchorContainer,
+        range,
+        ...payload
+      } = selection;
+
+      // The saved conversation marks this passage by its place in its
+      // block, so its pin finds it again in later versions.
+      const anchor =
+        payload.target.kind === "text" && range && askAnchor(range);
+
+      if (payload.target.kind === "text" && anchor)
+        payload.target = { ...payload.target, anchor };
+
+      if (agent) rememberAskAgent(session, agent);
+      panels.getState().openAsk({ ...payload, revision }, agent);
+      select(null);
+    },
+    [selection, panels, revision, select, session],
+  );
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -213,13 +255,27 @@ export function AgentSelectionProvider({
         void copy();
       }
 
+      if (
+        selection &&
+        askAgent &&
+        event.metaKey &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        event.key.toLowerCase() === "l"
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        ask();
+      }
+
       if (event.key === "Escape") select(null);
     };
 
     window.addEventListener("keydown", keydown, true);
 
     return () => window.removeEventListener("keydown", keydown, true);
-  }, [selection, copy, select]);
+  }, [selection, copy, select, askAgent, ask]);
 
   return (
     <SelectionContext.Provider value={select}>
@@ -236,27 +292,72 @@ export function AgentSelectionProvider({
                   selection.apiSource,
                 ]) &&
               createPortal(
-                <button
-                  type="button"
-                  className="copy-for-agent-popover"
-                  aria-keyshortcuts="Meta+Shift+C"
-                  aria-label="Copy for Agent"
-                  disabled={busy}
-                  style={{
-                    position: "absolute",
-                    left: selection.anchor?.x,
-                    top: selection.anchor?.y,
-                  }}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => void copy()}
+                // The toolbar starts at the selection, after a lead that
+                // gives way so it never runs past the container's edge.
+                <div
+                  {...stylex.props(themeStyles.vars, styles.lane)}
+                  style={{ top: selection.anchor?.y }}
                 >
-                  <span>{busy ? "Copying…" : "Copy for Agent"}</span>
-                  <kbd aria-hidden="true">
-                    <span>⇧</span>
-                    <span>⌘</span>
-                    <span>C</span>
-                  </kbd>
-                </button>,
+                  <span
+                    {...stylex.props(styles.lead)}
+                    style={{ flexBasis: selection.anchor?.x }}
+                  />
+                  <div
+                    ref={actions}
+                    {...stylex.props(surfaceStyles.popover, styles.actions)}
+                    onMouseDown={(event) => event.preventDefault()}
+                  >
+                    {askAgents && askAgent ? (
+                      <>
+                        <Button
+                          variant="primary"
+                          aria-keyshortcuts="Meta+L"
+                          onClick={() => ask()}
+                        >
+                          <ChatIcon xstyle={controlStyles.inlineIcon} />
+                          <span>Ask {askAgent.name}</span>
+                          <kbd aria-hidden="true" {...stylex.props(styles.key)}>
+                            <CommandKeyIcon />L
+                          </kbd>
+                        </Button>
+                        <IconButton
+                          aria-label="Ask another agent"
+                          aria-haspopup="menu"
+                          aria-expanded={choosing}
+                          onClick={() => setChoosing((value) => !value)}
+                        >
+                          <ChevronDownIcon />
+                        </IconButton>
+                        <span
+                          {...stylex.props(styles.divider)}
+                          aria-hidden="true"
+                        />
+                        {choosing ? (
+                          <AskAgentMenu
+                            agents={askAgents}
+                            current={askAgent.id}
+                            within={actions}
+                            onPick={ask}
+                            onDismiss={() => setChoosing(false)}
+                          />
+                        ) : null}
+                      </>
+                    ) : null}
+                    <Button
+                      variant="ghost"
+                      aria-keyshortcuts="Meta+Shift+C"
+                      aria-label="Copy ref"
+                      onClick={() => void copy()}
+                    >
+                      <CopyIcon xstyle={controlStyles.inlineIcon} />
+                      <span>Copy ref</span>
+                      <kbd aria-hidden="true" {...stylex.props(styles.key)}>
+                        <ShiftKeyIcon />
+                        <CommandKeyIcon />C
+                      </kbd>
+                    </Button>
+                  </div>
+                </div>,
                 selection.anchorContainer ?? overlayHost,
               )}
             {toast}
@@ -266,3 +367,48 @@ export function AgentSelectionProvider({
     </SelectionContext.Provider>
   );
 }
+
+// The selection's agent actions, beside the selected text: Ask the preferred
+// agent (or pick another), or copy the selection for an agent elsewhere.
+const styles = stylex.create({
+  // Spans its container, short of the right edge; only the toolbar takes
+  // the pointer. Outside .review-app it brings the chrome tokens.
+  lane: {
+    position: "absolute",
+    left: 0,
+    right: "8px",
+    zIndex: layer.agentSelection,
+    display: "flex",
+    pointerEvents: "none",
+  },
+  lead: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  actions: {
+    position: "relative",
+    flex: "none",
+    pointerEvents: "auto",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "2px",
+    padding: "4px",
+    whiteSpace: "nowrap",
+  },
+  key: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "1px",
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.micro,
+    lineHeight: "14px",
+    opacity: 0.65,
+  },
+  divider: {
+    flex: "0 0 auto",
+    width: "1px",
+    height: "16px",
+    backgroundColor: tokens.ruleSoft,
+  },
+});

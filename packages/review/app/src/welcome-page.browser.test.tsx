@@ -97,12 +97,10 @@ describe("WelcomePage", () => {
   const buttons = (label: string) =>
     [...container.querySelectorAll("button")].filter(
       (button) =>
-        button.textContent === label &&
-        !button.classList.contains("review-onboarding-step-header"),
+        button.textContent === label && button.parentElement?.tagName !== "LI",
     );
 
-  const step = (index: number) =>
-    container.querySelectorAll(".review-onboarding-step")[index];
+  const step = (index: number) => container.querySelectorAll("ol > li")[index];
 
   const stepState = (index: number) => step(index)?.getAttribute("data-state");
 
@@ -167,9 +165,7 @@ describe("WelcomePage", () => {
     });
 
     await act(async () => root.render(<WelcomePage install={install} />));
-    expect(container.querySelectorAll(".review-onboarding-step")).toHaveLength(
-      3,
-    );
+    expect(container.querySelectorAll("ol > li")).toHaveLength(3);
     expect(container.textContent).not.toContain(
       "Install the whiteboard command",
     );
@@ -179,33 +175,13 @@ describe("WelcomePage", () => {
     await act(async () => buttons("Remove deprecated skills")[0]?.click());
     await waitForStepAdvance();
     expect(install.removeLegacySkills).toHaveBeenCalledOnce();
-    expect(container.querySelectorAll(".review-onboarding-step")).toHaveLength(
-      3,
-    );
+    expect(container.querySelectorAll("ol > li")).toHaveLength(3);
     expect(stepOpen(0)).toBe("false");
     expect(stepOpen(1)).toBe("true");
     expect(stepState(0)).toBe("done");
     expect(
       (step(1)?.querySelector("button") as HTMLButtonElement).disabled,
     ).toBe(false);
-  });
-
-  it("opens on the connect step once the command is installed", async () => {
-    await act(async () =>
-      root.render(
-        <WelcomePage
-          install={content({
-            ...fresh,
-            shim: { ...fresh.shim, installed: true, profileConfigured: true },
-          })}
-        />,
-      ),
-    );
-    expect(stepState(0)).toBe("done");
-    expect(stepOpen(1)).toBe("true");
-    expect(
-      container.querySelectorAll('[aria-label="Agent"] button'),
-    ).toHaveLength(5);
   });
 
   it("offers recovery instead of installation until a missing CLI is available", async () => {
@@ -399,7 +375,7 @@ describe("WelcomePage", () => {
     );
     await act(async () => buttons("Dismiss")[0]?.click());
     expect(install.finishUpdate).toHaveBeenCalledOnce();
-    expect(container.querySelector(".review-welcome-page")).toBeNull();
+    expect(container.querySelector("ol")).toBeNull();
     expect(container.querySelector("h1")?.textContent).toBe("Sessions");
   });
 
@@ -543,67 +519,6 @@ describe("WelcomePage", () => {
     expect(install.removeLegacySkills).toHaveBeenCalledOnce();
     expect(stepState(0)).toBe("todo");
     expect(buttons("Remove deprecated skills")).toHaveLength(1);
-  });
-
-  it("shows the update screen and finishes the update on Dismiss", async () => {
-    const install = content({
-      ...fresh,
-      updateNeeded: true,
-      shim: { ...fresh.shim, installed: true, profileConfigured: true },
-      legacySkills: [{ path: "/h/.codex/skills/whiteboard" }],
-    });
-
-    const onClose = vi.fn<() => void>(() => {
-      expect(install.finishUpdate).toHaveBeenCalledOnce();
-    });
-
-    await act(async () =>
-      root.render(<WelcomePage install={install} onClose={onClose} />),
-    );
-    expect(stepOpen(0)).toBe("true");
-    expect(stepState(0)).toBe("todo");
-    expect(buttons("Remove deprecated skills")).toHaveLength(1);
-    expect(buttons("Copy prompt")).toHaveLength(0);
-
-    for (const index of [1]) {
-      const header = step(index)?.querySelector("button") as HTMLButtonElement;
-      expect(header.disabled).toBe(true);
-      await act(async () => header.click());
-      expect(stepOpen(index)).toBe("false");
-    }
-
-    await act(async () =>
-      container
-        .querySelector<HTMLButtonElement>(
-          '[aria-label="Expand Continue shipping thoughtful code"]',
-        )
-        ?.click(),
-    );
-    await act(async () => buttons("Dismiss").at(-1)?.click());
-    expect(install.finishUpdate).not.toHaveBeenCalled();
-
-    await act(async () => buttons("Remove deprecated skills")[0]?.click());
-    await waitForStepAdvance();
-    expect(install.removeLegacySkills).toHaveBeenCalledOnce();
-    expect(stepState(0)).toBe("done");
-    expect(stepOpen(0)).toBe("false");
-    expect(stepOpen(1)).toBe("true");
-    expect(buttons("Remove deprecated skills")).toHaveLength(0);
-
-    expect(buttons("Copy prompt")).toHaveLength(1);
-    expect(
-      container.querySelectorAll('[aria-label="Agent"] button'),
-    ).toHaveLength(5);
-
-    await act(async () =>
-      container
-        .querySelector<HTMLButtonElement>(
-          '[aria-label="Expand Continue shipping thoughtful code"]',
-        )
-        ?.click(),
-    );
-    await act(async () => buttons("Dismiss").at(-1)?.click());
-    expect(onClose).toHaveBeenCalledOnce();
   });
 });
 

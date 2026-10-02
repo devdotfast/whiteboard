@@ -1,37 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  c4EdgePointsFromSections,
-  positionC4EdgeLabels,
-} from "./c4-edge-label-geometry";
+import { positionC4EdgeLabels } from "./c4-edge-label-geometry";
 
 describe("SoftwareMap edge label geometry", () => {
-  it("uses routed C4 edge sections without schema endpoint rewrites", () => {
-    const points = c4EdgePointsFromSections([
-      {
-        startPoint: { x: 100, y: 100 },
-        bendPoints: [
-          { x: 160, y: 100 },
-          { x: 160, y: 220 },
-        ],
-        endPoint: { x: 260, y: 220 },
-      },
-    ]);
-
-    expect(points).toEqual([
-      { x: 100, y: 100 },
-      { x: 160, y: 100 },
-      { x: 160, y: 220 },
-      { x: 260, y: 220 },
-    ]);
-
-    for (let index = 1; index < points.length; index += 1) {
-      const previous = points[index - 1]!;
-      const next = points[index]!;
-      expect(previous.x === next.x || previous.y === next.y).toBe(true);
-    }
-  });
-
   it("keeps positioned C4 edge labels on their edges while avoiding overlaps", () => {
     const edgeSections = new Map([
       [

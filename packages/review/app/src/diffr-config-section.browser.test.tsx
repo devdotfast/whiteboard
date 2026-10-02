@@ -1,4 +1,5 @@
 import {
+  type JsonObject,
   type ReviewDiffrConfig,
   type ReviewDiffrConfigActions,
 } from "@dev.fast/review-protocol";
@@ -19,6 +20,30 @@ afterEach(async () => {
 function config(): ReviewDiffrConfig {
   return {
     credentialSource: "config",
+    providers: [
+      [
+        "gemini",
+        "Gemini",
+        "gemini-3.8-flash",
+        "https://generativelanguage.googleapis.com",
+      ],
+      ["openai", "OpenAI", "gpt-6-luna", "https://api.openai.com/v1"],
+      [
+        "anthropic",
+        "Anthropic",
+        "claude-haiku-4-5",
+        "https://api.anthropic.com",
+      ],
+      ["mistral", "Mistral", "mistral-small", "https://api.mistral.ai/v1"],
+    ].map(([id, title, model, endpoint]) => ({
+      id,
+      title,
+      model,
+      endpoint,
+      keyVariables: [],
+      keylessCustomEndpoint: id === "openai",
+    })),
+    defaultPrompt: "Default prompt.",
     values: {
       plugins: {
         bundled: {
@@ -28,15 +53,21 @@ function config(): ReviewDiffrConfig {
           "removed-runs": { enabled: true },
           group: { enabled: true },
           "hide-files": { enabled: true, deleted: true, tags: ["test"] },
-          summarize: { enabled: false, model: "test-model", tests: true },
+          summarize: {
+            enabled: false,
+            provider: "gemini",
+            model: "test-model",
+            tests: true,
+            system_prompt: "Default prompt.",
+          },
         },
       },
     },
   };
 }
 
-async function mount() {
-  const current = config();
+async function mount(overrides: Partial<ReviewDiffrConfig> = {}) {
+  const current = { ...config(), ...overrides };
 
   const actions: ReviewDiffrConfigActions = {
     read: vi.fn<ReviewDiffrConfigActions["read"]>(async () => current),
@@ -53,7 +84,10 @@ async function mount() {
             bundled: {
               summarize: {
                 enabled: input.enabled,
+                provider: input.provider,
                 model: input.model,
+                endpoint: input.endpoint,
+                system_prompt: input.systemPrompt,
                 tests: input.tests,
               },
             },
@@ -166,7 +200,10 @@ test("tests draft settings without saving, then saves and clears the key", async
   });
   expect(actions.saveSummarizer).toHaveBeenCalledWith({
     enabled: false,
+    provider: "gemini",
     model: "test-model",
+    endpoint: "",
+    systemPrompt: "Default prompt.",
     tests: true,
     apiKey: "test-secret",
   });
@@ -256,4 +293,135 @@ test("shows partial save errors with authoritative values and a reload prompt", 
   await expect
     .element(page.getByRole("button", { name: "Reload window", exact: true }))
     .toBeVisible();
+});
+
+test("defaults to Gemini and switching provider resets the model and key", async () => {
+  const { actions } = await mount();
+  await open();
+  await expect
+    .element(page.getByRole("radio", { name: "Gemini" }))
+    .toHaveAttribute("aria-checked", "true");
+  await act(async () => {
+    await page.getByLabelText("API key", { exact: true }).fill("typed-secret");
+  });
+  await act(async () => {
+    await page.getByRole("radio", { name: "Anthropic" }).click();
+  });
+  await expect
+    .element(page.getByLabelText("Model", { exact: true }))
+    .toHaveValue("claude-haiku-4-5");
+  await expect
+    .element(page.getByLabelText("API key", { exact: true }))
+    .toHaveValue("");
+  await expect
+    .element(page.getByText("Saving clears the key saved for Gemini."))
+    .toBeVisible();
+  await act(async () => {
+    await page
+      .getByLabelText("Endpoint URL", { exact: true })
+      .fill(" https://proxy.example/anthropic ");
+  });
+  await act(async () => {
+    await page.getByRole("button", { name: "Save summaries" }).click();
+  });
+  expect(actions.saveSummarizer).toHaveBeenCalledWith({
+    enabled: false,
+    provider: "anthropic",
+    model: "claude-haiku-4-5",
+    endpoint: " https://proxy.example/anthropic ",
+    systemPrompt: "Default prompt.",
+    tests: true,
+    apiKey: "",
+  });
+});
+
+test("edits the prompt, links its default, and resets it", async () => {
+  const { actions } = await mount();
+  await open();
+  const prompt = page.getByLabelText("Prompt", { exact: true });
+  await expect.element(prompt).toHaveValue("Default prompt.");
+  await expect
+    .element(page.getByText("Default", { exact: true }))
+    .toBeVisible();
+  await act(async () => {
+    await prompt.fill("Be terse.");
+  });
+  await expect
+    .element(page.getByText("Customized", { exact: true }))
+    .toBeVisible();
+  await act(async () => {
+    await page.getByRole("button", { name: "Test setup" }).click();
+  });
+  expect(actions.testSummarizer).toHaveBeenCalledWith(
+    expect.objectContaining({ systemPrompt: "Be terse." }),
+  );
+  await act(async () => {
+    await page.getByRole("button", { name: "Reset to default" }).click();
+  });
+  await expect.element(prompt).toHaveValue("Default prompt.");
+  await expect
+    .element(page.getByRole("button", { name: "Save summaries" }))
+    .toBeDisabled();
+});
+
+test("switching provider without a saved key does not promise to clear one", async () => {
+  await mount({ credentialSource: "missing" });
+  await open();
+  await act(async () => {
+    await page.getByRole("radio", { name: "OpenAI" }).click();
+  });
+  await expect
+    .element(
+      page.getByText(
+        "Enter a key for OpenAI, or leave blank to use its environment variable.",
+      ),
+    )
+    .toBeVisible();
+  expect(document.body.textContent).not.toContain("Saving clears");
+});
+
+test("switching provider clears a custom endpoint, and a new endpoint warns about the saved key", async () => {
+  const { values } = config();
+
+  const summarize: JsonObject = {
+    enabled: false,
+    provider: "openai",
+    model: "test-model",
+    endpoint: "https://openrouter.ai/api/v1",
+    tests: true,
+    system_prompt: "Default prompt.",
+  };
+
+  await mount({ values: { ...values, plugins: { bundled: { summarize } } } });
+  await open();
+  const endpoint = page.getByLabelText("Endpoint URL", { exact: true });
+  await expect.element(endpoint).toHaveValue("https://openrouter.ai/api/v1");
+  await act(async () => {
+    await endpoint.fill("https://other.example/v1");
+  });
+  await expect
+    .element(
+      page.getByText(
+        "Saving clears the saved key, since the endpoint changed.",
+      ),
+    )
+    .toBeVisible();
+  await act(async () => {
+    await page.getByRole("radio", { name: "Anthropic" }).click();
+  });
+  await expect.element(endpoint).toHaveValue("");
+});
+
+test("offers whatever providers diffr describes, with their defaults", async () => {
+  await mount();
+  await open();
+  await act(async () => {
+    await page.getByRole("radio", { name: "Mistral" }).click();
+  });
+  await expect
+    .element(page.getByLabelText("Model", { exact: true }))
+    .toHaveValue("mistral-small");
+  await expect
+    .element(page.getByLabelText("Endpoint URL", { exact: true }))
+    .toHaveAttribute("placeholder", "https://api.mistral.ai/v1");
 });

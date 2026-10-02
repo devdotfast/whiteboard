@@ -1,17 +1,23 @@
+import { fontSize, radius } from "@canvas/scale.stylex";
+import { Button } from "@canvas/ui/button";
 import {
   type ReviewCanvasInstallContent,
   type ReviewCliInstallStatus,
   type ReviewCliInstallTarget,
   ReviewCliInstallTargetSchema,
 } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import { useEffect, useRef, useState } from "react";
 
 import { AGENT_LOGOS } from "./agent-logos";
 import { cliInstallReady } from "./cli-install-status";
+import { controlStyles } from "./controls-styles";
 import { CopyIcon, copyText } from "./copy-text";
 import { DrawnCheckIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
 import { OptionMenu } from "./option-menu";
+import { promptStyles } from "./prompt-styles";
+import { tokens } from "./tokens.stylex";
 
 export const TARGET_LABELS: Record<ReviewCliInstallTarget, string> = {
   claude: "Claude Code",
@@ -123,8 +129,8 @@ export function ConnectCard({
 
   if (status.legacySkills.length > 0 || !cliInstallReady(status)) {
     return (
-      <section className="review-connect" aria-label="Connect your agents">
-        <p className="review-connect-note">
+      <section aria-label="Connect your agents">
+        <p {...stylex.props(styles.note)}>
           {status.legacySkills.length > 0
             ? "Remove deprecated skills first."
             : "Install the whiteboard command in PATH first."}
@@ -134,9 +140,13 @@ export function ConnectCard({
   }
 
   return (
-    <section className="review-connect" aria-label="Connect your agents">
+    <section aria-label="Connect your agents">
       <div
-        className="review-home-prompt-tabs review-connect-tabs"
+        {...stylex.props(
+          controlStyles.segmented,
+          promptStyles.tabs,
+          styles.agentTabs,
+        )}
         role="group"
         aria-label="Agent"
       >
@@ -147,11 +157,15 @@ export function ConnectCard({
             <button
               key={tab}
               type="button"
-              className={target === tab ? "is-active" : undefined}
+              {...stylex.props(
+                controlStyles.segment,
+                controlStyles.segmentLarge,
+                target === tab && controlStyles.segmentActive,
+              )}
               aria-pressed={target === tab}
               onClick={() => selectTarget(tab)}
             >
-              <Logo />
+              <Logo xstyle={styles.logo} />
               {TARGET_LABELS[tab]}
             </button>
           );
@@ -162,7 +176,7 @@ export function ConnectCard({
         />
       </div>
       <div
-        className="review-home-prompt-tabs review-connect-modes"
+        {...stylex.props(controlStyles.segmented, promptStyles.tabs)}
         role="group"
         aria-label="Setup method"
       >
@@ -170,7 +184,10 @@ export function ConnectCard({
           <button
             key={tab}
             type="button"
-            className={mode === tab ? "is-active" : undefined}
+            {...stylex.props(
+              controlStyles.segment,
+              mode === tab && controlStyles.segmentActive,
+            )}
             aria-pressed={mode === tab}
             onClick={() => selectMode(tab)}
           >
@@ -180,14 +197,17 @@ export function ConnectCard({
       </div>
       {text ? (
         <>
-          <div className="review-connect-body-wrap">
+          <div {...stylex.props(styles.bodyWrap)}>
             <pre
-              className="review-home-prompt-body review-connect-body"
+              {...stylex.props(
+                promptStyles.body,
+                collapsed && styles.collapsedBody,
+              )}
               data-collapsed={collapsed}
             >
               {text.split(/(--[a-z][a-z-]*)/g).map((part, index) =>
                 part.startsWith("--") ? (
-                  <span className="review-connect-option" key={index}>
+                  <span {...stylex.props(styles.option)} key={index}>
                     {part}
                   </span>
                 ) : (
@@ -198,7 +218,7 @@ export function ConnectCard({
             {collapsed ? (
               <button
                 type="button"
-                className="review-connect-expand"
+                {...stylex.props(styles.expand)}
                 aria-expanded={false}
                 onClick={() => setExpanded(true)}
               >
@@ -206,11 +226,11 @@ export function ConnectCard({
               </button>
             ) : null}
           </div>
-          <div className="review-home-prompt-actions">
+          <div {...stylex.props(promptStyles.actions)}>
             {collapsible && expanded ? (
               <button
                 type="button"
-                className="review-connect-collapse"
+                {...stylex.props(styles.collapse)}
                 aria-expanded={true}
                 onClick={() => setExpanded(false)}
               >
@@ -219,7 +239,7 @@ export function ConnectCard({
             ) : null}
             <button
               type="button"
-              className="review-home-prompt-copy"
+              {...stylex.props(promptStyles.copy)}
               aria-live="polite"
               aria-label={`${copied ? "Copied" : "Copy"} ${noun} for ${agent}`}
               onClick={() => copy(text)}
@@ -233,12 +253,12 @@ export function ConnectCard({
         </>
       ) : plugin.url ? (
         <>
-          <p className="review-home-prompt-body">
-            Opens {agent} and adds the review server.
+          <p {...stylex.props(promptStyles.body)}>
+            Opens {agent} and adds the Whiteboard server.
           </p>
-          <div className="review-home-prompt-actions">
+          <div {...stylex.props(promptStyles.actions)}>
             <a
-              className="review-home-prompt-copy"
+              {...stylex.props(promptStyles.copy)}
               href={plugin.url}
               {...newTabLinkProps(plugin.url)}
             >
@@ -247,12 +267,12 @@ export function ConnectCard({
           </div>
         </>
       ) : (
-        <p className="review-home-prompt-body">
+        <p {...stylex.props(promptStyles.body)}>
           {`${plugin.label}\nInstall the whiteboard command first.`}
         </p>
       )}
       {status.error ? (
-        <p className="review-connect-error">{status.error}</p>
+        <p {...stylex.props(promptStyles.error)}>{status.error}</p>
       ) : null}
     </section>
   );
@@ -281,11 +301,15 @@ function OtherAgentMenu({
         };
       })}
       onChange={onSelect}
-      className="review-connect-other"
-      triggerClassName={`review-connect-other-trigger${selected ? " is-active" : ""}`}
+      triggerStyle={[
+        controlStyles.segment,
+        controlStyles.segmentLarge,
+        styles.otherTrigger,
+        selected !== undefined && controlStyles.segmentActive,
+      ]}
       triggerProps={{ "aria-pressed": selected !== undefined }}
     >
-      {Logo ? <Logo /> : null}
+      {Logo ? <Logo xstyle={styles.logo} /> : null}
       {selected ? TARGET_LABELS[selected] : "Other…"}
     </OptionMenu>
   );
@@ -356,46 +380,132 @@ export function LegacySkillsRow({
 
   return (
     <section
-      className="review-connect-legacy"
+      {...stylex.props(styles.legacy)}
       aria-label="Deprecated Whiteboard skills"
     >
       {legacySkills.length > 0 ? (
         <>
-          <p>
+          <p {...stylex.props(styles.legacyText)}>
             Earlier versions of Whiteboard installed these skills. Whiteboard no
             longer uses them.
           </p>
-          <ul>
+          <ul {...stylex.props(styles.legacyList)}>
             {legacySkills.map((skill) => (
               <li key={skill.path}>
-                <code>{skill.path}</code>
+                <code {...stylex.props(styles.legacyCode)}>{skill.path}</code>
               </li>
             ))}
           </ul>
-          <button
-            type="button"
+          <Button
+            size="large"
+            xstyle={styles.legacyButton}
             disabled={busy}
             onClick={() => void removeSkills()}
           >
             Remove deprecated skills
-          </button>
+          </Button>
         </>
       ) : null}
       {removed.length > 0 ? (
         <>
-          <p>
+          <p {...stylex.props(styles.legacyText)}>
             Removed {removed.length} skill{removed.length === 1 ? "" : "s"}
           </p>
-          <ul>
+          <ul {...stylex.props(styles.legacyList)}>
             {removed.map((path) => (
               <li key={path}>
-                <code>{path}</code>
+                <code {...stylex.props(styles.legacyCode)}>{path}</code>
               </li>
             ))}
           </ul>
         </>
       ) : null}
-      {error ? <p className="review-connect-error">{error}</p> : null}
+      {error ? (
+        <p {...stylex.props(promptStyles.error, styles.legacyText)}>{error}</p>
+      ) : null}
     </section>
   );
 }
+
+const styles = stylex.create({
+  note: {
+    margin: "0 0 8px",
+    color: tokens.reviewHomeMeta,
+    fontSize: fontSize.body,
+  },
+  // The prompt card's tabs, one agent at a time.
+  agentTabs: {
+    flexWrap: "wrap",
+    marginBottom: "6px",
+  },
+  logo: {
+    width: "14px",
+    height: "14px",
+  },
+  otherTrigger: {
+    paddingRight: "6px",
+  },
+  bodyWrap: {
+    position: "relative",
+  },
+  collapsedBody: {
+    maxHeight: "calc(22px * 4)",
+    overflow: "hidden",
+    maskImage: "linear-gradient(to bottom, #000 35%, transparent)",
+  },
+  option: {
+    whiteSpace: "nowrap",
+  },
+  // Sits on the fade, centered, like a "show full prompt" pill.
+  expand: {
+    position: "absolute",
+    bottom: 0,
+    left: "50%",
+    transform: "translateX(-50%)",
+    padding: "3px 12px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: {
+      default: tokens.reviewHomeRuleSoft,
+      ":hover": tokens.inkMuted,
+    },
+    borderRadius: radius.pill,
+    backgroundColor: tokens.raised,
+    color: tokens.ink,
+    font: `${fontSize.body}/18px ${tokens.fontMono}`,
+    cursor: "pointer",
+  },
+  collapse: {
+    marginRight: "auto",
+    padding: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    backgroundColor: "transparent",
+    color: { default: tokens.inkMuted, ":hover": tokens.ink },
+    font: `${fontSize.body}/22px ${tokens.fontMono}`,
+    cursor: "pointer",
+  },
+  legacy: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: "8px",
+    fontSize: fontSize.body,
+  },
+  legacyText: {
+    margin: 0,
+  },
+  legacyList: {
+    margin: 0,
+    padding: 0,
+    listStyle: "none",
+    color: tokens.reviewHomeMeta,
+  },
+  legacyCode: {
+    fontFamily: tokens.fontMono,
+  },
+  legacyButton: {
+    marginTop: "8px",
+  },
+});

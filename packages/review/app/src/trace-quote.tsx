@@ -1,9 +1,13 @@
+import type { ReviewComponentProps } from "@review/review-document-data";
+import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, isValidElement } from "react";
 
-import type { ReviewComponentProps } from "../../src/review-document-data";
 import { isReactTextNode } from "./agent-markdown";
+import { drawStyles } from "./draw-styles";
+import { documentMarker } from "./markers.stylex";
 import { ProsePeekAnchor } from "./review-components";
 import { useOptionalReviewPanel } from "./review-panel";
+import { tokens } from "./tokens.stylex";
 
 function extractText(node: ReactNode): string {
   if (isReactTextNode(node)) return String(node);
@@ -42,15 +46,13 @@ export function TraceQuote({
   const href = `#trace-${sessionId}${trace ? `-${trace}` : ""}${event !== undefined ? `-event-${event}` : ""}`;
 
   return (
-    <span className="review-trace-quote-container">
+    <span {...stylex.props(styles.container, drawStyles.blockChild)}>
       <ProsePeekAnchor
         href={href}
-        className="review-trace-quote"
+        xstyle={[styles.quote, isOpen && styles.open]}
         isOpen={isOpen}
         inertFallback={
-          <span className="review-trace-quote review-trace-quote--inert">
-            {children}
-          </span>
+          <span {...stylex.props(styles.quote, styles.inert)}>{children}</span>
         }
         onOpen={() => {
           openPeek?.({
@@ -83,3 +85,50 @@ export function TraceQuote({
     </span>
   );
 }
+
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
+
+// A block's own element: a child of the block's node.
+const inDocumentBlock = () => `${inDocument()}:is([data-review-node-id] > *)`;
+
+const styles = stylex.create({
+  // A quote block stands in the prose column; a quote in prose stays inline.
+  container: {
+    display: { default: null, [inDocumentBlock()]: "block" },
+    width: {
+      default: null,
+      [inDocumentBlock()]: `min(100%, ${tokens.reviewProseMaxWidth})`,
+    },
+    maxWidth: {
+      default: null,
+      [inDocumentBlock()]: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
+    },
+    marginInline: { default: null, [inDocumentBlock()]: "auto" },
+  },
+  quote: {
+    color: tokens.accent,
+    textDecoration: { default: "none", ":hover": "underline" },
+    cursor: "pointer",
+    // Faint curly quotes hug each trace quote so the reader can tell
+    // someone's words from a code peek or file link without the link color
+    // changing. inline-block keeps the hover underline off the marks.
+    "::before": {
+      content: "'\\201C'",
+      display: "inline-block",
+      color: tokens.inkFaint,
+    },
+    "::after": {
+      content: "'\\201D'",
+      display: "inline-block",
+      color: tokens.inkFaint,
+    },
+  },
+  open: {
+    backgroundColor: tokens.linkOpenWash,
+  },
+  inert: {
+    color: tokens.inkFaint,
+    textDecoration: "none",
+    cursor: "default",
+  },
+});

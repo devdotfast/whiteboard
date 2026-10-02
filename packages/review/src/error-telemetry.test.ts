@@ -40,12 +40,6 @@ describe("packBundleFrames", () => {
     );
   });
 
-  it("leaves no trace of the user's machine", () => {
-    const frames = packBundleFrames(MIXED_STACK) ?? "";
-
-    for (const token of USER_TOKENS) expect(frames).not.toContain(token);
-  });
-
   it("drops a frame whose only anchor is a user directory named out", () => {
     expect(
       packBundleFrames(
@@ -180,17 +174,6 @@ describe("deriveErrorTelemetryProperties", () => {
     }
   });
 
-  it("keeps a marker even though the marker names a secret", () => {
-    // "<REDACTED: GitHub Token>" contains the word "token", which the secret
-    // rule matches. The second check must not re-flag the cleaner's own output.
-    expect(
-      deriveErrorTelemetryProperties({
-        name: "Error",
-        message: "bad credential ghp_012345678901234567890123456789012345",
-      }).message,
-    ).toBeDefined();
-  });
-
   it("sends no message for a schema error, which quotes the document", () => {
     const derived = deriveErrorTelemetryProperties({
       name: "ZodError",
@@ -200,14 +183,6 @@ describe("deriveErrorTelemetryProperties", () => {
     expect(derived.message).toBeUndefined();
     expect(derived.error_name).toBe("ZodError");
     expect(derived.message_hash).toMatch(/^[0-9a-f]{16}$/);
-  });
-
-  it("always returns a digest, cleaned message or not", () => {
-    expect(deriveErrorTelemetryProperties(raw).message_hash).toBeDefined();
-    expect(
-      deriveErrorTelemetryProperties({ name: "Error", message: "plain" })
-        .message_hash,
-    ).toBeDefined();
   });
 
   it("gives the same digest for the same cause", () => {

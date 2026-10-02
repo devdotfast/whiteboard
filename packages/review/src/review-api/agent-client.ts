@@ -2,14 +2,15 @@ import {
   healthyReviewInstance,
   reviewInstanceUnavailable,
   selectReviewInstance,
-} from "../desktop-discovery.js";
+} from "@review/desktop-discovery.js";
 import {
   readReviewServerDiscovery,
   reviewServerIsHealthy,
   reviewServerStateDir,
   serverNotReady,
-} from "../server-discovery.js";
-import { ReviewApiClient } from "./client.js";
+} from "@review/server-discovery.js";
+
+import { ReviewApiClient, ReviewApiError } from "./client.js";
 
 export interface AuthoringTool {
   name: string;
@@ -95,13 +96,28 @@ export async function callAuthoringTool(
   signal?: AbortSignal,
 ) {
   if (tool.commandType) {
-    const { commandId, leaseId, ...fields } = input;
+    // Agents may omit the id; the host's receipts make a retry with it safe.
+    const { commandId = randomUUID(), leaseId, ...fields } = input;
 
-    return client.post<JsonValue>(
-      tool.path,
-      { commandId, leaseId, operation: { ...fields, type: tool.commandType } },
-      signal,
-    );
+    try {
+      return await client.post<JsonValue>(
+        tool.path,
+        {
+          commandId,
+          leaseId,
+          operation: { ...fields, type: tool.commandType },
+        },
+        signal,
+      );
+    } catch (error) {
+      // A host reply (any status) is definite: a failed command rolls back.
+      if (error instanceof ReviewApiError || signal?.aborted) throw error;
+
+      throw new Error(
+        `Whiteboard may or may not have applied ${tool.name} (${error instanceof Error ? error.message : String(error)}). Retry with identical input, including leaseId, and commandId "${String(commandId)}": if the first attempt was applied, you get its result back instead of a second write.`,
+        { cause: error },
+      );
+    }
   }
 
   const fields = { ...input };
@@ -161,6 +177,8 @@ export function toolResultText(
     ? result
     : JSON.stringify(result);
 }
+
+import { randomUUID } from "node:crypto";
 
 import {
   isBooleanValue,

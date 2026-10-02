@@ -6,8 +6,9 @@ import { Range } from "../../editor/common/core/range.js";
  *--------------------------------------------------------------------------------------------*/
 
 import "../browser/media/review.css";
-import { $, addDisposableListener, append, Dimension } from "../../base/browser/dom.js";
+import { $, addDisposableListener, append, Dimension, getWindow, scheduleAtNextAnimationFrame } from "../../base/browser/dom.js";
 import { Orientation, SplitView } from "../../base/browser/ui/splitview/splitview.js";
+import { disposableTimeout } from "../../base/common/async.js";
 import { Emitter, Event } from "../../base/common/event.js";
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from "../../base/common/lifecycle.js";
 import { autorun } from "../../base/common/observable.js";
@@ -33,7 +34,8 @@ import { IEditorService } from "../../workbench/services/editor/common/editorSer
 import { ITextFileService } from "../../workbench/services/textfile/common/textfiles.js";
 import { ReviewChangedFilesTree } from "../browser/reviewChangedFilesTree.js";
 import { REVIEW_COUNTS_PENDING_TOOLTIP, reviewChangesTooltip, reviewCountsTooltip, ReviewTooltip, type ReviewTooltipContent } from "../browser/reviewTooltip.js";
-import { type ReviewDiffFileWire, type StructuralLineCounts } from "../common/reviewProtocol.js";
+import { type ReviewDiffFileWire } from "../common/reviewProtocol.js";
+import { binarySizeLabel, isBinaryCounts, type ReviewFileCounts } from "../common/reviewStructuralDiff.js";
 import type { ReviewDiffLayoutSetting } from "./reviewDiffLayout.js";
 import { reviewMultiDiffLabelUris, ReviewMultiDiffUIElementFactory } from "./reviewMultiDiff.js";
 
@@ -175,15 +177,16 @@ export class ReviewFilesDiffView extends Disposable {
 	private readonly splitView: SplitView<number>;
 	private readonly changedFilesTree: ReviewChangedFilesTree | undefined;
 	private readonly widget: MultiDiffEditorWidget;
+	private pendingViewState: IMultiDiffEditorViewState | undefined;
 	private viewModel: MultiDiffEditorViewModel | undefined;
 	private input: ReviewFilesEditorInput | undefined;
 	private readonly readyFiles = new Set<string>();
 	private readonly fileStates = new Map<string, string>();
-	private readonly revealHold = this._register(new MutableDisposable<DisposableStore>());
+	private readonly settleHold = this._register(new MutableDisposable<DisposableStore>());
 	/** Full structural counts for views without persisted coverage. */
 	private readonly streamStats = new Map<
 		string,
-		{ counts: StructuralLineCounts; tooltip: ReviewTooltipContent }
+		{ counts: ReviewFileCounts; tooltip?: ReviewTooltipContent }
 	>();
 	private readonly headerFactory: ReviewMultiDiffUIElementFactory;
 	private readonly summary: HTMLElement;
@@ -199,6 +202,8 @@ export class ReviewFilesDiffView extends Disposable {
 	private readonly initializedDocumentItems = new WeakSet<object>();
 	private readonly viewedApplied = new Map<string, string>();
 	private readonly streamStatus: HTMLElement;
+	private offscreen = false;
+	private layoutDeferred = false;
 
 	constructor(
 		private readonly container: HTMLElement,
@@ -229,8 +234,9 @@ export class ReviewFilesDiffView extends Disposable {
 					? this.input.entries.map((entry) => ({
 							original: entry.original,
 							modified: entry.modified,
-							additions: entry.file.status === "unchanged" ? undefined : this.entryProgress(entry)?.remaining.additions ?? (this.fileTreeContainer || this.document ? undefined : this.streamStats.get(entry.file.path)?.counts.added),
-							deletions: entry.file.status === "unchanged" ? undefined : this.entryProgress(entry)?.remaining.deletions ?? (this.fileTreeContainer || this.document ? undefined : this.streamStats.get(entry.file.path)?.counts.removed),
+							additions: entry.file.status === "unchanged" || entry.file.binary ? undefined : this.entryProgress(entry)?.remaining.additions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.added),
+							deletions: entry.file.status === "unchanged" || entry.file.binary ? undefined : this.entryProgress(entry)?.remaining.deletions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.removed),
+							collapseLocked: !!entry.file.binary,
 						countsTooltip: this.progressTooltip(entry) ?? this.streamStats.get(entry.file.path)?.tooltip,
 						viewedState: this.entryProgress(entry)?.state,
 						onToggleViewed: entry.file.status !== "unchanged" && this.onToggleViewed ? () => this.onToggleViewed!(entry.file.path, entry.sectionId) : undefined,
@@ -239,8 +245,11 @@ export class ReviewFilesDiffView extends Disposable {
 						onToggleSectionCollapsed: () => { if (entry.sectionId) { if (this.collapsedSections.has(entry.sectionId)) this.collapsedSections.delete(entry.sectionId); else this.collapsedSections.add(entry.sectionId); this.headerFactory.refreshHeaders(); } },
 						section: entry.sectionStart ? this.progress?.sections?.find(section => section.id === entry.sectionId) : undefined,
 						onToggleSection: () => entry.sectionId && this.onToggleSection?.(entry.sectionId),
-						note: entry.file.status === "unchanged" ? "Unchanged" : this.hiddenFiles.get(entry.file.path),
-							onDidOpen: () => {
+						// A binary is folded like a hidden file, with its size as the reason.
+						note: entry.file.status === "unchanged" ? "Unchanged" : entry.file.binary ? this.binaryNote(entry.file.path) : this.hiddenFiles.get(entry.file.path),
+						noteTooltip: entry.file.binary ? { label: "No text to show · binary files stay folded" } : undefined,
+							// A binary has no text to open.
+							onDidOpen: entry.file.binary ? undefined : () => {
 								if (document?.onDidOpen) { document.onDidOpen(); return; }
 								const target = this.widget.tryGetCodeEditor(entry.goToFileResource);
 								const change = isDiffEditor(target?.diffEditor) ? target.diffEditor.getDiffComputationResult()?.changes2[0] : undefined;
@@ -263,6 +272,10 @@ export class ReviewFilesDiffView extends Disposable {
 			false,
 			undefined,
 		);
+		factory.alwaysShowScrollbars = Boolean(document);
+		// A document embed shows one file, so its header stays pinned at the top.
+		factory.scrollbarBelowResourceHeader = Boolean(document);
+		if (document) factory.bottomScrollPadding = 0;
 		this.headerFactory = factory;
 
 		this.widget = this._register(
@@ -336,6 +349,14 @@ export class ReviewFilesDiffView extends Disposable {
 			treeSize.startObserving();
 			this._register(toDisposable(() => fileTree.remove()));
 		}
+		if (document) {
+			const visibility = new IntersectionObserver(([entry]) => {
+				this.offscreen = !entry.isIntersecting;
+				if (!this.offscreen && this.layoutDeferred) this.layout();
+			}, { rootMargin: "200px 0px" });
+			visibility.observe(container);
+			this._register(toDisposable(() => visibility.disconnect()));
+		}
 		const sizeObserver = this._register(new ElementSizeObserver(this.container, undefined));
 		this._register(sizeObserver.onDidChange(() => this.layout()));
 		sizeObserver.startObserving();
@@ -346,7 +367,8 @@ export class ReviewFilesDiffView extends Disposable {
 	}
 
 	async setInput(input: ReviewFilesEditorInput, viewState: IMultiDiffEditorViewState | undefined): Promise<void> {
-		this.revealHold.clear();
+		this.settleHold.clear();
+		this.pendingViewState = viewState;
 		this.input = input;
 		this.changedFilesTree?.setFiles(Array.from(new Map(input.entries.map(entry => [entry.file.path, entry.file])).values()));
 		const viewModel = await input.getViewModel();
@@ -355,6 +377,15 @@ export class ReviewFilesDiffView extends Disposable {
 		// The canvas mounts this view without a user gesture, so the widget's
 		// first-change navigation must never take keyboard focus.
 		this.widget.setViewModel(viewModel, { preserveFocus: true, viewState, initialScrollPosition: this.document ? "top" : "firstChange" });
+		if (viewState) {
+			this.settle(() => {
+				this.widget.setViewState(viewState);
+				this.syncFileSelectionFromWidget();
+			}).add(toDisposable(() => {
+				this.pendingViewState = undefined;
+				this.widget.clearPendingRestorationState();
+			}));
+		}
 		this.changedFilesTree?.setFiles(Array.from(new Map(input.entries.map(entry => [entry.file.path, entry.file])).values()));
 		this.syncFileSelectionFromWidget();
 		this._register(
@@ -414,14 +445,27 @@ export class ReviewFilesDiffView extends Disposable {
 	}
 
 	/** Coverage counts are independent of fold state. */
-	fileCounts(path: string, counts: StructuralLineCounts): void {
+	fileCounts(path: string, counts: ReviewFileCounts): void {
 		this.streamStats.set(path, {
 			counts,
-			tooltip: reviewChangesTooltip(counts.added, counts.removed),
+			// A binary's header shows no counts, so it has no counts tooltip.
+			tooltip: isBinaryCounts(counts) ? undefined : reviewChangesTooltip(counts.added, counts.removed),
 		});
-		if (!this.fileTreeContainer) this.changedFilesTree?.setCounts(path, counts);
+		// Coverage owns line counts in a hosted tree; a binary's size has no other source.
+		if (!this.fileTreeContainer || isBinaryCounts(counts)) this.changedFilesTree?.setCounts(path, counts);
 		this.headerFactory.refreshHeaders();
 		this.renderSummary();
+	}
+
+	private lineCounts(path: string) {
+		const counts = this.streamStats.get(path)?.counts;
+		return isBinaryCounts(counts) ? undefined : counts;
+	}
+
+	private binaryNote(path: string): string {
+		const counts = this.streamStats.get(path)?.counts;
+		const size = isBinaryCounts(counts) ? binarySizeLabel(counts) : undefined;
+		return size ? `Binary file · ${size}` : "Binary file";
 	}
 
 	private renderSummary(): void {
@@ -430,7 +474,7 @@ export class ReviewFilesDiffView extends Disposable {
 		const complete = [...paths].every(path => this.streamStats.has(path));
 		const total = { added: 0, removed: 0 };
 		for (const path of paths) {
-			const counts = this.streamStats.get(path)?.counts;
+			const counts = this.lineCounts(path);
 			if (counts) { total.added += counts.added; total.removed += counts.removed; }
 		}
 		this.summary.replaceChildren();
@@ -516,6 +560,7 @@ export class ReviewFilesDiffView extends Disposable {
 		}
 	}
 	revealSource(source: ReviewDiffLens['ranges'][number], sectionId?: string): void {
+		this.settleHold.clear();
 		const entry = this.input?.entries.find(entry => (!sectionId || entry.sectionId === sectionId) && (!entry.sectionId || this.progress?.sections?.find(section => section.id === entry.sectionId)?.sources.some(range => range.file === source.file && range.side === source.side && range.fromLine <= source.fromLine && range.toLine >= source.fromLine)) && source.file === (source.side === 'base' ? entry.file.previousPath ?? entry.file.path : entry.file.path));
 		if (!entry) return;
 		if (entry.sectionId && this.collapsedSections.delete(entry.sectionId)) this.headerFactory.refreshHeaders();
@@ -528,6 +573,7 @@ export class ReviewFilesDiffView extends Disposable {
 
 	/** Scroll to a file, or to it once its diff has loaded. */
 	revealFile(path: string): void {
+		this.settleHold.clear();
 		const entry = this.input?.entries.find((entry) => entry.file.path === path);
 		if (!entry) return;
 		this.pendingPath = this.fileStates.has(path) ? path : undefined;
@@ -585,7 +631,7 @@ export class ReviewFilesDiffView extends Disposable {
 	}
 
 	getViewState(): IMultiDiffEditorViewState | undefined {
-		return this.viewModel ? this.widget.getViewState() : undefined;
+		return this.pendingViewState ?? (this.viewModel ? this.widget.getViewState() : undefined);
 	}
 
 	getActiveControl(): IDiffEditor | undefined {
@@ -593,6 +639,7 @@ export class ReviewFilesDiffView extends Disposable {
 	}
 
 	setCollapsed(collapsed: boolean): void {
+		this.settleHold.clear();
 		this.documentCollapsed = collapsed;
 		for (const item of this.viewModel?.items.get() ?? []) item.collapsed.set(collapsed, undefined);
 	}
@@ -602,6 +649,8 @@ export class ReviewFilesDiffView extends Disposable {
 	}
 
 	layout(): void {
+		this.layoutDeferred = this.offscreen;
+		if (this.offscreen) return;
 		const width = this.container.clientWidth;
 		const height = this.container.clientHeight;
 		if (width <= 0 || height <= 0) return;
@@ -616,15 +665,32 @@ export class ReviewFilesDiffView extends Disposable {
 	}
 	private reveal(resource: { original: URI | undefined; modified: URI | undefined }, options: RevealOptions = { highlight: true }): void {
 		this.widget.reveal(resource, options);
-		// The widget scrolls by the heights laid out so far, and files above still
-		// loading or measuring move the target; reveal it again as they settle,
-		// until the reader takes over or the input changes.
-		const hold = this.revealHold.value = new DisposableStore();
-		hold.add(this.widget.onDidChangeContentHeight(() => {
+		this.settle(() => {
 			if (this.itemFor(resource)) this.widget.reveal(resource, { ...options, highlight: false });
-		}));
-		for (const type of ["wheel", "pointerdown", "keydown"])
-			hold.add(addDisposableListener(this.diffContainer, type, () => this.revealHold.clear(), { capture: true, passive: true }));
+		});
+	}
+
+	/**
+	 * Streamed files and lazy editor measurements move content after the widget
+	 * first scrolls; re-apply `apply` as heights settle, until the reader takes
+	 * over, another reveal or input replaces it, or 30s pass.
+	 */
+	private settle(apply: () => void): DisposableStore {
+		const hold = this.settleHold.value = new DisposableStore();
+		const frame = hold.add(new MutableDisposable());
+		const schedule = () => {
+			if (frame.value) return;
+			frame.value = scheduleAtNextAnimationFrame(getWindow(this.root), () => {
+				apply();
+				frame.clear();
+			});
+		};
+		hold.add(this.widget.onDidChangeContentHeight(schedule));
+		for (const type of ["wheel", "pointerdown", "keydown", "touchstart"])
+			hold.add(addDisposableListener(this.diffContainer, type, () => this.settleHold.clear(), { capture: true, passive: true }));
+		hold.add(disposableTimeout(() => this.settleHold.clear(), 30_000));
+		schedule();
+		return hold;
 	}
 
 	private itemFor(resource: { original: URI | undefined; modified: URI | undefined }) {

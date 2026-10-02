@@ -2,23 +2,23 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { parseJsonText } from "@dev.fast/review-protocol";
-import { describe, expect, it } from "vitest";
-
 import {
   LEGACY_REVIEW_FIXTURES_ROOT,
   listLegacyReviewFixtures,
-} from "../fixtures/legacy-reviews/legacy-review-fixture";
+} from "@review/fixtures/legacy-reviews/legacy-review-fixture";
 import {
   blockSchema,
   checkReferences,
   elements,
   resourceReferences,
-} from "../review-api/document";
+} from "@review/review-api/document";
 import {
   type ReviewNode,
   reviewDocumentDataSchema,
   upgradeReviewDocumentJson,
-} from "../review-document-data";
+} from "@review/review-document-data";
+import { describe, expect, it } from "vitest";
+
 import { el, footnoteTraceQuoteSection, text } from "./import-test-utils";
 import { legacyDocumentToBlocks } from "./legacy-blocks";
 

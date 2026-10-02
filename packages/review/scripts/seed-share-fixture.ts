@@ -3,10 +3,11 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { openLocalReviewStore } from "../src/review-api/local-data.js";
-import { exportShare } from "../src/sharing/export.js";
-import { SharedReviewStore } from "../src/sharing/import.js";
-import { fetchPinnedRepository } from "../src/sharing/repository.js";
+import { openLocalReviewStore } from "@review/review-api/local-data.js";
+import { exportShare } from "@review/sharing/export.js";
+import { SharedReviewStore } from "@review/sharing/import.js";
+import { fetchPinnedRepository } from "@review/sharing/repository.js";
+
 import { createShareFixture } from "../test/fixtures/share/create.js";
 
 const [root, home] = process.argv.slice(2).map((arg) => path.resolve(arg));

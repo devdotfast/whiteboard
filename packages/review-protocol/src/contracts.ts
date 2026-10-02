@@ -14,6 +14,15 @@ export const REVIEW_DESKTOP_DISCOVERY_VERSION = 3;
 // Version 5: document and software-map bundles are JSON.
 export const REVIEW_SCHEMA_VERSION = 5;
 
+// A gateway sets the client header on every call it forwards from another
+// machine; the server then leaves local paths out. The host header names the
+// machine that answered; absent means this one.
+export const REVIEW_CLIENT_HEADER = "x-review-client";
+
+export const REVIEW_CLIENT_REMOTE = "remote";
+
+export const REVIEW_HOST_HEADER = "x-review-host";
+
 const requiredString = z
   .string({ error: "must be a string" })
   .refine((value) => value.trim().length > 0, "must be a string");
@@ -97,8 +106,6 @@ export const ReviewRuntimeConfigSchema = z.strictObject({
 });
 
 export type ReviewRuntimeConfig = z.infer<typeof ReviewRuntimeConfigSchema>;
-
-export type ReviewHost = ReviewRuntimeConfig["host"];
 
 export type ReviewTheme = ReviewRuntimeConfig["theme"];
 
@@ -263,8 +270,8 @@ export interface ReviewDiffViewHandle extends ReviewDisposable {
     source: ReviewDiffLens["ranges"][number],
     sectionId?: string,
   ): void;
-  /** Scroll to a changed file, once its diff has loaded. */
-  revealFile?(path: string): void;
+  /** Scroll to a changed file once loaded. Restore requests defer to saved editor position. */
+  revealFile?(path: string, options?: { restore?: boolean }): void;
   onDidError(listener: (message: string) => void): ReviewDisposable;
   /** Fires when the diff scrolls or its topmost file changes. */
   onDidScroll?(
@@ -307,11 +314,13 @@ export interface ReviewCanvasDiagnostic {
 
 /**
  * `instant` shows the Whiteboard tooltip the moment the pointer lands, for
- * small targets like the viewed box and the diff counts; `detail` is its
- * fainter second line. Without options the host shows its delayed hover.
+ * small targets like the viewed box and the diff counts; `quick` shows it
+ * after half the delay; `detail` is its fainter second line. Without options
+ * the host shows its delayed hover.
  */
 export interface ReviewTooltipOptions {
   instant?: boolean;
+  quick?: boolean;
   detail?: string;
 }
 
@@ -393,16 +402,29 @@ export interface ReviewCanvasOnboarding {
 
 // The workbench owns the theme and the keymap; the canvas only names a choice.
 // These lists mirror the workbench side (`reviewThemeChoice.ts`, and
-// `REVIEW_KEYMAPS` and `REVIEW_CTRL_TAB_CHOICES` in `reviewConfigurationDefaults.ts`).
+// `REVIEW_KEYMAPS`, `REVIEW_CTRL_TAB_CHOICES` and `REVIEW_DOCUMENT_WIDTH_CHOICES`
+// in `reviewConfigurationDefaults.ts`).
 export const REVIEW_THEME_CHOICES = ["dark", "light", "system"] as const;
 
 export type ReviewThemeChoice = (typeof REVIEW_THEME_CHOICES)[number];
 
-export const REVIEW_KEYMAP_CHOICES = ["none", "vim", "emacs"] as const;
+export const REVIEW_KEYMAP_CHOICES = [
+  "none",
+  "vim",
+  "emacs",
+  "sublime",
+] as const;
 
 export type ReviewKeymapChoice = (typeof REVIEW_KEYMAP_CHOICES)[number];
 
 export type ReviewCtrlTabChoice = "recent" | "next";
+
+export type ReviewDocumentWidthChoice = "standard" | "wide" | "full";
+
+export type ReviewReadyNotificationChoice =
+  | "notificationAndBadge"
+  | "notification"
+  | "off";
 
 export const REVIEW_TUTORIAL_STEP_IDS = [
   "openPeek",
@@ -450,16 +472,32 @@ export interface ReviewCanvasTutorialBridge {
  * setter resolves with the value that actually landed, so a row re-renders from
  * the authoritative result instead of an optimistic one.
  */
+/** What diffr's schema says about one summary provider. */
+export interface ReviewDiffrProvider {
+  id: string;
+  title: string;
+  model: string;
+  endpoint: string;
+  keyVariables: string[];
+  keylessCustomEndpoint: boolean;
+}
+
 export interface ReviewDiffrConfig {
   values: JsonObject;
   credentialSource: "config" | "environment" | "missing";
+  providers?: ReviewDiffrProvider[];
+  defaultPrompt?: string;
   changed?: boolean;
   error?: string;
 }
 
 export const reviewDiffrSummarizerInputSchema = z.object({
   enabled: z.boolean(),
+  provider: z.string().min(1),
   model: z.string().trim().min(1),
+  endpoint: z.string().trim(),
+  // Blank means diffr's own default; kept as written, not trimmed.
+  systemPrompt: z.string(),
   tests: z.boolean(),
   apiKey: z.string().optional(),
 });
@@ -471,6 +509,19 @@ export type ReviewDiffrSummarizerInput = z.infer<
 const reviewDiffrConfigSchema = z.object({
   values: z.custom<JsonObject>(isJsonObject),
   credentialSource: z.enum(["config", "environment", "missing"]),
+  providers: z
+    .array(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        model: z.string(),
+        endpoint: z.string(),
+        keyVariables: z.array(z.string()),
+        keylessCustomEndpoint: z.boolean(),
+      }),
+    )
+    .optional(),
+  defaultPrompt: z.string().optional(),
   changed: z.boolean().optional(),
   error: z.string().optional(),
 });
@@ -504,6 +555,14 @@ export interface ReviewCanvasSettingsContent {
   setKeymap(choice: ReviewKeymapChoice): Promise<ReviewKeymapChoice>;
   ctrlTab: ReviewCtrlTabChoice;
   setCtrlTab(choice: ReviewCtrlTabChoice): Promise<ReviewCtrlTabChoice>;
+  documentWidth: ReviewDocumentWidthChoice;
+  setDocumentWidth(
+    choice: ReviewDocumentWidthChoice,
+  ): Promise<ReviewDocumentWidthChoice>;
+  readyNotification: ReviewReadyNotificationChoice;
+  setReadyNotification(
+    choice: ReviewReadyNotificationChoice,
+  ): Promise<ReviewReadyNotificationChoice>;
   softwareMapEnabled: boolean;
   setSoftwareMapEnabled(enabled: boolean): Promise<boolean>;
   structuralDiffEnabled: boolean;
@@ -526,7 +585,8 @@ export interface ReviewCanvasSettingsContent {
 
 /** Workspace attachment identity is independent of the displayed source generation. */
 export interface ReviewLanguageEnvironment {
-  readonly rootPath: string | null;
+  /** Absent for a caller on another machine. */
+  readonly rootPath?: string | null;
   readonly identity: string;
   /** Present only when the language checkout is unavailable, not while preparing. */
   readonly issue?: string;
@@ -627,6 +687,7 @@ export type ReviewCanvasContent =
       setTutorial?(enabled: boolean): void;
       structuralDiffEnabled?: boolean;
       softwareMapEnabled?: boolean;
+      documentWidth?: ReviewDocumentWidthChoice;
       reviewId: string;
       version?: number;
       bridge: ReviewCanvasBridge;
@@ -698,6 +759,9 @@ export interface ReviewCanvasRange {
   headRef: string;
   baseCommit: string;
   headCommit: string;
+  /** Set for a live worktree comparison, whose working files can differ
+   * from the head commit; it changes on every save. */
+  worktreeRevision?: string;
 }
 
 export interface ReviewCanvasHandle extends ReviewDisposable {
@@ -708,10 +772,30 @@ export interface ReviewCanvasHandle extends ReviewDisposable {
 
 export const REVIEW_CANVAS_RESUME_EVENT = "dev-fast-review-canvas-resume";
 
+export interface ReviewMenuItem {
+  id: string;
+  label: string;
+  checked?: boolean;
+  enabled?: boolean;
+}
+
+export interface ReviewMenuRequest {
+  anchor: HTMLElement;
+  items: readonly ReviewMenuItem[];
+  onSelect(id: string): void | Promise<void>;
+  onHide(): void;
+}
+
+export interface ReviewCanvasUi {
+  confirmDelete?(title: string): Promise<boolean>;
+  showMenu(request: ReviewMenuRequest): ReviewDisposable;
+}
+
 export interface ReviewCanvasModule {
   mountReviewCanvas(
     container: HTMLElement,
     content: ReviewCanvasContent,
+    ui?: ReviewCanvasUi,
   ): ReviewCanvasHandle;
 }
 
@@ -719,7 +803,7 @@ export interface ReviewCanvasModule {
 // bump; readers must ignore fields they do not understand.
 export const ReviewDesktopDiscoverySchema = z.object({
   version: z.literal(REVIEW_DESKTOP_DISCOVERY_VERSION, {
-    error: "Unsupported Review Desktop discovery version",
+    error: "Unsupported Whiteboard Desktop discovery version",
   }),
   instanceId: requiredString,
   url: loopbackOriginSchema,
@@ -747,6 +831,21 @@ export type ReviewDesktopDiscovery = z.infer<
   typeof ReviewDesktopDiscoverySchema
 >;
 
+/** `GET /health` on every review server. No token needed. */
+export interface ReviewServerHealth {
+  ok: true;
+  instanceId: string; // new on every start
+  desktopAttached: boolean;
+  version: string; // package version; equals the Desktop version in release builds
+}
+
+/** `GET /health` with the server's token: what identifies the machine and build. */
+export interface ReviewServerHealthWithToken extends ReviewServerHealth {
+  serverId: string; // stable, one per review store
+  serverPid: number;
+  commit: string | null;
+}
+
 export const ReviewRepositoryIdentitySchema = z.strictObject({
   kind: z.enum(["git", "jj", "none"], {
     error: "must be git, jj, or none",
@@ -759,8 +858,6 @@ export const ReviewRepositoryIdentitySchema = z.strictObject({
 export type ReviewRepositoryIdentity = z.infer<
   typeof ReviewRepositoryIdentitySchema
 >;
-
-export type ReviewRepositoryKind = ReviewRepositoryIdentity["kind"];
 
 export const ReviewStatusSchema = z.enum([
   "draft",
@@ -785,19 +882,11 @@ export const ReviewAgentSessionRoleSchema = z.enum([
   "question",
 ]);
 
-export type ReviewAgentSessionRole = z.infer<
-  typeof ReviewAgentSessionRoleSchema
->;
-
 export const ReviewAgentSessionAttributionSchema = z.strictObject({
   roles: z.array(ReviewAgentSessionRoleSchema),
   firstSeenAt: requiredString,
   lastSeenAt: requiredString,
 });
-
-export type ReviewAgentSessionAttribution = z.infer<
-  typeof ReviewAgentSessionAttributionSchema
->;
 
 export const ReviewCommitSummarySchema = z.strictObject({
   commit: z
@@ -816,27 +905,11 @@ export const ReviewCommitSummarySchema = z.strictObject({
 
 export type ReviewCommitSummary = z.infer<typeof ReviewCommitSummarySchema>;
 
-export const ReviewDocumentVersionSchema = z.strictObject({
-  // The native snapshot version displayed by the canvas.
-  revision: z.string().min(1),
-  /** Unix milliseconds when the version was sealed. */
-  sealedAt: positiveInteger,
-  isCurrent: z.boolean(),
-});
-
-export type ReviewDocumentVersionWire = z.infer<
-  typeof ReviewDocumentVersionSchema
->;
-
 /** The native agent session that authored the review. */
 export const AuthoringAgentSessionSchema = z.strictObject({
   harness: z.enum(["claude-code", "codex", "opencode", "pi"]),
   sessionId: requiredString,
 });
-
-export type AuthoringAgentSessionWire = z.infer<
-  typeof AuthoringAgentSessionSchema
->;
 
 export const ReviewErrorResponseSchema = z.strictObject({
   ok: z.literal(false),
@@ -844,8 +917,6 @@ export const ReviewErrorResponseSchema = z.strictObject({
   code: requiredString.optional(),
   retryable: z.boolean().optional(),
 });
-
-export type ReviewErrorResponse = z.infer<typeof ReviewErrorResponseSchema>;
 
 /** Managed tutorials use the native JSON canvas and stay out of Home. */
 export const ReviewTutorialOpenResponseSchema = z.strictObject({
@@ -945,9 +1016,9 @@ export const ReviewCliInstallStatusSchema = z.strictObject({
     .strictObject({ path: requiredString, version: requiredString })
     .nullable(),
   connect: z.strictObject({
-    // "sh", or "review" when Desktop has no built CLI.
+    // "sh", or "whiteboard" when Desktop has no built CLI.
     command: requiredString,
-    // ["-c", "exec \"$HOME/.local/bin/review\" mcp"], or ["mcp"].
+    // ["-c", "exec \"$HOME/.local/bin/whiteboard\" mcp"], or ["mcp"].
     args: z.array(z.string()),
     prompts: z.record(ReviewCliInstallTargetSchema, requiredString),
     // The published plugin per harness: an install command, or Cursor's link.
@@ -1006,6 +1077,8 @@ export const ReviewDiffFileSchema = z.strictObject({
   status: z.enum(["added", "modified", "deleted", "renamed", "unchanged"]),
   additions: nonNegativeInteger,
   deletions: nonNegativeInteger,
+  /** Git reports no line counts: the file's contents are binary. */
+  binary: z.literal(true).optional(),
   patch: requiredString.optional(),
 });
 
@@ -1041,10 +1114,6 @@ export const ReviewDiffFilesRequestSchema = z.strictObject({
     .regex(/^[0-9a-f]{40}$/i, "must be a 40-hex revision")
     .optional(),
 });
-
-export type ReviewDiffFilesRequest = z.infer<
-  typeof ReviewDiffFilesRequestSchema
->;
 
 export const ReviewDiffFilesResponseSchema = z.discriminatedUnion("ok", [
   z.strictObject({
@@ -1110,8 +1179,6 @@ export const ReviewOpenEditorSchema = z.strictObject({
   scheme: requiredString,
 });
 
-export type ReviewOpenEditorWire = z.infer<typeof ReviewOpenEditorSchema>;
-
 export const ReviewEditorSelectionSchema = z.strictObject({
   path: requiredString,
   startLine: positiveInteger,
@@ -1120,17 +1187,11 @@ export const ReviewEditorSelectionSchema = z.strictObject({
   endColumn: positiveInteger,
 });
 
-export type ReviewEditorSelectionWire = z.infer<
-  typeof ReviewEditorSelectionSchema
->;
-
 export const ReviewDesktopStateSchema = z.strictObject({
   openEditors: z.array(ReviewOpenEditorSchema),
   activeEditor: ReviewOpenEditorSchema.nullable(),
   selection: ReviewEditorSelectionSchema.nullable(),
 });
-
-export type ReviewDesktopState = z.infer<typeof ReviewDesktopStateSchema>;
 
 const revealArgsSchema = z
   .strictObject({
@@ -1191,7 +1252,6 @@ export const ReviewVerbRequestSchema = z.discriminatedUnion("name", [
     }),
   }),
   z.strictObject({ name: z.literal("reveal"), args: revealArgsSchema }),
-  z.strictObject({ name: z.literal("focusCanvas"), args: z.strictObject({}) }),
   z.strictObject({ name: z.literal("focusWindow"), args: z.strictObject({}) }),
   z.strictObject({
     name: z.literal("captureScreenshot"),

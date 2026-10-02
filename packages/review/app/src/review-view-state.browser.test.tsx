@@ -1,28 +1,16 @@
-import {
-  type ReactNode,
-  type RefObject,
-  act,
-  createElement,
-  useRef,
-} from "react";
+import { type RefObject, act, createElement, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AnchorRef } from "../../src/authoring";
 import { ReviewSessionProvider } from "./host/review-session";
-import type { GuidedTour } from "./review-panel-model";
 import { createReviewPanelStore } from "./review-panel-store";
 import { testReviewSession } from "./review-session-test-utils";
 import { writeReviewUiState } from "./review-ui-state";
 import {
-  ReviewViewStateProvider,
-  clearPersistedReviewViewState,
-  createReviewTourRestoreClaim,
   readPersistedReviewViewState,
+  readReviewNavigationRestore,
   reviewViewStateKey,
   useReviewViewStateSync,
-  useTourPersist,
-  useTourRestore,
 } from "./review-view-state";
 
 type TestReviewSession = ReturnType<typeof testReviewSession>;
@@ -35,15 +23,12 @@ let frames = new Map<number, FrameRequestCallback>();
 
 let resizeObservers = new Set<{ trigger(): void; disconnect(): void }>();
 
-let observedElements = new Set<Element>();
-
 beforeEach(() => {
   vi.useFakeTimers();
   window.localStorage.clear();
   nextFrame = 1;
   frames = new Map();
   resizeObservers = new Set();
-  observedElements = new Set();
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
     const frame = nextFrame;
     nextFrame += 1;
@@ -59,9 +44,7 @@ beforeEach(() => {
     constructor(private readonly callback: ResizeObserverCallback) {
       resizeObservers.add(this);
     }
-    observe(target: Element): void {
-      observedElements.add(target);
-    }
+    observe(): void {}
     unobserve(): void {}
     disconnect(): void {
       resizeObservers.delete(this);
@@ -86,6 +69,85 @@ afterEach(() => {
 });
 
 describe("review view state", () => {
+  it("restores a selected commit and file using current commit metadata", () => {
+    const session = testReviewSession();
+    const store = createReviewPanelStore();
+
+    const commit = {
+      commit: "a".repeat(40),
+      parentCommit: "b".repeat(40),
+      subject: "Original title",
+      author: "Author",
+      authoredAt: "2026-09-29",
+      fileCount: 1,
+      additions: 2,
+      deletions: 0,
+    };
+
+    renderViewState({ session, store });
+    act(() => store.getState().openCommitDiff({ commit, file: "file.ts" }));
+    unmount();
+
+    const restored = createReviewPanelStore(
+      readReviewNavigationRestore(session.config, {
+        ...canvas,
+        commits: [{ ...commit, subject: "Current metadata" }],
+      }),
+    );
+
+    expect(restored.getState().view).toBe("diff");
+    expect(restored.getState().diffScope).toEqual({
+      commit: { ...commit, subject: "Current metadata" },
+      file: "file.ts",
+      restoreFile: true,
+    });
+    expect(
+      readReviewNavigationRestore(session.config, { ...canvas, commits: [] })
+        .diffScope,
+    ).toBeNull();
+  });
+
+  it("restores trace identity, event and source without saving trace content", () => {
+    const session = testReviewSession();
+    const store = createReviewPanelStore();
+    renderViewState({ session, store });
+    act(() => {
+      store
+        .getState()
+        .openTrace({ sessionId: "agent-a", trace: "subagent", eventIndex: 7 });
+      store.getState().selectTraceStorage("hosted");
+    });
+    unmount();
+
+    const restored = createReviewPanelStore(
+      readReviewNavigationRestore(session.config, canvas),
+    );
+
+    expect(restored.getState().view).toBe("trace");
+    expect(restored.getState().traceSelection).toEqual({
+      sessionId: "agent-a",
+      trace: "subagent",
+      eventIndex: 7,
+    });
+    expect(restored.getState().traceStorage).toBe("hosted");
+    restored.getState().setAvailableViews(["review", "diff"]);
+    expect(restored.getState().view).toBe("review");
+  });
+
+  it("rejects malformed navigation identifiers", () => {
+    const session = testReviewSession();
+    storeState(session, {
+      diffScope: { commit: "invalid", file: "file.ts" },
+      trace: { sessionId: "agent", eventIndex: -5 },
+    });
+    expect(
+      readPersistedReviewViewState(session.config).diffScope,
+    ).toBeUndefined();
+    expect(
+      readPersistedReviewViewState(session.config).trace?.eventIndex,
+    ).toBeUndefined();
+  });
+
   it("does not restart scroll restoration when live session data changes", () => {
     const session = testReviewSession();
     storeState(session, { scrollTop: 100 });
@@ -109,18 +171,6 @@ describe("review view state", () => {
     expect(readPersistedReviewViewState(session.config).scrollTop).toBe(350);
   });
 
-  it("clears transient state when a review input is recreated", () => {
-    const session = testReviewSession();
-    storeState(session, {
-      scrollTop: 320,
-      panel: { kind: "tour", tourId: "flow", activeAnchor: "second" },
-    });
-
-    clearPersistedReviewViewState(session.config);
-
-    expect(readPersistedReviewViewState(session.config)).toEqual({});
-  });
-
   it("flushes the final scroll position when cleanup cancels a pending frame", () => {
     const session = testReviewSession();
     const harness = renderViewState({ session });
@@ -135,6 +185,7 @@ describe("review view state", () => {
 
     expect(readPersistedReviewViewState(session.config)).toEqual({
       scrollTop: 180,
+      scrollView: "review",
     });
     expect(frames.size).toBe(0);
   });
@@ -156,53 +207,40 @@ describe("review view state", () => {
     expect(frames.size).toBe(0);
   });
 
-  it("keeps restoring after the old animation-frame retry window", () => {
+  it("restores the scroll only on the view it was taken on", () => {
+    const session = testReviewSession();
+    // Older records carry no view: their scroll belongs to the whiteboard.
+    storeState(session, { scrollTop: 320 });
+
+    const diff = renderViewState({
+      session,
+      store: createReviewPanelStore({ view: "diff" }),
+    });
+
+    expect(diff.element.scrollTop).toBe(0);
+    unmount();
+
+    storeState(session, { scrollTop: 320, scrollView: "diff" });
+
+    const resumed = renderViewState({
+      session,
+      store: createReviewPanelStore({ view: "diff" }),
+    });
+
+    expect(resumed.element.scrollTop).toBe(320);
+  });
+
+  it("stops restoring the scroll once the reader switches view", () => {
     const session = testReviewSession();
     const metrics = { scrollHeight: 200, clientHeight: 200 };
     storeState(session, { scrollTop: 320 });
     const harness = renderViewState({ session, metrics });
 
-    expect(frames.size).toBe(0);
-    expect(resizeObservers.size).toBe(1);
+    act(() => harness.store.getState().showView("commits"));
     metrics.scrollHeight = 700;
     triggerResize();
 
-    expect(harness.element.scrollTop).toBe(320);
-    expect(resizeObservers.size).toBe(0);
-  });
-
-  it("watches the region's laid-out children for growth, not every descendant", () => {
-    const session = testReviewSession();
-    storeState(session, { scrollTop: 320 });
-
-    const harness = renderViewState({
-      session,
-      metrics: { scrollHeight: 200, clientHeight: 200 },
-      children: [
-        createElement(
-          "div",
-          { key: "view", style: { display: "contents" } },
-          createElement("nav", null, "toc"),
-          createElement(
-            "article",
-            null,
-            createElement("section", null, createElement("p", null, "peek")),
-          ),
-        ),
-        createElement("aside", { key: "aside" }, "panel"),
-      ],
-    });
-
-    const region = harness.element;
-
-    expect(observedElements).toEqual(
-      new Set([
-        region,
-        region.querySelector("nav")!,
-        region.querySelector("article")!,
-        region.querySelector("aside")!,
-      ]),
-    );
+    expect(harness.element.scrollTop).toBe(0);
   });
 
   it("does not persist an intermediate programmatic scroll during restoration", () => {
@@ -288,13 +326,38 @@ describe("review view state", () => {
         content: { kind: "inline-code", text: "start();" },
       }),
     );
-    expect(readPersistedReviewViewState(session.config).panel).toBeUndefined();
+    expect(readPersistedReviewViewState(session.config)).toEqual({});
 
-    act(() => store.getState().openTour(tour, "second"));
-    expect(readPersistedReviewViewState(session.config).panel).toEqual({
-      kind: "tour",
-      tourId: "flow",
-      activeAnchor: "second",
+    act(() =>
+      store
+        .getState()
+        .openOverlayTour({ tourId: "flow", kind: "sequence" }, "second"),
+    );
+    expect(readPersistedReviewViewState(session.config)).toEqual({
+      overlayTour: { tourId: "flow", activeAnchor: "second", kind: "sequence" },
+    });
+  });
+
+  it("persists navigation without discarding a stored view the canvas could not offer", () => {
+    const session = testReviewSession();
+    storeState(session, { activeView: "map" });
+    // The canvas opened without a map, so it started on the whiteboard.
+    const store = createReviewPanelStore({ view: "review" });
+    renderViewState({ session, store });
+
+    act(() =>
+      store
+        .getState()
+        .openOverlayTour({ tourId: "flow", kind: "sequence" }, "second"),
+    );
+    expect(readPersistedReviewViewState(session.config)).toMatchObject({
+      activeView: "map",
+      overlayTour: { tourId: "flow", activeAnchor: "second" },
+    });
+
+    act(() => store.getState().showView("diff"));
+    expect(readPersistedReviewViewState(session.config)).toEqual({
+      activeView: "diff",
     });
   });
 
@@ -312,63 +375,43 @@ describe("review view state", () => {
     );
   });
 
-  it("keeps a stored tour until the diagram that owns it mounts", () => {
+  it("restores the fullscreen tour a reader left open", () => {
     const session = testReviewSession();
-    const otherTour: GuidedTour = { ...tour, id: "other" };
     storeState(session, {
-      overlayTour: { tourId: "flow", activeAnchor: "second" },
+      activeView: "review",
+      overlayTour: { tourId: "flow", activeAnchor: "second", kind: "sequence" },
     });
 
-    const container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-
-    const render = (owners: readonly GuidedTour[]) =>
-      act(() => {
-        root?.render(
-          <ReviewSessionProvider session={session}>
-            <TourHarness owners={owners} />
-          </ReviewSessionProvider>,
-        );
-      });
-
-    // A diagram that does not own the stored tour mounts first (and closed).
-    render([otherTour]);
-    expect(container.querySelector("[data-tour=other]")?.textContent).toBe("");
-    expect(readPersistedReviewViewState(session.config).overlayTour).toEqual({
+    expect(
+      readReviewNavigationRestore(session.config, canvas).overlayTour,
+    ).toEqual({
       tourId: "flow",
-      activeAnchor: "second",
-    });
-
-    // The owner mounts later, claims the restore, and keeps persisting it.
-    render([otherTour, tour]);
-    expect(container.querySelector("[data-tour=flow]")?.textContent).toBe(
-      "second",
-    );
-    expect(readPersistedReviewViewState(session.config).overlayTour).toEqual({
-      tourId: "flow",
-      activeAnchor: "second",
+      kind: "sequence",
+      anchor: "second",
+      revealRequest: 0,
     });
   });
 
-  it("lets the matching tour owner claim a restore exactly once", () => {
-    const claim = createReviewTourRestoreClaim({
-      tourId: "flow",
-      activeAnchor: "second",
+  it("restores a tour an older build stored as a panel", () => {
+    const session = testReviewSession();
+    storeState(session, {
+      panel: { kind: "tour", tourId: "flow", activeAnchor: "second" },
     });
 
-    expect(claim.claim({ ...tour, id: "other" })).toBeNull();
-    expect(claim.claim(tour)).toEqual({
-      tour,
-      activeAnchor: "second",
+    expect(
+      readReviewNavigationRestore(session.config, canvas).overlayTour,
+    ).toEqual({
+      tourId: "flow",
+      kind: undefined,
+      anchor: "second",
+      revealRequest: 0,
     });
-    expect(claim.claim(tour)).toBeNull();
   });
 
   it("restores every view the switcher offers, and nothing else", () => {
     const session = testReviewSession();
 
-    for (const view of ["review", "map", "diff"] as const) {
+    for (const view of ["review", "commits", "map", "diff", "trace"] as const) {
       storeState(session, { activeView: view });
       expect(readPersistedReviewViewState(session.config).activeView).toBe(
         view,
@@ -394,32 +437,22 @@ describe("review view state", () => {
   });
 });
 
-const tour: GuidedTour = {
-  id: "flow",
-  stops: [
-    {
-      anchor: { id: "first", title: "First" } as AnchorRef,
-      label: "First",
-      content: { kind: "inline-code", text: "first();" },
-    },
-    {
-      anchor: { id: "second", title: "Second" } as AnchorRef,
-      label: "Second",
-      content: { kind: "inline-code", text: "second();" },
-    },
-  ],
-};
+const canvas = {
+  softwareMapEnabled: true,
+  hasChangeRange: true,
+  version: 1,
+  lensMode: "structural",
+  commits: [],
+} as const;
 
 function renderViewState({
   session,
   store = createReviewPanelStore(),
   metrics = { scrollHeight: 1_000, clientHeight: 200 },
-  children,
 }: {
   session: TestReviewSession;
   store?: ReturnType<typeof createReviewPanelStore>;
   metrics?: { scrollHeight: number; clientHeight: number };
-  children?: ReactNode;
 }) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -436,9 +469,7 @@ function renderViewState({
             captureElement={(value: HTMLDivElement) => {
               element = value;
             }}
-          >
-            {children}
-          </ViewStateHarness>
+          />
         </ReviewSessionProvider>,
       );
     });
@@ -448,45 +479,14 @@ function renderViewState({
   return { element: element!, store, renderSession };
 }
 
-function TourOwner({ tour }: { tour: GuidedTour }) {
-  const restored = useTourRestore(tour);
-  useTourPersist(restored?.tour ?? null, restored?.activeAnchor ?? null);
-
-  return <span data-tour={tour.id}>{restored?.activeAnchor ?? ""}</span>;
-}
-
-function TourHarness({ owners }: { owners: readonly GuidedTour[] }) {
-  const scrollRegionRef = useRef<HTMLDivElement | null>(null);
-
-  const sync = useReviewViewStateSync({
-    scrollRegionRef: scrollRegionRef as RefObject<HTMLElement | null>,
-    panelStore: createReviewPanelStore(),
-  });
-
-  return (
-    <ReviewViewStateProvider
-      tourRestore={sync.tourRestore}
-      persistOverlayTour={sync.persistOverlayTour}
-    >
-      <div ref={scrollRegionRef}>
-        {owners.map((owner) => (
-          <TourOwner key={owner.id} tour={owner} />
-        ))}
-      </div>
-    </ReviewViewStateProvider>
-  );
-}
-
 function ViewStateHarness({
   store,
   metrics,
   captureElement,
-  children,
 }: {
   store: ReturnType<typeof createReviewPanelStore>;
   metrics: { scrollHeight: number; clientHeight: number };
   captureElement(element: HTMLDivElement): void;
-  children?: ReactNode;
 }) {
   const scrollRegionRef = useRef<HTMLDivElement | null>(null);
   const scrollTop = useRef(0);
@@ -495,36 +495,32 @@ function ViewStateHarness({
     panelStore: store,
   });
 
-  return createElement(
-    "div",
-    {
-      ref: (element: HTMLDivElement | null) => {
-        scrollRegionRef.current = element;
+  return createElement("div", {
+    ref: (element: HTMLDivElement | null) => {
+      scrollRegionRef.current = element;
 
-        if (!element) return;
-        Object.defineProperties(element, {
-          scrollTop: {
-            configurable: true,
-            get: () => scrollTop.current,
-            set: (value: number) => {
-              scrollTop.current = value;
-            },
+      if (!element) return;
+      Object.defineProperties(element, {
+        scrollTop: {
+          configurable: true,
+          get: () => scrollTop.current,
+          set: (value: number) => {
+            scrollTop.current = value;
           },
-          scrollHeight: {
-            configurable: true,
-            get: () => metrics.scrollHeight,
-          },
-          clientHeight: {
-            configurable: true,
-            get: () => metrics.clientHeight,
-          },
-        });
-        captureElement(element);
-      },
-      tabIndex: -1,
+        },
+        scrollHeight: {
+          configurable: true,
+          get: () => metrics.scrollHeight,
+        },
+        clientHeight: {
+          configurable: true,
+          get: () => metrics.clientHeight,
+        },
+      });
+      captureElement(element);
     },
-    children,
-  );
+    tabIndex: -1,
+  });
 }
 
 function storeState(

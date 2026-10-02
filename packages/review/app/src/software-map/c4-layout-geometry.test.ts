@@ -2,15 +2,12 @@ import type { Edge as ReactFlowEdge } from "@xyflow/react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  C4LayoutQueue,
   c4EdgeEndpointBubbles,
   c4LayoutSignature,
   c4PreviousInlineLayoutForRelationships,
   c4ViewportForNodeReveal,
   createC4MapFlowFromLayout,
-  fitC4MapView,
   focusC4MapNode,
-  focusC4MapNodeAndKeyboard,
   runInlineC4Layout,
   runSerializedC4Layout,
 } from "./c4-layout-geometry";
@@ -35,36 +32,6 @@ type C4LayoutBoxForTest = {
 };
 
 describe("SoftwareMap C4 layout geometry", () => {
-  it("serializes C4 layouts while follow-up measurements settle", async () => {
-    const queue = new C4LayoutQueue();
-    const calls: string[] = [];
-    let releaseFirst!: () => void;
-
-    const firstGate = new Promise<void>((resolve) => {
-      releaseFirst = resolve;
-    });
-
-    const first = queue.run(async () => {
-      calls.push("first:start");
-      await firstGate;
-      calls.push("first:end");
-
-      return 1;
-    });
-
-    const second = queue.run(async () => {
-      calls.push("second");
-
-      return 2;
-    });
-
-    await Promise.resolve();
-    expect(calls).toEqual(["first:start"]);
-    releaseFirst();
-    await expect(Promise.all([first, second])).resolves.toEqual([1, 2]);
-    expect(calls).toEqual(["first:start", "first:end", "second"]);
-  });
-
   it("serializes libavoid work shared by separate map canvases", async () => {
     const calls: string[] = [];
     let releaseFirst!: () => void;
@@ -307,78 +274,6 @@ describe("SoftwareMap C4 layout geometry", () => {
       { x: 24, y: 36, width: 1740, height: 665 },
       expect.objectContaining({ padding: expect.any(Number) }),
     );
-  });
-
-  it("restores C4 keyboard focus after viewport focus succeeds", () => {
-    const node = {
-      id: "progressiveReview",
-      position: { x: 24, y: 36 },
-      data: {
-        node: {
-          id: "progressiveReview",
-          label: "Progressive Review",
-          type: "softwareSystem",
-        },
-      },
-      type: "softwareMapC4",
-      width: 320,
-      height: 180,
-    };
-
-    const fitBounds = vi.fn<() => void>();
-
-    const keyboardTarget = {
-      focus: vi.fn<(options?: FocusOptions) => void>(),
-    };
-
-    const focusKeyboardTarget = vi.fn<(element: HTMLElement | null) => void>(
-      (element) => {
-        element?.focus({ preventScroll: true });
-      },
-    );
-
-    expect(
-      focusC4MapNodeAndKeyboard(
-        { fitBounds } as never,
-        node as never,
-        keyboardTarget as never,
-        focusKeyboardTarget,
-      ),
-    ).toBe(true);
-    expect(fitBounds).toHaveBeenCalledWith(
-      { x: 24, y: 36, width: 320, height: 180 },
-      expect.objectContaining({ padding: expect.any(Number) }),
-    );
-    expect(focusKeyboardTarget).toHaveBeenCalledWith(keyboardTarget);
-    expect(keyboardTarget.focus).toHaveBeenCalledWith({ preventScroll: true });
-
-    fitBounds.mockClear();
-    keyboardTarget.focus.mockClear();
-    focusKeyboardTarget.mockClear();
-    expect(
-      focusC4MapNodeAndKeyboard(
-        null,
-        node as never,
-        keyboardTarget as never,
-        focusKeyboardTarget,
-      ),
-    ).toBe(false);
-    expect(fitBounds).not.toHaveBeenCalled();
-    expect(focusKeyboardTarget).not.toHaveBeenCalled();
-    expect(keyboardTarget.focus).not.toHaveBeenCalled();
-  });
-
-  it("fits the C4 viewport with the same padding as the React Flow control", () => {
-    const fitView = vi.fn<() => void>();
-
-    expect(fitC4MapView(null)).toBe(false);
-    expect(fitView).not.toHaveBeenCalled();
-
-    expect(fitC4MapView({ fitView } as never)).toBe(true);
-    expect(fitView).toHaveBeenCalledWith({
-      padding: 0.18,
-      duration: expect.any(Number),
-    });
   });
 
   it("does not move the viewport when keyboard navigation lands on a visible C4 node", () => {

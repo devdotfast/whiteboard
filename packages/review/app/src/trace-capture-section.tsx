@@ -1,8 +1,14 @@
+import { fontSize } from "@canvas/scale.stylex";
+import { TextField } from "@canvas/ui/text-field";
 import type {
   ReviewCanvasInstallContent,
   ReviewCliInstallStatus,
 } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import { useEffect, useState } from "react";
+
+import { promptStyles } from "./prompt-styles";
+import { tokens } from "./tokens.stylex";
 
 type InstallApplyRequest = Parameters<ReviewCanvasInstallContent["apply"]>[0];
 
@@ -11,11 +17,11 @@ type TraceCredentials = Exclude<InstallApplyRequest["trace"], true | undefined>;
 /** One line naming the selected trace store and where its setup lives. */
 function traceStorageSummary(trace: ReviewCliInstallStatus["trace"]): string {
   if (trace.storageMode === "hosted") {
-    return "Storage: hosted trace store selected. Manage it with `review login`, `review trace allow`, and `review trace storage use` in a terminal.";
+    return "Storage: hosted trace store selected. Manage it with `whiteboard login`, `whiteboard trace allow`, and `whiteboard trace storage use` in a terminal.";
   }
 
   if (trace.storageMode === "none" || !trace.configured) {
-    return "Storage: none selected. Enter S3/R2 credentials below, or select the hosted store with `review trace storage use hosted`.";
+    return "Storage: none selected. Enter S3/R2 credentials below, or select the hosted store with `whiteboard trace storage use hosted`.";
   }
 
   const source =
@@ -95,11 +101,14 @@ export function TraceCaptureSection({
   };
 
   return (
-    <div className="review-agent-setup-terminal review-agent-setup-trace">
-      <div className="review-agent-setup-terminal-info">
-        <span className="review-agent-setup-name">Trace capture</span>
+    <div {...stylex.props(styles.section)}>
+      <div {...stylex.props(styles.info)}>
+        <span {...stylex.props(styles.name)}>Trace capture</span>
         <span
-          className="review-agent-setup-state"
+          {...stylex.props(
+            styles.state,
+            status.trace.enabled && styles.stateEnabled,
+          )}
           data-installed={status.trace.enabled}
           title={status.trace.envPath}
         >
@@ -113,34 +122,34 @@ export function TraceCaptureSection({
               ? "ready to enable"
               : "off"}
         </span>
-        <span className="review-agent-setup-cli">
+        <span {...stylex.props(styles.detail)}>
           {traceDestinationCopy(status.trace)}
         </span>
-        <span className="review-agent-setup-cli" data-testid="trace-storage">
+        <span {...stylex.props(styles.detail)} data-testid="trace-storage">
           {traceStorageSummary(status.trace)}
         </span>
       </div>
       {hosted ? null : (
-        <div className="review-agent-setup-trace-fields">
-          <input
+        <div {...stylex.props(styles.fields)}>
+          <TextField
             aria-label="S3/R2 endpoint URL"
             placeholder="S3/R2 endpoint URL"
             value={traceEndpoint}
             onChange={(event) => setTraceEndpoint(event.currentTarget.value)}
           />
-          <input
+          <TextField
             aria-label="S3/R2 bucket"
             placeholder="S3/R2 bucket"
             value={traceBucket}
             onChange={(event) => setTraceBucket(event.currentTarget.value)}
           />
-          <input
+          <TextField
             aria-label="S3/R2 region"
             placeholder="Region (auto for R2)"
             value={traceRegion}
             onChange={(event) => setTraceRegion(event.currentTarget.value)}
           />
-          <input
+          <TextField
             aria-label="S3/R2 access key ID"
             placeholder={
               status.trace.accessKeyIdPrefix
@@ -150,7 +159,7 @@ export function TraceCaptureSection({
             value={traceKey}
             onChange={(event) => setTraceKey(event.currentTarget.value)}
           />
-          <input
+          <TextField
             aria-label="S3/R2 secret access key"
             type="password"
             placeholder={
@@ -210,7 +219,54 @@ export function TraceCaptureSection({
               : "Enable"}
         </button>
       )}
-      {error ? <p className="review-agent-setup-error">{error}</p> : null}
+      {error ? <p {...stylex.props(promptStyles.error)}>{error}</p> : null}
     </div>
   );
 }
+
+const styles = stylex.create({
+  section: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "flex-start",
+    gap: "10px",
+    marginTop: "12px",
+    paddingTop: "10px",
+    borderTopWidth: "1px",
+    borderTopStyle: "solid",
+    borderTopColor: tokens.reviewHomeRuleSoft,
+  },
+  info: {
+    display: "flex",
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: "100%",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    gap: "10px",
+    minWidth: 0,
+  },
+  name: {
+    minWidth: "110px",
+  },
+  state: {
+    flex: 1,
+    minWidth: 0,
+    color: tokens.reviewHomeMeta,
+    fontSize: fontSize.body,
+  },
+  // Enabled is the one state worth colouring.
+  stateEnabled: {
+    color: tokens.changeAdded,
+  },
+  detail: {
+    color: tokens.reviewHomeMeta,
+    fontSize: fontSize.body,
+  },
+  fields: {
+    display: "grid",
+    flex: 1,
+    gridTemplateColumns: "repeat(2, minmax(160px, 1fr))",
+    gap: "6px",
+  },
+});

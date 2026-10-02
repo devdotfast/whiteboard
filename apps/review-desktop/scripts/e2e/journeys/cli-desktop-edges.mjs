@@ -118,7 +118,7 @@ export async function run(ctx) {
 
   const original = await readFile(pointer, "utf8");
 
-  // `review info` is the CLI's only unconditional discovery read; `app pick` launches before it reads and swallows these errors.
+  // `whiteboard info` is the CLI's only unconditional discovery read; `app pick` launches before it reads and swallows these errors.
   const probe = async (contents) => {
     await writeFile(pointer, contents);
 
@@ -202,7 +202,7 @@ export async function run(ctx) {
       LOOKUP_ERROR,
       `an unreachable Desktop still answered: ${output(result)}`,
     );
-    ctx.check("a stale pointer tells the user to run review app launch");
+    ctx.check("a stale pointer tells the user to run whiteboard app launch");
 
     // The other half: dead pids with a url that still answers must not read as a stale pointer.
     result = await probe(
@@ -215,11 +215,11 @@ export async function run(ctx) {
       `dead pids were treated as a broken pointer: ${output(result)}`,
     );
 
-    assert.equal(result.code, 0, `review info: ${output(result)}`);
+    assert.equal(result.code, 0, `whiteboard info: ${output(result)}`);
     assert.match(
       result.stdout,
       new RegExp(review.reviewId),
-      `review info named no review: ${output(result)}`,
+      `whiteboard info named no review: ${output(result)}`,
     );
     ctx.check("dead pids in the pointer do not stop the CLI reaching Desktop");
 

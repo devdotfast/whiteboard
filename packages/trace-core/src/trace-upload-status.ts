@@ -3,7 +3,6 @@ import type { Writable } from "node:stream";
 import { listUploadsQuerySchema } from "@dev.fast/trace-protocol";
 
 import { StoreApiError, type StoreClient } from "./store-client";
-import { traceCommandPrefix } from "./trace-command";
 import type { TraceRepo } from "./trace-repo";
 
 /** A live, writer-authorized check of recorded uploads. */
@@ -87,7 +86,7 @@ export async function writeOwnUploadStatus(input: {
 
     if (page.nextCursor)
       input.stdout.write(
-        `More uploads: run \`${traceCommandPrefix()} status${input.session ? ` --agent-session ${input.session}` : ""} --limit ${query.data.limit} --cursor ${page.nextCursor}\`.\n`,
+        `More uploads: run \`whiteboard trace status${input.session ? ` --agent-session ${input.session}` : ""} --limit ${query.data.limit} --cursor ${page.nextCursor}\`.\n`,
       );
 
     return 0;

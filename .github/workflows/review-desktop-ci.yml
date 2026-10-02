@@ -1,4 +1,4 @@
-name: Review Desktop CI
+name: Whiteboard CI
 
 on:
   pull_request:
@@ -7,9 +7,6 @@ on:
       - reopened
       - synchronize
       - ready_for_review
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -105,6 +102,10 @@ jobs:
           cache: npm
           cache-dependency-path: apps/review-desktop/code-oss/**/package-lock.json
 
+      - name: Compute Code OSS dependency digest
+        id: code-oss-dependency-digest
+        run: echo "digest=$(node apps/review-desktop/scripts/code-oss-bootstrap.mjs digest apps/review-desktop/code-oss)" >> "$GITHUB_OUTPUT"
+
       # out/ is deliberately not cached: the build rebuilds it from scratch, so
       # caching it only adds download/upload time. The nested extension and
       # build-tool node_modules are cached so postinstall's per-directory npm
@@ -128,17 +129,17 @@ jobs:
             apps/review-desktop/code-oss/.build/distro/npm/remote/web/node_modules
             apps/review-desktop/code-oss/.build/electron
             ~/.cache/node-gyp
-          key: ${{ runner.os }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-code-oss-deps-v3-${{ steps.code-oss-dependency-digest.outputs.digest }}
           restore-keys: |
-            ${{ runner.os }}-code-oss-deps-v2-
+            ${{ runner.os }}-${{ runner.arch }}-code-oss-deps-v3-
 
-      - name: Build Review Desktop
+      - name: Build Whiteboard
         env:
           GITHUB_TOKEN: ${{ github.token }}
           REVIEW_DESKTOP_CI_FAST: "1"
         run: pnpm --filter @dev.fast/review-desktop app:build
 
-      - name: Validate Review Desktop build
+      - name: Validate Whiteboard build
         run: |
           test -d apps/review-desktop/code-oss/node_modules
           test -f apps/review-desktop/code-oss/out/main.js
@@ -158,16 +159,26 @@ jobs:
             apps/review-desktop/code-oss/.build/distro/npm/remote/web/node_modules
             apps/review-desktop/code-oss/.build/electron
             ~/.cache/node-gyp
-          key: ${{ runner.os }}-code-oss-deps-v2-${{ hashFiles('apps/review-desktop/code-oss/**/package-lock.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-code-oss-deps-v3-${{ steps.code-oss-dependency-digest.outputs.digest }}
 
       - name: Check the tutorial assets
         run: pnpm --filter @dev.fast/review check:tutorial
 
-      - name: Typecheck and test
-        run: pnpm typecheck && pnpm test
+      # The build already built workspace dependencies and typechecked Code OSS.
+      - name: Typecheck
+        run: |
+          pnpm -r --filter '!@dev.fast/review-desktop' --workspace-concurrency=1 --if-present typecheck
+
+      # Typecheck prepared the shared tutorial assets before concurrent pretests.
+      - name: Test
+        run: |
+          node --test "scripts/**/*.test.mjs"
+          pnpm -r --no-sort --workspace-concurrency=3 --if-present test
 
       - name: Bundled diffr integration
-        run: pnpm --filter @dev.fast/review test:integration:diffr
+        run: |
+          pnpm --filter @dev.fast/review ensure:diffr --required
+          pnpm --filter @dev.fast/review exec vitest run --config vitest.integration.config.ts
 
       - name: Upload browser test diagnostics
         if: failure()

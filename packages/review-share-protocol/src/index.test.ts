@@ -116,7 +116,7 @@ it("normalizes GitHub transports without publishing credentials", () => {
     expect(gitHubRepositoryUrlSchema.safeParse(remote).success).toBe(false);
 });
 
-it("requires repository identity and rejects the previous source envelope", () => {
+it("accepts document-only manifests and rejects the previous source envelope", () => {
   const a = "a".repeat(64),
     b = "b".repeat(64);
 
@@ -134,7 +134,7 @@ it("requires repository identity and rejects the previous source envelope", () =
     resources: [],
   };
 
-  expect(shareManifestSchema.safeParse(manifest).success).toBe(false);
+  expect(shareManifestSchema.safeParse(manifest).success).toBe(true);
   expect(
     shareManifestSchema.safeParse({
       ...manifest,

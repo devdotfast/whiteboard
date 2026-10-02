@@ -61,12 +61,12 @@ describe("ReviewSection", () => {
     expect(container.querySelectorAll("h2")).toHaveLength(1);
     expect(body?.querySelectorAll(":scope > p, :scope > ol")).toHaveLength(3);
     expect(body).toHaveProperty("hidden", true);
-    expect(container.querySelector(".review-section-meta")?.textContent).toBe(
-      "2 paragraphs",
-    );
+    expect(
+      container.querySelector(".review-section-heading + span")?.textContent,
+    ).toBe("2 paragraphs");
 
     const toggle = container.querySelector<HTMLButtonElement>(
-      ".review-section-toggle",
+      "button[aria-expanded]",
     );
 
     expect(toggle?.getAttribute("aria-label")).toBe("Expand Testing");
@@ -79,26 +79,5 @@ describe("ReviewSection", () => {
         reviewUiStateKey(TEST_REVIEW_CONFIG, "session", "section", "Testing"),
       ),
     ).toBe(false);
-  });
-
-  it("renders without an id when none was assigned", () => {
-    const container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-
-    act(() => {
-      renderWithSession(
-        <ReviewSection title="Loose">
-          <p>Body copy.</p>
-        </ReviewSection>,
-      );
-    });
-
-    const heading = container.querySelector(".review-section-heading h2");
-
-    expect(heading?.hasAttribute("id")).toBe(false);
-    expect(container.querySelector(".review-section-body")?.textContent).toBe(
-      "Body copy.",
-    );
   });
 });

@@ -1,13 +1,13 @@
-import { z } from "zod";
-
 import {
   type LensSource,
   comparisonKey,
   resolveDiffSelection,
   selectionKey,
-} from "../lens-selection.js";
-import { type FileLineRange, fileLineRangeSchema } from "../source.js";
-import { type CoverageFile, emptyCoverage } from "../viewed-coverage.js";
+} from "@review/lens-selection.js";
+import { type FileLineRange, fileLineRangeSchema } from "@review/source.js";
+import { type CoverageFile, emptyCoverage } from "@review/viewed-coverage.js";
+import { z } from "zod";
+
 import type { ComparisonCoverage } from "./comparison-coverage.js";
 import {
   type DiffLens,

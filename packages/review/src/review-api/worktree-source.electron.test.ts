@@ -55,7 +55,7 @@ it.skipIf(!electron && !process.env.CI)(
     const git = (...args: string[]) =>
       execFileSync("git", args, { cwd: repository });
 
-    git("init", "-q");
+    git("init", "-q", "-b", "main");
     // Not an archive: a fixture of the kind language-server test suites carry.
     writeFileSync(path.join(repository, "fixture.asar"), "plain bytes\n");
     writeFileSync(path.join(repository, "index.ts"), "export {};\n");

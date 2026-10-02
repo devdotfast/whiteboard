@@ -11,10 +11,10 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { openLocalReviewStore } from "@review/review-api/local-data";
+import { reviewVcs } from "@review/review-vcs";
 import { afterEach, expect, it } from "vitest";
 
-import { openLocalReviewStore } from "../review-api/local-data";
-import { reviewVcs } from "../review-vcs";
 import { scratchGitRepo, syntheticLegacyReview } from "./import-test-utils";
 import { ensureJsonCutover, migrateJsonReviews } from "./json-cutover";
 

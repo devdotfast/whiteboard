@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -13,6 +13,7 @@ import {
 } from "@dev.fast/json";
 import {
   type ReviewDiffrConfig,
+  type ReviewDiffrProvider,
   type ReviewDiffrSummarizerInput,
   decodeStructuralDiffEvent,
   reviewDiffrSummarizerInputSchema,
@@ -69,12 +70,16 @@ async function values(
   reveal = false,
   signal?: AbortSignal,
 ): Promise<JsonObject> {
-  const output = await diffr(
-    ["config", "show", "--json", ...(reveal ? ["--reveal"] : [])],
-    rootPath,
-    { signal },
+  return json(
+    await diffr(
+      ["config", "show", "--json", ...(reveal ? ["--reveal"] : [])],
+      rootPath,
+      { signal },
+    ),
   );
+}
 
+function json(output: string): JsonObject {
   try {
     const parsed = parseJsonText(output);
 
@@ -97,18 +102,118 @@ function valueAt(object: JsonObject, key: string): JsonValue | undefined {
 
 const prefix = "plugins.bundled.summarize";
 
-function environmentKey(): string | undefined {
-  return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || undefined;
+function savedProvider(config: JsonObject): string {
+  const value = valueAt(config, `${prefix}.provider`);
+
+  return isStringValue(value) ? value : "";
+}
+
+function savedEndpoint(config: JsonObject): string {
+  const value = valueAt(config, `${prefix}.endpoint`);
+
+  return isStringValue(value) ? value : "";
+}
+
+/** Whether a saved key belongs to a different destination than the draft's. */
+function movesKey(
+  config: JsonObject,
+  draft: Pick<ReviewDiffrSummarizerInput, "provider" | "endpoint">,
+): boolean {
+  return (
+    draft.provider !== savedProvider(config) ||
+    draft.endpoint !== savedEndpoint(config)
+  );
+}
+
+function environmentKey(
+  providers: ReviewDiffrProvider[],
+  id: string,
+): string | undefined {
+  return providers
+    .find((provider) => provider.id === id)
+    ?.keyVariables.map((name) => process.env[name])
+    .find((key) => !!key);
+}
+
+function keyOptional(
+  providers: ReviewDiffrProvider[],
+  id: string,
+  endpoint: string,
+): boolean {
+  return (
+    endpoint !== "" &&
+    !!providers.find((provider) => provider.id === id)?.keylessCustomEndpoint
+  );
+}
+
+function strings(value: JsonValue | undefined): string[] {
+  return Array.isArray(value) ? value.filter(isStringValue) : [];
+}
+
+/**
+ * What diffr's schema says about summaries: each provider's defaults, and
+ * the default prompt with the link its description gives. Nothing when
+ * diffr cannot describe its schema: the rest of Settings still works.
+ */
+async function summaryDefaults(
+  rootPath?: string,
+): Promise<Pick<ReviewDiffrConfig, "providers" | "defaultPrompt">> {
+  let schema: JsonObject;
+
+  try {
+    schema = json(await diffr(["config", "schema"], rootPath));
+  } catch {
+    return {};
+  }
+
+  const options = valueAt(
+    schema,
+    "properties.plugins.properties.bundled.properties.summarize.properties",
+  );
+
+  if (!isJsonObject(options)) return {};
+
+  const option = (name: string) =>
+    isJsonObject(options[name]) ? options[name] : {};
+
+  const provider = option("provider");
+  const titles = strings(provider["x-enum-titles"]);
+  const models = valueAt(option("model"), "x-default-by.values");
+  const details = valueAt(option("provider_details"), "x-default-by.values");
+
+  const providers = strings(provider.enum).map((id, index) => {
+    const detail = isJsonObject(details) ? details[id] : undefined;
+    const model = isJsonObject(models) ? models[id] : undefined;
+    const endpoint = isJsonObject(detail) ? detail.endpoint : undefined;
+
+    return {
+      id,
+      title: titles[index] ?? id,
+      model: isStringValue(model) ? model : "",
+      endpoint: isStringValue(endpoint) ? endpoint : "",
+      keyVariables: isJsonObject(detail) ? strings(detail.key_variables) : [],
+      keylessCustomEndpoint:
+        isJsonObject(detail) && detail.keyless_custom_endpoint === true,
+    };
+  });
+
+  const prompt = option("system_prompt");
+
+  return {
+    providers,
+    defaultPrompt: isStringValue(prompt.default) ? prompt.default : undefined,
+  };
 }
 
 async function read(rootPath?: string): Promise<ReviewDiffrConfig> {
   const config = await values(rootPath);
+  const defaults = await summaryDefaults(rootPath);
   const saved = valueAt(config, `${prefix}.api_key`);
 
   const credentialSource =
     isStringValue(saved) && saved.length > 0
       ? "config"
-      : environmentKey()
+      : environmentKey(defaults.providers ?? [], savedProvider(config))
         ? "environment"
         : "missing";
 
@@ -124,7 +229,7 @@ async function read(rootPath?: string): Promise<ReviewDiffrConfig> {
     }
   }
 
-  return { values: config, credentialSource };
+  return { values: config, credentialSource, ...defaults };
 }
 
 export function readDiffrConfig(rootPath?: string): Promise<ReviewDiffrConfig> {
@@ -141,7 +246,7 @@ async function writeSettings(
 ): Promise<ReviewDiffrConfig> {
   let changed = false;
   let error: string | undefined;
-  const current = await values(rootPath);
+  let current = await values(rootPath);
 
   try {
     for (const [key, value] of entries) {
@@ -151,6 +256,8 @@ async function writeSettings(
         rootPath,
       );
       changed = true;
+      // A write can clear others, such as a provider's endpoint and key.
+      current = await values(rootPath);
     }
   } catch {
     error = changed
@@ -188,16 +295,21 @@ export function saveDiffrSummarizer(
 
   return serialized(async () => {
     const current = await read(rootPath);
+    const providers = current.providers ?? [];
+    const moving = movesKey(current.values, draft);
+    const savedKey = current.credentialSource === "config";
 
     if (
       draft.enabled &&
       !draft.apiKey &&
-      current.credentialSource === "missing"
+      !(savedKey && !moving) &&
+      !environmentKey(providers, draft.provider) &&
+      !keyOptional(providers, draft.provider, draft.endpoint)
     ) {
       return {
         ...current,
         changed: false,
-        error: "Add a Gemini API key before enabling summaries.",
+        error: "Add an API key before enabling summaries.",
       };
     }
 
@@ -205,7 +317,28 @@ export function saveDiffrSummarizer(
 
     if (!draft.enabled) entries.push([`${prefix}.enabled`, false]);
 
+    // Clear a key before its destination changes and write a new one only
+    // after, so a failure part way never pairs a key with another vendor.
+    if (moving && savedKey) entries.push([`${prefix}.api_key`, ""]);
+    entries.push([`${prefix}.provider`, draft.provider]);
+
+    // diffr clears a provider's endpoint when the provider changes, so a
+    // custom one kept across a switch is written again.
+    if (
+      draft.endpoint !== savedEndpoint(current.values) ||
+      (draft.endpoint && draft.provider !== savedProvider(current.values))
+    )
+      entries.push([`${prefix}.endpoint`, draft.endpoint]);
+
     if (draft.apiKey) entries.push([`${prefix}.api_key`, draft.apiKey]);
+
+    // A blank prompt leaves diffr's own in place.
+    if (
+      draft.systemPrompt.trim() &&
+      draft.systemPrompt !== valueAt(current.values, `${prefix}.system_prompt`)
+    )
+      entries.push([`${prefix}.system_prompt`, draft.systemPrompt]);
+
     entries.push(
       [`${prefix}.model`, draft.model],
       [`${prefix}.tests`, draft.tests],
@@ -239,27 +372,43 @@ export async function testDiffrSummarizer(
     if (!isJsonObject(saved))
       throw new Error("The summarizer is not available in this configuration.");
 
+    const { provider, endpoint, model, systemPrompt } = parsed.data;
+    const providers = (await summaryDefaults(rootPath)).providers ?? [];
+
+    const variables =
+      providers.find((known) => known.id === provider)?.keyVariables ?? [];
+
     const apiKey =
       parsed.data.apiKey ||
-      (isStringValue(saved.api_key) ? saved.api_key : undefined) ||
-      environmentKey();
+      (!movesKey(config, parsed.data) && isStringValue(saved.api_key)
+        ? saved.api_key
+        : "") ||
+      environmentKey(providers, provider);
 
-    if (!apiKey) throw new Error("Add a Gemini API key to test summaries.");
+    if (!apiKey && !keyOptional(providers, provider, endpoint))
+      throw new Error("Add an API key to test summaries.");
     directory = await mkdtemp(join(tmpdir(), "review-summary-"));
 
     const options: JsonObject = {
       ...saved,
       enabled: true,
-      model: parsed.data.model,
+      provider,
+      model,
+      ...(systemPrompt.trim() && { system_prompt: systemPrompt }),
       min_lines: 1,
       retries: 0,
       request_timeout_ms: 45_000,
     };
 
     delete options.api_key;
-    const configPath = join(directory, "config.toml");
+    // Resolved for the saved provider; diffr derives the draft provider's.
+    delete options.provider_details;
+
+    if (endpoint) options.endpoint = endpoint;
+    else delete options.endpoint;
+    await mkdir(join(directory, "diffr"));
     await writeFile(
-      configPath,
+      join(directory, "diffr", "config.toml"),
       stringify({
         version: 1,
         plugins: {
@@ -278,8 +427,6 @@ export async function testDiffrSummarizer(
 
     const output = await diffr(
       [
-        "--config",
-        configPath,
         "--no-index",
         "--format",
         "ndjson",
@@ -290,7 +437,16 @@ export async function testDiffrSummarizer(
       ],
       directory,
       {
-        env: { ...process.env, GEMINI_API_KEY: apiKey, GOOGLE_API_KEY: "" },
+        env: {
+          ...process.env,
+          ...Object.fromEntries(
+            providers
+              .flatMap((known) => known.keyVariables)
+              .map((name) => [name, ""]),
+          ),
+          ...(apiKey && variables[0] && { [variables[0]]: apiKey }),
+          XDG_CONFIG_HOME: directory,
+        },
         signal: deadline,
       },
     );
@@ -316,7 +472,9 @@ export async function testDiffrSummarizer(
         ) &&
         annotation
       ) {
-        return annotation.label.split(apiKey).join("[redacted]");
+        return apiKey
+          ? annotation.label.split(apiKey).join("[redacted]")
+          : annotation.label;
       }
     } catch {
       /* Never return provider output or parser causes. */

@@ -2,11 +2,11 @@ import type {
   ReviewInlineEditorSpec,
   ReviewVerbRequest,
 } from "@dev.fast/review-protocol";
+import { selectSource, sourceAnchors } from "@review/lens-selection";
 import { type ReactNode, act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { selectSource, sourceAnchors } from "../../src/lens-selection";
 import { CodePeek, CodePeekCard, CodePeekGroup } from "./CodePeek";
 import {
   type ReviewSession,
@@ -216,38 +216,6 @@ describe("CodePeek native editor", () => {
     });
   });
 
-  it("gives range side peeks a source title and content height policy", async () => {
-    const input = {
-      side: "head",
-      file: "src/example.ts",
-      fromLine: 1,
-      toLine: 3,
-    } as const;
-
-    const container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-
-    await act(async () =>
-      renderWithSession(
-        <CodePeekCard
-          source={selectSource(input)}
-          heightMode="content"
-          lenses={testLenses}
-        />,
-      ),
-    );
-
-    await vi.waitFor(() => {
-      expect(created[0]).toMatchObject({
-        path: "src/example.ts",
-        ranges: [{ startLine: 1, endLine: 3 }],
-        title: "src/example.ts:1-3",
-        heightMode: "content",
-      });
-    });
-  });
-
   it("disposes every prior editor while rapidly retargeting one inline surface", async () => {
     const container = document.createElement("div");
     document.body.append(container);
@@ -311,34 +279,6 @@ describe("CodePeek native editor", () => {
     await vi.waitFor(() => {
       expect(disposed).toHaveLength(1);
       expect(created).toHaveLength(2);
-    });
-  });
-
-  it("renders a canonical source range on its pinned side", async () => {
-    const container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      renderWithSession(
-        <CodePeekCard
-          lenses={testLenses}
-          source={selectSource({
-            side: "base",
-            file: "src/old.ts",
-            fromLine: 7,
-            toLine: 9,
-          })}
-        />,
-      );
-    });
-
-    await vi.waitFor(() => expect(created).toHaveLength(1));
-    expect(created[0]).toMatchObject({
-      path: "src/old.ts",
-      title: "src/old.ts:7-9",
-      side: "base",
-      ranges: [{ startLine: 7, endLine: 9 }],
     });
   });
 });

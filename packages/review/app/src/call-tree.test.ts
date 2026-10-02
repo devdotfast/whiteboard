@@ -1,6 +1,6 @@
+import { call_stack_diff } from "@review/review-api/blocks/call_stack_diff";
 import { expect, it } from "vitest";
 
-import { call_stack_diff } from "../../src/review-api/blocks/call_stack_diff";
 import { callTreeStops } from "./call-tree";
 
 it("keeps separate calls into the same file as separate sections and combines matched base/head evidence", () => {

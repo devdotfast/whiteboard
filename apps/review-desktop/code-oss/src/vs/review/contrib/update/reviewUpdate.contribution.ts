@@ -19,16 +19,18 @@
 import { localize, localize2 } from '../../../nls.js';
 import { toAction } from '../../../base/common/actions.js';
 import { Disposable } from '../../../base/common/lifecycle.js';
-import { isLinux } from '../../../base/common/platform.js';
+import { isLinux, isMacintosh } from '../../../base/common/platform.js';
 import Severity from '../../../base/common/severity.js';
 import { Action2, registerAction2 } from '../../../platform/actions/common/actions.js';
 import type { ServicesAccessor } from '../../../platform/instantiation/common/instantiation.js';
 import { ILogService } from '../../../platform/log/common/log.js';
 import { INotificationService, type INotificationHandle } from '../../../platform/notification/common/notification.js';
+import { IOpenerService } from '../../../platform/opener/common/opener.js';
 import { IProductService } from '../../../platform/product/common/productService.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../platform/storage/common/storage.js';
 import {
 	darwinFailedUpdateNoticeId,
+	isDarwinReadOnlyVolumeError,
 	DARWIN_FAILED_UPDATE_STORAGE_KEY,
 	parseDarwinFailedUpdate,
 	shouldAnnounceDarwinFailedUpdate,
@@ -51,6 +53,7 @@ const STAGED_UPDATE_STORAGE_KEY = 'review.update.staged.v1';
 const SKIPPED_UPDATE_STORAGE_KEY = 'review.update.skipped.v1';
 /** Failed update attempt that Review already announced. */
 const FAILED_UPDATE_NOTICE_STORAGE_KEY = 'review.update.failedNotice.v1';
+const RELEASES_URL = 'https://github.com/devdotfast/whiteboard/releases';
 
 class ReviewUpdateNotifications extends Disposable {
 
@@ -60,6 +63,7 @@ class ReviewUpdateNotifications extends Disposable {
 	private readyHandle: INotificationHandle | undefined;
 	/** Which commit `readyHandle` is about. */
 	private readyCommit: string | undefined;
+	private announcedReadOnlyVolume = false;
 
 	constructor(
 		@IUpdateService private readonly updateService: IUpdateService,
@@ -67,6 +71,7 @@ class ReviewUpdateNotifications extends Disposable {
 		@IStorageService private readonly storageService: IStorageService,
 		@IProductService private readonly productService: IProductService,
 		@ILogService private readonly logService: ILogService,
+		@IOpenerService private readonly openerService: IOpenerService,
 	) {
 		super();
 
@@ -141,6 +146,10 @@ class ReviewUpdateNotifications extends Disposable {
 			message: notice.productVersion
 				? localize('review.update.applied', "Whiteboard updated to {0}.", notice.productVersion)
 				: localize('review.update.applied.unknownVersion', "Whiteboard has been updated."),
+			actions: { primary: [toAction({
+				id: 'review.update.releaseNotes', label: localize('review.update.releaseNotes', "Release Notes"),
+				run: () => this.openerService.open(RELEASES_URL, { openExternal: true }),
+			})] },
 		});
 	}
 
@@ -154,6 +163,17 @@ class ReviewUpdateNotifications extends Disposable {
 	 * would add a download-progress story for a state that clears on its own.
 	 */
 	private onStateChange(state: State): void {
+		if (isMacintosh && state.type === StateType.Idle && isDarwinReadOnlyVolumeError(state.error)) {
+			if (!this.announcedReadOnlyVolume) {
+				this.announcedReadOnlyVolume = true;
+				this.notificationService.notify({
+					severity: Severity.Warning,
+					sticky: true,
+					message: localize('review.update.readOnlyVolume', "Whiteboard cannot update from its current location. Quit Whiteboard, use Finder to copy or move Whiteboard to your Applications folder, then open it from there. If you opened Whiteboard from a disk image, eject the disk image after copying the app."),
+				});
+			}
+			return;
+		}
 		if (isLinux && state.type === StateType.AvailableForDownload) {
 			if (this.readyCommit === state.update.version && this.readyHandle) { return; }
 			this.readyHandle?.close();

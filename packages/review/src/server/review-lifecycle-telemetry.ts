@@ -1,11 +1,14 @@
-import type { PostHogCaptureProperties } from "../posthog-capture-client";
-import type { ReviewApiHooks } from "../review-api/http.js";
-import type { ReviewSessionAgent, ReviewTelemetry } from "../review-telemetry";
+import type { PostHogCaptureProperties } from "@review/posthog-capture-client";
+import type { ReviewApiHooks } from "@review/review-api/http.js";
+import type {
+  ReviewSessionAgent,
+  ReviewTelemetry,
+} from "@review/review-telemetry";
 
 /**
  * Review created, published and revoked, and agent authoring completed, as
  * server events. Authoring is complete at the first publish of a review an
- * agent created through `review api` or `review mcp`, timed from the review's
+ * agent created through `whiteboard api` or `whiteboard mcp`, timed from the review's
  * creation. Which reviews an agent created is known only to this process, so
  * a server restart between create and publish loses that one completion.
  * Sign-in reports its funnel, and a success calls `onLoggedIn`.

@@ -2,10 +2,10 @@ import { cp, mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { openLocalReviewStore } from "@review/review-api/local-data";
+import { createNativeTutorial } from "@review/server/tutorial-service";
 import ts from "typescript";
 
-import { openLocalReviewStore } from "../src/review-api/local-data";
-import { createNativeTutorial } from "../src/server/tutorial-service";
 import {
   buildTutorialAssets,
   readTutorialRuntimeManifest,

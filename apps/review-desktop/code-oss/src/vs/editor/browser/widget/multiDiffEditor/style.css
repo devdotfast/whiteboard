@@ -43,15 +43,27 @@
 		width: auto;
 	}
 
-	.active {
-		--vscode-multiDiffEditor-border: var(--vscode-focusBorder);
-	}
-
 	.multiDiffEntry {
 		display: flex;
 		flex-direction: column;
 		flex: 1;
 		overflow: hidden;
+
+		/*
+		 * Recolor only the two borders of the active entry. Setting the
+		 * inherited --vscode-multiDiffEditor-border on the entry made every
+		 * element of its editors restyle whenever the active entry changed,
+		 * which happens while scrolling across files.
+		 */
+		&.active {
+			.header .header-content {
+				border-top-color: var(--vscode-focusBorder);
+			}
+
+			.editorParent {
+				border-bottom-color: var(--vscode-focusBorder);
+			}
+		}
 
 
 		.collapse-button {

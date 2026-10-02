@@ -1,6 +1,3 @@
-import { describe, expect, it } from "vitest";
-import { ZodError } from "zod";
-
 import {
   type StoreInput,
   type StoreRef,
@@ -8,15 +5,17 @@ import {
   defineCollections,
   resolveTargetRef,
   storeRefData,
-} from "../../src/authoring";
-import { databaseLensBlockFromLegacy } from "../../src/database-lens-block";
-import { selectSource } from "../../src/lens-selection";
-import type { DatabaseOperation } from "../../src/review-api/document";
+} from "@review/authoring";
+import { databaseLensBlockFromLegacy } from "@review/database-lens-block";
+import { selectSource } from "@review/lens-selection";
+import type { DatabaseOperation } from "@review/review-api/document";
+import { describe, expect, it } from "vitest";
+import { ZodError } from "zod";
+
 import {
   type LensStores,
   type ResolvedOperation,
   databaseC4Snapshot,
-  databaseTourStopDetail,
   initialDatabaseC4ExpandedNodeIds,
   lensTarget,
   seedDatabaseC4DefaultExpandedNodeIds,
@@ -647,26 +646,5 @@ describe("database lens operation highlighting", () => {
       writeAudit: "inactive",
       refreshCache: "inactive",
     });
-  });
-});
-
-describe("database lens guided tour steps", () => {
-  it("keeps tour stop detail visible when the operation anchor omits detail", () => {
-    expect(
-      databaseTourStopDetail({
-        useCaseLabel: "Publish review",
-        operationLabel: "write submitted status",
-      }),
-    ).toBe("Publish review: write submitted status");
-  });
-
-  it("prefers operation anchor detail when present", () => {
-    expect(
-      databaseTourStopDetail({
-        useCaseLabel: "Publish review",
-        operationLabel: "write submitted status",
-        anchorDetail: "Persist the submitted review event.",
-      }),
-    ).toBe("Persist the submitted review event.");
   });
 });

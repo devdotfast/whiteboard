@@ -8,23 +8,23 @@ import {
   type ShareManifest,
   shareManifestSchema,
 } from "@dev.fast/review-share-protocol";
-import { z } from "zod";
-
-import { sourceAnchors } from "../lens-selection.js";
-import { markdownNodes, parseMarkdown } from "../markdown.js";
-import { lensSelections } from "../review-api/diff-lenses.js";
-import { ReviewInputError } from "../review-api/document.js";
+import { sourceAnchors } from "@review/lens-selection.js";
+import { markdownNodes, parseMarkdown } from "@review/markdown.js";
+import { lensSelections } from "@review/review-api/diff-lenses.js";
+import { ReviewInputError } from "@review/review-api/document.js";
 import {
   anchorPins,
   checkReferences,
   documentSchema,
   elements,
+  hasCodeReferences,
   resourceReference,
   resourceReferences,
   sourceReferences,
-} from "../review-api/document.js";
-import type { LocalReviewData } from "../review-api/local-data.js";
-import type { ReviewStore } from "../review-api/store.js";
+} from "@review/review-api/document.js";
+import type { LocalReviewData } from "@review/review-api/local-data.js";
+import type { ReviewStore, Snapshot } from "@review/review-api/store.js";
+import { z } from "zod";
 
 export interface ShareBundle {
   manifest: ShareManifest;
@@ -43,17 +43,28 @@ export function digestBytes(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+export function validateShareSources(
+  snapshot: Pick<Snapshot, "pins" | "document" | "lenses">,
+) {
+  if (!snapshot.pins && hasCodeReferences(snapshot))
+    throw new ReviewInputError(
+      "Reviews with code references need source pins before sharing.",
+      409,
+    );
+}
+
 /** Freeze one stored version before any asynchronous source reads. */
 export async function exportShare(input: {
   store: ShareExportStore;
   data: ShareExportData;
   reviewId: string;
   version?: number;
-  repository: ShareManifest["repository"];
+  repository?: ShareManifest["repository"];
 }): Promise<ShareBundle> {
   // A share is the finished document: what edit last touched it stays home.
   const {
     target,
+    kind: _kind,
     staleSources: _staleSources,
     sourceUnavailable: _sourceUnavailable,
     lastEdit: _lastEdit,
@@ -102,11 +113,10 @@ export async function exportShare(input: {
 
   const pins = snapshot.pins;
 
-  if (!pins)
-    throw new ReviewInputError(
-      "A document without source pins of its own cannot be shared.",
-      409,
-    );
+  validateShareSources(snapshot);
+
+  if (Boolean(pins) !== Boolean(input.repository))
+    throw new ReviewInputError("Shared source pins require a repository.", 409);
 
   for (const block of elements(snapshot.document)) {
     if (block.type !== "markdown") continue;

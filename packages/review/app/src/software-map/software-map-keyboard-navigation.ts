@@ -1,4 +1,5 @@
-import type { ReviewNodeTint, ReviewTheme } from "../debug-settings";
+import type { ReviewNodeTint, ReviewTheme } from "@canvas/debug-settings";
+
 import type {
   C4LayoutResult,
   C4MapAnyFlowNode,
@@ -466,9 +467,9 @@ export function softwareMapOverlayClassName({
 }) {
   return [
     "software-map-overlay",
-    // The overlay portals to document.body, outside the canvas root that
-    // carries the dark token definitions — so it must bring the token scope
-    // along itself.
+    // The overlay portals into the canvas container, outside .review-app, so
+    // it carries its own scope root (the dark tokens) and theme classes;
+    // softwareMapOverlayProps adds the matching StyleX theme and appMarker.
     "review-canvas-root",
     "review-app",
     `review-app--theme-${theme}`,

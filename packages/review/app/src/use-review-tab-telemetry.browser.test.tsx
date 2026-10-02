@@ -2,6 +2,7 @@ import { act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import {
   type ReviewSession,
   ReviewSessionProvider,
@@ -42,7 +43,6 @@ it("keeps dwell continuous through live review updates and sends the latest vers
     historicalRevision: null,
     updatedAtMs: 0,
     traces: new Map(),
-    listVersions: async () => [],
     stack: async () => [],
     dismiss: async () => {},
   };
@@ -54,9 +54,11 @@ it("keeps dwell continuous through live review updates and sends the latest vers
   const render = (session: ReviewSession) =>
     act(() => {
       root!.render(
-        <ReviewSessionProvider session={session}>
-          <Telemetry />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <Telemetry />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       );
     });
 
@@ -72,10 +74,6 @@ it("keeps dwell continuous through live review updates and sends the latest vers
     beaconUrl: () => "http://localhost/telemetry?version=2",
   });
 
-  expect(request).toHaveBeenCalledTimes(1);
-  expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body)).name).toBe(
-    "app_opened",
-  );
   expect(beacon).not.toHaveBeenCalled();
   now = 2500;
   act(() => window.dispatchEvent(new Event("pagehide")));

@@ -17,8 +17,6 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
-import { verifyWindowsDiffr } from "./windows-diffr.mjs";
-
 const execFileAsync = promisify(execFile);
 
 const diffrName = process.platform === "win32" ? "diffr.exe" : "diffr";
@@ -50,6 +48,8 @@ export const REQUIRED_RUNTIME_ENTRIES = [
   RUNTIME_CLI_ENTRY,
   `bin/${diffrName}`,
   "dist/cli.js",
+  // The build's commit; without it the server reports `commit: null`.
+  "dist/build-info.json",
   "instructions/authoring.md",
   "tutorial/runtime-manifest.json",
   "node_modules",
@@ -125,7 +125,6 @@ export async function stageReviewRuntime(packagedRoot) {
     pnpmScript ? process.execPath : "pnpm",
     [
       ...(pnpmScript ? [pnpmScript] : []),
-      "--config.allow-unused-patches=true",
       // This workspace pins `nodeLinker: hoisted`, under which a plain deploy
       // links workspace dependencies back to the checkout and never resolves
       // their own dependency graphs. Injecting copies them in with their deps.
@@ -178,24 +177,20 @@ export async function stageDiffrBinary(
     );
   }
 
-  if (process.platform === "win32") {
-    verifyWindowsDiffr(source);
-  } else {
-    const require = createRequire(
-      path.join(monorepoRoot, "packages/review/package.json"),
-    );
+  const require = createRequire(
+    path.join(monorepoRoot, "packages/review/package.json"),
+  );
 
-    const packageRoot = path.dirname(
-      require.resolve("@dev.fast/diffr/package.json"),
-    );
+  const packageRoot = path.dirname(
+    require.resolve("@dev.fast/diffr/package.json"),
+  );
 
-    await execFileAsync(process.execPath, [
-      path.join(packageRoot, "bin/fetch.mjs"),
-      "--check",
-      "--into",
-      path.dirname(source),
-    ]);
-  }
+  await execFileAsync(process.execPath, [
+    path.join(packageRoot, "bin/fetch.mjs"),
+    "--check",
+    "--into",
+    path.dirname(source),
+  ]);
 
   const destination = path.join(runtimeRoot, "bin", diffrName);
   await mkdir(path.dirname(destination), { recursive: true });

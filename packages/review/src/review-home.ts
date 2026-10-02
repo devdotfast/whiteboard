@@ -13,7 +13,6 @@ import {
 import { errorMessage } from "@dev.fast/trace-core";
 import { z } from "zod";
 
-import { isMissingFileError } from "./fs-utils";
 import { devReviewHome } from "./review-home-paths";
 import {
   type ReviewRecord,
@@ -107,93 +106,6 @@ export async function sealReviewCandidate(
   return withReviewMutationLock(dir, () => reviewVcs.seal(dir, message));
 }
 
-export async function findReview(
-  uuid: string,
-  devHome?: string,
-): Promise<StoredReview | null> {
-  return findReviewRecord(uuid, devHome);
-}
-
-export async function findReviewForRepair(
-  uuid: string,
-  devHome?: string,
-): Promise<StoredReview | null> {
-  if (!UUID_PATTERN.test(uuid))
-    throw new Error(`Review UUID is invalid: ${uuid}`);
-  const dir = path.join(reviewsHomeDir(devHome), uuid);
-  let value: JsonValue;
-
-  try {
-    value = parseJsonText(
-      await readFile(path.join(dir, "review.json"), "utf8"),
-    );
-  } catch (error) {
-    if (isMissingFileError(error)) return null;
-
-    const detail: ReviewHomeErrorDetail = {
-      message: `Could not read review.json: ${errorMessage(error)}`,
-    };
-
-    const code =
-      error instanceof Error && "code" in error
-        ? z.string().safeParse(error.code)
-        : null;
-
-    if (code?.success) detail.code = code.data;
-    throw new ReviewHomeScanError([reviewHomeError(dir, undefined, detail)]);
-  }
-
-  let review: StoredReviewRecord;
-
-  try {
-    review = parseAnyStoredReviewRecord(value);
-  } catch (error) {
-    throw new ReviewHomeScanError([
-      reviewHomeError(dir, jsonObject(value), {
-        code: "MIGRATION_REQUIRED",
-        message: `Invalid review.json; run \`review migrate apply\`: ${errorMessage(error)}`,
-      }),
-    ]);
-  }
-
-  if (review.uuid !== uuid)
-    throw new ReviewHomeScanError([
-      reviewHomeError(dir, review, {
-        message: "review.json UUID does not match its directory.",
-      }),
-    ]);
-
-  return { dir, review };
-}
-
-async function findReviewRecord(
-  uuid: string,
-  devHome?: string,
-): Promise<StoredReview | null> {
-  if (!UUID_PATTERN.test(uuid)) {
-    throw new Error(`Review UUID is invalid: ${uuid}`);
-  }
-
-  const loaded = await readStoredReview(
-    path.join(reviewsHomeDir(devHome), uuid),
-  );
-
-  if ("error" in loaded) {
-    if (loaded.error.code === "ENOENT") return null;
-    throw new ReviewHomeScanError([loaded.error]);
-  }
-
-  if (loaded.review.uuid !== uuid) {
-    throw new ReviewHomeScanError([
-      reviewHomeError(loaded.dir, loaded.review, {
-        message: "review.json UUID does not match its directory.",
-      }),
-    ]);
-  }
-
-  return loaded;
-}
-
 export async function materializeReviewRevision(
   dir: string,
   revision: string,
@@ -239,7 +151,7 @@ export async function readStoredReview(
     if (!parsed.success) {
       return {
         error: reviewHomeError(dir, jsonObject(value), {
-          message: `Invalid review.json; run \`review migrate apply\`: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
+          message: `Invalid review.json; run \`whiteboard migrate apply\`: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
           code: "MIGRATION_REQUIRED",
         }),
       };

@@ -1,5 +1,6 @@
-import { markdownText, parseMarkdown } from "../markdown.js";
-import { slugify, uniqueId } from "../slug.js";
+import { markdownText, parseMarkdown } from "@review/markdown.js";
+import { slugify, uniqueId } from "@review/slug.js";
+
 import { type Block, elements } from "./document.js";
 
 export type ReviewHeadingLevel = "h2" | "h3";

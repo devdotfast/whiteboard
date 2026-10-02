@@ -1,7 +1,7 @@
+import type { Snapshot } from "@review/review-api/store";
 import { act } from "react";
 import { afterEach, expect, it } from "vitest";
 
-import type { Snapshot } from "../../src/review-api/store";
 import { mountReviewCanvas as mount } from "./desktop-entry";
 import { fixtureReviewBridge, settled } from "./fixture-review-bridge";
 
@@ -39,8 +39,13 @@ it("renders a document's task list with each checkbox beside its text", async ()
   });
 
   const items = await settled(() =>
-    container.querySelectorAll<HTMLElement>("li.markdown-task").length === 4
-      ? [...container.querySelectorAll<HTMLElement>("li.markdown-task")]
+    container.querySelectorAll<HTMLElement>('li:has(> input[type="checkbox"])')
+      .length === 4
+      ? [
+          ...container.querySelectorAll<HTMLElement>(
+            'li:has(> input[type="checkbox"])',
+          ),
+        ]
       : undefined,
   );
 

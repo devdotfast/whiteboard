@@ -1,0 +1,37 @@
+# Maintainer: dev.fast <support@dev.fast>
+# Built by build-arch-package.sh from the shared install tree for install.dev.fast.
+case ${WHITEBOARD_CHANNEL:?} in
+	stable) pkgname=whiteboard ;;
+	preview) pkgname=whiteboard-preview ;;
+	*) exit 1 ;;
+esac
+pkgver=${WHITEBOARD_VERSION:?}
+pkgrel=${WHITEBOARD_REVISION:?}
+pkgdesc='Guided code reviews with coding agents'
+arch=('x86_64')
+url='https://dev.fast/'
+license=('MIT')
+options=('!debug' '!strip' '!purge' '!zipman' 'staticlibs' 'libtool')
+depends=(
+	'alsa-lib' 'at-spi2-core' 'ca-certificates' 'cairo' 'curl' 'dbus' 'expat'
+	'gcc-libs' 'glib2' 'glibc' 'gtk3' 'git' 'hicolor-icon-theme' 'krb5' 'libcups'
+	'libnotify' 'libsecret' 'libx11' 'libxcb' 'libxcomposite' 'libxdamage' 'libxext'
+	'libxfixes' 'libxkbcommon' 'libxkbfile' 'libxrandr' 'mesa' 'nspr' 'nss' 'pango'
+	'systemd-libs' 'vulkan-icd-loader' 'xdg-utils' 'zlib'
+)
+optdepends=(
+	'bubblewrap: sandbox agent commands'
+	'python: run Python language extensions'
+	'socat: sandbox agent commands'
+)
+source=("whiteboard-payload.tar.zst")
+noextract=("whiteboard-payload.tar.zst")
+# The install tree comes from the verified shared app artifact.
+sha256sums=('SKIP')
+
+package() {
+	set -o pipefail
+	bsdtar -xpf "$srcdir/whiteboard-payload.tar.zst" -C "$pkgdir"
+	install -Dm644 "$pkgdir/usr/share/$pkgname/resources/app/LICENSE.txt" \
+		"$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

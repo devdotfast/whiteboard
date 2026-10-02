@@ -1,9 +1,10 @@
+import { ReviewApiClient } from "@review/review-api/client";
 // @vitest-environment jsdom
 import { act, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { ReviewApiClient } from "../../src/review-api/client";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewSessionProvider } from "./host/review-session";
 import { testReviewSession } from "./review-session-test-utils";
 import { ShareControl, SharingContext } from "./share-control";
@@ -13,6 +14,7 @@ let dispose: (() => void) | undefined;
 afterEach(async () => {
   await act(async () => dispose?.());
   document.body.replaceChildren();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -114,11 +116,13 @@ function mount(options: {
     );
 
     return (
-      <ReviewSessionProvider session={session}>
-        <SharingContext.Provider value={value}>
-          <ShareControl />
-        </SharingContext.Provider>
-      </ReviewSessionProvider>
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={session}>
+          <SharingContext.Provider value={value}>
+            <ShareControl />
+          </SharingContext.Provider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>
     );
   }
 
@@ -170,6 +174,7 @@ it("asks a signed-out user to sign in, then uploads the version chosen before lo
   ).toEqual(["Sign in to share"]);
   expect(publishes(harness)).toHaveLength(0);
   await harness.click("Sign in to share");
+  await harness.settle();
   expect(container.textContent).toContain("Waiting for sign-in…");
   expect(container.querySelector("[role=dialog] a")).toBeNull();
   await harness.render(5);
@@ -217,29 +222,6 @@ it("uploads on open for a signed-in user, retries after a failure, and copies th
   expect(container.textContent).toContain("Copied");
   expect(harness.telemetry).toContain("review_shared");
   delete (document as Partial<Document>).execCommand;
-});
-
-it("shows the uploading state until the upload resolves", async () => {
-  let release: (() => void) | undefined;
-
-  const harness = mount({
-    signedIn: true,
-    holdPublish: new Promise<void>((resolve) => {
-      release = resolve;
-    }),
-  });
-
-  const { container } = harness;
-
-  await harness.render(1);
-  await harness.click("Share review");
-  await harness.settle();
-  expect(container.textContent).toContain("Uploading…");
-  expect(container.querySelector("input")).toBeNull();
-  release?.();
-  await harness.settle();
-  expect(container.querySelector("input")?.value).toContain("#capability");
-  expect(container.textContent).not.toContain("Uploading");
 });
 
 it("knows the sign-in state before the popover opens and refreshes it on focus", async () => {
@@ -331,4 +313,50 @@ it("uses a fresh request after failed verification revokes the staged share", as
   expect((requests[0]!.body as { requestId: string }).requestId).not.toBe(
     (requests[1]!.body as { requestId: string }).requestId,
   );
+});
+
+it("keeps one upload when the popover is reopened while it is in flight", async () => {
+  let release: (() => void) | undefined;
+
+  const harness = mount({
+    signedIn: true,
+    holdPublish: new Promise<void>((resolve) => {
+      release = resolve;
+    }),
+  });
+
+  await harness.render(3);
+  await harness.click("Share review");
+  await harness.settle();
+  await harness.click("Share review");
+  await harness.click("Share review");
+  await harness.settle();
+  expect(publishes(harness)).toHaveLength(1);
+  expect(harness.container.textContent).toContain("Uploading…");
+  release?.();
+  await harness.settle();
+  expect(harness.container.querySelector("input")?.value).toContain(
+    "#capability",
+  );
+  expect(publishes(harness)).toHaveLength(1);
+});
+
+it("polls only while sign-in is pending and stops when the control unmounts", async () => {
+  vi.useFakeTimers({
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+  });
+  const harness = mount({ signedIn: false });
+  const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+
+  await harness.render(1);
+  await wait(5000);
+  expect(harness.accountReads()).toBe(1);
+  await harness.click("Share review");
+  await harness.click("Sign in to share");
+  await wait(10);
+  expect(harness.container.textContent).toContain("Waiting for sign-in…");
+  await act(async () => dispose?.());
+  dispose = undefined;
+  await wait(5000);
+  expect(harness.accountReads()).toBe(1);
 });

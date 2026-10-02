@@ -1,4 +1,7 @@
+import { Chip, chipStyles } from "@canvas/ui/chip";
+import { textStyles } from "@canvas/ui/text";
 import type { ReviewAgentTraceEvent } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import {
   type ReactNode,
   useEffect,
@@ -12,14 +15,22 @@ import { AgentChatUserMessage } from "./agent-chat";
 import { AgentMarkdown } from "./agent-markdown";
 import {
   HighlightedText,
+  QuoteMark,
   findWhitespaceNormalizedSpan,
 } from "./highlighted-text";
+import {
+  traceGroupMarker,
+  traceRowMarker,
+  traceToolMarker,
+  traceWorkedMarker,
+} from "./markers.stylex";
 import {
   type TraceScrollAnchor,
   captureTraceScrollAnchor,
   findScrollContainer,
   restoreTraceScrollAnchor,
 } from "./trace-scroll-anchor";
+import { traceStyles as styles } from "./trace-styles";
 
 export type TraceTurnEvent = Exclude<
   ReviewAgentTraceEvent,
@@ -228,12 +239,12 @@ export function TraceToolGroup({
 
   return (
     <details
-      className="review-trace-toolgroup"
+      {...stylex.props(styles.tool, traceGroupMarker)}
       open={hasTarget}
       data-trace-event={items[0]?.index}
     >
-      <summary>
-        <span className="review-trace-tool-icon">
+      <summary {...stylex.props(styles.summary, styles.toolGroupSummary)}>
+        <span {...stylex.props(styles.centered)}>
           {iconSvg(
             <>
               <rect
@@ -265,17 +276,17 @@ export function TraceToolGroup({
             </>,
           )}
         </span>
-        <span className="review-trace-toolgroup-label">
+        <span {...stylex.props(styles.toolGroupLabel)}>
           {toolGroupLabel(events)}
         </span>
-        <span className="review-trace-toolgroup-count">
+        <span {...stylex.props(styles.toolGroupCount)}>
           {events.length} steps
         </span>
-        <span className="review-trace-toolgroup-chevron" aria-hidden="true">
-          <ChevronIcon />
+        <span {...stylex.props(styles.inlineCentered)} aria-hidden="true">
+          <ChevronIcon xstyle={styles.toolGroupChevronIcon} />
         </span>
       </summary>
-      <div className="review-trace-toolgroup-body">
+      <div {...stylex.props(styles.toolGroupBody)}>
         {items.map((item) => (
           <div
             key={item.index}
@@ -323,30 +334,23 @@ export function TraceEvent({
     if (event.thinking) {
       return (
         <details
-          className="review-trace-tool review-trace-tool--expandable"
+          {...stylex.props(styles.tool, traceToolMarker)}
           open={Boolean(highlightQuote)}
         >
-          <summary>
-            <span className="review-trace-tool-row">
-              <span className="review-trace-tool-icon">
-                {toolIcon("Thinking")}
-              </span>
-              <span className="review-trace-tool-label">
-                <span className="review-trace-tool-verb">Thinking</span>
-              </span>
-              <span className="review-trace-tool-chevron" aria-hidden="true">
-                <ChevronIcon />
-              </span>
-            </span>
-          </summary>
-          <figure className="review-trace-figure">
-            <figcaption className="review-trace-figure-head">
+          <ThinkingSummary />
+          <figure {...stylex.props(styles.figure)}>
+            <figcaption
+              {...stylex.props(textStyles.eyebrow, styles.figureHead)}
+            >
               <span>Thinking</span>
             </figcaption>
-            <div className="review-trace-figure-body review-trace-figure-body--thinking">
+            <div
+              {...stylex.props(styles.figureBody, styles.figureBodyThinking)}
+            >
               <AgentMarkdown
                 source={event.markdown}
                 highlightQuote={highlightQuote}
+                xstyle={styles.thinkingMarkdown}
               />
             </div>
           </figure>
@@ -355,10 +359,11 @@ export function TraceEvent({
     }
 
     return (
-      <div className="review-trace-prose">
+      <div>
         <AgentMarkdown
           source={event.markdown}
           highlightQuote={highlightQuote}
+          xstyle={styles.proseMarkdown}
         />
       </div>
     );
@@ -375,59 +380,83 @@ export function TraceToolRow({
   const expandable = Boolean(event.command || event.input || event.output);
 
   const row = (
-    <span className="review-trace-tool-row">
-      <span className="review-trace-tool-icon">{toolIcon(event.verb)}</span>
-      <span className="review-trace-tool-label">
-        <span className="review-trace-tool-verb">{event.verb}</span>
+    <span {...stylex.props(styles.toolRow)}>
+      <span {...stylex.props(styles.centered)}>{toolIcon(event.verb)}</span>
+      <span {...stylex.props(styles.toolLabel)}>
+        <span {...stylex.props(styles.toolVerb)}>{event.verb}</span>
         <span
-          className={
-            event.filePath
-              ? "review-trace-tool-title review-trace-tool-title--file"
-              : "review-trace-tool-title"
-          }
+          {...stylex.props(
+            styles.toolTitle,
+            Boolean(event.filePath) && styles.toolTitleFile,
+          )}
         >
-          {event.filePath ? <bdi>{event.title}</bdi> : event.title}
+          {event.filePath ? (
+            <bdi {...stylex.props(styles.toolPath)}>{event.title}</bdi>
+          ) : (
+            event.title
+          )}
         </span>
         {event.additions !== undefined && event.additions > 0 && (
-          <span className="review-trace-added">+{event.additions}</span>
+          <span {...stylex.props(styles.added)}>+{event.additions}</span>
         )}
         {event.deletions !== undefined && event.deletions > 0 && (
-          <span className="review-trace-removed">−{event.deletions}</span>
+          <span {...stylex.props(styles.removed)}>−{event.deletions}</span>
         )}
-        {event.error && <span className="review-trace-error-flag">failed</span>}
+        {event.error && (
+          <span {...stylex.props(textStyles.eyebrow, styles.errorFlag)}>
+            failed
+          </span>
+        )}
       </span>
       {expandable && (
-        <span className="review-trace-tool-chevron" aria-hidden="true">
-          <ChevronIcon />
+        <span {...stylex.props(styles.centered)} aria-hidden="true">
+          <ChevronIcon xstyle={styles.toolChevronIcon} />
         </span>
       )}
     </span>
   );
 
   if (!expandable) {
-    return <div className="review-trace-tool">{row}</div>;
+    return <div {...stylex.props(styles.tool)}>{row}</div>;
   }
 
   return (
-    <details className="review-trace-tool review-trace-tool--expandable">
-      <summary>{row}</summary>
-      <figure className="review-trace-figure">
-        <figcaption className="review-trace-figure-head">
+    <details {...stylex.props(styles.tool, traceToolMarker)}>
+      <summary {...stylex.props(styles.summary)}>{row}</summary>
+      <figure {...stylex.props(styles.figure)}>
+        <figcaption {...stylex.props(textStyles.eyebrow, styles.figureHead)}>
           <span>{event.command ? "Shell" : event.tool}</span>
         </figcaption>
-        <pre className="review-trace-figure-body">
+        <pre {...stylex.props(styles.figureBody)}>
           {event.command && (
-            <code className="review-trace-figure-command">{event.command}</code>
+            <code {...stylex.props(styles.figureCommand)}>{event.command}</code>
           )}
           {!event.command && event.input && (
-            <code className="review-trace-figure-command">{event.input}</code>
+            <code {...stylex.props(styles.figureCommand)}>{event.input}</code>
           )}
           {event.output && (
-            <code className="review-trace-figure-output">{event.output}</code>
+            <code {...stylex.props(styles.figureOutput)}>{event.output}</code>
           )}
         </pre>
       </figure>
     </details>
+  );
+}
+
+/** The summary row of a thinking block. */
+function ThinkingSummary() {
+  return (
+    <summary {...stylex.props(styles.summary)}>
+      <span {...stylex.props(styles.toolRow)}>
+        <span {...stylex.props(styles.centered)}>{toolIcon("Thinking")}</span>
+        <span {...stylex.props(styles.toolLabel)}>
+          <span {...stylex.props(styles.toolVerb)}>Thinking</span>
+        </span>
+        <span {...stylex.props(styles.centered)} aria-hidden="true">
+          <ChevronIcon xstyle={styles.toolChevronIcon} />
+        </span>
+      </span>
+    </summary>
   );
 }
 
@@ -457,9 +486,13 @@ export function formatDuration(durationMs: number): string {
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 }
 
-function iconSvg(children: ReactNode): ReactNode {
+function iconSvg(children: ReactNode, xstyle?: stylex.StyleXStyles): ReactNode {
   return (
-    <svg viewBox="0 0 16 16" className="review-trace-icon" aria-hidden="true">
+    <svg
+      viewBox="0 0 16 16"
+      {...stylex.props(styles.icon, xstyle)}
+      aria-hidden="true"
+    >
       {children}
     </svg>
   );
@@ -512,8 +545,8 @@ export function toolIcon(verb: string): ReactNode {
   }
 }
 
-export function ChevronIcon() {
-  return iconSvg(<path d="M4 6l4 4 4-4" />);
+export function ChevronIcon({ xstyle }: { xstyle?: stylex.StyleXStyles } = {}) {
+  return iconSvg(<path d="M4 6l4 4 4-4" />, xstyle);
 }
 
 export interface LensPickEvent {
@@ -591,26 +624,6 @@ export function elideByKeep(
   return segments;
 }
 
-export function extractEventText(
-  event: ReviewAgentTraceEvent | undefined,
-): string {
-  if (!event) return "";
-
-  if (event.kind === "user") return event.text;
-
-  if (event.kind === "assistant") return event.markdown;
-
-  if (event.kind === "tool") {
-    return [event.title, event.command, event.input, event.output]
-      .filter(Boolean)
-      .join(" ");
-  }
-
-  if (event.kind === "separator") return event.label;
-
-  return "";
-}
-
 export function ElidedMessage({
   event,
   keep,
@@ -628,17 +641,23 @@ export function ElidedMessage({
   if (!segments) return <TraceEvent event={event} highlightQuote={quote} />;
 
   const body = (
-    <span className="review-trace-lens-elided">
+    <span {...stylex.props(styles.elided)}>
       {segments.map((segment, index) =>
         segment.kind === "kept" ? (
-          <span key={index} className="review-trace-lens-kept">
-            <mark className="review-trace-quote-mark">{segment.text}</mark>
+          <span
+            key={index}
+            {...stylex.props(
+              styles.kept,
+              event.kind === "user" && styles.keptInBubble,
+            )}
+          >
+            <QuoteMark>{segment.text}</QuoteMark>
           </span>
         ) : (
           <button
             key={index}
             type="button"
-            className="review-trace-lens-chip"
+            {...stylex.props(chipStyles.pill, styles.lensChip)}
             title="Show the hidden text"
             onClick={onExpand}
           >
@@ -652,7 +671,6 @@ export function ElidedMessage({
   if (event.kind === "user") {
     return (
       <AgentChatUserMessage
-        bubbleClassName="agent-chat-user-bubble--elided"
         caption={event.at ? timeLabel(event.at) : undefined}
       >
         {body}
@@ -662,37 +680,21 @@ export function ElidedMessage({
 
   if (event.thinking) {
     return (
-      <details className="review-trace-tool review-trace-tool--expandable" open>
-        <summary>
-          <span className="review-trace-tool-row">
-            <span className="review-trace-tool-icon">
-              {toolIcon("Thinking")}
-            </span>
-            <span className="review-trace-tool-label">
-              <span className="review-trace-tool-verb">Thinking</span>
-            </span>
-            <span className="review-trace-tool-chevron" aria-hidden="true">
-              <ChevronIcon />
-            </span>
-          </span>
-        </summary>
-        <figure className="review-trace-figure">
-          <figcaption className="review-trace-figure-head">
+      <details {...stylex.props(styles.tool, traceToolMarker)} open>
+        <ThinkingSummary />
+        <figure {...stylex.props(styles.figure)}>
+          <figcaption {...stylex.props(textStyles.eyebrow, styles.figureHead)}>
             <span>Thinking</span>
           </figcaption>
-          <div className="review-trace-figure-body review-trace-figure-body--thinking">
-            <div className="review-trace-prose review-trace-prose--elided">
-              {body}
-            </div>
+          <div {...stylex.props(styles.figureBody, styles.figureBodyThinking)}>
+            <div {...stylex.props(styles.proseElided)}>{body}</div>
           </div>
         </figure>
       </details>
     );
   }
 
-  return (
-    <div className="review-trace-prose review-trace-prose--elided">{body}</div>
-  );
+  return <div {...stylex.props(styles.proseElided)}>{body}</div>;
 }
 
 export function TraceGapChip({
@@ -708,15 +710,19 @@ export function TraceGapChip({
     <button
       key={`gap-${from}`}
       type="button"
-      className="review-trace-lens-gap"
+      {...stylex.props(styles.lensRow, traceRowMarker)}
       data-trace-gap={from}
       onClick={onExpand}
     >
-      <span className="review-trace-lens-gap-line" />
-      <span className="review-trace-lens-gap-chip">
+      <span {...stylex.props(styles.lensLine)} />
+      <Chip
+        variant="pill"
+        size="large"
+        xstyle={[textStyles.eyebrow, styles.lensRowChip]}
+      >
         ⋯ {count} hidden {count === 1 ? "event" : "events"}
-      </span>
-      <span className="review-trace-lens-gap-line" />
+      </Chip>
+      <span {...stylex.props(styles.lensLine)} />
     </button>
   );
 }
@@ -738,14 +744,22 @@ export function TraceCollapseRow({
   return (
     <button
       type="button"
-      className="review-trace-lens-collapse"
+      {...stylex.props(styles.lensRow, traceRowMarker)}
       onClick={onCollapse}
     >
-      <span className="review-trace-lens-collapse-line" />
-      <span className="review-trace-lens-collapse-chip">
+      <span {...stylex.props(styles.lensLine, styles.lensLineSolid)} />
+      <Chip
+        variant="pill"
+        size="large"
+        xstyle={[
+          textStyles.eyebrow,
+          styles.lensRowChip,
+          styles.lensRowChipSolid,
+        ]}
+      >
         <svg
           viewBox="0 0 16 16"
-          className="review-trace-lens-collapse-chevron"
+          {...stylex.props(styles.collapseChevron)}
           aria-hidden="true"
         >
           {edge === "top" ? (
@@ -755,8 +769,8 @@ export function TraceCollapseRow({
           )}
         </svg>
         collapse {span.count} {span.count === 1 ? "event" : "events"}
-      </span>
-      <span className="review-trace-lens-collapse-line" />
+      </Chip>
+      <span {...stylex.props(styles.lensLine, styles.lensLineSolid)} />
     </button>
   );
 }
@@ -1020,7 +1034,7 @@ export function TraceTurn({
         topRow || bottomRow ? (
           <div
             key={`user-${turn.user.index}`}
-            className="review-trace-user-slot"
+            {...stylex.props(styles.userSlot)}
           >
             {topRow}
             {renderTurnEvent(turn.user)}
@@ -1063,22 +1077,28 @@ export function TraceTurn({
         isTargetInWork || (effectiveIncluded !== null && includedWorkCount > 0);
 
       workElement = (
-        <details className="review-trace-worked" open={openWorked}>
-          <summary>
-            <span className="review-trace-worked-label">{workedLabel}</span>
-            <span className="review-trace-worked-chevron" aria-hidden="true">
-              <ChevronIcon />
+        <details {...stylex.props(traceWorkedMarker)} open={openWorked}>
+          <summary
+            {...stylex.props(
+              styles.summary,
+              textStyles.eyebrow,
+              styles.workedSummary,
+            )}
+          >
+            <span>{workedLabel}</span>
+            <span {...stylex.props(styles.inlineCentered)} aria-hidden="true">
+              <ChevronIcon xstyle={styles.workedChevronIcon} />
             </span>
-            <span className="review-trace-worked-line" />
+            <span {...stylex.props(styles.line)} />
           </summary>
-          <div className="review-trace-worked-body">{renderWorkItems()}</div>
+          <div {...stylex.props(styles.workedBody)}>{renderWorkItems()}</div>
         </details>
       );
     }
   }
 
   return (
-    <div className="review-trace-turn">
+    <div {...stylex.props(styles.turn)}>
       {userElement}
       {workElement}
       {renderFinalItems()}
@@ -1091,7 +1111,8 @@ export interface TraceDocumentOptions {
   highlightQuote?: string;
   targetEventIndex?: number;
   coalesce?: boolean;
-  className?: string;
+  /** Scoped into a side peek. */
+  scoped?: boolean;
 }
 
 export interface TraceDocumentProps extends TraceDocumentOptions {
@@ -1104,7 +1125,7 @@ export function TraceDocument({
   highlightQuote,
   targetEventIndex,
   coalesce = true,
-  className,
+  scoped = false,
 }: TraceDocumentProps) {
   useEffect(() => {
     if (targetEventIndex === undefined) return;
@@ -1349,9 +1370,7 @@ export function TraceDocument({
   return (
     <div
       ref={rootRef}
-      className={
-        className ? `review-trace-events ${className}` : "review-trace-events"
-      }
+      {...stylex.props(styles.events, scoped && styles.eventsScoped)}
     >
       {turnElements}
     </div>

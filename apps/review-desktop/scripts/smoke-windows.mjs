@@ -213,7 +213,7 @@ export async function smokeWindows(app, evidence) {
           { encoding: "utf8", timeout: 30000 },
         );
 
-        assert.match(diffr, /0\.1\.3/);
+        assert.match(diffr, /^diffr \d+\.\d+\.\d+/);
         const repository = path.join(profile, "repository with spaces");
         await mkdir(repository);
 

@@ -8,6 +8,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewDiffView } from "./DiffView";
 import { ReviewSessionProvider } from "./host/review-session";
 import { testReviewSession } from "./review-session-test-utils";
@@ -48,9 +49,11 @@ async function mount(
 
   await act(async () =>
     root!.render(
-      <ReviewSessionProvider session={testReviewSession({}, { diffView })}>
-        {element}
-      </ReviewSessionProvider>,
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={testReviewSession({}, { diffView })}>
+          {element}
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     ),
   );
 
@@ -78,11 +81,18 @@ it("opens a commit's diff at the file clicked in its file list", async () => {
   await act(async () =>
     container.querySelector<HTMLButtonElement>("[aria-expanded]")!.click(),
   );
-  await act(async () =>
-    [...container.querySelectorAll("button")]
-      .find((button) => button.textContent?.includes(file.path))!
-      .click(),
-  );
+
+  const fileButton = await vi.waitFor(() => {
+    const button = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes(file.path),
+    );
+
+    if (!button) throw new Error("file list not loaded");
+
+    return button;
+  });
+
+  await act(async () => fileButton.click());
 
   expect(onOpenDiff).toHaveBeenCalledWith(commit, "file", file.path);
 });
@@ -103,5 +113,5 @@ it("reveals the requested file in a commit-scoped diff", async () => {
     },
   );
 
-  expect(revealFile).toHaveBeenCalledWith(file.path);
+  expect(revealFile.mock.calls[0]?.[0]).toBe(file.path);
 });

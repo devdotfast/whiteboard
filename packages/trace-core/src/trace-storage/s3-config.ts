@@ -5,7 +5,6 @@ import path from "node:path";
 
 import { jsonString, parseJsonText } from "@dev.fast/json";
 
-import { traceCommandPrefix } from "../trace-command";
 import {
   type S3Profile,
   TraceConfigurationError,
@@ -239,7 +238,7 @@ export function resolveS3Credentials(
   return resolveS3Setup(scope).credentials;
 }
 
-/** What `review trace status` prints about the direct bucket setup. */
+/** What `whiteboard trace status` prints about the direct bucket setup. */
 export interface S3SetupReport {
   /** The file the values came from: the version-2 profile, else the env file. */
   envPath: string;
@@ -250,7 +249,7 @@ export interface S3SetupReport {
 
 /** The message a machine with no trace configuration reads, in either CLI. */
 export function noTraceConfigurationMessage(): string {
-  return `No trace configuration found. Run \`${traceCommandPrefix()} allow .\` to configure trace capture.`;
+  return `No trace configuration found. Run \`whiteboard trace allow .\` to configure trace capture.`;
 }
 
 /** Describes the resolved direct-bucket setup without testing the network. */

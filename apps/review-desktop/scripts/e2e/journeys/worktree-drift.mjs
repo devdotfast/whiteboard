@@ -34,9 +34,9 @@ function canvasUi(ctx) {
     // The state a missing checkout is meant to reach (see desktop-entry.tsx).
     unavailable: ctx.page.getByText("Worktree unavailable"),
     retained: canvas.getByText(RETAINED_SOURCE),
-    failed: canvas.getByText(/^ReviewApiError: Whiteboard operation failed/),
+    failed: canvas.getByText(/^Whiteboard operation failed \(Error\)\./),
     peek: canvas
-      .locator('.review-inline-editor[data-review-inline-editor="order.ts"]')
+      .locator('[data-review-inline-editor="order.ts"]')
       .first(),
   };
 }
@@ -155,11 +155,11 @@ export async function run(ctx) {
     moved,
   );
 
-  assert.equal(info.code, 0, `review info: ${info.stdout}\n${info.stderr}`);
+  assert.equal(info.code, 0, `whiteboard info: ${info.stdout}\n${info.stderr}`);
   assert.match(
     info.stdout,
     new RegExp(review.reviewId),
-    `review info named no review: ${info.stdout}`,
+    `whiteboard info named no review: ${info.stdout}`,
   );
   ctx.check("info resolves a review whose worktree moved");
 
@@ -171,9 +171,11 @@ export async function run(ctx) {
   await ctx.restartDesktop();
   await openHome(ctx);
   await ctx.page
-    .locator("main.review-home .review-home-table tbody tr")
+    .locator("main.review-home")
+    .getByRole("region", { name: "Sessions", exact: true })
+    .locator("tbody tr")
     .filter({ hasText: TITLE })
-    .locator(".review-home-table-open")
+    .getByTitle(TITLE, { exact: true })
     .click();
 
   const deleted = canvasUi(ctx);

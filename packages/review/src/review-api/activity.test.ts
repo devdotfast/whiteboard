@@ -2,11 +2,25 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 import { afterEach, expect, it, vi } from "vitest";
+import type { z } from "zod";
 
-import { ACTIVITY_TTL_MS, ReviewActivity } from "./activity.js";
+import {
+  ACTIVITY_TTL_MS,
+  ReviewActivity,
+  type activitySchema,
+} from "./activity.js";
 import { ReviewApiClient } from "./client.js";
 import { createReviewApi } from "./http.js";
 import { ReviewStore } from "./store.js";
+
+type ActivityInput = z.input<typeof activitySchema>;
+
+/** Omit per action: the input is a union over begin, renew and end. */
+type WithoutLease = ActivityInput extends infer Input
+  ? Input extends unknown
+    ? Omit<Input, "leaseId">
+    : never
+  : never;
 
 const databases: DatabaseSync[] = [];
 
@@ -56,6 +70,34 @@ it("renews reported work, expires abandoned work, and does not end another autho
   expect(vi.getTimerCount()).toBe(0);
 });
 
+it("reports working transitions without heartbeats or focus changes", () => {
+  vi.useFakeTimers();
+  const activity = newActivity();
+  const transitions = vi.fn<() => void>();
+  activity.subscribeWorking(transitions);
+  const leaseId = randomUUID();
+
+  const update = (value: WithoutLease) =>
+    activity.update("review", { leaseId, ...value });
+
+  update({ action: "begin" });
+  expect(activity.isWorking("review")).toBe(true);
+  update({ action: "renew" });
+  update({ action: "renew", focus: { description: "Reading the diff" } });
+  update({ action: "begin", scope: "lenses" });
+  expect(transitions).toHaveBeenCalledTimes(1);
+  update({ action: "end" });
+  expect(transitions).toHaveBeenCalledTimes(1);
+  update({ action: "end", scope: "lenses" });
+  expect(activity.isWorking("review")).toBe(false);
+  expect(transitions).toHaveBeenCalledTimes(2);
+  update({ action: "begin" });
+  vi.advanceTimersByTime(ACTIVITY_TTL_MS);
+  expect(activity.isWorking("review")).toBe(false);
+  expect(transitions).toHaveBeenCalledTimes(4);
+  activity.close();
+});
+
 it("streams activity separately from document versions and closes the stream on deletion", async () => {
   const store = new ReviewStore(":memory:", {
     validatePins: async () => {},
@@ -90,12 +132,11 @@ it("streams activity separately from document versions and closes the stream on 
     });
 
     const input = {
-      action: "begin",
       leaseId: randomUUID(),
       focus: { description: "Drafting outline" },
     };
 
-    await client.post(`/${reviewId}/activity`, input);
+    await client.post(`/${reviewId}/activity/begin`, input);
     expect((await stream.next()).value).toMatchObject({
       activity: { workingCount: 1, focuses: [input.focus] },
     });
@@ -116,9 +157,9 @@ it("streams activity separately from document versions and closes the stream on 
       for await (const _snapshot of stream) {
       }
     }).rejects.toThrow(Error);
-    await expect(client.post(`/${reviewId}/activity`, input)).rejects.toThrow(
-      /not found/i,
-    );
+    await expect(
+      client.post(`/${reviewId}/activity/begin`, input),
+    ).rejects.toThrow(/not found/i);
     expect(store.activity.read(reviewId).workingCount).toBe(0);
   } finally {
     abort.abort();
@@ -159,3 +200,74 @@ it("retains, changes and clears the owner's focus until its lease expires", () =
   expect(activity.read("review").focuses).toBeUndefined();
   activity.close();
 });
+
+it.each([false, true])(
+  "streams completion and expiry to the catalog without an open canvas (multiplexed=%s)",
+  async (multiplexed) => {
+    vi.useFakeTimers();
+
+    const store = new ReviewStore(":memory:", {
+      validatePins: async () => {},
+      validateSource: async () => {},
+      validateResource: async () => {},
+    });
+
+    const api = createReviewApi(store);
+
+    const { reviewId } = await store.execute({
+      commandId: randomUUID(),
+      operation: {
+        type: "create",
+        title: "Background review",
+        pins: { repositoryId: "repo", base: "base", head: "head" },
+      },
+    });
+
+    const client = new ReviewApiClient(
+      { serverUrl: "http://review.test", token: "test" },
+      async (url, init) => api.request(url.replace("/reviews-api", ""), init),
+    );
+
+    const abort = new AbortController();
+
+    const stream = client.watch(
+      multiplexed ? [{ reviewId: null }] : null,
+      abort.signal,
+    );
+
+    const next = async () => {
+      const value = (await stream.next()).value;
+
+      return multiplexed ? (value as { value: unknown }[])[0]!.value : value;
+    };
+
+    const expected = (working: boolean) => [
+      expect.objectContaining({ reviewId, working }),
+    ];
+
+    const leaseId = randomUUID();
+
+    try {
+      expect(await next()).toEqual(expected(false));
+      store.activity.update(reviewId, { action: "begin", leaseId });
+      expect(await next()).toEqual(expected(true));
+      // One line per transition: no repeat, nothing for renewals or focus.
+      store.activity.update(reviewId, { action: "renew", leaseId });
+      store.activity.update(reviewId, {
+        action: "renew",
+        leaseId,
+        focus: { description: "Reading the diff" },
+      });
+      store.activity.update(reviewId, { action: "end", leaseId });
+      expect(await next()).toEqual(expected(false));
+      store.activity.update(reviewId, { action: "begin", leaseId });
+      expect(await next()).toEqual(expected(true));
+      await vi.advanceTimersByTimeAsync(ACTIVITY_TTL_MS);
+      expect(await next()).toEqual(expected(false));
+    } finally {
+      abort.abort();
+      await stream.return(undefined);
+      await store.close();
+    }
+  },
+);

@@ -99,6 +99,10 @@
     {
       "name": "anti-slop",
       "specifier": "./tools/oxlint/anti-slop/index.ts"
+    },
+    {
+      "name": "canvas-styles",
+      "specifier": "./tools/oxlint/canvas-styles/index.ts"
     }
   ],
   "overrides": [
@@ -115,6 +119,29 @@
       }
     },
     {
+      "files": ["packages/review/src/**", "packages/review/app/src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "../**",
+                  "!**/test/fixtures/**",
+                  "!**/test-config*",
+                  "!**/tutorial/*.json",
+                  "!**/desktop-css-scope",
+                  "!**/agent-plugins/**"
+                ],
+                "message": "Import through @review/* or @canvas/*; run scripts/rewrite-relative-imports.mjs."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["packages/trace-core/**"],
       "rules": {
         "no-restricted-imports": [
@@ -124,6 +151,15 @@
             "patterns": ["@dev.fast/review/*", "**/review/**"]
           }
         ]
+      }
+    },
+    {
+      "files": [
+        "packages/review/app/src/**/*.ts",
+        "packages/review/app/src/**/*.tsx"
+      ],
+      "rules": {
+        "canvas-styles/scale-literals": "error"
       }
     }
   ]

@@ -2,7 +2,6 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import { createServer } from "node:http";
-import path from "node:path";
 
 import { isObjectValue } from "@dev.fast/json";
 import {
@@ -10,25 +9,25 @@ import {
   withFileLock,
   writePrivateJsonAtomic,
 } from "@dev.fast/trace-core";
-import { Hono } from "hono";
-
-import { createReviewApi } from "../review-api/http.js";
-import { openReviewProfile } from "../review-api/profile.js";
-import { readScratchpadEnabled } from "../review-preferences.js";
+import { createReviewApi } from "@review/review-api/http.js";
+import { openReviewProfile } from "@review/review-api/profile.js";
 import {
   type ReviewServerDiscovery,
+  headlessServerLockPath,
   reviewServerDiscoveryPath,
-} from "../server-discovery.js";
-import { mountSharingPublisher } from "../sharing/host.js";
-import {
-  type ReviewHonoEnv,
-  createNodeRequestListener,
-  isAuthorizedRequest,
-} from "./hono-http.js";
+} from "@review/server-discovery.js";
+import { mountSharingPublisher } from "@review/sharing/host.js";
+
+import { GlobalReviewDesktopVerbRelay } from "./global-verb-relay.js";
+import { createNodeRequestListener } from "./hono-http.js";
 import {
   drainServerCrashReport,
   installProcessErrorTelemetry,
 } from "./process-error-telemetry.js";
+import {
+  createReviewServerApp,
+  relayReviewCallbacks,
+} from "./review-server-core.js";
 import type { ReviewTelemetryCapture } from "./ui-telemetry.js";
 
 interface HeadlessServerInput {
@@ -49,22 +48,34 @@ export async function runHeadlessServer(input: HeadlessServerInput) {
   const stopErrorTelemetry =
     input.telemetry && installProcessErrorTelemetry(input.telemetry);
 
-  const outcome = await withFileLock(
-    path.join(stateDir, "headless-server.lock"),
-    {
-      timeoutMs: 0,
-      retryMs: 20,
-      // A paused live owner must never lose exclusive access to its store.
-      staleMs: Infinity,
-      unownedGraceMs: 1_000,
-    },
-    () => serve({ ...input, stateDir }),
+  const outcome = await withHeadlessServerLock(stateDir, () =>
+    serve({ ...input, stateDir }),
   ).finally(() => stopErrorTelemetry?.());
 
   if (!outcome.acquired)
     throw new Error(
       `A Whiteboard server already owns ${stateDir}. Stop it first, or choose another --state-dir.`,
     );
+}
+
+/** Held by a running server, so also by anything that must not run beside one. */
+export function withHeadlessServerLock<T>(
+  stateDir: string,
+  operation: () => Promise<T>,
+) {
+  return withFileLock(
+    headlessServerLockPath(stateDir),
+    {
+      timeoutMs: 0,
+      retryMs: 20,
+      // A paused live owner must never lose exclusive access to its store.
+      staleMs: Infinity,
+      unownedGraceMs: 1_000,
+      // A reboot or kill can hand the pid to an unrelated live process.
+      identifyOwner: true,
+    },
+    operation,
+  );
 }
 
 async function serve(input: HeadlessServerInput) {
@@ -84,30 +95,25 @@ async function serve(input: HeadlessServerInput) {
     token: randomBytes(32).toString("base64url"),
   };
 
-  const app = new Hono<ReviewHonoEnv>();
-  app.use("*", async (context, next) => {
-    if (!isAuthorizedRequest(context.req.raw, discovery.token))
-      return context.json({ error: "Unauthorized" }, 401);
-    await next();
-  });
-  app.get("/health", (context) =>
-    context.json({ ok: true, instanceId: discovery.instanceId }),
-  );
+  const relay = new GlobalReviewDesktopVerbRelay();
 
-  // Headless shares Desktop's database, so it lists the pad on the same
-  // terms; a preference changed after start applies at the next start.
-  const scratchpadEnabled = await readScratchpadEnabled();
+  const app = createReviewServerApp({
+    token: discovery.token,
+    instanceId: discovery.instanceId,
+    serverId: local.store.serverId(),
+    relay,
+  });
+
+  const callbacks = relayReviewCallbacks(relay, input.softwareMapEnabled);
 
   const api = createReviewApi(
     local.store,
     local.data,
+    callbacks.open,
     undefined,
-    undefined,
-    () => ({
-      desktopAvailable: false,
-      softwareMapEnabled: input.softwareMapEnabled ?? false,
-    }),
-    () => scratchpadEnabled,
+    callbacks.capabilities,
+    // The scratchpad is the laptop's alone, even with a Desktop attached.
+    () => false,
     () => traceMachineEnabled(),
     () => ({ key: "headless", home: input.stateDir }),
   );
@@ -148,6 +154,8 @@ async function serve(input: HeadlessServerInput) {
       if (published)
         await rm(reviewServerDiscoveryPath(input.stateDir), { force: true });
     } finally {
+      // An attached Desktop's stream would otherwise hold the close open.
+      relay.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       clearTimeout(forceClose);
 

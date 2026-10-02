@@ -3,11 +3,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { openLocalReviewStore } from "@review/review-api/local-data";
+import { ReviewStore, SCRATCHPAD_ID } from "@review/review-api/store";
+import { ReviewTelemetry } from "@review/review-telemetry";
 import { expect, it, vi } from "vitest";
 
-import { openLocalReviewStore } from "../review-api/local-data";
-import { ReviewStore, SCRATCHPAD_ID } from "../review-api/store";
-import { ReviewTelemetry } from "../review-telemetry";
 import {
   createGlobalReviewServer,
   sessionStartedSourceKind,

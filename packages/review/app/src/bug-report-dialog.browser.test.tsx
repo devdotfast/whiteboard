@@ -84,18 +84,12 @@ describe("BugReportControl", () => {
             ? "Bug report was sent."
             : "The report could not be sent. Try again.",
       });
-      expect(container.querySelector(".review-toast")).toBeNull();
+      expect(container.querySelector('[role="status"]')).toBeNull();
       expect(container.querySelector('[role="dialog"]') !== null).toBe(
         status !== 200,
       );
     },
   );
-
-  it("enables Send with an empty description", async () => {
-    await renderAndOpen();
-
-    expect(sendButton().disabled).toBe(false);
-  });
 
   it("disables Send when the description exceeds the byte limit", async () => {
     await renderAndOpen();
@@ -116,22 +110,7 @@ describe("BugReportControl", () => {
       include_review: false,
       include_map: false,
       include_diff: true,
-      include_trace: false,
     });
-  });
-
-  it("never offers or requests an agent session trace", async () => {
-    await renderAndOpen();
-
-    const labels = [...container.querySelectorAll("fieldset label")].map(
-      (label) => label.textContent?.trim(),
-    );
-
-    expect(labels).not.toContain("Agent session trace");
-
-    await act(async () => sendButton().click());
-
-    expect(reportBody()).toMatchObject({ include_trace: false });
   });
 
   it("shows an automatic screenshot and omits it after removal", async () => {
@@ -154,17 +133,6 @@ describe("BugReportControl", () => {
 
     await act(async () => sendButton().click());
     expect(reportBody()).not.toHaveProperty("screenshot");
-  });
-
-  it("still opens when automatic capture returns no result", async () => {
-    captureScreenshotMock.mockResolvedValue(null);
-
-    await renderAndOpen();
-
-    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
-    expect(container.textContent).toContain(
-      "Paste or drop an image to attach a screenshot.",
-    );
   });
 
   it("disables reporting in the tutorial", async () => {

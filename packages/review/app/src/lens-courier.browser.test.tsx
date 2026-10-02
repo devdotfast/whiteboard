@@ -1,21 +1,22 @@
+import type { ActivitySnapshot } from "@review/review-api/activity";
+import { ReviewApiClient } from "@review/review-api/client";
+import type { Lens } from "@review/review-api/diff-lenses";
+import type { Snapshot } from "@review/review-api/store";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { ActivitySnapshot } from "../../src/review-api/activity";
-import { ReviewApiClient } from "../../src/review-api/client";
-import type { Lens } from "../../src/review-api/diff-lenses";
-import type { Snapshot } from "../../src/review-api/store";
-import {
-  AuthoringActivityBadge,
-  AuthoringActivityContext,
-} from "./authoring-activity";
+import { AuthoringActivityBadge } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import type { AuthoringCursor } from "./authoring-cursor";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { AuthoringCursorContext } from "./courier";
 import { ReviewDiffView } from "./DiffView";
 import { type DrawQueueClock, DrawQueueProvider } from "./draw-queue-provider";
+import { reviewPreferenceKey } from "./host/review-client";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewLensesProvider } from "./review-lenses";
+import { ReviewPanelProvider } from "./review-panel";
 import { type ReviewRoots, ReviewRootsProvider } from "./review-root-context";
 import { testReviewSession } from "./review-session-test-utils";
 
@@ -175,28 +176,32 @@ const render = async (state: {
 
   await act(async () =>
     root.render(
-      <ReviewSessionProvider session={session}>
-        <ReviewRootsProvider roots={roots}>
-          <AuthoringActivityContext.Provider
-            value={state.activity ?? lensesOnly}
-          >
-            <AuthoringCursorContext.Provider
-              value={state.documentCursor ?? null}
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={session}>
+          <ReviewRootsProvider roots={roots}>
+            <AuthoringActivityContext.Provider
+              value={state.activity ?? lensesOnly}
             >
-              <DrawQueueProvider
-                scope="lenses"
-                cursor={state.lensCursor}
-                clock={manualClock.clock}
+              <AuthoringCursorContext.Provider
+                value={state.documentCursor ?? null}
               >
-                <ReviewLensesProvider client={client} snapshot={snapshot}>
-                  <AuthoringActivityBadge onLocate={onLocate} />
-                  <ReviewDiffView />
-                </ReviewLensesProvider>
-              </DrawQueueProvider>
-            </AuthoringCursorContext.Provider>
-          </AuthoringActivityContext.Provider>
-        </ReviewRootsProvider>
-      </ReviewSessionProvider>,
+                <DrawQueueProvider
+                  scope="lenses"
+                  cursor={state.lensCursor}
+                  clock={manualClock.clock}
+                >
+                  <ReviewPanelProvider>
+                    <ReviewLensesProvider client={client} snapshot={snapshot}>
+                      <AuthoringActivityBadge onLocate={onLocate} />
+                      <ReviewDiffView />
+                    </ReviewLensesProvider>
+                  </ReviewPanelProvider>
+                </DrawQueueProvider>
+              </AuthoringCursorContext.Provider>
+            </AuthoringActivityContext.Provider>
+          </ReviewRootsProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     ),
   );
 };
@@ -232,11 +237,15 @@ it("lands a new lens row with the courier on it, without listing its files, and 
   expect(row(docs.id)?.dataset.motion).toBe("landing");
   await vi.waitFor(() => expect(courier()).toBeTruthy());
 
+  // The courier re-measures a frame later, once the list makes room for him.
   const list = app.querySelector<HTMLElement>(".diff-sidebar-lenses")!;
-  const box = list.getBoundingClientRect();
-  expect(parseFloat(courier()!.style.top)).toBeCloseTo(
-    row(docs.id)!.getBoundingClientRect().top - box.top + list.scrollTop,
-    0,
+  await vi.waitFor(() =>
+    expect(parseFloat(courier()!.style.top)).toBeCloseTo(
+      row(docs.id)!.getBoundingClientRect().top -
+        list.getBoundingClientRect().top +
+        list.scrollTop,
+      0,
+    ),
   );
 
   // The row lands and settles; the files it groups are never listed under it.
@@ -296,4 +305,42 @@ it("sends the top-bar badge to the Diffs page while only lenses are written", as
       .click(),
   );
   expect(onLocate).toHaveBeenCalledWith("review");
+});
+
+it("folds the sidebar to a rail that still filters and opens again", async () => {
+  window.localStorage.setItem(
+    reviewPreferenceKey("ui", "diff-sidebar-width-collapsed"),
+    "true",
+  );
+
+  try {
+    await render({ lenses: [api, docs], version: 1, lensCursor: null });
+
+    const railLens = (title: string) =>
+      app.querySelector<HTMLButtonElement>(
+        `nav[aria-label="Lens rail"] button[aria-label="${title}"]`,
+      );
+
+    await vi.waitFor(() =>
+      expect(railLens("Uncategorized changes")?.textContent).toBe("n/a"),
+    );
+    expect(railLens(api.title)?.textContent).toBe("API");
+
+    await act(async () => railLens(api.title)!.click());
+    expect(railLens(api.title)?.getAttribute("aria-pressed")).toBe("true");
+
+    await act(async () =>
+      app
+        .querySelector<HTMLButtonElement>('button[aria-label="Show lenses"]')!
+        .click(),
+    );
+    expect(app.querySelector('nav[aria-label="Lens rail"]')).toBeNull();
+    expect(
+      row(api.id)
+        ?.querySelector("button[aria-pressed]")
+        ?.getAttribute("aria-pressed"),
+    ).toBe("true");
+  } finally {
+    window.localStorage.clear();
+  }
 });

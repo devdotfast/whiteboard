@@ -1,4 +1,4 @@
-import type { AgentSelection } from "../../src/agent-selection";
+import type { AgentSelection } from "@review/agent-selection";
 
 /** Authored document text participates; native code editors report their own selections. */
 export function observeAgentTextSelection(
@@ -8,6 +8,7 @@ export function observeAgentTextSelection(
       | (Omit<AgentSelection, "revision"> & {
           anchor: { x: number; y: number };
           anchorElement: Element;
+          range: Range;
         })
       | null,
   ) => void,
@@ -89,6 +90,7 @@ export function observeAgentTextSelection(
       title: quote.slice(0, 100),
       anchor: { x: rect.left + rect.width / 2, y: rect.top },
       anchorElement,
+      range: range.cloneRange(),
     });
   };
 

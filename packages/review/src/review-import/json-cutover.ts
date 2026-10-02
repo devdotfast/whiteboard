@@ -19,15 +19,15 @@ import {
   withFileLock,
   writePrivateJsonAtomic,
 } from "@dev.fast/trace-core";
-
-import { isMissingFileError } from "../fs-utils";
-import { openLocalReviewStore } from "../review-api/local-data";
+import { isMissingFileError } from "@review/fs-utils";
+import { openLocalReviewStore } from "@review/review-api/local-data";
 import {
   type StoredReview,
   UUID_PATTERN,
   parseAnyStoredReviewRecord,
-} from "../review-home";
-import { reviewVcs } from "../review-vcs";
+} from "@review/review-home";
+import { reviewVcs } from "@review/review-vcs";
+
 import {
   type ImportLegacyReviewInput,
   type ImportOutcome,

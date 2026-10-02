@@ -1,6 +1,14 @@
+import { tocLayer } from "@canvas/review-toc.stylex";
+import { fontSize, fontWeight, motion } from "@canvas/scale.stylex";
+import { IconButton } from "@canvas/ui/button";
+import { surfaceStyles } from "@canvas/ui/surface";
+import { textStyles } from "@canvas/ui/text";
+import type { ReviewDocumentWidthChoice } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useState } from "react";
 
 import { ContentsIcon } from "./icons";
+import { tocEntryMarker } from "./markers.stylex";
 import type { ReviewTocEntry } from "./review-document-headings";
 import {
   cssIdentifier,
@@ -12,6 +20,7 @@ import {
   activeTargetForScroll,
   scrollTailHeight,
 } from "./scroll-active-tracking";
+import { tokens } from "./tokens.stylex";
 
 interface NumberedReviewTocEntry extends ReviewTocEntry {
   number: string;
@@ -21,9 +30,15 @@ interface NumberedReviewTocEntry extends ReviewTocEntry {
  * Narrowest shell that fits the rail beside the prose: the 720px prose
  * measure sits centered, so each gutter is (shell - 720) / 2, and the rail
  * needs left offset (24) + card (up to ~286 with padding) + breathing room
- * before the text starts — a ~320px gutter, so a 1360px shell.
+ * before the text starts — a ~320px gutter, so a 1360px shell. A wide
+ * document needs the same gutter beside its 1232px block column; a full one
+ * leaves none, so its contents stay a pill.
  */
-const TOC_RAIL_MIN_SHELL_WIDTH = 1360;
+const TOC_RAIL_MIN_SHELL_WIDTH: Record<ReviewDocumentWidthChoice, number> = {
+  standard: 1360,
+  wide: 1872,
+  full: Infinity,
+};
 
 /**
  * Room to leave above the last heading once it is scrolled to the top, so
@@ -36,8 +51,16 @@ const TAIL_CSS_PROPERTY = "--review-toc-tail";
 
 export function ReviewToc({
   entries,
+  besideHeader = false,
+  documentWidth = "standard",
 }: {
   entries: readonly ReviewTocEntry[];
+  /** The document opens with a review header: the rail lines up with the
+   * page and sets its entries larger. A prop, not a :has() over the app,
+   * which restyled every element on each change anywhere in it, such as
+   * each keystroke in a text field. */
+  besideHeader?: boolean;
+  documentWidth?: ReviewDocumentWidthChoice;
 }): ReactElement | null {
   const roots = useReviewRoots();
   const shellRef = roots?.shellRef;
@@ -57,7 +80,7 @@ export function ReviewToc({
     if (!shell) return;
 
     const updateWidth = () => {
-      setIsWide(shell.clientWidth >= TOC_RAIL_MIN_SHELL_WIDTH);
+      setIsWide(shell.clientWidth >= TOC_RAIL_MIN_SHELL_WIDTH[documentWidth]);
     };
 
     updateWidth();
@@ -65,7 +88,7 @@ export function ReviewToc({
     resizeObserver.observe(shell);
 
     return () => resizeObserver.disconnect();
-  }, [shellRef]);
+  }, [shellRef, documentWidth]);
 
   useEffect(() => {
     if (isWide) setIsDrawerOpen(false);
@@ -79,7 +102,7 @@ export function ReviewToc({
 
       if (!(target instanceof Node)) return;
 
-      if (target instanceof Element && target.closest(".review-toc")) return;
+      if (target instanceof Element && target.closest("#review-toc")) return;
 
       setIsDrawerOpen(false);
     };
@@ -268,10 +291,17 @@ export function ReviewToc({
     <nav
       key={showRail ? "rail" : "pill"}
       id="review-toc"
-      className={
-        (showRail ? "review-toc review-toc--rail" : "review-toc") +
-        (showList ? " review-toc--open" : "")
-      }
+      {...stylex.props(
+        surfaceStyles.popover,
+        styles.toc,
+        showList && styles.tocOpen,
+        showRail && styles.tocRail,
+        showRail && besideHeader && styles.tocRailBesideHeader,
+        showRail &&
+          besideHeader &&
+          documentWidth === "wide" &&
+          styles.tocRailBesideWideHeader,
+      )}
       aria-label="Contents"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
@@ -280,35 +310,70 @@ export function ReviewToc({
         }
       }}
     >
-      <button
-        type="button"
-        className="review-toc-toggle"
+      <IconButton
+        size="large"
+        xstyle={[styles.toggle, showList && styles.toggleOpen]}
         aria-label={isDrawerOpen ? "Close contents" : "Open contents"}
         aria-expanded={isDrawerOpen}
         aria-controls="review-toc-body"
         hidden={showRail || undefined}
         onClick={() => setIsDrawerOpen((open) => !open)}
       >
-        <ContentsIcon />
-      </button>
-      <div id="review-toc-body" className="review-toc-body">
-        <div className="review-toc-head">Contents</div>
-        <ul className="review-toc-list">
+        <ContentsIcon xstyle={styles.toggleIcon} />
+      </IconButton>
+      <div
+        id="review-toc-body"
+        {...stylex.props(
+          styles.body,
+          showList && styles.bodyOpen,
+          showRail && styles.bodyRail,
+        )}
+      >
+        <div
+          {...stylex.props(
+            textStyles.eyebrow,
+            styles.head,
+            showRail && styles.headRail,
+            showRail && besideHeader && styles.headRailBesideHeader,
+          )}
+        >
+          Contents
+        </div>
+        <ul
+          {...stylex.props(
+            styles.list,
+            showRail && styles.listRail,
+            showRail && besideHeader && styles.listRailBesideHeader,
+          )}
+        >
           {numberedEntries.map((entry) => (
             <li
               key={entry.id}
-              className={
-                `review-toc-item review-toc-item--${entry.level}` +
-                (active === entry.id ? " review-toc-item--active" : "")
-              }
+              {...stylex.props(
+                styles.item,
+                entry.level === "h3" && styles.itemH3,
+              )}
             >
               <button
                 type="button"
-                className="review-toc-link"
+                aria-current={active === entry.id ? "location" : undefined}
+                {...stylex.props(
+                  tocEntryMarker,
+                  styles.link,
+                  showRail && besideHeader && styles.linkRailBesideHeader,
+                )}
                 onClick={() => scrollTo(entry.id)}
               >
-                <span className="review-toc-number">{entry.number}</span>
-                <span className="review-toc-text">{entry.text}</span>
+                <span
+                  {...stylex.props(
+                    styles.number,
+                    showRail && besideHeader && styles.numberRailBesideHeader,
+                    entry.level === "h3" && styles.numberH3,
+                  )}
+                >
+                  {entry.number}
+                </span>
+                <span {...stylex.props(styles.text)}>{entry.text}</span>
               </button>
             </li>
           ))}
@@ -347,3 +412,207 @@ function isVisibleHeadingForActiveTracking(heading: HTMLElement): boolean {
 
   return rect.width !== 0 || rect.height !== 0;
 }
+
+const narrow = "@media (max-width: 720px)";
+
+const currentEntry = ":is([aria-current])";
+
+const inCurrentEntry = () =>
+  stylex.when.ancestor(":is([aria-current])", tocEntryMarker);
+
+const reducedMotion = "@media (prefers-reduced-motion: reduce)";
+
+// On a narrow shell the nav is the pill and the card in one: a 32px square at
+// the pill's anchor that grows in place, top-left corner pinned, into the
+// 248px contents card. Width and height animate; the list only fades, late in
+// and early out, so no frame shows stretching text. The radius holds at 8px
+// so the eye tracks one shape. On a wide shell the same nav is the rail:
+// always open, no button, no card chrome.
+const styles = stylex.create({
+  toc: {
+    position: "absolute",
+    // Sits 16px above the content top so it clears the page title.
+    top: `calc(32px + ${tokens.reviewPageTop})`,
+    left: { default: "24px", [narrow]: "8px" },
+    zIndex: tocLayer.card,
+    display: "block",
+    flex: "none",
+    width: "32px",
+    height: "32px",
+    overflow: "hidden",
+    padding: 0,
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontSerif,
+    interpolateSize: "allow-keywords",
+    transition: {
+      default: `width ${motion.medium} cubic-bezier(0.2, 0.7, 0.2, 1) ${motion.fast}, height ${motion.medium} cubic-bezier(0.2, 0.7, 0.2, 1) ${motion.fast}`,
+      [reducedMotion]: "none",
+    },
+  },
+  tocOpen: {
+    width: { default: "248px", [narrow]: "min(248px, calc(100cqi - 16px))" },
+    height: "auto",
+    transition: {
+      default: `width ${motion.medium} cubic-bezier(0.2, 0.7, 0.2, 1), height ${motion.medium} cubic-bezier(0.2, 0.7, 0.2, 1)`,
+      [reducedMotion]: "none",
+    },
+  },
+  // A wide shell renders the contents as a plain rail beside the prose,
+  // without the floating-card chrome, for the whole document. It keeps the
+  // card's inner layout but never grows or shrinks.
+  tocRail: {
+    top: `calc(48px + ${tokens.reviewPageTop} + 40px)`,
+    left: { default: "24px", [narrow]: "8px" },
+    zIndex: tocLayer.rail,
+    width: { default: "248px", [narrow]: "min(248px, calc(100cqi - 16px))" },
+    overflow: "visible",
+    padding: "20px 18px 22px 20px",
+    transition: "none",
+    borderColor: tokens.transparent,
+    backgroundColor: tokens.transparent,
+    boxShadow: "none",
+  },
+  // Beside a review header the rail lines up with the left edge of a 1320px
+  // page and gives each entry a taller row and larger type.
+  tocRailBesideHeader: {
+    left: "max(24px, calc((100% - 1320px) / 2))",
+    width: "240px",
+    padding: "6px 0 0",
+  },
+  // Beside a wide document the page is its block column plus the same gutters.
+  tocRailBesideWideHeader: {
+    left: "max(24px, calc((100% - 1792px) / 2))",
+  },
+  toggle: {
+    position: "absolute",
+    top: "1px",
+    left: "1px",
+    display: { default: "inline-flex", ":is([hidden])": "none" },
+  },
+  toggleOpen: {
+    color: tokens.ink,
+  },
+  toggleIcon: {
+    flex: "0 0 auto",
+  },
+  body: {
+    maxHeight: "min(488px, calc(100dvh - 196px))",
+    overflow: "auto",
+    // Same scrollbar as the review document.
+    scrollbarWidth: "thin",
+    opacity: 0,
+    pointerEvents: "none",
+    transition: {
+      default: `opacity ${motion.fast} ${motion.ease}`,
+      [reducedMotion]: `opacity ${motion.fast} ${motion.ease}`,
+    },
+  },
+  bodyOpen: {
+    opacity: 1,
+    pointerEvents: "auto",
+    transition: {
+      default: `opacity ${motion.fast} ${motion.ease} ${motion.fast}`,
+      [reducedMotion]: `opacity ${motion.fast} ${motion.ease}`,
+    },
+  },
+  bodyRail: {
+    maxHeight: "min(520px, calc(100dvh - 164px))",
+    transition: "none",
+  },
+  // The card's first row is the pill's row: 32px tall, the label set in from
+  // the glyph. The rail has no glyph, so its head sits flush.
+  head: {
+    height: "32px",
+    paddingLeft: "32px",
+    fontFamily: tokens.fontMono,
+    lineHeight: "32px",
+    whiteSpace: "nowrap",
+  },
+  headRail: {
+    height: "auto",
+    marginBottom: "14px",
+    paddingLeft: 0,
+    lineHeight: "normal",
+  },
+  headRailBesideHeader: {
+    paddingBottom: "10px",
+    paddingLeft: "14px",
+  },
+  list: {
+    display: "grid",
+    margin: 0,
+    padding: "4px 18px 20px 20px",
+    listStyle: "none",
+    gap: "6px",
+  },
+  listRail: {
+    padding: 0,
+  },
+  listRailBesideHeader: {
+    gap: "4px",
+  },
+  item: {
+    margin: 0,
+    padding: 0,
+  },
+  itemH3: {
+    paddingLeft: "14px",
+  },
+  link: {
+    display: "flex",
+    alignItems: "baseline",
+    width: "100%",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    backgroundColor: tokens.transparent,
+    fontWeight: {
+      default: fontWeight.regular,
+      [currentEntry]: fontWeight.semibold,
+    },
+    textAlign: "left",
+    position: "relative",
+    gap: "10px",
+    padding: "2px 0",
+    borderRadius: 0,
+    color: {
+      default: tokens.inkMuted,
+      ":hover": tokens.ink,
+      ":focus-visible": tokens.ink,
+      [currentEntry]: tokens.ink,
+    },
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.body,
+    lineHeight: "18px",
+    outline: {
+      default: null,
+      ":hover": "none",
+      ":focus-visible": "none",
+      [currentEntry]: "none",
+    },
+  },
+  linkRailBesideHeader: {
+    minHeight: "30px",
+    gap: "12px",
+    paddingBlock: 0,
+    fontSize: fontSize.ui,
+  },
+  number: {
+    flex: "0 0 auto",
+    color: { default: tokens.inkFaint, [inCurrentEntry()]: tokens.ink },
+    fontFamily: tokens.fontMono,
+    minWidth: "22px",
+    fontSize: fontSize.small,
+  },
+  numberRailBesideHeader: {
+    minWidth: "12px",
+    fontSize: fontSize.body,
+  },
+  // Fits "5.10".
+  numberH3: {
+    minWidth: "4ch",
+  },
+  text: {
+    minWidth: 0,
+  },
+});

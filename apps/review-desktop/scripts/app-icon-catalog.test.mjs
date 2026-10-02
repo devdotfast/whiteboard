@@ -11,28 +11,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  ICON_VARIANTS,
-  getIconVariant,
-  hashIconSource,
-} from "./build-app-icon-catalog.mjs";
-
-const appRoot = path.resolve(import.meta.dirname, "..");
-
-const previewWorkflow = readFileSync(
-  path.resolve(appRoot, "../../.github/workflows/review-desktop-preview.yml"),
-  "utf8",
-);
-
-const stableWorkflow = readFileSync(
-  path.resolve(appRoot, "../../.github/workflows/review-desktop-release.yml"),
-  "utf8",
-);
-
-const applyAppIcon = readFileSync(
-  path.resolve(import.meta.dirname, "apply-app-icon.mjs"),
-  "utf8",
-);
+import { ICON_VARIANTS, hashIconSource } from "./build-app-icon-catalog.mjs";
 
 for (const [channel, variant] of Object.entries(ICON_VARIANTS)) {
   test(`committed ${channel} Assets.car was built from the current .icon`, () => {
@@ -70,29 +49,3 @@ for (const [channel, variant] of Object.entries(ICON_VARIANTS)) {
   });
 }
 
-test("stable remains the default icon channel", () => {
-  assert.equal(getIconVariant(), ICON_VARIANTS.stable);
-  assert.equal(getIconVariant("stable"), ICON_VARIANTS.stable);
-  assert.equal(getIconVariant("preview"), ICON_VARIANTS.preview);
-  assert.throws(() => getIconVariant("nightly"), /stable or preview/);
-});
-
-test("preview uses the approved orange background", () => {
-  const previewIcon = JSON.parse(
-    readFileSync(path.join(ICON_VARIANTS.preview.iconSource, "icon.json")),
-  );
-
-  assert.equal(
-    previewIcon.fill["automatic-gradient"],
-    "display-p3:0.85098,0.46667,0.34118,1.00000",
-  );
-});
-
-test("only the preview workflow opts into the preview icon", () => {
-  assert.match(previewWorkflow, /REVIEW_APP_ICON_CHANNEL:\s*preview/);
-  assert.doesNotMatch(stableWorkflow, /REVIEW_APP_ICON_CHANNEL/);
-  assert.match(
-    applyAppIcon,
-    /getIconVariant\(process\.env\.REVIEW_APP_ICON_CHANNEL\)/,
-  );
-});

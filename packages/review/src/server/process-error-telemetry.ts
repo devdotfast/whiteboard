@@ -21,10 +21,10 @@ import {
   type JsonValue,
   parseJsonText,
 } from "@dev.fast/review-protocol";
+import { mergeErrorTelemetryProperties } from "@review/error-telemetry";
+import { devReviewHome } from "@review/review-home-paths";
+import { sanitizeUiTelemetryEvent } from "@review/ui-telemetry-events";
 
-import { mergeErrorTelemetryProperties } from "../error-telemetry";
-import { devReviewHome } from "../review-home-paths";
-import { sanitizeUiTelemetryEvent } from "../ui-telemetry-events";
 import {
   type ReviewTelemetryCapture,
   admitUiTelemetryEvent,

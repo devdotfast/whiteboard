@@ -1,21 +1,22 @@
 import type { ReviewCommitSummary } from "@dev.fast/review-protocol";
-import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
-
-import { type DiffSelection } from "../../src/lens-selection";
-import type { ReviewApiClient } from "../../src/review-api/client";
+import { type DiffSelection } from "@review/lens-selection";
+import type { ReviewApiClient } from "@review/review-api/client";
 import {
   type Block,
   elements,
   resourceReferences,
   selectionReferences,
-} from "../../src/review-api/document";
-import type { LocalReviewData } from "../../src/review-api/local-data";
-import type { Snapshot } from "../../src/review-api/store";
-import type { DocumentPeekableAnchor } from "../../src/review-document-data";
-import type { NormalizedSoftwareModel } from "../../src/software-map-model";
+} from "@review/review-api/document";
+import type { LocalReviewData } from "@review/review-api/local-data";
+import type { Snapshot } from "@review/review-api/store";
+import type { DocumentPeekableAnchor } from "@review/review-document-data";
+import type { NormalizedSoftwareModel } from "@review/software-map-model";
+import * as stylex from "@stylexjs/stylex";
+import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
+
 import { markdownHasTitle } from "./agent-markdown";
 import { type ApiHeadingIds, apiHeadingIds } from "./api-document-headings";
-import { AuthoringActivityContext } from "./authoring-activity";
+import { AuthoringActivityContext } from "./authoring-activity-context";
 import { scopeLive } from "./authoring-cursor";
 import {
   BlockErrorBoundary,
@@ -24,16 +25,17 @@ import {
   stored,
 } from "./blocks";
 import { AuthoringCursorContext, Courier } from "./courier";
+import { documentStyles } from "./document-styles";
 import { withErasedBlocks } from "./draw-queue";
 import { useMotionPhase, useMotionPhases } from "./draw-queue-provider";
+import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
+import { documentNodeMarker, proseMarker } from "./markers.stylex";
 import { reportReviewDocumentRenderError } from "./review-document-error-report";
 import { ReviewDocumentTitle } from "./review-document-surface";
 import { cssIdentifier, scrollToReviewHeading } from "./review-heading-scroll";
 import { useReviewRoots } from "./review-root-context";
 import type { SoftwareMapResolvedDataPayload } from "./software-map/software-map-snapshot";
-
-import "./api-document.css";
 
 interface Trace {
   label: string;
@@ -197,6 +199,11 @@ export function sourceAnchor(
   return { __kind: "db-anchor-ref", id, title, peek: source };
 }
 
+export const documentHasTitle = (document: Snapshot["document"]) =>
+  elements(document).some(
+    (node) => node.type === "markdown" && markdownHasTitle(node.markdown),
+  );
+
 export function ApiDocument({
   data,
   softwareMapEnabled = true,
@@ -207,10 +214,7 @@ export function ApiDocument({
   useHeadingFragments();
 
   const hasTitle = useMemo(
-    () =>
-      elements(data.snapshot.document).some(
-        (node) => node.type === "markdown" && markdownHasTitle(node.markdown),
-      ),
+    () => documentHasTitle(data.snapshot.document),
     [data.snapshot.document],
   );
 
@@ -224,12 +228,9 @@ export function ApiDocument({
       {!hasTitle && !scratchpad && (
         <ReviewDocumentTitle>{data.snapshot.title}</ReviewDocumentTitle>
       )}
-      {(data.snapshot.target?.kind === "worktree" ||
-        data.snapshot.sourceUnavailable) && (
-        <p className="review-source-context">
-          {data.snapshot.sourceUnavailable
-            ? "Local checkout unavailable. Showing retained source."
-            : "Working tree"}
+      {data.snapshot.sourceUnavailable && (
+        <p {...stylex.props(documentStyles.note, documentStyles.articleNote)}>
+          Local checkout unavailable. Showing retained source.
         </p>
       )}
       <DocumentBlocks
@@ -395,22 +396,46 @@ export const DocumentNode = memo(function DocumentNode({
       data.snapshot.staleSources?.includes(reference.id),
     );
 
+  const prose = node.type === "markdown" || node.type === "trace_quote";
+
+  // Document and drawing styles find a block's own elements by its
+  // data-review-node-id, and its prose by proseMarker.
   return (
     <div
-      className="api-document-node"
+      {...stylex.props(
+        documentNodeMarker,
+        prose && proseMarker,
+        drawStyles.blockChild,
+        motion === "queued" && drawStyles.queued,
+        motion === "landing" && drawStyles.landing,
+        motion === "rewriting" && drawStyles.rewriting,
+        motion === "erasing" && drawStyles.erasing,
+        region && drawStyles.region,
+        (region === "writing" || region === "idle") && drawStyles.regionOn,
+        region === "writing"
+          ? drawStyles.blockPulse
+          : motion === "erasing"
+            ? drawStyles.blockCollapse
+            : motion === "landing" && drawStyles.blockLand,
+      )}
       data-review-node-id={node.id}
       data-motion={motion}
       data-region={region}
-      data-review-copy-prose={
-        node.type === "markdown" || node.type === "trace_quote" || undefined
-      }
+      data-review-copy-prose={prose || undefined}
     >
       <BlockErrorBoundary
         block={block}
         onError={(error) => reportReviewDocumentRenderError(session, error)}
       >
         {stale ? (
-          <p role="status">
+          <p
+            role="status"
+            {...stylex.props(
+              documentStyles.note,
+              documentStyles.column,
+              drawStyles.blockChild,
+            )}
+          >
             This source range changed. Update the reference to view it.
           </p>
         ) : (

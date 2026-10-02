@@ -1,3 +1,7 @@
+import { flowLayer } from "@canvas/flow-layers.stylex";
+import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import type { Step } from "@review/review-api/document";
+import * as stylex from "@stylexjs/stylex";
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -22,19 +26,20 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import type { Step } from "../../src/review-api/document";
 import { useReviewDebugSettings } from "./debug-settings";
 import { DiagramHeader } from "./diagram-header";
+import { diagramStyles } from "./diagram-styles";
 import { hasTextSelectionWithin } from "./diagram-text-selection";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { useMotionPhase } from "./draw-queue-provider";
+import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
-import { useReviewPanel } from "./review-panel";
+import { appMarker, documentMarker } from "./markers.stylex";
+import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type { GuidedTour, PeekAnchor } from "./review-panel-model";
-import { useTourPersist, useTourRestore } from "./review-view-state";
+import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
-
-import "@xyflow/react/dist/style.css";
 
 type SequenceParticipantNodeData = {
   participant: SequenceParticipant;
@@ -264,21 +269,19 @@ export function SequenceDiagram(block: SequenceDiagramProps) {
   const tour = useMemo(() => createSequenceTourEntry(sequence), [sequence]);
 
   // The tour IS the fullscreen mode: the inline figure becomes the stage
-  // and the standard GuidedTourPanel docks beside it.
-  const [tourState, setTourState] = useState<{
-    anchor: string;
-    revealRequest: number;
-  } | null>(null);
+  // and the standard GuidedTourPanel docks beside it. A stored anchor this
+  // tour no longer has leaves it closed.
+  const panelStore = useReviewPanelStore();
+
+  const tourState = useReviewPanel((state) =>
+    state.overlayTour?.tourId === tour.id &&
+    tour.stops.some((stop) => stop.anchor.id === state.overlayTour!.anchor)
+      ? state.overlayTour
+      : null,
+  );
 
   const tourAnchor = tourState?.anchor ?? null;
   const tourOpen = tourState !== null;
-  const restoredTour = useTourRestore(tour);
-  useTourPersist(tourOpen ? tour : null, tourAnchor);
-
-  useEffect(() => {
-    if (!restoredTour) return;
-    setTourState({ anchor: restoredTour.activeAnchor, revealRequest: 0 });
-  }, [restoredTour]);
 
   const openTour = useCallback(
     (anchor?: string) => {
@@ -294,37 +297,17 @@ export function SequenceDiagram(block: SequenceDiagramProps) {
         captureUiEvent(session, "tour_started", { steps: tour.stops.length });
       }
 
-      setTourState((state) => ({
-        anchor: nextAnchor,
-        revealRequest: (state?.revealRequest ?? 0) + 1,
-      }));
+      panelStore
+        .getState()
+        .openOverlayTour({ tourId: tour.id, kind: "sequence" }, nextAnchor);
     },
-    [session, tour, tourAnchor, tourOpen],
+    [panelStore, session, tour, tourAnchor, tourOpen],
   );
 
-  const closeTour = useCallback(() => setTourState(null), []);
+  const { closeOverlayTour: closeTour, moveOverlayTour: changeTourAnchor } =
+    panelStore.getState();
 
-  const changeTourAnchor = useCallback(
-    (anchor: string, options: { reveal: boolean }) => {
-      setTourState((state) =>
-        state
-          ? {
-              anchor,
-              revealRequest: options.reveal
-                ? state.revealRequest + 1
-                : state.revealRequest,
-            }
-          : state,
-      );
-    },
-    [],
-  );
-
-  const {
-    overlayRef,
-    portalTarget,
-    paneResize: tourPaneResize,
-  } = useDiagramTourShell(tourOpen, closeTour);
+  const { portalTarget } = useDiagramTourShell(tourOpen, closeTour);
 
   return (
     <>
@@ -339,11 +322,8 @@ export function SequenceDiagram(block: SequenceDiagramProps) {
         ? createPortal(
             <DiagramTourOverlay
               tour={tour}
-              activeAnchor={tourAnchor!}
-              revealRequest={tourState?.revealRequest ?? 0}
-              paneWidth={tourPaneResize.width}
-              separatorProps={tourPaneResize.separatorProps}
-              overlayRef={overlayRef}
+              activeAnchor={tourState.anchor}
+              revealRequest={tourState.revealRequest}
               onActiveAnchorChange={changeTourAnchor}
               onClose={closeTour}
             >
@@ -380,6 +360,7 @@ function SequenceDiagramFigure({
    * its Tour button for a close control and message dots show stop numbers. */
   onCloseTour?: () => void;
 }) {
+  const stage = onCloseTour !== undefined;
   const sequenceScrollRef = useRef<HTMLDivElement | null>(null);
   const panelMotion = useReviewPanel((state) => state.motion);
   const [availableWidth, setAvailableWidth] = useState(0);
@@ -413,8 +394,19 @@ function SequenceDiagramFigure({
         id: participant.id,
         type: "sequenceParticipant",
         position: { x: index * laneWidth, y: 0 },
-        width: laneWidth,
+        // A width stamped inline goes stale when the lane is measured
+        // before the container settles, so the lane reads the live variable;
+        // initialWidth only sizes it until React Flow first measures it.
+        initialWidth: laneWidth,
         height,
+        // The lane spans the whole diagram over the message arrows; left
+        // interactive it would steal their hover. Its label keeps its own
+        // pointer events.
+        style: {
+          width: "var(--sequence-lane-width, 176px)",
+          pointerEvents: "none",
+        },
+        className: stylex.props(styles.lane).className,
         data: {
           participant,
           height,
@@ -460,9 +452,10 @@ function SequenceDiagramFigure({
             openTour,
             stepNumber: onCloseTour ? index + 1 : null,
           },
-          className: isActive
-            ? "sequence-message clickable active"
-            : "sequence-message clickable",
+          className: stylex.props(
+            styles.message,
+            isActive && styles.messageActive,
+          ).className,
           zIndex: isActive ? 2 : 1,
         };
       }),
@@ -561,7 +554,14 @@ function SequenceDiagramFigure({
   return (
     <>
       <figure
-        className={sequenceDiagramClassName(Boolean(activeTourAnchor))}
+        {...withClass(
+          "sequence-diagram",
+          styles.figure,
+          stage && styles.stage,
+          Boolean(activeTourAnchor) &&
+            (stage ? styles.stageActive : styles.active),
+          drawStyles.blockChild,
+        )}
         style={style}
         tabIndex={-1}
         data-sequence-tour-id={sequence.id}
@@ -570,12 +570,13 @@ function SequenceDiagramFigure({
           kind="SEQ"
           title={sequence.title}
           meta={`${stopCount} ${stopCount === 1 ? "stop" : "stops"}`}
+          xstyle={styles.header}
           action={
             // The tour panel's header owns the close control fullscreen.
             onCloseTour ? null : (
               <button
                 type="button"
-                className="diagram-tour-button"
+                {...withClass("diagram-tour-button", diagramStyles.control)}
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -589,10 +590,11 @@ function SequenceDiagramFigure({
         />
         <div
           ref={sequenceScrollRef}
-          className="sequence-diagram-body"
+          {...stylex.props(styles.body)}
           onClick={() => openTour()}
         >
           <ReactFlow
+            {...stylex.props(styles.canvas)}
             colorMode={theme}
             nodes={reactFlowNodes}
             edges={reactFlowEdges}
@@ -617,12 +619,6 @@ function SequenceDiagramFigure({
   );
 }
 
-export function sequenceDiagramClassName(isTourActive: boolean): string {
-  return isTourActive
-    ? "sequence-diagram sequence-tour sequence-tour--active"
-    : "sequence-diagram sequence-tour";
-}
-
 function SequenceParticipantNode({
   data,
 }: ReactFlowNodeProps<SequenceParticipantFlowNode>) {
@@ -634,13 +630,16 @@ function SequenceParticipantNode({
   );
 
   return (
-    <div className="sequence-participant-node" style={{ height }}>
-      <div className="sequence-participant-label-anchor">
-        <span className="sequence-participant-label" title={participant.label}>
+    <div {...stylex.props(styles.participant)} style={{ height }}>
+      <div {...stylex.props(styles.participantLabelAnchor)}>
+        <span
+          {...stylex.props(styles.participantLabel)}
+          title={participant.label}
+        >
           {participant.label}
         </span>
       </div>
-      <div className="sequence-lifeline" />
+      <div {...stylex.props(styles.lifeline)} />
       {activeMessages.flatMap((message, index) => {
         const messageIndex = messages.findIndex(
           (item) => item.id === message.id,
@@ -677,7 +676,7 @@ function SequenceParticipantNode({
             id={handle.id}
             type={handle.type}
             position={handle.side}
-            className="sequence-message-handle"
+            {...stylex.props(styles.handle)}
             style={{
               left: "50%",
               top: sequenceMessageHandleTop(message, handle.type, top),
@@ -743,11 +742,8 @@ function SequenceMessageEdge(
 
   const labelY = props.sourceY - 12;
 
-  const edgeClassName = data.active
-    ? "sequence-message clickable active"
-    : "sequence-message clickable";
-
   const stepMotion = useMotionPhase(data.message.id);
+  const stage = data.stepNumber !== null;
 
   return (
     <>
@@ -760,14 +756,27 @@ function SequenceMessageEdge(
             ? undefined
             : props.markerEnd
         }
-        className={edgeClassName}
+        // The class is a marker for tests. The stroke color is the edge's
+        // inline style, so it holds while the line is drawn.
+        className={
+          withClass(
+            "sequence-message",
+            styles.message,
+            data.active && styles.messageActive,
+            (stepMotion === "outline" || stepMotion === "stroke") &&
+              styles.messageDrawing,
+            stepMotion === "queued" && drawStyles.hidden,
+            stepMotion === "stroke" && drawStyles.traceQuick,
+            stepMotion === "outline" && drawStyles.traceLine,
+          ).className
+        }
         style={props.style}
         pathLength={1}
         data-motion={stepMotion}
       />
       <path
         d={edgePath}
-        className="sequence-message-hit-area"
+        {...stylex.props(styles.hitArea)}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -777,13 +786,15 @@ function SequenceMessageEdge(
       <EdgeLabelRenderer>
         <button
           type="button"
-          className={[
-            "sequence-message-dot",
-            data.active ? "active" : null,
-            data.stepNumber !== null ? "sequence-message-dot--step" : null,
-          ]
-            .filter(Boolean)
-            .join(" ")}
+          {...stylex.props(
+            styles.dot,
+            data.active && styles.dotActive,
+            stage && styles.stopBadge,
+            stage && data.active && styles.stopBadgeActive,
+            stepMotion === "attention" && styles.dotAttention,
+            stepMotion === "queued" && drawStyles.hidden,
+            stepMotion === "fill" && drawStyles.stepPop,
+          )}
           style={{
             transform: `translate(-50%, -50%) translate(${props.sourceX}px,${props.sourceY}px)`,
           }}
@@ -798,7 +809,12 @@ function SequenceMessageEdge(
           {data.stepNumber}
         </button>
         <div
-          className="sequence-message-label-anchor"
+          {...stylex.props(
+            styles.labelAnchor,
+            stepMotion === "queued" && drawStyles.hidden,
+            (stepMotion === "outline" || stepMotion === "stroke") &&
+              drawStyles.labelStep,
+          )}
           data-motion={stepMotion}
           style={{
             transform: `translate(-50%, -100%) translate(${labelX}px,${labelY}px)`,
@@ -807,11 +823,7 @@ function SequenceMessageEdge(
           <span
             role="button"
             tabIndex={0}
-            className={
-              data.active
-                ? "sequence-message-label clickable active"
-                : "sequence-message-label clickable"
-            }
+            {...stylex.props(styles.label, data.active && styles.labelActive)}
             data-review-anchor-id={data.message.id}
             onClick={(event) => {
               event.stopPropagation();
@@ -994,3 +1006,237 @@ function sequenceHandleId(
 ): string {
   return `${handleType}-${messageId}`;
 }
+
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
+
+// Where the theme defines --diagram-border: inside the app root.
+const inApp = () => stylex.when.ancestor(":is(*)", appMarker);
+
+const labelHover = `0 0 0 2px ${tokens.accentShadow}, 0 6px 14px ${tokens.shadowColorStrong}`;
+
+const styles = stylex.create({
+  // Inline, a sequence takes the document's block measure, lanes spreading to
+  // fill it. The fullscreen tour is the escape hatch.
+  figure: {
+    position: "relative",
+    display: "grid",
+    gridTemplateRows: "auto minmax(0, 1fr)",
+    width: {
+      default: "100%",
+      "@media (max-width: 720px)": {
+        default: "100%",
+        [inDocument()]: "calc(100cqi - 16px)",
+      },
+    },
+    minWidth: 0,
+    maxWidth: {
+      default: "100%",
+      [inDocument()]: `min(${tokens.reviewBlockMaxWidth}, calc(100cqi - ${tokens.reviewDocumentPaddingInline} - ${tokens.reviewDocumentPaddingInline}))`,
+    },
+    // Natural height; the document scrolls, not the diagram. The body
+    // scrolls only past about forty steps.
+    height: "auto",
+    minHeight: `min(${tokens.sequenceHeight}, 260px)`,
+    maxHeight: "3200px",
+    marginBlock: "24px",
+    marginInline: { default: 0, [inDocument()]: "auto" },
+    paddingTop: 0,
+    overflow: "hidden",
+    // Without --diagram-border the border drops out whole, as the shorthand
+    // it replaces did.
+    borderWidth: { default: null, [inApp()]: "1px" },
+    borderStyle: { default: null, [inApp()]: "solid" },
+    borderColor: { default: null, [inApp()]: tokens.diagramBorder },
+    borderRadius: radius.control,
+    backgroundColor: tokens.diagramSurface,
+    boxShadow: "none",
+    cursor: "pointer",
+  },
+  active: {
+    borderColor: tokens.selection,
+    boxShadow: `0 0 0 2px ${tokens.selectionShadow}`,
+  },
+  // The tour stage: the figure fills the overlay without its card chrome.
+  stage: {
+    width: "100%",
+    maxWidth: "none",
+    height: "100%",
+    minHeight: 0,
+    marginBlock: 0,
+    marginInline: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    borderRadius: 0,
+    boxShadow: "none",
+  },
+  stageActive: {
+    borderColor: tokens.selection,
+  },
+  header: {
+    justifyContent: "space-between",
+    fontSize: fontSize.body,
+    fontWeight: fontWeight.bold,
+  },
+  // No overscroll-behavior: Chrome latches wheel gestures to the nearest
+  // scroll container even when it has nothing to scroll, and `contain` would
+  // stop them chaining up to the document scroller.
+  body: {
+    minWidth: 0,
+    minHeight: 0,
+    overflow: "auto",
+  },
+  // React Flow sizes its root inline at 100%; the min pair keeps the canvas
+  // at its natural size so the body scrolls to the clipped remainder.
+  canvas: {
+    minWidth: tokens.sequenceWidth,
+    minHeight: tokens.sequenceHeight,
+    backgroundColor: tokens.diagramCanvasBg,
+  },
+  // Its text reads like the prose around it.
+  lane: {
+    userSelect: "text",
+  },
+  participant: {
+    position: "relative",
+    width: "100%",
+  },
+  // The chip sizes to the name, capped at the lane: a long label uses the
+  // whole lane before it ellipsizes (its title carries the full name).
+  participantLabelAnchor: {
+    position: "relative",
+    zIndex: flowLayer.label,
+    width: "fit-content",
+    minWidth: "min(148px, 100%)",
+    maxWidth: "calc(100% - 16px)",
+    margin: "24px auto 0",
+    pointerEvents: "all",
+  },
+  participantLabel: {
+    display: "block",
+    boxSizing: "border-box",
+    width: "100%",
+    padding: "6px 10px",
+    overflow: "hidden",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.ruleSoft,
+    borderRadius: radius.control,
+    backgroundColor: tokens.surface,
+    boxShadow: { default: "none", ":hover": labelHover },
+    color: tokens.ink,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    fontWeight: fontWeight.bold,
+    textAlign: "center",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    pointerEvents: "all",
+  },
+  lifeline: {
+    position: "absolute",
+    top: "62px",
+    bottom: "18px",
+    left: "50%",
+    marginLeft: "-0.5px",
+    borderLeftWidth: "1px",
+    borderLeftStyle: "dashed",
+    borderLeftColor: tokens.ruleSoft,
+  },
+  // Edge endpoints sit exactly on the lane: left: 50% places the handle's
+  // left edge, so the handle centers itself on it.
+  handle: {
+    width: "1px",
+    height: "1px",
+    minWidth: 0,
+    minHeight: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    opacity: 0,
+    pointerEvents: "none",
+    transform: "translate(-50%, -50%)",
+  },
+  message: {
+    strokeWidth: "1.25px",
+    cursor: "pointer",
+  },
+  messageActive: {
+    strokeWidth: "2.4px",
+  },
+  messageDrawing: {
+    strokeWidth: "1.6px",
+  },
+  hitArea: {
+    fill: "none",
+    stroke: tokens.transparent,
+    strokeWidth: "18px",
+    cursor: "pointer",
+    pointerEvents: "stroke",
+  },
+  dot: {
+    position: "absolute",
+    zIndex: 3,
+    width: "11px",
+    height: "11px",
+    padding: 0,
+    borderWidth: "1.5px",
+    borderStyle: "solid",
+    borderColor: tokens.ruleSoft,
+    borderRadius: radius.round,
+    backgroundColor: tokens.surface,
+  },
+  dotAttention: {
+    borderColor: tokens.accent,
+    boxShadow: `0 0 0 3px ${tokens.markerGlow}`,
+  },
+  dotActive: {
+    borderColor: tokens.accent,
+    backgroundColor: tokens.accent,
+  },
+  // On the stage the dots grow into numbered stop badges.
+  stopBadge: {
+    display: "grid",
+    placeItems: "center",
+    width: "18px",
+    height: "18px",
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.micro,
+    lineHeight: 1,
+  },
+  stopBadgeActive: {
+    color: tokens.onAccent,
+  },
+  labelAnchor: {
+    position: "absolute",
+    zIndex: flowLayer.label,
+    display: "inline-flex",
+    alignItems: "center",
+    pointerEvents: "all",
+  },
+  label: {
+    position: "relative",
+    zIndex: 4,
+    maxWidth: "calc(var(--sequence-lane-width, 176px) - 12px)",
+    padding: "0 3px",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderRadius: 0,
+    backgroundColor: tokens.transparent,
+    boxShadow: { default: "none", ":hover": labelHover },
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    fontWeight: fontWeight.medium,
+    lineHeight: "14px",
+    overflowWrap: "anywhere",
+    textAlign: "center",
+    whiteSpace: "normal",
+    cursor: "pointer",
+  },
+  labelActive: {
+    color: tokens.accent,
+    fontWeight: fontWeight.bold,
+  },
+});

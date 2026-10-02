@@ -40,6 +40,8 @@ export class MultiDiffEditorResourceHeader extends Disposable {
 	private readonly _resourceLabel2;
 	private readonly _resourceHeaderMetadata;
 	private _data: IMultiDiffEditorResourceHeaderData | undefined;
+	private _collapseLocked = false;
+	private readonly _collapseButton;
 
 	readonly element: HTMLElement;
 	readonly actionsElement: HTMLElement;
@@ -88,7 +90,7 @@ export class MultiDiffEditorResourceHeader extends Disposable {
 			this.element.style.display = 'none';
 		}
 
-		const collapseButton = this._register(new Button(this._elements.collapseButton, {}));
+		const collapseButton = this._collapseButton = this._register(new Button(this._elements.collapseButton, {}));
 		this._register(autorun(reader => {
 			collapseButton.element.className = '';
 			collapseButton.icon = collapsed.read(reader) ? Codicon.chevronRight : Codicon.chevronDown;
@@ -119,7 +121,7 @@ export class MultiDiffEditorResourceHeader extends Disposable {
 		}
 		this._register(autorun(reader => {
 			const isCollapsed = collapsed.read(reader) ?? false;
-			if (!this._workbenchUIElementFactory.hideResourceHeader && this._workbenchUIElementFactory.headerClickToCollapse) {
+			if (!this._collapseLocked && !this._workbenchUIElementFactory.hideResourceHeader && this._workbenchUIElementFactory.headerClickToCollapse) {
 				this.element.setAttribute('aria-expanded', String(!isCollapsed));
 			}
 		}));
@@ -133,6 +135,26 @@ export class MultiDiffEditorResourceHeader extends Disposable {
 			toolbarOptions: { primaryGroup: group => group.startsWith('navigation') },
 			actionViewItemProvider: (action, options) => createActionViewItem(instantiationService, action, options),
 		}));
+	}
+
+	/** A locked header keeps its item folded: no chevron, no button semantics. */
+	setCollapseLocked(locked: boolean): void {
+		if (this._collapseLocked === locked) {
+			return;
+		}
+		this._collapseLocked = locked;
+		// The slot stays so the path lines up with its neighbours.
+		this._collapseButton.element.style.visibility = locked ? 'hidden' : '';
+		if (!this._workbenchUIElementFactory.hideResourceHeader && this._workbenchUIElementFactory.headerClickToCollapse) {
+			if (locked) {
+				this.element.removeAttribute('role');
+				this.element.removeAttribute('aria-expanded');
+				this.element.tabIndex = -1;
+			} else {
+				this.element.setAttribute('role', 'button');
+				this.element.tabIndex = 0;
+			}
+		}
 	}
 
 	setData(data: IMultiDiffEditorResourceHeaderData | undefined): void {

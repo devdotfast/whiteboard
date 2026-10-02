@@ -1,5 +1,5 @@
 import { existsSync, realpathSync, rmSync } from "node:fs";
-import { mkdir, rm, rmdir } from "node:fs/promises";
+import { lstat, mkdir, readdir, rm, rmdir } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -8,7 +8,7 @@ import {
   jjRevisionIsConflicted,
   resolveRevision,
 } from "@dev.fast/local-vcs";
-import { withFileLock } from "@dev.fast/trace-core";
+import { errorMessage, withFileLock } from "@dev.fast/trace-core";
 
 import {
   type ReviewCheckoutRole,
@@ -127,7 +127,9 @@ async function materializeReviewPinnedCheckout(input: {
 /**
  * Remove every checkout one Review owns in a repository. Registrations go
  * first, so an interrupted removal cannot leave a gutted tree that git still
- * lists and a later ensure would reuse.
+ * lists and a later ensure would reuse; an unregistered leftover is replaced
+ * by the next ensure. Each checkout is removed on its own, so one that cannot
+ * be deleted leaves the others removed; the error names every failure.
  */
 export async function removeReviewManagedCheckouts(
   commonDir: string,
@@ -137,19 +139,71 @@ export async function removeReviewManagedCheckouts(
 
   if (!isInsideDirectory(root, reviewManagedCheckoutsDir(commonDir)))
     throw new Error(`Refusing to remove non-managed checkouts at ${root}.`);
-  const roots = [root, ...(existsSync(root) ? [realpathSync(root)] : [])];
+
+  // Resolve symlinks above the root (say /tmp) only; never the root itself.
+  const roots = [
+    root,
+    path.join(realPath(path.dirname(root)), path.basename(root)),
+  ];
+
+  const errors: string[] = [];
+  // A checkout git refused to remove (say, locked) stays registered and whole.
+  const kept = new Set<string>();
+
+  const attempt = (work: Promise<unknown>) =>
+    work.then(
+      () => true,
+      (error) => {
+        errors.push(errorMessage(error));
+
+        return false;
+      },
+    );
 
   for (const worktree of await listRegisteredWorktrees(commonDir))
-    if (roots.some((dir) => isInsideDirectory(worktree.worktreePath, dir)))
-      await git(commonDir, [
-        "worktree",
-        "remove",
-        "--force",
-        worktree.worktreePath,
-      ]);
+    if (
+      roots.some((dir) => isInsideDirectory(worktree.worktreePath, dir)) &&
+      !(await attempt(
+        git(commonDir, [
+          "worktree",
+          "remove",
+          "--force",
+          worktree.worktreePath,
+        ]),
+      ))
+    )
+      kept.add(realPath(worktree.worktreePath));
 
-  await rm(root, { recursive: true, force: true });
+  // Descend only into real directories. rm removes a symlink itself, never
+  // what it points to, so nothing outside the root is touched.
+  const entries = async (dir: string) =>
+    (await lstat(dir).catch(() => null))?.isDirectory()
+      ? await readdir(dir, { withFileTypes: true })
+      : [];
+
+  for (const entry of await entries(root)) {
+    const dir = path.join(root, entry.name);
+
+    // base/<commit> and head/<commit> are checkouts; anything else (the
+    // navigator workspaces) goes whole.
+    const checkouts =
+      entry.isDirectory() && (entry.name === "base" || entry.name === "head")
+        ? (await entries(dir)).map((child) => path.join(dir, child.name))
+        : [dir];
+
+    for (const checkout of checkouts)
+      if (
+        !kept.has(
+          path.join(realPath(path.dirname(checkout)), path.basename(checkout)),
+        )
+      )
+        await attempt(rm(checkout, { recursive: true, force: true }));
+  }
+
+  if (!errors.length) await rm(root, { recursive: true, force: true });
   await git(commonDir, ["worktree", "prune"], { allowFailure: true });
+
+  if (errors.length) throw new Error(errors.join("\n"));
 }
 
 /** Remove commit-owned checkouts from releases before Review ownership. */
@@ -307,6 +361,10 @@ function isManagedLegacyReviewWorktree(
   }
 
   return worktree.headCommit?.startsWith(relative.toLowerCase()) ?? false;
+}
+
+function realPath(filePath: string): string {
+  return existsSync(filePath) ? realpathSync(filePath) : path.resolve(filePath);
 }
 
 function isInsideDirectory(filePath: string, directory: string): boolean {

@@ -1,16 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { testReviewSession } from "../review-session-test-utils";
 import { projectInlineC4 } from "./c4-projection";
 import { defineSoftwareModel } from "./model";
 import {
-  clearSoftwareMapNavigationStateForTests,
   initialSoftwareMapExpandedNodeIds,
-  rememberSoftwareMapNavigationState,
-  restoreSoftwareMapNavigationState,
   seedSoftwareMapDefaultExpandedNodeIds,
   softwareMapAncestorPaths,
-  softwareMapNavigationKey,
 } from "./software-map-navigation-state";
 
 describe("SoftwareMap navigation state", () => {
@@ -24,36 +19,6 @@ describe("SoftwareMap navigation state", () => {
       "progressiveReview.reviewApp",
       "progressiveReview.reviewApp.databaseLens",
     ]);
-  });
-
-  it("persists selected node and expanded node ids by model identity", () => {
-    const session = testReviewSession();
-    clearSoftwareMapNavigationStateForTests(session);
-
-    const key = softwareMapNavigationKey({
-      title: "CI SoftwareMap",
-      view: "inline",
-    });
-
-    rememberSoftwareMapNavigationState(session, key, {
-      modelKey: "model:a",
-      expandedNodeIds: ["devFastCi", "devFastCi.ciWorker"],
-      selectedNodeId: "devFastCi.ciWorker",
-      expanded: true,
-    });
-
-    expect(restoreSoftwareMapNavigationState(session, key, "model:a")).toEqual({
-      modelKey: "model:a",
-      expandedNodeIds: ["devFastCi", "devFastCi.ciWorker"],
-      selectedNodeId: "devFastCi.ciWorker",
-      expanded: true,
-    });
-    expect(restoreSoftwareMapNavigationState(session, key, "model:b")).toEqual({
-      modelKey: "model:b",
-      expandedNodeIds: [],
-      selectedNodeId: null,
-      expanded: false,
-    });
   });
 
   it("defaults every non-component expandable node to expanded", () => {

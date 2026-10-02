@@ -24,12 +24,7 @@ import { readStoreAuth, requireStoreClient } from "./store-auth";
 import { StoreApiError, StoreClient } from "./store-client";
 import { readActiveTraceSessions } from "./trace-agent-sessions";
 import { HOSTED_CAPTURE_SCOPE_DESCRIPTION } from "./trace-capture-scope";
-import {
-  type TraceCommand,
-  type TraceScope,
-  traceCliName,
-  traceCommandPrefix,
-} from "./trace-command";
+import { type TraceCommand, type TraceScope } from "./trace-command";
 import {
   allowTraceRepository,
   denyTraceRepository,
@@ -71,13 +66,13 @@ function describeStoreFailure(
 
   switch (error.code) {
     case "unauthorized":
-      return `The trace store at ${origin} rejected the login. Run \`${traceCliName()} login --origin ${origin}\`.`;
+      return `The trace store at ${origin} rejected the login. Run \`whiteboard login --origin ${origin}\`.`;
     case "forbidden":
       return `You cannot read the traces of ${repository}: ${error.message}`;
     case "store_deleted":
-      return `The trace store of ${repository} was deleted. Run \`${traceCommandPrefix()} store create\` to create a new one.`;
+      return `The trace store of ${repository} was deleted. Run \`whiteboard trace store create\` to create a new one.`;
     case "not_found":
-      return `${repository} has no trace store. Run \`${traceCommandPrefix()} store create\` first.`;
+      return `${repository} has no trace store. Run \`whiteboard trace store create\` first.`;
     default:
       return `The trace store at ${origin} answered ${error.code}: ${error.message}`;
   }
@@ -132,8 +127,8 @@ async function withHostedRepository(
     if (!auth) {
       return fail(
         stage === "allow"
-          ? `Run \`${traceCliName()} login\` first.`
-          : `The trace store login is missing. Run \`${traceCliName()} login --origin ${origin}\`.`,
+          ? `Run \`whiteboard login\` first.`
+          : `The trace store login is missing. Run \`whiteboard login --origin ${origin}\`.`,
       );
     }
 
@@ -141,7 +136,7 @@ async function withHostedRepository(
 
     if (auth.origin !== origin) {
       return fail(
-        `You are logged in to ${auth.origin}, not the selected store ${origin}. Run \`${traceCliName()} login --origin ${origin}\`.`,
+        `You are logged in to ${auth.origin}, not the selected store ${origin}. Run \`whiteboard login --origin ${origin}\`.`,
       );
     }
 
@@ -184,13 +179,13 @@ async function requireActiveStore(
 
   if (!store) {
     throw new HostedCommandFailure(
-      `${ctx.repository} has no trace store. Run \`${traceCommandPrefix()} store create\` first.`,
+      `${ctx.repository} has no trace store. Run \`whiteboard trace store create\` first.`,
     );
   }
 
   if (store.status !== "active") {
     throw new HostedCommandFailure(
-      `The trace store of ${store.displayName} was deleted. Run \`${traceCommandPrefix()} store create\` to create a new one.`,
+      `The trace store of ${store.displayName} was deleted. Run \`whiteboard trace store create\` to create a new one.`,
     );
   }
 
@@ -240,7 +235,7 @@ export async function runTraceOnboard(
       `Created the trace store of ${store.displayName} (id ${store.repositoryId}).\n`,
     );
     stream.write(
-      `Run \`${traceCommandPrefix()} allow .\` to send traces from this repository.\n`,
+      `Run \`whiteboard trace allow .\` to send traces from this repository.\n`,
     );
 
     return 0;
@@ -275,7 +270,7 @@ export async function runTraceStoreInfo(
 
     if (!store) {
       throw new HostedCommandFailure(
-        `${ctx.repository} has no trace store. Run \`${traceCommandPrefix()} store create\` first.`,
+        `${ctx.repository} has no trace store. Run \`whiteboard trace store create\` first.`,
       );
     }
 
@@ -373,7 +368,7 @@ export async function runTraceAllow(
       return failWithJsonError(
         input,
         "allow",
-        `This machine sends traces to a bucket. Run \`review trace storage use hosted\` first.`,
+        `This machine sends traces to a bucket. Run \`whiteboard trace storage use hosted\` first.`,
       );
     }
 
@@ -414,8 +409,7 @@ export async function runTraceAllow(
       store: storeOrigin,
     });
 
-    const verifyCommand =
-      input.verifyCommand ?? `${traceCommandPrefix()} status`;
+    const verifyCommand = input.verifyCommand ?? `whiteboard trace status`;
 
     humanStream(input).write(
       `Traces from ${store.displayName} may be published to ${storeOrigin}. Run \`${verifyCommand}\` to verify.\n`,
@@ -574,7 +568,7 @@ export async function runTraceSessions(
   // on here.
   if (mode === "s3") {
     return fail(
-      `\`${traceCommandPrefix()} sessions\` lists the hosted store only. Run \`review trace storage use hosted\`, or pass \`--storage hosted\`.`,
+      `\`whiteboard trace sessions\` lists the hosted store only. Run \`whiteboard trace storage use hosted\`, or pass \`--storage hosted\`.`,
     );
   }
 
@@ -587,7 +581,7 @@ export async function runTraceSessions(
 
   if (!selection.hosted) {
     return fail(
-      `Hosted trace storage is not configured. Run \`${traceCommandPrefix()} allow .\` or \`review trace storage use hosted\`.`,
+      `Hosted trace storage is not configured. Run \`whiteboard trace allow .\` or \`whiteboard trace storage use hosted\`.`,
     );
   }
 
@@ -616,7 +610,7 @@ export async function runTraceSessions(
           error.code === "invalid_request"
         ) {
           throw new HostedCommandFailure(
-            `The trace store at ${origin} does not support listing every session yet. Update the store, or use \`${traceCommandPrefix()} list --commit <sha>\`.`,
+            `The trace store at ${origin} does not support listing every session yet. Update the store, or use \`whiteboard trace list --commit <sha>\`.`,
           );
         }
 
@@ -663,7 +657,7 @@ export async function runTraceSessions(
 
       stream.write(
         page.nextCursor
-          ? `Sessions are ordered by id. More follow: run \`${traceCommandPrefix()} sessions${nextPageFlags} --cursor ${page.nextCursor}\`.\n`
+          ? `Sessions are ordered by id. More follow: run \`whiteboard trace sessions${nextPageFlags} --cursor ${page.nextCursor}\`.\n`
           : "Sessions are ordered by id. This is the last page.\n",
       );
 
@@ -694,9 +688,9 @@ export async function writeHostedTraceStatus(
       ? `Login: ${auth.login} at ${auth.origin}${
           auth.origin === input.origin
             ? ""
-            : ` (selected store is ${input.origin}; run \`${traceCliName()} login --origin ${input.origin}\`)`
+            : ` (selected store is ${input.origin}; run \`whiteboard login --origin ${input.origin}\`)`
         }\n`
-      : `Login: none. Run \`${traceCliName()} login --origin ${input.origin}\`.\n`,
+      : `Login: none. Run \`whiteboard login --origin ${input.origin}\`.\n`,
   );
   stream.write(
     `Capture switch: ${hostedCaptureEnabled(readTraceConfigFile({ devHome }).config) ? "on" : "off"}\n`,
@@ -718,7 +712,7 @@ export async function writeHostedTraceStatus(
 
   if (config.repositories.length === 0) {
     stream.write(
-      `Allowed repositories: none. Run \`${traceCommandPrefix()} allow .\`.\n`,
+      `Allowed repositories: none. Run \`whiteboard trace allow .\`.\n`,
     );
   } else {
     for (const repository of config.repositories) {
@@ -744,11 +738,11 @@ export async function writeHostedTraceStatus(
 
     if (!entry) {
       stream.write(
-        `This repository (${name}) is not allowed. Run \`${traceCommandPrefix()} allow .\`.\n`,
+        `This repository (${name}) is not allowed. Run \`whiteboard trace allow .\`.\n`,
       );
     } else if (!entry.enabledOrigins.includes(input.origin)) {
       stream.write(
-        `This repository (${name}) is allowed at ${entry.enabledOrigins.join(", ")}, not the selected ${input.origin}. Run \`${traceCommandPrefix()} allow .\` while logged in there.\n`,
+        `This repository (${name}) is allowed at ${entry.enabledOrigins.join(", ")}, not the selected ${input.origin}. Run \`whiteboard trace allow .\` while logged in there.\n`,
       );
     } else {
       stream.write(

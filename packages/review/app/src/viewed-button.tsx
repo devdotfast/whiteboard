@@ -1,4 +1,5 @@
-import type { CoverageProgress } from "../../src/viewed-coverage";
+import type { CoverageProgress } from "@review/viewed-coverage";
+
 import { useTooltip } from "./use-tooltip";
 
 /**

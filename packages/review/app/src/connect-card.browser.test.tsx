@@ -6,11 +6,13 @@ import { type ReactNode, act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { testCanvasUi } from "./canvas-ui-test-utils";
 import {
   ConnectCard,
   LegacySkillsRow,
   REVIEW_CONNECT_TARGET_STORAGE_KEY,
 } from "./connect-card";
+import { CanvasUiContext } from "./host/canvas-ui";
 
 const status: ReviewCliInstallStatus = {
   fingerprint: "f",
@@ -118,17 +120,17 @@ function button(container: HTMLElement, label: string) {
 }
 
 function body(container: HTMLElement) {
-  return container.querySelector(".review-home-prompt-body")?.textContent;
+  return container.querySelector("pre")?.textContent;
 }
 
 function otherTrigger(container: HTMLElement) {
   return container.querySelector<HTMLButtonElement>(
-    ".review-connect-other-trigger",
+    'button[aria-label="Other agent"]',
   );
 }
 
 function copyButton(container: HTMLElement) {
-  return container.querySelector<HTMLButtonElement>(".review-home-prompt-copy");
+  return container.querySelector<HTMLButtonElement>("[aria-live]");
 }
 
 describe("ConnectCard", () => {
@@ -164,25 +166,30 @@ describe("ConnectCard", () => {
   });
 
   it("swaps between the other agents from the menu", async () => {
-    const container = await mount(<ConnectCard install={content()} />);
+    const host = testCanvasUi();
+
+    const container = await mount(
+      <CanvasUiContext.Provider value={host.ui}>
+        <ConnectCard install={content()} />
+      </CanvasUiContext.Provider>,
+    );
 
     expect(otherTrigger(container)?.textContent).toBe("Other…");
     expect(otherTrigger(container)?.getAttribute("aria-pressed")).toBe("false");
     expect(container.querySelector("[role=menu]")).toBeNull();
 
     await act(async () => otherTrigger(container)?.click());
-    expect(
-      [...container.querySelectorAll("[role=menuitemradio]")].map(
-        (item) => item.textContent,
-      ),
-    ).toEqual(["Pi", "oh-my-pi", "Copilot CLI"]);
-
-    await act(async () => button(container, "oh-my-pi")?.click());
+    expect(host.menu.items.map((item) => item.label)).toEqual([
+      "Pi",
+      "oh-my-pi",
+      "Copilot CLI",
+    ]);
+    await act(async () => host.select("omp"));
     expect(container.querySelector("[role=menu]")).toBeNull();
     expect(otherTrigger(container)?.textContent).toBe("oh-my-pi");
     expect(otherTrigger(container)?.getAttribute("aria-pressed")).toBe("true");
     expect(
-      otherTrigger(container)?.querySelector(".review-agent-logo--omp"),
+      otherTrigger(container)?.querySelector("#review-agent-logo-omp-gradient"),
     ).not.toBeNull();
     expect(button(container, "Claude Code")?.getAttribute("aria-pressed")).toBe(
       "false",
@@ -319,16 +326,14 @@ describe("ConnectCard", () => {
     const body = container.querySelector("pre");
     expect(body?.dataset.collapsed).toBe("true");
 
-    const toggle = container.querySelector(
-      ".review-connect-body-wrap [aria-expanded]",
-    );
+    const toggle = container.querySelector("pre + [aria-expanded]");
 
     expect(toggle?.textContent).toBe("Show full prompt");
     await act(async () => (toggle as HTMLButtonElement).click());
     expect(body?.dataset.collapsed).toBe("false");
-    expect(
-      container.querySelector(".review-connect-collapse")?.textContent,
-    ).toBe("Show less");
+    expect(container.querySelector('[aria-expanded="true"]')?.textContent).toBe(
+      "Show less",
+    );
 
     const copy = [...container.querySelectorAll("button")].find(
       (b) => b.textContent === "Copy prompt",
@@ -339,19 +344,7 @@ describe("ConnectCard", () => {
 
     const short = await mount(<ConnectCard install={content()} />);
     expect(short.querySelector("pre")?.dataset.collapsed).toBe("false");
-    expect(
-      short.querySelector(".review-connect-body-wrap [aria-expanded]"),
-    ).toBeNull();
-  });
-
-  it("shows the setup error from the status", async () => {
-    const container = await mount(
-      <ConnectCard install={content({ error: "boom" })} />,
-    );
-
-    expect(container.querySelector(".review-connect-error")?.textContent).toBe(
-      "boom",
-    );
+    expect(short.querySelector("pre + [aria-expanded]")).toBeNull();
   });
 });
 

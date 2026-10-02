@@ -1,4 +1,4 @@
-name: Review CLI Release
+name: Whiteboard CLI Release
 
 on:
   workflow_dispatch:
@@ -104,7 +104,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           {
-            echo "### Review CLI ${VERSION}"
+            echo "### Whiteboard CLI ${VERSION}"
             echo "Source: ${COMMIT}; tag: ${RELEASE_TAG}"
             if [ "$DRY_RUN" = true ]; then
               echo 'Dry run: no tag or npm publication was created. Download the tested tarball from this run.'

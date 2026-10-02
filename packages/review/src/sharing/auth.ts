@@ -1,6 +1,5 @@
 import { DEFAULT_STORE_ORIGIN, readStoreAuth } from "@dev.fast/trace-core";
-
-import { ReviewInputError } from "../review-api/document.js";
+import { ReviewInputError } from "@review/review-api/document.js";
 
 /** CI credentials stay in the server environment and are never persisted to a profile. */
 export async function readSharingAuth(env: NodeJS.ProcessEnv = process.env) {

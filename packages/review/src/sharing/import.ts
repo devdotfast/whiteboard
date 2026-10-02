@@ -24,11 +24,9 @@ import {
   shareIdSchema,
   shareManifestSchema,
 } from "@dev.fast/review-share-protocol";
-import { z } from "zod";
-
-import { textIncludesQuote } from "../evidence.js";
-import { lensSchema } from "../review-api/diff-lenses.js";
-import { ReviewInputError } from "../review-api/document.js";
+import { textIncludesQuote } from "@review/evidence.js";
+import { lensSchema } from "@review/review-api/diff-lenses.js";
+import { ReviewInputError } from "@review/review-api/document.js";
 import {
   checkReferences,
   documentSchema,
@@ -36,19 +34,25 @@ import {
   resourceReference,
   resourceReferences,
   sourceReferences,
-} from "../review-api/document.js";
-import type { LocalReviewData } from "../review-api/local-data.js";
-import type { ReviewStore } from "../review-api/store.js";
-import { traceSchema } from "../review-api/trace-schema.js";
+} from "@review/review-api/document.js";
+import type { LocalReviewData } from "@review/review-api/local-data.js";
+import type { ReviewStore } from "@review/review-api/store.js";
+import { traceSchema } from "@review/review-api/trace-schema.js";
 import {
   normalizedSoftwareElementSchema,
   normalizedSoftwareRelationshipSchema,
-} from "../software-map-model.js";
+} from "@review/software-map-model.js";
 import {
   liftFileLenses,
   migrateStoredDocument,
-} from "../stored-document-migration.js";
-import { type ShareBundle, digestBytes } from "./export.js";
+} from "@review/stored-document-migration.js";
+import { z } from "zod";
+
+import {
+  type ShareBundle,
+  digestBytes,
+  validateShareSources,
+} from "./export.js";
 import {
   fetchPinnedRepository,
   repositoryReady,
@@ -59,10 +63,12 @@ export const sharedSnapshotSchema = z.strictObject({
   reviewId: z.string().min(1),
   version: z.number().int().nonnegative(),
   title: z.string().min(1),
-  pins: pinsSchema.extend({
-    base: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
-    head: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
-  }),
+  pins: pinsSchema
+    .extend({
+      base: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
+      head: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
+    })
+    .optional(),
   document: documentSchema,
   lenses: z.array(lensSchema).optional(),
   createdAt: z.string(),
@@ -157,10 +163,17 @@ export function validateShareBundle(bundle: ShareBundle) {
   )
     throw new Error("Shared snapshot does not match its manifest.");
   checkReferences(snapshot.document);
+  validateShareSources(snapshot);
+
+  if (Boolean(snapshot.pins) !== Boolean(manifest.repository))
+    throw new Error("Shared source pins require a repository.");
 
   const presentation = sharePresentationSchema.parse(
     json(manifest.presentation),
   );
+
+  if (!snapshot.pins && Object.keys(presentation.maps).length)
+    throw new Error("Shared maps require source pins.");
 
   const traces = new Map<
     string,
@@ -198,7 +211,7 @@ export function validateShareBundle(bundle: ShareBundle) {
     if (block.type === "software_map") {
       const map = presentation.maps[block.mapVersionId];
 
-      if (!map || map.commit !== snapshot.pins[map.side])
+      if (!map || map.commit !== snapshot.pins?.[map.side])
         throw new Error("Shared map pins do not match.");
     }
   }
@@ -319,13 +332,19 @@ export class SharedReviewStore {
 
   private async prepareRepository(id: string) {
     const local = this.local;
-
-    if (!local)
-      throw new ReviewInputError("Repository service is unavailable.", 409);
     const saved = this.validated.get(id);
 
     if (!saved)
       throw new ReviewInputError("Shared review is not available.", 404);
+
+    if (!saved.snapshot.pins) {
+      this.setStatus(id, "ready");
+
+      return;
+    }
+
+    if (!local)
+      throw new ReviewInputError("Repository service is unavailable.", 409);
     const root = this.repositoryRoot(id);
 
     try {
@@ -339,7 +358,7 @@ export class SharedReviewStore {
         await rm(root, { recursive: true, force: true });
         await this.fetchRepository(
           root,
-          saved.manifest.repository.cloneUrl,
+          saved.manifest.repository!.cloneUrl,
           saved.snapshot.pins,
         );
         await sharedGit(root, [
@@ -401,7 +420,8 @@ export class SharedReviewStore {
 
     if (
       !saved ||
-      !(await repositoryReady(this.repositoryRoot(id), saved.snapshot.pins))
+      (saved.snapshot.pins &&
+        !(await repositoryReady(this.repositoryRoot(id), saved.snapshot.pins)))
     ) {
       this.setStatus(
         id,
@@ -474,7 +494,8 @@ export class SharedReviewStore {
         /* A first or interrupted import has no local registration yet. */
       }
 
-      if (
+      if (!validated.snapshot.pins) this.setStatus(id, "ready");
+      else if (
         prepared &&
         this.local &&
         (await repositoryReady(
@@ -531,9 +552,10 @@ export class SharedReviewStore {
     const repositoryId = this.repositories.get(id);
 
     if (
-      !repositoryId ||
       this.status(id).stage !== "ready" ||
-      !existsSync(path.join(this.repositoryRoot(id), ".git"))
+      (validated.snapshot.pins &&
+        (!repositoryId ||
+          !existsSync(path.join(this.repositoryRoot(id), ".git"))))
     )
       throw new ReviewInputError(
         this.status(id).error ??
@@ -546,12 +568,16 @@ export class SharedReviewStore {
       snapshot: {
         ...validated.snapshot,
         reviewId: id,
-        pins: { ...validated.snapshot.pins, repositoryId },
-        target: {
-          kind: "commits" as const,
-          ...validated.snapshot.pins,
-          repositoryId,
-        },
+        pins: validated.snapshot.pins
+          ? { ...validated.snapshot.pins, repositoryId: repositoryId! }
+          : undefined,
+        target: validated.snapshot.pins
+          ? {
+              kind: "commits" as const,
+              ...validated.snapshot.pins,
+              repositoryId: repositoryId!,
+            }
+          : undefined,
         shared: {
           ...bundle.attribution,
           cloneUrl: bundle.manifest.repository?.cloneUrl,
@@ -566,7 +592,8 @@ export class SharedReviewStore {
       .filter(
         (id) =>
           this.status(id).stage === "ready" &&
-          existsSync(path.join(this.repositoryRoot(id), ".git")),
+          (!this.validated.get(id)?.snapshot.pins ||
+            existsSync(path.join(this.repositoryRoot(id), ".git"))),
       )
       .map((id) => {
         const { document: _document, ...snapshot } = this.get(id).snapshot;

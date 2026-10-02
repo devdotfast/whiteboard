@@ -1,7 +1,7 @@
+import { bundleReviewSoftwareMap } from "@review/software-map-bundle";
+import { defineSoftwareMap } from "@review/software-map-model";
 import { describe, expect, it } from "vitest";
 
-import { bundleReviewSoftwareMap } from "../software-map-bundle";
-import { defineSoftwareMap } from "../software-map-model";
 import {
   mapResourcesFromBundle,
   traceResourceFromLoaded,

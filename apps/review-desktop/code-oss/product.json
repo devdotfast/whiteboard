@@ -1,7 +1,7 @@
 {
 	"nameShort": "Whiteboard",
 	"nameLong": "/dev/fast Whiteboard",
-	"reviewVersion": "0.1.3",
+	"reviewVersion": "0.2.0",
 	"applicationName": "review",
 	"dataFolderName": ".dev-fast-review",
 	"sharedDataFolderName": ".dev-fast-review-shared",
@@ -23,7 +23,7 @@
 	"win32x64UserAppId": "{{78391143-AA32-4906-AF1B-54B2248A214A}",
 	"win32arm64UserAppId": "{{E81529AA-7A0C-43B8-956F-9DDAD5A1AA5F}",
 	"win32AppUserModelId": "devfast.Review",
-	"win32ShellNameShort": "Review",
+	"win32ShellNameShort": "Whiteboard",
 	"win32TunnelServiceMutex": "devfastreview-tunnelservice",
 	"win32TunnelMutex": "devfastreview-tunnel",
 	"darwinBundleIdentifier": "dev.fast.review",

@@ -34,11 +34,6 @@ export function traceCliName(): string {
   return "whiteboard";
 }
 
-/** The command prefix used in trace instructions. */
-export function traceCommandPrefix(): string {
-  return "whiteboard trace";
-}
-
 /** Returns the configured trace home, then the operating-system home. */
 export function traceHomeDir(env: NodeJS.ProcessEnv = process.env): string {
   return env.TRACE_HOME_DIR ?? os.homedir();

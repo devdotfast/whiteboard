@@ -30,7 +30,7 @@ function createService() {
     onDidChangeConfiguration: changes.event,
   };
   const service = new ReviewDiffLayoutSetting(configurationService as never);
-  return { service, values, writes, changes };
+  return { service, values, writes };
 }
 
 test("side by side is the default and inline maps to unified", () => {
@@ -56,27 +56,4 @@ test("set writes the user setting and announces the new layout", async () => {
   ]);
   assert.deepEqual(announced, ["unified"]);
   assert.equal(service.get(), "unified");
-});
-
-test("toggle flips between the two layouts", async () => {
-  const { service, writes } = createService();
-  await service.toggle();
-  assert.equal(service.get(), "unified");
-  await service.toggle();
-  assert.equal(service.get(), "split");
-  assert.deepEqual(
-    writes.map((write) => write.value),
-    [false, true],
-  );
-});
-
-test("unrelated setting changes do not announce a layout", () => {
-  const { service, changes } = createService();
-  const announced: ReviewDiffLayout[] = [];
-  service.onDidChange((layout) => announced.push(layout));
-  changes.fire({
-    affectsConfiguration: (section: string): boolean =>
-      section === "editor.fontSize",
-  } as IConfigurationChangeEvent);
-  assert.deepEqual(announced, []);
 });

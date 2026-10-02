@@ -34,6 +34,7 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 	private readonly _collapsed;
 
 	private readonly _editorContentHeight;
+	private readonly _collapseLocked;
 	public readonly contentHeight;
 
 	private readonly _modifiedContentWidth;
@@ -68,10 +69,11 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 		this._viewModel = observableValue<DocumentDiffItemViewModel | undefined>(this, undefined);
 		this._collapsed = derived(this, reader => this._viewModel.read(reader)?.collapsed.read(reader));
 		this._editorContentHeight = observableValue<number>(this, 500);
+		this._collapseLocked = observableValue<boolean>(this, false);
 		this.contentHeight = derived(this, reader => {
 			const sectionHeight = this._sectionHeader?.height.read(reader) ?? 0;
 			if (this._sectionHeader?.bodyHidden.read(reader)) return sectionHeight;
-			const h = this._collapsed.read(reader) ? 0 : this._editorContentHeight.read(reader);
+			const h = this._collapsed.read(reader) || this._collapseLocked.read(reader) ? 0 : this._editorContentHeight.read(reader);
 			return h + this._outerEditorHeight + (this._sectionHeader?.height.read(reader) ?? 0);
 		});
 		this._modifiedContentWidth = observableValue<number>(this, 0);
@@ -81,7 +83,7 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 		this.maxScroll = derived(this, reader => {
 			const scroll1 = this._modifiedContentWidth.read(reader) - this._modifiedWidth.read(reader);
 			const scroll2 = this._originalContentWidth.read(reader) - this._originalWidth.read(reader);
-			if (scroll1 > scroll2) {
+			if (this._scrollsModified(scroll1, scroll2)) {
 				return { maxScroll: scroll1, width: this._modifiedWidth.read(reader) };
 			} else {
 				return { maxScroll: scroll2, width: this._originalWidth.read(reader) };
@@ -105,7 +107,10 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 			this._elements.root,
 			this._workbenchUIElementFactory,
 			this._collapsed,
-			() => this._viewModel.get()?.collapsed.set(!this._collapsed.get(), undefined),
+			() => {
+				// A locked item has nothing to show; its header never opens it.
+				if (!this._collapseLocked.get()) this._viewModel.get()?.collapsed.set(!this._collapsed.get(), undefined);
+			},
 		));
 		this._elements.root.insertBefore(this._resourceHeader.element, this._elements.editorParent);
 		this._headerHeight = this._resourceHeader.height;
@@ -122,7 +127,9 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 			const sectionCollapsed = this._sectionHeader?.bodyHidden.read(reader) ?? false;
 			this._resourceHeader.element.style.display = sectionCollapsed ? 'none' : '';
 			this._elements.editorParent.style.display = sectionCollapsed ? 'none' : '';
-			this._elements.editor.style.display = collapsed || sectionCollapsed ? 'none' : 'block';
+			const locked = this._collapseLocked.read(reader);
+			this._resourceHeader.setCollapseLocked(locked);
+			this._elements.editor.style.display = collapsed || sectionCollapsed || locked ? 'none' : 'block';
 		}));
 
 		this._register(this.editor.getModifiedEditor().onDidLayoutChange(e => {
@@ -170,8 +177,19 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 		}));
 	}
 
+	/**
+	 * Which editor the shared horizontal scrollbar drives. Side by side it is
+	 * the one with more overflow. Inline, the original editor is laid out a few
+	 * pixels wide and never shown, so its overflow is always the larger one and
+	 * the scrollbar would move text nobody can see; inline always scrolls the
+	 * modified editor.
+	 */
+	private _scrollsModified(modifiedOverflow: number, originalOverflow: number): boolean {
+		return !this.editor.renderSideBySide || modifiedOverflow > originalOverflow;
+	}
+
 	public setScrollLeft(left: number): void {
-		if (this._modifiedContentWidth.get() - this._modifiedWidth.get() > this._originalContentWidth.get() - this._originalWidth.get()) {
+		if (this._scrollsModified(this._modifiedContentWidth.get() - this._modifiedWidth.get(), this._originalContentWidth.get() - this._originalWidth.get())) {
 			this.editor.getModifiedEditor().setScrollLeft(left);
 		} else {
 			this.editor.getOriginalEditor().setScrollLeft(left);
@@ -210,6 +228,7 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 			this._sectionHeader?.setUris(undefined);
 			globalTransaction(tx => {
 				this._viewModel.set(undefined, tx);
+				this._collapseLocked.set(false, tx);
 				this.editor.setDiffModel(null, tx);
 				this._dataStore.clear();
 			});
@@ -236,6 +255,7 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 
 			this._dataStore.clear();
 			this._viewModel.set(data.viewModel, tx);
+			this._collapseLocked.set(this._workbenchUIElementFactory.isResourceCollapseLocked?.({ original: data.viewModel.originalUri, modified: data.viewModel.modifiedUri }) ?? false, tx);
 			this.editor.setDiffModel(data.viewModel.diffEditorViewModelRef, tx);
 			this.editor.updateOptions(updateOptions(value.options ?? {}));
 		});

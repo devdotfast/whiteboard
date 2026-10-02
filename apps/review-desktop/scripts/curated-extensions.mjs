@@ -250,18 +250,16 @@ function sanitizeManifest(directory, extension) {
     delete manifest.extensionPack;
   }
 
-  for (const activationEvent of extension.addActivationEvents ?? []) {
-    manifest.activationEvents ??= [];
-
-    if (!manifest.activationEvents.includes(activationEvent)) {
-      manifest.activationEvents.push(activationEvent);
-    }
-  }
-
   const engine = manifest.engines?.vscode;
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`);
 
   return { engine, id: `${manifest.publisher}.${manifest.name}` };
+}
+
+function prunePayload(directory, extension) {
+  for (const relative of extension.prunePaths ?? []) {
+    fs.rmSync(path.join(directory, relative), { recursive: true, force: true });
+  }
 }
 
 /** Fails loudly when a payload's layout drifts instead of shipping a broken server. */
@@ -387,6 +385,7 @@ async function extractVsix(vsix, extension, targetKey, sha256) {
     }
 
     const { engine, id } = sanitizeManifest(payload, extension);
+    prunePayload(payload, extension);
 
     if (id.toLowerCase() !== extension.id.toLowerCase()) {
       throw new Error(
@@ -494,11 +493,9 @@ export function verifyCuratedExtensions({
       );
     }
 
-    for (const activationEvent of extension.addActivationEvents ?? []) {
-      if (!manifest.activationEvents?.includes(activationEvent)) {
-        throw new Error(
-          `${extension.id}: packaged manifest is missing ${activationEvent}`,
-        );
+    for (const relative of extension.prunePaths ?? []) {
+      if (fs.existsSync(path.join(directory, relative))) {
+        throw new Error(`${extension.id}: pruned path ${relative} is present`);
       }
     }
 
@@ -645,6 +642,7 @@ async function main() {
     const destination = path.join(EXTENSIONS_DIR, extension.id);
 
     if (stampMatches(readStamp(destination), extension, targetKey, sha256)) {
+      prunePayload(destination, extension);
       verifyEngine(destination, extension);
       continue;
     }

@@ -346,7 +346,6 @@ export default defineConfig(
 			'src/vs/workbench/services/search/common/textSearchManager.ts',
 			'src/vs/workbench/test/browser/workbenchTestServices.ts',
 			'src/vs/platform/agentHost/common/state/protocol/**',
-			'test/automation/src/playwrightDriver.ts',
 			'.eslint-plugin-local/**/*',
 		],
 		plugins: {
@@ -2004,7 +2003,7 @@ export default defineConfig(
 						'src/*.js',
 						'*' // node.js
 					]
-				},
+				}
 			]
 		}
 	},
@@ -2022,35 +2021,6 @@ export default defineConfig(
 			'local/code-import-patterns': [
 				'warn',
 				{
-					'target': 'test/smoke/**',
-					'restrictions': [
-						'test/automation',
-						'test/smoke/**',
-						'@vscode/*',
-						'@parcel/*',
-						'@playwright/*',
-						'*' // node modules
-					]
-				},
-				{
-					'target': 'test/sanity/**',
-					'restrictions': [
-						'test/sanity/**',
-						'*' // node modules
-					]
-				},
-				{
-					'target': 'test/automation/**',
-					'restrictions': [
-						'test/automation/**',
-						'@vscode/*',
-						'@parcel/*',
-						'playwright-core/**',
-						'@playwright/*',
-						'*' // node modules
-					]
-				},
-				{
 					'target': 'test/integration/**',
 					'restrictions': [
 						'test/integration/**',
@@ -2060,36 +2030,6 @@ export default defineConfig(
 						'*' // node modules
 					]
 				},
-				{
-					'target': 'test/monaco/**',
-					'restrictions': [
-						'test/monaco/**',
-						'@vscode/*',
-						'@parcel/*',
-						'@playwright/*',
-						'*' // node modules
-					]
-				},
-				{
-					'target': 'test/mcp/**',
-					'restrictions': [
-						'test/automation',
-						'test/mcp/**',
-						'@vscode/*',
-						'@parcel/*',
-						'@playwright/*',
-						'@modelcontextprotocol/sdk/**/*',
-						'*' // node modules
-					]
-				},
-				{
-					'target': 'test/componentFixtures/playwright/**',
-					'restrictions': [
-						'test/componentFixtures/playwright/**',
-						'@playwright/*',
-						'*' // node modules
-					]
-				}
 			]
 		}
 	},

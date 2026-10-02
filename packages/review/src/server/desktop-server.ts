@@ -20,14 +20,12 @@ import {
   reviewDiffrSummarizerInputSchema,
 } from "@dev.fast/review-protocol";
 import {
+  shellQuote,
   traceMachineEnabled,
   writePrivateJsonAtomic,
 } from "@dev.fast/trace-core";
-import { type Context, Hono } from "hono";
-import { streamSSE } from "hono/streaming";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { z } from "zod";
-
+import { detectAskAgents, launchAskAgent } from "@review/ask/agents.js";
+import { AskThreads } from "@review/ask/threads.js";
 import {
   applyCliInstall,
   declineCliInstall,
@@ -37,27 +35,31 @@ import {
   resetCliInstall,
   resolveCliInstallStatus,
   skipCliInstall,
-} from "../cli-install";
-import type { ReviewInstanceIdentity } from "../desktop-discovery";
-import { readReviewPackageVersion } from "../package-paths";
-import { ReviewInputError } from "../review-api/document.js";
-import { createReviewApi } from "../review-api/http.js";
-import type { LocalReviewData } from "../review-api/local-data.js";
-import type { ReviewStore } from "../review-api/store.js";
+} from "@review/cli-install";
+import {
+  REVIEW_INSTANCE_ENV,
+  type ReviewInstanceIdentity,
+} from "@review/desktop-discovery";
+import { readReviewPackageVersion } from "@review/package-paths";
+import { createReviewApi } from "@review/review-api/http.js";
+import type { LocalReviewData } from "@review/review-api/local-data.js";
+import type { ReviewStore } from "@review/review-api/store.js";
 import {
   devReviewHome,
   reviewInstanceDiscoveryPath,
   reviewLegacyDiscoveryPath,
-} from "../review-home-paths";
+} from "@review/review-home-paths";
 import {
   readScratchpadEnabled,
   writeScratchpadEnabled,
-} from "../review-preferences";
+} from "@review/review-preferences";
 import {
   ReviewTelemetry,
   type ReviewTelemetryContext,
-} from "../review-telemetry";
-import type { SharedReviewStore } from "../sharing/import.js";
+} from "@review/review-telemetry";
+import type { SharedReviewStore } from "@review/sharing/import.js";
+import { z } from "zod";
+
 import { aliasInstallationToAccount } from "./account-alias";
 import { CrashReportRequestSchema, reportCrashDump } from "./crash-report";
 import {
@@ -70,19 +72,16 @@ import {
   GlobalReviewDesktopVerbRelay,
   type ReviewDesktopVerbRelay,
 } from "./global-verb-relay";
-import {
-  type ReviewHonoEnv,
-  applyCorsHeaders,
-  corsPreflightResponse,
-  createNodeRequestListener,
-  isAuthorizedRequest,
-  jsonResponse,
-  readBoundedRequestJson,
-} from "./hono-http";
-import { HttpJsonError, ReviewServerError } from "./http-json";
+import { createNodeRequestListener, readBoundedRequestJson } from "./hono-http";
+import { ReviewServerError } from "./http-json";
 import { createJsonReviewReporting } from "./json-review-reporting";
 import { reviewLifecycleTelemetry } from "./review-lifecycle-telemetry";
 import { ReviewOpenWatchdog } from "./review-open-watchdog";
+import {
+  createReviewServerApp,
+  relayReviewCallbacks,
+  serverJson,
+} from "./review-server-core";
 import { createTutorialService } from "./tutorial-service";
 import { captureSanitizedUiTelemetry } from "./ui-telemetry";
 
@@ -138,7 +137,47 @@ export function createGlobalReviewServer(
       : [reviewInstanceDiscoveryPath(identity.key)];
 
   const telemetry = input.telemetry ?? ReviewTelemetry.fromEnv();
-  const relay = input.relay ?? new GlobalReviewDesktopVerbRelay();
+
+  // Each window attaches its own stream; one at a time keeps a verb from
+  // opening in every window, and the next takes over when it goes.
+  const relay =
+    input.relay ?? new GlobalReviewDesktopVerbRelay({ maxClients: 1 });
+
+  // This Desktop's own CLI, pinned to this instance so another running
+  // Whiteboard never answers it.
+  const askCliEnv = () => [
+    { name: REVIEW_INSTANCE_ENV, value: identity.key },
+    ...(process.versions.electron
+      ? [{ name: "ELECTRON_RUN_AS_NODE", value: "1" }]
+      : []),
+    ...(process.env.DEV_REVIEW_HOME
+      ? [{ name: "DEV_REVIEW_HOME", value: process.env.DEV_REVIEW_HOME }]
+      : []),
+  ];
+
+  // Ask sessions get its MCP server, `whiteboard mcp`; an agent whose model
+  // would not get it uses `whiteboard api` from its shell instead.
+  const askThreads = new AskThreads(launchAskAgent, {
+    mcpServers: () =>
+      discovery.cliPath
+        ? [
+            {
+              name: "whiteboard",
+              command: process.execPath,
+              args: [discovery.cliPath, "mcp"],
+              env: askCliEnv(),
+            },
+          ]
+        : [],
+    cli: () =>
+      discovery.cliPath &&
+      [
+        ...askCliEnv().map(({ name, value }) => `${name}=${shellQuote(value)}`),
+        shellQuote(process.execPath),
+        shellQuote(discovery.cliPath),
+      ].join(" "),
+  });
+
   const reviewStore = input.reviewStore;
 
   const reviewLocks = new Map<string, Promise<void>>();
@@ -192,27 +231,14 @@ export function createGlobalReviewServer(
     }
   }
 
-  const app = new Hono<ReviewHonoEnv>();
-  app.use("*", async (context, next) => {
-    await next();
-    applyCorsHeaders(context.req.raw, context.res);
+  const app = createReviewServerApp({
+    token,
+    instanceId,
+    serverId: input.reviewStore.serverId(),
+    relay,
   });
-  app.options("*", (context) => corsPreflightResponse(context.req.raw));
-  app.get("/health", () =>
-    globalJson(200, {
-      ok: true,
-      instanceId,
-      serverPid: process.pid,
-      desktopAttached: relay.attached,
-    }),
-  );
-  app.use("*", async (context, next) => {
-    if (!isAuthorizedRequest(context.req.raw, token)) {
-      return globalJson(401, { ok: false, error: "Unauthorized" });
-    }
 
-    await next();
-  });
+  const callbacks = relayReviewCallbacks(relay);
 
   app.route(
     "/reviews-api",
@@ -226,35 +252,9 @@ export function createGlobalReviewServer(
     createReviewApi(
       input.reviewStore,
       input.reviewData,
-      async (review) => {
-        const result = await relay.dispatch({
-          name: "openApiReview",
-          args: review,
-        });
-
-        if (!result.ok) throw new ReviewInputError(result.error, 409);
-
-        return z
-          .object({ softwareMapEnabled: z.boolean() })
-          .parse(result.result);
-      },
+      callbacks.open,
       input.sharedReviews,
-      async () => {
-        if (!relay.attached)
-          return { desktopAvailable: false, softwareMapEnabled: false };
-
-        const result = await relay.dispatch({
-          name: "authoringCapabilities",
-          args: {},
-        });
-
-        if (!result.ok) throw new ReviewInputError(result.error, 409);
-
-        return {
-          desktopAvailable: true,
-          ...z.object({ softwareMapEnabled: z.boolean() }).parse(result.result),
-        };
-      },
+      callbacks.capabilities,
       () => scratchpadEnabled,
       () => traceMachineEnabled(),
       () => {
@@ -277,10 +277,11 @@ export function createGlobalReviewServer(
         (reviewId) => reviewStore.summary(reviewId)?.firstCreatedAt,
         () => aliasInstallationToAccount(telemetry),
       ),
+      { threads: askThreads, agents: () => detectAskAgents() },
     ),
   );
   app.get("/preferences/scratchpad", () =>
-    globalJson(200, { enabled: scratchpadEnabled }),
+    serverJson(200, { enabled: scratchpadEnabled }),
   );
   app.put("/preferences/scratchpad", async (context) => {
     const request = z
@@ -296,7 +297,7 @@ export function createGlobalReviewServer(
     if (scratchpadEnabled) await reviewStore.ensureScratchpad();
     reviewStore.invalidateCatalog();
 
-    return globalJson(200, { enabled: scratchpadEnabled });
+    return serverJson(200, { enabled: scratchpadEnabled });
   });
   app.post("/app/focus", async () => {
     const result = await relay.dispatch({
@@ -304,7 +305,7 @@ export function createGlobalReviewServer(
       args: {},
     });
 
-    return globalJson(result.ok ? 200 : 409, result);
+    return serverJson(result.ok ? 200 : 409, result);
   });
   app.post("/telemetry/event", async (context) => {
     try {
@@ -313,7 +314,7 @@ export function createGlobalReviewServer(
       let flushBeforeOptOut = false;
 
       if (payload.name === "app_ready") {
-        if (appReadyReported) return globalJson(200, { ok: true });
+        if (appReadyReported) return serverJson(200, { ok: true });
 
         appReadyReported = true;
       }
@@ -364,7 +365,7 @@ export function createGlobalReviewServer(
       console.error(error);
     }
 
-    return globalJson(200, { ok: true });
+    return serverJson(200, { ok: true });
   });
   app.post("/crash-reports", async (context) => {
     const body = CrashReportRequestSchema.safeParse(
@@ -383,10 +384,10 @@ export function createGlobalReviewServer(
       input.crashDumpsDir,
     );
 
-    return globalJson(result.status, result.body);
+    return serverJson(result.status, result.body);
   });
   app.get("/tutorial/status", async () =>
-    globalJson(200, await tutorial.status()),
+    serverJson(200, await tutorial.status()),
   );
   app.post("/tutorial/prepare", async () => {
     const prepared = await withReviewLock(
@@ -394,29 +395,13 @@ export function createGlobalReviewServer(
       prepareTutorialLocked,
     );
 
-    return globalJson(200, {
+    return serverJson(200, {
       ok: true,
       reviewUuid: prepared.reviewId,
     });
   });
-  // The tutorial descriptor is not in `GET /reviews`, so tooling and
-  // integration checks fetch it here.
-  app.get("/tutorial/review", async () => {
-    const stored = await tutorial.find();
-
-    if (!stored) {
-      throw new ReviewServerError("Review not found.", 404);
-    }
-
-    return globalJson(200, {
-      reviewId: stored.reviewId,
-      title: stored.title,
-      pins: stored.pins,
-      version: stored.version,
-    });
-  });
   app.post("/tutorial/open", async () => {
-    return globalJson(
+    return serverJson(
       200,
       await withReviewLock(TUTORIAL_LIFECYCLE_LOCK_KEY, openTutorialLocked),
     );
@@ -424,10 +409,10 @@ export function createGlobalReviewServer(
   app.delete("/tutorial", async () => {
     await withReviewLock(TUTORIAL_LIFECYCLE_LOCK_KEY, deleteTutorialLocked);
 
-    return globalJson(200, { ok: true });
+    return serverJson(200, { ok: true });
   });
   app.get("/diffr-config", async () =>
-    globalJson(200, await readDiffrConfig()),
+    serverJson(200, await readDiffrConfig()),
   );
   app.put("/diffr-config", async (context) => {
     const body = await readBoundedRequestJson(context.req.raw);
@@ -440,7 +425,7 @@ export function createGlobalReviewServer(
       throw new ReviewServerError("key and value are required.", 400);
     }
 
-    return globalJson(200, await setDiffrConfigValue(key, value));
+    return serverJson(200, await setDiffrConfigValue(key, value));
   });
   app.put("/diffr-config/summarizer", async (context) => {
     const input = reviewDiffrSummarizerInputSchema.safeParse(
@@ -450,7 +435,7 @@ export function createGlobalReviewServer(
     if (!input.success)
       throw new ReviewServerError("Invalid summary settings.", 400);
 
-    return globalJson(200, await saveDiffrSummarizer(input.data));
+    return serverJson(200, await saveDiffrSummarizer(input.data));
   });
   app.post("/diffr-config/summarizer/test", async (context) => {
     const input = reviewDiffrSummarizerInputSchema.safeParse(
@@ -460,7 +445,7 @@ export function createGlobalReviewServer(
     if (!input.success)
       throw new ReviewServerError("Invalid summary settings.", 400);
 
-    return globalJson(200, {
+    return serverJson(200, {
       summary: await testDiffrSummarizer(
         input.data,
         undefined,
@@ -469,7 +454,7 @@ export function createGlobalReviewServer(
     });
   });
   app.get("/install/status", async () =>
-    globalJson(
+    serverJson(
       200,
       await resolveCliInstallStatus({ packageRoot: input.packageRoot }),
     ),
@@ -504,7 +489,7 @@ export function createGlobalReviewServer(
 
     if (result.shimPath) body.shimPath = result.shimPath;
 
-    return globalJson(result.code === 0 ? 200 : 500, body);
+    return serverJson(result.code === 0 ? 200 : 500, body);
   });
   app.post("/install/remove", async (context) => {
     const request = parseReviewCliInstallApplyRequest(
@@ -518,120 +503,35 @@ export function createGlobalReviewServer(
     if (request.trace) removeInput.trace = true;
     const result = await removeCliInstall(removeInput);
 
-    return globalJson(200, { ok: true, output: result.output });
+    return serverJson(200, { ok: true, output: result.output });
   });
   app.post("/install/legacy-skills/remove", async () => {
     const { removed } = await removeLegacyReviewSkills();
 
-    return globalJson(200, { ok: true, removed });
+    return serverJson(200, { ok: true, removed });
   });
   app.post("/install/finish-update", async () => {
     await finishCliInstallUpdate();
 
-    return globalJson(200, { ok: true });
+    return serverJson(200, { ok: true });
   });
   app.post("/install/decline", async () => {
     await declineCliInstall();
 
-    return globalJson(200, { ok: true });
+    return serverJson(200, { ok: true });
   });
   app.post("/install/skip", async () => {
     await skipCliInstall();
 
-    return globalJson(200, { ok: true });
+    return serverJson(200, { ok: true });
   });
   app.post("/install/reset", async () => {
     await resetCliInstall();
 
-    return globalJson(200, { ok: true });
-  });
-  app.get("/control", (context) => openControlEvents(context));
-  app.post("/control/result", async (context) => {
-    const accepted = relay.acceptResult(
-      await readBoundedRequestJson(context.req.raw),
-    );
-
-    return globalJson(accepted ? 200 : 404, { ok: accepted });
-  });
-  app.notFound(() => globalJson(404, { ok: false, error: "Not found." }));
-  app.onError((error) => {
-    const serverError = error instanceof ReviewServerError ? error : undefined;
-
-    const message = toError(error).message;
-
-    return globalJson(
-      serverError?.statusCode ?? httpJsonStatus(error),
-      serverError?.code
-        ? { ok: false, code: serverError.code, error: message }
-        : { ok: false, error: message },
-    );
+    return serverJson(200, { ok: true });
   });
 
   const httpServer = createServer(createNodeRequestListener(app));
-
-  function openControlEvents(context: Context<ReviewHonoEnv>): Response {
-    let attached = false;
-
-    const response = streamSSE(context, async (output) => {
-      let finish!: () => void;
-
-      const disconnected = new Promise<void>((resolve) => {
-        finish = resolve;
-      });
-
-      const abort = new AbortController();
-
-      let pending: Promise<void> = output
-        .write(": attached\n\n")
-        .then(() => undefined);
-
-      const writer = {
-        signal: abort.signal,
-        write(frame: string) {
-          pending = pending.then(async () => {
-            await output.write(frame);
-          });
-        },
-        close() {
-          finish();
-          void output.close();
-        },
-      };
-
-      output.onAbort(() => {
-        abort.abort();
-        finish();
-      });
-      attached = relay.attach(writer);
-
-      if (!attached) {
-        finish();
-
-        return;
-      }
-
-      try {
-        await disconnected;
-        await pending;
-      } finally {
-        abort.abort();
-      }
-    });
-
-    if (!attached) {
-      void response.body?.cancel();
-
-      return globalJson(409, {
-        ok: false,
-        error: "A Whiteboard Desktop control client is already attached.",
-      });
-    }
-
-    response.headers.set("cache-control", "no-cache, no-transform");
-    response.headers.set("content-type", "text/event-stream; charset=utf-8");
-
-    return response;
-  }
 
   async function prepareTutorialLocked() {
     return tutorial.prepare();
@@ -691,6 +591,7 @@ export function createGlobalReviewServer(
     close: async () => {
       if (closing) return;
       closing = true;
+      askThreads.closeAll();
 
       for (const discoveryPath of discoveryPaths)
         await removeMatchingDiscovery(discoveryPath, discovery);
@@ -722,10 +623,6 @@ function watchSessionOpen(
     watchdog.presented(presentationSessionId);
 }
 
-function httpJsonStatus(cause: unknown): number {
-  return cause instanceof HttpJsonError ? cause.statusCode : 400;
-}
-
 /**
  * `session_started`'s `source_kind`: the opened review's target kind, or
  * `scratchpad` for the one scratchpad. Undefined when the review is gone (a
@@ -747,14 +644,6 @@ export function sessionStartedSourceKind(
   } catch {
     return undefined;
   }
-}
-
-function globalJson<T>(status: number, body: T): Response {
-  // SAFETY: callers pass 2xx/4xx/5xx codes (literals, ReviewServerError and
-  // HttpJsonError statusCode); none is a bodyless 1xx/204/205/304 status.
-  return jsonResponse(body, status as ContentfulStatusCode, {
-    cacheControl: "no-store",
-  });
 }
 
 function listen(server: Server, port: number): Promise<number> {
@@ -812,8 +701,4 @@ function isTcpAddress(
   address: string | AddressInfo | null,
 ): address is AddressInfo {
   return isObjectValue(address);
-}
-
-function toError(cause: unknown): Error {
-  return cause instanceof Error ? cause : new Error(String(cause));
 }

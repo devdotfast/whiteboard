@@ -6,12 +6,12 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { type JsonObject, isJsonObject } from "@dev.fast/review-protocol";
+import { selectSource } from "@review/lens-selection";
+import { ReviewInputError } from "@review/review-api/document.js";
+import { createReviewApi } from "@review/review-api/http.js";
+import { openLocalReviewStore } from "@review/review-api/local-data.js";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { selectSource } from "../lens-selection";
-import { ReviewInputError } from "../review-api/document.js";
-import { createReviewApi } from "../review-api/http.js";
-import { openLocalReviewStore } from "../review-api/local-data.js";
 import { type ShareBundle, digestBytes, exportShare } from "./export.js";
 import { SharedReviewStore, validateShareBundle } from "./import.js";
 import { fetchPinnedRepository } from "./repository.js";
@@ -305,7 +305,7 @@ it("shares a review's lenses and reads a bundle that holds them as document bloc
     const { targetId } = await local.store.execute({
       commandId: randomUUID(),
       operation: {
-        type: "lens",
+        type: "lens_edit",
         reviewId,
         edit: { type: "insert", ...lens },
       },
@@ -367,8 +367,8 @@ it("fetches pinned source into an independent repository and retains complete tr
 
   expect(trace.events).toHaveLength(2);
   const persisted = validateShareBundle(await imported.read(id));
-  expect(persisted.snapshot.pins.repositoryId).not.toBe(
-    imported.get(id).snapshot.pins.repositoryId,
+  expect(persisted.snapshot.pins!.repositoryId).not.toBe(
+    imported.get(id).snapshot.pins!.repositoryId,
   );
 
   const restarted = new SharedReviewStore(imported.root, async () => {
@@ -391,7 +391,7 @@ it("uses normal source and workspace routes but rejects authoring mutations", as
       .status,
   ).toBe(404);
   expect(
-    (await app.request(`/${id}/activity`, { method: "POST" })).status,
+    (await app.request(`/${id}/activity/begin`, { method: "POST" })).status,
   ).toBe(409);
   expect(
     (await app.request(`/${id}/source-attachment?side=head&file=main.ts`))
@@ -491,7 +491,7 @@ it("repairs a missing checkout and removes owned workspaces before reimport", as
   expect(() => imported.get(id)).toThrow("Fetch the shared repository");
   await imported.prepare(id);
   expect(fetchRepository).toHaveBeenCalledTimes(2);
-  const repositoryId = imported.get(id).snapshot.pins.repositoryId;
+  const repositoryId = imported.get(id).snapshot.pins!.repositoryId;
   await imported.removeLocal(id);
 
   for (const target of [checkout, ...paths])
@@ -544,7 +544,7 @@ it("retains failed imports for retry and deduplicates preparation", async () => 
 
 it("does not expose an interrupted import before validation finishes", async () => {
   const { imported, id, recipient } = await importFixture();
-  const repositoryId = imported.get(id).snapshot.pins.repositoryId;
+  const repositoryId = imported.get(id).snapshot.pins!.repositoryId;
   await writeFile(
     path.join(imported.root, id, "repository.json"),
     JSON.stringify({ repositoryId, ready: false }),
@@ -554,7 +554,7 @@ it("does not expose an interrupted import before validation finishes", async () 
   await restarted.load();
   expect(restarted.list()).toEqual([]);
   await restarted.prepare(id);
-  expect(restarted.get(id).snapshot.pins.repositoryId).toBe(repositoryId);
+  expect(restarted.get(id).snapshot.pins!.repositoryId).toBe(repositoryId);
 });
 
 it("keeps the published snapshot and code after author edits and branch movement", async () => {
@@ -607,7 +607,7 @@ it("requires a pinned review before sharing saved worktree changes", async () =>
     operation: { type: "repin", reviewId, pins: snapshot.pins },
   });
   const bundle = await exportShare({ ...local, reviewId, repository });
-  expect(validateShareBundle(bundle).snapshot.pins.head).toBe(
+  expect(validateShareBundle(bundle).snapshot.pins!.head).toBe(
     snapshot.pins!.head,
   );
 });
@@ -662,7 +662,7 @@ it("lists and streams shared diff counts with the same mode and persistence as l
     expect((await readCatalog("textual"))[0].diffStats).toEqual(expected);
     expect((await readCatalog("structural"))[0].diffStats).toBeNull();
 
-    const sharedPins = imported.get(id).snapshot.pins;
+    const sharedPins = imported.get(id).snapshot.pins!;
     const structural = { fileCount: 4, additions: 1, deletions: 1 };
     recipient.store.setDiffStats(sharedPins, structural, "structural");
     expect((await readCatalog("structural"))[0].diffStats).toEqual(structural);

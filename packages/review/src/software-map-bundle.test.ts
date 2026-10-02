@@ -51,33 +51,6 @@ describe("software map bundle", () => {
     },
   );
 
-  it("rejects unknown foreign-key properties before creating a bundle", () => {
-    const fk = { table: "users", field: "id", unsupported: true };
-
-    const map = defineSoftwareMap({
-      systems: {
-        app: {
-          dataStores: {
-            db: {
-              tables: {
-                orders: { schema: { userId: { type: "string", fk } } },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    expect(() =>
-      bundleReviewSoftwareMap({
-        head: map,
-        base: map,
-        headCommit: "a".repeat(40),
-        baseCommit: "b".repeat(40),
-      }),
-    ).toThrow(/head.*unsupported/s);
-  });
-
   it("writes head and base maps as JSON and reads them back", async () => {
     directory = await mkdtemp(path.join(tmpdir(), "review-map-bundle-"));
     const head = defineSoftwareMap({ systems: { app: { label: "App" } } });

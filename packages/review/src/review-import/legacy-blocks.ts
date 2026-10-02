@@ -1,12 +1,13 @@
 import path from "node:path";
 
-import { type Block, elements } from "../review-api/document";
+import { type Block, elements } from "@review/review-api/document";
 import type {
   ReviewComponentNode,
   ReviewDocumentData,
   ReviewElementNode,
   ReviewNode,
-} from "../review-document-data";
+} from "@review/review-document-data";
+
 import {
   type RenderProseNode,
   collectFootnoteDefinitions,

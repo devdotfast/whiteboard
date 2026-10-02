@@ -3,10 +3,10 @@ import {
   ReviewBugReportRequestSchema,
   parseZod,
 } from "@dev.fast/review-protocol";
+import type { ReviewTabTelemetryEvent } from "@review/telemetry";
+import { REVIEW_TELEMETRY_TABS } from "@review/ui-telemetry-events";
 import { z } from "zod";
 
-import type { ReviewTabTelemetryEvent } from "../telemetry";
-import { REVIEW_TELEMETRY_TABS } from "../ui-telemetry-events";
 import { HttpJsonError } from "./http-json";
 
 const MIN_REVIEW_TAB_DWELL_MS = 250;
@@ -18,37 +18,6 @@ const APP_SESSION_ID_PATTERN = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{15,127}$/;
 const MAX_BUG_REPORT_DESCRIPTION_BYTES = 64 * 1024;
 
 const MAX_BUG_REPORT_SCREENSHOT_BYTES = 3 * 1024 * 1024;
-
-const nonEmptyStringSchema = z
-  .string({ error: "must be a non-empty string" })
-  .min(1, "must be a non-empty string");
-
-const positiveIntegerSchema = z.coerce
-  .number({ error: "must be a positive integer" })
-  .int("must be a positive integer")
-  .positive("must be a positive integer");
-
-const softwareMapLineRangeFields = {
-  fromLine: positiveIntegerSchema,
-  toLine: positiveIntegerSchema,
-};
-
-function validateSoftwareMapLineRange(
-  range: { fromLine: number; toLine: number },
-  context: z.core.$RefinementCtx,
-) {
-  if (range.toLine < range.fromLine) {
-    context.addIssue({
-      code: "custom",
-      message: "toLine must be at least fromLine",
-      path: ["toLine"],
-    });
-  }
-}
-
-export const SoftwareMapLineRangeInputSchema = z
-  .strictObject(softwareMapLineRangeFields)
-  .superRefine(validateSoftwareMapLineRange);
 
 export function parseReviewBugReportInput(value: JsonValue) {
   const parsed = ReviewBugReportRequestSchema.parse(value);
@@ -81,28 +50,6 @@ export function parseReviewBugReportInput(value: JsonValue) {
   return parsed;
 }
 
-export const SoftwareMapSourceRangeInputSchema = z
-  .strictObject({
-    file: nonEmptyStringSchema,
-    ...softwareMapLineRangeFields,
-  })
-  .superRefine(validateSoftwareMapLineRange);
-
-const optionalLineRangesSchema = z
-  .array(SoftwareMapLineRangeInputSchema)
-  .optional();
-
-export const SoftwareMapCodeElementInputSchema = z.strictObject({
-  path: nonEmptyStringSchema,
-  label: nonEmptyStringSchema.optional(),
-  description: nonEmptyStringSchema.optional(),
-  changeStatus: z
-    .enum(["added", "removed", "modified", "unchanged"])
-    .optional()
-    .catch(undefined),
-  sourceRanges: z.array(SoftwareMapSourceRangeInputSchema).optional(),
-});
-
 export const ReviewTabTelemetryInputSchema = z
   .strictObject({
     tab: z.enum(REVIEW_TELEMETRY_TABS, {
@@ -130,18 +77,6 @@ export const ReviewTabTelemetryInputSchema = z
 
 export function requestJsonErrorStatus(cause: unknown): number {
   return cause instanceof HttpJsonError ? cause.statusCode : 400;
-}
-
-export function parseSoftwareMapCodeElements(value: JsonValue) {
-  if (!Array.isArray(value)) {
-    throw new Error("SoftwareMap codeElements must be an array");
-  }
-
-  return parseZod(
-    z.array(SoftwareMapCodeElementInputSchema),
-    value,
-    "SoftwareMap codeElements",
-  );
 }
 
 export function parseReviewTabTelemetryInput(

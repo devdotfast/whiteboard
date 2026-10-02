@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { execFileSync } from 'node:child_process';
-import { chmod, cp, mkdir, open, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, open, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { additionalDeps, recommendedDeps } from './rpm/dep-lists.ts';
 
@@ -61,12 +61,12 @@ async function loadReviewPackage(appRoot: string) {
 	const source = join(appRoot, 'VSCode-linux-x64');
 	const product = JSON.parse(await readFile(join(source, 'resources/app/product.json'), 'utf8'));
 	if (product.reviewVersion !== metadata.version || !/^[a-f0-9]{40}$/.test(product.commit ?? '')) {
-		throw new Error('Linux payload must carry the stamped Review version and source commit');
+		throw new Error('Linux payload must carry the stamped Whiteboard version and source commit');
 	}
 	return { pkg: reviewPackage(product, metadata.version), source, product };
 }
 
-/** Stage the same desktop, CLI and bundled runtime for both system packages. */
+/** Stage the same desktop, CLI and bundled runtime for every system package. */
 async function stageReviewPackage(codeRoot: string, destination: string) {
 	const appRoot = resolve(codeRoot, '..');
 	const monorepoRoot = resolve(appRoot, '../..');
@@ -98,15 +98,6 @@ exec ${share}/${app} ${share}/resources/app/review-runtime/dist/cli.js "$@"
 unset ELECTRON_RUN_AS_NODE VSCODE_DEV VSCODE_CLI
 exec ${share}/${app} "$@"
 `, 0o755);
-	// Preserve existing CLI shims and scripts.
-	const link = async (target: string, path: string) => {
-		await mkdir(dirname(join(destination, path)), { recursive: true });
-		await symlink(target, join(destination, path));
-	};
-	await link(app, `usr/bin/${legacyApp}`);
-	await link(`${app}-desktop`, `usr/bin/${legacyApp}-desktop`);
-	await link(`${share}/${app}`, `usr/share/${legacyApp}/${legacyApp}`);
-	await link(`${share}/resources/app/review-runtime/dist/cli.js`, `usr/share/${legacyApp}/resources/app/review-runtime/dist/cli.js`);
 	await write(`usr/share/applications/${name}.desktop`, `[Desktop Entry]
 Name=${appName}
 Comment=Guided code reviews with your coding agents
@@ -135,7 +126,7 @@ MimeType=x-scheme-handler/${urlProtocol};
   <metadata_license>CC0-1.0</metadata_license><project_license>MIT</project_license>
   <launchable type="desktop-id">${name}.desktop</launchable>
   <url type="homepage">https://dev.fast/</url>
-  <description><p>Review turns code changes into guided, interactive reviews with code, traces, and agent discussions.</p></description>
+  <description><p>Whiteboard turns code changes into guided, interactive reviews with code, traces, and agent discussions.</p></description>
 </component>
 `);
 	const icon = join(destination, `usr/share/icons/hicolor/512x512/apps/${app}.png`);
@@ -152,7 +143,7 @@ export async function prepareReviewRpmPackage(codeRoot: string, arch: string): P
 	if (arch !== 'x86_64') { throw new Error('Review Linux packages currently support x86_64 only'); }
 	const rpmRoot = join(codeRoot, '.build/linux/rpm/x86_64/rpmbuild');
 	const { pkg, share } = await stageReviewPackage(codeRoot, join(rpmRoot, 'BUILD'));
-	const { name, app, appName, legacyName, legacyApp } = pkg;
+	const { name, app, appName, legacyName } = pkg;
 	const dependencies = [...additionalDeps.filter(dep => !dep.startsWith('rpmlib(')), 'git', 'libsecret-1.so.0()(64bit)', 'libkrb5.so.3()(64bit)', 'libnotify.so.4()(64bit)', '/bin/sh'];
 	await mkdir(join(rpmRoot, 'SPECS'), { recursive: true });
 	await writeFile(join(rpmRoot, 'SPECS/review.spec'), String.raw`Name: ${name}
@@ -181,7 +172,7 @@ Recommends: ${recommendedDeps.join(', ')}
 
 %description
 ${appName} turns code changes into guided, interactive reviews with code, traces,
-and agent discussions. Includes the Review CLI and its runtime.
+and agent discussions. Includes the Whiteboard CLI and its runtime.
 
 %install
 mkdir -p %{buildroot}
@@ -199,9 +190,6 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then gtk-update-icon-cache 
 %defattr(-,root,root)
 /usr/bin/${app}
 /usr/bin/${app}-desktop
-/usr/bin/${legacyApp}
-/usr/bin/${legacyApp}-desktop
-/usr/share/${legacyApp}/
 ${share}/
 %attr(4755,root,root) ${share}/chrome-sandbox
 /usr/share/applications/${legacyName}.desktop
@@ -209,6 +197,11 @@ ${share}/
 /usr/share/metainfo/${legacyName}.metainfo.xml
 /usr/share/icons/hicolor/512x512/apps/${app}.png
 `);
+}
+
+/** Stage the same install tree for pacman without depending on an RPM. */
+export async function prepareReviewArchPackage(codeRoot: string): Promise<void> {
+	await stageReviewPackage(codeRoot, join(codeRoot, '.build/linux/arch/x86_64/package'));
 }
 
 /** Keep rpmbuild state under the package output directory without changing HOME. */

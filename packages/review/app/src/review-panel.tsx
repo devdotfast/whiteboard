@@ -11,6 +11,7 @@ import {
 import { useStore } from "zustand";
 
 import {
+  type ReviewNavigationRestore,
   type ReviewPanelStore,
   type ReviewPanelStoreState,
   createReviewPanelStore,
@@ -22,18 +23,14 @@ const fallbackReviewPanelStore = createReviewPanelStore();
 
 export function ReviewPanelProvider({
   children,
-  detailRevision,
+  restore,
 }: {
   children: ReactNode;
-  detailRevision?: unknown;
+  /** Called once, when the provider mounts: the canvas re-renders often, and
+   * restoring reads storage. */
+  restore?: () => ReviewNavigationRestore;
 }) {
-  const [store] = useState(createReviewPanelStore);
-  const previousDetailRevision = useRef(detailRevision);
-  useEffect(() => {
-    if (previousDetailRevision.current === detailRevision) return;
-    previousDetailRevision.current = detailRevision;
-    store.getState().closeForDocumentChange();
-  }, [detailRevision, store]);
+  const [store] = useState(() => createReviewPanelStore(restore?.()));
 
   return (
     <ReviewPanelContext.Provider value={store}>

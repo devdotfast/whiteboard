@@ -1,3 +1,13 @@
+import { fontSize, fontWeight, motion } from "@canvas/scale.stylex";
+import type {
+  FlowDiagramBlock,
+  FlowDiagramNode,
+} from "@review/review-api/blocks/flow_diagram";
+import {
+  type CoverageProgress,
+  coverageProgress,
+} from "@review/viewed-coverage";
+import * as stylex from "@stylexjs/stylex";
 import {
   BaseEdge,
   type CoordinateExtent,
@@ -14,21 +24,19 @@ import {
   useReactFlow,
   useStoreApi,
 } from "@xyflow/react";
-import ELK, { type ElkNode } from "elkjs/lib/elk.bundled.js";
+import type { ElkNode } from "elkjs/lib/elk.bundled.js";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
-import type {
-  FlowDiagramBlock,
-  FlowDiagramNode,
-} from "../../src/review-api/blocks/flow_diagram";
-import {
-  type CoverageProgress,
-  coverageProgress,
-} from "../../src/viewed-coverage";
 import { useReviewDebugSettings } from "./debug-settings";
+import { diagramStyles } from "./diagram-styles";
 import { useMotionPhase } from "./draw-queue-provider";
+import { drawStyles } from "./draw-styles";
+import { loadElk } from "./elk";
 import { ElementCountsText } from "./lens-counts";
+import { documentMarker, flowNodeMarker } from "./markers.stylex";
 import { useReviewLenses } from "./review-lenses";
+import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 
 /**
  * Every flow surface: the document block, the Diff sidebar lens and the
@@ -115,6 +123,7 @@ export function FlowGraph({
                 ...SIZE,
                 draggable: false,
                 selectable: false,
+                className: stylex.props(styles.nodeWrapper).className,
                 data: {
                   node,
                   requireReady,
@@ -162,19 +171,28 @@ export function FlowGraph({
     [layout, interactive],
   );
 
-  if (error) return <p role="alert">Could not lay out diagram: {error}</p>;
+  if (error)
+    return (
+      <p role="alert" {...stylex.props(styles.paragraph)}>
+        Could not lay out diagram: {error}
+      </p>
+    );
 
-  if (!layout) return <p className="lens-diagram-note">Laying out flow…</p>;
+  if (!layout)
+    return (
+      <p {...stylex.props(styles.paragraph, styles.note)}>Laying out flow…</p>
+    );
 
   return (
     <div
       ref={frame}
-      className="lens-flow"
+      {...withClass("lens-flow", styles.flow)}
       style={{ height }}
       aria-label={block.title}
     >
       <ReactFlowProvider>
         <ReactFlow
+          {...stylex.props(styles.canvas)}
           colorMode={theme}
           nodes={nodes}
           edges={edges}
@@ -209,7 +227,7 @@ export function FlowGraph({
           {moved ? (
             <Panel position="top-right">
               <button
-                className="diagram-tour-button"
+                {...withClass("diagram-tour-button", diagramStyles.control)}
                 onClick={() => setMovedLayout(undefined)}
               >
                 Reset view
@@ -400,7 +418,9 @@ async function layoutFlow(
   block: FlowDiagramBlock,
   direction: "down" | "right" | undefined,
 ): Promise<Layout> {
-  const result = await new ELK().layout<ElkNode>({
+  const elk = await loadElk();
+
+  const result = await elk.layout<ElkNode>({
     id: "flow",
     layoutOptions: {
       "elk.algorithm": "layered",
@@ -511,16 +531,14 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
 
   return (
     <div
-      className={[
-        "flow-node",
+      // The class is a marker for tests.
+      {...withClass(
         "lens-flow-node",
-        `lens-flow-node--${change(progress)}`,
-        `lens-flow-node--${node.kind ?? "process"}`,
-        selected ? "is-selected" : "",
-        progress.state === "viewed" ? "is-viewed" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+        flowNodeMarker,
+        styles.node,
+        progress.state === "viewed" && styles.viewed,
+        motion === "queued" && drawStyles.hidden,
+      )}
       style={{ width: SIZE.width, height: SIZE.height }}
       role="button"
       tabIndex={unavailable ? -1 : 0}
@@ -546,20 +564,34 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
       <Handle
         type="target"
         position={Position.Top}
-        className="flow-node-handle"
+        {...stylex.props(styles.handle)}
       />
       <Handle
         type="source"
         position={Position.Bottom}
-        className="flow-node-handle"
+        {...stylex.props(styles.handle)}
       />
       <svg
-        className="flow-node-shape"
+        {...stylex.props(styles.drawing)}
         viewBox={`0 0 ${SIZE.width} ${SIZE.height}`}
         preserveAspectRatio="none"
         aria-hidden="true"
       >
         <rect
+          {...stylex.props(
+            styles.outline,
+            changeOutline[change(progress)],
+            selected && styles.outlineSelected,
+            node.kind === "decision" && !motion && styles.outlineDecision,
+            motion === "stroke" && [
+              styles.outlineTracing,
+              drawStyles.traceQuick,
+            ],
+            motion === "outline" && [styles.outlineOnly, drawStyles.traceNode],
+            motion === "fill" && drawStyles.fill,
+            motion === "relabel" && drawStyles.refill,
+            motion === "attention" && styles.outlineAttention,
+          )}
           pathLength={1}
           x={0.5}
           y={0.5}
@@ -568,11 +600,18 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
           rx={node.kind === "terminal" ? SIZE.height / 2 : 6}
         />
       </svg>
-      <div className="flow-node-text">
-        <span className="flow-node-label">
+      <div
+        {...stylex.props(
+          styles.text,
+          motion === "stroke" && drawStyles.labelQuick,
+          motion === "outline" && drawStyles.hidden,
+          (motion === "fill" || motion === "relabel") && drawStyles.labelFill,
+        )}
+      >
+        <span {...stylex.props(styles.label)}>
           {node.label.length > 26 ? `${node.label.slice(0, 25)}…` : node.label}
         </span>
-        <span className="flow-node-caption lens-flow-caption">
+        <span {...stylex.props(styles.caption)}>
           {unavailable ? (
             availability === "pending" ? (
               "…"
@@ -604,7 +643,15 @@ function FlowEdge({ id, data, markerEnd }: EdgeProps<FlowEdgeType>) {
       <BaseEdge
         id={id}
         path={path}
-        className="lens-flow-edge"
+        className={
+          stylex.props(
+            styles.edge,
+            (motion === "outline" || motion === "stroke") && styles.edgeTracing,
+            motion === "queued" && drawStyles.hidden,
+            motion === "stroke" && drawStyles.traceQuick,
+            motion === "outline" && drawStyles.traceLine,
+          ).className
+        }
         // The arrowhead is the last stroke.
         markerEnd={
           motion === "outline" || motion === "stroke" ? undefined : markerEnd
@@ -617,7 +664,12 @@ function FlowEdge({ id, data, markerEnd }: EdgeProps<FlowEdgeType>) {
       />
       {data.label && (
         <text
-          className="lens-flow-edge-label"
+          {...stylex.props(
+            styles.edgeLabel,
+            motion === "queued" && drawStyles.hidden,
+            motion === "stroke" && drawStyles.labelEdgeQuick,
+            motion === "outline" && drawStyles.labelEdge,
+          )}
           x={data.label.x}
           y={data.label.y}
           data-motion={motion}
@@ -632,3 +684,164 @@ function FlowEdge({ id, data, markerEnd }: EdgeProps<FlowEdgeType>) {
 const nodeTypes = { flowNode: FlowNode };
 
 const edgeTypes = { flowEdge: FlowEdge };
+
+const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
+
+const styles = stylex.create({
+  // Read as document paragraphs inside a document.
+  paragraph: {
+    margin: { default: null, [inDocument()]: "14px 0" },
+    color: { default: null, [inDocument()]: tokens.ink },
+    fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
+    fontSize: { default: null, [inDocument()]: fontSize.reading },
+    lineHeight: { default: null, [inDocument()]: 1.72 },
+    textAlign: { default: null, [inDocument()]: "left" },
+  },
+  note: {
+    padding: "8px 12px",
+    color: { default: tokens.inkFaint, [inDocument()]: tokens.ink },
+  },
+  flow: {
+    width: "100%",
+    minHeight: "120px",
+    display: "block",
+    font: `${fontSize.body} ${tokens.fontMono}`,
+  },
+  canvas: {
+    backgroundColor: tokens.transparent,
+  },
+  nodeWrapper: {
+    cursor: "default",
+  },
+  node: {
+    position: "relative",
+    boxSizing: "border-box",
+    color: tokens.ink,
+    font: `${fontSize.body}/1.4 ${tokens.fontMono}`,
+    cursor: "pointer",
+    outline: { default: null, ":focus-visible": "none" },
+  },
+  viewed: {
+    opacity: 0.42,
+  },
+  // Handles exist only so edges can attach.
+  handle: {
+    width: "1px",
+    height: "1px",
+    minWidth: 0,
+    minHeight: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    backgroundColor: tokens.transparent,
+    opacity: 0,
+    pointerEvents: "none",
+  },
+  drawing: {
+    position: "absolute",
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    overflow: "visible",
+  },
+  outline: {
+    fill: tokens.surface,
+    stroke: {
+      default: tokens.ruleSoft,
+      [stylex.when.ancestor(":focus-visible", flowNodeMarker)]: tokens.accent,
+    },
+    strokeWidth: {
+      default: 1,
+      [stylex.when.ancestor(":focus-visible", flowNodeMarker)]: 1.5,
+    },
+    vectorEffect: "non-scaling-stroke",
+    transition: `fill ${motion.medium} ${motion.ease}, stroke ${motion.medium} ${motion.ease}`,
+  },
+  outlineSelected: {
+    fill: tokens.markerTint,
+    stroke: tokens.accent,
+    strokeWidth: 1.5,
+  },
+  // A decision rests as a dashed box; the trace draws it solid. With
+  // pathLength 1, the dashes are fractions of the outline: about 4px on,
+  // 3px off.
+  outlineDecision: {
+    stroke: tokens.inkMuted,
+    strokeDasharray: "0.0075 0.0057",
+  },
+  // While drawn, the trace strokes it in the marker.
+  outlineTracing: {
+    stroke: tokens.accent,
+    strokeWidth: 1.6,
+  },
+  outlineOnly: {
+    fill: tokens.transparent,
+    stroke: tokens.accent,
+    strokeWidth: 1.6,
+  },
+  outlineAttention: {
+    fill: tokens.markerTint,
+    stroke: tokens.accent,
+    strokeWidth: 1.6,
+  },
+  text: {
+    position: "absolute",
+    inset: 0,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    gap: "2px",
+    minWidth: 0,
+    padding: "0 12px",
+  },
+  label: {
+    overflow: "hidden",
+    fontWeight: fontWeight.medium,
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  caption: {
+    color: tokens.inkFaint,
+    fontSize: fontSize.micro,
+  },
+  edge: {
+    fill: "none",
+    stroke: tokens.inkMuted,
+    strokeWidth: 1.4,
+  },
+  edgeTracing: {
+    strokeWidth: 1.6,
+  },
+  edgeLabel: {
+    font: `${fontSize.micro} ${tokens.fontMono}`,
+    fill: tokens.inkMuted,
+    paintOrder: "stroke",
+    stroke: tokens.tray,
+    strokeWidth: "4px",
+  },
+});
+
+const changeOutline = stylex.create({
+  unchanged: {},
+  added: {
+    fill: tokens.diffAddedBg,
+    stroke: {
+      default: tokens.changeAdded,
+      [stylex.when.ancestor(":focus-visible", flowNodeMarker)]: tokens.accent,
+    },
+  },
+  removed: {
+    fill: tokens.diffRemovedBg,
+    stroke: {
+      default: tokens.changeRemoved,
+      [stylex.when.ancestor(":focus-visible", flowNodeMarker)]: tokens.accent,
+    },
+  },
+  modified: {
+    fill: tokens.diffModifiedBg,
+    stroke: {
+      default: tokens.changeModified,
+      [stylex.when.ancestor(":focus-visible", flowNodeMarker)]: tokens.accent,
+    },
+  },
+});

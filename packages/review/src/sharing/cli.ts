@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { Writable } from "node:stream";
 
+import { connectReviewApi } from "@review/review-api/agent-client.js";
 import { z } from "zod";
-
-import { connectReviewApi } from "../review-api/agent-client.js";
 
 const resultSchema = z.strictObject({
   shareId: z.uuid(),
@@ -36,7 +35,7 @@ export async function runShareCli(input: {
           : "Share revoked. Existing downloads remain available offline.\n",
       );
     } else {
-      if (!input.review) throw new Error("Use review share --review <id>.");
+      if (!input.review) throw new Error("Use whiteboard share --review <id>.");
 
       const version =
         input.version === undefined
@@ -44,7 +43,7 @@ export async function runShareCli(input: {
           : z.number().int().nonnegative().parse(Number(input.version));
 
       input.stderr.write(
-        "Sharing includes retained images, maps, and full trace conversations. Anyone with the link can download them. Recipients need GitHub repository access to fetch the pinned commits.\n",
+        "Sharing includes retained images, maps, and full trace conversations. Anyone with the link can download them. Reviews with code require GitHub repository access to fetch the pinned commits.\n",
       );
 
       const result = resultSchema.parse(

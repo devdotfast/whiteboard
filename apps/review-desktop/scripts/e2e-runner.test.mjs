@@ -29,18 +29,6 @@ test("every journey module exports name, phase and run", async () => {
   }
 });
 
-test("run.mjs --list prints journeys without launching anything", async () => {
-  const { stdout } = await exec(process.execPath, [
-    path.join(e2eDir, "run.mjs"),
-    "--list",
-  ]);
-
-  assert.deepEqual(
-    JSON.parse(stdout).map((j) => j.name),
-    await journeyNames(),
-  );
-});
-
 test("run.mjs rejects an unknown --journey", async () => {
   await assert.rejects(
     exec(process.execPath, [

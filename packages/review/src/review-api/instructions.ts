@@ -1,9 +1,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { findReviewPackageRoot } from "@review/package-paths.js";
 import { z } from "zod";
-
-import { findReviewPackageRoot } from "../package-paths.js";
 
 export const INSTRUCTION_TOPICS = [
   "authoring",

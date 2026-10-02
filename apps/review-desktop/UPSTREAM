@@ -54,9 +54,6 @@ Review applies four of them, covering four CVEs:
   `isUNC` import by hand because the surrounding import block predates
   upstream's `isPortableLinkTarget`; the rest is verbatim.
 
-`scripts/vscode-security-backports.test.mjs` asserts each of these hunks is
-still present.
-
 #### Not applicable at this pin
 
 - Azure DevOps access token disclosure (CVE-2026-81381, moderate):
@@ -120,7 +117,7 @@ created. They have never existed in the monorepo history:
 - `extensions/emmet/test-workspace/` (contains only excluded `.vscode/` data)
 - `extensions/vscode-colorize-perf-tests/`
 - `extensions/vscode-colorize-tests/`
-- `test/monaco/dist/`
+- `test/monaco/dist/` (all of `test/monaco/` was later pruned; see below)
 
 The `.vscode/` trees and Monaco `dist/` fixture are upstream development-only
 files ignored by the vendored tree's own ignore rules; they are not required
@@ -161,6 +158,20 @@ To restore one: `git checkout code-oss-upstream-8a7abeba -- apps/review-desktop/
 and re-add its lines to the three build files above. In a checkout without
 that tag (the standalone open-source repository), take the extension from
 `microsoft/vscode` at the upstream commit recorded above instead.
+
+## Pruned upstream tooling
+
+Review deletes these upstream development and release tools. It never builds
+or runs them, and their lockfiles only produced Dependabot alerts:
+
+- `cli/` (the Rust `code` CLI) and `build/gulpfile.cli.ts`
+- `test/automation/`, `test/smoke/`, `test/mcp/`
+- `test/sanity/`, `test/monaco/`, `test/componentFixtures/`
+- `scripts/chat-simulation/`, `scripts/mock-policy-server/`
+
+Their npm scripts, ESLint import rules, hygiene filters and ignore entries are
+removed with them. Restore them from the upstream tag the same way as the
+extensions above.
 
 ## Pruned Agents window
 
@@ -290,6 +301,11 @@ one of these entries:
   `src/vs/platform/browserView/node/playwrightService.ts` through a dynamic
   import, on a path nothing constructs once the `playwright` channel is
   unregistered.
+  It also drops the 1DS/Application Insights telemetry SDKs (Review sets no
+  `product.aiConfig`, and the built-in extensions bundle their own copies),
+  root `katex` (chat only), `@vscode/tree-sitter-wasm` (Review stubs
+  `ITreeSitterLibraryService`; highlighting is behind experimental settings it
+  never enables), and tsserver's translated diagnostics.
 - `build/darwin/create-universal-app.ts`
 - `build/darwin/verify-macho.ts`
 - `build/lib/i18n.resources.json`
@@ -309,7 +325,11 @@ one of these entries:
 - `build/gulpfile.extensions.ts`
 - `build/gulpfile.hygiene.ts`
 - `build/gulpfile.reh.ts`
-- `build/gulpfile.vscode.ts`
+- `build/gulpfile.vscode.ts` and `build/next/index.ts`: also skip the welcome
+  walkthrough media, the PSReadLine terminal module, and the tree-sitter query
+  files, none of which Review loads.
+  `gulpfile.vscode.ts` also keeps only Chromium's English UI translations
+  (`locales/en-*.pak`, `en*.lproj`), since Review's UI is English only.
 - `build/hygiene.ts`
 - `build/lib/extensions.ts` (also excludes the curated built-in extensions,
   which are staged from prebuilt VSIXes rather than packaged from source)

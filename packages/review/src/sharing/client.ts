@@ -6,12 +6,12 @@ import {
   type ShareManifest,
   shareManifestSchema,
 } from "@dev.fast/review-share-protocol";
-import { z } from "zod";
-
 import {
   StreamLimitError,
   readBoundedStream,
-} from "../server/bounded-stream.js";
+} from "@review/server/bounded-stream.js";
+import { z } from "zod";
+
 import { type ShareBundle, digestBytes } from "./export.js";
 import { validateShareBundle } from "./import.js";
 

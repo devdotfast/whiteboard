@@ -56,6 +56,8 @@ export interface IReviewDesktopConnectionService {
 	readonly onDidChangeConnection: Event<void>;
 	initialize(): Promise<void>;
 	getConnection(): Promise<ReviewServerConnection>;
+	/** Closes the reviews' source windows, whose checkouts dismissal and deletion free. */
+	closeSourceWindows(reviewIds: readonly string[]): Promise<void>;
 	readDiffrConfig(): Promise<ReviewDiffrConfig>;
 	saveDiffrSummarizer(input: ReviewDiffrSummarizerInput): Promise<ReviewDiffrConfig>;
 	testDiffrSummarizer(input: ReviewDiffrSummarizerInput): Promise<string>;
@@ -152,6 +154,11 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		await this.initialize();
 		const { token, appSessionId } = this.requireConnection();
 		return { serverUrl: this.serverUrl, token, appSessionId };
+	}
+
+	async closeSourceWindows(reviewIds: readonly string[]): Promise<void> {
+		if (reviewIds.length === 0) return;
+		await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("closeSourceWindows", reviewIds);
 	}
 
 	async readDiffrConfig(): Promise<ReviewDiffrConfig> {
