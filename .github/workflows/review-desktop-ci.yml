@@ -45,10 +45,28 @@ jobs:
       - name: Find successful CI for this tree
         id: match
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
           CODE_OSS_CACHE_KEY: ${{ runner.os }}-${{ runner.arch }}-code-oss-deps-v3-${{ steps.digest.outputs.digest }}
           PLAYWRIGHT_CACHE_KEY: ${{ runner.os }}-${{ runner.arch }}-playwright-chromium-${{ hashFiles('pnpm-lock.yaml') }}
-        run: node scripts/ci-reuse.mjs
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          api="repos/$GITHUB_REPOSITORY/actions"
+          workflow=$(gh api "$api/runs/$GITHUB_RUN_ID" --jq '.workflow_id')
+          runs=$(gh api "$api/artifacts?name=ci-tree-$tree&per_page=100" \
+            --jq '.artifacts[] | select(.expired == false) | .workflow_run.id')
+          for run in $runs; do
+            passed=$(gh api "$api/runs/$run" --jq \
+              'select(.status == "completed" and .conclusion == "success") | .workflow_id')
+            [[ "$passed" == "$workflow" ]] || continue
+            for key in "$CODE_OSS_CACHE_KEY" "$PLAYWRIGHT_CACHE_KEY"; do
+              gh api --method GET "$api/caches" -f ref=refs/heads/main -f key="$key" -f per_page=100 |
+                jq -e --arg key "$key" '.actions_caches | any(.key == $key and .ref == "refs/heads/main")' \
+                >/dev/null || exit 0
+            done
+            echo "reuse=true" >> "$GITHUB_OUTPUT"
+            echo "Reusing [successful CI]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run) for identical tree \`$tree\`; shared caches are warm." >> "$GITHUB_STEP_SUMMARY"
+            break
+          done
 
   review-desktop:
     name: Review Desktop
