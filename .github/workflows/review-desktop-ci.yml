@@ -14,14 +14,46 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: review-desktop-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  reuse:
+    name: Check reusable CI
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    outputs:
+      reuse: ${{ steps.match.outputs.reuse }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup Code OSS Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: apps/review-desktop/code-oss/.nvmrc
+
+      - name: Compute Code OSS dependency digest
+        id: digest
+        run: echo "digest=$(node apps/review-desktop/scripts/code-oss-bootstrap.mjs digest apps/review-desktop/code-oss)" >> "$GITHUB_OUTPUT"
+
+      - name: Find successful CI for this tree
+        id: match
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CODE_OSS_CACHE_KEY: ${{ runner.os }}-${{ runner.arch }}-code-oss-deps-v3-${{ steps.digest.outputs.digest }}
+          PLAYWRIGHT_CACHE_KEY: ${{ runner.os }}-${{ runner.arch }}-playwright-chromium-${{ hashFiles('pnpm-lock.yaml') }}
+        run: node scripts/ci-reuse.mjs
+
   review-desktop:
     name: Review Desktop
+    needs: reuse
+    if: always() && !cancelled() && needs.reuse.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -182,6 +214,21 @@ jobs:
         run: |
           pnpm --filter @dev.fast/review ensure:diffr --required
           pnpm --filter @dev.fast/review exec vitest run --config vitest.integration.config.ts
+
+      - name: Record tested tree
+        id: tested-tree
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "$tree" > "$RUNNER_TEMP/ci-tree.txt"
+
+      - name: Publish tested tree receipt
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-tree-${{ steps.tested-tree.outputs.tree }}
+          path: ${{ runner.temp }}/ci-tree.txt
+          retention-days: 14
 
       - name: Upload browser test diagnostics
         if: failure()
