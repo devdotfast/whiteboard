@@ -12,6 +12,9 @@ import { isChrome, isFirefox, isFullscreen, isSafari, onDidChangeFullscreen } fr
 import { mark } from '../../base/common/performance.js';
 import { onUnexpectedError, setUnexpectedErrorHandler } from '../../base/common/errors.js';
 import { ReviewErrorReportLimiter } from '../common/reviewErrorReport.js';
+import { reviewInstallLocation } from '../common/reviewInstallLocation.js';
+import { FileAccess } from '../../base/common/network.js';
+import { IWorkbenchEnvironmentService } from '../../workbench/services/environment/common/environmentService.js';
 import { IReviewTelemetryService } from '../services/reviewTelemetryService.js';
 import { ITimerService } from '../../workbench/services/timer/browser/timerService.js';
 import { isLinux, isMacintosh, isNative, isWeb, isWindows } from '../../base/common/platform.js';
@@ -447,7 +450,12 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 			const timerService = this.workbenchInstantiationService?.invokeFunction(accessor => accessor.get(ITimerService));
 			timerService?.whenReady().then(() => {
 				this.reviewTelemetryService ??= this.workbenchInstantiationService?.invokeFunction(accessor => accessor.get(IReviewTelemetryService));
-				this.reviewTelemetryService?.capture('app_ready', { duration_ms: Math.round(timerService.startupMetrics.ellapsed) });
+				const properties: Record<string, string | number> = { duration_ms: Math.round(timerService.startupMetrics.ellapsed) };
+				// Only a packaged macOS bundle has a location Squirrel cares about.
+				if (isMacintosh && this.workbenchInstantiationService?.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).isBuilt)) {
+					properties.install_location = reviewInstallLocation(FileAccess.asFileUri('').fsPath);
+				}
+				this.reviewTelemetryService?.capture('app_ready', properties);
 			}, onUnexpectedError);
 		} catch (error) {
 			// Telemetry must never keep the workbench from restoring.
