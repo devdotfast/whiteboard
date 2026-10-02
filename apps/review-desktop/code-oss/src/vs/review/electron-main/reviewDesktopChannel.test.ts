@@ -18,7 +18,7 @@ function channelWith(workspaces: Record<string, unknown>) {
 		openedWorkspace,
 		close: () => closed.push(name),
 	}));
-	const channel = new ReviewDesktopChannel({} as never, { getWindows: () => windows } as never);
+	const channel = new ReviewDesktopChannel({} as never, { getWindows: () => windows } as never, () => false);
 	return { channel, closed };
 }
 
