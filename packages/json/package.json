@@ -19,7 +19,7 @@
     "typecheck": "pnpm -w exec tsc -p packages/json/tsconfig.json --noEmit"
   },
   "dependencies": {
-    "zod": "4.4.3"
+    "zod": "catalog:"
   },
   "engines": {
     "node": ">=22"

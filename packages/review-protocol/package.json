@@ -23,7 +23,7 @@
     "@dev.fast/diffr": "0.1.10",
     "@dev.fast/json": "workspace:*",
     "@dev.fast/trace-protocol": "workspace:*",
-    "zod": "4.4.3"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "esbuild": "0.28.1",

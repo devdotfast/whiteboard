@@ -4,6 +4,12 @@ settings:
   autoInstallPeers: false
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    zod:
+      specifier: 4.6.5
+      version: 4.6.5
+
 overrides:
   '@dev.fast/local-vcs': workspace:0.1.0
   esbuild: 0.28.1
@@ -32,8 +38,8 @@ importers:
         specifier: npm:typescript@7.0.2
         version: 7.0.2
       zod:
-        specifier: 4.4.3
-        version: 4.4.3
+        specifier: 'catalog:'
+        version: 4.6.5
 
   apps/review-desktop:
     dependencies:
@@ -46,7 +52,7 @@ importers:
     devDependencies:
       '@dev.fast/diffr':
         specifier: 0.1.10
-        version: 0.1.10(zod@4.4.3)
+        version: 0.1.10(zod@4.6.5)
       '@dev.fast/review-canvas':
         specifier: workspace:*
         version: link:../../packages/review/app
@@ -74,8 +80,8 @@ importers:
   packages/json:
     dependencies:
       zod:
-        specifier: 4.4.3
-        version: 4.4.3
+        specifier: 'catalog:'
+        version: 4.6.5
 
   packages/local-vcs:
     dependencies:
@@ -106,13 +112,13 @@ importers:
     dependencies:
       '@agentclientprotocol/claude-agent-acp':
         specifier: 0.84.0
-        version: 0.84.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))
+        version: 0.84.0(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))
       '@agentclientprotocol/codex-acp':
         specifier: 2.0.0
         version: 2.0.0
       '@agentclientprotocol/sdk':
         specifier: 1.5.1
-        version: 1.5.1(zod@4.4.3)
+        version: 1.5.1(zod@4.6.5)
       '@hono/node-server':
         specifier: 2.0.12
         version: 2.0.12(hono@4.13.5)
@@ -121,7 +127,7 @@ importers:
         version: 0.35.4
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
-        version: 1.30.0(zod@4.4.3)
+        version: 1.30.0(zod@4.6.5)
       commander:
         specifier: 14.0.3
         version: 14.0.3
@@ -162,12 +168,12 @@ importers:
         specifier: 1.8.0
         version: 1.8.0
       zod:
-        specifier: 4.4.3
-        version: 4.4.3
+        specifier: 'catalog:'
+        version: 4.6.5
     devDependencies:
       '@dev.fast/diffr':
         specifier: 0.1.10
-        version: 0.1.10(zod@4.4.3)
+        version: 0.1.10(zod@4.6.5)
       '@dev.fast/json':
         specifier: workspace:*
         version: link:../json
@@ -221,7 +227,7 @@ importers:
     dependencies:
       '@dev.fast/diffr':
         specifier: 0.1.10
-        version: 0.1.10(zod@4.4.3)
+        version: 0.1.10(zod@4.6.5)
       '@dev.fast/json':
         specifier: workspace:*
         version: link:../json
@@ -229,8 +235,8 @@ importers:
         specifier: workspace:*
         version: link:../trace-protocol
       zod:
-        specifier: 4.4.3
-        version: 4.4.3
+        specifier: 'catalog:'
+        version: 4.6.5
     devDependencies:
       esbuild:
         specifier: 0.28.1
@@ -242,8 +248,8 @@ importers:
   packages/review-share-protocol:
     dependencies:
       zod:
-        specifier: 4.4.3
-        version: 4.4.3
+        specifier: 'catalog:'
+        version: 4.6.5
     devDependencies:
       vitest:
         specifier: 4.1.11
@@ -291,8 +297,8 @@ importers:
         specifier: 19.2.5
         version: 19.2.5(react@19.2.5)
       zod:
-        specifier: 4.4.3
-        version: 4.4.3
+        specifier: 'catalog:'
+        version: 4.6.5
       zustand:
         specifier: 5.0.15
         version: 5.0.15(@types/react@19.2.14)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))
@@ -352,8 +358,8 @@ importers:
         specifier: 14.0.3
         version: 14.0.3
       zod:
-        specifier: 4.4.3
-        version: 4.4.3
+        specifier: 'catalog:'
+        version: 4.6.5
     devDependencies:
       '@types/node':
         specifier: 24.12.2
@@ -374,8 +380,8 @@ importers:
   packages/trace-protocol:
     dependencies:
       zod:
-        specifier: 4.4.3
-        version: 4.4.3
+        specifier: 'catalog:'
+        version: 4.6.5
     devDependencies:
       vitest:
         specifier: 4.1.11
@@ -3324,9 +3330,6 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
-  zod@4.4.3:
-    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
-
   zod@4.6.5:
     resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
 
@@ -3374,10 +3377,10 @@ ignoredOptionalDependencies:
 
 snapshots:
 
-  '@agentclientprotocol/claude-agent-acp@0.84.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))':
+  '@agentclientprotocol/claude-agent-acp@0.84.0(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))':
     dependencies:
       '@agentclientprotocol/sdk': 1.5.1(zod@4.6.5)
-      '@anthropic-ai/claude-agent-sdk': 0.3.284(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(zod@4.6.5)
+      '@anthropic-ai/claude-agent-sdk': 0.3.284(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(zod@4.6.5)
       diff: 9.0.0
       zod: 4.6.5
     transitivePeerDependencies:
@@ -3386,28 +3389,24 @@ snapshots:
 
   '@agentclientprotocol/codex-acp@2.0.0':
     dependencies:
-      '@agentclientprotocol/sdk': 1.5.1(zod@4.4.3)
+      '@agentclientprotocol/sdk': 1.5.1(zod@4.6.5)
       '@openai/codex': 0.158.0
       diff: 9.0.0
       open: 11.0.4
       vscode-jsonrpc: 9.0.2
-      zod: 4.4.3
+      zod: 4.6.5
 
   '@agentclientprotocol/sdk@0.26.0(zod@3.25.76)':
     dependencies:
       zod: 3.25.76
 
-  '@agentclientprotocol/sdk@1.5.1(zod@4.4.3)':
-    dependencies:
-      zod: 4.4.3
-
   '@agentclientprotocol/sdk@1.5.1(zod@4.6.5)':
     dependencies:
       zod: 4.6.5
 
-  '@anthropic-ai/claude-agent-sdk@0.3.284(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(zod@4.6.5)':
+  '@anthropic-ai/claude-agent-sdk@0.3.284(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(zod@4.6.5)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(zod@4.4.3)
+      '@modelcontextprotocol/sdk': 1.30.0(zod@4.6.5)
       zod: 4.6.5
 
   '@asamuzakjp/css-color@5.1.11':
@@ -3577,9 +3576,9 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.0': {}
 
-  '@dev.fast/diffr@0.1.10(zod@4.4.3)':
+  '@dev.fast/diffr@0.1.10(zod@4.6.5)':
     dependencies:
-      zod: 4.4.3
+      zod: 4.6.5
 
   '@dual-bundle/import-meta-resolve@4.2.1': {}
 
@@ -3747,7 +3746,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@modelcontextprotocol/sdk@1.30.0(zod@4.4.3)':
+  '@modelcontextprotocol/sdk@1.30.0(zod@4.6.5)':
     dependencies:
       '@hono/node-server': 2.0.12(hono@4.13.5)
       ajv: 8.20.0
@@ -3764,8 +3763,8 @@ snapshots:
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod: 4.4.3
-      zod-to-json-schema: 3.25.2(zod@4.4.3)
+      zod: 4.6.5
+      zod-to-json-schema: 3.25.2(zod@4.6.5)
     transitivePeerDependencies:
       - supports-color
 
@@ -6148,13 +6147,11 @@ snapshots:
       '@yuku-parser/binding-win32-arm64': 0.8.4
       '@yuku-parser/binding-win32-x64': 0.8.4
 
-  zod-to-json-schema@3.25.2(zod@4.4.3):
+  zod-to-json-schema@3.25.2(zod@4.6.5):
     dependencies:
-      zod: 4.4.3
+      zod: 4.6.5
 
   zod@3.25.76: {}
-
-  zod@4.4.3: {}
 
   zod@4.6.5: {}
 

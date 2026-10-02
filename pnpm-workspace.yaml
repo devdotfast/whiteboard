@@ -4,6 +4,11 @@ packages:
   - "packages/review/app"
   - "apps/*"
 
+catalog:
+  zod: "4.6.5"
+
+catalogMode: strict
+
 nodeLinker: hoisted
 enableGlobalVirtualStore: true
 strictPeerDependencies: false
