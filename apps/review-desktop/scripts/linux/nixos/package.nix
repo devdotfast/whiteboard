@@ -6,7 +6,7 @@ let
     pname = "${app}-payload";
     inherit (release) version;
     src = ./payload;
-    nativeBuildInputs = [ pkgs.makeWrapper ];
+    nativeBuildInputs = [ pkgs.makeWrapper pkgs.desktop-file-utils ];
     dontConfigure = true;
     dontBuild = true;
     dontFixup = true;
@@ -25,6 +25,7 @@ let
         --add-flags --disable-setuid-sandbox
       substituteInPlace "$out/share/applications/"*.desktop \
         --replace-fail "/usr/bin/${app}-desktop" "${app}-desktop"
+      update-desktop-database "$out/share/applications"
       runHook postInstall
     '';
   };

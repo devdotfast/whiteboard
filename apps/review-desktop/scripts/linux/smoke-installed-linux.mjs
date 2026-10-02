@@ -226,20 +226,10 @@ async function deepLinks(coldObserved) {
   await waitFor(`!(${shareNotification})`);
   console.log(`${app}: cold link observed; dispatching warm link.`);
 
-  const { stdout: openerPath } = await promisify(execFile)(
-    "bash",
-    ["-c", "command -v xdg-open"],
-    { env: environment, timeout: 5000 },
-  );
-
   await new Promise((resolve, reject) => {
     const opener = spawn(
-      "bash",
-      [
-        "-x",
-        openerPath.trim(),
-        `${protocol}://share/nixos-warm?origin=invalid`,
-      ],
+      "xdg-open",
+      [`${protocol}://share/nixos-warm?origin=invalid`],
       {
         env: { ...environment, XDG_UTILS_DEBUG_LEVEL: "2" },
         stdio: ["ignore", "ignore", "pipe"],
