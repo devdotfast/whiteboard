@@ -365,7 +365,7 @@ describe("block components", () => {
         });
 
         const copy = container.querySelector<HTMLButtonElement>(
-          '[aria-label="Copy for Agent"]',
+          '[aria-label="Copy ref"]',
         );
 
         expect(copy).not.toBeNull();
@@ -443,7 +443,7 @@ describe("block components", () => {
   });
 
   it.each(["sequence", "database_lens", "software_map"] as const)(
-    "keeps %s interactions without offering Copy for Agent",
+    "keeps %s interactions without offering Copy ref",
     async (kind) => {
       const { container } = await mountFixture(kind);
       expect(await settled(() => rendered[kind](container))).toBe(true);
@@ -466,7 +466,7 @@ describe("block components", () => {
       await act(async () => target!.click());
       expect(
         [...container.querySelectorAll("button")].some(
-          (button) => button.textContent === "Copy for Agent",
+          (button) => button.textContent === "Copy ref",
         ),
       ).toBe(false);
     },

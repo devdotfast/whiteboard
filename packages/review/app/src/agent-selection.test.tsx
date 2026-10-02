@@ -77,16 +77,13 @@ it("copies only on click or Shift+Cmd+C, reports failures, and clears on revisio
     await act(async () => render("one"));
     await act(async () => container.querySelector("button")!.click());
     expect(fetch).not.toHaveBeenCalled();
-    expect(
-      container.querySelector('[aria-label="Copy for Agent"]'),
-    ).not.toBeNull();
+    expect(container.querySelector('[aria-label="Copy ref"]')).not.toBeNull();
 
     // The selection's actions move together; the lane around their group
     // holds the position.
     const popover = () =>
-      container.querySelector<HTMLButtonElement>(
-        '[aria-label="Copy for Agent"]',
-      )!.parentElement!.parentElement!;
+      container.querySelector<HTMLButtonElement>('[aria-label="Copy ref"]')!
+        .parentElement!.parentElement!;
 
     const top = popover().style.top;
 
@@ -115,7 +112,7 @@ it("copies only on click or Shift+Cmd+C, reports failures, and clears on revisio
     expect(fetch).not.toHaveBeenCalled();
     await act(async () =>
       container
-        .querySelector<HTMLButtonElement>('[aria-label="Copy for Agent"]')!
+        .querySelector<HTMLButtonElement>('[aria-label="Copy ref"]')!
         .click(),
     );
     expect(write).toHaveBeenLastCalledWith("Review: /review.mdx\n\nselected");
@@ -131,7 +128,7 @@ it("copies only on click or Shift+Cmd+C, reports failures, and clears on revisio
       shortcut();
     });
     expect(write).toHaveBeenCalledTimes(2);
-    expect(container.querySelector('[aria-label="Copy for Agent"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Copy ref"]')).toBeNull();
     write.mockResolvedValue(false);
     await act(async () => {
       shortcut();
@@ -142,7 +139,7 @@ it("copies only on click or Shift+Cmd+C, reports failures, and clears on revisio
     });
     expect(container.querySelector('[role="status"]')).toBeNull();
     await act(async () => render("two"));
-    expect(container.querySelector('[aria-label="Copy for Agent"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Copy ref"]')).toBeNull();
     await act(async () => {
       shortcut();
     });

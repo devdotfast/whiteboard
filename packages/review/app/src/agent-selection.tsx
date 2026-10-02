@@ -347,12 +347,12 @@ export function AgentSelectionProvider({
                     <Button
                       variant="ghost"
                       aria-keyshortcuts="Meta+Shift+C"
-                      aria-label="Copy for Agent"
+                      aria-label="Copy ref"
                       disabled={busy}
                       onClick={() => void copy()}
                     >
                       <CopyIcon xstyle={controlStyles.inlineIcon} />
-                      <span>{busy ? "Copying…" : "Copy for agent"}</span>
+                      <span>{busy ? "Copying…" : "Copy ref"}</span>
                       <kbd aria-hidden="true" {...stylex.props(styles.key)}>
                         <ShiftKeyIcon />
                         <CommandKeyIcon />C

@@ -695,7 +695,7 @@ it("copies prose and code from the displayed historical JSON review", async () =
     const copy = async () => {
       await act(async () =>
         container
-          .querySelector<HTMLButtonElement>('[aria-label="Copy for Agent"]')!
+          .querySelector<HTMLButtonElement>('[aria-label="Copy ref"]')!
           .click(),
       );
 
@@ -755,7 +755,7 @@ it("copies prose and code from the displayed historical JSON review", async () =
           path: "unrelated.ts",
         });
     });
-    expect(container.querySelector('[aria-label="Copy for Agent"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Copy ref"]')).toBeNull();
     await act(async () => {
       for (const listener of listeners)
         listener({
