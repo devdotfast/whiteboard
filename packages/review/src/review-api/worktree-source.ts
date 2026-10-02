@@ -39,7 +39,7 @@ export async function localSourcePath(
   return candidate;
 }
 
-/** List the live checkout, including untracked files but excluding ignored files. */
+/** List the live checkout's tracked files. jj tracks new files itself; Git's untracked files are left out. */
 export async function workingFiles(vcs: LocalVcs): Promise<string[]> {
   const gitDirectory =
     vcs.kind === "jj" ? await gitCommonDir(vcs.rootPath) : undefined;
@@ -59,10 +59,9 @@ export async function workingFiles(vcs: LocalVcs): Promise<string[]> {
         : []),
       "ls-files",
       "-z",
-      "--others",
-      "--exclude-standard",
-      "--exclude=.jj/",
-      ...(vcs.kind === "git" ? ["--cached"] : []),
+      ...(vcs.kind === "git"
+        ? ["--cached"]
+        : ["--others", "--exclude-standard", "--exclude=.jj/"]),
     ],
     { maxBuffer: 32 * 1024 * 1024 },
   );
@@ -88,6 +87,37 @@ export async function workingFiles(vcs: LocalVcs): Promise<string[]> {
   );
 
   return present.filter((file): file is string => file !== undefined);
+}
+
+/**
+ * Count Git's untracked, non-ignored files, which working tree reviews leave
+ * out. Undefined for jj, which tracks new files itself, or when the listing
+ * is too large to read.
+ */
+export async function untrackedFileCount(
+  vcs: LocalVcs,
+): Promise<number | undefined> {
+  if (vcs.kind !== "git") return undefined;
+
+  try {
+    const { stdout } = await exec(
+      "git",
+      [
+        "-C",
+        vcs.rootPath,
+        "ls-files",
+        "-z",
+        "--others",
+        "--exclude-standard",
+        "--exclude=.jj/",
+      ],
+      { maxBuffer: 32 * 1024 * 1024 },
+    );
+
+    return stdout.split("\0").filter(Boolean).length;
+  } catch {
+    return undefined;
+  }
 }
 
 /** A refresh token, not stored source: all reads still use the checkout. */

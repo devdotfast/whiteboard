@@ -2595,15 +2595,18 @@ it("reads current working source across authored versions, commits and retargeti
   expect(
     (await local.data.file(original.pins!, "head", "example.ts")).text,
   ).toContain("live = 1");
-  expect(await local.data.tree(original.pins!, "head", "")).toContainEqual({
-    path: "untracked.ts",
-    kind: "file",
-  });
-  expect(await local.data.changes(original.pins!)).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ path: "untracked.ts", status: "added" }),
-    ]),
+  // Untracked files are left out of the tree and the comparison, and counted.
+  expect(await local.data.tree(original.pins!, "head", "")).not.toContainEqual(
+    expect.objectContaining({ path: "untracked.ts" }),
   );
+  expect(await local.data.changes(original.pins!)).not.toEqual(
+    expect.arrayContaining([expect.objectContaining({ path: "untracked.ts" })]),
+  );
+  expect(await local.data.untrackedFiles(original.pins!)).toBe(1);
+  // An anchor can still read an untracked file from disk.
+  expect(
+    (await local.data.file(original.pins!, "head", "untracked.ts")).text,
+  ).toContain("fresh = true");
   writeFileSync(
     path.join(repository, "example.ts"),
     "export const live = 2;\n",
@@ -2709,11 +2712,10 @@ describe("worktree base", () => {
       base: "main",
     });
     expect(snapshot.pins?.base).toBe(run("merge-base", "main", "HEAD"));
+    // Untracked .gitignore and untracked.ts are left out; staged.ts was added.
     expect(await changedPaths(reviewId)).toEqual([
-      "added .gitignore",
       "added committed.ts",
       "added staged.ts",
-      "added untracked.ts",
       "deleted removed.ts",
       "modified shared.ts",
     ]);
@@ -2773,6 +2775,8 @@ it("reads symlink text and an unborn repository without following external links
   writeFileSync(outside, "secret\n");
   symlinkSync(outside, path.join(root, "external.ts"));
   writeFileSync(path.join(root, "first.ts"), "export const first = 1;\n");
+  // Untracked files are left out; intent-to-add puts a new file in the review.
+  execFileSync("git", ["-C", root, "add", "-N", "first.ts"]);
 
   const result = await local.store.execute(
     command({
@@ -2834,6 +2838,7 @@ it("keeps authored coordinates fixed as live source changes and warns only on un
     path.join(repository, "range.ts"),
     "const first = 1;\nconst second = 2;\nconst third = 3;\n",
   );
+  git("add", "-N", "range.ts");
 
   const result = await local.store.execute(
     command({
@@ -2977,6 +2982,7 @@ it("includes saved additions and deletions while keeping ignored and binary sour
   writeFileSync(path.join(repository, ".gitignore"), "ignored.ts\n");
   writeFileSync(path.join(repository, "ignored.ts"), "secret\n");
   writeFileSync(path.join(repository, "binary.dat"), Buffer.from([0, 1, 2]));
+  git("add", "-N", "binary.dat");
   writeFileSync(path.join(repository, "__proto__"), "legitimate filename\n");
   rmSync(path.join(repository, "example.ts"));
 
@@ -3045,6 +3051,10 @@ it.skipIf(spawnSync("jj", ["--version"]).status !== 0)(
     expect(
       await local.data.changes(local.store.read(result.reviewId).pins!),
     ).toEqual([expect.objectContaining({ path: "new.ts", status: "added" })]);
+    // jj tracks new files itself, so nothing is left out to count.
+    expect(
+      await local.data.untrackedFiles(local.store.read(result.reviewId).pins!),
+    ).toBeUndefined();
     expect(jj("op", "log", "--no-graph", "--limit", "1", "-T", "id")).toBe(
       operation,
     );
@@ -3146,6 +3156,7 @@ it.each(["repin", "set_target"] as const)(
   async (operation) => {
     const original = "const first = 1;\nconst second = 2;\n";
     writeFileSync(path.join(repository, "recover.ts"), original);
+    git("add", "-N", "recover.ts");
 
     const created = await local.store.execute(
       command({
@@ -3193,6 +3204,7 @@ it.each(["repin", "set_target"] as const)(
       }),
     ).rejects.toThrow("exceeds the pinned file");
     writeFileSync(path.join(repository, "recover.ts"), original);
+    git("add", "-N", "recover.ts");
     await new Promise((resolve) => setTimeout(resolve, 50));
     await local.store.refreshWorktrees();
     expect(local.store.read(created.reviewId).staleSources).toEqual([]);
@@ -3623,7 +3635,7 @@ describe("review_diff", () => {
   });
 });
 
-it("patches working files of a worktree review, untracked files included", async () => {
+it("patches working files of a worktree review once an untracked file is intent-to-add", async () => {
   const api = createReviewApi(local.store, local.data);
 
   const { reviewId } = await local.store.execute(
@@ -3636,6 +3648,11 @@ it("patches working files of a worktree review, untracked files included", async
 
   writeFileSync(path.join(repository, "fresh.ts"), "fresh\n");
 
+  expect(await (await api.request(`/${reviewId}/diff`)).json()).not.toEqual(
+    expect.arrayContaining([expect.objectContaining({ path: "fresh.ts" })]),
+  );
+
+  git("add", "-N", "fresh.ts");
   const list = await (await api.request(`/${reviewId}/diff`)).json();
 
   expect(list).toEqual(
