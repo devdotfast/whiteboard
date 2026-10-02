@@ -405,11 +405,15 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     }>();
 
     const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
-    const discovery = await readReviewServerDiscovery(stateDir);
-    // Only the recorded instance's own answer proves the pid is still its.
-    const health = discovery && (await readReviewServerHealth(discovery));
 
-    if (!discovery || health?.serverPid !== discovery.serverPid) {
+    const { headlessServerOwner, stopBackgroundServer } =
+      await import("./server/background-server.js");
+
+    // The lock's live holder, answering or not: a hung server is stopped too.
+    const owner = await headlessServerOwner(stateDir);
+    const discovery = await readReviewServerDiscovery(stateDir);
+
+    if (owner === undefined) {
       input.stdout.write(
         options.json
           ? `${JSON.stringify({ event: "server.stop", stopped: false, stateDir })}\n`
@@ -419,15 +423,17 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       return;
     }
 
-    const { serverPid, startedBy } = discovery;
+    const serverPid = owner;
 
-    if (startedBy === "user")
+    if (discovery?.serverPid !== owner)
+      throw new Error(
+        `Process ${owner} holds the Whiteboard server's lock in ${stateDir} but has published no server; it may be starting. Try again, or end that process.`,
+      );
+
+    if (discovery.startedBy === "user")
       throw new Error(
         `The Whiteboard server in ${stateDir} (process ${serverPid}) runs in the foreground of \`whiteboard server start\`. Stop it there with Ctrl-C.`,
       );
-
-    const { stopBackgroundServer } =
-      await import("./server/background-server.js");
 
     await stopBackgroundServer(discovery);
 

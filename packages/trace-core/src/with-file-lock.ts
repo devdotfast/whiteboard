@@ -121,6 +121,17 @@ export async function withFileLock<T>(
   }
 }
 
+/** The pid holding the lock while that process lives: what keeps a waiter out. */
+export async function liveLockOwner(lockPath: string) {
+  const owner = await readLockOwner(lockPath);
+
+  return owner &&
+    processIsAlive(owner.pid) &&
+    !pidReused(owner.pid, owner.started)
+    ? owner.pid
+    : undefined;
+}
+
 export function processIsAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);

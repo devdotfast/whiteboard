@@ -1,10 +1,9 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdir, open, readFile, stat } from "node:fs/promises";
+import { mkdir, open, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { processIsAlive } from "@dev.fast/trace-core";
+import { liveLockOwner, processIsAlive } from "@dev.fast/trace-core";
 import { findReviewPackageRoot } from "@review/package-paths.js";
 import {
   type ReviewServerDiscovery,
@@ -52,10 +51,9 @@ export async function ensureBackgroundServer(
 
     if (child.error) throw child.error;
 
-    // Our child lost the start to another, or failed. Only a lock holder
-    // can still publish a server; one that was shutting down cannot, so
-    // try once more.
-    if (child.exited && !existsSync(headlessServerLockPath(stateDir))) {
+    // Our child lost the start to another, or failed. Only a live lock
+    // holder can still publish a server; without one, try once more.
+    if (child.exited && (await headlessServerOwner(stateDir)) === undefined) {
       if (respawned) break;
       respawned = true;
       child = await spawnServer(stateDir, logPath, input);
@@ -64,36 +62,56 @@ export async function ensureBackgroundServer(
     await delay(100);
   }
 
+  const owner = await headlessServerOwner(stateDir);
+
   throw new Error(
-    `The Whiteboard server did not become ready${child.exited ? "" : ` within ${Math.round((input.timeoutMs ?? 15_000) / 1_000)} s; process ${child.pid} is still starting`}. The end of ${logPath}:\n${await logTail(logPath, logStart)}`,
+    `The Whiteboard server did not become ready${child.exited ? "" : ` within ${Math.round((input.timeoutMs ?? 15_000) / 1_000)} s; process ${child.pid} is still starting`}.${owner !== undefined && owner !== child.pid ? ` Process ${owner} holds its state directory without answering; \`whiteboard server stop\` ends it.` : ""} The end of ${logPath}:\n${await logTail(logPath, logStart)}`,
   );
 }
 
 /**
- * SIGTERMs a server the CLI or Desktop started and waits for it to exit.
- * The caller has checked the pid answers for the recorded instance.
+ * The process holding `stateDir`'s server lock while it lives, answering or
+ * not: its recorded pid and start, the rule `server start` and `reset-id`
+ * meet when they take the lock. Never `/health` alone: a paused server is
+ * silent but still owns the store.
+ */
+export async function headlessServerOwner(stateDir: string) {
+  const resolved = await realpath(stateDir).catch(() => path.resolve(stateDir));
+
+  return liveLockOwner(headlessServerLockPath(resolved));
+}
+
+/**
+ * SIGTERMs a server the CLI or Desktop started and waits for it to exit;
+ * one still there after 10 s, hung or paused, is SIGKILLed. The caller has
+ * checked the pid is the recorded server's.
  */
 export async function stopBackgroundServer(
   discovery: Pick<ReviewServerDiscovery, "serverPid">,
 ) {
   const { serverPid } = discovery;
 
-  try {
-    process.kill(serverPid, "SIGTERM");
-  } catch (error) {
-    // It exited between the health check and the signal.
-    if (!(error instanceof Error && "code" in error && error.code === "ESRCH"))
+  // Shutdown force-closes open streams after 5 s.
+  for (const [signal, waitMs] of [
+    ["SIGTERM", 10_000],
+    ["SIGKILL", 2_000],
+  ] as const) {
+    try {
+      process.kill(serverPid, signal);
+    } catch (error) {
+      // It exited before the signal.
+      if (error instanceof Error && "code" in error && error.code === "ESRCH")
+        return;
       throw error;
+    }
+
+    for (let waited = 0; waited < waitMs; waited += 100) {
+      if (!processIsAlive(serverPid)) return;
+      await delay(100);
+    }
   }
 
-  // Shutdown force-closes open streams after 5 s.
-  for (let waited = 0; processIsAlive(serverPid); waited += 100) {
-    if (waited >= 10_000)
-      throw new Error(
-        `The Whiteboard server (process ${serverPid}) did not stop within 10 s.`,
-      );
-    await delay(100);
-  }
+  throw new Error(`The Whiteboard server (process ${serverPid}) did not stop.`);
 }
 
 interface ServerChild {

@@ -144,6 +144,47 @@ it("refuses to stop a server the user started in the foreground", async () => {
   expect(await readReviewServerHealth(discovery)).toMatchObject({ ok: true });
 }, 60_000);
 
+it("a paused server still owns its state directory: start and reset-id refuse, and stop ends it", async () => {
+  const { discovery } = await ensureBackgroundServer({
+    stateDir,
+    env,
+    cli: sourceCli,
+  });
+
+  const pid = discovery.serverPid;
+  process.kill(pid, "SIGSTOP");
+
+  try {
+    expect(await readReviewServerHealth(discovery)).toBeNull();
+
+    const start = spawnSync(
+      sourceCli[0]!,
+      [...sourceCli.slice(1), "server", "start", "--state-dir", stateDir],
+      { env, encoding: "utf8", timeout: 30_000 },
+    );
+
+    expect(start.status).toBe(1);
+    expect(start.stderr).toContain("already owns");
+    expect((await cli(["server", "reset-id", "--json"])).code).toBe(1);
+    expect(alive(pid)).toBe(true);
+
+    const stopped = await cli(["server", "stop", "--json"]);
+
+    expect(JSON.parse(stopped.stdout)).toMatchObject({
+      event: "server.stop",
+      stopped: true,
+      serverPid: pid,
+    });
+    expect(alive(pid)).toBe(false);
+  } finally {
+    try {
+      process.kill(pid, "SIGCONT");
+    } catch {
+      // Stopped.
+    }
+  }
+}, 90_000);
+
 it("never signals the pid of a stale discovery file", async () => {
   const bystander = spawn(process.execPath, [
     "-e",
