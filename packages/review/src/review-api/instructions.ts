@@ -81,7 +81,7 @@ export async function renderInstructions(
     COMPONENT_REFERENCE,
     ...(context.traceEnabled
       ? [
-          '## Traces\n\nAt the end, check if traces are available via `session_get_instructions({topic:"trace-archaeology"})`, and rewrite as much as possible of the what/why, design, and requirements sections in terms of literal trace quotes from the user.',
+          '## Traces\n\nAt the end, run `whiteboard trace list --session <sessionId> --json`, which covers every commit in the review. If it lists no sessions, there are no traces to quote: skip this step. Otherwise read `session_get_instructions({topic:"trace-archaeology"})` and rewrite as much as possible of the what/why, design, and requirements sections in terms of literal trace quotes from the user.',
         ]
       : []),
     ...(more.length ? [`## More guidance\n\n${more.join("\n")}`] : []),
