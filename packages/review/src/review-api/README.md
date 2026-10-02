@@ -320,7 +320,9 @@ Omitted commit base means source at head with no diff, exactly as base=head;
 supply its parent to review the changes introduced by a single commit.
 
 A worktree target follows saved files in that registered checkout, including
-staged, unstaged and nonignored untracked files. `base` names the branch to
+staged and unstaged changes. Git's untracked files are left out; `git add -N` a
+new file to include it (jj tracks new files itself). The Diff view counts the
+untracked files left out. `base` names the branch to
 compare against, by default the default branch (`origin/HEAD`, `origin/main`,
 `origin/master`, `main`, then `master`); an unborn repository compares with
 empty source. The comparison starts at the merge base of `base` and HEAD,

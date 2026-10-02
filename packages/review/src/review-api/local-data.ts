@@ -94,6 +94,7 @@ import {
   inspectWorktree,
   localSourcePath,
   readWorkingFile,
+  untrackedFileCount,
   workingFiles,
 } from "./worktree-source.js";
 
@@ -204,6 +205,36 @@ export class LocalReviewData {
     }
 
     return issues;
+  }
+
+  private readonly untrackedCounts = new Map<
+    string,
+    Promise<number | undefined>
+  >();
+
+  /**
+   * Untracked files a live worktree review leaves out; undefined otherwise.
+   * Counted once per worktree revision, never by the revision poll, so a
+   * checkout with many untracked files pays for the walk only when read.
+   */
+  untrackedFiles(pins: Pins): Promise<number | undefined> {
+    if (!pins.worktreeRevision) return Promise.resolve(undefined);
+    const key = `${pins.repositoryId}\0${pins.worktreeRevision}`;
+    let count = this.untrackedCounts.get(key);
+
+    if (!count) {
+      count = this.vcs(pins.repositoryId).then((vcs) =>
+        vcs ? untrackedFileCount(vcs) : undefined,
+      );
+      this.untrackedCounts.set(key, count);
+
+      for (const cached of this.untrackedCounts.keys()) {
+        if (this.untrackedCounts.size <= 32) break;
+        this.untrackedCounts.delete(cached);
+      }
+    }
+
+    return count;
   }
 
   /** Local checkout context for live worktree targets only. */
