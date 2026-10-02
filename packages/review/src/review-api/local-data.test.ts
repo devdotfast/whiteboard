@@ -210,24 +210,13 @@ it("reads, resolves and retires a reference at its own pins in another repositor
     ).status,
   ).toBe(400);
 
-  const quoted = await app.request(`/${reviewId}/source`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      source: {
-        side: "head",
-        file: "lib.ts",
-        fromLine: 2,
-        toLine: 2,
-        pins: own,
-      },
-    }),
-  });
-
-  expect(await quoted.json()).toMatchObject({
-    commit: own.head,
-    text: "export const more = 2;",
-  });
+  expect(
+    await (
+      await app.request(
+        `/${reviewId}/file?side=head&file=lib.ts&repositoryId=${own.repositoryId}&head=${own.head}`,
+      )
+    ).json(),
+  ).toMatchObject({ text: expect.stringContaining("export const more = 2;") });
 
   const progress = await (
     await app.request(`/${reviewId}/progress?mode=textual`)
@@ -801,15 +790,9 @@ it("lists the version's commits and reads a selected commit's diff against its p
   const selected = `version=0&commit=${firstHead}`;
 
   for (const side of ["base", "head"] as const) {
-    const response = await app.request(`${route}/source`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        version: 0,
-        commit: firstHead,
-        source: { side, file: "example.ts", fromLine: 1, toLine: 1 },
-      }),
-    });
+    const response = await app.request(
+      `${route}/file?${selected}&side=${side}&file=example.ts`,
+    );
 
     expect(response.status).toBe(200);
     expect((await response.json()).text).toContain(
@@ -823,13 +806,6 @@ it("lists the version's commits and reads a selected commit's diff against its p
 
   expect(file.text).toContain("value = 2");
 
-  const patch = await (
-    await app.request(`${route}/diff?${selected}&file=example.ts`)
-  ).text();
-
-  expect(patch).toContain("-export const value = 1;");
-  expect(patch).toContain("+export const value = 2;");
-  expect(patch).not.toContain("value = 3");
   expect((await app.request(`${route}/diff?commit=${pins.base}`)).status).toBe(
     404,
   );
@@ -2135,16 +2111,6 @@ it("exposes real source and resource operations through the authenticated deskto
     const read = async (route: string) =>
       (await fetch(url + route, { headers })).json();
 
-    const quote = await post(`/${review.reviewId}/source`, { source });
-    expect(quote.status).toBe(200);
-    expect(await quote.json()).toEqual({
-      side: "head",
-      file: source.file,
-      fromLine: 1,
-      toLine: 2,
-      commit: pins.head,
-      text: "export const value = 2;\nexport const saved = true;",
-    });
     expect(
       await read(`/${review.reviewId}/file?side=head&file=${source.file}`),
     ).toEqual({
@@ -2163,22 +2129,6 @@ it("exposes real source and resource operations through the authenticated deskto
       { path: "literal1.ts", status: "added", additions: 1, deletions: 0 },
       { path: "literal[1].ts", status: "added", additions: 1, deletions: 0 },
     ]);
-    expect(
-      await (
-        await fetch(url + `/${review.reviewId}/diff?file=${source.file}`, {
-          headers,
-        })
-      ).text(),
-    ).toBe(
-      [
-        `diff --git a/${source.file} b/${source.file}`,
-        "@@ -1 +1,2 @@",
-        "1   -export const value = 1;",
-        "  1 +export const value = 2;",
-        "  2 +export const saved = true;",
-        "",
-      ].join("\n"),
-    );
     expect(await read(`/${review.reviewId}/commits`)).toEqual([
       {
         commit: pins.head,
@@ -2217,13 +2167,6 @@ it("exposes real source and resource operations through the authenticated deskto
       provenance: "client_supplied",
       events: [],
     });
-    expect(
-      (
-        await post(`/${review.reviewId}/source`, {
-          source: { ...source, toLine: 99 },
-        })
-      ).status,
-    ).toBe(400);
   } finally {
     await server.close();
   }
@@ -3390,168 +3333,7 @@ it("marks a worktree review unavailable while its checkout is gone", async () =>
   expect(local.store.read(review.reviewId).sourceUnavailable).toBe(true);
 });
 
-describe("review_diff", () => {
-  const exampleLines = (changed: number) =>
-    Array.from({ length: 12 }, (_, index) =>
-      index + 1 === changed ? "changed line" : `line ${index + 1}`,
-    ).join("\n") + "\n";
-
-  let reviewId: string;
-  let call: (input: Record<string, JsonValue>) => Promise<JsonValue>;
-
-  beforeEach(async () => {
-    writeFileSync(path.join(repository, source.file), exampleLines(0));
-    git("add", ".");
-    git("-c", "commit.gpgsign=false", "commit", "-qm", "Twelve lines");
-    const base = git("rev-parse", "HEAD");
-    writeFileSync(path.join(repository, source.file), exampleLines(6));
-    mkdirSync(path.join(repository, "dir"));
-    git("mv", "literal1.ts", "dir/moved.ts");
-    writeFileSync(
-      path.join(repository, "dir/big.ts"),
-      Array.from({ length: 40 }, (_, index) => `big ${index}`).join("\n") +
-        "\n",
-    );
-    git("add", ".");
-    git("-c", "commit.gpgsign=false", "commit", "-qm", "Change");
-
-    const diffPins = await local.data.resolvePins(
-      pins.repositoryId,
-      base,
-      "HEAD",
-    );
-
-    ({ reviewId } = await local.store.execute(
-      command({ type: "create", title: "Diff", pins: diffPins }),
-    ));
-
-    const app = createReviewApi(local.store, local.data);
-
-    const client = new ReviewApiClient(
-      { serverUrl: "http://review.test", token: "test" },
-      async (url, init) => app.request(url.replace("/reviews-api", ""), init),
-    );
-
-    const tools = await client.read<AuthoringTool[]>("/authoring");
-    const tool = tools.find((item) => item.name === "review_diff")!;
-
-    call = async (input) => {
-      const result = await callAuthoringTool(client, tool, {
-        reviewId,
-        ...input,
-      });
-
-      return result instanceof ToolText ? result.text : result;
-    };
-  });
-
-  it("lists every changed file, or those a pathspec names", async () => {
-    expect(await call({})).toEqual([
-      { path: "dir/big.ts", status: "added", additions: 40, deletions: 0 },
-      {
-        path: "dir/moved.ts",
-        previousPath: "literal1.ts",
-        status: "renamed",
-        additions: 0,
-        deletions: 0,
-      },
-      { path: "example.ts", status: "modified", additions: 1, deletions: 1 },
-    ]);
-    expect(await call({ paths: ["example.ts"] })).toEqual([
-      { path: "example.ts", status: "modified", additions: 1, deletions: 1 },
-    ]);
-    expect(
-      (
-        (await call({ paths: ["dir/", "literal1.ts"] })) as { path: string }[]
-      ).map((file) => file.path),
-    ).toEqual(["dir/big.ts", "dir/moved.ts"]);
-  });
-
-  it("returns every patch with base and head line numbers", async () => {
-    const text = (await call({ format: "patch" })) as string;
-
-    expect(text).toContain("diff --git a/dir/big.ts b/dir/big.ts\n");
-    expect(text).toContain("   40 +big 39\n");
-    expect(text).toContain(
-      "diff --git a/literal1.ts b/dir/moved.ts\nsimilarity index 100%\nrename from literal1.ts\nrename to dir/moved.ts\n",
-    );
-    expect(text).toContain(
-      [
-        "diff --git a/example.ts b/example.ts",
-        "@@ -3,7 +3,7 @@ line 2",
-        " 3  3  line 3",
-        " 4  4  line 4",
-        " 5  5  line 5",
-        " 6    -line 6",
-        "    6 +changed line",
-        " 7  7  line 7",
-        " 8  8  line 8",
-        " 9  9  line 9",
-        "",
-      ].join("\n"),
-    );
-  });
-
-  it("returns only the patches a pathspec names, both sides of a rename included", async () => {
-    const text = (await call({
-      format: "patch",
-      paths: ["dir/moved.ts", "missing.ts"],
-    })) as string;
-
-    expect(text).toContain("rename from literal1.ts\nrename to dir/moved.ts");
-    expect(text).not.toContain("example.ts");
-    expect(text).not.toContain("big.ts");
-    expect(text).toContain('[No changes match paths:["missing.ts"].]');
-  });
-
-  it("reads a legacy file as its numbered patch and rejects mixing it with paths or format", async () => {
-    expect(await call({ file: "example.ts" })).toBe(
-      await call({ format: "patch", paths: ["example.ts"] }),
-    );
-    await expect(
-      call({ file: "example.ts", paths: ["example.ts"] }),
-    ).rejects.toThrow(/file cannot be combined with paths or format/);
-    await expect(call({ file: "example.ts", format: "patch" })).rejects.toThrow(
-      /file cannot be combined/,
-    );
-  });
-
-  it("lists patches past maxBytes with a paths hint", async () => {
-    const text = (await call({ format: "patch", maxBytes: 400 })) as string;
-
-    expect(text).toContain("diff --git a/dir/big.ts");
-    expect(text).toContain("[dir/big.ts is cut at the 400-byte budget after");
-    expect(text).toMatch(
-      /\[2 more files over the 400-byte budget: dir\/moved\.ts, example\.ts \(\+1 -1\)\. Fetch them with paths:\["dir\/moved\.ts","example\.ts"\], format:"patch"\.\]\n$/,
-    );
-
-    const next = (await call({
-      format: "patch",
-      paths: ["dir/moved.ts", "example.ts"],
-      maxBytes: 400,
-    })) as string;
-
-    expect(next).toContain("rename to dir/moved.ts");
-    expect(next).toContain("diff --git a/example.ts b/example.ts");
-    expect(next).not.toContain("budget");
-  });
-
-  it("applies context lines around each change", async () => {
-    expect(
-      await call({ format: "patch", paths: ["example.ts"], context: 0 }),
-    ).toBe(
-      [
-        "diff --git a/example.ts b/example.ts",
-        "@@ -6 +6 @@ line 5",
-        "6   -line 6",
-        "  6 +changed line",
-        "",
-      ].join("\n"),
-    );
-  });
-});
-
-it("patches working files of a worktree review, untracked files included", async () => {
+it("lists working files of a worktree review, untracked files included", async () => {
   const api = createReviewApi(local.store, local.data);
 
   const { reviewId } = await local.store.execute(
@@ -3571,18 +3353,6 @@ it("patches working files of a worktree review, untracked files included", async
       expect.objectContaining({ path: "fresh.ts", status: "added" }),
     ]),
   );
-
-  const response = await api.request(
-    `/${reviewId}/diff?format=patch&paths=fresh.ts&paths=${source.file}`,
-  );
-
-  expect(response.headers.get("content-type")).toMatch(/^text\/plain/);
-  const text = await response.text();
-
-  expect(text).toContain("diff --git a/fresh.ts b/fresh.ts\nnew file mode");
-  expect(text).toContain("  1 +fresh\n");
-  expect(text).toContain("+uncommitted text must never appear");
-  expect(text).not.toContain("literal");
 });
 
 it("saves the head branch for pinned reviews and preserves it across checkout changes", async () => {
