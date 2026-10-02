@@ -149,7 +149,7 @@ export function documentText(
         if (element.description) detail(element.description);
 
         for (const node of element.nodes) {
-          detail(`${node.key}: ${node.label}`);
+          detail(`[${node.id}] ${node.key}: ${node.label}`);
 
           if (detailed && node.description) write(depth + 2, node.description);
 
@@ -162,7 +162,7 @@ export function documentText(
 
         for (const edge of element.edges)
           detail(
-            `${edge.from} → ${edge.to}${edge.label ? `: ${edge.label}` : ""}`,
+            `[${edge.id}] ${edge.from} → ${edge.to}${edge.label ? `: ${edge.label}` : ""}`,
           );
         break;
       case "software_map":
