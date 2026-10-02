@@ -23,6 +23,7 @@ import { isLinux, isMacintosh } from '../../../base/common/platform.js';
 import Severity from '../../../base/common/severity.js';
 import { Action2, registerAction2 } from '../../../platform/actions/common/actions.js';
 import type { ServicesAccessor } from '../../../platform/instantiation/common/instantiation.js';
+import { IMainProcessService } from '../../../platform/ipc/common/mainProcessService.js';
 import { ILogService } from '../../../platform/log/common/log.js';
 import { INotificationService, type INotificationHandle } from '../../../platform/notification/common/notification.js';
 import { IOpenerService } from '../../../platform/opener/common/opener.js';
@@ -36,6 +37,7 @@ import {
 	shouldAnnounceDarwinFailedUpdate,
 } from '../../../platform/update/common/darwinUpdateRecovery.js';
 import { IUpdateService, StateType, type State } from '../../../platform/update/common/update.js';
+import { REVIEW_DESKTOP_CHANNEL } from '../../common/reviewDesktopBootstrap.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../workbench/common/contributions.js';
 import {
 	decideUpdateNotice,
@@ -72,6 +74,7 @@ class ReviewUpdateNotifications extends Disposable {
 		@IProductService private readonly productService: IProductService,
 		@ILogService private readonly logService: ILogService,
 		@IOpenerService private readonly openerService: IOpenerService,
+		@IMainProcessService private readonly mainProcessService: IMainProcessService,
 	) {
 		super();
 
@@ -170,6 +173,13 @@ class ReviewUpdateNotifications extends Disposable {
 					severity: Severity.Warning,
 					sticky: true,
 					message: localize('review.update.readOnlyVolume', "Whiteboard cannot update from its current location. Quit Whiteboard, use Finder to copy or move Whiteboard to your Applications folder, then open it from there. If you opened Whiteboard from a disk image, eject the disk image after copying the app."),
+					actions: { primary: [toAction({
+						id: 'review.update.moveToApplications', label: localize('review.update.moveToApplications', "Move to Applications"),
+						// On success the app quits and relaunches from Applications.
+						run: () => this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call<boolean>('moveToApplications').then(moved => {
+							if (!moved) { this.logService.warn('[WhiteboardUpdate] could not move Whiteboard to Applications'); }
+						}),
+					})] },
 				});
 			}
 			return;

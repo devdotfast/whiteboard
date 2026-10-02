@@ -141,6 +141,7 @@ import ErrorTelemetry from '../../platform/telemetry/electron-main/errorTelemetr
 import { ReviewDesktopHost } from '../../review/electron-main/reviewDesktopHost.js';
 import { ReviewMenubarMainService } from '../../review/electron-main/reviewMenubar.js';
 import { ReviewUpdateDialog } from '../../review/electron-main/reviewUpdateDialog.js';
+import { moveToApplicationsFolder, ReviewMoveToApplications } from '../../review/electron-main/reviewMoveToApplications.js';
 import { REVIEW_DESKTOP_CHANNEL, ReviewDesktopChannel } from '../../review/electron-main/reviewDesktopChannel.js';
 
 /**
@@ -1247,7 +1248,7 @@ export class CodeApplication extends Disposable {
 		// Review Desktop hands the renderer its server endpoint over IPC rather
 		// than through bootstrap environment variables.
 		if (this.reviewDesktopHost) {
-			mainProcessElectronServer.registerChannel(REVIEW_DESKTOP_CHANNEL, new ReviewDesktopChannel(this.reviewDesktopHost, accessor.get(IWindowsMainService)));
+			mainProcessElectronServer.registerChannel(REVIEW_DESKTOP_CHANNEL, new ReviewDesktopChannel(this.reviewDesktopHost, accessor.get(IWindowsMainService), () => moveToApplicationsFolder(this.logService)));
 		}
 
 		const launchChannel = ProxyChannel.fromService(accessor.get(ILaunchMainService), disposables, { disableMarshalling: true });
@@ -1287,6 +1288,8 @@ export class CodeApplication extends Disposable {
 		// Report explicit update checks natively. Review's renderer stubs out
 		// `IUpdateService`, so the main process owns the whole feedback path.
 		this._register(accessor.get(IInstantiationService).createInstance(ReviewUpdateDialog));
+		// Squirrel cannot update an app left on a disk image or translocated from Downloads.
+		this._register(accessor.get(IInstantiationService).createInstance(ReviewMoveToApplications));
 
 		// Metered Connection
 		const meteredConnectionChannel = new MeteredConnectionChannel(accessor.get(IMeteredConnectionService) as MeteredConnectionMainService);
