@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationError, ErrorNoTelemetry } from "../../base/common/errors.js";
-import { FileOperationError } from "../../platform/files/common/files.js";
 
 /**
  * Shared error reporting rules for the Review workbench and the Review part of
@@ -16,7 +15,8 @@ import { FileOperationError } from "../../platform/files/common/files.js";
  * bundle; see packages/review/src/error-telemetry.ts. Nothing in
  * this file is ever sent to a vendor as it stands.
  *
- * The filters mirror upstream `BaseErrorTelemetry._onErrorEvent`. They are
+ * The filters follow upstream `BaseErrorTelemetry._onErrorEvent`, except that
+ * file errors are skipped only when a cancellation caused them. They are
  * reimplemented rather than imported because that module pulls the whole file
  * service in behind it, and this one runs in the main process too.
  */
@@ -29,14 +29,16 @@ export interface ReviewErrorReport {
 
 /**
  * Unwrap a loader error, then decide whether it is worth reporting. Errors with
- * a system `code`, cancellations, errors marked as never-report, file read and
- * file operation errors, and errors without a stack are all skipped: none of
- * them says anything about a defect in Review.
+ * a system `code`, cancellations, errors marked as never-report, and errors
+ * without a stack are all skipped: none of them says anything about a defect in
+ * Review.
  *
- * File errors are skipped by message as well as by class because callers such
- * as the theme service rewrap them in a plain `Error`. A read cancelled when a
- * window closes or reloads arrives as "Unable to load <theme>: Unable to read
- * file '<theme>' (Canceled: Canceled)".
+ * Cancellations are also recognized by message. The file service wraps a
+ * failure as "Unable to read file '<path>' (<cause>)", and callers such as the
+ * theme service rewrap that in a plain `Error`, so a read cancelled when a
+ * window closes or reloads loses its class on the way up and arrives as
+ * "Unable to load <theme>: Unable to read file '<theme>' (Canceled: Canceled)".
+ * Other file failures, such as a missing or unreadable file, are still reported.
  */
 export function packReviewError(error: unknown): ReviewErrorReport | undefined {
 	if (!error || typeof error !== 'object') {
@@ -53,8 +55,7 @@ export function packReviewError(error: unknown): ReviewErrorReport | undefined {
 	if (
 		ErrorNoTelemetry.isErrorNoTelemetry(candidate as Error)
 		|| candidate instanceof CancellationError
-		|| candidate instanceof FileOperationError
-		|| (typeof candidate.message === 'string' && candidate.message.includes('Unable to read file'))
+		|| (typeof candidate.message === 'string' && candidate.message.endsWith('(Canceled: Canceled)'))
 	) {
 		return undefined;
 	}
