@@ -205,7 +205,7 @@ it("assigns a command ID and names it when a reply is lost", async () => {
 it("serves MCP framing without stdout diagnostics and returns host errors as tool errors", async () => {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
-  const calls: Array<[string, string, boolean]> = [];
+  const calls: Array<[string, string, boolean, string?]> = [];
 
   const server = await serveReviewMcp(
     async () => ({ client }),
@@ -214,7 +214,8 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
     undefined,
     false,
     undefined,
-    ({ tool, via, ok }) => void calls.push([tool, via, ok]),
+    ({ tool, via, ok, errorName }) =>
+      void calls.push(errorName ? [tool, via, ok, errorName] : [tool, via, ok]),
   );
 
   let output = "";
@@ -317,11 +318,11 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
     await request(7, "tools/call", { name: "my private notes", arguments: {} });
 
     expect(calls).toEqual([
-      ["session_get", "mcp", false],
+      ["session_get", "mcp", false, "review_not_found"],
       ["session_list", "mcp", true],
       ["session_get", "mcp", true],
       ["session_get", "mcp", true],
-      ["other", "mcp", false],
+      ["other", "mcp", false, "usage_error"],
     ]);
   } finally {
     await server.close();
@@ -333,7 +334,7 @@ it("reports each api tool call with its outcome", async () => {
     .spyOn(agentClient, "connectReviewApi")
     .mockResolvedValue(client);
 
-  const calls: Array<[string, string, boolean]> = [];
+  const calls: Array<[string, string, boolean, string?]> = [];
 
   const discard = new Writable({
     write(_chunk, _encoding, done) {
@@ -347,9 +348,9 @@ it("reports each api tool call with its outcome", async () => {
       stdout: discard,
       stderr: discard,
       // Queued a tick late, like a real capture: the command must wait.
-      onToolCall: async ({ tool, via, ok }) => {
+      onToolCall: async ({ tool, via, ok, errorName }) => {
         await new Promise((resolve) => setImmediate(resolve));
-        calls.push([tool, via, ok]);
+        calls.push(errorName ? [tool, via, ok, errorName] : [tool, via, ok]);
       },
     });
 
@@ -361,7 +362,7 @@ it("reports each api tool call with its outcome", async () => {
     expect(await run(["api", "no_such_tool"])).toBe(1);
     expect(calls).toEqual([
       ["session_list", "api", true],
-      ["session_get", "api", false],
+      ["session_get", "api", false, "review_not_found"],
     ]);
   } finally {
     connection.mockRestore();

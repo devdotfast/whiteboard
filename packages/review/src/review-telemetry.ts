@@ -97,6 +97,9 @@ export interface ReviewToolCall {
   via: "api" | "mcp";
   ok: boolean;
   durationMs: number;
+  /** Set on a failed call: why it failed, from the closed CLI vocabulary. */
+  errorName?: ReviewTelemetryErrorName;
+  errorCategory?: ReviewTelemetryErrorCategory;
 }
 
 export type ReviewCliCommand = "review" | "map" | "status";
@@ -472,12 +475,19 @@ export class ReviewTelemetry {
   }
 
   async captureToolCalled(call: ReviewToolCall): Promise<void> {
-    await this.captureEvent("review_mcp_tool_called", {
+    const properties: PostHogCaptureProperties = {
       tool: TOOL_NAME_PATTERN.test(call.tool) ? call.tool : "other",
       via: call.via,
       ok: call.ok,
       duration_ms: Math.max(0, Math.round(call.durationMs)),
-    });
+    };
+
+    if (!call.ok && call.errorName) properties.error_name = call.errorName;
+
+    if (!call.ok && call.errorCategory)
+      properties.error_category = call.errorCategory;
+
+    await this.captureEvent("review_mcp_tool_called", properties);
   }
 
   /**

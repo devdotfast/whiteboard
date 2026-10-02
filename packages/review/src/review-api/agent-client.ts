@@ -12,6 +12,7 @@ import {
 } from "@review/server-discovery.js";
 
 import { ReviewApiClient, ReviewApiError } from "./client.js";
+import { ReviewInputError } from "./input-error.js";
 
 export interface AuthoringTool {
   name: string;
@@ -132,7 +133,7 @@ export async function callAuthoringTool(
     const value = fields.reviewId;
 
     if (!isStringValue(value) || !value)
-      throw new Error("reviewId is required.");
+      throw new ReviewInputError("reviewId is required.");
     delete fields.reviewId;
 
     return encodeURIComponent(value);
@@ -149,7 +150,7 @@ export async function callAuthoringTool(
     // Arrays travel as repeated keys, as in paths=a&paths=b.
     for (const item of Array.isArray(value) ? value : [value]) {
       if (!isStringValue(item) && !isNumberValue(item) && !isBooleanValue(item))
-        throw new Error(
+        throw new ReviewInputError(
           `${key} must be a string, number, boolean or list of them.`,
         );
 
