@@ -18,7 +18,6 @@ import {
   emitJsonEvent,
   humanStream,
   jsonRequestedInArgv,
-  processIsAlive,
   registerTraceCommands,
   resolveTraceCommand,
   runStoreLogin,
