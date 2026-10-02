@@ -75,7 +75,7 @@ export function authoringTools(
       'Edit one Diff-view lens. Lenses partition the review\'s change for the Diff view; they sit beside the document (never in it) and version with it. The host assigns durable lens IDs; updates replace only the fields supplied. Write one lens per call while a reader may be watching; each draws in on the Diffs page. Requires the lenses lease: review_activity_begin with scope:"lenses", which another agent can hold while the document lease is held elsewhere. The result identifies the lens and reports uncategorized: changed lines no lens selects yet, grouped by file. Keep adding lenses until it is empty or what remains is deliberate. review_lens_get reads the current lenses and gaps.',
     rename: "Change the review title.",
     repin:
-      "Update source pins or PR identity while preserving the document and component IDs. Returns warnings for retained source ranges to verify and resources that no longer match; fix them with review_edit. Previous pins and content remain in history. Omitted pullRequestUrl preserves PR identity within the same repository; changing repositories clears it. Supply a URL to replace it or null to detach.",
+      "Update source pins or PR identity while preserving the document and component IDs. Returns warnings for retained source ranges in files the new pins changed, to verify, and resources that no longer match; fix them with review_edit. Previous pins and content remain in history. Omitted pullRequestUrl preserves PR identity within the same repository; changing repositories clears it. Supply a URL to replace it or null to detach.",
     restore:
       "Restore title, source pins, PR identity and content from a saved version.",
     attention:

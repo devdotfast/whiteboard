@@ -1107,6 +1107,38 @@ export class LocalReviewData {
 
     return { repositoryId, base: left.commit, head: right.commit };
   }
+  /** Files each side's commit changed from one set of pins to another, under
+   * both names for a rename. A worktree has no commit to diff from. */
+  async filesChangedBetween(from: Pins, to: Pins) {
+    if (
+      from.repositoryId !== to.repositoryId ||
+      from.worktreeRevision ||
+      to.worktreeRevision
+    )
+      return undefined;
+
+    const target = await this.vcsTarget(to.repositoryId);
+
+    const changed = async (side: "base" | "head") => {
+      if (from[side] === to[side]) return new Set<string>();
+
+      const files = await diffFileSummariesTrees({
+        ...target,
+        baseRef: from[side],
+        headRef: to[side],
+      });
+
+      return new Set(
+        files.flatMap((file) =>
+          file.previousPath ? [file.previousPath, file.path] : [file.path],
+        ),
+      );
+    };
+
+    const [base, head] = await Promise.all([changed("base"), changed("head")]);
+
+    return { base, head };
+  }
   async validatePins(pins: Pins) {
     if (pins.worktreeRevision) {
       if (!(await this.vcs(pins.repositoryId))) throw unavailableCheckout();
@@ -1802,6 +1834,7 @@ export function openLocalReviewStore(
     sourcePins: (snapshot) => data.sourcePins(snapshot),
     unavailableAnchors: (snapshot) => data.unavailableAnchors(snapshot),
     validatePins: (pins) => data.validatePins(pins),
+    filesChangedBetween: (from, to) => data.filesChangedBetween(from, to),
     validateSource: (pins, source, options) =>
       data.validateSource(pins, source, options),
     validateResource: (pins, block) => data.validateResource(pins, block),
