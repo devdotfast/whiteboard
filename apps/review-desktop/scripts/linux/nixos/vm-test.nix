@@ -2,12 +2,13 @@
 let
   app = release.packageName;
   raw = "${package.payload}/share/${app}";
+  source = ./.;
   rust = builtins.fromJSON (builtins.readFile ./rust-extension.json);
   rustVsix = pkgs.fetchurl { inherit (rust) url sha256; };
   probe = pkgs.buildFHSEnv {
     pname = "${app}-probe";
     inherit (release) version;
-    targetPkgs = p: package.runtimePackages p ++ [ p.unzip p.file p.binutils ];
+    targetPkgs = p: package.runtimePackages p ++ [ p.unzip p.file p.binutils p.cargo p.rustc ];
     runScript = pkgs.writeShellScript "probe-installed-whiteboard" ''
       set -eu
       ${raw}/resources/app/review-runtime/bin/diffr --version
@@ -26,6 +27,7 @@ let
       done < <(find ${raw} -type f -print0)
       export APP=${app}
       export REVIEW_LINUX_DESKTOP_COMMAND=${package.payload}/bin/${app}-desktop
+      export SMOKE_RUST_VSIX=${rustVsix}
       exec env ELECTRON_RUN_AS_NODE=1 ${raw}/${app} ${./smoke-installed-linux.mjs}
     '';
   };
@@ -37,8 +39,8 @@ in pkgs.testers.runNixOSTest {
     services.xserver.desktopManager.xfce.enable = true;
     services.xserver.displayManager.lightdm.enable = true;
     services.displayManager.autoLogin = { enable = true; user = "tester"; };
-    environment.systemPackages = [ probe pkgs.desktop-file-utils pkgs.xdg-utils ];
-    virtualisation = { memorySize = 4096; cores = 2; diskSize = 16384; additionalPaths = [ package ]; };
+    environment.systemPackages = [ probe pkgs.desktop-file-utils pkgs.xdg-utils pkgs.python3 ];
+    virtualisation = { memorySize = 4096; cores = 2; diskSize = 16384; additionalPaths = [ package source pkgs.path ]; };
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     system.stateVersion = "26.05";
   };
@@ -51,7 +53,10 @@ in pkgs.testers.runNixOSTest {
     def user(command):
         return machine.succeed("su - tester -c " + shlex.quote(command))
 
-    user("nix profile install ${package}")
+    user("cp -r ${source} ~/package && chmod -R u+w ~/package")
+    flake = "path:/home/tester/package#${app}"
+    nixpkgs = "--override-input nixpkgs path:${pkgs.path}"
+    user(f"nix profile install {flake} {nixpkgs}")
     user("DO_NOT_TRACK=1 ${app} --help")
     assert "${release.version}" in user("DO_NOT_TRACK=1 ${app} --version")
     machine.fail("su - tester -c 'command -v node'")
@@ -59,10 +64,21 @@ in pkgs.testers.runNixOSTest {
     handler = user("xdg-mime query default x-scheme-handler/${release.urlProtocol}").strip()
     assert handler.endswith("-url-handler.desktop"), handler
 
-    user("DISPLAY=:0 XAUTHORITY=/home/tester/.Xauthority DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus DO_NOT_TRACK=1 SMOKE_SCREENSHOT=/home/tester/onboarding.png ${probe}/bin/${app}-probe")
+    user("DISPLAY=:0 XAUTHORITY=/home/tester/.Xauthority DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus DO_NOT_TRACK=1 SMOKE_DEEP_LINK_PROTOCOL=${release.urlProtocol} SMOKE_SCREENSHOT=/home/tester/onboarding.png ${probe}/bin/${app}-probe")
     machine.copy_from_vm("/home/tester/onboarding.png", "onboarding.png")
+    machine.copy_from_vm("/home/tester/onboarding-deep-links.png", "deep-links.png")
+    machine.copy_from_vm("/home/tester/onboarding-rust.png", "rust.png")
 
     user("mkdir -p ~/.dev/reviews && echo retained > ~/.dev/reviews/nixos-install-sentinel")
+    before = user("readlink -f ~/.nix-profile")
+    machine.succeed("python3 -c 'import json; p=\"/home/tester/package/release.json\"; r=json.load(open(p)); r[\"revision\"] += 1; json.dump(r, open(p, \"w\"))'")
+    user(f"nix profile upgrade ${app} --refresh {nixpkgs}")
+    after = user("readlink -f ~/.nix-profile")
+    assert before != after, "Profile upgrade did not change the installed generation"
+    user("DO_NOT_TRACK=1 ${app} --help")
+    user("nix profile rollback")
+    assert before == user("readlink -f ~/.nix-profile")
+    user("test $(cat ~/.dev/reviews/nixos-install-sentinel) = retained")
     user("nix profile remove --all")
     machine.fail("su - tester -c 'command -v ${app}'")
     user("test $(cat ~/.dev/reviews/nixos-install-sentinel) = retained")

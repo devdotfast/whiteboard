@@ -123,14 +123,14 @@ def build_nixos(packages, snapshot_root, package_name, version, revision, commit
     name = f"{package_name}-{app_version}-{revision}-x86_64.nix.tar.gz"
     source = packages / name
     with tarfile.open(source, "r:gz") as archive:
-        metadata = json.load(archive.extractfile("package/release.json"))
-        product = json.load(archive.extractfile(f"package/payload/usr/share/{package_name}/resources/app/product.json"))
+        metadata = json.load(archive.extractfile(f"{package_name}/release.json"))
+        product = json.load(archive.extractfile(f"{package_name}/payload/usr/share/{package_name}/resources/app/product.json"))
         if [metadata.get(key) for key in ("packageName", "version", "revision", "commit")] != [package_name, app_version, revision, commit]:
             raise ValueError("NixOS metadata does not match the release")
         if [product.get(key) for key in ("applicationName", "reviewVersion", "commit")] != [package_name, app_version, commit]:
             raise ValueError("NixOS payload does not match the release")
         for file in ("flake.nix", "flake.lock", "package.nix"):
-            if not archive.getmember(f"package/{file}").isfile():
+            if not archive.getmember(f"{package_name}/{file}").isfile():
                 raise ValueError(f"NixOS package is missing {file}")
     snapshot = snapshot_root / "nixos/x86_64"
     snapshot.mkdir(parents=True)

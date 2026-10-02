@@ -30,7 +30,7 @@ if [[ "$FORMAT" == nixos || "$FORMAT" == all ]]; then
   STAGING="$CHECKOUT/.build/linux/nixos/x86_64/package"
   NAME=$(node -p "require('$STAGING/release.json').packageName")
   VERSION=$(node -p "require('$STAGING/release.json').version")
-  tar --sort=name --mtime=@0 --owner=0 --group=0 -czf \
+  tar --sort=name --mtime=@0 --owner=0 --group=0 --transform "s,^package,$NAME," -czf \
     "$DIST/$NAME-$VERSION-${REVIEW_LINUX_PACKAGE_REVISION:-1}-x86_64.nix.tar.gz" \
     -C "$(dirname "$STAGING")" package
 fi

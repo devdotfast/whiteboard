@@ -21,8 +21,7 @@ printf tampered >> "$WORK/tampered.nix.tar.gz"
 if gpg --homedir "$WORK/gnupg" --batch --verify "$PACKAGE.asc" "$WORK/tampered.nix.tar.gz"; then
   echo 'NixOS archive tampering was accepted' >&2; exit 1
 fi
-tar -xzf "$PACKAGE" -C "$WORK"
-FLAKE="path:$WORK/package"
+FLAKE="file://$PACKAGE"
 nix flake check --no-build --no-update-lock-file "$FLAKE"
 nix build --no-update-lock-file "$FLAKE#default" --out-link "$WORK/result"
 nix build --no-update-lock-file "$FLAKE#checks.x86_64-linux.nixos" --out-link "$WORK/validation"

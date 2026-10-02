@@ -47,7 +47,7 @@ let
   cli = environment app;
   desktop = environment "${app}-desktop";
 in pkgs.symlinkJoin {
-  name = "${app}-${release.version}";
+  name = "${app}-${release.version}-${toString release.revision}";
   paths = [ cli desktop ];
   postBuild = ''ln -s ${payload}/share "$out/share"'';
   passthru = { inherit payload runtimePackages; };

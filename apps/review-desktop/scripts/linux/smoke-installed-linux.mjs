@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { promisify } from "node:util";
 
 const app = process.env.APP;
 
@@ -12,6 +21,42 @@ if (!/^whiteboard(?:-preview)?$/.test(app ?? ""))
   throw new Error("Set APP to whiteboard or whiteboard-preview");
 
 const state = await mkdtemp(path.join(os.tmpdir(), "whiteboard-install-"));
+
+const protocol = process.env.SMOKE_DEEP_LINK_PROTOCOL;
+
+const profile = protocol ? `${state}/portable/user-data` : `${state}/profile`;
+
+const extensions = protocol
+  ? `${state}/portable/extensions`
+  : `${state}/extensions`;
+
+const environment = {
+  ...process.env,
+  DEV_REVIEW_HOME: `${state}/reviews`,
+  DEV_REVIEW_IMPORT_FROM: "none",
+  DO_NOT_TRACK: "1",
+};
+
+if (protocol) {
+  environment.VSCODE_PORTABLE = `${state}/portable`;
+
+  await mkdir(`${state}/portable`, { recursive: true });
+}
+
+if (process.env.SMOKE_RUST_VSIX) {
+  await promisify(execFile)(
+    process.execPath,
+    [
+      path.join(path.dirname(process.execPath), "resources/app/out/cli.js"),
+      "--install-extension",
+      process.env.SMOKE_RUST_VSIX,
+      `--user-data-dir=${profile}`,
+      `--extensions-dir=${extensions}`,
+      "--force",
+    ],
+    { env: { ...environment, ELECTRON_RUN_AS_NODE: "1" } },
+  );
+}
 
 const portServer = createServer();
 
@@ -26,17 +71,15 @@ let output = "";
 const child = spawn(
   process.env.REVIEW_LINUX_DESKTOP_COMMAND ?? `/usr/bin/${app}-desktop`,
   [
-    `--user-data-dir=${state}/profile`,
-    `--extensions-dir=${state}/extensions`,
+    `--user-data-dir=${profile}`,
+    `--extensions-dir=${extensions}`,
     `--remote-debugging-port=${port}`,
+    ...(protocol
+      ? ["--open-url", "--", `${protocol}://share/nixos-cold?origin=invalid`]
+      : []),
   ],
   {
-    env: {
-      ...process.env,
-      DEV_REVIEW_HOME: `${state}/reviews`,
-      DEV_REVIEW_IMPORT_FROM: "none",
-      DO_NOT_TRACK: "1",
-    },
+    env: environment,
     stdio: ["ignore", "pipe", "pipe"],
   },
 );
@@ -63,7 +106,7 @@ const exit = new Promise((resolve) => {
   });
 });
 
-async function renderedOnboarding() {
+async function remote(method, params = {}) {
   const response = await fetch(`http://127.0.0.1:${port}/json/list`, {
     signal: AbortSignal.timeout(2000),
   });
@@ -74,58 +117,35 @@ async function renderedOnboarding() {
     (page) => page.type === "page" && page.url.startsWith("vscode-file://"),
   );
 
-  if (!page?.webSocketDebuggerUrl) return false;
+  if (!page?.webSocketDebuggerUrl)
+    throw new Error("Desktop renderer is not ready");
+
   const socket = new WebSocket(page.webSocketDebuggerUrl);
 
   try {
-    return await new Promise((resolve) => {
+    return await new Promise((resolve, reject) => {
       const timer = setTimeout(
-        () => resolve(false),
-        process.env.SMOKE_SCREENSHOT ? 10000 : 3000,
+        () => reject(new Error("Desktop inspection timed out")),
+        10000,
       );
 
-      const finish = (value) => {
+      const finish = (error, result) => {
         clearTimeout(timer);
-        resolve(value);
+
+        if (error) reject(error);
+        else resolve(result);
       };
 
-      socket.addEventListener("error", () => finish(false));
-      socket.addEventListener("open", () =>
-        socket.send(
-          JSON.stringify({
-            id: 1,
-            method: "Runtime.evaluate",
-            params: {
-              expression:
-                'Boolean(document.querySelector(".review-onboarding-headline")?.getBoundingClientRect().height)',
-              returnByValue: true,
-            },
-          }),
-        ),
+      socket.addEventListener("error", () =>
+        finish(new Error("Desktop inspection failed")),
       );
-      socket.addEventListener("message", async ({ data }) => {
+      socket.addEventListener("open", () =>
+        socket.send(JSON.stringify({ id: 1, method, params })),
+      );
+      socket.addEventListener("message", ({ data }) => {
         const result = JSON.parse(data);
 
-        if (result.id === 1) {
-          if (result.result?.result?.value !== true) return finish(false);
-
-          if (!process.env.SMOKE_SCREENSHOT) return finish(true);
-
-          socket.send(
-            JSON.stringify({ id: 2, method: "Page.captureScreenshot" }),
-          );
-        }
-
-        if (result.id === 2) {
-          if (!result.result?.data) return finish(false);
-
-          await writeFile(
-            process.env.SMOKE_SCREENSHOT,
-            Buffer.from(result.result.data, "base64"),
-          );
-
-          finish(true);
-        }
+        if (result.id === 1) finish(result.error, result.result);
       });
     });
   } finally {
@@ -133,8 +153,239 @@ async function renderedOnboarding() {
   }
 }
 
+async function evaluate(expression) {
+  const result = await remote("Runtime.evaluate", {
+    expression,
+    returnByValue: true,
+  });
+
+  return result.result?.value;
+}
+
+async function screenshot(file) {
+  const result = await remote("Page.captureScreenshot");
+
+  await writeFile(file, Buffer.from(result.data, "base64"));
+}
+
+async function renderedOnboarding() {
+  const rendered = await evaluate(
+    'Boolean(document.querySelector(".review-onboarding-headline")?.getBoundingClientRect().height)',
+  );
+
+  if (rendered && process.env.SMOKE_SCREENSHOT)
+    await screenshot(process.env.SMOKE_SCREENSHOT);
+
+  return rendered === true;
+}
+
+async function waitFor(expression) {
+  const deadline = Date.now() + 30000;
+
+  while (Date.now() < deadline && !exited) {
+    if (await evaluate(expression).catch(() => false)) return;
+    await delay(250);
+  }
+
+  throw new Error(`Desktop did not satisfy: ${expression}`);
+}
+
+async function deepLinks() {
+  const notification =
+    'document.body.innerText.includes("Invalid Whiteboard share link.")';
+
+  await waitFor(notification);
+  await evaluate(
+    'document.querySelectorAll(".notifications-toasts .codicon-notifications-clear").forEach(button => button.click())',
+  );
+  await waitFor(`!(${notification})`);
+  await promisify(execFile)(
+    "xdg-open",
+    [`${protocol}://share/nixos-warm?origin=invalid`],
+    { env: environment },
+  );
+  await waitFor(notification);
+
+  if (process.env.SMOKE_SCREENSHOT) {
+    await screenshot(
+      process.env.SMOKE_SCREENSHOT.replace(/\.png$/, "-deep-links.png"),
+    );
+  }
+
+  const renderers = [];
+
+  for (const pid of await readdir("/proc")) {
+    if (!/^\d+$/.test(pid)) continue;
+
+    const command = await readFile(`/proc/${pid}/cmdline`, "utf8").catch(
+      () => "",
+    );
+
+    if (!command.includes("--type=renderer") || !command.includes(app))
+      continue;
+    assert.ok(
+      !command.includes("--no-sandbox"),
+      "Renderer sandbox was disabled",
+    );
+    const status = await readFile(`/proc/${pid}/status`, "utf8");
+
+    assert.match(
+      status,
+      /^Seccomp:\s+2$/m,
+      "Renderer seccomp filter is not active",
+    );
+    renderers.push(pid);
+  }
+
+  assert.ok(renderers.length > 0, "No sandboxed Electron renderer found");
+  console.log(
+    `${app}: cold/warm protocol dispatch and renderer seccomp passed.`,
+  );
+}
+
+async function rustExtension() {
+  const directory = `${state}/rust`;
+
+  await mkdir(`${directory}/src`, { recursive: true });
+  await writeFile(
+    `${directory}/Cargo.toml`,
+    '[package]\nname = "nixos-smoke"\nversion = "0.0.0"\nedition = "2021"\n',
+  );
+  await writeFile(
+    `${directory}/src/main.rs`,
+    'fn main() { println!("NixOS"); }\n',
+  );
+
+  const git = (...args) =>
+    promisify(execFile)("git", args, { cwd: directory, env: environment });
+
+  await git("init", "-b", "main");
+  await git("add", ".");
+  await git(
+    "-c",
+    "user.name=NixOS CI",
+    "-c",
+    "user.email=ci@dev.fast",
+    "commit",
+    "-m",
+    "Rust fixture",
+  );
+
+  const { stdout } = await git("rev-parse", "HEAD");
+
+  const key = app.endsWith("-preview") ? "preview" : "stable";
+
+  const connection = JSON.parse(
+    await readFile(
+      `${state}/reviews/review-desktop/instances/${key}.json`,
+      "utf8",
+    ),
+  );
+
+  const post = async (route, body) => {
+    const response = await fetch(`${connection.url}/reviews-api${route}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-review-token": connection.token,
+      },
+      body: JSON.stringify(body),
+    });
+
+    assert.ok(
+      response.ok,
+      `Rust fixture request ${route}: ${response.status} ${await response.clone().text()}`,
+    );
+
+    return response.json();
+  };
+
+  const repository = await post("/repositories", { path: directory });
+
+  const pins = await post("/pins", {
+    repositoryId: repository.id,
+    base: stdout.trim(),
+    head: stdout.trim(),
+  });
+
+  const created = await post("/commands", {
+    commandId: randomUUID(),
+    operation: { type: "create", title: "NixOS Rust", pins, open: true },
+  });
+
+  const { leaseId } = await post(`/${created.reviewId}/activity/begin`, {
+    scope: "document",
+  });
+
+  await post("/commands", {
+    commandId: randomUUID(),
+    leaseId,
+    operation: {
+      type: "edit",
+      reviewId: created.reviewId,
+      edit: {
+        type: "insert",
+        content: {
+          type: "code_peek",
+          source: {
+            file: "src/main.rs",
+            start: { side: "head", line: 1 },
+            end: { side: "head", line: 1 },
+          },
+        },
+      },
+    },
+  });
+  await post(`/${created.reviewId}/activity/end`, { leaseId });
+  await post(`/${created.reviewId}/open`, {});
+  await waitFor(
+    'Boolean(document.querySelector(".code-peek .monaco-editor .view-lines"))',
+  );
+
+  const position = await evaluate(
+    '(() => { const rect = document.querySelector(".code-peek .monaco-editor .view-lines").getBoundingClientRect(); return { x: rect.left + 40, y: rect.top + 10 }; })()',
+  );
+
+  await remote("Input.dispatchMouseEvent", { type: "mouseMoved", ...position });
+
+  const deadline = Date.now() + 60000;
+
+  while (Date.now() < deadline && !exited) {
+    for (const pid of await readdir("/proc")) {
+      if (!/^\d+$/.test(pid)) continue;
+
+      const command = await readFile(`/proc/${pid}/cmdline`, "utf8").catch(
+        () => "",
+      );
+
+      if (
+        command.includes("rust-analyzer") &&
+        command.includes(state) &&
+        !command.includes("--version")
+      ) {
+        if (process.env.SMOKE_SCREENSHOT)
+          await screenshot(
+            process.env.SMOKE_SCREENSHOT.replace(/\.png$/, "-rust.png"),
+          );
+
+        console.log(
+          `${app}: optional Rust extension activated its downloaded server (pid ${pid}).`,
+        );
+
+        return;
+      }
+    }
+
+    await delay(500);
+  }
+
+  throw new Error(
+    "Optional Rust extension did not start its downloaded language server",
+  );
+}
+
 async function serverReady() {
-  const logs = `${state}/profile/logs`;
+  const logs = `${profile}/logs`;
 
   for (const entry of await readdir(logs)) {
     const main = await readFile(`${logs}/${entry}/main.log`, "utf8").catch(
@@ -168,6 +419,10 @@ try {
     ready,
     "Installed app did not render onboarding and start its bundled server",
   );
+
+  if (protocol) await deepLinks();
+
+  if (process.env.SMOKE_RUST_VSIX) await rustExtension();
 
   if (process.env.APPARMOR_PROFILE) {
     const profile = await readFile(`/proc/${child.pid}/attr/current`, "utf8");
