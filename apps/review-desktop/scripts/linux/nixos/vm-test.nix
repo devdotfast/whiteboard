@@ -63,7 +63,8 @@ in pkgs.testers.runNixOSTest {
     user("desktop-file-validate ${package}/share/applications/*.desktop")
     handler = user("xdg-mime query default x-scheme-handler/${release.urlProtocol}").strip()
     assert handler.endswith("-url-handler.desktop"), handler
-    assert handler in user("gio mime x-scheme-handler/${release.urlProtocol}")
+    registered = user("gio mime x-scheme-handler/${release.urlProtocol}")
+    assert handler in registered, handler + "\n" + registered + user("printf 'PATH=%s\nXDG_DATA_DIRS=%s\n' \"$PATH\" \"$XDG_DATA_DIRS\"; cat ${package}/share/applications/mimeinfo.cache")
 
     user("DISPLAY=:0 XAUTHORITY=/home/tester/.Xauthority DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus DO_NOT_TRACK=1 SMOKE_DEEP_LINK_PROTOCOL=${release.urlProtocol} SMOKE_SCREENSHOT=/home/tester/onboarding.png ${probe}/bin/${app}-probe")
     machine.copy_from_vm("/home/tester/onboarding.png", "onboarding.png")

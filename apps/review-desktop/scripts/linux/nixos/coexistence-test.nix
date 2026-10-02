@@ -29,7 +29,7 @@ in pkgs.testers.runNixOSTest {
     for source, app in [("${stable.outPath}", "whiteboard"), ("${preview.outPath}", "whiteboard-preview")]:
         user(f"nix profile install path:{source}#{app} --no-write-lock-file --override-input nixpkgs path:${pkgs.path}")
 
-    for protocol, handler in [("dev-fast-review", "whiteboard-url-handler.desktop"), ("dev-fast-review-preview", "whiteboard-preview-url-handler.desktop")]:
+    for protocol, handler in [("dev-fast-review", "dev-fast-review-url-handler.desktop"), ("dev-fast-review-preview", "dev-fast-review-preview-url-handler.desktop")]:
         assert handler in user(f"gio mime x-scheme-handler/{protocol}")
     display = "DISPLAY=:0 XAUTHORITY=/home/tester/.Xauthority DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
     for app in ["whiteboard", "whiteboard-preview"]:

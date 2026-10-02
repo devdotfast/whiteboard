@@ -27,8 +27,8 @@ let
         --replace-fail "/usr/bin/${app}-desktop" "${app}-desktop"
       cat > "$out/share/applications/mimeinfo.cache" <<'CACHE'
 [MIME Cache]
-x-scheme-handler/dev-fast-review=whiteboard-url-handler.desktop;
-x-scheme-handler/dev-fast-review-preview=whiteboard-preview-url-handler.desktop;
+x-scheme-handler/dev-fast-review=dev-fast-review-url-handler.desktop;
+x-scheme-handler/dev-fast-review-preview=dev-fast-review-preview-url-handler.desktop;
 CACHE
       runHook postInstall
     '';
