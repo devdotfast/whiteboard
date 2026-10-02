@@ -31,6 +31,11 @@ let
       makeWrapper "$out/share/${app}/${app}" "$out/bin/${app}-desktop" \
         --unset ELECTRON_RUN_AS_NODE --unset VSCODE_DEV --unset VSCODE_CLI \
         --add-flags --disable-setuid-sandbox
+      # Explicit CLI instance selection uses these Desktop helper names.
+      for channel in whiteboard whiteboard-preview; do
+        makeWrapper ${pkgs.coreutils}/bin/env "$out/bin/''${channel/whiteboard/review}-desktop" \
+          --add-flags "$channel-desktop"
+      done
       substituteInPlace "$out/share/applications/"*.desktop \
         --replace-fail "/usr/bin/${app}-desktop" "${app}-desktop"
       cat > "$out/share/applications/mimeinfo.cache" <<'CACHE'
