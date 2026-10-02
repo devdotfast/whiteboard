@@ -712,6 +712,8 @@ const styles = stylex.create({
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
     lineHeight: "20px",
+    // Buttons center their text, which shows once a long summary wraps.
+    textAlign: "left",
     cursor: "pointer",
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: { default: null, ":focus-visible": "1px" },
