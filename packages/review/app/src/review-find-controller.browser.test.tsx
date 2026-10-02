@@ -50,6 +50,14 @@ it("orders duplicate editors with MDX and wraps navigation", async () => {
   const container = document.createElement("div");
   document.body.append(focusTarget, container);
   focusTarget.focus();
+  container.style.setProperty(
+    "--review-find-match-background",
+    "rgb(10, 20, 30)",
+  );
+  container.style.setProperty(
+    "--review-find-match-active-background",
+    "rgb(40, 50, 60)",
+  );
   const host = createReviewFindHost();
   root = createRoot(container);
   await act(async () => {
@@ -62,6 +70,14 @@ it("orders duplicate editors with MDX and wraps navigation", async () => {
   await vi.waitFor(() => {
     expect(findCount(container)?.textContent).toBe("1 of 4");
   });
+  expect(
+    getComputedStyle(container, "::highlight(review-find-match)")
+      .backgroundColor,
+  ).toBe("rgb(10, 20, 30)");
+  expect(
+    getComputedStyle(container, "::highlight(review-find-match-active)")
+      .backgroundColor,
+  ).toBe("rgb(40, 50, 60)");
   // The shell is the widget's containing block.
   expect(
     container.querySelector(".review-find-widget")?.parentElement,
@@ -86,6 +102,14 @@ it("orders duplicate editors with MDX and wraps navigation", async () => {
   expect(document.activeElement).toBe(focusTarget);
   expect(first.clearFind).toHaveBeenCalled();
   expect(second.clearFind).toHaveBeenCalled();
+  expect(
+    getComputedStyle(container, "::highlight(review-find-match)")
+      .backgroundColor,
+  ).toBe("rgba(0, 0, 0, 0)");
+  expect(
+    getComputedStyle(container, "::highlight(review-find-match-active)")
+      .backgroundColor,
+  ).toBe("rgba(0, 0, 0, 0)");
 });
 
 it("ignores results from an older query generation", async () => {

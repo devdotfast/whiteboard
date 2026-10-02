@@ -237,6 +237,10 @@ it("marks each asked-about passage beside it and reopens its conversation", asyn
 
   // The document's own text is unchanged; the wash is a CSS highlight.
   expect(CSS.highlights.get("ask-thread")?.size).toBe(2);
+  container.style.setProperty("--accent-wash", "rgb(10, 20, 30)");
+  expect(
+    getComputedStyle(container, "::highlight(ask-thread)").backgroundColor,
+  ).toBe("rgb(10, 20, 30)");
   expect(outdated).toEqual(new Set(["gone"]));
 
   await act(async () => first!.click());
@@ -254,6 +258,9 @@ it("marks each asked-about passage beside it and reopens its conversation", asyn
 
   await act(async () => root.unmount());
   expect(CSS.highlights.has("ask-thread")).toBe(false);
+  expect(
+    getComputedStyle(container, "::highlight(ask-thread)").backgroundColor,
+  ).toBe("rgba(0, 0, 0, 0)");
 });
 
 /** A file in an editor, as the Desktop draws one in a code block: the
@@ -567,6 +574,11 @@ it("pins every passage in one lane, side by side on a shared line, and pairs a p
   await frame();
   expect(active()).toEqual([pins()[2]]);
   expect(CSS.highlights.get("ask-thread-active")?.size).toBe(1);
+  container.style.setProperty("--marker-glow", "rgb(40, 50, 60)");
+  expect(
+    getComputedStyle(container, "::highlight(ask-thread-active)")
+      .backgroundColor,
+  ).toBe("rgb(40, 50, 60)");
 
   // And on a passage's words, its pin.
   const article = container.querySelector("article")!;
@@ -589,6 +601,10 @@ it("pins every passage in one lane, side by side on a shared line, and pairs a p
   });
   expect(active()).toEqual([]);
   expect(CSS.highlights.has("ask-thread-active")).toBe(false);
+  expect(
+    getComputedStyle(container, "::highlight(ask-thread-active)")
+      .backgroundColor,
+  ).toBe("rgba(0, 0, 0, 0)");
 
   await act(async () => root.unmount());
 });

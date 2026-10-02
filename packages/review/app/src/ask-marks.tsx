@@ -15,6 +15,7 @@ import { createPortal } from "react-dom";
 import { AGENT_LOGOS } from "./agent-logos";
 import { resolveAskAnchor } from "./ask-anchor";
 import { useAskHistory } from "./ask-history";
+import { setHighlightStyle } from "./highlight-styles";
 import { useOptionalReviewPanelStore } from "./review-panel";
 import { fontSize, radius } from "./scale.stylex";
 import { withClass } from "./stylex-props";
@@ -264,13 +265,11 @@ function findMarks(
 
   const api = highlights(article.ownerDocument);
 
-  if (api)
-    api.registry.set(
-      ASK_HIGHLIGHT,
-      new api.Highlight(
-        ...marks.flatMap(({ range }) => (range ? [range] : [])),
-      ),
-    );
+  if (api) {
+    const ranges = marks.flatMap(({ range }) => (range ? [range] : []));
+    api.registry.set(ASK_HIGHLIGHT, new api.Highlight(...ranges));
+    setHighlightStyle(article.ownerDocument, ASK_HIGHLIGHT, ranges.length > 0);
+  }
 
   // In reading order, which is also the order Tab reaches the pins. Pins
   // for passages on one line of a block sit side by side on it.
@@ -416,6 +415,7 @@ export function AskThreadMarks({
       for (const drawn of waiting) drawn.disconnect();
 
       highlights(article.ownerDocument)?.registry.delete(ASK_HIGHLIGHT);
+      setHighlightStyle(article.ownerDocument, ASK_HIGHLIGHT, false);
     };
   }, [article, entries, revision, reportOutdated]);
 
@@ -495,9 +495,11 @@ export function AskThreadMarks({
     // Over the resting wash.
     highlight.priority = 1;
     api.registry.set(ASK_ACTIVE_HIGHLIGHT, highlight);
+    setHighlightStyle(article.ownerDocument, ASK_ACTIVE_HIGHLIGHT, true);
 
     return () => {
       api.registry.delete(ASK_ACTIVE_HIGHLIGHT);
+      setHighlightStyle(article.ownerDocument, ASK_ACTIVE_HIGHLIGHT, false);
     };
   }, [article, activeRange]);
 

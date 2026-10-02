@@ -21,6 +21,7 @@ import {
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 
+import { setHighlightStyle } from "./highlight-styles";
 import type { ReviewClientConfig } from "./host/review-client";
 import { useOptionalReviewSession } from "./host/review-session";
 import { compileReviewFindQuery } from "./review-find-query";
@@ -605,6 +606,7 @@ function setAllCssHighlights(
 
   if (!api) return;
   api.registry.set(ALL_HIGHLIGHT, new api.Highlight(...ranges));
+  setHighlightStyle(document, ALL_HIGHLIGHT, ranges.length > 0);
 }
 
 function setActiveCssHighlight(range: Range): void {
@@ -612,16 +614,24 @@ function setActiveCssHighlight(range: Range): void {
 
   if (!api) return;
   api.registry.set(ACTIVE_HIGHLIGHT, new api.Highlight(range));
+  setHighlightStyle(
+    range.startContainer.ownerDocument ?? undefined,
+    ACTIVE_HIGHLIGHT,
+    true,
+  );
 }
 
 function clearActiveCssHighlight(document: Document | undefined): void {
   highlightApi(document)?.registry.delete(ACTIVE_HIGHLIGHT);
+  setHighlightStyle(document, ACTIVE_HIGHLIGHT, false);
 }
 
 function clearCssHighlights(document: Document | undefined): void {
   const registry = highlightApi(document)?.registry;
   registry?.delete(ALL_HIGHLIGHT);
   registry?.delete(ACTIVE_HIGHLIGHT);
+  setHighlightStyle(document, ALL_HIGHLIGHT, false);
+  setHighlightStyle(document, ACTIVE_HIGHLIGHT, false);
 }
 
 const compact = "@media (max-width: 620px)";
