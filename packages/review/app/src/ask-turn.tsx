@@ -366,7 +366,7 @@ function AskToolGroup({
         onClick={() => setOpen((value) => !value)}
       >
         <span>{summarize(activities)}</span>
-        <DisclosureChevron expanded={open} />
+        <DisclosureChevron expanded={open} xstyle={styles.summaryChevron} />
       </button>
       {open ? (
         <ul {...stylex.props(styles.toolList)}>
@@ -695,7 +695,8 @@ const styles = stylex.create({
   },
   summary: {
     display: "inline-flex",
-    alignItems: "center",
+    // A wrapped summary keeps its chevron on the first line.
+    alignItems: "flex-start",
     alignSelf: "flex-start",
     gap: "6px",
     padding: 0,
@@ -717,6 +718,10 @@ const styles = stylex.create({
     cursor: "pointer",
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: { default: null, ":focus-visible": "1px" },
+  },
+  // Centered on the summary's first 20px line.
+  summaryChevron: {
+    margin: "4px 2px",
   },
   summaryFailed: {
     color: tokens.inkFaint,
