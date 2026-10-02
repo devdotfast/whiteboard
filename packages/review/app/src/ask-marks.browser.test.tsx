@@ -363,7 +363,7 @@ it("marks asked-about code beside its line in the editor showing its file, witho
     Math.abs(at.top + at.height / 2 - (line.top + line.height / 2)),
   ).toBeLessThan(2);
   expect(at.left).toBeGreaterThanOrEqual(editor.right);
-  expect(CSS.highlights.get("ask-thread")?.size).toBe(0);
+  expect(CSS.highlights.has("ask-thread")).toBe(false);
   expect(outdated).toEqual(new Set());
 
   await act(async () => pin!.click());
