@@ -125,11 +125,7 @@ export async function createShareFixture(root: string) {
     },
     {
       type: "code_peek",
-      source: {
-        file: sourceFile,
-        start: { side: "head", line: 1 },
-        end: { side: "head", line: 3 },
-      },
+      source: `head/${sourceFile}#L1-L3`,
     },
     {
       type: "trace_quote",
@@ -141,19 +137,11 @@ export async function createShareFixture(root: string) {
     { type: "software_map", mapVersionId: mapId },
     {
       type: "code_peek",
-      source: {
-        file: "new.ts",
-        start: { side: "head", line: 1 },
-        end: { side: "head", line: 1 },
-      },
+      source: "head/new.ts#L1",
     },
     {
       type: "code_peek",
-      source: {
-        file: "removed.ts",
-        start: { side: "base", line: 1 },
-        end: { side: "base", line: 1 },
-      },
+      source: "base/removed.ts#L1",
     },
   ];
 

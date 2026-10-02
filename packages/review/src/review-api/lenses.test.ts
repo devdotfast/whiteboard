@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { selectSource } from "@review/lens-selection.js";
+import { rangeAnchor } from "@review/lens-selection.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { type AuthoringTool, callAuthoringTool } from "./agent-client.js";
@@ -169,7 +169,7 @@ it("validates a lens's pinned ranges like any other source link", async () => {
   await lens(reviewId, {
     type: "insert",
     title: "Range",
-    targets: [{ kind: "ranges", sources: [selectSource(range)] }],
+    targets: [{ kind: "ranges", sources: [rangeAnchor(range)] }],
   });
   expect(providers.validateSource).toHaveBeenCalledWith(pins, range, {
     peek: false,

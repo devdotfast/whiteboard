@@ -1,6 +1,8 @@
 import {
+  type Anchor,
   type LensSource,
-  selectSource,
+  parseAnchor,
+  selectionProblem,
   sourceAnchors,
 } from "@review/lens-selection.js";
 import {
@@ -216,12 +218,25 @@ function documentReferences(
     throw new ReviewInputError(message);
   };
 
-  return elements(document).flatMap<{
+  type Reference = {
     id: string;
     source: LensSource;
     label?: string;
     peek?: boolean;
-  }>((element) => {
+  };
+
+  // An anchor reads at its holder's pins, else its block's.
+  const select = (anchor: Anchor, pins?: SourcePins): LensSource[] => {
+    const parsed = parseAnchor(anchor);
+
+    if (!parsed) return reject(`Not a source anchor: ${anchor}`);
+    const source = pins ? { ...parsed, pins } : parsed;
+    const problem = selectionProblem(source);
+
+    return problem ? reject(problem) : [source];
+  };
+
+  return elements(document).flatMap<Reference>((element) => {
     if (element.type === "markdown")
       return [...markdownNodes(parseMarkdown(element.markdown))].flatMap(
         (node) => {
@@ -235,107 +250,113 @@ function documentReferences(
             if (/^(?:https?:\/\/|mailto:|#)/i.test(href)) return [];
 
             return reject(
-              `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](review-source:head/path#L10-L24) or review-source:base/path#L10-L24 for repository files, with a repository-relative path and verified line numbers. External links must use https://, http://, or mailto:; document anchors use #heading.`,
+              `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](review-source:head/path#L10-L24) or review-source:base/path#L10-L24 for repository files, or review-source:diff/path#L84-R90 across sides, with a repository-relative path and verified line numbers. External links must use https://, http://, or mailto:; document anchors use #heading.`,
             );
           }
 
-          const match =
-            /^review-source:(base|head)\/(.+)#L(\d+)(?:-L(\d+))?$/i.exec(
-              node.url!,
-            );
-
-          if (!match)
-            return reject(
-              "Use review-source:head/path#L10-L24 (or base) for a source link.",
-            );
-          let file: string;
+          let target: string;
 
           try {
-            file = decodeURIComponent(match[2]!);
+            target = decodeURIComponent(href.slice("review-source:".length));
           } catch {
             return reject("Invalid URL encoding in source link.");
           }
 
-          let source = fileLineRangeSchema.safeParse({
-            side: match[1]!.toLowerCase(),
-            file,
-            fromLine: Number(match[3]),
-            toLine: Number(match[4] ?? match[3]),
-          });
+          // Links share the anchor grammar blocks use.
+          const anchor = target.replace(/^(head|base|diff)\//i, (side) =>
+            side.toLowerCase(),
+          );
 
-          // A block's pins are the default for every link it holds.
-          if (source.success && element.pins)
-            source = fileLineRangeSchema.safeParse({
-              ...source.data,
-              pins: element.pins,
-            });
+          if (!parseAnchor(anchor))
+            return reject(
+              "Use review-source:head/path#L10-L24 (or base, or diff/path#L84-R90 across sides) for a source link.",
+            );
 
-          if (!source.success) {
-            if (tolerant) return [];
-            throw source.error;
-          }
-
-          return [
-            {
-              id: `${element.id}:${node.url}`,
-              source: selectSource(source.data),
-            },
-          ];
+          return select(anchor, element.pins).map((source) => ({
+            id: `${element.id}:${node.url}`,
+            source,
+          }));
         },
+      );
+
+    if (element.type === "code_peek")
+      return select(element.source, element.pins).map((source) => ({
+        id: element.id!,
+        source,
+        label: element.caption,
+        peek: true,
+      }));
+
+    // A step, frame and operation render the range as a peek, so a
+    // whitespace-only range is an authoring mistake for each of them; prose
+    // links and context sources only need the range to exist.
+    if (element.type === "sequence")
+      return element.steps.flatMap((step) =>
+        step.source
+          ? select(step.source, step.pins ?? element.pins).map((source) => ({
+              id: step.id!,
+              source,
+              label: step.label,
+              peek: true,
+            }))
+          : [],
       );
 
     if (element.type === "flow_diagram")
       return element.nodes.flatMap((node) =>
         node.attachments.flatMap((attachment, index) =>
-          attachment.sources.map((source, sourceIndex) => ({
-            id: `${element.id}:${node.key}:${index}:${sourceIndex}`,
-            source,
-            label: attachment.label,
-            peek: true,
-          })),
+          attachment.sources.flatMap((anchor, sourceIndex) =>
+            select(anchor, attachment.pins ?? element.pins).map((source) => ({
+              id: `${element.id}:${node.key}:${index}:${sourceIndex}`,
+              source,
+              label: attachment.label,
+              peek: true,
+            })),
+          ),
         ),
       );
 
     if (element.type === "call_stack_diff")
-      return [...element.base, ...element.head].flatMap((frame) => [
-        { ...frame, id: frame.id!, peek: true },
-        ...(frame.contextSources ?? []).map((source, index) => ({
-          id: `${frame.id}:context:${index}`,
-          source,
-        })),
-        ...(frame.callSite
-          ? [
-              {
+      return [...element.base, ...element.head].flatMap((frame) => {
+        const pins = frame.pins ?? element.pins;
+
+        return [
+          ...select(frame.source, pins).map((source) => ({
+            id: frame.id!,
+            source,
+            label: frame.label,
+            peek: true,
+          })),
+          ...(frame.contextSources ?? []).flatMap((anchor, index) =>
+            select(anchor, pins).map((source) => ({
+              id: `${frame.id}:context:${index}`,
+              source,
+            })),
+          ),
+          ...(frame.callSite
+            ? select(frame.callSite, pins).map((source) => ({
                 id: `${frame.id}:call-site`,
-                source: frame.callSite,
+                source,
                 label: frame.label,
                 peek: true,
-              },
-            ]
-          : []),
-      ]);
+              }))
+            : []),
+        ];
+      });
 
     if (element.type === "database_lens")
       return element.useCases.flatMap((useCase) =>
-        useCase.operations.map((operation) => ({
-          ...operation,
-          id: operation.id!,
-          peek: true,
-        })),
+        useCase.operations.flatMap((operation) =>
+          select(operation.source, operation.pins ?? element.pins).map(
+            (source) => ({
+              id: operation.id!,
+              source,
+              label: operation.label,
+              peek: true,
+            }),
+          ),
+        ),
       );
-
-    // A code peek, a sequence step, a frame and an operation all render the
-    // range as a peek, so a whitespace-only range is an authoring mistake for
-    // each of them. Prose links only need the range to exist.
-    if ("source" in element && element.source)
-      return [
-        {
-          id: element.id!,
-          source: element.source,
-          label: element.type === "step" ? element.label : element.caption,
-          peek: true,
-        },
-      ];
 
     return [];
   });

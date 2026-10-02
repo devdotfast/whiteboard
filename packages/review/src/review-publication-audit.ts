@@ -24,6 +24,7 @@ import {
 } from "./call-stack-diff";
 import { callStackFrames } from "./call-stack-frames";
 import { textIncludesQuote } from "./evidence";
+import { anchorSelection } from "./lens-selection";
 import {
   REVIEW_DOCUMENT_FORMAT,
   type ReviewDocumentData,
@@ -358,7 +359,7 @@ async function validateCallStackEvidence(input: {
     for (const row of rows) {
       if (row.change === "unchanged") continue;
       const side: CallStackSide = row.change === "removed" ? "base" : "head";
-      const file = row.frame.source.file;
+      const file = anchorSelection(row.frame.source).file;
       const key = `${side}\0${file}`;
 
       if (!changedLines.has(key)) {

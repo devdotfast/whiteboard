@@ -1,4 +1,5 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
+import { anchorSelection } from "@review/lens-selection";
 import {
   type Block,
   type BlockType,
@@ -173,7 +174,7 @@ function CalloutBlock({ node, children }: BlockProps<"callout">) {
 }
 
 function CodePeekBlock({ node }: BlockProps<"code_peek">) {
-  return <CodePeekCard source={node.source} />;
+  return <CodePeekCard source={anchorSelection(node.source, node.pins)} />;
 }
 
 function SequenceBlock({ node }: BlockProps<"sequence">) {
@@ -183,6 +184,7 @@ function SequenceBlock({ node }: BlockProps<"sequence">) {
       title={node.title}
       actors={node.actors}
       steps={node.steps}
+      pins={node.pins}
     />
   );
 }

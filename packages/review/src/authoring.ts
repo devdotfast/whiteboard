@@ -1,7 +1,7 @@
 import {
   type DiffSelection,
-  diffSelectionSchema,
   selectSource,
+  selectionProblem,
 } from "./lens-selection";
 import { tutorialAuthoringConversationSchema } from "./tutorial-conversation";
 
@@ -26,7 +26,7 @@ import {
   type SoftwareDataStoreFieldSchema,
   type SoftwareDataStoreKind,
 } from "./software-map-model";
-import { codePeekSource } from "./source";
+import { codePeekSource, sourcePinsSchema } from "./source";
 
 export { codePeekSource };
 
@@ -169,19 +169,38 @@ const anchorDefinitionMapSchema = z.record(
   ]),
 );
 
+// The pre-block document format keeps its peeks as selection objects.
+const endpointSchema = z.strictObject({
+  side: z.enum(["base", "head"]),
+  line: z.number().int().positive(),
+});
+
+const peekSelectionSchema = z
+  .strictObject({
+    file: nonEmptyStringSchema,
+    start: endpointSchema,
+    end: endpointSchema,
+    pins: sourcePinsSchema.optional(),
+  })
+  .superRefine((selection, context) => {
+    const problem = selectionProblem(selection);
+
+    if (problem) context.addIssue({ code: "custom", message: problem });
+  });
+
 export const anchorRefSchema = z.strictObject({
   __kind: z.literal("db-anchor-ref"),
   id: nonEmptyStringSchema,
   title: nonEmptyStringSchema,
   detail: optionalNonEmptyStringSchema,
-  peek: diffSelectionSchema.optional(),
+  peek: peekSelectionSchema.optional(),
   softwareMapPath: optionalNonEmptyStringSchema,
 });
 
 export type AnchorRef = z.infer<typeof anchorRefSchema>;
 
 export const peekableAnchorRefSchema = anchorRefSchema.extend({
-  peek: diffSelectionSchema,
+  peek: peekSelectionSchema,
 });
 
 export type PeekableAnchorRef = z.infer<typeof peekableAnchorRefSchema>;

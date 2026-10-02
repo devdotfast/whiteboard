@@ -2,6 +2,7 @@ import { type JsonValue, isJsonObject } from "@dev.fast/review-protocol";
 import { z } from "zod";
 
 import { migrateDiffSelections } from "./diff-selection-migration.js";
+import { formatAnchor } from "./lens-selection.js";
 import { label } from "./review-api/blocks/definition.js";
 import { type Lens, lensTargetsSchema } from "./review-api/diff-lenses.js";
 
@@ -11,7 +12,74 @@ import { type Lens, lensTargetsSchema } from "./review-api/diff-lenses.js";
 // This is the decoder boundary for stored documents in retired wire formats.
 // oxlint-disable-next-line anti-slop/no-unknown-parameters
 export function migrateStoredDocument(input: unknown): JsonValue {
-  return dropSectionStatus(migrateDiffSelections(input));
+  return anchorStrings(dropSectionStatus(migrateDiffSelections(input)));
+}
+
+/** Lenses saved before ranges were anchor strings. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Decoder boundary for stored lenses in retired formats.
+export function migrateStoredLenses(input: unknown): JsonValue {
+  return anchorStrings(migrateDiffSelections(input));
+}
+
+const ANCHOR_KEYS = ["source", "sources", "callSite", "contextSources"];
+
+const selectionObjectSchema = z.object({
+  file: z.string(),
+  start: z.object({ side: z.enum(["base", "head"]), line: z.number() }),
+  end: z.object({ side: z.enum(["base", "head"]), line: z.number() }),
+  pins: z.json().optional(),
+});
+
+/**
+ * Anchors were once selection objects, each with its own pins. They are now
+ * strings, and pins sit on whatever holds them (a code peek, step, frame,
+ * attachment or operation) when they differ from the enclosing block's. No
+ * stored element mixed pins across its anchors. Lens ranges read at the
+ * review's pins and never carried others.
+ */
+export function anchorStrings(
+  value: JsonValue,
+  blockPins?: JsonValue,
+): JsonValue {
+  if (Array.isArray(value))
+    return value.map((child) => anchorStrings(child, blockPins));
+
+  if (!isJsonObject(value)) return value;
+
+  const inherited = value.pins ?? blockPins;
+  let pins: JsonValue | undefined;
+
+  const convert = (anchor: JsonValue): JsonValue => {
+    const selection = selectionObjectSchema.safeParse(anchor);
+
+    if (!selection.success) return anchor;
+
+    const { pins: own, ...anchorAt } = selection.data;
+
+    if (own) pins = own;
+
+    return formatAnchor(anchorAt);
+  };
+
+  const migrated = Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      ANCHOR_KEYS.includes(key)
+        ? Array.isArray(child)
+          ? child.map(convert)
+          : convert(child)
+        : anchorStrings(child, inherited),
+    ]),
+  );
+
+  if (
+    pins !== undefined &&
+    value.kind !== "ranges" &&
+    JSON.stringify(pins) !== JSON.stringify(blockPins)
+  )
+    migrated.pins = pins;
+
+  return migrated;
 }
 
 /** Sections once carried an optional `status` (pending, in_progress or

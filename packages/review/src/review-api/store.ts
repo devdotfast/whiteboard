@@ -12,6 +12,7 @@ import { sourceAnchors } from "@review/lens-selection.js";
 import {
   liftFileLenses,
   migrateStoredDocument,
+  migrateStoredLenses,
 } from "@review/stored-document-migration.js";
 import {
   type Coverage,
@@ -755,6 +756,10 @@ export class ReviewStore {
     // SAFETY: stored blocks were validated on write; migration only replaces
     // retired representations and lifts retired lens blocks out.
     snapshot.document = document as Block[];
+
+    if (snapshot.lenses)
+      // SAFETY: as above, migration only rewrites retired range forms.
+      snapshot.lenses = migrateStoredLenses(snapshot.lenses) as Lens[];
 
     if (lenses.length)
       snapshot.lenses = [...(snapshot.lenses ?? []), ...lenses];

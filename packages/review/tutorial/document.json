@@ -45,17 +45,7 @@
         },
         {
           "type": "code_peek",
-          "source": {
-            "file": "src/orders/order-service.ts",
-            "start": {
-              "side": "head",
-              "line": 13
-            },
-            "end": {
-              "side": "head",
-              "line": 29
-            }
-          },
+          "source": "head/src/orders/order-service.ts#L13-L29",
           "caption": "Order service creates the order"
         },
         {
@@ -106,17 +96,7 @@
               "to": "orderService",
               "label": "Place order",
               "style": "call",
-              "source": {
-                "file": "src/api/checkout-api.ts",
-                "start": {
-                  "side": "head",
-                  "line": 12
-                },
-                "end": {
-                  "side": "head",
-                  "line": 15
-                }
-              }
+              "source": "head/src/api/checkout-api.ts#L12-L15"
             },
             {
               "type": "step",
@@ -124,17 +104,7 @@
               "to": "repository",
               "label": "Save order",
               "style": "call",
-              "source": {
-                "file": "src/orders/order-service.ts",
-                "start": {
-                  "side": "head",
-                  "line": 13
-                },
-                "end": {
-                  "side": "head",
-                  "line": 29
-                }
-              }
+              "source": "head/src/orders/order-service.ts#L13-L29"
             },
             {
               "type": "step",
@@ -142,17 +112,7 @@
               "to": "queue",
               "label": "Enqueue fulfillment",
               "style": "call",
-              "source": {
-                "file": "src/orders/orders-repository.ts",
-                "start": {
-                  "side": "head",
-                  "line": 9
-                },
-                "end": {
-                  "side": "head",
-                  "line": 12
-                }
-              }
+              "source": "head/src/orders/orders-repository.ts#L9-L12"
             },
             {
               "type": "step",
@@ -160,17 +120,7 @@
               "to": "worker",
               "label": "Deliver job",
               "style": "call",
-              "source": {
-                "file": "src/fulfillment/fulfillment-worker.ts",
-                "start": {
-                  "side": "head",
-                  "line": 13
-                },
-                "end": {
-                  "side": "head",
-                  "line": 14
-                }
-              }
+              "source": "head/src/fulfillment/fulfillment-worker.ts#L13-L14"
             },
             {
               "type": "step",
@@ -178,17 +128,7 @@
               "to": "shipping",
               "label": "Create shipment",
               "style": "call",
-              "source": {
-                "file": "src/fulfillment/fulfillment-worker.ts",
-                "start": {
-                  "side": "head",
-                  "line": 17
-                },
-                "end": {
-                  "side": "head",
-                  "line": 19
-                }
-              }
+              "source": "head/src/fulfillment/fulfillment-worker.ts#L17-L19"
             }
           ]
         },
@@ -254,17 +194,7 @@
                   "field": "status",
                   "actor": "orderService",
                   "label": "write pending order",
-                  "source": {
-                    "file": "src/orders/orders-repository.ts",
-                    "start": {
-                      "side": "head",
-                      "line": 9
-                    },
-                    "end": {
-                      "side": "head",
-                      "line": 12
-                    }
-                  }
+                  "source": "head/src/orders/orders-repository.ts#L9-L12"
                 }
               ]
             },
@@ -278,17 +208,7 @@
                   "field": "status",
                   "actor": "worker",
                   "label": "write fulfilled status",
-                  "source": {
-                    "file": "src/fulfillment/fulfillment-worker.ts",
-                    "start": {
-                      "side": "head",
-                      "line": 17
-                    },
-                    "end": {
-                      "side": "head",
-                      "line": 19
-                    }
-                  }
+                  "source": "head/src/fulfillment/fulfillment-worker.ts#L17-L19"
                 }
               ]
             }
@@ -329,7 +249,7 @@
         },
         {
           "type": "markdown",
-          "markdown": "To capture your own sessions, open **Preferences \u2192 Settings \u2192 Experimental\nFeatures \u2192 Trace capture**. Enter your S3/R2 bucket credentials and choose\n**Enable**. Have everyone on your team do this (with the same bucket credentials) to sync and review each other's traces.\n\nTrace capture is off by default; this sample works without setup.\n"
+          "markdown": "To capture your own sessions, open **Preferences → Settings → Experimental\nFeatures → Trace capture**. Enter your S3/R2 bucket credentials and choose\n**Enable**. Have everyone on your team do this (with the same bucket credentials) to sync and review each other's traces.\n\nTrace capture is off by default; this sample works without setup.\n"
         }
       ]
     },
@@ -339,7 +259,7 @@
       "children": [
         {
           "type": "markdown",
-          "markdown": "To connect Whiteboard to your agents, open **Preferences \u2192\nSettings**. To revisit setup or take this tour again, open **Preferences \u2192\nGetting Started**.\n"
+          "markdown": "To connect Whiteboard to your agents, open **Preferences →\nSettings**. To revisit setup or take this tour again, open **Preferences →\nGetting Started**.\n"
         }
       ]
     },

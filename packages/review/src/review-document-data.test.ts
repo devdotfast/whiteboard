@@ -248,11 +248,7 @@ describe("review document data", () => {
               {
                 id: "a",
                 key: "a",
-                source: {
-                  file: "src/a.ts",
-                  start: { side: "head", line: 2 },
-                  end: { side: "head", line: 4 },
-                },
+                source: "head/src/a.ts#L2-L4",
                 label: "A",
               },
             ],

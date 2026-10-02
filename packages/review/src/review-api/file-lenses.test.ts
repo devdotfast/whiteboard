@@ -1,4 +1,4 @@
-import { selectSource, sourceAnchors } from "@review/lens-selection.js";
+import { rangeAnchor, sourceAnchors } from "@review/lens-selection.js";
 import { expect, it } from "vitest";
 
 import {
@@ -112,9 +112,9 @@ it("unions mixed targets and canonicalizes renamed files without losing unchange
         {
           kind: "ranges",
           sources: [
-            selectSource({ ...head, fromLine: 4, toLine: 8 }),
-            selectSource(context),
-            selectSource({ ...context, fromLine: 5, toLine: 9 }),
+            rangeAnchor({ ...head, fromLine: 4, toLine: 8 }),
+            rangeAnchor(context),
+            rangeAnchor({ ...context, fromLine: 5, toLine: 9 }),
           ],
         },
       ],

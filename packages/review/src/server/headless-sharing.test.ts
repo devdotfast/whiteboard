@@ -148,11 +148,7 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
             children: [
               {
                 type: "code_peek",
-                source: {
-                  file: fixture.sourceFile,
-                  start: { side: "head", line: 1 },
-                  end: { side: "head", line: 1 },
-                },
+                source: `head/${fixture.sourceFile}#L1`,
               },
               {
                 type: "trace_quote",

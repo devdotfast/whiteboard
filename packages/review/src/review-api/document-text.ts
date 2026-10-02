@@ -1,12 +1,8 @@
-import { type LensSource } from "@review/lens-selection.js";
-
 import { type Element, ReviewInputError, elements } from "./document.js";
 import type { Snapshot } from "./store.js";
 
-const sourceText = (source: LensSource) =>
-  source.start.side === source.end.side
-    ? `${source.start.side}/${source.file}:${source.start.line}-${source.end.line}`
-    : `${source.file} diff rows ${source.start.side}:${source.start.line}–${source.end.side}:${source.end.line}`;
+// Anchors read as agents write them.
+const sourceText = (anchor: string) => anchor;
 
 /** A reading view of saved content, not another document format to maintain. */
 export function documentText(

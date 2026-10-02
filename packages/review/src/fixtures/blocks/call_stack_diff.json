@@ -7,17 +7,7 @@
       {
         "id": "frame-1",
         "key": "status",
-        "source": {
-          "file": "order.ts",
-          "start": {
-            "side": "base",
-            "line": 1
-          },
-          "end": {
-            "side": "base",
-            "line": 1
-          }
-        },
+        "source": "base/order.ts#L1",
         "label": "status = draft"
       }
     ],
@@ -25,17 +15,7 @@
       {
         "id": "frame-2",
         "key": "status",
-        "source": {
-          "file": "order.ts",
-          "start": {
-            "side": "head",
-            "line": 1
-          },
-          "end": {
-            "side": "head",
-            "line": 1
-          }
-        },
+        "source": "head/order.ts#L1",
         "label": "status = queued",
         "via": {
           "kind": "call",

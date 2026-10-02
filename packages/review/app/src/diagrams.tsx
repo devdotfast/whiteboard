@@ -1,6 +1,7 @@
 import { flowLayer } from "@canvas/flow-layers.stylex";
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
-import type { Step } from "@review/review-api/document";
+import { type DiffSelection, anchorSelection } from "@review/lens-selection";
+import type { SourcePins, Step } from "@review/review-api/document";
 import * as stylex from "@stylexjs/stylex";
 import {
   BaseEdge,
@@ -82,6 +83,7 @@ export interface SequenceDiagramProps {
   title: string;
   actors: Record<string, string>;
   steps: readonly Step[];
+  pins?: SourcePins;
 }
 
 export interface SequenceParticipant {
@@ -95,7 +97,7 @@ export interface SequenceMessage {
   to: SequenceParticipant;
   label: string;
   style: Step["style"];
-  source?: Step["source"];
+  source?: DiffSelection;
   code?: Step["code"];
   explanation?: string;
 }
@@ -125,7 +127,8 @@ export function sequenceView(block: SequenceDiagramProps): SequenceView {
       style: step.style,
     };
 
-    if (step.source) message.source = step.source;
+    if (step.source)
+      message.source = anchorSelection(step.source, step.pins ?? block.pins);
 
     if (step.code) message.code = step.code;
 
