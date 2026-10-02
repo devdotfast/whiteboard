@@ -533,15 +533,21 @@ try {
     for (const file of await readdir(`${profile}/logs/${entry}`, {
       recursive: true,
     })) {
-      if (!file.endsWith("renderer.log")) continue;
+      if (
+        !file.endsWith(".log") ||
+        (!file.endsWith("renderer.log") &&
+          !file.endsWith("exthost.log") &&
+          !file.includes("rust-lang.rust-analyzer"))
+      )
+        continue;
 
-      const renderer = await readFile(
+      const diagnostic = await readFile(
         `${profile}/logs/${entry}/${file}`,
         "utf8",
       );
 
       console.error(
-        renderer
+        diagnostic
           .split("\n")
           .slice(-120)
           .join("\n")

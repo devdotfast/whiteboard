@@ -2,6 +2,14 @@
 let
   inherit (pkgs) lib;
   app = release.packageName;
+  runtimeOsRelease = pkgs.writeTextFile {
+    name = "whiteboard-fhs-os-release";
+    destination = "/etc/os-release";
+    text = ''
+      NAME="Whiteboard Linux runtime"
+      ID=linux
+    '';
+  };
   payload = pkgs.stdenvNoCC.mkDerivation {
     pname = "${app}-payload";
     inherit (release) version;
@@ -34,7 +42,7 @@ CACHE
     '';
   };
   runtimePackages = p: with p; [
-    payload glibc glibcLocales stdenv.cc.cc.lib bash coreutils gnugrep gnused
+    payload runtimeOsRelease glibc glibcLocales stdenv.cc.cc.lib bash coreutils gnugrep gnused
     git xdg-utils glib gtk3 nss nspr dbus alsa-lib libgbm libglvnd libdrm
     libxkbcommon libsecret libnotify krb5 cups.lib expat fontconfig freetype
     pango cairo at-spi2-atk systemdLibs zlib openssl icu libuuid curl libunwind
