@@ -17,7 +17,8 @@ const MAX_RETRY_MS = 30_000;
 
 const healthSchema = z.object({
   ok: z.literal(true),
-  serverId: z.string(),
+  // Absent unless the token is the server's.
+  serverId: z.string().optional(),
   instanceId: z.string(),
   version: z.string(),
 });
@@ -228,9 +229,11 @@ export function createGatewayHosts(input: {
     let reason = "it did not answer";
 
     try {
+      // /health names the server only to its token's holder.
       const response = await send(host, {
         method: "GET",
         path: "/health",
+        headers: { "x-review-token": host.endpoint?.token ?? "" },
         signal: abort.signal,
       });
 
@@ -256,6 +259,12 @@ export function createGatewayHosts(input: {
     if (!health) {
       host.status = "offline";
       host.detail = `${host.alias} is offline: ${reason}.`;
+      retryLater(host);
+    } else if (health.serverId === undefined) {
+      // A restarted server has a new token; only its instance id is open.
+      host.instanceId = health.instanceId;
+      host.status = "offline";
+      host.detail = `${host.alias} is offline: it did not accept the token.`;
       retryLater(host);
     } else {
       const restarted =

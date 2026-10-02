@@ -749,6 +749,7 @@ it.each([
       {
         version,
         serverId,
+        token: "a",
         reviewIds: [reviewId],
         ...(sameInstance && { instanceId: c.health.instanceId }),
       },
@@ -940,7 +941,10 @@ it("without memory, uses a later alias while an earlier one is down, then settin
     .poll(memoryOf)
     .toEqual({ [serverId]: { alias: "wb-c", reviewIds: [reviewId] } });
 
-  await startFake({ version, serverId, reviewIds: [reviewId] }, port);
+  await startFake(
+    { version, serverId, token: "a", reviewIds: [reviewId] },
+    port,
+  );
 
   await expect
     .poll(() => states(gateway), { timeout: 5_000 })

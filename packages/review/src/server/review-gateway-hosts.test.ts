@@ -177,8 +177,13 @@ it("keeps a copied store a duplicate while the first alias is down", async () =>
     state: "offline",
   });
 
-  // Back on its port with a new instance id: still the machine.
-  await startRemote(path.join(root, "a"), port);
+  // Back on its port with a new instance id and token: still the machine.
+  const restarted = await startRemote(path.join(root, "a"), port);
+
+  gateway.set([
+    { alias: "wb-a", endpoint: restarted.endpoint },
+    { alias: "wb-c", endpoint: c.endpoint },
+  ]);
   await expect
     .poll(() => gateway.states()[0]?.state, { timeout: 5_000 })
     .toBe("online");
@@ -255,14 +260,18 @@ it("re-checks another alias of a server that restarted", async () => {
     .poll(() => gateway.states().map((host) => host.state))
     .toEqual(["online", "online"]);
 
-  // Same port, new instance id; /health needs no token, so the old
-  // endpoint still reaches it. Only the first alias learns of the restart.
+  // Same port, new instance id and token: the old token no longer names
+  // the server. The first alias is given the new one; the second learns of
+  // the restart from it and is checked again.
   await a.stop();
-  await startRemote(stateDir, port);
-  gateway.failed(gateway.serving(serverId)!, "test");
+  const restarted = await startRemote(stateDir, port);
 
+  gateway.set([
+    { alias: "wb-a1", endpoint: restarted.endpoint },
+    { alias: "wb-a2", endpoint: a.endpoint },
+  ]);
   await expect
     .poll(() => gateway.states().map((host) => host.state))
-    .toEqual(["online", "online"]);
+    .toEqual(["online", "offline"]);
   expect(gateway.serving(serverId)?.alias).toBe("wb-a1");
 });

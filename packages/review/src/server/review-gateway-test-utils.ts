@@ -8,7 +8,7 @@ import {
 } from "node:http";
 import type { AddressInfo } from "node:net";
 
-import type { ReviewServerHealth } from "@dev.fast/review-protocol";
+import type { ReviewServerHealthWithToken } from "@dev.fast/review-protocol";
 import type { ReviewServerDiscovery } from "@review/server-discovery.js";
 
 import { runHeadlessServer } from "./headless-host.js";
@@ -63,10 +63,12 @@ export async function startRemote(stateDir: string, port?: number) {
   };
 
   const health = async () =>
-    // SAFETY: /health answers ReviewServerHealth on every review server.
+    // SAFETY: /health answers ReviewServerHealthWithToken to the token.
     (await (
-      await fetch(`${discovery.url}/health`)
-    ).json()) as ReviewServerHealth;
+      await fetch(`${discovery.url}/health`, {
+        headers: { "x-review-token": discovery.token },
+      })
+    ).json()) as ReviewServerHealthWithToken;
 
   return {
     discovery,
@@ -101,7 +103,7 @@ export async function startFake(
   const requests: IncomingMessage[] = [];
   const token = options.token ?? "fake-token";
 
-  const health: ReviewServerHealth = {
+  const health: ReviewServerHealthWithToken = {
     ok: true,
     instanceId: options.instanceId ?? randomUUID(),
     serverId: options.serverId ?? randomUUID(),
@@ -117,8 +119,15 @@ export async function startFake(
     if (options.handle?.(request, response)) return;
 
     if (request.url === "/health") {
+      const { ok, instanceId, desktopAttached, version } = health;
       response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify(health));
+      response.end(
+        JSON.stringify(
+          request.headers["x-review-token"] === token
+            ? health
+            : { ok, instanceId, desktopAttached, version },
+        ),
+      );
 
       return;
     }
