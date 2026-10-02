@@ -569,7 +569,7 @@ describe("edit protocol rules", () => {
             edit: { type: "update", targetId, changes: { type: "markdown" } },
           },
         }),
-      "Cannot patch type; use structural edits or replace.",
+      "A component's type can't change; replace it instead.",
     );
 
     const cleared = await post("/commands", {
