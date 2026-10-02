@@ -494,29 +494,32 @@ describe("Review Desktop launcher", () => {
     },
   );
 
-  it("launches the channel's own Linux launcher when the CLI wrapper names it", () => {
-    const child = new FakeChild();
+  it.each([false, true])(
+    "launches the channel's own Linux launcher when the CLI wrapper names it, Electron=%s",
+    (electron) => {
+      const child = new FakeChild();
 
-    const spawn = vi.fn<NonNullable<LaunchDesktopApplicationInput["spawn"]>>(
-      () => child,
-    );
+      const spawn = vi.fn<NonNullable<LaunchDesktopApplicationInput["spawn"]>>(
+        () => child,
+      );
 
-    const attempt = launchDesktopApplication({
-      platform: "linux",
-      electron: false,
-      env: {
-        DEV_FAST_REVIEW_DESKTOP_COMMAND: "/usr/bin/review-preview-desktop",
-      },
-      spawn,
-    });
+      const attempt = launchDesktopApplication({
+        platform: "linux",
+        electron,
+        env: {
+          DEV_FAST_REVIEW_DESKTOP_COMMAND: "/usr/bin/review-preview-desktop",
+        },
+        spawn,
+      });
 
-    expect(spawn).toHaveBeenCalledWith(
-      "/usr/bin/review-preview-desktop",
-      [],
-      expect.objectContaining({ detached: true }),
-    );
-    expect(attempt.method).toContain("/usr/bin/review-preview-desktop");
-  });
+      expect(spawn).toHaveBeenCalledWith(
+        "/usr/bin/review-preview-desktop",
+        [],
+        expect.objectContaining({ detached: true }),
+      );
+      expect(attempt.method).toContain("/usr/bin/review-preview-desktop");
+    },
+  );
 
   it.each([
     [

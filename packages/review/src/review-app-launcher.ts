@@ -284,7 +284,7 @@ export function launchDesktopApplication(
       release.linuxLauncher;
     method = `the installed Linux launcher at "${command}"`;
 
-    if (electron) {
+    if (electron && !env.DEV_FAST_REVIEW_DESKTOP_COMMAND?.trim()) {
       command = execPath;
       method = `the Desktop-managed bundle at "${command}"`;
     }

@@ -33,9 +33,11 @@ if (format === "arch" || format === "all") await prepareReviewArchPackage(root);
 
 if (format === "nixos" || format === "all") {
   await prepareReviewNixPackage(root);
+
   const rust = curatedExtensions.find(
     ({ id }) => id === "rust-lang.rust-analyzer",
   );
+
   await writeFile(
     path.join(root, ".build/linux/nixos/x86_64/package/rust-extension.json"),
     `${JSON.stringify(rust.targets["linux-x64"], null, 2)}\n`,

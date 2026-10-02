@@ -108,17 +108,22 @@ async function renderedOnboarding() {
 
         if (result.id === 1) {
           if (result.result?.result?.value !== true) return finish(false);
+
           if (!process.env.SMOKE_SCREENSHOT) return finish(true);
+
           socket.send(
             JSON.stringify({ id: 2, method: "Page.captureScreenshot" }),
           );
         }
+
         if (result.id === 2) {
           if (!result.result?.data) return finish(false);
+
           await writeFile(
             process.env.SMOKE_SCREENSHOT,
             Buffer.from(result.result.data, "base64"),
           );
+
           finish(true);
         }
       });

@@ -6,6 +6,7 @@ let
   rustVsix = pkgs.fetchurl { inherit (rust) url sha256; };
   probe = pkgs.buildFHSEnv {
     pname = "${app}-probe";
+    inherit (release) version;
     targetPkgs = p: package.runtimePackages p ++ [ p.unzip p.file p.binutils ];
     runScript = pkgs.writeShellScript "probe-installed-whiteboard" ''
       set -eu
