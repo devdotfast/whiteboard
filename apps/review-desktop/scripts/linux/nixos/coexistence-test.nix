@@ -12,8 +12,8 @@ in pkgs.testers.runNixOSTest {
     services.xserver.desktopManager.xfce.enable = true;
     services.xserver.displayManager.lightdm.enable = true;
     services.displayManager.autoLogin = { enable = true; user = "tester"; };
-    environment.systemPackages = [ pkgs.wmctrl pkgs.python3 ];
-    virtualisation = { memorySize = 4096; cores = 2; diskSize = 16384; additionalPaths = packages; };
+    environment.systemPackages = [ pkgs.wmctrl pkgs.glib.bin pkgs.python3 ];
+    virtualisation = { memorySize = 4096; cores = 2; diskSize = 16384; additionalPaths = packages ++ [ stable.outPath preview.outPath pkgs.path ]; };
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     system.stateVersion = "26.05";
   };
@@ -24,9 +24,13 @@ in pkgs.testers.runNixOSTest {
     machine.wait_until_succeeds("pgrep -u tester xfce4-session")
 
     def user(command):
-        return machine.succeed("su - tester -c " + shlex.quote(command))
+        return machine.succeed("su - tester -c " + shlex.quote(command), timeout=300)
 
-    user("nix profile install ${builtins.concatStringsSep " " (map toString packages)}")
+    for source, app in [("${stable.outPath}", "whiteboard"), ("${preview.outPath}", "whiteboard-preview")]:
+        user(f"nix profile install path:{source}#{app} --no-write-lock-file --override-input nixpkgs path:${pkgs.path}")
+
+    for protocol, handler in [("dev-fast-review", "whiteboard-url-handler.desktop"), ("dev-fast-review-preview", "whiteboard-preview-url-handler.desktop")]:
+        assert handler in user(f"gio mime x-scheme-handler/{protocol}")
     display = "DISPLAY=:0 XAUTHORITY=/home/tester/.Xauthority DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
     for app in ["whiteboard", "whiteboard-preview"]:
         user(f"DO_NOT_TRACK=1 {app} --help")

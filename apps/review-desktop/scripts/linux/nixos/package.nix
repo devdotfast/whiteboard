@@ -6,7 +6,7 @@ let
     pname = "${app}-payload";
     inherit (release) version;
     src = ./payload;
-    nativeBuildInputs = [ pkgs.makeWrapper pkgs.desktop-file-utils ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
     dontConfigure = true;
     dontBuild = true;
     dontFixup = true;
@@ -25,7 +25,11 @@ let
         --add-flags --disable-setuid-sandbox
       substituteInPlace "$out/share/applications/"*.desktop \
         --replace-fail "/usr/bin/${app}-desktop" "${app}-desktop"
-      update-desktop-database "$out/share/applications"
+      cat > "$out/share/applications/mimeinfo.cache" <<'CACHE'
+[MIME Cache]
+x-scheme-handler/dev-fast-review=whiteboard-url-handler.desktop;
+x-scheme-handler/dev-fast-review-preview=whiteboard-preview-url-handler.desktop;
+CACHE
       runHook postInstall
     '';
   };
@@ -58,5 +62,6 @@ in pkgs.symlinkJoin {
     license = lib.licenses.mit;
     platforms = [ "x86_64-linux" ];
     mainProgram = app;
+    priority = if app == "whiteboard-preview" then 6 else 5;
   };
 }
