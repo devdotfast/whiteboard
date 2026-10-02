@@ -1,8 +1,8 @@
 import { fontSize } from "@canvas/scale.stylex";
 import {
   type ReviewCanvasContent,
-  type ReviewDocumentWidthChoice,
   type ReviewDiffViewSpec,
+  type ReviewDocumentWidthChoice,
   type ReviewInlineEditorSpec,
   parseReviewStackResponse,
   resolveReviewSourceView,
