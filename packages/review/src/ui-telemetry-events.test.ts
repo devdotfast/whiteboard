@@ -268,4 +268,16 @@ describe("reliability and engagement events", () => {
       })?.properties,
     ).toEqual({ via: "topbar" });
   });
+
+  it("keeps a known install location on app_ready and drops anything else", () => {
+    const location = (value: string) =>
+      sanitizeUiTelemetryEvent({
+        name: "app_ready",
+        properties: { duration_ms: 900, install_location: value },
+      })?.properties.install_location;
+
+    expect(location("translocated")).toBe("translocated");
+    expect(location("volume")).toBe("volume");
+    expect(location("/Volumes/Whiteboard/Whiteboard.app")).toBeUndefined();
+  });
 });
