@@ -1442,6 +1442,11 @@ export class ReviewStore {
         );
 
         if (owner) attribution.owned(owner);
+        else if (attribution.activityId)
+          result.warnings = [
+            ...(result.warnings ?? []),
+            "Your activity has ended or expired, so readers no longer see you working. The edit was saved; call session_activity_begin and pass the new activityId.",
+          ];
       }
 
       apply();
