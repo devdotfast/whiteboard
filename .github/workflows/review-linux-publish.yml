@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        format: [rpm, deb, arch]
+        format: [rpm, deb, arch, nixos]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -58,6 +58,7 @@ jobs:
             rpm) files=(linux-packages/*.rpm) ;;
             deb) files=(linux-packages/*.deb) ;;
             arch) files=(linux-packages/*.pkg.tar.zst linux-packages/*.pkg.tar.zst.sig) ;;
+            nixos) files=(linux-packages/*.nix.tar.gz linux-packages/*.nix.tar.gz.asc) ;;
           esac
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" "${files[@]}"
 

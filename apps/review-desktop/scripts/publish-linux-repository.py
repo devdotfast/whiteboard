@@ -57,13 +57,15 @@ def publication_format(name):
         return "deb"
     if "/arch/" in name:
         return "arch"
+    if "/nixos/" in name:
+        return "nixos"
     raise ValueError(f"Unknown publication format: {name}")
 
 
 def publish(directory, bucket, base_url, channel=None, upload_format=None, promote_only=False):
     if upload_format and promote_only:
         raise ValueError("Upload and promotion must be separate operations")
-    if upload_format and upload_format not in ("rpm", "deb", "arch"):
+    if upload_format and upload_format not in ("rpm", "deb", "arch", "nixos"):
         raise ValueError("Unknown upload format")
     if fetch_json(base_url + "/repos/health") != {"schemaVersion": 1, "format": "rpm"}:
         raise RuntimeError("Deploy the Linux repository Worker before publishing")
@@ -115,6 +117,15 @@ def publish(directory, bucket, base_url, channel=None, upload_format=None, promo
         ]
         if not package_name or any(name not in files for name in required):
             raise ValueError("Incomplete Arch publication")
+    if current.get("nixos") is True:
+        if fetch_json(base_url + "/repos/nixos/health") != {"schemaVersion": 1, "format": "nix"}:
+            raise RuntimeError("Deploy the NixOS repository Worker before publishing")
+        required = [
+            f"{prefix}/snapshots/{current['generation']}/nixos/x86_64/{package_name}.nix.tar.gz{suffix}"
+            for suffix in ("", ".asc")
+        ]
+        if not package_name or any(name not in files for name in required):
+            raise ValueError("Incomplete NixOS publication")
     # Compare-and-swap prevents concurrent or stale workflow reruns from moving
     # the repository backwards after a newer release has already won.
     with tempfile.TemporaryDirectory(prefix="review-current-") as temporary:
@@ -172,7 +183,7 @@ if __name__ == "__main__":
     parser.add_argument("--base-url", default="https://install.dev.fast")
     parser.add_argument("--channel", choices=sorted(CHANNELS), help="Refuse a publication built for another channel")
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--upload-format", choices=["rpm", "deb", "arch"], help="Upload this format without promoting the shared pointer")
+    mode.add_argument("--upload-format", choices=["rpm", "deb", "arch", "nixos"], help="Upload this format without promoting the shared pointer")
     mode.add_argument("--promote-only", action="store_true", help="Verify all uploaded objects, then promote the shared pointer")
     args = parser.parse_args()
     publish(args.directory.resolve(), args.bucket, args.base_url.rstrip("/"), args.channel, args.upload_format, args.promote_only)

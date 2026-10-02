@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -24,7 +24,7 @@ await new Promise((resolve) => portServer.close(resolve));
 let output = "";
 
 const child = spawn(
-  `/usr/bin/${app}-desktop`,
+  process.env.REVIEW_LINUX_DESKTOP_COMMAND ?? `/usr/bin/${app}-desktop`,
   [
     `--user-data-dir=${state}/profile`,
     `--extensions-dir=${state}/extensions`,
@@ -79,7 +79,10 @@ async function renderedOnboarding() {
 
   try {
     return await new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(false), 3000);
+      const timer = setTimeout(
+        () => resolve(false),
+        process.env.SMOKE_SCREENSHOT ? 10000 : 3000,
+      );
 
       const finish = (value) => {
         clearTimeout(timer);
@@ -100,10 +103,24 @@ async function renderedOnboarding() {
           }),
         ),
       );
-      socket.addEventListener("message", ({ data }) => {
+      socket.addEventListener("message", async ({ data }) => {
         const result = JSON.parse(data);
 
-        if (result.id === 1) finish(result.result?.result?.value === true);
+        if (result.id === 1) {
+          if (result.result?.result?.value !== true) return finish(false);
+          if (!process.env.SMOKE_SCREENSHOT) return finish(true);
+          socket.send(
+            JSON.stringify({ id: 2, method: "Page.captureScreenshot" }),
+          );
+        }
+        if (result.id === 2) {
+          if (!result.result?.data) return finish(false);
+          await writeFile(
+            process.env.SMOKE_SCREENSHOT,
+            Buffer.from(result.result.data, "base64"),
+          );
+          finish(true);
+        }
       });
     });
   } finally {

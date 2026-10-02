@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import tarfile
 import tempfile
 
 
@@ -117,6 +118,28 @@ def build_arch(packages, repos, snapshot_root, package_name, version, revision, 
         sign(database, fingerprint, armor=False)
 
 
+def build_nixos(packages, snapshot_root, package_name, version, revision, commit, fingerprint):
+    app_version = version.replace("~preview.", "-preview.")
+    name = f"{package_name}-{app_version}-{revision}-x86_64.nix.tar.gz"
+    source = packages / name
+    with tarfile.open(source, "r:gz") as archive:
+        metadata = json.load(archive.extractfile("package/release.json"))
+        product = json.load(archive.extractfile(f"package/payload/usr/share/{package_name}/resources/app/product.json"))
+        if [metadata.get(key) for key in ("packageName", "version", "revision", "commit")] != [package_name, app_version, revision, commit]:
+            raise ValueError("NixOS metadata does not match the release")
+        if [product.get(key) for key in ("applicationName", "reviewVersion", "commit")] != [package_name, app_version, commit]:
+            raise ValueError("NixOS payload does not match the release")
+        for file in ("flake.nix", "flake.lock", "package.nix"):
+            if not archive.getmember(f"package/{file}").isfile():
+                raise ValueError(f"NixOS package is missing {file}")
+    snapshot = snapshot_root / "nixos/x86_64"
+    snapshot.mkdir(parents=True)
+    package = snapshot / f"{package_name}.nix.tar.gz"
+    shutil.copyfile(source, package)
+    sign(package, fingerprint)
+    shutil.copyfile(package.with_name(package.name + ".asc"), packages / (name + ".asc"))
+
+
 # Each channel is a separate package in a separate repository. Preview builds
 # use RPM's tilde form so they sort below the stable release they precede.
 CHANNELS = {
@@ -170,8 +193,9 @@ def build(packages, output, version, revision, commit, fingerprint, channel="sta
     sign(snapshot / "repomd.xml", fingerprint)
     build_apt(packages, repos, repos / "snapshots" / generation, package_name, version, revision, fingerprint, channel)
     build_arch(packages, repos, repos / "snapshots" / generation, package_name, version, revision, fingerprint)
+    build_nixos(packages, repos / "snapshots" / generation, package_name, version, revision, commit, fingerprint)
     pointer = {
-        "schemaVersion": 1, "format": "rpm", "packageName": package_name, "deb": True, "arch": True, "generation": generation, "version": version,
+        "schemaVersion": 1, "format": "rpm", "packageName": package_name, "deb": True, "arch": True, "nixos": True, "generation": generation, "version": version,
         "commit": commit, "keyFingerprint": fingerprint,
     }
     (repos / "current.json").write_text(json.dumps(pointer) + "\n")
