@@ -39,7 +39,6 @@ afterEach(async () => {
   for (const { reviewId, kind } of store.list())
     if (kind !== "scratchpad")
       await store.execute({
-        commandId: randomUUID(),
         operation: { type: "delete", reviewId },
       });
 });
@@ -59,13 +58,11 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
     );
 
   const created = (await call("create", {
-    commandId: randomUUID(),
     title: "Authoring",
     pins: { repositoryId: "repo", base: "base", head: "head" },
   })) as { reviewId: string };
 
   const input = {
-    commandId: randomUUID(),
     reviewId: created.reviewId,
     edit: {
       type: "insert",
@@ -86,7 +83,6 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
   };
 
   const result = (await call("edit", input)) as { targetId: string };
-  expect(await call("edit", input)).toEqual(result);
   expect(store.read(created.reviewId).version).toBe(1);
   expect(
     await call("get", {
@@ -98,7 +94,6 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
   await expect(
     call("edit", {
       ...input,
-      commandId: randomUUID(),
       edit: {
         type: "update",
         targetId: result.targetId,
@@ -108,7 +103,6 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
   ).rejects.toThrow(Error);
   expect(store.read(created.reviewId).version).toBe(1);
   await call("edit", {
-    commandId: randomUUID(),
     reviewId: created.reviewId,
     edit: {
       type: "update",
@@ -143,7 +137,6 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
   // IDs discovered in the reading view still identify the same editable nodes.
   const stepId = String(text).match(/\[(step-\d+)\]/)![1];
   await call("edit", {
-    commandId: randomUUID(),
     reviewId: created.reviewId,
     edit: {
       type: "update",
@@ -156,7 +149,7 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
   ).toContain("Updated through the reading view.");
 });
 
-it("assigns a command ID and names it when a reply is lost", async () => {
+it("says a write whose reply was lost may or may not have applied", async () => {
   const tools = await client.read<AuthoringTool[]>("/authoring");
 
   const tool = (name: string) =>
@@ -193,13 +186,7 @@ it("assigns a command ID and names it when a reply is lost", async () => {
   );
 
   expect(store.read(reviewId).version).toBe(1);
-
-  const commandId = String(error).match(/commandId "([^"]+)"/)![1];
-
-  expect(
-    await callAuthoringTool(lossy, tool("edit"), { ...insert, commandId }),
-  ).toMatchObject({ reviewId, version: 1 });
-  expect(store.read(reviewId).version).toBe(1);
+  expect(String(error)).toMatch(/may or may not have applied.*Check with/);
 });
 
 it("serves MCP framing without stdout diagnostics and returns host errors as tool errors", async () => {
@@ -273,7 +260,7 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
     ).toMatchObject({
       type: "object",
       required: ["sessionId", "edit"],
-      properties: expect.objectContaining({ commandId: expect.anything() }),
+      properties: expect.objectContaining({ activityId: expect.anything() }),
     });
 
     const error = await request(3, "tools/call", {
@@ -294,7 +281,6 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
     expect(reviewsOnly(JSON.parse(next.result.content[0].text))).toEqual([]);
 
     const created = await store.execute({
-      commandId: randomUUID(),
       operation: {
         type: "create",
         title: "Readable review",
@@ -403,7 +389,6 @@ it("prints readable CLI output by default and raw objects with --json", async ()
     .mockResolvedValue(client);
 
   const created = await store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "create",
       title: "CLI reading",
@@ -452,7 +437,6 @@ it("binds existing content through the host-advertised PR tool", async () => {
   const tools = await client.read<AuthoringTool[]>("/authoring");
 
   const created = await store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "create",
       title: "PR",
@@ -461,7 +445,6 @@ it("binds existing content through the host-advertised PR tool", async () => {
   });
 
   await store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "edit",
       reviewId: created.reviewId,
@@ -478,7 +461,6 @@ it("binds existing content through the host-advertised PR tool", async () => {
     client,
     tools.find((tool) => tool.name === "review_repin")!,
     {
-      commandId: randomUUID(),
       reviewId: created.reviewId,
       pins: { repositoryId: "repo", base: "base", head: "head" },
       pullRequestUrl: "https://github.com/devdotfast/review/pull/310",

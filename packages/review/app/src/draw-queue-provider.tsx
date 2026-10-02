@@ -1,4 +1,4 @@
-import type { LeaseScope } from "@review/review-api/activity";
+import type { ActivitySurface } from "@review/review-api/activity";
 import {
   type Context,
   type ReactNode,
@@ -40,10 +40,10 @@ const defaultClock: DrawQueueClock = {
   clearTimeout: (handle) => window.clearTimeout(handle),
 };
 
-/** One queue per lease scope: the document's blocks, the Diffs page's lens
+/** One queue per surface: the document's blocks, the Diffs page's lens
  * rows. */
 const MotionPhasesContexts: Record<
-  LeaseScope,
+  ActivitySurface,
   Context<Map<string, MotionPhase>>
 > = {
   document: createContext<Map<string, MotionPhase>>(new Map()),
@@ -52,7 +52,7 @@ const MotionPhasesContexts: Record<
 
 /** Every element's phase, for a list that must keep an erased block around. */
 export function useMotionPhases(
-  scope: LeaseScope = "document",
+  scope: ActivitySurface = "document",
 ): Map<string, MotionPhase> {
   return useContext(MotionPhasesContexts[scope]);
 }
@@ -60,7 +60,7 @@ export function useMotionPhases(
 /** The phase an element is being drawn in, for its `data-motion`. */
 export function useMotionPhase(
   id: string | undefined,
-  scope: LeaseScope = "document",
+  scope: ActivitySurface = "document",
 ): MotionPhase | undefined {
   const map = useContext(MotionPhasesContexts[scope]);
 
@@ -81,7 +81,7 @@ export function DrawQueueProvider({
 }: {
   cursor: AuthoringCursor | null | undefined;
   /** Which courier this queue drives; each scope has its own contexts. */
-  scope?: LeaseScope;
+  scope?: ActivitySurface;
   /** Defaults to `performance`/window timers; browser tests inject a
    * manual clock so phase transitions land on the test's schedule. */
   clock?: DrawQueueClock;

@@ -29,8 +29,8 @@ let canvas: ReturnType<typeof mount> | undefined;
 
 const pins = { repositoryId: "repo", base: "base", head: "head" };
 
-const command = <Operation,>(operation: Operation, leaseId?: string) =>
-  store.execute({ commandId: randomUUID(), leaseId, operation });
+const command = <Operation,>(operation: Operation) =>
+  store.execute({ operation });
 
 beforeEach(() => {
   localStorage.clear();
@@ -136,9 +136,11 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
   await act(async () => toggle.click());
   expect(toggle.getAttribute("aria-expanded")).toBe("false");
   expect(node.textContent).toContain("1 paragraph");
-  const leaseId = randomUUID();
+  let activityId = "";
   await act(async () => {
-    store.activity.update(review.reviewId, { action: "begin", leaseId });
+    activityId = store.activity.update(review.reviewId, {
+      action: "begin",
+    }).activityId!;
   });
   await vi.waitFor(async () => {
     await act(async () => {});
@@ -150,8 +152,8 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
   expect(toggle.getAttribute("aria-expanded")).toBe("false");
   await act(async () => {
     store.activity.update(review.reviewId, {
-      action: "renew",
-      leaseId,
+      action: "update",
+      activityId,
       focus: { targetId: inserted.targetId, description: "Adding details" },
     });
   });
@@ -163,8 +165,8 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
   expect(displayedVersion).toHaveBeenLastCalledWith(inserted.version);
   await act(async () => {
     store.activity.update(review.reviewId, {
-      action: "renew",
-      leaseId,
+      action: "update",
+      activityId,
       focus: { description: "Checking the outline" },
     });
   });
@@ -173,7 +175,7 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
     expect(container.textContent).toContain("Checking the outline");
   });
   await act(async () => {
-    store.activity.update(review.reviewId, { action: "end", leaseId });
+    store.activity.update(review.reviewId, { action: "end", activityId });
   });
   await vi.waitFor(async () => {
     await act(async () => {});
@@ -256,24 +258,24 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
   });
   expect(container.textContent).not.toContain("Next section");
   await act(async () => {
-    store.activity.update(review.reviewId, { action: "begin", leaseId });
+    activityId = store.activity.update(review.reviewId, {
+      action: "begin",
+    }).activityId!;
   });
   expect(container.textContent).not.toContain("Agent working…");
   await act(async () => {
-    await command(
-      {
-        type: "edit",
-        reviewId: review.reviewId,
-        edit: {
-          type: "insert",
-          content: {
-            type: "markdown",
-            markdown: "Written while viewing history",
-          },
+    await command({
+      type: "edit",
+      reviewId: review.reviewId,
+      edit: {
+        type: "insert",
+        content: {
+          type: "markdown",
+          markdown: "Written while viewing history",
         },
       },
-      leaseId,
-    );
+      activityId,
+    });
   });
   expect(container.textContent).not.toContain("Written while viewing history");
 
@@ -803,7 +805,6 @@ it("reads a worktree review's range as its base against the working tree, and a 
   ) =>
     (
       await store.execute({
-        commandId: randomUUID(),
         operation: { type: "create", title, ...source },
       })
     ).reviewId;
@@ -884,7 +885,6 @@ it("degrades to the retained document and an unavailable Commits tab when the ch
 
   try {
     const { reviewId } = await gone.execute({
-      commandId: randomUUID(),
       operation: { type: "create", title: "Moved review", pins },
     });
 
@@ -938,7 +938,6 @@ it("offers the Diff view for a live worktree review and refreshes it on each sav
 
   try {
     const { reviewId } = await worktree.execute({
-      commandId: randomUUID(),
       operation: {
         type: "create",
         title: "Working files",

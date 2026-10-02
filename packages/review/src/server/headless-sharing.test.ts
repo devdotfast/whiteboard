@@ -117,7 +117,6 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
     });
 
     const d = await client.post<{ reviewId: string }>("/commands", {
-      commandId: randomUUID(),
       operation: {
         type: "create",
         title: "CI review",
@@ -136,7 +135,6 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
       },
     });
     await client.post("/commands", {
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId: d.reviewId,

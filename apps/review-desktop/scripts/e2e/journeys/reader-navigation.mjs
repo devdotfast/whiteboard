@@ -1,6 +1,5 @@
 /** One reader's path through a review: every view, the Find widget, the table of contents, and the version a rename seals. */
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 
 import { createReview, orderReviewBlocks } from "../harness.mjs";
 
@@ -172,7 +171,9 @@ export async function run(ctx) {
 
   await input.press("Escape");
   await find.waitFor({ state: "hidden" });
-  ctx.check("find handles plain, whole-word, regex and invalid regex, and wraps");
+  ctx.check(
+    "find handles plain, whole-word, regex and invalid regex, and wraps",
+  );
 
   const toc = page.locator("nav#review-toc");
 
@@ -234,7 +235,6 @@ export async function run(ctx) {
   const before = await history();
 
   const renamed = await ctx.api("/reviews-api/commands", "POST", {
-    commandId: randomUUID(),
     operation: { type: "rename", reviewId: review.reviewId, title: RENAMED },
   });
 

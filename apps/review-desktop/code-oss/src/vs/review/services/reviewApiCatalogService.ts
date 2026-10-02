@@ -7,7 +7,6 @@ import { IConfigurationService } from "../../platform/configuration/common/confi
 import { REVIEW_STRUCTURAL_DIFF_SETTING } from "../common/reviewConfigurationDefaults.js";
 import { Emitter, type Event } from "../../base/common/event.js";
 import { Disposable, toDisposable } from "../../base/common/lifecycle.js";
-import { generateUuid } from "../../base/common/uuid.js";
 import { createDecorator } from "../../platform/instantiation/common/instantiation.js";
 import { ILogService } from "../../platform/log/common/log.js";
 import { ReviewApiClient, type ReviewApiSummary } from "../common/reviewProtocol.js";
@@ -97,7 +96,6 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 	async attention(reviewId: string, action: "view" | "dismiss" | "restore"): Promise<void> {
 		await this.initialize();
 		await this.client!.post("/commands", {
-			commandId: generateUuid(),
 			operation: { type: "attention", reviewId, action },
 		});
 	}
@@ -105,7 +103,6 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 	async deleteReview(reviewId: string): Promise<void> {
 		await this.initialize();
 		await this.client!.post("/commands", {
-			commandId: generateUuid(),
 			operation: { type: "delete", reviewId },
 		});
 	}

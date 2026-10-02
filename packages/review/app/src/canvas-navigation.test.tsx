@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -28,7 +27,7 @@ let store: ReviewStore, directory: string;
 let canvas: ReturnType<typeof mount> | undefined;
 
 const command = <Operation,>(operation: Operation) =>
-  store.execute({ commandId: randomUUID(), operation });
+  store.execute({ operation });
 
 beforeEach(() => {
   localStorage.clear();

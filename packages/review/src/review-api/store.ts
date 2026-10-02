@@ -22,7 +22,7 @@ import {
 } from "@review/viewed-coverage.js";
 import { z } from "zod";
 
-import { type LeaseScope, ReviewActivity } from "./activity.js";
+import { type ActivitySurface, ReviewActivity } from "./activity.js";
 import { AskHistory } from "./ask-history.js";
 import {
   type Lens,
@@ -72,12 +72,15 @@ const DIAGRAM_TYPES = new Set([
 
 export const SCRATCHPAD_TITLE = "Scratchpad";
 
-/** The create command that makes it, with one id so a repeat is a receipt. */
-const SCRATCHPAD_COMMAND_ID = "5c7a7c6e-0000-4000-8000-5c7a7c6e0000";
+const activityId = z
+  .string()
+  .min(1)
+  .optional()
+  .describe(
+    "The activityId from review_activity_begin: your courier draws this edit. Never rejects a write.",
+  );
 
 export const commandSchema = z.strictObject({
-  commandId: z.uuid(),
-  leaseId: z.uuid().optional(),
   operation: z.discriminatedUnion("type", [
     z.strictObject({ type: z.literal("delete"), reviewId }),
     z.strictObject({
@@ -115,11 +118,17 @@ export const commandSchema = z.strictObject({
       reviewId,
       target: reviewTargetSchema,
     }),
-    z.strictObject({ type: z.literal("edit"), reviewId, edit: editSchema }),
+    z.strictObject({
+      type: z.literal("edit"),
+      reviewId,
+      edit: editSchema,
+      activityId,
+    }),
     z.strictObject({
       type: z.literal("lens_edit"),
       reviewId,
       edit: lensEditSchema,
+      activityId,
     }),
     z.strictObject({
       type: z.literal("rename"),
@@ -206,8 +215,8 @@ export interface Result {
   target?: ReviewTarget;
   /** The requested head differs from the existing review's. */
   headMoved?: boolean;
-  /** The live document lease on the existing review, whoever holds it. */
-  activeLeaseId?: string;
+  /** An agent is working on the existing review. */
+  working?: boolean;
   /** Older reviews that also name the PR, newest first. */
   otherReviewIds?: string[];
   /** The component an edit landed on, its type, and — for an insert or
@@ -435,11 +444,7 @@ export class ReviewStore {
       CREATE TABLE IF NOT EXISTS reviews(id TEXT PRIMARY KEY, version INTEGER NOT NULL, next_id INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS versions(review_id TEXT REFERENCES reviews(id), version INTEGER, snapshot TEXT NOT NULL,
         PRIMARY KEY(review_id,version));
-      CREATE TABLE IF NOT EXISTS receipts(command_id TEXT PRIMARY KEY, request TEXT NOT NULL, response TEXT NOT NULL);`);
-    // The lens command was "lens" before it took its tool's name.
-    this.db.exec(
-      "UPDATE receipts SET request=json_set(request,'$.operation.type','lens_edit') WHERE json_extract(request,'$.operation.type')='lens'",
-    );
+      DROP TABLE IF EXISTS receipts;`);
     this.db.exec(
       `CREATE TABLE IF NOT EXISTS review_attention(review_id TEXT PRIMARY KEY REFERENCES reviews(id), viewed_at TEXT, dismissed_at TEXT);`,
     );
@@ -930,14 +935,13 @@ export class ReviewStore {
       diagrams: blocks.filter((block) => DIAGRAM_TYPES.has(block.type)).length,
     };
   }
-  /** The one scratchpad, made on first use. The fixed command id makes a
-   * repeat, even from another host on the same home, find its receipt. */
+  /** The one scratchpad, made on first use. A host that loses the race to
+   * another on the same home finds it made. */
   async ensureScratchpad(): Promise<void> {
     if (this.has(SCRATCHPAD_ID)) return;
 
     try {
       await this.execute({
-        commandId: SCRATCHPAD_COMMAND_ID,
         operation: {
           type: "create",
           title: SCRATCHPAD_TITLE,
@@ -977,43 +981,13 @@ export class ReviewStore {
 
     if (initial && command.operation.type !== "create")
       throw new ReviewInputError("Initial content requires a create command.");
-    const request = JSON.stringify(initial ? { command, initial } : command);
-
-    // Network and fetch time stay out of the write queue. A replayed command
-    // never uses this: its receipt answers first, below.
+    // Network and fetch time stay out of the write queue.
     const pullRequest = this.startPullRequest(command);
 
     pullRequest?.catch(() => {});
 
     const run = this.pending.then(async () => {
-      const receipt = this.db
-        .prepare("SELECT request,response FROM receipts WHERE command_id=?")
-        .get(command.commandId);
-
-      if (receipt) {
-        if (receipt.request === "null")
-          throw new ReviewInputError("This command's review was deleted.", 404);
-
-        if (
-          !isDeepStrictEqual(
-            JSON.parse(String(receipt.request)),
-            JSON.parse(request),
-          )
-        )
-          throw new ReviewInputError(
-            "Command ID was already used for different input.",
-            409,
-          );
-
-        // SAFETY: receipts store only Results this method built, never caller-provided JSON.
-        return JSON.parse(String(receipt.response)) as Result;
-      }
-
       const op = command.operation;
-
-      if (op.type !== "create" && op.type !== "attention") {
-        this.activity.assertWrite(op.reviewId, command.leaseId, scopeOf(op));
-      }
 
       // The scratchpad is edited and restored like a review, and nothing else.
       if (
@@ -1086,14 +1060,6 @@ export class ReviewStore {
             resolvedTarget?.pins ?? op.pins!,
           );
 
-          // Nothing is written but the receipt: a retry replays this answer,
-          // and deleting the review erases it like any other command's.
-          this.db
-            .prepare(
-              "INSERT INTO receipts(command_id,request,response) VALUES(?,?,?)",
-            )
-            .run(command.commandId, request, JSON.stringify(result));
-
           return result;
         }
       }
@@ -1106,13 +1072,11 @@ export class ReviewStore {
         };
 
         this.commitCommand(
-          command.commandId,
-          request,
           result,
           () => {
             for (const table of [
               "ask_conversations",
-              "authoring_sessions",
+              "authoring_presences",
               "review_coverage",
               "review_attention",
               "versions",
@@ -1121,16 +1085,8 @@ export class ReviewStore {
                 .prepare(`DELETE FROM ${table} WHERE review_id=?`)
                 .run(op.reviewId);
             this.db.prepare("DELETE FROM reviews WHERE id=?").run(op.reviewId);
-            // Keep command IDs so a delayed retry cannot recreate deleted content.
-            // Erase their saved inputs while retaining the retry record.
-            this.db
-              .prepare(
-                "UPDATE receipts SET request='null',response=? WHERE json_extract(response,'$.reviewId')=?",
-              )
-              .run(JSON.stringify(result), op.reviewId);
           },
-          () =>
-            this.assertMutation(op.reviewId, result.version, command.leaseId),
+          () => this.assertMutation(op.reviewId, result.version),
         );
 
         return result;
@@ -1143,7 +1099,7 @@ export class ReviewStore {
           attention: true,
         };
 
-        this.commitCommand(command.commandId, request, result, () => {
+        this.commitCommand(result, () => {
           this.db
             .prepare(
               "INSERT OR IGNORE INTO review_attention(review_id) VALUES(?)",
@@ -1378,8 +1334,6 @@ export class ReviewStore {
       if (warnings.length) result.warnings = warnings;
 
       this.commitCommand(
-        command.commandId,
-        request,
         result,
         () => {
           this.db
@@ -1393,17 +1347,17 @@ export class ReviewStore {
             )
             .run(id, snapshot.version, JSON.stringify(snapshot));
         },
-        previous
-          ? () =>
-              this.assertMutation(
-                id,
-                previous.version,
-                command.leaseId,
-                scopeOf(op),
-              )
+        previous ? () => this.assertMutation(id, previous.version) : undefined,
+        op.type === "edit" || op.type === "lens_edit"
+          ? {
+              surface: op.type === "edit" ? "document" : "lenses",
+              activityId: op.activityId,
+              // The version names the agent whose courier draws it.
+              owned: (owner) => {
+                if (snapshot.lastEdit) snapshot.lastEdit.activityId = owner;
+              },
+            }
           : undefined,
-        command.leaseId,
-        scopeOf(op),
       );
 
       return result;
@@ -1424,10 +1378,7 @@ export class ReviewStore {
       op.kind ||
       op.pins ||
       op.target ||
-      !op.pullRequestUrl ||
-      this.db
-        .prepare("SELECT 1 FROM receipts WHERE command_id=?")
-        .get(command.commandId)
+      !op.pullRequestUrl
     )
       return undefined;
 
@@ -1473,13 +1424,14 @@ export class ReviewStore {
       snapshot.pins?.repositoryId !== requested.repositoryId ||
       snapshot.pins?.head !== requested.head;
 
-    const activeLeaseId = this.activity.liveLeaseId(reviewId);
+    const working = this.activity.read(reviewId).activities ?? [];
 
     const note = [
       "Returned the existing review for this PR instead of creating one; the requested title and target were not applied. Update it in place (read it with session_get first), or pass reuseExisting:false to create a separate review.",
       headMoved &&
         "The PR head moved since this review's target was set, and the target was NOT changed: call review_set_target to move it, then repair the source references it reports.",
-      activeLeaseId && `Lease ${activeLeaseId} is currently authoring it.`,
+      working.length > 0 &&
+        `Another agent is working on it${working[0]!.focus ? `: ${working[0]!.focus.description}` : ""}.`,
       others.length > 0 &&
         "Older reviews also name this PR; see otherReviewIds.",
     ]
@@ -1493,32 +1445,38 @@ export class ReviewStore {
       version: snapshot.version,
       target: snapshot.target,
       headMoved,
-      ...(activeLeaseId && { activeLeaseId }),
+      ...(working.length > 0 && { working: true }),
       ...(others.length > 0 && { otherReviewIds: others }),
     };
   }
   private commitCommand(
-    commandId: string,
-    request: string,
     result: Result,
     apply: () => void,
     guard?: () => void,
-    leaseId?: string,
-    scope: LeaseScope = "document",
+    /** An edit credits the agent it came from, renewing its presence. */
+    attribution?: {
+      surface: ActivitySurface;
+      activityId?: string;
+      owned(activityId: string): void;
+    },
   ) {
     this.db.exec("BEGIN IMMEDIATE");
-    let extended = false;
+    let owner: string | undefined;
 
     try {
       guard?.();
+
+      if (attribution) {
+        owner = this.activity.attribute(
+          result.reviewId,
+          attribution.surface,
+          attribution.activityId,
+        );
+
+        if (owner) attribution.owned(owner);
+      }
+
       apply();
-      this.db
-        .prepare(
-          "INSERT INTO receipts(command_id,request,response) VALUES(?,?,?)",
-        )
-        .run(commandId, request, JSON.stringify(result));
-      // An accepted write is proof of life: it renews the author's lease.
-      extended = this.activity.extend(result.reviewId, leaseId, scope);
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -1526,17 +1484,10 @@ export class ReviewStore {
     }
 
     if (result.deleted) this.activity.deleted(result.reviewId);
-    else if (extended) this.activity.extended(result.reviewId);
+    else if (owner) this.activity.extended(result.reviewId);
     this.notify(result);
   }
-  private assertMutation(
-    reviewId: string,
-    version: number | undefined,
-    leaseId?: string,
-    scope: LeaseScope = "document",
-  ) {
-    this.activity.assertWrite(reviewId, leaseId, scope);
-
+  private assertMutation(reviewId: string, version: number | undefined) {
     const current = this.db
       .prepare("SELECT version FROM reviews WHERE id=?")
       .get(reviewId);
@@ -1611,8 +1562,6 @@ export class ReviewStore {
       return Promise.reject(new Error("Import versions of one review only."));
 
     const run = this.pending.then(async () => {
-      this.activity.assertWrite(reviewId);
-
       const existing = this.db
         .prepare("SELECT version,next_id FROM reviews WHERE id=?")
         .get(reviewId);
@@ -1878,11 +1827,6 @@ export class ReviewStore {
 
     return warnings.sort();
   }
-}
-
-/** Lens writes need the lenses lease; every other write needs the document's. */
-function scopeOf(operation: { type: string }): LeaseScope {
-  return operation.type === "lens_edit" ? "lenses" : "document";
 }
 
 /** A new document's first version, before its initial content. Field order

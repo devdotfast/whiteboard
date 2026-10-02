@@ -45,7 +45,11 @@ export function AuthoringActivityBadge({
 
   const cursor = toLenses ? lensCursor : documentCursor;
 
-  const focuses = working ? (activity.focuses ?? []) : [];
+  const focuses = working
+    ? (activity.activities ?? []).flatMap((presence) =>
+        presence.focus ? [presence.focus] : [],
+      )
+    : [];
 
   const description = [
     ...new Set(focuses.map((focus) => focus.description)),
@@ -133,7 +137,7 @@ export function AuthoringActivityBadge({
 /**
  * The word "Whiteboard" in the top bar's surface tabs. While an agent is writing,
  * marker ink sweeps through the word. The document is ready once it has
- * content and no authoring session is live, so ending (or losing) the lease is
+ * content and no agent is working, so the last agent ending (or expiring) is
  * what finishes it. When it becomes ready while the reader is on another
  * surface, an unread dot sits just past the word until they visit the tab, and
  * it comes back only when a later version arrives while they are elsewhere
@@ -153,7 +157,7 @@ export function ReviewSurfaceLabel({
   const activity = useContext(AuthoringActivityContext);
   const version = useContext(DisplayedReviewVersionContext) ?? null;
 
-  // Any live lease, document or lenses, means the review is not ready yet.
+  // Any working agent, on the document or lenses, means the review is not ready yet.
   const live =
     activity !== undefined &&
     activity !== "unknown" &&
@@ -249,7 +253,7 @@ const styles = stylex.create({
     color: tokens.inkFaint,
     transform: "translateY(2px) rotate(-8deg)",
   },
-  // Arriving: the mini courier drops in when a lease begins.
+  // Arriving: the mini courier drops in when an agent begins.
   courierActive: {
     color: tokens.accent,
     transform: "none",

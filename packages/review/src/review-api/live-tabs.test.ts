@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -19,7 +18,7 @@ it("shares one live connection across reviews, reconnects, and isolates a delete
   });
 
   const command = <Operation>(operation: Operation) =>
-    store.execute({ commandId: randomUUID(), operation });
+    store.execute({ operation });
 
   const app = createReviewApi(store);
 
@@ -94,14 +93,13 @@ it("shares one live connection across reviews, reconnects, and isolates a delete
       expect(seen.get("a")).toMatchObject({ title: "A updated", version: 1 }),
     );
     expect(seen.get("b")).toMatchObject({ title: "B", version: 0 });
-    const leaseId = randomUUID();
-    store.activity.update(b, { action: "begin", leaseId });
+    const { activityId } = store.activity.update(b, { action: "begin" });
     await vi.waitFor(() =>
       expect(seen.get("b")).toMatchObject({ activity: { workingCount: 1 } }),
     );
 
     requests.at(-1)!.stream.error(new Error("Network interrupted"));
-    store.activity.update(b, { action: "end", leaseId });
+    store.activity.update(b, { action: "end", activityId: activityId! });
     await vi.waitFor(() =>
       expect(errors.get("b")).toContain("Network interrupted"),
     );

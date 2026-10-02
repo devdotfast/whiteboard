@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -78,7 +77,6 @@ beforeEach(async () => {
   const pins = await local.data.resolvePins(repo.id, "HEAD^", "HEAD");
 
   const result = await local.store.execute({
-    commandId: randomUUID(),
     operation: { type: "create", title: "Trace test", pins },
   });
 

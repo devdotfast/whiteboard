@@ -55,7 +55,6 @@ async function post(route: string, body: JsonValue): Promise<Reply> {
 
 const insert = (content: JsonValue) =>
   post("/commands", {
-    commandId: randomUUID(),
     operation: {
       type: "edit",
       reviewId,
@@ -117,7 +116,6 @@ beforeEach(async () => {
   app = createReviewApi(local.store, local.data);
 
   const created = await post("/commands", {
-    commandId: randomUUID(),
     operation: { type: "create", title: "Pitfalls", pins },
   });
 
@@ -342,7 +340,6 @@ describe("anchors written as strings", () => {
     expect(sequence.status).toBe(200);
 
     const step = await post("/commands", {
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId,
@@ -562,7 +559,6 @@ describe("edit protocol rules", () => {
     await expectRejected(
       () =>
         post("/commands", {
-          commandId: randomUUID(),
           operation: {
             type: "edit",
             reviewId,
@@ -573,7 +569,6 @@ describe("edit protocol rules", () => {
     );
 
     const cleared = await post("/commands", {
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId,

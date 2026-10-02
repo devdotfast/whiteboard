@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import {
   mkdir,
   mkdtemp,
@@ -302,7 +301,6 @@ export async function smokeWindows(app, evidence) {
         });
 
         const created = api("session_create", {
-          commandId: randomUUID(),
           title: "Windows structural diff smoke",
           open: false,
           target: { kind: "commits", repositoryId: registered.id, base, head },

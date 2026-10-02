@@ -38,7 +38,7 @@ export function authoringTools(
 
   const descriptions = {
     create:
-      'Create a review of saved working files, immutable commits or a GitHub PR. Revisions are resolved on acceptance. A worktree target reviews the saved files in its checkout, uncommitted and untracked ones included, against base: the branch to compare against, by default the default branch of the repository. The diff starts at the merge base of base and HEAD, which follows rebases. Omitted commits base means source at head with no diff; supply the parent to review introduced changes. For a GitHub PR, pullRequestUrl alone is enough: target and title become optional, and the host fetches the PR into a registered checkout of its repository and pins the current PR head and GitHub diff base, titled from the PR. When a review for that PR exists, it is returned instead, reporting whether its head moved and the id of any live lease on it; update it in place, move its target with review_set_target, or create a separate review with reuseExisting. kind:"scratchpad" names the one scratchpad, which the host creates itself. The result carries review, the review as review_list shows it: its target with resolved commits, origin (its PR), repositoryName and repositoryPath, so no follow-up read is needed before diffing. When Desktop is available the review opens there and the result reports opened, softwareMapEnabled and environmentIssues, as review_open does; set open:false to author in the background without taking over Desktop.',
+      'Create a review of saved working files, immutable commits or a GitHub PR. Revisions are resolved on acceptance. A worktree target reviews the saved files in its checkout, uncommitted and untracked ones included, against base: the branch to compare against, by default the default branch of the repository. The diff starts at the merge base of base and HEAD, which follows rebases. Omitted commits base means source at head with no diff; supply the parent to review introduced changes. For a GitHub PR, pullRequestUrl alone is enough: target and title become optional, and the host fetches the PR into a registered checkout of its repository and pins the current PR head and GitHub diff base, titled from the PR. When a review for that PR exists, it is returned instead, reporting whether its head moved and whether an agent is working on it; update it in place, move its target with review_set_target, or create a separate review with reuseExisting. kind:"scratchpad" names the one scratchpad, which the host creates itself. The result carries review, the review as review_list shows it: its target with resolved commits, origin (its PR), repositoryName and repositoryPath, so no follow-up read is needed before diffing. When Desktop is available the review opens there and the result reports opened, softwareMapEnabled and environmentIssues, as review_open does; set open:false to author in the background without taking over Desktop.',
     set_target:
       "Change the review target, preserving document and component IDs. Returns warnings for source references needing repair. Earlier versions keep their retained source.",
     edit: [
@@ -68,7 +68,7 @@ export function authoringTools(
       "Replace example paths and lines with verified source ranges. The host assigns short durable IDs; use returned IDs to edit components in place. The result identifies the edited component and, for an insert or replace, its first-level children, so they can be edited without a follow-up read. Accepted edits are saved immediately. Omitted placement appends; on the scratchpad it lands at the top, so insert a multi-block thought bottom-up or chain each block with afterId. To fill a section later, insert into it with parentId. null removes an optional field in a patch. While a reader may be watching, write small and often: one paragraph per edit, so the document draws itself as you go. Insert a new diagram whole, with all its nodes and edges or steps; the board traces it in one quick pass. Change a diagram already on the board one unit at a time: insert, update or remove a flow_node, flow_edge or step by ID (parentId names the diagram). Link each added flow_node to a node already drawn, so it arrives attached; a separate flow_edge is only for two nodes that already exist. Removing a flow_node removes its edges.",
     ].join("\n"),
     lens_edit:
-      'Edit one Diff-view lens. Lenses partition the review\'s change for the Diff view; they sit beside the document (never in it) and version with it. The host assigns durable lens IDs; updates replace only the fields supplied. Write one lens per call while a reader may be watching; each draws in on the Diffs page. Requires the lenses lease: review_activity_begin with scope:"lenses", which another agent can hold while the document lease is held elsewhere. The result identifies the lens and reports uncategorized: changed lines no lens selects yet, grouped by file. Keep adding lenses until it is empty or what remains is deliberate. review_lens_get reads the current lenses and gaps.',
+      "Edit one Diff-view lens. Lenses partition the review's change for the Diff view; they sit beside the document (never in it) and version with it. The host assigns durable lens IDs; updates replace only the fields supplied. Write one lens per call while a reader may be watching; each draws in on the Diffs page. Pass your activityId so your courier draws each lens. The result identifies the lens and reports uncategorized: changed lines no lens selects yet, grouped by file. Keep adding lenses until it is empty or what remains is deliberate. review_lens_get reads the current lenses and gaps.",
     rename: "Change the review title.",
     repin:
       "Update source pins or PR identity while preserving the document and component IDs. Returns warnings for retained source ranges in files the new pins changed, to verify, and resources that no longer match; fix them with review_edit. Previous pins and content remain in history. Omitted pullRequestUrl preserves PR identity within the same repository; changing repositories clears it. Supply a URL to replace it or null to detach.",
@@ -122,21 +122,21 @@ export function authoringTools(
     ),
     tool(
       "activity_begin",
-      "Acquire an exclusive authoring session for one scope of a review and return its leaseId: pass it on every write in that scope, to review_activity_update and to review_activity_end. Separate scopes let one agent author lenses while another holds the document lease. Each scope has its own lease and focus; a focus targetId in the lenses scope names a lens id. The lease expires after 3 minutes without an accepted write or update. Another session gets a conflict while this lease is active. Use focus to show current work.",
+      "Show that you are working on a review: the reader sees your focus and your courier drawing your edits, and the review reads as finished only once every agent has ended. Returns an activityId: pass it to session_edit and session_lens_edit so your courier draws them, and to review_activity_update and review_activity_end. Nothing is locked; other agents can work on the review too. The activity expires after 3 minutes without an edit or update.",
       activityBeginSchema.extend(review),
       "POST",
       "/:reviewId/activity/begin",
     ),
     tool(
       "activity_update",
-      "Keep an authoring session alive and change its focus. Each accepted write carrying the leaseId already keeps it alive; call this during long reads or pauses between edits, or to show new work. Omitted focus preserves it and null clears it. Fails once the lease has expired: begin a new session and reread the review before editing.",
+      "Change your focus, or keep your activity alive during long reads or pauses; an edit carrying your activityId already keeps it alive. Omitted focus preserves it and null clears it. Fails once the activity has expired: begin a new one.",
       activityUpdateSchema.extend(review),
       "POST",
       "/:reviewId/activity/update",
     ),
     tool(
       "activity_end",
-      "End an authoring session only when the review is finished: readers treat a review with content and no live session as ready. Ending it creates no document version. Ending an expired lease, or another session's, changes nothing.",
+      "End your activity when your part is finished: readers treat a review with content and no live activity as ready. Ending it creates no document version. Ending twice, or an expired activity, changes nothing.",
       activityEndSchema.extend(review),
       "POST",
       "/:reviewId/activity/end",
@@ -152,18 +152,6 @@ export function authoringTools(
           ...fields,
           ...(type === "create" && { open: z.boolean().optional() }),
           ...(type === "edit" && { edit: publishedEditSchema }),
-          commandId: z
-            .uuid()
-            .optional()
-            .describe(
-              "Idempotency key. Omit it; Whiteboard assigns one. Pass one only when an error tells you to.",
-            ),
-          ...(type !== "create" &&
-            type !== "attention" && {
-              leaseId: commandSchema.shape.leaseId.describe(
-                'The leaseId from review_activity_begin, if you hold a lease on this review (scope "lenses" for review_lens_edit).',
-              ),
-            }),
         }),
         "POST",
         "/commands",

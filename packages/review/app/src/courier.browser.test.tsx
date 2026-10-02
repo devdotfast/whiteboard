@@ -38,7 +38,13 @@ const data = testApiDocumentData(blocks);
 const working = (description?: string): ActivitySnapshot => ({
   workingCount: 1,
   expiresAt: null,
-  focuses: description ? [{ description }] : [],
+  activities: [
+    {
+      activityId: "a",
+      slot: 0,
+      ...(description && { focus: { description } }),
+    },
+  ],
 });
 
 const ended: ActivitySnapshot = { workingCount: 0, expiresAt: null };

@@ -162,7 +162,6 @@ it("shares review identity, resources, sessions and live changes with Desktop in
     };
 
     const created = await server.client.post<Result>("/commands", {
-      commandId: randomUUID(),
       operation: { type: "create", title: "Shared review", pins },
     });
 
@@ -180,10 +179,11 @@ it("shares review identity, resources, sessions and live changes with Desktop in
       reviewId: created.reviewId,
       version: 0,
     });
-    const leaseId = randomUUID();
-    await server.client.post(`/${created.reviewId}/activity/begin`, {
-      leaseId,
-    });
+
+    const { activityId } = await server.client.post<{ activityId: string }>(
+      `/${created.reviewId}/activity/begin`,
+      {},
+    );
 
     for (;;) {
       const value = (await reviewStream.next()).value;
@@ -197,16 +197,6 @@ it("shares review identity, resources, sessions and live changes with Desktop in
         break;
     }
 
-    await expect(
-      desktop.post("/commands", {
-        commandId: randomUUID(),
-        operation: {
-          type: "rename",
-          reviewId: created.reviewId,
-          title: "Competing author",
-        },
-      }),
-    ).rejects.toMatchObject({ status: 409 });
     const traceId = randomUUID();
     await server.client.post("/resources", {
       id: traceId,
@@ -223,11 +213,10 @@ it("shares review identity, resources, sessions and live changes with Desktop in
       label: "Evidence",
     });
     await server.client.post("/commands", {
-      commandId: randomUUID(),
-      leaseId,
       operation: {
         type: "edit",
         reviewId: created.reviewId,
+        activityId,
         edit: {
           type: "insert",
           content: {
@@ -260,10 +249,9 @@ it("shares review identity, resources, sessions and live changes with Desktop in
         .filter((id) => id !== "scratchpad"),
     ).toEqual([created.reviewId]);
     await server.client.post(`/${created.reviewId}/activity/end`, {
-      leaseId,
+      activityId,
     });
     await desktop.post("/commands", {
-      commandId: randomUUID(),
       operation: {
         type: "rename",
         reviewId: created.reviewId,
@@ -274,7 +262,6 @@ it("shares review identity, resources, sessions and live changes with Desktop in
       await server.client.read(`/${created.reviewId}?full=true`),
     ).toMatchObject({ title: "Changed in Desktop", version: 2 });
     await server.client.post("/commands", {
-      commandId: randomUUID(),
       operation: { type: "delete", reviewId: created.reviewId },
     });
     await expect(async () => {
@@ -310,7 +297,6 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
       "api",
       "session_create",
       JSON.stringify({
-        commandId: randomUUID(),
         title: "CI review",
         pins,
       }),
@@ -325,7 +311,6 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
     .parse(JSON.parse(created.output));
 
   await client.post("/commands", {
-    commandId: randomUUID(),
     operation: {
       type: "edit",
       reviewId,
@@ -354,7 +339,6 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
     base64: image.toString("base64"),
   });
   await client.post("/commands", {
-    commandId: randomUUID(),
     operation: {
       type: "edit",
       reviewId,
@@ -410,7 +394,6 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
   });
   await expect(
     client.post("/commands", {
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId,
@@ -557,7 +540,6 @@ it("authenticates clients, reports capabilities and readiness without exposing t
   ).rejects.toThrow(/Fetch the requested commits/);
 
   const result = await server.client.post<Result>("/commands", {
-    commandId: randomUUID(),
     operation: {
       type: "create",
       title: "No UI",
@@ -598,7 +580,6 @@ it("rejects a second owner and keeps separate CI job stores independent", async 
   });
 
   await first.client.post("/commands", {
-    commandId: randomUUID(),
     operation: {
       type: "create",
       title: "First job only",

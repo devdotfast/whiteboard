@@ -1,26 +1,11 @@
-import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 import { afterEach, expect, it, vi } from "vitest";
-import type { z } from "zod";
 
-import {
-  ACTIVITY_TTL_MS,
-  ReviewActivity,
-  type activitySchema,
-} from "./activity.js";
+import { ACTIVITY_TTL_MS, ReviewActivity } from "./activity.js";
 import { ReviewApiClient } from "./client.js";
 import { createReviewApi } from "./http.js";
 import { ReviewStore } from "./store.js";
-
-type ActivityInput = z.input<typeof activitySchema>;
-
-/** Omit per action: the input is a union over begin, renew and end. */
-type WithoutLease = ActivityInput extends infer Input
-  ? Input extends unknown
-    ? Omit<Input, "leaseId">
-    : never
-  : never;
 
 const databases: DatabaseSync[] = [];
 
@@ -37,34 +22,43 @@ afterEach(() => {
   for (const db of databases.splice(0)) db.close();
 });
 
-it("renews reported work, expires abandoned work, and does not end another author's activity", () => {
+it("keeps one presence per agent, ends only the one named, and expires abandoned ones", () => {
   vi.useFakeTimers();
   const activity = newActivity();
   const notify = vi.fn<Parameters<ReviewActivity["subscribe"]>[0]>();
   activity.subscribe(notify);
 
-  const a = randomUUID(),
-    b = randomUUID();
+  const begin = (reviewId = "review") =>
+    activity.update(reviewId, { action: "begin" }).activityId!;
 
-  const update = (leaseId: string, action: "begin" | "renew" | "end") =>
-    activity.update("review", { leaseId, action });
+  const a = begin(),
+    b = begin();
 
-  expect(update(a, "begin").workingCount).toBe(1);
-  expect(update(a, "begin").workingCount).toBe(1);
+  expect(activity.read("review").activities).toEqual([
+    { activityId: a, slot: 0 },
+    { activityId: b, slot: 1 },
+  ]);
   vi.advanceTimersByTime(ACTIVITY_TTL_MS / 2);
-  update(a, "renew");
-  expect(() => update(b, "begin")).toThrow(/another session/);
-  expect(update(b, "end").workingCount).toBe(1);
-  vi.advanceTimersByTime(ACTIVITY_TTL_MS / 2);
-  expect(activity.read("review").workingCount).toBe(1);
-  expect(update(a, "end").workingCount).toBe(0);
-  expect(update(a, "end").workingCount).toBe(0);
-  update(b, "begin");
+  activity.update("review", { action: "update", activityId: a });
+  expect(
+    activity.update("review", { action: "end", activityId: b }).workingCount,
+  ).toBe(1);
+  expect(
+    activity.update("review", { action: "end", activityId: b }).workingCount,
+  ).toBe(1);
+  // A freed color goes to the next agent.
+  expect(activity.read("review").activities?.[0]?.slot).toBe(0);
+  expect(begin()).not.toBe(a);
+  expect(activity.read("review").activities?.map(({ slot }) => slot)).toEqual([
+    0, 1,
+  ]);
   vi.advanceTimersByTime(ACTIVITY_TTL_MS);
   expect(activity.read("review")).toEqual({ workingCount: 0, expiresAt: null });
   expect(notify).toHaveBeenLastCalledWith("review");
-  expect(() => update(b, "renew")).toThrow(/expired/);
-  activity.update("another", { leaseId: randomUUID(), action: "begin" });
+  expect(() =>
+    activity.update("review", { action: "update", activityId: a }),
+  ).toThrow(/expired/);
+  begin("another");
   expect(activity.read("review").workingCount).toBe(0);
   activity.close();
   expect(vi.getTimerCount()).toBe(0);
@@ -75,23 +69,24 @@ it("reports working transitions without heartbeats or focus changes", () => {
   const activity = newActivity();
   const transitions = vi.fn<() => void>();
   activity.subscribeWorking(transitions);
-  const leaseId = randomUUID();
 
-  const update = (value: WithoutLease) =>
-    activity.update("review", { leaseId, ...value });
-
-  update({ action: "begin" });
+  const first = activity.update("review", { action: "begin" }).activityId!;
   expect(activity.isWorking("review")).toBe(true);
-  update({ action: "renew" });
-  update({ action: "renew", focus: { description: "Reading the diff" } });
-  update({ action: "begin", scope: "lenses" });
+  activity.update("review", { action: "update", activityId: first });
+  activity.update("review", {
+    action: "update",
+    activityId: first,
+    focus: { description: "Reading the diff" },
+  });
+
+  const second = activity.update("review", { action: "begin" }).activityId!;
   expect(transitions).toHaveBeenCalledTimes(1);
-  update({ action: "end" });
+  activity.update("review", { action: "end", activityId: first });
   expect(transitions).toHaveBeenCalledTimes(1);
-  update({ action: "end", scope: "lenses" });
+  activity.update("review", { action: "end", activityId: second });
   expect(activity.isWorking("review")).toBe(false);
   expect(transitions).toHaveBeenCalledTimes(2);
-  update({ action: "begin" });
+  activity.update("review", { action: "begin" });
   vi.advanceTimersByTime(ACTIVITY_TTL_MS);
   expect(activity.isWorking("review")).toBe(false);
   expect(transitions).toHaveBeenCalledTimes(4);
@@ -113,7 +108,7 @@ it("streams activity separately from document versions and closes the stream on 
   );
 
   const command = <Operation>(operation: Operation) =>
-    store.execute({ commandId: randomUUID(), operation });
+    store.execute({ operation });
 
   const { reviewId } = await command({
     type: "create",
@@ -131,27 +126,27 @@ it("streams activity separately from document versions and closes the stream on 
       activity: { workingCount: 0 },
     });
 
-    const input = {
-      leaseId: randomUUID(),
-      focus: { description: "Drafting outline" },
-    };
+    const input = { focus: { description: "Drafting outline" } };
 
-    await client.post(`/${reviewId}/activity/begin`, input);
+    const { activityId } = await client.post<{ activityId: string }>(
+      `/${reviewId}/activity/begin`,
+      input,
+    );
+
     expect((await stream.next()).value).toMatchObject({
-      activity: { workingCount: 1, focuses: [input.focus] },
+      activity: {
+        workingCount: 1,
+        activities: [{ activityId, slot: 0, focus: input.focus }],
+      },
     });
     expect(changed).not.toHaveBeenCalled();
     expect(store.history(reviewId)).toHaveLength(1);
     const reconnect = client.watch(reviewId, abort.signal);
     expect((await reconnect.next()).value).toMatchObject({
-      activity: { workingCount: 1, focuses: [input.focus] },
+      activity: { workingCount: 1, activities: [{ focus: input.focus }] },
     });
     await reconnect.return(undefined);
-    await store.execute({
-      commandId: randomUUID(),
-      leaseId: input.leaseId,
-      operation: { type: "delete", reviewId },
-    });
+    await store.execute({ operation: { type: "delete", reviewId } });
     // A reader may already have buffered a pre-deletion snapshot.
     await expect(async () => {
       for await (const _snapshot of stream) {
@@ -167,37 +162,47 @@ it("streams activity separately from document versions and closes the stream on 
   }
 });
 
-it("retains, changes and clears the owner's focus until its lease expires", () => {
+it("keeps each agent's focus until it changes, clears or expires", () => {
   vi.useFakeTimers();
   const activity = newActivity();
-  const leaseId = randomUUID();
-  const other = randomUUID();
   const focus = { description: "Adding evidence", targetId: "section-1" };
-  activity.update("review", { action: "begin", leaseId, focus });
-  expect(
-    activity.update("review", { action: "renew", leaseId }).focuses,
-  ).toEqual([focus]);
-  expect(() =>
-    activity.update("review", {
-      action: "begin",
-      leaseId: other,
-      focus: { description: "Drafting summary" },
-    }),
-  ).toThrow(/another session/);
+
+  const mine = activity.update("review", {
+    action: "begin",
+    focus,
+  }).activityId!;
+
+  const other = activity.update("review", {
+    action: "begin",
+    focus: { description: "Grouping files" },
+  }).activityId!;
+
+  const focusOf = (activityId: string) =>
+    activity
+      .read("review")
+      .activities?.find((presence) => presence.activityId === activityId)
+      ?.focus;
+
+  activity.update("review", { action: "update", activityId: mine });
+  expect(focusOf(mine)).toEqual(focus);
+
   const next = { description: "Drawing save flow", targetId: "section-2" };
-  expect(
-    activity.update("review", { action: "renew", leaseId, focus: next })
-      .focuses,
-  ).toEqual([next]);
-  expect(
-    activity.update("review", { action: "renew", leaseId, focus: null })
-      .focuses,
-  ).toBeUndefined();
-  activity.update("review", { action: "end", leaseId: other });
-  expect(activity.read("review").focuses).toBeUndefined();
-  activity.update("review", { action: "renew", leaseId, focus });
+  activity.update("review", {
+    action: "update",
+    activityId: mine,
+    focus: next,
+  });
+  expect(focusOf(mine)).toEqual(next);
+  expect(focusOf(other)).toEqual({ description: "Grouping files" });
+  activity.update("review", {
+    action: "update",
+    activityId: mine,
+    focus: null,
+  });
+  expect(focusOf(mine)).toBeUndefined();
+  activity.update("review", { action: "update", activityId: mine, focus });
   vi.advanceTimersByTime(ACTIVITY_TTL_MS);
-  expect(activity.read("review").focuses).toBeUndefined();
+  expect(activity.read("review").activities).toBeUndefined();
   activity.close();
 });
 
@@ -215,7 +220,6 @@ it.each([false, true])(
     const api = createReviewApi(store);
 
     const { reviewId } = await store.execute({
-      commandId: randomUUID(),
       operation: {
         type: "create",
         title: "Background review",
@@ -245,22 +249,30 @@ it.each([false, true])(
       expect.objectContaining({ reviewId, working }),
     ];
 
-    const leaseId = randomUUID();
-
     try {
       expect(await next()).toEqual(expected(false));
-      store.activity.update(reviewId, { action: "begin", leaseId });
+
+      const { activityId } = store.activity.update(reviewId, {
+        action: "begin",
+      });
+
       expect(await next()).toEqual(expected(true));
       // One line per transition: no repeat, nothing for renewals or focus.
-      store.activity.update(reviewId, { action: "renew", leaseId });
       store.activity.update(reviewId, {
-        action: "renew",
-        leaseId,
+        action: "update",
+        activityId: activityId!,
+      });
+      store.activity.update(reviewId, {
+        action: "update",
+        activityId: activityId!,
         focus: { description: "Reading the diff" },
       });
-      store.activity.update(reviewId, { action: "end", leaseId });
+      store.activity.update(reviewId, {
+        action: "end",
+        activityId: activityId!,
+      });
       expect(await next()).toEqual(expected(false));
-      store.activity.update(reviewId, { action: "begin", leaseId });
+      store.activity.update(reviewId, { action: "begin" });
       expect(await next()).toEqual(expected(true));
       await vi.advanceTimersByTimeAsync(ACTIVITY_TTL_MS);
       expect(await next()).toEqual(expected(false));
