@@ -275,7 +275,7 @@ test("a remote review is rooted on its host and asks that host's registry, never
 	assert.equal(windowAsked, 0);
 	assert.deepEqual(asked, [SERVER_ID]);
 	assert.deepEqual(roots, [remoteUri(ROOT).toString()]);
-	assert.deepEqual(activated, ["onLanguage:typescript"]);
+	assert.deepEqual(activated, ["onLanguage:typescript", "onReviewWorkspaceLanguage:typescript"]);
 	assert.deepEqual(windowActivations, []);
 });
 
