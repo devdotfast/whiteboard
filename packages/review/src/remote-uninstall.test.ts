@@ -609,7 +609,7 @@ it("stops the VS Code server with its extension host, and a detached extension i
   expect(runningWith(`${install}/`)).toBe(false);
 });
 
-it("still refuses a server the user started, and removes nothing", async () => {
+it("refuses a server the user started before it stops anything, naming only that server", async () => {
   const server = await groupFrom(
     path.join(
       install,
@@ -619,6 +619,7 @@ it("still refuses a server the user started, and removes nothing", async () => {
       "out",
       "server-main.js",
     ),
+    path.join(install, "extensions", "ms-python.python", "server.js"),
   );
 
   await languageServerRecords(server);
@@ -642,6 +643,27 @@ it("still refuses a server the user started, and removes nothing", async () => {
       `A Whiteboard server you started (process ${user.pid})`,
     ),
   });
+  expect((result as { reason: string }).reason).not.toContain(`${server}`);
   expect(alive(user.pid!)).toBe(true);
+  // Language features keep working when the uninstall is refused.
+  expect(alive(server)).toBe(true);
   expect(existsSync(path.join(install, "versions"))).toBe(true);
+});
+
+it("removes nothing under a DEV_REVIEW_HOME it cannot normalise, as the probe refuses it", async () => {
+  for (const moved of ["relative/home", `${root}/a/../b`, `${root}//b`]) {
+    const result = await remoteUninstall({
+      env: { DEV_REVIEW_HOME: moved },
+      home,
+      stateDir,
+      deleteReviews: false,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("not an absolute, normalised path"),
+    });
+  }
+
+  expect(existsSync(install)).toBe(true);
 });

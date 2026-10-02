@@ -269,7 +269,8 @@ const VIA = { "remote-download": "downloaded on the host", upload: "uploaded fro
  */
 export function installPromptText(alias: string, version: string, probe: ReviewRemoteProbe): string {
 	const node = probe.node || probe.managedNode ? "" : `, and about 200 MB for Node 24, which ${alias} does not have`;
-	return `Whiteboard ${version} is not installed on ${alias}. Install it in ~/.dev/whiteboard-remote? It takes about 60 MB${node}. Whiteboard also adds ~/.local/bin/whiteboard if that path is free.`;
+	const where = probe.root === `${probe.home}/.dev/whiteboard-remote` ? "~/.dev/whiteboard-remote" : "whiteboard-remote under DEV_REVIEW_HOME";
+	return `Whiteboard ${version} is not installed on ${alias}. Install it in ${where}? It takes about 60 MB${node}. Whiteboard also adds ~/.local/bin/whiteboard if that path is free.`;
 }
 
 /** One sentence naming the version, the step and the reason; the installer's own errors name the step more closely. */

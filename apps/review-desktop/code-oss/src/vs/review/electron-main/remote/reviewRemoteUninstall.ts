@@ -51,7 +51,7 @@ export async function uninstallRemote(input: {
 			.map((line) => line.slice(REVIEW_REMOTE_INSTALL_SAY.length + word.length + 2).trim());
 	if (!said("LISTED").length) throw failed(sshProblem(listed));
 	const root = said("ROOT")[0];
-	if (!root?.startsWith("/")) throw failed("it named no install directory.");
+	if (!root?.startsWith("/")) throw failed("DEV_REVIEW_HOME there is not an absolute, normalised path.");
 	const newest = said("HAVE")
 		.filter((name) => REVIEW_REMOTE_VERSION.test(name))
 		.sort(compareVersions)

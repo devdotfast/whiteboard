@@ -119,6 +119,17 @@ async function fixture(t: test.TestContext, cli = CLI) {
 
 const run = (file: string, ...args: string[]) => execFileSync(file, args, { encoding: "utf8" }).trim();
 
+test("a DEV_REVIEW_HOME the remote cannot normalise is refused by the probe and the uninstall, before anything is written", async (t) => {
+	const f = await fixture(t);
+	for (const home of ["relative/home", `${f.root}/a/../b`, `${f.root}//b`, `${f.root}/./b`]) {
+		const spawn = localRemote(f.home, 0, { DEV_REVIEW_HOME: home });
+		const probed = await probeRemote({ session: reviewSshSession("devbox", tmpdir()), spawn, env: {} });
+		assert.match("error" in probed ? probed.error : "", /DEV_REVIEW_HOME there is not an absolute, normalised path/, home);
+		await assert.rejects(uninstallRemote({ session: reviewSshSession("devbox", tmpdir()), spawn, env: {} }), /DEV_REVIEW_HOME there is not an absolute, normalised path/);
+	}
+	assert.deepEqual(await readdir(f.home), []);
+});
+
 test("DEV_REVIEW_HOME moves the probe's versions, the install, its launcher and the uninstall together", async (t) => {
 	const uninstalled = `else if (a === "remote" && b === "uninstall") console.log(JSON.stringify({ event: "remote.uninstall", ok: true, removed: [], keptReviews: true }));\n`;
 	const f = await fixture(t, CLI.replace("else console.log", `${uninstalled}else console.log`));

@@ -138,6 +138,8 @@ function readProbe(value: unknown): ReviewRemoteProbe {
 	});
 	const tools = record.tools;
 	if (!Array.isArray(tools) || tools.length > INSTALLED_LIMIT) throw new Error("tools is not a short list.");
+	// The probe's root helper leaves it empty for a DEV_REVIEW_HOME it cannot normalise.
+	if (record.root === "") throw new Error("DEV_REVIEW_HOME there is not an absolute, normalised path.");
 	const freeBytes = record.freeBytes;
 	if (typeof freeBytes !== "number" || !Number.isSafeInteger(freeBytes) || freeBytes < 0) throw new Error("freeBytes is not a byte count.");
 	return {

@@ -247,12 +247,11 @@ async function installing(files: ReturnType<typeof remoteLanguageServerFiles>) {
 }
 
 /**
- * Stops the VS Code server and a detached `extensions ensure` that this
- * install started, each with its process group (extension hosts, language
- * servers), so `remote uninstall` finds none of them running. A process
- * whose start differs from the recorded one is not ours and is left.
+ * The process groups that the VS Code server and a detached `extensions
+ * ensure` lead (with their extension hosts and language servers), when each
+ * recorded start matches: this install's own. One whose start differs is not.
  */
-export async function stopRemoteLanguageServer(env: NodeJS.ProcessEnv) {
+export async function remoteLanguageServerGroups(env: NodeJS.ProcessEnv) {
   const files = remoteLanguageServerFiles(env);
 
   const recorded = await Promise.all([
@@ -260,12 +259,11 @@ export async function stopRemoteLanguageServer(env: NodeJS.ProcessEnv) {
     readInstalling(files),
   ]);
 
-  await Promise.all(
-    recorded.map((entry) => entry && ours(entry) && stopGroup(entry.pid)),
-  );
+  return recorded.flatMap((entry) => (entry && ours(entry) ? [entry.pid] : []));
 }
 
-async function stopGroup(leader: number) {
+/** SIGTERM, then SIGKILL, to the process group `leader` leads. */
+export async function stopProcessGroup(leader: number) {
   for (const signal of ["SIGTERM", "SIGKILL"] as const) {
     try {
       process.kill(-leader, signal);

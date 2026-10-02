@@ -46,13 +46,20 @@ export interface ReviewRemoteInstallContext {
 
 /**
  * Sets `root` on the remote as the CLI's `whiteboardRemoteHome` does:
- * DEV_REVIEW_HOME, trimmed and resolved against the working directory, else
- * ~/.dev, then whiteboard-remote. The probe and the uninstall's listing
- * derive it; every other script is given it quoted.
+ * DEV_REVIEW_HOME, trimmed, else ~/.dev, then whiteboard-remote. A
+ * DEV_REVIEW_HOME that is relative or not normalised (`.`, `..`, `//`) leaves
+ * `root` empty: sh cannot spell it as Node's `path.resolve` does, and a
+ * process scan by path would miss what runs from the other spelling. The
+ * probe and the uninstall's listing derive it; every other script is given
+ * it quoted.
  */
 export const REVIEW_REMOTE_ROOT_SCRIPT = `base=$(printf '%s' "\${DEV_REVIEW_HOME-}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-case "$base" in '') base=$HOME/.dev ;; /*) ;; *) base=$PWD/$base ;; esac
-root=\${base%/}/whiteboard-remote
+root=
+case "$base" in
+'') root=$HOME/.dev/whiteboard-remote ;;
+*//*|*/./*|*/../*|*/.|*/..|*/./|*/../) ;;
+/*) root=\${base%/}/whiteboard-remote ;;
+esac
 `;
 
 export const reviewRemoteVersionDir = (root: string, version: string) => `${root}/versions/${version}`;
