@@ -628,9 +628,9 @@ it("copies prose and code from the displayed historical JSON review", async () =
   });
 
   await command({
-    type: "repin",
+    type: "set_target",
     reviewId: review.reviewId,
-    pins: { ...pins, head: "new-head" },
+    target: { kind: "commits", ...pins, head: "new-head" },
   });
   const data = new LocalReviewData(store);
   vi.spyOn(data, "commits").mockResolvedValue([]);

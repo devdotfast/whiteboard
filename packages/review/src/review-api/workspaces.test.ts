@@ -212,9 +212,9 @@ it("keeps historical and equal-side environments until review deletion and leave
   expect(local.data.workspaces.list(reviewId)).toHaveLength(1);
   const old = await local.data.workspaces.source(reviewId, pins, "base");
   await command({
-    type: "repin",
+    type: "set_target",
     reviewId,
-    pins: { ...pins, base: pins.head },
+    target: { kind: "commits", ...pins, base: pins.head },
   });
   expect(existsSync(old.rootPath!)).toBe(true);
   await command({ type: "delete", reviewId });

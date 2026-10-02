@@ -109,8 +109,8 @@ describe("snapshot authoring", () => {
     const authored = store.read(reviewId);
 
     const rebinding = request({
-      type: "repin",
-      pins,
+      type: "set_target",
+      target: { kind: "commits", ...pins },
       reviewId,
       pullRequestUrl: "https://github.com/devdotfast/review/pull/311",
     });
@@ -123,14 +123,18 @@ describe("snapshot authoring", () => {
       store.read(reviewId, authored.version).origin?.pullRequestNumber,
     ).toBe(310);
     await store.execute(
-      request({ type: "repin", reviewId, pins: { ...pins, head: "new-head" } }),
+      request({
+        type: "set_target",
+        reviewId,
+        target: { kind: "commits", ...pins, head: "new-head" },
+      }),
     );
     expect(store.read(reviewId).origin?.pullRequestNumber).toBe(311);
     await store.execute(
       request({
-        type: "repin",
+        type: "set_target",
         reviewId,
-        pins: { ...pins, repositoryId: "other-repository" },
+        target: { kind: "commits", ...pins, repositoryId: "other-repository" },
       }),
     );
     expect(store.read(reviewId).origin?.pullRequestUrl).toBeUndefined();
@@ -140,7 +144,12 @@ describe("snapshot authoring", () => {
     expect(store.read(reviewId).origin?.pullRequestNumber).toBe(310);
     expect(store.read(reviewId).document).toEqual(authored.document);
     await store.execute(
-      request({ type: "repin", reviewId, pins, pullRequestUrl: null }),
+      request({
+        type: "set_target",
+        reviewId,
+        target: { kind: "commits", ...pins },
+        pullRequestUrl: null,
+      }),
     );
     expect(store.read(reviewId).origin?.pullRequestNumber).toBeUndefined();
     expect(store.read(reviewId).document).toEqual(authored.document);
@@ -162,9 +171,9 @@ describe("snapshot authoring", () => {
     });
     await store.execute(
       request({
-        type: "repin",
+        type: "set_target",
         reviewId,
-        pins,
+        target: { kind: "commits", ...pins },
         pullRequestUrl: "https://github.com/devdotfast/review/pull/319",
       }),
     );
@@ -176,7 +185,12 @@ describe("snapshot authoring", () => {
       pullRequestUrl: "https://github.com/devdotfast/review/pull/319",
     });
     await store.execute(
-      request({ type: "repin", reviewId, pins, pullRequestUrl: null }),
+      request({
+        type: "set_target",
+        reviewId,
+        target: { kind: "commits", ...pins },
+        pullRequestUrl: null,
+      }),
     );
     expect(store.read(reviewId).origin).toEqual({
       branch: "feature",
@@ -385,9 +399,9 @@ describe("snapshot authoring", () => {
     const beforeRepin = store.read(first.reviewId);
     await store.execute(
       request({
-        type: "repin",
+        type: "set_target",
         reviewId: first.reviewId,
-        pins: { ...pins, head: "new-head" },
+        target: { kind: "commits", ...pins, head: "new-head" },
       }),
     );
     expect(store.read(first.reviewId)).toMatchObject({
@@ -421,9 +435,9 @@ describe("snapshot authoring", () => {
     );
 
     const command = request({
-      type: "repin",
+      type: "set_target",
       reviewId,
-      pins: { ...pins, head: "new-head" },
+      target: { kind: "commits", ...pins, head: "new-head" },
     });
 
     const result = await store.execute(command);
@@ -462,7 +476,11 @@ describe("snapshot authoring", () => {
     });
 
     const untouched = await store.execute(
-      request({ type: "repin", reviewId, pins: { ...pins, head: "rebased" } }),
+      request({
+        type: "set_target",
+        reviewId,
+        target: { kind: "commits", ...pins, head: "rebased" },
+      }),
     );
 
     expect(untouched.warnings).toBeUndefined();
@@ -472,7 +490,11 @@ describe("snapshot authoring", () => {
     });
 
     const result = await store.execute(
-      request({ type: "repin", reviewId, pins: { ...pins, head: "new-head" } }),
+      request({
+        type: "set_target",
+        reviewId,
+        target: { kind: "commits", ...pins, head: "new-head" },
+      }),
     );
 
     expect(result.warnings).toEqual([
@@ -480,7 +502,11 @@ describe("snapshot authoring", () => {
     ]);
 
     const samePins = await store.execute(
-      request({ type: "repin", reviewId, pins: { ...pins, head: "new-head" } }),
+      request({
+        type: "set_target",
+        reviewId,
+        target: { kind: "commits", ...pins, head: "new-head" },
+      }),
     );
 
     expect(samePins.warnings).toBeUndefined();
@@ -499,9 +525,9 @@ describe("snapshot authoring", () => {
     await expect(
       store.execute(
         request({
-          type: "repin",
+          type: "set_target",
           reviewId,
-          pins: { ...pins, head: "missing" },
+          target: { kind: "commits", ...pins, head: "missing" },
         }),
       ),
     ).rejects.toThrow("Missing commit");
@@ -511,9 +537,9 @@ describe("snapshot authoring", () => {
     await expect(
       store.execute(
         request({
-          type: "repin",
+          type: "set_target",
           reviewId,
-          pins: { ...pins, head: "new-head" },
+          target: { kind: "commits", ...pins, head: "new-head" },
         }),
       ),
     ).rejects.toThrow("Repository read failed");
@@ -1232,7 +1258,11 @@ describe("snapshot authoring", () => {
 
     validated.length = 0;
     await store.execute(
-      request({ type: "repin", reviewId, pins: { ...pins, head: "new-head" } }),
+      request({
+        type: "set_target",
+        reviewId,
+        target: { kind: "commits", ...pins, head: "new-head" },
+      }),
     );
 
     // Repinning the document re-checks inherited references only.
@@ -1298,7 +1328,11 @@ describe("snapshot authoring", () => {
       { type: "delete", reviewId: SCRATCHPAD_ID },
       { type: "attention", reviewId: SCRATCHPAD_ID, action: "view" },
       { type: "rename", reviewId: SCRATCHPAD_ID, title: "Notes" },
-      { type: "repin", reviewId: SCRATCHPAD_ID, pins },
+      {
+        type: "set_target",
+        reviewId: SCRATCHPAD_ID,
+        target: { kind: "commits", ...pins },
+      },
       {
         type: "set_target",
         reviewId: SCRATCHPAD_ID,
@@ -2189,7 +2223,11 @@ it("preserves unchanged partial file coverage across pins and rejects stale writ
 
   expect((await mark(initial.files[0].fingerprint, 0)).status).toBe(200);
   await store.execute(
-    request({ type: "repin", reviewId, pins: { ...pins, head: "new-pin" } }),
+    request({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...pins, head: "new-pin" },
+    }),
   );
   expect(
     (await reviewProgress(store, data, store.read(reviewId))).files[0].viewed
@@ -2198,9 +2236,9 @@ it("preserves unchanged partial file coverage across pins and rejects stale writ
   head += "\nchanged outside the hunk";
   await store.execute(
     request({
-      type: "repin",
+      type: "set_target",
       reviewId,
-      pins: { ...pins, head: "changed-head" },
+      target: { kind: "commits", ...pins, head: "changed-head" },
     }),
   );
   expect(
@@ -2216,9 +2254,14 @@ it("preserves unchanged partial file coverage across pins and rejects stale writ
   base += "\nnew base context";
   await store.execute(
     request({
-      type: "repin",
+      type: "set_target",
       reviewId,
-      pins: { ...pins, base: "changed-base", head: "changed-head" },
+      target: {
+        kind: "commits",
+        ...pins,
+        base: "changed-base",
+        head: "changed-head",
+      },
     }),
   );
   expect(
@@ -2858,10 +2901,20 @@ it("Home reads persisted counts without scheduling comparisons, and changed pins
   expect(store.list()[0].diffStats).toEqual(counts);
   expect(store.list("textual")[0].diffStats).toBeNull();
   await store.execute(
-    request({ type: "repin", reviewId, pins: { ...pins, head: "new-head" } }),
+    request({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...pins, head: "new-head" },
+    }),
   );
   expect(store.list()[0].diffStats).toBeNull();
-  await store.execute(request({ type: "repin", reviewId, pins }));
+  await store.execute(
+    request({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...pins },
+    }),
+  );
   expect(store.list()[0].diffStats).toEqual(counts);
 });
 
