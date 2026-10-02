@@ -22,7 +22,6 @@ export const all = Object.freeze<string[]>([
 	'scripts/**/*',
 	'src/**/*',
 	'test/**/*',
-	'!cli/**/*',
 	'!out*/**',
 	'!extensions/**/out*/**',
 	'!test/**/out/**',
@@ -100,9 +99,6 @@ export const indentationFilter = Object.freeze<string[]>([
 	'!src/vs/platform/endpoint/common/licenseAgreement.ts',
 
 	// except specific folders
-	'!test/automation/out/**',
-	'!test/monaco/out/**',
-	'!test/smoke/out/**',
 	'!extensions/terminal-suggest/src/shell/zshBuiltinsCache.ts',
 	'!extensions/terminal-suggest/src/shell/fishBuiltinsCache.ts',
 	'!extensions/terminal-suggest/src/completions/upstream/**',

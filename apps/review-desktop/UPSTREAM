@@ -117,7 +117,7 @@ created. They have never existed in the monorepo history:
 - `extensions/emmet/test-workspace/` (contains only excluded `.vscode/` data)
 - `extensions/vscode-colorize-perf-tests/`
 - `extensions/vscode-colorize-tests/`
-- `test/monaco/dist/`
+- `test/monaco/dist/` (all of `test/monaco/` was later pruned; see below)
 
 The `.vscode/` trees and Monaco `dist/` fixture are upstream development-only
 files ignored by the vendored tree's own ignore rules; they are not required
@@ -158,6 +158,20 @@ To restore one: `git checkout code-oss-upstream-8a7abeba -- apps/review-desktop/
 and re-add its lines to the three build files above. In a checkout without
 that tag (the standalone open-source repository), take the extension from
 `microsoft/vscode` at the upstream commit recorded above instead.
+
+## Pruned upstream tooling
+
+Review deletes these upstream development and release tools. It never builds
+or runs them, and their lockfiles only produced Dependabot alerts:
+
+- `cli/` (the Rust `code` CLI) and `build/gulpfile.cli.ts`
+- `test/automation/`, `test/smoke/`, `test/mcp/`
+- `test/sanity/`, `test/monaco/`, `test/componentFixtures/`
+- `scripts/chat-simulation/`, `scripts/mock-policy-server/`
+
+Their npm scripts, ESLint import rules, hygiene filters and ignore entries are
+removed with them. Restore them from the upstream tag the same way as the
+extensions above.
 
 ## Pruned Agents window
 

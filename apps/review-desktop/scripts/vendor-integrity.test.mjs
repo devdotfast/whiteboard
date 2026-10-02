@@ -16,11 +16,7 @@ const vendorTimeExclusions = [
 const reviewUnusedInstallTargets = [
   "remote",
   "remote/web",
-  "test/automation",
   "test/integration/browser",
-  "test/monaco",
-  "test/smoke",
-  "test/mcp",
 ];
 
 test("postinstall does not target vendor-time exclusions", () => {
