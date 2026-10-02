@@ -20,6 +20,10 @@ on:
         description: "Compiled Linux app artifact to repackage for NixOS validation"
         type: string
         default: linux-packages-app
+      nixos_coexistence_run:
+        description: "Existing full Linux CI run whose stable and preview packages should be checked together"
+        type: string
+        default: ""
       linux_packages:
         description: "Build and validate stable and preview Linux packages with disposable CI signing keys"
         type: boolean
@@ -66,8 +70,11 @@ jobs:
 
   nixos-coexistence:
     name: NixOS channel coexistence
+    permissions:
+      contents: read
+      actions: read
     needs: [nixos, linux-packages]
-    if: ${{ !cancelled() && (needs.linux-packages.result == 'success' || (needs.nixos.result == 'success' && fromJSON(inputs.nixos_artifact_runs)[1] != null)) }}
+    if: ${{ !cancelled() && (inputs.nixos_coexistence_run != '' || needs.linux-packages.result == 'success' || (needs.nixos.result == 'success' && fromJSON(inputs.nixos_artifact_runs)[1] != null)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -79,12 +86,16 @@ jobs:
             accept-flake-config = false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ inputs.linux_packages && 'linux-ci-stable' || format('nixos-validation-{0}', fromJSON(inputs.nixos_artifact_runs)[0]) }}
+          name: ${{ (inputs.linux_packages || inputs.nixos_coexistence_run != '') && 'linux-ci-stable' || format('nixos-validation-{0}', fromJSON(inputs.nixos_artifact_runs)[0]) }}
           path: stable
+          run-id: ${{ inputs.nixos_coexistence_run || github.run_id }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ inputs.linux_packages && 'linux-ci-preview' || format('nixos-validation-{0}', fromJSON(inputs.nixos_artifact_runs)[1]) }}
+          name: ${{ (inputs.linux_packages || inputs.nixos_coexistence_run != '') && 'linux-ci-preview' || format('nixos-validation-{0}', fromJSON(inputs.nixos_artifact_runs)[1]) }}
           path: preview
+          run-id: ${{ inputs.nixos_coexistence_run || github.run_id }}
+          github-token: ${{ github.token }}
       - name: Check CLI launches and stable/preview coexistence
         run: |
           STABLE=$(find "$PWD/stable" -name 'whiteboard-[0-9]*.nix.tar.gz')

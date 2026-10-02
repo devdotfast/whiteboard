@@ -33,11 +33,11 @@ in pkgs.testers.runNixOSTest {
     for protocol, handler in [("dev-fast-review", "dev-fast-review-url-handler.desktop"), ("dev-fast-review-preview", "dev-fast-review-preview-url-handler.desktop")]:
         assert handler in user(f"gio mime x-scheme-handler/{protocol}")
     display = "DISPLAY=:0 XAUTHORITY=/home/tester/.Xauthority DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
-    for app in ["whiteboard", "whiteboard-preview"]:
+    for app, channel in [("whiteboard", "stable"), ("whiteboard-preview", "preview")]:
         user(f"DO_NOT_TRACK=1 {app} --help")
-        user(f"{display} DO_NOT_TRACK=1 DEV_REVIEW_HOME=/home/tester/reviews DEV_FAST_REVIEW_DESKTOP_STATE_ROOT=/home/tester/profiles/{app} {app} app launch --focus --json")
+        user(f"{display} DO_NOT_TRACK=1 DEV_REVIEW_INSTANCE={channel} DEV_REVIEW_HOME=/home/tester/reviews DEV_FAST_REVIEW_DESKTOP_STATE_ROOT=/home/tester/profiles/{app} {app} app launch --focus --json")
 
-    machine.wait_until_succeeds("test -f /home/tester/reviews/review-desktop/instances/stable.json && test -f /home/tester/reviews/review-desktop/instances/preview.json")
+    machine.wait_until_succeeds("test -f /home/tester/reviews/review-desktop/instances/stable.json && test -f /home/tester/reviews/review-desktop/instances/preview.json", timeout=60)
     machine.succeed("python3 -c 'import json; p=\"/home/tester/reviews/review-desktop/instances/\"; a=json.load(open(p+\"stable.json\")); b=json.load(open(p+\"preview.json\")); assert a[\"url\"] != b[\"url\"]'")
     windows = user(f"{display} wmctrl -lx")
     assert len([line for line in windows.splitlines() if "whiteboard" in line.lower()]) >= 2, windows
