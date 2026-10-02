@@ -24,6 +24,6 @@ fi
 FLAKE="file://$PACKAGE"
 nix flake check --no-build --no-update-lock-file "$FLAKE"
 nix build --no-update-lock-file "$FLAKE#default" --out-link "$WORK/result"
-nix build --no-update-lock-file "$FLAKE#checks.x86_64-linux.nixos" --out-link "$WORK/validation"
+nix build -L --no-update-lock-file "$FLAKE#checks.x86_64-linux.nixos" --out-link "$WORK/validation"
 mkdir -p nixos-validation
 cp -RL "$WORK/validation/." nixos-validation/

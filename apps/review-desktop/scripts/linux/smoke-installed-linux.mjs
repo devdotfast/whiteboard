@@ -75,7 +75,12 @@ const child = spawn(
     `--extensions-dir=${extensions}`,
     `--remote-debugging-port=${port}`,
     ...(protocol
-      ? ["--open-url", "--", `${protocol}://share/nixos-cold?origin=invalid`]
+      ? [
+          "--log=trace",
+          "--open-url",
+          "--",
+          `${protocol}://share/nixos-cold?origin=invalid`,
+        ]
       : []),
   ],
   {
@@ -437,6 +442,20 @@ try {
   );
 } catch (error) {
   console.error(await evaluate("document.body.innerText").catch(() => ""));
+
+  for (const entry of await readdir(`${profile}/logs`).catch(() => [])) {
+    const log = await readFile(
+      `${profile}/logs/${entry}/main.log`,
+      "utf8",
+    ).catch(() => "");
+
+    console.error(
+      log
+        .split("\n")
+        .filter((line) => /[Uu][Rr][Ll]|protocol/i.test(line))
+        .join("\n"),
+    );
+  }
 
   if (process.env.SMOKE_SCREENSHOT)
     await screenshot(
