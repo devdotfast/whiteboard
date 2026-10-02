@@ -16,6 +16,13 @@
   --check-mark: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 5.2 4.2 7.4 8 3.2' fill='none' stroke='%230C0F15' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
   --marker-tint: rgba(91, 124, 255, 0.14);
   --marker-glow: rgba(91, 124, 255, 0.3);
+  /* Agents after the first, in the order they begin: violet, then teal. */
+  --agent-1: #9b7bff;
+  --agent-1-tint: rgba(155, 123, 255, 0.14);
+  --agent-1-glow: rgba(155, 123, 255, 0.3);
+  --agent-2: #2bb3ad;
+  --agent-2-tint: rgba(43, 179, 173, 0.14);
+  --agent-2-glow: rgba(43, 179, 173, 0.3);
   --board-grid: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='1' cy='1' r='0.8' fill='%231A1F2A'/></svg>");
   --review-header-height: 35px;
   --font-serif: "Newsreader", Georgia, serif;

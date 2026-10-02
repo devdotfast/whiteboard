@@ -1,10 +1,12 @@
 import { courierMotion } from "@canvas/courier-motion.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import type { ActivityPresence } from "@review/review-api/activity";
 import * as stylex from "@stylexjs/stylex";
 import { useContext, useState } from "react";
 
+import { agentColor } from "./agent-colors";
 import { AuthoringActivityContext } from "./authoring-activity-context";
-import { scopeLive } from "./authoring-cursor";
+import { surfaceOf } from "./authoring-cursor";
 import {
   AuthoringCursorContext,
   LensCursorContext,
@@ -20,11 +22,11 @@ import { tokens } from "./tokens.stylex";
 import { useTooltip } from "./use-tooltip";
 
 /**
- * The top-bar badge: the mini courier and what the agent is doing. While an
- * agent works, clicking it opens the Review surface; when the courier is on
- * the board, it also takes the reader to him, and he jumps so the eye finds
- * him. When only lenses are being written, or only the lenses' courier is
- * out, it opens the Diffs page and finds the courier in the lens list.
+ * The top-bar badges: one pill per working agent, in its color, with its
+ * mini courier and what it is doing. Clicking one opens the page where that
+ * agent last wrote (the Review surface, or the Diffs page for lenses); when
+ * its courier is on the board, it also takes the reader to him, and he jumps
+ * so the eye finds him.
  */
 export function AuthoringActivityBadge({
   onLocate,
@@ -33,32 +35,54 @@ export function AuthoringActivityBadge({
   onLocate?(view: "review" | "diff"): void;
 }) {
   const activity = useContext(AuthoringActivityContext);
+
+  const tooltip = useTooltip<HTMLElement>(
+    "Activity updates stopped. This does not mean the agent finished.",
+  );
+
+  if (!activity) return null;
+
+  // The class is a marker for tests.
+  if (activity === "unknown")
+    return (
+      <span
+        {...withClass("host-authoring-activity", styles.badge)}
+        role="status"
+        aria-live="polite"
+        ref={tooltip}
+      >
+        <CourierFigure xstyle={styles.courier} />
+        <span {...stylex.props(styles.text)}>Activity unknown</span>
+      </span>
+    );
+
+  return (activity.activities ?? []).map((presence) => (
+    <AgentPill
+      key={presence.activityId}
+      presence={presence}
+      onLocate={onLocate}
+    />
+  ));
+}
+
+function AgentPill({
+  presence,
+  onLocate,
+}: {
+  presence: ActivityPresence;
+  onLocate?(view: "review" | "diff"): void;
+}) {
   const documentCursor = useContext(AuthoringCursorContext);
   const lensCursor = useContext(LensCursorContext);
   const roots = useReviewRoots();
 
-  const working = activity && activity !== "unknown";
-
-  const toLenses =
-    (scopeLive(activity, "lenses") && !scopeLive(activity, "document")) ||
-    (!documentCursor && !!lensCursor);
-
+  const toLenses = surfaceOf(presence) === "lenses";
   const cursor = toLenses ? lensCursor : documentCursor;
-
-  const focuses = working
-    ? (activity.activities ?? []).flatMap((presence) =>
-        presence.focus ? [presence.focus] : [],
-      )
-    : [];
-
-  const description = [
-    ...new Set(focuses.map((focus) => focus.description)),
-  ].join(" · ");
+  const description = presence.focus?.description;
+  const text = description || "Agent working…";
 
   const tooltip = useTooltip<HTMLElement>(
-    working
-      ? `${description || "An agent has reported ongoing authoring work. This signal expires if updates stop."}${cursor ? " · Click to go to the courier." : ""}`
-      : "Activity updates stopped. This does not mean the agent finished.",
+    `${description || "An agent has reported ongoing authoring work. This signal expires if updates stop."}${cursor ? " · Click to go to the courier." : ""}`,
   );
 
   const locate = () => {
@@ -91,35 +115,15 @@ export function AuthoringActivityBadge({
     });
   };
 
-  if (!activity || (working && !activity.workingCount)) return null;
-
-  const text = working
-    ? description ||
-      (activity.workingCount > 1
-        ? `${activity.workingCount} agents working…`
-        : "Agent working…")
-    : "Activity unknown";
-
-  // The class is a marker for tests.
-  const badge = "host-authoring-activity";
-
-  if (!working)
-    return (
-      <span
-        {...withClass(badge, styles.badge)}
-        role="status"
-        aria-live="polite"
-        ref={tooltip}
-      >
-        <CourierFigure xstyle={styles.courier} />
-        <span {...stylex.props(styles.text)}>{text}</span>
-      </span>
-    );
-
   return (
     <button
       type="button"
-      {...withClass(badge, styles.badge, styles.badgeActive)}
+      {...withClass(
+        "host-authoring-activity",
+        styles.badge,
+        styles.badgeActive,
+        agentColor(presence.slot),
+      )}
       data-active
       data-locatable
       aria-label={cursor ? `${text}. Go to the courier.` : undefined}

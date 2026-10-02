@@ -12,11 +12,13 @@ import {
   useState,
 } from "react";
 
+import { agentColor } from "./agent-colors";
 import { AuthoringActivityContext } from "./authoring-activity-context";
 import {
   type AuthoringCursor,
   scopeFocus,
   scopeLive,
+  scopePresence,
 } from "./authoring-cursor";
 import { CourierFigure } from "./courier-figure";
 import { cursorElement } from "./cursor-element";
@@ -267,7 +269,13 @@ export function Courier({
   return (
     <div
       ref={node}
-      {...withClass("courier", styles.courier, unknown && styles.unknown)}
+      {...withClass(
+        "courier",
+        styles.courier,
+        // Each agent's courier wears its color.
+        agentColor(scopePresence(activity, scope)?.slot),
+        unknown && styles.unknown,
+      )}
       data-scope={scope}
       data-state={unknown ? "unknown" : live ? "live" : "ended"}
       data-idle={idle}

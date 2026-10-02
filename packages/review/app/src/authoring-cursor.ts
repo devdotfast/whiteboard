@@ -44,13 +44,22 @@ export const editScope = (edit: EditSummary): ActivitySurface =>
   edit.kind === "lens" ? "lenses" : "document";
 
 /** Where an agent is: where it last wrote, the document until it writes. */
-const surfaceOf = (presence: { surface?: ActivitySurface }) =>
+export const surfaceOf = (presence: { surface?: ActivitySurface }) =>
   presence.surface ?? "document";
+
+/** The agent working on one surface. */
+export function scopePresence(
+  activity: ActivitySnapshot | "unknown" | undefined,
+  scope: ActivitySurface,
+) {
+  if (activity === undefined || activity === "unknown") return undefined;
+
+  return activity.activities?.find((presence) => surfaceOf(presence) === scope);
+}
 
 /** The focus of the agent working on one surface. */
 export function scopeFocus(activity: ActivitySnapshot, scope: ActivitySurface) {
-  return activity.activities?.find((presence) => surfaceOf(presence) === scope)
-    ?.focus;
+  return scopePresence(activity, scope)?.focus;
 }
 
 /** Whether an agent is working on one surface. */
