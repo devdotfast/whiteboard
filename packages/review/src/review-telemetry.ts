@@ -100,6 +100,8 @@ export interface ReviewToolCall {
   /** Set on a failed call: why it failed, from the closed CLI vocabulary. */
   errorName?: ReviewTelemetryErrorName;
   errorCategory?: ReviewTelemetryErrorCategory;
+  /** The calling agent when the caller knows better than this process's environment. */
+  agentKind?: ReviewSessionAgent;
 }
 
 export type ReviewCliCommand = "review" | "map" | "status";
@@ -480,6 +482,7 @@ export class ReviewTelemetry {
       via: call.via,
       ok: call.ok,
       duration_ms: Math.max(0, Math.round(call.durationMs)),
+      agent_kind: call.agentKind ?? this.sessionAgent(),
     };
 
     if (!call.ok && call.errorName) properties.error_name = call.errorName;

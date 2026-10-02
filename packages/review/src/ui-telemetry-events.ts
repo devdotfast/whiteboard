@@ -157,7 +157,15 @@ export const SESSION_SOURCE_KIND = [
  * definition: `review-telemetry.ts`'s `ReviewSessionAgent` type imports and
  * derives from it instead of redeclaring the list.
  */
-export const SESSION_AGENT_KIND = ["codex", "claude", "pi", "other"] as const;
+export const SESSION_AGENT_KIND = [
+  "codex",
+  "claude",
+  "cursor",
+  "opencode",
+  "pi",
+  "omp",
+  "other",
+] as const;
 
 export type ReviewSessionAgent = (typeof SESSION_AGENT_KIND)[number];
 
