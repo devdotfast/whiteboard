@@ -202,6 +202,8 @@ export class ReviewFilesDiffView extends Disposable {
 	private readonly initializedDocumentItems = new WeakSet<object>();
 	private readonly viewedApplied = new Map<string, string>();
 	private readonly streamStatus: HTMLElement;
+	private offscreen = false;
+	private layoutDeferred = false;
 
 	constructor(
 		private readonly container: HTMLElement,
@@ -346,6 +348,14 @@ export class ReviewFilesDiffView extends Disposable {
 			this._register(treeSize.onDidChange(() => this.layout()));
 			treeSize.startObserving();
 			this._register(toDisposable(() => fileTree.remove()));
+		}
+		if (document) {
+			const visibility = new IntersectionObserver(([entry]) => {
+				this.offscreen = !entry.isIntersecting;
+				if (!this.offscreen && this.layoutDeferred) this.layout();
+			}, { rootMargin: "200px 0px" });
+			visibility.observe(container);
+			this._register(toDisposable(() => visibility.disconnect()));
 		}
 		const sizeObserver = this._register(new ElementSizeObserver(this.container, undefined));
 		this._register(sizeObserver.onDidChange(() => this.layout()));
@@ -639,6 +649,8 @@ export class ReviewFilesDiffView extends Disposable {
 	}
 
 	layout(): void {
+		this.layoutDeferred = this.offscreen;
+		if (this.offscreen) return;
 		const width = this.container.clientWidth;
 		const height = this.container.clientHeight;
 		if (width <= 0 || height <= 0) return;

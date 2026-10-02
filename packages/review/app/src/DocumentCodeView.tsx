@@ -348,6 +348,7 @@ const styles = stylex.create({
     width: "100%",
     minWidth: 0,
     overflow: "hidden",
+    contentVisibility: "auto",
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
