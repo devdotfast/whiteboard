@@ -145,8 +145,8 @@ function createFindController(
   let searchScheduled = false;
 
   const clearHighlights = () => {
-    setCssHighlight(articleRef.current?.ownerDocument, ALL_HIGHLIGHT, []);
-    setCssHighlight(articleRef.current?.ownerDocument, ACTIVE_HIGHLIGHT, []);
+    setCssHighlight(articleRef.current, ALL_HIGHLIGHT, []);
+    setCssHighlight(articleRef.current, ACTIVE_HIGHLIGHT, []);
 
     for (const registration of registrations) {
       registration.clearFind();
@@ -169,7 +169,7 @@ function createFindController(
     const wrapped = (index + matches.length) % matches.length;
     const match = matches[wrapped]!;
     setActiveIndex(wrapped);
-    setCssHighlight(articleRef.current?.ownerDocument, ACTIVE_HIGHLIGHT, []);
+    setCssHighlight(articleRef.current, ACTIVE_HIGHLIGHT, []);
 
     for (const registration of registrations) {
       registration.getHandle()?.clearActiveFindMatch();
@@ -182,11 +182,7 @@ function createFindController(
       expandReviewSection(match.node);
       requestAnimationFrame(() => {
         if (!current()) return;
-        setCssHighlight(
-          match.range.startContainer.ownerDocument,
-          ACTIVE_HIGHLIGHT,
-          [match.range],
-        );
+        setCssHighlight(articleRef.current, ACTIVE_HIGHLIGHT, [match.range]);
         rangeElement(match.range)?.scrollIntoView?.({ block: "center" });
         inputRef.current?.focus();
       });
@@ -277,7 +273,7 @@ function createFindController(
       ].sort((left, right) => compareDocumentOrder(left.node, right.node));
 
       if (!store.getState().completeSearch(generation, matches)) return;
-      setCssHighlight(article?.ownerDocument, ALL_HIGHLIGHT, ranges);
+      setCssHighlight(article, ALL_HIGHLIGHT, ranges);
 
       if (matches.length > 0) reveal(0);
     });

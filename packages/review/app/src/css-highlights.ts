@@ -1,29 +1,32 @@
-const backgrounds = {
-  "review-find-match": "--review-find-match-background",
-  "review-find-match-active": "--review-find-match-active-background",
-  "ask-thread": "--accent-wash",
-  "ask-thread-active": "--marker-glow",
-} as const;
+import { create, props } from "@stylexjs/stylex";
 
-type HighlightName = keyof typeof backgrounds;
+const styles = create({
+  "review-find-match": {
+    "::highlight(review-find-match)": {
+      backgroundColor: "var(--review-find-match-background)",
+    },
+  },
+  "review-find-match-active": {
+    "::highlight(review-find-match-active)": {
+      backgroundColor: "var(--review-find-match-active-background)",
+    },
+  },
+  "ask-thread": {
+    "::highlight(ask-thread)": { backgroundColor: "var(--accent-wash)" },
+  },
+  "ask-thread-active": {
+    "::highlight(ask-thread-active)": { backgroundColor: "var(--marker-glow)" },
+  },
+});
 
-const styles = new WeakMap<Document, HTMLStyleElement>();
-
-/**
- * Paints ranges through the CSS Custom Highlight API; no ranges clears it.
- * Each `::highlight` rule exists only while its highlight does, because any
- * such rule makes every style recalculation slower, even with nothing painted.
- */
 export function setCssHighlight(
-  document: Document | null | undefined,
-  name: HighlightName,
+  root: HTMLElement | null | undefined,
+  name: keyof typeof styles,
   ranges: readonly Range[],
   priority = 0,
 ): void {
-  // SAFETY: lib.dom declares the CSS Custom Highlight API only on
-  // globalThis; it is read off the document's window and stays optional
-  // because jsdom does not implement it.
-  const view = document?.defaultView as
+  // SAFETY: Window omits these DOM types; jsdom also omits the runtime API.
+  const view = root?.ownerDocument.defaultView as
     | (Window & {
         CSS?: { highlights?: HighlightRegistry };
         Highlight?: typeof Highlight;
@@ -33,7 +36,7 @@ export function setCssHighlight(
 
   const registry = view?.CSS?.highlights;
 
-  if (!document || !registry || !view?.Highlight) return;
+  if (!root || !registry || !view?.Highlight) return;
 
   if (ranges.length) {
     const highlight = new view.Highlight(...ranges);
@@ -41,28 +44,5 @@ export function setCssHighlight(
     registry.set(name, highlight);
   } else registry.delete(name);
 
-  const rules = Object.entries(backgrounds)
-    .filter(([highlight]) => registry.has(highlight))
-    .map(
-      ([highlight, color]) =>
-        `::highlight(${highlight}) { background: var(${color}); }`,
-    )
-    .join("\n");
-
-  let style = styles.get(document);
-
-  if (!rules) {
-    style?.remove();
-    styles.delete(document);
-
-    return;
-  }
-
-  if (!style) {
-    style = document.createElement("style");
-    document.head.append(style);
-    styles.set(document, style);
-  }
-
-  if (style.textContent !== rules) style.textContent = rules;
+  root.classList.toggle(props(styles[name]).className!, ranges.length > 0);
 }

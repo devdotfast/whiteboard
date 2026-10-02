@@ -246,7 +246,7 @@ function findMarks(
   }
 
   setCssHighlight(
-    article.ownerDocument,
+    article,
     ASK_HIGHLIGHT,
     marks.flatMap(({ range }) => (range ? [range] : [])),
   );
@@ -394,7 +394,7 @@ export function AskThreadMarks({
 
       for (const drawn of waiting) drawn.disconnect();
 
-      setCssHighlight(article.ownerDocument, ASK_HIGHLIGHT, []);
+      setCssHighlight(article, ASK_HIGHLIGHT, []);
     };
   }, [article, entries, revision, reportOutdated]);
 
@@ -468,15 +468,9 @@ export function AskThreadMarks({
   useEffect(() => {
     if (!article || !activeRange) return;
     // Over the resting wash.
-    setCssHighlight(
-      article.ownerDocument,
-      ASK_ACTIVE_HIGHLIGHT,
-      [activeRange],
-      1,
-    );
+    setCssHighlight(article, ASK_ACTIVE_HIGHLIGHT, [activeRange], 1);
 
-    return () =>
-      setCssHighlight(article.ownerDocument, ASK_ACTIVE_HIGHLIGHT, []);
+    return () => setCssHighlight(article, ASK_ACTIVE_HIGHLIGHT, []);
   }, [article, activeRange]);
 
   const prefix = `--ask-${useId().replace(/[^a-zA-Z0-9-]/g, "")}`;

@@ -71,12 +71,16 @@ it("orders duplicate editors with MDX and wraps navigation", async () => {
     expect(findCount(container)?.textContent).toBe("1 of 4");
   });
   expect(
-    getComputedStyle(container, "::highlight(review-find-match)")
-      .backgroundColor,
+    getComputedStyle(
+      container.querySelector("article")!,
+      "::highlight(review-find-match)",
+    ).backgroundColor,
   ).toBe("rgb(10, 20, 30)");
   expect(
-    getComputedStyle(container, "::highlight(review-find-match-active)")
-      .backgroundColor,
+    getComputedStyle(
+      container.querySelector("article")!,
+      "::highlight(review-find-match-active)",
+    ).backgroundColor,
   ).toBe("rgb(40, 50, 60)");
   // The shell is the widget's containing block.
   expect(
@@ -103,12 +107,16 @@ it("orders duplicate editors with MDX and wraps navigation", async () => {
   expect(first.clearFind).toHaveBeenCalled();
   expect(second.clearFind).toHaveBeenCalled();
   expect(
-    getComputedStyle(container, "::highlight(review-find-match)")
-      .backgroundColor,
+    getComputedStyle(
+      container.querySelector("article")!,
+      "::highlight(review-find-match)",
+    ).backgroundColor,
   ).toBe("rgba(0, 0, 0, 0)");
   expect(
-    getComputedStyle(container, "::highlight(review-find-match-active)")
-      .backgroundColor,
+    getComputedStyle(
+      container.querySelector("article")!,
+      "::highlight(review-find-match-active)",
+    ).backgroundColor,
   ).toBe("rgba(0, 0, 0, 0)");
 });
 
