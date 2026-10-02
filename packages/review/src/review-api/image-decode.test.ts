@@ -1,17 +1,21 @@
-import { afterEach, expect, it, vi } from "vitest";
+import sharp from "sharp";
+import { expect, it } from "vitest";
 
 import { decodeImage } from "./image-decode.js";
 
-afterEach(() => vi.unstubAllGlobals());
+it.each(["png", "jpeg", "webp"] as const)(
+  "re-encodes %s as PNG with the original dimensions",
+  async (format) => {
+    const input = await sharp({
+      create: { width: 3, height: 2, channels: 3, background: "red" },
+    })
+      .toFormat(format)
+      .toBuffer();
 
-it("rejects image ingestion before loading Sharp in Linux Electron", async () => {
-  vi.stubGlobal("process", {
-    ...process,
-    platform: "linux",
-    versions: { ...process.versions, electron: "42.10.0" },
-  });
-
-  await expect(decodeImage(new Uint8Array())).rejects.toThrow(
-    "Image uploads and imports are unavailable in Whiteboard Desktop on Linux.",
-  );
-});
+    expect(await sharp(await decodeImage(input)).metadata()).toMatchObject({
+      format: "png",
+      width: 3,
+      height: 2,
+    });
+  },
+);

@@ -68,6 +68,7 @@
     "@agentclientprotocol/codex-acp": "2.0.0",
     "@agentclientprotocol/sdk": "1.5.1",
     "@hono/node-server": "2.0.12",
+    "@img/sharp-wasm32": "0.35.4",
     "@modelcontextprotocol/sdk": "1.30.0",
     "commander": "14.0.3",
     "es-module-lexer": "2.1.0",

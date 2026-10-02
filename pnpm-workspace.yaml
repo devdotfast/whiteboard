@@ -36,6 +36,9 @@ overrides:
 ignoredOptionalDependencies:
   - "@anthropic-ai/claude-agent-sdk-*"
   - "@openai/codex-*"
+  # Native libvips conflicts with Linux Electron; use Sharp's WASM fallback.
+  - "@img/sharp-linux*"
+  - "@img/sharp-libvips-linux*"
 
 allowBuilds:
   esbuild: true
