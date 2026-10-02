@@ -85,14 +85,44 @@ export async function readReviewDesktopDiscoveryFile(
   }
 }
 
+/** A live server busy with other work can take seconds to answer; reporting
+ * it stopped sends agents to another instance or to start one. */
+const BUSY_HEALTH_TIMEOUT_MS = 10_000;
+
+function processAlive(pid: number) {
+  try {
+    process.kill(pid, 0);
+
+    return true;
+  } catch (error) {
+    // EPERM: alive, owned by someone else.
+    return error instanceof Error && "code" in error && error.code === "EPERM";
+  }
+}
+
 export async function isHealthyReviewDesktop(
   discovery: ReviewDesktopDiscovery,
   fetch = globalThis.fetch,
 ): Promise<boolean> {
   try {
-    const response = await fetch(`${discovery.url}/health`, {
-      signal: AbortSignal.timeout(1_500),
-    });
+    const check = (timeout: number) =>
+      fetch(`${discovery.url}/health`, {
+        signal: AbortSignal.timeout(timeout),
+      });
+
+    let response: Response;
+
+    try {
+      response = await check(1_500);
+    } catch (error) {
+      const busy =
+        error instanceof DOMException &&
+        error.name === "TimeoutError" &&
+        processAlive(discovery.serverPid);
+
+      if (!busy) return false;
+      response = await check(BUSY_HEALTH_TIMEOUT_MS);
+    }
 
     if (!response.ok) return false;
     const health = await response.json();
