@@ -185,6 +185,29 @@ describe("ReviewTelemetry", () => {
     ]);
   });
 
+  it("names the agent on tool calls, preferring the caller's over the environment's", async () => {
+    const { events, rootPath, telemetry } = createTelemetry({
+      env: { CLAUDE_CODE_SESSION_ID: "session" },
+    });
+
+    cleanupPaths.push(rootPath);
+
+    const call = {
+      tool: "session_edit",
+      via: "mcp",
+      ok: true,
+      durationMs: 1,
+    } as const;
+
+    await telemetry.captureToolCalled({ ...call, agentKind: "codex" });
+    await telemetry.captureToolCalled(call);
+
+    expect(events.map(({ properties }) => properties?.agent_kind)).toEqual([
+      "codex",
+      "claude",
+    ]);
+  });
+
   it("sends a $exception twin after every client error", async () => {
     const { events, rootPath, telemetry } = createTelemetry();
     cleanupPaths.push(rootPath);

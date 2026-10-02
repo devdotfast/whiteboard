@@ -70,10 +70,12 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
     if (mode === "mcp") {
       const { serveReviewMcp } = await import("./mcp.js");
       await serveReviewMcp(
-        (key) =>
+        (key, agentKind) =>
           connectReviewInstance(
             key ? { ...env, [REVIEW_INSTANCE_ENV]: key } : env,
-            headers,
+            agentKind
+              ? { ...headers, [REVIEW_AGENT_HEADER]: agentKind }
+              : headers,
           ),
         input.stdin ?? process.stdin,
         input.stdout,
@@ -96,6 +98,7 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
               };
             },
         input.onToolCall,
+        reviewSessionAgent(env),
       );
 
       return 0;
