@@ -27,10 +27,24 @@ const protocol = process.env.SMOKE_DEEP_LINK_PROTOCOL;
 const shareNotification =
   'document.body.innerText.includes("Invalid Whiteboard share link.")';
 
-const profile = protocol ? `${state}/portable/user-data` : `${state}/profile`;
+const product = protocol
+  ? JSON.parse(
+      await readFile(
+        path.join(path.dirname(process.execPath), "resources/app/product.json"),
+        "utf8",
+      ),
+    )
+  : undefined;
+
+const profile = protocol
+  ? path.join(
+      process.env.XDG_CONFIG_HOME ?? `${os.homedir()}/.config`,
+      product.nameShort,
+    )
+  : `${state}/profile`;
 
 const extensions = protocol
-  ? `${state}/portable/extensions`
+  ? path.join(os.homedir(), product.dataFolderName, "extensions")
   : `${state}/extensions`;
 
 const environment = {
@@ -40,11 +54,7 @@ const environment = {
   DO_NOT_TRACK: "1",
 };
 
-if (protocol) {
-  environment.VSCODE_PORTABLE = `${state}/portable`;
-
-  await mkdir(`${state}/portable`, { recursive: true });
-}
+if (protocol) delete environment.VSCODE_PORTABLE;
 
 if (process.env.SMOKE_RUST_VSIX) {
   console.log(`${app}: installing optional Rust extension.`);
@@ -75,8 +85,9 @@ let output = "";
 const child = spawn(
   process.env.REVIEW_LINUX_DESKTOP_COMMAND ?? `/usr/bin/${app}-desktop`,
   [
-    `--user-data-dir=${profile}`,
-    `--extensions-dir=${extensions}`,
+    ...(!protocol
+      ? [`--user-data-dir=${profile}`, `--extensions-dir=${extensions}`]
+      : []),
     `--remote-debugging-port=${port}`,
     ...(protocol
       ? [
@@ -218,13 +229,27 @@ async function deepLinks(coldObserved) {
     const opener = spawn(
       "xdg-open",
       [`${protocol}://share/nixos-warm?origin=invalid`],
-      { env: environment, stdio: "ignore", timeout: 30000 },
+      {
+        env: { ...environment, XDG_UTILS_DEBUG_LEVEL: "2" },
+        stdio: ["ignore", "ignore", "pipe"],
+        timeout: 30000,
+      },
     );
 
+    let diagnostics = "";
+
+    opener.stderr.on("data", (data) => {
+      diagnostics += data;
+    });
     opener.once("error", reject);
     opener.once("exit", (code, signal) => {
       if (code === 0) resolve();
-      else reject(new Error(`Protocol opener exited: ${code}, ${signal}`));
+      else
+        reject(
+          new Error(
+            `Protocol opener exited: ${code}, ${signal}\n${diagnostics}`,
+          ),
+        );
     });
   });
   await waitFor(shareNotification);
@@ -384,7 +409,7 @@ async function rustExtension() {
 
       if (
         command.includes("rust-analyzer") &&
-        command.includes(state) &&
+        command.includes(extensions) &&
         !command.includes("--version")
       ) {
         if (process.env.SMOKE_SCREENSHOT)
