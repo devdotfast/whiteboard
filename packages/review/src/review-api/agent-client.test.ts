@@ -331,8 +331,8 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
 
 it("reports each api tool call with its outcome", async () => {
   const connection = vi
-    .spyOn(agentClient, "connectReviewApi")
-    .mockResolvedValue(client);
+    .spyOn(agentClient, "connectReviewInstance")
+    .mockResolvedValue({ client, instance: { key: "stable" } });
 
   const calls: Array<[string, string, boolean, string?]> = [];
 
@@ -369,9 +369,40 @@ it("reports each api tool call with its outcome", async () => {
   }
 });
 
+it("hands the parent CLI the release of the Desktop an api call reached", async () => {
+  const connection = vi
+    .spyOn(agentClient, "connectReviewInstance")
+    .mockResolvedValue({
+      client,
+      instance: { key: "preview", appVersion: "0.1.6-preview.20261002.90" },
+    });
+
+  const releases: Array<string | undefined> = [];
+
+  const discard = new Writable({
+    write(_chunk, _encoding, done) {
+      done();
+    },
+  });
+
+  try {
+    expect(
+      await runReviewAgentCli({
+        argv: ["api", "session_list"],
+        stdout: discard,
+        stderr: discard,
+        onDesktop: (appVersion) => releases.push(appVersion),
+      }),
+    ).toBe(0);
+    expect(releases).toEqual(["0.1.6-preview.20261002.90"]);
+  } finally {
+    connection.mockRestore();
+  }
+});
+
 it("returns API failures to the parent CLI for terminal-event classification", async () => {
   const connection = vi
-    .spyOn(agentClient, "connectReviewApi")
+    .spyOn(agentClient, "connectReviewInstance")
     .mockRejectedValue(new Error("controlled connection failure"));
 
   const discard = new Writable({
@@ -423,8 +454,8 @@ it("shows CLI help without requiring Desktop or touching review storage", async 
 
 it("prints readable CLI output by default and raw objects with --json", async () => {
   const connection = vi
-    .spyOn(agentClient, "connectReviewApi")
-    .mockResolvedValue(client);
+    .spyOn(agentClient, "connectReviewInstance")
+    .mockResolvedValue({ client });
 
   const created = await store.execute({
     commandId: randomUUID(),

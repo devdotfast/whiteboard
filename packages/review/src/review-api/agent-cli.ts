@@ -13,7 +13,6 @@ import {
 
 import {
   type AuthoringTool,
-  connectReviewApi,
   connectReviewInstance,
   toolResultText,
 } from "./agent-client.js";
@@ -33,6 +32,8 @@ interface AgentCliInput {
   onToolCall?: (call: ReviewToolCall) => Promise<void> | void;
   /** Receives the failure so the parent CLI can classify its terminal event. */
   onFailure?: (error: Error) => void;
+  /** Receives the release of each Desktop reached, for telemetry. */
+  onDesktop?: (appVersion: string | undefined) => void;
 }
 
 export const reviewAgentCliHelp =
@@ -70,13 +71,18 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
     if (mode === "mcp") {
       const { serveReviewMcp } = await import("./mcp.js");
       await serveReviewMcp(
-        (key, agentKind) =>
-          connectReviewInstance(
+        async (key, agentKind) => {
+          const connected = await connectReviewInstance(
             key ? { ...env, [REVIEW_INSTANCE_ENV]: key } : env,
             agentKind
               ? { ...headers, [REVIEW_AGENT_HEADER]: agentKind }
               : headers,
-          ),
+          );
+
+          input.onDesktop?.(connected.instance?.appVersion);
+
+          return connected;
+        },
         input.stdin ?? process.stdin,
         input.stdout,
         input.stderr,
@@ -108,7 +114,10 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
     let tools: AuthoringTool[];
 
     try {
-      client = await connectReviewApi(input.env, headers);
+      const connected = await connectReviewInstance(input.env, headers);
+
+      input.onDesktop?.(connected.instance?.appVersion);
+      client = connected.client;
       tools = (await client.read<AuthoringTool[]>("/authoring")).map(
         publicTool,
       );

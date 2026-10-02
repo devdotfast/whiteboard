@@ -262,6 +262,7 @@ describe("Whiteboard CLI", () => {
 
     const telemetry = {
       setSurface: vi.fn<ReviewTelemetry["setSurface"]>(),
+      setDesktopVersion: vi.fn<ReviewTelemetry["setDesktopVersion"]>(),
       createCommandRunId: vi.fn<ReviewTelemetry["createCommandRunId"]>(
         () => "run-12345678",
       ),
@@ -611,6 +612,7 @@ describe("Whiteboard CLI", () => {
 
     const telemetry = {
       setSurface: vi.fn<ReviewTelemetry["setSurface"]>(),
+      setDesktopVersion: vi.fn<ReviewTelemetry["setDesktopVersion"]>(),
       createCommandRunId: () => "8b733d48-1172-46a7-9df0-3cc71930c25a",
       captureInstallationCreated: vi.fn<
         ReviewTelemetry["captureInstallationCreated"]
