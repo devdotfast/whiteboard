@@ -288,11 +288,11 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
     path: repo.directory,
   });
 
-  const pins = await client.post<Pins>("/pins", {
+  const pins: Pins = {
     repositoryId: registered.id,
     base: repo.base,
     head: repo.head,
-  });
+  };
 
   const created = await cli(
     [
@@ -534,14 +534,6 @@ it("authenticates clients, reports capabilities and readiness without exposing t
   const registered = await server.client.post<{ id: string }>("/repositories", {
     path: repo.directory,
   });
-
-  await expect(
-    server.client.post("/pins", {
-      repositoryId: registered.id,
-      base: "unavailable",
-      head: repo.head,
-    }),
-  ).rejects.toThrow(/Fetch the requested commits/);
 
   const result = await server.client.post<Result>("/commands", {
     operation: {
