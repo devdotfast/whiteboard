@@ -74,7 +74,7 @@ in pkgs.testers.runNixOSTest {
 
     user("mkdir -p ~/.dev/reviews && echo retained > ~/.dev/reviews/nixos-install-sentinel")
     before = user("readlink -f ~/.nix-profile")
-    machine.succeed("python3 -c 'import json; p=\"/home/tester/package/release.json\"; r=json.load(open(p)); r[\"revision\"] += 1; json.dump(r, open(p, \"w\"))'")
+    machine.succeed("python3 -c 'import json; p=\"/home/tester/package/release.json\"; r=json.load(open(p)); r[\"revision\"] = str(int(r[\"revision\"]) + 1); json.dump(r, open(p, \"w\"))'")
     user(f"nix profile upgrade ${app} --refresh {nixpkgs}")
     after = user("readlink -f ~/.nix-profile")
     assert before != after, "Profile upgrade did not change the installed generation"
