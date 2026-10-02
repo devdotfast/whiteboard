@@ -84,7 +84,6 @@ export async function runTraceList(input: {
 
   let scope: { review: string } | { commit: string };
   let sessions: ReviewTraceSessionDescriptor[];
-  let emptyExitCode = 0;
 
   if ("commit" in input.scope) {
     const resolution = await lookupReviewTraceCommit({
@@ -105,7 +104,6 @@ export async function runTraceList(input: {
         ),
       ),
     );
-    emptyExitCode = 1;
   } else {
     scope = { review: input.scope.review.uuid };
     sessions = await listSessionsForReviewScope(input.scope.review, storage);
@@ -124,7 +122,7 @@ export async function runTraceList(input: {
       `${JSON.stringify({ ...scope, sessions: publicSessions })}\n`,
     );
 
-    return sessions.length === 0 ? emptyExitCode : 0;
+    return 0;
   }
 
   if (sessions.length === 0) {
@@ -133,7 +131,7 @@ export async function runTraceList(input: {
 
     input.stdout.write(`No agent sessions recorded for ${label}.\n`);
 
-    return emptyExitCode;
+    return 0;
   }
 
   for (const session of publicSessions) {
