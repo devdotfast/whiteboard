@@ -77,7 +77,6 @@ export function AgentSelectionProvider({
 
   const [selection, setSelection] = useState<Selection | null>(null);
   const [copiedSelection, setCopiedSelection] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const actions = useRef<HTMLDivElement>(null);
   const copying = useRef(false);
@@ -178,7 +177,6 @@ export function AgentSelectionProvider({
   const copy = useCallback(async () => {
     if (!selection || copying.current) return;
     copying.current = true;
-    setBusy(true);
 
     const {
       anchor: _anchor,
@@ -188,27 +186,28 @@ export function AgentSelectionProvider({
       ...payload
     } = selection;
 
+    setCopiedSelection(
+      JSON.stringify([
+        selection.target,
+        selection.selectedDiff,
+        selection.apiSource,
+      ]),
+    );
+
     try {
       await copyAgentContext(session, { ...payload, revision });
-      setCopiedSelection(
-        JSON.stringify([
-          selection.target,
-          selection.selectedDiff,
-          selection.apiSource,
-        ]),
-      );
       setToast({
         kind: "success",
         text: "Selection copied to clipboard. Paste into your agent to chat about it.",
       });
     } catch {
+      setCopiedSelection(null);
       setToast({
         kind: "error",
         text: "Could not copy selection. Please try again.",
       });
     } finally {
       copying.current = false;
-      setBusy(false);
     }
   }, [selection, session, revision]);
 
@@ -348,11 +347,10 @@ export function AgentSelectionProvider({
                       variant="ghost"
                       aria-keyshortcuts="Meta+Shift+C"
                       aria-label="Copy ref"
-                      disabled={busy}
                       onClick={() => void copy()}
                     >
                       <CopyIcon xstyle={controlStyles.inlineIcon} />
-                      <span>{busy ? "Copying…" : "Copy ref"}</span>
+                      <span>Copy ref</span>
                       <kbd aria-hidden="true" {...stylex.props(styles.key)}>
                         <ShiftKeyIcon />
                         <CommandKeyIcon />C
