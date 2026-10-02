@@ -23,6 +23,8 @@ type RightPanelResizeOptions = {
   collapsedWidth?: number;
   label: string;
   containerRef?: RefObject<HTMLElement | null>;
+  /** Whether the panel shows; a hidden one skips re-clamping on resize. */
+  active?: boolean;
 };
 
 type SeparatorProps = HTMLAttributes<HTMLDivElement> & {
@@ -195,6 +197,7 @@ export function useRightPanelResize({
   collapsedWidth,
   label,
   containerRef,
+  active = true,
 }: RightPanelResizeOptions) {
   // Persist the width the reader asked for and clamp only for rendering. A
   // panel can mount before its container has been laid out — the map frame does
@@ -278,27 +281,27 @@ export function useRightPanelResize({
 
   // The Review canvas can shrink without the browser window changing when a
   // native Code OSS editor opens beside it. Observe the actual owning
-  // container as well as the window so the document keeps its minimum width
+  // container, or the window without one, so the document keeps its minimum width
   // in both layouts. The rendered width is derived, so a re-render is all this
   // needs; the requested width stays untouched and the panel returns to it once
   // there is room again.
   useEffect(() => {
+    if (!active) return;
     const reclampWidth = () => setLayoutRevision((revision) => revision + 1);
-    window.addEventListener("resize", reclampWidth);
     const container = containerRef?.current;
 
-    const resizeObserver =
-      container && typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(reclampWidth)
-        : null;
+    if (!container || typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", reclampWidth);
 
-    if (container && resizeObserver) resizeObserver.observe(container);
+      return () => window.removeEventListener("resize", reclampWidth);
+    }
 
-    return () => {
-      window.removeEventListener("resize", reclampWidth);
-      resizeObserver?.disconnect();
-    };
-  }, [containerRef]);
+    const resizeObserver = new ResizeObserver(reclampWidth);
+
+    resizeObserver.observe(container);
+
+    return () => resizeObserver.disconnect();
+  }, [active, containerRef]);
 
   const pointerWidth = useCallback(
     (clientX: number) => {

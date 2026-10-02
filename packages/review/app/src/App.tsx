@@ -334,6 +334,8 @@ function ReviewLayoutContent({
 
   const debugSettings = useReviewDebugSettings();
 
+  const rightPanelOpen = activePanel !== null || askDocked;
+
   const sidePeekResize = useRightPanelResize({
     stateKey: "side-peek-width",
     defaultWidth: DEFAULT_SIDE_PEEK_WIDTH,
@@ -344,6 +346,7 @@ function ReviewLayoutContent({
     separatorWidth: 10,
     label: "Resize side peek",
     containerRef: appRef,
+    active: rightPanelOpen,
   });
 
   useDocumentEmbedScroll(scrollRegionRef);
@@ -447,8 +450,6 @@ function ReviewLayoutContent({
       ),
     [activeSoftwareMapSource, softwareMapTopologyDiff],
   );
-
-  const rightPanelOpen = activePanel !== null || askDocked;
 
   // SAFETY: `--side-peek-width` is a CSS custom property, which React forwards
   // to style.setProperty; the CSSProperties typings only omit custom names.
