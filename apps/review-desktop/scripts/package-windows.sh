@@ -15,7 +15,7 @@ node "$APP_DIR/scripts/copy-canvas.mjs" --packaged-root "$PACKAGED_ROOT"
 node "$APP_DIR/scripts/curated-extensions.mjs" --target=win32-x64 --copy-to "$PACKAGED_ROOT/resources/app/extensions"
 # ty links the Visual C++ runtime dynamically and a clean Windows install has none, so ship it beside ty.
 cp "$(cygpath -u "$SYSTEMROOT")/System32/vcruntime140.dll" "$PACKAGED_ROOT/resources/app/extensions/astral-sh.ty/bundled/libs/bin/"
-node "$APP_DIR/scripts/windows-diffr.mjs"
+pnpm --dir "$MONOREPO_ROOT" --filter @dev.fast/review ensure:diffr --required
 node "$APP_DIR/scripts/stage-review-runtime.mjs" --packaged-root "$PACKAGED_ROOT"
 node "$APP_DIR/scripts/stage-review-runtime.mjs" --verify --packaged-root "$PACKAGED_ROOT"
 npm --prefix "$CHECKOUT" run gulp -- vscode-win32-x64-inno-updater

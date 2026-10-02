@@ -17,8 +17,6 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
-import { verifyWindowsDiffr } from "./windows-diffr.mjs";
-
 const execFileAsync = promisify(execFile);
 
 const diffrName = process.platform === "win32" ? "diffr.exe" : "diffr";
@@ -177,24 +175,20 @@ export async function stageDiffrBinary(
     );
   }
 
-  if (process.platform === "win32") {
-    verifyWindowsDiffr(source);
-  } else {
-    const require = createRequire(
-      path.join(monorepoRoot, "packages/review/package.json"),
-    );
+  const require = createRequire(
+    path.join(monorepoRoot, "packages/review/package.json"),
+  );
 
-    const packageRoot = path.dirname(
-      require.resolve("@dev.fast/diffr/package.json"),
-    );
+  const packageRoot = path.dirname(
+    require.resolve("@dev.fast/diffr/package.json"),
+  );
 
-    await execFileAsync(process.execPath, [
-      path.join(packageRoot, "bin/fetch.mjs"),
-      "--check",
-      "--into",
-      path.dirname(source),
-    ]);
-  }
+  await execFileAsync(process.execPath, [
+    path.join(packageRoot, "bin/fetch.mjs"),
+    "--check",
+    "--into",
+    path.dirname(source),
+  ]);
 
   const destination = path.join(runtimeRoot, "bin", diffrName);
   await mkdir(path.dirname(destination), { recursive: true });
