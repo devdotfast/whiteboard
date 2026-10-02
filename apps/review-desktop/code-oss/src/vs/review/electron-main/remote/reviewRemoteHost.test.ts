@@ -782,7 +782,38 @@ test("the version present: no prompt and no install shown; the installed CLI att
 	assert.equal(ssh.of("wb-test-a", "probe").length, 1);
 	assert.equal(
 		ssh.of("wb-test-a", "exec")[0].input,
-		`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' remote attach --json --replace\n`,
+		`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' remote attach --json --replace --groups go\n`,
+	);
+});
+
+test("an installed host attaches again for its pending extensions by the installed CLI, with --replace and the groups enabled then", async (t) => {
+	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
+	const { flow } = await installFlow(t, "ask");
+	let groups = ["go"];
+	const { host, ssh, clock, last } = hostFor(
+		t,
+		{
+			probe: { installed: [at("0.1.6")] },
+			attach: (call) => ({ code: 0, stdout: call === 1 ? pendingOutput(41234) : attachOutput(41234, "remote-token", { languageServer: { port: 45678, connectionToken: "vscode-token", commit: COMMIT } }) }),
+		},
+		ports,
+		"wb-test-a",
+		"/tmp/wb-ssh-test",
+		flow,
+		undefined,
+		{ groups: async () => groups },
+	);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	groups = ["go", "rust"];
+	assert.ok(clock.next());
+	await until(() => last()?.languageFeatures === true);
+
+	const installed = `exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' remote attach --json --replace`;
+	assert.deepEqual(
+		ssh.of("wb-test-a", "exec").map((call) => call.input),
+		[`${installed} --groups go\n`, `${installed} --groups go,rust\n`],
 	);
 });
 

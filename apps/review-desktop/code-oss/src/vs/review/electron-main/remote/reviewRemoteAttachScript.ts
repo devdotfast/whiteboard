@@ -25,17 +25,22 @@ exec "$wb" ${words}
 `;
 }
 
-/** Stage 1's attach through the CLI on PATH; `groups` are the optional extension groups this Desktop has enabled. */
-export function reviewRemoteAttachScript(groups: readonly string[] = []): string {
+/** `groups` are the optional extension groups this Desktop has enabled. */
+function attachWords(groups: readonly string[], replace: boolean): string {
 	for (const group of groups) {
 		if (!/^[a-z0-9-]+$/.test(group)) throw new Error(`Invalid extension group ${JSON.stringify(group)}.`);
 	}
-	return pathCliScript(`remote attach --json${groups.length ? ` --groups ${groups.join(",")}` : ""}`);
+	return `remote attach --json${replace ? " --replace" : ""}${groups.length ? ` --groups ${groups.join(",")}` : ""}`;
+}
+
+/** Stage 1's attach through the CLI on PATH, never with `--replace`. */
+export function reviewRemoteAttachScript(groups: readonly string[] = []): string {
+	return pathCliScript(attachWords(groups, false));
 }
 
 /** The CLI of the version Desktop installed, by its exact path; `--replace` restarts a server of another version that was not a user's. */
-export function installedAttachScript(nodePath: string, cliPath: string): string {
-	return `exec ${shellQuote(nodePath)} ${shellQuote(cliPath)} remote attach --json --replace\n`;
+export function installedAttachScript(nodePath: string, cliPath: string, groups: readonly string[] = []): string {
+	return `exec ${shellQuote(nodePath)} ${shellQuote(cliPath)} ${attachWords(groups, true)}\n`;
 }
 
 export const REVIEW_REMOTE_ATTACH_BEGIN = "WHITEBOARD-REMOTE-BEGIN";

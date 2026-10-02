@@ -725,7 +725,7 @@ export class ReviewRemoteHost {
 		if (!installed) return undefined;
 		if ("path" in installed) {
 			const { nodePath, cliPath } = installed.path;
-			return { script: () => installedAttachScript(nodePath, cliPath), cli: { nodePath, cliPath } };
+			return { script: (groups) => installedAttachScript(nodePath, cliPath, groups), cli: { nodePath, cliPath } };
 		}
 		// An older complete version still serves: attached as it is, so the host is incompatible and says why.
 		if (!probed.probe.installed.some((other) => other.version !== version)) throw new HostFailure({ state: "not-installed", detail: installed.failed });

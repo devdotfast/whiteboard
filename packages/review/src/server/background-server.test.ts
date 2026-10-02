@@ -276,6 +276,43 @@ it("with --replace, stops a server of another version the CLI started and starts
   expect(discovery.startedBy).toBe("desktop");
 }, 60_000);
 
+it("with --replace and --groups, replaces the older server and reports the language groups in one line", async () => {
+  const old = await ensureBackgroundServer({ stateDir, env, cli: sourceCli });
+  const oldVersion = (await readReviewServerHealth(old.discovery))!.version;
+
+  const attach = await remoteAttach({
+    stateDir,
+    env: { ...env, ...(await fakeDiffr()) },
+    stderr: discard(),
+    cli: sourceCli,
+    replace: true,
+    version: "9.9.9",
+    groups: ["go"],
+  });
+
+  expect(attach).toMatchObject({
+    startedServer: true,
+    replaced: true,
+    previousVersion: oldVersion,
+    languageServer: null,
+    languageGroups: [{ group: "go", installed: false }],
+  });
+  expect(alive(old.discovery.serverPid)).toBe(false);
+
+  // The CLI takes both flags at once and prints both shapes in one line.
+  const both = await cli(
+    ["remote", "attach", "--json", "--replace", "--groups", "go"],
+    await fakeDiffr(),
+  );
+
+  expect(both.code).toBe(0);
+  expect(JSON.parse(both.stdout.split("\n")[1]!)).toMatchObject({
+    startedServer: false,
+    languageServer: null,
+    languageGroups: [{ group: "go", installed: false }],
+  });
+}, 60_000);
+
 it("with --replace, leaves a server of another version a user started, and reports it", async () => {
   const server = spawn(
     sourceCli[0]!,
