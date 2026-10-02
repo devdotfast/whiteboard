@@ -3650,3 +3650,54 @@ it("does not invent a head branch for detached or unrelated pinned commits", asy
 
   expect(local.store.read(created.reviewId).origin?.branch).toBeUndefined();
 });
+
+it("quotes the first and last line of each anchor an edit adds", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Quotes",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  const app = createReviewApi(local.store, local.data);
+
+  const edit = async (content: Record<string, string>) =>
+    (
+      await app.request("/commands", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          command({
+            type: "edit",
+            reviewId,
+            edit: { type: "insert", content },
+          }),
+        ),
+      })
+    ).json();
+
+  expect(
+    await edit({ type: "code_peek", source: "head/example.ts#L1-L2" }),
+  ).toMatchObject({
+    quotes: [
+      {
+        anchor: "head/example.ts#L1-L2",
+        first: "export const value = 2;",
+        last: "export const saved = true;",
+      },
+    ],
+  });
+
+  // Only what this edit added: the peek above is not quoted again.
+  expect(
+    await edit({
+      type: "markdown",
+      markdown: "Was [one](review-source:base/example.ts#L1).",
+    }),
+  ).toMatchObject({
+    quotes: [
+      { anchor: "base/example.ts#L1", first: "export const value = 1;" },
+    ],
+  });
+});

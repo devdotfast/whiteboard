@@ -39,6 +39,7 @@ import { scopedCoverage } from "@review/viewed-coverage.js";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
+import { anchorQuotes } from "./anchor-quotes.js";
 import { authoringTools } from "./authoring-tools.js";
 import { documentText } from "./document-text.js";
 import { ReviewInputError } from "./document.js";
@@ -1712,6 +1713,22 @@ export function createReviewApi(
     }
 
     const result = await store.execute(input);
+
+    if (input.operation.type === "edit" && data && !result.deleted) {
+      const { quotes, unquoted } = await anchorQuotes(
+        result.version > 0
+          ? store.read(result.reviewId, result.version - 1)
+          : undefined,
+        store.read(result.reviewId, result.version),
+        async (pins, side, file) => (await data.file(pins, side, file)).text,
+      );
+
+      return context.json({
+        ...result,
+        ...(quotes.length && { quotes }),
+        ...(unquoted && { unquotedAnchors: unquoted }),
+      });
+    }
 
     if (input.operation.type === "lens_edit") {
       const gaps = await lensGaps(
