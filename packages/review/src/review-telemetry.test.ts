@@ -149,6 +149,8 @@ describe("ReviewTelemetry", () => {
       via: "api",
       ok: false,
       durationMs: -1,
+      errorName: "usage_error",
+      errorCategory: "user_input",
     });
 
     expect(
@@ -158,10 +160,28 @@ describe("ReviewTelemetry", () => {
         properties?.via,
         properties?.ok,
         properties?.duration_ms,
+        properties?.error_name,
+        properties?.error_category,
       ]),
     ).toEqual([
-      ["review_mcp_tool_called", "session_create", "mcp", true, 42],
-      ["review_mcp_tool_called", "other", "api", false, 0],
+      [
+        "review_mcp_tool_called",
+        "session_create",
+        "mcp",
+        true,
+        42,
+        undefined,
+        undefined,
+      ],
+      [
+        "review_mcp_tool_called",
+        "other",
+        "api",
+        false,
+        0,
+        "usage_error",
+        "user_input",
+      ],
     ]);
   });
 

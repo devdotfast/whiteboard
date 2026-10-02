@@ -21,6 +21,7 @@ import { type ReviewApiClient, ReviewApiError } from "./client.js";
 import { callPublicTool, publicTool } from "./public-tools.js";
 import { RECOVERY } from "./recovery.js";
 import { REVIEW_AGENT_HEADER, REVIEW_VIA_HEADER } from "./request-origin.js";
+import { toolFailure } from "./tool-failure.js";
 
 interface AgentCliInput {
   argv: string[];
@@ -151,20 +152,28 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
 
     if (name === "session_get" && rest.includes("--json")) args.format = "json";
     const startedAt = Date.now();
-    let ok = false;
     let result: Awaited<ReturnType<typeof callPublicTool>>;
 
     try {
       result = await callPublicTool(client, tool, args);
-      ok = true;
-    } finally {
+    } catch (error) {
       await input.onToolCall?.({
         tool: tool.name,
         via: "api",
-        ok,
+        ok: false,
         durationMs: Date.now() - startedAt,
+        ...toolFailure(error, "call"),
       });
+
+      throw error;
     }
+
+    await input.onToolCall?.({
+      tool: tool.name,
+      via: "api",
+      ok: true,
+      durationMs: Date.now() - startedAt,
+    });
 
     const text = toolResultText(tool, result);
     input.stdout.write(text.endsWith("\n") ? text : text + "\n");
