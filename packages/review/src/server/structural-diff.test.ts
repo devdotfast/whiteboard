@@ -385,3 +385,36 @@ test("uses the bundled binary only when present and no override is set", async (
   vi.stubEnv("REVIEW_DIFFR_BINARY", "/elsewhere/diffr");
   expect(diffrExecutable(root)).toBe("/elsewhere/diffr");
 });
+
+test("keeps the ten most recently read idle comparisons", async () => {
+  const { StructuralComparisons } = await import("./structural-comparisons.js");
+
+  const root = await executable(`
+    require('node:fs').appendFileSync('runs', 'x');
+    ${emit(START)} ${emit(BINARY)} ${emit(COMPLETE)}
+  `);
+
+  const cache = new StructuralComparisons();
+
+  const read = async (head: string) => {
+    for await (const _event of cache.stream(
+      request(root, { comparison: { kind: "trees", base: "base", head } }),
+    )) {
+      /* drain */
+    }
+  };
+
+  const runs = async () =>
+    (await readFile(path.join(root, "runs"), "utf8")).length;
+
+  try {
+    for (let index = 0; index <= 10; index++) await read(`head-${index}`);
+    expect(await runs()).toBe(11);
+    await read("head-1");
+    expect(await runs()).toBe(11);
+    await read("head-0");
+    expect(await runs()).toBe(12);
+  } finally {
+    cache.close();
+  }
+});
