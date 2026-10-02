@@ -8,20 +8,23 @@ Serialization tag: code-oss-upstream-8a7abeba
 
 Review applies these focused VS Code changes without changing the source pin:
 
-- Electron 43.7.5 (Node 24.21.0):
-  `4ae4d96052c5a986fe84974ed9d7b220234670b4`,
-  `0d9ade07b6`, `d2fe6d3bf9`, on top of the earlier 42.10.0 authentication
-  type update `28cf0a82a08a5f8e9288d19b4218ec1eb5ee46a6`. The version,
-  checksum, `cgmanifest.json` and Linux dependency-list files are upstream's
-  at `d2fe6d3bf9`; the Electron checksums are verified line for line against
-  the official `v43.7.5` `SHASUMS256.txt`. From `4ae4d960` Review takes the
-  `enableWebSQL` removals, the GCC < 13 `v8config.h` header, the Linux
-  window-controls-overlay title bar, and the file dialog default path (Electron
-  43 otherwise defaults dialogs to Downloads). It leaves out the migration from
-  the deprecated `register*Protocol`/`interceptFileProtocol` APIs to
-  `protocol.handle`, which Electron 43 still supports and which targets a
-  protocol module upstream refactored after the pin, and the Linux
-  `linuxDesktopName` packaging rename.
+- Electron 43.7.5 (Node 24.21.0), tracking upstream's Electron version:
+  `4ae4d96052c5a986fe84974ed9d7b220234670b4`, `0d9ade07b6`, `d2fe6d3bf9`,
+  plus the 42.10.0 authentication type update
+  `28cf0a82a08a5f8e9288d19b4218ec1eb5ee46a6`. Version, checksum,
+  `cgmanifest.json` and Linux dependency-list files are upstream's at
+  `d2fe6d3bf9`; `electron.txt` is verified against the official `v43.7.5`
+  `SHASUMS256.txt`. From `4ae4d960` Review takes the `enableWebSQL` removals,
+  the Linux window-controls title bar, and the file dialog default path
+  (Electron 43 otherwise opens dialogs in Downloads). It leaves out:
+  the `protocol.handle` migration (Electron 43 still supports the deprecated
+  `register*Protocol`/`interceptFileProtocol` APIs, and upstream's change
+  targets a protocol module refactored after the pin; port it when a major
+  removes them); the `linuxDesktopName` rename, which would rename the
+  `.desktop` files in Review's Linux packages; and the GCC < 13
+  `build/npm/gyp/custom-headers/v8config.h` overlay with its `preinstall.ts`
+  hunk, since Review's Linux builder has GCC 13+ and macOS and Windows use
+  clang and MSVC.
 - Applicable security hardening from
   `06a2bc84d0555f4c7ebd176809673e61fa49c6ff`. Review includes environment
   sanitization, owned transfer buffers, production extension-development
@@ -43,49 +46,31 @@ Review applies these focused VS Code changes without changing the source pin:
   `ca90419648a3785c1c73d59dacad43c9726d9b67`. Review moves from 0.43.0, so
   the lockfiles are regenerated rather than patched.
 
-Leak, race, and crash fixes, applied verbatim without their test hunks:
+October 2026 leak, race, and crash fixes, verbatim without test hunks:
 
-- Empty MessagePort frames: `07be0760a43156ef9f282c1920a612eef34278a3`.
-- Batched list width measurement: `5616258b86991889c797f410af2ef6e281ef8406`.
-- Modal editor part creation race: `b8d3a33d7387e4e8fb371c3f55c2462287799d03`.
-- Signature help active overload: `69e459e483605a9b93acdb08a90d5a0798a09eef`.
-- Moved block overlay actions: `1b2f25580d1eaaeea7d18a3968565c818177d8e1`.
-- Stale RPC cancellation handlers: `a8fee7001b208f4572d5c9220cd95176de2b1be3`.
-- Responsive toolbar relayout: `30751f11c4f487f94b88b3b6b1b8f76dbc4c9f92`.
-- Cancellable promise races: `4064a18e3e6afb267fa4af95332e934133caecc0`.
-- IPC cleanup rejections: `453caa8cbcbb552c19528e8c4b4b33dc3507d0e2`,
-  `21aca566022b2ca229065ca4eff53ba0b4f6aba8`.
-- References view leak: `3c95df8b709912620d8cba3c697c384a74b978a1`.
-- Modal editor Escape capture: `e25abd165118edcc602b44def4eeda36878b3557`.
-  It leaves the fork's `editorCommands.ts` weight (below) intact.
-- Inverted list range clamp: `0f7b8aef913e61b9e39b80929695d214acdda2ad`.
-- Deferred diff model references: `e3ce07e8fe526cd0fdd39a4da95f376bf65cfa2d`.
-- Semantic token edit validation: `400d86be5f490c331817a72e85870f6337652574`.
-- Document drop edits leak: `5aa09546adfc99974e019744d496afe8a75bdd99`.
-- Destroyed window notification cleanup:
-  `36dc839d87d2429685e4474350e44af89c351d43`.
-- Built-in extension manifest cache: `47aa3e984d2936482e055341852b70b95de94b89`.
-- Extension host leaks (signature help, hierarchy, workspace symbols, tree
-  views): `78283637f7d4f67e52783ebc38dbff941d651110`,
-  `1ead63ee63e1df074555e77562466ae05ca256e3`,
-  `ece3c56dd754987ec95c6ffd0d74932a669118a6`,
-  `9f1fd52e6ab12e1616514da82738b098c09cfa07`.
-- Detached DOM retention (editor message, modifier keys, widget nodes, sticky
-  scroll, `Delayer`): `ee778616ace3e07480e6747b3d390898d504d53c`,
-  `2a4734ba1aa0c9e549b1ce91f338d9c4d20c1f50`,
-  `b5faf95135fa78e458e9c29f0ee33b5391ed1066`,
-  `e1821592a46257ac80500ba72fd3dbdb047b46e8`,
-  `d912aa0ec55e578a95a65b39e7fd112d317dfdc6`.
-- Semantic token leaks: `0d3c47e1dd520c0a80b9c365e553c19b7ede25f2`,
-  `46ce39e3c0e7dca2457169d4a6261ce0b6143bb3`.
-- Window disposal leaks (animation frames, font measurements, pixel ratio):
-  `86a5159bd5577ade1132378acd2f4831af2d6219`,
-  `9d4555eeab0c5bfe1ab3114e4e1bdac24d7c8c36`,
-  `44854867e65dea706bdbda194e97f997ae9c0948`. Review adds the
-  `markAsSingleton` import to `dom.ts` by hand; upstream already had it.
-- Reentrant autoclose decorations: `3df2a01bf7d27a07dea523f0335253c8d1de4d4a`.
-- Multi-diff editor tabs leak: `8636777c37989676621419af5d1031f5d6e38046`.
-- Modal editor part leak: `21e3d6f5862adebf4e6c441385963adb0a13d0d6`.
+- Startup: built-in extension manifest cache never hit (`47aa3e98`).
+- Detached DOM and window leaks: editor widgets, message, sticky scroll,
+  modifier keys, `Delayer`, and per-window animation frame, font and pixel
+  ratio caches (`b5faf951`, `ee778616`, `e1821592`, `2a4734ba`, `d912aa0e`,
+  `86a5159b`, `9d4555ee`, `44854867`). Review adds the `markAsSingleton`
+  import to `dom.ts` by hand; upstream already had it.
+- Extension host: leaks on cancelled requests (semantic tokens, signature
+  help, workspace symbols, hierarchies, drop edits, tree views) and stale RPC
+  cancel handlers (`0d3c47e1`, `78283637`, `ece3c56d`, `1ead63ee`, `5aa09546`,
+  `9f1fd52e`, `a8fee700`); one shared semantic token theme listener
+  (`46ce39e3`); invalid semantic token edits (`400d86be`).
+- Diff and editors: deferred diff model references, moved block actions,
+  multi-diff tab listeners, the References view, reentrant autoclose
+  decorations (`e3ce07e8`, `1b2f2558`, `8636777c`, `3c95df8b`, `3df2a01b`).
+- Modal editor: creation race, memento growth, Escape capture (`b8d3a33d`,
+  `21e3d6f5`, `e25abd16`); the fork's `editorCommands.ts` weight (below)
+  stays.
+- IPC and async: empty MessagePort frames, unhandled rejections
+  (`07be0760`, `4064a18e`, `453caa8c`, `21aca566`).
+- Lists and toolbars: inverted range clamp, batched width measurement,
+  responsive toolbar relayout (`0f7b8aef`, `5616258b`, `30751f11`).
+- Destroyed window notification cleanup (`36dc839d`); TypeScript signature
+  help active overload (`69e459e4`).
 
 ### September 2026 advisories (all fixed upstream in 1.136.2)
 
