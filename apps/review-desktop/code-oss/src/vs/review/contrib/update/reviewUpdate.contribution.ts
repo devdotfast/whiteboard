@@ -25,6 +25,7 @@ import { Action2, registerAction2 } from '../../../platform/actions/common/actio
 import type { ServicesAccessor } from '../../../platform/instantiation/common/instantiation.js';
 import { ILogService } from '../../../platform/log/common/log.js';
 import { INotificationService, type INotificationHandle } from '../../../platform/notification/common/notification.js';
+import { IOpenerService } from '../../../platform/opener/common/opener.js';
 import { IProductService } from '../../../platform/product/common/productService.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../platform/storage/common/storage.js';
 import {
@@ -52,6 +53,7 @@ const STAGED_UPDATE_STORAGE_KEY = 'review.update.staged.v1';
 const SKIPPED_UPDATE_STORAGE_KEY = 'review.update.skipped.v1';
 /** Failed update attempt that Review already announced. */
 const FAILED_UPDATE_NOTICE_STORAGE_KEY = 'review.update.failedNotice.v1';
+const RELEASES_URL = 'https://github.com/devdotfast/whiteboard/releases';
 
 class ReviewUpdateNotifications extends Disposable {
 
@@ -69,6 +71,7 @@ class ReviewUpdateNotifications extends Disposable {
 		@IStorageService private readonly storageService: IStorageService,
 		@IProductService private readonly productService: IProductService,
 		@ILogService private readonly logService: ILogService,
+		@IOpenerService private readonly openerService: IOpenerService,
 	) {
 		super();
 
@@ -143,6 +146,10 @@ class ReviewUpdateNotifications extends Disposable {
 			message: notice.productVersion
 				? localize('review.update.applied', "Whiteboard updated to {0}.", notice.productVersion)
 				: localize('review.update.applied.unknownVersion', "Whiteboard has been updated."),
+			actions: { primary: [toAction({
+				id: 'review.update.releaseNotes', label: localize('review.update.releaseNotes', "Release Notes"),
+				run: () => this.openerService.open(RELEASES_URL, { openExternal: true }),
+			})] },
 		});
 	}
 

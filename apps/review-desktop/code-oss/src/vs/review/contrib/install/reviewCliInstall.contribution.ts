@@ -300,8 +300,6 @@ class ReviewCliInstallStartup implements IWorkbenchContribution {
 					shim: true,
 					autoUpdate: true,
 				});
-				// Review has no status bar; status() messages would be dropped.
-				this.notificationService.info(localize("review.cliInstall.resyncedCli", "Whiteboard updated the installed CLI."));
 				return;
 			case "none":
 				return;
