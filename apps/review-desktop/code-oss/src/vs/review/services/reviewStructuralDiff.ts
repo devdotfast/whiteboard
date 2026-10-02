@@ -9,7 +9,7 @@ import { IModelService } from "../../editor/common/services/model.js";
 import { ITextModelService } from "../../editor/common/services/resolverService.js";
 import { URI } from "../../base/common/uri.js";
 import { Event } from "../../base/common/event.js";
-import { DisposableStore } from "../../base/common/lifecycle.js";
+import { DisposableMap, DisposableStore } from "../../base/common/lifecycle.js";
 import { CancellationError } from "../../base/common/errors.js";
 import { IInstantiationService } from "../../platform/instantiation/common/instantiation.js";
 import { ServiceCollection } from "../../platform/instantiation/common/serviceCollection.js";
@@ -157,11 +157,12 @@ function attachStructuralEditors(
 ): void {
 	const editors = instantiation.invokeFunction((a) => a.get(ICodeEditorService));
 	const pairs = new Map(entries.map((e) => [e.original!.toString() + "\n" + e.modified!.toString(), e.file.path]));
+	const watched = lifetime.add(new DisposableMap<IDiffEditor, DisposableStore>());
 	function watch(editor: IDiffEditor) {
-		const store = lifetime.add(new DisposableStore());
-		store.add(editor.onDidDispose(() => store.dispose()));
 		const widget = editor as unknown as { unchangedRegions?: IObservable<readonly UnchangedRegion[]> };
 		if (!widget.unchangedRegions) return;
+		const store = new DisposableStore();
+		watched.set(editor, store);
 		let revealed = new Set<UnchangedRegion>();
 		store.add(
 			autorun((reader) => {
@@ -193,6 +194,7 @@ function attachStructuralEditors(
 		);
 	}
 
+	lifetime.add(editors.onDiffEditorRemove(editor => watched.deleteAndDispose(editor)));
 	lifetime.add(editors.onDiffEditorAdd(watch));
 	for (const editor of editors.listDiffEditors()) watch(editor);
 }
