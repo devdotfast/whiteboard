@@ -68,6 +68,7 @@ import {
   setDiffrConfigValue,
   testDiffrSummarizer,
 } from "./diffr-config";
+import { installFullDiffr } from "./diffr-languages.js";
 import {
   GlobalReviewDesktopVerbRelay,
   type ReviewDesktopVerbRelay,
@@ -82,6 +83,7 @@ import {
   relayReviewCallbacks,
   serverJson,
 } from "./review-server-core";
+import { invalidateStructuralComparisons } from "./structural-comparisons.js";
 import { createTutorialService } from "./tutorial-service";
 import { captureSanitizedUiTelemetry } from "./ui-telemetry";
 
@@ -411,6 +413,19 @@ export function createGlobalReviewServer(
 
     return serverJson(200, { ok: true });
   });
+  app.post("/diffr-languages/install", async () => {
+    try {
+      await installFullDiffr();
+      invalidateStructuralComparisons();
+
+      return serverJson(200, { installed: true });
+    } catch (error) {
+      return serverJson(503, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
   app.get("/diffr-config", async () =>
     serverJson(200, await readDiffrConfig()),
   );

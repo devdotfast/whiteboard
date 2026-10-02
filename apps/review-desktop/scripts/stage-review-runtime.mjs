@@ -49,6 +49,9 @@ export const REQUIRED_RUNTIME_ENTRIES = [
   RUNTIME_SERVER_ENTRY,
   RUNTIME_CLI_ENTRY,
   `bin/${diffrName}`,
+  "bin/diffr-package/bin/fetch.mjs",
+  "bin/diffr-package/package.json",
+  "bin/diffr-package/pins.json",
   "dist/cli.js",
   // The build's commit; without it the server reports `commit: null`.
   "dist/build-info.json",
@@ -198,6 +201,16 @@ export async function stageDiffrBinary(
   const destination = path.join(runtimeRoot, "bin", diffrName);
   await mkdir(path.dirname(destination), { recursive: true });
   await copyFile(source, destination);
+  const installerRoot = path.join(runtimeRoot, "bin/diffr-package");
+  await mkdir(path.join(installerRoot, "bin"), { recursive: true });
+
+  for (const file of ["package.json", "pins.json", "bin/fetch.mjs"]) {
+    await copyFile(
+      path.join(packageRoot, file),
+      path.join(installerRoot, file),
+    );
+  }
+
   await chmod(destination, 0o755);
 }
 

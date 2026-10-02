@@ -11,6 +11,8 @@ import {
 } from "@dev.fast/review-protocol";
 import { findReviewPackageRoot } from "@review/package-paths";
 
+import { installedFullDiffr } from "./diffr-languages.js";
+
 export type DiffComparison =
   | { kind: "trees"; base: string; head: string }
   | { kind: "merge-base"; base: string; head: string }
@@ -28,6 +30,10 @@ export function diffrExecutable(
   packageRoot = findReviewPackageRoot(import.meta.url),
 ): string {
   if (process.env.REVIEW_DIFFR_BINARY) return process.env.REVIEW_DIFFR_BINARY;
+
+  const full = installedFullDiffr(packageRoot);
+
+  if (full) return full;
 
   const bundled = path.join(
     packageRoot,
