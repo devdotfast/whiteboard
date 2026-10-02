@@ -87,7 +87,9 @@ export async function remoteUninstall(input: {
 
   if (
     override &&
-    path.resolve(override) !== (override.replace(/\/$/, "") || "/")
+    (/[\x00-\x1f\x7f-\x9f]/.test(override) ||
+      override.includes("//") ||
+      path.resolve(override) !== (override.replace(/\/$/, "") || "/"))
   )
     return refuse(
       `DEV_REVIEW_HOME is ${JSON.stringify(override)}; Whiteboard removes nothing under a review home that is not an absolute, normalised path.`,

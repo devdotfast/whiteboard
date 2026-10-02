@@ -651,7 +651,14 @@ it("refuses a server the user started before it stops anything, naming only that
 });
 
 it("removes nothing under a DEV_REVIEW_HOME it cannot normalise, as the probe refuses it", async () => {
-  for (const moved of ["relative/home", `${root}/a/../b`, `${root}//b`]) {
+  for (const moved of [
+    "relative/home",
+    `${root}/a/../b`,
+    `${root}//b`,
+    `//${root}`,
+    `${root}/a\nb`,
+    `${root}/a\u001bb`,
+  ]) {
     const result = await remoteUninstall({
       env: { DEV_REVIEW_HOME: moved },
       home,

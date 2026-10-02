@@ -121,7 +121,7 @@ const run = (file: string, ...args: string[]) => execFileSync(file, args, { enco
 
 test("a DEV_REVIEW_HOME the remote cannot normalise is refused by the probe and the uninstall, before anything is written", async (t) => {
 	const f = await fixture(t);
-	for (const home of ["relative/home", `${f.root}/a/../b`, `${f.root}//b`, `${f.root}/./b`]) {
+	for (const home of ["relative/home", `${f.root}/a/../b`, `${f.root}//b`, `${f.root}/./b`, `${f.root}/a\nb`, `${f.root}/a\tb`]) {
 		const spawn = localRemote(f.home, 0, { DEV_REVIEW_HOME: home });
 		const probed = await probeRemote({ session: reviewSshSession("devbox", tmpdir()), spawn, env: {} });
 		assert.match("error" in probed ? probed.error : "", /DEV_REVIEW_HOME there is not an absolute, normalised path/, home);
