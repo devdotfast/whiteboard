@@ -119,10 +119,9 @@ const step = (api: Api, reviewId: string, description: string) => {
 
   if (!leaseId) leases.set(reviewId, randomUUID());
 
-  return api(`/${reviewId}/activity`, {
+  return api(`/${reviewId}/activity/${leaseId ? "update" : "begin"}`, {
     method: "POST",
     body: JSON.stringify({
-      action: leaseId ? "renew" : "begin",
       leaseId: leases.get(reviewId),
       focus: { description },
     }),
