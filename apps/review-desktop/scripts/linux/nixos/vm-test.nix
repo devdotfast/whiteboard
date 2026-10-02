@@ -40,7 +40,7 @@ in pkgs.testers.runNixOSTest {
     services.xserver.displayManager.lightdm.enable = true;
     services.displayManager.autoLogin = { enable = true; user = "tester"; };
     environment.systemPackages = [ probe pkgs.desktop-file-utils pkgs.xdg-utils pkgs.glib.bin pkgs.python3 ];
-    virtualisation = { memorySize = 4096; cores = 2; diskSize = 16384; additionalPaths = [ package source pkgs.path ]; };
+    virtualisation = { memorySize = 4096; cores = 2; diskSize = 16384; writableStoreUseTmpfs = false; additionalPaths = [ package source pkgs.path ]; };
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     system.stateVersion = "26.05";
   };
@@ -49,6 +49,7 @@ in pkgs.testers.runNixOSTest {
 
     machine.wait_for_unit("graphical.target")
     machine.wait_until_succeeds("pgrep -u tester xfce4-session")
+    print(machine.succeed("df -h / /nix/store"))
 
     def user(command):
         return machine.succeed("su - tester -c " + shlex.quote(command), timeout=300)
@@ -66,7 +67,7 @@ in pkgs.testers.runNixOSTest {
     registered = user("gio mime x-scheme-handler/${release.urlProtocol}")
     assert handler in registered, handler + "\n" + registered + user("printf 'PATH=%s\nXDG_DATA_DIRS=%s\n' \"$PATH\" \"$XDG_DATA_DIRS\"; cat ${package}/share/applications/mimeinfo.cache")
 
-    user("DISPLAY=:0 XAUTHORITY=/home/tester/.Xauthority DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus DO_NOT_TRACK=1 SMOKE_DEEP_LINK_PROTOCOL=${release.urlProtocol} SMOKE_SCREENSHOT=/home/tester/onboarding.png ${probe}/bin/${app}-probe")
+    print(user("DISPLAY=:0 XAUTHORITY=/home/tester/.Xauthority DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus DO_NOT_TRACK=1 SMOKE_DEEP_LINK_PROTOCOL=${release.urlProtocol} SMOKE_SCREENSHOT=/home/tester/onboarding.png ${probe}/bin/${app}-probe"))
     machine.copy_from_vm("/home/tester/onboarding.png", "onboarding.png")
     machine.copy_from_vm("/home/tester/onboarding-cold-link.png", "cold-link.png")
     machine.copy_from_vm("/home/tester/onboarding-deep-links.png", "deep-links.png")
@@ -76,6 +77,7 @@ in pkgs.testers.runNixOSTest {
     before = user("readlink -f ~/.nix-profile")
     machine.succeed("python3 -c 'import json; p=\"/home/tester/package/release.json\"; r=json.load(open(p)); r[\"revision\"] = str(int(r[\"revision\"]) + 1); json.dump(r, open(p, \"w\"))'")
     user(f"nix profile upgrade ${app} --refresh {nixpkgs}")
+    print(machine.succeed("df -h / /nix/store"))
     after = user("readlink -f ~/.nix-profile")
     assert before != after, "Profile upgrade did not change the installed generation"
     user("DO_NOT_TRACK=1 ${app} --help")

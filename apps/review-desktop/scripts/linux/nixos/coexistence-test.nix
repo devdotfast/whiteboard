@@ -13,7 +13,7 @@ in pkgs.testers.runNixOSTest {
     services.xserver.displayManager.lightdm.enable = true;
     services.displayManager.autoLogin = { enable = true; user = "tester"; };
     environment.systemPackages = [ pkgs.wmctrl pkgs.glib.bin pkgs.python3 ];
-    virtualisation = { memorySize = 4096; cores = 2; diskSize = 16384; additionalPaths = packages ++ [ stable.outPath preview.outPath pkgs.path ]; };
+    virtualisation = { memorySize = 4096; cores = 2; diskSize = 16384; writableStoreUseTmpfs = false; additionalPaths = packages ++ [ stable.outPath preview.outPath pkgs.path ]; };
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     system.stateVersion = "26.05";
   };
@@ -22,6 +22,7 @@ in pkgs.testers.runNixOSTest {
 
     machine.wait_for_unit("graphical.target")
     machine.wait_until_succeeds("pgrep -u tester xfce4-session")
+    print(machine.succeed("df -h / /nix/store"))
 
     def user(command):
         return machine.succeed("su - tester -c " + shlex.quote(command), timeout=300)
