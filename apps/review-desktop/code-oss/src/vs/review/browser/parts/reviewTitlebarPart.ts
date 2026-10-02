@@ -247,11 +247,18 @@ export class MainReviewTitlebarPart extends ReviewTitlebarPart {
 	}
 
 
+	private laidOutZoom: number | undefined;
+
 	override layout(width: number, height: number): void {
 		super.layout(width, height);
+		const zoomFactor = getZoomFactor(mainWindow);
+		if (zoomFactor === this.laidOutZoom) {
+			return;
+		}
+		this.laidOutZoom = zoomFactor;
 		void this.nativeHostService.updateWindowControls({
 			targetWindowId: getWindowId(mainWindow),
-			height: Math.round(REVIEW_CHROME_HEIGHT * getZoomFactor(mainWindow))
+			height: Math.round(REVIEW_CHROME_HEIGHT * zoomFactor)
 		});
 		// A zoom change fires no ResizeObserver.
 		this.updateChromeWidths();
