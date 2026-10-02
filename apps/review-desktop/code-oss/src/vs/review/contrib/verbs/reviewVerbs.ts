@@ -5,7 +5,7 @@
 
 import { encodeBase64 } from "../../../base/common/buffer.js";
 import { Emitter, Event } from "../../../base/common/event.js";
-import { Disposable, DisposableStore } from "../../../base/common/lifecycle.js";
+import { Disposable, DisposableMap, DisposableStore, type IDisposable } from "../../../base/common/lifecycle.js";
 import { type ICodeEditor, type IDiffEditor } from "../../../editor/browser/editorBrowser.js";
 import { ICodeEditorService } from "../../../editor/browser/services/codeEditorService.js";
 import { createDecorator } from "../../../platform/instantiation/common/instantiation.js";
@@ -42,7 +42,8 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 	private readonly _onDidRequestCanvasFocus = this._register(new Emitter<void>());
 	readonly onDidRequestCanvasFocus = this._onDidRequestCanvasFocus.event;
 
-	private readonly selectionEditors = new Map<string, DisposableStore>();
+	private readonly selectionEditors = this._register(new DisposableMap<string, DisposableStore>());
+	private readonly diffSelections = this._register(new DisposableMap<IDiffEditor, IDisposable>());
 
 	constructor(
 		@ICodeEditorService private readonly codeEditorService: ICodeEditorService,
@@ -57,28 +58,21 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 		for (const editor of this.codeEditorService.listCodeEditors()) this.trackSelection(editor);
 		for (const diff of this.codeEditorService.listDiffEditors()) this.trackDiffSelection(diff);
 		this._register(this.codeEditorService.onDiffEditorAdd(diff => this.trackDiffSelection(diff)));
+		this._register(this.codeEditorService.onDiffEditorRemove(diff => this.diffSelections.deleteAndDispose(diff)));
 		this._register(this.codeEditorService.onCodeEditorAdd((editor) => this.trackSelection(editor)));
-		this._register(
-			this.codeEditorService.onCodeEditorRemove((editor) => {
-				this.selectionEditors.get(editor.getId())?.dispose();
-				this.selectionEditors.delete(editor.getId());
-			}),
-		);
+		this._register(this.codeEditorService.onCodeEditorRemove((editor) => this.selectionEditors.deleteAndDispose(editor.getId())));
 	}
 
 	private trackDiffSelection(diff: IDiffEditor): void {
-		const subscription = diff.onDidUpdateDiff(() => {
+		this.diffSelections.set(diff, diff.onDidUpdateDiff(() => {
 			this.emitSelection(diff.getOriginalEditor());
 			this.emitSelection(diff.getModifiedEditor());
-		});
-		const disposed = diff.onDidDispose(() => { subscription.dispose(); disposed.dispose(); });
-		this._register(subscription);
-		this._register(disposed);
+		}));
 	}
 
 	private trackSelection(editor: ICodeEditor): void {
 		if (this.selectionEditors.has(editor.getId())) return;
-		const store = this._register(new DisposableStore());
+		const store = new DisposableStore();
 		this.selectionEditors.set(editor.getId(), store);
 		store.add(editor.onDidChangeCursorSelection(() => this.emitSelection(editor)));
 		store.add(editor.onDidFocusEditorText(() => this.emitSelection(editor)));
