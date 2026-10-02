@@ -3,6 +3,10 @@ let
   app = release.packageName;
   raw = "${package.payload}/share/${app}";
   source = ./.;
+  upgraded = import ./package.nix {
+    inherit pkgs;
+    release = release // { revision = toString (builtins.fromJSON (toString release.revision) + 1); };
+  };
   rust = builtins.fromJSON (builtins.readFile ./rust-extension.json);
   rustVsix = pkgs.fetchurl { inherit (rust) url sha256; };
   probe = pkgs.buildFHSEnv {
@@ -40,7 +44,7 @@ in pkgs.testers.runNixOSTest {
     services.xserver.displayManager.lightdm.enable = true;
     services.displayManager.autoLogin = { enable = true; user = "tester"; };
     environment.systemPackages = [ probe pkgs.desktop-file-utils pkgs.xdg-utils pkgs.glib.bin pkgs.python3 ];
-    virtualisation = { memorySize = 4096; cores = 2; diskSize = 16384; writableStoreUseTmpfs = false; additionalPaths = [ package source pkgs.path ]; };
+    virtualisation = { memorySize = 4096; cores = 2; diskSize = 16384; writableStoreUseTmpfs = false; additionalPaths = [ package upgraded source pkgs.path ]; };
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     system.stateVersion = "26.05";
   };
