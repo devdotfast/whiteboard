@@ -437,6 +437,7 @@ try {
   );
 } catch (error) {
   console.error(await evaluate("document.body.innerText").catch(() => ""));
+
   if (process.env.SMOKE_SCREENSHOT)
     await screenshot(
       process.env.SMOKE_SCREENSHOT.replace(/\.png$/, "-failure.png"),
