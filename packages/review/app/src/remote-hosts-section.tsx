@@ -1,3 +1,4 @@
+import { Button } from "@canvas/ui/button";
 import type {
   ReviewGatewayHostState,
   ReviewRemoteHostsSettings,
@@ -114,18 +115,14 @@ export function RemoteHostsSection({
             </div>
             <div {...stylex.props(styles.rowControl, local.actions)}>
               {state && RETRIED.has(state.state) ? (
-                <button
-                  type="button"
-                  {...stylex.props(styles.button)}
+                <Button
                   aria-label={`Retry ${name}`}
                   onClick={() => void hosts.retry(name).catch(() => undefined)}
                 >
                   Retry
-                </button>
+                </Button>
               ) : null}
-              <button
-                type="button"
-                {...stylex.props(styles.button)}
+              <Button
                 aria-label={`Remove ${name}`}
                 disabled={busy}
                 onClick={() =>
@@ -133,7 +130,7 @@ export function RemoteHostsSection({
                 }
               >
                 Remove
-              </button>
+              </Button>
             </div>
           </div>
         );
@@ -169,13 +166,9 @@ export function RemoteHostsSection({
                 <option key={suggestion} value={suggestion} />
               ))}
           </datalist>
-          <button
-            type="submit"
-            {...stylex.props(styles.button)}
-            disabled={busy}
-          >
+          <Button type="submit" disabled={busy}>
             Add
-          </button>
+          </Button>
         </div>
       </form>
       {error ? (
