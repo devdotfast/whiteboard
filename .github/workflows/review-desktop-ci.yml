@@ -56,6 +56,7 @@ jobs:
       commit: ${{ github.sha }}
       version: ${{ matrix.version }}
       artifact_name: linux-ci-${{ matrix.channel }}
+      runner: ubuntu-latest
       release_signing: false
     secrets: inherit
 
