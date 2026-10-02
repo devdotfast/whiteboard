@@ -61,8 +61,22 @@ it("shares one live connection across reviews, reconnects, and isolates a delete
 
   try {
     const pins = { repositoryId: "repo", base: "base", head: "head" };
-    const a = (await command({ type: "create", title: "A", pins })).reviewId;
-    const b = (await command({ type: "create", title: "B", pins })).reviewId;
+
+    const a = (
+      await command({
+        type: "create",
+        title: "A",
+        target: { kind: "commits", ...pins },
+      })
+    ).reviewId;
+
+    const b = (
+      await command({
+        type: "create",
+        title: "B",
+        target: { kind: "commits", ...pins },
+      })
+    ).reviewId;
 
     const follow = (key: string, id: string | null, index: number) => {
       following.push(

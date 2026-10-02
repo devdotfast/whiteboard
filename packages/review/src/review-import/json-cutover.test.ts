@@ -38,7 +38,12 @@ async function seed(existing?: string) {
     operation: {
       type: "create",
       title: "Already authored",
-      pins: { repositoryId, base: repo.base, head: repo.head },
+      target: {
+        kind: "commits",
+        repositoryId,
+        base: repo.base,
+        head: repo.head,
+      },
     },
   });
 

@@ -120,7 +120,7 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
       operation: {
         type: "create",
         title: "CI review",
-        pins: { ...pins, repositoryId: registered.id },
+        target: { kind: "commits", ...pins, repositoryId: registered.id },
       },
     });
 

@@ -35,7 +35,11 @@ beforeEach(async () => {
   a = new ReviewStore(database, providers);
   b = new ReviewStore(database, providers);
   ({ reviewId } = await a.execute(
-    command({ type: "create", title: "Initial", pins }),
+    command({
+      type: "create",
+      title: "Initial",
+      target: { kind: "commits", ...pins },
+    }),
   ));
 });
 

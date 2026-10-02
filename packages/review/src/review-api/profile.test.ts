@@ -50,7 +50,11 @@ async function fixture() {
   const pins = { repositoryId: oldRepo.id, base: "base", head: "head" };
 
   const created = await source.execute(
-    command({ type: "create", title: "Headless draft", pins }),
+    command({
+      type: "create",
+      title: "Headless draft",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   const resourceId = randomUUID();

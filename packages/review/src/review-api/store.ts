@@ -1038,7 +1038,8 @@ export class ReviewStore {
       const fromPullRequest = await pullRequest;
 
       const resolvedTarget = requestedTarget
-        ? await this.providers.resolveTarget?.(requestedTarget)
+        ? await (this.providers.resolveTarget?.(requestedTarget) ??
+            namedCommits(requestedTarget))
         : fromPullRequest;
 
       if (requestedTarget && !resolvedTarget)
@@ -1827,6 +1828,16 @@ export class ReviewStore {
 
     return warnings.sort();
   }
+}
+
+/** Without a resolver, a commits target that names both commits pins them as
+ * given; validatePins still checks they exist. */
+function namedCommits(target: ReviewTarget) {
+  if (target.kind !== "commits" || target.base === undefined) return undefined;
+
+  const { repositoryId, base, head } = target;
+
+  return { target, pins: { repositoryId, base, head } };
 }
 
 /** A new document's first version, before its initial content. Field order

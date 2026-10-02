@@ -10,6 +10,7 @@ import type {
   ReviewSurfaceEvent,
 } from "@dev.fast/review-protocol";
 import { rangeAnchor } from "@review/lens-selection";
+import type { ReviewTarget } from "@review/review-api/document";
 import { createReviewApi } from "@review/review-api/http";
 import { ReviewInputError } from "@review/review-api/input-error";
 import { LocalReviewData } from "@review/review-api/local-data";
@@ -69,7 +70,11 @@ afterEach(async () => {
 });
 
 it("mounts the existing canvas and preserves a section's DOM and collapsed state through live edits", async () => {
-  const review = await command({ type: "create", title: "Live review", pins });
+  const review = await command({
+    type: "create",
+    title: "Live review",
+    target: { kind: "commits", ...pins },
+  });
 
   const inserted = await command({
     type: "edit",
@@ -294,7 +299,11 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
 });
 
 it("keeps sequence step identities and supports explanation/code steps without invented source anchors", async () => {
-  const review = await command({ type: "create", title: "Diagram", pins });
+  const review = await command({
+    type: "create",
+    title: "Diagram",
+    target: { kind: "commits", ...pins },
+  });
 
   const inserted = await command({
     type: "edit",
@@ -350,7 +359,7 @@ it("dismisses immediately through the API without changing the saved document", 
   const { reviewId } = await command({
     type: "create",
     title: "Dismiss me",
-    pins,
+    target: { kind: "commits", ...pins },
   });
 
   const app = new Hono().route("/reviews-api", createReviewApi(store));
@@ -390,7 +399,7 @@ it.each([false, true])(
     const review = await command({
       type: "create",
       title: "Retained conversation",
-      pins,
+      target: { kind: "commits", ...pins },
     });
 
     const traceId = randomUUID();
@@ -498,7 +507,11 @@ it.each([false, true])(
 );
 
 it("renders a code peek block on its pinned side without fetching source text", async () => {
-  const review = await command({ type: "create", title: "Peek review", pins });
+  const review = await command({
+    type: "create",
+    title: "Peek review",
+    target: { kind: "commits", ...pins },
+  });
 
   await command({
     type: "edit",
@@ -599,7 +612,11 @@ it("renders a code peek block on its pinned side without fetching source text", 
 });
 
 it("copies prose and code from the displayed historical JSON review", async () => {
-  const review = await command({ type: "create", title: "Copy review", pins });
+  const review = await command({
+    type: "create",
+    title: "Copy review",
+    target: { kind: "commits", ...pins },
+  });
 
   const inserted = await command({
     type: "edit",
@@ -797,17 +814,9 @@ it("reads a worktree review's range as its base against the working tree, and a 
     validateResource: async () => {},
   });
 
-  const create = async (
-    title: string,
-    source:
-      | { target: { kind: "worktree"; repositoryId: string } }
-      | { pins: { repositoryId: string; base: string; head: string } },
-  ) =>
-    (
-      await store.execute({
-        operation: { type: "create", title, ...source },
-      })
-    ).reviewId;
+  const create = async (title: string, target: ReviewTarget) =>
+    (await store.execute({ operation: { type: "create", title, target } }))
+      .reviewId;
 
   const app = new Hono().route("/reviews-api", createReviewApi(store));
   app.get("/reviews-api/:id/commits", (context) => context.json([]));
@@ -842,7 +851,8 @@ it("reads a worktree review's range as its base against the working tree, and a 
   try {
     const worktree = await open(
       await create("Uncommitted work", {
-        target: { kind: "worktree", repositoryId: "repo" },
+        kind: "worktree",
+        repositoryId: "repo",
       }),
       "Uncommitted work",
     );
@@ -854,7 +864,10 @@ it("reads a worktree review's range as its base against the working tree, and a 
 
     const committed = await open(
       await create("Committed work", {
-        pins: { repositoryId: "repo", base: head, head },
+        kind: "commits",
+        repositoryId: "repo",
+        base: head,
+        head,
       }),
       "Committed work",
     );
@@ -868,10 +881,8 @@ it("reads a worktree review's range as its base against the working tree, and a 
 
 it("degrades to the retained document and an unavailable Commits tab when the checkout is gone", async () => {
   const gone = new ReviewStore(path.join(directory, "gone.db"), {
-    // Present only so the refresh loop runs; a commit-pinned review never calls it.
-    resolveTarget: async () => {
-      throw new Error("This review is commit-pinned.");
-    },
+    // Resolves the create; a commit-pinned review never refreshes through it.
+    resolveTarget: async (target) => ({ target, pins }),
     sourcePins: async () => {
       throw new ReviewInputError(
         "The selected local checkout is unavailable.",
@@ -885,7 +896,11 @@ it("degrades to the retained document and an unavailable Commits tab when the ch
 
   try {
     const { reviewId } = await gone.execute({
-      operation: { type: "create", title: "Moved review", pins },
+      operation: {
+        type: "create",
+        title: "Moved review",
+        target: { kind: "commits", ...pins },
+      },
     });
 
     await gone.refreshWorktrees();
@@ -1009,7 +1024,12 @@ it("offers the Diff view for a live worktree review and refreshes it on each sav
 });
 
 it("leaves window errors to the workbench it shares a window with", async () => {
-  const review = await command({ type: "create", title: "Errors", pins });
+  const review = await command({
+    type: "create",
+    title: "Errors",
+    target: { kind: "commits", ...pins },
+  });
+
   const app = new Hono().route("/reviews-api", createReviewApi(store));
   app.get("/reviews-api/:id/commits", (context) => context.json([]));
   const telemetry: string[] = [];

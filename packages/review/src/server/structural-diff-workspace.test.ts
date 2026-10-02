@@ -97,7 +97,11 @@ console.log(JSON.stringify({type:'complete',succeeded:1,failed:0}));
       );
 
       const { reviewId } = await local.store.execute({
-        operation: { type: "create", title: "Structural", pins },
+        operation: {
+          type: "create",
+          title: "Structural",
+          target: { kind: "commits", ...pins },
+        },
       });
 
       const app = createJsonReviewApi(local.store, local.data);

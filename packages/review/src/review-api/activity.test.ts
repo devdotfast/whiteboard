@@ -113,7 +113,12 @@ it("streams activity separately from document versions and closes the stream on 
   const { reviewId } = await command({
     type: "create",
     title: "Activity",
-    pins: { repositoryId: "repo", base: "base", head: "head" },
+    target: {
+      kind: "commits",
+      repositoryId: "repo",
+      base: "base",
+      head: "head",
+    },
   });
 
   const changed = vi.fn<Parameters<ReviewStore["subscribe"]>[0]>();
@@ -223,7 +228,12 @@ it.each([false, true])(
       operation: {
         type: "create",
         title: "Background review",
-        pins: { repositoryId: "repo", base: "base", head: "head" },
+        target: {
+          kind: "commits",
+          repositoryId: "repo",
+          base: "base",
+          head: "head",
+        },
       },
     });
 

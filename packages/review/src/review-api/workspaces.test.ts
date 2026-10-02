@@ -61,8 +61,13 @@ beforeEach(async () => {
   local = openLocalReviewStore(database);
   const registered = await local.data.register(repository);
   pins = { repositoryId: registered.id, base, head };
-  reviewId = (await command({ type: "create", title: "Pinned", pins }))
-    .reviewId;
+  reviewId = (
+    await command({
+      type: "create",
+      title: "Pinned",
+      target: { kind: "commits", ...pins },
+    })
+  ).reviewId;
 });
 
 afterEach(async () => {
@@ -319,8 +324,13 @@ it("claims unowned workspaces before removing them", async () => {
 });
 
 it("removes a dismissed review's checkouts and rebuilds them on demand", async () => {
-  const other = (await command({ type: "create", title: "Other", pins }))
-    .reviewId;
+  const other = (
+    await command({
+      type: "create",
+      title: "Other",
+      target: { kind: "commits", ...pins },
+    })
+  ).reviewId;
 
   const dismissed = await local.data.workspaces.source(reviewId, pins, "head");
   const kept = await local.data.workspaces.source(other, pins, "head");
