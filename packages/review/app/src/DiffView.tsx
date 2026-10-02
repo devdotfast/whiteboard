@@ -173,6 +173,7 @@ export function ReviewDiffView({
   });
 
   const lenses = useReviewLenses();
+  const diffFiles = useReviewDiffFiles();
   const lens = scope ? undefined : lenses?.active;
   const [lensList, setLensList] = useState<HTMLDivElement | null>(null);
   const rows = useLensRows(lenses?.lenses ?? []);
@@ -245,6 +246,8 @@ export function ReviewDiffView({
 
     void lenses.mark(sources, lenses.stats(sources).state !== "viewed");
   };
+
+  if (diffFiles.status === "unavailable") return null;
 
   if (scope || !lenses)
     return (

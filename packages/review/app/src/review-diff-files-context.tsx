@@ -12,6 +12,7 @@ import { useReviewContainer } from "./review-root-context";
 export type ReviewDiffFilesState =
   | { status: "loading" }
   | { status: "error"; error: string }
+  | { status: "unavailable" }
   | { status: "loaded"; files: ReviewDiffFileWire[] };
 
 const ReviewDiffFilesContext = createContext<
@@ -37,11 +38,14 @@ function sourceId(source: ReviewCanvasBridge["diffView"]): number {
 export function ReviewDiffFilesProvider({
   documentKey,
   revision,
+  unavailable,
   children,
 }: {
   documentKey: string;
   /** A live checkout's save generation: refetch, keeping the shown files. */
   revision?: string;
+  /** The checkout is gone; nothing is fetched. */
+  unavailable?: boolean;
   children: ReactNode;
 }) {
   const session = useReviewSession();
@@ -62,6 +66,7 @@ export function ReviewDiffFilesProvider({
 
       return files;
     },
+    enabled: !unavailable,
     // A source never changes its answer; a replaced one is never asked again.
     staleTime: Infinity,
     gcTime: 0,
@@ -75,14 +80,16 @@ export function ReviewDiffFilesProvider({
 
   const value = useMemo<ReviewDiffFilesState & { revision?: string }>(
     () => ({
-      ...(query.status === "success"
-        ? { status: "loaded", files: query.data }
-        : query.status === "error"
-          ? { status: "error", error: query.error.message }
-          : { status: "loading" }),
+      ...(unavailable
+        ? { status: "unavailable" }
+        : query.status === "success"
+          ? { status: "loaded", files: query.data }
+          : query.status === "error"
+            ? { status: "error", error: query.error.message }
+            : { status: "loading" }),
       revision,
     }),
-    [query.status, query.data, query.error, revision],
+    [unavailable, query.status, query.data, query.error, revision],
   );
 
   return (

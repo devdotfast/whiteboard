@@ -117,6 +117,7 @@ export function ReviewLensesProvider({
         `${route}?version=${snapshot.version}&mode=${mode}&wait=false`,
         signal,
       ),
+    enabled: !snapshot.sourceUnavailable,
     staleTime: Infinity,
     gcTime: 0,
   });
@@ -181,8 +182,9 @@ export function ReviewLensesProvider({
   const busy = markViewed.isPending;
 
   // The latest outcome wins: a later read clears a failed mark.
-  const error =
-    markViewed.error && markViewed.submittedAt > read.dataUpdatedAt
+  const error = snapshot.sourceUnavailable
+    ? "Local checkout unavailable."
+    : markViewed.error && markViewed.submittedAt > read.dataUpdatedAt
       ? String(markViewed.error)
       : read.error
         ? String(read.error)

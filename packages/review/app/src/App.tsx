@@ -140,6 +140,7 @@ export function App({
     <ReviewDiffFilesProvider
       documentKey={[document.routePath, document.filePath].join("\0")}
       revision={range.worktreeRevision}
+      unavailable={!!range.sourceUnavailable}
     >
       <ReviewLayout
         document={document}
