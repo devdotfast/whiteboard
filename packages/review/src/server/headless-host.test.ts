@@ -864,9 +864,7 @@ it("gives a remote caller no local paths and no source window", async () => {
     expect(localContext.rootPath).toBe(checkout);
     expect(localContext.identity).not.toMatch(hash);
 
-    const { serverId } = await (
-      await fetch(`${server.discovery.url}/health`)
-    ).json();
+    const serverId = await serverIdOf(server.discovery);
 
     expect(await read(worktree, context, true)).toEqual({
       remoteRootPath: checkout,
