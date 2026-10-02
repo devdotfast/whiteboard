@@ -232,16 +232,62 @@ export async function ensureRemoteLanguageServer(
   }
 }
 
-async function installing(files: ReturnType<typeof remoteLanguageServerFiles>) {
-  const running = await readFile(files.installingFile, "utf8")
+async function readInstalling(
+  files: ReturnType<typeof remoteLanguageServerFiles>,
+) {
+  return readFile(files.installingFile, "utf8")
     .then((text) => installingSchema.safeParse(JSON.parse(text)).data)
     .catch(() => undefined);
+}
 
-  return (
-    running !== undefined &&
-    running.started !== null &&
-    processStartIdentity(running.pid) === running.started
+async function installing(files: ReturnType<typeof remoteLanguageServerFiles>) {
+  const running = await readInstalling(files);
+
+  return running !== undefined && ours(running);
+}
+
+/**
+ * Stops the VS Code server and a detached `extensions ensure` that this
+ * install started, each with its process group (extension hosts, language
+ * servers), so `remote uninstall` finds none of them running. A process
+ * whose start differs from the recorded one is not ours and is left.
+ */
+export async function stopRemoteLanguageServer(env: NodeJS.ProcessEnv) {
+  const files = remoteLanguageServerFiles(env);
+
+  const recorded = await Promise.all([
+    readRunning(files.runningFile),
+    readInstalling(files),
+  ]);
+
+  await Promise.all(
+    recorded.map((entry) => entry && ours(entry) && stopGroup(entry.pid)),
   );
+}
+
+async function stopGroup(leader: number) {
+  for (const signal of ["SIGTERM", "SIGKILL"] as const) {
+    try {
+      process.kill(-leader, signal);
+    } catch {
+      return;
+    }
+
+    for (let i = 0; i < 50; i++) {
+      if (!groupAlive(leader)) return;
+      await delay(100);
+    }
+  }
+}
+
+function groupAlive(leader: number) {
+  try {
+    process.kill(-leader, 0);
+
+    return true;
+  } catch (error) {
+    return error instanceof Error && "code" in error && error.code === "EPERM";
+  }
 }
 
 /**
@@ -316,7 +362,7 @@ async function readRunning(file: string) {
     .catch(() => undefined);
 }
 
-const ours = (running: Running) =>
+const ours = (running: { pid: number; started: string | null }) =>
   running.started !== null &&
   processStartIdentity(running.pid) === running.started;
 

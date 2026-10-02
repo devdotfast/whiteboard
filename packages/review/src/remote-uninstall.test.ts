@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
@@ -17,6 +17,7 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 
 import { REVIEW_REMOTE_WRAPPER_MARK } from "@dev.fast/review-protocol";
+import { processStartIdentity } from "@dev.fast/trace-core";
 import { runReviewCli } from "@review/cli-runner.js";
 import { remoteServerPaths } from "@review/remote-extensions.js";
 import { remoteUninstall, takeInstallLock } from "@review/remote-uninstall.js";
@@ -36,6 +37,9 @@ let install: string;
 let wrapper: string;
 
 const children: ChildProcess[] = [];
+
+/** Process group leaders, killed with their groups. */
+const groups: number[] = [];
 
 const servers: Server[] = [];
 
@@ -75,6 +79,13 @@ beforeEach(async () => {
 afterEach(async () => {
   for (const child of children.splice(0)) child.kill("SIGKILL");
 
+  for (const leader of groups.splice(0))
+    try {
+      process.kill(-leader, "SIGKILL");
+    } catch {
+      // Already gone.
+    }
+
   for (const server of servers.splice(0)) server.close();
   await rm(root, { recursive: true, force: true });
 });
@@ -93,6 +104,51 @@ async function runningFrom(cli: string) {
   await once(child, "spawn");
 
   return child;
+}
+
+/** A detached process group running from `file`, with a child running from `child`: the VS Code server and an extension host. */
+async function groupFrom(file: string, child?: string) {
+  const forever = "setInterval(() => {}, 1000)";
+
+  const leader = spawn(
+    process.execPath,
+    [
+      "-e",
+      child
+        ? `require("child_process").spawn(process.execPath, ["-e", ${JSON.stringify(forever)}, ${JSON.stringify(child)}], { stdio: "ignore" }); ${forever}`
+        : forever,
+      file,
+    ],
+    { stdio: "ignore", detached: true },
+  );
+
+  groups.push(leader.pid!);
+  await once(leader, "spawn");
+
+  return leader.pid!;
+}
+
+const runningWith = (text: string) =>
+  spawnSync("pgrep", ["-f", text]).status === 0;
+
+/** What attach records for the VS Code server and a detached extension install. */
+async function languageServerRecords(server: number, ensure?: number) {
+  const { serverDataDir } = remoteServerPaths(env);
+  await mkdir(serverDataDir, { recursive: true });
+  await writeFile(
+    path.join(serverDataDir, "server.json"),
+    JSON.stringify({
+      pid: server,
+      started: processStartIdentity(server),
+      port: 1,
+    }),
+  );
+
+  if (ensure !== undefined)
+    await writeFile(
+      path.join(serverDataDir, "install.json"),
+      JSON.stringify({ pid: ensure, started: processStartIdentity(ensure) }),
+    );
 }
 
 /** A server record and a /health that answers for `pid`. */
@@ -512,4 +568,80 @@ it("with DEV_REVIEW_HOME elsewhere removes the install there, with the VS Code s
   });
   expect(existsSync(serverDataDir)).toBe(false);
   expect(existsSync(install)).toBe(true);
+});
+
+it("stops the VS Code server with its extension host, and a detached extension install, then removes the install", async () => {
+  const pkg = path.join(
+    install,
+    "versions",
+    "0.1.6",
+    "node_modules",
+    "@dev.fast",
+    "whiteboard",
+  );
+
+  const extensionHost = path.join(
+    install,
+    "extensions",
+    "ms-python.python",
+    "server.js",
+  );
+
+  const server = await groupFrom(
+    path.join(pkg, "vscode-server", "out", "server-main.js"),
+    extensionHost,
+  );
+
+  const ensure = await groupFrom(path.join(pkg, "dist", "cli.js"));
+  await languageServerRecords(server, ensure);
+
+  for (let i = 0; i < 100 && !runningWith(extensionHost); i++)
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+  const result = await remoteUninstall({
+    env,
+    home,
+    stateDir,
+    deleteReviews: false,
+  });
+
+  expect(result).toMatchObject({ ok: true, removed: [install, wrapper] });
+  expect(runningWith(`${install}/`)).toBe(false);
+});
+
+it("still refuses a server the user started, and removes nothing", async () => {
+  const server = await groupFrom(
+    path.join(
+      install,
+      "versions",
+      "0.1.6",
+      "vscode-server",
+      "out",
+      "server-main.js",
+    ),
+  );
+
+  await languageServerRecords(server);
+
+  const user = await runningFrom(
+    path.join(install, "versions", "0.1.6", "cli.js"),
+  );
+
+  await serverRecord(user.pid!, "user");
+
+  const result = await remoteUninstall({
+    env,
+    home,
+    stateDir,
+    deleteReviews: false,
+  });
+
+  expect(result).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining(
+      `A Whiteboard server you started (process ${user.pid})`,
+    ),
+  });
+  expect(alive(user.pid!)).toBe(true);
+  expect(existsSync(path.join(install, "versions"))).toBe(true);
 });

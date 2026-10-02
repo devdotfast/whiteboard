@@ -172,7 +172,8 @@ In Settings, click **Remove** on the host, check **Also remove Whiteboard from
 `<alias>`**, and click **Remove host**. Desktop runs the host's own
 `whiteboard remote uninstall --keep-reviews` over the connection, which:
 
-- stops the review server that Desktop or the CLI started;
+- stops the review server that Desktop or the CLI started, and the VS Code
+  server and any extension download that `remote attach` started;
 - removes `~/.dev/whiteboard-remote/`, and `~/.local/bin/whiteboard` if
   Desktop wrote it;
 - keeps your reviews in `~/.dev`.

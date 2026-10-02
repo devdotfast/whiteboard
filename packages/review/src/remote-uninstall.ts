@@ -18,6 +18,7 @@ import { REVIEW_REMOTE_WRAPPER_MARK } from "@dev.fast/review-protocol";
 import { processIsAlive } from "@dev.fast/trace-core";
 
 import { whiteboardRemoteHome } from "./remote-extensions";
+import { stopRemoteLanguageServer } from "./remote-language-server";
 import {
   readReviewServerDiscovery,
   readReviewServerHealth,
@@ -48,8 +49,9 @@ export type RemoteUninstallResult =
 
 /**
  * Removes what Desktop installed on this host: `whiteboardRemoteHome(env)`
- * and its `~/.local/bin/whiteboard`. A server Desktop or the CLI started is
- * stopped first. Any other process running from the install is a refusal.
+ * and its `~/.local/bin/whiteboard`. A server Desktop or the CLI started,
+ * the VS Code server and a detached extension install are stopped first.
+ * Any other process running from the install is a refusal.
  */
 export async function remoteUninstall(input: {
   home: string;
@@ -111,6 +113,8 @@ export async function remoteUninstall(input: {
         ? recorded.serverPid
         : undefined;
 
+    // Desktop's own, started by attach: back on the next attach.
+    await stopRemoteLanguageServer(input.env);
     const running = await processesFrom(`${install}/`);
 
     if (running === undefined)
