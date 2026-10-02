@@ -167,8 +167,8 @@ Every event from the Whiteboard telemetry API includes these properties:
 
 | Property                  | Value                                                                                                                     |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `cli_version`             | CLI package version (`version` repeats it for one release)                                                                |
-| `app_version`             | Whiteboard app release version; absent for the standalone CLI                                                             |
+| `cli_version`             | CLI package version, stamped with the app release since 0.1.6 (`version` repeats it for one release)                      |
+| `app_version`             | Whiteboard app release: the app's own, or the Desktop a `whiteboard api` or `mcp` process reached; absent if none         |
 | `channel`                 | `stable`, `preview`, or `dev` for an unpackaged build                                                                     |
 | `environment`             | `production`, `ci`, `internal`, `e2e`, or `smoke`                                                                         |
 | `surface`                 | `desktop`, `cli`, `headless`, `mcp`, or `api`                                                                             |

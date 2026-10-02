@@ -265,6 +265,7 @@ export type ReviewCommandTelemetry = Pick<
   ReviewTelemetry,
   | "createCommandRunId"
   | "setSurface"
+  | "setDesktopVersion"
   | "captureInstallationCreated"
   | "captureCommandStarted"
   | "captureCommandSucceeded"
@@ -287,6 +288,7 @@ export class ReviewTelemetry {
   private readonly now: () => Date;
   private surface: ReviewTelemetrySurface;
   private readonly packageVersion: string;
+  private desktopVersion: string | undefined;
   private installConfig: ReviewTelemetryInstallConfig | undefined;
   private chunkIds: ChunkIds | undefined;
 
@@ -330,6 +332,16 @@ export class ReviewTelemetry {
   /** Sets the surface for every later event, envelope included. */
   setSurface(surface: ReviewTelemetrySurface): void {
     this.surface = surface;
+  }
+
+  /**
+   * Records the release of the Desktop this process reached, for `app_version`
+   * on every later event. A process Desktop launched already has it in its env.
+   */
+  setDesktopVersion(version: string | undefined): void {
+    const value = nonEmpty(version);
+
+    this.desktopVersion = value && validSemver(value) ? value : undefined;
   }
 
   async setEnabled(enabled: boolean): Promise<void> {
@@ -913,7 +925,7 @@ export class ReviewTelemetry {
       "internal" | "accountAlias" | "createdAt"
     >,
   ): Promise<PostHogCaptureProperties> {
-    const appVersion = reviewAppVersion(this.env);
+    const appVersion = reviewAppVersion(this.env) ?? this.desktopVersion;
     const appSessionId = nonEmpty(this.env[REVIEW_APP_SESSION_ID_ENV]);
 
     const properties: PostHogCaptureProperties = {
