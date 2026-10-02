@@ -317,6 +317,11 @@ function ReviewLayoutContent({
   // column again and lays out once.
   const diffHostRef = useRef<HTMLDivElement | null>(null);
   const diffPreloaded = activeView !== "diff" || diffScope !== null;
+  // Built the first time it is shown, then kept for instant returns.
+  const [diffOpened, setDiffOpened] = useState(!diffPreloaded);
+
+  if (!diffPreloaded && !diffOpened) setDiffOpened(true);
+
   const [frozenDiffWidth, setFrozenDiffWidth] = useState<number>();
 
   useLayoutEffect(() => {
@@ -790,7 +795,7 @@ function ReviewLayoutContent({
               )}
               style={frozenDiffStyle}
             >
-              <ReviewDiffView />
+              {diffOpened && <ReviewDiffView />}
             </div>
             {activeView === "diff" && diffScope !== null && (
               <div

@@ -1107,3 +1107,51 @@ it("leaves window errors to the workbench it shares a window with", async () => 
 
   expect(telemetry).not.toContain("client_error");
 });
+
+it("builds the full diff only once the Diff view is shown", async () => {
+  const review = await command({ type: "create", title: "Lazy diff", pins });
+  const app = new Hono().route("/reviews-api", createReviewApi(store));
+
+  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+
+  const create = vi.fn<ReviewCanvasBridge["diffView"]["create"]>(() => {
+    throw new Error("Diff is not mounted by this test.");
+  });
+
+  const bridge = testReviewBridge(
+    {},
+    {
+      request: async (url, init) => app.request(url, init),
+      diffView: {
+        files: async () => [
+          { path: "a.ts", status: "modified", additions: 1, deletions: 1 },
+        ],
+        create,
+      },
+    },
+  );
+
+  const container = document.createElement("div");
+
+  document.body.append(container);
+  await act(async () => {
+    canvas = mount(container, {
+      kind: "api",
+      reviewId: review.reviewId,
+      bridge,
+    });
+  });
+  await act(async () =>
+    vi.waitFor(() =>
+      expect(container.querySelector("h1")?.textContent).toBe("Lazy diff"),
+    ),
+  );
+  expect(create).not.toHaveBeenCalled();
+
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('button[aria-label="Diff"]')!
+      .click(),
+  );
+  await act(async () => vi.waitFor(() => expect(create).toHaveBeenCalled()));
+});
