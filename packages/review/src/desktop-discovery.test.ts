@@ -70,6 +70,34 @@ describe("Review Desktop health", () => {
   ])("rejects %s discovery", async (_label, fetch) => {
     await expect(isHealthyReviewDesktop(discovery, fetch)).resolves.toBe(false);
   });
+
+  it.each([
+    ["waits for a busy server whose process is alive", process.pid, true],
+    [
+      "reports a server that timed out and exited as stopped",
+      2 ** 22 + 7,
+      false,
+    ],
+  ])("%s", async (_label, serverPid, healthy) => {
+    let calls = 0;
+
+    const fetch = vi.fn<() => Promise<Response>>(async () => {
+      calls += 1;
+
+      if (calls === 1)
+        throw new DOMException("The operation timed out.", "TimeoutError");
+
+      return Response.json({
+        ok: true,
+        instanceId: discovery.instanceId,
+        desktopAttached: true,
+      });
+    });
+
+    await expect(
+      isHealthyReviewDesktop({ ...discovery, serverPid }, fetch),
+    ).resolves.toBe(healthy);
+  });
 });
 
 describe("Review instance selection", () => {
