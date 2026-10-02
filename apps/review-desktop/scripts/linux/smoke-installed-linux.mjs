@@ -47,6 +47,7 @@ if (protocol) {
 }
 
 if (process.env.SMOKE_RUST_VSIX) {
+  console.log(`${app}: installing optional Rust extension.`);
   await promisify(execFile)(
     process.execPath,
     [
@@ -212,11 +213,20 @@ async function deepLinks(coldObserved) {
     'document.querySelectorAll(".notifications-toasts .codicon-notifications-clear").forEach(button => button.click())',
   );
   await waitFor(`!(${shareNotification})`);
-  await promisify(execFile)(
-    "xdg-open",
-    [`${protocol}://share/nixos-warm?origin=invalid`],
-    { env: environment },
-  );
+  console.log(`${app}: cold link observed; dispatching warm link.`);
+  await new Promise((resolve, reject) => {
+    const opener = spawn(
+      "xdg-open",
+      [`${protocol}://share/nixos-warm?origin=invalid`],
+      { env: environment, stdio: "ignore", timeout: 30000 },
+    );
+
+    opener.once("error", reject);
+    opener.once("exit", (code, signal) => {
+      if (code === 0) resolve();
+      else reject(new Error(`Protocol opener exited: ${code}, ${signal}`));
+    });
+  });
   await waitFor(shareNotification);
 
   if (process.env.SMOKE_SCREENSHOT) {
@@ -257,6 +267,7 @@ async function deepLinks(coldObserved) {
 }
 
 async function rustExtension() {
+  console.log(`${app}: activating optional Rust extension.`);
   const directory = `${state}/rust`;
 
   await mkdir(`${directory}/src`, { recursive: true });
@@ -442,6 +453,8 @@ try {
     ready,
     "Installed app did not render onboarding and start its bundled server",
   );
+
+  console.log(`${app}: onboarding and bundled server ready.`);
 
   if (protocol) await deepLinks(coldLinkObserved);
 

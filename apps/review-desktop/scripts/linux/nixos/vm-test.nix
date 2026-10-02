@@ -51,7 +51,7 @@ in pkgs.testers.runNixOSTest {
     machine.wait_until_succeeds("pgrep -u tester xfce4-session")
 
     def user(command):
-        return machine.succeed("su - tester -c " + shlex.quote(command))
+        return machine.succeed("su - tester -c " + shlex.quote(command), timeout=300)
 
     user("cp -r ${source} ~/package && chmod -R u+w ~/package")
     flake = "path:/home/tester/package#${app}"
