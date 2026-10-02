@@ -24,6 +24,9 @@ const state = await mkdtemp(path.join(os.tmpdir(), "whiteboard-install-"));
 
 const protocol = process.env.SMOKE_DEEP_LINK_PROTOCOL;
 
+const shareNotification =
+  'document.body.innerText.includes("Invalid Whiteboard share link.")';
+
 const profile = protocol ? `${state}/portable/user-data` : `${state}/profile`;
 
 const extensions = protocol
@@ -195,21 +198,26 @@ async function waitFor(expression) {
   throw new Error(`Desktop did not satisfy: ${expression}`);
 }
 
-async function deepLinks() {
-  const notification =
-    'document.body.innerText.includes("Invalid Whiteboard share link.")';
+async function deepLinks(coldObserved) {
+  if (!coldObserved) {
+    await waitFor(shareNotification);
 
-  await waitFor(notification);
+    if (process.env.SMOKE_SCREENSHOT)
+      await screenshot(
+        process.env.SMOKE_SCREENSHOT.replace(/\.png$/, "-cold-link.png"),
+      );
+  }
+
   await evaluate(
     'document.querySelectorAll(".notifications-toasts .codicon-notifications-clear").forEach(button => button.click())',
   );
-  await waitFor(`!(${notification})`);
+  await waitFor(`!(${shareNotification})`);
   await promisify(execFile)(
     "xdg-open",
     [`${protocol}://share/nixos-warm?origin=invalid`],
     { env: environment },
   );
-  await waitFor(notification);
+  await waitFor(shareNotification);
 
   if (process.env.SMOKE_SCREENSHOT) {
     await screenshot(
@@ -407,8 +415,18 @@ async function serverReady() {
 try {
   const deadline = Date.now() + 180_000;
   let ready = false;
+  let coldLinkObserved = false;
 
   while (Date.now() < deadline && !exited) {
+    if (protocol && !coldLinkObserved) {
+      coldLinkObserved = await evaluate(shareNotification).catch(() => false);
+
+      if (coldLinkObserved && process.env.SMOKE_SCREENSHOT)
+        await screenshot(
+          process.env.SMOKE_SCREENSHOT.replace(/\.png$/, "-cold-link.png"),
+        );
+    }
+
     if (
       (await serverReady().catch(() => false)) &&
       (await renderedOnboarding().catch(() => false))
@@ -425,7 +443,7 @@ try {
     "Installed app did not render onboarding and start its bundled server",
   );
 
-  if (protocol) await deepLinks();
+  if (protocol) await deepLinks(coldLinkObserved);
 
   if (process.env.SMOKE_RUST_VSIX) await rustExtension();
 

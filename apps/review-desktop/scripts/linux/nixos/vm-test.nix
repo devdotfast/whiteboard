@@ -66,6 +66,7 @@ in pkgs.testers.runNixOSTest {
 
     user("DISPLAY=:0 XAUTHORITY=/home/tester/.Xauthority DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus DO_NOT_TRACK=1 SMOKE_DEEP_LINK_PROTOCOL=${release.urlProtocol} SMOKE_SCREENSHOT=/home/tester/onboarding.png ${probe}/bin/${app}-probe")
     machine.copy_from_vm("/home/tester/onboarding.png", "onboarding.png")
+    machine.copy_from_vm("/home/tester/onboarding-cold-link.png", "cold-link.png")
     machine.copy_from_vm("/home/tester/onboarding-deep-links.png", "deep-links.png")
     machine.copy_from_vm("/home/tester/onboarding-rust.png", "rust.png")
 
