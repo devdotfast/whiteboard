@@ -213,21 +213,10 @@ export function RemoteHostsSection({
                   />
                   Also remove Whiteboard from {name}
                 </label>
-                <button
-                  type="button"
-                  {...stylex.props(styles.button)}
-                  disabled={busy}
-                  onClick={() => void remove(name)}
-                >
+                <Button disabled={busy} onClick={() => void remove(name)}>
                   Remove host
-                </button>
-                <button
-                  type="button"
-                  {...stylex.props(styles.button)}
-                  onClick={() => setRemoving(undefined)}
-                >
-                  Cancel
-                </button>
+                </Button>
+                <Button onClick={() => setRemoving(undefined)}>Cancel</Button>
               </div>
             ) : null}
           </div>
