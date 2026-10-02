@@ -332,6 +332,23 @@ async function rustExtension() {
     ),
   );
 
+  const attachedDeadline = Date.now() + 60000;
+  let health;
+
+  while (Date.now() < attachedDeadline && !exited) {
+    health = await fetch(`${connection.url}/health`, {
+      signal: AbortSignal.timeout(5000),
+    }).then((response) => response.json());
+
+    if (health.ok && health.desktopAttached) break;
+    await delay(500);
+  }
+
+  assert.ok(
+    health?.ok && health.desktopAttached,
+    `Desktop control did not attach: ${JSON.stringify(health)}`,
+  );
+
   const post = async (route, body) => {
     const response = await fetch(`${connection.url}/reviews-api${route}`, {
       method: "POST",
@@ -512,6 +529,25 @@ try {
         .filter((line) => /[Uu][Rr][Ll]|protocol/i.test(line))
         .join("\n"),
     );
+
+    for (const file of await readdir(`${profile}/logs/${entry}`, {
+      recursive: true,
+    })) {
+      if (!file.endsWith("renderer.log")) continue;
+
+      const renderer = await readFile(
+        `${profile}/logs/${entry}/${file}`,
+        "utf8",
+      );
+
+      console.error(
+        renderer
+          .split("\n")
+          .slice(-120)
+          .join("\n")
+          .replaceAll(/([?&]token=)[^&\s"']+/g, "$1[redacted]"),
+      );
+    }
   }
 
   if (process.env.SMOKE_SCREENSHOT)
