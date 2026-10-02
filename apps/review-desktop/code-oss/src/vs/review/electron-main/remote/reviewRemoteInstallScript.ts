@@ -38,17 +38,29 @@ export function shellQuote(value: string, lines = false): string {
 export interface ReviewRemoteInstallContext {
 	/** The remote's home, from the probe. */
 	readonly home: string;
+	/** Where Desktop installs on the remote, from the probe. */
+	readonly root: string;
 	/** This install's lock token: hex. */
 	readonly token: string;
 }
 
-export const reviewRemoteRoot = (home: string) => `${home}/.dev/whiteboard-remote`;
-export const reviewRemoteVersionDir = (home: string, version: string) => `${reviewRemoteRoot(home)}/versions/${version}`;
-export const reviewRemoteNodeDir = (home: string, nodeVersion: string) => `${reviewRemoteRoot(home)}/node/v${nodeVersion}`;
+/**
+ * Sets `root` on the remote as the CLI's `whiteboardRemoteHome` does:
+ * DEV_REVIEW_HOME, trimmed and resolved against the working directory, else
+ * ~/.dev, then whiteboard-remote. The probe and the uninstall's listing
+ * derive it; every other script is given it quoted.
+ */
+export const REVIEW_REMOTE_ROOT_SCRIPT = `base=$(printf '%s' "\${DEV_REVIEW_HOME-}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+case "$base" in '') base=$HOME/.dev ;; /*) ;; *) base=$PWD/$base ;; esac
+root=\${base%/}/whiteboard-remote
+`;
+
+export const reviewRemoteVersionDir = (root: string, version: string) => `${root}/versions/${version}`;
+export const reviewRemoteNodeDir = (root: string, nodeVersion: string) => `${root}/node/v${nodeVersion}`;
 export const reviewRemoteWrapperPath = (home: string) => `${home}/.local/bin/whiteboard`;
 
-const versionPart = (context: ReviewRemoteInstallContext, version: string) => `${reviewRemoteVersionDir(context.home, version)}.${context.token}.part`;
-const nodePart = (context: ReviewRemoteInstallContext, nodeVersion: string) => `${reviewRemoteNodeDir(context.home, nodeVersion)}.${context.token}.part`;
+const versionPart = (context: ReviewRemoteInstallContext, version: string) => `${reviewRemoteVersionDir(context.root, version)}.${context.token}.part`;
+const nodePart = (context: ReviewRemoteInstallContext, nodeVersion: string) => `${reviewRemoteNodeDir(context.root, nodeVersion)}.${context.token}.part`;
 
 /**
  * `guard` runs a long command in the background and prints a heartbeat each
@@ -62,7 +74,7 @@ export LC_ALL
 umask 022
 trap '' PIPE
 exec 3>&1
-root=${shellQuote(reviewRemoteRoot(context.home))}
+root=${shellQuote(context.root)}
 lock="$root/install.lock"
 token=${context.token}
 say() { printf '\\n%s %s\\n' ${REVIEW_REMOTE_INSTALL_SAY} "$*" >&3; }
@@ -144,7 +156,7 @@ say RELEASED
  * version) is removed.
  */
 export function prepareScript(context: ReviewRemoteInstallContext, input: { version: string; integrity: string; nodeVersion: string }): string {
-	const nodeDir = reviewRemoteNodeDir(context.home, input.nodeVersion);
+	const nodeDir = reviewRemoteNodeDir(context.root, input.nodeVersion);
 	return `${prelude(context)}own
 rm -rf "$root"/versions/*.part "$root"/node/*.part "$root"/install.lock.*.stale "$root"/install.lock.*.done
 mkdir -p "$root/versions" || fail cannot create "$root/versions"
@@ -180,7 +192,7 @@ export const REVIEW_REMOTE_COMPLETE_INTEGRITY = `completeIntegrity() {
 
 /** Sets `v` (the version's directory), `m` (its marker) and `complete` when the marker has the pinned integrity and its Node and CLI exist. */
 function markerCheck(context: ReviewRemoteInstallContext, input: { version: string; integrity: string }): string {
-	return `v=${shellQuote(reviewRemoteVersionDir(context.home, input.version))}
+	return `v=${shellQuote(reviewRemoteVersionDir(context.root, input.version))}
 m="$v/${REVIEW_REMOTE_INSTALL_MARKER}"
 ${REVIEW_REMOTE_COMPLETE_INTEGRITY}
 complete=
@@ -237,7 +249,7 @@ export function nodePlaceScript(context: ReviewRemoteInstallContext, input: { no
 	if (!/^[0-9a-f]{64}$/.test(input.sha256)) throw new Error("The Node checksum is not a sha256.");
 	return `${prelude(context)}own
 d=${shellQuote(nodePart(context, input.nodeVersion))}
-final=${shellQuote(reviewRemoteNodeDir(context.home, input.nodeVersion))}
+final=${shellQuote(reviewRemoteNodeDir(context.root, input.nodeVersion))}
 f="$d/node.tar.xz"
 sum=$(sha256sum "$f" 2>/dev/null) || { rm -rf "$d"; fail cannot read "$f"; }
 sum=\${sum%% *}
@@ -324,7 +336,7 @@ fi
 		: "";
 	return `${prelude(context)}own
 p=${shellQuote(versionPart(context, input.version))}
-v=${shellQuote(reviewRemoteVersionDir(context.home, input.version))}
+v=${shellQuote(reviewRemoteVersionDir(context.root, input.version))}
 printf '%s' ${shellQuote(input.launcher, true)} > "$p/whiteboard" && chmod 755 "$p/whiteboard" || fail cannot write the launcher
 printf '%s\\n' ${shellQuote(input.marker)} > "$p/${REVIEW_REMOTE_INSTALL_MARKER}" || fail cannot write the marker
 [ -e "$v" ] && { rm -rf "$p"; fail "$v" appeared during the install; }

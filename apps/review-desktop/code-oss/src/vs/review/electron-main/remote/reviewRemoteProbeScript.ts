@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { REVIEW_REMOTE_COMPLETE_INTEGRITY, REVIEW_REMOTE_INSTALL_MARKER } from "./reviewRemoteInstallScript.js";
+import { REVIEW_REMOTE_COMPLETE_INTEGRITY, REVIEW_REMOTE_INSTALL_MARKER, REVIEW_REMOTE_ROOT_SCRIPT } from "./reviewRemoteInstallScript.js";
 
 export const REVIEW_REMOTE_PROBE_BEGIN = "WHITEBOARD-PROBE-BEGIN";
 export const REVIEW_REMOTE_PROBE_END = "WHITEBOARD-PROBE-END";
@@ -72,7 +72,7 @@ nodeVersion=$bestVersion
 npm=
 [ -n "$node" ] && [ -x "\${node%/*}/npm" ] && npm=\${node%/*}/npm
 
-remote=$home/.dev/whiteboard-remote
+${REVIEW_REMOTE_ROOT_SCRIPT}remote=$root
 best=
 bestVersion=
 pick "$remote"/node/v24*/bin/node
@@ -112,8 +112,8 @@ fi
 
 echo
 echo ${REVIEW_REMOTE_PROBE_BEGIN}
-printf '{"os":%s,"arch":%s,"glibc":%s,"home":%s,"homeWritable":%s,"freeBytes":%s,' \\
-	"$(str "$os")" "$(str "$arch")" "$(strOrNull "$glibc")" "$(str "$home")" \\
+printf '{"os":%s,"arch":%s,"glibc":%s,"home":%s,"root":%s,"homeWritable":%s,"freeBytes":%s,' \\
+	"$(str "$os")" "$(str "$arch")" "$(strOrNull "$glibc")" "$(str "$home")" "$(str "$remote")" \\
 	"$writable" "\${free:-0}"
 if [ -n "$node" ]; then
 	printf '"node":{"path":%s,"version":%s},' "$(str "$node")" "$(str "$nodeVersion")"

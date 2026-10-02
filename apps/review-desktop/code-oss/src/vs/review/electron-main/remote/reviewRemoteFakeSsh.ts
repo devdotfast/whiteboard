@@ -108,6 +108,7 @@ export const probeOutput = (probe: Partial<Record<string, unknown>> = {}) =>
 		arch: "aarch64",
 		glibc: "2.35",
 		home: "/home/dev",
+		root: "/home/dev/.dev/whiteboard-remote",
 		homeWritable: true,
 		freeBytes: 50e9,
 		node: null,
@@ -200,7 +201,7 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 					}
 					if (child.input.includes(" LISTED\\n")) {
 						entry.kind = "uninstall";
-						return child.finish(0, { stdout: `${REVIEW_REMOTE_INSTALL_SAY} HAVE 0.1.6\n${REVIEW_REMOTE_INSTALL_SAY} LISTED\n` });
+						return child.finish(0, { stdout: `${REVIEW_REMOTE_INSTALL_SAY} ROOT /home/dev/.dev/whiteboard-remote\n${REVIEW_REMOTE_INSTALL_SAY} HAVE 0.1.6\n${REVIEW_REMOTE_INSTALL_SAY} LISTED\n` });
 					}
 					if (child.input.includes("remote uninstall")) {
 						entry.kind = "uninstall";

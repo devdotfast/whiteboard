@@ -17,6 +17,7 @@ import { promisify } from "node:util";
 import { REVIEW_REMOTE_WRAPPER_MARK } from "@dev.fast/review-protocol";
 import { processIsAlive } from "@dev.fast/trace-core";
 
+import { whiteboardRemoteHome } from "./remote-extensions";
 import {
   readReviewServerDiscovery,
   readReviewServerHealth,
@@ -46,12 +47,14 @@ export type RemoteUninstallResult =
   | { event: "remote.uninstall"; ok: false; reason: string };
 
 /**
- * Removes what Desktop installed on this host: `~/.dev/whiteboard-remote/`
+ * Removes what Desktop installed on this host: `whiteboardRemoteHome(env)`
  * and its `~/.local/bin/whiteboard`. A server Desktop or the CLI started is
  * stopped first. Any other process running from the install is a refusal.
  */
 export async function remoteUninstall(input: {
   home: string;
+  /** Places the install as `whiteboardRemoteHome` does. */
+  env: NodeJS.ProcessEnv;
   /** The review home the server uses. */
   stateDir: string;
   deleteReviews: boolean;
@@ -73,7 +76,7 @@ export async function remoteUninstall(input: {
       `The review home ${JSON.stringify(input.stateDir)} is not an absolute path.`,
     );
 
-  const install = path.join(input.home, ".dev", "whiteboard-remote");
+  const install = whiteboardRemoteHome(input.env);
   const wrapper = path.join(input.home, ".local", "bin", "whiteboard");
   const lock = path.join(install, "install.lock");
 

@@ -105,6 +105,10 @@ host at once take turns.
 | `~/.dev/whiteboard-remote/install.lock/` | Present while an install runs. |
 | `~/.local/bin/whiteboard` | A launcher for the newest version, so that you and your agents can run `whiteboard` there. Desktop writes it only if that path is free or Desktop's own; a `whiteboard` you installed yourself is left alone. |
 
+With `DEV_REVIEW_HOME` set in the remote's environment, `whiteboard-remote/`
+is under that directory instead of `~/.dev`, as is everything below that
+Desktop and the VS Code server keep there.
+
 As before, the review server keeps its reviews in `~/.dev`
 (`review-api.db` and its companion files), and the structural diff's `diffr`
 in `~/.dev/review-tools/`.

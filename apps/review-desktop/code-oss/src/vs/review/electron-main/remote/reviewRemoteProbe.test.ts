@@ -23,6 +23,7 @@ const supported: ReviewRemoteProbe = {
 	arch: "x86_64",
 	glibc: "2.35",
 	home: "/home/dev",
+	root: "/home/dev/.dev/whiteboard-remote",
 	homeWritable: true,
 	freeBytes: 20e9,
 	node: { path: "/home/dev/.nvm/versions/node/v24.18.0/bin/node", version: "24.18.0" },
@@ -77,6 +78,7 @@ test("a malformed answer is an error, never an exception", () => {
 		{ arch: "" },
 		{ glibc: "2.35; echo" },
 		{ home: "home/dev" },
+		{ root: "relative/whiteboard-remote" },
 		{ home: "/home/\u0007dev" },
 		{ home: `/${"a".repeat(5000)}` },
 		{ homeWritable: "yes" },
@@ -192,6 +194,7 @@ test("the script finds the highest Node 24, the complete installed versions and 
 	assert.equal(probe.managedNode, join(home, ".dev/whiteboard-remote/node/v24.18.0/bin/node"));
 	assert.deepEqual(probe.installed, [{ version: "0.1.6", integrity: INTEGRITY }]);
 	assert.equal(probe.home, home);
+	assert.equal(probe.root, join(home, ".dev/whiteboard-remote"));
 	assert.equal(probe.homeWritable, true);
 	assert.ok(probe.freeBytes > 0);
 	assert.equal(probe.downloader, "curl");

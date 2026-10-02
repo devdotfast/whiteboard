@@ -15,6 +15,8 @@ export interface ReviewRemoteProbe {
 	/** "2.35", or null when the C library is not glibc. */
 	glibc: string | null;
 	home: string;
+	/** Where Desktop installs: DEV_REVIEW_HOME or ~/.dev, then whiteboard-remote. */
+	root: string;
 	homeWritable: boolean;
 	/** In the home directory's file system. */
 	freeBytes: number;
@@ -22,9 +24,9 @@ export interface ReviewRemoteProbe {
 	node: { path: string; version: string } | null;
 	/** The npm beside `node`. */
 	npm: string | null;
-	/** Complete versions under ~/.dev/whiteboard-remote/versions, with the package integrity each marker records. */
+	/** Complete versions under `root`/versions, with the package integrity each marker records. */
 	installed: ReviewRemoteInstalled[];
-	/** The highest Node 24 under ~/.dev/whiteboard-remote/node. */
+	/** The highest Node 24 under `root`/node. */
 	managedNode: string | null;
 	downloader: "curl" | "wget" | null;
 	registryReachable: boolean;
@@ -143,6 +145,7 @@ function readProbe(value: unknown): ReviewRemoteProbe {
 		arch: string(record.arch, "arch", WORD),
 		glibc,
 		home: path(record.home, "home"),
+		root: path(record.root, "root"),
 		homeWritable: boolean(record.homeWritable, "homeWritable"),
 		freeBytes,
 		node: node && { path: path(node.path, "node.path"), version: string(node.version, "node.version", /^24\.\d{1,4}\.\d{1,4}$/) },

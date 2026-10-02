@@ -18,6 +18,7 @@ import { PassThrough } from "node:stream";
 
 import { REVIEW_REMOTE_WRAPPER_MARK } from "@dev.fast/review-protocol";
 import { runReviewCli } from "@review/cli-runner.js";
+import { remoteServerPaths } from "@review/remote-extensions.js";
 import { remoteUninstall, takeInstallLock } from "@review/remote-uninstall.js";
 import { reviewServerDiscoveryPath } from "@review/server-discovery.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -27,6 +28,8 @@ let root: string;
 let home: string;
 
 let stateDir: string;
+
+let env: NodeJS.ProcessEnv;
 
 let install: string;
 
@@ -40,6 +43,7 @@ beforeEach(async () => {
   root = await realpath(await mkdtemp(path.join(tmpdir(), "wb-uninstall-")));
   home = path.join(root, "home");
   stateDir = path.join(home, ".dev");
+  env = { DEV_REVIEW_HOME: stateDir };
   install = path.join(stateDir, "whiteboard-remote");
   wrapper = path.join(home, ".local", "bin", "whiteboard");
 
@@ -145,6 +149,7 @@ const alive = (pid: number) => {
 
 it("with --keep-reviews removes the install and Desktop's script, and leaves the review store", async () => {
   const result = await remoteUninstall({
+    env,
     home,
     stateDir,
     deleteReviews: false,
@@ -168,7 +173,12 @@ it("with --keep-reviews removes the install and Desktop's script, and leaves the
 });
 
 it("with --delete-reviews also removes the review store and nothing else in the review home", async () => {
-  const result = await remoteUninstall({ home, stateDir, deleteReviews: true });
+  const result = await remoteUninstall({
+    env,
+    home,
+    stateDir,
+    deleteReviews: true,
+  });
 
   expect(result).toMatchObject({
     ok: true,
@@ -189,6 +199,7 @@ it("leaves a ~/.local/bin/whiteboard that Desktop did not write", async () => {
   await writeFile(wrapper, "#!/bin/sh\necho mine\n");
 
   const result = await remoteUninstall({
+    env,
     home,
     stateDir,
     deleteReviews: false,
@@ -206,6 +217,7 @@ it("stops a server Desktop started and reports it", async () => {
   await serverRecord(server.pid!, "desktop");
 
   const result = await remoteUninstall({
+    env,
     home,
     stateDir,
     deleteReviews: false,
@@ -227,6 +239,7 @@ it("refuses while a server the user started runs from the install, and removes n
   await serverRecord(server.pid!, "user");
 
   const result = await remoteUninstall({
+    env,
     home,
     stateDir,
     deleteReviews: false,
@@ -257,6 +270,7 @@ it("refuses while any other process runs from the install, naming it, and stops 
   );
 
   const result = await remoteUninstall({
+    env,
     home,
     stateDir,
     deleteReviews: false,
@@ -280,6 +294,7 @@ it("takes over a stale install lock", async () => {
   );
 
   const result = await remoteUninstall({
+    env,
     home,
     stateDir,
     deleteReviews: false,
@@ -362,6 +377,7 @@ it("releases the lock when writing it fails", async () => {
 it("removes nothing without an absolute home", async () => {
   for (const relative of ["", ".dev"]) {
     const result = await remoteUninstall({
+      env,
       home: relative,
       stateDir,
       deleteReviews: true,
@@ -371,7 +387,12 @@ it("removes nothing without an absolute home", async () => {
   }
 
   expect(
-    await remoteUninstall({ home, stateDir: ".dev", deleteReviews: true }),
+    await remoteUninstall({
+      env,
+      home,
+      stateDir: ".dev",
+      deleteReviews: true,
+    }),
   ).toMatchObject({ ok: false });
   expect(existsSync(install)).toBe(true);
   expect(await homeEntries()).toContain("review-api.db");
@@ -386,6 +407,7 @@ it("refuses while an install holds the lock", async () => {
   );
 
   const result = await remoteUninstall({
+    env,
     home,
     stateDir,
     deleteReviews: false,
@@ -464,4 +486,30 @@ it("prints one JSON line on success", async () => {
     removed: [install, wrapper],
     keptReviews: true,
   });
+});
+
+it("with DEV_REVIEW_HOME elsewhere removes the install there, with the VS Code server's data, and leaves ~/.dev alone", async () => {
+  const moved = path.join(root, "moved");
+  const movedInstall = path.join(moved, "whiteboard-remote");
+  const { serverDataDir } = remoteServerPaths({ DEV_REVIEW_HOME: moved });
+  await mkdir(path.join(movedInstall, "versions", "0.1.6"), {
+    recursive: true,
+  });
+  await mkdir(serverDataDir, { recursive: true });
+  await writeFile(path.join(serverDataDir, "connection-token"), "token");
+
+  const result = await cli(
+    ["remote", "uninstall", "--keep-reviews", "--json"],
+    {
+      DEV_REVIEW_HOME: moved,
+    },
+  );
+
+  expect(result).toMatchObject({ code: 0, stderr: "" });
+  expect(JSON.parse(result.stdout)).toMatchObject({
+    ok: true,
+    removed: [movedInstall, wrapper],
+  });
+  expect(existsSync(serverDataDir)).toBe(false);
+  expect(existsSync(install)).toBe(true);
 });
