@@ -111,9 +111,11 @@ it("credits each edit to the agent that made it, renewing only that agent, and n
   await b.execute(insert("Three"));
   expect(a.read(reviewId).lastEdit?.activityId).toBe(first);
 
-  // Once it expires, an edit naming it still applies and is no one's.
+  // Once it expires, an edit naming it still applies, is no one's, and says so.
   vi.advanceTimersByTime(ACTIVITY_TTL_MS);
-  await b.execute(insert("Four", first));
+  expect((await b.execute(insert("Four", first))).warnings).toEqual([
+    expect.any(String),
+  ]);
   expect(a.read(reviewId).lastEdit?.activityId).toBeUndefined();
   expect(b.activity.read(reviewId).workingCount).toBe(0);
 });

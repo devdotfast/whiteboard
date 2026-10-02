@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { isDeepStrictEqual } from "node:util";
 
 import { resolveRepoContextSync } from "@dev.fast/local-vcs";
 import {
@@ -49,7 +48,6 @@ import {
   elements,
   explicitPins,
   isUnit,
-  pinsSchema,
   resourceReferences,
   reviewTargetSchema,
   sourceReferences,
@@ -1471,6 +1469,11 @@ export class ReviewStore {
         );
 
         if (owner) attribution.owned(owner);
+        else if (attribution.activityId)
+          result.warnings = [
+            ...(result.warnings ?? []),
+            "Your activity has ended or expired, so readers no longer see you working. The edit was saved; call session_activity_begin and pass the new activityId.",
+          ];
       }
 
       apply();
