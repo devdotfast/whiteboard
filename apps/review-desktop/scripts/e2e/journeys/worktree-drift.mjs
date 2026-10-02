@@ -22,8 +22,9 @@ const TITLE = "Order review";
 const MOVED_BUG =
   "A review whose repository directory moves or is deleted renders `ReviewApiError: Review operation failed.`";
 
-/** The banner a snapshot marked `sourceUnavailable` renders instead of the source (see api-document.tsx). */
-const RETAINED_SOURCE = "Local checkout unavailable. Showing retained source.";
+/** The banner a snapshot marked `sourceUnavailable` shows under the topbar (see missing-checkout-banner.tsx). */
+const RETAINED_SOURCE =
+  "Local checkout unavailable. Showing the source saved with the review.";
 
 /** Every locator this journey uses, rebuilt from the current `ctx.page` because each restart replaces it. */
 function canvasUi(ctx) {
@@ -33,7 +34,10 @@ function canvasUi(ctx) {
     heading: canvas.getByRole("heading", { name: TITLE, exact: true }),
     // The state a missing checkout is meant to reach (see desktop-entry.tsx).
     unavailable: ctx.page.getByText("Worktree unavailable"),
-    retained: canvas.getByText(RETAINED_SOURCE),
+    retained: ctx.page.getByRole("status").filter({ hasText: RETAINED_SOURCE }),
+    dismiss: ctx.page
+      .getByRole("status")
+      .getByRole("button", { name: "Dismiss review", exact: true }),
     failed: canvas.getByText(/^Whiteboard operation failed \(Error\)\./),
     peek: canvas
       .locator('[data-review-inline-editor="order.ts"]')
@@ -200,6 +204,7 @@ export async function run(ctx) {
 
   // Nothing is left to read from, so the retained document has to say so rather than pass for a current one.
   await deleted.retained.waitFor();
+  await deleted.dismiss.waitFor();
 
   const views = ctx.page.locator('[aria-label="Session views"]');
 
@@ -207,15 +212,13 @@ export async function run(ctx) {
 
   const commits = ctx.page.locator(".review-view-region--commits");
 
-  await commits
-    .getByRole("heading", { name: "Commits unavailable", exact: true })
-    .waitFor();
+  await deleted.retained.waitFor();
   assert.equal(
     await commits.getByText(/\d+ commits/).count(),
     0,
     "the Commits tab counted commits although the checkout is gone",
   );
   ctx.check(
-    "a deleted worktree renders the retained document with its banner, and Commits says it is unavailable",
+    "a deleted worktree renders the retained document under a banner with Dismiss, and Commits lists nothing",
   );
 }

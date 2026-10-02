@@ -55,6 +55,7 @@ import {
   topbarActionsMarker,
   topbarTabsMarker,
 } from "./markers.stylex";
+import { MissingCheckoutBanner } from "./missing-checkout-banner";
 import { ReviewPanelHost } from "./review-components";
 import {
   ReviewProvider,
@@ -383,6 +384,10 @@ function ReviewLayoutContent({
     >
       You are viewing an older version of this session.
     </StatusBanner>
+  ) : range.sourceUnavailable ? (
+    <MissingCheckoutBanner
+      worktree={session.review?.targetKind === "worktree"}
+    />
   ) : null;
 
   const selectForAgent = useAgentSelection();

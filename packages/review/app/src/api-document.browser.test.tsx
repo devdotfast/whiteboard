@@ -130,7 +130,4 @@ it("renders the retained document without reading commits when the source is gon
 
   expect(article.textContent).toContain("Imported");
   expect(article.querySelector("#details-2")).not.toBeNull();
-  expect(article.querySelector(":scope > div > p")?.textContent).toBe(
-    "Local checkout unavailable. Showing retained source.",
-  );
 });

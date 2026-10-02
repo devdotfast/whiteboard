@@ -228,11 +228,6 @@ export function ApiDocument({
       {!hasTitle && !scratchpad && (
         <ReviewDocumentTitle>{data.snapshot.title}</ReviewDocumentTitle>
       )}
-      {data.snapshot.sourceUnavailable && (
-        <p {...stylex.props(documentStyles.note, documentStyles.articleNote)}>
-          Local checkout unavailable. Showing retained source.
-        </p>
-      )}
       <DocumentBlocks
         nodes={data.snapshot.document}
         data={data}

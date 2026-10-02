@@ -219,7 +219,7 @@ export const documentStyles = stylex.create({
     textAlign: { default: null, [inProse()]: "left" },
   },
   // Document copy outside a Markdown block, read as its paragraphs: the
-  // retained-source note, a stale block's notice, the fallback message.
+  // stale block's notice, the fallback message.
   note: {
     margin: { default: null, [inDocument()]: "14px 0" },
     color: { default: null, [inDocument()]: tokens.ink },
@@ -227,11 +227,6 @@ export const documentStyles = stylex.create({
     fontSize: { default: null, [inDocument()]: fontSize.reading },
     lineHeight: { default: null, [inDocument()]: 1.72 },
     textAlign: { default: null, [inDocument()]: "left" },
-  },
-  // The retained-source note sits in the prose column, flush left.
-  articleNote: {
-    width: { default: null, [inDocument()]: proseColumn },
-    maxWidth: { default: null, [inDocument()]: proseMaxWidth },
   },
   // Links are just text in the link color, prose and code chips alike, with
   // no visited distinction. Hover restores the plain underline, and the link

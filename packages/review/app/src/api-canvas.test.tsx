@@ -865,17 +865,18 @@ it("reads a worktree review's range as its base against the working tree, and a 
   }
 });
 
-it("degrades to the retained document and an unavailable Commits tab when the checkout is gone", async () => {
+it("offers to dismiss a review whose worktree is gone, without reading its diff", async () => {
+  let removed = false;
+
   const gone = new ReviewStore(path.join(directory, "gone.db"), {
-    // Present only so the refresh loop runs; a commit-pinned review never calls it.
-    resolveTarget: async () => {
-      throw new Error("This review is commit-pinned.");
-    },
-    sourcePins: async () => {
-      throw new ReviewInputError(
-        "The selected local checkout is unavailable.",
-        404,
-      );
+    resolveTarget: async (target) => {
+      if (removed)
+        throw new ReviewInputError(
+          "The selected local checkout is unavailable.",
+          404,
+        );
+
+      return { target, pins: { ...pins, worktreeRevision: "saved" } };
     },
     validatePins: async () => {},
     validateSource: async () => {},
@@ -885,17 +886,51 @@ it("degrades to the retained document and an unavailable Commits tab when the ch
   try {
     const { reviewId } = await gone.execute({
       commandId: randomUUID(),
-      operation: { type: "create", title: "Moved review", pins },
+      operation: {
+        type: "create",
+        title: "Moved review",
+        target: { kind: "worktree", repositoryId: pins.repositoryId },
+      },
     });
 
+    await gone.execute({
+      commandId: randomUUID(),
+      operation: {
+        type: "edit",
+        reviewId,
+        edit: {
+          type: "insert",
+          content: {
+            type: "code_peek",
+            source: selectSource({
+              side: "head",
+              file: "src/a.ts",
+              fromLine: 1,
+              toLine: 2,
+            }),
+          },
+        },
+      },
+    });
+    removed = true;
     await gone.refreshWorktrees();
     const app = new Hono().route("/reviews-api", createReviewApi(gone));
     const commits = vi.fn<() => Response>(() => new Response("[]"));
     app.get("/reviews-api/:id/commits", commits);
+    const progress = vi.fn<() => Response>(() => new Response("{}"));
+    app.get("/reviews-api/:id/progress", progress);
+    const files = vi.fn<() => Promise<never[]>>(async () => []);
+
+    const create = vi.fn<ReviewCanvasBridge["diffView"]["create"]>(() => {
+      throw new Error("The Diff view must not open.");
+    });
 
     const bridge = testReviewBridge(
       {},
-      { request: async (url, init) => app.request(url, init) },
+      {
+        request: async (url, init) => app.request(url, init),
+        diffView: { files, create },
+      },
     );
 
     const container = document.createElement("div");
@@ -905,22 +940,31 @@ it("degrades to the retained document and an unavailable Commits tab when the ch
     });
     await act(async () =>
       vi.waitFor(() =>
-        expect(container.querySelector("h1")?.textContent).toBe("Moved review"),
+        expect(container.textContent).toContain("Diff selection unavailable"),
       ),
     );
-
-    expect(container.querySelector(".review-document > p")?.textContent).toBe(
-      "Local checkout unavailable. Showing retained source.",
-    );
-
     await act(async () =>
       container
-        .querySelector<HTMLButtonElement>('button[aria-label="Commits"]')!
+        .querySelector<HTMLButtonElement>('button[aria-label="Diff"]')!
         .click(),
     );
 
-    expect(container.textContent).toContain("Commits unavailable");
+    expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(commits).not.toHaveBeenCalled();
+    expect(progress).not.toHaveBeenCalled();
+    expect(files).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+
+    const dismiss = () =>
+      [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+        (button) => button.textContent === "Dismiss review",
+      );
+
+    await act(async () => dismiss()!.click());
+    await vi.waitFor(() =>
+      expect(gone.list()[0]?.dismissedAt).toEqual(expect.any(String)),
+    );
+    expect(dismiss()).toBeUndefined();
   } finally {
     await gone.close();
   }
