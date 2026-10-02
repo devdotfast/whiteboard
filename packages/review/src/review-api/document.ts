@@ -607,6 +607,23 @@ const unitParent = {
   flow_edge: "flow_diagram",
 } as const;
 
+/** What to do instead of patching a field an update can't reach. */
+function patchRefusal(key: string, element: Element): string {
+  if (key === "base" || key === "head")
+    return `A call stack's frames change only by replacing it: send {type:"replace", targetId:"${element.id}", content} with the whole call_stack_diff.`;
+
+  if (key === "nodes" || key === "edges" || key === "steps")
+    return `Edit a diagram's ${key} one at a time by their own IDs (session_get lists them), or replace the diagram.`;
+
+  if (key === "children")
+    return `Edit a ${element.type}'s children by their own IDs, or insert into it with parentId "${element.id}".`;
+
+  if (key === "id" || key === "type")
+    return `A component's ${key} can't change; replace it instead.`;
+
+  return `Cannot patch ${key}; replace the ${element.type} instead.`;
+}
+
 const structural = new Set([
   "nodes",
   "edges",
@@ -729,7 +746,9 @@ export function applyEdit(
       throw new ReviewInputError("Cannot move a block inside itself.");
 
     if (!isUnit(element) && parent && !("children" in parent))
-      throw new ReviewInputError("Invalid parent for this element.");
+      throw new ReviewInputError(
+        `${parentId} is a ${parent.type}, which holds no components: insert into a section or callout, or at the top level.`,
+      );
 
     if (isUnit(element) && parent?.type !== unitParent[element.type])
       throw new ReviewInputError(
@@ -810,9 +829,7 @@ export function applyEdit(
           structural.has(key) ||
           ["__proto__", "constructor", "prototype"].includes(key)
         )
-          throw new ReviewInputError(
-            `Cannot patch ${key}; use structural edits or replace.`,
-          );
+          throw new ReviewInputError(patchRefusal(key, element));
 
       if ("link" in edit.changes)
         throw new ReviewInputError(
