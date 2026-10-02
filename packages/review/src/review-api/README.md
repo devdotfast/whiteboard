@@ -189,7 +189,7 @@ The Trace tab and quote side panels read retained trace resources; imported
 labels are preserved without claiming a harness, commit association, or timestamps.
 
 The thin agent clients use `whiteboard api <tool-name> '<json>'` (or `-` for stdin)
-and `whiteboard mcp` (stdio). `whiteboard api tools` lists the host's tool schemas.
+and `whiteboard mcp` (stdio). `whiteboard api tools` lists the host's tools, one line each, and `whiteboard api tools <name>` prints one tool's schema.
 Both adapters use existing desktop discovery/authentication and the same HTTP
 routes as the canvas. Neither imports the store or validates document content.
 Command/resource schemas come from the server's existing Zod definitions and
