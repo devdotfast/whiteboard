@@ -287,15 +287,13 @@ function RemoteHostAgents({
         <span {...stylex.props(styles.rowDescription, local.detail)}>
           Agents on {alias}:{" "}
           {offered.map((agent) => TARGET_LABELS[agent.id]).join(", ")} —{" "}
-          <button
-            type="button"
-            {...stylex.props(styles.button)}
+          <Button
             aria-label={`Connect agents on ${alias}`}
             disabled={busy}
             onClick={() => void connect(offered.map((agent) => agent.id))}
           >
             Connect
-          </button>
+          </Button>
         </span>
       ) : null}
       {manual?.map((agent) => (
