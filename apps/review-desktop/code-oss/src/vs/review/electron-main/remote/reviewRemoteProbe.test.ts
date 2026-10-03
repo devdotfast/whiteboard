@@ -292,9 +292,10 @@ test("a login shell that ignores SIGTERM is killed in time, and finds no CLI", {
 	t.after(() => rm(home, { recursive: true, force: true }));
 	const shell = join(home, "slow-shell");
 	await executable(shell, "trap '' TERM\nsleep 2; sleep 2; sleep 2; echo /opt/bin/whiteboard");
+	await executable(join(home, "bin/curl"), "exit 7");
 	const started = Date.now();
 
-	const result = await probeRemote({ session, spawn: localShell({ HOME: home, SHELL: shell, PATH: `${timeoutDir}:/usr/bin:/bin` }), env: {} });
+	const result = await probeRemote({ session, spawn: localShell({ HOME: home, SHELL: shell, PATH: `${join(home, "bin")}:${timeoutDir}:/usr/bin:/bin` }), env: {} });
 
 	assert.ok("probe" in result, "error" in result ? result.error : "");
 	assert.equal(result.probe.pathCli, null);
