@@ -921,6 +921,7 @@ test("another version's CLI on PATH does not count: the user is asked", async (t
 	await until(() => last()?.endpoint !== undefined);
 
 	assert.equal(prompts.length, 1);
+	assert.equal(await flow.consent.get("wb-test-a"), "deny");
 });
 
 test("an open install question is reported until it is answered", async (t) => {
