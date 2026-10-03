@@ -23,6 +23,14 @@ interface ReviewAppRuntime {
   fetch: typeof globalThis.fetch;
 }
 
+export class ReviewAppUsageError extends Error {
+  readonly name = "ReviewAppUsageError";
+}
+
+export class ReviewAppStateError extends Error {
+  readonly name = "ReviewAppStateError";
+}
+
 export interface RunReviewAppInput {
   cwd: string;
   reviewUuid?: string;
@@ -86,7 +94,7 @@ export async function runReviewAppPick(
     );
   } else {
     if (!input.stdin.isTTY)
-      throw new Error(
+      throw new ReviewAppUsageError(
         "whiteboard app pick needs a terminal without --session. Pass --session <uuid> or run it in a terminal.",
       );
     const root = await runtime.resolveReviewRoot(input.cwd);
@@ -95,7 +103,7 @@ export async function runReviewAppPick(
       .filter((review) => review.repositoryPath === root && !review.dismissedAt)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-    if (!reviews.length) throw new Error("No review to show.");
+    if (!reviews.length) throw new ReviewAppStateError("No review to show.");
 
     const picked = await runtime.pickReview(
       reviews.map((review) => ({
