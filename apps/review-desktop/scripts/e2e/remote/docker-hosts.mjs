@@ -6,7 +6,7 @@ import path from "node:path";
 import { stageVscodeServer } from "../../stage-vscode-server.mjs";
 import { addOnce, docker, exec, run, sleep } from "./exec.mjs";
 import { hostOf } from "./run-state.mjs";
-import { waitForSsh } from "./ssh.mjs";
+import { installFakeAgent, waitForSsh } from "./ssh.mjs";
 
 const imageDir = path.join(import.meta.dirname, "image");
 
@@ -125,6 +125,9 @@ export async function up(runState, name, options) {
   if (!["key", "password"].includes(auth)) throw new Error(`--auth ${auth}`);
 
   if (jump && port) throw new Error("--port and --jump cannot be combined");
+
+  if (options["fake-agent"] && auth !== "key")
+    throw new Error("--fake-agent needs --auth key");
 
   const toolchain = options.toolchain ?? "none";
 
@@ -297,6 +300,8 @@ export async function up(runState, name, options) {
           ]
         : [],
     );
+
+  if (options["fake-agent"]) await installFakeAgent(runState, host);
 
   console.log(alias);
 }

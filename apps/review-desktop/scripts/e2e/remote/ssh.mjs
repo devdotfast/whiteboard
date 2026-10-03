@@ -145,3 +145,21 @@ export async function stopTunnels(runState, name) {
   state.forwards = state.forwards.filter((f) => name && f.host !== name);
   await runState.save();
 }
+
+/** `--fake-agent`: puts fake-agent/ in the host user's ~/.opencode/bin, where Ask finds OpenCode. */
+export async function installFakeAgent(runState, host) {
+  const dir = path.join(import.meta.dirname, "fake-agent");
+
+  await run("ssh", [...sshArgs(runState, host), "mkdir -p ~/.opencode/bin"]);
+  await run("scp", [
+    "-F",
+    `${runState.dir}/ssh_config`,
+    path.join(dir, "opencode"),
+    path.join(dir, "acp-agent.mjs"),
+    `${host.alias}:.opencode/bin/`,
+  ]);
+  await run("ssh", [
+    ...sshArgs(runState, host),
+    "chmod 755 ~/.opencode/bin/opencode ~/.opencode/bin/acp-agent.mjs",
+  ]);
+}

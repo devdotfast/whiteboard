@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createInterface } from "node:readline";
 import { test } from "node:test";
 import { promisify } from "node:util";
 
@@ -56,6 +57,60 @@ test("ssh_config for a --jump host goes through the other host", () => {
 
   assert.match(block, /^ {2}ProxyJump wb-test-a$/m);
   assert.match(block, /^ {2}Port 22$/m);
+});
+
+test("the fake OpenCode answers a prompt with a chunk and a tool call on f.ts", async (t) => {
+  const child = spawn(process.execPath, [
+    path.join(import.meta.dirname, "fake-agent/acp-agent.mjs"),
+  ]);
+
+  t.after(() => child.kill());
+
+  const lines = createInterface({ input: child.stdout })[
+    Symbol.asyncIterator
+  ]();
+
+  const next = async () => JSON.parse((await lines.next()).value);
+
+  const send = (id, method, params) =>
+    child.stdin.write(
+      `${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`,
+    );
+
+  send(1, "initialize", { protocolVersion: 1, clientCapabilities: {} });
+  assert.equal((await next()).result.protocolVersion, 1);
+
+  send(2, "session/new", { cwd: "/work/repo", mcpServers: [] });
+  const { sessionId, modes } = (await next()).result;
+
+  assert.equal(modes.currentModeId, "build");
+
+  send(3, "session/set_mode", { sessionId, modeId: "build" });
+  assert.deepEqual((await next()).result, {});
+
+  send(4, "session/prompt", {
+    sessionId,
+    prompt: [
+      { type: "text", text: "<whiteboard-context>x</whiteboard-context>" },
+      { type: "text", text: "why?" },
+    ],
+  });
+
+  const chunk = await next();
+  const toolCall = await next();
+  const answer = await next();
+
+  assert.equal(chunk.params.update.sessionUpdate, "agent_message_chunk");
+  assert.equal(chunk.params.update.content.text, "You asked: why?. See f.ts.");
+  assert.equal(toolCall.params.update.sessionUpdate, "tool_call");
+  assert.deepEqual(toolCall.params.update.locations, [
+    { path: "/work/repo/f.ts", line: 1 },
+  ]);
+  assert.deepEqual(answer, {
+    jsonrpc: "2.0",
+    id: 4,
+    result: { stopReason: "end_turn" },
+  });
 });
 
 test("down --all with an empty state.json exits 0", async () => {
