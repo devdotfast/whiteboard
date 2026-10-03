@@ -5,13 +5,13 @@
 
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import type { SpawnSsh } from "./reviewRemoteHost.js";
-import { REVIEW_REMOTE_INSTALL_MARKER } from "./reviewRemoteInstallScript.js";
+import { REVIEW_REMOTE_INSTALL_MARKER, REVIEW_REMOTE_WRAPPER_MARK } from "./reviewRemoteInstallScript.js";
 import { judgeRemote, parseRemoteProbe, probeRemote, type ReviewRemoteProbe } from "./reviewRemoteProbe.js";
 import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_PATH_CLI } from "./reviewRemoteProbeScript.js";
 import { reviewSshSession } from "./reviewSshCommand.js";
@@ -221,6 +221,26 @@ test("the script finds the highest Node 24, the complete installed versions and 
 	assert.equal(probe.registryReachable, false);
 	assert.ok(probe.tools.includes("tar"), probe.tools.join());
 	assert.deepEqual(await tree(home), before);
+});
+
+test("Desktop's wrapper and a link into the install root are not a CLI on PATH: their markers decide", async (t) => {
+	const { home, env } = await fakeRemote(t);
+	const bin = join(home, "bin");
+	const local = join(home, ".local/bin");
+	await rm(join(bin, "whiteboard"));
+	await executable(join(local, "whiteboard"), `${REVIEW_REMOTE_WRAPPER_MARK}\necho 0.1.6`);
+	const probe = async () => {
+		const result = await probeRemote({ session, spawn: localShell(env), env: {} });
+		assert.ok("probe" in result, "error" in result ? result.error : "");
+		return result.probe.pathCli;
+	};
+
+	assert.equal(await probe(), null);
+
+	const managed = join(home, ".dev/whiteboard-remote/versions/0.1.6/whiteboard");
+	await executable(managed, "echo 0.1.6");
+	await symlink(managed, join(bin, "whiteboard"));
+	assert.equal(await probe(), null);
 });
 
 test("a home with quotes and backslashes reaches the parser intact", async (t) => {

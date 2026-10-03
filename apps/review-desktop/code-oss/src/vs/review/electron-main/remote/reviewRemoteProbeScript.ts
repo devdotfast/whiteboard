@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { REVIEW_REMOTE_FIND_CLI } from "./reviewRemoteAttachScript.js";
-import { REVIEW_REMOTE_COMPLETE_INTEGRITY, REVIEW_REMOTE_INSTALL_MARKER, REVIEW_REMOTE_ROOT_SCRIPT } from "./reviewRemoteInstallScript.js";
+import { REVIEW_REMOTE_COMPLETE_INTEGRITY, REVIEW_REMOTE_INSTALL_MARKER, REVIEW_REMOTE_ROOT_SCRIPT, REVIEW_REMOTE_WRAPPER_MARK, shellQuote } from "./reviewRemoteInstallScript.js";
 
 export const REVIEW_REMOTE_PROBE_BEGIN = "WHITEBOARD-PROBE-BEGIN";
 export const REVIEW_REMOTE_PROBE_END = "WHITEBOARD-PROBE-END";
@@ -23,7 +23,8 @@ export const REVIEW_REMOTE_PROBE_PATH_CLI = "WHITEBOARD-PROBE-PATH-CLI";
  * judges it: an integrity, a Node that runs and a CLI that exists.
  *
  * Last, after the sentinels, so that running out of time loses only this:
- * the CLI stage 1's attach would run, with its `--version`. The login
+ * the CLI stage 1's attach would run, with its `--version`, unless it is
+ * Desktop's wrapper or under the install root. The login
  * shell gets 3 s and the version 2 s; a shell killed at 4 s prints no CLI.
  */
 export const REVIEW_REMOTE_PROBE_SCRIPT = `LC_ALL=C
@@ -130,7 +131,10 @@ printf '"npm":%s,"installed":[%s],"managedNode":%s,"downloader":%s,"registryReac
 	"$(strOrNull "$npm")" "$installed" "$(strOrNull "$managed")" "$(strOrNull "$downloader")" "$reachable" "$tools"
 echo ${REVIEW_REMOTE_PROBE_END}
 
-${REVIEW_REMOTE_FIND_CLI}if [ -n "$wb" ]; then
+${REVIEW_REMOTE_FIND_CLI}# Desktop's own installs are judged by their markers, not by a version on PATH.
+grep -qxF ${shellQuote(REVIEW_REMOTE_WRAPPER_MARK)} "$wb" 2>/dev/null && wb=
+case "$(readlink -f "$wb" 2>/dev/null)" in "$(readlink -f "$remote" 2>/dev/null || echo "$remote")"/*) wb= ;; esac
+if [ -n "$wb" ]; then
 	wbVersion=$(PATH="\${wb%/*}:$PATH" DEV_FAST_REVIEW_CLI_NO_DELEGATE=1 DEV_FAST_REVIEW_TELEMETRY_DISABLED=1 bounded 2 "$wb" --version </dev/null 2>/dev/null | head -n 1)
 	printf '%s {"path":%s,"version":%s}\\n' ${REVIEW_REMOTE_PROBE_PATH_CLI} "$(str "$wb")" "$(strOrNull "$wbVersion")"
 fi
