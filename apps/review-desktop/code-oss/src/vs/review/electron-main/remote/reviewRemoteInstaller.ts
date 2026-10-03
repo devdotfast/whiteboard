@@ -87,10 +87,6 @@ export interface ReviewRemoteInstallResult {
 	/** The package's CLI entry, run with `nodePath`. */
 	readonly cliPath: string;
 	readonly nodePath: string;
-	/** `versions/<v>/whiteboard`, which runs the CLI with its Node. */
-	readonly launcher: string;
-	/** Whether diffr is present; its absence only turns structural diff off. */
-	readonly diffr: boolean;
 }
 
 const BIN = /^[\w.-]+(\/[\w.-]+)*$/;
@@ -164,9 +160,8 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 		});
 		const marker = checked?.has("COMPLETE") ? readMarker(checked.get("MARKER")) : undefined;
 		if (!marker) return undefined;
-		const launcher = `${reviewRemoteVersionDir(probe.root, input.version)}/whiteboard`;
 		input.onProgress({ step: "done", cliPath: marker.cli });
-		return { nodePath: marker.node, cliPath: marker.cli, launcher, diffr: diffrReady(checked!.lines) };
+		return { nodePath: marker.node, cliPath: marker.cli };
 	}
 
 	async function takeLock(): Promise<void> {
@@ -192,7 +187,7 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 
 		if (prepared.has("COMPLETE")) {
 			const marker = readMarker(prepared.get("MARKER"));
-			if (marker) return finish({ nodePath: marker.node, cliPath: marker.cli, launcher: `${reviewRemoteVersionDir(probe.root, input.version)}/whiteboard` });
+			if (marker) return finish({ nodePath: marker.node, cliPath: marker.cli });
 		}
 
 		const { node, npm } = await ensureNode(prepared.has("MANAGED-NODE"));
@@ -224,7 +219,7 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 		);
 		if (!finished.has("COMPLETE")) throw finished.failure();
 		await cleanup(prepared.all("HAVE"), newest);
-		return finish({ nodePath: node, cliPath, launcher });
+		return finish({ nodePath: node, cliPath });
 	}
 
 	/** Keeps this version, the newest and one more, preferring one a process runs from; the version is installed whatever happens here. */
@@ -237,14 +232,13 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 		});
 	}
 
-	async function finish(paths: Omit<ReviewRemoteInstallResult, "diffr">): Promise<ReviewRemoteInstallResult> {
-		const fetched = await run("fetching diffr", diffrScript(context, { launcher: paths.launcher }), timeouts.diffr).catch((error: unknown) => {
+	/** Ensures diffr, whose absence only turns structural diff off. */
+	async function finish(paths: ReviewRemoteInstallResult): Promise<ReviewRemoteInstallResult> {
+		await run("fetching diffr", diffrScript(context, { launcher: `${reviewRemoteVersionDir(probe.root, input.version)}/whiteboard` }), timeouts.diffr).catch((error: unknown) => {
 			if (signal.aborted) throw error;
-			return undefined;
 		});
-		const diffr = diffrReady(fetched?.lines ?? []);
 		input.onProgress({ step: "done", cliPath: paths.cliPath });
-		return { ...paths, diffr };
+		return paths;
 	}
 
 	/** The probe's Node 24 with its npm, else the pinned Node under `node/`, installed if missing. */
@@ -337,8 +331,6 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 		await server.close();
 	}
 }
-
-const diffrReady = (lines: string[]) => lines.some((line) => /^\{"event":"remote\.diffr","diffr":true\}$/.test(line.trim()));
 
 /** The checksums the remote checks against, and the pinned Node's version. */
 function pinned(artifacts: ReviewRemoteInstallInput["artifacts"]) {

@@ -151,13 +151,12 @@ test("a host with no Node gets Node and the package", { skip, timeout: 10 * 60_0
 
 test("a sealed host gets Node by upload and the dependencies through the relay", { skip, timeout: 10 * 60_000 }, async () => {
 	const { value, progress } = input("sealed");
-	const result = await installRemote(value);
+	await installRemote(value);
 
 	assert.deepEqual(progress.slice(0, 2), [
 		{ step: "node", via: "upload" },
 		{ step: "package", via: "upload" },
 	]);
-	assert.equal(result.diffr, false);
 	assert.equal(await version("sealed"), VERSION);
 	// The forward is gone with the install.
 	assert.equal(await inContainer("sealed", "ss -Htln | grep -c 127.0.0.1: || true"), "0");
@@ -227,10 +226,10 @@ test("an existing ~/.local/bin/whiteboard that Desktop did not write is left alo
 	await reset("node");
 	await inContainer("node", "mkdir -p ~/.local/bin && printf '#!/bin/sh\\necho mine\\n' > ~/.local/bin/whiteboard && chmod 755 ~/.local/bin/whiteboard");
 
-	const result = await installRemote(input("node").value);
+	await installRemote(input("node").value);
 
 	assert.equal(await inContainer("node", "~/.local/bin/whiteboard"), "mine");
-	assert.equal(JSON.parse(await inContainer("node", `'${result.launcher}' version --json`)).version, VERSION);
+	assert.equal(JSON.parse(await inContainer("node", `~/.dev/whiteboard-remote/versions/${VERSION}/whiteboard version --json`)).version, VERSION);
 });
 
 test("with three versions installed and one running, an install leaves the running one and the newest", { skip, timeout: 10 * 60_000 }, async (t) => {

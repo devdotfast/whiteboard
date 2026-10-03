@@ -226,7 +226,7 @@ test("a window gets the VS Code server of a machine only while the gateway has i
 });
 
 const INSTALLED_INTEGRITY = `sha512-${"A".repeat(86)}==`;
-const INSTALLED = { nodePath: "/n/bin/node", cliPath: "/v/cli.js", launcher: "/v/whiteboard", diffr: true };
+const INSTALLED = { nodePath: "/n/bin/node", cliPath: "/v/cli.js" };
 
 test("install progress is sent at most once a second, the latest step only", async (t) => {
 	const gate = Promise.withResolvers<void>();

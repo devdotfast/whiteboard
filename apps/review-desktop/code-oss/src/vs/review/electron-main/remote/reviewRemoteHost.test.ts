@@ -90,8 +90,6 @@ const at = (version: string, integrity = INTEGRITY) => ({ version, integrity });
 const INSTALLED: ReviewRemoteInstallResult = {
 	nodePath: "/home/dev/.dev/whiteboard-remote/node/v24.18.0/bin/node",
 	cliPath: "/home/dev/.dev/whiteboard-remote/versions/0.1.6/node_modules/@dev.fast/whiteboard/dist/cli.js",
-	launcher: "/home/dev/.dev/whiteboard-remote/versions/0.1.6/whiteboard",
-	diffr: true,
 };
 
 /**
