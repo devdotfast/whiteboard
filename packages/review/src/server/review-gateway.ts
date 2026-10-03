@@ -85,6 +85,10 @@ const FORWARDED_ROUTES: readonly (readonly [string, RegExp])[] = [
 /** Preparing a pinned checkout can take minutes; the host is not down. */
 const LANGUAGE_CONTEXT_TIMEOUT_MS = 120_000;
 
+/** Routes that may wait on preparing a checkout or launching an agent. */
+const SLOW_ROUTES =
+  /^(language-context|ask|ask\/agents\/[^/]+\/offer|ask\/[^/]+\/open|ask\/mentions)$/;
+
 /** Routes whose answers are read whole and refused if they name a path. */
 const WHOLE_BODY_ROUTES =
   /^(file|language-context|navigator|ask\/agents(\/[^/]+\/offer)?|ask\/mentions|ask\/threads)$/;
@@ -375,9 +379,9 @@ export function createReviewGateway(input: {
 
     let timedOut = false;
     // Its failure fails only the request; heartbeats judge the host.
-    const slow = options.route === "language-context";
+    const waits = SLOW_ROUTES.test(options.route ?? "");
 
-    const limit = slow
+    const limit = waits
       ? (input.languageContextMs ?? LANGUAGE_CONTEXT_TIMEOUT_MS)
       : FIRST_BYTE_TIMEOUT_MS;
 
@@ -404,11 +408,11 @@ export function createReviewGateway(input: {
 
       const reason = !timedOut
         ? errorText(error)
-        : slow
+        : waits
           ? `it did not answer within ${limit / 1_000} seconds`
           : NO_ANSWER;
 
-      if (!slow && !request.signal.aborted) hosts.failed(remote, reason);
+      if (!waits && !request.signal.aborted) hosts.failed(remote, reason);
 
       return answer(remote.alias, timedOut ? 504 : 502, {
         ok: false,
@@ -523,7 +527,7 @@ export function createReviewGateway(input: {
       }
 
       const unusable =
-        slow && status === 200
+        options.route === "language-context" && status === 200
           ? unusableLanguageContext(body, remote.serverId)
           : undefined;
 

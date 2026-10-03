@@ -1376,3 +1376,49 @@ it("passes a 2 MB Ask files body to the remote intact", async () => {
   expect(response.status).toBe(200);
   expect(received).toBe(Buffer.byteLength(body));
 });
+
+it("waits past the 10 s limit for a slow Ask offer and keeps the host online when it never answers", async () => {
+  const slow = randomUUID();
+  const hung = randomUUID();
+
+  const fake = await startFake({
+    version,
+    reviewIds: [slow, hung],
+    handle(request, response) {
+      if (
+        request.url?.startsWith(`/reviews-api/${hung}/ask/agents/codex/offer`)
+      )
+        return true;
+
+      if (
+        !request.url?.startsWith(`/reviews-api/${slow}/ask/agents/codex/offer`)
+      )
+        return false;
+
+      setTimeout(() => {
+        response.setHeader("content-type", "application/json");
+        response.end('{"ok":true}');
+      }, 11_000);
+
+      return true;
+    },
+  });
+
+  const { request, gateway } = await startLaptopGateway(
+    root,
+    [{ alias: "wb-a", endpoint: fake.endpoint }],
+    { languageContextMs: 14_000 },
+  );
+
+  await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+
+  const [answered, unanswered] = await Promise.all([
+    request(`/${slow}/ask/agents/codex/offer`),
+    request(`/${hung}/ask/agents/codex/offer`),
+  ]);
+
+  expect(answered.status).toBe(200);
+  expect(unanswered.status).toBe(504);
+  expect(unanswered.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+  expect(gateway.hosts()[0]?.state).toBe("online");
+}, 30_000);
