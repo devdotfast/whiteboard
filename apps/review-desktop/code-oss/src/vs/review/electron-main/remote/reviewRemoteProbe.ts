@@ -28,6 +28,8 @@ export interface ReviewRemoteProbe {
 	installed: ReviewRemoteInstalled[];
 	/** The highest Node 24 under `root`/node. */
 	managedNode: string | null;
+	/** The CLI stage 1's attach would run, with what its `--version` printed when that is a version. */
+	pathCli: { path: string; version: string | null } | null;
 	downloader: "curl" | "wget" | null;
 	registryReachable: boolean;
 	/** Which of `REVIEW_REMOTE_PROBE_TOOLS` are on PATH. */
@@ -161,6 +163,11 @@ function readProbe(value: unknown): ReviewRemoteProbe {
 				: [];
 		}),
 		managedNode: nullable(record.managedNode, "managedNode", (v) => path(v, "managedNode")),
+		pathCli: nullable(record.pathCli, "pathCli", (v) => {
+			const cli = object(v, "pathCli");
+			const version = cli.version;
+			return { path: path(cli.path, "pathCli.path"), version: typeof version === "string" && version.length <= 128 && REVIEW_REMOTE_VERSION.test(version) ? version : null };
+		}),
 		downloader,
 		registryReachable: boolean(record.registryReachable, "registryReachable"),
 		tools: REVIEW_REMOTE_PROBE_TOOLS.filter((tool) => tools.includes(tool)),

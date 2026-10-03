@@ -115,6 +115,7 @@ export const probeOutput = (probe: Partial<Record<string, unknown>> = {}) =>
 		npm: null,
 		installed: [],
 		managedNode: null,
+		pathCli: null,
 		downloader: "curl",
 		registryReachable: true,
 		tools: ["tar", "xz", "sha256sum", "sha512sum"],

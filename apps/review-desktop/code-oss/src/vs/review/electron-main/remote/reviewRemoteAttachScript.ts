@@ -6,19 +6,27 @@
 import { REVIEW_REMOTE_VERSION, shellQuote } from "./reviewRemoteInstallScript.js";
 
 /**
- * POSIX sh, sent to `sh -s` on the remote. Finds the CLI on PATH, in
- * ~/.local/bin, then through the login shell (Node version managers), and
- * exits 127 when there is none. The CLI's directory goes first on PATH, so
- * a `#!/usr/bin/env node` next to it is found. `words` follow the CLI as they are.
+ * POSIX sh that sets `wb` to the CLI on PATH, in ~/.local/bin, or through the
+ * login shell (Node version managers), or to nothing. `limit` prefixes the login shell.
  */
-export function pathCliScript(words: string): string {
+export function findPathCli(limit = ""): string {
 	return `wb=$(command -v whiteboard 2>/dev/null)
 case "$wb" in /*) ;; *) wb= ;; esac
 if [ -z "$wb" ] && [ -x "$HOME/.local/bin/whiteboard" ]; then wb="$HOME/.local/bin/whiteboard"; fi
 if [ -z "$wb" ] && [ -n "$SHELL" ]; then
-	wb=$("$SHELL" -lic 'command -v whiteboard' </dev/null 2>/dev/null | tr -d '\\r' | grep '^/.*/whiteboard$' | tail -n 1)
+	wb=$(${limit ? `${limit} ` : ""}"$SHELL" -lic 'command -v whiteboard' </dev/null 2>/dev/null | tr -d '\\r' | grep '^/.*/whiteboard$' | tail -n 1)
 fi
-if [ -z "$wb" ] || [ ! -x "$wb" ]; then exit 127; fi
+[ -n "$wb" ] && [ -x "$wb" ] || wb=
+`;
+}
+
+/**
+ * POSIX sh, sent to `sh -s` on the remote. Runs the CLI `findPathCli` finds,
+ * and exits 127 when there is none. The CLI's directory goes first on PATH, so
+ * a `#!/usr/bin/env node` next to it is found. `words` follow the CLI as they are.
+ */
+export function pathCliScript(words: string): string {
+	return `${findPathCli()}if [ -z "$wb" ]; then exit 127; fi
 PATH="\${wb%/*}:$PATH"
 export PATH
 exec "$wb" ${words}

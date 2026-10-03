@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { findPathCli } from "./reviewRemoteAttachScript.js";
 import { REVIEW_REMOTE_COMPLETE_INTEGRITY, REVIEW_REMOTE_INSTALL_MARKER, REVIEW_REMOTE_ROOT_SCRIPT } from "./reviewRemoteInstallScript.js";
 
 export const REVIEW_REMOTE_PROBE_BEGIN = "WHITEBOARD-PROBE-BEGIN";
@@ -10,15 +11,17 @@ export const REVIEW_REMOTE_PROBE_END = "WHITEBOARD-PROBE-END";
 
 /**
  * POSIX sh and coreutils, sent to `sh -s` on the remote. Prints one JSON line
- * between the sentinels and writes nothing: no temporary files, no login
- * shell (it could write history), and wget only with `--no-hsts`. The
- * registry check has its own 3 s limit; the caller bounds the whole run.
+ * between the sentinels and writes nothing but what the attach's login shell
+ * would: no temporary files, and wget only with `--no-hsts`. The registry
+ * check, the login shell and the PATH CLI's `--version` have 3 s limits each;
+ * the caller bounds the whole run.
  *
  * Node 24 is looked for on PATH, in /usr/local/bin and /usr/bin, and under
  * nvm, fnm, volta, asdf, mise, nodenv and n; each candidate is run once for
  * its version, and the highest 24.x wins. A version is listed, with the
  * integrity its marker names, only when it is complete as the installer
- * judges it: an integrity, a Node that runs and a CLI that exists.
+ * judges it: an integrity, a Node that runs and a CLI that exists. The CLI
+ * stage 1's attach would run is reported with its `--version`.
  */
 export const REVIEW_REMOTE_PROBE_SCRIPT = `LC_ALL=C
 export LC_ALL
@@ -88,6 +91,14 @@ for dir in "$remote"/versions/*; do
 	installed="$installed\${installed:+,}{\\"version\\":$(str "\${dir##*/}"),\\"integrity\\":$(str "$integrity")}"
 done
 
+limit3=
+command -v timeout >/dev/null 2>&1 && limit3="timeout 3"
+${findPathCli("$limit3")}pathCli=
+if [ -n "$wb" ]; then
+	wbVersion=$(PATH="\${wb%/*}:$PATH" DEV_FAST_REVIEW_CLI_NO_DELEGATE=1 DEV_FAST_REVIEW_TELEMETRY_DISABLED=1 $limit3 "$wb" --version </dev/null 2>/dev/null | head -n 1)
+	pathCli="{\\"path\\":$(str "$wb"),\\"version\\":$(strOrNull "$wbVersion")}"
+fi
+
 tools=
 for tool in tar xz sha256sum sha512sum openssl; do
 	command -v "$tool" >/dev/null 2>&1 && tools="$tools\${tools:+,}\\"$tool\\""
@@ -120,7 +131,7 @@ if [ -n "$node" ]; then
 else
 	printf '"node":null,'
 fi
-printf '"npm":%s,"installed":[%s],"managedNode":%s,"downloader":%s,"registryReachable":%s,"tools":[%s]}\\n' \\
-	"$(strOrNull "$npm")" "$installed" "$(strOrNull "$managed")" "$(strOrNull "$downloader")" "$reachable" "$tools"
+printf '"npm":%s,"installed":[%s],"managedNode":%s,"pathCli":%s,"downloader":%s,"registryReachable":%s,"tools":[%s]}\\n' \\
+	"$(strOrNull "$npm")" "$installed" "$(strOrNull "$managed")" "\${pathCli:-null}" "$(strOrNull "$downloader")" "$reachable" "$tools"
 echo ${REVIEW_REMOTE_PROBE_END}
 `;

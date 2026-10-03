@@ -30,6 +30,7 @@ const supported: ReviewRemoteProbe = {
 	npm: "/home/dev/.nvm/versions/node/v24.18.0/bin/npm",
 	installed: [{ version: "0.1.6", integrity: INTEGRITY }],
 	managedNode: null,
+	pathCli: { path: "/usr/local/bin/whiteboard", version: "0.1.6" },
 	downloader: "curl",
 	registryReachable: true,
 	tools: ["tar", "xz", "sha256sum", "sha512sum"],
@@ -92,6 +93,8 @@ test("a malformed answer is an error, never an exception", () => {
 		{ installed: "0.1.6" },
 		{ installed: Array(300).fill({ version: "0.1.6", integrity: INTEGRITY }) },
 		{ managedNode: 7 },
+		{ pathCli: undefined },
+		{ pathCli: { path: "whiteboard", version: "0.1.6" } },
 		{ downloader: "fetch" },
 		{ registryReachable: 1 },
 		{ tools: "tar" },
@@ -106,6 +109,20 @@ test("tools keeps only the tools asked about", () => {
 	const parsed = parseRemoteProbe(answer({ ...supported, tools: ["openssl", "rm -rf", 5, "tar"] }));
 	assert.ok("probe" in parsed);
 	assert.deepEqual(parsed.probe.tools, ["tar", "openssl"]);
+});
+
+test("pathCli keeps its version only when it is one", () => {
+	const version = (value: unknown) => {
+		const parsed = parseRemoteProbe(answer({ ...supported, pathCli: { path: "/usr/bin/whiteboard", version: value } }));
+		assert.ok("probe" in parsed);
+		return parsed.probe.pathCli?.version;
+	};
+	assert.equal(version("0.2.0"), "0.2.0");
+	assert.equal(version("Whiteboard needs Node.js 24 or newer"), null);
+	assert.equal(version(null), null);
+	const parsed = parseRemoteProbe(answer({ ...supported, pathCli: null }));
+	assert.ok("probe" in parsed);
+	assert.equal(parsed.probe.pathCli, null);
 });
 
 test("installed keeps only versions with an npm sha512 integrity", () => {
@@ -139,13 +156,14 @@ async function executable(path: string, body: string) {
 	await chmod(path, 0o755);
 }
 
-/** A home with Node 20 on PATH, three Node 24s under version managers, one complete version beside half-written and broken ones, and a curl that cannot connect. */
+/** A home with Node 20 and a CLI on PATH, three Node 24s under version managers, one complete version beside half-written and broken ones, and a curl that cannot connect. */
 async function fakeRemote(t: test.TestContext) {
 	const home = await mkdtemp(join(tmpdir(), "wb-probe-"));
 	t.after(() => rm(home, { recursive: true, force: true }));
 	const bin = join(home, "bin");
 	await executable(join(bin, "node"), "echo v20.11.1");
 	await executable(join(bin, "curl"), "exit 7");
+	await executable(join(bin, "whiteboard"), 'if [ "$1" = --version ]; then echo 0.2.0; fi');
 	await executable(join(home, ".nvm/versions/node/v24.9.0/bin/node"), "echo v24.9.0");
 	await executable(join(home, ".nvm/versions/node/v24.10.0/bin/node"), "echo v24.10.0");
 	await executable(join(home, ".nvm/versions/node/v24.10.0/bin/npm"), "echo 11.0.0");
@@ -193,6 +211,7 @@ test("the script finds the highest Node 24, the complete installed versions and 
 	assert.equal(probe.npm, join(home, ".nvm/versions/node/v24.10.0/bin/npm"));
 	assert.equal(probe.managedNode, join(home, ".dev/whiteboard-remote/node/v24.18.0/bin/node"));
 	assert.deepEqual(probe.installed, [{ version: "0.1.6", integrity: INTEGRITY }]);
+	assert.deepEqual(probe.pathCli, { path: join(home, "bin/whiteboard"), version: "0.2.0" });
 	assert.equal(probe.home, home);
 	assert.equal(probe.root, join(home, ".dev/whiteboard-remote"));
 	assert.equal(probe.homeWritable, true);

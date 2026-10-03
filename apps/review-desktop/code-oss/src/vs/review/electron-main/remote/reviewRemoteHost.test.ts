@@ -900,6 +900,30 @@ test("a declined host with another version's CLI on PATH attaches it, and still 
 	assert.equal(await flow.consent.get("wb-test-a"), "deny");
 });
 
+test("this version's CLI on PATH counts as installed: no prompt, no install, and stage 1's attach", async (t) => {
+	const port = await healthServer(t);
+	const { flow, prompts, runs } = await installFlow(t, "ask");
+	const { host, ssh, last } = hostFor(t, { probe: { pathCli: { path: "/usr/local/bin/whiteboard", version: "0.1.6" } } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.deepEqual([prompts.length, runs.length], [0, 0]);
+	assert.equal(last()?.declined, undefined);
+	assert.match(ssh.of("wb-test-a", "exec")[0].input!, /command -v whiteboard/);
+});
+
+test("another version's CLI on PATH does not count: the user is asked", async (t) => {
+	const port = await healthServer(t);
+	const { flow, prompts } = await installFlow(t, "ask", { answers: [false] });
+	const { host, last } = hostFor(t, { probe: { pathCli: { path: "/usr/local/bin/whiteboard", version: "0.1.5" } } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(prompts.length, 1);
+});
+
 test("a prompt nobody answered is not remembered, offers Install, and the next connect asks again", async (t) => {
 	const { flow, prompts, consentFile } = await installFlow(t, "ask", { answers: [undefined, undefined] });
 	const { host, ssh, last } = hostFor(t, { attach: { code: 127 } }, 1, "wb-test-a", "/tmp/wb-ssh-test", flow);

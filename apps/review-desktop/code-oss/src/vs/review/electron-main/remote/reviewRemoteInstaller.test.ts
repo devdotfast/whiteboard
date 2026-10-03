@@ -89,6 +89,7 @@ async function fixture(t: test.TestContext, cli = CLI) {
 		npm: join(dirname(process.execPath), "npm"),
 		installed: [],
 		managedNode: null,
+		pathCli: null,
 		downloader: "curl",
 		registryReachable: true,
 		tools: ["tar", "xz", "sha256sum", "sha512sum"],
