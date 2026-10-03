@@ -573,7 +573,7 @@ test("quitting while a removed host's master closes waits for it", async (t) => 
 });
 
 test("a server's agents are read on their own once a session, and again only when asked", async (t) => {
-	const { manager, ssh, sentUntil } = await managerFor(t, { "wb-test-a": { detect: { code: 0, stdout: detectOutput([{ id: "pi", present: true, connected: false }]) } } });
+	const { manager, ssh, sentUntil } = await managerFor(t, { "wb-test-a": { detect: { code: 0, stdout: detectOutput([{ id: "pi", connected: false }]) } } });
 
 	manager.update(true, ["wb-test-a"]);
 	await sentUntil((hosts) => byAlias(hosts, "wb-test-a")?.endpoint !== undefined);

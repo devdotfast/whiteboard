@@ -6,6 +6,7 @@ import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 import {
+  REVIEW_CLI_INSTALL_TARGET_LABELS,
   REVIEW_REMOTE_ATTACH_BEGIN,
   REVIEW_REMOTE_ATTACH_END,
 } from "@dev.fast/review-protocol";
@@ -1137,7 +1138,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
 
       const sections = selected.map((target) =>
         selected.length > 1
-          ? `## ${TARGET_LABELS[target]}\n\n${prompts[target]}`
+          ? `## ${REVIEW_CLI_INSTALL_TARGET_LABELS[target]}\n\n${prompts[target]}`
           : prompts[target],
       );
 
@@ -1570,16 +1571,6 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     await attemptTelemetry(() => telemetry.shutdown(1_000));
   }
 }
-
-const TARGET_LABELS: Record<InstallTarget, string> = {
-  claude: "Claude Code",
-  codex: "Codex",
-  cursor: "Cursor",
-  opencode: "OpenCode",
-  pi: "Pi",
-  omp: "oh-my-pi",
-  copilot: "Copilot CLI",
-};
 
 function parseTargets(targets: readonly string[]): InstallTarget[] {
   if (targets.length === 0 || targets.includes("all")) {

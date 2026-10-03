@@ -1218,7 +1218,7 @@ test("agents are detected once after the first attach, with the installed CLI, a
 	const { flow } = await installFlow(t, "always");
 	const attached = new Set<string>();
 	const firstAttach = (key: string) => !attached.has(key) && !!attached.add(key);
-	const remote: FakeRemote = { detect: { code: 0, stdout: `noise\n${detectOutput([{ id: "pi", name: "Pi", present: true, connected: false }])}` } };
+	const remote: FakeRemote = { detect: { code: 0, stdout: `noise\n${detectOutput([{ id: "pi", name: "Pi", connected: false }])}` } };
 	const { host, ssh, last } = hostFor(t, remote, port, "wb-test-a", "/tmp/wb-ssh-test", flow, "0.1.6", { firstAttach });
 
 	host.start();
@@ -1258,8 +1258,8 @@ test("connecting runs the agents' commands with the installed CLI, and refuses a
 		detect: {
 			code: 0,
 			stdout: detectOutput([
-				{ id: "pi", present: true, connected: false },
-				{ id: "codex", present: true, connected: false, manual: true },
+				{ id: "pi", connected: false },
+				{ id: "codex", connected: false, manual: true },
 			]),
 		},
 	};
@@ -1285,7 +1285,7 @@ test("connecting runs the agents' commands with the installed CLI, and refuses a
 test("a connect that prints no result fails with ssh's words, as plain text", async (t) => {
 	const port = await healthServer(t);
 	const remote: FakeRemote = {
-		detect: { code: 0, stdout: detectOutput([{ id: "pi", present: true, connected: false }]) },
+		detect: { code: 0, stdout: detectOutput([{ id: "pi", connected: false }]) },
 		connect: { code: 1, stderr: "\u001b[31mboom\u001b[0m\r\nmore\n" },
 	};
 	const { host, last } = hostFor(t, remote, port, "wb-test-a", "/tmp/wb-ssh-test", undefined, "0.1.6", { firstAttach: () => true });

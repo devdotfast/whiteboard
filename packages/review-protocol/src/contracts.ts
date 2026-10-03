@@ -1129,6 +1129,19 @@ export type ReviewCliInstallTarget = z.infer<
   typeof ReviewCliInstallTargetSchema
 >;
 
+export const REVIEW_CLI_INSTALL_TARGET_LABELS: Record<
+  ReviewCliInstallTarget,
+  string
+> = {
+  claude: "Claude Code",
+  codex: "Codex",
+  cursor: "Cursor",
+  opencode: "OpenCode",
+  pi: "Pi",
+  omp: "oh-my-pi",
+  copilot: "Copilot CLI",
+};
+
 export const ReviewCliInstallStampSchema = z.object({
   consent: z.enum(["granted", "declined", "skipped"], {
     error: "must be granted, declined, or skipped",

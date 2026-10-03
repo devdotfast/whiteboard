@@ -67,7 +67,7 @@ function agentsOf<T extends { id: ReviewRemoteAgentId }>(record: Record<string, 
 /** `connect --detect --json`; undefined when it printed no such line. */
 export function parseRemoteAgents(stdout: string): ReviewRemoteAgent[] | undefined {
 	return agentsOf(lastEvent(stdout, "connect.detect"), (item) =>
-		item.present === true && typeof item.connected === "boolean"
+		typeof item.connected === "boolean"
 			? { id: item.id as ReviewRemoteAgentId, connected: item.connected, ...(item.manual === true && { manual: true as const }) }
 			: undefined,
 	);

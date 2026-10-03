@@ -149,7 +149,6 @@ describe("Whiteboard CLI", () => {
         {
           id: "codex",
           name: "Codex",
-          present: true,
           connected: false,
           manual: true,
         },
