@@ -1181,6 +1181,7 @@ it("keeps a live navigator attached to the live checkout without preparing it", 
   });
 
   expect(live.filePath).toBe(path.join(root, source.file));
+  expect(live.live).toBe(true);
 
   const base = await local.data.navigatorWorkspace(local.store.read(reviewId), {
     side: "base",
@@ -1188,6 +1189,7 @@ it("keeps a live navigator attached to the live checkout without preparing it", 
   });
 
   expect(readFileSync(base.filePath!, "utf8")).toContain("value = 1");
+  expect(base.live).toBe(false);
   const outside = path.join(directory, "outside.ts");
   writeFileSync(outside, "outside source\n");
   symlinkSync(outside, path.join(repository, "outside-link.ts"));

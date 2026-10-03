@@ -44,6 +44,8 @@ import { ILifecycleService } from "../../../../workbench/services/lifecycle/comm
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import {
 	REVIEW_CTRL_TAB_SETTING,
+	REVIEW_OPEN_FILES_IN_CHOICES,
+	REVIEW_OPEN_FILES_IN_SETTING,
 	REVIEW_DOCUMENT_WIDTH_SETTING,
 	REVIEW_KEYMAP_SETTING,
 	REVIEW_KEYMAPS,
@@ -66,6 +68,7 @@ import type {
 	ReviewCanvasTutorialBridge,
 	ReviewCliInstallStatus,
 	ReviewCtrlTabChoice,
+	ReviewOpenFilesInChoice,
 	ReviewDocumentWidthChoice,
 	ReviewKeymapChoice,
 	ReviewReadyNotificationChoice,
@@ -797,6 +800,15 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.configurationService.updateValue(REVIEW_CTRL_TAB_SETTING, choice, ConfigurationTarget.USER);
 				return this.currentCtrlTab();
 			},
+			openFilesIn: this.currentOpenFilesIn(),
+			setOpenFilesIn: async (choice) => {
+				this.reviewTelemetryService.capture("setting_changed", {
+					setting: "open_files_in",
+					enabled: true,
+				});
+				await this.configurationService.updateValue(REVIEW_OPEN_FILES_IN_SETTING, choice, ConfigurationTarget.USER);
+				return this.currentOpenFilesIn();
+			},
 			documentWidth: this.currentDocumentWidth(),
 			setDocumentWidth: async (choice) => {
 				this.reviewTelemetryService.capture("setting_changed", {
@@ -868,6 +880,11 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	private currentCtrlTab(): ReviewCtrlTabChoice {
 		return this.configurationService.getValue<ReviewCtrlTabChoice>(REVIEW_CTRL_TAB_SETTING) === "next" ? "next" : "recent";
+	}
+
+	private currentOpenFilesIn(): ReviewOpenFilesInChoice {
+		const value = this.configurationService.getValue<ReviewOpenFilesInChoice>(REVIEW_OPEN_FILES_IN_SETTING);
+		return REVIEW_OPEN_FILES_IN_CHOICES.includes(value) ? value : "whiteboard";
 	}
 
 	private currentDocumentWidth(): ReviewDocumentWidthChoice {

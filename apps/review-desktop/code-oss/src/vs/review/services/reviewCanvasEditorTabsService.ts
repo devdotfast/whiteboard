@@ -6,6 +6,7 @@
 import { Event } from "../../base/common/event.js";
 import { Disposable } from "../../base/common/lifecycle.js";
 import { URI } from "../../base/common/uri.js";
+import { IConfigurationService } from "../../platform/configuration/common/configuration.js";
 import type { ITextEditorOptions } from "../../platform/editor/common/editor.js";
 import { createDecorator, IInstantiationService } from "../../platform/instantiation/common/instantiation.js";
 import { ILogService } from "../../platform/log/common/log.js";
@@ -19,6 +20,8 @@ import {
 	type ReviewCanvasEditorTarget,
 } from "../browser/parts/canvas/reviewCanvasEditorInput.js";
 
+import { REVIEW_OPEN_FILES_IN_SETTING } from "../common/reviewConfigurationDefaults.js";
+import { isExternalEditor } from "../common/reviewExternalEditor.js";
 import { reviewSourceQuery, type ReviewSourceSelection } from "../common/reviewProtocol.js";
 import { REVIEW_LANGUAGE_SOURCE_SCHEME } from "../common/reviewReadonlySource.js";
 import { sourceLocation, sourceSelectionIdentity, REVIEW_API_SOURCE_SCHEME } from "../common/reviewSourceView.js";
@@ -59,6 +62,7 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		private readonly desktopConnection: IReviewDesktopConnectionService,
 		@IHostService private readonly host: IHostService,
 		@ILogService private readonly logService: ILogService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
 		this._register(
@@ -112,19 +116,32 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		await this.host.openWindow([{ workspaceUri: URI.file(result.workspacePath), label: title }], { forceNewWindow: true });
 	}
 
-	/** Hand source opens to the native workspace before Review creates an editor group. */
+	/**
+	 * Hand source opens to the native workspace before Review creates an editor
+	 * group, or to the `review.openFilesIn` editor when the file is in the
+	 * reader's own checkout.
+	 */
 	async openSourceEditor(editor: IUntypedEditorInput): Promise<boolean> {
 		const diff = isResourceDiffEditorInput(editor);
 		const resources = diff ? [editor.original.resource, editor.modified.resource] : [isResourceEditorInput(editor) ? editor.resource : undefined];
 		if (!resources.every((resource): resource is URI => !!resource && [REVIEW_API_SOURCE_SCHEME, REVIEW_LANGUAGE_SOURCE_SCHEME].includes(resource.scheme))) return false;
 		const destinations = await Promise.all(resources.map(resource => this.sourceDestination(resource)));
+		const selection = !diff ? (editor.options as ITextEditorOptions | undefined)?.selection : undefined;
+		const position = selection ? `:${selection.startLineNumber}:${selection.startColumn ?? 1}` : "";
+		// A pinned checkout belongs to Whiteboard and is removed with the review,
+		// so only files the reader owns leave for another editor.
+		if (!diff && destinations[0].external && await this.openExternalEditor(destinations[0].filePath, selection)) return true;
 		await this.host.openWindow([
 			{ workspaceUri: destinations[destinations.length - 1].workspaceUri },
-			...destinations.map(({ filePath }) => {
-				const selection = !diff ? (editor.options as ITextEditorOptions | undefined)?.selection : undefined;
-				return { fileUri: URI.file(selection ? `${filePath}:${selection.startLineNumber}:${selection.startColumn ?? 1}` : filePath) };
-			}),
+			...destinations.map(({ filePath }) => ({ fileUri: URI.file(`${filePath}${position}`) })),
 		], { forceNewWindow: true, gotoLineMode: true, diffMode: diff });
+		return true;
+	}
+
+	private async openExternalEditor(filePath: string, selection: ITextEditorOptions["selection"]): Promise<boolean> {
+		const editor = this.configurationService.getValue<string>(REVIEW_OPEN_FILES_IN_SETTING);
+		if (!isExternalEditor(editor)) return false;
+		await this.desktopConnection.openInExternalEditor({ editor, filePath, line: selection?.startLineNumber, column: selection?.startColumn });
 		return true;
 	}
 
@@ -138,21 +155,24 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		return true;
 	}
 
-	private async sourceDestination(resource: URI): Promise<{ workspaceUri: URI; filePath: string }> {
+	private async sourceDestination(resource: URI): Promise<{ workspaceUri: URI; filePath: string; external: boolean }> {
 		const target = sourceLocation(resource);
 		const local = resource.scheme === REVIEW_LANGUAGE_SOURCE_SCHEME;
+		const empty = new URLSearchParams(resource.query).has("empty");
 		const result = await this.navigatorWorkspace(target.view.reviewId, {
 			...reviewSourceQuery(target.view),
 			side: target.side,
 			file: local ? undefined : target.file,
-			empty: new URLSearchParams(resource.query).has("empty") ? "true" : undefined,
+			empty: empty ? "true" : undefined,
 		});
 		const filePath = local ? resource.fsPath : result.filePath;
 		if (!filePath) throw new Error("The navigator did not resolve the source file.");
-		return { workspaceUri: URI.file(result.workspacePath), filePath };
+		// An empty side is a placeholder the navigator writes for native diffs,
+		// and a language target may sit in a prepared dependency tree.
+		return { workspaceUri: URI.file(result.workspacePath), filePath, external: result.live === true && !empty && !local };
 	}
 
-	private async navigatorWorkspace(reviewId: string, values: Record<string, string | number | undefined>): Promise<{ workspacePath: string; filePath?: string }> {
+	private async navigatorWorkspace(reviewId: string, values: Record<string, string | number | undefined>): Promise<{ workspacePath: string; filePath?: string; live?: boolean }> {
 		const { serverUrl, token } = await this.desktopConnection.getConnection();
 		const query = new URLSearchParams(Object.entries(values).filter(([key, value]) => key !== "reviewId" && value !== undefined).map(([key, value]) => [key, String(value)]));
 		const response = await fetch(`${serverUrl}/reviews-api/${encodeURIComponent(reviewId)}/navigator${query.size ? `?${query}` : ""}`, {

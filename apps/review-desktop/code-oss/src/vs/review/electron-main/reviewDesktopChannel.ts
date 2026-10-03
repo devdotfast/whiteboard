@@ -7,7 +7,9 @@ import { Event } from "../../base/common/event.js";
 import { IServerChannel } from "../../base/parts/ipc/common/ipc.js";
 import type { IWindowsMainService } from "../../platform/windows/electron-main/windows.js";
 import type { ReviewDesktopConnection } from "../common/reviewDesktopBootstrap.js";
+import { externalEditorUrl, type ReviewExternalEditorTarget } from "../common/reviewExternalEditor.js";
 import type { ReviewDesktopHost } from "./reviewDesktopHost.js";
+import { launchExternalEditorUrl } from "./reviewExternalEditorLauncher.js";
 
 export { REVIEW_DESKTOP_CHANNEL } from "../common/reviewDesktopBootstrap.js";
 
@@ -20,6 +22,7 @@ export class ReviewDesktopChannel implements IServerChannel {
   constructor(
     private readonly host: ReviewDesktopHost,
     private readonly windows: IWindowsMainService,
+    private readonly launchEditorUrl: (url: string) => Promise<void> = launchExternalEditorUrl,
   ) {}
 
   listen<T>(): Event<T> {
@@ -37,6 +40,14 @@ export class ReviewDesktopChannel implements IServerChannel {
     }
     if (command === "closeSourceWindows") {
       this.closeSourceWindows(Array.isArray(arg) ? arg.map(String) : []);
+      return undefined as T;
+    }
+    if (command === "openInExternalEditor") {
+      // Only a known editor's file URL leaves here: the renderer names the
+      // file, never the URL or the program that opens it.
+      const url = externalEditorUrl((arg ?? {}) as ReviewExternalEditorTarget);
+      if (!url) throw new Error("Not a file Whiteboard can open in an external editor.");
+      await this.launchEditorUrl(url);
       return undefined as T;
     }
     throw new Error(`Unknown Review Desktop channel call: ${command}`);

@@ -6,6 +6,7 @@ import type {
   ReviewCtrlTabChoice,
   ReviewDocumentWidthChoice,
   ReviewKeymapChoice,
+  ReviewOpenFilesInChoice,
   ReviewReadyNotificationChoice,
   ReviewThemeChoice,
 } from "@dev.fast/review-protocol";
@@ -36,6 +37,13 @@ const KEYMAP_LABELS: Record<ReviewKeymapChoice, string> = {
 const CTRL_TAB_LABELS: Record<ReviewCtrlTabChoice, string> = {
   recent: "Last used tab",
   next: "Next tab",
+};
+
+const OPEN_FILES_IN_LABELS: Record<ReviewOpenFilesInChoice, string> = {
+  whiteboard: "Whiteboard",
+  vscode: "VS Code",
+  cursor: "Cursor",
+  zed: "Zed",
 };
 
 const DOCUMENT_WIDTH_LABELS: Record<ReviewDocumentWidthChoice, string> = {
@@ -71,6 +79,7 @@ export function SettingsPage({
   const [theme, setTheme] = useState(settings.theme);
   const [keymap, setKeymap] = useState(settings.keymap);
   const [ctrlTab, setCtrlTab] = useState(settings.ctrlTab);
+  const [openFilesIn, setOpenFilesIn] = useState(settings.openFilesIn);
   const [documentWidth, setDocumentWidth] = useState(settings.documentWidth);
 
   const [readyNotification, setReadyNotification] = useState(
@@ -264,6 +273,24 @@ export function SettingsPage({
                     "ctrl-tab",
                     () => settings.setCtrlTab(choice),
                     setCtrlTab,
+                  )
+                }
+              />
+            </Row>
+            <Row
+              label="Open files in"
+              description="Where Open file shows a file from your checkout. Diffs and other revisions stay in Whiteboard."
+            >
+              <Choice
+                label="Open files in"
+                value={openFilesIn}
+                labels={OPEN_FILES_IN_LABELS}
+                disabled={busy !== null}
+                onChange={(choice) =>
+                  void run(
+                    "open-files-in",
+                    () => settings.setOpenFilesIn(choice),
+                    setOpenFilesIn,
                   )
                 }
               />

@@ -139,6 +139,7 @@ export const SETTING_NAME = [
   "structural_diff",
   "theme",
   "ctrl_tab",
+  "open_files_in",
   "ready_notification",
   "document_width",
 ] as const;

@@ -45,3 +45,15 @@ test("matches a review by the storage segment the host names its directory with"
 
 	assert.deepEqual(closed, ["shared"]);
 });
+
+test("opens only a known editor's file URL from the main process", async () => {
+	const launched: string[] = [];
+	const channel = new ReviewDesktopChannel({} as never, { getWindows: () => [] } as never, async (url) => { launched.push(url); });
+
+	await channel.call("", "openInExternalEditor", { editor: "cursor", filePath: "/repo/a.ts", line: 3, column: 2 });
+	await assert.rejects(channel.call("", "openInExternalEditor", { editor: "whiteboard", filePath: "/repo/a.ts" }));
+	await assert.rejects(channel.call("", "openInExternalEditor", { editor: "vscode", filePath: "../a.ts" }));
+	await assert.rejects(channel.call("", "openInExternalEditor"));
+
+	assert.deepEqual(launched, ["cursor://file/repo/a.ts:3:2"]);
+});
