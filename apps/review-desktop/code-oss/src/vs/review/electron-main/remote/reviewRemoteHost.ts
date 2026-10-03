@@ -743,6 +743,7 @@ export class ReviewRemoteHost {
 		const log = (error: Error) => this.options.log(`${this.alias}: install consent: ${error.message}`);
 		const stored = await flow.consent.get(this.alias).catch(log);
 		if (stored) return stored === "allow";
+		if (stale()) return false;
 		this.set({ alias: this.alias, asking: version });
 		const answer = await flow.confirm({ alias: this.alias, text: installPromptText(this.alias, version, probe) });
 		if (!stale()) this.set({ alias: this.alias });

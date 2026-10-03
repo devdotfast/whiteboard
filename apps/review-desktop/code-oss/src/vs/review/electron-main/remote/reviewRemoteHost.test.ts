@@ -940,7 +940,7 @@ test("an open install question is reported until it is answered", async (t) => {
 	assert.deepEqual(reports.at(-2), { alias: "wb-test-a" });
 });
 
-test("a quiesce closes an open install question", async (t) => {
+test("a quiesce closes an open install question, and one it lands before", async (t) => {
 	const { flow } = await installFlow(t, "ask");
 	const answer = Promise.withResolvers<boolean | undefined>();
 	flow.confirm = () => answer.promise;
@@ -953,6 +953,26 @@ test("a quiesce closes an open install question", async (t) => {
 	await new Promise((resolve) => setTimeout(resolve, 20));
 
 	assert.deepEqual(last(), { alias: "wb-test-a" });
+
+	const reading = await installFlow(t, "ask");
+	const read = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	const get = reading.flow.consent.get.bind(reading.flow.consent);
+	reading.flow.consent.get = async (alias) => {
+		read.resolve();
+		await release.promise;
+		return get(alias);
+	};
+	const other = hostFor(t, { attach: { code: 127 } }, 1, "wb-test-a", "/tmp/wb-ssh-test", reading.flow);
+
+	other.host.start();
+	await read.promise;
+	other.host.quiesce();
+	release.resolve();
+	await new Promise((resolve) => setTimeout(resolve, 20));
+
+	assert.equal(reading.prompts.length, 0);
+	assert.equal(other.last()?.asking, undefined);
 });
 
 test("a prompt nobody answered is not remembered, offers Install, and the next connect asks again", async (t) => {
