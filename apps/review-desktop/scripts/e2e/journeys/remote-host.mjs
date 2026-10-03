@@ -16,7 +16,7 @@ const runId = process.env.WB_TEST_RUN ?? `e2e${Date.now().toString(36)}`;
 export const runDir = `/tmp/wbt.${runId}`;
 
 // A host a user prepared (`up` or `aws-up`, then a hand install) in the WB_TEST_RUN run; the journey never removes it.
-const prepared = process.env.REVIEW_E2E_REMOTE_HOST;
+export const prepared = process.env.REVIEW_E2E_REMOTE_HOST;
 
 export const alias = `wb-test-${prepared ?? "a"}`;
 
@@ -204,7 +204,7 @@ export async function run(ctx) {
  * Desktop the way a user does, so it closes its masters, then end any of its
  * ssh that outlived it. The harness's own close still runs afterwards.
  */
-async function closeDesktop(ctx) {
+export async function closeDesktop(ctx) {
   const session = await ctx.browser.newBrowserCDPSession().catch(() => null);
 
   // The browser drops the connection as it closes, so this answer may never come.
