@@ -12,6 +12,7 @@ import {
 import { AskHistoryProvider, useAskHistory } from "./ask-history";
 import { AskHistoryList } from "./ask-history-list";
 import { AskPanelContent } from "./ask-panel";
+import { AskSignIn } from "./ask-setup";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewPanelProvider, useReviewPanel } from "./review-panel";
 import { testReviewSession } from "./review-session-test-utils";
@@ -1261,6 +1262,63 @@ it("moves from setup to asking once an agent is installed", async () => {
     available = true;
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(container.querySelector("textarea")).not.toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("names the host a remote review's agents run on (wb-test-a)", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const remote = testReviewSession();
+  remote.review = { ...remote.review!, host: "wb-test-a" };
+  const laptop = testReviewSession();
+
+  for (const session of [remote, laptop])
+    vi.spyOn(session, "fetch").mockImplementation(async (endpoint) =>
+      endpoint === "/ask/agents"
+        ? Response.json({
+            agents: [{ id: "claude", name: "Claude Code", available: false }],
+          })
+        : Response.json({ ok: true }, { status: 404 }),
+    );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  const render = async (session: typeof remote) =>
+    act(async () =>
+      root.render(
+        <ReviewSessionProvider session={session}>
+          <AskPanelContent selection={selection} />
+          <AskSignIn
+            agentName="Claude Code"
+            command="claude auth login"
+            onRetry={() => {}}
+          />
+        </ReviewSessionProvider>,
+      ),
+    );
+
+  try {
+    await render(remote);
+    expect(container.textContent).toContain(
+      "Whiteboard runs a coding agent on wb-test-a, against the review's checkout there. Install one and sign in to it once over ssh; it shows up here when you come back.",
+    );
+    expect(container.textContent).toContain("Not installed on wb-test-a");
+    expect(
+      container.querySelector('[aria-label="Sign in"]')?.textContent,
+    ).toContain("the question is still here. Run it on wb-test-a.");
+
+    await render(laptop);
+    expect(container.textContent).toContain("Not installed");
+    expect(container.textContent).not.toContain("wb-test-a");
+    expect(container.textContent).toContain(
+      "Whiteboard runs a coding agent on your machine, against the pinned checkout.",
+    );
   } finally {
     await act(async () => root.unmount());
     container.remove();
