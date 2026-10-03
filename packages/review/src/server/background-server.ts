@@ -4,12 +4,15 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { liveLockOwner, processIsAlive } from "@dev.fast/trace-core";
+import type { ReviewInstanceSelection } from "@review/desktop-discovery.js";
 import { findReviewPackageRoot } from "@review/package-paths.js";
+import { desktopApplicationInstalled } from "@review/review-app-launcher.js";
 import {
   type ReviewServerDiscovery,
   headlessServerLockPath,
   readReviewServerDiscovery,
   readReviewServerHealth,
+  reviewServerStateDir,
 } from "@review/server-discovery.js";
 
 export interface EnsureBackgroundServerInput {
@@ -70,6 +73,37 @@ export async function ensureBackgroundServer(
   throw new Error(
     `The Whiteboard server did not become ready${child.exited ? "" : ` within ${Math.round((input.timeoutMs ?? 15_000) / 1_000)} s; process ${child.pid} is still starting`}.${owner !== undefined && owner !== child.pid ? ` Process ${owner} holds its state directory without answering; \`whiteboard server stop\` ends it.` : ""} The end of ${logPath}:\n${await logTail(logPath, logStart)}`,
   );
+}
+
+/**
+ * With no Desktop here at all, not even a record of one or its app, the CLI
+ * keeps this machine's own server up; undefined when a Desktop owns serving.
+ */
+export async function ensureServerWithoutDesktop(input: {
+  selection: ReviewInstanceSelection;
+  env: NodeJS.ProcessEnv;
+  /** Test seam: the launcher's own check by default. */
+  desktopInstalled?: () => boolean;
+  /** Test seam: this process's CLI by default. */
+  cli?: readonly string[];
+}) {
+  const { selection, env } = input;
+
+  if (
+    selection.source !== "fallback" ||
+    selection.instances.length !== 0 ||
+    selection.problem ||
+    (input.desktopInstalled ?? (() => desktopApplicationInstalled({ env })))()
+  )
+    return undefined;
+
+  const { discovery } = await ensureBackgroundServer({
+    stateDir: reviewServerStateDir(env),
+    env,
+    cli: input.cli,
+  });
+
+  return discovery;
 }
 
 /**

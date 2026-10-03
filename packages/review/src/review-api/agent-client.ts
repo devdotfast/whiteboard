@@ -3,7 +3,6 @@ import {
   reviewInstanceUnavailable,
   selectReviewInstance,
 } from "@review/desktop-discovery.js";
-import { desktopApplicationInstalled } from "@review/review-app-launcher.js";
 import {
   readReviewServerDiscovery,
   reviewServerIsHealthy,
@@ -42,6 +41,7 @@ export async function connectReviewApi(
   return (await connectReviewInstance(env, headers)).client;
 }
 
+/** Test seams. */
 export interface ConnectReviewOptions {
   /** The launcher's own check by default. */
   desktopInstalled?: () => boolean;
@@ -83,38 +83,28 @@ export async function connectReviewInstance(
   const selection = await selectReviewInstance({ env });
   const discovery = healthyReviewInstance(selection);
 
-  // With no Desktop here at all, not even a record of one, the CLI keeps
-  // this machine's own server up.
-  if (
-    !discovery &&
-    selection.source === "fallback" &&
-    selection.instances.length === 0 &&
-    !selection.problem &&
-    !(
-      options.desktopInstalled ?? (() => desktopApplicationInstalled({ env }))
-    )()
-  ) {
-    const { ensureBackgroundServer } =
+  if (!discovery) {
+    const { ensureServerWithoutDesktop } =
       await import("@review/server/background-server.js");
 
-    const { discovery: server } = await ensureBackgroundServer({
-      stateDir: reviewServerStateDir(env),
+    const server = await ensureServerWithoutDesktop({
+      selection,
       env,
-      cli: options.cli,
+      ...options,
     });
 
-    return {
-      client: new ReviewApiClient(
-        { serverUrl: server.url, token: server.token },
-        request,
-      ),
-    };
-  }
+    if (server)
+      return {
+        client: new ReviewApiClient(
+          { serverUrl: server.url, token: server.token },
+          request,
+        ),
+      };
 
-  if (!discovery)
     throw new Error(
       `${reviewInstanceUnavailable(selection).message} For headless authoring, select a running server with --state-dir or DEV_REVIEW_SERVER_DIR.`,
     );
+  }
 
   return {
     client: new ReviewApiClient(
