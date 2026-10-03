@@ -44,9 +44,13 @@ function attachWords(groups: readonly string[], replace: boolean): string {
 	return `remote attach --json${replace ? " --replace" : ""}${groups.length ? ` --groups ${groups.join(",")}` : ""}`;
 }
 
-/** Stage 1's attach through the CLI on PATH, never with `--replace`. */
-export function reviewRemoteAttachScript(groups: readonly string[] = []): string {
-	return pathCliScript(attachWords(groups, false));
+/**
+ * The attach through the CLI on PATH: without `--replace` for stage 1's
+ * hosts (installs off, or declined), and with it when that CLI is this
+ * Desktop's version, which supports it.
+ */
+export function reviewRemoteAttachScript(groups: readonly string[] = [], replace = false): string {
+	return pathCliScript(attachWords(groups, replace));
 }
 
 /** The CLI of the version Desktop installed, by its exact path; `--replace` restarts a server of another version that was not a user's. */

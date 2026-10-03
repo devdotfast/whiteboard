@@ -896,6 +896,7 @@ test("a declined host with another version's CLI on PATH attaches it, and still 
 	assert.equal(last()?.declined, true);
 	assert.equal(runs.length, 0);
 	assert.match(ssh.of("wb-test-a", "exec")[0].input!, /command -v whiteboard/);
+	assert.doesNotMatch(ssh.of("wb-test-a", "exec")[0].input!, /--replace/);
 	// Calls on the store run in turn: this waits for the move of the answer after the attach.
 	assert.equal(await flow.consent.get("wb-test-a"), "deny");
 });
@@ -910,7 +911,7 @@ test("this version's CLI on PATH counts as installed: no prompt, no install, and
 
 	assert.deepEqual([prompts.length, runs.length], [0, 0]);
 	assert.equal(last()?.declined, undefined);
-	assert.match(ssh.of("wb-test-a", "exec")[0].input!, /command -v whiteboard/);
+	assert.match(ssh.of("wb-test-a", "exec")[0].input!, /command -v whiteboard[\s\S]*remote attach --json --replace/);
 });
 
 test("another version's CLI on PATH does not count: the user is asked", async (t) => {

@@ -717,7 +717,7 @@ export class ReviewRemoteHost {
 		if (stale()) return;
 		// Another pack under the same version is not this build's: it is installed again, as any absent version.
 		const present = probed.probe.installed.some((entry) => entry.version === version && entry.integrity === integrity);
-		if (!present && probed.probe.pathCli?.version === version) return onPath;
+		if (!present && probed.probe.pathCli?.version === version) return { script: (groups) => reviewRemoteAttachScript(groups, true) };
 		if (!present && mode === "ask" && !(await this.agreed(flow, probed.probe, version, stale))) {
 			// A CLI the user installed by hand still attaches; without one the host is not-installed.
 			this.declined = true;
