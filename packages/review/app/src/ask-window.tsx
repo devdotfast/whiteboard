@@ -17,7 +17,12 @@ import { useReviewDebugSettings } from "./debug-settings";
 import { ChatIcon, CloseIcon, DockIcon, GripIcon, MinusIcon } from "./icons";
 import { appMarker } from "./markers.stylex";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
-import type { AskAnchor, AskPresence } from "./review-panel-model";
+import type {
+  AskAnchor,
+  AskPanel,
+  AskPresence,
+  AskSize,
+} from "./review-panel-model";
 import { useReviewContainer } from "./review-root-context";
 import { elevation, fontSize, radius } from "./scale.stylex";
 import { panelStyles } from "./side-panel-styles";
@@ -46,6 +51,9 @@ const MIN_HEIGHT = 320;
 
 // How close to the canvas's edges a dragged pill may go.
 const PILL_EDGE = 8;
+
+// Between the pills, and between them and the window.
+const PILL_GAP = 8;
 
 // A press on the pill that moves less than this is a click.
 const DRAG_THRESHOLD = 4;
@@ -108,14 +116,17 @@ export function AskSlot({ node }: { node: HTMLElement }): ReactElement {
   return <div ref={slot} {...stylex.props(styles.fill)} />;
 }
 
-/** Ask in a window over the canvas, above peeks and fullscreen diagrams. */
+/** An Ask in the window over the canvas, above peeks and fullscreen
+ * diagrams. */
 export function AskWindow({
+  askKey,
   actions,
   titleAccessory,
   onClose,
   closeRef,
   children,
 }: {
+  askKey: number;
   /** The conversation's own buttons, before dock, minimize and close. */
   actions: ReactNode;
   titleAccessory?: ReactNode;
@@ -142,15 +153,8 @@ export function AskWindow({
     from: Frame;
   } | null>(null);
 
-  // Never smaller than the canvas allows, nor closer than GAP to its edges.
-  const maxWidth = canvas.width - GAP * 2;
-  const maxHeight = canvas.height - GAP * 2;
-  const minWidth = Math.min(MIN_WIDTH, maxWidth);
-  const minHeight = Math.min(MIN_HEIGHT, maxHeight);
-  const width = clamp(size?.width ?? WINDOW_WIDTH, minWidth, maxWidth);
-  const height = clamp(size?.height ?? WINDOW_HEIGHT, minHeight, maxHeight);
-
-  const frame = live?.frame ?? placeAt(anchor, { width, height }, canvas, GAP);
+  const { minWidth, minHeight } = windowLimits(canvas);
+  const frame = live?.frame ?? windowFrame(anchor, size, canvas);
 
   const start = (
     event: PointerEvent<HTMLElement>,
@@ -275,7 +279,7 @@ export function AskWindow({
               ref={dockTooltip}
               size="large"
               aria-label="Dock Ask in the side panel"
-              onClick={() => store.getState().dockAsk()}
+              onClick={() => store.getState().dockAsk(askKey)}
             >
               <DockIcon
                 xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
@@ -285,7 +289,7 @@ export function AskWindow({
               ref={minimizeTooltip}
               size="large"
               aria-label="Minimize Ask"
-              onClick={() => store.getState().minimizeAsk()}
+              onClick={() => store.getState().minimizeAsk(askKey)}
             >
               <MinusIcon
                 xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
@@ -316,13 +320,16 @@ export function AskWindow({
   );
 }
 
-/** Ask, minimized or covered: who is answering and how it is going, in the
- * window's corner. Drag it anywhere; a press that barely moves opens Ask. */
-export function AskPill({ presence }: { presence: AskPresence }): ReactElement {
+/** The Asks minimized or covered: who is answering and how it is going,
+ * in the window's corner, or beside the window while one is open. Drag
+ * them anywhere; a press that barely moves opens that Ask. */
+export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
   const store = useReviewPanelStore();
   const anchor = useReviewPanel((state) => state.askAnchor) ?? DEFAULT_ANCHOR;
+  const size = useReviewPanel((state) => state.askSize);
+  const windowOpen = useReviewPanel((state) => state.askWindow !== null);
   const canvas = useAskCanvas();
-  const pill = useRef<HTMLButtonElement>(null);
+  const tray = useRef<HTMLDivElement>(null);
   const [live, setLive] = useState<Frame | null>(null);
 
   const press = useRef<{
@@ -332,18 +339,28 @@ export function AskPill({ presence }: { presence: AskPresence }): ReactElement {
     moved: boolean;
   } | null>(null);
 
-  // The click that ends a drag drops the pill; it does not open Ask.
+  // The click that ends a drag drops the pills; it does not open an Ask.
   const dropped = useRef(false);
 
-  const waiting = presence.tone === "waiting";
-  const measured = useElementSize(pill);
+  const measured = useElementSize(tray);
 
   const frame =
-    live ?? (measured ? placeAt(anchor, measured, canvas, PILL_EDGE) : null);
+    live ??
+    (measured
+      ? windowOpen
+        ? besideWindow(
+            windowFrame(anchor, size, canvas),
+            measured,
+            anchor,
+            canvas,
+          )
+        : placeAt(anchor, measured, canvas, PILL_EDGE)
+      : null);
 
+  // Beside the window they follow it; dragging the window moves them.
   const startPress = (event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return;
-    const rect = event.currentTarget.getBoundingClientRect();
+    if (event.button !== 0 || windowOpen || !tray.current) return;
+    const rect = tray.current.getBoundingClientRect();
 
     event.currentTarget.setPointerCapture(event.pointerId);
     press.current = {
@@ -398,61 +415,76 @@ export function AskPill({ presence }: { presence: AskPresence }): ReactElement {
 
   return (
     <AskLayer>
-      <button
-        ref={pill}
-        type="button"
+      <div
+        ref={tray}
         {...stylex.props(
-          surfaceStyles.popover,
-          styles.pill,
-          waiting && styles.pillWaiting,
-          live && styles.pillLifted,
+          styles.tray,
+          anchor.x === "left" && !windowOpen && styles.trayStart,
         )}
         style={
           frame && canvas.measured
             ? { left: frame.left, top: frame.top }
             : { visibility: "hidden" }
         }
-        aria-label={`Open Ask: ${presence.agentName}, ${presence.status}`}
-        onPointerDown={startPress}
-        onPointerMove={movePress}
-        onPointerUp={endPress}
-        onPointerCancel={() => {
-          press.current = null;
-          setLive(null);
-        }}
-        onClick={() => {
-          if (dropped.current) {
-            dropped.current = false;
-
-            return;
-          }
-
-          store.getState().restoreAsk();
-        }}
       >
-        {presence.agent ? (
-          logos[presence.agent]({ xstyle: styles.logo })
-        ) : (
-          <ChatIcon xstyle={[styles.logo, styles.askGlyph]} />
-        )}
-        <span {...stylex.props(styles.name)}>{presence.agentName}</span>
-        <span
-          {...stylex.props(
-            styles.status,
-            waiting && styles.statusWaiting,
-            presence.tone === "failed" && styles.statusFailed,
-          )}
-        >
-          {presence.status}
-        </span>
-        <Chip
-          variant="pill"
-          size="large"
-          xstyle={[styles.open, waiting && styles.openWaiting]}
-        >
-          {waiting ? "Review" : "Open"}
-        </Chip>
-      </button>
+        {asks.map(({ key, presence }) => {
+          const waiting = presence.tone === "waiting";
+
+          return (
+            <button
+              key={key}
+              type="button"
+              {...stylex.props(
+                surfaceStyles.popover,
+                styles.pill,
+                waiting && styles.pillWaiting,
+                live && styles.pillLifted,
+                windowOpen && styles.pillFixed,
+              )}
+              aria-label={`Open Ask: ${presence.agentName}, ${presence.status}`}
+              onPointerDown={startPress}
+              onPointerMove={movePress}
+              onPointerUp={endPress}
+              onPointerCancel={() => {
+                press.current = null;
+                setLive(null);
+              }}
+              onClick={() => {
+                if (dropped.current) {
+                  dropped.current = false;
+
+                  return;
+                }
+
+                store.getState().restoreAsk(key);
+              }}
+            >
+              {presence.agent ? (
+                logos[presence.agent]({ xstyle: styles.logo })
+              ) : (
+                <ChatIcon xstyle={[styles.logo, styles.askGlyph]} />
+              )}
+              <span {...stylex.props(styles.name)}>{presence.agentName}</span>
+              <span
+                {...stylex.props(
+                  styles.status,
+                  waiting && styles.statusWaiting,
+                  presence.tone === "failed" && styles.statusFailed,
+                )}
+              >
+                {presence.status}
+              </span>
+              <Chip
+                variant="pill"
+                size="large"
+                xstyle={[styles.open, waiting && styles.openWaiting]}
+              >
+                {waiting ? "Review" : "Open"}
+              </Chip>
+            </button>
+          );
+        })}
+      </div>
     </AskLayer>
   );
 }
@@ -463,6 +495,82 @@ interface Frame {
   top: number;
   width: number;
   height: number;
+}
+
+/** The window's smallest size: never smaller than the canvas allows. */
+function windowLimits(canvas: AskCanvas) {
+  return {
+    minWidth: Math.min(MIN_WIDTH, canvas.width - GAP * 2),
+    minHeight: Math.min(MIN_HEIGHT, canvas.height - GAP * 2),
+  };
+}
+
+/** Where the window is, at rest: its size kept inside the canvas, never
+ * closer than GAP to its edges. */
+function windowFrame(
+  anchor: AskAnchor,
+  size: AskSize | null,
+  canvas: AskCanvas,
+): Frame {
+  const { minWidth, minHeight } = windowLimits(canvas);
+
+  const width = clamp(
+    size?.width ?? WINDOW_WIDTH,
+    minWidth,
+    canvas.width - GAP * 2,
+  );
+
+  const height = clamp(
+    size?.height ?? WINDOW_HEIGHT,
+    minHeight,
+    canvas.height - GAP * 2,
+  );
+
+  return placeAt(anchor, { width, height }, canvas, GAP);
+}
+
+/** Where pills of this size go beside the window, clear of any docked
+ * panel: on its inner side or its outer one, level with its anchored edge;
+ * where neither has room, above or below it, at its anchored side. */
+function besideWindow(
+  window: Frame,
+  size: { width: number; height: number },
+  anchor: AskAnchor,
+  canvas: AskCanvas,
+): Frame {
+  const freeWidth = canvas.width - canvas.right;
+  const freeHeight = canvas.height - canvas.bottom;
+  const before = window.left - PILL_GAP - size.width;
+  const after = window.left + window.width + PILL_GAP;
+  const fitsBefore = before >= PILL_EDGE;
+  const fitsAfter = after + size.width <= freeWidth - PILL_EDGE;
+  let left: number;
+  let top: number;
+
+  if (fitsBefore || fitsAfter) {
+    left = fitsBefore && (anchor.x === "right" || !fitsAfter) ? before : after;
+    top =
+      anchor.y === "bottom"
+        ? window.top + window.height - size.height
+        : window.top;
+  } else {
+    const above = window.top - PILL_GAP - size.height;
+    const below = window.top + window.height + PILL_GAP;
+    const fitsAbove = above >= PILL_EDGE;
+    const fitsBelow = below + size.height <= freeHeight - PILL_EDGE;
+
+    left =
+      anchor.x === "right"
+        ? window.left + window.width - size.width
+        : window.left;
+    top = fitsBelow && (anchor.y === "top" || !fitsAbove) ? below : above;
+  }
+
+  return {
+    left: clamp(left, PILL_EDGE, canvas.width - size.width - PILL_EDGE),
+    top: clamp(top, PILL_EDGE, canvas.height - size.height - PILL_EDGE),
+    ...size,
+  };
 }
 
 /** Where a window or pill of this size goes for the anchor, kept `edge`
@@ -730,12 +838,23 @@ const styles = stylex.create({
     minHeight: 0,
     overflow: "hidden",
   },
-  pill: {
+  // Right-aligned, as the corner it starts in.
+  tray: {
     position: "fixed",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: `${PILL_GAP}px`,
+    maxWidth: `calc(100% - ${GAP * 2}px)`,
+  },
+  trayStart: {
+    alignItems: "flex-start",
+  },
+  pill: {
     display: "flex",
     alignItems: "center",
     gap: "10px",
-    maxWidth: `calc(100% - ${GAP * 2}px)`,
+    maxWidth: "100%",
     padding: "6px 6px 6px 12px",
     borderRadius: radius.pill,
     fontFamily: tokens.fontMono,
@@ -744,6 +863,10 @@ const styles = stylex.create({
     userSelect: "none",
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: { default: null, ":focus-visible": "1px" },
+  },
+  // Beside the window, it moves with the window.
+  pillFixed: {
+    cursor: "pointer",
   },
   // While it is dragged, it lifts to the window's shadow.
   pillLifted: {

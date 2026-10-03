@@ -11,6 +11,8 @@ import type {
   AskAnchor,
   AskPanel,
   AskPlace,
+  AskPresence,
+  AskReport,
   AskShown,
   AskSize,
   AskView,
@@ -23,12 +25,16 @@ import type { AgentTraceStorage } from "./use-agent-trace";
 export interface ReviewPanelState {
   /** The peek in the side panel. */
   active: PeekPanel | null;
-  /** The open conversation, wherever it shows. */
-  ask: AskPanel | null;
+  /** The open Asks, oldest first, wherever each shows. */
+  asks: AskPanel[];
+  /** The Ask in the side panel, if any. */
+  askDocked: number | null;
+  /** The Ask in the window over the canvas, if any. */
+  askWindow: number | null;
+  /** Where the next Ask opens: where the last one was shown. */
   askPlace: AskPlace;
-  askMinimized: boolean;
-  /** Where the window and the pill were dragged to; until then, the bottom
-   * right. */
+  /** Where the window and the pills were dragged to; until then, the
+   * bottom right. */
   askAnchor: AskAnchor | null;
   /** How big the window was made; until then, as wide as the docked panel. */
   askSize: AskSize | null;
@@ -90,19 +96,36 @@ export interface ReviewNavigationState {
 export interface ReviewPanelActions {
   suppressMotion: () => void;
   openPeek: (panel: PeekPanel) => void;
-  openAsk: (selection: AgentSelection, agent?: AskAgentId) => void;
-  openAskView: (view: AskView) => void;
+  openAsk: (
+    selection: AgentSelection,
+    agent?: AskAgentId,
+    options?: AskOpenOptions,
+  ) => void;
+  /** Shows a view where Asks open, or the Ask `from` is in. One already
+   * open comes forward instead. A view takes the place of the Ask there,
+   * unless that one's agent is working: then it opens beside it. */
+  openAskView: (view: AskView, options?: AskOpenOptions) => void;
+  /** An open Ask says what its conversation is doing. */
+  reportAsk: (key: number, report: AskReport) => void;
   /** Closes the peek; a docked Ask it covered comes back. */
   close: () => void;
-  closeAsk: () => void;
-  popOutAsk: () => void;
-  /** Puts Ask back in the side panel, in place of any peek. */
-  dockAsk: () => void;
-  minimizeAsk: () => void;
-  /** The pill opens Ask in its window. */
-  restoreAsk: () => void;
-  /** Moves the window and the pill together, resizing the window too. */
+  closeAsk: (key: number) => void;
+  popOutAsk: (key: number) => void;
+  /** Puts an Ask in the side panel, in place of any peek. */
+  dockAsk: (key: number) => void;
+  minimizeAsk: (key: number) => void;
+  /** A pill opens its Ask in the window. */
+  restoreAsk: (key: number) => void;
+  /** Moves the window and the pills together, resizing the window too. */
   placeAsk: (anchor: AskAnchor, size?: AskSize) => void;
+}
+
+export interface AskOpenOptions {
+  /** The Ask asking, whose place the view opens in. */
+  from?: number;
+  /** Takes that Ask's place even while its agent works, as when its
+   * conversation was deleted. */
+  replace?: boolean;
 }
 
 export interface ReviewNavigationActions {
@@ -155,22 +178,59 @@ export function createReviewPanelStore({
   overlayTour = null,
 }: ReviewNavigationRestore = {}) {
   const initialView = availableViews.includes(view) ? view : "review";
+  let nextAskKey = 0;
 
-  // Asking shows Ask where it was; docked, it takes the peek's place.
+  // A view opens where Asks open, or where the Ask that asked is; docked, it
+  // takes the peek's place. One already open comes forward instead.
   const showAsk = (
-    state: ReviewPanelState,
+    state: ReviewPanelStoreState,
     view: AskView,
-  ): Partial<ReviewPanelState> => ({
-    ask: { kind: "ask", key: state.ask ? state.ask.key + 1 : 0, view },
-    askMinimized: false,
-    active: state.askPlace === "docked" ? null : state.active,
-  });
+    { from, replace = false }: AskOpenOptions,
+  ): Partial<ReviewPanelState> => {
+    // The Ask asking for its own view wants it afresh, as to reconnect.
+    const open = state.asks.find(
+      (ask) => ask.key !== from && showsView(ask, view),
+    );
+
+    if (open)
+      return {
+        ...showAt(state, open.key, placeOf(state, open.key) ?? state.askPlace),
+        motion: "live",
+      };
+
+    const place =
+      (from !== undefined && placeOf(state, from)) || state.askPlace;
+
+    const there = place === "docked" ? state.askDocked : state.askWindow;
+    const occupant = state.asks.find((ask) => ask.key === there);
+    const ask = newAsk(nextAskKey++, view);
+
+    return {
+      // An Ask whose agent works is minimized, never replaced.
+      asks:
+        occupant && (!occupant.busy || (replace && occupant.key === from))
+          ? state.asks.map((each) => (each === occupant ? ask : each))
+          : [...state.asks, ask],
+      ...(place === "docked"
+        ? { askDocked: ask.key, active: null }
+        : { askWindow: ask.key }),
+      askPlace: place,
+      // Switching views inside an open panel is not a new panel.
+      motion:
+        place === "docked" &&
+        there !== null &&
+        askShown(state, there) === "panel"
+          ? "restored"
+          : "live",
+    };
+  };
 
   return createStore<ReviewPanelStoreState>()((set) => ({
     active: null,
-    ask: null,
+    asks: [],
+    askDocked: null,
+    askWindow: null,
     askPlace: "docked",
-    askMinimized: false,
     askAnchor: null,
     askSize: null,
     motion: "live",
@@ -184,29 +244,38 @@ export function createReviewPanelStore({
     overlayTour: initialView === "review" ? overlayTour : null,
     suppressMotion: () => set({ motion: "restored" }),
     openPeek: (panel) => set({ active: panel, motion: "live" }),
-    openAsk: (selection, agent) =>
+    openAsk: (selection, agent, options = {}) =>
       set((state) => ({
-        ...showAsk(state, { type: "new", selection, agent }),
+        ...showAsk(state, { type: "new", selection, agent }, options),
         motion: "live",
       })),
-    openAskView: (view) =>
-      set((state) => ({
-        ...showAsk(state, view),
-        // Switching views inside an open panel is not a new panel.
-        motion: askShown(state) === "panel" ? "restored" : "live",
-      })),
-    close: () => set({ active: null, motion: "live" }),
-    closeAsk: () => set({ ask: null, askMinimized: false }),
-    popOutAsk: () => set({ askPlace: "window", askMinimized: false }),
-    dockAsk: () =>
-      set({
-        askPlace: "docked",
-        askMinimized: false,
-        active: null,
-        motion: "live",
+    openAskView: (view, options = {}) =>
+      set((state) => showAsk(state, view, options)),
+    reportAsk: (key, report) =>
+      set((state) => {
+        const reporting = state.asks.find((ask) => ask.key === key);
+
+        return reporting && !sameReport(reporting, report)
+          ? {
+              asks: state.asks.map((ask) =>
+                ask === reporting ? { ...ask, ...report } : ask,
+              ),
+            }
+          : state;
       }),
-    minimizeAsk: () => set({ askMinimized: true }),
-    restoreAsk: () => set({ askPlace: "window", askMinimized: false }),
+    close: () => set({ active: null, motion: "live" }),
+    closeAsk: (key) =>
+      set((state) => ({
+        asks: state.asks.filter((ask) => ask.key !== key),
+        ...unplaced(state, key),
+      })),
+    popOutAsk: (key) =>
+      set((state) => ({ ...showAt(state, key, "window"), motion: "live" })),
+    dockAsk: (key) =>
+      set((state) => ({ ...showAt(state, key, "docked"), motion: "live" })),
+    minimizeAsk: (key) => set((state) => unplaced(state, key)),
+    restoreAsk: (key) =>
+      set((state) => ({ ...showAt(state, key, "window"), motion: "live" })),
     placeAsk: (askAnchor, askSize) =>
       set(askSize ? { askAnchor, askSize } : { askAnchor }),
     showView: (next) => set((state) => viewTransition(state, next)),
@@ -287,16 +356,121 @@ export function createReviewPanelStore({
   }));
 }
 
-export function askShown(
-  state: ReviewPanelState & Pick<ReviewNavigationState, "overlayTour">,
-): AskShown | null {
-  if (!state.ask) return null;
+type AskShownState = ReviewPanelState &
+  Pick<ReviewNavigationState, "overlayTour">;
 
-  if (state.askMinimized) return "pill";
+/** How the Ask with this key shows now, if it is open. */
+export function askShown(state: AskShownState, key: number): AskShown | null {
+  if (!state.asks.some((ask) => ask.key === key)) return null;
 
-  if (state.askPlace === "window") return "window";
+  if (key === state.askWindow) return "window";
+
+  if (key !== state.askDocked) return "pill";
 
   return state.active || state.overlayTour ? "pill" : "panel";
+}
+
+/** Whether an Ask fills the side panel. */
+export function askDockedShown(state: AskShownState): boolean {
+  return (
+    state.askDocked !== null && askShown(state, state.askDocked) === "panel"
+  );
+}
+
+/** The Asks that show as pills, oldest first. */
+export function askPills(state: AskShownState): AskPanel[] {
+  return state.asks.filter((ask) => askShown(state, ask.key) === "pill");
+}
+
+const historyPresence: AskPresence = {
+  agentName: "Ask",
+  status: "Conversations",
+  tone: "quiet",
+};
+
+function newAsk(key: number, view: AskView): AskPanel {
+  return {
+    kind: "ask",
+    key,
+    view,
+    threadId: view.type === "saved" ? view.threadId : null,
+    busy: false,
+    presence:
+      view.type === "history"
+        ? historyPresence
+        : {
+            agent: view.agent,
+            agentName: "Ask",
+            status: view.type === "saved" ? "Connecting…" : "New question",
+            tone: "quiet",
+          },
+  };
+}
+
+/** Whether an open Ask already shows this view: the same conversation, or
+ * the same list of them. */
+function showsView(ask: AskPanel, view: AskView): boolean {
+  if (view.type === "saved") return ask.threadId === view.threadId;
+
+  if (view.type !== "history" || ask.view.type !== "history") return false;
+
+  return (
+    JSON.stringify(ask.view.passage ?? null) ===
+    JSON.stringify(view.passage ?? null)
+  );
+}
+
+function placeOf(state: ReviewPanelState, key: number): AskPlace | null {
+  if (key === state.askDocked) return "docked";
+
+  if (key === state.askWindow) return "window";
+
+  return null;
+}
+
+/** Shows an open Ask in a place; the one there becomes a pill. Docked, it
+ * takes the peek's place. */
+function showAt(
+  state: ReviewPanelState,
+  key: number,
+  place: AskPlace,
+): Partial<ReviewPanelState> {
+  if (!state.asks.some((ask) => ask.key === key)) return {};
+
+  return place === "docked"
+    ? {
+        askDocked: key,
+        askWindow: state.askWindow === key ? null : state.askWindow,
+        askPlace: place,
+        active: null,
+      }
+    : {
+        askWindow: key,
+        askDocked: state.askDocked === key ? null : state.askDocked,
+        askPlace: place,
+      };
+}
+
+/** Takes an Ask out of the side panel or the window, leaving its pill. */
+function unplaced(
+  state: ReviewPanelState,
+  key: number,
+): Partial<ReviewPanelState> {
+  return {
+    askDocked: state.askDocked === key ? null : state.askDocked,
+    askWindow: state.askWindow === key ? null : state.askWindow,
+  };
+}
+
+function sameReport(ask: AskPanel, report: AskReport) {
+  return (
+    ask.threadId === report.threadId &&
+    ask.busy === report.busy &&
+    ask.presence.agent === report.presence.agent &&
+    ask.presence.agentName === report.presence.agentName &&
+    ask.presence.status === report.presence.status &&
+    ask.presence.tone === report.presence.tone
+  );
 }
 
 function viewTransition(

@@ -75,29 +75,31 @@ export interface AskPresence {
   tone: "quiet" | "waiting" | "failed";
 }
 
-/** What an open Ask says about itself as its conversation goes. */
-export interface AskReport {
-  /** Its agent is working: closing the Ask stops it, so closing asks
-   * first. */
-  busy: boolean;
-  presence: AskPresence;
-}
-
-/** Conversations with a local agent about selections. Each view change
- * remounts the panel through `key`. */
+/** One open Ask: a conversation with a local agent about a selection, or
+ * the list of saved ones. Each view change remounts it through `key`. */
 export interface AskPanel {
   kind: "ask";
   key: number;
   view: AskView;
+  /** The conversation it shows, once it has one. */
+  threadId: string | null;
+  /** Its agent is working: closing it stops the agent, so it asks first,
+   * and a new question opens beside it rather than in its place. */
+  busy: boolean;
+  presence: AskPresence;
 }
 
+/** What an open Ask says about itself as its conversation goes. */
+export type AskReport = Pick<AskPanel, "threadId" | "busy" | "presence">;
+
 /** Where Ask shows: in the side panel, or in a window over the canvas that
- * stays above peeks, fullscreen diagrams and every view. */
+ * stays above peeks, fullscreen diagrams and every view. One Ask at most
+ * shows in each; the others are pills. */
 export type AskPlace = "docked" | "window";
 
-/** How Ask shows now: in the side panel, in its window, or as a pill that
- * says what the agent is doing. A docked Ask that a peek or a fullscreen
- * diagram covers shows as the pill. */
+/** How an Ask shows now: in the side panel, in the window, or as a pill
+ * that says what its agent is doing. A docked Ask that a peek or a
+ * fullscreen diagram covers shows as a pill. */
 export type AskShown = "panel" | "window" | "pill";
 
 /** Where Ask floats, shared by its window and its pill: a corner of the

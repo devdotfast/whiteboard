@@ -19,6 +19,14 @@ import {
 
 const ReviewPanelContext = createContext<ReviewPanelStore | null>(null);
 
+/** The open Ask a component renders in: what it opens, opens there. */
+export const AskKeyContext = createContext<number | null>(null);
+
+/** The key of the open Ask this renders in, for `AskOpenOptions.from`. */
+export function useAskKey(): number | undefined {
+  return useContext(AskKeyContext) ?? undefined;
+}
+
 const fallbackReviewPanelStore = createReviewPanelStore();
 
 export function ReviewPanelProvider({
