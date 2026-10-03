@@ -142,7 +142,8 @@ it("asks the chosen agent, streams its answer, relays a decision, and closes the
       )!;
 
     // Only an installed agent can be chosen, so Codex answers.
-    expect(picker().textContent).toBe("Codex");
+    expect(header.textContent).toBe("Codex");
+    expect(picker()).toBeNull();
 
     await act(async () => {
       const setValue = Object.getOwnPropertyDescriptor(

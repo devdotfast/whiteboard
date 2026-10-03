@@ -406,7 +406,10 @@ export function AskAgentPicker({
   const dismiss = useMenuClose(setOpen, trigger);
   const chosen = agents?.find((candidate) => candidate.id === agent);
 
-  if (locked) {
+  if (
+    locked ||
+    agents?.filter((candidate) => candidate.available).length === 1
+  ) {
     return (
       <span {...stylex.props(styles.inline)}>
         {agent ? logos[agent]({}) : null}

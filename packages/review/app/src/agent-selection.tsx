@@ -213,6 +213,9 @@ export function AgentSelectionProvider({
 
   const askAgent = askAgents && preferredAskAgent(session, askAgents);
 
+  const canChooseAgent =
+    (askAgents?.filter((candidate) => candidate.available).length ?? 0) > 1;
+
   const ask = useCallback(
     (agent?: AskAgentId) => {
       if (!selection || !panels) return;
@@ -320,19 +323,21 @@ export function AgentSelectionProvider({
                             <CommandKeyIcon />L
                           </kbd>
                         </Button>
-                        <IconButton
-                          aria-label="Ask another agent"
-                          aria-haspopup="menu"
-                          aria-expanded={choosing}
-                          onClick={() => setChoosing((value) => !value)}
-                        >
-                          <ChevronDownIcon />
-                        </IconButton>
+                        {canChooseAgent ? (
+                          <IconButton
+                            aria-label="Ask another agent"
+                            aria-haspopup="menu"
+                            aria-expanded={choosing}
+                            onClick={() => setChoosing((value) => !value)}
+                          >
+                            <ChevronDownIcon />
+                          </IconButton>
+                        ) : null}
                         <span
                           {...stylex.props(styles.divider)}
                           aria-hidden="true"
                         />
-                        {choosing ? (
+                        {canChooseAgent && choosing ? (
                           <AskAgentMenu
                             agents={askAgents}
                             current={askAgent.id}
