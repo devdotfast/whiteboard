@@ -87,7 +87,7 @@ const LANGUAGE_CONTEXT_TIMEOUT_MS = 120_000;
 
 /** Routes that may wait on preparing a checkout or launching an agent. */
 const SLOW_ROUTES =
-  /^(language-context|ask|ask\/agents\/[^/]+\/offer|ask\/[^/]+\/open|ask\/mentions)$/;
+  /^(language-context|ask|ask\/agents\/[^/]+\/offer|ask\/[^/]+\/(open|choice|permissions)|ask\/mentions)$/;
 
 /** Routes whose answers are read whole and refused if they name a path. */
 const WHOLE_BODY_ROUTES =
