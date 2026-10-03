@@ -17,8 +17,7 @@ const runId = process.env.WB_TEST_RUN ?? `e2e${Date.now().toString(36)}`;
 const runDir = `/tmp/wbt.${runId}`;
 
 // Hosts a user brought up (`aws-up`) in the WB_TEST_RUN run, never given Whiteboard: only steps 1 and 12 run, and the run is kept.
-const prepared =
-  process.env.REVIEW_E2E_REMOTE_HOSTS?.split(",").filter(Boolean);
+const prepared = process.env.REVIEW_E2E_REMOTE_HOSTS?.split(",").filter(Boolean);
 
 // The containers, by role. On an Apple-silicon Mac `arm` is native and `fresh` runs under emulation, so both targets install.
 const CONTAINERS = {
@@ -271,9 +270,7 @@ async function mainLog(ctx) {
   );
 
   return (
-    await Promise.all(
-      files.map((file) => readFile(path.join(logs, file), "utf8")),
-    )
+    await Promise.all(files.map((file) => readFile(path.join(logs, file), "utf8")))
   ).join("\n");
 }
 
@@ -585,10 +582,7 @@ async function steps(ctx, until, watch, timings, manifestPath) {
 
   timings.sealed = third.ms;
 
-  for (const step of [
-    "Installing Node 24",
-    "Installing the Whiteboard package",
-  ])
+  for (const step of ["Installing Node 24", "Installing the Whiteboard package"])
     assert.ok(
       third.steps.includes(`${step} (uploaded from this computer).`),
       `sealed's steps: ${third.steps}`,
@@ -599,10 +593,7 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   );
   // diffr comes from GitHub, so a host without a route out has none: structural diff is off there.
   assert.equal(
-    await onRemote(
-      sealed,
-      "ls ~/.dev/review-tools/diffr-fetch 2>/dev/null || true",
-    ),
+    await onRemote(sealed, "ls ~/.dev/review-tools/diffr-fetch 2>/dev/null || true"),
     "",
   );
   ctx.check(
@@ -709,10 +700,7 @@ async function steps(ctx, until, watch, timings, manifestPath) {
     "",
   );
   assert.equal(
-    await onRemote(
-      fresh2,
-      `ls ${ROOT}/versions; ls -d ${ROOT}/install.lock* 2>/dev/null || true`,
-    ),
+    await onRemote(fresh2, `ls ${ROOT}/versions; ls -d ${ROOT}/install.lock* 2>/dev/null || true`),
     version,
   );
   assert.equal((await promptsFor(ctx, fresh2)).length, 1);
@@ -836,7 +824,8 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   await ctx.restartDesktop();
   await watchPage(ctx.page);
   await until(
-    async () => !(await desktopSsh()).some(([pid]) => sshBefore.includes(pid)),
+    async () =>
+      !(await desktopSsh()).some(([pid]) => sshBefore.includes(pid)),
     "the previous Desktop's ssh to end",
     30_000,
   );
@@ -868,10 +857,7 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   assert.equal(newFreshServer.version, next);
   assert.notEqual(newFreshServer.serverPid, oldFreshServer.serverPid);
   assert.match(
-    await onRemote(
-      fresh,
-      `cat /proc/${newFreshServer.serverPid}/cmdline | tr '\\0' ' '`,
-    ),
+    await onRemote(fresh, `cat /proc/${newFreshServer.serverPid}/cmdline | tr '\\0' ' '`),
     new RegExp(`/versions/${next.replaceAll(".", "\\.")}/`),
   );
   await homeRow(ctx, title);
@@ -903,10 +889,7 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   await onRemote(node, `kill -0 ${userServer.serverPid}`);
   assert.equal(
     (
-      await onRemote(
-        node,
-        `cat /proc/${userServer.serverPid}/cmdline | tr '\\0' ' '`,
-      )
+      await onRemote(node, `cat /proc/${userServer.serverPid}/cmdline | tr '\\0' ' '`)
     ).includes(`/versions/${version}/`),
     true,
   );
