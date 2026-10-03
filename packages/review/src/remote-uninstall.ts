@@ -23,10 +23,9 @@ import {
 } from "./remote-language-server";
 import { DEV_REVIEW_HOME_ENV } from "./review-home-paths";
 import {
-  readReviewServerDiscovery,
-  readReviewServerHealth,
-} from "./server-discovery";
-import { stopBackgroundServer } from "./server/background-server";
+  recordedBackgroundServer,
+  stopBackgroundServer,
+} from "./server/background-server";
 
 /** An install refreshes its lock at least this often; an older one is stale. */
 const LOCK_STALE_MS = 15 * 60_000;
@@ -113,17 +112,12 @@ export async function remoteUninstall(input: {
   let removedInstall = false;
 
   try {
-    const discovery = await readReviewServerDiscovery(input.stateDir).catch(
-      () => null,
-    );
+    const server = await recordedBackgroundServer(input.stateDir);
 
-    const health = discovery && (await readReviewServerHealth(discovery));
-
-    // Only the recorded instance's own answer proves the pid is still its.
-    const recorded =
-      discovery && health?.serverPid === discovery.serverPid
-        ? { ...discovery, version: health.version ?? null }
-        : undefined;
+    const recorded = server && {
+      ...server.discovery,
+      version: server.health.version ?? null,
+    };
 
     const stoppable =
       recorded && recorded.startedBy !== "user"

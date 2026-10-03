@@ -81,6 +81,16 @@ export async function headlessServerOwner(stateDir: string) {
   return liveLockOwner(headlessServerLockPath(resolved));
 }
 
+/** The recorded server and its `/health`, when that answer proves the pid is still its. */
+export async function recordedBackgroundServer(stateDir: string) {
+  const discovery = await readReviewServerDiscovery(stateDir).catch(() => null);
+  const health = discovery && (await readReviewServerHealth(discovery));
+
+  return discovery && health?.serverPid === discovery.serverPid
+    ? { discovery, health }
+    : undefined;
+}
+
 /**
  * SIGTERMs a server the CLI or Desktop started and waits for it to exit;
  * one still there after 10 s, hung or paused, is SIGKILLed. The caller has

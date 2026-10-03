@@ -18,14 +18,11 @@ import {
   ensureRemoteLanguageServer,
 } from "./remote-language-server";
 import { missingToolchains } from "./remote-toolchains";
-import {
-  readReviewServerDiscovery,
-  readReviewServerHealth,
-  serverNotReady,
-} from "./server-discovery";
+import { readReviewServerHealth, serverNotReady } from "./server-discovery";
 import {
   type EnsureBackgroundServerInput,
   ensureBackgroundServer,
+  recordedBackgroundServer,
   stopBackgroundServer,
 } from "./server/background-server";
 import { diffrExecutable, fetchedDiffrPath } from "./server/structural-diff";
@@ -164,11 +161,10 @@ const newer = (running: string, own: string) =>
 
 /** The healthy server in `stateDir` when it reports a version other than `version`. */
 async function otherVersionRunning(stateDir: string, version: string) {
-  const discovery = await readReviewServerDiscovery(stateDir).catch(() => null);
-  const health = discovery && (await readReviewServerHealth(discovery));
+  const recorded = await recordedBackgroundServer(stateDir);
 
-  // Only the recorded instance's own answer proves the pid is still its.
-  if (!health || health.serverPid !== discovery.serverPid) return undefined;
+  if (!recorded) return undefined;
+  const { discovery, health } = recorded;
   const running = health.version ?? "unknown";
 
   return running === version
