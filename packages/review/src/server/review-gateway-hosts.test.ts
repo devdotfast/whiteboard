@@ -432,7 +432,7 @@ it("decides the duplicate by the order of the setting", async () => {
   expect(gateway.serving(serverId)?.alias).toBe("wb-c");
 });
 
-it("checks a host in backoff at once when the setting changes", async () => {
+it("leaves a host in backoff alone when only another host changes, and checks it at once when its own entry does", async () => {
   let failing = true;
   let checks = 0;
 
@@ -458,8 +458,19 @@ it("checks a host in backoff at once when the setting changes", async () => {
     .poll(() => checks, { timeout: 10_000 })
     .toBeGreaterThanOrEqual(4);
   expect(gateway.states()[0]?.state).toBe("offline");
+  const before = checks;
 
   failing = false;
+  gateway.set([
+    { alias: "devbox", endpoint: fake.endpoint },
+    { alias: "other" },
+  ]);
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  expect(checks).toBe(before);
+  expect(gateway.states()[0]?.state).toBe("offline");
+
+  gateway.set([{ alias: "devbox" }, { alias: "other" }]);
   gateway.set([
     { alias: "devbox", endpoint: fake.endpoint },
     { alias: "other" },

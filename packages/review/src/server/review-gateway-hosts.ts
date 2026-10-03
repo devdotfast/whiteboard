@@ -436,10 +436,11 @@ export function createGatewayHosts(input: {
   }
 
   return {
-    /** The hosts in the setting's order. A change checks every host at once. */
+    /** The hosts in the setting's order. A host whose entry changed is checked at once. */
     set(list: ReviewGatewayHost[]) {
       const previous = new Map(hosts.map((host) => [host.alias, host]));
       const next: Host[] = [];
+      const changed: Host[] = [];
 
       for (const given of list) {
         if (next.some((host) => host.alias === given.alias)) continue;
@@ -465,18 +466,21 @@ export function createGatewayHosts(input: {
             ])
         ) {
           previous.delete(given.alias);
-          current.retryMs = FIRST_RETRY_MS;
           current.languageFeatures = given.languageFeatures;
           current.languageFeaturesDetail = given.languageFeaturesDetail;
           current.languageGroups = given.languageGroups;
           next.push(current);
-        } else next.push(create(given));
+        } else {
+          const host = create(given);
+          next.push(host);
+          changed.push(host);
+        }
       }
 
       for (const gone of previous.values()) dispose(gone);
       hosts = next;
 
-      for (const host of hosts) void check(host);
+      for (const host of changed) void check(host);
       report();
     },
     states: () => hosts.map(stateOf),
