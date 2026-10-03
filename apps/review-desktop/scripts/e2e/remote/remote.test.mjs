@@ -102,7 +102,7 @@ test("the fake OpenCode answers a prompt with a chunk and a tool call on f.ts", 
   const answer = await next();
 
   assert.equal(chunk.params.update.sessionUpdate, "agent_message_chunk");
-  assert.equal(chunk.params.update.content.text, "You asked: why?. See f.ts.");
+  assert.equal(chunk.params.update.content.text, "You asked: why?. See `f.ts`.");
   assert.equal(toolCall.params.update.sessionUpdate, "tool_call");
   assert.deepEqual(toolCall.params.update.locations, [
     { path: "/work/repo/f.ts", line: 1 },

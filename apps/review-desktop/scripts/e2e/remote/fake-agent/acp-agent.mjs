@@ -52,7 +52,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         sessionId,
         update: {
           sessionUpdate: "agent_message_chunk",
-          content: { type: "text", text: `You asked: ${question}. See f.ts.` },
+          content: { type: "text", text: `You asked: ${question}. See \`f.ts\`.` },
         },
       });
       notify("session/update", {

@@ -1,7 +1,9 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
+import { existsSync } from "node:fs";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import { createServer } from "node:http";
+import path from "node:path";
 
 import { isObjectValue } from "@dev.fast/json";
 import {
@@ -9,6 +11,13 @@ import {
   withFileLock,
   writePrivateJsonAtomic,
 } from "@dev.fast/trace-core";
+import {
+  type AskAgentLauncher,
+  detectAskAgents,
+  launchAskAgent,
+} from "@review/ask/agents.js";
+import { AskThreads, cliAskTools } from "@review/ask/threads.js";
+import { findReviewPackageRoot } from "@review/package-paths.js";
 import { createReviewApi } from "@review/review-api/http.js";
 import { openReviewProfile } from "@review/review-api/profile.js";
 import {
@@ -39,6 +48,7 @@ interface HeadlessServerInput {
   /** The CLI's instance, already on the `headless` surface. */
   telemetry?: Pick<ReviewTelemetryCapture, "captureUiEvent">;
   onReady(discovery: ReviewServerDiscovery): void;
+  launchAskAgent?: AskAgentLauncher;
 }
 
 /** Another server holds the profile's lock. */
@@ -111,6 +121,20 @@ async function serve(input: HeadlessServerInput) {
 
   const callbacks = relayReviewCallbacks(relay, input.softwareMapEnabled);
 
+  const cliPath = path.join(
+    findReviewPackageRoot(import.meta.url),
+    "dist",
+    "cli.js",
+  );
+
+  const askThreads = new AskThreads(
+    input.launchAskAgent ?? launchAskAgent,
+    cliAskTools(() => (existsSync(cliPath) ? cliPath : undefined), {
+      name: "DEV_REVIEW_SERVER_DIR",
+      value: input.stateDir,
+    }),
+  );
+
   const api = createReviewApi(
     local.store,
     local.data,
@@ -121,6 +145,8 @@ async function serve(input: HeadlessServerInput) {
     () => false,
     () => traceMachineEnabled(),
     () => ({ key: "headless", home: input.stateDir }),
+    undefined,
+    { threads: askThreads, agents: () => detectAskAgents() },
   );
 
   mountSharingPublisher(api, local.store, local.data);
@@ -151,6 +177,8 @@ async function serve(input: HeadlessServerInput) {
         input.signal.addEventListener("abort", () => resolve(), { once: true });
     });
   } finally {
+    askThreads.closeAll();
+
     // Watch streams may live forever. Drain ordinary requests, then bound shutdown.
     const forceClose = setTimeout(() => server.closeAllConnections(), 5_000);
     forceClose.unref();
