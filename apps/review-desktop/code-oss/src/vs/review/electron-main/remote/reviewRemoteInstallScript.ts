@@ -226,7 +226,7 @@ sum=\${sum%% *}
 [ "$sum" = ${input.sha512} ] || { rm -rf "$p"; say MISMATCH "$sum"; exit 3; }
 PATH=${shellQuote(nodeBin)}:$PATH
 export PATH
-guard ${shellQuote(input.npm)} install --ignore-scripts --no-audit --no-fund --no-update-notifier --loglevel=error --cache "$p/.npm-cache" --prefix "$p"${registry} "$f" > "$p/.npm.log" 2>&1 || {
+guard ${shellQuote(input.npm)} install --ignore-scripts --omit=optional --no-audit --no-fund --no-update-notifier --loglevel=error --cache "$p/.npm-cache" --prefix "$p"${registry} "$f" > "$p/.npm.log" 2>&1 || {
 	tail -n 15 "$p/.npm.log" >&3
 	rm -rf "$p"
 	fail npm could not install the package
