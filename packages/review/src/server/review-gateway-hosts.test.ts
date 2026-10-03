@@ -569,6 +569,41 @@ it("a 401 from a host asks Desktop once to attach again", async () => {
   expect(restarted).toEqual(["devbox"]);
 });
 
+it("a server that stops answering /health is attached again after three timeouts in a row", async () => {
+  let hanging = false;
+
+  const fake = await startFake({
+    version,
+    handle: (request) => hanging && request.url === "/health",
+  });
+
+  const restarted: string[] = [];
+
+  const gateway = createGatewayHosts({
+    version,
+    restarted: (alias) => restarted.push(alias),
+  });
+
+  closes.push(() => gateway.close());
+  gateway.set([{ alias: "devbox", endpoint: fake.endpoint }]);
+  await expect.poll(() => gateway.states()[0]?.state).toBe("online");
+
+  hanging = true;
+  gateway.failed(gateway.online()[0]!, "test");
+
+  await expect
+    .poll(() => gateway.states()[0]?.detail, { timeout: 5_000 })
+    .toBe("devbox is offline: it did not answer within 3 seconds.");
+  expect(restarted).toEqual([]);
+
+  await expect.poll(() => restarted, { timeout: 20_000 }).toEqual(["devbox"]);
+  expect(gateway.states()[0]).toMatchObject({
+    state: "offline",
+    detail:
+      "devbox is offline: it did not answer within 3 seconds, 3 times in a row; attaching again.",
+  });
+}, 30_000);
+
 it("a server gone from behind a working forward asks Desktop to attach again", async () => {
   const a = await startRemote(path.join(root, "a"));
   const restarted: string[] = [];

@@ -119,7 +119,9 @@ When Desktop updates, it installs its new version beside the old one without
 asking again, and restarts the review server it started on the new version.
 Your reviews stay. Desktop keeps two versions on a host, and any older one
 that a running process still uses; it removes the rest after the next
-install.
+install. If the new version fails to install but a `whiteboard` of that version
+on `PATH` attaches, the host is `online` and Settings does not show the
+failure; the next connection tries the install again.
 
 Desktop does not stop a review server that you started yourself
 (`whiteboard server start`). If that server runs another version, the host is
@@ -199,7 +201,7 @@ remote changes, and Desktop keeps your answer.
 | `connecting` | Whiteboard is opening the SSH connection and starting the review server. | Wait. |
 | `installing` | Desktop is installing its version there; the detail names the step. | Wait. |
 | `online` | Connected. The host's reviews are listed and open. | Nothing. |
-| `offline` | The connection is up, but the review server did not answer. Whiteboard checks every 10 seconds, so a host that hangs shows `offline` within about 15 seconds. | It returns by itself when the server answers. If it stays offline, check the remote's load. |
+| `offline` | The connection is up, but the review server did not answer. Whiteboard checks every 10 seconds, so a host that hangs shows `offline` within about 15 seconds. | It returns by itself when the server answers. After three checks in a row without an answer, Whiteboard attaches again; if the server is hung, run `whiteboard server stop` on the remote and click **Retry**. |
 | `unreachable` | `ssh` could not connect, or the connection ended. | Whiteboard tries again by itself, waiting 1 to 60 seconds between tries; **Retry** tries now. Check that `ssh <alias>` works in a terminal. |
 | `auth-failed` | The login was refused, a prompt was cancelled, or the host key did not match. | Fix the login, then click **Retry**. Whiteboard does not retry this by itself. |
 | `not-installed` | You declined the install, `review.remote.install` is `never` and `whiteboard` was not found, or an install failed (the detail says where). | After **Don't install**, click **Install**; otherwise install by hand with the command that Settings shows and click **Retry**. Whiteboard does not retry this by itself. |
