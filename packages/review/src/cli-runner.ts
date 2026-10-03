@@ -975,6 +975,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         onFailure: (error) => {
           activeCause = error;
         },
+        onDesktop: (appVersion) => telemetry.setDesktopVersion(appVersion),
         onToolCall: (call) =>
           attemptTelemetry(() => telemetry.captureToolCalled(call)),
       });

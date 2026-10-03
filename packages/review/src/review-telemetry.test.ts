@@ -659,6 +659,42 @@ describe("ReviewTelemetry", () => {
     },
   );
 
+  it("reports the Desktop release a CLI process reached as app_version", async () => {
+    const { events, rootPath, telemetry } = createTelemetry({ env: {} });
+
+    cleanupPaths.push(rootPath);
+    telemetry.setDesktopVersion("0.2.0");
+
+    await telemetry.captureToolCalled({
+      tool: "session_edit",
+      via: "mcp",
+      ok: true,
+      durationMs: 12,
+    });
+
+    expect(events[0].properties).toMatchObject({ app_version: "0.2.0" });
+  });
+
+  it("prefers the Desktop's own version and ignores an invalid reached one", async () => {
+    const launched = createTelemetry({
+      env: { [REVIEW_APP_VERSION_ENV]: "0.2.0" },
+    });
+
+    const reached = createTelemetry({ env: {} });
+
+    cleanupPaths.push(launched.rootPath, reached.rootPath);
+    launched.telemetry.setDesktopVersion("0.1.5");
+    reached.telemetry.setDesktopVersion("not-a-version");
+
+    await launched.telemetry.captureUiEvent("review_app_opened", {});
+    await reached.telemetry.captureUiEvent("review_app_opened", {});
+
+    expect(launched.events[0].properties).toMatchObject({
+      app_version: "0.2.0",
+    });
+    expect(reached.events[0].properties).not.toHaveProperty("app_version");
+  });
+
   it("does not look up the account to alias when telemetry is off", async () => {
     const { events, rootPath, telemetry } = createTelemetry({
       env: { DO_NOT_TRACK: "1" },

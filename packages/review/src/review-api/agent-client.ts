@@ -33,7 +33,7 @@ const TEXT_TOOLS = new Set([
 export interface ConnectedReview {
   client: ReviewApiClient;
   /** The Desktop reached; absent for a headless server. */
-  instance?: { key: string };
+  instance?: { key: string; appVersion?: string };
 }
 
 export async function connectReviewApi(
@@ -91,7 +91,7 @@ export async function connectReviewInstance(
       { serverUrl: discovery.url, token: discovery.token },
       request,
     ),
-    instance: { key: selection.key },
+    instance: { key: selection.key, appVersion: discovery.appVersion },
   };
 }
 
