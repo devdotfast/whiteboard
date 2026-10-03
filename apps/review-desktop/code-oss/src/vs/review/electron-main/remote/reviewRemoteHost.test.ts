@@ -867,7 +867,7 @@ test("the version absent, asked and declined: not-installed and declined, and no
 	assert.match(prompts[0].text, /Whiteboard 0\.1\.6 is not installed on wb-test-a/);
 	assert.match(prompts[0].text, /Install it in ~\/\.dev\/whiteboard-remote\?/);
 	assert.doesNotMatch(prompts[0].text, /\/home\/dev/);
-	assert.match(prompts[0].text, /about 800 MB, and about 200 MB for Node 24/);
+	assert.match(prompts[0].text, /about 140 MB, and about 200 MB for Node 24/);
 	assert.deepEqual(last(), {
 		alias: "wb-test-a",
 		problem: { state: "not-installed", detail: "Whiteboard is not installed on wb-test-a. Install Whiteboard 0.1.6 there; Node 24 is needed." },
