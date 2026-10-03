@@ -392,6 +392,10 @@ it.each([
   ["navigator", "POST", "workspacePath"],
   ["navigator", "POST", "filePath"],
   ["language-context", "GET", "rootPath"],
+  ["ask/agents", "GET", "localPath"],
+  ["ask/agents/codex/offer", "GET", "localPath"],
+  ["ask/mentions", "GET", "localPath"],
+  ["ask/threads", "GET", "localPath"],
 ])(
   "refuses a remote %s answer that carries %s",
   async (route, method, field) => {
