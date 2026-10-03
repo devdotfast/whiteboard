@@ -219,7 +219,7 @@ dropped the events.
 | `review_crash`                  | `process` in `renderer`, `gpu`, `utility`, `server`, `unknown`; `reason` (≤40 chars); `exit_code`; `uptime_ms`; `source` in `live`, `minidump` | A Whiteboard process dies, or an uncovered dump is found on the next launch                  |
 | `review_hang_started`           | None                                                                                                                                           | An app window stops responding                                                               |
 | `review_hang_ended`             | `duration_ms`                                                                                                                                  | The window responds again, its process dies, or it closes                                    |
-| `review_app_ready`              | `duration_ms`                                                                                                                                  | The workbench restores, timed from the startup trace; once per app launch                    |
+| `review_app_ready`              | `duration_ms`; `install_location` on a packaged macOS build, see below                                                                          | The workbench restores, timed from the startup trace; once per app launch                    |
 | `review_error_burst`            | `message_hash`, `suppressed`                                                                                                                   | A `review_client_error` passes 5 reports for one message in one session; see "Error reports" |
 | `review_open_timeout`           | `elapsed_ms`, `review_id`, `presentation_id`                                                                                                   | A session starts and no presented or ended event follows within 30 seconds                   |
 | `review_review_created`         | `via` in `api`, `mcp`, `other`; `kind` in `review`, `scratchpad`; `blocks`; optional `agent_kind`                                              | A whiteboard or the scratchpad is created; `via` is `other` for the app's own UI             |
@@ -333,6 +333,13 @@ sent.
   `unresponsive` / `responsive` events.
 - `review_open_timeout`: a whiteboard that neither presents nor ends within 30
   seconds.
+- `install_location` on `review_app_ready`: where a packaged macOS build runs
+  from, read from the app bundle's path. The path itself is never sent.
+  `applications` is `/Applications`, `user_applications` is `~/Applications`,
+  `volume` is anything under `/Volumes` (a mounted disk image or an external
+  drive), `translocated` is the read-only copy macOS makes of a quarantined app
+  opened from Downloads, and `other` is anywhere else. Squirrel cannot update a
+  `volume` or `translocated` app. Other platforms and unpackaged builds omit it.
 
 If the app dies with a whiteboard open, the next launch sends
 `review_session_ended` with `outcome: "abnormal"`. A workbench reload ends its
