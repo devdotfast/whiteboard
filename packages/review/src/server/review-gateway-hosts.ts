@@ -81,6 +81,7 @@ interface Host extends GatewayRemote {
   languageGroups?: ReviewGatewayHost["languageGroups"];
   installing?: ReviewGatewayHost["installing"];
   declined?: true;
+  asking?: string;
   installFailure?: string;
   serverId?: string;
   instanceId?: string;
@@ -302,6 +303,9 @@ export function createGatewayHosts(input: {
       host.installing = given.installing;
       host.status = "installing";
       host.detail = `${INSTALL_STEPS[step]}${detail ? ` (${detail})` : ""}.`;
+    } else if (given.asking && !given.endpoint) {
+      host.asking = given.asking;
+      host.detail = `Waiting for an answer: install Whiteboard ${given.asking} on ${given.alias}?`;
     } else if (!given.endpoint)
       host.detail = `Waiting for a connection to ${given.alias}.`;
     else {
@@ -446,6 +450,7 @@ export function createGatewayHosts(input: {
             current.problem,
             current.installing,
             current.declined,
+            current.asking,
             current.installFailure,
           ]) ===
             JSON.stringify([
@@ -453,6 +458,7 @@ export function createGatewayHosts(input: {
               given.problem,
               given.installing,
               given.declined,
+              given.asking,
               given.installFailure,
             ])
         ) {

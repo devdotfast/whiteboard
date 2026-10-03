@@ -951,6 +951,8 @@ export const ReviewGatewayHostSchema = z.strictObject({
     .optional(),
   // The user has not agreed to Desktop's install; Settings offers it.
   declined: z.literal(true).optional(),
+  // Desktop asks whether to install this version there; nobody has answered.
+  asking: requiredString.optional(),
   // Desktop's install of its version failed; the host serves an older one.
   installFailure: stringAllowEmpty.optional(),
   // Desktop is installing on the host; it has no endpoint yet.

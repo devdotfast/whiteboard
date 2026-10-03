@@ -155,6 +155,22 @@ it("a host Desktop is installing on shows the step, and the next step replaces i
   ]);
 });
 
+it("a host whose install question is open says so, and the answer clears it", () => {
+  const gateway = hosts("0.1.6");
+
+  gateway.set([{ alias: "box", asking: "0.1.6" }]);
+  expect(gateway.states()).toEqual([
+    {
+      alias: "box",
+      state: "connecting",
+      detail: "Waiting for an answer: install Whiteboard 0.1.6 on box?",
+    },
+  ]);
+
+  gateway.set([{ alias: "box" }]);
+  expect(gateway.states()[0]?.detail).toBe("Waiting for a connection to box.");
+});
+
 it("a declined host keeps the install command and says it was declined", () => {
   const gateway = hosts("0.1.6");
   const detail = "Whiteboard is not installed on box.";
