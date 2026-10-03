@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,7 +13,7 @@ import test from "node:test";
 import type { SpawnSsh } from "./reviewRemoteHost.js";
 import { REVIEW_REMOTE_INSTALL_MARKER } from "./reviewRemoteInstallScript.js";
 import { judgeRemote, parseRemoteProbe, probeRemote, type ReviewRemoteProbe } from "./reviewRemoteProbe.js";
-import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END } from "./reviewRemoteProbeScript.js";
+import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_PATH_CLI } from "./reviewRemoteProbeScript.js";
 import { reviewSshSession } from "./reviewSshCommand.js";
 
 const INTEGRITY = `sha512-${"A".repeat(86)}==`;
@@ -36,8 +36,12 @@ const supported: ReviewRemoteProbe = {
 	tools: ["tar", "xz", "sha256sum", "sha512sum"],
 };
 
-const answer = (value: unknown, before = "", after = "") =>
-	`${before}${REVIEW_REMOTE_PROBE_BEGIN}\n${JSON.stringify(value)}\n${REVIEW_REMOTE_PROBE_END}\n${after}`;
+/** The answer, and `pathCli` on its own line after the sentinels. */
+const answer = (value: unknown, before = "", after = "") => {
+	const { pathCli, ...rest } = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : { pathCli: undefined };
+	const body = value && typeof value === "object" && !Array.isArray(value) ? rest : value;
+	return `${before}${REVIEW_REMOTE_PROBE_BEGIN}\n${JSON.stringify(body)}\n${REVIEW_REMOTE_PROBE_END}\n${pathCli ? `${REVIEW_REMOTE_PROBE_PATH_CLI} ${JSON.stringify(pathCli)}\n` : ""}${after}`;
+};
 
 test("judgeRemote names the target of a supported host", () => {
 	assert.deepEqual(judgeRemote(supported), { supported: true, target: "linux-x64" });
@@ -93,8 +97,6 @@ test("a malformed answer is an error, never an exception", () => {
 		{ installed: "0.1.6" },
 		{ installed: Array(300).fill({ version: "0.1.6", integrity: INTEGRITY }) },
 		{ managedNode: 7 },
-		{ pathCli: undefined },
-		{ pathCli: { path: "whiteboard", version: "0.1.6" } },
 		{ downloader: "fetch" },
 		{ registryReachable: 1 },
 		{ tools: "tar" },
@@ -111,18 +113,17 @@ test("tools keeps only the tools asked about", () => {
 	assert.deepEqual(parsed.probe.tools, ["tar", "openssl"]);
 });
 
-test("pathCli keeps its version only when it is one", () => {
-	const version = (value: unknown) => {
-		const parsed = parseRemoteProbe(answer({ ...supported, pathCli: { path: "/usr/bin/whiteboard", version: value } }));
+test("pathCli keeps its version only when it is one, and is null when its line is missing or wrong", () => {
+	const pathCli = (value: unknown) => {
+		const parsed = parseRemoteProbe(answer({ ...supported, pathCli: value }));
 		assert.ok("probe" in parsed);
-		return parsed.probe.pathCli?.version;
+		return parsed.probe.pathCli;
 	};
-	assert.equal(version("0.2.0"), "0.2.0");
-	assert.equal(version("Whiteboard needs Node.js 24 or newer"), null);
-	assert.equal(version(null), null);
-	const parsed = parseRemoteProbe(answer({ ...supported, pathCli: null }));
-	assert.ok("probe" in parsed);
-	assert.equal(parsed.probe.pathCli, null);
+	assert.equal(pathCli({ path: "/usr/bin/whiteboard", version: "0.2.0" })?.version, "0.2.0");
+	assert.equal(pathCli({ path: "/usr/bin/whiteboard", version: "Whiteboard needs Node.js 24 or newer" })?.version, null);
+	assert.equal(pathCli({ path: "/usr/bin/whiteboard", version: null })?.version, null);
+	assert.equal(pathCli({ path: "whiteboard", version: "0.2.0" }), null);
+	assert.equal(pathCli(null), null);
 });
 
 test("installed keeps only versions with an npm sha512 integrity", () => {
@@ -255,6 +256,29 @@ test("a probe that does not answer in time is ended and reported", async () => {
 
 	assert.deepEqual(result, { error: "The probe of devbox did not answer within 0.3 seconds." });
 	assert.ok(Date.now() - started < 5000);
+});
+
+test("a probe that runs out of time after its answer has no PATH CLI, and is not an error", async () => {
+	const printed = answer({ ...supported, pathCli: undefined });
+	const result = await probeRemote({ session, spawn: localShell({}, "/bin/sh", ["-c", `cat >/dev/null; printf '%s' '${printed}'; exec sleep 30`]), env: {}, timeout: 500 });
+
+	assert.deepEqual(result, { probe: { ...supported, pathCli: null } });
+});
+
+const timeoutDir = spawnSync("/bin/sh", ["-c", "command -v timeout"], { encoding: "utf8" }).stdout.trim().replace(/\/timeout$/, "");
+
+test("a login shell that ignores SIGTERM is killed in time, and finds no CLI", { skip: !timeoutDir && "no timeout on PATH" }, async (t) => {
+	const home = await mkdtemp(join(tmpdir(), "wb-probe-"));
+	t.after(() => rm(home, { recursive: true, force: true }));
+	const shell = join(home, "slow-shell");
+	await executable(shell, "trap '' TERM\nsleep 2; sleep 2; sleep 2; echo /opt/bin/whiteboard");
+	const started = Date.now();
+
+	const result = await probeRemote({ session, spawn: localShell({ HOME: home, SHELL: shell, PATH: `${timeoutDir}:/usr/bin:/bin` }), env: {} });
+
+	assert.ok("probe" in result, "error" in result ? result.error : "");
+	assert.equal(result.probe.pathCli, null);
+	assert.ok(Date.now() - started < 6000, `${Date.now() - started} ms`);
 });
 
 test("an ssh failure is reported with what OpenSSH said", async () => {

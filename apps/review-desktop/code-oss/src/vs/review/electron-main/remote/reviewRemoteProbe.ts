@@ -5,7 +5,7 @@
 
 import { runSsh, type SpawnSsh } from "./reviewRemoteHost.js";
 import { REVIEW_REMOTE_VERSION } from "./reviewRemoteInstallScript.js";
-import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_SCRIPT } from "./reviewRemoteProbeScript.js";
+import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_PATH_CLI, REVIEW_REMOTE_PROBE_SCRIPT } from "./reviewRemoteProbeScript.js";
 import { sshExecArgs, type ReviewSshSession } from "./reviewSshCommand.js";
 
 /** What a remote is and has, read before anything is written to it. */
@@ -28,7 +28,7 @@ export interface ReviewRemoteProbe {
 	installed: ReviewRemoteInstalled[];
 	/** The highest Node 24 under `root`/node. */
 	managedNode: string | null;
-	/** The CLI stage 1's attach would run, with what its `--version` printed when that is a version. */
+	/** The CLI stage 1's attach would run, with what its `--version` printed when that is a version; null when the probe ran out of time first. */
 	pathCli: { path: string; version: string | null } | null;
 	downloader: "curl" | "wget" | null;
 	registryReachable: boolean;
@@ -90,9 +90,10 @@ export async function probeRemote(input: {
 	const alias = input.session.alias;
 	const result = await runSsh(input.spawn, input.env, sshExecArgs(input.session, input.env), timeout, REVIEW_REMOTE_PROBE_SCRIPT);
 	if (result.error) return { error: `The probe of ${alias} could not start: ${result.error.message}` };
-	if (result.timedOut) return { error: `The probe of ${alias} did not answer within ${timeout / 1000} seconds.` };
 	const parsed = parseRemoteProbe(result.stdout);
+	// Time runs out, if at all, in the PATH lookup that follows the answer.
 	if ("probe" in parsed) return parsed;
+	if (result.timedOut) return { error: `The probe of ${alias} did not answer within ${timeout / 1000} seconds.` };
 	const stderr = result.stderr.trim().split("\n").at(-1)?.slice(0, 300);
 	return { error: `The probe of ${alias} failed: ${parsed.error}${result.code ? ` It exited with ${result.code}${stderr ? `: ${stderr}` : ""}.` : ""}` };
 }
@@ -122,13 +123,25 @@ export function parseRemoteProbe(stdout: string): ReviewRemoteProbeResult {
 		return { error: "its answer is not JSON." };
 	}
 	try {
-		return { probe: readProbe(value) };
+		return { probe: { ...readProbe(value), pathCli: readPathCli(stdout.slice(end)) } };
 	} catch (error) {
 		return { error: `its answer is malformed: ${(error as Error).message}` };
 	}
 }
 
-function readProbe(value: unknown): ReviewRemoteProbe {
+/** The line after the sentinels; anything but an absolute path, with a version or not, is no CLI. */
+function readPathCli(after: string): ReviewRemoteProbe["pathCli"] {
+	const line = after.split("\n").find((candidate) => candidate.startsWith(`${REVIEW_REMOTE_PROBE_PATH_CLI} `));
+	try {
+		const cli = object(JSON.parse(line?.slice(REVIEW_REMOTE_PROBE_PATH_CLI.length + 1) ?? "null"), "pathCli");
+		const { version } = cli;
+		return { path: path(cli.path, "pathCli.path"), version: typeof version === "string" && version.length <= 128 && REVIEW_REMOTE_VERSION.test(version) ? version : null };
+	} catch {
+		return null;
+	}
+}
+
+function readProbe(value: unknown): Omit<ReviewRemoteProbe, "pathCli"> {
 	const record = object(value, "the answer");
 	const node = record.node === null ? null : object(record.node, "node");
 	const installed = record.installed;
@@ -163,11 +176,6 @@ function readProbe(value: unknown): ReviewRemoteProbe {
 				: [];
 		}),
 		managedNode: nullable(record.managedNode, "managedNode", (v) => path(v, "managedNode")),
-		pathCli: nullable(record.pathCli, "pathCli", (v) => {
-			const cli = object(v, "pathCli");
-			const version = cli.version;
-			return { path: path(cli.path, "pathCli.path"), version: typeof version === "string" && version.length <= 128 && REVIEW_REMOTE_VERSION.test(version) ? version : null };
-		}),
 		downloader,
 		registryReachable: boolean(record.registryReachable, "registryReachable"),
 		tools: REVIEW_REMOTE_PROBE_TOOLS.filter((tool) => tools.includes(tool)),

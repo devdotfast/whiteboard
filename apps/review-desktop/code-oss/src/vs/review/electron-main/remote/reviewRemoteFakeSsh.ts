@@ -9,7 +9,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { ReviewRemoteClock, SpawnSsh, SshChildProcess } from "./reviewRemoteHost.js";
 import { REVIEW_REMOTE_INSTALL_SAY } from "./reviewRemoteInstallScript.js";
-import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END } from "./reviewRemoteProbeScript.js";
+import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_PATH_CLI } from "./reviewRemoteProbeScript.js";
 
 class FakeChild extends EventEmitter {
 	static nextPid = 1000;
@@ -115,12 +115,11 @@ export const probeOutput = (probe: Partial<Record<string, unknown>> = {}) =>
 		npm: null,
 		installed: [],
 		managedNode: null,
-		pathCli: null,
 		downloader: "curl",
 		registryReachable: true,
 		tools: ["tar", "xz", "sha256sum", "sha512sum"],
 		...probe,
-	})}\n${REVIEW_REMOTE_PROBE_END}\n`;
+	})}\n${REVIEW_REMOTE_PROBE_END}\n${probe.pathCli ? `${REVIEW_REMOTE_PROBE_PATH_CLI} ${JSON.stringify(probe.pathCli)}\n` : ""}`;
 
 /** A virtual clock: scheduled work runs only when the test calls `next`. */
 export function fakeClock() {
