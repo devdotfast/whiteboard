@@ -901,7 +901,7 @@ test("a declined host with another version's CLI on PATH attaches it, and still 
 	assert.equal(await flow.consent.get("wb-test-a"), "deny");
 });
 
-test("this version's CLI on PATH counts as installed: no prompt, no install, and stage 1's attach", async (t) => {
+test("this version's CLI on PATH counts as installed: no prompt, no install, and it attaches through PATH with --replace", async (t) => {
 	const port = await healthServer(t);
 	const { flow, prompts, runs } = await installFlow(t, "ask");
 	const { host, ssh, last } = hostFor(t, { probe: { pathCli: { path: "/usr/local/bin/whiteboard", version: "0.1.6" } } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
