@@ -16,13 +16,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Writable } from "node:stream";
 
-import { processStartIdentity } from "@dev.fast/trace-core";
 import {
-  REMOTE_ATTACH_BEGIN,
-  REMOTE_ATTACH_END,
-  ensureDiffr,
-  remoteAttach,
-} from "@review/remote-attach.js";
+  REVIEW_REMOTE_ATTACH_BEGIN,
+  REVIEW_REMOTE_ATTACH_END,
+} from "@dev.fast/review-protocol";
+import { processStartIdentity } from "@dev.fast/trace-core";
+import { ensureDiffr, remoteAttach } from "@review/remote-attach.js";
 import {
   headlessServerLockPath,
   readReviewServerDiscovery,
@@ -249,9 +248,9 @@ it("attaches with one JSON line between the sentinels, and its token reaches the
   expect(first.code).toBe(0);
   const lines = first.stdout.split("\n");
   expect(lines).toEqual([
-    REMOTE_ATTACH_BEGIN,
+    REVIEW_REMOTE_ATTACH_BEGIN,
     expect.any(String),
-    REMOTE_ATTACH_END,
+    REVIEW_REMOTE_ATTACH_END,
     "",
   ]);
 
@@ -454,9 +453,9 @@ it("prints a failed attach between the sentinels and exits non-zero", async () =
   expect(failed.code).toBe(1);
   const lines = failed.stdout.split("\n");
   expect(lines).toEqual([
-    REMOTE_ATTACH_BEGIN,
+    REVIEW_REMOTE_ATTACH_BEGIN,
     expect.any(String),
-    REMOTE_ATTACH_END,
+    REVIEW_REMOTE_ATTACH_END,
     "",
   ]);
   expect(JSON.parse(lines[1]!)).toMatchObject({

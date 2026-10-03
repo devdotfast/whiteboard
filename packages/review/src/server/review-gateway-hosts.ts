@@ -5,6 +5,7 @@ import {
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
   type REVIEW_REMOTE_INSTALL_STEPS,
+  REVIEW_REMOTE_VERSION,
   type ReviewGatewayHost,
   type ReviewGatewayHostState,
 } from "@dev.fast/review-protocol";
@@ -31,9 +32,6 @@ export const UUID =
 
 /** A backoff delay, ±25%. */
 export const jitter = (ms: number) => ms * (0.75 + Math.random() * 0.5);
-
-// A remote's version reaches the UI, so only a version passes.
-const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 
 /** The command that installs this Desktop's version; never built from a remote's text. */
 const INSTALLS = new Set<ReviewGatewayHostState["state"]>([
@@ -407,7 +405,11 @@ export function createGatewayHosts(input: {
       // A restarted server has a new token, which only a new attach reads.
       if (restarted) return restartedHost(host);
 
-      if (health.version !== "unknown" && !VERSION.test(health.version)) {
+      // A remote's version reaches the UI, so only a version passes.
+      if (
+        health.version !== "unknown" &&
+        !REVIEW_REMOTE_VERSION.test(health.version)
+      ) {
         host.status = "incompatible";
         host.detail = `${host.alias} reports an invalid version.`;
       } else if (

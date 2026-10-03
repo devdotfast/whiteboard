@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { REVIEW_REMOTE_ATTACH_BEGIN, REVIEW_REMOTE_ATTACH_END } from "../../common/reviewProtocol.js";
 import { REVIEW_REMOTE_VERSION, shellQuote } from "./reviewRemoteInstallScript.js";
 
 /**
@@ -57,9 +58,6 @@ export function reviewRemoteAttachScript(groups: readonly string[] = [], replace
 export function installedAttachScript(nodePath: string, cliPath: string, groups: readonly string[] = []): string {
 	return `exec ${shellQuote(nodePath)} ${shellQuote(cliPath)} ${attachWords(groups, true)}\n`;
 }
-
-export const REVIEW_REMOTE_ATTACH_BEGIN = "WHITEBOARD-REMOTE-BEGIN";
-export const REVIEW_REMOTE_ATTACH_END = "WHITEBOARD-REMOTE-END";
 
 export interface ReviewRemoteLanguageServer {
 	/** The VS Code server's loopback port on the remote. */

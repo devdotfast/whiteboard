@@ -6,6 +6,10 @@ import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 import {
+  REVIEW_REMOTE_ATTACH_BEGIN,
+  REVIEW_REMOTE_ATTACH_END,
+} from "@dev.fast/review-protocol";
+import {
   StoreApiError,
   processIsAlive,
   readStoreAuth,
@@ -578,8 +582,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
 
     const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
 
-    const { REMOTE_ATTACH_BEGIN, REMOTE_ATTACH_END, remoteAttach } =
-      await import("./remote-attach.js");
+    const { remoteAttach } = await import("./remote-attach.js");
 
     let attach: Awaited<ReturnType<typeof remoteAttach>>;
 
@@ -607,7 +610,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         { event: "error", error: serializeReviewError(error) },
       );
       input.stdout.write(
-        `${REMOTE_ATTACH_BEGIN}\n${ensureTrailingNewline(line)}${REMOTE_ATTACH_END}\n`,
+        `${REVIEW_REMOTE_ATTACH_BEGIN}\n${ensureTrailingNewline(line)}${REVIEW_REMOTE_ATTACH_END}\n`,
       );
       state.exitCode = 1;
 
@@ -617,7 +620,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     // Sentinels let Desktop drop whatever the login shell prints around them.
     input.stdout.write(
       options.json
-        ? `${REMOTE_ATTACH_BEGIN}\n${JSON.stringify(attach)}\n${REMOTE_ATTACH_END}\n`
+        ? `${REVIEW_REMOTE_ATTACH_BEGIN}\n${JSON.stringify(attach)}\n${REVIEW_REMOTE_ATTACH_END}\n`
         : `Whiteboard server ${attach.startedServer ? "started" : "already running"} at ${attach.url}\nStructural diff: ${attach.diffr ? "available" : "unavailable (no diffr)"}\nLanguage features: ${attach.languageServer ? `VS Code server on port ${attach.languageServer.port}` : `unavailable (${attach.languageServerDetail})`}\n`,
     );
   });

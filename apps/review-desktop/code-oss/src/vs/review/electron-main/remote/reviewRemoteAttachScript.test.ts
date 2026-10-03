@@ -10,7 +10,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { installedAttachScript, parseRemoteAttach, REVIEW_REMOTE_ATTACH_BEGIN, REVIEW_REMOTE_ATTACH_END, reviewRemoteAttachScript } from "./reviewRemoteAttachScript.js";
+import { REVIEW_REMOTE_ATTACH_BEGIN, REVIEW_REMOTE_ATTACH_END } from "../../common/reviewProtocol.js";
+import { installedAttachScript, parseRemoteAttach, reviewRemoteAttachScript } from "./reviewRemoteAttachScript.js";
 
 async function executable(path: string, body: string) {
 	await writeFile(path, `#!/bin/sh\n${body}\n`);

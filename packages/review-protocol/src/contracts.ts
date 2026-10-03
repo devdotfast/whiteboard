@@ -614,6 +614,19 @@ export interface ReviewRemoteHostsSettings {
 export const REVIEW_REMOTE_WRAPPER_MARK =
   "# Written by Whiteboard Desktop, which replaces it with each install.";
 
+/** The lines around `whiteboard remote attach --json`'s answer, which login noise may precede. */
+export const REVIEW_REMOTE_ATTACH_BEGIN = "WHITEBOARD-REMOTE-BEGIN";
+
+export const REVIEW_REMOTE_ATTACH_END = "WHITEBOARD-REMOTE-END";
+
+/** A version, and a version directory's name on a remote host. */
+export const REVIEW_REMOTE_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+
+/** The remote install root's lock; one not refreshed for this long is taken over. */
+export const REVIEW_REMOTE_INSTALL_LOCK = "install.lock";
+
+export const REVIEW_REMOTE_LOCK_STALE_SECONDS = 15 * 60;
+
 /** The agents `whiteboard connect --detect` finds and `--yes` connects: trace-core's harnesses. */
 export const REVIEW_REMOTE_AGENT_IDS = [
   "claude",

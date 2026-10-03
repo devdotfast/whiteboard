@@ -14,7 +14,11 @@ import {
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { REVIEW_REMOTE_WRAPPER_MARK } from "@dev.fast/review-protocol";
+import {
+  REVIEW_REMOTE_INSTALL_LOCK,
+  REVIEW_REMOTE_LOCK_STALE_SECONDS,
+  REVIEW_REMOTE_WRAPPER_MARK,
+} from "@dev.fast/review-protocol";
 
 import { whiteboardRemoteHome } from "./remote-extensions";
 import {
@@ -27,8 +31,7 @@ import {
   stopBackgroundServer,
 } from "./server/background-server";
 
-/** An install refreshes its lock at least this often; an older one is stale. */
-const LOCK_STALE_MS = 15 * 60_000;
+const LOCK_STALE_MS = REVIEW_REMOTE_LOCK_STALE_SECONDS * 1000;
 
 /** The review store: the reviews' database and its workspaces database, with their write-ahead files, in the review home. */
 const REVIEW_STORE = [
@@ -96,7 +99,7 @@ export async function remoteUninstall(input: {
 
   const install = whiteboardRemoteHome(input.env);
   const wrapper = path.join(input.home, ".local", "bin", "whiteboard");
-  const lock = path.join(install, "install.lock");
+  const lock = path.join(install, REVIEW_REMOTE_INSTALL_LOCK);
 
   // Nothing installed, nothing to lock: the tree is then left alone.
   const taken = existsSync(install)
@@ -223,7 +226,7 @@ export async function takeInstallLock(
     afterMkdir?(): Promise<void>;
   } = {},
 ): Promise<{ token: string } | { holder: string }> {
-  const lock = path.join(install, "install.lock");
+  const lock = path.join(install, REVIEW_REMOTE_INSTALL_LOCK);
   const token = randomBytes(8).toString("hex");
 
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -257,7 +260,11 @@ export async function takeInstallLock(
       return { holder: await readText(path.join(lock, "owner")) };
 
     await hooks.beforeMove?.();
-    const aside = path.join(install, `install.lock.${token}.stale`);
+
+    const aside = path.join(
+      install,
+      `${REVIEW_REMOTE_INSTALL_LOCK}.${token}.stale`,
+    );
 
     // Gone or replaced meanwhile: try again.
     if (
