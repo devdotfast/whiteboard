@@ -324,6 +324,15 @@ export interface ReviewTooltipOptions {
   detail?: string;
 }
 
+/** Detached diagram document for the hidden native capture page. */
+export interface ReviewDiagramCapturePage {
+  html: string;
+  styles: Array<{ href: string } | { css: string }>;
+  width: number;
+  height: number;
+  background: string;
+}
+
 export interface ReviewCanvasBridge {
   readonly appSessionId?: string;
   readonly config: ReviewRuntimeConfig;
@@ -331,6 +340,8 @@ export interface ReviewCanvasBridge {
   readonly diffView: ReviewDiffViewFactory;
   request(url: string, init?: RequestInit): Promise<Response>;
   post(request: ReviewVerbRequest): Promise<ReviewVerbResponse>;
+  /** Render in a separate hidden page without changing the visible document. */
+  capturePageImage?(page: ReviewDiagramCapturePage): Promise<void>;
   subscribe(listener: (event: ReviewSurfaceEvent) => void): ReviewDisposable;
   currentTheme(): ReviewTheme;
   onDidChangeTheme(listener: (theme: ReviewTheme) => void): ReviewDisposable;

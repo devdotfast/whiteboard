@@ -1,6 +1,7 @@
 import {
   type JsonValue,
   type ReviewCanvasTutorialBridge,
+  type ReviewDiagramCapturePage,
   parseJsonText,
 } from "@dev.fast/review-protocol";
 import {
@@ -180,7 +181,11 @@ afterEach(async () => {
 
 async function mountFixture(
   kind: Kind,
-  options: { trace?: null; document?: Snapshot["document"] } = {},
+  options: {
+    trace?: null;
+    document?: Snapshot["document"];
+    capturePageImage?: (page: ReviewDiagramCapturePage) => Promise<void>;
+  } = {},
   tutorial?: ReviewCanvasTutorialBridge,
   shippedTutorial = false,
   hostStyle?: string,
@@ -242,6 +247,8 @@ async function mountFixture(
     },
   });
 
+  bridge.capturePageImage = options.capturePageImage;
+
   const request = vi.spyOn(bridge, "request");
   const container = document.createElement("div");
 
@@ -277,6 +284,91 @@ async function mountFixture(
 }
 
 describe("block components", () => {
+  it.each([
+    ["flow_diagram", false],
+    ["flow_diagram", true],
+    ["sequence", false],
+    ["sequence", true],
+    ["database_lens", false],
+    ["database_lens", true],
+    ["software_map", false],
+    ["software_map", true],
+    ["call_stack_diff", false],
+  ] as const)(
+    "copies %s through the hidden page (expanded=%s)",
+    async (kind, expanded) => {
+      const write = vi
+        .fn<(page: ReviewDiagramCapturePage) => Promise<void>>()
+        .mockResolvedValue(undefined);
+
+      const { container } = await mountFixture(kind, {
+        capturePageImage: write,
+      });
+
+      expect(
+        await settled(
+          () => container.querySelector(".diagram-copy-button") !== null,
+        ),
+      ).toBe(true);
+
+      if (expanded) {
+        await act(async () => {
+          container
+            .querySelector<HTMLButtonElement>(
+              '.diagram-tour-button, [aria-label="Expand software map"]',
+            )!
+            .click();
+        });
+      }
+
+      const copyContainer = expanded
+        ? container.querySelector<HTMLElement>('[role="dialog"]')!
+        : container;
+
+      const ready = () =>
+        kind === "call_stack_diff"
+          ? copyContainer.querySelector('nav[aria-label="Call tree"]') !== null
+          : copyContainer.querySelector(".react-flow__node") !== null;
+
+      expect(await settled(ready)).toBe(true);
+
+      await act(async () => {
+        copyContainer
+          .querySelector<HTMLButtonElement>(
+            '[aria-label="Copy diagram as image"]',
+          )!
+          .click();
+      });
+      expect(await settled(() => write.mock.calls.length > 0)).toBe(true);
+      const page = write.mock.calls[0]![0];
+      const snapshot = new DOMParser().parseFromString(page.html, "text/html");
+
+      expect(page.width).toBeGreaterThan(50);
+      expect(page.height).toBeGreaterThan(50);
+      expect(page.width).toBeLessThanOrEqual(2048);
+      expect(page.height).toBeLessThanOrEqual(2048);
+      expect(page.styles.length).toBeGreaterThan(0);
+      expect(snapshot.querySelector(".diagram-copy-button")).toBeNull();
+      expect(
+        snapshot.querySelector(
+          kind === "call_stack_diff"
+            ? 'nav[aria-label="Call tree"]'
+            : ".react-flow__node",
+        ),
+      ).not.toBeNull();
+      expect(
+        document.querySelector("[data-diagram-native-capture]"),
+      ).toBeNull();
+      expect(
+        await settled(
+          () =>
+            copyContainer.querySelector('[aria-label="Diagram copied"]') !==
+            null,
+        ),
+      ).toBe(true);
+    },
+  );
+
   it.each([
     {
       kind: "sequence",

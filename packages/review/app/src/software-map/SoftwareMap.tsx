@@ -1,4 +1,5 @@
 import { CodePeekGroup } from "@canvas/CodePeek";
+import { CopyDiagramButton } from "@canvas/copy-diagram-button";
 import {
   type ReviewNodeTint,
   type ReviewTheme,
@@ -939,6 +940,7 @@ export function SoftwareMapFrame({
             </figcaption>
           </div>
           <div {...stylex.props(styles.actions)}>
+            <CopyDiagramButton />
             {onRefresh ? (
               <IconButton
                 xstyle={refreshing && styles.refreshing}
