@@ -637,3 +637,67 @@ it("keeps an MCP session on the instance key it first reached", async () => {
     await server.close();
   }
 });
+
+it("names the agent from the MCP handshake, falling back to the session environment", async () => {
+  // The header names the agent on reviews the session creates; the call names it on tool events.
+  const headerAgents: (string | undefined)[] = [];
+  const callAgents: (string | undefined)[] = [];
+
+  const connection = vi
+    .spyOn(agentClient, "connectReviewInstance")
+    .mockImplementation(async (_env, headers) => {
+      headerAgents.push(headers?.["x-review-agent"]);
+
+      return { client };
+    });
+
+  const session = async (clientName: string, env: NodeJS.ProcessEnv) => {
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    let output = "";
+    stdout.on("data", (chunk) => {
+      output += chunk;
+    });
+
+    await runReviewAgentCli({
+      argv: ["mcp"],
+      env,
+      stdin,
+      stdout,
+      stderr: new PassThrough(),
+      onToolCall: ({ agentKind }) => void callAgents.push(agentKind),
+    });
+
+    const reply = async (id: number, method: string, params: JsonObject) => {
+      stdin.write(
+        JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n",
+      );
+      await expect
+        .poll(() =>
+          output
+            .split("\n")
+            .filter(Boolean)
+            .some((line) => JSON.parse(line).id === id),
+        )
+        .toBe(true);
+    };
+
+    await reply(1, "initialize", {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: clientName, version: "1" },
+    });
+    await reply(2, "tools/call", { name: "session_list", arguments: {} });
+    stdin.end();
+  };
+
+  try {
+    // Codex strips CODEX_* from the server's environment; its handshake says who it is.
+    await session("codex-mcp-client", {});
+    await session("some-editor", { CLAUDE_CODE_SESSION_ID: "session" });
+    expect(headerAgents).toEqual(["codex", "claude"]);
+    expect(callAgents).toEqual(["codex", "claude"]);
+  } finally {
+    connection.mockRestore();
+  }
+});

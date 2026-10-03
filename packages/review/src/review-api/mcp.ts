@@ -8,6 +8,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { ReviewToolCall } from "@review/review-telemetry.js";
+import type { ReviewSessionAgent } from "@review/ui-telemetry-events.js";
 
 import {
   type AuthoringTool,
@@ -18,6 +19,7 @@ import { authoringTools } from "./authoring-tools.js";
 import type { ReviewApiClient } from "./client.js";
 import { ReviewApiError } from "./client.js";
 import { ReviewInputError } from "./input-error.js";
+import { mcpClientAgent } from "./mcp-client-agent.js";
 import { callPublicTool, publicTool } from "./public-tools.js";
 import { RECOVERY } from "./recovery.js";
 import { REVIEW_STATUS_TOOL } from "./status-tool.js";
@@ -48,8 +50,11 @@ function mcpAuthoringGuidance(context: {
 }
 
 export async function serveReviewMcp(
-  /** Connects to `key` once one is latched, else selects one. */
-  connect: (key?: string) => Promise<ConnectedReview>,
+  /** Connects to `key` once one is latched, else selects one, as `agentKind`. */
+  connect: (
+    key?: string,
+    agentKind?: ReviewSessionAgent,
+  ) => Promise<ConnectedReview>,
   stdin: Readable,
   stdout: Writable,
   stderr: Writable = process.stderr,
@@ -57,6 +62,8 @@ export async function serveReviewMcp(
   /** What whiteboard_status reports when the Desktop cannot be reached, and why. */
   offlineStatus?: (problem: string) => Promise<JsonValue>,
   onToolCall?: (call: ReviewToolCall) => Promise<void> | void,
+  /** The agent from the session environment, when the handshake names none. */
+  environmentAgent?: ReviewSessionAgent,
 ) {
   const instructionsTool = {
     ...authoringTools(false, traceEnabled).find(
@@ -82,8 +89,11 @@ export async function serveReviewMcp(
   // it never hops to another key once others start.
   let latched: string | undefined;
 
+  const agentKind = () =>
+    mcpClientAgent(server.getClientVersion()?.name) ?? environmentAgent;
+
   const load = async (signal?: AbortSignal) => {
-    const { client, instance } = await connect(latched);
+    const { client, instance } = await connect(latched, agentKind());
     latched ??= instance?.key;
 
     catalog = (await client.read<AuthoringTool[]>("/authoring", signal)).map(
@@ -145,6 +155,7 @@ export async function serveReviewMcp(
         via: "mcp",
         ok: !failure,
         durationMs: Date.now() - startedAt,
+        agentKind: agentKind(),
         ...failure,
       });
 

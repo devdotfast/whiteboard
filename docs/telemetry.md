@@ -226,7 +226,7 @@ dropped the events.
 | `review_review_published`       | `version`                                                                                                                                      | A whiteboard is published for sharing                                                        |
 | `review_review_revoked`         | None                                                                                                                                           | A share link is revoked                                                                      |
 | `review_authoring_completed`    | `duration_ms`; optional `agent_kind`                                                                                                           | The first publish of a whiteboard created via `api` or `mcp`, timed from its creation        |
-| `review_mcp_tool_called`        | `tool`; `via` in `api`, `mcp`; `ok`; `duration_ms`; on failure, `error_name` and `error_category` closed enums                                 | An agent calls a Whiteboard authoring tool; `tool` is `other` if none was reached            |
+| `review_mcp_tool_called`        | `tool`; `via` in `api`, `mcp`; `ok`; `duration_ms`; `agent_kind`; on failure, `error_name` and `error_category` closed enums                   | An agent calls a Whiteboard authoring tool; `tool` is `other` if none was reached            |
 | `review_login_started`          | None                                                                                                                                           | GitHub sign-in in the app begins                                                             |
 | `review_login_succeeded`        | None                                                                                                                                           | GitHub sign-in in the app finishes                                                           |
 | `review_login_failed`           | `reason` in `did_not_finish`, `error`                                                                                                          | GitHub sign-in in the app fails                                                              |
@@ -236,6 +236,12 @@ dropped the events.
 `source_kind` is `worktree`, `commits`, or `scratchpad`, set by the server from
 the opened whiteboard. `agent_kind` is allowlisted for session events but not
 yet sent.
+
+`agent_kind` comes from the agent's session environment (`CODEX_THREAD_ID`,
+`CLAUDE_CODE_SESSION_ID`, `PI_SESSION_ID`). Over MCP, the client name the agent
+sends when it connects takes precedence, because some agents, Codex among
+them, start MCP servers without those variables. Cursor, OpenCode and Oh My Pi
+are identified only by that name. A client name is matched to the closed list and never sent.
 
 | `outcome`   | Meaning                                                                                                                                              |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -272,7 +278,7 @@ text, and only as described in "Error reports".
   `internal`.
 - Queue drop reasons: `queue_full`, `expired`, `corrupt`,
   `permanent_rejection`, and `storage_failure`.
-- Agent kinds: `codex`, `claude`, `pi`, and `other`.
+- Agent kinds: `codex`, `claude`, `cursor`, `opencode`, `pi`, `omp`, and `other`.
 
 ### Desktop and canvas events
 
