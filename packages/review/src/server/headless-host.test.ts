@@ -1555,6 +1555,81 @@ it("lists the Ask agents", async () => {
     });
 });
 
+async function executable(file: string, body: string) {
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+}
+
+/** The agents it lists, and the environment it launches Claude Code in. */
+async function askAgentsAndEnv() {
+  const launched = Promise.withResolvers<NodeJS.ProcessEnv | undefined>();
+  const started = Date.now();
+
+  const server = await start(
+    undefined,
+    false,
+    async (_agent, _cwd, options) => {
+      launched.resolve(options?.env);
+      throw new Error("No agent here.");
+    },
+  );
+
+  const startMs = Date.now() - started;
+  const { worktree } = await reviewsOfBothKinds(server.client);
+
+  const { agents } = await (
+    await askCall(server, `${worktree}/ask/agents`)
+  ).json();
+
+  await askCall(server, `${worktree}/ask`, {
+    agent: "claude",
+    question: { text: "Why?" },
+    selection: { target: { kind: "text", quote: "value" }, title: "value" },
+  });
+
+  return {
+    claude: agents.find((entry: { id: string }) => entry.id === "claude"),
+    env: await launched.promise,
+    startMs,
+  };
+}
+
+it("finds and launches Ask agents on the login shell's PATH, with its own node last", async () => {
+  const login = path.join(root, "login-bin");
+  await executable(path.join(login, "claude"), "exit 0");
+  await executable(
+    path.join(root, "shell"),
+    `echo Welcome\nprintf '\\nWHITEBOARD-PATH=%s\\n' '${login}'\necho Bye`,
+  );
+  vi.stubEnv("SHELL", path.join(root, "shell"));
+  vi.stubEnv("PATH", "/usr/bin:/bin");
+
+  const { claude, env } = await askAgentsAndEnv();
+
+  expect(claude).toMatchObject({ available: true });
+  expect(env?.PATH).toBe(
+    [login, "/usr/bin:/bin", path.dirname(process.execPath)].join(
+      path.delimiter,
+    ),
+  );
+});
+
+it("starts with its own PATH when the login shell hangs", async () => {
+  const bin = path.join(root, "bin");
+  await executable(path.join(bin, "claude"), "exit 0");
+  await executable(path.join(root, "shell"), "sleep 60");
+  vi.stubEnv("SHELL", path.join(root, "shell"));
+  vi.stubEnv("PATH", `${bin}:/usr/bin:/bin`);
+
+  const { claude, env, startMs } = await askAgentsAndEnv();
+
+  expect(startMs).toBeLessThan(8_000);
+  expect(claude).toMatchObject({ available: true });
+  expect(env?.PATH).toBe(
+    [bin, "/usr/bin:/bin", path.dirname(process.execPath)].join(path.delimiter),
+  );
+}, 20_000);
+
 it("opens an Ask thread in the review's checkout and closes it on stop", async () => {
   const launched = Promise.withResolvers<void>();
   let stopped = 0;

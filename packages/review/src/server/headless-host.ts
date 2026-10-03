@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
@@ -93,6 +94,62 @@ export function withHeadlessServerLock<T>(
   );
 }
 
+const LOGIN_PATH_TIMEOUT_MS = 4_000;
+
+/** Started over ssh without a login shell, this server has sshd's PATH; agents
+ * live on the login shell's (version managers, ~/.local/bin). This runtime's
+ * node comes last, for a CLI that runs on node. */
+async function agentEnv(): Promise<NodeJS.ProcessEnv> {
+  const login = process.env.SHELL && (await loginPath(process.env.SHELL));
+
+  return {
+    ...process.env,
+    PATH: [login, process.env.PATH, path.dirname(process.execPath)]
+      .filter(Boolean)
+      .join(path.delimiter),
+  };
+}
+
+/** Only its marked line is read, so start-up output is ignored. */
+function loginPath(shell: string) {
+  return new Promise<string | undefined>((resolve) => {
+    const child = spawn(
+      shell,
+      ["-lic", 'printf "\\nWHITEBOARD-PATH=%s\\n" "$PATH"'],
+      { detached: true, stdio: ["ignore", "pipe", "ignore"] },
+    );
+
+    let output = "";
+
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => (output += chunk));
+
+    const timer = setTimeout(() => {
+      try {
+        process.kill(-child.pid!, "SIGKILL");
+      } catch {}
+
+      resolve(undefined);
+    }, LOGIN_PATH_TIMEOUT_MS);
+
+    child.once("error", () => {
+      clearTimeout(timer);
+      resolve(undefined);
+    });
+    child.once("close", () => {
+      clearTimeout(timer);
+
+      const found = output
+        .replaceAll("\r", "")
+        .split("\n")
+        .findLast((line) => line.startsWith("WHITEBOARD-PATH="))
+        ?.slice("WHITEBOARD-PATH=".length);
+
+      resolve(found?.startsWith("/") ? found : undefined);
+    });
+  });
+}
+
 async function serve(input: HeadlessServerInput) {
   if (input.signal.aborted) return;
 
@@ -128,8 +185,11 @@ async function serve(input: HeadlessServerInput) {
     "cli.js",
   );
 
+  const env = await agentEnv();
+  const launch = input.launchAskAgent ?? launchAskAgent;
+
   const askThreads = new AskThreads(
-    input.launchAskAgent ?? launchAskAgent,
+    (agent, cwd, options) => launch(agent, cwd, { ...options, env }),
     cliAskTools(() => (existsSync(cliPath) ? cliPath : undefined), {
       name: "DEV_REVIEW_SERVER_DIR",
       value: input.stateDir,
@@ -148,7 +208,7 @@ async function serve(input: HeadlessServerInput) {
     () => traceMachineEnabled(),
     () => ({ key: "headless", home: input.stateDir }),
     undefined,
-    { threads: askThreads, agents: () => detectAskAgents() },
+    { threads: askThreads, agents: () => detectAskAgents(env) },
   );
 
   mountSharingPublisher(api, local.store, local.data);
