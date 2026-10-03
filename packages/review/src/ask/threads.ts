@@ -202,7 +202,9 @@ export class AskThreads {
   constructor(
     private readonly launch: AskAgentLauncher,
     private readonly tools: AskTools = {},
-    private readonly limits: AskThreadLimits = askThreadLimits,
+    private readonly limits: AskThreadLimits & {
+      idleCloseMs?: number;
+    } = askThreadLimits,
   ) {
     this.mcpServers = tools.mcpServers ?? (() => []);
   }
@@ -229,6 +231,22 @@ export class AskThreads {
     );
 
     this.threads.set(thread.id, thread);
+    const { idleCloseMs } = this.limits;
+
+    if (idleCloseMs !== undefined) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+
+      thread.onUnwatched((unwatched) => {
+        if (unwatched)
+          timer ??= setTimeout(() => this.close(thread.id), idleCloseMs);
+        else {
+          clearTimeout(timer);
+          timer = undefined;
+        }
+      });
+      thread.onClose(() => clearTimeout(timer));
+    }
+
     void thread.open();
 
     return thread;

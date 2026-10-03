@@ -22,9 +22,13 @@ import {
   applyAskChange,
   askUpdateSchema,
 } from "@review/ask/thread-state.js";
-import { AskThread, type AskThreadLimits } from "@review/ask/thread.js";
+import {
+  AskThread,
+  type AskThreadLimits,
+  askThreadLimits,
+} from "@review/ask/thread.js";
 import { AskThreads } from "@review/ask/threads.js";
-import { expect, it, vi } from "vitest";
+import { expect, it, onTestFinished, vi } from "vitest";
 
 const permissionOptions = [
   { optionId: "allow", name: "Allow once", kind: "allow_once" as const },
@@ -1506,4 +1510,101 @@ it("accepts Cursor's todo list, so it carries on with the answer", async () => {
   expect(reply).toEqual({ outcome: { outcome: "accepted", todos } });
   expect(state.entries.at(-1)).toMatchObject({ text: "It is safe." });
   thread.close();
+});
+
+/** Threads that close one idle a second with no one watching, Desktop's
+ * that do not, and the agent processes stopped. */
+function idleThreads(turn: (prompt: string) => Promise<void> = async () => {}) {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  const fake = fakeAgent(async (_client, prompt) => turn(prompt));
+  const stopped = vi.fn<() => void>();
+
+  const launch: AskAgentLauncher = async (...args) => {
+    const process = await fake.launch(...args);
+
+    return {
+      ...process,
+      stop: () => {
+        stopped();
+        process.stop();
+      },
+    };
+  };
+
+  return {
+    threads: new AskThreads(
+      launch,
+      {},
+      { ...askThreadLimits, idleCloseMs: 1_000 },
+    ),
+    desktop: new AskThreads(launch),
+    stopped,
+  };
+}
+
+const idleAsk = (onSave?: (entries: AskEntry[]) => void) => ({
+  reviewId: "review",
+  agent: "claude" as const,
+  cwd: "/checkouts/payments",
+  head: "abc123",
+  selection: { title: "Payments" },
+  context: "",
+  question: { text: "Why?" },
+  onSave,
+});
+
+it("closes a thread once it has waited idle a while with no one watching, saving what it showed", async () => {
+  const { threads, desktop, stopped } = idleThreads();
+  const saved = vi.fn<(entries: AskEntry[]) => void>();
+  const thread = threads.open(idleAsk(saved));
+  const kept = desktop.open(idleAsk());
+  const unwatch = thread.subscribe(() => {});
+
+  await vi.waitFor(() => expect(thread.read().status).toBe("idle"));
+  await vi.waitFor(() => expect(kept.read().status).toBe("idle"));
+  await vi.advanceTimersByTimeAsync(5_000);
+  expect(threads.get(thread.id)).toBe(thread);
+
+  unwatch();
+  await vi.advanceTimersByTimeAsync(999);
+  thread.subscribe(() => {})();
+  await vi.advanceTimersByTimeAsync(999);
+  expect(threads.get(thread.id)).toBe(thread);
+  expect(stopped).not.toHaveBeenCalled();
+
+  await vi.advanceTimersByTimeAsync(1);
+  expect(threads.get(thread.id)).toBeUndefined();
+  expect(stopped).toHaveBeenCalled();
+  expect(saved).toHaveBeenLastCalledWith(thread.read().entries);
+  expect(thread.read().status).toBe("idle");
+  expect(desktop.get(kept.id)).toBe(kept);
+  kept.close();
+});
+
+it("waits for an answer to end before closing a thread no one watches", async () => {
+  const answered = Promise.withResolvers<void>();
+
+  const { threads, stopped } = idleThreads(async (prompt) => {
+    if (prompt.includes("And then?")) await answered.promise;
+  });
+
+  const thread = threads.open(idleAsk());
+
+  await vi.waitFor(() => expect(thread.read().status).toBe("idle"));
+  await vi.advanceTimersByTimeAsync(500);
+  const asked = thread.ask({ text: "And then?" });
+  await vi.waitFor(() => expect(thread.read().status).toBe("running"));
+  await vi.advanceTimersByTimeAsync(5_000);
+  expect(threads.get(thread.id)).toBe(thread);
+
+  answered.resolve();
+  await asked;
+  await vi.advanceTimersByTimeAsync(999);
+  expect(threads.get(thread.id)).toBe(thread);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(threads.get(thread.id)).toBeUndefined();
+  expect(stopped).toHaveBeenCalled();
 });

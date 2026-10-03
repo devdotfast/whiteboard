@@ -16,6 +16,7 @@ import {
   detectAskAgents,
   launchAskAgent,
 } from "@review/ask/agents.js";
+import { askThreadLimits } from "@review/ask/thread.js";
 import { AskThreads, cliAskTools } from "@review/ask/threads.js";
 import { findReviewPackageRoot } from "@review/package-paths.js";
 import { createReviewApi } from "@review/review-api/http.js";
@@ -133,6 +134,7 @@ async function serve(input: HeadlessServerInput) {
       name: "DEV_REVIEW_SERVER_DIR",
       value: input.stateDir,
     }),
+    { ...askThreadLimits, idleCloseMs: 30 * 60_000 },
   );
 
   const api = createReviewApi(
