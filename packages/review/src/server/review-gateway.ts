@@ -69,13 +69,25 @@ const FORWARDED_ROUTES: readonly (readonly [string, RegExp])[] = [
   ["POST", /^navigator$/],
   ["POST", /^copy-context$/],
   ["GET", /^language-context$/],
+  ["GET", /^ask\/agents$/],
+  ["GET", /^ask\/agents\/[^/]+\/offer$/],
+  ["GET", /^ask\/mentions$/],
+  ["GET", /^ask\/threads$/],
+  ["GET", /^ask\/[^/]+\/watch$/],
+  ["POST", /^ask$/],
+  [
+    "POST",
+    /^ask\/[^/]+\/(open|prompt|permission|permissions|files|choice|retry|cancel|close)$/,
+  ],
+  ["DELETE", /^ask\/[^/]+$/],
 ];
 
 /** Preparing a pinned checkout can take minutes; the host is not down. */
 const LANGUAGE_CONTEXT_TIMEOUT_MS = 120_000;
 
 /** Routes whose answers are read whole and refused if they name a path. */
-const PATH_ROUTES = new Set(["file", "language-context", "navigator"]);
+const WHOLE_BODY_ROUTES =
+  /^(file|language-context|navigator|ask\/agents(\/[^/]+\/offer)?|ask\/mentions|ask\/threads)$/;
 
 const PATH_FIELDS = new Set([
   "localPath",
@@ -445,7 +457,7 @@ export function createReviewGateway(input: {
       status === 200 &&
       url.searchParams.get("full") === "true";
 
-    if (snapshot || (options.route && PATH_ROUTES.has(options.route))) {
+    if (snapshot || (options.route && WHOLE_BODY_ROUTES.test(options.route))) {
       // A whole answer keeps coming, and ends in time. Cutting one fails
       // only this request: /health decides whether the host is down.
       let cut: string | undefined;
