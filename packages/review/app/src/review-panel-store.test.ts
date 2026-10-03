@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 
 import type { PeekAnchor } from "./review-panel-model";
 import type { ReviewPeekContent } from "./review-panel-model";
-import { askShown, createReviewPanelStore } from "./review-panel-store";
+import {
+  type ReviewPanelStore,
+  askShown,
+  createReviewPanelStore,
+} from "./review-panel-store";
 
 const anchor = {
   id: "startup",
@@ -26,23 +30,41 @@ const selection = {
   target: { kind: "text", quote: "start();" },
 } as const;
 
+const presence = {
+  agentName: "Claude Code",
+  status: "",
+  tone: "quiet",
+} as const;
+
+/** The key of the Ask shown in that place. */
+function shownAt(store: ReviewPanelStore, place: "docked" | "window") {
+  const state = store.getState();
+
+  return place === "docked" ? state.askDocked : state.askWindow;
+}
+
+function working(store: ReviewPanelStore, key: number, threadId = "thread") {
+  store.getState().reportAsk(key, { threadId, busy: true, presence });
+}
+
 describe("Ask", () => {
   it("shrinks to a pill under a peek or a diagram, and comes back after", () => {
     const store = createReviewPanelStore();
     store.getState().openAsk(selection);
-    expect(askShown(store.getState())).toBe("panel");
+    const key = shownAt(store, "docked")!;
+    expect(askShown(store.getState(), key)).toBe("panel");
 
     store.getState().openPeek({ kind: "peek", anchor, content });
-    expect(askShown(store.getState())).toBe("pill");
+    expect(askShown(store.getState(), key)).toBe("pill");
     store.getState().close();
-    expect(askShown(store.getState())).toBe("panel");
+    expect(askShown(store.getState(), key)).toBe("panel");
 
     store
       .getState()
       .openOverlayTour({ tourId: "flow", kind: "sequence" }, "step-1");
-    expect(askShown(store.getState())).toBe("pill");
+    expect(askShown(store.getState(), key)).toBe("pill");
     store.getState().closeOverlayTour();
-    expect(askShown(store.getState())).toBe("panel");
+    expect(askShown(store.getState(), key)).toBe("panel");
   });
 
   it("stays open in every view", () => {
@@ -50,24 +72,106 @@ describe("Ask", () => {
     store.getState().openAsk(selection);
 
     store.getState().showView("diff");
-    expect(askShown(store.getState())).toBe("panel");
+    expect(askShown(store.getState(), shownAt(store, "docked")!)).toBe("panel");
   });
 
   it("opens its window from the pill, and docks in place of a peek", () => {
     const store = createReviewPanelStore();
     store.getState().openAsk(selection);
+    const key = shownAt(store, "docked")!;
     store.getState().openPeek({ kind: "peek", anchor, content });
 
-    store.getState().restoreAsk();
-    expect(askShown(store.getState())).toBe("window");
+    store.getState().restoreAsk(key);
+    expect(askShown(store.getState(), key)).toBe("window");
     expect(store.getState().active).toMatchObject({ kind: "peek" });
 
-    store.getState().minimizeAsk();
-    expect(askShown(store.getState())).toBe("pill");
+    store.getState().minimizeAsk(key);
+    expect(askShown(store.getState(), key)).toBe("pill");
 
-    store.getState().dockAsk();
-    expect(askShown(store.getState())).toBe("panel");
+    store.getState().dockAsk(key);
+    expect(askShown(store.getState(), key)).toBe("panel");
     expect(store.getState().active).toBeNull();
+  });
+
+  it("asks in place of an idle Ask, and beside one whose agent is working", () => {
+    const store = createReviewPanelStore();
+    store.getState().openAsk(selection);
+    const idle = shownAt(store, "docked")!;
+
+    store.getState().openAsk(selection);
+    const first = shownAt(store, "docked")!;
+    expect(askShown(store.getState(), idle)).toBeNull();
+    expect(store.getState().asks).toHaveLength(1);
+
+    working(store, first);
+    store.getState().openAsk(selection);
+    const second = shownAt(store, "docked")!;
+    expect(second).not.toBe(first);
+    expect(askShown(store.getState(), first)).toBe("pill");
+    expect(askShown(store.getState(), second)).toBe("panel");
+
+    // From the pill, the working one opens in the window beside the dock.
+    store.getState().restoreAsk(first);
+    expect(askShown(store.getState(), first)).toBe("window");
+    expect(askShown(store.getState(), second)).toBe("panel");
+
+    store.getState().closeAsk(second);
+    expect(store.getState().asks.map((ask) => ask.key)).toEqual([first]);
+    expect(askShown(store.getState(), first)).toBe("window");
+  });
+
+  it("shows one Ask docked and one in the window; another there minimizes it", () => {
+    const store = createReviewPanelStore();
+    store.getState().openAsk(selection);
+    const first = shownAt(store, "docked")!;
+    working(store, first, "first");
+    store.getState().openAsk(selection);
+    const second = shownAt(store, "docked")!;
+    working(store, second, "second");
+    store.getState().openAsk(selection);
+    const third = shownAt(store, "docked")!;
+
+    store.getState().popOutAsk(third);
+    store.getState().dockAsk(first);
+    expect(askShown(store.getState(), first)).toBe("panel");
+    expect(askShown(store.getState(), third)).toBe("window");
+    expect(askShown(store.getState(), second)).toBe("pill");
+
+    store.getState().restoreAsk(second);
+    expect(askShown(store.getState(), second)).toBe("window");
+    expect(askShown(store.getState(), third)).toBe("pill");
+
+    store.getState().dockAsk(third);
+    expect(askShown(store.getState(), third)).toBe("panel");
+    expect(askShown(store.getState(), first)).toBe("pill");
+    expect(askShown(store.getState(), second)).toBe("window");
+  });
+
+  it("brings an open conversation forward rather than opening it twice", () => {
+    const store = createReviewPanelStore();
+
+    const saved = {
+      type: "saved",
+      threadId: "first",
+      selection,
+      agent: "claude",
+    } as const;
+
+    store.getState().openAskView(saved);
+    const key = shownAt(store, "docked")!;
+    working(store, key, "first");
+    store.getState().minimizeAsk(key);
+
+    store.getState().openAskView({ type: "history" });
+    store.getState().openAskView(saved);
+    expect(shownAt(store, "docked")).toBe(key);
+    expect(store.getState().asks).toHaveLength(2);
+
+    // Asked from itself, as to reconnect, it opens afresh in its place.
+    store.getState().openAskView(saved, { from: key, replace: true });
+    expect(shownAt(store, "docked")).not.toBe(key);
+    expect(askShown(store.getState(), key)).toBeNull();
+    expect(store.getState().asks).toHaveLength(2);
   });
 });
 

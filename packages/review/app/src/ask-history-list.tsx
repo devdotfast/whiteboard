@@ -10,7 +10,7 @@ import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
 import { ChatIcon, HistoryIcon } from "./icons";
 import { formatRelativeTime } from "./review-home-view";
-import { useOptionalReviewPanelStore } from "./review-panel";
+import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
 import type { AskView } from "./review-panel-model";
 import { useReviewRoots } from "./review-root-context";
 import { fontSize } from "./scale.stylex";
@@ -25,9 +25,10 @@ import { useTooltip } from "./use-tooltip";
 /** Opens the list of this review's saved conversations. */
 function useOpenAskHistory() {
   const panels = useOptionalReviewPanelStore();
+  const from = useAskKey();
 
   return panels
-    ? () => panels.getState().openAskView({ type: "history" })
+    ? () => panels.getState().openAskView({ type: "history" }, { from })
     : undefined;
 }
 
@@ -117,6 +118,7 @@ export function AskHistoryList({
 }): ReactElement {
   const history = useAskHistory();
   const panels = useOptionalReviewPanelStore();
+  const from = useAskKey();
   const openHistory = useOpenAskHistory();
 
   const session = useReviewSession();
@@ -258,12 +260,15 @@ export function AskHistoryList({
                           );
                       }
 
-                      panels?.getState().openAskView({
-                        type: "saved",
-                        threadId: entry.id,
-                        selection: entry.selection,
-                        agent: entry.agent,
-                      });
+                      panels?.getState().openAskView(
+                        {
+                          type: "saved",
+                          threadId: entry.id,
+                          selection: entry.selection,
+                          agent: entry.agent,
+                        },
+                        { from },
+                      );
                     }}
                   >
                     <span {...stylex.props(styles.historyLogo)}>

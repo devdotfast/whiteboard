@@ -55,7 +55,7 @@ import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
 import { ArrowUpIcon, ImageIcon, LockIcon } from "./icons";
 import { formatRelativeTime } from "./review-home-view";
-import { useOptionalReviewPanelStore } from "./review-panel";
+import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
 import type { AskPresence, AskReport } from "./review-panel-model";
 import { fontSize, radius } from "./scale.stylex";
 import type { StyleArg } from "./stylex-props";
@@ -133,6 +133,7 @@ export function AskPanelContent({
   const composer = useRef<HTMLTextAreaElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const panels = useOptionalReviewPanelStore();
+  const askKey = useAskKey();
 
   useEffect(() => {
     if (agents && !agent) setAgent(preferredAskAgent(session, agents)?.id);
@@ -408,12 +409,15 @@ export function AskPanelContent({
   const reconnect =
     lost && threadId && panels && !unsaved
       ? () =>
-          panels.getState().openAskView({
-            type: "saved",
-            threadId,
-            selection,
-            agent: thread?.agent ?? agent ?? "claude",
-          })
+          panels.getState().openAskView(
+            {
+              type: "saved",
+              threadId,
+              selection,
+              agent: thread?.agent ?? agent ?? "claude",
+            },
+            { from: askKey, replace: true },
+          )
       : undefined;
 
   // A failed agent starts again, once it is signed back in, say, and asks
@@ -433,7 +437,11 @@ export function AskPanelContent({
     panels &&
     ((lost && unsaved) ||
       (savedThreadId !== undefined && requestError !== null && !thread))
-      ? () => panels.getState().openAsk(selection, thread?.agent ?? agent)
+      ? () =>
+          panels.getState().openAsk(selection, thread?.agent ?? agent, {
+            from: askKey,
+            replace: true,
+          })
       : undefined;
 
   // Reopening starts the agent and loads its session. Whiteboard's saved
@@ -466,6 +474,7 @@ export function AskPanelContent({
           };
 
   const presenceAgent = thread?.agent ?? agent;
+  const reportedThreadId = threadId ?? savedThreadId ?? null;
 
   // Reopening a saved conversation loses nothing if it stops; an answer
   // under way does.
@@ -477,6 +486,7 @@ export function AskPanelContent({
 
   useEffect(() => {
     onReport?.({
+      threadId: reportedThreadId,
       busy: working,
       presence: {
         agent: presenceAgent,
@@ -487,6 +497,7 @@ export function AskPanelContent({
     });
   }, [
     onReport,
+    reportedThreadId,
     working,
     presenceAgent,
     presence.agentName,
@@ -714,9 +725,11 @@ export function AskReadOnlyThread({
 
   const agentName = thread?.agentName ?? "Ask";
 
-  // Nothing runs on a read-only conversation.
+  // Nothing runs on a read-only conversation, and it opens no thread to
+  // close.
   useEffect(() => {
     onReport?.({
+      threadId: null,
       busy: false,
       presence: {
         agent: thread?.agent,

@@ -40,7 +40,10 @@ let view: unknown;
 let outdated: ReadonlySet<string> | undefined;
 
 function Probe() {
-  view = useReviewPanel(({ ask }) => ask?.view ?? null);
+  view = useReviewPanel(
+    ({ asks, askDocked }) =>
+      asks.find((ask) => ask.key === askDocked)?.view ?? null,
+  );
   outdated = useAskHistory()?.outdated;
 
   return null;

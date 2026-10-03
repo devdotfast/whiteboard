@@ -12,7 +12,7 @@ import {
 import { useAskHistory } from "./ask-history";
 import { controlStyles } from "./controls-styles";
 import { TrashIcon } from "./icons";
-import { useOptionalReviewPanelStore } from "./review-panel";
+import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
 import { fontSize, radius } from "./scale.stylex";
 import type { StyleArg } from "./stylex-props";
 import { useToast } from "./toast";
@@ -109,6 +109,7 @@ export function AskDeleteThreadButton(): ReactElement | null {
   const threadId = useContext(OpenThreadContext)?.threadId;
   const history = useAskHistory();
   const panels = useOptionalReviewPanelStore();
+  const askKey = useAskKey();
   const { showToast, toast } = useToast();
 
   if (!threadId || !history?.entries?.some((entry) => entry.id === threadId))
@@ -120,7 +121,13 @@ export function AskDeleteThreadButton(): ReactElement | null {
         label="Delete this conversation"
         onDelete={() =>
           void history.forget(threadId).then((deleted) => {
-            if (deleted) panels?.getState().openAskView({ type: "history" });
+            if (deleted)
+              panels
+                ?.getState()
+                .openAskView(
+                  { type: "history" },
+                  { from: askKey, replace: true },
+                );
             else
               showToast({
                 kind: "error",

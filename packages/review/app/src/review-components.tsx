@@ -11,14 +11,22 @@ import type {
   ReactNode,
   Ref,
 } from "react";
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
+import { useShallow } from "zustand/react/shallow";
 
 import { AskCloseWarning } from "./ask-close";
 import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
 import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
-import { AskPill, type AskPresence, AskSlot, AskWindow } from "./ask-window";
+import { AskPills, AskSlot, AskWindow } from "./ask-window";
 import { AuthoredCodeSurface } from "./authored-code-surface";
 import { CodePeekCard } from "./CodePeek";
 import { controlStyles } from "./controls-styles";
@@ -41,6 +49,7 @@ import { chevronMarker, documentMarker } from "./markers.stylex";
 import { useReviewActions } from "./review-context";
 import { useReviewDiffFiles } from "./review-diff-files-context";
 import {
+  AskKeyContext,
   useOptionalReviewPanelStore,
   useReviewPanel,
   useReviewPanelStore,
@@ -53,7 +62,7 @@ import type {
   ReviewPeekContent,
   SourcePeekAnchor,
 } from "./review-panel-model";
-import { askShown } from "./review-panel-store";
+import { askPills, askShown } from "./review-panel-store";
 import { useReviewRoots } from "./review-root-context";
 import type { ReviewSectionSummary } from "./review-section-summary";
 import { useReviewUiState } from "./review-ui-state";
@@ -488,62 +497,72 @@ export function ReviewPanelHost() {
   );
 }
 
-const historyPresence: AskPresence = {
-  agentName: "Ask",
-  status: "Conversations",
-  tone: "quiet",
-};
-
 /**
- * The open conversation, in the side panel, its window or the pill. It
- * renders once, into an element of its own that moves between them, so
- * popping out, docking or minimizing never restarts it.
+ * The open Asks, each in the side panel, the window or a pill. Each renders
+ * once, into an element of its own that moves between them, so popping
+ * out, docking or minimizing never restarts it.
  */
 function AskHost() {
+  const keys = useReviewPanel(
+    useShallow((state) => state.asks.map((ask) => ask.key)),
+  );
+
+  const pills = useReviewPanel(useShallow(askPills));
+
+  return (
+    <>
+      {keys.map((key) => (
+        <OpenAsk key={key} askKey={key} />
+      ))}
+      {pills.length ? <AskPills asks={pills} /> : null}
+    </>
+  );
+}
+
+function OpenAsk({ askKey }: { askKey: number }) {
   const store = useReviewPanelStore();
-  const ask = useReviewPanel((state) => state.ask);
-  const shown = useReviewPanel(askShown);
+
+  const view = useReviewPanel(
+    (state) => state.asks.find((ask) => ask.key === askKey)?.view,
+  );
+
+  const shown = useReviewPanel((state) => askShown(state, askKey));
   const popOutTooltip = useTooltip("Pop out");
   const minimizeTooltip = useTooltip("Minimize");
   const [node] = useState(() => document.createElement("div"));
-
   const [header, setHeader] = useState<HTMLDivElement | null>(null);
-
-  const [report, setReport] = useState<AskReport>({
-    busy: false,
-    presence: { agentName: "Ask", status: "New question", tone: "quiet" },
-  });
-
   const checkoutGone = useReviewDiffFiles().status === "unavailable";
   const [warning, setWarning] = useState(false);
   const closeButton = useRef<HTMLButtonElement>(null);
 
-  // A new view is a new conversation, which has said nothing yet.
-  const [shownKey, setShownKey] = useState(ask?.key);
+  const report = useCallback(
+    (report: AskReport) => store.getState().reportAsk(askKey, report),
+    [store, askKey],
+  );
 
-  if (ask?.key !== shownKey) {
-    setShownKey(ask?.key);
-    setWarning(false);
-  }
+  if (!view || !shown) return null;
 
-  if (!ask || !shown) return null;
+  const ask = () =>
+    store.getState().asks.find((candidate) => candidate.key === askKey);
 
   // Closing stops the agent: while it works, ask first.
   const close = () => {
-    if (report.busy) setWarning(true);
-    else store.getState().closeAsk();
+    if (ask()?.busy) setWarning(true);
+    else store.getState().closeAsk(askKey);
   };
 
+  const busy = ask()?.busy ?? false;
+
   const closeWarning =
-    warning && report.busy && shown !== "pill" ? (
+    warning && busy && shown !== "pill" ? (
       <AskCloseWarning
         anchor={closeButton}
-        agentName={report.presence.agentName}
+        agentName={ask()?.presence.agentName ?? "The agent"}
         onMinimize={() => {
           setWarning(false);
-          store.getState().minimizeAsk();
+          store.getState().minimizeAsk(askKey);
         }}
-        onClose={() => store.getState().closeAsk()}
+        onClose={() => store.getState().closeAsk(askKey)}
         onKeep={() => setWarning(false)}
       />
     ) : null;
@@ -551,94 +570,89 @@ function AskHost() {
   const actions = (
     <>
       <AskDeleteThreadButton />
-      <AskHistoryButton view={ask.view} />
+      <AskHistoryButton view={view} />
     </>
   );
 
   return (
-    <AskOpenThreadProvider key={ask.key}>
-      {createPortal(
-        ask.view.type === "history" ? (
-          <AskHistoryList passage={ask.view.passage} />
-        ) : ask.view.type === "saved" && checkoutGone ? (
-          <AskReadOnlyThread
-            selection={ask.view.selection}
-            threadId={ask.view.threadId}
-            onReport={setReport}
-          />
-        ) : (
-          <AskPanelContent
-            selection={ask.view.selection}
-            agent={ask.view.agent}
-            savedThreadId={
-              ask.view.type === "saved" ? ask.view.threadId : undefined
+    <AskKeyContext.Provider value={askKey}>
+      <AskOpenThreadProvider>
+        {createPortal(
+          view.type === "history" ? (
+            <AskHistoryList passage={view.passage} />
+          ) : view.type === "saved" && checkoutGone ? (
+            <AskReadOnlyThread
+              selection={view.selection}
+              threadId={view.threadId}
+              onReport={report}
+            />
+          ) : (
+            <AskPanelContent
+              selection={view.selection}
+              agent={view.agent}
+              savedThreadId={view.type === "saved" ? view.threadId : undefined}
+              onReport={report}
+              header={header}
+            />
+          ),
+          node,
+        )}
+        {shown === "panel" ? (
+          <ReviewPanelFrame
+            tray
+            label="Ask"
+            titleAccessory={
+              <div ref={setHeader} {...stylex.props(panelStyles.title)} />
             }
-            onReport={setReport}
-            header={header}
-          />
-        ),
-        node,
-      )}
-      {shown === "panel" ? (
-        <ReviewPanelFrame
-          tray
-          label="Ask"
-          titleAccessory={
-            <div ref={setHeader} {...stylex.props(panelStyles.title)} />
-          }
-          onClose={close}
-          onEscape={warning ? () => setWarning(false) : close}
-          closeLabel="Close Ask"
-          closeRef={closeButton}
-          headerActions={
-            <>
-              {actions}
-              <IconButton
-                ref={popOutTooltip}
-                size="large"
-                aria-label="Pop out Ask"
-                onClick={() => store.getState().popOutAsk()}
-              >
-                <PopOutIcon
-                  xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
-                />
-              </IconButton>
-              <IconButton
-                ref={minimizeTooltip}
-                size="large"
-                aria-label="Minimize Ask"
-                onClick={() => store.getState().minimizeAsk()}
-              >
-                <MinusIcon
-                  xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
-                />
-              </IconButton>
-            </>
-          }
-        >
-          {closeWarning}
-          <AskSlot node={node} />
-        </ReviewPanelFrame>
-      ) : shown === "window" ? (
-        <AskWindow
-          actions={actions}
-          titleAccessory={
-            <div ref={setHeader} {...stylex.props(panelStyles.title)} />
-          }
-          onClose={close}
-          closeRef={closeButton}
-        >
-          {closeWarning}
-          <AskSlot node={node} />
-        </AskWindow>
-      ) : (
-        <AskPill
-          presence={
-            ask.view.type === "history" ? historyPresence : report.presence
-          }
-        />
-      )}
-    </AskOpenThreadProvider>
+            onClose={close}
+            onEscape={warning ? () => setWarning(false) : close}
+            closeLabel="Close Ask"
+            closeRef={closeButton}
+            headerActions={
+              <>
+                {actions}
+                <IconButton
+                  ref={popOutTooltip}
+                  size="large"
+                  aria-label="Pop out Ask"
+                  onClick={() => store.getState().popOutAsk(askKey)}
+                >
+                  <PopOutIcon
+                    xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
+                  />
+                </IconButton>
+                <IconButton
+                  ref={minimizeTooltip}
+                  size="large"
+                  aria-label="Minimize Ask"
+                  onClick={() => store.getState().minimizeAsk(askKey)}
+                >
+                  <MinusIcon
+                    xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
+                  />
+                </IconButton>
+              </>
+            }
+          >
+            {closeWarning}
+            <AskSlot node={node} />
+          </ReviewPanelFrame>
+        ) : shown === "window" ? (
+          <AskWindow
+            askKey={askKey}
+            actions={actions}
+            titleAccessory={
+              <div ref={setHeader} {...stylex.props(panelStyles.title)} />
+            }
+            onClose={close}
+            closeRef={closeButton}
+          >
+            {closeWarning}
+            <AskSlot node={node} />
+          </AskWindow>
+        ) : null}
+      </AskOpenThreadProvider>
+    </AskKeyContext.Provider>
   );
 }
 
