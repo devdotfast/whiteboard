@@ -22,7 +22,11 @@ import {
   applyAskChange,
   askUpdateSchema,
 } from "@review/ask/thread-state.js";
-import { AskThread, type AskThreadLimits } from "@review/ask/thread.js";
+import {
+  AskThread,
+  type AskThreadLimits,
+  askThreadLimits,
+} from "@review/ask/thread.js";
 import { AskThreads } from "@review/ask/threads.js";
 import { expect, it, vi } from "vitest";
 
@@ -1506,4 +1510,64 @@ it("accepts Cursor's todo list, so it carries on with the answer", async () => {
   expect(reply).toEqual({ outcome: { outcome: "accepted", todos } });
   expect(state.entries.at(-1)).toMatchObject({ text: "It is safe." });
   thread.close();
+});
+
+it("lets an answer run on with nothing following it, then ends the thread once it has sat idle unfollowed", async () => {
+  let finish!: () => void;
+
+  const fake = fakeAgent(async (client) => {
+    const finished = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+
+    await say(client, "Reading.");
+    await finished;
+  });
+
+  const threads = new AskThreads(fake.launch, {}, askThreadLimits, 1_000);
+
+  const thread = threads.open({
+    reviewId: "review",
+    agent: "claude",
+    cwd: "/checkout",
+    head: "abc123",
+    selection: { title: "Paragraph 3", quote: "The index is concurrent." },
+    context: "Selected text from Whiteboard.",
+    question: { text: "Is this safe?" },
+  });
+
+  try {
+    await until(thread, (state) =>
+      state.entries.some((entry) => entry.kind === "agent"),
+    );
+    expect(threads.working()).toEqual([
+      { threadId: thread.id, reviewId: "review", agentName: "Claude Code" },
+    ]);
+
+    // Answering, it runs on however long nothing follows it.
+    threads.sweep(0);
+    threads.sweep(60_000);
+    expect(threads.get(thread.id)).toBe(thread);
+
+    finish();
+    await until(thread, (state) => state.status === "idle");
+    expect(threads.working()).toEqual([]);
+
+    // Followed, an idle thread stays.
+    const unfollow = thread.subscribe(() => {});
+
+    threads.sweep(70_000);
+    threads.sweep(80_000);
+    expect(threads.get(thread.id)).toBe(thread);
+
+    unfollow();
+    threads.sweep(90_000);
+    threads.sweep(90_999);
+    expect(threads.get(thread.id)).toBe(thread);
+
+    threads.sweep(91_000);
+    expect(threads.get(thread.id)).toBeUndefined();
+  } finally {
+    threads.closeAll();
+  }
 });

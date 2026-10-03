@@ -40,7 +40,8 @@ import type {
 import { EditorPaneSelectionChangeReason } from "../../../../workbench/common/editor.js";
 import type { IEditorGroup } from "../../../../workbench/services/editor/common/editorGroupsService.js";
 import { IHostService } from "../../../../workbench/services/host/browser/host.js";
-import { ILifecycleService } from "../../../../workbench/services/lifecycle/common/lifecycle.js";
+import { isMacintosh } from "../../../../base/common/platform.js";
+import { ILifecycleService, ShutdownReason } from "../../../../workbench/services/lifecycle/common/lifecycle.js";
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import {
 	EDITOR_FONT_SIZE_SETTING,
@@ -83,6 +84,7 @@ import {
 	REVIEW_TUTORIAL_STEP_IDS
 } from "../../../common/reviewProtocol.js";
 import { IReviewVerbsService } from "../../../contrib/verbs/reviewVerbs.js";
+import { vetoStoppingAskAgents } from "../../reviewAskShutdown.js";
 import { confirmReviewDeletion } from "../../reviewDeleteConfirmation.js";
 import { showReviewCanvasMenu } from "../../reviewCanvasMenu.js";
 import { ReviewTooltip } from "../../reviewTooltip.js";
@@ -207,6 +209,27 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		);
 		// A clean quit ends the open session before the server would reconcile it as abnormal.
 		this._register(lifecycleService.onWillShutdown(() => this.sessionTelemetry.end("app_quit")));
+		// Quitting stops the review server and the agents answering in Ask; the
+		// reviewer chooses. Elsewhere than macOS, closing the last window quits.
+		// A reload leaves them running, to reopen.
+		this._register(
+			lifecycleService.onBeforeShutdown((event) => {
+				const action =
+					event.reason === ShutdownReason.QUIT
+						? "Quit"
+						: event.reason === ShutdownReason.CLOSE && !isMacintosh
+							? "Close"
+							: undefined;
+				if (!action) return;
+				event.veto(
+					this.desktopConnection
+						.workingAskAgents()
+						.catch(() => [])
+						.then((agents) => vetoStoppingAskAgents(this.dialogService, agents, action)),
+					"review.askAgentsWorking",
+				);
+			}),
+		);
 		this._register(toDisposable(() => this.sessionTelemetry.end("closed")));
 		let catalog = this.apiCatalog.reviews;
 		this._register(this.apiCatalog.onDidChange(() => {

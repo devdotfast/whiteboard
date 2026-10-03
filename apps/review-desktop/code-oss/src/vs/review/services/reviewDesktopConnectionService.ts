@@ -64,6 +64,8 @@ export interface IReviewDesktopConnectionService {
 	setDiffrConfigValue(key: string, value: JsonValue): Promise<ReviewDiffrConfig>;
 	/** The scratchpad preference: a server preference, since the review server reads it. */
 	readScratchpadEnabled(): Promise<boolean>;
+	/** The agents answering in Ask in any review, which quitting would stop. */
+	workingAskAgents(): Promise<string[]>;
 	setScratchpadEnabled(enabled: boolean): Promise<boolean>;
 	getTutorialStatus(): Promise<{ version: 1; reviewUuid: string | null }>;
 	prepareTutorial(): Promise<void>;
@@ -184,6 +186,16 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		});
 		await this.requireOk(response, "diffr configuration");
 		return parseReviewDiffrConfig(await response.json());
+	}
+
+	async workingAskAgents(): Promise<string[]> {
+		await this.initialize();
+		const response = await fetch(`${this.serverUrl}/reviews-api/ask/working`, {
+			headers: this.authHeaders(),
+			signal: AbortSignal.timeout(5_000),
+		});
+		await this.requireOk(response, "working Ask agents");
+		return parseWorkingAskAgents(await response.json());
 	}
 
 	async readScratchpadEnabled(): Promise<boolean> {
@@ -555,4 +567,13 @@ function parseScratchpadPreference(value: unknown): boolean {
 		throw new Error("scratchpad preference response is malformed.");
 	}
 	return value.enabled;
+}
+
+/** The names of the agents a working-agents answer lists; anything else
+ * lists none. */
+function parseWorkingAskAgents(value: unknown): string[] {
+	if (!isJsonObject(value) || !Array.isArray(value.agents)) return [];
+	return value.agents.flatMap((agent) =>
+		isJsonObject(agent) && typeof agent.agentName === "string" ? [agent.agentName] : [],
+	);
 }

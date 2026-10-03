@@ -29,6 +29,7 @@ import {
 import { retainedTrace } from "./api-trace";
 import { App } from "./App";
 import type { RenderedReviewDocument } from "./App";
+import { readOpenAsks } from "./ask-open-state";
 import { AuthoringActivityContext } from "./authoring-activity-context";
 import {
   type AuthoringCursor,
@@ -395,8 +396,9 @@ export function ApiCanvas({
       <SharingContext.Provider value={sharing}>
         <ReviewSessionProvider session={session}>
           <ReviewPanelProvider
-            restore={() =>
-              readReviewNavigationRestore(session.config, {
+            restore={() => ({
+              asks: readOpenAsks(session.config),
+              ...readReviewNavigationRestore(session.config, {
                 softwareMapEnabled:
                   content.softwareMapEnabled === true && data.maps.size > 0,
                 hasChangeRange:
@@ -408,8 +410,8 @@ export function ApiCanvas({
                     ? "textual"
                     : "structural",
                 commits: data.commits,
-              })
-            }
+              }),
+            })}
           >
             <DocumentData.Provider value={data}>
               <ReviewLensesProvider

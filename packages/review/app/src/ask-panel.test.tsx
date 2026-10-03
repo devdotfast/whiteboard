@@ -76,7 +76,7 @@ function working(container: HTMLElement) {
   );
 }
 
-it("asks the chosen agent, streams its answer, relays a decision, and closes the agent when the panel goes", async () => {
+it("asks the chosen agent, streams its answer, relays a decision, and leaves the agent running when the panel goes", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const session = testReviewSession();
   const header = document.createElement("div");
@@ -256,7 +256,8 @@ it("asks the chosen agent, streams its answer, relays a decision, and closes the
     vi.unstubAllGlobals();
   }
 
-  expect(posted("/ask/thread/close")).toEqual(["POST"]);
+  // Closing its Ask ends the agent; the panel going, as with its tab, does not.
+  expect(posted("/ask/thread/close")).toEqual([]);
 });
 
 /** What the document's marks report once they place themselves. */

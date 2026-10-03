@@ -26,6 +26,14 @@ const OFFER_TIMEOUT_MS = 30_000;
  * commands, which it sends on its own rather than in the response. */
 const COMMANDS_WAIT_MS = 2_000;
 
+/** How long a thread nobody follows may sit idle before it ends: its panel
+ * went with a reload, or its review's tab never came back. The conversation
+ * stays saved, so opening it again starts its agent again. */
+const UNWATCHED_IDLE_MS = 10 * 60_000;
+
+/** How often idle threads nobody follows are looked for. */
+const SWEEP_MS = 60_000;
+
 /** What an agent offers, from a session it starts and leaves without
  * asking anything: with the model given, where it offers that model, since
  * the efforts on offer depend on it. */
@@ -144,9 +152,20 @@ export type AskToolsReach =
   | { kind: "cli"; command: string }
   | undefined;
 
-/** The live Ask threads of one server; they end with it. */
+/** An agent answering in Ask, which ending the server would stop. */
+export interface AskWorkingAgent {
+  threadId: string;
+  reviewId: string;
+  agentName: string;
+}
+
+/** The live Ask threads of one server; they end with it, or once idle with
+ * nothing following them. */
 export class AskThreads {
   private readonly threads = new Map<string, AskThread>();
+  /** When each thread was last seen idle with nothing following it. */
+  private readonly unwatchedSince = new Map<string, number>();
+  private sweeper?: ReturnType<typeof setInterval>;
   /** One question to each agent at a time about what it offers with a
    * model. */
   private readonly offers = new Map<string, Promise<AskOffer>>();
@@ -157,6 +176,7 @@ export class AskThreads {
     private readonly launch: AskAgentLauncher,
     private readonly tools: AskTools = {},
     private readonly limits: AskThreadLimits = askThreadLimits,
+    private readonly unwatchedIdleMs = UNWATCHED_IDLE_MS,
   ) {
     this.mcpServers = tools.mcpServers ?? (() => []);
   }
@@ -184,8 +204,45 @@ export class AskThreads {
 
     this.threads.set(thread.id, thread);
     void thread.open();
+    this.sweeper ??= setInterval(() => this.sweep(), SWEEP_MS);
+    this.sweeper.unref?.();
 
     return thread;
+  }
+
+  /** The agents answering now, in every review. */
+  working(): AskWorkingAgent[] {
+    return [...this.threads.values()].flatMap((thread) => {
+      const { status, agentName } = thread.read();
+
+      return status === "running" || status === "waiting"
+        ? [{ threadId: thread.id, reviewId: thread.reviewId, agentName }]
+        : [];
+    });
+  }
+
+  /** Ends the threads left idle with nothing following them for long
+   * enough. One answering or waiting on a decision runs on. */
+  sweep(now = Date.now()) {
+    for (const [id, thread] of this.threads) {
+      const { status } = thread.read();
+
+      if (
+        thread.watched() ||
+        status === "starting" ||
+        status === "running" ||
+        status === "waiting"
+      ) {
+        this.unwatchedSince.delete(id);
+        continue;
+      }
+
+      const since = this.unwatchedSince.get(id) ?? now;
+
+      this.unwatchedSince.set(id, since);
+
+      if (now - since >= this.unwatchedIdleMs) this.close(id);
+    }
   }
 
   get(id: string) {
@@ -211,9 +268,12 @@ export class AskThreads {
   close(id: string) {
     this.threads.get(id)?.close();
     this.threads.delete(id);
+    this.unwatchedSince.delete(id);
   }
 
   closeAll() {
     for (const id of [...this.threads.keys()]) this.close(id);
+    clearInterval(this.sweeper);
+    this.sweeper = undefined;
   }
 }

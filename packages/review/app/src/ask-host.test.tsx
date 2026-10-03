@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import { AskHistoryProvider } from "./ask-history";
+import { readOpenAsks } from "./ask-open-state";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewPanelHost } from "./review-components";
@@ -86,6 +87,10 @@ function askCanvas() {
       if (endpoint === "/ask")
         return Response.json({ threadId: `thread-${++asked}` });
 
+      const opened = /^\/ask\/(.+)\/open$/.exec(String(endpoint))?.[1];
+
+      if (opened) return Response.json({ threadId: opened });
+
       // Every open Ask follows its thread over one stream; the newest
       // carries each thread's updates.
       if (endpoint === "/ask/watch")
@@ -122,15 +127,18 @@ function askCanvas() {
 
   const container = document.createElement("div");
   document.body.append(container);
-  const root = createRoot(container);
+  let root = createRoot(container);
 
-  /** Mounts the canvas. */
+  /** Mounts the canvas, with the Asks it last left open, as a tab switched
+   * back to or a reload does. */
   const mount = () =>
     act(async () =>
       root.render(
         <ReviewSessionProvider session={session}>
           <ReviewDebugSettingsProvider>
-            <ReviewPanelProvider>
+            <ReviewPanelProvider
+              restore={() => ({ asks: readOpenAsks(session.config) })}
+            >
               <AskHistoryProvider>
                 <Probe />
                 <ReviewPanelHost />
@@ -140,6 +148,12 @@ function askCanvas() {
         </ReviewSessionProvider>,
       ),
     );
+
+  /** The canvas goes, as for another tab. */
+  const unmount = async () => {
+    await act(async () => root.unmount());
+    root = createRoot(container);
+  };
 
   const askQuestion = async (text: string) => {
     const textarea = document.querySelector("textarea")!;
@@ -170,11 +184,14 @@ function askCanvas() {
             endpoint === "/ask/watch" && !init?.signal?.aborted,
         )
         .map(([, init]) => watchedThreads(init)),
+    requested,
     mount,
+    unmount,
     askQuestion,
     async [Symbol.asyncDispose]() {
       await act(async () => root.unmount());
       container.remove();
+      sessionStorage.clear();
       vi.restoreAllMocks();
       vi.unstubAllGlobals();
     },
@@ -320,4 +337,41 @@ it("folds two or more minimized Asks into one pill that lists them", async () =>
   // One minimized again: its own pill, and no list.
   expect(button(/minimized Asks$/)).toBeNull();
   expect(pills()).toHaveLength(1);
+});
+
+it("leaves an agent working when its canvas goes, and carries on with it when the canvas comes back", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await using canvas = askCanvas();
+
+  await canvas.mount();
+  await act(async () => canvas.store().getState().openAsk(selection));
+  await canvas.askQuestion("Is this safe on replicas?");
+  await act(async () =>
+    canvas.streams.get("thread-1")!({ seq: 1, snapshot: running("thread-1") }),
+  );
+
+  // Another tab: the canvas goes, and the agent runs on.
+  await canvas.unmount();
+  expect(canvas.closed()).toEqual([]);
+
+  // Back again, the Ask is where it was, following the same conversation.
+  await canvas.mount();
+  expect(canvas.requested("/ask/thread-1/open")).toHaveLength(1);
+  await act(async () =>
+    canvas.streams.get("thread-1")!({
+      seq: 2,
+      snapshot: {
+        ...running("thread-1"),
+        entries: [
+          ...running("thread-1").entries,
+          { kind: "agent", id: "a", text: "Replicas replay the build." },
+        ],
+      },
+    }),
+  );
+  expect(
+    document.querySelector('aside[aria-label="Ask"]')?.textContent,
+  ).toContain("Replicas replay the build.");
+  expect(button(/^Close Ask$/)).not.toBeNull();
+  expect(canvas.closed()).toEqual([]);
 });

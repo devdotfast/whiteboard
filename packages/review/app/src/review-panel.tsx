@@ -11,7 +11,7 @@ import {
 import { useStore } from "zustand";
 
 import {
-  type ReviewNavigationRestore,
+  type ReviewPanelRestore,
   type ReviewPanelStore,
   type ReviewPanelStoreState,
   createReviewPanelStore,
@@ -36,7 +36,7 @@ export function ReviewPanelProvider({
   children: ReactNode;
   /** Called once, when the provider mounts: the canvas re-renders often, and
    * restoring reads storage. */
-  restore?: () => ReviewNavigationRestore;
+  restore?: () => ReviewPanelRestore;
 }) {
   const [store] = useState(() => createReviewPanelStore(restore?.()));
 

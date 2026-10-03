@@ -25,10 +25,12 @@ import { useShallow } from "zustand/react/shallow";
 import { AskCloseWarning } from "./ask-close";
 import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
 import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
+import { syncOpenAsks } from "./ask-open-state";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
 import {
   AskThreadsWatchContext,
   useAskThreadsWatch,
+  useLatest,
 } from "./ask-thread-stream";
 import { AskPills, AskSlot, AskWindow } from "./ask-window";
 import { AuthoredCodeSurface } from "./authored-code-surface";
@@ -507,6 +509,27 @@ export function ReviewPanelHost() {
  * out, docking or minimizing never restarts it.
  */
 function AskHost() {
+  const store = useReviewPanelStore();
+  const session = useLatest(useReviewSession());
+
+  // Closing an Ask ends its agent; its canvas going, as for another tab,
+  // does not.
+  useEffect(
+    () =>
+      syncOpenAsks(
+        store,
+        session.current.config,
+        (threadId) =>
+          void session.current
+            .fetch(`/ask/${threadId}/close`, {
+              method: "POST",
+              keepalive: true,
+            })
+            .catch(() => {}),
+      ),
+    [store, session],
+  );
+
   const keys = useReviewPanel(
     useShallow((state) => state.asks.map((ask) => ask.key)),
   );

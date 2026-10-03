@@ -192,13 +192,13 @@ export function useAskThreadsWatch(session: ReviewSession) {
   return watch;
 }
 
-/** Follows one thread until the panel lets go of it. */
+/** Follows one thread until the panel lets go of it. Letting go leaves the
+ * agent running: closing its Ask is what ends it. */
 export function useThread(session: ReviewSession, threadId: string | null) {
   const [thread, setThread] = useState<AskThreadState | null>(null);
   const [lost, setLost] = useState(false);
-  // Each new version of the review is a new session object; the agent
-  // belongs to the panel, so only the panel closing ends it.
-  const current = useLatest(session);
+  // Each new version of the review is a new session object; the watch
+  // follows the latest, so following the thread does not start again.
   const own = useAskThreadsWatch(session);
   const watch = useContext(AskThreadsWatchContext) ?? own;
 
@@ -207,29 +207,11 @@ export function useThread(session: ReviewSession, threadId: string | null) {
 
     setLost(false);
 
-    // Set once the thread is gone from the server, which then has nothing
-    // to close; a late close could end the same thread reopened.
-    let gone = false;
-
-    const stop = watch.follow(threadId, {
+    return watch.follow(threadId, {
       onState: setThread,
-      onEnd() {
-        gone = true;
-        setLost(true);
-      },
+      onEnd: () => setLost(true),
     });
-
-    return () => {
-      stop();
-
-      if (gone) return;
-      // The agent process belongs to this panel; closing the panel ends it.
-      // The conversation stays saved, to reopen from the history.
-      void current.current
-        .fetch(`/ask/${threadId}/close`, { method: "POST", keepalive: true })
-        .catch(() => {});
-    };
-  }, [current, threadId, watch]);
+  }, [threadId, watch]);
 
   // A thread the panel lost is not running any more, whatever it last said.
   return {

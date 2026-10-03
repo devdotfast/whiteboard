@@ -1177,6 +1177,11 @@ export function createReviewApi(
 
     // Each agent with the models and efforts it offered last; none until
     // it has run.
+    // The agents answering in any review, which quitting the app would stop.
+    app.get("/ask/working", (context) =>
+      context.json({ agents: ask.threads.working() }),
+    );
+
     app.get("/:id/ask/agents", async (context) =>
       context.json({ agents: await ask.agents() }),
     );
@@ -1567,7 +1572,8 @@ export function createReviewApi(
       return context.json({ ok: true });
     });
 
-    // Closing the panel ends the agent; the conversation stays saved.
+    // Closing an Ask ends its agent; the conversation stays saved. A tab
+    // switched away from or a reload leaves it running, to come back to.
     app.post("/:id/ask/:threadId/close", (context) => {
       readThread(context.req.param("id"), context.req.param("threadId"));
       ask.threads.close(context.req.param("threadId"));

@@ -250,6 +250,11 @@ export class AskThread {
     return () => this.listeners.delete(listener);
   }
 
+  /** Whether anything follows the thread, as an open panel does. */
+  watched() {
+    return this.listeners.size > 0;
+  }
+
   /** Starts the agent and asks the first question, or loads an earlier
    * conversation; failures land in the state. */
   async open() {

@@ -155,6 +155,14 @@ export type ReviewPanelStoreState = ReviewPanelState &
 
 export type ReviewPanelStore = ReturnType<typeof createReviewPanelStore>;
 
+/** The open Asks to start with, as a review's canvas last left them. */
+export interface AskRestore extends Pick<
+  ReviewPanelState,
+  "askDocked" | "askWindow" | "askPlace" | "askAnchor" | "askSize"
+> {
+  asks: { key: number; view: AskView }[];
+}
+
 export type ReviewNavigationRestore = Partial<
   Pick<
     ReviewNavigationState,
@@ -168,6 +176,10 @@ export type ReviewNavigationRestore = Partial<
   >
 >;
 
+export type ReviewPanelRestore = ReviewNavigationRestore & {
+  asks?: AskRestore;
+};
+
 export function createReviewPanelStore({
   view = "review",
   availableViews = reviewViewSchema.options,
@@ -176,9 +188,16 @@ export function createReviewPanelStore({
   traceStorage = null,
   lens = null,
   overlayTour = null,
-}: ReviewNavigationRestore = {}) {
+  asks: restored,
+}: ReviewPanelRestore = {}) {
   const initialView = availableViews.includes(view) ? view : "review";
-  let nextAskKey = 0;
+  const asks = restored?.asks.map(({ key, view }) => newAsk(key, view)) ?? [];
+
+  // A place shows a restored Ask only if it is among them.
+  const open = (key: number | null | undefined) =>
+    asks.find((ask) => ask.key === key)?.key ?? null;
+
+  let nextAskKey = Math.max(-1, ...asks.map((ask) => ask.key)) + 1;
 
   // A view opens where Asks open, or where the Ask that asked is; docked, it
   // takes the peek's place. One already open comes forward instead.
@@ -227,12 +246,12 @@ export function createReviewPanelStore({
 
   return createStore<ReviewPanelStoreState>()((set) => ({
     active: null,
-    asks: [],
-    askDocked: null,
-    askWindow: null,
-    askPlace: "docked",
-    askAnchor: null,
-    askSize: null,
+    asks,
+    askDocked: open(restored?.askDocked),
+    askWindow: open(restored?.askWindow),
+    askPlace: restored?.askPlace ?? "docked",
+    askAnchor: restored?.askAnchor ?? null,
+    askSize: restored?.askSize ?? null,
     motion: "live",
     view: initialView,
     availableViews,
