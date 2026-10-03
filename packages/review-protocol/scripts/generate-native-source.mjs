@@ -124,6 +124,7 @@ const MODULE_PATHS = [
   path.join(sourceRoot, "source-alignment.ts"),
   path.join(sourceRoot, "contracts.ts"),
   path.join(sourceRoot, "code-peek-diff.ts"),
+  path.join(sourceRoot, "ndjson.ts"),
   path.join(sourceRoot, "review-api-client.ts"),
   path.join(sourceRoot, "index.ts"),
 ];
