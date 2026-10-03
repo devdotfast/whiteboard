@@ -258,6 +258,17 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       ? { ...env, DEV_REVIEW_SERVER_DIR: path.resolve(cwd, stateDir) }
       : env;
 
+  // An expected refusal: its message alone, not a stack.
+  const refuse = (message: string, json?: boolean) => {
+    if (json)
+      emitReviewEvent(input.stdout, {
+        event: "error",
+        error: { name: "Error", message },
+      });
+    else input.stderr.write(`${message}\n`);
+    state.exitCode = 1;
+  };
+
   const serverCommand = configureOutput(
     program
       .command("server")
@@ -342,8 +353,10 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
 
+    const { HeadlessServerBusyError, runHeadlessServer } =
+      await import("./server/headless-host.js");
+
     try {
-      const { runHeadlessServer } = await import("./server/headless-host.js");
       await runHeadlessServer({
         stateDir,
         port,
@@ -359,6 +372,9 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
           );
         },
       });
+    } catch (error) {
+      if (!(error instanceof HeadlessServerBusyError)) throw error;
+      refuse(error.message, options.json);
     } finally {
       process.off("SIGINT", stop);
       process.off("SIGTERM", stop);
@@ -481,10 +497,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         `Cannot tell whether a Whiteboard Desktop is using ${stateDir}: ${problem.message}`,
       );
 
-    const inUse = () =>
-      new Error(
-        `A Whiteboard server is using ${stateDir}. Stop it first, then run whiteboard server reset-id again.`,
-      );
+    const inUse = `A Whiteboard server is using ${stateDir}. Stop it first, then run whiteboard server reset-id again.`;
 
     if (
       desktops.instances.some(({ discovery }) =>
@@ -493,7 +506,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         ),
       )
     )
-      throw inUse();
+      return refuse(inUse, options.json);
 
     const [{ openReviewProfile }, { withHeadlessServerLock }] =
       await Promise.all([
@@ -519,7 +532,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       },
     );
 
-    if (!reset.acquired) throw inUse();
+    if (!reset.acquired) return refuse(inUse, options.json);
     const serverId = reset.result;
 
     input.stdout.write(

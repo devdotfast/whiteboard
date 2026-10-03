@@ -41,6 +41,9 @@ interface HeadlessServerInput {
   onReady(discovery: ReviewServerDiscovery): void;
 }
 
+/** Another server holds the profile's lock. */
+export class HeadlessServerBusyError extends Error {}
+
 /** One foreground headless endpoint per profile; Desktop shares its database. */
 export async function runHeadlessServer(input: HeadlessServerInput) {
   await mkdir(input.stateDir, { recursive: true, mode: 0o700 });
@@ -54,7 +57,7 @@ export async function runHeadlessServer(input: HeadlessServerInput) {
   ).finally(() => stopErrorTelemetry?.());
 
   if (!outcome.acquired)
-    throw new Error(
+    throw new HeadlessServerBusyError(
       `A Whiteboard server already owns ${stateDir}. Stop it first, or choose another --state-dir.`,
     );
 }

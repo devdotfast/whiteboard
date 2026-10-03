@@ -164,7 +164,12 @@ it("a paused server still owns its state directory: start and reset-id refuse, a
     );
 
     expect(start.status).toBe(1);
-    expect(start.stderr).toContain("already owns");
+    // The message alone, without a stack.
+    expect(start.stderr).toMatch(/^A Whiteboard server already owns [^\n]+\n$/);
+    expect(await cli(["server", "reset-id"])).toMatchObject({
+      code: 1,
+      stderr: expect.stringMatching(/^A Whiteboard server is using [^\n]+\n$/),
+    });
     expect((await cli(["server", "reset-id", "--json"])).code).toBe(1);
     expect(alive(pid)).toBe(true);
 
