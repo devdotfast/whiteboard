@@ -1,6 +1,10 @@
 #!/bin/sh
 # wb-test: stands in for OpenCode. `opencode acp` speaks ACP; anything else prints a version.
 case "$1" in
-  acp) exec node "$(dirname "$0")/acp-agent.mjs" ;;
+  acp)
+    node=$(command -v node)
+    [ -n "$node" ] || for node in "$HOME"/.dev/whiteboard-remote/node/v*/bin/node; do :; done
+    [ -x "$node" ] || { echo "opencode (wb-test): no node on PATH or in ~/.dev/whiteboard-remote/node" >&2; exit 127; }
+    exec "$node" "${0%/*}/acp-agent.mjs" ;;
   *) echo "opencode 0.0.0-wb-test" ;;
 esac

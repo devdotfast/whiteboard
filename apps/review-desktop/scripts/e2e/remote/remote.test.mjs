@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { test } from "node:test";
@@ -111,6 +112,38 @@ test("the fake OpenCode answers a prompt with a chunk and a tool call on f.ts", 
     id: 4,
     result: { stopReason: "end_turn" },
   });
+});
+
+test("the fake OpenCode falls back to the managed node off PATH", async (t) => {
+  const home = await mkdtemp(path.join(tmpdir(), "wb-test-home-"));
+  const bin = path.join(home, "bin");
+  const managed = path.join(home, ".dev/whiteboard-remote/node/v24.0.0/bin");
+  const shim = path.join(import.meta.dirname, "fake-agent/opencode");
+
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await mkdir(bin);
+
+  const acp = (input) =>
+    exec("/bin/sh", ["-c", `printf '%s\\n' '${input}' | "$0" acp`, shim], {
+      env: { PATH: bin, HOME: home },
+    }).then(
+      ({ stdout }) => ({ code: 0, stdout }),
+      ({ code, stderr }) => ({ code, stderr }),
+    );
+
+  const missing = await acp("");
+
+  assert.equal(missing.code, 127);
+  assert.match(missing.stderr, /no node on PATH/);
+
+  await mkdir(managed, { recursive: true });
+  await symlink(process.execPath, path.join(managed, "node"));
+
+  const found = await acp(
+    JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize" }),
+  );
+
+  assert.equal(JSON.parse(found.stdout).result.protocolVersion, 1);
 });
 
 test("down --all with an empty state.json exits 0", async () => {
