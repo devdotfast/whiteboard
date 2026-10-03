@@ -391,6 +391,7 @@ const styles = stylex.create({
       [inDocumentBlock()]: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
     },
     marginInline: { default: null, [inDocumentBlock()]: "auto" },
+    marginBlock: { default: "24px", [inMapInspector()]: 0 },
     overflow: { default: null, [inMapInspector()]: "visible" },
     padding: {
       default: null,
