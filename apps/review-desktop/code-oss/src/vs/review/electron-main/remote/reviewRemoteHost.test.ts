@@ -940,6 +940,21 @@ test("an open install question is reported until it is answered", async (t) => {
 	assert.deepEqual(reports.at(-2), { alias: "wb-test-a" });
 });
 
+test("a quiesce closes an open install question", async (t) => {
+	const { flow } = await installFlow(t, "ask");
+	const answer = Promise.withResolvers<boolean | undefined>();
+	flow.confirm = () => answer.promise;
+	const { host, last } = hostFor(t, { attach: { code: 127 } }, 1, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.asking !== undefined);
+	host.quiesce();
+	answer.resolve(undefined);
+	await new Promise((resolve) => setTimeout(resolve, 20));
+
+	assert.deepEqual(last(), { alias: "wb-test-a" });
+});
+
 test("a prompt nobody answered is not remembered, offers Install, and the next connect asks again", async (t) => {
 	const { flow, prompts, consentFile } = await installFlow(t, "ask", { answers: [undefined, undefined] });
 	const { host, ssh, last } = hostFor(t, { attach: { code: 127 } }, 1, "wb-test-a", "/tmp/wb-ssh-test", flow);

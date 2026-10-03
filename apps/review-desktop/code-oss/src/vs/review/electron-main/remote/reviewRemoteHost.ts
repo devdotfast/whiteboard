@@ -495,6 +495,8 @@ export class ReviewRemoteHost {
 		this.cancelPending = undefined;
 		this.installing?.abort();
 		this.options.install?.cancel?.(this.alias);
+		// The question is closed, and its answer would be stale.
+		if (this.reported.asking) this.set({ alias: this.alias });
 	}
 
 	get quiesced(): boolean {
