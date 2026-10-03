@@ -15,6 +15,7 @@ import type {
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { AskCloseWarning } from "./ask-close";
 import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
 import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
 import { AskPanelContent } from "./ask-panel";
@@ -29,12 +30,23 @@ import {
   useOptionalReviewSession,
   useReviewSession,
 } from "./host/review-session";
-import { CloseIcon, DisclosureChevron, MapPinIcon, PopOutIcon } from "./icons";
+import {
+  CloseIcon,
+  DisclosureChevron,
+  MapPinIcon,
+  MinusIcon,
+  PopOutIcon,
+} from "./icons";
 import { newTabLinkProps } from "./link-props";
 import { chevronMarker, documentMarker } from "./markers.stylex";
 import { useReviewActions } from "./review-context";
-import { useOptionalReviewPanelStore, useReviewPanel } from "./review-panel";
+import {
+  useOptionalReviewPanelStore,
+  useReviewPanel,
+  useReviewPanelStore,
+} from "./review-panel";
 import type {
+  AskReport,
   GuidedTour,
   GuidedTourStop,
   PeekAnchor,
@@ -73,6 +85,7 @@ function ReviewPanelFrame({
   label,
   title,
   onClose,
+  onEscape = onClose,
   closeLabel,
   titleAccessory,
   headerActions,
@@ -87,6 +100,8 @@ function ReviewPanelFrame({
   label: string;
   title?: string;
   onClose: () => void;
+  /** What Escape does; closing, unless the panel says otherwise. */
+  onEscape?: () => void;
   closeLabel: string;
   titleAccessory?: ReactNode;
   /** Buttons beside the close button. */
@@ -113,13 +128,13 @@ function ReviewPanelFrame({
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || !appRef?.current) return;
       event.preventDefault();
-      onClose();
+      onEscape();
     };
 
     document.addEventListener("keydown", closeOnEscape);
 
     return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [appRef, onClose]);
+  }, [appRef, onEscape]);
 
   // SAFETY: `--side-panel-bottom-fraction` is a CSS custom property, which
   // React forwards to style.setProperty; the CSSProperties typings only omit
@@ -483,22 +498,50 @@ const historyPresence: AskPresence = {
  * popping out, docking or minimizing never restarts it.
  */
 function AskHost() {
+  const store = useReviewPanelStore();
   const ask = useReviewPanel((state) => state.ask);
   const shown = useReviewPanel(askShown);
-  const closeAsk = useReviewPanel((state) => state.closeAsk);
-  const popOutAsk = useReviewPanel((state) => state.popOutAsk);
   const popOutTooltip = useTooltip("Pop out");
+  const minimizeTooltip = useTooltip("Minimize");
   const [node] = useState(() => document.createElement("div"));
 
   const [header, setHeader] = useState<HTMLDivElement | null>(null);
 
-  const [presence, setPresence] = useState<AskPresence>({
-    agentName: "Ask",
-    status: "New question",
-    tone: "quiet",
+  const [report, setReport] = useState<AskReport>({
+    busy: false,
+    presence: { agentName: "Ask", status: "New question", tone: "quiet" },
   });
 
+  const [warning, setWarning] = useState(false);
+
+  // A new view is a new conversation, which has said nothing yet.
+  const [shownKey, setShownKey] = useState(ask?.key);
+
+  if (ask?.key !== shownKey) {
+    setShownKey(ask?.key);
+    setWarning(false);
+  }
+
   if (!ask || !shown) return null;
+
+  // Closing stops the agent: while it works, ask first.
+  const close = () => {
+    if (report.busy) setWarning(true);
+    else store.getState().closeAsk();
+  };
+
+  const closeWarning =
+    warning && report.busy && shown !== "pill" ? (
+      <AskCloseWarning
+        agentName={report.presence.agentName}
+        onMinimize={() => {
+          setWarning(false);
+          store.getState().minimizeAsk();
+        }}
+        onClose={() => store.getState().closeAsk()}
+        onKeep={() => setWarning(false)}
+      />
+    ) : null;
 
   const actions = (
     <>
@@ -519,7 +562,7 @@ function AskHost() {
             savedThreadId={
               ask.view.type === "saved" ? ask.view.threadId : undefined
             }
-            onPresence={setPresence}
+            onReport={setReport}
             header={header}
           />
         ),
@@ -532,7 +575,8 @@ function AskHost() {
           titleAccessory={
             <div ref={setHeader} {...stylex.props(panelStyles.title)} />
           }
-          onClose={closeAsk}
+          onClose={close}
+          onEscape={warning ? () => setWarning(false) : close}
           closeLabel="Close Ask"
           headerActions={
             <>
@@ -541,15 +585,26 @@ function AskHost() {
                 ref={popOutTooltip}
                 size="large"
                 aria-label="Pop out Ask"
-                onClick={popOutAsk}
+                onClick={() => store.getState().popOutAsk()}
               >
                 <PopOutIcon
+                  xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
+                />
+              </IconButton>
+              <IconButton
+                ref={minimizeTooltip}
+                size="large"
+                aria-label="Minimize Ask"
+                onClick={() => store.getState().minimizeAsk()}
+              >
+                <MinusIcon
                   xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
                 />
               </IconButton>
             </>
           }
         >
+          {closeWarning}
           <AskSlot node={node} />
         </ReviewPanelFrame>
       ) : shown === "window" ? (
@@ -558,12 +613,16 @@ function AskHost() {
           titleAccessory={
             <div ref={setHeader} {...stylex.props(panelStyles.title)} />
           }
+          onClose={close}
         >
+          {closeWarning}
           <AskSlot node={node} />
         </AskWindow>
       ) : (
         <AskPill
-          presence={ask.view.type === "history" ? historyPresence : presence}
+          presence={
+            ask.view.type === "history" ? historyPresence : report.presence
+          }
         />
       )}
     </AskOpenThreadProvider>
