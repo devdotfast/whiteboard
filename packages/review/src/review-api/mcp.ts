@@ -17,9 +17,11 @@ import {
 import { authoringTools } from "./authoring-tools.js";
 import type { ReviewApiClient } from "./client.js";
 import { ReviewApiError } from "./client.js";
+import { ReviewInputError } from "./input-error.js";
 import { callPublicTool, publicTool } from "./public-tools.js";
 import { RECOVERY } from "./recovery.js";
 import { REVIEW_STATUS_TOOL } from "./status-tool.js";
+import { type ToolFailure, toolFailure } from "./tool-failure.js";
 
 // Some hosts ignore tools/list_changed, so the agent itself has to reload.
 const RELOAD_TOOLS =
@@ -135,12 +137,15 @@ export async function serveReviewMcp(
     // The requested name is agent input; only a catalog name is reported.
     let tool: AuthoringTool | undefined;
 
-    const report = (ok: boolean) =>
+    let phase: "connect" | "call" = "connect";
+
+    const report = (failure?: ToolFailure) =>
       void onToolCall?.({
         tool: tool?.name ?? "other",
         via: "mcp",
-        ok,
+        ok: !failure,
         durationMs: Date.now() - startedAt,
+        ...failure,
       });
 
     try {
@@ -175,10 +180,13 @@ export async function serveReviewMcp(
         throw error;
       }
 
+      phase = "call";
       tool = tools.find((tool) => tool.name === request.params.name);
 
       if (!tool)
-        throw new Error(`Unknown Whiteboard tool: ${request.params.name}`);
+        throw new ReviewInputError(
+          `Unknown Whiteboard tool: ${request.params.name}`,
+        );
 
       const result = await callPublicTool(
         client,
@@ -188,7 +196,7 @@ export async function serveReviewMcp(
       );
 
       const text = toolResultText(tool, result);
-      report(true);
+      report();
 
       return {
         content: [
@@ -202,7 +210,7 @@ export async function serveReviewMcp(
         ],
       };
     } catch (error) {
-      report(false);
+      report(toolFailure(error, phase));
 
       return {
         isError: true,
