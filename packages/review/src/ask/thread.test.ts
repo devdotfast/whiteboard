@@ -1608,3 +1608,55 @@ it("waits for an answer to end before closing a thread no one watches", async ()
   expect(threads.get(thread.id)).toBeUndefined();
   expect(stopped).toHaveBeenCalled();
 });
+
+it.each([
+  [
+    "failed",
+    async () => {
+      throw new Error("Overloaded.");
+    },
+  ],
+  [
+    "waiting",
+    async (client: AgentContext) => {
+      await askPermission(client, "execute");
+    },
+  ],
+] as const)(
+  "closes a thread no one watches that is %s",
+  async (status, turn) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const fake = fakeAgent(turn);
+    const stopped = vi.fn<() => void>();
+
+    const threads = new AskThreads(
+      async (...args) => {
+        const process = await fake.launch(...args);
+
+        return {
+          ...process,
+          stop: () => {
+            stopped();
+            process.stop();
+          },
+        };
+      },
+      {},
+      { ...askThreadLimits, idleCloseMs: 1_000 },
+    );
+
+    const thread = threads.open(idleAsk());
+
+    while (thread.read().status !== status)
+      await new Promise((resolve) => setImmediate(resolve));
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(stopped).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(threads.get(thread.id)).toBeUndefined();
+    expect(stopped).toHaveBeenCalled();
+  },
+);

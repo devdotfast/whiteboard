@@ -255,8 +255,8 @@ export class AskThread {
     };
   }
 
-  /** Says whether the thread is idle with no one watching, whenever that
-   * may change. */
+  /** Says whether no one watches the thread while it waits for the reviewer
+   * or has failed, whenever that may change. */
   onUnwatched(watch: (unwatched: boolean) => void) {
     this.watched = watch;
     this.noteWatchers();
@@ -264,7 +264,11 @@ export class AskThread {
 
   private noteWatchers() {
     if (!this.closed)
-      this.watched?.(!this.listeners.size && this.state.status === "idle");
+      this.watched?.(
+        !this.listeners.size &&
+          this.state.status !== "starting" &&
+          this.state.status !== "running",
+      );
   }
 
   /** Starts the agent and asks the first question, or loads an earlier
