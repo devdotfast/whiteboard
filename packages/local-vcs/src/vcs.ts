@@ -983,7 +983,7 @@ export function diffWorkingTree(
   });
 }
 
-/** Private index/object writes include untracked files without staging user files. */
+/** A private index and object store compare the working tree without staging user files. */
 async function withWorkingTreeIndex<T>(
   input: WorkingTreeDiffInput,
   read: (options: {
@@ -1068,8 +1068,18 @@ async function withWorkingTreeIndex<T>(
       await git(["read-tree", input.headRef]);
     }
 
-    // Intent-to-add exposes untracked files without staging their contents.
-    await git(["add", "--intent-to-add", "--all", "--", ".", ":(exclude).jj"]);
+    // Git leaves untracked files out: the copied index already holds every
+    // tracked path, including new files someone added. jj tracks new files
+    // itself, so its new files are exposed without staging their contents.
+    if (input.kind === "jj")
+      await git([
+        "add",
+        "--intent-to-add",
+        "--all",
+        "--",
+        ".",
+        ":(exclude).jj",
+      ]);
     await fs.promises.writeFile(path.join(scratch, "empty"), "");
 
     const baseRef =

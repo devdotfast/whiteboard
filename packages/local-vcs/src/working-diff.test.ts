@@ -65,6 +65,17 @@ it.each([false, true])(
       await symlink("edit.ts", path.join(root, "link"));
       git("rm", "-q", "restore.ts");
       await writeFile(path.join(root, "restore.ts"), "recreated\n");
+      // Untracked files are left out; intent-to-add brings new files in.
+      git(
+        "add",
+        "-N",
+        "new.ts",
+        "empty",
+        "new [file].ts",
+        "link",
+        "restore.ts",
+      );
+      await writeFile(path.join(root, "untracked.ts"), "left out\n");
 
       if (splitIndex) {
         git("config", "core.splitIndex", "true");
@@ -111,6 +122,11 @@ it.each([false, true])(
       expect(changes).not.toEqual(
         expect.arrayContaining([expect.objectContaining({ path: "ignored" })]),
       );
+      expect(changes).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: "untracked.ts" }),
+        ]),
+      );
       expect(await diffWorkingTree({ ...input, paths: ["new.ts"] })).toContain(
         "rename from old.ts",
       );
@@ -143,6 +159,7 @@ it.each([false, true])(
       await mkdir(path.join(root, "linked"));
       git("worktree", "add", "--detach", path.join(root, "linked"), baseRef);
       await writeFile(path.join(root, "linked", "extra.ts"), "linked\n");
+      git("-C", path.join(root, "linked"), "add", "-N", "extra.ts");
       expect(
         await diffFileSummariesWorkingTree({
           ...input,
