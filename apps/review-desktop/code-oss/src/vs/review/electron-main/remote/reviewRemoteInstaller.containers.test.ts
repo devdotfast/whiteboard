@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { after, before, test } from "node:test";
 import { promisify } from "node:util";
@@ -23,6 +23,7 @@ import { REVIEW_SSH_CONFIG_ENV, reviewSshSession, sshCheckArgs, sshCloseArgs, ss
 const run = promisify(execFile);
 const checkout = resolve(import.meta.dirname, "../../../../../../../..");
 const harness = join(checkout, "apps/review-desktop/scripts/e2e/remote/remote.mjs");
+const VERSION: string = JSON.parse(await readFile(join(checkout, "packages/review/package.json"), "utf8")).version;
 
 function skipReason(): string | undefined {
 	if (process.env.WB_TEST_CONTAINERS !== "1") return "set WB_TEST_CONTAINERS=1 to install into containers";
@@ -103,7 +104,7 @@ function input(host: Host, change: Partial<ReviewRemoteInstallInput> = {}) {
 		session,
 		probe,
 		target,
-		version: "0.0.1",
+		version: VERSION,
 		onProgress: (step) => progress.push(step),
 		signal: new AbortController().signal,
 		artifacts: artifacts.get(target)!,
@@ -125,12 +126,12 @@ test("a host with Node 24 gets the package; whiteboard version prints it", { ski
 	const result = await installRemote(value);
 
 	assert.equal(result.nodePath, "/usr/local/bin/node");
-	assert.equal(await version("node"), "0.0.1");
+	assert.equal(await version("node"), VERSION);
 	assert.deepEqual(
 		progress.map((p) => p.step),
 		["package", "verifying", "done"],
 	);
-	assert.equal(await inContainer("node", "ls ~/.dev/whiteboard-remote/versions"), "0.0.1");
+	assert.equal(await inContainer("node", "ls ~/.dev/whiteboard-remote/versions"), VERSION);
 
 	// Complete now: read without the lock, in one script.
 	const again = input("node");
@@ -145,7 +146,7 @@ test("a host with no Node gets Node and the package", { skip, timeout: 10 * 60_0
 
 	assert.match(result.nodePath, /\/\.dev\/whiteboard-remote\/node\/v24\.\d+\.\d+\/bin\/node$/);
 	assert.deepEqual(progress[0], { step: "node", via: "remote-download" });
-	assert.equal(await version("bare"), "0.0.1");
+	assert.equal(await version("bare"), VERSION);
 });
 
 test("a sealed host gets Node by upload and the dependencies through the relay", { skip, timeout: 10 * 60_000 }, async () => {
@@ -157,7 +158,7 @@ test("a sealed host gets Node by upload and the dependencies through the relay",
 		{ step: "package", via: "upload" },
 	]);
 	assert.equal(result.diffr, false);
-	assert.equal(await version("sealed"), "0.0.1");
+	assert.equal(await version("sealed"), VERSION);
 	// The forward is gone with the install.
 	assert.equal(await inContainer("sealed", "ss -Htln | grep -c 127.0.0.1: || true"), "0");
 });
@@ -193,10 +194,10 @@ test("an abort while npm runs leaves no version; the next install succeeds", { s
 	}
 	assert.equal(npm, "");
 	const left = await leftovers("node");
-	assert.ok(!left.includes("./versions/0.0.1") && !left.includes("./install.lock"), left.join(" "));
+	assert.ok(!left.includes(`./versions/${VERSION}`) && !left.includes("./install.lock"), left.join(" "));
 
 	await installRemote(input("node").value);
-	assert.equal(await version("node"), "0.0.1");
+	assert.equal(await version("node"), VERSION);
 });
 
 test("two installs at once: one waits, the package is sent once, both return the same path", { skip, timeout: 10 * 60_000 }, async () => {
@@ -229,7 +230,7 @@ test("an existing ~/.local/bin/whiteboard that Desktop did not write is left alo
 	const result = await installRemote(input("node").value);
 
 	assert.equal(await inContainer("node", "~/.local/bin/whiteboard"), "mine");
-	assert.equal(JSON.parse(await inContainer("node", `'${result.launcher}' version --json`)).version, "0.0.1");
+	assert.equal(JSON.parse(await inContainer("node", `'${result.launcher}' version --json`)).version, VERSION);
 });
 
 test("with three versions installed and one running, an install leaves the running one and the newest", { skip, timeout: 10 * 60_000 }, async (t) => {
@@ -238,13 +239,14 @@ test("with three versions installed and one running, an install leaves the runni
 	// Two earlier versions beside it: copies with their own name, one running a process from its directory.
 	await inContainer(
 		"node",
-		`cd ~/.dev/whiteboard-remote/versions && for v in 0.0.1-old.1 0.0.1-old.2; do cp -a 0.0.1 $v && sed -i "s#/versions/0.0.1/#/versions/$v/#g" $v/.whiteboard-install.json; done
-		setsid nohup node -e 'setInterval(() => {}, 1000)' "$HOME/.dev/whiteboard-remote/versions/0.0.1-old.1/node_modules/@dev.fast/whiteboard/dist/cli.js" >/dev/null 2>&1 < /dev/null &`,
+		`cd ~/.dev/whiteboard-remote/versions && for v in ${VERSION}-old.1 ${VERSION}-old.2; do cp -a ${VERSION} $v && sed -i "s#/versions/${VERSION}/#/versions/$v/#g" $v/.whiteboard-install.json; done
+		setsid nohup node -e 'setInterval(() => {}, 1000)' "$HOME/.dev/whiteboard-remote/versions/${VERSION}-old.1/node_modules/@dev.fast/whiteboard/dist/cli.js" >/dev/null 2>&1 < /dev/null &`,
 	);
-	t.after(() => inContainer("node", "pkill -f '[0]\\.0\\.1-old\\.1/' || true"));
-	await inContainer("node", "rm -rf ~/.dev/whiteboard-remote/versions/0.0.1");
+	// The bracket keeps pkill from matching its own shell.
+	t.after(() => inContainer("node", `pkill -f '[${VERSION[0]}]${VERSION.slice(1)}-old.1/' || true`));
+	await inContainer("node", `rm -rf ~/.dev/whiteboard-remote/versions/${VERSION}`);
 
 	await installRemote(input("node").value);
 
-	assert.equal(await inContainer("node", "ls ~/.dev/whiteboard-remote/versions | tr '\\n' ' '"), "0.0.1 0.0.1-old.1");
+	assert.equal(await inContainer("node", "ls ~/.dev/whiteboard-remote/versions | tr '\\n' ' '"), `${VERSION} ${VERSION}-old.1`);
 });
