@@ -66,6 +66,23 @@ export type AskView =
       passage?: { quote: string; threadIds: string[] };
     };
 
+/** What the pill says about a conversation it stands in for. */
+export interface AskPresence {
+  /** Absent for the list of conversations, which has no one agent. */
+  agent?: AskAgentId;
+  agentName: string;
+  status: string;
+  tone: "quiet" | "waiting" | "failed";
+}
+
+/** What an open Ask says about itself as its conversation goes. */
+export interface AskReport {
+  /** Its agent is working: closing the Ask stops it, so closing asks
+   * first. */
+  busy: boolean;
+  presence: AskPresence;
+}
+
 /** Conversations with a local agent about selections. Each view change
  * remounts the panel through `key`. */
 export interface AskPanel {

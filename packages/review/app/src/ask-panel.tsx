@@ -50,13 +50,13 @@ import { AskSetup, AskSignIn } from "./ask-setup";
 import { askPanelStyles } from "./ask-styles";
 import { useLatest, useThread } from "./ask-thread-stream";
 import { AskAgentTurn, AskWorking, turns } from "./ask-turn";
-import type { AskPresence } from "./ask-window";
 import { canvasQueryKeys } from "./canvas-query";
 import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
 import { ArrowUpIcon, ImageIcon, LockIcon } from "./icons";
 import { formatRelativeTime } from "./review-home-view";
 import { useOptionalReviewPanelStore } from "./review-panel";
+import type { AskPresence, AskReport } from "./review-panel-model";
 import { fontSize, radius } from "./scale.stylex";
 import type { StyleArg } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
@@ -92,7 +92,7 @@ export function AskPanelContent({
   selection,
   agent: requestedAgent,
   savedThreadId,
-  onPresence,
+  onReport,
   header,
 }: {
   selection: AgentSelection;
@@ -100,8 +100,9 @@ export function AskPanelContent({
   header?: HTMLElement | null;
   /** A saved conversation to reopen instead of asking a new question. */
   savedThreadId?: string;
-  /** What the pill says while the conversation is out of sight. */
-  onPresence?: (presence: AskPresence) => void;
+  /** What the conversation is doing, for the pill to say while it is out
+   * of sight and for closing to warn while its agent works. */
+  onReport?: (report: AskReport) => void;
 }): ReactElement {
   const session = useReviewSession();
   const agents = useAskAgents(session);
@@ -466,15 +467,27 @@ export function AskPanelContent({
 
   const presenceAgent = thread?.agent ?? agent;
 
+  // Reopening a saved conversation loses nothing if it stops; an answer
+  // under way does.
+  const working =
+    sending ||
+    thread?.status === "running" ||
+    thread?.status === "waiting" ||
+    (thread?.status === "starting" && !connecting);
+
   useEffect(() => {
-    onPresence?.({
-      agent: presenceAgent,
-      agentName: presence.agentName,
-      status: presence.status,
-      tone: presence.tone,
+    onReport?.({
+      busy: working,
+      presence: {
+        agent: presenceAgent,
+        agentName: presence.agentName,
+        status: presence.status,
+        tone: presence.tone,
+      },
     });
   }, [
-    onPresence,
+    onReport,
+    working,
     presenceAgent,
     presence.agentName,
     presence.status,
@@ -674,11 +687,11 @@ export function AskPanelContent({
 export function AskReadOnlyThread({
   selection,
   threadId,
-  onPresence,
+  onReport,
 }: {
   selection: AgentSelection;
   threadId: string;
-  onPresence?: (presence: AskPresence) => void;
+  onReport?: (report: AskReport) => void;
 }): ReactElement {
   const session = useReviewSession();
 
@@ -701,14 +714,18 @@ export function AskReadOnlyThread({
 
   const agentName = thread?.agentName ?? "Ask";
 
+  // Nothing runs on a read-only conversation.
   useEffect(() => {
-    onPresence?.({
-      agent: thread?.agent,
-      agentName,
-      status: "Read-only",
-      tone: "quiet",
+    onReport?.({
+      busy: false,
+      presence: {
+        agent: thread?.agent,
+        agentName,
+        status: "Read-only",
+        tone: "quiet",
+      },
     });
-  }, [onPresence, thread?.agent, agentName]);
+  }, [onReport, thread?.agent, agentName]);
 
   return (
     <div {...stylex.props(askPanelStyles.body)}>
