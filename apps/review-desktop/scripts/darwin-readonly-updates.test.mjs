@@ -146,7 +146,7 @@ test("ordinary update failures remain retryable and late native errors do not cl
   assert.equal(checks(), 3);
 });
 
-test("recovery notice is sticky, deduplicated, and specific to native macOS read-only failures", () => {
+test("recovery notice is sticky, deduplicated, specific to native macOS read-only failures, and offers the move", async () => {
   const notices = [];
 
   const { ReviewUpdateNotifications } = load(
@@ -164,13 +164,27 @@ test("recovery notice is sticky, deduplicated, and specific to native macOS read
         WorkbenchPhase: {},
         registerWorkbenchContribution2: noOp,
       },
+      "../../../base/common/actions.js": { toAction: (action) => action },
+      "../../common/reviewDesktopBootstrap.js": {
+        REVIEW_DESKTOP_CHANNEL: "review",
+      },
       "../../../nls.js": { localize: (_key, text) => text },
     },
     "\nexports.ReviewUpdateNotifications = ReviewUpdateNotifications;",
   );
 
+  const calls = [];
   const instance = Object.create(ReviewUpdateNotifications.prototype);
   instance.notificationService = { notify: (notice) => notices.push(notice) };
+  instance.mainProcessService = {
+    getChannel: (channel) => ({
+      call: async (command) => {
+        calls.push([channel, command]);
+
+        return true;
+      },
+    }),
+  };
   instance.onStateChange(
     update.State.Idle(update.UpdateType.Archive, "offline"),
   );
@@ -182,4 +196,8 @@ test("recovery notice is sticky, deduplicated, and specific to native macOS read
   assert.equal(notices[0].sticky, true);
   assert.match(notices[0].message, /Applications folder/);
   assert.match(notices[0].message, /disk image/);
+
+  // The notice's action asks the main process to move and relaunch the app.
+  await notices[0].actions.primary[0].run();
+  assert.deepEqual(calls, [["review", "moveToApplications"]]);
 });
