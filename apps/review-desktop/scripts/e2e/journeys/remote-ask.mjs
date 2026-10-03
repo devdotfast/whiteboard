@@ -188,7 +188,7 @@ async function journey(ctx) {
 
   // 3. The remote review, a sentence selected, ⌘L.
   const requests = await recordRequests(ctx.page, /\/ask\/[^/]+\/watch(\?|$)/);
-  const recorders = [requests];
+  const recorders = [{ requests, origin: new URL(ctx.discovery.url).origin }];
 
   await openReview();
   await askAboutSentence();
@@ -265,45 +265,15 @@ async function journey(ctx) {
   );
   assert.equal(await panel().getByRole("link", { name: "f.ts" }).count(), 0);
 
-  const beforeClick = requests.size;
-
+  // Step 11 audits the whole run for the requests a click could send.
   await reference.click();
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  assert.deepEqual(
-    [...requests.values()]
-      .slice(beforeClick)
-      .flatMap((r) =>
-        /\/(navigator|files)(\?|$)/.test(r.url ?? "") ? [r.url] : [],
-      ),
-    [],
-    "file requests after clicking the reference",
-  );
   ctx.check(
-    "6. the answer's f.ts is text titled Source windows are not available…, not a link or button, and a click sent no navigator or files request",
+    "6. the answer's f.ts is text titled Source windows are not available…, not a link or button",
   );
 
   // 7. Ask spoke only to the local server, and no remote token reached the page.
-  const localServer = new URL(ctx.discovery.url).origin;
+  const asks = audit(recorders, remoteTokens);
 
-  const asks = [...requests.values()].filter((r) =>
-    /\/ask(\/|\?|$)/.test(new URL(r.url ?? "http://x").pathname),
-  );
-
-  assert.ok(asks.length > 0, "no Ask request was recorded");
-  assert.deepEqual(
-    asks.flatMap((r) => (new URL(r.url).origin === localServer ? [] : [r.url])),
-    [],
-    "Ask requests past the local server",
-  );
-  assert.equal(
-    [...requests.values()].filter((r) =>
-      [r.url, ...Object.values(r.headers ?? {})].some((value) =>
-        [...remoteTokens].some((token) => String(value).includes(token)),
-      ),
-    ).length,
-    0,
-    "requests that carried the remote token",
-  );
   assert.ok(
     asks.some((r) => r.received?.toString().includes("You asked:")),
     "no watch stream carried the answer",
@@ -329,8 +299,12 @@ async function journey(ctx) {
 
   // 9. A Desktop restart: the thread is still listed.
   await ctx.quitAndRelaunchDesktop();
-  recorders.push(await recordRequests(ctx.page, /^$/));
+  recorders.push({
+    requests: await recordRequests(ctx.page, /^$/),
+    origin: new URL(ctx.discovery.url).origin,
+  });
   await waitState("online", "online after the relaunch");
+  remoteTokens.add(await remoteToken());
   await openReview();
   await historyLists("the thread in Ask history after the relaunch");
   await panel().getByRole("button", { name: "Close Ask" }).click();
@@ -371,14 +345,49 @@ async function journey(ctx) {
     async () => (await homeRow().count()) === 0,
     "the remote review to leave Home",
   );
+  const allAsks = audit(recorders, remoteTokens);
+
   assert.deepEqual(
-    recorders
-      .flatMap((recorded) => [...recorded.values()])
-      .flatMap((r) => (/\/navigator(\?|$)/.test(r.url ?? "") ? [r.url] : [])),
+    recorders.flatMap(({ requests: recorded }) =>
+      [...recorded.values()].flatMap((r) =>
+        /\/(navigator|files)(\?|$)/.test(r.url ?? "") ? [r.url] : [],
+      ),
+    ),
     [],
-    "navigator requests",
+    "navigator or files requests",
   );
   ctx.check(
-    "11. removing the host took the review out of Home; no navigator request in the whole run",
+    `11. removing the host took the review out of Home; across both launches ${allAsks.length} Ask requests, all to the local server, none with a remote token, and no navigator or files request`,
   );
+}
+
+/**
+ * Asserts each launch's Ask requests went to that launch's local server and
+ * no recorded request carried a remote token; returns the Ask requests.
+ */
+function audit(recorders, remoteTokens) {
+  const asks = [];
+
+  for (const { requests, origin } of recorders)
+    for (const r of requests.values()) {
+      if (!r.url) continue;
+      assert.ok(
+        ![r.url, ...Object.values(r.headers ?? {})].some((value) =>
+          [...remoteTokens].some((token) => String(value).includes(token)),
+        ),
+        "a request carried a remote token",
+      );
+
+      if (!/\/ask(\/|\?|$)/.test(new URL(r.url).pathname)) continue;
+      assert.equal(
+        new URL(r.url).origin,
+        origin,
+        "an Ask request past the local server",
+      );
+      asks.push(r);
+    }
+
+  assert.ok(asks.length > 0, "no Ask request was recorded");
+
+  return asks;
 }
