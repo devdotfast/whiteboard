@@ -322,7 +322,7 @@ it("waits past the 10 s limit for a slow language context and keeps the host onl
   const { request, gateway } = await startLaptopGateway(
     root,
     [{ alias: "wb-a", endpoint: fake.endpoint }],
-    { languageContextMs: 14_000 },
+    { slowRouteMs: 14_000 },
   );
 
   await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
@@ -1409,7 +1409,7 @@ it.each([
     const { request, gateway } = await startLaptopGateway(
       root,
       [{ alias: "wb-a", endpoint: fake.endpoint }],
-      { languageContextMs: 14_000 },
+      { slowRouteMs: 14_000 },
     );
 
     await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");

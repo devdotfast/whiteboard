@@ -82,8 +82,8 @@ const FORWARDED_ROUTES: readonly (readonly [string, RegExp])[] = [
   ["DELETE", /^ask\/[^/]+$/],
 ];
 
-/** Preparing a pinned checkout can take minutes; the host is not down. */
-const LANGUAGE_CONTEXT_TIMEOUT_MS = 120_000;
+/** Preparing a checkout or starting an agent can take minutes; the host is not down. */
+const SLOW_ROUTE_TIMEOUT_MS = 120_000;
 
 /** Routes that may wait on preparing a checkout or launching an agent. */
 const SLOW_ROUTES =
@@ -164,8 +164,8 @@ export function createReviewGateway(input: {
   relay: ReviewDesktopVerbRelay;
   /** How often an answering host is checked again; 10 s. */
   heartbeatMs?: number;
-  /** How long `/language-context` may take to answer; 120 s. */
-  languageContextMs?: number;
+  /** How long a slow route may take to answer; 120 s. */
+  slowRouteMs?: number;
   /** A host's server restarted with a new token; Desktop attaches again. */
   restarted?(alias: string): void;
   log?(message: string): void;
@@ -382,7 +382,7 @@ export function createReviewGateway(input: {
     const waits = SLOW_ROUTES.test(options.route ?? "");
 
     const limit = waits
-      ? (input.languageContextMs ?? LANGUAGE_CONTEXT_TIMEOUT_MS)
+      ? (input.slowRouteMs ?? SLOW_ROUTE_TIMEOUT_MS)
       : FIRST_BYTE_TIMEOUT_MS;
 
     const firstByte = setTimeout(() => {
