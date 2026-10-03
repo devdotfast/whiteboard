@@ -13,12 +13,12 @@ const remoteScript = path.join(import.meta.dirname, "../remote/remote.mjs");
 // A live check sets WB_TEST_RUN so its trap can remove the run; otherwise the journey names its own.
 const runId = process.env.WB_TEST_RUN ?? `e2e${Date.now().toString(36)}`;
 
-const runDir = `/tmp/wbt.${runId}`;
+export const runDir = `/tmp/wbt.${runId}`;
 
 // A host a user prepared (`up` or `aws-up`, then a hand install) in the WB_TEST_RUN run; the journey never removes it.
 const prepared = process.env.REVIEW_E2E_REMOTE_HOST;
 
-const alias = `wb-test-${prepared ?? "a"}`;
+export const alias = `wb-test-${prepared ?? "a"}`;
 
 const title = "Remote order";
 
@@ -36,7 +36,7 @@ export const options = {
 };
 
 /** Runs on the remote: a repository with two commits, and a review of them with prose and a code peek. Prints its id and the repository's path. */
-const createRemoteReview = String.raw`
+export const createRemoteReview = String.raw`
 set -e
 uuid() { cat /proc/sys/kernel/random/uuid; }
 field() { node -pe "JSON.parse(require('fs').readFileSync(0, 'utf8')).$1"; }
@@ -58,7 +58,7 @@ echo "$id"
 pwd
 `;
 
-async function remote(...args) {
+export async function remote(...args) {
   return (
     await exec(process.execPath, [remoteScript, ...args], {
       env: { ...process.env, WB_TEST_RUN: runId },
@@ -68,7 +68,7 @@ async function remote(...args) {
 }
 
 /** Runs `command` on the remote through the run's ssh_config, with `input` on stdin. */
-function onRemote(command, input = "") {
+export function onRemote(command, input = "") {
   return new Promise((resolve, reject) => {
     const child = spawn(
       "ssh",
@@ -95,7 +95,7 @@ const remoteApi = (tool, input) =>
   onRemote(`whiteboard api ${tool} -`, JSON.stringify(input));
 
 /** The remote server's token, read the way Desktop reads it; kept only for comparison, never printed. */
-async function remoteToken() {
+export async function remoteToken() {
   const out = (await onRemote("whiteboard remote attach --json")).split("\n");
 
   let token;
@@ -122,7 +122,7 @@ async function remoteToken() {
  * its bytes as they arrive: the page cancels a stream once it has what it
  * needs, and a cancelled request's body can no longer be read.
  */
-async function recordRequests(page, streamed) {
+export async function recordRequests(page, streamed) {
   const cdp = await page.context().newCDPSession(page);
   const requests = new Map();
   const entry = (id) => requests.get(id) ?? requests.set(id, { id }).get(id);
@@ -703,7 +703,7 @@ const desktopSsh = async () =>
   (await desktopSshProcesses()).map(([pid]) => pid);
 
 /** The pid of this Desktop's ssh master for the alias. */
-async function masterPid() {
+export async function masterPid() {
   return (await desktopSshProcesses()).find(
     ([, args]) => args.includes(" -M -N ") && args.endsWith(`-- ${alias}`),
   )?.[0];
