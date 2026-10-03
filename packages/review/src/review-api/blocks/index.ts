@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { call_stack_diff } from "./call_stack_diff.js";
-import { type CalloutBlock, callout } from "./callout.js";
+import { type CalloutBlock, callout, calloutSchema } from "./callout.js";
 import { code } from "./code.js";
 import { code_peek } from "./code_peek.js";
 import { database_lens } from "./database_lens.js";
@@ -10,11 +10,11 @@ import { divider } from "./divider.js";
 import { flow_diagram } from "./flow_diagram.js";
 import { image } from "./image.js";
 import { markdown } from "./markdown.js";
-import { type SectionBlock, section } from "./section.js";
+import { type SectionBlock, section, sectionSchema } from "./section.js";
 import { sequence } from "./sequence.js";
 import { software_map } from "./software_map.js";
 import { trace_quote } from "./trace_quote.js";
-import { type TutorialBlock, tutorial } from "./tutorial.js";
+import { type TutorialBlock, tutorial, tutorialSchema } from "./tutorial.js";
 
 /** Leaf kinds share one discriminated union so unknown types read as they always have. */
 export const leafSchema = z.discriminatedUnion("type", [
@@ -59,9 +59,16 @@ export const blocks = {
   tutorial,
 } satisfies Definitions;
 
+/** Discriminated by type, so a malformed block reports its own kind's
+ * issues rather than every kind's. */
 export const blockSchema: z.ZodType<Block> = z.lazy(() =>
-  z.union([leafSchema, section.schema, callout.schema, tutorial.schema]),
+  z.discriminatedUnion("type", blockKindSchemas()),
 );
+
+/** Each block kind's schema, for unions that add kinds of their own. Read
+ * lazily: the container modules import this one. */
+export const blockKindSchemas = () =>
+  [leafSchema, sectionSchema, calloutSchema, tutorialSchema] as const;
 
 function checkBlock<K extends BlockType>(
   type: K,
