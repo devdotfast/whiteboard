@@ -1,9 +1,7 @@
-import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   chmod,
   mkdir,
-  open,
   readFile,
   rename,
   stat,
@@ -17,7 +15,7 @@ import { z } from "zod";
 
 import { findReviewPackageRoot } from "./package-paths";
 import { ensureRemoteExtensions, remoteServerPaths } from "./remote-extensions";
-import { cliSpawn } from "./server/background-server";
+import { cliSpawn, spawnDetached } from "./server/background-server";
 
 const START_TIMEOUT_MS = 15_000;
 
@@ -302,11 +300,10 @@ async function installDetached(
     async () => {
       if (await installing(files)) return;
       const { command, args, env } = cliSpawn(input.cli, input.env);
-      const log = await open(files.installLog, "a", 0o600);
 
-      const child = spawn(
+      const child = await spawnDetached({
         command,
-        [
+        args: [
           ...args,
           "remote",
           "extensions",
@@ -314,17 +311,10 @@ async function installDetached(
           "--json",
           ...(input.groups?.length ? ["--groups", input.groups.join(",")] : []),
         ],
-        {
-          cwd: files.serverDataDir,
-          detached: true,
-          env,
-          stdio: ["ignore", log.fd, log.fd],
-        },
-      );
-
-      child.once("error", () => {});
-      child.unref();
-      await log.close();
+        cwd: files.serverDataDir,
+        env,
+        log: files.installLog,
+      });
 
       if (child.pid !== undefined)
         await writeFile(
@@ -414,12 +404,11 @@ async function startServer(
   await chmod(temporary, 0o600);
   await rename(temporary, files.tokenFile);
 
-  const log = await open(files.logFile, "a", 0o600);
-  const logStart = (await stat(files.logFile)).size;
+  const logStart = (await stat(files.logFile).catch(() => null))?.size ?? 0;
 
-  const child = spawn(
-    process.execPath,
-    [
+  const child = await spawnDetached({
+    command: process.execPath,
+    args: [
       path.join(root, "out", "server-main.js"),
       "--host",
       "127.0.0.1",
@@ -437,27 +426,14 @@ async function startServer(
         ? ["--remote-auto-shutdown-without-delay"]
         : []),
     ],
-    {
-      cwd: serverDataDir,
-      detached: true,
-      env,
-      stdio: ["ignore", log.fd, log.fd],
-    },
-  );
-
-  let exited = false;
-  let failure: Error | undefined;
-  child.once("exit", () => (exited = true));
-  child.once("error", (error) => {
-    exited = true;
-    failure = error;
+    cwd: serverDataDir,
+    env,
+    log: files.logFile,
   });
-  child.unref();
-  await log.close();
 
   const deadline = Date.now() + timeoutMs;
 
-  while (Date.now() < deadline && !exited) {
+  while (Date.now() < deadline && !child.exited) {
     const output = (await readFile(files.logFile))
       .subarray(logStart)
       .toString("utf8");
@@ -481,7 +457,8 @@ async function startServer(
     await delay(100);
   }
 
-  if (!exited && child.pid !== undefined) process.kill(child.pid, "SIGTERM");
+  if (!child.exited && child.pid !== undefined)
+    process.kill(child.pid, "SIGTERM");
 
   const tail = (await readFile(files.logFile))
     .subarray(logStart)
@@ -492,6 +469,6 @@ async function startServer(
     .join("\n");
 
   throw new Error(
-    `The VS Code server did not start${failure ? `: ${failure.message}` : exited ? "" : ` within ${timeoutMs / 1_000} s`}. The end of ${files.logFile}:\n${tail}`,
+    `The VS Code server did not start${child.error ? `: ${child.error.message}` : child.exited ? "" : ` within ${timeoutMs / 1_000} s`}. The end of ${files.logFile}:\n${tail}`,
   );
 }

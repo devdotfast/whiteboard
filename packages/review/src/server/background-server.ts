@@ -49,7 +49,10 @@ export async function ensureBackgroundServer(
     if (discovery)
       return { discovery, started: discovery.serverPid === child.pid };
 
-    if (child.error) throw child.error;
+    if (child.error)
+      throw new Error(
+        `Could not start the Whiteboard server: ${child.error.message}`,
+      );
 
     // Our child lost the start to another, or failed. Only a live lock
     // holder can still publish a server; without one, try once more.
@@ -124,27 +127,56 @@ export async function stopBackgroundServer(
   throw new Error(`The Whiteboard server (process ${serverPid}) did not stop.`);
 }
 
-interface ServerChild {
+interface DetachedChild {
   pid?: number;
   exited: boolean;
   /** Set when the command itself could not run. */
   error?: Error;
 }
 
-async function spawnServer(
+/** Spawns a process group of its own, writing to `log`, that outlives this process. */
+export async function spawnDetached(input: {
+  command: string;
+  args: readonly string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  log: string;
+}) {
+  const log = await open(input.log, "a", 0o600);
+
+  const child = spawn(input.command, input.args, {
+    cwd: input.cwd,
+    detached: true,
+    env: input.env,
+    stdio: ["ignore", log.fd, log.fd],
+  });
+
+  const state: DetachedChild = { pid: child.pid, exited: false };
+
+  child.once("exit", () => (state.exited = true));
+  child.once("error", (error) => {
+    state.exited = true;
+    state.error = error;
+  });
+  child.unref();
+  await log.close();
+
+  return state;
+}
+
+function spawnServer(
   stateDir: string,
   logPath: string,
   input: EnsureBackgroundServerInput,
 ) {
-  const log = await open(logPath, "a", 0o600);
   const { command, args, env } = cliSpawn(input.cli, input.env ?? process.env);
 
   // The token reaches callers through the discovery file only: never an
   // argument, the environment or this log. The working directory is the
   // state directory, so the server never holds the caller's.
-  const child = spawn(
+  return spawnDetached({
     command,
-    [
+    args: [
       ...args,
       "server",
       "start",
@@ -154,30 +186,10 @@ async function spawnServer(
       input.startedBy ?? "cli",
       ...(input.args ?? []),
     ],
-    {
-      cwd: stateDir,
-      detached: true,
-      env,
-      stdio: ["ignore", log.fd, log.fd],
-    },
-  );
-
-  const state: ServerChild = {
-    pid: child.pid,
-    exited: false,
-  };
-
-  child.once("exit", () => (state.exited = true));
-  child.once("error", (error) => {
-    state.exited = true;
-    state.error = new Error(
-      `Could not start the Whiteboard server: ${error.message}`,
-    );
+    cwd: stateDir,
+    env,
+    log: logPath,
   });
-  child.unref();
-  await log.close();
-
-  return state;
 }
 
 /** How to spawn `cli`, this process's own CLI by default. */
