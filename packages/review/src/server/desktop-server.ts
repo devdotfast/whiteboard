@@ -19,13 +19,8 @@ import {
   parseReviewCliInstallApplyRequest,
   reviewDiffrSummarizerInputSchema,
 } from "@dev.fast/review-protocol";
-import {
-  shellQuote,
-  traceMachineEnabled,
-  writePrivateJsonAtomic,
-} from "@dev.fast/trace-core";
-import { detectAskAgents, launchAskAgent } from "@review/ask/agents.js";
-import { AskThreads } from "@review/ask/threads.js";
+import { shellQuote, writePrivateJsonAtomic } from "@dev.fast/trace-core";
+import type { AskTools } from "@review/ask/threads.js";
 import {
   applyCliInstall,
   declineCliInstall,
@@ -41,7 +36,6 @@ import {
   type ReviewInstanceIdentity,
 } from "@review/desktop-discovery";
 import { readReviewPackageVersion } from "@review/package-paths";
-import { createReviewApi } from "@review/review-api/http.js";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
 import type { ReviewStore } from "@review/review-api/store.js";
 import {
@@ -78,11 +72,7 @@ import { ReviewServerError } from "./http-json";
 import { createJsonReviewReporting } from "./json-review-reporting";
 import { reviewLifecycleTelemetry } from "./review-lifecycle-telemetry";
 import { ReviewOpenWatchdog } from "./review-open-watchdog";
-import {
-  createReviewServerApp,
-  relayReviewCallbacks,
-  serverJson,
-} from "./review-server-core";
+import { createWhiteboardCore, serverJson } from "./review-server-core";
 import { invalidateStructuralComparisons } from "./structural-comparisons.js";
 import { createTutorialService } from "./tutorial-service";
 import { captureSanitizedUiTelemetry } from "./ui-telemetry";
@@ -159,7 +149,7 @@ export function createGlobalReviewServer(
 
   // Ask sessions get its MCP server, `whiteboard mcp`; an agent whose model
   // would not get it uses `whiteboard api` from its shell instead.
-  const askThreads = new AskThreads(launchAskAgent, {
+  const askTools: AskTools = {
     mcpServers: () =>
       discovery.cliPath
         ? [
@@ -178,7 +168,7 @@ export function createGlobalReviewServer(
         shellQuote(process.execPath),
         shellQuote(discovery.cliPath),
       ].join(" "),
-  });
+  };
 
   const reviewStore = input.reviewStore;
 
@@ -233,14 +223,40 @@ export function createGlobalReviewServer(
     }
   }
 
-  const app = createReviewServerApp({
+  const core = createWhiteboardCore({
+    profile: {
+      store: reviewStore,
+      data: input.reviewData,
+      shared: input.sharedReviews,
+    },
+    relay,
     token,
     instanceId,
-    serverId: input.reviewStore.serverId(),
-    relay,
+    scratchpad: () => scratchpadEnabled,
+    status: () => {
+      const { key, channel, checkout, appVersion, cliVersion, instanceId } =
+        discovery;
+
+      return {
+        key: key ?? null,
+        channel: channel ?? null,
+        checkout: checkout ?? null,
+        appVersion: appVersion ?? null,
+        cliVersion: cliVersion ?? null,
+        instanceId,
+        url: urlForBoundPort(),
+        home: devReviewHome(),
+      };
+    },
+    hooks: reviewLifecycleTelemetry(
+      telemetry,
+      (reviewId) => reviewStore.summary(reviewId)?.firstCreatedAt,
+      () => aliasInstallationToAccount(telemetry),
+    ),
+    ask: { tools: askTools },
   });
 
-  const callbacks = relayReviewCallbacks(relay);
+  const { app } = core;
 
   app.route(
     "/reviews-api",
@@ -249,39 +265,7 @@ export function createGlobalReviewServer(
     }),
   );
 
-  app.route(
-    "/reviews-api",
-    createReviewApi(
-      input.reviewStore,
-      input.reviewData,
-      callbacks.open,
-      input.sharedReviews,
-      callbacks.capabilities,
-      () => scratchpadEnabled,
-      () => traceMachineEnabled(),
-      () => {
-        const { key, channel, checkout, appVersion, cliVersion, instanceId } =
-          discovery;
-
-        return {
-          key: key ?? null,
-          channel: channel ?? null,
-          checkout: checkout ?? null,
-          appVersion: appVersion ?? null,
-          cliVersion: cliVersion ?? null,
-          instanceId,
-          url: urlForBoundPort(),
-          home: devReviewHome(),
-        };
-      },
-      reviewLifecycleTelemetry(
-        telemetry,
-        (reviewId) => reviewStore.summary(reviewId)?.firstCreatedAt,
-        () => aliasInstallationToAccount(telemetry),
-      ),
-      { threads: askThreads, agents: () => detectAskAgents() },
-    ),
-  );
+  app.route("/reviews-api", core.api);
   app.get("/preferences/scratchpad", () =>
     serverJson(200, { enabled: scratchpadEnabled }),
   );
@@ -606,7 +590,7 @@ export function createGlobalReviewServer(
     close: async () => {
       if (closing) return;
       closing = true;
-      askThreads.closeAll();
+      core.close();
 
       for (const discoveryPath of discoveryPaths)
         await removeMatchingDiscovery(discoveryPath, discovery);

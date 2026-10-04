@@ -4,6 +4,8 @@ import type {
   ReviewServerHealthWithToken,
 } from "@dev.fast/review-protocol";
 import { traceMachineEnabled } from "@dev.fast/trace-core";
+import { detectAskAgents, launchAskAgent } from "@review/ask/agents.js";
+import { AskThreads, type AskTools } from "@review/ask/threads.js";
 import {
   readBuildCommit,
   readReviewPackageVersion,
@@ -122,6 +124,7 @@ export interface WhiteboardCoreInput {
   scratchpad: () => boolean;
   status: () => JsonObject;
   hooks?: ReviewApiHooks;
+  ask?: { tools: AskTools };
 }
 
 export function createWhiteboardCore(input: WhiteboardCoreInput) {
@@ -136,6 +139,9 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
 
   const callbacks = relayReviewCallbacks(input.relay, input.softwareMapEnabled);
 
+  const askThreads =
+    input.ask && new AskThreads(launchAskAgent, input.ask.tools);
+
   const api = createReviewApi(
     store,
     data,
@@ -146,12 +152,13 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
     () => traceMachineEnabled(),
     input.status,
     input.hooks,
+    askThreads && { threads: askThreads, agents: () => detectAskAgents() },
   );
 
   // A shared store mounts the publisher with the rest of sharing.
   if (!shared) mountSharingPublisher(api, store, data);
 
-  return { app, api };
+  return { app, api, close: () => askThreads?.closeAll() };
 }
 
 /** The Desktop callbacks `createReviewApi` takes, answered over the relay. */
