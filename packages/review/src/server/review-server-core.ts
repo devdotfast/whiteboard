@@ -1,13 +1,23 @@
+import type { JsonObject } from "@dev.fast/json";
 import type {
   ReviewServerHealth,
   ReviewServerHealthWithToken,
 } from "@dev.fast/review-protocol";
+import { traceMachineEnabled } from "@dev.fast/trace-core";
 import {
   readBuildCommit,
   readReviewPackageVersion,
 } from "@review/package-paths.js";
 import { ReviewInputError } from "@review/review-api/document.js";
-import type { AuthoringCapabilities } from "@review/review-api/http.js";
+import {
+  type AuthoringCapabilities,
+  type ReviewApiHooks,
+  createReviewApi,
+} from "@review/review-api/http.js";
+import type { LocalReviewData } from "@review/review-api/local-data.js";
+import type { ReviewStore } from "@review/review-api/store.js";
+import { mountSharingPublisher } from "@review/sharing/host.js";
+import type { SharedReviewStore } from "@review/sharing/import.js";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -97,6 +107,51 @@ export function createReviewServerApp(input: {
   });
 
   return app;
+}
+
+export interface WhiteboardCoreInput {
+  profile: {
+    store: ReviewStore;
+    data: LocalReviewData;
+    shared?: SharedReviewStore;
+  };
+  relay: ReviewDesktopVerbRelay;
+  token: string;
+  instanceId: string;
+  softwareMapEnabled?: boolean;
+  scratchpad: () => boolean;
+  status: () => JsonObject;
+  hooks?: ReviewApiHooks;
+}
+
+export function createWhiteboardCore(input: WhiteboardCoreInput) {
+  const { store, data, shared } = input.profile;
+
+  const app = createReviewServerApp({
+    token: input.token,
+    instanceId: input.instanceId,
+    serverId: store.serverId(),
+    relay: input.relay,
+  });
+
+  const callbacks = relayReviewCallbacks(input.relay, input.softwareMapEnabled);
+
+  const api = createReviewApi(
+    store,
+    data,
+    callbacks.open,
+    shared,
+    callbacks.capabilities,
+    input.scratchpad,
+    () => traceMachineEnabled(),
+    input.status,
+    input.hooks,
+  );
+
+  // A shared store mounts the publisher with the rest of sharing.
+  if (!shared) mountSharingPublisher(api, store, data);
+
+  return { app, api };
 }
 
 /** The Desktop callbacks `createReviewApi` takes, answered over the relay. */

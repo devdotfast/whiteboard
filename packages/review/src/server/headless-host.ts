@@ -4,19 +4,13 @@ import { mkdir, realpath, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 
 import { isObjectValue } from "@dev.fast/json";
-import {
-  traceMachineEnabled,
-  withFileLock,
-  writePrivateJsonAtomic,
-} from "@dev.fast/trace-core";
-import { createReviewApi } from "@review/review-api/http.js";
+import { withFileLock, writePrivateJsonAtomic } from "@dev.fast/trace-core";
 import { openReviewProfile } from "@review/review-api/profile.js";
 import {
   type ReviewServerDiscovery,
   headlessServerLockPath,
   reviewServerDiscoveryPath,
 } from "@review/server-discovery.js";
-import { mountSharingPublisher } from "@review/sharing/host.js";
 
 import { GlobalReviewDesktopVerbRelay } from "./global-verb-relay.js";
 import { createNodeRequestListener } from "./hono-http.js";
@@ -24,10 +18,7 @@ import {
   drainServerCrashReport,
   installProcessErrorTelemetry,
 } from "./process-error-telemetry.js";
-import {
-  createReviewServerApp,
-  relayReviewCallbacks,
-} from "./review-server-core.js";
+import { createWhiteboardCore } from "./review-server-core.js";
 import type { ReviewTelemetryCapture } from "./ui-telemetry.js";
 
 interface HeadlessServerInput {
@@ -97,28 +88,17 @@ async function serve(input: HeadlessServerInput) {
 
   const relay = new GlobalReviewDesktopVerbRelay();
 
-  const app = createReviewServerApp({
+  const { app, api } = createWhiteboardCore({
+    profile: local,
+    relay,
     token: discovery.token,
     instanceId: discovery.instanceId,
-    serverId: local.store.serverId(),
-    relay,
+    softwareMapEnabled: input.softwareMapEnabled,
+    // The scratchpad is the laptop's alone, even with a Desktop attached.
+    scratchpad: () => false,
+    status: () => ({ key: "headless", home: input.stateDir }),
   });
 
-  const callbacks = relayReviewCallbacks(relay, input.softwareMapEnabled);
-
-  const api = createReviewApi(
-    local.store,
-    local.data,
-    callbacks.open,
-    undefined,
-    callbacks.capabilities,
-    // The scratchpad is the laptop's alone, even with a Desktop attached.
-    () => false,
-    () => traceMachineEnabled(),
-    () => ({ key: "headless", home: input.stateDir }),
-  );
-
-  mountSharingPublisher(api, local.store, local.data);
   app.route("/reviews-api", api);
 
   const server = createServer(createNodeRequestListener(app));
