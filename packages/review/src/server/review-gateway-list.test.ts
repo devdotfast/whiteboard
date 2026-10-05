@@ -64,7 +64,7 @@ it("lists the laptop first, then each machine in the setting's order", () => {
   });
 });
 
-it("offers language features only for an online host whose Desktop reported them", () => {
+it("offers language features and Source windows only for an online host whose Desktop reported language features", () => {
   const merged = mergeLists(
     "structural",
     [],
@@ -79,12 +79,10 @@ it("offers language features only for an online host whose Desktop reported them
     ),
   );
 
-  expect(
-    merged.map((review) => [review.host, review.available?.languageFeatures]),
-  ).toEqual([
-    ["a", true],
-    ["b", false],
-    ["c", false],
+  expect(merged.map((review) => [review.host, review.available])).toEqual([
+    ["a", { sourceWindows: true, languageFeatures: true }],
+    ["b", { sourceWindows: false, languageFeatures: false }],
+    ["c", { sourceWindows: false, languageFeatures: false }],
   ]);
 });
 

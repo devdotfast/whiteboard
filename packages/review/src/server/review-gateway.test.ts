@@ -391,8 +391,8 @@ it("streams a remote answer line by line and closes the remote connection when t
 it.each([
   ["file", "GET", "localPath"],
   ["file", "GET", "localRoot"],
-  ["navigator", "POST", "workspacePath"],
-  ["navigator", "POST", "filePath"],
+  ["file", "GET", "workspacePath"],
+  ["file", "GET", "filePath"],
   ["language-context", "GET", "rootPath"],
   ["ask/agents", "GET", "localPath"],
   ["ask/agents/codex/offer", "GET", "localPath"],
@@ -435,6 +435,157 @@ it.each([
     expect(logged.join("\n")).toContain(field);
   },
 );
+
+/** A remote whose navigator answers `answers[file]` for `?file=`; `gone` with 409. */
+async function startNavigator(
+  answers: Record<string, JsonObject>,
+  serverId = "C0FFEE-42",
+) {
+  const reviewId = randomUUID();
+
+  const fake = await startFake({
+    version,
+    serverId,
+    reviewIds: [reviewId],
+    handle(request, response) {
+      if (!request.url?.startsWith(`/reviews-api/${reviewId}/navigator`))
+        return false;
+
+      const file = new URL(request.url, "http://remote").searchParams.get(
+        "file",
+      );
+
+      response.statusCode = file === "gone" ? 409 : 200;
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(answers[file ?? ""]));
+
+      return true;
+    },
+  });
+
+  const started = await startGateway([
+    { alias: "wb-a", endpoint: fake.endpoint },
+  ]);
+
+  await expect.poll(() => started.gateway.hosts()[0]?.state).toBe("online");
+
+  const open = (file: string) =>
+    started.request(`/${reviewId}/navigator?file=${file}`, {
+      method: "POST",
+      body: "{}",
+    });
+
+  return { ...started, open };
+}
+
+it("answers a remote navigator with vscode-remote URIs on its host", async () => {
+  const { open } = await startNavigator({
+    file: {
+      workspacePath: "/home/dev/.review/ws/a b.code-workspace",
+      filePath: "/home/dev/repo (1)/src/a#b+c@d!'*.ts",
+    },
+    empty: {
+      workspacePath: "/home/dev/.review/ws/x.code-workspace",
+      emptySide: true,
+    },
+    unicode: { workspacePath: "/home/dév/ws.code-workspace" },
+  });
+
+  const response = await open("file");
+  expect(response.status).toBe(200);
+  expect(response.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+  expect(await response.json()).toEqual({
+    workspaceUri:
+      "vscode-remote://whiteboard+c0ffee-42/home/dev/.review/ws/a%20b.code-workspace",
+    fileUri:
+      "vscode-remote://whiteboard+c0ffee-42/home/dev/repo%20%281%29/src/a%23b%2Bc%40d%21%27%2A.ts",
+    remoteAuthority: "whiteboard+c0ffee-42",
+  });
+
+  expect(await (await open("empty")).json()).toEqual({
+    workspaceUri:
+      "vscode-remote://whiteboard+c0ffee-42/home/dev/.review/ws/x.code-workspace",
+    remoteAuthority: "whiteboard+c0ffee-42",
+    emptySide: true,
+  });
+
+  expect(await (await open("unicode")).json()).toMatchObject({
+    workspaceUri:
+      "vscode-remote://whiteboard+c0ffee-42/home/d%C3%A9v/ws.code-workspace",
+  });
+});
+
+it.each([
+  ["a relative path", "home/dev/repo/a.ts"],
+  ["a .. segment", "/home/dev/repo/../../etc/passwd"],
+  ["a trailing .. segment", "/home/dev/.."],
+  ["a control character", "/home/dev/repo\n/a.ts"],
+  ["a DEL character", "/home/dev/repo\u007f/a.ts"],
+  ["a lone surrogate", "/home/dev/\ud800.ts"],
+  ["a leading //", "//evil/share/a.ts"],
+  ["an inner //", "/home/dev//a.ts"],
+  ["a scheme", "file:///home/dev/a.ts"],
+  ["a : before the first /", "c:/home/dev/a.ts"],
+  ["no string", 7],
+])(
+  "refuses a remote navigator answer whose path has %s",
+  async (_, hostile) => {
+    const { open, logged } = await startNavigator({
+      good: {
+        workspacePath: "/home/dev/ws.code-workspace",
+        filePath: "/home/dev/a.ts",
+      },
+      workspace: { workspacePath: hostile },
+      file: { workspacePath: "/home/dev/ws.code-workspace", filePath: hostile },
+    });
+
+    expect((await open("good")).status).toBe(200);
+
+    for (const file of ["workspace", "file"]) {
+      const response = await open(file);
+      expect(response.status).toBe(502);
+      expect(response.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+      const text = await response.text();
+      expect(text).not.toContain("vscode-remote");
+      expect(text).not.toContain(String(hostile));
+    }
+
+    expect(logged.join("\n")).toContain("/navigator");
+  },
+);
+
+it("refuses a remote navigator answer with another field or an unusable server id", async () => {
+  const fields = await startNavigator({
+    good: { workspacePath: "/home/dev/ws.code-workspace" },
+    extra: {
+      workspacePath: "/home/dev/ws.code-workspace",
+      localPath: "/home/dev",
+    },
+  });
+
+  expect((await fields.open("good")).status).toBe(200);
+  expect((await fields.open("extra")).status).toBe(502);
+
+  const id = await startNavigator(
+    { good: { workspacePath: "/home/dev/ws.code-workspace" } },
+    "not_an+authority",
+  );
+
+  expect((await id.open("good")).status).toBe(502);
+});
+
+it("passes a remote navigator's refusal through", async () => {
+  const { open } = await startNavigator({
+    good: { workspacePath: "/home/dev/ws.code-workspace" },
+    gone: { ok: false, error: "The file is gone." },
+  });
+
+  expect((await open("good")).status).toBe(200);
+  expect(await (await open("gone")).json()).toEqual({
+    ok: false,
+    error: "The file is gone.",
+  });
+});
 
 it("reaches the laptop for the scratchpad and shared reviews, even when a remote has one", async () => {
   const fake = await startFake({

@@ -8,6 +8,7 @@ import {
   REVIEW_HOST_HEADER,
   type ReviewGatewayHost,
   type ReviewGatewayHostState,
+  type ReviewRemoteNavigatorAnswer,
   isJsonObject,
   parseJsonText,
 } from "@dev.fast/review-protocol";
@@ -131,6 +132,29 @@ const remoteLanguageContext = z.object({
   remoteRootPath: z.string().nullable(),
   serverId: z.string(),
 });
+
+/** Absolute POSIX, no `..` segment, no control character or lone surrogate,
+ * no `//`; a `:` before the first `/` (a scheme) is not absolute. */
+const hostPath = z
+  .string()
+  .refine(
+    (value) =>
+      value.startsWith("/") &&
+      value.isWellFormed() &&
+      !value.includes("//") &&
+      !/\p{Cc}/u.test(value) &&
+      !value.split("/").includes(".."),
+  );
+
+const remoteNavigator = z.strictObject({
+  workspacePath: hostPath,
+  filePath: hostPath.optional(),
+  emptySide: z.literal(true).optional(),
+});
+
+/** VS Code's `URI.toString()` path encoding: unreserved characters and `/`
+ * stay, everything else is percent-encoded. */
+const URI_PATH_KEPT = /[A-Za-z0-9\-._~/]/;
 
 const commandTarget = z.object({
   operation: z.object({ reviewId: z.string().optional() }).optional(),
@@ -311,7 +335,7 @@ export function createReviewGateway(input: {
   function answer(
     alias: string,
     status: number,
-    body: { ok: boolean; error?: string },
+    body: { ok: boolean; error?: string } | ReviewRemoteNavigatorAnswer,
   ) {
     const response = serverJson(status, body);
     response.headers.set(REVIEW_HOST_HEADER, alias);
@@ -471,6 +495,20 @@ export function createReviewGateway(input: {
         return answer(remote.alias, 502, {
           ok: false,
           error: `${remote.alias} answered with another review, so the answer was refused.`,
+        });
+      }
+
+      if (options.route === "navigator" && status === 200) {
+        const uris = navigatorUris(body, remote.serverId);
+
+        if (uris) return answer(remote.alias, 200, uris);
+        log(
+          `Refused ${remote.alias}'s /navigator answer: a path or its server id is unusable.`,
+        );
+
+        return answer(remote.alias, 502, {
+          ok: false,
+          error: `${remote.alias} answered with an unusable path, so the answer was refused.`,
         });
       }
 
@@ -689,6 +727,45 @@ function unusableLanguageContext(body: Buffer, serverId: string | undefined) {
   if (context.data.serverId !== serverId) return "it names another server";
 
   return undefined;
+}
+
+/** The remote navigator's host paths as `vscode-remote` URIs on its
+ * `whiteboard+<serverId>` authority, as the fork's `reviewRemoteAuthority`
+ * names it. */
+function navigatorUris(
+  body: Buffer,
+  serverId: string | undefined,
+): ReviewRemoteNavigatorAnswer | undefined {
+  const parsed = remoteNavigator.safeParse(parseBody(body));
+
+  if (!parsed.success || !serverId || !/^[0-9a-z-]+$/i.test(serverId))
+    return undefined;
+  const { workspacePath, filePath, emptySide } = parsed.data;
+  const remoteAuthority = `whiteboard+${serverId.toLowerCase()}`;
+
+  const uri = (host: string) =>
+    `vscode-remote://${remoteAuthority}${uriPath(host)}`;
+
+  return {
+    workspaceUri: uri(workspacePath),
+    ...(filePath !== undefined && { fileUri: uri(filePath) }),
+    remoteAuthority,
+    ...(emptySide && { emptySide }),
+  };
+}
+
+function uriPath(value: string) {
+  let out = "";
+
+  for (const char of value)
+    out += URI_PATH_KEPT.test(char)
+      ? char
+      : encodeURIComponent(char).replace(
+          /[!'()*]/g,
+          (kept) => `%${kept.charCodeAt(0).toString(16).toUpperCase()}`,
+        );
+
+  return out;
 }
 
 function pathField(body: Buffer): string | undefined {
