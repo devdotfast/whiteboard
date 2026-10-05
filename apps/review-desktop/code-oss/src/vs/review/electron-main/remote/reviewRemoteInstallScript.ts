@@ -121,7 +121,9 @@ elif [ -e "$v" ]; then
 	mv "$v" ${shellQuote(versionPart(context, input.version))} && rm -rf ${shellQuote(versionPart(context, input.version))} || fail cannot remove "$v"
 fi
 for dir in "$root"/versions/*; do
-	[ -f "$dir/${REVIEW_REMOTE_INSTALL_MARKER}" ] && say HAVE "\${dir##*/}"
+	[ -f "$dir/${REVIEW_REMOTE_INSTALL_MARKER}" ] && say HAVE "\${dir##*/}" && continue
+	# A version whose removal was cut short: its marker went first.
+	case "\${dir##*/}" in [0-9]*.[0-9]*.[0-9]*) rm -rf "$dir" ;; esac
 done
 n=${shellQuote(`${nodeDir}/bin/node`)}
 [ -x "$n" ] && [ "$("$n" --version 2>/dev/null)" = v${input.nodeVersion} ] && say MANAGED-NODE
@@ -264,6 +266,30 @@ mv "$p" "$v" || fail cannot move the version into place
 say COMPLETE
 ${wrapper}rm -rf "$root"/versions/*.part "$root"/node/*.part
 say FINISHED
+`;
+}
+
+export function cleanupScript(context: ReviewRemoteInstallContext, input: { candidates: readonly string[]; room: number }): string {
+	const names = input.candidates.map((name) => shellQuote(name)).join(" ");
+	return `${prelude(context)}own
+# Every command line, read once: a grep below must not find itself. The
+# launchers run the CLI by absolute path, so its version's path is there.
+if [ -d /proc/self ]; then
+	procs=$(for f in /proc/[0-9]*/cmdline; do tr '\\000' ' ' < "$f" 2>/dev/null; echo; done)
+else
+	procs=$(ps -eo args= 2>/dev/null)
+fi
+running() { printf '%s\\n' "$procs" | grep -qF -- "$root/versions/$1/"; }
+kept=0
+for v in ${names}; do running "$v" && kept=$((kept + 1)); done
+for v in ${names}; do
+	if running "$v"; then say IN-USE "$v"; continue; fi
+	if [ "$kept" -lt ${input.room} ]; then kept=$((kept + 1)); continue; fi
+	d="$root/versions/$v"
+	[ -f "$d/${REVIEW_REMOTE_INSTALL_MARKER}" ] || continue
+	rm -f "$d/${REVIEW_REMOTE_INSTALL_MARKER}" && rm -rf "$d" && say REMOVED "$v"
+done
+say CLEANED
 `;
 }
 

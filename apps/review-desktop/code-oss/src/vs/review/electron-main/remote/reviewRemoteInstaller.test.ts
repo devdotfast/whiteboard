@@ -189,6 +189,55 @@ test("an existing ~/.local/bin/whiteboard that Desktop did not write is left alo
 	assert.equal(run(result.launcher, "version", "--json"), `{"event":"version","version":"${VERSION}"}`);
 });
 
+async function earlierVersion(remoteRoot: string, version: string): Promise<string> {
+	const dir = join(remoteRoot, "versions", version);
+	await mkdir(join(dir, "node_modules"), { recursive: true });
+	await writeFile(join(dir, REVIEW_REMOTE_INSTALL_MARKER), JSON.stringify({ version, integrity: "sha512-old", node: process.execPath, cli: join(dir, "cli.js") }));
+	return dir;
+}
+
+test("after an install, versions other than the newest two are removed, and a version left without its marker", async (t) => {
+	const f = await fixture(t);
+	for (const version of ["1.0.0", "2.0.0", "2.0.0-preview.1", "10.0.0-preview.3"]) await earlierVersion(f.remoteRoot, version);
+	await mkdir(join(f.remoteRoot, "versions", "notes"));
+	await mkdir(join(f.remoteRoot, "versions", "3.0.0", "node_modules"), { recursive: true });
+	await mkdir(join(f.remoteRoot, "node", "v24.18.0"), { recursive: true });
+
+	await installRemote(f.input());
+
+	assert.deepEqual((await f.versions()).sort(), ["10.0.0-preview.3", VERSION, "notes"].sort());
+	assert.deepEqual(await readdir(join(f.remoteRoot, "node")), ["v24.18.0"]);
+});
+
+test("with three versions installed and one running, cleanup leaves the running one and the newest", async (t) => {
+	const f = await fixture(t);
+	const running = await earlierVersion(f.remoteRoot, "1.0.0");
+	await earlierVersion(f.remoteRoot, "2.0.0");
+	const server = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)", join(running, "node_modules/@dev.fast/whiteboard/dist/cli.js"), "server", "start"], { stdio: "ignore" });
+	t.after(() => server.kill("SIGKILL"));
+
+	await installRemote(f.input());
+
+	assert.deepEqual((await f.versions()).sort(), ["1.0.0", VERSION]);
+	assert.equal(server.exitCode, null);
+
+	server.kill("SIGKILL");
+	await new Promise((resolve) => server.once("exit", resolve));
+	await earlierVersion(f.remoteRoot, "2.0.0");
+	await rm(join(f.remoteRoot, "versions", VERSION), { recursive: true });
+	await installRemote(f.input());
+	assert.deepEqual((await f.versions()).sort(), ["2.0.0", VERSION]);
+});
+
+test("an install of an older version keeps itself and the newest", async (t) => {
+	const f = await fixture(t);
+	for (const version of ["10.0.0", "11.0.0", "12.0.0"]) await earlierVersion(f.remoteRoot, version);
+
+	await installRemote(f.input());
+
+	assert.deepEqual((await f.versions()).sort(), ["12.0.0", VERSION]);
+});
+
 test("an abort while npm runs ends it, leaves no version and no lock, and the next install succeeds", async (t) => {
 	const f = await fixture(t);
 	const npm = join(f.root, "slow-npm");
