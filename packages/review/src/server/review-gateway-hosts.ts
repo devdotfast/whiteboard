@@ -57,6 +57,8 @@ interface Host extends GatewayRemote {
   agent?: http.Agent;
   unauthorized?: () => void;
   problem?: ReviewGatewayHost["problem"];
+  languageFeatures?: boolean;
+  languageFeaturesDetail?: string;
   serverId?: string;
   instanceId?: string;
   status: ReviewGatewayHostState["state"];
@@ -171,6 +173,7 @@ export function createGatewayHosts(input: {
       ...(INSTALLS.has(host.status) && {
         installCommand: `npm install -g @dev.fast/whiteboard@${input.version}`,
       }),
+      ...(host.status === "online" && languageOf(host)),
     };
   }
 
@@ -227,6 +230,7 @@ export function createGatewayHosts(input: {
       alias: given.alias,
       status: "connecting",
       retryMs: FIRST_RETRY_MS,
+      ...languageOf(given),
     };
 
     if (given.endpoint) host.endpoint = given.endpoint;
@@ -382,6 +386,8 @@ export function createGatewayHosts(input: {
             JSON.stringify([given.endpoint, given.problem])
         ) {
           previous.delete(given.alias);
+          current.languageFeatures = given.languageFeatures;
+          current.languageFeaturesDetail = given.languageFeaturesDetail;
           next.push(current);
         } else {
           const host = create(given);
@@ -437,6 +443,14 @@ export function createGatewayHosts(input: {
 }
 
 export type GatewayHosts = ReturnType<typeof createGatewayHosts>;
+
+const languageOf = ({
+  languageFeatures,
+  languageFeaturesDetail,
+}: Pick<ReviewGatewayHost, "languageFeatures" | "languageFeaturesDetail">) => ({
+  ...(languageFeatures !== undefined && { languageFeatures }),
+  ...(languageFeaturesDetail !== undefined && { languageFeaturesDetail }),
+});
 
 export const remoteHeaders = (remote: GatewayRemote) => ({
   "x-review-token": remote.endpoint?.token ?? "",

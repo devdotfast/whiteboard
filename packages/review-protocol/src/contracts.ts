@@ -875,6 +875,8 @@ export const ReviewGatewayHostSchema = z.strictObject({
       detail: stringAllowEmpty,
     })
     .optional(),
+  languageFeatures: z.boolean().optional(),
+  languageFeaturesDetail: stringAllowEmpty.optional(),
 });
 
 export type ReviewGatewayHost = z.infer<typeof ReviewGatewayHostSchema>;
@@ -893,6 +895,8 @@ export interface ReviewGatewayHostState {
     | "auth-failed";
   detail?: string;
   installCommand?: string;
+  languageFeatures?: boolean;
+  languageFeaturesDetail?: string;
 }
 
 export const ReviewRepositoryIdentitySchema = z.strictObject({
