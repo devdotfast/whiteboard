@@ -110,14 +110,7 @@ export function prepareScript(context: ReviewRemoteInstallContext, input: { vers
 	return `${prelude(context)}own
 rm -rf "$root"/versions/*.part "$root"/node/*.part "$root"/install.lock.*.stale "$root"/install.lock.*.done
 mkdir -p "$root/versions" "$root/node" || fail cannot create "$root/versions"
-v=${shellQuote(reviewRemoteVersionDir(context.home, input.version))}
-m="$v/${REVIEW_REMOTE_INSTALL_MARKER}"
-complete=
-if [ -f "$m" ] && [ "$(sed -n 's/.*"integrity":"\\([^"]*\\)".*/\\1/p' "$m")" = ${shellQuote(input.integrity)} ]; then
-	node=$(sed -n 's/.*"node":"\\([^"]*\\)".*/\\1/p' "$m")
-	cli=$(sed -n 's/.*"cli":"\\([^"]*\\)".*/\\1/p' "$m")
-	[ -x "$node" ] && [ -f "$cli" ] && complete=1
-fi
+${markerCheck(context, input)}
 if [ -n "$complete" ]; then
 	say COMPLETE
 	say MARKER "$(cat "$m")"
@@ -130,6 +123,27 @@ done
 n=${shellQuote(`${nodeDir}/bin/node`)}
 [ -x "$n" ] && [ "$("$n" --version 2>/dev/null)" = v${input.nodeVersion} ] && say MANAGED-NODE
 say PREPARED
+`;
+}
+
+function markerCheck(context: ReviewRemoteInstallContext, input: { version: string; integrity: string }): string {
+	return `v=${shellQuote(reviewRemoteVersionDir(context.home, input.version))}
+m="$v/${REVIEW_REMOTE_INSTALL_MARKER}"
+complete=
+if [ -f "$m" ] && [ "$(sed -n 's/.*"integrity":"\\([^"]*\\)".*/\\1/p' "$m")" = ${shellQuote(input.integrity)} ]; then
+	node=$(sed -n 's/.*"node":"\\([^"]*\\)".*/\\1/p' "$m")
+	cli=$(sed -n 's/.*"cli":"\\([^"]*\\)".*/\\1/p' "$m")
+	[ -x "$node" ] && [ -f "$cli" ] && complete=1
+fi`;
+}
+
+export function completeScript(context: ReviewRemoteInstallContext, input: { version: string; integrity: string }): string {
+	return `${prelude(context)}${markerCheck(context, input)}
+[ -n "$complete" ] || exit 0
+say COMPLETE
+say MARKER "$(cat "$m")"
+guard "$v/whiteboard" remote diffr ensure --json </dev/null 2>/dev/null
+say DIFFR-DONE
 `;
 }
 

@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { REVIEW_REMOTE_ATTACH_BEGIN, REVIEW_REMOTE_ATTACH_END } from "../../common/reviewProtocol.js";
+import { shellQuote } from "./reviewRemoteInstallScript.js";
 
 export function reviewRemoteAttachScript(groups: readonly string[] = []): string {
 	for (const group of groups) {
@@ -20,6 +21,10 @@ PATH="\${wb%/*}:$PATH"
 export PATH
 exec "$wb" remote attach --json${groups.length ? ` --groups ${groups.join(",")}` : ""}
 `;
+}
+
+export function installedAttachScript(nodePath: string, cliPath: string): string {
+	return `exec ${shellQuote(nodePath)} ${shellQuote(cliPath)} remote attach --json --replace\n`;
 }
 
 export interface ReviewRemoteLanguageServer {
@@ -43,6 +48,8 @@ export interface ReviewRemoteAttach {
 	readonly languageServerDetail?: string;
 	readonly languageServerPending?: true;
 	readonly languageGroups: readonly ReviewRemoteLanguageGroup[];
+	readonly replaced?: string;
+	readonly incompatibleRunning?: { readonly version: string; readonly startedBy: "user" | "cli" | "desktop" };
 }
 
 export function parseRemoteAttach(stdout: string): { attach: ReviewRemoteAttach } | { error: string } | undefined {
@@ -69,14 +76,20 @@ export function parseRemoteAttach(stdout: string): { attach: ReviewRemoteAttach 
 		if (port === undefined || typeof record.token !== "string" || !record.token) {
 			return { error: "remote attach answered without a loopback URL and a token." };
 		}
+		const running = record.incompatibleRunning as Record<string, unknown> | undefined;
 		return {
 			attach: {
 				version: typeof record.version === "string" ? record.version : null,
-				serverId: typeof record.serverId === "string" ? record.serverId : null,
+				serverId: typeof record.serverId === "string" && UUID.test(record.serverId) ? record.serverId : null,
 				token: record.token,
 				port,
 				...languageServerOf(record),
 				languageGroups: languageGroupsOf(record.languageGroups),
+				...(record.replaced === true && { replaced: versionText(record.previousVersion) }),
+				...(running &&
+					typeof running === "object" && {
+						incompatibleRunning: { version: versionText(running.version), startedBy: running.startedBy === "cli" || running.startedBy === "desktop" ? running.startedBy : "user" },
+					}),
 			},
 		};
 	}
@@ -112,6 +125,10 @@ function languageGroupsOf(value: unknown): ReviewRemoteLanguageGroup[] {
 		return [{ group, installed, ...(typeof detail === "string" && detail && { detail: detail.slice(0, 500) }) }];
 	});
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const versionText = (value: unknown) => (typeof value === "string" && /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(value) ? value : "unknown");
 
 function loopbackPort(url: unknown): number | undefined {
 	if (typeof url !== "string") return undefined;

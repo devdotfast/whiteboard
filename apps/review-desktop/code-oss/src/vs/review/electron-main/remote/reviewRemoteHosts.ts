@@ -7,7 +7,16 @@ import { readdir, rm } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { join } from "node:path";
 import type { ReviewGatewayHost, ReviewGatewayHostState } from "../../common/reviewProtocol.js";
-import { REVIEW_REMOTE_TIMEOUTS, ReviewRemoteHost, runSsh, systemClock, type ReviewRemoteClock, type ReviewRemoteHostOptions, type SpawnSsh } from "./reviewRemoteHost.js";
+import {
+	REVIEW_REMOTE_TIMEOUTS,
+	ReviewRemoteHost,
+	runSsh,
+	systemClock,
+	type ReviewRemoteClock,
+	type ReviewRemoteHostOptions,
+	type ReviewRemoteInstallFlow,
+	type SpawnSsh,
+} from "./reviewRemoteHost.js";
 import type { ReviewSshAskpass, SshPromptRequest } from "./reviewSshAskpass.js";
 import {
 	prepareSshControlDirectory,
@@ -38,6 +47,7 @@ export interface ReviewRemoteHostsOptions {
 	log(message: string): void;
 	readonly clock?: ReviewRemoteClock;
 	readonly timeouts?: ReviewRemoteHostOptions["timeouts"];
+	readonly install?: ReviewRemoteInstallFlow;
 }
 
 export function freeLoopbackPort(): Promise<number> {
@@ -64,8 +74,31 @@ export class ReviewRemoteHosts {
 	private disposed = false;
 	private disposing: Promise<void> | undefined;
 
+	private readonly flow: ReviewRemoteInstallFlow | undefined;
+
 	constructor(private readonly options: ReviewRemoteHostsOptions) {
 		this.clock = options.clock ?? systemClock;
+		const flow = options.install;
+		let asking: Promise<unknown> = Promise.resolve();
+		const questions = new Map<string, { answer: Promise<boolean | undefined>; abort: AbortController }>();
+		this.flow = flow && {
+			...flow,
+			confirm: (request) => {
+				const open = questions.get(request.alias);
+				if (open) return open.answer;
+				const abort = new AbortController();
+				const answer = asking
+					.then(() => (abort.signal.aborted ? undefined : flow.confirm({ ...request, signal: abort.signal })))
+					.finally(() => questions.get(request.alias)?.abort === abort && questions.delete(request.alias));
+				asking = answer.catch(() => undefined);
+				questions.set(request.alias, { answer, abort });
+				return answer;
+			},
+			cancel: (alias) => {
+				questions.get(alias)?.abort.abort();
+				questions.delete(alias);
+			},
+		};
 	}
 
 	update(enabled: boolean, aliases: readonly string[]): void {
@@ -101,6 +134,11 @@ export class ReviewRemoteHosts {
 	}
 
 	retry(alias: string): void {
+		this.hosts.get(alias)?.retry();
+	}
+
+	async install(alias: string): Promise<void> {
+		await this.options.install?.consent.set(alias, "allow");
 		this.hosts.get(alias)?.retry();
 	}
 
@@ -145,6 +183,7 @@ export class ReviewRemoteHosts {
 			log: this.options.log,
 			clock: this.clock,
 			timeouts: this.options.timeouts,
+			install: this.flow,
 		});
 	}
 

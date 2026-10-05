@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { REVIEW_REMOTE_INSTALL_ANSWER_CALL, REVIEW_REMOTE_INSTALL_PROMPT_EVENT } from "../common/reviewRemoteInstallPrompt.js";
 import { REVIEW_SSH_ANSWER_CALL, REVIEW_SSH_PROMPT_EVENT, type ReviewSshPromptEvent } from "../common/reviewSshPrompt.js";
 import { ReviewSshPromptRelay } from "./remote/reviewSshPromptRelay.js";
 import { ReviewDesktopChannel } from "./reviewDesktopChannel.js";
@@ -59,6 +60,24 @@ test("relays ssh prompts to the window and takes its answer", async () => {
 
 	assert.equal(await answer, "hunter2");
 	relay.dispose();
+});
+
+test("relays install prompts apart from ssh prompts", async () => {
+	const ssh = new ReviewSshPromptRelay();
+	const install = new ReviewSshPromptRelay();
+	const channel = new ReviewDesktopChannel({} as never, { getWindows: () => [] } as never, () => false, ssh, install);
+	const events: ReviewSshPromptEvent[] = [];
+	const sshEvents: ReviewSshPromptEvent[] = [];
+	channel.listen<ReviewSshPromptEvent>("", REVIEW_REMOTE_INSTALL_PROMPT_EVENT)((event) => events.push(event));
+	channel.listen<ReviewSshPromptEvent>("", REVIEW_SSH_PROMPT_EVENT)((event) => sshEvents.push(event));
+
+	const answer = install.prompt({ alias: "box", text: "Whiteboard 0.1.6 is not installed on box.", kind: "confirm" });
+	await channel.call("", REVIEW_REMOTE_INSTALL_ANSWER_CALL, { id: events[0].id, answer: "install" });
+
+	assert.equal(await answer, "install");
+	assert.deepEqual(sshEvents, []);
+	ssh.dispose();
+	install.dispose();
 });
 
 test("hands a window a remote machine's VS Code server by its server id, and nothing for anything else", async () => {

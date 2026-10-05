@@ -25,22 +25,44 @@ import type { ReviewGatewayHostState } from "../common/reviewProtocol.js";
 import {
   REVIEW_REMOTE_HOSTS_ENABLED_SETTING,
   REVIEW_REMOTE_HOSTS_SETTING,
+  REVIEW_REMOTE_INSTALL_MODES,
+  REVIEW_REMOTE_INSTALL_SETTING,
   REVIEW_TELEMETRY_SETTING,
 } from "../common/reviewConfigurationDefaults.js";
+import {
+  REVIEW_REMOTE_INSTALL_NO,
+  REVIEW_REMOTE_INSTALL_YES,
+} from "../common/reviewRemoteInstallPrompt.js";
 import { remoteHostAliases } from "../common/reviewSshAlias.js";
 import { REVIEW_CRASH_DUMPS_DIRNAME } from "../node/reviewCrashReporter.js";
 import { ReviewCrashDumps } from "./reviewCrashDumps.js";
 import { ReviewCrashTelemetry } from "./reviewCrashTelemetry.js";
 import { ReviewMainErrorTelemetry } from "./reviewMainErrorTelemetry.js";
 import { reviewEnabledExtensionGroups } from "./remote/reviewEnabledExtensionGroups.js";
+import {
+  remoteArtifacts,
+  reviewRemoteCacheDirectory,
+} from "./remote/reviewRemoteArtifacts.js";
+import type {
+  ReviewRemoteInstallFlow,
+  ReviewRemoteInstallMode,
+} from "./remote/reviewRemoteHost.js";
 import { ReviewRemoteHosts } from "./remote/reviewRemoteHosts.js";
+import {
+  openRemoteInstallConsent,
+  reviewRemoteInstallConsentPath,
+} from "./remote/reviewRemoteInstallConsent.js";
+import { installRemote } from "./remote/reviewRemoteInstaller.js";
 import { createSshAskpass } from "./remote/reviewSshAskpass.js";
 import {
   reviewSshConfigPath,
   reviewSshControlDirectory,
 } from "./remote/reviewSshCommand.js";
 import { listSshAliases } from "./remote/reviewSshConfigAliases.js";
-import { reviewSshPromptRelay } from "./remote/reviewSshPromptRelay.js";
+import {
+  reviewRemoteInstallPromptRelay,
+  reviewSshPromptRelay,
+} from "./remote/reviewSshPromptRelay.js";
 import { ReviewServerSupervisor } from "./reviewServerSupervisor.js";
 import {
   darwinShipItLogPath,
@@ -247,6 +269,55 @@ export class ReviewDesktopHost extends Disposable {
     }
   }
 
+  installRemoteHost(alias: string): Promise<void> {
+    return this.remoteHosts?.install(alias) ?? Promise.resolve();
+  }
+
+  private remoteInstallFlow(): ReviewRemoteInstallFlow {
+    const { userDataPath, isBuilt, appRoot } = this.environmentMainService;
+    const cacheDirectory = reviewRemoteCacheDirectory(userDataPath);
+    return {
+      mode: () => {
+        const mode = this.configurationService.getValue(
+          REVIEW_REMOTE_INSTALL_SETTING,
+        );
+        return REVIEW_REMOTE_INSTALL_MODES.includes(
+          mode as ReviewRemoteInstallMode,
+        )
+          ? (mode as ReviewRemoteInstallMode)
+          : "ask";
+      },
+      consent: openRemoteInstallConsent(
+        reviewRemoteInstallConsentPath(userDataPath),
+      ),
+      confirm: async (request) => {
+        const answer = await reviewRemoteInstallPromptRelay.prompt({
+          ...request,
+          kind: "confirm",
+        });
+        return answer === REVIEW_REMOTE_INSTALL_YES
+          ? true
+          : answer === REVIEW_REMOTE_INSTALL_NO
+            ? false
+            : undefined;
+      },
+      run: async (input) => {
+        const pin = this.productService.whiteboardRemote;
+        const artifacts = await remoteArtifacts(input.target, {
+          pin,
+          checkout: isBuilt ? undefined : join(appRoot, "..", "..", ".."),
+          cacheDirectory,
+        });
+        return installRemote({
+          ...input,
+          artifacts,
+          published: pin !== undefined,
+          cacheDirectory,
+        });
+      },
+    };
+  }
+
   private startRemoteHosts(
     shellEnvironment: () => Promise<NodeJS.ProcessEnv>,
   ): void {
@@ -268,6 +339,7 @@ export class ReviewDesktopHost extends Disposable {
         reviewEnabledExtensionGroups(this.environmentMainService.extensionsPath),
       send: (hosts) => this.supervisor.setRemoteHosts(hosts),
       log: (message) => this.logService.info(`[Remote hosts] ${message}`),
+      install: this.remoteInstallFlow(),
     });
     this.remoteHosts = manager;
     const update = () => {
@@ -295,7 +367,8 @@ export class ReviewDesktopHost extends Disposable {
       this.configurationService.onDidChangeConfiguration((event) => {
         if (
           event.affectsConfiguration(REVIEW_REMOTE_HOSTS_SETTING) ||
-          event.affectsConfiguration(REVIEW_REMOTE_HOSTS_ENABLED_SETTING)
+          event.affectsConfiguration(REVIEW_REMOTE_HOSTS_ENABLED_SETTING) ||
+          event.affectsConfiguration(REVIEW_REMOTE_INSTALL_SETTING)
         )
           update();
       }),

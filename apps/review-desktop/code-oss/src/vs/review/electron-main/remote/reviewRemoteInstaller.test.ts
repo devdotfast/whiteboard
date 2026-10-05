@@ -233,9 +233,18 @@ test("a stale lock is taken over; a fresh one is waited for, within the bound", 
 	await writeFile(join(lock, "owner"), "gone-laptop\n");
 	await writeFile(join(lock, "started"), `${Math.floor(Date.now() / 1000) - 16 * 60}\n`);
 
-	await installRemote(f.input());
+	const installed = await installRemote(f.input());
 	assert.ok(!(await readdir(f.remoteRoot)).includes("install.lock"));
 
+	await mkdir(lock);
+	await writeFile(join(lock, "token"), "0123456789abcdef\n");
+	await writeFile(join(lock, "started"), `${Math.floor(Date.now() / 1000)}\n`);
+	f.progress.length = 0;
+	assert.deepEqual(await installRemote(f.input({ timeouts: { lockPoll: 50, lockWait: 400 } })), installed);
+	assert.deepEqual(f.progress, [{ step: "done", cliPath: installed.cliPath }]);
+	await rm(lock, { recursive: true });
+
+	await rm(join(f.remoteRoot, "versions"), { recursive: true });
 	await mkdir(lock);
 	await writeFile(join(lock, "token"), "0123456789abcdef\n");
 	await writeFile(join(lock, "owner"), "busy-laptop\n");
