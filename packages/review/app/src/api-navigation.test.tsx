@@ -1,6 +1,4 @@
 // @vitest-environment jsdom
-import { randomUUID } from "node:crypto";
-
 import { createReviewApi } from "@review/review-api/http";
 import { ReviewStore } from "@review/review-api/store";
 import { Hono } from "hono";
@@ -48,25 +46,38 @@ it("exposes JSON section and Markdown headings plus imported PR and stack naviga
     validateSource: async () => {},
     validateResource: async () => {},
   });
-  const reviewId = randomUUID();
-  await store.importVersion({
-    reviewId,
-    title: "Navigation",
-    pins: { repositoryId: "repo", base: "base", head: "head" },
-    createdAt: new Date().toISOString(),
-    origin: {
-      pullRequestNumber: 42,
-      pullRequestUrl: "https://github.com/example/repo/pull/42",
-    },
-    document: [
-      { type: "markdown", markdown: "## Summary\n\nText\n\n### **Details**" },
-      {
-        type: "section",
-        title: "Implementation",
-        children: [{ type: "markdown", markdown: "## Details\n\nNested text" }],
+
+  const { reviewId } = await store.execute(
+    {
+      operation: {
+        type: "create",
+        title: "Navigation",
+        target: {
+          kind: "commits",
+          repositoryId: "repo",
+          base: "base",
+          head: "head",
+        },
       },
-    ],
-  });
+    },
+    {
+      origin: {
+        pullRequestNumber: 42,
+        pullRequestUrl: "https://github.com/example/repo/pull/42",
+      },
+      document: [
+        { type: "markdown", markdown: "## Summary\n\nText\n\n### **Details**" },
+        {
+          type: "section",
+          title: "Implementation",
+          children: [
+            { type: "markdown", markdown: "## Details\n\nNested text" },
+          ],
+        },
+      ],
+    },
+  );
+
   const app = new Hono();
   app.get("/reviews-api/:id/stack", (c) =>
     c.json({

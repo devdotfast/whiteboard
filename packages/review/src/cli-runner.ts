@@ -54,7 +54,6 @@ import {
   isInstallTarget,
 } from "./install";
 import { scanLegacySkills } from "./legacy-skills";
-import { runReviewMigration } from "./migrate";
 import {
   findReviewPackageRoot,
   readReviewPackageVersion,
@@ -119,7 +118,6 @@ interface ReviewCliRuntime {
   runReviewAppLaunch: typeof runReviewAppLaunch;
   runReviewAppPick: typeof runReviewAppPick;
   runReviewInfo: typeof runReviewInfo;
-  runReviewMigration: typeof runReviewMigration;
   runTraceStatus: typeof runTraceStatus;
   runTraceEnable: typeof runTraceEnable;
   runTraceDisable: typeof runTraceDisable;
@@ -713,25 +711,22 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
   });
 
   const migrate = configureOutput(
-    program.command("migrate").description("Migrate legacy review data"),
+    program.command("migrate", { hidden: true }),
     "plain",
   );
 
   configureJsonOutput(
-    migrate
-      .command("apply")
-      .description("Apply the legacy review migration")
-      .option("--force", "restart an interrupted migration"),
+    migrate.command("apply").option("--force"),
     "plain",
-  ).action(async (options: { force?: boolean; json?: boolean }) => {
-    state.exitCode = await runtime.runReviewMigration({
-      env,
-      force: options.force,
-      json: options.json,
-      stdout: input.stdout,
-      stderr: input.stderr,
-    });
-  });
+  ).action(
+    (_options: { force?: boolean; json?: boolean }, command: Command) => {
+      command
+        .showHelpAfterError(false)
+        .error(
+          "Markdown review migration is no longer supported. Ask your agent to migrate your old Whiteboard reviews.",
+        );
+    },
+  );
 
   const share = configureJsonOutput(
     program
@@ -1174,7 +1169,6 @@ function reviewCliRuntime(
     runReviewAppLaunch,
     runReviewAppPick,
     runReviewInfo,
-    runReviewMigration,
     runTraceStatus,
     runTraceEnable,
     runTraceDisable,

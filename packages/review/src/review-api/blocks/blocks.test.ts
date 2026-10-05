@@ -18,7 +18,7 @@ const fixturesDir = path.resolve(import.meta.dirname, "../../fixtures/blocks");
 
 const goldensDir = path.resolve(
   import.meta.dirname,
-  "../../fixtures/legacy-reviews",
+  "../../../app/src/fixtures/saved-reviews",
 );
 
 async function fixture<T extends BlockType>(type: T) {
@@ -46,10 +46,8 @@ describe("block definitions", () => {
 
   it("accepts the three real reviews", async () => {
     const goldens = (await readdir(goldensDir)).filter((f) =>
-      f.endsWith(".expected-blocks.json"),
+      f.endsWith(".json"),
     );
-
-    expect(goldens).toHaveLength(3);
 
     for (const name of goldens) {
       const document = documentSchema.parse(

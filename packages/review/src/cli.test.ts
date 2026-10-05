@@ -17,7 +17,6 @@ import {
 import { describe, expect, it, vi } from "vitest";
 
 import { runReviewCli } from "./cli-runner";
-import { runReviewMigration as runReviewMigrationActual } from "./migrate";
 import {
   PostHogCaptureClient,
   type PostHogCaptureInput,
@@ -734,37 +733,55 @@ describe("Whiteboard CLI", () => {
     );
   });
 
-  it("accepts only migrate apply and migrate apply --force", async () => {
-    const runReviewMigration = vi.fn<typeof runReviewMigrationActual>(
-      async () => 0,
-    );
+  it.each([
+    ["migrate", "apply"],
+    ["migrate", "apply", "--force"],
+    ["migrate", "apply", "--json"],
+    ["migrate", "apply", "--force", "--json"],
+  ])(
+    "rejects retired migration without changing old reviews: %j",
+    async (...argv) => {
+      const record = '{"schemaVersion":4,"title":"Old review"}';
 
-    await expect(
-      runReviewCli({
-        argv: ["migrate", "apply"],
-        stdout: outputStream(),
-        stderr: outputStream(),
-        runtime: { runReviewMigration },
-      }),
-    ).resolves.toBe(0);
-    await expect(
-      runReviewCli({
-        argv: ["migrate", "apply", "--force"],
-        stdout: outputStream(),
-        stderr: outputStream(),
-        runtime: { runReviewMigration },
-      }),
-    ).resolves.toBe(0);
+      const result = await runConnect(
+        argv,
+        async (home) => {
+          const directory = path.join(
+            home,
+            ".dev",
+            "reviews",
+            "11111111-1111-4111-8111-111111111111",
+          );
 
-    expect(runReviewMigration).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ force: undefined }),
-    );
-    expect(runReviewMigration).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ force: true }),
-    );
-  });
+          await mkdir(directory, { recursive: true });
+          await writeFile(path.join(directory, "review.json"), record);
+        },
+        async (home) => {
+          const directory = path.join(
+            home,
+            ".dev",
+            "reviews",
+            "11111111-1111-4111-8111-111111111111",
+          );
+
+          expect(
+            await readFile(path.join(directory, "review.json"), "utf8"),
+          ).toBe(record);
+          expect(await readdir(directory)).toEqual(["review.json"]);
+        },
+      );
+
+      const guidance =
+        "Markdown review migration is no longer supported. Ask your agent to migrate your old Whiteboard reviews.";
+
+      const failure = argv.includes("--json")
+        ? JSON.parse(result.stdout).error.message
+        : result.stderr;
+
+      expect(result.code).toBe(1);
+      expect(failure).toContain(guidance);
+    },
+  );
 });
 
 function outputStream(): PassThrough {
@@ -780,6 +797,7 @@ async function installTestShim(home: string): Promise<void> {
 async function runConnect(
   argv: string[],
   setup?: (homeDir: string) => Promise<void>,
+  verify?: (homeDir: string) => Promise<void>,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const homeDir = await mkdtemp(path.join(os.tmpdir(), "review-connect-"));
 
@@ -806,6 +824,8 @@ async function runConnect(
       stdout,
       stderr,
     });
+
+    await verify?.(homeDir);
 
     return { code, stdout: stdoutText, stderr: stderrText };
   } finally {

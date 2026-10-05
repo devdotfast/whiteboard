@@ -10,18 +10,19 @@ import { afterEach, expect, it } from "vitest";
 
 import { mountReviewCanvas as mount } from "./desktop-entry";
 import { fixtureReviewBridge, settled } from "./fixture-review-bridge";
+import { testReviewBridge } from "./review-session-test-utils";
 
-// The archived real reviews as the importer translates them, before ids.
+// Saved canonical documents exercise rendering without the retired importer.
 const goldens = import.meta.glob<{ default: JsonValue }>(
-  "../../src/fixtures/legacy-reviews/*.expected-blocks.json",
+  "./fixtures/saved-reviews/*.json",
   { eager: true },
 );
 
 /** The title heading of each archived review's golden document. */
 const phrases = {
-  "schema4-bug-report-dialog": "Bug reports: screenshots and simpler consent",
-  "schema4-opencode-agentserver": "OpenCode on AgentServer",
-  "schema4-three-minute-tour": "Review Desktop: three-minute tour",
+  "bug-report-dialog": "Bug reports: screenshots and simpler consent",
+  "opencode-agentserver": "OpenCode on AgentServer",
+  "three-minute-tour": "Review Desktop: three-minute tour",
 };
 
 let canvas: ReturnType<typeof mount> | undefined;
@@ -31,14 +32,45 @@ afterEach(async () => {
   canvas = undefined;
 });
 
+it("shows migration guidance in the existing error surface for an unavailable old review", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  await act(async () => {
+    canvas = mount(container, {
+      kind: "api",
+      reviewId: "11111111-1111-4111-8111-111111111111",
+      bridge: testReviewBridge(
+        {},
+        {
+          request: async () =>
+            Response.json(
+              {
+                error:
+                  "Review not found. If this is an old Whiteboard review, ask your agent to migrate your old Whiteboard reviews.",
+              },
+              { status: 404 },
+            ),
+        },
+      ),
+    });
+  });
+  expect(
+    await settled(() =>
+      container.textContent?.includes(
+        "ask your agent to migrate your old Whiteboard reviews",
+      ),
+    ),
+  ).toBe(true);
+});
+
 it.each(Object.keys(phrases) as (keyof typeof phrases)[])(
   "renders the real review %s through the JSON canvas",
   async (name) => {
     const file = Object.keys(goldens).find((key) =>
-      key.endsWith(`/${name}.expected-blocks.json`),
+      key.endsWith(`/${name}.json`),
     )!;
 
-    // Ids are assigned exactly as ReviewStore.importVersion assigns them.
+    // Assign ids as current authoring does before rendering.
     const blocks = documentSchema.parse(goldens[file]!.default);
     let nextId = 0;
 

@@ -69,6 +69,27 @@ afterEach(async () => {
   rmSync(directory, { recursive: true, force: true });
 });
 
+it("shows agent migration guidance when an old review cannot be loaded", async () => {
+  const app = new Hono().route("/reviews-api", createReviewApi(store));
+  const container = document.createElement("div");
+  document.body.append(container);
+  await act(async () => {
+    canvas = mount(container, {
+      kind: "api",
+      reviewId: "11111111-1111-4111-8111-111111111111",
+      bridge: testReviewBridge(
+        {},
+        { request: async (url, init) => app.request(url, init) },
+      ),
+    });
+  });
+  await vi.waitFor(() => {
+    expect(container.textContent).toContain(
+      "ask your agent to migrate your old Whiteboard reviews",
+    );
+  });
+});
+
 it("mounts the existing canvas and preserves a section's DOM and collapsed state through live edits", async () => {
   const review = await command({
     type: "create",

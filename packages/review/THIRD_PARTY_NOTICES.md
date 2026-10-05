@@ -86,7 +86,6 @@ Direct third-party runtime/UI dependencies currently include:
 - `@xyflow/react` (`MIT`)
 - `elkjs` (`EPL-2.0`)
 - `fuzzysort` (`MIT`)
-- `isomorphic-git` (`MIT`)
 - `katex` (`MIT`, fonts `OFL-1.1`)
 - `react` and `react-dom` (`MIT`)
 - `semver` (`ISC`)

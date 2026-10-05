@@ -36,14 +36,18 @@ it("derives source_kind from the review's stored target, or the scratchpad kind"
 
   try {
     const repository = store.registerRepository(process.cwd());
-    const reviewId = randomUUID();
 
-    await store.importVersion({
-      reviewId,
-      pins: { repositoryId: repository.id, base: "base", head: "head" },
-      title: "Pinned",
-      document: [{ type: "markdown", markdown: "Prose" }],
-      createdAt: "2026-01-01T00:00:00Z",
+    const { reviewId } = await store.execute({
+      operation: {
+        type: "create",
+        title: "Pinned",
+        target: {
+          kind: "commits",
+          repositoryId: repository.id,
+          base: "base",
+          head: "head",
+        },
+      },
     });
 
     expect(sessionStartedSourceKind(store, reviewId)).toBe("commits");

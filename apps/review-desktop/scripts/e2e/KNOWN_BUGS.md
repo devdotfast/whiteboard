@@ -89,35 +89,6 @@ for <repo>.` The delete path fails the same way. The journey asserts that log
   today: the only `{ kind: "source" }` render (`reviewCanvasPart.ts:308`) never
   sets `error`, so no journey can assert that string.
 
-## Home says nothing about a legacy review directory left behind by the JSON cutover
-
-- **Journey:** `settings-and-migration` · **Found:** 2026-09-17 · **Status:** not-a-bug
-- **Reason:** the JSON store is the catalog, and the cutover that fills it is a
-  one-time storage migration, not a Home refresh task. A directory left in
-  `<home>/reviews` afterwards is dead data, and nothing writes one any more.
-- **Repro:** with a Review home that has already been through the cutover
-  (`<home>/json-cutover.json` present), add
-  `<home>/reviews/11111111-1111-4111-8111-111111111111/review.json` holding
-  `{"schemaVersion":1,"uuid":"11111111-1111-4111-8111-111111111111"}`, restart
-  Review Desktop and open Home.
-- **Expected (by the plan):** Home lists the review as needing migration and
-  names the command to run, from the `MIGRATION_REQUIRED` `ReviewHomeError`
-  whose message is "Invalid review.json; run `whiteboard migrate apply`: …"
-  (`review-home.ts:364-366`, `:706-710`).
-- **Actual:** Home renders the empty-Home onboarding rail and mentions neither
-  the review nor the command; `GET /reviews-api` answers 200 without it; the
-  directory is left byte-for-byte as seeded. The journey asserts all three, and
-  keeps the plan's assertion behind a branch that fires if a build grows the
-  guidance, so the expectation is recorded rather than dropped.
-- **Notes:** `ensureJsonCutover` (`review-import/json-cutover.ts:254-289`) returns on its
-  marker without reading `<home>/reviews` again, and Home lists from the JSON
-  store (`review-api/store.ts:485`). The `MIGRATION_REQUIRED` error has no
-  Desktop consumer at all: only tests read `review-home.ts`'s scan errors,
-  and `ReviewHomeError` appears nowhere in
-  `packages/review/app/src`. What is worth fixing is the path where such a
-  directory still matters: before the cutover has run, the same record stopped
-  the Desktop from starting (fixed in #349).
-
 ## A review's Rust language server never starts when the extension wins a race with the workspace folder
 
 - **Journey:** `lsp-rust` · **Found:** 2026-09-17 · **Status:** fix-pr #854

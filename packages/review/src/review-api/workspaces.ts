@@ -251,8 +251,7 @@ export class ReviewWorkspaces {
   }
 
   private assertReview(id: string) {
-    if (!this.hasReview(id))
-      throw new ReviewInputError("Review not found.", 404);
+    if (!this.hasReview(id)) this.store.assertExists(id);
   }
 
   async remove(reviewId: string) {

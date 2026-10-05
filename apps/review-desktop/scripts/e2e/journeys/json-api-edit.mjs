@@ -2,47 +2,28 @@
 import assert from "node:assert/strict";
 
 import { createReview, orderReviewBlocks } from "../harness.mjs";
-import {
-  openLegacyReview,
-  seedLegacyFixtures,
-  waitForImport,
-} from "../legacy-fixtures.mjs";
 
 export const name = "json-api-edit";
 
 export const phase = 1;
 
-export const options = { beforeLaunch: seedLegacyFixtures };
+export const options = {};
 
 export async function run(ctx) {
-  const { api, apiOk, apiCanvasFor, legacyFixtures } = ctx;
+  const { api, apiOk } = ctx;
 
-  // createReview has not run yet, so an imported fixture is the only open canvas available.
-  const fixture = legacyFixtures.find(
-    (candidate) => candidate.metadata.sourceRepository === "devdotfast/review",
-  );
+  const { reviewId, canvas } = await createReview(ctx, {
+    title: "JSON API edit e2e",
+    blocks: [{ type: "markdown", markdown: "Original analysis." }],
+  });
 
-  assert.ok(fixture, "an importable legacy fixture is available");
-
-  const { metadata } = fixture;
-
-  await waitForImport(ctx, metadata.sourceUuid);
-  await openLegacyReview(ctx, fixture);
-  const snapshot = await waitForImport(ctx, metadata.sourceUuid);
-
-  const page = await apiCanvasFor(snapshot.title);
-
-  await ctx.watchPage(page);
-
-  const canvas = page.locator(".review-canvas-root");
-
-  const before = await apiOk(`/reviews-api/${metadata.sourceUuid}?full=true`);
+  const before = await apiOk(`/reviews-api/${reviewId}?full=true`);
 
   const edit = (content) =>
     api("/reviews-api/commands", "POST", {
       operation: {
         type: "edit",
-        reviewId: metadata.sourceUuid,
+        reviewId: reviewId,
         edit: { type: "insert", content },
       },
     });
@@ -84,9 +65,13 @@ export async function run(ctx) {
     assert.match(rejected.value.error, new RegExp(message));
   }
 
-  const after = await apiOk(`/reviews-api/${metadata.sourceUuid}?full=true`);
+  const after = await apiOk(`/reviews-api/${reviewId}?full=true`);
 
-  assert.deepEqual(after, before, "rejected edits must not change the document");
+  assert.deepEqual(
+    after,
+    before,
+    "rejected edits must not change the document",
+  );
 
   const accepted = await edit({
     type: "callout",
@@ -116,7 +101,10 @@ export async function run(ctx) {
   await created.canvas
     .getByRole("heading", { name: "Overview", exact: true })
     .waitFor();
-  await created.canvas.getByText("moves from draft to queued").first().waitFor();
+  await created.canvas
+    .getByText("moves from draft to queued")
+    .first()
+    .waitFor();
   assert.doesNotMatch(await created.canvas.innerText(), /Layout failed:/);
   ctx.check("createReview helper opens an API review");
 }

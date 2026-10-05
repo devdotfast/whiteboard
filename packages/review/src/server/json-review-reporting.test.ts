@@ -20,7 +20,6 @@ it("routes sanitized telemetry and uploads only opted-in JSON context from the d
     validateResource: async () => {},
   });
   const repository = store.registerRepository(process.cwd());
-  const reviewId = randomUUID();
   const pins = { repositoryId: repository.id, base: "base", head: "head" };
   const mapId = randomUUID();
   store.putResource(
@@ -30,22 +29,42 @@ it("routes sanitized telemetry and uploads only opted-in JSON context from the d
     "application/json",
     Buffer.from(JSON.stringify({ model: { title: "Original map" } })),
   );
-  await store.importVersion({
-    reviewId,
-    pins,
-    title: "Original",
-    document: [
-      { type: "markdown", markdown: "Original prose" },
-      { type: "software_map", mapVersionId: mapId },
-    ],
-    createdAt: "2026-01-01T00:00:00Z",
+
+  const { reviewId } = await store.execute(
+    {
+      operation: {
+        type: "create",
+        title: "Original",
+        target: { kind: "commits", ...pins },
+      },
+    },
+    {
+      document: [
+        { type: "markdown", markdown: "Original prose" },
+        { type: "software_map", mapVersionId: mapId },
+      ],
+      origin: {},
+    },
+  );
+
+  const original = store.read(reviewId);
+  await store.execute({
+    operation: {
+      type: "edit",
+      reviewId,
+      edit: {
+        type: "update",
+        targetId: original.document[0]!.id!,
+        changes: { markdown: "Newer prose" },
+      },
+    },
   });
-  await store.importVersion({
-    reviewId,
-    pins: { ...pins, head: "new-head" },
-    title: "Newer",
-    document: [{ type: "markdown", markdown: "Newer prose" }],
-    createdAt: "2026-01-02T00:00:00Z",
+  await store.execute({
+    operation: {
+      type: "edit",
+      reviewId,
+      edit: { type: "remove", targetId: original.document[1]!.id! },
+    },
   });
 
   const telemetry = {
@@ -224,13 +243,18 @@ it("sends a bug report without the envelope when telemetry cannot supply one", a
     validateResource: async () => {},
   });
   const repository = store.registerRepository(process.cwd());
-  const reviewId = randomUUID();
-  await store.importVersion({
-    reviewId,
-    pins: { repositoryId: repository.id, base: "base", head: "head" },
-    title: "Original",
-    document: [{ type: "markdown", markdown: "Original prose" }],
-    createdAt: "2026-01-01T00:00:00Z",
+
+  const { reviewId } = await store.execute({
+    operation: {
+      type: "create",
+      title: "Original",
+      target: {
+        kind: "commits",
+        repositoryId: repository.id,
+        base: "base",
+        head: "head",
+      },
+    },
   });
 
   const submitted: Array<Parameters<typeof submitReviewBugReport>[0]> = [];

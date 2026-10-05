@@ -1,16 +1,6 @@
-import {
-  type StoreInput,
-  type StoreRef,
-  collectionSchema,
-  defineCollections,
-  resolveTargetRef,
-  storeRefData,
-} from "@review/authoring";
-import { databaseLensBlockFromLegacy } from "@review/database-lens-block";
 import { selectSource } from "@review/lens-selection";
 import type { DatabaseOperation } from "@review/review-api/document";
 import { describe, expect, it } from "vitest";
-import { ZodError } from "zod";
 
 import {
   type LensStores,
@@ -21,23 +11,35 @@ import {
   seedDatabaseC4DefaultExpandedNodeIds,
   selectDatabaseOperationHighlights,
 } from "./database-lens";
-import { createTestReviewDefinitionSession } from "./review-definition-test-utils";
 import { c4LayoutSignature } from "./software-map/c4-layout-geometry";
-import { defineSoftwareModel } from "./software-map/model";
 
-const { defineSoftwareStores } = createTestReviewDefinitionSession();
-
-/** Legacy store handles reach the renderer through the server lowering. */
-function canonicalStores(stores: Record<string, StoreRef>): LensStores {
-  return databaseLensBlockFromLegacy(
-    {
-      stores: Object.fromEntries(
-        Object.entries(stores).map(([id, store]) => [id, storeRefData(store)]),
-      ),
+const graphStores: LensStores = {
+  graphDb: {
+    label: "Graph database",
+    storage: "relational",
+    dataStoreKind: "database",
+    softwareMapPath: "product.graphDb",
+    collections: {
+      nodes: {
+        label: "nodes",
+        fields: {
+          id: { label: "id", dataType: "text", primaryKey: true },
+          props_json: { label: "props_json", dataType: "json" },
+        },
+      },
+      edges: {
+        label: "edges",
+        fields: {
+          from_id: {
+            label: "from_id",
+            dataType: "text",
+            references: { store: "graphDb", collection: "nodes", field: "id" },
+          },
+        },
+      },
     },
-    [],
-  ).stores;
-}
+  },
+};
 
 const source = {
   side: "head",
@@ -67,52 +69,42 @@ function operation(
 
 describe("software map backed database lenses", () => {
   it("connects a field to the referenced store, including a document collection", () => {
-    const inputs = {
+    const stores: LensStores = {
       orders: {
-        kind: "relational",
+        storage: "relational",
         label: "Orders",
-        tables: {
-          users: { schema: { id: { type: "text" } } },
+        collections: {
+          users: {
+            label: "users",
+            fields: { id: { label: "id", dataType: "text" } },
+          },
           orders: {
-            schema: {
+            label: "orders",
+            fields: {
               owner: {
-                type: "text",
-                fk: { store: "identity", table: "users", field: "id" },
+                label: "owner",
+                dataType: "text",
+                references: {
+                  store: "identity",
+                  collection: "users",
+                  field: "id",
+                },
               },
             },
           },
         },
       },
       identity: {
-        kind: "document",
+        storage: "document",
         label: "Identity",
-        documents: { users: { schema: { id: { type: "text" } } } },
-      },
-    } satisfies Record<string, StoreInput>;
-
-    const handles: Record<string, StoreRef> = Object.fromEntries(
-      Object.entries(inputs).map(([id, input]) => {
-        const kind = input.kind === "relational" ? "tables" : "documents";
-
-        return [
-          id,
-          {
-            __kind: "db-store-ref",
-            id,
-            kind: input.kind,
-            label: input.label,
-            [kind]: defineCollections(
-              id,
-              input,
-              kind,
-              input.kind === "relational" ? input.tables : input.documents,
-            ),
+        collections: {
+          users: {
+            label: "users",
+            fields: { id: { label: "id", dataType: "text" } },
           },
-        ];
-      }),
-    );
-
-    const stores = canonicalStores(handles);
+        },
+      },
+    };
 
     const snapshot = databaseC4Snapshot({
       useCase: { id: "read", label: "Read" },
@@ -176,133 +168,22 @@ describe("software map backed database lenses", () => {
     ).toEqual([]);
   });
 
-  it("derives DatabaseLens stores from software map data stores", () => {
-    const model = defineSoftwareModel({
-      systems: {
-        product: {
-          dataStores: {
-            appDb: {
-              label: "App database",
-              kind: "database",
-              tables: {
-                reviews: {
-                  schema: {
-                    id: { type: "text", pk: true },
-                    body: { type: "text" },
-                  },
-                },
-              },
-            },
-            artifactStore: {
-              label: "Review artifacts",
-              kind: "artifactStore",
-              documents: {
-                softwareMap: {
-                  schema: {
-                    path: { type: "text", pk: true },
-                  },
-                },
-              },
-            },
-            defaultDb: {
-              label: "Default database",
-            },
-          },
-        },
-      },
-    });
-
-    const stores = defineSoftwareStores(model, {
-      appDb: {
-        path: "product.appDb",
-      },
-      artifacts: {
-        path: "product.artifactStore",
-      },
-      defaultDb: {
-        path: "product.defaultDb",
-        tables: {
-          sessions: {
-            schema: {
-              id: { type: "text", pk: true },
-            },
-          },
-        },
-      },
-    });
-
-    expect(stores.appDb).toMatchObject({
-      id: "appDb",
-      kind: "relational",
-      label: "App database",
-      dataStoreKind: "database",
-      softwareMapPath: "product.appDb",
-    });
-    expect(resolveTargetRef(stores.appDb.tables?.reviews.id)).toMatchObject({
-      storeDataStoreKind: "database",
-      storeSoftwareMapPath: "product.appDb",
-    });
-    expect(collectionSchema(stores.appDb.tables!.reviews)).toEqual({
-      id: { type: "text", pk: true },
-      body: { type: "text" },
-    });
-    expect(stores.artifacts).toMatchObject({
-      id: "artifacts",
-      kind: "document",
-      label: "Review artifacts",
-      dataStoreKind: "artifactStore",
-      softwareMapPath: "product.artifactStore",
-    });
-    expect(stores.defaultDb).toMatchObject({
-      id: "defaultDb",
-      kind: "relational",
-      label: "Default database",
-      softwareMapPath: "product.defaultDb",
-    });
-
-    // The lowering carries the map path and data-store kind into the block.
-    expect(canonicalStores(stores).appDb).toMatchObject({
-      storage: "relational",
-      dataStoreKind: "database",
-      softwareMapPath: "product.appDb",
-      collections: {
-        reviews: {
-          fields: {
-            id: { dataType: "text", primaryKey: true },
-            body: { dataType: "text" },
-          },
-        },
-      },
-    });
-  });
-
   it("keeps collection metadata renderable when table fields collide with id and label", () => {
-    const model = defineSoftwareModel({
-      systems: {
-        product: {
-          dataStores: {
-            graphDb: {
-              label: "Graph database",
-              kind: "database",
-              tables: {
-                nodes: {
-                  label: "nodes",
-                  schema: {
-                    id: { type: "text", pk: true },
-                    label: { type: "text" },
-                    props_json: { type: "json" },
-                  },
-                },
-              },
+    const stores: LensStores = {
+      graphDb: {
+        ...graphStores.graphDb!,
+        collections: {
+          nodes: {
+            label: "nodes",
+            fields: {
+              id: { label: "id", dataType: "text", primaryKey: true },
+              label: { label: "label", dataType: "text" },
+              props_json: { label: "props_json", dataType: "json" },
             },
           },
         },
       },
-    });
-
-    const stores = canonicalStores(
-      defineSoftwareStores(model, { graphDb: { path: "product.graphDb" } }),
-    );
+    };
 
     const snapshot = databaseC4Snapshot({
       useCase: { id: "inspect", label: "Inspect graph" },
@@ -339,35 +220,7 @@ describe("software map backed database lenses", () => {
   });
 
   it("expands operation data stores by default so table rows are visible", () => {
-    const model = defineSoftwareModel({
-      systems: {
-        product: {
-          dataStores: {
-            graphDb: {
-              label: "Graph database",
-              kind: "database",
-              tables: {
-                nodes: {
-                  schema: {
-                    id: { type: "text", pk: true },
-                    props_json: { type: "json" },
-                  },
-                },
-                edges: {
-                  schema: {
-                    from_id: { type: "text", fk: "nodes.id" },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const stores = canonicalStores(
-      defineSoftwareStores(model, { graphDb: { path: "product.graphDb" } }),
-    );
+    const stores = graphStores;
 
     const operations = [
       operation(stores, {
@@ -454,35 +307,7 @@ describe("software map backed database lenses", () => {
   });
 
   it("keeps DB lens layout stable when guided tour highlights move between operations", () => {
-    const model = defineSoftwareModel({
-      systems: {
-        product: {
-          dataStores: {
-            graphDb: {
-              label: "Graph database",
-              kind: "database",
-              tables: {
-                nodes: {
-                  schema: {
-                    id: { type: "text", pk: true },
-                    props_json: { type: "json" },
-                  },
-                },
-                edges: {
-                  schema: {
-                    from_id: { type: "text", fk: "nodes.id" },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const stores = canonicalStores(
-      defineSoftwareStores(model, { graphDb: { path: "product.graphDb" } }),
-    );
+    const stores = graphStores;
 
     const operations = [
       operation(stores, {
@@ -564,40 +389,6 @@ describe("software map backed database lenses", () => {
         edgesSnapshot.relationships ?? [],
       ),
     );
-  });
-
-  it("rejects non-data-store software map elements for DatabaseLens stores", () => {
-    const model = defineSoftwareModel({
-      systems: {
-        product: {
-          containers: {
-            web: { label: "Web" },
-          },
-        },
-      },
-    });
-
-    let caught: unknown;
-
-    try {
-      defineSoftwareStores(model, {
-        web: {
-          path: "product.web",
-          tables: {
-            sessions: { schema: { id: { type: "text" } } },
-          },
-        },
-      });
-    } catch (error) {
-      caught = error;
-    }
-
-    expect(caught).toBeInstanceOf(ZodError);
-    expect((caught as ZodError).issues[0]).toMatchObject({
-      path: ["web", "path"],
-      message:
-        'Software map element "product.web" must be a dataStore to back a DatabaseLens store',
-    });
   });
 });
 

@@ -15,6 +15,7 @@ import { authoringTools } from "./authoring-tools.js";
 import { ReviewApiClient } from "./client.js";
 import { documentText } from "./document-text.js";
 import { ReviewInputError } from "./document.js";
+import { createReviewApi } from "./http.js";
 import { LocalReviewData } from "./local-data";
 import {
   type ReviewProviders,
@@ -83,6 +84,28 @@ afterEach(async () => {
   await store.close();
   vi.unstubAllEnvs();
   rmSync(directory, { recursive: true, force: true });
+});
+
+it("guides missing-review reads and opens to an agent while keeping missing versions distinct", async () => {
+  const api = createReviewApi(store);
+  const oldId = "11111111-1111-4111-8111-111111111111";
+
+  for (const [route, method] of [
+    [`/${oldId}`, "GET"],
+    [`/${oldId}/open`, "POST"],
+  ]) {
+    const response = await api.request(route!, { method });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error:
+        "Review not found. If this is an old Whiteboard review, ask your agent to migrate your old Whiteboard reviews.",
+    });
+  }
+
+  const { reviewId } = await create();
+  const response = await api.request(`/${reviewId}?version=999`);
+  expect(response.status).toBe(404);
+  expect(await response.json()).toEqual({ error: "Review version not found." });
 });
 
 describe("snapshot authoring", () => {
@@ -156,19 +179,22 @@ describe("snapshot authoring", () => {
   });
 
   it("preserves imported provenance when attaching a PR and supports explicit repin identity", async () => {
-    const { reviewId } = await create();
-    await store.importVersion({
-      reviewId,
-      title: "Imported",
-      pins,
-      document: [],
-      createdAt: new Date().toISOString(),
-      origin: {
-        branch: "feature",
-        baseRef: "main",
-        revision: "legacy-revision",
+    const { reviewId } = await store.execute(
+      request({
+        type: "create",
+        title: "Imported",
+        target: { kind: "commits", ...pins },
+      }),
+      {
+        document: [],
+        origin: {
+          branch: "feature",
+          baseRef: "main",
+          revision: "legacy-revision",
+        },
       },
-    });
+    );
+
     await store.execute(
       request({
         type: "set_target",

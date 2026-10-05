@@ -74,21 +74,8 @@ export async function runDesktopHost(
   const home = devReviewHome(env);
   await mkdir(home, { recursive: true });
 
-  const migrationProgress = (message: string) =>
-    process.stdout.write(
-      `${JSON.stringify({ event: "migration", message })}\n`,
-    );
-
-  const heartbeat = setInterval(
-    () => migrationProgress("Migrating saved reviews"),
-    5_000,
-  );
-
   const local = await openReviewProfile(home, {
     manageWorkspaces: true,
-    log: migrationProgress,
-  }).finally(() => {
-    clearInterval(heartbeat);
   });
 
   // JSON is the sole user-review store. A failure is surfaced, never replaced

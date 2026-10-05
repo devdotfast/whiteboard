@@ -141,13 +141,6 @@ export const commandSchema = z.strictObject({
   ]),
 });
 
-/** How far legacy import has got with a review; the map has its own cursor. */
-export interface LegacyImportProgress {
-  revision: string;
-  mapRevision: string | null;
-  importedAt: string;
-}
-
 /** Source identity displayed in the review header and Home, alongside immutable pins. */
 export interface SnapshotOrigin {
   /** Managed tutorial; readable by ID but excluded from the user catalog. */
@@ -182,18 +175,6 @@ export interface Snapshot {
   /** The edit that produced this version, when one did; absent for a
    * rename, set_target, restore or import, which the canvas does not draw. */
   lastEdit?: EditSummary;
-}
-
-/** A whole version written by legacy import: ids are assigned here, sources
- * are checked tolerantly, and attention is applied only for a new review. */
-export interface ImportedVersionInput {
-  reviewId: string;
-  title: string;
-  pins: Pins;
-  document: Block[];
-  createdAt: string;
-  origin?: SnapshotOrigin;
-  attention?: { viewedAt?: string | null; dismissedAt?: string | null };
 }
 
 export interface Result {
@@ -259,12 +240,6 @@ export interface ReviewProviders {
     options: { peek: boolean },
   ): Promise<void>;
   validateResource(pins: Pins | undefined, block: Block): Promise<void>;
-  /** Import only: report a problem as a warning instead of rejecting. */
-  validateSourceTolerant?(
-    pins: Pins,
-    source: FileLineRange,
-    options: { peek: boolean },
-  ): Promise<string | null>;
 }
 
 /** One instance owned by the desktop server. All writers go through execute().
@@ -451,12 +426,6 @@ export class ReviewStore {
     this.db.exec(
       "CREATE TABLE IF NOT EXISTS comparison_stats(identity TEXT PRIMARY KEY, stats TEXT NOT NULL)",
     );
-    // Import progress lives apart from the editable snapshots: restoring an
-    // older version or deleting the review must not look like an unfinished
-    // import to the next sweep.
-    this.db.exec(
-      `CREATE TABLE IF NOT EXISTS legacy_imports(review_id TEXT PRIMARY KEY, revision TEXT NOT NULL, map_revision TEXT, imported_at TEXT NOT NULL);`,
-    );
     // One row: which machine this store is. Review ids never contain it.
     this.db.exec(
       "CREATE TABLE IF NOT EXISTS server_identity(one INTEGER PRIMARY KEY CHECK(one=1), id TEXT NOT NULL)",
@@ -465,15 +434,6 @@ export class ReviewStore {
     this.db.exec("DROP TABLE IF EXISTS authoring_drafts");
     this.activity = new ReviewActivity(this.db, (id) => this.assertExists(id));
     this.askHistory = new AskHistory(this.db);
-
-    // Homes written before map resumption lack the column.
-    if (
-      !this.db
-        .prepare("PRAGMA table_info(legacy_imports)")
-        .all()
-        .some((column) => String(column.name) === "map_revision")
-    )
-      this.db.exec("ALTER TABLE legacy_imports ADD COLUMN map_revision TEXT");
 
     this.observedDataVersion = this.dataVersion();
     this.observedVersions = this.currentVersions();
@@ -582,38 +542,6 @@ export class ReviewStore {
       this.db.exec("ROLLBACK");
       throw error;
     }
-  }
-  /** The last legacy revisions imported for a review, kept after deletion. */
-  legacyImport(reviewId: string): LegacyImportProgress | null {
-    const row = this.db
-      .prepare(
-        "SELECT revision,map_revision,imported_at FROM legacy_imports WHERE review_id=?",
-      )
-      .get(reviewId);
-
-    return row
-      ? {
-          revision: String(row.revision),
-          mapRevision:
-            row.map_revision === null ? null : String(row.map_revision),
-          importedAt: String(row.imported_at),
-        }
-      : null;
-  }
-  recordLegacyImport(
-    reviewId: string,
-    progress: Omit<LegacyImportProgress, "importedAt">,
-  ) {
-    this.db
-      .prepare(
-        "INSERT INTO legacy_imports(review_id,revision,map_revision,imported_at) VALUES(?,?,?,?) ON CONFLICT(review_id) DO UPDATE SET revision=excluded.revision,map_revision=excluded.map_revision,imported_at=excluded.imported_at",
-      )
-      .run(
-        reviewId,
-        progress.revision,
-        progress.mapRevision,
-        new Date().toISOString(),
-      );
   }
   private readonly repositoryGroups = new Map<
     string,
@@ -756,7 +684,10 @@ export class ReviewStore {
   /** The 404 check alone, without loading a snapshot. */
   assertExists(id: string) {
     if (!this.db.prepare("SELECT 1 FROM reviews WHERE id=?").get(id))
-      throw new ReviewInputError("Review not found.", 404);
+      throw new ReviewInputError(
+        "Review not found. If this is an old Whiteboard review, ask your agent to migrate your old Whiteboard reviews.",
+        404,
+      );
   }
   read(id: string, version?: number): Snapshot {
     const row =
@@ -772,7 +703,10 @@ export class ReviewStore {
             )
             .get(id, version);
 
-    if (!row) throw new ReviewInputError("Review or version not found.", 404);
+    if (!row) {
+      this.assertExists(id);
+      throw new ReviewInputError("Review version not found.", 404);
+    }
 
     // SAFETY: versions contains only snapshots validated by execute before committing.
     const snapshot = JSON.parse(String(row.snapshot)) as Snapshot;
@@ -1533,165 +1467,6 @@ export class ReviewStore {
       this.db.prepare("SELECT 1 FROM reviews WHERE id=?").get(reviewId) !==
       undefined
     );
-  }
-  /** Legacy import of one version. See `importVersions`. */
-  importVersion(
-    input: ImportedVersionInput,
-  ): Promise<{ version: number; warnings: string[] }> {
-    return this.importVersions([input]);
-  }
-  /** Legacy import: every version is validated first, then all rows land in
-   * one transaction, so a failure leaves no partial review. A new review
-   * starts at version 0; an existing one continues its numbering. The last
-   * input's `origin.revision` becomes the review's import cursor. */
-  importVersions(
-    inputs: ImportedVersionInput[],
-    options: { preserveCurrent?: Snapshot; revision?: string } = {},
-  ): Promise<{ version: number; warnings: string[] }> {
-    if (this.closing)
-      return Promise.reject(new Error("Review store is closing."));
-
-    const reviewId = inputs[0]?.reviewId ?? options.preserveCurrent?.reviewId;
-
-    if (!reviewId) return Promise.reject(new Error("Nothing to import."));
-
-    if (
-      inputs.some((input) => input.reviewId !== reviewId) ||
-      (options.preserveCurrent && options.preserveCurrent.reviewId !== reviewId)
-    )
-      return Promise.reject(new Error("Import versions of one review only."));
-
-    const run = this.pending.then(async () => {
-      const existing = this.db
-        .prepare("SELECT version,next_id FROM reviews WHERE id=?")
-        .get(reviewId);
-
-      let nextId = existing ? Number(existing.next_id) : 0;
-      let version = existing ? Number(existing.version) : -1;
-      const snapshots: Snapshot[] = [];
-      const warnings: string[] = [];
-
-      for (const input of inputs) {
-        const document = structuredClone(
-          documentSchema.parse(migrateStoredDocument(input.document)),
-        );
-
-        for (const block of document)
-          assignFreshIds(block, (prefix) => `${prefix}-${++nextId}`);
-        checkReferences(document);
-        await this.providers.validatePins(input.pins);
-
-        const seen = new Set<string>();
-
-        for (const { source, peek } of sourceReferences(document, {
-          tolerant: true,
-        })) {
-          const key = JSON.stringify(source);
-
-          if (seen.has(key)) continue;
-          seen.add(key);
-
-          const warning = this.providers.validateSourceTolerant
-            ? await this.providers.validateSourceTolerant(
-                anchorPins(source, input.pins),
-                source,
-                { peek: peek === true },
-              )
-            : null;
-
-          if (warning) warnings.push(warning);
-        }
-
-        for (const block of resourceReferences(document))
-          await this.providers.validateResource(input.pins, block);
-
-        version += 1;
-
-        const snapshot: Snapshot = {
-          reviewId,
-          version,
-          title: input.title,
-          pins: input.pins,
-          target: { kind: "commits", ...input.pins },
-          document,
-          createdAt: input.createdAt,
-        };
-
-        if (input.origin) snapshot.origin = input.origin;
-        snapshots.push(snapshot);
-      }
-
-      // Backfilling sealed history must not replace an edited JSON document.
-      // Keep all existing version numbers and element IDs stable.
-      if (existing && options.preserveCurrent) {
-        if (options.preserveCurrent.version !== Number(existing.version))
-          throw new ReviewInputError("Review changed during migration.", 409);
-
-        const document = documentSchema.parse(
-          migrateStoredDocument(options.preserveCurrent.document),
-        );
-
-        snapshots.push({
-          ...options.preserveCurrent,
-          document,
-          version: ++version,
-        });
-      }
-
-      const attention = inputs[0]?.attention;
-      this.db.exec("BEGIN IMMEDIATE");
-
-      try {
-        this.assertMutation(
-          reviewId,
-          existing ? Number(existing.version) : undefined,
-        );
-        this.db
-          .prepare(
-            "INSERT INTO reviews(id,version,next_id) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,next_id=excluded.next_id",
-          )
-          .run(reviewId, version, nextId);
-
-        for (const snapshot of snapshots)
-          this.db
-            .prepare(
-              "INSERT INTO versions(review_id,version,snapshot) VALUES(?,?,?)",
-            )
-            .run(reviewId, snapshot.version, JSON.stringify(snapshot));
-
-        if (!existing && attention)
-          this.db
-            .prepare(
-              "INSERT INTO review_attention(review_id,viewed_at,dismissed_at) VALUES(?,?,?)",
-            )
-            .run(
-              reviewId,
-              attention.viewedAt ?? null,
-              attention.dismissedAt ?? null,
-            );
-
-        const cursor = options.revision ?? inputs.at(-1)?.origin?.revision;
-
-        // The importer records the map once it knows whether it landed.
-        if (cursor)
-          this.recordLegacyImport(reviewId, {
-            revision: cursor,
-            mapRevision: null,
-          });
-        this.db.exec("COMMIT");
-      } catch (error) {
-        this.db.exec("ROLLBACK");
-        throw error;
-      }
-
-      this.notify({ reviewId, version });
-
-      return { version, warnings: [...new Set(warnings)] };
-    });
-
-    this.pending = run.catch(() => {});
-
-    return run;
   }
   private async validateExternal(
     snapshot: Snapshot,

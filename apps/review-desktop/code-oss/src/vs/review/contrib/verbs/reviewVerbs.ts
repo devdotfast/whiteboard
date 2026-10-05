@@ -129,7 +129,7 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 					return { ok: true, result: await this.captureScreenshot() };
 				case "openReview": {
 					const review = this.apiCatalog.reviews.find((review) => review.reviewId === request.args.reviewUuid);
-					if (!review) throw new Error("Session not found.");
+					if (!review) throw new Error("Review not found. If this is an old Whiteboard review, ask your agent to migrate your old Whiteboard reviews.");
 					await this.tabsService.openApiReview(review.reviewId, review.title, request.args.active);
 					break;
 				}

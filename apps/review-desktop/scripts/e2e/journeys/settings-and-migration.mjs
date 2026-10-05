@@ -1,9 +1,7 @@
-/** The telemetry toggle and the theme choice survive a restart; then an unreadable legacy record is followed everywhere. */
+/** Settings persist across a restart; old reviews stay untouched and migration points to an agent. */
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import { openHome, openSettings } from "../harness.mjs";
 import { readUserSettings } from "../storage.mjs";
@@ -12,11 +10,8 @@ export const name = "settings-and-migration";
 
 export const phase = 1;
 
-export const options = {};
+export const options = { beforeLaunch: (ctx) => seedLegacyReview(ctx.home) };
 
-const exec = promisify(execFile);
-
-/** A stored record no schema accepts: `schemaVersion` 1 is not one the importer migrates in place, so nothing can repair it. */
 const LEGACY_UUID = "11111111-1111-4111-8111-111111111111";
 
 const LEGACY_RECORD = { schemaVersion: 1, uuid: LEGACY_UUID };
@@ -58,37 +53,6 @@ async function seedLegacyReview(home) {
 
 const storedRecord = async (dir) =>
   JSON.parse(await readFile(path.join(dir, "review.json"), "utf8"));
-
-/** A host that listens never exits on its own, so the timeout is what ends the run. */
-const HOST_LIFETIME = 20000;
-
-/** Runs the Desktop's own server host against `home`, with no Electron and no window, on a port of its own. */
-async function runDesktopHost(ctx, home) {
-  const env = {
-    ...ctx.env,
-    HOME: home,
-    DEV_REVIEW_HOME: home,
-    DEV_FAST_REVIEW_SERVER_PORT: "0",
-    DEV_FAST_REVIEW_APP_PID: String(process.pid),
-  };
-
-  try {
-    return {
-      ...(await exec(
-        process.execPath,
-        [path.join(ctx.runtime, "dist/server/desktop-host.js")],
-        { env, timeout: HOST_LIFETIME, maxBuffer: 8 * 1024 * 1024 },
-      )),
-      code: 0,
-    };
-  } catch (error) {
-    return {
-      stdout: error.stdout ?? "",
-      stderr: error.stderr ?? "",
-      code: error.code,
-    };
-  }
-}
 
 export async function run(ctx) {
   const { until, userData } = ctx;
@@ -168,101 +132,40 @@ export async function run(ctx) {
     "the telemetry toggle and the theme choice persist across a restart",
   );
 
-  // Nothing in the Desktop reads a legacy record once the cutover marker is set, so Home's text is asserted only if it does.
-  const legacyDir = await seedLegacyReview(ctx.home);
-
-  await ctx.restartDesktop();
+  const legacyDir = path.join(ctx.home, "reviews", LEGACY_UUID);
   await openHome(ctx);
-
   const home = ctx.page.locator("main.review-home");
-
-  // The onboarding rail is what an empty Home renders, so waiting for it makes the absences below mean "finished", not "slow".
   await home.getByText("Create your first session").waitFor({ timeout: 60000 });
+  const summaries = await ctx.apiOk("/reviews-api");
+  assert.ok(!summaries.some((summary) => summary.reviewId === LEGACY_UUID));
+  assert.deepEqual(await storedRecord(legacyDir), LEGACY_RECORD);
 
-  const summaries = await ctx.api("/reviews-api");
+  for (const [route, method] of [
+    [`/reviews-api/${LEGACY_UUID}`, "GET"],
+    [`/reviews-api/${LEGACY_UUID}/open`, "POST"],
+  ]) {
+    const response = await ctx.api(
+      route,
+      method,
+      method === "POST" ? {} : undefined,
+    );
 
-  assert.equal(summaries.status, 200, JSON.stringify(summaries.value));
-  assert.deepEqual(
-    summaries.value.filter((summary) => summary.reviewId === LEGACY_UUID),
-    [],
-    "the store listed a review it cannot read",
-  );
-  assert.deepEqual(
-    await storedRecord(legacyDir),
-    LEGACY_RECORD,
-    "the Desktop rewrote the legacy record it cannot read",
-  );
-
-  // `innerText` is the rendered text, and the uuid is the only identifier this record could be named by: its title is empty.
-  const homeText = await home.innerText();
-
-  if (homeText.includes(LEGACY_UUID)) {
+    assert.equal(response.status, 404, JSON.stringify(response.value));
     assert.match(
-      homeText,
-      /whiteboard migrate apply/g,
-      "Home named the unreadable review but not the command to run",
-    );
-    ctx.check(
-      "Home surfaces a legacy review that needs migration with the command to run",
-    );
-  } else {
-    assert.doesNotMatch(
-      homeText,
-      /whiteboard migrate apply/g,
-      "Home offered migration guidance without naming the review it is about",
-    );
-    ctx.check(
-      "a legacy review directory the cutover never saw stays out of Home and is left untouched",
+      response.value.error,
+      /ask your agent to migrate your old Whiteboard reviews/,
     );
   }
 
-  // The reader's real upgrade path is a home whose cutover has not run, so the probe gets one of its own.
-  const upgradeHome = path.join(ctx.root, "upgrade-home");
-
-  await seedLegacyReview(upgradeHome);
-
-  const host = await runDesktopHost(ctx, upgradeHome);
-
-  // The host writes its discovery the moment it listens, so the ready line is what "it got past the cutover" means.
+  const migrate = await ctx.cliRaw(["migrate", "apply", "--force", "--json"]);
+  assert.equal(migrate.code, 1, migrate.stdout + migrate.stderr);
   assert.match(
-    host.stdout,
-    /"event":"ready"/,
-    `the host on an unmigrated home never listened (exit ${host.code}): ${host.stdout}\n${host.stderr}`,
+    JSON.parse(migrate.stdout).error.message,
+    /Ask your agent to migrate your old Whiteboard reviews/,
   );
-  assert.match(
-    host.stdout,
-    new RegExp(
-      `${LEGACY_UUID}: unreadable review\\.json, left untouched and skipped`,
-    ),
-    `the host did not name the skipped record: ${host.stdout}`,
-  );
-  ctx.check("an unreadable legacy review.json is skipped and named at startup");
-
-  const migrate = await ctx.cliRaw(["migrate", "apply", "--force"], ctx.repo, {
-    timeout: 120000,
-  });
-
-  const output = `${migrate.stdout}${migrate.stderr}`;
-
-  // The blocker names the directory, so the uuid anchors it to this record rather than to the machine's own state.
-  assert.match(
-    output,
-    new RegExp(
-      `${LEGACY_UUID}: current artifact migration failed: Unsupported Review schema; the record was preserved\\.`,
-    ),
-    `whiteboard migrate apply did not report the record: ${output}`,
-  );
-  assert.equal(
-    migrate.code,
-    1,
-    `whiteboard migrate apply reported a blocker but exited ${migrate.code}: ${output}`,
-  );
-  assert.deepEqual(
-    await storedRecord(legacyDir),
-    LEGACY_RECORD,
-    "whiteboard migrate apply changed the record it reported as preserved",
-  );
+  assert.deepEqual(await storedRecord(legacyDir), LEGACY_RECORD);
   ctx.check(
-    "`whiteboard migrate apply` is the one place the unreadable record is reported, and it preserves it",
+    "old reviews do not block startup or change on disk",
+    "opening an old review and the retired migration command show agent guidance",
   );
 }
