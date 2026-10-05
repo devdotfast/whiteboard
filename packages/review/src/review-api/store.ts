@@ -54,6 +54,7 @@ import {
   summarizeEdit,
 } from "./document.js";
 import { pullRequestKey, pullRequestUrl, setPullRequest } from "./origin.js";
+import { initializeReviewStoreSchema } from "./store-schema.js";
 
 const reviewId = z.string().min(1);
 
@@ -406,32 +407,7 @@ export class ReviewStore {
   ) {
     // WAL plus a busy timeout: another host on the same home waits instead of failing.
     this.db = new DatabaseSync(databasePath, { timeout: 5000 });
-    this.db.exec(`PRAGMA journal_mode=WAL;
-      PRAGMA foreign_keys=ON;
-      CREATE TABLE IF NOT EXISTS reviews(id TEXT PRIMARY KEY, version INTEGER NOT NULL, next_id INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS versions(review_id TEXT REFERENCES reviews(id), version INTEGER, snapshot TEXT NOT NULL,
-        PRIMARY KEY(review_id,version));
-      DROP TABLE IF EXISTS receipts;`);
-    this.db.exec(
-      `CREATE TABLE IF NOT EXISTS review_attention(review_id TEXT PRIMARY KEY REFERENCES reviews(id), viewed_at TEXT, dismissed_at TEXT);`,
-    );
-    this.db
-      .exec(`CREATE TABLE IF NOT EXISTS repositories(id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS resources(id TEXT PRIMARY KEY, repository_id TEXT NOT NULL REFERENCES repositories(id),
-        kind TEXT NOT NULL, mime_type TEXT NOT NULL, data BLOB NOT NULL);`);
-    this.db.exec(
-      "CREATE TABLE IF NOT EXISTS review_coverage(review_id TEXT REFERENCES reviews(id), file TEXT, fingerprint TEXT NOT NULL, coverage TEXT NOT NULL, PRIMARY KEY(review_id,file));",
-    );
-    this.db.exec("DROP TABLE IF EXISTS review_viewed");
-    this.db.exec(
-      "CREATE TABLE IF NOT EXISTS comparison_stats(identity TEXT PRIMARY KEY, stats TEXT NOT NULL)",
-    );
-    // One row: which machine this store is. Review ids never contain it.
-    this.db.exec(
-      "CREATE TABLE IF NOT EXISTS server_identity(one INTEGER PRIMARY KEY CHECK(one=1), id TEXT NOT NULL)",
-    );
-    // Batch authoring's scratch drafts were removed; drop their leftover table.
-    this.db.exec("DROP TABLE IF EXISTS authoring_drafts");
+    initializeReviewStoreSchema(this.db);
     this.activity = new ReviewActivity(this.db, (id) => this.assertExists(id));
     this.askHistory = new AskHistory(this.db);
 

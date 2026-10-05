@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { withFileLock } from "@dev.fast/trace-core";
 
 import { openLocalReviewStore } from "./local-data.js";
+import { initializeReviewStoreSchema } from "./store-schema.js";
 
 const lockOptions = {
   retryMs: 50,
@@ -23,22 +24,13 @@ export async function openReviewProfile(
     path.join(home, ".review-profile-startup"),
     lockOptions,
     async () => {
-      const databasePath = path.join(home, "review-api.db");
-
-      const initial = openLocalReviewStore(databasePath, {
-        manageWorkspaces: false,
-      });
-
-      await initial.data.close();
-      await initial.store.close();
-
       for (const source of [
         path.join(home, "review-server", "reviews.db"),
         path.join(home, "reviews.db"),
       ])
         await importHeadlessStore(home, source);
 
-      return openLocalReviewStore(databasePath, options);
+      return openLocalReviewStore(path.join(home, "review-api.db"), options);
     },
   );
 
@@ -75,6 +67,8 @@ async function importHeadlessStore(home: string, source: string) {
         .get(source)
     )
       return;
+
+    initializeReviewStoreSchema(database);
 
     const outcome = await withFileLock(
       path.join(path.dirname(source), "server.lock"),

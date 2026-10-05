@@ -226,6 +226,42 @@ it("merges preview headless history and resources without changing review IDs or
   await reopened.store.close();
 });
 
+it("imports headless reviews before opening a fresh profile", async () => {
+  await mkdir(path.join(home, "review-server"));
+
+  const source = new ReviewStore(
+    path.join(home, "review-server", "reviews.db"),
+    providers,
+  );
+
+  stores.push(source);
+  const repository = source.registerRepository(home);
+
+  const created = await source.execute(
+    command({
+      type: "create",
+      title: "Headless draft",
+      target: {
+        kind: "commits",
+        repositoryId: repository.id,
+        base: "base",
+        head: "head",
+      },
+    }),
+  );
+
+  const before = source.read(created.reviewId);
+  const profile = await openReviewProfile(home, { manageWorkspaces: false });
+
+  try {
+    expect(profile.store.read(created.reviewId)).toEqual(before);
+    expect(source.read(created.reviewId)).toEqual(before);
+  } finally {
+    await profile.data.close();
+    await profile.store.close();
+  }
+});
+
 it("refuses migration while the preview server owns its source, then succeeds after shutdown", async () => {
   const { target, created } = await fixture();
 
