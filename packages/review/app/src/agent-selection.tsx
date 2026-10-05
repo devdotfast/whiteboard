@@ -34,7 +34,7 @@ import { fontSize, layer } from "./scale.stylex";
 import { themeStyles } from "./theme-styles";
 import { useToast } from "./toast";
 import { tokens } from "./tokens.stylex";
-import { Button, IconButton } from "./ui/button";
+import { Button } from "./ui/button";
 import { surfaceStyles } from "./ui/surface";
 
 type Selection = Omit<AgentSelection, "revision"> & {
@@ -213,6 +213,9 @@ export function AgentSelectionProvider({
 
   const askAgent = askAgents && preferredAskAgent(session, askAgents);
 
+  const canChooseAgent =
+    (askAgents?.filter((candidate) => candidate.available).length ?? 0) > 1;
+
   const ask = useCallback(
     (agent?: AskAgentId) => {
       if (!selection || !panels) return;
@@ -309,30 +312,36 @@ export function AgentSelectionProvider({
                   >
                     {askAgents && askAgent ? (
                       <>
-                        <Button
-                          variant="primary"
-                          aria-keyshortcuts="Meta+L"
-                          onClick={() => ask()}
-                        >
-                          <ChatIcon xstyle={controlStyles.inlineIcon} />
-                          <span>Ask {askAgent.name}</span>
-                          <kbd aria-hidden="true" {...stylex.props(styles.key)}>
-                            <CommandKeyIcon />L
-                          </kbd>
-                        </Button>
-                        <IconButton
-                          aria-label="Ask another agent"
-                          aria-haspopup="menu"
-                          aria-expanded={choosing}
-                          onClick={() => setChoosing((value) => !value)}
-                        >
-                          <ChevronDownIcon />
-                        </IconButton>
-                        <span
-                          {...stylex.props(styles.divider)}
-                          aria-hidden="true"
-                        />
-                        {choosing ? (
+                        <span {...stylex.props(styles.split)}>
+                          <Button
+                            variant="primary"
+                            aria-keyshortcuts="Meta+L"
+                            onClick={() => ask()}
+                            xstyle={canChooseAgent && styles.splitMain}
+                          >
+                            <ChatIcon xstyle={controlStyles.inlineIcon} />
+                            <span>Ask {askAgent.name}</span>
+                            <kbd
+                              aria-hidden="true"
+                              {...stylex.props(styles.key)}
+                            >
+                              <CommandKeyIcon />L
+                            </kbd>
+                          </Button>
+                          {canChooseAgent ? (
+                            <Button
+                              variant="primary"
+                              aria-label="Ask another agent"
+                              aria-haspopup="menu"
+                              aria-expanded={choosing}
+                              onClick={() => setChoosing((value) => !value)}
+                              xstyle={styles.splitMenu}
+                            >
+                              <ChevronDownIcon />
+                            </Button>
+                          ) : null}
+                        </span>
+                        {canChooseAgent && choosing ? (
                           <AskAgentMenu
                             agents={askAgents}
                             current={askAgent.id}
@@ -392,9 +401,25 @@ const styles = stylex.create({
     pointerEvents: "auto",
     display: "inline-flex",
     alignItems: "center",
-    gap: "2px",
+    gap: "4px",
     padding: "4px",
     whiteSpace: "nowrap",
+  },
+  // Ask and its agent menu are one split button; the fill sets it apart from
+  // Copy, so the toolbar needs no divider with or without the menu.
+  split: {
+    display: "inline-flex",
+  },
+  splitMain: {
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  splitMenu: {
+    width: "22px",
+    padding: 0,
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 0,
+    boxShadow: `inset 1px 0 0 color-mix(in srgb, ${tokens.onAccent} 28%, transparent)`,
   },
   key: {
     display: "inline-flex",
@@ -404,11 +429,5 @@ const styles = stylex.create({
     fontSize: fontSize.micro,
     lineHeight: "14px",
     opacity: 0.65,
-  },
-  divider: {
-    flex: "0 0 auto",
-    width: "1px",
-    height: "16px",
-    backgroundColor: tokens.ruleSoft,
   },
 });

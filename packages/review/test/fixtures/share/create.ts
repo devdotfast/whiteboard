@@ -50,8 +50,11 @@ export async function createShareFixture(root: string) {
   const pins = { repositoryId: registered.id, base, head };
 
   const created = await local.store.execute({
-    commandId: randomUUID(),
-    operation: { type: "create", title: "Sharing pinned commits", pins },
+    operation: {
+      type: "create",
+      title: "Sharing pinned commits",
+      target: { kind: "commits", ...pins },
+    },
   });
 
   const traceId = randomUUID(),
@@ -125,11 +128,7 @@ export async function createShareFixture(root: string) {
     },
     {
       type: "code_peek",
-      source: {
-        file: sourceFile,
-        start: { side: "head", line: 1 },
-        end: { side: "head", line: 3 },
-      },
+      source: `head/${sourceFile}#L1-L3`,
     },
     {
       type: "trace_quote",
@@ -141,25 +140,16 @@ export async function createShareFixture(root: string) {
     { type: "software_map", mapVersionId: mapId },
     {
       type: "code_peek",
-      source: {
-        file: "new.ts",
-        start: { side: "head", line: 1 },
-        end: { side: "head", line: 1 },
-      },
+      source: "head/new.ts#L1",
     },
     {
       type: "code_peek",
-      source: {
-        file: "removed.ts",
-        start: { side: "base", line: 1 },
-        end: { side: "base", line: 1 },
-      },
+      source: "base/removed.ts#L1",
     },
   ];
 
   for (const content of blocks)
     await local.store.execute({
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId: created.reviewId,

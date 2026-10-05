@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { isDeepStrictEqual } from "node:util";
 
 import { resolveRepoContextSync } from "@dev.fast/local-vcs";
 import {
@@ -12,6 +11,7 @@ import { sourceAnchors } from "@review/lens-selection.js";
 import {
   liftFileLenses,
   migrateStoredDocument,
+  migrateStoredLenses,
 } from "@review/stored-document-migration.js";
 import {
   type Coverage,
@@ -21,7 +21,7 @@ import {
 } from "@review/viewed-coverage.js";
 import { z } from "zod";
 
-import { type LeaseScope, ReviewActivity } from "./activity.js";
+import { type ActivitySurface, ReviewActivity } from "./activity.js";
 import { AskHistory } from "./ask-history.js";
 import {
   type Lens,
@@ -48,7 +48,6 @@ import {
   elements,
   explicitPins,
   isUnit,
-  pinsSchema,
   resourceReferences,
   reviewTargetSchema,
   sourceReferences,
@@ -71,12 +70,15 @@ const DIAGRAM_TYPES = new Set([
 
 export const SCRATCHPAD_TITLE = "Scratchpad";
 
-/** The create command that makes it, with one id so a repeat is a receipt. */
-const SCRATCHPAD_COMMAND_ID = "5c7a7c6e-0000-4000-8000-5c7a7c6e0000";
+const activityId = z
+  .string()
+  .min(1)
+  .optional()
+  .describe(
+    "The activityId from review_activity_begin: your courier draws this edit. Never rejects a write.",
+  );
 
 export const commandSchema = z.strictObject({
-  commandId: z.uuid(),
-  leaseId: z.uuid().optional(),
   operation: z.discriminatedUnion("type", [
     z.strictObject({ type: z.literal("delete"), reviewId }),
     z.strictObject({
@@ -88,7 +90,6 @@ export const commandSchema = z.strictObject({
       type: z.literal("create"),
       /** Required unless pullRequestUrl alone names the source; then the PR title. */
       title: z.string().trim().min(1).optional(),
-      pins: pinsSchema.optional(),
       target: reviewTargetSchema.optional(),
       pullRequestUrl: pullRequestUrl.optional(),
       /** With pullRequestUrl and no target: the checkout to fetch the PR into. */
@@ -113,23 +114,24 @@ export const commandSchema = z.strictObject({
       type: z.literal("set_target"),
       reviewId,
       target: reviewTargetSchema,
+      pullRequestUrl: pullRequestUrl.nullable().optional(),
     }),
-    z.strictObject({ type: z.literal("edit"), reviewId, edit: editSchema }),
+    z.strictObject({
+      type: z.literal("edit"),
+      reviewId,
+      edit: editSchema,
+      activityId,
+    }),
     z.strictObject({
       type: z.literal("lens_edit"),
       reviewId,
       edit: lensEditSchema,
+      activityId,
     }),
     z.strictObject({
       type: z.literal("rename"),
       reviewId,
       title: z.string().trim().min(1),
-    }),
-    z.strictObject({
-      type: z.literal("repin"),
-      reviewId,
-      pins: pinsSchema,
-      pullRequestUrl: pullRequestUrl.nullable().optional(),
     }),
     z.strictObject({
       type: z.literal("restore"),
@@ -178,7 +180,7 @@ export interface Snapshot {
   createdAt: string;
   origin?: SnapshotOrigin;
   /** The edit that produced this version, when one did; absent for a
-   * rename, repin, restore or import, which the canvas does not draw. */
+   * rename, set_target, restore or import, which the canvas does not draw. */
   lastEdit?: EditSummary;
 }
 
@@ -205,8 +207,8 @@ export interface Result {
   target?: ReviewTarget;
   /** The requested head differs from the existing review's. */
   headMoved?: boolean;
-  /** The live document lease on the existing review, whoever holds it. */
-  activeLeaseId?: string;
+  /** An agent is working on the existing review. */
+  working?: boolean;
   /** Older reviews that also name the PR, newest first. */
   otherReviewIds?: string[];
   /** The component an edit landed on, its type, and — for an insert or
@@ -245,6 +247,12 @@ export interface ReviewProviders {
   /** Ids of references whose own pins no longer name a usable checkout. */
   unavailableAnchors?(snapshot: Snapshot): Promise<string[]>;
   validatePins(pins: Pins): Promise<void>;
+  /** The files each side's commit changed from one set of pins to another,
+   * or undefined when they can't be diffed commit to commit. */
+  filesChangedBetween?(
+    from: Pins,
+    to: Pins,
+  ): Promise<{ base: Set<string>; head: Set<string> } | undefined>;
   validateSource(
     pins: Pins,
     source: FileLineRange,
@@ -428,11 +436,7 @@ export class ReviewStore {
       CREATE TABLE IF NOT EXISTS reviews(id TEXT PRIMARY KEY, version INTEGER NOT NULL, next_id INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS versions(review_id TEXT REFERENCES reviews(id), version INTEGER, snapshot TEXT NOT NULL,
         PRIMARY KEY(review_id,version));
-      CREATE TABLE IF NOT EXISTS receipts(command_id TEXT PRIMARY KEY, request TEXT NOT NULL, response TEXT NOT NULL);`);
-    // The lens command was "lens" before it took its tool's name.
-    this.db.exec(
-      "UPDATE receipts SET request=json_set(request,'$.operation.type','lens_edit') WHERE json_extract(request,'$.operation.type')='lens'",
-    );
+      DROP TABLE IF EXISTS receipts;`);
     this.db.exec(
       `CREATE TABLE IF NOT EXISTS review_attention(review_id TEXT PRIMARY KEY REFERENCES reviews(id), viewed_at TEXT, dismissed_at TEXT);`,
     );
@@ -452,6 +456,10 @@ export class ReviewStore {
     // import to the next sweep.
     this.db.exec(
       `CREATE TABLE IF NOT EXISTS legacy_imports(review_id TEXT PRIMARY KEY, revision TEXT NOT NULL, map_revision TEXT, imported_at TEXT NOT NULL);`,
+    );
+    // One row: which machine this store is. Review ids never contain it.
+    this.db.exec(
+      "CREATE TABLE IF NOT EXISTS server_identity(one INTEGER PRIMARY KEY CHECK(one=1), id TEXT NOT NULL)",
     );
     // Batch authoring's scratch drafts were removed; drop their leftover table.
     this.db.exec("DROP TABLE IF EXISTS authoring_drafts");
@@ -720,6 +728,31 @@ export class ReviewStore {
     this.activity.close();
     this.db.close();
   }
+  /** Stable across restarts; the first host on a new store chooses it. */
+  serverId(): string {
+    const read = () =>
+      this.db.prepare("SELECT id FROM server_identity").get()?.id;
+
+    let id = read();
+
+    if (id === undefined) {
+      // Another host may insert first; its id wins.
+      this.db
+        .prepare("INSERT OR IGNORE INTO server_identity(one,id) VALUES(1,?)")
+        .run(randomUUID());
+      id = read();
+    }
+
+    return String(id);
+  }
+  resetServerId(): string {
+    const id = randomUUID();
+    this.db
+      .prepare("INSERT OR REPLACE INTO server_identity(one,id) VALUES(1,?)")
+      .run(id);
+
+    return id;
+  }
   /** The 404 check alone, without loading a snapshot. */
   assertExists(id: string) {
     if (!this.db.prepare("SELECT 1 FROM reviews WHERE id=?").get(id))
@@ -755,6 +788,10 @@ export class ReviewStore {
     // SAFETY: stored blocks were validated on write; migration only replaces
     // retired representations and lifts retired lens blocks out.
     snapshot.document = document as Block[];
+
+    if (snapshot.lenses)
+      // SAFETY: as above, migration only rewrites retired range forms.
+      snapshot.lenses = migrateStoredLenses(snapshot.lenses) as Lens[];
 
     if (lenses.length)
       snapshot.lenses = [...(snapshot.lenses ?? []), ...lenses];
@@ -919,14 +956,13 @@ export class ReviewStore {
       diagrams: blocks.filter((block) => DIAGRAM_TYPES.has(block.type)).length,
     };
   }
-  /** The one scratchpad, made on first use. The fixed command id makes a
-   * repeat, even from another host on the same home, find its receipt. */
+  /** The one scratchpad, made on first use. A host that loses the race to
+   * another on the same home finds it made. */
   async ensureScratchpad(): Promise<void> {
     if (this.has(SCRATCHPAD_ID)) return;
 
     try {
       await this.execute({
-        commandId: SCRATCHPAD_COMMAND_ID,
         operation: {
           type: "create",
           title: SCRATCHPAD_TITLE,
@@ -966,43 +1002,13 @@ export class ReviewStore {
 
     if (initial && command.operation.type !== "create")
       throw new ReviewInputError("Initial content requires a create command.");
-    const request = JSON.stringify(initial ? { command, initial } : command);
-
-    // Network and fetch time stay out of the write queue. A replayed command
-    // never uses this: its receipt answers first, below.
+    // Network and fetch time stay out of the write queue.
     const pullRequest = this.startPullRequest(command);
 
     pullRequest?.catch(() => {});
 
     const run = this.pending.then(async () => {
-      const receipt = this.db
-        .prepare("SELECT request,response FROM receipts WHERE command_id=?")
-        .get(command.commandId);
-
-      if (receipt) {
-        if (receipt.request === "null")
-          throw new ReviewInputError("This command's review was deleted.", 404);
-
-        if (
-          !isDeepStrictEqual(
-            JSON.parse(String(receipt.request)),
-            JSON.parse(request),
-          )
-        )
-          throw new ReviewInputError(
-            "Command ID was already used for different input.",
-            409,
-          );
-
-        // SAFETY: receipts store only Results this method built, never caller-provided JSON.
-        return JSON.parse(String(receipt.response)) as Result;
-      }
-
       const op = command.operation;
-
-      if (op.type !== "create" && op.type !== "attention") {
-        this.activity.assertWrite(op.reviewId, command.leaseId, scopeOf(op));
-      }
 
       // The scratchpad is edited and restored like a review, and nothing else.
       if (
@@ -1018,30 +1024,21 @@ export class ReviewStore {
         );
 
       if (op.type === "create" && op.kind === "scratchpad") {
-        if (op.pins || op.target)
-          throw new ReviewInputError(
-            "A scratchpad has no target or pins of its own.",
-          );
+        if (op.target)
+          throw new ReviewInputError("A scratchpad has no target of its own.");
 
         if (this.has(SCRATCHPAD_ID))
           throw new ReviewInputError("The scratchpad already exists.", 409);
       } else if (op.type === "create") {
-        if (op.pins && op.target)
+        if (!op.target && !op.pullRequestUrl)
+          throw new ReviewInputError("Supply a target or a pullRequestUrl.");
+
+        if (op.repositoryId && op.target)
           throw new ReviewInputError(
-            "Supply exactly one of target or legacy pins.",
+            "A checkout for the PR applies only to a create from pullRequestUrl alone; name it in the target instead.",
           );
 
-        if (!op.pins && !op.target && !op.pullRequestUrl)
-          throw new ReviewInputError(
-            "Supply a target, legacy pins, or a pullRequestUrl.",
-          );
-
-        if (op.repositoryId && (op.pins || op.target))
-          throw new ReviewInputError(
-            "repositoryId applies only to a create from pullRequestUrl alone; put it in the target instead.",
-          );
-
-        if (!op.title && (op.pins || op.target))
+        if (!op.title && op.target)
           throw new ReviewInputError("Supply a title.");
       }
 
@@ -1053,7 +1050,8 @@ export class ReviewStore {
       const fromPullRequest = await pullRequest;
 
       const resolvedTarget = requestedTarget
-        ? await this.providers.resolveTarget?.(requestedTarget)
+        ? await (this.providers.resolveTarget?.(requestedTarget) ??
+            namedCommits(requestedTarget))
         : fromPullRequest;
 
       if (requestedTarget && !resolvedTarget)
@@ -1072,16 +1070,8 @@ export class ReviewStore {
           const result = this.existingReview(
             found,
             others,
-            resolvedTarget?.pins ?? op.pins!,
+            resolvedTarget!.pins,
           );
-
-          // Nothing is written but the receipt: a retry replays this answer,
-          // and deleting the review erases it like any other command's.
-          this.db
-            .prepare(
-              "INSERT INTO receipts(command_id,request,response) VALUES(?,?,?)",
-            )
-            .run(command.commandId, request, JSON.stringify(result));
 
           return result;
         }
@@ -1095,13 +1085,11 @@ export class ReviewStore {
         };
 
         this.commitCommand(
-          command.commandId,
-          request,
           result,
           () => {
             for (const table of [
               "ask_conversations",
-              "authoring_sessions",
+              "authoring_presences",
               "review_coverage",
               "review_attention",
               "versions",
@@ -1110,16 +1098,8 @@ export class ReviewStore {
                 .prepare(`DELETE FROM ${table} WHERE review_id=?`)
                 .run(op.reviewId);
             this.db.prepare("DELETE FROM reviews WHERE id=?").run(op.reviewId);
-            // Keep command IDs so a delayed retry cannot recreate deleted content.
-            // Erase their saved inputs while retaining the retry record.
-            this.db
-              .prepare(
-                "UPDATE receipts SET request='null',response=? WHERE json_extract(response,'$.reviewId')=?",
-              )
-              .run(JSON.stringify(result), op.reviewId);
           },
-          () =>
-            this.assertMutation(op.reviewId, result.version, command.leaseId),
+          () => this.assertMutation(op.reviewId, result.version),
         );
 
         return result;
@@ -1132,7 +1112,7 @@ export class ReviewStore {
           attention: true,
         };
 
-        this.commitCommand(command.commandId, request, result, () => {
+        this.commitCommand(result, () => {
           this.db
             .prepare(
               "INSERT OR IGNORE INTO review_attention(review_id) VALUES(?)",
@@ -1189,14 +1169,10 @@ export class ReviewStore {
       let lensTarget: { targetId: string; type: "lens" } | undefined;
 
       if (
-        (op.type === "create" ||
-          op.type === "set_target" ||
-          op.type === "repin") &&
+        (op.type === "create" || op.type === "set_target") &&
         this.providers.headBranch
       ) {
-        const pins =
-          resolvedTarget?.pins ??
-          (op.type === "repin" ? op.pins : snapshot.pins);
+        const pins = resolvedTarget?.pins ?? snapshot.pins;
 
         if (pins) {
           const headRef =
@@ -1229,25 +1205,17 @@ export class ReviewStore {
           snapshot.title = op.title;
           break;
         case "set_target":
-          if (snapshot.pins?.repositoryId !== resolvedTarget!.pins.repositoryId)
-            setPullRequest(snapshot, null);
-          snapshot.staleSources = [];
-          snapshot.target = resolvedTarget!.target;
-          snapshot.pins = resolvedTarget!.pins;
-          break;
-        case "repin":
           setPullRequest(
             snapshot,
             op.pullRequestUrl ??
               (op.pullRequestUrl === null ||
-              snapshot.pins?.repositoryId !== op.pins.repositoryId
+              snapshot.pins?.repositoryId !== resolvedTarget!.pins.repositoryId
                 ? null
                 : undefined),
           );
-
           snapshot.staleSources = [];
-          snapshot.pins = op.pins;
-          snapshot.target = { kind: "commits", ...op.pins };
+          snapshot.target = resolvedTarget!.target;
+          snapshot.pins = resolvedTarget!.pins;
           break;
         case "restore":
           snapshot = this.read(id, op.version);
@@ -1343,7 +1311,7 @@ export class ReviewStore {
       const warnings = await this.validateExternal(
         snapshot,
         previous,
-        op.type === "repin" || op.type === "set_target",
+        op.type === "set_target",
       );
 
       snapshot.version = previous ? previous.version + 1 : 0;
@@ -1367,8 +1335,6 @@ export class ReviewStore {
       if (warnings.length) result.warnings = warnings;
 
       this.commitCommand(
-        command.commandId,
-        request,
         result,
         () => {
           this.db
@@ -1382,17 +1348,17 @@ export class ReviewStore {
             )
             .run(id, snapshot.version, JSON.stringify(snapshot));
         },
-        previous
-          ? () =>
-              this.assertMutation(
-                id,
-                previous.version,
-                command.leaseId,
-                scopeOf(op),
-              )
+        previous ? () => this.assertMutation(id, previous.version) : undefined,
+        op.type === "edit" || op.type === "lens_edit"
+          ? {
+              surface: op.type === "edit" ? "document" : "lenses",
+              activityId: op.activityId,
+              // The version names the agent whose courier draws it.
+              owned: (owner) => {
+                if (snapshot.lastEdit) snapshot.lastEdit.activityId = owner;
+              },
+            }
           : undefined,
-        command.leaseId,
-        scopeOf(op),
       );
 
       return result;
@@ -1408,16 +1374,7 @@ export class ReviewStore {
   ): Promise<ResolvedPullRequest> | undefined {
     const op = command.operation;
 
-    if (
-      op.type !== "create" ||
-      op.kind ||
-      op.pins ||
-      op.target ||
-      !op.pullRequestUrl ||
-      this.db
-        .prepare("SELECT 1 FROM receipts WHERE command_id=?")
-        .get(command.commandId)
-    )
+    if (op.type !== "create" || op.kind || op.target || !op.pullRequestUrl)
       return undefined;
 
     if (!this.providers.resolvePullRequest)
@@ -1462,13 +1419,14 @@ export class ReviewStore {
       snapshot.pins?.repositoryId !== requested.repositoryId ||
       snapshot.pins?.head !== requested.head;
 
-    const activeLeaseId = this.activity.liveLeaseId(reviewId);
+    const working = this.activity.read(reviewId).activities ?? [];
 
     const note = [
       "Returned the existing review for this PR instead of creating one; the requested title and target were not applied. Update it in place (read it with session_get first), or pass reuseExisting:false to create a separate review.",
       headMoved &&
         "The PR head moved since this review's target was set, and the target was NOT changed: call review_set_target to move it, then repair the source references it reports.",
-      activeLeaseId && `Lease ${activeLeaseId} is currently authoring it.`,
+      working.length > 0 &&
+        `Another agent is working on it${working[0]!.focus ? `: ${working[0]!.focus.description}` : ""}.`,
       others.length > 0 &&
         "Older reviews also name this PR; see otherReviewIds.",
     ]
@@ -1482,32 +1440,43 @@ export class ReviewStore {
       version: snapshot.version,
       target: snapshot.target,
       headMoved,
-      ...(activeLeaseId && { activeLeaseId }),
+      ...(working.length > 0 && { working: true }),
       ...(others.length > 0 && { otherReviewIds: others }),
     };
   }
   private commitCommand(
-    commandId: string,
-    request: string,
     result: Result,
     apply: () => void,
     guard?: () => void,
-    leaseId?: string,
-    scope: LeaseScope = "document",
+    /** An edit credits the agent it came from, renewing its presence. */
+    attribution?: {
+      surface: ActivitySurface;
+      activityId?: string;
+      owned(activityId: string): void;
+    },
   ) {
     this.db.exec("BEGIN IMMEDIATE");
-    let extended = false;
+    let owner: string | undefined;
 
     try {
       guard?.();
+
+      if (attribution) {
+        owner = this.activity.attribute(
+          result.reviewId,
+          attribution.surface,
+          attribution.activityId,
+        );
+
+        if (owner) attribution.owned(owner);
+        else if (attribution.activityId)
+          result.warnings = [
+            ...(result.warnings ?? []),
+            "Your activity has ended or expired, so readers no longer see you working. The edit was saved; call session_activity_begin and pass the new activityId.",
+          ];
+      }
+
       apply();
-      this.db
-        .prepare(
-          "INSERT INTO receipts(command_id,request,response) VALUES(?,?,?)",
-        )
-        .run(commandId, request, JSON.stringify(result));
-      // An accepted write is proof of life: it renews the author's lease.
-      extended = this.activity.extend(result.reviewId, leaseId, scope);
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -1515,17 +1484,10 @@ export class ReviewStore {
     }
 
     if (result.deleted) this.activity.deleted(result.reviewId);
-    else if (extended) this.activity.extended(result.reviewId);
+    else if (owner) this.activity.extended(result.reviewId);
     this.notify(result);
   }
-  private assertMutation(
-    reviewId: string,
-    version: number | undefined,
-    leaseId?: string,
-    scope: LeaseScope = "document",
-  ) {
-    this.activity.assertWrite(reviewId, leaseId, scope);
-
+  private assertMutation(reviewId: string, version: number | undefined) {
     const current = this.db
       .prepare("SELECT version FROM reviews WHERE id=?")
       .get(reviewId);
@@ -1600,8 +1562,6 @@ export class ReviewStore {
       return Promise.reject(new Error("Import versions of one review only."));
 
     const run = this.pending.then(async () => {
-      this.activity.assertWrite(reviewId);
-
       const existing = this.db
         .prepare("SELECT version,next_id FROM reviews WHERE id=?")
         .get(reviewId);
@@ -1781,6 +1741,13 @@ export class ReviewStore {
 
     const worktreeMoved = pinsChanged && snapshot.target?.kind === "worktree";
 
+    const changed =
+      repin && pinsChanged && previous.pins && snapshot.pins
+        ? await this.providers
+            .filesChangedBetween?.(previous.pins, snapshot.pins)
+            .catch(() => undefined)
+        : undefined;
+
     const retained = references(
       previous?.document ?? [],
       true,
@@ -1816,7 +1783,10 @@ export class ReviewStore {
             })
             .then(
               () => {
-                if (repin)
+                if (
+                  repin &&
+                  (!changed || changed[source.side].has(source.file))
+                )
                   warnings.push(
                     `${source.side}/${source.file}#L${source.fromLine}-L${source.toLine}: source pins changed; verify that this range still supports the document.`,
                   );
@@ -1856,29 +1826,29 @@ export class ReviewStore {
   }
 }
 
-/** Lens writes need the lenses lease; every other write needs the document's. */
-function scopeOf(operation: { type: string }): LeaseScope {
-  return operation.type === "lens_edit" ? "lenses" : "document";
+/** Without a resolver, a commits target that names both commits pins them as
+ * given; validatePins still checks they exist. */
+function namedCommits(target: ReviewTarget) {
+  if (target.kind !== "commits" || target.base === undefined) return undefined;
+
+  const { repositoryId, base, head } = target;
+
+  return { target, pins: { repositoryId, base, head } };
 }
 
 /** A new document's first version, before its initial content. Field order
  * is kept so stored JSON reads as it always has. */
 function createdSnapshot(
   id: string,
-  op: {
-    title?: string;
-    kind?: "scratchpad";
-    pins?: z.infer<typeof pinsSchema>;
-  },
+  op: { title?: string; kind?: "scratchpad" },
   resolved: { target: ReviewTarget; pins: Pins } | undefined,
   defaultTitle?: string,
 ): Snapshot {
-  const pins = resolved?.pins ?? op.pins;
   const title = op.title ?? defaultTitle;
 
   if (!title) throw new ReviewInputError("Supply a title.");
 
-  if (!pins)
+  if (!resolved)
     return {
       reviewId: id,
       version: 0,
@@ -1892,8 +1862,8 @@ function createdSnapshot(
     reviewId: id,
     version: 0,
     title,
-    pins,
-    target: resolved?.target ?? { kind: "commits", ...pins },
+    pins: resolved.pins,
+    target: resolved.target,
     document: [],
     createdAt: "",
   };

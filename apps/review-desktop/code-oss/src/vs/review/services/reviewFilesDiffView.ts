@@ -99,7 +99,7 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 					(structural || lens)
 						? {
 							...REVIEW_FILES_DIFF_EDITOR_OPTIONS,
-							hideOriginalLineNumbers: entry.file.status === "added",
+							hideOriginalLineNumbers: entry.file.status === "added" || entry.file.status === "unchanged",
 							hideUnchangedRegions: {
 								enabled: true,
 								minimumLineCount: 1,
@@ -109,7 +109,7 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 							glyphMargin: true,
 							experimental: { useTrueInlineView: false },
 						}
-						: { ...REVIEW_FILES_DIFF_EDITOR_OPTIONS, hideOriginalLineNumbers: entry.file.status === "added" },
+						: { ...REVIEW_FILES_DIFF_EDITOR_OPTIONS, hideOriginalLineNumbers: entry.file.status === "added" || entry.file.status === "unchanged" },
 					),
 		);
 		const changes = new Emitter<void>();

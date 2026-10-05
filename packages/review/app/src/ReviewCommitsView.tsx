@@ -1,6 +1,5 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
-import { EmptyState } from "@canvas/ui/empty-state";
 import { textStyles } from "@canvas/ui/text";
 import {
   type ReviewCommitSummary,
@@ -39,16 +38,7 @@ export function ReviewCommitsView({
   range: import("@dev.fast/review-protocol").ReviewCanvasRange;
   onOpenDiff: OpenCommitDiff;
 }) {
-  if (range.sourceUnavailable) {
-    return (
-      <EmptyState
-        variant="document"
-        role="status"
-        title="Commits unavailable"
-        message={range.sourceUnavailable}
-      />
-    );
-  }
+  if (range.sourceUnavailable) return null;
 
   return (
     <div {...stylex.props(styles.view)}>

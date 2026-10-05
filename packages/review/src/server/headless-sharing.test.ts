@@ -117,11 +117,10 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
     });
 
     const d = await client.post<{ reviewId: string }>("/commands", {
-      commandId: randomUUID(),
       operation: {
         type: "create",
         title: "CI review",
-        pins: { ...pins, repositoryId: registered.id },
+        target: { kind: "commits", ...pins, repositoryId: registered.id },
       },
     });
 
@@ -136,7 +135,6 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
       },
     });
     await client.post("/commands", {
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId: d.reviewId,
@@ -148,11 +146,7 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
             children: [
               {
                 type: "code_peek",
-                source: {
-                  file: fixture.sourceFile,
-                  start: { side: "head", line: 1 },
-                  end: { side: "head", line: 1 },
-                },
+                source: `head/${fixture.sourceFile}#L1`,
               },
               {
                 type: "trace_quote",

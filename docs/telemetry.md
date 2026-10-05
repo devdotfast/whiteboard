@@ -168,7 +168,7 @@ Every event from the Whiteboard telemetry API includes these properties:
 | Property                  | Value                                                                                                                     |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `cli_version`             | CLI package version (`version` repeats it for one release)                                                                |
-| `app_version`             | Whiteboard app release version; absent for the standalone CLI                                                             |
+| `app_version`             | Whiteboard app release: the app's own, or the Desktop a `whiteboard api` or `mcp` process reached; absent if none         |
 | `channel`                 | `stable`, `preview`, or `dev` for an unpackaged build                                                                     |
 | `environment`             | `production`, `ci`, `internal`, `e2e`, or `smoke`                                                                         |
 | `surface`                 | `desktop`, `cli`, `headless`, `mcp`, or `api`                                                                             |
@@ -219,14 +219,14 @@ dropped the events.
 | `review_crash`                  | `process` in `renderer`, `gpu`, `utility`, `server`, `unknown`; `reason` (≤40 chars); `exit_code`; `uptime_ms`; `source` in `live`, `minidump` | A Whiteboard process dies, or an uncovered dump is found on the next launch                  |
 | `review_hang_started`           | None                                                                                                                                           | An app window stops responding                                                               |
 | `review_hang_ended`             | `duration_ms`                                                                                                                                  | The window responds again, its process dies, or it closes                                    |
-| `review_app_ready`              | `duration_ms`                                                                                                                                  | The workbench restores, timed from the startup trace; once per app launch                    |
+| `review_app_ready`              | `duration_ms`; `install_location` on a packaged macOS build, see below                                                                          | The workbench restores, timed from the startup trace; once per app launch                    |
 | `review_error_burst`            | `message_hash`, `suppressed`                                                                                                                   | A `review_client_error` passes 5 reports for one message in one session; see "Error reports" |
 | `review_open_timeout`           | `elapsed_ms`, `review_id`, `presentation_id`                                                                                                   | A session starts and no presented or ended event follows within 30 seconds                   |
 | `review_review_created`         | `via` in `api`, `mcp`, `other`; `kind` in `review`, `scratchpad`; `blocks`; optional `agent_kind`                                              | A whiteboard or the scratchpad is created; `via` is `other` for the app's own UI             |
 | `review_review_published`       | `version`                                                                                                                                      | A whiteboard is published for sharing                                                        |
 | `review_review_revoked`         | None                                                                                                                                           | A share link is revoked                                                                      |
 | `review_authoring_completed`    | `duration_ms`; optional `agent_kind`                                                                                                           | The first publish of a whiteboard created via `api` or `mcp`, timed from its creation        |
-| `review_mcp_tool_called`        | `tool`; `via` in `api`, `mcp`; `ok`; `duration_ms`                                                                                             | An agent calls a Whiteboard authoring tool                                                   |
+| `review_mcp_tool_called`        | `tool`; `via` in `api`, `mcp`; `ok`; `duration_ms`; `agent_kind`; on failure, `error_name` and `error_category` closed enums                   | An agent calls a Whiteboard authoring tool; `tool` is `other` if none was reached            |
 | `review_login_started`          | None                                                                                                                                           | GitHub sign-in in the app begins                                                             |
 | `review_login_succeeded`        | None                                                                                                                                           | GitHub sign-in in the app finishes                                                           |
 | `review_login_failed`           | `reason` in `did_not_finish`, `error`                                                                                                          | GitHub sign-in in the app fails                                                              |
@@ -236,6 +236,12 @@ dropped the events.
 `source_kind` is `worktree`, `commits`, or `scratchpad`, set by the server from
 the opened whiteboard. `agent_kind` is allowlisted for session events but not
 yet sent.
+
+`agent_kind` comes from the agent's session environment (`CODEX_THREAD_ID`,
+`CLAUDE_CODE_SESSION_ID`, `PI_SESSION_ID`). Over MCP, the client name the agent
+sends when it connects takes precedence, because some agents, Codex among
+them, start MCP servers without those variables. Cursor, OpenCode and Oh My Pi
+are identified only by that name. A client name is matched to the closed list and never sent.
 
 | `outcome`   | Meaning                                                                                                                                              |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -272,7 +278,7 @@ text, and only as described in "Error reports".
   `internal`.
 - Queue drop reasons: `queue_full`, `expired`, `corrupt`,
   `permanent_rejection`, and `storage_failure`.
-- Agent kinds: `codex`, `claude`, `pi`, and `other`.
+- Agent kinds: `codex`, `claude`, `cursor`, `opencode`, `pi`, `omp`, and `other`.
 
 ### Desktop and canvas events
 
@@ -327,6 +333,13 @@ sent.
   `unresponsive` / `responsive` events.
 - `review_open_timeout`: a whiteboard that neither presents nor ends within 30
   seconds.
+- `install_location` on `review_app_ready`: where a packaged macOS build runs
+  from, read from the app bundle's path. The path itself is never sent.
+  `applications` is `/Applications`, `user_applications` is `~/Applications`,
+  `volume` is anything under `/Volumes` (a mounted disk image or an external
+  drive), `translocated` is the read-only copy macOS makes of a quarantined app
+  opened from Downloads, and `other` is anywhere else. Squirrel cannot update a
+  `volume` or `translocated` app. Other platforms and unpackaged builds omit it.
 
 If the app dies with a whiteboard open, the next launch sends
 `review_session_ended` with `outcome: "abnormal"`. A workbench reload ends its

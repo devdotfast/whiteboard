@@ -35,11 +35,15 @@ async function seed(existing?: string) {
   const repositoryId = (await local.data.register(repo.root)).id;
 
   const { reviewId } = await local.store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "create",
       title: "Already authored",
-      pins: { repositoryId, base: repo.base, head: repo.head },
+      target: {
+        kind: "commits",
+        repositoryId,
+        base: repo.base,
+        head: repo.head,
+      },
     },
   });
 
@@ -238,6 +242,63 @@ it("starts with healthy reviews when a published review's repository is unavaila
     expect(installed.store.has(goodRecord.uuid)).toBe(true);
     expect(installed.store.has(unavailableRecord.uuid)).toBe(false);
     expect(installed.store.read(existing.reviewId)).toEqual(existing.snapshot);
+  } finally {
+    await installed.data.close();
+    await installed.store.close();
+  }
+});
+
+it("starts with healthy reviews when a published review's map revision has no bundle", async () => {
+  const repo = await scratchGitRepo();
+  const good = await syntheticLegacyReview("schema4-bug-report-dialog", repo);
+  homes.push(good.home, repo.root);
+  const goodRecord = await sealPresentedRevision(good);
+
+  const mapless = await syntheticLegacyReview(
+    "schema4-bug-report-dialog",
+    repo,
+    {
+      overrides: { uuid: randomUUID() },
+    },
+  );
+
+  homes.push(mapless.home);
+  const sealed = await sealPresentedRevision(mapless);
+
+  // The map points at a sealed revision that carries only the document.
+  const record = {
+    ...sealed,
+    presentedSoftwareMapRevision: sealed.presentedDocumentRevision,
+  };
+
+  const maplessDir = path.join(good.home, "reviews", record.uuid);
+  await cp(mapless.dir, maplessDir, { recursive: true });
+  await writeFile(path.join(maplessDir, "review.json"), JSON.stringify(record));
+  const original = await readFile(path.join(maplessDir, "review.json"));
+
+  await ensureJsonCutover(good.home, () => {});
+
+  const marker = JSON.parse(
+    await readFile(path.join(good.home, "json-cutover.json"), "utf8"),
+  );
+
+  expect(marker.errors).toEqual([]);
+  expect(marker.skipped).toEqual([
+    {
+      reviewId: record.uuid,
+      dir: maplessDir,
+      reason: expect.stringContaining("has no bundle"),
+    },
+  ]);
+  expect(await readFile(path.join(maplessDir, "review.json"))).toEqual(
+    original,
+  );
+
+  const installed = openLocalReviewStore(path.join(good.home, "review-api.db"));
+
+  try {
+    expect(installed.store.has(goodRecord.uuid)).toBe(true);
+    expect(installed.store.has(record.uuid)).toBe(false);
   } finally {
     await installed.data.close();
     await installed.store.close();

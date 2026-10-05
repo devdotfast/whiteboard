@@ -496,9 +496,31 @@ async function hoverAndJump(
   await token.click({ position: await aim() });
   await page.keyboard.press("F12");
 
-  // Go to Definition opens the file in a Source window whose active tab names it: the cross-file evidence.
-  await closeSourceWindow(
-    await sourceWindowFor(ctx, path.basename(language.definitionFile)),
+  const source = await sourceWindowFor(
+    ctx,
+    path.basename(language.definitionFile),
   );
+
+  if (id === "typescript") {
+    await ctx.watchPage(source);
+    await source.keyboard.press("ControlOrMeta+Shift+KeyF");
+    const input = source.locator(".search-view textarea").first();
+
+    await input.waitFor({ timeout: 15000 });
+    await input.fill(language.symbol);
+    await input.press("Enter");
+    await ctx.until(
+      async () =>
+        (await source
+          .locator(".search-view .results .monaco-list-row")
+          .count()) > 0,
+      "Source search results",
+      15000,
+    );
+    await source.screenshot({ path: path.join(ctx.root, "source-search.png") });
+    ctx.check("Source search returns fixture results");
+  }
+
+  await closeSourceWindow(source);
   ctx.check(`${id}: go to definition crosses files${pass}`);
 }

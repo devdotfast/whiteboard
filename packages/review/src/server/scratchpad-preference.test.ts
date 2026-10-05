@@ -80,7 +80,6 @@ it("makes and lists the scratchpad only while its preference is on", async () =>
       method: "POST",
       headers,
       body: JSON.stringify({
-        commandId: "6d6e0a4e-0000-4000-8000-000000000001",
         operation: { type: "create", title: "Scratchpad", kind: "scratchpad" },
       }),
     });

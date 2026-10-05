@@ -52,6 +52,8 @@ export interface ReviewProgress {
   resolvedSelections: Record<string, FileLineRange[]>;
   /** The review's file lenses, then the automatic "Uncategorized changes". */
   lenses: (DiffLens & { unavailable?: string; pending?: boolean })[];
+  /** Untracked files a live worktree review leaves out of its comparison. */
+  untrackedFiles?: number;
 }
 
 /** Coverage survives new pins only when both complete file contents are unchanged. */
@@ -288,7 +290,7 @@ export async function reviewProgress(
         : "All changed lines are covered by lenses",
   });
 
-  return {
+  const progress: ReviewProgress = {
     complete: !partial,
     files,
     referenceFiles,
@@ -296,6 +298,12 @@ export async function reviewProgress(
     resolvedSelections,
     unavailableSelections,
   };
+
+  const untrackedFiles = pins ? await data.untrackedFiles(pins) : undefined;
+
+  if (untrackedFiles) progress.untrackedFiles = untrackedFiles;
+
+  return progress;
 }
 
 /** The most files an uncategorized report names; the rest are counted. */

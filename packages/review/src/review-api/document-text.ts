@@ -1,12 +1,5 @@
-import { type LensSource } from "@review/lens-selection.js";
-
 import { type Element, ReviewInputError, elements } from "./document.js";
 import type { Snapshot } from "./store.js";
-
-const sourceText = (source: LensSource) =>
-  source.start.side === source.end.side
-    ? `${source.start.side}/${source.file}:${source.start.line}-${source.end.line}`
-    : `${source.file} diff rows ${source.start.side}:${source.start.line}–${source.end.side}:${source.end.line}`;
 
 /** A reading view of saved content, not another document format to maintain. */
 export function documentText(
@@ -72,7 +65,7 @@ export function documentText(
       case "divider":
         break;
       case "code_peek":
-        detail(sourceText(element.source));
+        detail(element.source);
 
         if (element.caption) detail(element.caption);
         break;
@@ -86,7 +79,7 @@ export function documentText(
           `${element.from} → ${element.to}: ${element.label} (${element.style})`,
         );
 
-        if (element.source) detail(sourceText(element.source));
+        if (element.source) detail(element.source);
 
         if (detailed && element.explanation) detail(element.explanation);
 
@@ -98,7 +91,7 @@ export function documentText(
           element[side].forEach((frame) => {
             write(
               depth + 2,
-              `${frame.label ?? frame.key ?? "Frame"}: ${sourceText(frame.source)}`,
+              `${frame.label ?? frame.key ?? "Frame"}: ${frame.source}`,
             );
 
             if (detailed && frame.via)
@@ -135,7 +128,7 @@ export function documentText(
           for (const operation of useCase.operations)
             write(
               depth + 2,
-              `${operation.actor}: ${operation.kind} ${operation.store}.${operation.collection}${operation.field ? `.${operation.field}` : ""} — ${operation.label} (${sourceText(operation.source)})`,
+              `${operation.actor}: ${operation.kind} ${operation.store}.${operation.collection}${operation.field ? `.${operation.field}` : ""} — ${operation.label} (${operation.source})`,
             );
         }
 
@@ -153,20 +146,20 @@ export function documentText(
         if (element.description) detail(element.description);
 
         for (const node of element.nodes) {
-          detail(`${node.key}: ${node.label}`);
+          detail(`[${node.id}] ${node.key}: ${node.label}`);
 
           if (detailed && node.description) write(depth + 2, node.description);
 
           for (const attachment of node.attachments)
             write(
               depth + 2,
-              `${attachment.label}: ${attachment.sources.map(sourceText).join(", ")}`,
+              `${attachment.label}: ${attachment.sources.join(", ")}`,
             );
         }
 
         for (const edge of element.edges)
           detail(
-            `${edge.from} → ${edge.to}${edge.label ? `: ${edge.label}` : ""}`,
+            `[${edge.id}] ${edge.from} → ${edge.to}${edge.label ? `: ${edge.label}` : ""}`,
           );
         break;
       case "software_map":
@@ -193,9 +186,7 @@ export function documentText(
       for (const item of lens.targets)
         if (item.kind === "files")
           write(1, `Files: ${item.patterns.join(", ")}`);
-        else
-          for (const source of item.sources)
-            write(1, `Range: ${sourceText(source)}`);
+        else for (const source of item.sources) write(1, `Range: ${source}`);
     }
   }
 

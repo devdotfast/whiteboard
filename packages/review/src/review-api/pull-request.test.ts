@@ -1,5 +1,4 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -20,7 +19,6 @@ const url = "https://github.com/acme/widget/pull/7";
 const hasJj = spawnSync("jj", ["--version"]).status === 0;
 
 const command = <Operation>(operation: Operation) => ({
-  commandId: randomUUID(),
   operation,
 });
 
@@ -282,8 +280,6 @@ describe("creating a review from a pull request URL alone", () => {
       reviewId: created.reviewId,
       headMoved: true,
     });
-    // A retry of the first command replays its answer without asking GitHub.
-    expect(await local.store.execute(first)).toEqual(created);
     expect(ghCalls).toBe(calls + 1);
   });
 

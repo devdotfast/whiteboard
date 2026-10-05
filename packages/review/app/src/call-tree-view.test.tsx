@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { anchorSelection } from "@review/lens-selection";
 import type { Frame } from "@review/review-api/document";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -22,11 +23,7 @@ const frame = (
     id,
     key: id,
     label: `Frame ${id}`,
-    source: {
-      file: `src/${id}.ts`,
-      start: { side, line: 4 },
-      end: { side, line: 9 },
-    },
+    source: `${side}/src/${id}.ts#L4-L9`,
   };
 
   if (via) frame.via = via;
@@ -76,18 +73,8 @@ describe("DocumentCallTree", () => {
                   frame("reconcile"),
                   {
                     ...frame("auth", "base"),
-                    contextSources: [
-                      {
-                        file: "context.ts",
-                        start: { side: "head", line: 1 },
-                        end: { side: "head", line: 2 },
-                      },
-                    ],
-                    callSite: {
-                      file: "caller.ts",
-                      start: { side: "base", line: 12 },
-                      end: { side: "base", line: 12 },
-                    },
+                    contextSources: ["head/context.ts#L1-L2"],
+                    callSite: "base/caller.ts#L12",
                   },
                 ],
                 head: [
@@ -118,11 +105,7 @@ describe("DocumentCallTree", () => {
         anchor: expect.objectContaining({ id: "auth", title: "Frame auth" }),
         content: {
           kind: "source",
-          source: {
-            file: "src/auth.ts",
-            start: { side: "base", line: 4 },
-            end: { side: "base", line: 9 },
-          },
+          source: anchorSelection("base/src/auth.ts#L4-L9"),
         },
       }),
     );
@@ -140,11 +123,7 @@ describe("DocumentCallTree", () => {
       expect.objectContaining({
         content: {
           kind: "source",
-          source: {
-            file: "caller.ts",
-            start: { side: "base", line: 12 },
-            end: { side: "base", line: 12 },
-          },
+          source: anchorSelection("base/caller.ts#L12"),
         },
       }),
     );

@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { CancellationError, ErrorNoTelemetry } from "../../base/common/errors.js";
+import { FileOperationError, FileOperationResult } from "../../platform/files/common/files.js";
 import {
 	packReviewError,
 	ReviewErrorReportLimiter,
@@ -39,6 +40,24 @@ test("packReviewError skips errors that say nothing about a defect", () => {
 	const cancelled = new CancellationError();
 	cancelled.stack = "Canceled\n    at f (/app/out/vs/base/common/errors.js:1:1)";
 	assert.equal(packReviewError(cancelled), undefined);
+});
+
+function fileError(message: string, result: FileOperationResult): FileOperationError {
+	const error = new FileOperationError(message, result);
+	error.stack = `Error: ${message}\n    at f (/app/out/vs/platform/files/common/fileService.js:1:1)`;
+	return error;
+}
+
+test("packReviewError skips a cancelled file read, even rewrapped in a plain Error", () => {
+	assert.equal(packReviewError(fileError("Unable to read file '/app/theme.json' (Canceled: Canceled)", FileOperationResult.FILE_OTHER_ERROR)), undefined);
+	assert.equal(packReviewError(errorWithStack("Unable to load /app/theme.json: Unable to read file '/app/theme.json' (Canceled: Canceled)")), undefined);
+});
+
+test("packReviewError reports file failures that a cancellation did not cause", () => {
+	const denied = "Unable to write file '/user/settings.json' (NoPermissions (FileSystemError): EACCES: permission denied)";
+	assert.equal(packReviewError(fileError(denied, FileOperationResult.FILE_PERMISSION_DENIED))?.message, denied);
+	const missing = "Unable to load /app/theme.json: Unable to read file '/app/theme.json' (Error: Unable to resolve nonexistent file '/app/theme.json')";
+	assert.equal(packReviewError(errorWithStack(missing))?.message, missing);
 });
 
 test("packReviewError unwraps a loader error and an array stack", () => {

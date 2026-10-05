@@ -5,49 +5,50 @@ import {
   activityEndSchema,
   activityUpdateSchema,
 } from "./activity.js";
-import { fileLineRangeSchema } from "./document.js";
+import { pathTargetSchema, publishedEditSchema } from "./document.js";
 import { instructionsQuerySchema } from "./instructions.js";
 import { uploadSchema } from "./local-data.js";
-import { inspectQuerySchema, readQuerySchemas } from "./read-schemas.js";
+import { inspectQuerySchema } from "./read-schemas.js";
 import { REVIEW_STATUS_TOOL } from "./status-tool.js";
 import { commandSchema } from "./store.js";
 
-/** The host publishes its actual input schemas; adapters do not validate documents. */
+/** The host publishes its input schemas, except where agents write less than
+ * the host accepts (publishedEditSchema, publishedLensEditSchema) or name a
+ * checkout by path (pathTargetSchema); adapters validate nothing. */
 export function authoringTools(
   scratchpadAvailable = false,
   traceEnabled = false,
 ) {
   const id = z.string().min(1);
   const review = { reviewId: id };
-  const version = z.number().int().nonnegative().optional();
 
   // Anthropic rejects a top-level union, so publish one object; the host validates the union.
-  const [image, trace, map] = uploadSchema.options;
+  const [image, trace] = uploadSchema.options;
 
   const uploadInput = z
     .strictObject({
       ...image.shape,
       ...trace.shape,
-      ...map.shape,
-      kind: z.enum(["image", "trace", "map"]),
+      kind: z.enum(["image", "trace"]),
     })
     .partial()
     .required({ id: true, repositoryId: true, kind: true });
 
-  const read = (name: keyof typeof readQuerySchemas) =>
-    z.strictObject({ ...review, ...readQuerySchemas[name].shape });
-
   const descriptions = {
     create:
-      'Create a review of saved working files, immutable commits or a GitHub PR. Revisions are resolved on acceptance. A worktree target reviews the saved files in its checkout, uncommitted and untracked ones included, against base: the branch to compare against, by default the default branch of the repository. The diff starts at the merge base of base and HEAD, which follows rebases. Omitted commits base means source at head with no diff; supply the parent to review introduced changes. For a GitHub PR, pullRequestUrl alone is enough: target and title become optional, and the host fetches the PR into a registered checkout of its repository and pins the current PR head and GitHub diff base, titled from the PR. When a review for that PR exists, it is returned instead, reporting whether its head moved and the id of any live lease on it; update it in place, move its target with review_set_target, or create a separate review with reuseExisting. kind:"scratchpad" names the one scratchpad, which the host creates itself. The result carries review, the review as review_list shows it: its target with resolved commits, origin (its PR), repositoryName and repositoryPath, so no follow-up read is needed before diffing. When Desktop is available the review opens there and the result reports opened, softwareMapEnabled and environmentIssues, as review_open does; set open:false to author in the background without taking over Desktop.',
+      'Create a review of saved working files, immutable commits or a GitHub PR. Revisions are resolved on acceptance. A worktree target reviews the saved files in its checkout, uncommitted ones included and untracked ones left out (git add -N a new file to include it), against base: the branch to compare against, by default the default branch of the repository. The diff starts at the merge base of base and HEAD, which follows rebases. Omitted commits base means source at head with no diff; supply the parent to review introduced changes. For a GitHub PR, pullRequestUrl alone is enough: target and title become optional, and the host fetches the PR into a registered checkout of its repository and pins the current PR head and GitHub diff base, titled from the PR. When a review for that PR exists, it is returned instead, reporting whether its head moved and whether an agent is working on it; update it in place, move its target with review_set_target, or create a separate review with reuseExisting. kind:"scratchpad" names the one scratchpad, which the host creates itself. The result carries review, the review as review_list shows it: its target with resolved commits, origin (its PR), repositoryName and repositoryPath, so no follow-up read is needed before diffing. When Desktop is available the review opens there and the result reports opened, softwareMapEnabled and environmentIssues, as review_open does; set open:false to author in the background without taking over Desktop.',
     set_target:
-      "Change the review target, preserving document and component IDs. Returns warnings for source references needing repair. Earlier versions keep their retained source.",
-    edit: 'Edit a document component. Common content shapes: section `{"type":"section","title":"…","children":[]}`; prose `{"type":"markdown","markdown":"…"}`. Sections require `children` (not `blocks`); Markdown uses `markdown` (not `text`). To populate a section later, insert content with `edit.parentId` set to its returned ID. Flow diagram: `{"type":"flow_diagram","title":"Flow","nodes":[{"key":"a","label":"Start"},{"key":"b","label":"Finish"}],"edges":[{"from":"a","to":"b"}]}`. Use nodes and edges arrays (not children); at least one node is required, edges may be empty, and edge endpoints name unique node keys. Code peek: `{"type":"code_peek","source":{"file":"src/app.ts","start":{"side":"head","line":10},"end":{"side":"head","line":20}}}`. Call stack diff: `{"type":"call_stack_diff","title":"Request flow","base":[{"label":"Entry","source":{"file":"src/app.ts","start":{"side":"base","line":10},"end":{"side":"base","line":20}}}],"head":[{"label":"Entry","source":{"file":"src/app.ts","start":{"side":"head","line":10},"end":{"side":"head","line":20}}}]}`. Both base and head arrays are required; either may be empty. Each frame requires source; optional key/parentKey express nesting, and parentKey must name an earlier frame on that side. Sequence: `{"type":"sequence","title":"Request","actors":{"a":"Client","b":"Server"},"steps":[{"from":"a","to":"b","label":"Send","explanation":"Client sends a request."}]}`. actors is a key-to-label object; steps reference actor keys and each needs exactly one of source, explanation, or code. Database lens: `{"type":"database_lens","title":"Read items","actors":{"app":"App"},"stores":{"db":{"label":"DB","storage":"relational","collections":{"items":{"label":"Items","fields":{"id":{"label":"ID","dataType":"integer"}}}}}},"useCases":[{"label":"Load","operations":[{"kind":"read","actor":"app","store":"db","collection":"items","label":"Fetch items","source":{"file":"src/app.ts","start":{"side":"head","line":10},"end":{"side":"head","line":20}}}]}]}`. actors, stores, collections, and fields are keyed objects; useCases and operations are arrays. Include at least one store and use case, with at least one operation per use case; each operation requires source and must reference declared keys. Source paths are repository-relative; line numbers are 1-based and inclusive. Replace example paths and lines with verified source ranges. The host assigns short durable IDs; use returned IDs to edit components in place. The result identifies the edited component and, for an insert or replace, its first-level children, so they can be edited without a follow-up read. Accepted edits are saved immediately. Omitted placement appends; on the scratchpad it lands at the top, so insert a multi-block thought bottom-up or chain each block with afterId. null removes an optional field in a patch. While a reader may be watching, write small and often: one paragraph per edit, so the document draws itself as you go. Insert a new diagram whole, with all its nodes and edges or steps; the board traces it in one quick pass. Change a diagram already on the board one unit at a time: insert, update or remove a flow_node, flow_edge or step by ID (parentId names the diagram). Link each added flow_node to a node already drawn, so it arrives attached; a separate flow_edge is only for two nodes that already exist. Removing a flow_node removes its edges.',
+      "Move the review to a new target, such as the commits after a rebase or amend, preserving the document and component IDs. Revisions are resolved on acceptance. Returns warnings for retained source ranges in files the new commits changed, to verify, and resources that no longer match; fix them with review_edit. Earlier versions keep their source. Omitted pullRequestUrl keeps the PR within the same repository; changing repositories clears it. Supply a URL to replace it or null to detach.",
+    edit: [
+      "Edit one document component. content is one component, named by its type; each type's fields are in the Components section of session_get_instructions (authoring or scratchpad).",
+      "Anchors are head/path#L10-L20 or base/path#L7, or diff/path#L84-R90 for a range across sides, with repository-relative paths and 1-based inclusive lines. pins {repositoryId, head, base?} say which commits anchors quote: a step, frame, attachment or operation without pins uses its block's, and a block without them the review's.",
+      "insert adds content: parentId nests it, afterId places it, and omitted placement appends (on the scratchpad, it lands at the top). update patches a component's own fields; null removes an optional one. A section's children and a diagram's units change through their own IDs; a call stack's frames change by replacing the call stack. move and remove take a targetId; removing a flow_node removes its edges.",
+      "The host assigns short durable IDs. The result names the edited component and, for an insert or replace, its first-level children, and quotes the first and last line of each anchor the edit added or changed (the first 20; unquotedAnchors counts the rest): check they are the lines you meant. Accepted edits save at once.",
+      "While a reader may be watching, write small and often: one paragraph per edit. Insert a new diagram whole. Change one already drawn a unit at a time (a flow_node, flow_edge or step, with parentId naming the diagram), and link each added flow_node to a node already drawn.",
+    ].join("\n"),
     lens_edit:
-      'Edit one Diff-view lens. Lenses partition the review\'s change for the Diff view; they sit beside the document (never in it) and version with it. The host assigns durable lens IDs; updates replace only the fields supplied. Write one lens per call while a reader may be watching; each draws in on the Diffs page. Requires the lenses lease: review_activity_begin with scope:"lenses", which another agent can hold while the document lease is held elsewhere. The result identifies the lens and reports uncategorized: changed lines no lens selects yet, grouped by file. Keep adding lenses until it is empty or what remains is deliberate. review_lens_get reads the current lenses and gaps.',
+      "Edit one Diff-view lens. Lenses partition the review's change for the Diff view; they sit beside the document (never in it) and version with it. The host assigns durable lens IDs; updates replace only the fields supplied. Write one lens per call while a reader may be watching; each draws in on the Diffs page. Pass your activityId so your courier draws each lens. The result identifies the lens and reports uncategorized: changed lines no lens selects yet, grouped by file. Keep adding lenses until it is empty or what remains is deliberate. review_lens_get reads the current lenses and gaps.",
     rename: "Change the review title.",
-    repin:
-      "Update source pins or PR identity while preserving the document and component IDs. Returns warnings for retained source ranges to verify and resources that no longer match; fix them with review_edit. Previous pins and content remain in history. Omitted pullRequestUrl preserves PR identity within the same repository; changing repositories clears it. Supply a URL to replace it or null to detach.",
     restore:
       "Restore title, source pins, PR identity and content from a saved version.",
     attention:
@@ -78,7 +79,7 @@ export function authoringTools(
     REVIEW_STATUS_TOOL,
     tool(
       "capabilities",
-      "Discover whether Desktop is available and optional software-map generation is enabled. Read before authoring. Map uploads remain supported regardless of generation permission.",
+      "Discover whether Desktop is available and optional software-map generation is enabled. Read before authoring.",
       z.strictObject({}),
       "GET",
       "/capabilities",
@@ -98,47 +99,51 @@ export function authoringTools(
     ),
     tool(
       "activity_begin",
-      "Acquire an exclusive authoring session for one scope of a review and return its leaseId: pass it on every write in that scope, to review_activity_update and to review_activity_end. Separate scopes let one agent author lenses while another holds the document lease. Each scope has its own lease and focus; a focus targetId in the lenses scope names a lens id. The lease expires after 3 minutes without an accepted write or update. Another session gets a conflict while this lease is active. Use focus to show current work.",
+      "Show that you are working on a review: the reader sees your focus and your courier drawing your edits, and the review reads as finished only once every agent has ended. Returns an activityId: pass it to session_edit and session_lens_edit so your courier draws them, and to review_activity_update and review_activity_end. Nothing is locked; other agents can work on the review too. The activity expires after 3 minutes without an edit or update.",
       activityBeginSchema.extend(review),
       "POST",
       "/:reviewId/activity/begin",
     ),
     tool(
       "activity_update",
-      "Keep an authoring session alive and change its focus. Each accepted write carrying the leaseId already keeps it alive; call this during long reads or pauses between edits, or to show new work. Omitted focus preserves it and null clears it. Fails once the lease has expired: begin a new session and reread the review before editing.",
+      "Change your focus, or keep your activity alive during long reads or pauses; an edit carrying your activityId already keeps it alive. Omitted focus preserves it and null clears it. Fails once the activity has expired: begin a new one.",
       activityUpdateSchema.extend(review),
       "POST",
       "/:reviewId/activity/update",
     ),
     tool(
       "activity_end",
-      "End an authoring session only when the review is finished: readers treat a review with content and no live session as ready. Ending it creates no document version. Ending an expired lease, or another session's, changes nothing.",
+      "End your activity when your part is finished: readers treat a review with content and no live activity as ready. Ending it creates no document version. Ending twice, or an expired activity, changes nothing.",
       activityEndSchema.extend(review),
       "POST",
       "/:reviewId/activity/end",
     ),
     ...commandSchema.shape.operation.options.map((operation) => {
       const type = operation.shape.type.value;
-      const { type: _type, ...fields } = operation.shape;
+
+      // Agents name a checkout by its path; /commands registers it.
+      const {
+        type: _type,
+        repositoryId: _repositoryId,
+        ...fields
+      }: Record<string, z.ZodType> = operation.shape;
 
       return tool(
         type,
         descriptions[type],
         z.strictObject({
           ...fields,
-          ...(type === "create" && { open: z.boolean().optional() }),
-          commandId: z
-            .uuid()
-            .optional()
-            .describe(
-              "Idempotency key. Omit it; Whiteboard assigns one. Pass one only when an error tells you to.",
-            ),
-          ...(type !== "create" &&
-            type !== "attention" && {
-              leaseId: commandSchema.shape.leaseId.describe(
-                'The leaseId from review_activity_begin, if you hold a lease on this review (scope "lenses" for review_lens_edit).',
+          ...(type === "create" && {
+            target: pathTargetSchema.optional(),
+            repositoryPath: id
+              .optional()
+              .describe(
+                "Only with pullRequestUrl and no target: the local checkout to fetch the PR into. Default: the existing review's, else the first registered checkout with a remote for the PR's repository.",
               ),
-            }),
+            open: z.boolean().optional(),
+          }),
+          ...(type === "set_target" && { target: pathTargetSchema }),
+          ...(type === "edit" && { edit: publishedEditSchema }),
         }),
         "POST",
         "/commands",
@@ -190,64 +195,17 @@ export function authoringTools(
     ),
     tool(
       "register_repository",
-      "Register a local Git or jj repository. The prepared checkout path is on the authoring server.",
+      "Register a local Git or jj repository and return its id, for pins on scratchpad blocks. session_create and session_set_target take the checkout's path instead.",
       z.strictObject({ path: id }),
       "POST",
       "/repositories",
     ),
     tool(
-      "resolve_pins",
-      "Resolve base and head revisions to immutable commit IDs for create or repin.",
-      z.strictObject({ repositoryId: id, base: id, head: id }),
-      "POST",
-      "/pins",
-    ),
-    tool(
       "upload",
-      'Retain an image, trace or software map for use in a review. kind:"image" takes base64; kind:"trace" takes trace; kind:"map" takes pins, side and model. Reusing an upload ID requires identical content; rejected uploads are not saved.',
+      'Retain an image or trace for use in a review. kind:"image" takes base64; kind:"trace" takes trace. Reusing an upload ID requires identical content; rejected uploads are not saved.',
       uploadInput,
       "POST",
       "/resources",
-    ),
-    tool(
-      "source",
-      "Read an exact code range from the current target. An explicit version reads retained historical source. source.pins reads at explicit commits of any registered repository instead; the same pins on a stored selection or markdown block make it resolve there.",
-      z.strictObject({
-        ...review,
-        version,
-        source: fileLineRangeSchema,
-        commit: z.string().min(1).optional(),
-      }),
-      "POST",
-      "/:reviewId/source",
-    ),
-    tool(
-      "file",
-      "Read a complete source file from the current target; version selects retained history. repositoryId and head (and base for the base side) read at explicit pins of any registered repository instead.",
-      read("file"),
-      "GET",
-      "/:reviewId/file",
-    ),
-    tool(
-      "tree",
-      "List immediate directory entries in the target, including working files for worktree targets. repositoryId and head list a registered repository at explicit pins instead.",
-      read("tree"),
-      "GET",
-      "/:reviewId/tree",
-    ),
-    tool(
-      "diff",
-      'Read this review\'s changes. paths selects files (default: all). format:"files" lists them with status and counts; format:"patch" returns plain-text patches with base and head line numbers on every line, ready for review-source links. Patches past maxBytes are listed with a paths:[…] hint. commit selects one commit from this review; repositoryId, base and head compare explicit pins of a registered repository instead.',
-      read("diff"),
-      "GET",
-      "/:reviewId/diff",
-    ),
-    tool(
-      "commits",
-      "List commits in this review's pinned comparison.",
-      read("commits"),
-      "GET",
-      "/:reviewId/commits",
     ),
   ];
 }

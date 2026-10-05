@@ -157,7 +157,15 @@ export const SESSION_SOURCE_KIND = [
  * definition: `review-telemetry.ts`'s `ReviewSessionAgent` type imports and
  * derives from it instead of redeclaring the list.
  */
-export const SESSION_AGENT_KIND = ["codex", "claude", "pi", "other"] as const;
+export const SESSION_AGENT_KIND = [
+  "codex",
+  "claude",
+  "cursor",
+  "opencode",
+  "pi",
+  "omp",
+  "other",
+] as const;
 
 export type ReviewSessionAgent = (typeof SESSION_AGENT_KIND)[number];
 
@@ -222,6 +230,15 @@ export const CRASH_PROCESS = [
 ] as const;
 
 export const CRASH_SOURCE = ["live", "minidump"] as const;
+
+/** Where a packaged macOS build runs from; Squirrel cannot update `volume` or `translocated`. */
+export const INSTALL_LOCATION = [
+  "applications",
+  "user_applications",
+  "volume",
+  "translocated",
+  "other",
+] as const;
 
 export const DIFF_OPENED_VIA = ["topbar", "lens", "locate"] as const;
 
@@ -526,7 +543,7 @@ export const UI_TELEMETRY_EVENTS = {
   },
   app_ready: {
     event: "review_app_ready",
-    properties: { duration_ms: "number" },
+    properties: { duration_ms: "number", install_location: INSTALL_LOCATION },
   },
   error_burst: {
     event: "review_error_burst",

@@ -3,10 +3,8 @@ import { z } from "zod";
 
 import { ReviewInputError } from "./input-error.js";
 
-// Query schemas for the read routes. http.ts parses query strings with them
-// and authoring-tools.ts publishes the same shapes, so the two cannot drift.
-// Coercion and defaults only affect parsing; the published input schema keeps
-// the JSON types.
+// Query schemas for the read routes Desktop and review_get call. http.ts
+// parses query strings with them, and authoring-tools.ts publishes get's.
 const version = z
   .union([
     z.literal("").transform(() => undefined),
@@ -76,21 +74,7 @@ export const readQuerySchemas = {
     side,
     file: z.string().min(1),
   }),
-  diff: z.strictObject({
-    version,
-    commit,
-    ...anchor,
-    /** Pathspec, like `git diff -- a b`: files or directories. Omit for every changed file. */
-    paths: z.array(z.string().min(1)).max(200).optional(),
-    /** "files" lists changes (like --numstat); "patch" returns numbered patches (like -p). */
-    format: z.enum(["files", "patch"]).default("files"),
-    /** Context lines around each change, like -U<n>. */
-    context: z.coerce.number().int().min(0).max(50).optional(),
-    /** Patch budget; files past it are listed with a paths:[…] hint. */
-    maxBytes: z.coerce.number().int().positive().max(500_000).default(40_000),
-    /** Legacy: same as paths:[file], format:"patch". */
-    file: z.string().min(1).optional(),
-  }),
+  diff: z.strictObject({ version, commit, ...anchor }),
   structuralDiff: z.strictObject({
     version,
     commit,

@@ -9,7 +9,7 @@ DIST="$APP_DIR/dist/linux"
 }
 
 FORMAT="${1:-all}"
-case "$FORMAT" in rpm|deb|arch|all) ;; *) echo "Unknown package format: $FORMAT" >&2; exit 2 ;; esac
+case "$FORMAT" in rpm|deb|arch|nixos|all) ;; *) echo "Unknown package format: $FORMAT" >&2; exit 2 ;; esac
 node "$APP_DIR/scripts/stage-review-runtime.mjs" --verify --packaged-root "$APP_DIR/VSCode-linux-x64"
 mkdir -p "$DIST"
 node --experimental-strip-types "$APP_DIR/scripts/package-linux-distributions.mjs" "$FORMAT"
@@ -25,4 +25,12 @@ if [[ "$FORMAT" == arch || "$FORMAT" == all ]]; then
   VERSION=$(node -p "require('$APP_DIR/package.json').version.replace('-preview.', '~preview.')")
   bash "$APP_DIR/scripts/linux/build-arch-package.sh" "$DIST" "$CHANNEL" "$VERSION" "${REVIEW_LINUX_PACKAGE_REVISION:-1}"
   rm "$DIST/whiteboard-payload.tar.zst"
+fi
+if [[ "$FORMAT" == nixos || "$FORMAT" == all ]]; then
+  STAGING="$CHECKOUT/.build/linux/nixos/x86_64/package"
+  NAME=$(node -p "require('$STAGING/release.json').packageName")
+  VERSION=$(node -p "require('$STAGING/release.json').version")
+  tar --sort=name --mtime=@0 --owner=0 --group=0 --transform "s,^package,$NAME," -czf \
+    "$DIST/$NAME-$VERSION-${REVIEW_LINUX_PACKAGE_REVISION:-1}-x86_64.nix.tar.gz" \
+    -C "$(dirname "$STAGING")" package
 fi

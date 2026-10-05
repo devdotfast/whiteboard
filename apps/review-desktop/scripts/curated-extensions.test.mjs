@@ -23,8 +23,6 @@ import {
   bundledGroups,
   curatedExtensions,
   curatedGroups,
-  defaultDisabledIds,
-  keymapGroups,
   openVsxUrl,
   optionalExtensions,
   parseGroupSelection,
@@ -50,21 +48,6 @@ const buildExtensions = await readFile(
   "utf8",
 );
 
-const curatedContribution = await readFile(
-  new URL(
-    "../code-oss/src/vs/review/contrib/extensions/reviewCuratedExtensions.contribution.ts",
-    import.meta.url,
-  ),
-  "utf8",
-);
-
-const reviewConfiguration = await readFile(
-  new URL(
-    "../code-oss/src/vs/review/common/reviewConfigurationDefaults.ts",
-    import.meta.url,
-  ),
-  "utf8",
-);
 
 async function loadImportFreeTypeScriptModule(url) {
   const source = await readFile(url, "utf8");
@@ -373,56 +356,5 @@ test("copies only bundled extensions for each package target", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  }
-});
-
-test("keeps the in-app picker list in sync with the manifest", () => {
-  // Phase 1 keeps the existing bundled picker contract. Optional entries get
-  // their group rows when the trusted runtime installer is connected.
-  for (const extension of bundledExtensions) {
-    assert.ok(
-      curatedContribution.includes(`id: '${extension.id}'`),
-      `${extension.id} must appear in reviewCuratedExtensions.contribution.ts`,
-    );
-  }
-
-  // Nothing may be offered that this build does not vendor.
-  const offered = [...curatedContribution.matchAll(/\{ id: '([^']+)'/g)].map(
-    (match) => match[1],
-  );
-
-  const known = new Set(curatedExtensions.map((extension) => extension.id));
-
-  for (const id of offered) {
-    assert.ok(known.has(id), `${id} is offered by the picker but not vendored`);
-  }
-});
-
-test("keeps the keymaps mutually exclusive in the picker", () => {
-  for (const id of defaultDisabledIds) {
-    assert.ok(
-      curatedContribution.includes(`'${id}'`),
-      `${id} must be listed as a keymap in the picker`,
-    );
-  }
-
-  const enumDeclaration = reviewConfiguration.match(
-    /REVIEW_KEYMAPS\s*=\s*\[([^\]]+)\]/,
-  );
-
-  assert.ok(enumDeclaration, "review.keymap enum declaration");
-
-  const enumValues = [...enumDeclaration[1].matchAll(/'([^']+)'/g)].map(
-    (match) => match[1],
-  );
-
-  assert.deepEqual(enumValues, ["none", ...keymapGroups]);
-
-  for (const keymap of keymapGroups) {
-    assert.match(
-      curatedContribution,
-      new RegExp(`${keymap}:\\s*'[^']+'`),
-      `${keymap} must map to a curated extension`,
-    );
   }
 });

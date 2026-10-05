@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import {
   access,
   copyFile,
@@ -166,24 +165,21 @@ try {
     path: repository,
   });
 
-  const pins = await api("session_resolve_pins", {
-    repositoryId: registered.id,
-    base: head,
-    head,
-  });
-
   const created = await api("session_create", {
-    commandId: randomUUID(),
     title: "Packed CLI smoke",
-    target: { kind: "commits", ...pins },
+    target: { kind: "commits", repositoryId: registered.id, base: head, head },
     open: false,
   });
 
-  const lease = { sessionId: created.sessionId, leaseId: randomUUID() };
-  await api("session_activity_begin", lease);
+  const activity = {
+    sessionId: created.sessionId,
+    activityId: (
+      await api("session_activity_begin", { sessionId: created.sessionId })
+    ).activityId,
+  };
+
   await api("session_edit", {
-    ...lease,
-    commandId: randomUUID(),
+    ...activity,
     edit: {
       type: "insert",
       content: {
@@ -198,7 +194,7 @@ try {
       },
     },
   });
-  await api("session_activity_end", lease);
+  await api("session_activity_end", activity);
   const reviews = await api("session_list");
   assert.equal(reviews.length, 1);
   console.log(

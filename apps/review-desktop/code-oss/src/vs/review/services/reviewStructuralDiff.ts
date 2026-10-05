@@ -7,9 +7,10 @@ import type { IDocumentDiffProvider, IDocumentDiff } from "../../editor/common/d
 import { StructuralDiffSession } from "./reviewStructuralDiffSession.js";
 import { IModelService } from "../../editor/common/services/model.js";
 import { ITextModelService } from "../../editor/common/services/resolverService.js";
+import { ILanguageService } from "../../editor/common/languages/language.js";
 import { URI } from "../../base/common/uri.js";
 import { Event } from "../../base/common/event.js";
-import { DisposableStore } from "../../base/common/lifecycle.js";
+import { DisposableMap, DisposableStore } from "../../base/common/lifecycle.js";
 import { CancellationError } from "../../base/common/errors.js";
 import { IInstantiationService } from "../../platform/instantiation/common/instantiation.js";
 import { ServiceCollection } from "../../platform/instantiation/common/serviceCollection.js";
@@ -27,6 +28,7 @@ import {
 	structuralHighlights,
 } from "../common/reviewStructuralDiff.js";
 import type { ReviewFilesEditorEntry } from "./reviewFilesDiffView.js";
+import { REVIEW_API_SOURCE_SCHEME } from "../common/reviewSourceView.js";
 
 /** View-owned Monaco providers and editor listeners; comparison state lives in session. */
 export function createStructuralDiffEditors(
@@ -35,17 +37,54 @@ export function createStructuralDiffEditors(
 	lifetime: DisposableStore,
 	session: StructuralDiffSession,
 ): { instantiation: IInstantiationService; entries: readonly ReviewFilesEditorEntry[] } {
-	// Use pinned checkout resources so native language providers see real project files.
-	// Revision-only resources retain their virtual snapshot identity.
+	// These models belong to this comparison. A live file can change while the
+	// comparison is open, so its editor text must come from diffr's own result.
 	const modelService = instantiation.invokeFunction((a) => a.get(IModelService));
 	const resolver = instantiation.invokeFunction((a) => a.get(ITextModelService));
+	const languages = instantiation.invokeFunction((a) => a.get(ILanguageService));
+	const viewId = ++structuralViewId;
+	const sources = new Map<string, { path: string; side: "lhs" | "rhs"; unchangedBase?: URI }>();
+	const unchangedTexts = new Map<string, Promise<string>>();
+	const snapshotUri = (uri: URI, path: string, side: "lhs" | "rhs", unchangedBase?: URI) => {
+		const query = new URLSearchParams(uri.query);
+		query.set("structuralView", String(viewId));
+		const snapshot = uri.with({ query: query.toString() });
+		sources.set(snapshot.toString(), { path, side, unchangedBase });
+		return snapshot;
+	};
+	lifetime.add(resolver.registerTextModelContentProvider(REVIEW_API_SOURCE_SCHEME, {
+		provideTextContent: async uri => {
+			const source = sources.get(uri.with({ fragment: "" }).toString());
+			if (!source) return null;
+			const existing = modelService.getModel(uri);
+			if (existing) return existing;
+			let text: string;
+			if (source.unchangedBase) {
+				let read = unchangedTexts.get(source.path);
+				if (!read) {
+					read = resolver.createModelReference(source.unchangedBase).then(reference => {
+						try { return reference.object.textEditorModel.getValue(); }
+						finally { reference.dispose(); }
+					});
+					unchangedTexts.set(source.path, read);
+				}
+				text = await read;
+			} else {
+				const result = await session.fileResult(source.path);
+				if (result.error) throw new Error(result.error);
+				if (result.diff?.type !== "text") throw new Error(`diffr did not supply a text result for ${source.path}.`);
+				text = result.diff[source.side]?.text ?? "";
+			}
+			return modelService.getModel(uri) ?? modelService.createModel(text, languages.createByFilepathOrFirstLine(uri, text.split("\n", 1)[0]), uri);
+		},
+	}));
 	lifetime.add(resolver.registerTextModelContentProvider("review-structural-empty", {
 		provideTextContent: async uri => modelService.getModel(uri) ?? modelService.createModel("", null, uri),
 	}));
 	const resolvedEntries = entries.map(entry => ({
 		...entry,
-		original: entry.original ?? URI.from({ scheme: "review-structural-empty", path: "/base/" + entry.file.path, query: entry.modified!.toString() }),
-		modified: entry.modified ?? URI.from({ scheme: "review-structural-empty", path: "/head/" + entry.file.path, query: entry.original!.toString() }),
+		original: entry.original ? snapshotUri(entry.original, entry.file.path, "lhs", entry.file.status === "unchanged" ? entry.original : undefined) : URI.from({ scheme: "review-structural-empty", path: "/base/" + entry.file.path, query: entry.modified!.toString() }),
+		modified: entry.modified ? snapshotUri(entry.modified, entry.file.path, "rhs", entry.file.status === "unchanged" ? entry.original : undefined) : URI.from({ scheme: "review-structural-empty", path: "/head/" + entry.file.path, query: entry.original!.toString() }),
 	}));
 	const unchanged = new Set(entries.filter(e => e.file.status === "unchanged").map(e => e.file.path));
 	const pairs = new Map(resolvedEntries.map(e => [e.original!.toString() + "\n" + e.modified!.toString(), e.file.path]));
@@ -59,6 +98,8 @@ export function createStructuralDiffEditors(
 	attachStructuralEditors(instantiation, resolvedEntries, session, lifetime);
 	return { instantiation: child, entries: resolvedEntries };
 }
+
+let structuralViewId = 0;
 
 /** Adapts session snapshots and fold state to Monaco's diff interface. */
 export class StructuralDiffProvider implements IDocumentDiffProvider {
@@ -157,11 +198,12 @@ function attachStructuralEditors(
 ): void {
 	const editors = instantiation.invokeFunction((a) => a.get(ICodeEditorService));
 	const pairs = new Map(entries.map((e) => [e.original!.toString() + "\n" + e.modified!.toString(), e.file.path]));
+	const watched = lifetime.add(new DisposableMap<IDiffEditor, DisposableStore>());
 	function watch(editor: IDiffEditor) {
-		const store = lifetime.add(new DisposableStore());
-		store.add(editor.onDidDispose(() => store.dispose()));
 		const widget = editor as unknown as { unchangedRegions?: IObservable<readonly UnchangedRegion[]> };
 		if (!widget.unchangedRegions) return;
+		const store = new DisposableStore();
+		watched.set(editor, store);
 		let revealed = new Set<UnchangedRegion>();
 		store.add(
 			autorun((reader) => {
@@ -193,7 +235,7 @@ function attachStructuralEditors(
 		);
 	}
 
+	lifetime.add(editors.onDiffEditorRemove(editor => watched.deleteAndDispose(editor)));
 	lifetime.add(editors.onDiffEditorAdd(watch));
 	for (const editor of editors.listDiffEditors()) watch(editor);
 }
-

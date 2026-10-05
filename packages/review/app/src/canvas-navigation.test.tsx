@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -28,7 +27,7 @@ let store: ReviewStore, directory: string;
 let canvas: ReturnType<typeof mount> | undefined;
 
 const command = <Operation,>(operation: Operation) =>
-  store.execute({ commandId: randomUUID(), operation });
+  store.execute({ operation });
 
 beforeEach(() => {
   localStorage.clear();
@@ -70,7 +69,12 @@ it("resumes the view and lens a reader left, on the version they left them", asy
   const review = await command({
     type: "create",
     title: "Lens review",
-    pins: { repositoryId: "repo", base: "base", head: "head" },
+    target: {
+      kind: "commits",
+      repositoryId: "repo",
+      base: "base",
+      head: "head",
+    },
   });
 
   const app = new Hono();
@@ -191,7 +195,12 @@ it("reopens a stored fullscreen tour only while its diagram is in the document",
   const review = await command({
     type: "create",
     title: "Tour review",
-    pins: { repositoryId: "repo", base: "base", head: "head" },
+    target: {
+      kind: "commits",
+      repositoryId: "repo",
+      base: "base",
+      head: "head",
+    },
   });
 
   await command({
@@ -276,7 +285,12 @@ it("keeps a flow diagram's tour in the canvas navigation", async () => {
   const review = await command({
     type: "create",
     title: "Flow review",
-    pins: { repositoryId: "repo", base: "base", head: "head" },
+    target: {
+      kind: "commits",
+      repositoryId: "repo",
+      base: "base",
+      head: "head",
+    },
   });
 
   await command({
@@ -346,7 +360,12 @@ it("resumes a commit diff with its scope", async () => {
   const review = await command({
     type: "create",
     title: "Commit review",
-    pins: { repositoryId: "repo", base: "base", head: "head" },
+    target: {
+      kind: "commits",
+      repositoryId: "repo",
+      base: "base",
+      head: "head",
+    },
   });
 
   const commit = {
@@ -502,7 +521,12 @@ const traceReview = () =>
   command({
     type: "create",
     title: "Trace review",
-    pins: { repositoryId: "repo", base: "base", head: "head" },
+    target: {
+      kind: "commits",
+      repositoryId: "repo",
+      base: "base",
+      head: "head",
+    },
   });
 
 function traceCanvas(reviewId: string, sessions: (typeof traceSession)[]) {

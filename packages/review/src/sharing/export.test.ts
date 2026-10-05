@@ -6,7 +6,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { type JsonObject, isJsonObject } from "@dev.fast/review-protocol";
-import { selectSource } from "@review/lens-selection";
+import { rangeAnchor } from "@review/lens-selection";
 import { ReviewInputError } from "@review/review-api/document.js";
 import { createReviewApi } from "@review/review-api/http.js";
 import { openLocalReviewStore } from "@review/review-api/local-data.js";
@@ -64,8 +64,11 @@ async function fixture() {
   const pins = { repositoryId: repository.id, base, head };
 
   const created = await local.store.execute({
-    commandId: randomUUID(),
-    operation: { type: "create", title: "A shared review", pins },
+    operation: {
+      type: "create",
+      title: "A shared review",
+      target: { kind: "commits", ...pins },
+    },
   });
 
   const traceId = randomUUID();
@@ -85,7 +88,7 @@ async function fixture() {
   for (const content of [
     {
       type: "code_peek",
-      source: selectSource({
+      source: rangeAnchor({
         side: "head",
         file: "main.ts",
         fromLine: 1,
@@ -94,7 +97,7 @@ async function fixture() {
     },
     {
       type: "code_peek",
-      source: selectSource({
+      source: rangeAnchor({
         side: "head",
         file: "new.ts",
         fromLine: 1,
@@ -109,7 +112,6 @@ async function fixture() {
     },
   ])
     await local.store.execute({
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId: created.reviewId,
@@ -211,7 +213,6 @@ it("exports a review saved with the retired section status and imports a bundle 
   const { imported, id, bundle } = await importFixture(
     async ({ root, local, reviewId }) => {
       const { version } = await local.store.execute({
-        commandId: randomUUID(),
         operation: {
           type: "edit",
           reviewId,
@@ -290,7 +291,7 @@ it("shares a review's lenses and reads a bundle that holds them as document bloc
       {
         kind: "ranges",
         sources: [
-          selectSource({
+          rangeAnchor({
             side: "head",
             file: "new.ts",
             fromLine: 1,
@@ -303,7 +304,6 @@ it("shares a review's lenses and reads a bundle that holds them as document bloc
 
   const { imported, id } = await importFixture(async ({ local, reviewId }) => {
     const { targetId } = await local.store.execute({
-      commandId: randomUUID(),
       operation: {
         type: "lens_edit",
         reviewId,
@@ -398,13 +398,7 @@ it("uses normal source and workspace routes but rejects authoring mutations", as
       .status,
   ).toBe(404);
 
-  const source = await app.request(`/${id}/source`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      source: { side: "head", file: "main.ts", fromLine: 1, toLine: 1 },
-    }),
-  });
+  const source = await app.request(`/${id}/file?side=head&file=main.ts`);
 
   expect(source.status).toBe(200);
 
@@ -424,7 +418,6 @@ it("uses normal source and workspace routes but rejects authoring mutations", as
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      commandId: randomUUID(),
       operation: { type: "rename", reviewId: id, title: "Changed" },
     }),
   });
@@ -566,7 +559,6 @@ it("keeps the published snapshot and code after author edits and branch movement
     stdio: "pipe",
   });
   await local.store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "edit",
       reviewId,
@@ -587,7 +579,6 @@ it("requires a pinned review before sharing saved worktree changes", async () =>
   const { local, reviewId, repo } = await fixture();
   const snapshot = local.store.read(reviewId);
   await local.store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "set_target",
       reviewId,
@@ -603,8 +594,11 @@ it("requires a pinned review before sharing saved worktree changes", async () =>
     "Pin this review to commits before sharing it.",
   );
   await local.store.execute({
-    commandId: randomUUID(),
-    operation: { type: "repin", reviewId, pins: snapshot.pins },
+    operation: {
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...snapshot.pins },
+    },
   });
   const bundle = await exportShare({ ...local, reviewId, repository });
   expect(validateShareBundle(bundle).snapshot.pins!.head).toBe(

@@ -45,6 +45,7 @@ import {
 import {
   liftFileLenses,
   migrateStoredDocument,
+  migrateStoredLenses,
 } from "@review/stored-document-migration.js";
 import { z } from "zod";
 
@@ -222,15 +223,15 @@ export function validateShareBundle(bundle: ShareBundle) {
 function liftSharedLenses(stored: JsonObject, migrated: JsonValue): JsonObject {
   const { document, lenses } = liftFileLenses(migrated);
 
+  // SAFETY: migration returns the array it was given, rewritten.
+  const kept = Array.isArray(stored.lenses)
+    ? (migrateStoredLenses(stored.lenses) as JsonValue[])
+    : [];
+
   return {
     ...stored,
     document,
-    ...(lenses.length && {
-      lenses: [
-        ...(Array.isArray(stored.lenses) ? stored.lenses : []),
-        ...lenses,
-      ],
-    }),
+    ...((kept.length || lenses.length) && { lenses: [...kept, ...lenses] }),
   };
 }
 

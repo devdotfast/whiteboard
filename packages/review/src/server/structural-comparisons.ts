@@ -5,6 +5,8 @@ import {
   structuralDiff,
 } from "./structural-diff.js";
 
+const IDLE_COMPARISONS = 10;
+
 /** Replays a pinned comparison to concurrent rendering and coverage consumers. */
 export class StructuralComparisons {
   private readonly entries = new Map<string, Comparison>();
@@ -23,10 +25,9 @@ export class StructuralComparisons {
 
     let entry = this.entries.get(key);
 
-    if (!entry) {
-      entry = new Comparison(input);
-      this.entries.set(key, entry);
-    }
+    if (entry) this.entries.delete(key);
+    else entry = new Comparison(input);
+    this.entries.set(key, entry);
 
     entry.readers++;
 
@@ -43,14 +44,14 @@ export class StructuralComparisons {
         entry.abort.abort();
         this.entries.delete(key);
       }
-      // Keep at most two idle comparisons, including background enrichment.
+      // Keep the most recently read idle comparisons, including background enrichment.
       // Coverage can finish before an editor subscribes; it must not cancel summaries.
 
       const idle = [...this.entries].filter(
         ([, value]) => (value.done || value.initialReady) && !value.readers,
       );
 
-      for (const [oldKey, old] of idle.slice(0, -2)) {
+      for (const [oldKey, old] of idle.slice(0, -IDLE_COMPARISONS)) {
         old.abort.abort();
         this.entries.delete(oldKey);
       }

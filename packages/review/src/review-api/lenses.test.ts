@@ -1,10 +1,9 @@
-import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { selectSource } from "@review/lens-selection.js";
+import { rangeAnchor } from "@review/lens-selection.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { type AuthoringTool, callAuthoringTool } from "./agent-client.js";
@@ -41,23 +40,24 @@ afterEach(async () => {
   rmSync(directory, { recursive: true, force: true });
 });
 
-const run = <Operation>(operation: Operation, leaseId?: string) =>
-  store.execute({ commandId: randomUUID(), leaseId, operation });
+const run = <Operation>(operation: Operation) => store.execute({ operation });
 
-const create = () => run({ type: "create", title: "Lenses", pins });
+const create = () =>
+  run({
+    type: "create",
+    title: "Lenses",
+    target: { kind: "commits", ...pins },
+  });
 
-const lens = <Edit>(reviewId: string, edit: Edit, leaseId?: string) =>
-  run({ type: "lens_edit", reviewId, edit }, leaseId);
+const lens = <Edit>(reviewId: string, edit: Edit, activityId?: string) =>
+  run({ type: "lens_edit", reviewId, edit, activityId });
 
-const markdown = (reviewId: string, text: string, leaseId?: string) =>
-  run(
-    {
-      type: "edit",
-      reviewId,
-      edit: { type: "insert", content: { type: "markdown", markdown: text } },
-    },
-    leaseId,
-  );
+const markdown = (reviewId: string, text: string) =>
+  run({
+    type: "edit",
+    reviewId,
+    edit: { type: "insert", content: { type: "markdown", markdown: text } },
+  });
 
 const files = (...patterns: string[]) => [{ kind: "files", patterns }];
 
@@ -137,20 +137,14 @@ it("inserts, updates and removes one lens at a time beside the document", async 
   ).rejects.toThrow(/title or targets/);
 });
 
-it("keeps lenses in history, restores them, and replays a lens command's receipt", async () => {
+it("keeps lenses in history and restores them", async () => {
   const { reviewId } = await create();
 
-  const command = {
-    commandId: randomUUID(),
-    operation: {
-      type: "lens_edit",
-      reviewId,
-      edit: { type: "insert", title: "API", targets: files("src/**") },
-    },
-  };
-
-  const first = await store.execute(command);
-  expect(await store.execute(command)).toEqual(first);
+  const first = await lens(reviewId, {
+    type: "insert",
+    title: "API",
+    targets: files("src/**"),
+  });
 
   await lens(reviewId, { type: "remove", targetId: first.targetId });
   expect(store.read(reviewId).lenses).toBeUndefined();
@@ -169,42 +163,27 @@ it("validates a lens's pinned ranges like any other source link", async () => {
   await lens(reviewId, {
     type: "insert",
     title: "Range",
-    targets: [{ kind: "ranges", sources: [selectSource(range)] }],
+    targets: [{ kind: "ranges", sources: [rangeAnchor(range)] }],
   });
   expect(providers.validateSource).toHaveBeenCalledWith(pins, range, {
     peek: false,
   });
 });
 
-it("lets a lenses lease write lenses while another session holds the document", async () => {
+it("lets two agents write the document and lenses at once, each credited and renewed on its own page", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
   const { reviewId } = await create();
 
-  const writer = randomUUID(),
-    lensWriter = randomUUID();
+  store.activity.update(reviewId, { action: "begin" });
 
-  store.activity.update(reviewId, { action: "begin", leaseId: writer });
-  expect(
-    store.activity.update(reviewId, {
-      action: "begin",
-      leaseId: lensWriter,
-      scope: "lenses",
-      focus: { description: "Grouping the API files", targetId: "lens-1" },
-    }),
-  ).toMatchObject({
-    workingCount: 2,
-    scopes: ["document", "lenses"],
-    focuses: [
-      {
-        description: "Grouping the API files",
-        targetId: "lens-1",
-        scope: "lenses",
-      },
-    ],
-  });
+  const lensWriter = store.activity.update(reviewId, {
+    action: "begin",
+    focus: { description: "Grouping the API files", targetId: "lens-1" },
+  }).activityId!;
 
-  // Each writes in its own scope, concurrently.
+  vi.advanceTimersByTime(120_000);
   await Promise.all([
-    markdown(reviewId, "Overview", writer),
+    markdown(reviewId, "Overview"),
     lens(
       reviewId,
       { type: "insert", title: "API", targets: files("src/**") },
@@ -213,74 +192,21 @@ it("lets a lenses lease write lenses while another session holds the document", 
   ]);
   expect(store.read(reviewId).document).toHaveLength(1);
   expect(store.read(reviewId).lenses).toHaveLength(1);
-
-  // Neither lease writes the other's scope, and no lease writes neither.
-  await expect(markdown(reviewId, "Not mine", lensWriter)).rejects.toThrow(
-    /another session/,
-  );
-  await expect(
-    lens(
-      reviewId,
-      { type: "insert", title: "Docs", targets: files("docs/**") },
-      writer,
-    ),
-  ).rejects.toThrow(/lenses are being authored by another session/);
-  await expect(
-    lens(reviewId, {
-      type: "insert",
-      title: "Docs",
-      targets: files("docs/**"),
-    }),
-  ).rejects.toThrow(/another session/);
-  await expect(markdown(reviewId, "Anonymous")).rejects.toThrow(
-    /another session/,
-  );
-
-  // A lens write needs the lenses lease itself, not the document's.
-  store.activity.update(reviewId, {
-    action: "end",
-    leaseId: lensWriter,
-    scope: "lenses",
+  expect(store.read(reviewId).lastEdit).toMatchObject({
+    kind: "lens",
+    activityId: lensWriter,
   });
-  await expect(
-    lens(
-      reviewId,
-      { type: "insert", title: "Docs", targets: files("docs/**") },
-      writer,
-    ),
-  ).rejects.toThrow(/No live lenses lease/);
-  expect(store.activity.read(reviewId)).toMatchObject({
-    workingCount: 1,
-    scopes: ["document"],
-  });
-});
 
-it("renews only the lease whose scope a write lands in", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  const { reviewId } = await create();
-
-  const writer = randomUUID(),
-    lensWriter = randomUUID();
-
-  store.activity.update(reviewId, { action: "begin", leaseId: writer });
-  store.activity.update(reviewId, {
-    action: "begin",
-    leaseId: lensWriter,
-    scope: "lenses",
-  });
-  vi.advanceTimersByTime(120_000);
-  await lens(
-    reviewId,
-    { type: "insert", title: "API", targets: files("src/**") },
-    lensWriter,
-  );
+  // The lens write kept its writer; the document writer named no one and lapsed.
   vi.advanceTimersByTime(90_000);
-
-  // The document lease lapsed; the lens write kept the lenses lease alive.
-  expect(store.activity.read(reviewId)).toMatchObject({
-    workingCount: 1,
-    scopes: ["lenses"],
-  });
+  expect(store.activity.read(reviewId).activities).toEqual([
+    {
+      activityId: lensWriter,
+      slot: 1,
+      surface: "lenses",
+      focus: { description: "Grouping the API files", targetId: "lens-1" },
+    },
+  ]);
 });
 
 it("reads lenses saved as document blocks as the snapshot's lenses", async () => {
@@ -352,31 +278,6 @@ it("reads lenses saved as document blocks as the snapshot's lenses", async () =>
     "files-2",
     "files-4",
   ]);
-});
-
-it("keeps a live lease from before scopes as the document's", async () => {
-  await store.close();
-  const legacyPath = path.join(directory, "legacy.db");
-  const db = new DatabaseSync(legacyPath);
-  db.exec(`CREATE TABLE authoring_sessions(
-      review_id TEXT PRIMARY KEY, lease_id TEXT NOT NULL,
-      expires_at INTEGER NOT NULL, focus TEXT
-    )`);
-  const leaseId = randomUUID();
-  db.prepare("INSERT INTO authoring_sessions VALUES(?,?,?,?)").run(
-    "review",
-    leaseId,
-    Date.now() + 60_000,
-    JSON.stringify({ description: "Writing" }),
-  );
-  db.close();
-
-  store = new ReviewStore(legacyPath, providers);
-  expect(store.activity.read("review")).toMatchObject({
-    workingCount: 1,
-    scopes: ["document"],
-    focuses: [{ description: "Writing" }],
-  });
 });
 
 it("reports the changed lines no lens selects after each lens write", async () => {
@@ -453,7 +354,6 @@ it("reports the changed lines no lens selects after each lens write", async () =
   try {
     expect(
       await call("review_lens_edit", {
-        commandId: randomUUID(),
         edit: { type: "insert", title: "API", targets: files("src/**") },
       }),
     ).toMatchObject({
@@ -476,7 +376,6 @@ it("reports the changed lines no lens selects after each lens write", async () =
 
     expect(
       await call("review_lens_edit", {
-        commandId: randomUUID(),
         edit: { type: "insert", title: "Docs", targets: files("docs/**") },
       }),
     ).toMatchObject({ uncategorized: { lines: 0, files: [] } });

@@ -23,7 +23,11 @@ import {
   type PostHogCaptureInput,
   type PostHogCaptureProperties,
 } from "./posthog-capture-client";
-import { runReviewAppPick as runReviewAppActual } from "./review-app";
+import {
+  ReviewAppStateError,
+  ReviewAppUsageError,
+  runReviewAppPick as runReviewAppActual,
+} from "./review-app";
 import { runReviewAppLaunch as runReviewAppLaunchActual } from "./review-app-launcher";
 import { runReviewInfo as runReviewInfoActual } from "./review-info";
 import {
@@ -258,6 +262,7 @@ describe("Whiteboard CLI", () => {
 
     const telemetry = {
       setSurface: vi.fn<ReviewTelemetry["setSurface"]>(),
+      setDesktopVersion: vi.fn<ReviewTelemetry["setDesktopVersion"]>(),
       createCommandRunId: vi.fn<ReviewTelemetry["createCommandRunId"]>(
         () => "run-12345678",
       ),
@@ -310,6 +315,61 @@ describe("Whiteboard CLI", () => {
     );
   });
 
+  it.each([
+    [new ReviewAppUsageError("terminal required"), "usage_error", "user_input"],
+    [new ReviewAppStateError("no review"), "review_state_error", "local_state"],
+  ])(
+    "classifies app pick failure %s",
+    async (cause, errorName, errorCategory) => {
+      const rootPath = await mkdtemp(
+        path.join(os.tmpdir(), "review-cli-app-pick-error-"),
+      );
+
+      const events: PostHogCaptureInput[] = [];
+
+      const telemetry = new ReviewTelemetry({
+        captureClient: {
+          enabled: true,
+          capture: async (event) => {
+            events.push(event);
+          },
+        },
+        env: {},
+        installConfigPath: path.join(rootPath, "telemetry.json"),
+        legacyInstallConfigPath: path.join(rootPath, "legacy.json"),
+      });
+
+      try {
+        await expect(
+          runReviewCli({
+            argv: ["app", "pick", "--session", "review-uuid"],
+            stdout: outputStream(),
+            stderr: outputStream(),
+            telemetry,
+            runtime: {
+              runReviewAppPick: async () => {
+                throw cause;
+              },
+            },
+          }),
+        ).resolves.toBe(1);
+
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            event: "review_command_failed",
+            properties: expect.objectContaining({
+              command_path: "app.pick",
+              error_name: errorName,
+              error_category: errorCategory,
+            }),
+          }),
+        );
+      } finally {
+        await rm(rootPath, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("labels every event of a headless server process headless", async () => {
     const rootPath = await mkdtemp(
       path.join(os.tmpdir(), "review-cli-surface-"),
@@ -344,6 +404,95 @@ describe("Whiteboard CLI", () => {
       );
       expect(new Set(events.map((event) => event.properties?.surface))).toEqual(
         new Set(["headless"]),
+      );
+    } finally {
+      await rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("classifies invalid headless options as usage failures", async () => {
+    const rootPath = await mkdtemp(
+      path.join(os.tmpdir(), "review-cli-invalid-port-"),
+    );
+
+    const events: PostHogCaptureInput[] = [];
+
+    const telemetry = new ReviewTelemetry({
+      captureClient: {
+        enabled: true,
+        capture: async (event) => {
+          events.push(event);
+        },
+      },
+      env: {},
+      installConfigPath: path.join(rootPath, "telemetry.json"),
+      legacyInstallConfigPath: path.join(rootPath, "legacy.json"),
+    });
+
+    try {
+      await expect(
+        runReviewCli({
+          argv: ["server", "start", "--port", "99999"],
+          stdout: outputStream(),
+          stderr: outputStream(),
+          telemetry,
+        }),
+      ).resolves.toBe(1);
+
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: "review_command_failed",
+          properties: expect.objectContaining({
+            command_path: "server.start",
+            error_name: "usage_error",
+            error_category: "user_input",
+          }),
+        }),
+      );
+    } finally {
+      await rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("classifies API connection failures as Desktop dependency failures", async () => {
+    const rootPath = await mkdtemp(
+      path.join(os.tmpdir(), "review-cli-api-connection-"),
+    );
+
+    const events: PostHogCaptureInput[] = [];
+
+    const telemetry = new ReviewTelemetry({
+      captureClient: {
+        enabled: true,
+        capture: async (event) => {
+          events.push(event);
+        },
+      },
+      env: {},
+      installConfigPath: path.join(rootPath, "telemetry.json"),
+      legacyInstallConfigPath: path.join(rootPath, "legacy.json"),
+    });
+
+    try {
+      await expect(
+        runReviewCli({
+          argv: ["api", "tools"],
+          env: { DEV_REVIEW_HOME: rootPath },
+          stdout: outputStream(),
+          stderr: outputStream(),
+          telemetry,
+        }),
+      ).resolves.toBe(1);
+
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: "review_command_failed",
+          properties: expect.objectContaining({
+            command_path: "api",
+            error_name: "desktop_connection_error",
+            error_category: "dependency",
+          }),
+        }),
       );
     } finally {
       await rm(rootPath, { recursive: true, force: true });
@@ -463,6 +612,7 @@ describe("Whiteboard CLI", () => {
 
     const telemetry = {
       setSurface: vi.fn<ReviewTelemetry["setSurface"]>(),
+      setDesktopVersion: vi.fn<ReviewTelemetry["setDesktopVersion"]>(),
       createCommandRunId: () => "8b733d48-1172-46a7-9df0-3cc71930c25a",
       captureInstallationCreated: vi.fn<
         ReviewTelemetry["captureInstallationCreated"]

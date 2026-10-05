@@ -15,17 +15,7 @@
         "to": "store",
         "label": "set status",
         "style": "call",
-        "source": {
-          "file": "order.ts",
-          "start": {
-            "side": "head",
-            "line": 1
-          },
-          "end": {
-            "side": "head",
-            "line": 1
-          }
-        }
+        "source": "head/order.ts#L1"
       },
       {
         "id": "step-2",

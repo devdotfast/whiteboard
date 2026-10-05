@@ -12,12 +12,12 @@ import {
   FIXTURE_TRACE_ID,
   readBlockFixtures,
 } from "@review/fixtures/blocks/fixtures.js";
-import { selectSource } from "@review/lens-selection.js";
+import { rangeAnchor } from "@review/lens-selection.js";
 import type { Hono } from "hono";
 import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type Pins, elements } from "./document.js";
+import { type Pins, elements, selectionReferences } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { openLocalReviewStore } from "./local-data.js";
 
@@ -55,7 +55,6 @@ async function post(route: string, body: JsonValue): Promise<Reply> {
 
 const insert = (content: JsonValue) =>
   post("/commands", {
-    commandId: randomUUID(),
     operation: {
       type: "edit",
       reviewId,
@@ -117,8 +116,11 @@ beforeEach(async () => {
   app = createReviewApi(local.store, local.data);
 
   const created = await post("/commands", {
-    commandId: randomUUID(),
-    operation: { type: "create", title: "Pitfalls", pins },
+    operation: {
+      type: "create",
+      title: "Pitfalls",
+      target: { kind: "commits", ...pins },
+    },
   });
 
   reviewId = created.body.reviewId!;
@@ -156,7 +158,7 @@ const operation = {
   field: "id",
   actor: "app",
   label: "Insert",
-  source: selectSource(head("src/store.ts", 1, 2)),
+  source: rangeAnchor(head("src/store.ts", 1, 2)),
 };
 
 describe("lens rules the mount used to be the only guard for", () => {
@@ -285,8 +287,8 @@ describe("diagram rules", () => {
           type: "call_stack_diff",
           title: "Save",
           base: [
-            { key: "save", source: selectSource(baseSource) },
-            { key: "save", source: selectSource(baseSource) },
+            { key: "save", source: rangeAnchor(baseSource) },
+            { key: "save", source: rangeAnchor(baseSource) },
           ],
           head: [],
         }),
@@ -301,18 +303,87 @@ describe("diagram rules", () => {
     const result = await insert({
       type: "call_stack_diff",
       title: "Two paths in the head snapshot",
-      base: [{ source: selectSource(baseSource) }],
-      head: [{ source: selectSource(headSource) }],
+      base: [{ source: rangeAnchor(baseSource) }],
+      head: [{ source: rangeAnchor(headSource) }],
     });
 
     expect(result.status).toBe(200);
     expect(local.store.read(reviewId).document).toContainEqual(
       expect.objectContaining({
         type: "call_stack_diff",
-        base: [expect.objectContaining({ source: selectSource(baseSource) })],
-        head: [expect.objectContaining({ source: selectSource(headSource) })],
+        base: [expect.objectContaining({ source: rangeAnchor(baseSource) })],
+        head: [expect.objectContaining({ source: rangeAnchor(headSource) })],
       }),
     );
+  });
+});
+
+describe("anchors written as strings", () => {
+  it("stores them as written and reads them, a unit inserted later included, at the diagram's pins", async () => {
+    const elementPins = {
+      repositoryId: pins.repositoryId,
+      base: pins.base,
+      head: pins.head,
+    };
+
+    const sequence = await insert({
+      type: "sequence",
+      title: "Save",
+      actors: { a: "Agent", b: "Host" },
+      pins: elementPins,
+      steps: [
+        {
+          from: "a",
+          to: "b",
+          label: "Save",
+          source: "head/src/store.ts#L1-L3",
+        },
+      ],
+    });
+
+    expect(sequence.status).toBe(200);
+
+    const step = await post("/commands", {
+      operation: {
+        type: "edit",
+        reviewId,
+        edit: {
+          type: "insert",
+          parentId: sequence.body.targetId!,
+          content: {
+            type: "step",
+            from: "b",
+            to: "a",
+            label: "Status",
+            source: "diff/order.ts#L1-R1",
+          },
+        },
+      },
+    });
+
+    expect(step.status).toBe(200);
+    const document = local.store.read(reviewId).document;
+
+    // Stored as written; both steps read at the diagram's pins.
+    expect(
+      elements(document).flatMap((element) =>
+        element.type === "step" && element.source ? [element.source] : [],
+      ),
+    ).toEqual(["head/src/store.ts#L1-L3", "diff/order.ts#L1-R1"]);
+    expect(selectionReferences(document).map(({ source }) => source)).toEqual([
+      {
+        file: "src/store.ts",
+        start: { side: "head", line: 1 },
+        end: { side: "head", line: 3 },
+        pins: elementPins,
+      },
+      {
+        file: "order.ts",
+        start: { side: "base", line: 1 },
+        end: { side: "head", line: 1 },
+        pins: elementPins,
+      },
+    ]);
   });
 });
 
@@ -323,7 +394,7 @@ describe("source rules in every peek position", () => {
     const message = "src/blank.ts:2-3 contains only whitespace";
 
     await expectRejected(
-      () => insert({ type: "code_peek", source: selectSource(blank) }),
+      () => insert({ type: "code_peek", source: rangeAnchor(blank) }),
       message,
     );
     await expectRejected(
@@ -337,7 +408,7 @@ describe("source rules in every peek position", () => {
               from: "app",
               to: "app",
               label: "Write",
-              source: selectSource(blank),
+              source: rangeAnchor(blank),
             },
           ],
         }),
@@ -349,7 +420,7 @@ describe("source rules in every peek position", () => {
           type: "call_stack_diff",
           title: "Save",
           base: [],
-          head: [{ source: selectSource(blank) }],
+          head: [{ source: rangeAnchor(blank) }],
         }),
       message,
     );
@@ -360,7 +431,7 @@ describe("source rules in every peek position", () => {
           useCases: [
             {
               label: "x",
-              operations: [{ ...operation, source: selectSource(blank) }],
+              operations: [{ ...operation, source: rangeAnchor(blank) }],
             },
           ],
         }),
@@ -382,7 +453,7 @@ describe("source rules in every peek position", () => {
       () =>
         insert({
           type: "code_peek",
-          source: selectSource(head("../etc/passwd", 1)),
+          source: rangeAnchor(head("../etc/passwd", 1)),
         }),
       "Source file must be a repository-relative path.",
     );
@@ -390,7 +461,7 @@ describe("source rules in every peek position", () => {
       () =>
         insert({
           type: "code_peek",
-          source: selectSource(head("src/store.ts", 1, 99)),
+          source: rangeAnchor(head("src/store.ts", 1, 99)),
         }),
       /exceeds the pinned file/,
     );
@@ -398,7 +469,7 @@ describe("source rules in every peek position", () => {
       () =>
         insert({
           type: "code_peek",
-          source: selectSource(head("src/store.ts", 3, 1)),
+          source: rangeAnchor(head("src/store.ts", 3, 1)),
         }),
       "Source range ends before it starts.",
     );
@@ -406,7 +477,7 @@ describe("source rules in every peek position", () => {
       () =>
         insert({
           type: "code_peek",
-          source: selectSource(head("src/missing.ts", 1)),
+          source: rangeAnchor(head("src/missing.ts", 1)),
         }),
       "File is unavailable at the pinned commit.",
       404,
@@ -415,7 +486,7 @@ describe("source rules in every peek position", () => {
       () =>
         insert({
           type: "code_peek",
-          source: selectSource(head("assets/logo.png", 1)),
+          source: rangeAnchor(head("assets/logo.png", 1)),
         }),
       "Binary files cannot be used as code references.",
     );
@@ -442,7 +513,7 @@ describe("source rules in every peek position", () => {
           type: "markdown",
           markdown: "[x](review-source:head/src/store.ts)",
         }),
-      "Use review-source:head/path#L10-L24 (or base) for a source link.",
+      "Use review-source:head/path#L10-L24 (or base, or diff/path#L84-R90 across sides) for a source link.",
     );
     await expectRejected(
       () =>
@@ -469,18 +540,16 @@ describe("edit protocol rules", () => {
     await expectRejected(
       () =>
         post("/commands", {
-          commandId: randomUUID(),
           operation: {
             type: "edit",
             reviewId,
             edit: { type: "update", targetId, changes: { type: "markdown" } },
           },
         }),
-      "Cannot patch type; use structural edits or replace.",
+      "A component's type can't change; replace it instead.",
     );
 
     const cleared = await post("/commands", {
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId,

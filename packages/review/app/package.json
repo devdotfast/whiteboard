@@ -30,7 +30,7 @@
     "katex": "0.18.7",
     "react": "19.2.5",
     "react-dom": "19.2.5",
-    "zod": "4.4.3",
+    "zod": "catalog:",
     "zustand": "5.0.15"
   },
   "devDependencies": {

@@ -18,8 +18,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { setLocalVcsCommandObserver } from "@dev.fast/local-vcs";
-import type { JsonValue } from "@dev.fast/review-protocol";
-import { selectSource } from "@review/lens-selection";
+import {
+  type JsonValue,
+  REVIEW_CLIENT_HEADER,
+  REVIEW_CLIENT_REMOTE,
+} from "@dev.fast/review-protocol";
+import { rangeAnchor } from "@review/lens-selection";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { Hono } from "hono";
 import sharp from "sharp";
@@ -40,7 +44,6 @@ let directory: string, repository: string, database: string, pins: Pins;
 let local: ReturnType<typeof openLocalReviewStore>;
 
 const command = <Operation>(operation: Operation) => ({
-  commandId: randomUUID(),
   operation,
 });
 
@@ -67,10 +70,18 @@ const recordSpawns = () => {
   });
 };
 
-const batchProcesses = () =>
-  spawnSync("pgrep", ["-P", String(process.pid), "-f", "cat-file"], {
-    encoding: "utf8",
-  })
+/** Batch readers of one repository; other test files share this worker. */
+const batchProcesses = (root: string) =>
+  spawnSync(
+    "pgrep",
+    [
+      "-P",
+      String(process.pid),
+      "-f",
+      `${root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} cat-file --batch`,
+    ],
+    { encoding: "utf8" },
+  )
     .stdout.split("\n")
     .filter(Boolean);
 
@@ -165,29 +176,25 @@ it("reads, resolves and retires a reference at its own pins in another repositor
   };
 
   const { reviewId } = await local.store.execute(
-    command({ type: "create", title: "Two repositories", pins }),
+    command({
+      type: "create",
+      title: "Two repositories",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   const peek = await insert(reviewId, {
     type: "code_peek",
-    source: {
-      file: "lib.ts",
-      start: { side: "head", line: 1 },
-      end: { side: "head", line: 2 },
-      pins: own,
-    },
+    source: "head/lib.ts#L1-L2",
+    pins: own,
   });
 
   // A branch name is not a pin, even for a reference's own pins.
   await expect(
     insert(reviewId, {
       type: "code_peek",
-      source: {
-        file: "lib.ts",
-        start: { side: "head", line: 1 },
-        end: { side: "head", line: 1 },
-        pins: { ...own, head: "HEAD" },
-      },
+      source: "head/lib.ts#L1",
+      pins: { ...own, head: "HEAD" },
     }),
   ).rejects.toThrow(/resolved commit IDs/);
 
@@ -218,24 +225,13 @@ it("reads, resolves and retires a reference at its own pins in another repositor
     ).status,
   ).toBe(400);
 
-  const quoted = await app.request(`/${reviewId}/source`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      source: {
-        side: "head",
-        file: "lib.ts",
-        fromLine: 2,
-        toLine: 2,
-        pins: own,
-      },
-    }),
-  });
-
-  expect(await quoted.json()).toMatchObject({
-    commit: own.head,
-    text: "export const more = 2;",
-  });
+  expect(
+    await (
+      await app.request(
+        `/${reviewId}/file?side=head&file=lib.ts&repositoryId=${own.repositoryId}&head=${own.head}`,
+      )
+    ).json(),
+  ).toMatchObject({ text: expect.stringContaining("export const more = 2;") });
 
   const progress = await (
     await app.request(`/${reviewId}/progress?mode=textual`)
@@ -276,7 +272,11 @@ it("reads, resolves and retires a reference at its own pins in another repositor
 
 it("opens without waiting for acquisition and keeps diagnostic failures nonfatal", async () => {
   const created = await local.store.execute(
-    command({ type: "create", title: "Immediate open", pins }),
+    command({
+      type: "create",
+      title: "Immediate open",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   const app = createReviewApi(local.store, local.data, async () => ({
@@ -351,7 +351,11 @@ it("opens a created review in Desktop unless the author opts out", async () => {
   const shown = await postJson(
     app,
     "/commands",
-    command({ type: "create", title: "Shown", pins }),
+    command({
+      type: "create",
+      title: "Shown",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   expect(shown.status).toBe(200);
@@ -365,7 +369,7 @@ it("opens a created review in Desktop unless the author opts out", async () => {
   const background = command({
     type: "create",
     title: "Background",
-    pins,
+    target: { kind: "commits", ...pins },
     open: false,
   });
 
@@ -375,20 +379,6 @@ it("opens a created review in Desktop unless the author opts out", async () => {
   const quietReview = await quiet.json();
   expect(quietReview).toMatchObject({ opened: false });
   expect(opened).toEqual([shownReview.reviewId]);
-
-  // Opening is not part of the saved command: a retry may choose to show it.
-  const { open: _open, ...retried } = background.operation;
-
-  const retry = await postJson(app, "/commands", {
-    ...background,
-    operation: retried,
-  });
-
-  expect(await retry.json()).toMatchObject({
-    reviewId: quietReview.reviewId,
-    opened: true,
-  });
-  expect(opened).toEqual([shownReview.reviewId, quietReview.reviewId]);
 });
 
 it("opens the PR's existing review that create returns instead of a new one", async () => {
@@ -406,14 +396,24 @@ it("opens the PR's existing review that create returns instead of a new one", as
     await postJson(
       app,
       "/commands",
-      command({ type: "create", title: "PR", pins, pullRequestUrl }),
+      command({
+        type: "create",
+        title: "PR",
+        target: { kind: "commits", ...pins },
+        pullRequestUrl,
+      }),
     )
   ).json();
 
   const again = await postJson(
     app,
     "/commands",
-    command({ type: "create", title: "PR again", pins, pullRequestUrl }),
+    command({
+      type: "create",
+      title: "PR again",
+      target: { kind: "commits", ...pins },
+      pullRequestUrl,
+    }),
   );
 
   expect(again.status).toBe(200);
@@ -439,7 +439,11 @@ it("does not open a created review when Desktop is not attached", async () => {
   const response = await postJson(
     app,
     "/commands",
-    command({ type: "create", title: "Headless", pins }),
+    command({
+      type: "create",
+      title: "Headless",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   expect(response.status).toBe(200);
@@ -464,7 +468,11 @@ it("keeps a created review when Desktop fails to open it", async () => {
   const response = await postJson(
     app,
     "/commands",
-    command({ type: "create", title: "Saved anyway", pins }),
+    command({
+      type: "create",
+      title: "Saved anyway",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   expect(response.status).toBe(200);
@@ -478,7 +486,11 @@ it("keeps a created review when Desktop fails to open it", async () => {
 
 it("only reports acquisition issues to agents and clears them after recovery", async () => {
   const created = await local.store.execute(
-    command({ type: "create", title: "Language availability", pins }),
+    command({
+      type: "create",
+      title: "Language availability",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   const app = createReviewApi(local.store, local.data, async () => ({
@@ -595,7 +607,11 @@ it("only reports acquisition issues to agents and clears them after recovery", a
 
 it("lists the full repository path and hydrates diff counts from pinned commits", async () => {
   await local.store.execute(
-    command({ type: "create", title: "Home metadata", pins }),
+    command({
+      type: "create",
+      title: "Home metadata",
+      target: { kind: "commits", ...pins },
+    }),
   );
   const app = createReviewApi(local.store, local.data);
   const first = await (await app.request("/?mode=textual")).json();
@@ -618,7 +634,11 @@ it("lists the full repository path and hydrates diff counts from pinned commits"
 
 it("uses a managed pinned worktree for language services without changing local edits", async () => {
   const created = await local.store.execute(
-    command({ type: "create", title: "Local LSP", pins }),
+    command({
+      type: "create",
+      title: "Local LSP",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   const app = createReviewApi(local.store, local.data);
@@ -749,7 +769,11 @@ it("preserves map element and range details in upload errors", async () => {
 
 it("validates Markdown source links against the pinned files before saving", async () => {
   const { reviewId } = await local.store.execute(
-    command({ type: "create", title: "Links", pins }),
+    command({
+      type: "create",
+      title: "Links",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   await insert(reviewId, {
@@ -788,7 +812,11 @@ it("lists the version's commits and reads a selected commit's diff against its p
   );
 
   const review = await local.store.execute(
-    command({ type: "create", title: "Two commits", pins: updatedPins }),
+    command({
+      type: "create",
+      title: "Two commits",
+      target: { kind: "commits", ...updatedPins },
+    }),
   );
 
   const app = new Hono().route(
@@ -809,15 +837,9 @@ it("lists the version's commits and reads a selected commit's diff against its p
   const selected = `version=0&commit=${firstHead}`;
 
   for (const side of ["base", "head"] as const) {
-    const response = await app.request(`${route}/source`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        version: 0,
-        commit: firstHead,
-        source: { side, file: "example.ts", fromLine: 1, toLine: 1 },
-      }),
-    });
+    const response = await app.request(
+      `${route}/file?${selected}&side=${side}&file=example.ts`,
+    );
 
     expect(response.status).toBe(200);
     expect((await response.json()).text).toContain(
@@ -831,21 +853,14 @@ it("lists the version's commits and reads a selected commit's diff against its p
 
   expect(file.text).toContain("value = 2");
 
-  const patch = await (
-    await app.request(`${route}/diff?${selected}&file=example.ts`)
-  ).text();
-
-  expect(patch).toContain("-export const value = 1;");
-  expect(patch).toContain("+export const value = 2;");
-  expect(patch).not.toContain("value = 3");
   expect((await app.request(`${route}/diff?commit=${pins.base}`)).status).toBe(
     404,
   );
   await local.store.execute(
     command({
-      type: "repin",
+      type: "set_target",
       reviewId: review.reviewId,
-      pins: { ...updatedPins, base: firstHead },
+      target: { kind: "commits", ...updatedPins, base: firstHead },
     }),
   );
   expect((await app.request(`${route}/diff?commit=${firstHead}`)).status).toBe(
@@ -856,7 +871,11 @@ it("lists the version's commits and reads a selected commit's diff against its p
 
 it("reads each version of one review at its own pins", async () => {
   const { reviewId } = await local.store.execute(
-    command({ type: "create", title: "Versions", pins }),
+    command({
+      type: "create",
+      title: "Versions",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   writeFileSync(
@@ -872,7 +891,13 @@ it("reads each version of one review at its own pins", async () => {
     "HEAD",
   );
 
-  await local.store.execute(command({ type: "repin", reviewId, pins: later }));
+  await local.store.execute(
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...later },
+    }),
+  );
   const first = local.store.read(reviewId, 0).pins!;
   const second = local.store.read(reviewId, 1).pins!;
 
@@ -899,10 +924,14 @@ it("reads each version of one review at its own pins", async () => {
 
 it("serves a historical version's file at the pins that version was saved with", async () => {
   const { reviewId } = await local.store.execute(
-    command({ type: "create", title: "Snapshot", pins }),
+    command({
+      type: "create",
+      title: "Snapshot",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
-  await insert(reviewId, { type: "code_peek", source: selectSource(source) });
+  await insert(reviewId, { type: "code_peek", source: rangeAnchor(source) });
   writeFileSync(
     path.join(repository, source.file),
     "export const value = 3;\n",
@@ -916,7 +945,13 @@ it("serves a historical version's file at the pins that version was saved with",
     "HEAD",
   );
 
-  await local.store.execute(command({ type: "repin", reviewId, pins: later }));
+  await local.store.execute(
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...later },
+    }),
+  );
   expect(local.store.read(reviewId).version).toBe(2);
 
   const app = new Hono().route(
@@ -943,9 +978,72 @@ it("serves a historical version's file at the pins that version was saved with",
   });
 });
 
+it("gives a remote caller a commit review's language context without its checkout path", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Remote",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  await local.data.languageEnvironment(local.store.read(reviewId), "head");
+  await local.data.workspaces.idle();
+  const app = createReviewApi(local.store, local.data);
+
+  const read = async (headers: Record<string, string> = {}) =>
+    (
+      await app.request(`/${reviewId}/language-context?side=head`, { headers })
+    ).json();
+
+  const ownMachine = await read();
+  expect(ownMachine.rootPath).toEqual(expect.any(String));
+
+  const remote = await read({ [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE });
+  expect(remote).toEqual({ identity: expect.any(String) });
+  expect(JSON.stringify(remote)).not.toContain(directory);
+  expect(await read({ [REVIEW_CLIENT_HEADER]: "local" })).toEqual(ownMachine);
+});
+
+it("gives a remote caller a fixed issue when a commit review's checkout fails", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Remote",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  // A file where the managed checkouts directory belongs fails acquisition
+  // with an error that quotes the path.
+  mkdirSync(path.join(repository, ".git", "dev-fast"), { recursive: true });
+  writeFileSync(path.join(repository, ".git", "dev-fast", "reviews"), "");
+  await local.data.languageEnvironment(local.store.read(reviewId), "head");
+  await local.data.workspaces.idle();
+  const app = createReviewApi(local.store, local.data);
+
+  const read = async (headers: Record<string, string> = {}) =>
+    (
+      await app.request(`/${reviewId}/language-context?side=head`, { headers })
+    ).json();
+
+  expect((await read()).issue).toContain(directory);
+  const remote = await read({ [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE });
+  expect(JSON.stringify(remote)).not.toContain(directory);
+  expect(remote).toEqual({
+    identity: expect.any(String),
+    issue:
+      "The checkout for language features is not available on the remote machine.",
+  });
+});
+
 it("opens a stable native workspace on the Review's pinned checkout at the selected version", async () => {
   const { reviewId } = await local.store.execute(
-    command({ type: "create", title: "Navigator", pins }),
+    command({
+      type: "create",
+      title: "Navigator",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   await local.data.languageEnvironment(local.store.read(reviewId), "head");
@@ -967,7 +1065,13 @@ it("opens a stable native workspace on the Review's pinned checkout at the selec
     "HEAD",
   );
 
-  await local.store.execute(command({ type: "repin", reviewId, pins: later }));
+  await local.store.execute(
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...later },
+    }),
+  );
   const app = createReviewApi(local.store, local.data);
 
   const open = async (query = "") => {
@@ -1017,7 +1121,11 @@ it("opens a stable native workspace on the Review's pinned checkout at the selec
 
 it("opens navigator files at their base, head, commit and explicit pins", async () => {
   const { reviewId } = await local.store.execute(
-    command({ type: "create", title: "Navigator files", pins }),
+    command({
+      type: "create",
+      title: "Navigator files",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   const app = createReviewApi(local.store, local.data);
@@ -1222,7 +1330,11 @@ it("browses committed directories, including history, without listing untracked 
   );
 
   const { reviewId } = await local.store.execute(
-    command({ type: "create", title: "Tree", pins: nestedPins }),
+    command({
+      type: "create",
+      title: "Tree",
+      target: { kind: "commits", ...nestedPins },
+    }),
   );
 
   writeFileSync(path.join(repository, "untracked.ts"), "Not in the review\n");
@@ -1256,7 +1368,13 @@ it("browses committed directories, including history, without listing untracked 
   );
   expect((await app.request(`${route}?path=../outside`)).status).toBe(400);
   expect((await app.request(`${route}?path=example.ts`)).status).toBe(404);
-  await local.store.execute(command({ type: "repin", reviewId, pins }));
+  await local.store.execute(
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...pins },
+    }),
+  );
   expect((await app.request(`${route}?path=nested`)).status).toBe(404);
   expect((await app.request(`${route}?version=0&path=nested`)).status).toBe(
     200,
@@ -1265,12 +1383,16 @@ it("browses committed directories, including history, without listing untracked 
 
 it("reads pinned Git objects, rejects invalid evidence before saving, and retains registrations across restart", async () => {
   const review = await local.store.execute(
-    command({ type: "create", title: "Pinned", pins }),
+    command({
+      type: "create",
+      title: "Pinned",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   await insert(review.reviewId, {
     type: "code_peek",
-    source: selectSource(source),
+    source: rangeAnchor(source),
   });
   expect(await local.data.quote(pins, source)).toMatchObject({
     commit: pins.head,
@@ -1288,22 +1410,12 @@ it("reads pinned Git objects, rejects invalid evidence before saving, and retain
   await expect(
     insert(review.reviewId, {
       type: "code_peek",
-      source: selectSource({ ...source, toLine: 4 }),
+      source: rangeAnchor({ ...source, toLine: 4 }),
     }),
   ).rejects.toThrow(/exceeds/);
   await expect(local.data.file(pins, "head", "../outside.ts")).rejects.toThrow(
     /relative/,
   );
-  await expect(
-    local.store.execute(
-      command({
-        type: "repin",
-        reviewId: review.reviewId,
-        pins: { ...pins, head: "HEAD" },
-      }),
-    ),
-  ).rejects.toThrow(/resolved commit/);
-  expect(local.store.read(review.reviewId).version).toBe(1);
   await local.store.close();
   await local.data.close();
   local = openLocalReviewStore(database);
@@ -1326,7 +1438,11 @@ it("describes binary source for browsing without allowing it as code evidence", 
   );
 
   const review = await local.store.execute(
-    command({ type: "create", title: "Binary", pins: binaryPins }),
+    command({
+      type: "create",
+      title: "Binary",
+      target: { kind: "commits", ...binaryPins },
+    }),
   );
 
   const app = createReviewApi(local.store, local.data);
@@ -1354,7 +1470,7 @@ it("describes binary source for browsing without allowing it as code evidence", 
   await expect(
     insert(review.reviewId, {
       type: "code_peek",
-      source: selectSource({ ...source, file: "binary.bin", toLine: 1 }),
+      source: rangeAnchor({ ...source, file: "binary.bin", toLine: 1 }),
     }),
   ).rejects.toThrow("Binary files cannot be used as code references.");
 
@@ -1698,10 +1814,11 @@ it.skipIf(spawnSync("pgrep", ["-P", String(process.pid)]).error !== undefined)(
     expect(await read).toMatchObject({
       text: "export const value = 2;\nexport const saved = true;\n",
     });
-    expect(spawns.filter((spawn) => spawn.includes("cat-file"))).toHaveLength(
-      1,
-    );
-    expect(batchProcesses()).toEqual([]);
+    const root = realpathSync.native(repository);
+    expect(spawns.filter((spawn) => spawn.includes("cat-file"))).toEqual([
+      ["git", "-C", root, "cat-file", "--batch"],
+    ]);
+    expect(batchProcesses(root)).toEqual([]);
   },
 );
 
@@ -1840,7 +1957,11 @@ it.skipIf(spawnSync("jj", ["--version"]).status !== 0)(
 
 it("decodes images and checks trace/map evidence before accepting components", async () => {
   const review = await local.store.execute(
-    command({ type: "create", title: "Resources", pins }),
+    command({
+      type: "create",
+      title: "Resources",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   const image = {
@@ -2126,33 +2247,21 @@ it("exposes real source and resource operations through the authenticated deskto
     expect(
       await (await post("/repositories", { path: repository })).json(),
     ).toEqual({ id: pins.repositoryId, name: "repository" });
-    expect(
-      await (
-        await post("/pins", {
-          repositoryId: pins.repositoryId,
-          base: "HEAD^",
-          head: "HEAD",
-        })
-      ).json(),
-    ).toEqual(pins);
 
     const review = await (
-      await post("/commands", command({ type: "create", title: "HTTP", pins }))
+      await post(
+        "/commands",
+        command({
+          type: "create",
+          title: "HTTP",
+          target: { kind: "commits", ...pins },
+        }),
+      )
     ).json();
 
     const read = async (route: string) =>
       (await fetch(url + route, { headers })).json();
 
-    const quote = await post(`/${review.reviewId}/source`, { source });
-    expect(quote.status).toBe(200);
-    expect(await quote.json()).toEqual({
-      side: "head",
-      file: source.file,
-      fromLine: 1,
-      toLine: 2,
-      commit: pins.head,
-      text: "export const value = 2;\nexport const saved = true;",
-    });
     expect(
       await read(`/${review.reviewId}/file?side=head&file=${source.file}`),
     ).toEqual({
@@ -2171,22 +2280,6 @@ it("exposes real source and resource operations through the authenticated deskto
       { path: "literal1.ts", status: "added", additions: 1, deletions: 0 },
       { path: "literal[1].ts", status: "added", additions: 1, deletions: 0 },
     ]);
-    expect(
-      await (
-        await fetch(url + `/${review.reviewId}/diff?file=${source.file}`, {
-          headers,
-        })
-      ).text(),
-    ).toBe(
-      [
-        `diff --git a/${source.file} b/${source.file}`,
-        "@@ -1 +1,2 @@",
-        "1   -export const value = 1;",
-        "  1 +export const value = 2;",
-        "  2 +export const saved = true;",
-        "",
-      ].join("\n"),
-    );
     expect(await read(`/${review.reviewId}/commits`)).toEqual([
       {
         commit: pins.head,
@@ -2225,13 +2318,6 @@ it("exposes real source and resource operations through the authenticated deskto
       provenance: "client_supplied",
       events: [],
     });
-    expect(
-      (
-        await post(`/${review.reviewId}/source`, {
-          source: { ...source, toLine: 99 },
-        })
-      ).status,
-    ).toBe(400);
   } finally {
     await server.close();
   }
@@ -2269,7 +2355,11 @@ it("rejects a code peek on blank lines but accepts a prose link to them", async 
 
 it("copies prose with the displayed version's title and immutable review identity", async () => {
   const { reviewId } = await local.store.execute(
-    command({ type: "create", title: "Original title", pins }),
+    command({
+      type: "create",
+      title: "Original title",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   await local.store.execute(
@@ -2294,11 +2384,19 @@ it("copies prose with the displayed version's title and immutable review identit
 
 it("copies code from historical pins after a repin, never from working-tree contents", async () => {
   const { reviewId } = await local.store.execute(
-    command({ type: "create", title: "Code", pins }),
+    command({
+      type: "create",
+      title: "Code",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   await local.store.execute(
-    command({ type: "repin", reviewId, pins: { ...pins, head: pins.base } }),
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...pins, head: pins.base },
+    }),
   );
   const app = createReviewApi(local.store, local.data);
 
@@ -2337,11 +2435,19 @@ it("copies code from historical pins after a repin, never from working-tree cont
 
 it("copies a diff selection from its pinned version and selected commit, and rejects another review", async () => {
   const { reviewId } = await local.store.execute(
-    command({ type: "create", title: "Code", pins }),
+    command({
+      type: "create",
+      title: "Code",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   await local.store.execute(
-    command({ type: "repin", reviewId, pins: { ...pins, head: pins.base } }),
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "commits", ...pins, head: pins.base },
+    }),
   );
   const app = createReviewApi(local.store, local.data);
 
@@ -2392,7 +2498,11 @@ it("copies a diff selection from its pinned version and selected commit, and rej
 
 it("copies selected diff rows with rename paths without resolving an unavailable source", async () => {
   const { reviewId } = await local.store.execute(
-    command({ type: "create", title: "Rename", pins }),
+    command({
+      type: "create",
+      title: "Rename",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   // Use selected diff rows; the new path may not exist on the base commit.
@@ -2432,7 +2542,11 @@ it("copies selected diff rows with rename paths without resolving an unavailable
 
 it("reports invalid copy requests, unavailable versions, and missing source files as JSON errors", async () => {
   const { reviewId } = await local.store.execute(
-    command({ type: "create", title: "Errors", pins }),
+    command({
+      type: "create",
+      title: "Errors",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   const app = createReviewApi(local.store, local.data);
@@ -2531,15 +2645,18 @@ it("reads current working source across authored versions, commits and retargeti
   expect(
     (await local.data.file(original.pins!, "head", "example.ts")).text,
   ).toContain("live = 1");
-  expect(await local.data.tree(original.pins!, "head", "")).toContainEqual({
-    path: "untracked.ts",
-    kind: "file",
-  });
-  expect(await local.data.changes(original.pins!)).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ path: "untracked.ts", status: "added" }),
-    ]),
+  // Untracked files are left out of the tree and the comparison, and counted.
+  expect(await local.data.tree(original.pins!, "head", "")).not.toContainEqual(
+    expect.objectContaining({ path: "untracked.ts" }),
   );
+  expect(await local.data.changes(original.pins!)).not.toEqual(
+    expect.arrayContaining([expect.objectContaining({ path: "untracked.ts" })]),
+  );
+  expect(await local.data.untrackedFiles(original.pins!)).toBe(1);
+  // An anchor can still read an untracked file from disk.
+  expect(
+    (await local.data.file(original.pins!, "head", "untracked.ts")).text,
+  ).toContain("fresh = true");
   writeFileSync(
     path.join(repository, "example.ts"),
     "export const live = 2;\n",
@@ -2560,7 +2677,6 @@ it("reads current working source across authored versions, commits and retargeti
     ).text,
   ).toContain("live = 2");
   expect(local.store.history(result.reviewId)).toHaveLength(1);
-  expect(await local.store.execute(request)).toEqual(result);
   expect(git("diff", "--cached")).toBe(beforeIndex);
   git("add", ".");
   git("commit", "-qm", "Save changes");
@@ -2645,11 +2761,10 @@ describe("worktree base", () => {
       base: "main",
     });
     expect(snapshot.pins?.base).toBe(run("merge-base", "main", "HEAD"));
+    // Untracked .gitignore and untracked.ts are left out; staged.ts was added.
     expect(await changedPaths(reviewId)).toEqual([
-      "added .gitignore",
       "added committed.ts",
       "added staged.ts",
-      "added untracked.ts",
       "deleted removed.ts",
       "modified shared.ts",
     ]);
@@ -2709,6 +2824,8 @@ it("reads symlink text and an unborn repository without following external links
   writeFileSync(outside, "secret\n");
   symlinkSync(outside, path.join(root, "external.ts"));
   writeFileSync(path.join(root, "first.ts"), "export const first = 1;\n");
+  // Untracked files are left out; intent-to-add puts a new file in the review.
+  execFileSync("git", ["-C", root, "add", "-N", "first.ts"]);
 
   const result = await local.store.execute(
     command({
@@ -2770,6 +2887,7 @@ it("keeps authored coordinates fixed as live source changes and warns only on un
     path.join(repository, "range.ts"),
     "const first = 1;\nconst second = 2;\nconst third = 3;\n",
   );
+  git("add", "-N", "range.ts");
 
   const result = await local.store.execute(
     command({
@@ -2785,7 +2903,7 @@ it("keeps authored coordinates fixed as live source changes and warns only on un
 
   await insert(result.reviewId, {
     type: "code_peek",
-    source: selectSource({
+    source: rangeAnchor({
       side: "head",
       file: "range.ts",
       fromLine: 2,
@@ -2800,11 +2918,11 @@ it("keeps authored coordinates fixed as live source changes and warns only on un
   await new Promise((resolve) => setTimeout(resolve, 50));
   await local.store.refreshWorktrees();
   expect(local.store.read(result.reviewId).document[0]).toMatchObject({
-    source: { start: { line: 2 }, end: { line: 2 } },
+    source: "head/range.ts#L2",
   });
   expect(
     local.store.read(result.reviewId, saved.version).document[0],
-  ).toMatchObject({ source: { start: { line: 2 }, end: { line: 2 } } });
+  ).toMatchObject({ source: "head/range.ts#L2" });
   writeFileSync(path.join(repository, "range.ts"), "const first = 99;\n");
   await vi.waitFor(async () => {
     await local.store.refreshWorktrees();
@@ -2913,6 +3031,7 @@ it("includes saved additions and deletions while keeping ignored and binary sour
   writeFileSync(path.join(repository, ".gitignore"), "ignored.ts\n");
   writeFileSync(path.join(repository, "ignored.ts"), "secret\n");
   writeFileSync(path.join(repository, "binary.dat"), Buffer.from([0, 1, 2]));
+  git("add", "-N", "binary.dat");
   writeFileSync(path.join(repository, "__proto__"), "legitimate filename\n");
   rmSync(path.join(repository, "example.ts"));
 
@@ -2981,6 +3100,10 @@ it.skipIf(spawnSync("jj", ["--version"]).status !== 0)(
     expect(
       await local.data.changes(local.store.read(result.reviewId).pins!),
     ).toEqual([expect.objectContaining({ path: "new.ts", status: "added" })]);
+    // jj tracks new files itself, so nothing is left out to count.
+    expect(
+      await local.data.untrackedFiles(local.store.read(result.reviewId).pins!),
+    ).toBeUndefined();
     expect(jj("op", "log", "--no-graph", "--limit", "1", "-T", "id")).toBe(
       operation,
     );
@@ -3002,7 +3125,7 @@ it("retargets a live review without losing authored content or component IDs", a
 
   await insert(created.reviewId, {
     type: "code_peek",
-    source: selectSource({
+    source: rangeAnchor({
       side: "head",
       file: "example.ts",
       fromLine: 1,
@@ -3077,89 +3200,84 @@ it("worktree language contexts never prepare or create checkouts, including hist
   expect(existsSync(path.join(repository, "prepared"))).toBe(false);
 });
 
-it.each(["repin", "set_target"] as const)(
-  "recovers persisted stale source and clears flags on %s",
-  async (operation) => {
-    const original = "const first = 1;\nconst second = 2;\n";
-    writeFileSync(path.join(repository, "recover.ts"), original);
+it("recovers persisted stale source and clears flags on set_target", async () => {
+  const original = "const first = 1;\nconst second = 2;\n";
+  writeFileSync(path.join(repository, "recover.ts"), original);
+  git("add", "-N", "recover.ts");
 
-    const created = await local.store.execute(
-      command({
-        type: "create",
-        title: "Recovery",
-        target: {
-          kind: "worktree",
-          repositoryId: pins.repositoryId,
-          base: pins.head,
-        },
-      }),
-    );
+  const created = await local.store.execute(
+    command({
+      type: "create",
+      title: "Recovery",
+      target: {
+        kind: "worktree",
+        repositoryId: pins.repositoryId,
+        base: pins.head,
+      },
+    }),
+  );
 
-    await insert(created.reviewId, {
+  await insert(created.reviewId, {
+    type: "code_peek",
+    source: rangeAnchor({
+      side: "head",
+      file: "recover.ts",
+      fromLine: 2,
+      toLine: 2,
+    }),
+  });
+  writeFileSync(path.join(repository, "recover.ts"), "const first = 99;\n");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  const renamed = await local.store.execute(
+    command({
+      type: "rename",
+      reviewId: created.reviewId,
+      title: "Still editable",
+    }),
+  );
+
+  expect(renamed.warnings?.length).toBeGreaterThan(0);
+  expect(local.store.read(created.reviewId).staleSources).toHaveLength(1);
+  await expect(
+    insert(created.reviewId, {
       type: "code_peek",
-      source: selectSource({
+      source: rangeAnchor({
         side: "head",
         file: "recover.ts",
-        fromLine: 2,
-        toLine: 2,
+        fromLine: 99,
+        toLine: 99,
       }),
-    });
-    writeFileSync(path.join(repository, "recover.ts"), "const first = 99;\n");
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    const renamed = await local.store.execute(
-      command({
-        type: "rename",
-        reviewId: created.reviewId,
-        title: "Still editable",
-      }),
-    );
-
-    expect(renamed.warnings?.length).toBeGreaterThan(0);
-    expect(local.store.read(created.reviewId).staleSources).toHaveLength(1);
-    await expect(
-      insert(created.reviewId, {
-        type: "code_peek",
-        source: selectSource({
-          side: "head",
-          file: "recover.ts",
-          fromLine: 99,
-          toLine: 99,
-        }),
-      }),
-    ).rejects.toThrow("exceeds the pinned file");
-    writeFileSync(path.join(repository, "recover.ts"), original);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    await local.store.refreshWorktrees();
-    expect(local.store.read(created.reviewId).staleSources).toEqual([]);
-    expect(local.store.read(created.reviewId).document[0]).toMatchObject({
-      source: { start: { line: 2 }, end: { line: 2 } },
-    });
-    expect(
-      local.store.read(created.reviewId, renamed.version).staleSources,
-    ).toHaveLength(1);
-    await local.store.execute(
-      command({
-        type: "restore",
-        reviewId: created.reviewId,
-        version: renamed.version,
-      }),
-    );
-    expect(local.store.read(created.reviewId).staleSources).toHaveLength(1);
-    await local.store.execute(
-      command(
-        operation === "repin"
-          ? { type: "repin", reviewId: created.reviewId, pins }
-          : {
-              type: "set_target",
-              reviewId: created.reviewId,
-              target: { kind: "commits", ...pins },
-            },
-      ),
-    );
-    expect(local.store.read(created.reviewId).staleSources).toEqual([]);
-  },
-);
+    }),
+  ).rejects.toThrow("exceeds the pinned file");
+  writeFileSync(path.join(repository, "recover.ts"), original);
+  git("add", "-N", "recover.ts");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await local.store.refreshWorktrees();
+  expect(local.store.read(created.reviewId).staleSources).toEqual([]);
+  expect(local.store.read(created.reviewId).document[0]).toMatchObject({
+    source: "head/recover.ts#L2",
+  });
+  expect(
+    local.store.read(created.reviewId, renamed.version).staleSources,
+  ).toHaveLength(1);
+  await local.store.execute(
+    command({
+      type: "restore",
+      reviewId: created.reviewId,
+      version: renamed.version,
+    }),
+  );
+  expect(local.store.read(created.reviewId).staleSources).toHaveLength(1);
+  await local.store.execute(
+    command({
+      type: "set_target",
+      reviewId: created.reviewId,
+      target: { kind: "commits", ...pins },
+    }),
+  );
+  expect(local.store.read(created.reviewId).staleSources).toEqual([]);
+});
 
 it("does not report clean tracked symlinks and submodules as modified", async () => {
   symlinkSync("example.ts", path.join(repository, "tracked-link.ts"));
@@ -3313,7 +3431,11 @@ it("keeps live language identity across edits but replaces it with a checkout at
 
 it("marks a commit-pinned review unavailable while its repository is gone", async () => {
   const review = await local.store.execute(
-    command({ type: "create", title: "Moved repository", pins }),
+    command({
+      type: "create",
+      title: "Moved repository",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   const app = createReviewApi(local.store, local.data);
@@ -3343,7 +3465,11 @@ it("marks a commit-pinned review unavailable while its repository is gone", asyn
 
 it("never stores the unavailable flag on a version authored while degraded", async () => {
   const review = await local.store.execute(
-    command({ type: "create", title: "Edited while gone", pins }),
+    command({
+      type: "create",
+      title: "Edited while gone",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   const moved = `${repository}-moved`;
@@ -3365,7 +3491,11 @@ it("never stores the unavailable flag on a version authored while degraded", asy
 
 it("answers a source read with 404 while the checkout is gone", async () => {
   const review = await local.store.execute(
-    command({ type: "create", title: "Moved repository", pins }),
+    command({
+      type: "create",
+      title: "Moved repository",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   const app = createReviewApi(local.store, local.data);
@@ -3398,168 +3528,7 @@ it("marks a worktree review unavailable while its checkout is gone", async () =>
   expect(local.store.read(review.reviewId).sourceUnavailable).toBe(true);
 });
 
-describe("review_diff", () => {
-  const exampleLines = (changed: number) =>
-    Array.from({ length: 12 }, (_, index) =>
-      index + 1 === changed ? "changed line" : `line ${index + 1}`,
-    ).join("\n") + "\n";
-
-  let reviewId: string;
-  let call: (input: Record<string, JsonValue>) => Promise<JsonValue>;
-
-  beforeEach(async () => {
-    writeFileSync(path.join(repository, source.file), exampleLines(0));
-    git("add", ".");
-    git("-c", "commit.gpgsign=false", "commit", "-qm", "Twelve lines");
-    const base = git("rev-parse", "HEAD");
-    writeFileSync(path.join(repository, source.file), exampleLines(6));
-    mkdirSync(path.join(repository, "dir"));
-    git("mv", "literal1.ts", "dir/moved.ts");
-    writeFileSync(
-      path.join(repository, "dir/big.ts"),
-      Array.from({ length: 40 }, (_, index) => `big ${index}`).join("\n") +
-        "\n",
-    );
-    git("add", ".");
-    git("-c", "commit.gpgsign=false", "commit", "-qm", "Change");
-
-    const diffPins = await local.data.resolvePins(
-      pins.repositoryId,
-      base,
-      "HEAD",
-    );
-
-    ({ reviewId } = await local.store.execute(
-      command({ type: "create", title: "Diff", pins: diffPins }),
-    ));
-
-    const app = createReviewApi(local.store, local.data);
-
-    const client = new ReviewApiClient(
-      { serverUrl: "http://review.test", token: "test" },
-      async (url, init) => app.request(url.replace("/reviews-api", ""), init),
-    );
-
-    const tools = await client.read<AuthoringTool[]>("/authoring");
-    const tool = tools.find((item) => item.name === "review_diff")!;
-
-    call = async (input) => {
-      const result = await callAuthoringTool(client, tool, {
-        reviewId,
-        ...input,
-      });
-
-      return result instanceof ToolText ? result.text : result;
-    };
-  });
-
-  it("lists every changed file, or those a pathspec names", async () => {
-    expect(await call({})).toEqual([
-      { path: "dir/big.ts", status: "added", additions: 40, deletions: 0 },
-      {
-        path: "dir/moved.ts",
-        previousPath: "literal1.ts",
-        status: "renamed",
-        additions: 0,
-        deletions: 0,
-      },
-      { path: "example.ts", status: "modified", additions: 1, deletions: 1 },
-    ]);
-    expect(await call({ paths: ["example.ts"] })).toEqual([
-      { path: "example.ts", status: "modified", additions: 1, deletions: 1 },
-    ]);
-    expect(
-      (
-        (await call({ paths: ["dir/", "literal1.ts"] })) as { path: string }[]
-      ).map((file) => file.path),
-    ).toEqual(["dir/big.ts", "dir/moved.ts"]);
-  });
-
-  it("returns every patch with base and head line numbers", async () => {
-    const text = (await call({ format: "patch" })) as string;
-
-    expect(text).toContain("diff --git a/dir/big.ts b/dir/big.ts\n");
-    expect(text).toContain("   40 +big 39\n");
-    expect(text).toContain(
-      "diff --git a/literal1.ts b/dir/moved.ts\nsimilarity index 100%\nrename from literal1.ts\nrename to dir/moved.ts\n",
-    );
-    expect(text).toContain(
-      [
-        "diff --git a/example.ts b/example.ts",
-        "@@ -3,7 +3,7 @@ line 2",
-        " 3  3  line 3",
-        " 4  4  line 4",
-        " 5  5  line 5",
-        " 6    -line 6",
-        "    6 +changed line",
-        " 7  7  line 7",
-        " 8  8  line 8",
-        " 9  9  line 9",
-        "",
-      ].join("\n"),
-    );
-  });
-
-  it("returns only the patches a pathspec names, both sides of a rename included", async () => {
-    const text = (await call({
-      format: "patch",
-      paths: ["dir/moved.ts", "missing.ts"],
-    })) as string;
-
-    expect(text).toContain("rename from literal1.ts\nrename to dir/moved.ts");
-    expect(text).not.toContain("example.ts");
-    expect(text).not.toContain("big.ts");
-    expect(text).toContain('[No changes match paths:["missing.ts"].]');
-  });
-
-  it("reads a legacy file as its numbered patch and rejects mixing it with paths or format", async () => {
-    expect(await call({ file: "example.ts" })).toBe(
-      await call({ format: "patch", paths: ["example.ts"] }),
-    );
-    await expect(
-      call({ file: "example.ts", paths: ["example.ts"] }),
-    ).rejects.toThrow(/file cannot be combined with paths or format/);
-    await expect(call({ file: "example.ts", format: "patch" })).rejects.toThrow(
-      /file cannot be combined/,
-    );
-  });
-
-  it("lists patches past maxBytes with a paths hint", async () => {
-    const text = (await call({ format: "patch", maxBytes: 400 })) as string;
-
-    expect(text).toContain("diff --git a/dir/big.ts");
-    expect(text).toContain("[dir/big.ts is cut at the 400-byte budget after");
-    expect(text).toMatch(
-      /\[2 more files over the 400-byte budget: dir\/moved\.ts, example\.ts \(\+1 -1\)\. Fetch them with paths:\["dir\/moved\.ts","example\.ts"\], format:"patch"\.\]\n$/,
-    );
-
-    const next = (await call({
-      format: "patch",
-      paths: ["dir/moved.ts", "example.ts"],
-      maxBytes: 400,
-    })) as string;
-
-    expect(next).toContain("rename to dir/moved.ts");
-    expect(next).toContain("diff --git a/example.ts b/example.ts");
-    expect(next).not.toContain("budget");
-  });
-
-  it("applies context lines around each change", async () => {
-    expect(
-      await call({ format: "patch", paths: ["example.ts"], context: 0 }),
-    ).toBe(
-      [
-        "diff --git a/example.ts b/example.ts",
-        "@@ -6 +6 @@ line 5",
-        "6   -line 6",
-        "  6 +changed line",
-        "",
-      ].join("\n"),
-    );
-  });
-});
-
-it("patches working files of a worktree review, untracked files included", async () => {
+it("lists working files of a worktree review once an untracked file is intent-to-add", async () => {
   const api = createReviewApi(local.store, local.data);
 
   const { reviewId } = await local.store.execute(
@@ -3572,6 +3541,11 @@ it("patches working files of a worktree review, untracked files included", async
 
   writeFileSync(path.join(repository, "fresh.ts"), "fresh\n");
 
+  expect(await (await api.request(`/${reviewId}/diff`)).json()).not.toEqual(
+    expect.arrayContaining([expect.objectContaining({ path: "fresh.ts" })]),
+  );
+
+  git("add", "-N", "fresh.ts");
   const list = await (await api.request(`/${reviewId}/diff`)).json();
 
   expect(list).toEqual(
@@ -3579,25 +3553,17 @@ it("patches working files of a worktree review, untracked files included", async
       expect.objectContaining({ path: "fresh.ts", status: "added" }),
     ]),
   );
-
-  const response = await api.request(
-    `/${reviewId}/diff?format=patch&paths=fresh.ts&paths=${source.file}`,
-  );
-
-  expect(response.headers.get("content-type")).toMatch(/^text\/plain/);
-  const text = await response.text();
-
-  expect(text).toContain("diff --git a/fresh.ts b/fresh.ts\nnew file mode");
-  expect(text).toContain("  1 +fresh\n");
-  expect(text).toContain("+uncommitted text must never appear");
-  expect(text).not.toContain("literal");
 });
 
 it("saves the head branch for pinned reviews and preserves it across checkout changes", async () => {
   git("checkout", "-b", "feature/saved-head");
 
   const created = await local.store.execute(
-    command({ type: "create", title: "Branch provenance", pins }),
+    command({
+      type: "create",
+      title: "Branch provenance",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   expect(local.store.read(created.reviewId).origin?.branch).toBe(
@@ -3675,8 +3641,63 @@ it("does not invent a head branch for detached or unrelated pinned commits", asy
   git("checkout", "--detach", pins.head);
 
   const created = await local.store.execute(
-    command({ type: "create", title: "Detached", pins }),
+    command({
+      type: "create",
+      title: "Detached",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   expect(local.store.read(created.reviewId).origin?.branch).toBeUndefined();
+});
+
+it("quotes the first and last line of each anchor an edit adds", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Quotes",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  const app = createReviewApi(local.store, local.data);
+
+  const edit = async (content: Record<string, string>) =>
+    (
+      await app.request("/commands", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          command({
+            type: "edit",
+            reviewId,
+            edit: { type: "insert", content },
+          }),
+        ),
+      })
+    ).json();
+
+  expect(
+    await edit({ type: "code_peek", source: "head/example.ts#L1-L2" }),
+  ).toMatchObject({
+    quotes: [
+      {
+        anchor: "head/example.ts#L1-L2",
+        first: "export const value = 2;",
+        last: "export const saved = true;",
+      },
+    ],
+  });
+
+  // Only what this edit added: the peek above is not quoted again.
+  expect(
+    await edit({
+      type: "markdown",
+      markdown: "Was [one](review-source:base/example.ts#L1).",
+    }),
+  ).toMatchObject({
+    quotes: [
+      { anchor: "base/example.ts#L1", first: "export const value = 1;" },
+    ],
+  });
 });

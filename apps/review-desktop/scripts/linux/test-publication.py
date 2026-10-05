@@ -76,7 +76,7 @@ class PublicationTests(unittest.TestCase):
     def seal_formats(self):
         del self.digests[self.package_key]
         for name in ["repos/rpm/x86_64/Packages/app.rpm", "repos/apt/pool/app.deb",
-                     "repos/arch/x86_64/app.pkg.tar.zst", "repos/keys/public.asc"]:
+                     "repos/arch/x86_64/app.pkg.tar.zst", "repos/nixos/x86_64/app.nix.tar.gz", "repos/keys/public.asc"]:
             file = self.root / name
             file.parent.mkdir(parents=True, exist_ok=True)
             file.write_bytes(name.encode())
@@ -86,7 +86,7 @@ class PublicationTests(unittest.TestCase):
     def test_upload_workers_partition_objects_without_promoting(self):
         self.seal_formats()
         uploaded = []
-        for format in ["rpm", "deb", "arch"]:
+        for format in ["rpm", "deb", "arch", "nixos"]:
             self.calls.clear()
             self.publish(upload_format=format)
             keys = [call[call.index("--key") + 1] for call in self.writes()]
@@ -287,6 +287,57 @@ class PublicationTests(unittest.TestCase):
         keys = [call[call.index("--key") + 1] for call in self.writes()]
         self.assertEqual(keys[-1], self.pointer_key)
         self.assertEqual(set(keys), set(self.digests))
+
+    def seal_nixos(self):
+        del self.digests[self.package_key]
+        self.current["nixos"] = True
+        (self.root / self.pointer_key).write_text(json.dumps(self.current))
+        self.digests[self.pointer_key] = publisher.checksum(self.root / self.pointer_key)
+        for suffix in ("", ".asc"):
+            key = f"{self.prefix}/snapshots/{self.current['generation']}/nixos/x86_64/{self.current['packageName']}.nix.tar.gz{suffix}"
+            path = self.root / key
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"sealed NixOS package")
+            self.digests[key] = publisher.checksum(path)
+        (self.root / "sha256.json").write_text(json.dumps(self.digests))
+
+    def with_nixos_worker(self):
+        original = self.request
+        def request(url, **kwargs):
+            if url.full_url.endswith("/nixos/health"):
+                return io.BytesIO(b'{"schemaVersion":1,"format":"nix"}')
+            return original(url, **kwargs)
+        self.request = request
+
+    def test_nixos_requires_worker_support_before_upload(self):
+        self.seal_nixos()
+        with self.assertRaisesRegex(RuntimeError, "Deploy the NixOS repository Worker"):
+            self.publish()
+        self.assertEqual(self.calls, [])
+
+    def test_nixos_requires_both_archive_and_signature_before_promotion(self):
+        self.seal_nixos()
+        self.with_nixos_worker()
+        for suffix in (".tar.gz", ".asc"):
+            missing = next(key for key in self.digests if key.endswith(suffix))
+            digest = self.digests.pop(missing)
+            (self.root / "sha256.json").write_text(json.dumps(self.digests))
+            with self.assertRaisesRegex(ValueError, "Incomplete NixOS publication"):
+                self.publish(promote_only=True)
+            self.assertEqual(self.writes(), [])
+            self.digests[missing] = digest
+
+    def test_nixos_workers_upload_only_their_objects_then_promote_together(self):
+        self.seal_nixos()
+        self.with_nixos_worker()
+        self.publish(upload_format="nixos")
+        keys = [call[call.index("--key") + 1] for call in self.writes()]
+        self.assertEqual(len(keys), 2)
+        self.assertTrue(all("/nixos/" in key for key in keys))
+        self.calls.clear()
+        self.publish(promote_only=True)
+        self.assertEqual(len(self.writes()), 1)
+        self.assertEqual(self.writes()[0][self.writes()[0].index("--key") + 1], self.pointer_key)
 
     def test_changed_sealed_bytes_fail_before_upload(self):
         (self.root / "repos/package").write_bytes(b"changed")

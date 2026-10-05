@@ -33,13 +33,7 @@ const docs: Lens = {
     { kind: "files", patterns: ["docs/**"] },
     {
       kind: "ranges",
-      sources: [
-        {
-          file: "README.md",
-          start: { side: "head", line: 1 },
-          end: { side: "head", line: 4 },
-        },
-      ],
+      sources: ["head/README.md#L1-L4"],
     },
   ],
 };
@@ -47,13 +41,16 @@ const docs: Lens = {
 const lensesOnly: ActivitySnapshot = {
   workingCount: 1,
   expiresAt: null,
-  scopes: ["lenses"],
+  activities: [{ activityId: "lenses", slot: 0, surface: "lenses" }],
 };
 
 const both: ActivitySnapshot = {
   workingCount: 2,
   expiresAt: null,
-  scopes: ["document", "lenses"],
+  activities: [
+    { activityId: "writer", slot: 0 },
+    { activityId: "lenses", slot: 1, surface: "lenses" },
+  ],
 };
 
 /** Timers the test fires by hand, so each phase is asserted on schedule. */

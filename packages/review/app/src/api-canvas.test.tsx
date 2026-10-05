@@ -9,7 +9,8 @@ import type {
   ReviewInlineEditorSpec,
   ReviewSurfaceEvent,
 } from "@dev.fast/review-protocol";
-import { selectSource } from "@review/lens-selection";
+import { rangeAnchor } from "@review/lens-selection";
+import type { ReviewTarget } from "@review/review-api/document";
 import { createReviewApi } from "@review/review-api/http";
 import { ReviewInputError } from "@review/review-api/input-error";
 import { LocalReviewData } from "@review/review-api/local-data";
@@ -29,8 +30,8 @@ let canvas: ReturnType<typeof mount> | undefined;
 
 const pins = { repositoryId: "repo", base: "base", head: "head" };
 
-const command = <Operation,>(operation: Operation, leaseId?: string) =>
-  store.execute({ commandId: randomUUID(), leaseId, operation });
+const command = <Operation,>(operation: Operation) =>
+  store.execute({ operation });
 
 beforeEach(() => {
   localStorage.clear();
@@ -69,7 +70,11 @@ afterEach(async () => {
 });
 
 it("mounts the existing canvas and preserves a section's DOM and collapsed state through live edits", async () => {
-  const review = await command({ type: "create", title: "Live review", pins });
+  const review = await command({
+    type: "create",
+    title: "Live review",
+    target: { kind: "commits", ...pins },
+  });
 
   const inserted = await command({
     type: "edit",
@@ -136,9 +141,11 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
   await act(async () => toggle.click());
   expect(toggle.getAttribute("aria-expanded")).toBe("false");
   expect(node.textContent).toContain("1 paragraph");
-  const leaseId = randomUUID();
+  let activityId = "";
   await act(async () => {
-    store.activity.update(review.reviewId, { action: "begin", leaseId });
+    activityId = store.activity.update(review.reviewId, {
+      action: "begin",
+    }).activityId!;
   });
   await vi.waitFor(async () => {
     await act(async () => {});
@@ -150,8 +157,8 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
   expect(toggle.getAttribute("aria-expanded")).toBe("false");
   await act(async () => {
     store.activity.update(review.reviewId, {
-      action: "renew",
-      leaseId,
+      action: "update",
+      activityId,
       focus: { targetId: inserted.targetId, description: "Adding details" },
     });
   });
@@ -163,8 +170,8 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
   expect(displayedVersion).toHaveBeenLastCalledWith(inserted.version);
   await act(async () => {
     store.activity.update(review.reviewId, {
-      action: "renew",
-      leaseId,
+      action: "update",
+      activityId,
       focus: { description: "Checking the outline" },
     });
   });
@@ -173,7 +180,7 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
     expect(container.textContent).toContain("Checking the outline");
   });
   await act(async () => {
-    store.activity.update(review.reviewId, { action: "end", leaseId });
+    store.activity.update(review.reviewId, { action: "end", activityId });
   });
   await vi.waitFor(async () => {
     await act(async () => {});
@@ -256,24 +263,24 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
   });
   expect(container.textContent).not.toContain("Next section");
   await act(async () => {
-    store.activity.update(review.reviewId, { action: "begin", leaseId });
+    activityId = store.activity.update(review.reviewId, {
+      action: "begin",
+    }).activityId!;
   });
   expect(container.textContent).not.toContain("Agent working…");
   await act(async () => {
-    await command(
-      {
-        type: "edit",
-        reviewId: review.reviewId,
-        edit: {
-          type: "insert",
-          content: {
-            type: "markdown",
-            markdown: "Written while viewing history",
-          },
+    await command({
+      type: "edit",
+      reviewId: review.reviewId,
+      edit: {
+        type: "insert",
+        content: {
+          type: "markdown",
+          markdown: "Written while viewing history",
         },
       },
-      leaseId,
-    );
+      activityId,
+    });
   });
   expect(container.textContent).not.toContain("Written while viewing history");
 
@@ -292,7 +299,11 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
 });
 
 it("keeps sequence step identities and supports explanation/code steps without invented source anchors", async () => {
-  const review = await command({ type: "create", title: "Diagram", pins });
+  const review = await command({
+    type: "create",
+    title: "Diagram",
+    target: { kind: "commits", ...pins },
+  });
 
   const inserted = await command({
     type: "edit",
@@ -348,7 +359,7 @@ it("dismisses immediately through the API without changing the saved document", 
   const { reviewId } = await command({
     type: "create",
     title: "Dismiss me",
-    pins,
+    target: { kind: "commits", ...pins },
   });
 
   const app = new Hono().route("/reviews-api", createReviewApi(store));
@@ -388,7 +399,7 @@ it.each([false, true])(
     const review = await command({
       type: "create",
       title: "Retained conversation",
-      pins,
+      target: { kind: "commits", ...pins },
     });
 
     const traceId = randomUUID();
@@ -496,7 +507,11 @@ it.each([false, true])(
 );
 
 it("renders a code peek block on its pinned side without fetching source text", async () => {
-  const review = await command({ type: "create", title: "Peek review", pins });
+  const review = await command({
+    type: "create",
+    title: "Peek review",
+    target: { kind: "commits", ...pins },
+  });
 
   await command({
     type: "edit",
@@ -505,7 +520,7 @@ it("renders a code peek block on its pinned side without fetching source text", 
       type: "insert",
       content: {
         type: "code_peek",
-        source: selectSource({
+        source: rangeAnchor({
           side: "base",
           file: "src/old.ts",
           fromLine: 7,
@@ -597,7 +612,11 @@ it("renders a code peek block on its pinned side without fetching source text", 
 });
 
 it("copies prose and code from the displayed historical JSON review", async () => {
-  const review = await command({ type: "create", title: "Copy review", pins });
+  const review = await command({
+    type: "create",
+    title: "Copy review",
+    target: { kind: "commits", ...pins },
+  });
 
   const inserted = await command({
     type: "edit",
@@ -609,9 +628,9 @@ it("copies prose and code from the displayed historical JSON review", async () =
   });
 
   await command({
-    type: "repin",
+    type: "set_target",
     reviewId: review.reviewId,
-    pins: { ...pins, head: "new-head" },
+    target: { kind: "commits", ...pins, head: "new-head" },
   });
   const data = new LocalReviewData(store);
   vi.spyOn(data, "commits").mockResolvedValue([]);
@@ -795,18 +814,9 @@ it("reads a worktree review's range as its base against the working tree, and a 
     validateResource: async () => {},
   });
 
-  const create = async (
-    title: string,
-    source:
-      | { target: { kind: "worktree"; repositoryId: string } }
-      | { pins: { repositoryId: string; base: string; head: string } },
-  ) =>
-    (
-      await store.execute({
-        commandId: randomUUID(),
-        operation: { type: "create", title, ...source },
-      })
-    ).reviewId;
+  const create = async (title: string, target: ReviewTarget) =>
+    (await store.execute({ operation: { type: "create", title, target } }))
+      .reviewId;
 
   const app = new Hono().route("/reviews-api", createReviewApi(store));
   app.get("/reviews-api/:id/commits", (context) => context.json([]));
@@ -841,7 +851,8 @@ it("reads a worktree review's range as its base against the working tree, and a 
   try {
     const worktree = await open(
       await create("Uncommitted work", {
-        target: { kind: "worktree", repositoryId: "repo" },
+        kind: "worktree",
+        repositoryId: "repo",
       }),
       "Uncommitted work",
     );
@@ -853,7 +864,10 @@ it("reads a worktree review's range as its base against the working tree, and a 
 
     const committed = await open(
       await create("Committed work", {
-        pins: { repositoryId: "repo", base: head, head },
+        kind: "commits",
+        repositoryId: "repo",
+        base: head,
+        head,
       }),
       "Committed work",
     );
@@ -865,17 +879,18 @@ it("reads a worktree review's range as its base against the working tree, and a 
   }
 });
 
-it("degrades to the retained document and an unavailable Commits tab when the checkout is gone", async () => {
+it("offers to dismiss a review whose worktree is gone, without reading its diff", async () => {
+  let removed = false;
+
   const gone = new ReviewStore(path.join(directory, "gone.db"), {
-    // Present only so the refresh loop runs; a commit-pinned review never calls it.
-    resolveTarget: async () => {
-      throw new Error("This review is commit-pinned.");
-    },
-    sourcePins: async () => {
-      throw new ReviewInputError(
-        "The selected local checkout is unavailable.",
-        404,
-      );
+    resolveTarget: async (target) => {
+      if (removed)
+        throw new ReviewInputError(
+          "The selected local checkout is unavailable.",
+          404,
+        );
+
+      return { target, pins: { ...pins, worktreeRevision: "saved" } };
     },
     validatePins: async () => {},
     validateSource: async () => {},
@@ -884,18 +899,50 @@ it("degrades to the retained document and an unavailable Commits tab when the ch
 
   try {
     const { reviewId } = await gone.execute({
-      commandId: randomUUID(),
-      operation: { type: "create", title: "Moved review", pins },
+      operation: {
+        type: "create",
+        title: "Moved review",
+        target: { kind: "worktree", repositoryId: pins.repositoryId },
+      },
     });
 
+    await gone.execute({
+      operation: {
+        type: "edit",
+        reviewId,
+        edit: {
+          type: "insert",
+          content: {
+            type: "code_peek",
+            source: rangeAnchor({
+              side: "head",
+              file: "src/a.ts",
+              fromLine: 1,
+              toLine: 2,
+            }),
+          },
+        },
+      },
+    });
+    removed = true;
     await gone.refreshWorktrees();
     const app = new Hono().route("/reviews-api", createReviewApi(gone));
     const commits = vi.fn<() => Response>(() => new Response("[]"));
     app.get("/reviews-api/:id/commits", commits);
+    const progress = vi.fn<() => Response>(() => new Response("{}"));
+    app.get("/reviews-api/:id/progress", progress);
+    const files = vi.fn<() => Promise<never[]>>(async () => []);
+
+    const create = vi.fn<ReviewCanvasBridge["diffView"]["create"]>(() => {
+      throw new Error("The Diff view must not open.");
+    });
 
     const bridge = testReviewBridge(
       {},
-      { request: async (url, init) => app.request(url, init) },
+      {
+        request: async (url, init) => app.request(url, init),
+        diffView: { files, create },
+      },
     );
 
     const container = document.createElement("div");
@@ -905,22 +952,31 @@ it("degrades to the retained document and an unavailable Commits tab when the ch
     });
     await act(async () =>
       vi.waitFor(() =>
-        expect(container.querySelector("h1")?.textContent).toBe("Moved review"),
+        expect(container.textContent).toContain("Diff selection unavailable"),
       ),
     );
-
-    expect(container.querySelector(".review-document > p")?.textContent).toBe(
-      "Local checkout unavailable. Showing retained source.",
-    );
-
     await act(async () =>
       container
-        .querySelector<HTMLButtonElement>('button[aria-label="Commits"]')!
+        .querySelector<HTMLButtonElement>('button[aria-label="Diff"]')!
         .click(),
     );
 
-    expect(container.textContent).toContain("Commits unavailable");
+    expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(commits).not.toHaveBeenCalled();
+    expect(progress).not.toHaveBeenCalled();
+    expect(files).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+
+    const dismiss = () =>
+      [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+        (button) => button.textContent === "Dismiss review",
+      );
+
+    await act(async () => dismiss()!.click());
+    await vi.waitFor(() =>
+      expect(gone.list()[0]?.dismissedAt).toEqual(expect.any(String)),
+    );
+    expect(dismiss()).toBeUndefined();
   } finally {
     await gone.close();
   }
@@ -938,7 +994,6 @@ it("offers the Diff view for a live worktree review and refreshes it on each sav
 
   try {
     const { reviewId } = await worktree.execute({
-      commandId: randomUUID(),
       operation: {
         type: "create",
         title: "Working files",
@@ -1010,7 +1065,12 @@ it("offers the Diff view for a live worktree review and refreshes it on each sav
 });
 
 it("leaves window errors to the workbench it shares a window with", async () => {
-  const review = await command({ type: "create", title: "Errors", pins });
+  const review = await command({
+    type: "create",
+    title: "Errors",
+    target: { kind: "commits", ...pins },
+  });
+
   const app = new Hono().route("/reviews-api", createReviewApi(store));
   app.get("/reviews-api/:id/commits", (context) => context.json([]));
   const telemetry: string[] = [];
@@ -1062,4 +1122,57 @@ it("leaves window errors to the workbench it shares a window with", async () => 
   await act(async () => {});
 
   expect(telemetry).not.toContain("client_error");
+});
+
+it("builds the full diff only once the Diff view is shown", async () => {
+  const review = await command({
+    type: "create",
+    title: "Lazy diff",
+    target: { kind: "commits", ...pins },
+  });
+
+  const app = new Hono().route("/reviews-api", createReviewApi(store));
+
+  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+
+  const create = vi.fn<ReviewCanvasBridge["diffView"]["create"]>(() => {
+    throw new Error("Diff is not mounted by this test.");
+  });
+
+  const bridge = testReviewBridge(
+    {},
+    {
+      request: async (url, init) => app.request(url, init),
+      diffView: {
+        files: async () => [
+          { path: "a.ts", status: "modified", additions: 1, deletions: 1 },
+        ],
+        create,
+      },
+    },
+  );
+
+  const container = document.createElement("div");
+
+  document.body.append(container);
+  await act(async () => {
+    canvas = mount(container, {
+      kind: "api",
+      reviewId: review.reviewId,
+      bridge,
+    });
+  });
+  await act(async () =>
+    vi.waitFor(() =>
+      expect(container.querySelector("h1")?.textContent).toBe("Lazy diff"),
+    ),
+  );
+  expect(create).not.toHaveBeenCalled();
+
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('button[aria-label="Diff"]')!
+      .click(),
+  );
+  await act(async () => vi.waitFor(() => expect(create).toHaveBeenCalled()));
 });

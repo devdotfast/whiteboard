@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -37,8 +36,7 @@ const git = (...args: string[]) =>
 
 type Operation = z.infer<typeof commandSchema>["operation"];
 
-const command = (operation: Operation) =>
-  local.store.execute({ commandId: randomUUID(), operation });
+const command = (operation: Operation) => local.store.execute({ operation });
 
 beforeEach(async () => {
   directory = mkdtempSync(path.join(tmpdir(), "pinned-language-"));
@@ -63,8 +61,13 @@ beforeEach(async () => {
   local = openLocalReviewStore(database);
   const registered = await local.data.register(repository);
   pins = { repositoryId: registered.id, base, head };
-  reviewId = (await command({ type: "create", title: "Pinned", pins }))
-    .reviewId;
+  reviewId = (
+    await command({
+      type: "create",
+      title: "Pinned",
+      target: { kind: "commits", ...pins },
+    })
+  ).reviewId;
 });
 
 afterEach(async () => {
@@ -84,7 +87,6 @@ it("keeps Desktop preparation owned while a headless connection edits and delete
     expect(() => headless.data.workspaces).toThrow(/Desktop/);
     expect(local.data.workspaces.list(reviewId)).toContainEqual(preparing);
     await headless.store.execute({
-      commandId: randomUUID(),
       operation: { type: "delete", reviewId },
     });
     await vi.waitFor(
@@ -210,9 +212,9 @@ it("keeps historical and equal-side environments until review deletion and leave
   expect(local.data.workspaces.list(reviewId)).toHaveLength(1);
   const old = await local.data.workspaces.source(reviewId, pins, "base");
   await command({
-    type: "repin",
+    type: "set_target",
     reviewId,
-    pins: { ...pins, base: pins.head },
+    target: { kind: "commits", ...pins, base: pins.head },
   });
   expect(existsSync(old.rootPath!)).toBe(true);
   await command({ type: "delete", reviewId });
@@ -322,8 +324,13 @@ it("claims unowned workspaces before removing them", async () => {
 });
 
 it("removes a dismissed review's checkouts and rebuilds them on demand", async () => {
-  const other = (await command({ type: "create", title: "Other", pins }))
-    .reviewId;
+  const other = (
+    await command({
+      type: "create",
+      title: "Other",
+      target: { kind: "commits", ...pins },
+    })
+  ).reviewId;
 
   const dismissed = await local.data.workspaces.source(reviewId, pins, "head");
   const kept = await local.data.workspaces.source(other, pins, "head");
@@ -402,7 +409,6 @@ it("removes checkouts left by reviews dismissed while Desktop was closed", async
   await local.store.close();
   const headless = openLocalReviewStore(database, { manageWorkspaces: false });
   await headless.store.execute({
-    commandId: randomUUID(),
     operation: { type: "attention", reviewId, action: "dismiss" },
   });
   await headless.data.close();
@@ -450,7 +456,6 @@ const attentionWhileClosed = async (
 
   for (const action of actions) {
     await headless.store.execute({
-      commandId: randomUUID(),
       operation: { type: "attention", reviewId, action },
     });
     await new Promise((resolve) => setTimeout(resolve, 5));

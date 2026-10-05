@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -377,7 +376,6 @@ describe("importLegacyReview", () => {
       version: 1,
     });
     await store.execute({
-      commandId: randomUUID(),
       operation: { type: "restore", reviewId: record.uuid, version: 0 },
     });
     expect(store.read(record.uuid).origin?.revision).toBe(oids[0]);
@@ -388,7 +386,6 @@ describe("importLegacyReview", () => {
     expect(store.read(record.uuid).version).toBe(2);
 
     await store.execute({
-      commandId: randomUUID(),
       operation: { type: "delete", reviewId: record.uuid },
     });
     expect(store.has(record.uuid)).toBe(false);
@@ -470,7 +467,6 @@ describe("importLegacyReview", () => {
       });
       const original = store.read(fixture.record.uuid, 0);
       await store.execute({
-        commandId: randomUUID(),
         operation: {
           type: "edit",
           reviewId: fixture.record.uuid,
@@ -681,7 +677,6 @@ describe("importLegacyReview", () => {
 
     // A reader annotates the review between the two map publishes.
     const note = await store.execute({
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId: record.uuid,
@@ -770,7 +765,6 @@ describe("importLegacyReview", () => {
 
     expect(await importReview()).toMatchObject({ kind: "imported" });
     await store.execute({
-      commandId: randomUUID(),
       operation: { type: "delete", reviewId: record.uuid },
     });
 

@@ -30,12 +30,10 @@ async function fixture() {
   cleanup.push(() => local.data.close());
 
   const { reviewId } = await local.store.execute({
-    commandId: randomUUID(),
     operation: { type: "create", kind: "scratchpad", title: "Whiteboard" },
   });
 
   await local.store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "edit",
       reviewId,
@@ -168,7 +166,6 @@ it("retains image and trace resources on a document without source pins", async 
   cleanup.push(() => resources.data.close());
 
   const { reviewId } = await resources.store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "create",
       kind: "scratchpad",
@@ -181,7 +178,6 @@ it("retains image and trace resources on a document without source pins", async 
   for (const resource of source.manifest.resources) {
     if (resource.kind === "map") continue;
     await resources.store.execute({
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId,

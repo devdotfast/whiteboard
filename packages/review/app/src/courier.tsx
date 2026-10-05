@@ -1,6 +1,6 @@
 import { courierMotion } from "@canvas/courier-motion.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
-import type { LeaseScope } from "@review/review-api/activity";
+import type { ActivitySurface } from "@review/review-api/activity";
 import * as stylex from "@stylexjs/stylex";
 import {
   type Context,
@@ -12,11 +12,12 @@ import {
   useState,
 } from "react";
 
+import { agentColor } from "./agent-colors";
 import { AuthoringActivityContext } from "./authoring-activity-context";
 import {
   type AuthoringCursor,
-  scopeFocus,
   scopeLive,
+  scopePresence,
 } from "./authoring-cursor";
 import { CourierFigure } from "./courier-figure";
 import { cursorElement } from "./cursor-element";
@@ -37,7 +38,7 @@ export const LensCursorContext = createContext<
 >(undefined);
 
 export const cursorContext = (
-  scope: LeaseScope,
+  scope: ActivitySurface,
 ): Context<AuthoringCursor | null | undefined> =>
   scope === "lenses" ? LensCursorContext : AuthoringCursorContext;
 
@@ -83,21 +84,21 @@ type Idle = "none" | "march" | "sit";
 
 /**
  * Stands on whatever the cursor names, hops when it moves, marches in place
- * while the lease is live and nothing is arriving, sits down after a while,
- * and hops up and out when the lease ends. Click him and he jumps. He is
+ * while an agent is working and nothing is arriving, sits down after a while,
+ * and hops up and out when the agent stops. Click him and he jumps. He is
  * absolutely positioned inside his container and measured against it, so
  * scrolling costs nothing; layout changes re-measure him.
  *
- * The document's courier lives in the article and follows the document
- * lease; the lenses' courier lives in the Diffs page's lens list and follows
- * the lenses lease. Both can be out at once.
+ * The document's courier lives in the article and follows the agent writing
+ * the document; the lenses' courier lives in the Diffs page's lens list and
+ * follows the agent writing lenses. Both can be out at once.
  */
 export function Courier({
   scope = "document",
   container,
   find = cursorElement,
 }: {
-  scope?: LeaseScope;
+  scope?: ActivitySurface;
   /** Where he stands, once mounted; the document article by default. */
   container?: HTMLElement | null;
   find?: (container: HTMLElement, cursor: AuthoringCursor) => Element | null;
@@ -223,7 +224,7 @@ export function Courier({
     return () => clearTimeout(timer);
   }, [live, motion, cursor?.seq, gone]);
 
-  // The lease ended: one last hop up and out, then nothing.
+  // The agent stopped: one last hop up and out, then nothing.
   useEffect(() => {
     if (live || activity === undefined || unknown || !position || gone) return;
     setIdle("none");
@@ -242,7 +243,7 @@ export function Courier({
     return () => clearTimeout(timer);
   }, [live, unknown, activity === undefined, Boolean(position), gone]);
 
-  // A lease that begins again brings him back.
+  // An agent that begins again brings him back.
   useEffect(() => {
     if (live && gone) setGone(false);
   }, [live, gone]);
@@ -258,7 +259,7 @@ export function Courier({
 
   const description =
     activity !== "unknown"
-      ? scopeFocus(activity, scope)?.description
+      ? scopePresence(activity, scope)?.focus?.description
       : undefined;
 
   // The classes are markers: the badge finds him by them, and tests read
@@ -267,7 +268,12 @@ export function Courier({
   return (
     <div
       ref={node}
-      {...withClass("courier", styles.courier, unknown && styles.unknown)}
+      {...withClass(
+        "courier",
+        styles.courier,
+        agentColor(scopePresence(activity, scope)?.slot),
+        unknown && styles.unknown,
+      )}
       data-scope={scope}
       data-state={unknown ? "unknown" : live ? "live" : "ended"}
       data-idle={idle}
@@ -383,7 +389,7 @@ const marchBob = stylex.keyframes({
   "50%": { transform: "translateY(-1.5px) rotate(2deg)" },
 });
 
-// The lease ended: up and out.
+// The agent stopped: up and out.
 
 const leave = stylex.keyframes({
   "0%": { transform: "translateY(0)" },

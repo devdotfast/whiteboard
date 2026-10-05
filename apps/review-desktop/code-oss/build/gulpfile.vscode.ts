@@ -214,7 +214,14 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 		const out = sourceFolderName;
 		const versionedResourcesFolder = util.getVersionedResourcesFolder(platform, commit!);
 
+		const sharedDirectory = path.join(process.cwd(), out, 'vs/review/shared');
+		const sharedFiles = fs.existsSync(sharedDirectory)
+			? fs.readdirSync(sharedDirectory).filter(file => file.endsWith('.js')).map(file => `vs/review/shared/${file}`)
+			: [];
 		const checksums = computeChecksums(out, [
+			...sharedFiles,
+			'vs/review/navigator.desktop.main.js',
+			'vs/review/navigator.desktop.main.css',
 			'vs/base/parts/sandbox/electron-browser/preload.js',
 			'vs/review/review.desktop.main.js',
 			'vs/review/review.desktop.main.css',

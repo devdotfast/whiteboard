@@ -8,18 +8,33 @@ Serialization tag: code-oss-upstream-8a7abeba
 
 Review applies these focused VS Code changes without changing the source pin:
 
-- Electron 42.10.0 and its authentication type update:
-  `ce168782e1cb844c18ebcbf4ba5d66f098f0e6b2`,
-  `28cf0a82a08a5f8e9288d19b4218ec1eb5ee46a6`. Review previously pinned 42.9.3
-  (`eff5556afcf7a77abefa5d5b83dc26ac895ff8bf`), which upstream reverted two
-  days later before settling on 42.10.0. The checksum file is upstream's,
-  verified line for line against the official `v42.10.0` `SHASUMS256.txt`.
+- Electron 43.7.5 (Node 24.21.0), tracking upstream's Electron version:
+  `4ae4d96052c5a986fe84974ed9d7b220234670b4`, `0d9ade07b6`, `d2fe6d3bf9`,
+  plus the 42.10.0 authentication type update
+  `28cf0a82a08a5f8e9288d19b4218ec1eb5ee46a6`. Version, checksum,
+  `cgmanifest.json` and Linux dependency-list files are upstream's at
+  `d2fe6d3bf9`; `electron.txt` is verified against the official `v43.7.5`
+  `SHASUMS256.txt`. From `4ae4d960` Review takes the `enableWebSQL` removals,
+  the Linux window-controls title bar, and the file dialog default path
+  (Electron 43 otherwise opens dialogs in Downloads). It leaves out:
+  the `protocol.handle` migration (Electron 43 still supports the deprecated
+  `register*Protocol`/`interceptFileProtocol` APIs, and upstream's change
+  targets a protocol module refactored after the pin; port it when a major
+  removes them); the `linuxDesktopName` rename, which would rename the
+  `.desktop` files in Review's Linux packages; and the GCC < 13
+  `build/npm/gyp/custom-headers/v8config.h` overlay with its `preinstall.ts`
+  hunk, since Review's Linux builder has GCC 13+ and macOS and Windows use
+  clang and MSVC.
 - Applicable security hardening from
   `06a2bc84d0555f4c7ebd176809673e61fa49c6ff`. Review includes environment
   sanitization, owned transfer buffers, production extension-development
   restrictions, extension URL confirmation ordering, and invalid terminal
   working-directory termination. Review excludes the workspace trust hunk and
-  changes for pruned subsystems.
+  changes for pruned subsystems. This covers CVE-2026-47285, CVE-2026-70336,
+  CVE-2026-69320, and the `extensionUrlHandler` part of CVE-2026-59113. It
+  leaves CVE-2026-69306 (network filter) and the `webPageLoader` part of
+  CVE-2026-59113 inert (see below), and CVE-2026-69278 and CVE-2026-58650
+  unaddressed with the excluded terminal trust hunk.
 - Native event buffering: `876ce72e199704eb7f85b92ed580a3413e9c9f42`.
 - Listener leak instrumentation: `0e03962871113c2b3c525ede47dcf8197915f10a`.
 - Main-thread editor disposal: `b5f99abe4c3ca01cd5271bbeb562c1c508341f43`.
@@ -27,6 +42,35 @@ Review applies these focused VS Code changes without changing the source pin:
 - Disposed multi-diff guard: `9302a9e943f45090b8f89f59c9e83362bb973b92`.
 - Destroyed Electron frame guards: `1058ac0ced09b96d5745c379cdfd50f855f57036`.
 - Retry after failed Oniguruma loads: `5c7bf1f5abd4b51d290f4d9861d5d00ecdcb2de0`.
+- `@vscode/proxy-agent` 0.45.0 in the root and `remote/` manifests:
+  `ca90419648a3785c1c73d59dacad43c9726d9b67`. Review moves from 0.43.0, so
+  the lockfiles are regenerated rather than patched.
+
+October 2026 leak, race, and crash fixes, verbatim without test hunks:
+
+- Startup: built-in extension manifest cache never hit (`47aa3e98`).
+- Detached DOM and window leaks: editor widgets, message, sticky scroll,
+  modifier keys, `Delayer`, and per-window animation frame, font and pixel
+  ratio caches (`b5faf951`, `ee778616`, `e1821592`, `2a4734ba`, `d912aa0e`,
+  `86a5159b`, `9d4555ee`, `44854867`). Review adds the `markAsSingleton`
+  import to `dom.ts` by hand; upstream already had it.
+- Extension host: leaks on cancelled requests (semantic tokens, signature
+  help, workspace symbols, hierarchies, drop edits, tree views) and stale RPC
+  cancel handlers (`0d3c47e1`, `78283637`, `ece3c56d`, `1ead63ee`, `5aa09546`,
+  `9f1fd52e`, `a8fee700`); one shared semantic token theme listener
+  (`46ce39e3`); invalid semantic token edits (`400d86be`).
+- Diff and editors: deferred diff model references, moved block actions,
+  multi-diff tab listeners, the References view, reentrant autoclose
+  decorations (`e3ce07e8`, `1b2f2558`, `8636777c`, `3c95df8b`, `3df2a01b`).
+- Modal editor: creation race, memento growth, Escape capture (`b8d3a33d`,
+  `21e3d6f5`, `e25abd16`); the fork's `editorCommands.ts` weight (below)
+  stays.
+- IPC and async: empty MessagePort frames, unhandled rejections
+  (`07be0760`, `4064a18e`, `453caa8c`, `21aca566`).
+- Lists and toolbars: inverted range clamp, batched width measurement,
+  responsive toolbar relayout (`0f7b8aef`, `5616258b`, `30751f11`).
+- Destroyed window notification cleanup (`36dc839d`); TypeScript signature
+  help active overload (`69e459e4`).
 
 ### September 2026 advisories (all fixed upstream in 1.136.2)
 
@@ -69,6 +113,11 @@ Review applies four of them, covering four CVEs:
   declared but have no read sites in this tree, so there is no path that reads a
   remote agent host address or a persisted file-permission grant from workspace
   configuration.
+- Trusted URL validation (CVE-2026-81356):
+  `e5c58adb0bafaff3e2265e7d1153139f1b784f61` hardens `isURLDomainTrusted` and
+  chat URL fetching patterns. Inert here: the only caller of
+  `isURLDomainTrusted` is `webContentExtractorService.ts`, which Review never
+  registers, and Review loads no chat contributions.
 
 #### Not remediated, by decision
 
@@ -224,12 +273,14 @@ one of these entries:
 - `README.md`: fork orientation and npm-only build rule.
 - `package.json` and `package-lock.json`: omit tasks and runtime dependencies
   for the excluded Copilot extension. Also removes dependencies whose features Review never
-  reaches: the Windows-only natives (`@vscode/windows-mutex`,
-  `@vscode/windows-process-tree`, `@vscode/windows-registry`,
-  `windows-foreground-love`), `kerberos`, `@vscode/policy-watcher`,
-  `@vscode/fs-copyfile`, `native-is-elevated`, `@microsoft/mxc-sdk`,
-  `@vscode/l10n-dev`, `@vscode/test-web`, and `@vscode/telemetry-extractor`.
-  Their import sites typecheck against `src/typings/removed-native-modules.d.ts`.
+  reaches: `@vscode/windows-process-tree`, `windows-foreground-love`,
+  `kerberos`, `@vscode/policy-watcher`, `@vscode/fs-copyfile`,
+  `@microsoft/mxc-sdk`, `@vscode/l10n-dev`, `@vscode/test-web`, and
+  `@vscode/telemetry-extractor`. Their import sites typecheck against
+  `src/typings/removed-native-modules.d.ts`. `@vscode/windows-registry`,
+  `native-is-elevated`, and the optional `@vscode/windows-mutex` were removed
+  too, then restored by the Windows build (#590) because the main process
+  imports them there; their ambient declarations remain.
   The lockfile also advances Undici, Hono, its Node adapter, `ip-address`, and
   `body-parser` within their declared ranges to releases that clear their
   applicable security advisories.
@@ -431,6 +482,37 @@ one of these entries:
   editor (the compact icon-only Home rendering depends on stickiness), and
   the `editor.contribution.ts` Unpin tab-context item is hidden for
   `CannotClose` editors so the menu does not offer a dead action.
+- `src/vs/editor/browser/widget/multiDiffEditor/` (`diffEditorItemTemplate.ts`,
+  `multiDiffEditorResourceHeader.ts`, `multiDiffEditorViewModel.ts`,
+  `multiDiffEditorWidget.ts`, `multiDiffEditorWidgetImpl.ts`,
+  `workbenchUIElementFactory.ts`, `style.css`),
+  `src/vs/editor/browser/widget/diffEditor/` (`diffEditorWidget.ts`,
+  `diffEditorViewModel.ts`, `utils.ts`, `style.css`,
+  `features/hideUnchangedRegionsFeature.ts`, `components/diffEditorDecorations.ts`,
+  `components/diffEditorEditors.ts`, and `components/diffEditorViewZones/`
+  `diffEditorViewZones.ts`, `inlineDiffDeletedCodeMargin.ts`, `renderLines.ts`),
+  `src/vs/editor/common/diff/documentDiffProvider.ts`, the fork-added
+  `src/vs/editor/common/diff/sourceLineAlignment.ts`, and
+  `src/vs/workbench/contrib/multiDiffEditor/browser/` (`multiDiffEditorInput.ts`,
+  `multiDiffSourceResolverService.ts`): Review's Diff view. Unified and
+  structural diffs, stable keys for progressive loading, folded binary entries,
+  Dock-sized bottom scroll space, persisted view state, no restyling while
+  scrolling, and horizontal scrolling in inline entries (862110bb8, 0b9d0ac08,
+  9af69be21, 51b1a4061, a43ec7425, 96fd6fa84, 9c152358d, 5ca7aa1fe, b1be23513,
+  3c14a9e64, da9b3b546).
+- `src/vs/base/browser/ui/scrollbar/` (`scrollableElement.ts`,
+  `scrollableElementOptions.ts`, `scrollbarState.ts`, `verticalScrollbar.ts`):
+  let document scrolling pass over embedded diagrams and code peeks
+  (9c152358d).
+- `src/vs/workbench/browser/parts/editor/editorCommands.ts`: the modal editor's
+  list/tree Escape arm sits at `WorkbenchContrib + 51`, above the References
+  peek's own rule, so one Escape closes the modal (b837f01aa).
+- `src/vs/workbench/browser/parts/editor/` (`editor.contribution.ts`,
+  `editorActions.ts`, `editorCommands.ts`, `editorParts.ts`,
+  `editorTabsControl.ts`, `modalEditorPart.ts`) and
+  `src/vs/workbench/contrib/output/browser/output.contribution.ts`: remove
+  every way to open a detached editor window, which Review's status bar
+  service cannot host (0748d87db).
 - `.gitignore`: ignore the curated built-in extension payloads that
   `scripts/curated-extensions.mjs` materializes under `extensions/`.
 - `src/vs/review/`: Review-owned workbench, protocol, and tests. These files

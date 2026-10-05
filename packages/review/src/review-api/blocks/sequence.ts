@@ -1,10 +1,11 @@
-import { lensSourceSchema } from "@review/lens-selection.js";
+import { anchorSchema } from "@review/lens-selection.js";
 import { z } from "zod";
 
 import { codeFields } from "./code.js";
 import {
   type BlockDefinition,
   defineBlock,
+  elementPins,
   identity,
   label,
   requireKey,
@@ -19,7 +20,8 @@ export const stepSchema = z
     to: label,
     label,
     style: z.enum(["call", "return", "async"]).default("call"),
-    source: lensSourceSchema.optional(),
+    source: anchorSchema.optional(),
+    pins: elementPins,
     explanation: label.optional(),
     code: z.strictObject(codeFields).optional(),
   })
@@ -37,6 +39,7 @@ export const sequenceSchema = defineBlock("sequence", {
   title: label,
   actors: z.record(text, label),
   steps: z.array(stepSchema),
+  pins: elementPins,
 });
 
 export type SequenceBlock = z.infer<typeof sequenceSchema>;

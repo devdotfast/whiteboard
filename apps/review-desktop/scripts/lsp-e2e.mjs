@@ -421,24 +421,18 @@ async function api(route, method = "GET", body) {
   return result;
 }
 
-const command = (operation) =>
-  api("/commands", "POST", { commandId: randomUUID(), operation });
+const command = (operation) => api("/commands", "POST", { operation });
 
 async function createReview(fix, title, kind = "commits") {
   const repository = await api("/repositories", "POST", { path: fix.repo });
 
-  const pins = await api("/pins", "POST", {
-    repositoryId: repository.id,
-    base: fix.base,
-    head: fix.head,
-  });
-
   const review = await command({
     type: "create",
     title,
-    ...(kind === "worktree"
-      ? { target: { kind, repositoryId: repository.id, base: fix.base } }
-      : { pins }),
+    target:
+      kind === "worktree"
+        ? { kind, repositoryId: repository.id, base: fix.base }
+        : { kind, repositoryId: repository.id, base: fix.base, head: fix.head },
   });
 
   const reviewId = review.reviewId;
@@ -1074,13 +1068,16 @@ try {
   );
   await record("selected-commit source retains its own pinned coordinates");
 
-  const newerPins = await api("/pins", "POST", {
-    repositoryId: review.pins.repositoryId,
-    base: first.base,
-    head: first.base,
+  await command({
+    type: "set_target",
+    reviewId: review.reviewId,
+    target: {
+      kind: "commits",
+      repositoryId: review.pins.repositoryId,
+      base: first.base,
+      head: first.base,
+    },
   });
-
-  await command({ type: "repin", reviewId: review.reviewId, pins: newerPins });
   const newerReview = await api(`/${review.reviewId}?full=true`);
   const historical = await expectHover(uri(review), greetAt, "string");
   assert.equal(historical.document.text, mainText("head"));

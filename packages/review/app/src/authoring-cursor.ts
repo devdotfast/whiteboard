@@ -1,17 +1,20 @@
-import type { ActivitySnapshot, LeaseScope } from "@review/review-api/activity";
+import type {
+  ActivitySnapshot,
+  ActivitySurface,
+} from "@review/review-api/activity";
 import type { EditSummary } from "@review/review-api/document";
 
 /**
  * Where the agent is on the board. The stream carries two signals: the edit
- * that produced each version, and the lease's focus. A new version moves the
+ * that produced each version, and each agent's focus. A new version moves the
  * cursor to what it edited; between versions, a changed focus moves it to
  * what the agent says it is looking at. `seq` counts moves, so two edits to
  * the same target still read as two arrivals. A reader who joins mid-session
  * finds him standing on the last edit, already drawn.
  *
- * Each lease scope has its own cursor: the document's courier follows
- * document edits and the document lease's focus, the Diffs page's follows
- * lens edits and the lenses lease's focus. One stream feeds both.
+ * Each surface has its own cursor: the document's courier follows document
+ * edits and the focus of the agent writing there, the Diffs page's follows
+ * lens edits and the lens agent's focus. One stream feeds both.
  */
 export interface AuthoringCursor {
   targetId: string;
@@ -36,28 +39,30 @@ export interface CursorMemory {
   focusTarget?: string;
 }
 
-/** The scope an edit belongs to: a lens edit is the lenses lease's work. */
-export const editScope = (edit: EditSummary): LeaseScope =>
+/** The surface an edit belongs to: a lens edit is drawn on the Diffs page. */
+export const editScope = (edit: EditSummary): ActivitySurface =>
   edit.kind === "lens" ? "lenses" : "document";
 
-/** The focus of one scope's lease; a focus without a scope is the document's. */
-export function scopeFocus(activity: ActivitySnapshot, scope: LeaseScope) {
-  return activity.focuses?.find(
-    (focus) => (focus.scope ?? "document") === scope,
-  );
+/** Where an agent is: where it last wrote, the document until it writes. */
+export const surfaceOf = (presence: { surface?: ActivitySurface }) =>
+  presence.surface ?? "document";
+
+/** The agent working on one surface. */
+export function scopePresence(
+  activity: ActivitySnapshot | "unknown" | undefined,
+  scope: ActivitySurface,
+) {
+  if (activity === undefined || activity === "unknown") return undefined;
+
+  return activity.activities?.find((presence) => surfaceOf(presence) === scope);
 }
 
-/** Whether one scope's lease is live. A host that predates scopes reports
- * only a count, which is the document's. */
+/** Whether an agent is working on one surface. */
 export function scopeLive(
   activity: ActivitySnapshot | "unknown" | undefined,
-  scope: LeaseScope,
+  scope: ActivitySurface,
 ): boolean {
-  if (activity === undefined || activity === "unknown") return false;
-
-  return activity.scopes
-    ? activity.scopes.includes(scope)
-    : scope === "document" && activity.workingCount > 0;
+  return scopePresence(activity, scope) !== undefined;
 }
 
 /** Fold one stream message into one scope's cursor; the memory is the
@@ -66,14 +71,14 @@ export function nextCursor(
   cursor: AuthoringCursor | null,
   memory: CursorMemory,
   message: CursorMessage,
-  scope: LeaseScope = "document",
+  scope: ActivitySurface = "document",
 ): AuthoringCursor | null {
   const seq = (cursor?.seq ?? 0) + 1;
 
   const focusTarget =
     message.activity === "unknown"
       ? memory.focusTarget
-      : scopeFocus(message.activity, scope)?.targetId;
+      : scopePresence(message.activity, scope)?.focus?.targetId;
 
   // Another scope's edit is not this courier's to draw.
   const lastEdit =

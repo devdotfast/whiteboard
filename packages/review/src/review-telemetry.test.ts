@@ -149,6 +149,8 @@ describe("ReviewTelemetry", () => {
       via: "api",
       ok: false,
       durationMs: -1,
+      errorName: "usage_error",
+      errorCategory: "user_input",
     });
 
     expect(
@@ -158,10 +160,51 @@ describe("ReviewTelemetry", () => {
         properties?.via,
         properties?.ok,
         properties?.duration_ms,
+        properties?.error_name,
+        properties?.error_category,
       ]),
     ).toEqual([
-      ["review_mcp_tool_called", "session_create", "mcp", true, 42],
-      ["review_mcp_tool_called", "other", "api", false, 0],
+      [
+        "review_mcp_tool_called",
+        "session_create",
+        "mcp",
+        true,
+        42,
+        undefined,
+        undefined,
+      ],
+      [
+        "review_mcp_tool_called",
+        "other",
+        "api",
+        false,
+        0,
+        "usage_error",
+        "user_input",
+      ],
+    ]);
+  });
+
+  it("names the agent on tool calls, preferring the caller's over the environment's", async () => {
+    const { events, rootPath, telemetry } = createTelemetry({
+      env: { CLAUDE_CODE_SESSION_ID: "session" },
+    });
+
+    cleanupPaths.push(rootPath);
+
+    const call = {
+      tool: "session_edit",
+      via: "mcp",
+      ok: true,
+      durationMs: 1,
+    } as const;
+
+    await telemetry.captureToolCalled({ ...call, agentKind: "codex" });
+    await telemetry.captureToolCalled(call);
+
+    expect(events.map(({ properties }) => properties?.agent_kind)).toEqual([
+      "codex",
+      "claude",
     ]);
   });
 
@@ -615,6 +658,42 @@ describe("ReviewTelemetry", () => {
       expect(events[0].properties).not.toHaveProperty("app_version");
     },
   );
+
+  it("reports the Desktop release a CLI process reached as app_version", async () => {
+    const { events, rootPath, telemetry } = createTelemetry({ env: {} });
+
+    cleanupPaths.push(rootPath);
+    telemetry.setDesktopVersion("0.2.0");
+
+    await telemetry.captureToolCalled({
+      tool: "session_edit",
+      via: "mcp",
+      ok: true,
+      durationMs: 12,
+    });
+
+    expect(events[0].properties).toMatchObject({ app_version: "0.2.0" });
+  });
+
+  it("prefers the Desktop's own version and ignores an invalid reached one", async () => {
+    const launched = createTelemetry({
+      env: { [REVIEW_APP_VERSION_ENV]: "0.2.0" },
+    });
+
+    const reached = createTelemetry({ env: {} });
+
+    cleanupPaths.push(launched.rootPath, reached.rootPath);
+    launched.telemetry.setDesktopVersion("0.1.5");
+    reached.telemetry.setDesktopVersion("not-a-version");
+
+    await launched.telemetry.captureUiEvent("review_app_opened", {});
+    await reached.telemetry.captureUiEvent("review_app_opened", {});
+
+    expect(launched.events[0].properties).toMatchObject({
+      app_version: "0.2.0",
+    });
+    expect(reached.events[0].properties).not.toHaveProperty("app_version");
+  });
 
   it("does not look up the account to alias when telemetry is off", async () => {
     const { events, rootPath, telemetry } = createTelemetry({

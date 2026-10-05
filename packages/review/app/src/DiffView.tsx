@@ -173,6 +173,7 @@ export function ReviewDiffView({
   });
 
   const lenses = useReviewLenses();
+  const diffFiles = useReviewDiffFiles();
   const lens = scope ? undefined : lenses?.active;
   const [lensList, setLensList] = useState<HTMLDivElement | null>(null);
   const rows = useLensRows(lenses?.lenses ?? []);
@@ -245,6 +246,8 @@ export function ReviewDiffView({
 
     void lenses.mark(sources, lenses.stats(sources).state !== "viewed");
   };
+
+  if (diffFiles.status === "unavailable") return null;
 
   if (scope || !lenses)
     return (
@@ -494,6 +497,16 @@ export function ReviewDiffView({
               ref={setLensTree}
               style={!lens ? { display: "none" } : undefined}
             />
+            {lenses.progress?.untrackedFiles ? (
+              <div
+                {...stylex.props(styles.hint, styles.untracked)}
+                title="Untracked files are not part of the review. git add -N a file to include it."
+              >
+                {lenses.progress.untrackedFiles} untracked{" "}
+                {lenses.progress.untrackedFiles === 1 ? "file" : "files"} not
+                shown
+              </div>
+            ) : null}
           </div>
         </div>
       </aside>
@@ -1047,6 +1060,10 @@ const styles = stylex.create({
     padding: "0 14px 6px 16px",
     color: tokens.inkFaint,
     font: `${fontSize.small}/16px ${tokens.fontMono}`,
+  },
+  untracked: {
+    flexShrink: 0,
+    paddingTop: 6,
   },
   nativeTree: {
     flex: 1,

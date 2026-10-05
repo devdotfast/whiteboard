@@ -246,7 +246,7 @@ describe("review_get_instructions", () => {
 
   it("prints CLI guidance as raw text and reports offline recovery on stderr", async () => {
     const { client } = api();
-    const connection = vi.spyOn(agentClient, "connectReviewApi");
+    const connection = vi.spyOn(agentClient, "connectReviewInstance");
     let stdout = "";
     let stderr = "";
 
@@ -265,7 +265,7 @@ describe("review_get_instructions", () => {
     });
 
     try {
-      connection.mockResolvedValueOnce(client);
+      connection.mockResolvedValueOnce({ client });
       expect(
         await runReviewAgentCli({
           argv: ["api", "session_get_instructions", "{}"],

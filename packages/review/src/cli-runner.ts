@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import type { Writable } from "node:stream";
@@ -5,12 +7,14 @@ import { fileURLToPath } from "node:url";
 
 import {
   StoreApiError,
+  processIsAlive,
   readStoreAuth,
   withStoreAuthorization,
 } from "@dev.fast/trace-core";
 import {
   type CliInputStream,
   DEFAULT_STORE_ORIGIN,
+  DEV_REVIEW_HOME_ENV,
   emitJsonEvent,
   humanStream,
   jsonRequestedInArgv,
@@ -39,7 +43,11 @@ import {
 } from "./cli-install";
 import { cliRuntimeInfo, describeCliRuntime } from "./cli-runtime-info";
 import { connectPrompts } from "./connect-prompts";
-import { selectReviewInstance } from "./desktop-discovery";
+import {
+  ReviewInstanceUnavailableError,
+  readReviewInstances,
+  selectReviewInstance,
+} from "./desktop-discovery";
 import {
   ALL_INSTALL_TARGETS,
   type InstallTarget,
@@ -52,7 +60,13 @@ import {
   readReviewPackageVersion,
 } from "./package-paths";
 import { reviewAgentCliHelp } from "./review-api/agent-cli";
-import { type ReviewAppEvent, runReviewAppPick } from "./review-app";
+import { ReviewApiError } from "./review-api/client";
+import {
+  type ReviewAppEvent,
+  ReviewAppStateError,
+  ReviewAppUsageError,
+  runReviewAppPick,
+} from "./review-app";
 import {
   type ReviewAppLaunchEvent,
   runReviewAppLaunch,
@@ -74,6 +88,7 @@ import {
 } from "./review-telemetry";
 import {
   readReviewServerDiscovery,
+  readReviewServerHealth,
   reviewServerIsHealthy,
   reviewServerStateDir,
   serverNotReady,
@@ -95,6 +110,10 @@ import {
   runTraceSync,
 } from "./trace-cli";
 import { runTraceConfigMigrate, runTraceStorageUse } from "./trace-storage-cli";
+
+class ReviewCliUsageError extends Error {
+  readonly name = "ReviewCliUsageError";
+}
 
 interface ReviewCliRuntime {
   runReviewAppLaunch: typeof runReviewAppLaunch;
@@ -193,6 +212,8 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       }
     | undefined;
 
+  let activeCause: unknown;
+
   const configureOutput = <T extends Command>(
     command: T,
     surface: OutputSurface,
@@ -285,13 +306,15 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     }>();
 
     if (options.authoringMode !== undefined)
-      throw new Error(
+      throw new ReviewCliUsageError(
         "--authoring-mode was removed with batch authoring; the server always authors interactively. Drop the option.",
       );
     const port = Number(options.port);
 
     if (!Number.isInteger(port) || port < 0 || port > 65535)
-      throw new Error("--port must be an integer between 0 and 65535.");
+      throw new ReviewCliUsageError(
+        "--port must be an integer between 0 and 65535.",
+      );
     const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
     const controller = new AbortController();
     const stop = () => controller.abort();
@@ -337,14 +360,100 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
 
     const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
     const discovery = await readReviewServerDiscovery(stateDir);
+    const health = discovery && (await readReviewServerHealth(discovery));
 
-    if (!discovery || !(await reviewServerIsHealthy(discovery)))
-      throw serverNotReady(stateDir);
+    if (!discovery || !health) throw serverNotReady(stateDir);
     const { url, serverPid } = discovery;
+    const { version, serverId } = health;
     input.stdout.write(
       options.json
-        ? `${JSON.stringify({ event: "server.status", ready: true, url, serverPid, stateDir })}\n`
+        ? `${JSON.stringify({ event: "server.status", ready: true, url, serverPid, stateDir, version, serverId })}\n`
         : `Whiteboard server ready at ${url}\nSaved reviews: ${stateDir}\n`,
+    );
+  });
+
+  configureJsonOutput(
+    serverCommand
+      .command("reset-id")
+      .description(
+        "Give this machine's saved reviews a new server id; stop the server first",
+      )
+      .option(
+        "--state-dir <path>",
+        "directory selected when starting the server",
+      ),
+    "plain",
+  ).action(async (_options, command: Command) => {
+    const options = command.optsWithGlobals<{
+      stateDir?: string;
+      json?: boolean;
+    }>();
+
+    const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
+
+    if (!existsSync(path.join(stateDir, "review-api.db")))
+      throw new Error(
+        `No saved reviews in ${stateDir}, so there is no server id to reset. Check --state-dir.`,
+      );
+
+    // Any live Desktop holds the store, attached window or not. Only a gone
+    // process counts as stopped: a paused or busy one may not answer /health.
+    const desktops = await readReviewInstances({
+      env: { ...env, [DEV_REVIEW_HOME_ENV]: stateDir },
+    });
+
+    const [problem] = desktops.broken.values();
+
+    if (problem)
+      throw new Error(
+        `Cannot tell whether a Whiteboard Desktop is using ${stateDir}: ${problem.message}`,
+      );
+
+    const inUse = () =>
+      new Error(
+        `A Whiteboard server is using ${stateDir}. Stop it first, then run whiteboard server reset-id again.`,
+      );
+
+    if (
+      desktops.instances.some(({ discovery }) =>
+        [discovery.appPid, discovery.serverPid].some((pid) =>
+          processIsAlive(pid),
+        ),
+      )
+    )
+      throw inUse();
+
+    const [{ openReviewProfile }, { withHeadlessServerLock }] =
+      await Promise.all([
+        import("./review-api/profile.js"),
+        import("./server/headless-host.js"),
+      ]);
+
+    // The headless server's own lock (at the path it resolves): refused while
+    // a live server holds it, and no server can start during the reset.
+    const reset = await withHeadlessServerLock(
+      await realpath(stateDir),
+      async () => {
+        const local = await openReviewProfile(stateDir, {
+          manageWorkspaces: false,
+        });
+
+        try {
+          return local.store.resetServerId();
+        } finally {
+          await local.data.close();
+          await local.store.close();
+        }
+      },
+    );
+
+    if (!reset.acquired) throw inUse();
+    const serverId = reset.result;
+
+    input.stdout.write(
+      options.json
+        ? `${JSON.stringify({ event: "server.reset-id", serverId, stateDir })}\n`
+        : `New server id ${serverId}\nSaved reviews: ${stateDir}\n`,
     );
   });
 
@@ -863,6 +972,10 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         ...input,
         env: authoringEnv(),
         argv: [name, ...args],
+        onFailure: (error) => {
+          activeCause = error;
+        },
+        onDesktop: (appVersion) => telemetry.setDesktopVersion(appVersion),
         onToolCall: (call) =>
           attemptTelemetry(() => telemetry.captureToolCalled(call)),
       });
@@ -899,7 +1012,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       telemetry,
       activeTelemetry,
       state.exitCode,
-      undefined,
+      activeCause,
       telemetryProperties,
     );
   });
@@ -1260,6 +1373,49 @@ function errorClassification(
 ): ErrorClassification {
   if (cause instanceof CommanderError || command === "invalid") {
     return { errorName: "usage_error", errorCategory: "user_input" };
+  }
+
+  if (
+    cause instanceof ReviewCliUsageError ||
+    cause instanceof ReviewAppUsageError
+  ) {
+    return { errorName: "usage_error", errorCategory: "user_input" };
+  }
+
+  if (cause instanceof ReviewAppStateError) {
+    return {
+      errorName: "review_state_error",
+      errorCategory: "local_state",
+    };
+  }
+
+  if (cause instanceof ReviewInstanceUnavailableError) {
+    return {
+      errorName: "desktop_connection_error",
+      errorCategory: "dependency",
+    };
+  }
+
+  if (cause instanceof ReviewApiError) {
+    if (cause.status === 404)
+      return { errorName: "review_not_found", errorCategory: "local_state" };
+
+    if (cause.status >= 500)
+      return { errorName: "unexpected_error", errorCategory: "internal" };
+
+    return { errorName: "usage_error", errorCategory: "user_input" };
+  }
+
+  if (cause instanceof Error && "code" in cause) {
+    const code = cause.code;
+
+    if (code === "EADDRINUSE" || code === "ECONNREFUSED") {
+      return { errorName: "network_error", errorCategory: "transport" };
+    }
+  }
+
+  if (command === "api" && cause instanceof TypeError) {
+    return { errorName: "network_error", errorCategory: "transport" };
   }
 
   const name = cause instanceof Error ? cause.name.toLowerCase() : "";

@@ -46,6 +46,11 @@ import {
 } from "./legacy-resources";
 import { escapeMarkdownText } from "./prose-markdown";
 
+/** A review whose sealed history cannot be converted in full. The JSON cutover
+ * leaves such a review's directory untouched rather than installing part of
+ * its history. */
+export class IncompleteHistoryError extends Error {}
+
 export type ImportOutcome =
   | {
       kind: "imported";
@@ -215,7 +220,7 @@ export async function importLegacyReview(
 
     if (raw === null) {
       if (entry.oid === record.presentedDocumentRevision)
-        throw new Error(
+        throw new IncompleteHistoryError(
           `Published revision ${entry.oid} has no sealed document.`,
         );
       warnings.push(`revision ${entry.oid} has no sealed JSON document`);
@@ -254,7 +259,7 @@ export async function importLegacyReview(
         mapWarnings,
       );
 
-      if (!map) throw new Error(mapWarnings.join("; "));
+      if (!map) throw new IncompleteHistoryError(mapWarnings.join("; "));
       input.archiveMap({
         reviewId,
         documentRevision: entry.oid,
@@ -300,7 +305,9 @@ export async function importLegacyReview(
     );
 
     if (input.completeHistory && versionWarnings.length)
-      throw new Error(`revision ${entry.oid}: ${versionWarnings.join("; ")}`);
+      throw new IncompleteHistoryError(
+        `revision ${entry.oid}: ${versionWarnings.join("; ")}`,
+      );
 
     // Each sealed revision carries the record it was sealed with, so its
     // peeks resolve against the pins of that time, not today's.
@@ -319,7 +326,7 @@ export async function importLegacyReview(
       );
 
       if (!map && input.completeHistory)
-        throw new Error(versionWarnings.join("; "));
+        throw new IncompleteHistoryError(versionWarnings.join("; "));
 
       if (map) {
         blocks.push(map);
@@ -444,7 +451,6 @@ async function importPresentedMap(
   const replaced = head.document.find(isMapSection);
 
   const result = await store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "edit",
       reviewId,

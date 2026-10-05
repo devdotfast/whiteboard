@@ -1,5 +1,11 @@
+import { createHash } from "node:crypto";
+
 import { type JsonObject, isJsonObject } from "@dev.fast/json";
-import type { ReviewStructuralDiffEvent } from "@dev.fast/review-protocol";
+import {
+  REVIEW_CLIENT_HEADER,
+  REVIEW_CLIENT_REMOTE,
+  type ReviewStructuralDiffEvent,
+} from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
 import {
   type AgentSelection,
@@ -30,12 +36,13 @@ import type { SharedReviewStore } from "@review/sharing/import.js";
 import { SharedReviewData } from "@review/sharing/routes.js";
 import type { ReviewSessionAgent } from "@review/ui-telemetry-events.js";
 import { scopedCoverage } from "@review/viewed-coverage.js";
-import { Hono, type MiddlewareHandler } from "hono";
+import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
+import { anchorQuotes } from "./anchor-quotes.js";
 import { authoringTools } from "./authoring-tools.js";
 import { documentText } from "./document-text.js";
-import { ReviewInputError, fileLineRangeSchema } from "./document.js";
+import { ReviewInputError } from "./document.js";
 import {
   instructionsQuerySchema,
   renderInstructions,
@@ -142,6 +149,10 @@ export interface ReviewApiHooks {
   }) => void;
   sharing?: SharingHostEvents;
 }
+
+/** A gateway forwarding from another machine; it gets no local paths. */
+const remoteCaller = (context: Context) =>
+  context.req.header(REVIEW_CLIENT_HEADER) === REVIEW_CLIENT_REMOTE;
 
 /** Both hosts mount this behind their token authentication. */
 export function createReviewApi(
@@ -455,12 +466,8 @@ export function createReviewApi(
   });
 
   // One route per agent tool; the path names the action.
-  for (const [path, action] of [
-    ["begin", "begin"],
-    ["update", "renew"],
-    ["end", "end"],
-  ] as const)
-    app.post(`/:id/activity/${path}`, async (context) => {
+  for (const action of ["begin", "update", "end"] as const)
+    app.post(`/:id/activity/${action}`, async (context) => {
       const input = await readBoundedRequestJson(context.req.raw);
       const id = context.req.param("id");
       store.assertExists(id);
@@ -731,6 +738,12 @@ export function createReviewApi(
       return context.json(result);
     });
     app.post("/:id/navigator", async (context) => {
+      if (remoteCaller(context))
+        throw new ReviewInputError(
+          "Source windows are not available for a review on another machine.",
+          409,
+        );
+
       const input = readQuerySchemas.file
         .extend({
           side: z.enum(["base", "head"]).default("head"),
@@ -787,19 +800,6 @@ export function createReviewApi(
 
       return context.json(await data!.register(input.path));
     });
-    app.post("/pins", async (context) => {
-      const input = z
-        .strictObject({
-          repositoryId: z.string(),
-          base: z.string(),
-          head: z.string(),
-        })
-        .parse(await readBoundedRequestJson(context.req.raw));
-
-      return context.json(
-        await data!.resolvePins(input.repositoryId, input.base, input.head),
-      );
-    });
     app.post("/resources", async (context) =>
       context.json(
         await data!.upload(
@@ -833,23 +833,6 @@ export function createReviewApi(
         },
       });
     });
-    app.post("/:id/source", async (context) => {
-      const input = z
-        .strictObject({
-          version: z.number().int().nonnegative().optional(),
-          source: fileLineRangeSchema,
-          commit: z.string().min(1).optional(),
-        })
-        .parse(await readBoundedRequestJson(context.req.raw));
-
-      const { pins } = await data.resolveSource(
-        readReview(context.req.param("id"), input.version),
-        input.commit,
-        input.source.pins,
-      );
-
-      return context.json(await data.quote(pins, input.source));
-    });
     app.get("/:id/language-context", async (context) => {
       const input = readQuerySchemas.maps
         .extend({
@@ -863,14 +846,28 @@ export function createReviewApi(
 
       const snapshot = readReview(context.req.param("id"), input.version);
 
+      const environment = await data.languageEnvironment(
+        snapshot,
+        input.side,
+        input.commit,
+        false,
+        queryAnchor(input),
+      );
+
       return context.json(
-        await data.languageEnvironment(
-          snapshot,
-          input.side,
-          input.commit,
-          false,
-          queryAnchor(input),
-        ),
+        remoteCaller(context)
+          ? {
+              // A live checkout's identity names its path; keep only its equality.
+              identity: createHash("sha256")
+                .update(environment.identity)
+                .digest("hex"),
+              // An acquisition error can quote local paths.
+              ...(environment.issue && {
+                issue:
+                  "The checkout for language features is not available on the remote machine.",
+              }),
+            }
+          : environment,
       );
     });
     app.post("/:id/environment", async (context) => {
@@ -941,6 +938,7 @@ export function createReviewApi(
       }
 
       const local =
+        !remoteCaller(context) &&
         !input.commit &&
         !anchor &&
         input.side === "head" &&
@@ -1000,14 +998,7 @@ export function createReviewApi(
       });
     });
     app.get("/:id/diff", async (context) => {
-      const query = context.req.query();
-      const paths = context.req.queries("paths");
-      const input = readQuerySchemas.diff.parse({ ...query, paths });
-
-      if (input.file !== undefined && (paths || "format" in query))
-        throw new ReviewInputError(
-          'file cannot be combined with paths or format; use paths:["…"], format:"patch".',
-        );
+      const input = readQuerySchemas.diff.parse(context.req.query());
 
       const { pins } = await data.resolveSource(
         readReview(context.req.param("id"), input.version),
@@ -1015,16 +1006,7 @@ export function createReviewApi(
         queryAnchor(input),
       );
 
-      if (input.format === "files" && input.file === undefined)
-        return context.json(await data.changedFiles(pins, input.paths));
-
-      return context.text(
-        await data.patches(pins, {
-          paths: input.file === undefined ? input.paths : [input.file],
-          contextLines: input.context,
-          maxBytes: input.maxBytes,
-        }),
-      );
+      return context.json(await data.changes(pins));
     });
     app.get("/:id/commits", async (context) => {
       const input = readQuerySchemas.commits.parse(context.req.query());
@@ -1673,9 +1655,15 @@ export function createReviewApi(
   };
 
   app.post("/commands", async (context) => {
-    const { command: request, open: requestedOpen } = takeCreateOpen(
+    const { command: body, open: requestedOpen } = takeCreateOpen(
       await readBoundedRequestJson(context.req.raw),
     );
+
+    const request = await locateRepositories(body, (path) => {
+      if (!data) throw new ReviewInputError("Repositories are unavailable.");
+
+      return data.register(path);
+    });
 
     const input = commandSchema.parse(request);
 
@@ -1726,6 +1714,22 @@ export function createReviewApi(
 
     const result = await store.execute(input);
 
+    if (input.operation.type === "edit" && data && !result.deleted) {
+      const { quotes, unquoted } = await anchorQuotes(
+        result.version > 0
+          ? store.read(result.reviewId, result.version - 1)
+          : undefined,
+        store.read(result.reviewId, result.version),
+        async (pins, side, file) => (await data.file(pins, side, file)).text,
+      );
+
+      return context.json({
+        ...result,
+        ...(quotes.length && { quotes }),
+        ...(unquoted && { unquotedAnchors: unquoted }),
+      });
+    }
+
     if (input.operation.type === "lens_edit") {
       const gaps = await lensGaps(
         result.reviewId,
@@ -1744,8 +1748,7 @@ export function createReviewApi(
 
     if (input.operation.type !== "create") return context.json(result);
 
-    // False when an existing review for the same PR came back. A replayed
-    // command returns its first receipt, so this can repeat for one review.
+    // False when an existing review for the same PR came back.
     if (result.created !== false)
       hooks.onReviewCreated?.({
         reviewId: result.reviewId,
@@ -1777,8 +1780,8 @@ function failureKind(error: Error): string {
 
 /**
  * `open` steers presentation, not the saved review, so it stays out of the
- * command and its receipt: a retry may choose differently. Anything else,
- * including `open` off create, is left for commandSchema to reject.
+ * command. Anything else, including `open` off create, is left for
+ * commandSchema to reject.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Request body boundary: commandSchema parses the result.
 function takeCreateOpen(body: unknown) {
@@ -1795,6 +1798,44 @@ function takeCreateOpen(body: unknown) {
   const { open, ...operation } = create.data.operation;
 
   return { command: { ...create.data, operation }, open };
+}
+
+/**
+ * Agents name a checkout by its path (pathTargetSchema, and repositoryPath on
+ * a create from a PR); the store keeps the id it registers as. A command that
+ * already names ids is left as it is.
+ */
+async function locateRepositories(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Request body boundary: commandSchema parses the result.
+  body: unknown,
+  register: (path: string) => Promise<{ id: string }>,
+) {
+  const located = z
+    .looseObject({
+      operation: z.looseObject({
+        type: z.enum(["create", "set_target"]),
+        target: z.looseObject({ repositoryPath: z.string() }).optional(),
+        repositoryPath: z.string().optional(),
+      }),
+    })
+    .safeParse(body);
+
+  if (!located.success) return body;
+  const { target, repositoryPath, ...operation } = located.data.operation;
+
+  const byId = async <Named extends { repositoryPath: string }>({
+    repositoryPath: path,
+    ...rest
+  }: Named) => ({ ...rest, repositoryId: (await register(path)).id });
+
+  return {
+    ...located.data,
+    operation: {
+      ...operation,
+      ...(target && { target: await byId(target) }),
+      ...(repositoryPath && (await byId({ repositoryPath }))),
+    },
+  };
 }
 
 /** Send committed state, coalescing updates when the reader falls behind. */

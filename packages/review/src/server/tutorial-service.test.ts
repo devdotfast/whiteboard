@@ -2,7 +2,7 @@ import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { selectSource } from "@review/lens-selection";
+import { rangeAnchor } from "@review/lens-selection";
 import {
   elements,
   resourceReferences,
@@ -118,7 +118,7 @@ it("rejects invalid shipped source references before saving a document", async (
   const authored = JSON.parse(await readFile(file, "utf8"));
   authored.document.push({
     type: "code_peek",
-    source: selectSource({
+    source: rangeAnchor({
       side: "head",
       file: "missing.ts",
       fromLine: 1,

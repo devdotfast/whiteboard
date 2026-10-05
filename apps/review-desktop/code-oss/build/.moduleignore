@@ -187,6 +187,8 @@ prebuild-install/**/*
 **/CONTRIBUTING.md
 
 **/*.ts
+**/*.d.cts
+**/*.d.mts
 
 # Exclude TS files that aren't needed by TS extension
 typescript/lib/tsc.js
@@ -240,3 +242,13 @@ playwright-core/**
 # KaTeX backs chat's math rendering, which Review does not register. The
 # canvas bundles its own copy.
 katex/**
+
+@xterm/addon-ligatures/lib/addon-ligatures.mjs
+@xterm/addon-ligatures/node_modules/lru-cache/dist/**
+!@xterm/addon-ligatures/node_modules/lru-cache/dist/**/*.map
+@xterm/addon-ligatures/node_modules/lru-cache/README.md
+opentype.js/dist/*.js
+opentype.js/dist/*.mjs
+opentype.js/bin/**
+opentype.js/src/**
+chrome-remote-interface/chrome-remote-interface.js

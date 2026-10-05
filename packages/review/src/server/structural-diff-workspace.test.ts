@@ -1,5 +1,4 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -98,8 +97,11 @@ console.log(JSON.stringify({type:'complete',succeeded:1,failed:0}));
       );
 
       const { reviewId } = await local.store.execute({
-        commandId: randomUUID(),
-        operation: { type: "create", title: "Structural", pins },
+        operation: {
+          type: "create",
+          title: "Structural",
+          target: { kind: "commits", ...pins },
+        },
       });
 
       const app = createJsonReviewApi(local.store, local.data);

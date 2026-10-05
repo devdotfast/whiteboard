@@ -28,7 +28,7 @@
     "oxfmt": "0.48.0",
     "oxlint": "1.63.0",
     "typescript": "npm:typescript@7.0.2",
-    "zod": "4.4.3"
+    "zod": "catalog:"
   },
   "engines": {
     "node": ">=24 <25",

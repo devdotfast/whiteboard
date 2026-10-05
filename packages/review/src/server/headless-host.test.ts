@@ -1,10 +1,26 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 
+import {
+  type JsonValue,
+  REVIEW_CLIENT_HEADER,
+  REVIEW_CLIENT_REMOTE,
+  parseReviewDesktopVerbFrame,
+} from "@dev.fast/review-protocol";
 import { runReviewCli } from "@review/cli-runner.js";
 import {
   connectReviewApi,
@@ -16,8 +32,11 @@ import { createReviewApi } from "@review/review-api/http.js";
 import { serveReviewMcp } from "@review/review-api/mcp.js";
 import { openReviewProfile } from "@review/review-api/profile.js";
 import type { Result, Snapshot } from "@review/review-api/store.js";
+import { writeScratchpadEnabled } from "@review/review-preferences.js";
+import { ReviewTelemetry } from "@review/review-telemetry.js";
 import {
   type ReviewServerDiscovery,
+  headlessServerLockPath,
   readReviewServerDiscovery,
   reviewServerDiscoveryPath,
   reviewServerIsHealthy,
@@ -26,6 +45,7 @@ import sharp from "sharp";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { z } from "zod";
 
+import { createGlobalReviewServer } from "./desktop-server.js";
 import { runHeadlessServer } from "./headless-host.js";
 
 let root: string;
@@ -76,6 +96,15 @@ async function start(
   const client = await connectReviewApi(env);
 
   return { client, discovery, env, stateDir, stop };
+}
+
+/** The stable id, which /health gives only to a caller with the token. */
+async function serverIdOf(discovery: { url: string; token: string }) {
+  const response = await fetch(`${discovery.url}/health`, {
+    headers: { "x-review-token": discovery.token },
+  });
+
+  return (await response.json()).serverId;
 }
 
 async function repository() {
@@ -162,8 +191,11 @@ it("shares review identity, resources, sessions and live changes with Desktop in
     };
 
     const created = await server.client.post<Result>("/commands", {
-      commandId: randomUUID(),
-      operation: { type: "create", title: "Shared review", pins },
+      operation: {
+        type: "create",
+        title: "Shared review",
+        target: { kind: "commits", ...pins },
+      },
     });
 
     // Catalog refreshes can also report repository registration before creation.
@@ -180,10 +212,11 @@ it("shares review identity, resources, sessions and live changes with Desktop in
       reviewId: created.reviewId,
       version: 0,
     });
-    const leaseId = randomUUID();
-    await server.client.post(`/${created.reviewId}/activity/begin`, {
-      leaseId,
-    });
+
+    const { activityId } = await server.client.post<{ activityId: string }>(
+      `/${created.reviewId}/activity/begin`,
+      {},
+    );
 
     for (;;) {
       const value = (await reviewStream.next()).value;
@@ -197,16 +230,6 @@ it("shares review identity, resources, sessions and live changes with Desktop in
         break;
     }
 
-    await expect(
-      desktop.post("/commands", {
-        commandId: randomUUID(),
-        operation: {
-          type: "rename",
-          reviewId: created.reviewId,
-          title: "Competing author",
-        },
-      }),
-    ).rejects.toMatchObject({ status: 409 });
     const traceId = randomUUID();
     await server.client.post("/resources", {
       id: traceId,
@@ -223,11 +246,10 @@ it("shares review identity, resources, sessions and live changes with Desktop in
       label: "Evidence",
     });
     await server.client.post("/commands", {
-      commandId: randomUUID(),
-      leaseId,
       operation: {
         type: "edit",
         reviewId: created.reviewId,
+        activityId,
         edit: {
           type: "insert",
           content: {
@@ -260,10 +282,9 @@ it("shares review identity, resources, sessions and live changes with Desktop in
         .filter((id) => id !== "scratchpad"),
     ).toEqual([created.reviewId]);
     await server.client.post(`/${created.reviewId}/activity/end`, {
-      leaseId,
+      activityId,
     });
     await desktop.post("/commands", {
-      commandId: randomUUID(),
       operation: {
         type: "rename",
         reviewId: created.reviewId,
@@ -274,7 +295,6 @@ it("shares review identity, resources, sessions and live changes with Desktop in
       await server.client.read(`/${created.reviewId}?full=true`),
     ).toMatchObject({ title: "Changed in Desktop", version: 2 });
     await server.client.post("/commands", {
-      commandId: randomUUID(),
       operation: { type: "delete", reviewId: created.reviewId },
     });
     await expect(async () => {
@@ -297,11 +317,11 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
     path: repo.directory,
   });
 
-  const pins = await client.post<Pins>("/pins", {
+  const pins: Pins = {
     repositoryId: registered.id,
     base: repo.base,
     head: repo.head,
-  });
+  };
 
   const created = await cli(
     [
@@ -310,9 +330,13 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
       "api",
       "session_create",
       JSON.stringify({
-        commandId: randomUUID(),
         title: "CI review",
-        pins,
+        target: {
+          kind: "commits",
+          repositoryPath: repo.directory,
+          base: repo.base,
+          head: repo.head,
+        },
       }),
     ],
     process.env,
@@ -325,7 +349,6 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
     .parse(JSON.parse(created.output));
 
   await client.post("/commands", {
-    commandId: randomUUID(),
     operation: {
       type: "edit",
       reviewId,
@@ -354,7 +377,6 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
     base64: image.toString("base64"),
   });
   await client.post("/commands", {
-    commandId: randomUUID(),
     operation: {
       type: "edit",
       reviewId,
@@ -410,7 +432,6 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
   });
   await expect(
     client.post("/commands", {
-      commandId: randomUUID(),
       operation: {
         type: "edit",
         reviewId,
@@ -418,11 +439,7 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
           type: "insert",
           content: {
             type: "code_peek",
-            source: {
-              file: "missing.ts",
-              start: { side: "head", line: 1 },
-              end: { side: "head", line: 1 },
-            },
+            source: "head/missing.ts#L1",
           },
         },
       },
@@ -544,6 +561,8 @@ it("authenticates clients, reports capabilities and readiness without exposing t
   expect(JSON.parse(status.output)).toMatchObject({
     event: "server.status",
     ready: true,
+    version: expect.any(String),
+    serverId: await serverIdOf(server.discovery),
   });
   expect(status.output).not.toContain(server.discovery.token);
   const repo = await repository();
@@ -552,26 +571,22 @@ it("authenticates clients, reports capabilities and readiness without exposing t
     path: repo.directory,
   });
 
-  await expect(
-    server.client.post("/pins", {
-      repositoryId: registered.id,
-      base: "unavailable",
-      head: repo.head,
-    }),
-  ).rejects.toThrow(/Fetch the requested commits/);
-
   const result = await server.client.post<Result>("/commands", {
-    commandId: randomUUID(),
     operation: {
       type: "create",
       title: "No UI",
-      pins: { repositoryId: registered.id, base: repo.base, head: repo.head },
+      target: {
+        kind: "commits",
+        repositoryId: registered.id,
+        base: repo.base,
+        head: repo.head,
+      },
     },
   });
 
   await expect(
     server.client.post(`/${result.reviewId}/open`, {}),
-  ).rejects.toThrow(/desktop is not connected/);
+  ).rejects.toThrow(/No Whiteboard Desktop is attached/);
   await server.stop();
   const stopped = await cli(["server", "status", "--json"], server.env);
   expect(stopped.exitCode).toBe(1);
@@ -579,6 +594,317 @@ it("authenticates clients, reports capabilities and readiness without exposing t
   await expect(connectReviewApi(server.env)).rejects.toThrow(
     /whiteboard server start/g,
   );
+});
+
+/** A stand-in Desktop on `/control` that answers every verb relayed to it. */
+async function attachDesktop(
+  discovery: Pick<ReviewServerDiscovery, "url" | "token">,
+) {
+  const abort = new AbortController();
+  const opened: JsonValue[] = [];
+  const verbs: string[] = [];
+
+  const control = await fetch(`${discovery.url}/control`, {
+    headers: { "x-review-token": discovery.token },
+    signal: abort.signal,
+  });
+
+  expect(control.status).toBe(200);
+
+  void (async () => {
+    let buffered = "";
+
+    for await (const chunk of control.body!.pipeThrough(
+      new TextDecoderStream(),
+    )) {
+      buffered += chunk;
+      let end: number;
+
+      while ((end = buffered.indexOf("\n\n")) >= 0) {
+        const frame = buffered.slice(0, end);
+        buffered = buffered.slice(end + 2);
+
+        if (!frame.startsWith("data: ")) continue;
+
+        const { id, request } = parseReviewDesktopVerbFrame(
+          JSON.parse(frame.slice("data: ".length)),
+        );
+
+        verbs.push(request.name);
+
+        if (request.name === "openApiReview") opened.push(request.args);
+        await fetch(`${discovery.url}/control/result`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-review-token": discovery.token,
+          },
+          body: JSON.stringify({
+            id,
+            response: { ok: true, result: { softwareMapEnabled: true } },
+          }),
+        });
+      }
+    }
+  })().catch(() => {});
+
+  return { opened, verbs, detach: () => abort.abort() };
+}
+
+it("reports attached Desktops and sends each the reviews to open", async () => {
+  const server = await start();
+
+  const desktops = [
+    await attachDesktop(server.discovery),
+    await attachDesktop(server.discovery),
+  ];
+
+  try {
+    expect(await server.client.read("/capabilities")).toMatchObject({
+      desktopAvailable: true,
+      softwareMapEnabled: true,
+    });
+
+    const repo = await repository();
+
+    const registered = await server.client.post<{ id: string }>(
+      "/repositories",
+      { path: repo.directory },
+    );
+
+    const created = await server.client.post<Result>("/commands", {
+      operation: {
+        type: "create",
+        title: "Opened remotely",
+        target: {
+          kind: "commits",
+          repositoryId: registered.id,
+          base: repo.base,
+          head: repo.head,
+        },
+        open: false,
+      },
+    });
+
+    await server.client.post(`/${created.reviewId}/open`, {});
+
+    // The first answer resolves the open; the other's may still be on its way.
+    for (const desktop of desktops)
+      await expect
+        .poll(() => desktop.opened)
+        .toEqual([{ reviewId: created.reviewId, title: "Opened remotely" }]);
+  } finally {
+    for (const desktop of desktops) desktop.detach();
+  }
+
+  await expect
+    .poll(() => server.client.read("/capabilities"))
+    .toMatchObject({ desktopAvailable: false });
+});
+
+it.each([false, true])(
+  "never makes, lists or offers the scratchpad, with a Desktop attached: %s",
+  async (attached) => {
+    await writeScratchpadEnabled(true);
+    const server = await start();
+    const desktop = attached ? await attachDesktop(server.discovery) : null;
+
+    try {
+      expect(await server.client.read("/capabilities")).toMatchObject({
+        desktopAvailable: attached,
+        scratchpadEnabled: false,
+      });
+      expect(await server.client.read("")).toEqual([]);
+      // The offer is a pointer to the scratchpad topic.
+      const offer = 'topic:"scratchpad"';
+
+      expect(
+        (await server.client.read<{ description: string }[]>("/authoring"))
+          .map((tool) => tool.description)
+          .join("\n"),
+      ).not.toContain(offer);
+      expect(await server.client.read("/instructions")).not.toContain(offer);
+      expect(
+        await server.client.read("/instructions?topic=scratchpad"),
+      ).toMatch(/turned off/);
+    } finally {
+      desktop?.detach();
+    }
+
+    await server.stop();
+
+    const local = await openReviewProfile(server.stateDir, {
+      manageWorkspaces: false,
+    });
+
+    try {
+      expect(local.store.list()).toEqual([]);
+    } finally {
+      await local.data.close();
+      await local.store.close();
+    }
+  },
+);
+
+/** A registered repository with an uncommitted change, reviewed as a worktree and as commits. */
+async function reviewsOfBothKinds(client: ReviewApiClient) {
+  const repo = await repository();
+  await writeFile(
+    path.join(repo.directory, "example.ts"),
+    "export const value = 3;\n",
+  );
+
+  const { id: repositoryId } = await client.post<{ id: string }>(
+    "/repositories",
+    { path: repo.directory },
+  );
+
+  const create = async (target: JsonValue) =>
+    (
+      await client.post<Result>("/commands", {
+        operation: { type: "create", title: "Remote", target, open: false },
+      })
+    ).reviewId;
+
+  return {
+    repo,
+    root: await realpath(repo.directory),
+    worktree: await create({ kind: "worktree", repositoryId, base: repo.base }),
+    commits: await create({
+      kind: "commits",
+      repositoryId,
+      base: repo.base,
+      head: repo.head,
+    }),
+  };
+}
+
+const workspaceFiles = async () =>
+  (await readdir(root, { recursive: true })).filter((entry) =>
+    entry.endsWith(".code-workspace"),
+  );
+
+it("gives a remote caller no local paths and no source window", async () => {
+  const server = await start();
+  const desktop = await attachDesktop(server.discovery);
+
+  try {
+    const {
+      repo,
+      root: checkout,
+      worktree,
+      commits,
+    } = await reviewsOfBothKinds(server.client);
+
+    const call = (
+      reviewId: string,
+      route: string,
+      remote: boolean,
+      method = "GET",
+    ) =>
+      fetch(`${server.discovery.url}/reviews-api/${reviewId}${route}`, {
+        method,
+        headers: {
+          "x-review-token": server.discovery.token,
+          ...(remote && { [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE }),
+        },
+      });
+
+    const read = async (reviewId: string, route: string, remote: boolean) => {
+      const response = await call(reviewId, route, remote);
+      expect(response.status).toBe(200);
+
+      return response.json();
+    };
+
+    const file = "/file?side=head&file=example.ts";
+    const context = "/language-context?side=head";
+    const hash = /^[0-9a-f]{64}$/;
+    const home = await realpath(root);
+
+    expect(await read(worktree, file, false)).toMatchObject({
+      text: "export const value = 3;\n",
+      localPath: path.join(checkout, "example.ts"),
+      localRoot: checkout,
+    });
+    expect(await read(commits, file, false)).toEqual({
+      file: "example.ts",
+      side: "head",
+      commit: repo.head,
+      text: "export const value = 2;\n",
+    });
+
+    const localContext = await read(worktree, context, false);
+    expect(localContext.rootPath).toBe(checkout);
+    expect(localContext.identity).not.toMatch(hash);
+
+    // A headless server prepares no commit checkouts, so only the worktree
+    // review has a language context here.
+    const remoteContext = await read(worktree, context, true);
+    expect(remoteContext).toEqual({ identity: expect.stringMatching(hash) });
+    expect(JSON.stringify(remoteContext)).not.toContain(home);
+
+    for (const reviewId of [worktree, commits]) {
+      const remoteFile = await read(reviewId, file, true);
+      expect(remoteFile).toMatchObject({ text: expect.any(String) });
+      expect(JSON.stringify(remoteFile)).not.toContain(home);
+
+      const navigator = await call(reviewId, "/navigator", true, "POST");
+      expect(navigator.status).toBe(409);
+      expect(await navigator.json()).toEqual({
+        error:
+          "Source windows are not available for a review on another machine.",
+      });
+    }
+
+    expect(await workspaceFiles()).toEqual([]);
+    expect(desktop.verbs).toEqual([]);
+
+    // The same search finds the file an unmarked call writes.
+    const navigator = await call(worktree, "/navigator", false, "POST");
+    expect(navigator.status).toBe(200);
+    expect(await navigator.json()).toHaveProperty("workspacePath");
+    expect(await workspaceFiles()).toHaveLength(1);
+  } finally {
+    desktop.detach();
+  }
+});
+
+it("treats a near-miss client header as a local caller", async () => {
+  const server = await start();
+  const { root: checkout, worktree } = await reviewsOfBothKinds(server.client);
+  const url = `${server.discovery.url}/reviews-api/${worktree}/file?side=head&file=example.ts`;
+
+  // Sent as two header lines; the server joins them as "remote, remote".
+  const twice = await new Promise<string>((resolve, reject) => {
+    const request = httpRequest(url, (response) => {
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => (body += chunk));
+      response.on("end", () => resolve(body));
+    });
+
+    request.setHeader("x-review-token", server.discovery.token);
+    request.setHeader(REVIEW_CLIENT_HEADER, [
+      REVIEW_CLIENT_REMOTE,
+      REVIEW_CLIENT_REMOTE,
+    ]);
+    request.on("error", reject);
+    request.end();
+  });
+
+  const capitalized = await fetch(url, {
+    headers: {
+      "x-review-token": server.discovery.token,
+      [REVIEW_CLIENT_HEADER]: "Remote",
+    },
+  });
+
+  for (const answer of [JSON.parse(twice), await capitalized.json()])
+    expect(answer).toMatchObject({
+      localPath: path.join(checkout, "example.ts"),
+      localRoot: checkout,
+    });
 });
 
 it("rejects a second owner and keeps separate CI job stores independent", async () => {
@@ -602,11 +928,15 @@ it("rejects a second owner and keeps separate CI job stores independent", async 
   });
 
   await first.client.post("/commands", {
-    commandId: randomUUID(),
     operation: {
       type: "create",
       title: "First job only",
-      pins: { repositoryId: registered.id, base: repo.base, head: repo.head },
+      target: {
+        kind: "commits",
+        repositoryId: registered.id,
+        base: repo.base,
+        head: repo.head,
+      },
     },
   });
   expect(await first.client.read("")).toMatchObject([
@@ -641,6 +971,138 @@ it("does not connect to another instance through stale discovery", async () => {
     JSON.stringify({ ...original, instanceId: randomUUID() }),
   );
   await expect(connectReviewApi(server.env)).rejects.toThrow(/not ready/);
+});
+
+it("resets the server id only while no server holds the store", async () => {
+  const server = await start();
+
+  const before = await serverIdOf(server.discovery);
+
+  const reset = [
+    "--state-dir",
+    server.stateDir,
+    "server",
+    "reset-id",
+    "--json",
+  ];
+
+  const refused = await cli(reset, process.env);
+
+  expect(refused.exitCode).toBe(1);
+  expect(JSON.parse(refused.output).error.message).toMatch(/Stop it first/);
+  expect(await serverIdOf(server.discovery)).toBe(before);
+
+  await server.stop();
+
+  // An unrelated instance selection must not get in the way.
+  const done = await cli(reset, {
+    ...process.env,
+    DEV_REVIEW_INSTANCE: "Not A Key!",
+  });
+
+  expect(done).toMatchObject({ exitCode: 0, errors: "" });
+  const { event, serverId: after } = JSON.parse(done.output);
+  expect(event).toBe("server.reset-id");
+  expect(after).not.toBe(before);
+
+  const restarted = await start(server.stateDir);
+  expect(await serverIdOf(restarted.discovery)).toBe(after);
+});
+
+it("resets the id over a lock its dead server left behind", async () => {
+  const server = await start();
+  await server.stop();
+  const lock = headlessServerLockPath(await realpath(server.stateDir));
+  await mkdir(lock);
+  const { pid } = spawnSync(process.execPath, ["-e", ""]);
+  await writeFile(path.join(lock, "owner.json"), JSON.stringify({ pid }));
+
+  const done = await cli(
+    ["--state-dir", server.stateDir, "server", "reset-id", "--json"],
+    process.env,
+  );
+
+  expect(done).toMatchObject({ exitCode: 0, errors: "" });
+  await expect(access(lock)).rejects.toThrow(/ENOENT/);
+});
+
+it.each(["attached", "not yet attached"])(
+  "refuses to reset the id of a store a Desktop holds, window %s",
+  async (window) => {
+    const local = await openReviewProfile(root, { manageWorkspaces: false });
+
+    const desktop = createGlobalReviewServer({
+      reviewStore: local.store,
+      reviewData: local.data,
+      appPid: process.pid,
+      packageRoot: root,
+      toolingRoot: root,
+      port: 0,
+      telemetry: ReviewTelemetry.fromEnv(process.env),
+    });
+
+    stops.push(async () => {
+      await desktop.close();
+      await local.data.close();
+      await local.store.close();
+    });
+    await desktop.listen();
+    const before = local.store.serverId();
+
+    const attached =
+      window === "attached" ? await attachDesktop(desktop.discovery) : null;
+
+    try {
+      const refused = await cli(
+        ["--state-dir", root, "server", "reset-id", "--json"],
+        process.env,
+      );
+
+      expect(refused.exitCode).toBe(1);
+      expect(JSON.parse(refused.output).error.message).toMatch(/Stop it first/);
+      expect(local.store.serverId()).toBe(before);
+      expect(await serverIdOf(desktop.discovery)).toBe(before);
+    } finally {
+      attached?.detach();
+    }
+  },
+);
+
+it("refuses to reset the id while a Desktop record cannot be read", async () => {
+  const local = await openReviewProfile(root, { manageWorkspaces: false });
+  const before = local.store.serverId();
+  await local.data.close();
+  await local.store.close();
+  const instances = path.join(root, "review-desktop", "instances");
+  await mkdir(instances, { recursive: true });
+  await writeFile(path.join(instances, "stable.json"), "not json");
+
+  const refused = await cli(
+    ["--state-dir", root, "server", "reset-id", "--json"],
+    process.env,
+  );
+
+  expect(refused.exitCode).toBe(1);
+
+  const reopened = await openReviewProfile(root, { manageWorkspaces: false });
+  stops.push(async () => {
+    await reopened.data.close();
+    await reopened.store.close();
+  });
+  expect(reopened.store.serverId()).toBe(before);
+});
+
+it("refuses to reset the id where there is no store, and creates none", async () => {
+  const typo = path.join(root, "no-such-state");
+
+  const refused = await cli(
+    ["--state-dir", typo, "server", "reset-id", "--json"],
+    process.env,
+  );
+
+  expect(refused.exitCode).toBe(1);
+  expect(JSON.parse(refused.output).error.message).toContain(typo);
+  await expect(access(typo)).rejects.toThrow(/ENOENT/);
 });
 
 it("refuses the removed batch authoring mode instead of ignoring it", async () => {

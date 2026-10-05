@@ -20,7 +20,6 @@ const providers = {
 };
 
 const command = <Operation>(operation: Operation) => ({
-  commandId: randomUUID(),
   operation,
 });
 
@@ -51,7 +50,11 @@ async function fixture() {
   const pins = { repositoryId: oldRepo.id, base: "base", head: "head" };
 
   const created = await source.execute(
-    command({ type: "create", title: "Headless draft", pins }),
+    command({
+      type: "create",
+      title: "Headless draft",
+      target: { kind: "commits", ...pins },
+    }),
   );
 
   const resourceId = randomUUID();
@@ -72,14 +75,13 @@ async function fixture() {
     },
   });
 
-  const result = await source.execute(edit);
+  await source.execute(edit);
 
-  return { source, target, created, existingRepo, resourceId, edit, result };
+  return { source, target, created, existingRepo, resourceId };
 }
 
 it("merges preview headless history and resources without changing review IDs or resurrecting deleted reviews", async () => {
-  const { source, target, created, existingRepo, resourceId, edit, result } =
-    await fixture();
+  const { source, target, created, existingRepo, resourceId } = await fixture();
 
   const before = source.read(created.reviewId);
   const profile = await openReviewProfile(home, { manageWorkspaces: false });
@@ -97,7 +99,6 @@ it("merges preview headless history and resources without changing review IDs or
     expect(Buffer.from(profile.store.resource(resourceId).data)).toEqual(
       Buffer.from("retained resource"),
     );
-    expect(await profile.store.execute(edit)).toEqual(result);
     expect(source.read(created.reviewId)).toEqual(before);
     await profile.store.execute(
       command({ type: "delete", reviewId: created.reviewId }),

@@ -595,7 +595,11 @@ ${tslib}`,
 	const contentMapperPlugin = fileContentMapperPlugin(outDir);
 
 	// Bundle each entry point directly from TypeScript source
-	await Promise.all(entryPoints.map(async (entryPoint) => {
+	const sharedEntries = ['vs/review/review.desktop.main', 'vs/review/navigator.desktop.main'];
+	const entryGroups = [...entryPoints.filter(entry => !sharedEntries.includes(entry)).map(entry => [entry]), sharedEntries];
+	await Promise.all(entryGroups.map(async (entries) => {
+		const entryPoint = entries[0];
+		const shared = entries.length > 1;
 		const entryPath = path.join(REPO_ROOT, SRC_DIR, `${entryPoint}.ts`);
 		const outPath = path.join(REPO_ROOT, outDir, `${entryPoint}.js`);
 
@@ -619,12 +623,14 @@ ${tslib}`,
 
 		const buildOptions: esbuild.BuildOptions = {
 			entryPoints: needsCssBundling
-				? [{ in: entryPath, out: entryPoint }]
+				? entries.map(entry => ({ in: path.join(REPO_ROOT, SRC_DIR, `${entry}.ts`), out: entry }))
 				: [entryPath],
 			...(needsCssBundling
 				? { outdir: path.join(REPO_ROOT, outDir) }
 				: { outfile: outPath }),
 			bundle: true,
+			splitting: shared,
+			chunkNames: 'vs/review/shared/[name]-[hash]',
 			format: 'esm',
 			platform: 'neutral',
 			target: ['es2024'],

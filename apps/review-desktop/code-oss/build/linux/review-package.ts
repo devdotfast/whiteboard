@@ -204,6 +204,20 @@ export async function prepareReviewArchPackage(codeRoot: string): Promise<void> 
 	await stageReviewPackage(codeRoot, join(codeRoot, '.build/linux/arch/x86_64/package'));
 }
 
+export async function prepareReviewNixPackage(codeRoot: string): Promise<void> {
+	const appRoot = resolve(codeRoot, '..');
+	const destination = join(codeRoot, '.build/linux/nixos/x86_64/package');
+	await rm(destination, { recursive: true, force: true });
+	const { pkg } = await stageReviewPackage(codeRoot, join(destination, 'payload'));
+	const { product } = await loadReviewPackage(appRoot);
+	await cp(join(appRoot, 'scripts/linux/nixos'), destination, { recursive: true });
+	await cp(join(appRoot, 'scripts/linux/smoke-installed-linux.mjs'), join(destination, 'smoke-installed-linux.mjs'));
+	await writeFile(join(destination, 'release.json'), JSON.stringify({
+		packageName: pkg.name, version: product.reviewVersion, revision: pkg.revision,
+		commit: product.commit, urlProtocol: product.urlProtocol,
+	}, null, 2) + '\n');
+}
+
 /** Keep rpmbuild state under the package output directory without changing HOME. */
 export async function buildReviewRpmPackage(codeRoot: string, arch: string): Promise<void> {
 	if (arch !== 'x86_64') { throw new Error('Review Fedora packages support x86_64 only'); }

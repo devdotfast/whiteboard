@@ -1,4 +1,5 @@
 import {
+  ReviewInstanceUnavailableError,
   healthyReviewInstance,
   reviewInstanceUnavailable,
   selectReviewInstance,
@@ -11,6 +12,7 @@ import {
 } from "@review/server-discovery.js";
 
 import { ReviewApiClient, ReviewApiError } from "./client.js";
+import { ReviewInputError } from "./input-error.js";
 
 export interface AuthoringTool {
   name: string;
@@ -31,7 +33,7 @@ const TEXT_TOOLS = new Set([
 export interface ConnectedReview {
   client: ReviewApiClient;
   /** The Desktop reached; absent for a headless server. */
-  instance?: { key: string };
+  instance?: { key: string; appVersion?: string };
 }
 
 export async function connectReviewApi(
@@ -74,17 +76,22 @@ export async function connectReviewInstance(
   const selection = await selectReviewInstance({ env });
   const discovery = healthyReviewInstance(selection);
 
-  if (!discovery)
-    throw new Error(
-      `${reviewInstanceUnavailable(selection).message} For headless authoring, select a running server with --state-dir or DEV_REVIEW_SERVER_DIR.`,
-    );
+  if (!discovery) {
+    const unavailable = reviewInstanceUnavailable(selection);
+    const message = `${unavailable.message} For headless authoring, select a running server with --state-dir or DEV_REVIEW_SERVER_DIR.`;
+
+    if (unavailable instanceof ReviewInstanceUnavailableError)
+      throw new ReviewInstanceUnavailableError(message);
+
+    throw unavailable;
+  }
 
   return {
     client: new ReviewApiClient(
       { serverUrl: discovery.url, token: discovery.token },
       request,
     ),
-    instance: { key: selection.key },
+    instance: { key: selection.key, appVersion: discovery.appVersion },
   };
 }
 
@@ -96,17 +103,10 @@ export async function callAuthoringTool(
   signal?: AbortSignal,
 ) {
   if (tool.commandType) {
-    // Agents may omit the id; the host's receipts make a retry with it safe.
-    const { commandId = randomUUID(), leaseId, ...fields } = input;
-
     try {
       return await client.post<JsonValue>(
         tool.path,
-        {
-          commandId,
-          leaseId,
-          operation: { ...fields, type: tool.commandType },
-        },
+        { operation: { ...input, type: tool.commandType } },
         signal,
       );
     } catch (error) {
@@ -114,7 +114,7 @@ export async function callAuthoringTool(
       if (error instanceof ReviewApiError || signal?.aborted) throw error;
 
       throw new Error(
-        `Whiteboard may or may not have applied ${tool.name} (${error instanceof Error ? error.message : String(error)}). Retry with identical input, including leaseId, and commandId "${String(commandId)}": if the first attempt was applied, you get its result back instead of a second write.`,
+        `Whiteboard may or may not have applied ${tool.name} (${error instanceof Error ? error.message : String(error)}). Check with review_get before retrying.`,
         { cause: error },
       );
     }
@@ -126,7 +126,7 @@ export async function callAuthoringTool(
     const value = fields.reviewId;
 
     if (!isStringValue(value) || !value)
-      throw new Error("reviewId is required.");
+      throw new ReviewInputError("reviewId is required.");
     delete fields.reviewId;
 
     return encodeURIComponent(value);
@@ -143,7 +143,7 @@ export async function callAuthoringTool(
     // Arrays travel as repeated keys, as in paths=a&paths=b.
     for (const item of Array.isArray(value) ? value : [value]) {
       if (!isStringValue(item) && !isNumberValue(item) && !isBooleanValue(item))
-        throw new Error(
+        throw new ReviewInputError(
           `${key} must be a string, number, boolean or list of them.`,
         );
 
@@ -177,8 +177,6 @@ export function toolResultText(
     ? result
     : JSON.stringify(result);
 }
-
-import { randomUUID } from "node:crypto";
 
 import {
   isBooleanValue,

@@ -1,11 +1,12 @@
 import { type JsonValue, jsonValueSchema } from "@dev.fast/review-protocol";
-import { lensSourceSchema } from "@review/lens-selection.js";
+import { anchorSchema } from "@review/lens-selection.js";
 import { ReviewInputError } from "@review/review-api/input-error.js";
 import { z } from "zod";
 
 import {
   type BlockDefinition,
   defineBlock,
+  elementPins,
   identity,
   label,
   requireKey,
@@ -69,7 +70,8 @@ export const operationSchema = z.strictObject({
   actor: label,
   label,
   detail: label.optional(),
-  source: lensSourceSchema,
+  source: anchorSchema,
+  pins: elementPins,
 });
 
 // The legacy MDX audit rejected these empty forms after a lens with
@@ -95,6 +97,7 @@ export const databaseLensSchema = defineBlock("database_lens", {
       }),
     )
     .min(1, "A database lens needs at least one use case."),
+  pins: elementPins,
 });
 
 export type DatabaseLensBlock = z.infer<typeof databaseLensSchema>;

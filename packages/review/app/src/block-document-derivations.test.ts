@@ -1,4 +1,4 @@
-import { selectSource } from "@review/lens-selection";
+import { rangeAnchor } from "@review/lens-selection";
 import { describe, expect, it } from "vitest";
 
 import { blockSectionSummary } from "./block-document-derivations";
@@ -27,7 +27,7 @@ describe("blockSectionSummary", () => {
                 { type: "software_map", mapVersionId: "map-1" },
                 {
                   type: "code_peek",
-                  source: selectSource({
+                  source: rangeAnchor({
                     side: "head",
                     file: "x.ts",
                     fromLine: 1,

@@ -15,7 +15,8 @@ import { CancellationError, ErrorNoTelemetry } from "../../base/common/errors.js
  * bundle; see packages/review/src/error-telemetry.ts. Nothing in
  * this file is ever sent to a vendor as it stands.
  *
- * The filters mirror upstream `BaseErrorTelemetry._onErrorEvent`. They are
+ * The filters follow upstream `BaseErrorTelemetry._onErrorEvent`, except that
+ * file errors are skipped only when a cancellation caused them. They are
  * reimplemented rather than imported because that module pulls the whole file
  * service in behind it, and this one runs in the main process too.
  */
@@ -31,6 +32,13 @@ export interface ReviewErrorReport {
  * a system `code`, cancellations, errors marked as never-report, and errors
  * without a stack are all skipped: none of them says anything about a defect in
  * Review.
+ *
+ * Cancellations are also recognized by message. The file service wraps a
+ * failure as "Unable to read file '<path>' (<cause>)", and callers such as the
+ * theme service rewrap that in a plain `Error`, so a read cancelled when a
+ * window closes or reloads loses its class on the way up and arrives as
+ * "Unable to load <theme>: Unable to read file '<theme>' (Canceled: Canceled)".
+ * Other file failures, such as a missing or unreadable file, are still reported.
  */
 export function packReviewError(error: unknown): ReviewErrorReport | undefined {
 	if (!error || typeof error !== 'object') {
@@ -44,7 +52,11 @@ export function packReviewError(error: unknown): ReviewErrorReport | undefined {
 	if (candidate.detail && (candidate.detail as { stack?: unknown }).stack) {
 		candidate = candidate.detail as typeof candidate;
 	}
-	if (ErrorNoTelemetry.isErrorNoTelemetry(candidate as Error) || candidate instanceof CancellationError) {
+	if (
+		ErrorNoTelemetry.isErrorNoTelemetry(candidate as Error)
+		|| candidate instanceof CancellationError
+		|| (typeof candidate.message === 'string' && candidate.message.endsWith('(Canceled: Canceled)'))
+	) {
 		return undefined;
 	}
 	// Array stacks come from workerServer.ts; upstream works around this too.

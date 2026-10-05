@@ -586,6 +586,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		}
 	}
 
+	async refreshComparison(): Promise<void> {
+		if (!(this.input instanceof ReviewCanvasEditorInput) || this.input.target.kind !== "api") return;
+		this.readyInput = undefined;
+		await this.group.openEditor(this.input, { forceReload: true, preserveFocus: true });
+	}
+
 	override async clearInput(): Promise<void> {
 		this.canvasMenu.clear();
 		// Keep apiContent with the mounted canvas so resuming it preserves its review identity.

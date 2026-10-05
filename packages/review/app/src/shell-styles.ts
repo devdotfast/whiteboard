@@ -1,4 +1,4 @@
-import { fontSize, motion } from "@canvas/scale.stylex";
+import { motion } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { appMarker, topbarActionsMarker } from "./markers.stylex";
@@ -67,7 +67,7 @@ export const shellStyles = stylex.create({
     overflow: "hidden",
     container: "review-content / inline-size",
   },
-  documentShellHistorical: {
+  documentShellBanner: {
     gridTemplateRows: "auto auto minmax(0, 1fr)",
   },
   // The host's own box lives in the collapsed third grid column on narrow
@@ -278,20 +278,6 @@ export const shellStyles = stylex.create({
     width: "1px",
     height: "16px",
     backgroundColor: tokens.chromeBorder,
-  },
-  historyBanner: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "12px",
-    padding: "6px 12px",
-    borderBottomWidth: "1px",
-    borderBottomStyle: "solid",
-    borderBottomColor: tokens.ruleSoft,
-    backgroundColor: `color-mix(in srgb, ${tokens.accent} 12%, ${tokens.surface})`,
-    color: tokens.ink,
-    fontFamily: tokens.chromeFont,
-    fontSize: fontSize.body,
   },
 
   viewRegion: {

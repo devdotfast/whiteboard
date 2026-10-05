@@ -29,6 +29,10 @@ export function reviewServerDiscoveryPath(stateDir: string) {
   return path.join(stateDir, "review-server", "server.json");
 }
 
+export function headlessServerLockPath(stateDir: string) {
+  return path.join(stateDir, "headless-server.lock");
+}
+
 export async function readReviewServerDiscovery(
   stateDir: string,
 ): Promise<ReviewServerDiscovery | null> {
@@ -52,21 +56,35 @@ export async function readReviewServerDiscovery(
 }
 
 export async function reviewServerIsHealthy(discovery: ReviewServerDiscovery) {
+  return (await readReviewServerHealth(discovery)) !== null;
+}
+
+/** The recorded server's /health, or null when another or none answers. */
+export async function readReviewServerHealth(
+  discovery: Pick<ReviewServerDiscovery, "url" | "token" | "instanceId">,
+) {
   try {
     const response = await fetch(`${discovery.url}/health`, {
       headers: { "x-review-token": discovery.token },
       signal: AbortSignal.timeout(1_500),
     });
 
-    if (!response.ok) return false;
+    if (!response.ok) return null;
 
     const health = z
-      .object({ ok: z.literal(true), instanceId: z.string() })
+      .object({
+        ok: z.literal(true),
+        instanceId: z.string(),
+        serverId: z.string().optional(),
+        version: z.string().optional(),
+      })
       .safeParse(await response.json());
 
-    return health.success && health.data.instanceId === discovery.instanceId;
+    return health.success && health.data.instanceId === discovery.instanceId
+      ? health.data
+      : null;
   } catch {
-    return false;
+    return null;
   }
 }
 

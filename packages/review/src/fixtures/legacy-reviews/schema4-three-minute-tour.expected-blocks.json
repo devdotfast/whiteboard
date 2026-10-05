@@ -43,17 +43,7 @@
       },
       {
         "type": "code_peek",
-        "source": {
-          "file": "src/orders/order-service.ts",
-          "start": {
-            "side": "head",
-            "line": 13
-          },
-          "end": {
-            "side": "head",
-            "line": 29
-          }
-        },
+        "source": "head/src/orders/order-service.ts#L13-L29",
         "caption": "Order service creates the order"
       },
       {
@@ -86,17 +76,7 @@
       },
       {
         "type": "code_peek",
-        "source": {
-          "file": "src/inventory/inventory-service.ts",
-          "start": {
-            "side": "head",
-            "line": 4
-          },
-          "end": {
-            "side": "head",
-            "line": 8
-          }
-        },
+        "source": "head/src/inventory/inventory-service.ts#L4-L8",
         "caption": "Inventory rejects invalid quantities"
       },
       {
@@ -131,17 +111,7 @@
             "to": "orderService",
             "label": "Place order",
             "style": "call",
-            "source": {
-              "file": "src/api/checkout-api.ts",
-              "start": {
-                "side": "head",
-                "line": 12
-              },
-              "end": {
-                "side": "head",
-                "line": 15
-              }
-            }
+            "source": "head/src/api/checkout-api.ts#L12-L15"
           },
           {
             "type": "step",
@@ -149,17 +119,7 @@
             "to": "repository",
             "label": "Save order",
             "style": "call",
-            "source": {
-              "file": "src/orders/order-service.ts",
-              "start": {
-                "side": "head",
-                "line": 13
-              },
-              "end": {
-                "side": "head",
-                "line": 29
-              }
-            }
+            "source": "head/src/orders/order-service.ts#L13-L29"
           },
           {
             "type": "step",
@@ -167,17 +127,7 @@
             "to": "queue",
             "label": "Enqueue fulfillment",
             "style": "call",
-            "source": {
-              "file": "src/orders/orders-repository.ts",
-              "start": {
-                "side": "head",
-                "line": 9
-              },
-              "end": {
-                "side": "head",
-                "line": 12
-              }
-            }
+            "source": "head/src/orders/orders-repository.ts#L9-L12"
           },
           {
             "type": "step",
@@ -185,17 +135,7 @@
             "to": "worker",
             "label": "Deliver job",
             "style": "call",
-            "source": {
-              "file": "src/fulfillment/fulfillment-worker.ts",
-              "start": {
-                "side": "head",
-                "line": 13
-              },
-              "end": {
-                "side": "head",
-                "line": 14
-              }
-            }
+            "source": "head/src/fulfillment/fulfillment-worker.ts#L13-L14"
           },
           {
             "type": "step",
@@ -203,17 +143,7 @@
             "to": "shipping",
             "label": "Create shipment",
             "style": "call",
-            "source": {
-              "file": "src/fulfillment/fulfillment-worker.ts",
-              "start": {
-                "side": "head",
-                "line": 17
-              },
-              "end": {
-                "side": "head",
-                "line": 19
-              }
-            }
+            "source": "head/src/fulfillment/fulfillment-worker.ts#L17-L19"
           }
         ]
       },
@@ -285,17 +215,7 @@
                 "field": "status",
                 "actor": "orderService",
                 "label": "write pending order",
-                "source": {
-                  "file": "src/orders/orders-repository.ts",
-                  "start": {
-                    "side": "head",
-                    "line": 9
-                  },
-                  "end": {
-                    "side": "head",
-                    "line": 12
-                  }
-                }
+                "source": "head/src/orders/orders-repository.ts#L9-L12"
               }
             ]
           },
@@ -309,17 +229,7 @@
                 "field": "status",
                 "actor": "worker",
                 "label": "write fulfilled status",
-                "source": {
-                  "file": "src/fulfillment/fulfillment-worker.ts",
-                  "start": {
-                    "side": "head",
-                    "line": 17
-                  },
-                  "end": {
-                    "side": "head",
-                    "line": 19
-                  }
-                }
+                "source": "head/src/fulfillment/fulfillment-worker.ts#L17-L19"
               }
             ]
           }
@@ -344,7 +254,7 @@
     "children": [
       {
         "type": "markdown",
-        "markdown": "## Get help\n\nTo manage the Review skills installed for your agents, open **Preferences \u2192\nSettings**. To revisit setup or take this tour again, open **Preferences \u2192\nGetting Started**.\n"
+        "markdown": "## Get help\n\nTo manage the Review skills installed for your agents, open **Preferences →\nSettings**. To revisit setup or take this tour again, open **Preferences →\nGetting Started**.\n"
       }
     ]
   }

@@ -1,4 +1,5 @@
 import { Button, IconButton } from "@canvas/ui/button";
+import { StatusBanner } from "@canvas/ui/status-banner";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
 import {
@@ -54,6 +55,7 @@ import {
   topbarActionsMarker,
   topbarTabsMarker,
 } from "./markers.stylex";
+import { MissingCheckoutBanner } from "./missing-checkout-banner";
 import { ReviewPanelHost } from "./review-components";
 import {
   ReviewProvider,
@@ -139,6 +141,7 @@ export function App({
     <ReviewDiffFilesProvider
       documentKey={[document.routePath, document.filePath].join("\0")}
       revision={range.worktreeRevision}
+      unavailable={!!range.sourceUnavailable}
     >
       <ReviewLayout
         document={document}
@@ -314,6 +317,11 @@ function ReviewLayoutContent({
   // column again and lays out once.
   const diffHostRef = useRef<HTMLDivElement | null>(null);
   const diffPreloaded = activeView !== "diff" || diffScope !== null;
+  // Built the first time it is shown, then kept for instant returns.
+  const [diffOpened, setDiffOpened] = useState(!diffPreloaded);
+
+  if (!diffPreloaded && !diffOpened) setDiffOpened(true);
+
   const [frozenDiffWidth, setFrozenDiffWidth] = useState<number>();
 
   useLayoutEffect(() => {
@@ -366,6 +374,26 @@ function ReviewLayoutContent({
 
   const hasChangeRange =
     !!range.worktreeRevision || range.baseCommit !== range.headCommit;
+
+  const banner = review.historicalRevision ? (
+    <StatusBanner
+      action={
+        <Button
+          onClick={() =>
+            void session.surface.post({ name: "openReviewRevision", args: {} })
+          }
+        >
+          Back to latest
+        </Button>
+      }
+    >
+      You are viewing an older version of this session.
+    </StatusBanner>
+  ) : range.sourceUnavailable ? (
+    <MissingCheckoutBanner
+      worktree={session.review?.targetKind === "worktree"}
+    />
+  ) : null;
 
   const selectForAgent = useAgentSelection();
   useEffect(() => {
@@ -489,7 +517,7 @@ function ReviewLayoutContent({
         {...withClass(
           "review-document-shell",
           shellStyles.documentShell,
-          !!review.historicalRevision && shellStyles.documentShellHistorical,
+          !!banner && shellStyles.documentShellBanner,
         )}
       >
         <TutorialExperienceProvider
@@ -654,21 +682,7 @@ function ReviewLayoutContent({
               ) : null}
             </div>
           </header>
-          {review.historicalRevision ? (
-            <div {...stylex.props(shellStyles.historyBanner)} role="status">
-              <span>You are viewing an older version of this session.</span>
-              <Button
-                onClick={() =>
-                  void session.surface.post({
-                    name: "openReviewRevision",
-                    args: {},
-                  })
-                }
-              >
-                Back to latest
-              </Button>
-            </div>
-          ) : null}
+          {banner}
           {activeView === "review" && (
             <ReviewToc
               entries={tocEntries}
@@ -781,7 +795,7 @@ function ReviewLayoutContent({
               )}
               style={frozenDiffStyle}
             >
-              <ReviewDiffView />
+              {diffOpened && <ReviewDiffView />}
             </div>
             {activeView === "diff" && diffScope !== null && (
               <div

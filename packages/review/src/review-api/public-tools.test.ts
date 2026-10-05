@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { afterEach, expect, test } from "vitest";
 
 import type { AuthoringTool } from "./agent-client.js";
@@ -35,9 +33,13 @@ test("public session tools create, edit and retry against the unchanged review s
     callPublicTool(client, tools.find((tool) => tool.name === name)!, input);
 
   const create = await call("session_create", {
-    commandId: randomUUID(),
     title: "Public names",
-    pins: { repositoryId: "repo", base: "base", head: "head" },
+    target: {
+      kind: "commits",
+      repositoryId: "repo",
+      base: "base",
+      head: "head",
+    },
   });
 
   expect(create).toHaveProperty("sessionId");
@@ -48,13 +50,11 @@ test("public session tools create, edit and retry against the unchanged review s
     "Keep reviewId, sessionId and review_create verbatim in authored content.";
 
   const edit = {
-    commandId: randomUUID(),
     sessionId,
     edit: { type: "insert", content: { type: "markdown", markdown: literal } },
   };
 
-  const result = await call("session_edit", edit);
-  expect(await call("session_edit", edit)).toEqual(result);
+  await call("session_edit", edit);
   expect(store.read(sessionId).version).toBe(1);
   expect(JSON.stringify(store.read(sessionId).document)).toContain(literal);
 

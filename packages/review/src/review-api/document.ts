@@ -1,6 +1,8 @@
 import {
+  type Anchor,
   type LensSource,
-  selectSource,
+  parseAnchor,
+  selectionProblem,
   sourceAnchors,
 } from "@review/lens-selection.js";
 import {
@@ -23,7 +25,12 @@ import {
   flowNodeInsertSchema,
   flowNodeSchema,
 } from "./blocks/flow_diagram.js";
-import { type Block, blockSchema } from "./blocks/index.js";
+import {
+  type Block,
+  blockKindSchemas,
+  blockSchema,
+  blocks,
+} from "./blocks/index.js";
 import { type Step, stepSchema } from "./blocks/sequence.js";
 import type { Lens } from "./diff-lenses.js";
 import { ReviewInputError } from "./input-error.js";
@@ -113,19 +120,27 @@ export function explicitPins(references: { source: { pins?: SourcePins } }[]) {
   return [...seen.values()];
 }
 
-export const reviewTargetSchema = z.discriminatedUnion("kind", [
-  z.strictObject({
-    kind: z.literal("worktree"),
-    repositoryId: label,
-    base: label.optional(),
-  }),
-  z.strictObject({
-    kind: z.literal("commits"),
-    repositoryId: label,
-    head: label,
-    base: label.optional(),
-  }),
-]);
+const targets = <Repository extends Record<string, z.ZodType>>(
+  repository: Repository,
+) =>
+  z.discriminatedUnion("kind", [
+    z.strictObject({
+      kind: z.literal("worktree"),
+      ...repository,
+      base: label.optional(),
+    }),
+    z.strictObject({
+      kind: z.literal("commits"),
+      ...repository,
+      head: label,
+      base: label.optional(),
+    }),
+  ]);
+
+export const reviewTargetSchema = targets({ repositoryId: label });
+
+/** How agents name a target: by the checkout's path, registered on acceptance. */
+export const pathTargetSchema = targets({ repositoryPath: label });
 
 export type ReviewTarget = z.infer<typeof reviewTargetSchema>;
 
@@ -211,12 +226,25 @@ function documentReferences(
     throw new ReviewInputError(message);
   };
 
-  return elements(document).flatMap<{
+  type Reference = {
     id: string;
     source: LensSource;
     label?: string;
     peek?: boolean;
-  }>((element) => {
+  };
+
+  // An anchor reads at its holder's pins, else its block's.
+  const select = (anchor: Anchor, pins?: SourcePins): LensSource[] => {
+    const parsed = parseAnchor(anchor);
+
+    if (!parsed) return reject(`Not a source anchor: ${anchor}`);
+    const source = pins ? { ...parsed, pins } : parsed;
+    const problem = selectionProblem(source);
+
+    return problem ? reject(problem) : [source];
+  };
+
+  return elements(document).flatMap<Reference>((element) => {
     if (element.type === "markdown")
       return [...markdownNodes(parseMarkdown(element.markdown))].flatMap(
         (node) => {
@@ -230,107 +258,113 @@ function documentReferences(
             if (/^(?:https?:\/\/|mailto:|#)/i.test(href)) return [];
 
             return reject(
-              `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](review-source:head/path#L10-L24) or review-source:base/path#L10-L24 for repository files, with a repository-relative path and verified line numbers. External links must use https://, http://, or mailto:; document anchors use #heading.`,
+              `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](review-source:head/path#L10-L24) or review-source:base/path#L10-L24 for repository files, or review-source:diff/path#L84-R90 across sides, with a repository-relative path and verified line numbers. External links must use https://, http://, or mailto:; document anchors use #heading.`,
             );
           }
 
-          const match =
-            /^review-source:(base|head)\/(.+)#L(\d+)(?:-L(\d+))?$/i.exec(
-              node.url!,
-            );
-
-          if (!match)
-            return reject(
-              "Use review-source:head/path#L10-L24 (or base) for a source link.",
-            );
-          let file: string;
+          let target: string;
 
           try {
-            file = decodeURIComponent(match[2]!);
+            target = decodeURIComponent(href.slice("review-source:".length));
           } catch {
             return reject("Invalid URL encoding in source link.");
           }
 
-          let source = fileLineRangeSchema.safeParse({
-            side: match[1]!.toLowerCase(),
-            file,
-            fromLine: Number(match[3]),
-            toLine: Number(match[4] ?? match[3]),
-          });
+          // Links share the anchor grammar blocks use.
+          const anchor = target.replace(/^(head|base|diff)\//i, (side) =>
+            side.toLowerCase(),
+          );
 
-          // A block's pins are the default for every link it holds.
-          if (source.success && element.pins)
-            source = fileLineRangeSchema.safeParse({
-              ...source.data,
-              pins: element.pins,
-            });
+          if (!parseAnchor(anchor))
+            return reject(
+              "Use review-source:head/path#L10-L24 (or base, or diff/path#L84-R90 across sides) for a source link.",
+            );
 
-          if (!source.success) {
-            if (tolerant) return [];
-            throw source.error;
-          }
-
-          return [
-            {
-              id: `${element.id}:${node.url}`,
-              source: selectSource(source.data),
-            },
-          ];
+          return select(anchor, element.pins).map((source) => ({
+            id: `${element.id}:${node.url}`,
+            source,
+          }));
         },
+      );
+
+    if (element.type === "code_peek")
+      return select(element.source, element.pins).map((source) => ({
+        id: element.id!,
+        source,
+        label: element.caption,
+        peek: true,
+      }));
+
+    // A step, frame and operation render the range as a peek, so a
+    // whitespace-only range is an authoring mistake for each of them; prose
+    // links and context sources only need the range to exist.
+    if (element.type === "sequence")
+      return element.steps.flatMap((step) =>
+        step.source
+          ? select(step.source, step.pins ?? element.pins).map((source) => ({
+              id: step.id!,
+              source,
+              label: step.label,
+              peek: true,
+            }))
+          : [],
       );
 
     if (element.type === "flow_diagram")
       return element.nodes.flatMap((node) =>
         node.attachments.flatMap((attachment, index) =>
-          attachment.sources.map((source, sourceIndex) => ({
-            id: `${element.id}:${node.key}:${index}:${sourceIndex}`,
-            source,
-            label: attachment.label,
-            peek: true,
-          })),
+          attachment.sources.flatMap((anchor, sourceIndex) =>
+            select(anchor, attachment.pins ?? element.pins).map((source) => ({
+              id: `${element.id}:${node.key}:${index}:${sourceIndex}`,
+              source,
+              label: attachment.label,
+              peek: true,
+            })),
+          ),
         ),
       );
 
     if (element.type === "call_stack_diff")
-      return [...element.base, ...element.head].flatMap((frame) => [
-        { ...frame, id: frame.id!, peek: true },
-        ...(frame.contextSources ?? []).map((source, index) => ({
-          id: `${frame.id}:context:${index}`,
-          source,
-        })),
-        ...(frame.callSite
-          ? [
-              {
+      return [...element.base, ...element.head].flatMap((frame) => {
+        const pins = frame.pins ?? element.pins;
+
+        return [
+          ...select(frame.source, pins).map((source) => ({
+            id: frame.id!,
+            source,
+            label: frame.label,
+            peek: true,
+          })),
+          ...(frame.contextSources ?? []).flatMap((anchor, index) =>
+            select(anchor, pins).map((source) => ({
+              id: `${frame.id}:context:${index}`,
+              source,
+            })),
+          ),
+          ...(frame.callSite
+            ? select(frame.callSite, pins).map((source) => ({
                 id: `${frame.id}:call-site`,
-                source: frame.callSite,
+                source,
                 label: frame.label,
                 peek: true,
-              },
-            ]
-          : []),
-      ]);
+              }))
+            : []),
+        ];
+      });
 
     if (element.type === "database_lens")
       return element.useCases.flatMap((useCase) =>
-        useCase.operations.map((operation) => ({
-          ...operation,
-          id: operation.id!,
-          peek: true,
-        })),
+        useCase.operations.flatMap((operation) =>
+          select(operation.source, operation.pins ?? element.pins).map(
+            (source) => ({
+              id: operation.id!,
+              source,
+              label: operation.label,
+              peek: true,
+            }),
+          ),
+        ),
       );
-
-    // A code peek, a sequence step, a frame and an operation all render the
-    // range as a peek, so a whitespace-only range is an authoring mistake for
-    // each of them. Prose links only need the range to exist.
-    if ("source" in element && element.source)
-      return [
-        {
-          id: element.id!,
-          source: element.source,
-          label: element.type === "step" ? element.label : element.caption,
-          peek: true,
-        },
-      ];
 
     return [];
   });
@@ -365,8 +399,10 @@ export function hasCodeReferences(review: {
 
 export const documentSchema = z.array(blockSchema);
 
-export const contentSchema = z.union([
-  blockSchema,
+/** Discriminated by type, like blockSchema, so a malformed insert reports
+ * its own kind's issues. */
+export const contentSchema = z.discriminatedUnion("type", [
+  ...blockKindSchemas(),
   stepSchema,
   flowNodeInsertSchema,
   flowEdgeSchema,
@@ -374,27 +410,49 @@ export const contentSchema = z.union([
 
 const placement = { parentId: label.optional(), afterId: label.optional() };
 
-export const editSchema = z.discriminatedUnion("type", [
-  z.strictObject({
-    type: z.literal("insert"),
-    content: contentSchema,
-    ...placement,
-  }),
-  z.strictObject({
-    type: z.literal("replace"),
-    targetId: label,
-    content: blockSchema,
-  }),
-  z.strictObject({
-    type: z.literal("update"),
-    targetId: label,
-    changes: z.record(text, z.json()),
-  }),
-  z.strictObject({ type: z.literal("move"), targetId: label, ...placement }),
-  z.strictObject({ type: z.literal("remove"), targetId: label }),
-]);
+function edits<
+  Content extends z.ZodType,
+  Replacement extends z.ZodType,
+  Value extends z.ZodType,
+>(content: Content, replacement: Replacement, value: Value) {
+  return z.discriminatedUnion("type", [
+    z.strictObject({ type: z.literal("insert"), content, ...placement }),
+    z.strictObject({
+      type: z.literal("replace"),
+      targetId: label,
+      content: replacement,
+    }),
+    z.strictObject({
+      type: z.literal("update"),
+      targetId: label,
+      changes: z.record(text, value),
+    }),
+    z.strictObject({ type: z.literal("move"), targetId: label, ...placement }),
+    z.strictObject({ type: z.literal("remove"), targetId: label }),
+  ]);
+}
+
+export const editSchema = edits(contentSchema, blockSchema, z.json());
 
 export type Edit = z.infer<typeof editSchema>;
+
+// Tutorial blocks are the built-in tutorial's, not for agents to write.
+const writableBlockTypes = Object.keys(blocks).filter(
+  (type) => type !== "tutorial",
+);
+
+const namedByType = (types: string[]) =>
+  z
+    .looseObject({ type: z.enum(types) })
+    .describe("Fields depend on type; see the tool description.");
+
+/** What agents are shown: content names only its type. The host parses
+ * editSchema, reporting the named kind's issues. */
+export const publishedEditSchema = edits(
+  namedByType([...writableBlockTypes, "step", "flow_node", "flow_edge"]),
+  namedByType(writableBlockTypes),
+  z.unknown(),
+);
 
 /**
  * What one saved version did, for a canvas drawing the document as the
@@ -416,6 +474,8 @@ export interface EditSummary {
   /** A diagram written whole: its units in the order a hand would draw
    * them, so the canvas can trace the whole diagram in one quick pass. */
   units?: string[];
+  /** The agent whose courier draws this edit, when the host could tell. */
+  activityId?: string;
 }
 
 /** A component an edit wrote, named so the author can address it. */
@@ -547,6 +607,23 @@ const unitParent = {
   flow_edge: "flow_diagram",
 } as const;
 
+/** What to do instead of patching a field an update can't reach. */
+function patchRefusal(key: string, element: Element): string {
+  if (key === "base" || key === "head")
+    return `A call stack's frames change only by replacing it: send {type:"replace", targetId:"${element.id}", content} with the whole call_stack_diff.`;
+
+  if (key === "nodes" || key === "edges" || key === "steps")
+    return `Edit a diagram's ${key} one at a time by their own IDs (session_get lists them), or replace the diagram.`;
+
+  if (key === "children")
+    return `Edit a ${element.type}'s children by their own IDs, or insert into it with parentId "${element.id}".`;
+
+  if (key === "id" || key === "type")
+    return `A component's ${key} can't change; replace it instead.`;
+
+  return `Cannot patch ${key}; replace the ${element.type} instead.`;
+}
+
 const structural = new Set([
   "nodes",
   "edges",
@@ -669,7 +746,9 @@ export function applyEdit(
       throw new ReviewInputError("Cannot move a block inside itself.");
 
     if (!isUnit(element) && parent && !("children" in parent))
-      throw new ReviewInputError("Invalid parent for this element.");
+      throw new ReviewInputError(
+        `${parentId} is a ${parent.type}, which holds no components: insert into a section or callout, or at the top level.`,
+      );
 
     if (isUnit(element) && parent?.type !== unitParent[element.type])
       throw new ReviewInputError(
@@ -750,9 +829,7 @@ export function applyEdit(
           structural.has(key) ||
           ["__proto__", "constructor", "prototype"].includes(key)
         )
-          throw new ReviewInputError(
-            `Cannot patch ${key}; use structural edits or replace.`,
-          );
+          throw new ReviewInputError(patchRefusal(key, element));
 
       if ("link" in edit.changes)
         throw new ReviewInputError(

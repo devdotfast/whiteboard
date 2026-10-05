@@ -13,7 +13,6 @@ import {
 
 import {
   type AuthoringTool,
-  connectReviewApi,
   connectReviewInstance,
   toolResultText,
 } from "./agent-client.js";
@@ -21,6 +20,7 @@ import { type ReviewApiClient, ReviewApiError } from "./client.js";
 import { callPublicTool, publicTool } from "./public-tools.js";
 import { RECOVERY } from "./recovery.js";
 import { REVIEW_AGENT_HEADER, REVIEW_VIA_HEADER } from "./request-origin.js";
+import { toolFailure } from "./tool-failure.js";
 
 interface AgentCliInput {
   argv: string[];
@@ -30,10 +30,14 @@ interface AgentCliInput {
   stderr: Writable;
   /** Awaited on the api path: the process exits right after the call. */
   onToolCall?: (call: ReviewToolCall) => Promise<void> | void;
+  /** Receives the failure so the parent CLI can classify its terminal event. */
+  onFailure?: (error: Error) => void;
+  /** Receives the release of each Desktop reached, for telemetry. */
+  onDesktop?: (appVersion: string | undefined) => void;
 }
 
 export const reviewAgentCliHelp =
-  "whiteboard api tools\nwhiteboard api <tool-name> '<json>'\nwhiteboard api <tool-name> -  (read JSON from stdin)\nwhiteboard mcp  (stdio MCP adapter; Whiteboard Desktop or whiteboard server start must be running)\nSelect headless state with DEV_REVIEW_SERVER_DIR or whiteboard --state-dir <path> api/mcp.\n";
+  "whiteboard api tools  (one line per tool)\nwhiteboard api tools <tool-name>  (its description and input schema)\nwhiteboard api <tool-name> '<json>'\nwhiteboard api <tool-name> -  (read JSON from stdin)\nwhiteboard mcp  (stdio MCP adapter; Whiteboard Desktop or whiteboard server start must be running)\nSelect headless state with DEV_REVIEW_SERVER_DIR or whiteboard --state-dir <path> api/mcp.\n";
 
 export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
   const env = input.env ?? process.env;
@@ -67,11 +71,18 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
     if (mode === "mcp") {
       const { serveReviewMcp } = await import("./mcp.js");
       await serveReviewMcp(
-        (key) =>
-          connectReviewInstance(
+        async (key, agentKind) => {
+          const connected = await connectReviewInstance(
             key ? { ...env, [REVIEW_INSTANCE_ENV]: key } : env,
-            headers,
-          ),
+            agentKind
+              ? { ...headers, [REVIEW_AGENT_HEADER]: agentKind }
+              : headers,
+          );
+
+          input.onDesktop?.(connected.instance?.appVersion);
+
+          return connected;
+        },
         input.stdin ?? process.stdin,
         input.stdout,
         input.stderr,
@@ -93,6 +104,7 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
               };
             },
         input.onToolCall,
+        reviewSessionAgent(env),
       );
 
       return 0;
@@ -102,7 +114,10 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
     let tools: AuthoringTool[];
 
     try {
-      client = await connectReviewApi(input.env, headers);
+      const connected = await connectReviewInstance(input.env, headers);
+
+      input.onDesktop?.(connected.instance?.appVersion);
+      client = connected.client;
       tools = (await client.read<AuthoringTool[]>("/authoring")).map(
         publicTool,
       );
@@ -120,8 +135,23 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
     }
 
     if (name === "tools") {
-      if (json) throw new Error("whiteboard api tools takes no input.");
-      input.stdout.write(JSON.stringify(tools, null, 2) + "\n");
+      // The whole catalog is too long to read; a name prints one schema.
+      if (json) {
+        const tool = tools.find((tool) => tool.name === json);
+
+        if (!tool)
+          throw new Error(
+            `Unknown review tool: ${json}. Use whiteboard api tools.`,
+          );
+        input.stdout.write(JSON.stringify(tool, null, 2) + "\n");
+
+        return 0;
+      }
+
+      for (const tool of tools)
+        input.stdout.write(
+          `${tool.name}: ${tool.description.split(/(?<=\.)\s/)[0]}\n`,
+        );
 
       return 0;
     }
@@ -149,29 +179,38 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
 
     if (name === "session_get" && rest.includes("--json")) args.format = "json";
     const startedAt = Date.now();
-    let ok = false;
     let result: Awaited<ReturnType<typeof callPublicTool>>;
 
     try {
       result = await callPublicTool(client, tool, args);
-      ok = true;
-    } finally {
+    } catch (error) {
       await input.onToolCall?.({
         tool: tool.name,
         via: "api",
-        ok,
+        ok: false,
         durationMs: Date.now() - startedAt,
+        ...toolFailure(error, "call"),
       });
+
+      throw error;
     }
+
+    await input.onToolCall?.({
+      tool: tool.name,
+      via: "api",
+      ok: true,
+      durationMs: Date.now() - startedAt,
+    });
 
     const text = toolResultText(tool, result);
     input.stdout.write(text.endsWith("\n") ? text : text + "\n");
 
     return 0;
   } catch (error) {
-    input.stderr.write(
-      (error instanceof Error ? error.message : String(error)) + "\n",
-    );
+    const failure = error instanceof Error ? error : new Error(String(error));
+
+    input.onFailure?.(failure);
+    input.stderr.write(failure.message + "\n");
 
     return 1;
   }

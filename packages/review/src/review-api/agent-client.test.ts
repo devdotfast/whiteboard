@@ -39,7 +39,6 @@ afterEach(async () => {
   for (const { reviewId, kind } of store.list())
     if (kind !== "scratchpad")
       await store.execute({
-        commandId: randomUUID(),
         operation: { type: "delete", reviewId },
       });
 });
@@ -59,13 +58,16 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
     );
 
   const created = (await call("create", {
-    commandId: randomUUID(),
     title: "Authoring",
-    pins: { repositoryId: "repo", base: "base", head: "head" },
+    target: {
+      kind: "commits",
+      repositoryId: "repo",
+      base: "base",
+      head: "head",
+    },
   })) as { reviewId: string };
 
   const input = {
-    commandId: randomUUID(),
     reviewId: created.reviewId,
     edit: {
       type: "insert",
@@ -86,7 +88,6 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
   };
 
   const result = (await call("edit", input)) as { targetId: string };
-  expect(await call("edit", input)).toEqual(result);
   expect(store.read(created.reviewId).version).toBe(1);
   expect(
     await call("get", {
@@ -98,7 +99,6 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
   await expect(
     call("edit", {
       ...input,
-      commandId: randomUUID(),
       edit: {
         type: "update",
         targetId: result.targetId,
@@ -108,7 +108,6 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
   ).rejects.toThrow(Error);
   expect(store.read(created.reviewId).version).toBe(1);
   await call("edit", {
-    commandId: randomUUID(),
     reviewId: created.reviewId,
     edit: {
       type: "update",
@@ -143,7 +142,6 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
   // IDs discovered in the reading view still identify the same editable nodes.
   const stepId = String(text).match(/\[(step-\d+)\]/)![1];
   await call("edit", {
-    commandId: randomUUID(),
     reviewId: created.reviewId,
     edit: {
       type: "update",
@@ -156,56 +154,10 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
   ).toContain("Updated through the reading view.");
 });
 
-it("assigns a command ID and names it when a reply is lost", async () => {
-  const tools = await client.read<AuthoringTool[]>("/authoring");
-
-  const tool = (name: string) =>
-    tools.find((t) => t.name === `review_${name}`)!;
-
-  let dropReply = false;
-
-  // The host applies the command, then the reply is lost on the way back.
-  const lossy = new ReviewApiClient(client.connection, async (url, init) => {
-    const response = await app.request(url.replace("/reviews-api", ""), init);
-
-    if (dropReply) {
-      dropReply = false;
-      throw new TypeError("fetch failed");
-    }
-
-    return response;
-  });
-
-  const { reviewId } = (await callAuthoringTool(lossy, tool("create"), {
-    title: "Minted",
-    pins: { repositoryId: "repo", base: "base", head: "head" },
-  })) as { reviewId: string };
-
-  const insert = {
-    reviewId,
-    edit: { type: "insert", content: { type: "markdown", markdown: "Once." } },
-  };
-
-  dropReply = true;
-
-  const error = await callAuthoringTool(lossy, tool("edit"), insert).catch(
-    (caught: Error) => caught,
-  );
-
-  expect(store.read(reviewId).version).toBe(1);
-
-  const commandId = String(error).match(/commandId "([^"]+)"/)![1];
-
-  expect(
-    await callAuthoringTool(lossy, tool("edit"), { ...insert, commandId }),
-  ).toMatchObject({ reviewId, version: 1 });
-  expect(store.read(reviewId).version).toBe(1);
-});
-
 it("serves MCP framing without stdout diagnostics and returns host errors as tool errors", async () => {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
-  const calls: Array<[string, string, boolean]> = [];
+  const calls: Array<[string, string, boolean, string?]> = [];
 
   const server = await serveReviewMcp(
     async () => ({ client }),
@@ -214,7 +166,8 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
     undefined,
     false,
     undefined,
-    ({ tool, via, ok }) => void calls.push([tool, via, ok]),
+    ({ tool, via, ok, errorName }) =>
+      void calls.push(errorName ? [tool, via, ok, errorName] : [tool, via, ok]),
   );
 
   let output = "";
@@ -259,6 +212,13 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
         ["anyOf", "oneOf", "allOf"].some((key) => key in tool.inputSchema),
       ),
     ).toEqual([]);
+    // Codex and Claude Code mishandle $ref (openai/codex#13746,
+    // anthropics/claude-code#18260).
+    expect(
+      list.result.tools.filter((tool: AuthoringTool) =>
+        JSON.stringify(tool.inputSchema).includes("$ref"),
+      ),
+    ).toEqual([]);
     expect(
       list.result.tools.find(
         (tool: AuthoringTool) => tool.name === "session_edit",
@@ -266,7 +226,7 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
     ).toMatchObject({
       type: "object",
       required: ["sessionId", "edit"],
-      properties: expect.objectContaining({ commandId: expect.anything() }),
+      properties: expect.objectContaining({ activityId: expect.anything() }),
     });
 
     const error = await request(3, "tools/call", {
@@ -287,11 +247,15 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
     expect(reviewsOnly(JSON.parse(next.result.content[0].text))).toEqual([]);
 
     const created = await store.execute({
-      commandId: randomUUID(),
       operation: {
         type: "create",
         title: "Readable review",
-        pins: { repositoryId: "repo", base: "base", head: "head" },
+        target: {
+          kind: "commits",
+          repositoryId: "repo",
+          base: "base",
+          head: "head",
+        },
       },
     });
 
@@ -317,11 +281,11 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
     await request(7, "tools/call", { name: "my private notes", arguments: {} });
 
     expect(calls).toEqual([
-      ["session_get", "mcp", false],
+      ["session_get", "mcp", false, "review_not_found"],
       ["session_list", "mcp", true],
       ["session_get", "mcp", true],
       ["session_get", "mcp", true],
-      ["other", "mcp", false],
+      ["other", "mcp", false, "usage_error"],
     ]);
   } finally {
     await server.close();
@@ -330,10 +294,10 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
 
 it("reports each api tool call with its outcome", async () => {
   const connection = vi
-    .spyOn(agentClient, "connectReviewApi")
-    .mockResolvedValue(client);
+    .spyOn(agentClient, "connectReviewInstance")
+    .mockResolvedValue({ client, instance: { key: "stable" } });
 
-  const calls: Array<[string, string, boolean]> = [];
+  const calls: Array<[string, string, boolean, string?]> = [];
 
   const discard = new Writable({
     write(_chunk, _encoding, done) {
@@ -347,9 +311,9 @@ it("reports each api tool call with its outcome", async () => {
       stdout: discard,
       stderr: discard,
       // Queued a tick late, like a real capture: the command must wait.
-      onToolCall: async ({ tool, via, ok }) => {
+      onToolCall: async ({ tool, via, ok, errorName }) => {
         await new Promise((resolve) => setImmediate(resolve));
-        calls.push([tool, via, ok]);
+        calls.push(errorName ? [tool, via, ok, errorName] : [tool, via, ok]);
       },
     });
 
@@ -361,8 +325,39 @@ it("reports each api tool call with its outcome", async () => {
     expect(await run(["api", "no_such_tool"])).toBe(1);
     expect(calls).toEqual([
       ["session_list", "api", true],
-      ["session_get", "api", false],
+      ["session_get", "api", false, "review_not_found"],
     ]);
+  } finally {
+    connection.mockRestore();
+  }
+});
+
+it("hands the parent CLI the release of the Desktop an api call reached", async () => {
+  const connection = vi
+    .spyOn(agentClient, "connectReviewInstance")
+    .mockResolvedValue({
+      client,
+      instance: { key: "preview", appVersion: "0.1.6-preview.20261002.90" },
+    });
+
+  const releases: Array<string | undefined> = [];
+
+  const discard = new Writable({
+    write(_chunk, _encoding, done) {
+      done();
+    },
+  });
+
+  try {
+    expect(
+      await runReviewAgentCli({
+        argv: ["api", "session_list"],
+        stdout: discard,
+        stderr: discard,
+        onDesktop: (appVersion) => releases.push(appVersion),
+      }),
+    ).toBe(0);
+    expect(releases).toEqual(["0.1.6-preview.20261002.90"]);
   } finally {
     connection.mockRestore();
   }
@@ -392,15 +387,19 @@ it("shows CLI help without requiring Desktop or touching review storage", async 
 
 it("prints readable CLI output by default and raw objects with --json", async () => {
   const connection = vi
-    .spyOn(agentClient, "connectReviewApi")
-    .mockResolvedValue(client);
+    .spyOn(agentClient, "connectReviewInstance")
+    .mockResolvedValue({ client });
 
   const created = await store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "create",
       title: "CLI reading",
-      pins: { repositoryId: "repo", base: "base", head: "head" },
+      target: {
+        kind: "commits",
+        repositoryId: "repo",
+        base: "base",
+        head: "head",
+      },
     },
   });
 
@@ -445,16 +444,19 @@ it("binds existing content through the host-advertised PR tool", async () => {
   const tools = await client.read<AuthoringTool[]>("/authoring");
 
   const created = await store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "create",
       title: "PR",
-      pins: { repositoryId: "repo", base: "base", head: "head" },
+      target: {
+        kind: "commits",
+        repositoryId: "repo",
+        base: "base",
+        head: "head",
+      },
     },
   });
 
   await store.execute({
-    commandId: randomUUID(),
     operation: {
       type: "edit",
       reviewId: created.reviewId,
@@ -469,11 +471,15 @@ it("binds existing content through the host-advertised PR tool", async () => {
 
   await callAuthoringTool(
     client,
-    tools.find((tool) => tool.name === "review_repin")!,
+    tools.find((tool) => tool.name === "review_set_target")!,
     {
-      commandId: randomUUID(),
       reviewId: created.reviewId,
-      pins: { repositoryId: "repo", base: "base", head: "head" },
+      target: {
+        kind: "commits",
+        repositoryId: "repo",
+        base: "base",
+        head: "head",
+      },
       pullRequestUrl: "https://github.com/devdotfast/review/pull/310",
     },
   );
@@ -604,5 +610,69 @@ it("keeps an MCP session on the instance key it first reached", async () => {
     expect(result.isError).toBeFalsy();
   } finally {
     await server.close();
+  }
+});
+
+it("names the agent from the MCP handshake, falling back to the session environment", async () => {
+  // The header names the agent on reviews the session creates; the call names it on tool events.
+  const headerAgents: (string | undefined)[] = [];
+  const callAgents: (string | undefined)[] = [];
+
+  const connection = vi
+    .spyOn(agentClient, "connectReviewInstance")
+    .mockImplementation(async (_env, headers) => {
+      headerAgents.push(headers?.["x-review-agent"]);
+
+      return { client };
+    });
+
+  const session = async (clientName: string, env: NodeJS.ProcessEnv) => {
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    let output = "";
+    stdout.on("data", (chunk) => {
+      output += chunk;
+    });
+
+    await runReviewAgentCli({
+      argv: ["mcp"],
+      env,
+      stdin,
+      stdout,
+      stderr: new PassThrough(),
+      onToolCall: ({ agentKind }) => void callAgents.push(agentKind),
+    });
+
+    const reply = async (id: number, method: string, params: JsonObject) => {
+      stdin.write(
+        JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n",
+      );
+      await expect
+        .poll(() =>
+          output
+            .split("\n")
+            .filter(Boolean)
+            .some((line) => JSON.parse(line).id === id),
+        )
+        .toBe(true);
+    };
+
+    await reply(1, "initialize", {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: clientName, version: "1" },
+    });
+    await reply(2, "tools/call", { name: "session_list", arguments: {} });
+    stdin.end();
+  };
+
+  try {
+    // Codex strips CODEX_* from the server's environment; its handshake says who it is.
+    await session("codex-mcp-client", {});
+    await session("some-editor", { CLAUDE_CODE_SESSION_ID: "session" });
+    expect(headerAgents).toEqual(["codex", "claude"]);
+    expect(callAgents).toEqual(["codex", "claude"]);
+  } finally {
+    connection.mockRestore();
   }
 });

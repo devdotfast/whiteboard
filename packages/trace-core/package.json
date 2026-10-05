@@ -27,7 +27,7 @@
     "@dev.fast/local-vcs": "workspace:*",
     "@dev.fast/trace-protocol": "workspace:*",
     "commander": "14.0.3",
-    "zod": "4.4.3"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

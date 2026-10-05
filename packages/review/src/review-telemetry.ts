@@ -97,6 +97,11 @@ export interface ReviewToolCall {
   via: "api" | "mcp";
   ok: boolean;
   durationMs: number;
+  /** Set on a failed call: why it failed, from the closed CLI vocabulary. */
+  errorName?: ReviewTelemetryErrorName;
+  errorCategory?: ReviewTelemetryErrorCategory;
+  /** The calling agent when the caller knows better than this process's environment. */
+  agentKind?: ReviewSessionAgent;
 }
 
 export type ReviewCliCommand = "review" | "map" | "status";
@@ -260,6 +265,7 @@ export type ReviewCommandTelemetry = Pick<
   ReviewTelemetry,
   | "createCommandRunId"
   | "setSurface"
+  | "setDesktopVersion"
   | "captureInstallationCreated"
   | "captureCommandStarted"
   | "captureCommandSucceeded"
@@ -282,6 +288,7 @@ export class ReviewTelemetry {
   private readonly now: () => Date;
   private surface: ReviewTelemetrySurface;
   private readonly packageVersion: string;
+  private desktopVersion: string | undefined;
   private installConfig: ReviewTelemetryInstallConfig | undefined;
   private chunkIds: ChunkIds | undefined;
 
@@ -325,6 +332,16 @@ export class ReviewTelemetry {
   /** Sets the surface for every later event, envelope included. */
   setSurface(surface: ReviewTelemetrySurface): void {
     this.surface = surface;
+  }
+
+  /**
+   * Records the release of the Desktop this process reached, for `app_version`
+   * on every later event. A process Desktop launched already has it in its env.
+   */
+  setDesktopVersion(version: string | undefined): void {
+    const value = nonEmpty(version);
+
+    this.desktopVersion = value && validSemver(value) ? value : undefined;
   }
 
   async setEnabled(enabled: boolean): Promise<void> {
@@ -472,12 +489,20 @@ export class ReviewTelemetry {
   }
 
   async captureToolCalled(call: ReviewToolCall): Promise<void> {
-    await this.captureEvent("review_mcp_tool_called", {
+    const properties: PostHogCaptureProperties = {
       tool: TOOL_NAME_PATTERN.test(call.tool) ? call.tool : "other",
       via: call.via,
       ok: call.ok,
       duration_ms: Math.max(0, Math.round(call.durationMs)),
-    });
+      agent_kind: call.agentKind ?? this.sessionAgent(),
+    };
+
+    if (!call.ok && call.errorName) properties.error_name = call.errorName;
+
+    if (!call.ok && call.errorCategory)
+      properties.error_category = call.errorCategory;
+
+    await this.captureEvent("review_mcp_tool_called", properties);
   }
 
   /**
@@ -900,7 +925,7 @@ export class ReviewTelemetry {
       "internal" | "accountAlias" | "createdAt"
     >,
   ): Promise<PostHogCaptureProperties> {
-    const appVersion = reviewAppVersion(this.env);
+    const appVersion = reviewAppVersion(this.env) ?? this.desktopVersion;
     const appSessionId = nonEmpty(this.env[REVIEW_APP_SESSION_ID_ENV]);
 
     const properties: PostHogCaptureProperties = {
