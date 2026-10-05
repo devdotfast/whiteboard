@@ -84,7 +84,6 @@ describe("ReviewStackSelector", () => {
       );
     });
     await openMenu(container);
-    expect(container.textContent).toContain("current");
 
     const unavailable = container.querySelector<HTMLButtonElement>(
       "[role=menu] button:disabled",

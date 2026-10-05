@@ -1,10 +1,4 @@
-import {
-  fontSize,
-  fontWeight,
-  motion,
-  radius,
-  tracking,
-} from "@canvas/scale.stylex";
+import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
 import type { ReviewStackLayer } from "@dev.fast/review-protocol";
@@ -116,6 +110,9 @@ export function ReviewStackSelector(): ReactElement | null {
             styles.menu,
           )}
         >
+          <div {...stylex.props(styles.row, styles.baseRow)}>
+            <span {...stylex.props(styles.branch)}>main</span>
+          </div>
           {layers.map((layer) => (
             <LayerRow
               key={layer.pullRequestNumber}
@@ -161,10 +158,8 @@ function LayerRow({
           )}
         >
           {layer.branch}
+          {disabled ? " · No session" : ""}
         </span>
-      </span>
-      <span {...stylex.props(styles.relation, current && styles.accent)}>
-        {disabled ? "No session" : layer.relation}
       </span>
     </>
   );
@@ -234,17 +229,16 @@ const styles = stylex.create({
   menu: {
     display: "flex",
     flexDirection: "column",
-    minWidth: "340px",
-    padding: "7px",
+    minWidth: "280px",
+    padding: "4px",
     font: `${fontSize.ui}/18px ${tokens.fontMono}`,
   },
   row: {
     display: "flex",
     alignItems: "center",
-    gap: "10px",
     width: "100%",
-    minHeight: "48px",
-    padding: "7px 9px",
+    minHeight: "40px",
+    padding: "5px 8px",
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "currentcolor",
@@ -253,6 +247,9 @@ const styles = stylex.create({
     color: tokens.ink,
     font: "inherit",
     textAlign: "left",
+  },
+  baseRow: {
+    minHeight: "26px",
   },
   rowCurrent: {
     backgroundColor: `color-mix(in srgb, ${tokens.accent} 8%, ${tokens.surfaceRaised})`,
@@ -290,18 +287,6 @@ const styles = stylex.create({
   },
   branchCurrent: {
     color: tokens.inkMuted,
-  },
-  relation: {
-    flex: "0 0 64px",
-    color: tokens.inkFaint,
-    fontSize: fontSize.micro,
-    letterSpacing: tracking.chrome,
-    lineHeight: "13px",
-    textAlign: "right",
-    textTransform: "uppercase",
-  },
-  accent: {
-    color: tokens.accent,
   },
   faint: {
     color: tokens.inkFaint,
