@@ -1,6 +1,4 @@
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import { createWriteStream } from "node:fs";
 import {
   mkdir,
   readFile,
@@ -10,19 +8,15 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
-import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { promisify } from "node:util";
 
 import { parseJsonText } from "@dev.fast/json";
 import { z } from "zod";
 
 import { findReviewPackageRoot } from "./package-paths";
+import { downloadPinned } from "./pinned-download";
 import { devReviewHome } from "./review-home-paths";
 import { extractVsix, sanitizeVsixManifest } from "./vsix";
-
-const DOWNLOAD_TIMEOUT_MS = 120_000;
 
 const EXECUTABLE_TIMEOUT_MS = 15_000;
 
@@ -264,14 +258,14 @@ async function install(
   download: CuratedDownload,
   directory: string,
   stamp: Stamp,
-  timeoutMs = DOWNLOAD_TIMEOUT_MS,
+  timeoutMs?: number,
   signal?: AbortSignal,
 ) {
   const part = `${directory}.${process.pid}.vsix`;
   const staging = `${directory}.${process.pid}.staging`;
 
   try {
-    await fetchVerified(download, part, timeoutMs, signal);
+    await downloadPinned(download, part, { timeoutMs, signal });
     await rm(staging, { recursive: true, force: true });
     await extractVsix(part, staging, download.size * 8);
     await sanitizeVsixManifest(staging, extension);
@@ -289,78 +283,6 @@ async function install(
     await rm(staging, { recursive: true, force: true });
   }
 }
-
-async function fetchVerified(
-  download: CuratedDownload,
-  file: string,
-  timeoutMs: number,
-  signal?: AbortSignal,
-) {
-  const { host } = new URL(download.url);
-  let response: Response;
-
-  try {
-    response = await fetch(download.url, {
-      signal: AbortSignal.any([
-        AbortSignal.timeout(timeoutMs),
-        ...(signal ? [signal] : []),
-      ]),
-    });
-  } catch (error) {
-    throw new Error(
-      `Network error reaching ${host}: ${error instanceof Error ? networkCause(error) : String(error)}`,
-    );
-  }
-
-  if (!response.ok || !response.body)
-    throw new Error(`${host} answered ${response.status} for ${download.url}`);
-
-  const hash = createHash("sha256");
-  let received = 0;
-
-  const tooLarge = new Error(
-    `${download.url} is larger than its pinned ${download.size} bytes`,
-  );
-
-  try {
-    await pipeline(
-      // SAFETY: Node's fetch body is its own web stream; the DOM type only
-      // names the same object.
-      Readable.fromWeb(response.body as WebReadableStream),
-      async function* (chunks: AsyncIterable<Buffer>) {
-        for await (const chunk of chunks) {
-          received += chunk.length;
-
-          if (received > download.size) throw tooLarge;
-
-          hash.update(chunk);
-          yield chunk;
-        }
-      },
-      createWriteStream(file),
-    );
-  } catch (error) {
-    if (error === tooLarge) throw error;
-
-    throw new Error(
-      `Network error downloading from ${host}: ${error instanceof Error ? networkCause(error) : String(error)}`,
-    );
-  }
-
-  const actual = hash.digest("hex");
-
-  if (actual !== download.sha256)
-    throw new Error(
-      `Checksum mismatch for ${download.url}: expected ${download.sha256}, got ${actual}. The download was deleted.`,
-    );
-}
-
-const networkCauseSchema = z.object({ code: z.string() });
-
-const networkCause = (error: Error) =>
-  error.name === "TimeoutError"
-    ? "timed out"
-    : (networkCauseSchema.safeParse(error.cause).data?.code ?? error.message);
 
 async function checkExecutables(
   directory: string,
