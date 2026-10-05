@@ -248,19 +248,15 @@ async function journey(ctx) {
     "the composer to come back with OpenCode",
     30000,
   );
-  const picker = panel().getByRole("button", { name: "OpenCode", exact: true });
+  await panel().getByText("OpenCode", { exact: true }).waitFor();
 
-  await picker.click();
-  assert.deepEqual(
-    await panel()
-      .getByRole("menu", { name: "Answer with" })
-      .getByRole("menuitemradio")
-      .allInnerTexts(),
-    ["OpenCode"],
-  );
-  await picker.click();
+  for (const name of ["OpenCode", "Choose an agent"])
+    assert.equal(
+      await panel().getByRole("button", { name, exact: true }).count(),
+      0,
+    );
   ctx.check(
-    `4. without the remote's OpenCode, Claude Code, Codex and OpenCode read Not installed on ${alias}; with it back, Answer with offers OpenCode alone`,
+    `4. without the remote's OpenCode, Claude Code, Codex and OpenCode read Not installed on ${alias}; with it back, the header names OpenCode alone, without a menu`,
   );
 
   // 5. The question goes to the remote's agent; its answer streams back through the gateway.
