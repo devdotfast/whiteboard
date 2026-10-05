@@ -77,8 +77,6 @@ const at = (version: string, integrity = INTEGRITY) => ({ version, integrity });
 const INSTALLED: ReviewRemoteInstallResult = {
 	nodePath: "/home/dev/.dev/whiteboard-remote/node/v24.18.0/bin/node",
 	cliPath: "/home/dev/.dev/whiteboard-remote/versions/0.1.6/node_modules/@dev.fast/whiteboard/dist/cli.js",
-	launcher: "/home/dev/.dev/whiteboard-remote/versions/0.1.6/whiteboard",
-	diffr: true,
 };
 
 async function installFlow(
@@ -861,7 +859,7 @@ test("a declined host with another version's CLI on PATH attaches it, and still 
 	assert.equal(await flow.consent.get("wb-test-a"), "deny");
 });
 
-test("this version's CLI on PATH counts as installed: no prompt, no install, and stage 1's attach", async (t) => {
+test("this version's CLI on PATH counts as installed: no prompt, no install, and it attaches through PATH with --replace", async (t) => {
 	const port = await healthServer(t);
 	const { flow, prompts, runs } = await installFlow(t, "ask");
 	const { host, ssh, last } = hostFor(t, { probe: { pathCli: { path: "/usr/local/bin/whiteboard", version: "0.1.6" } } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
@@ -883,6 +881,7 @@ test("another version's CLI on PATH does not count: the user is asked", async (t
 	await until(() => last()?.endpoint !== undefined);
 
 	assert.equal(prompts.length, 1);
+	assert.equal(await flow.consent.get("wb-test-a"), "deny");
 });
 
 test("an open install question is reported until it is answered", async (t) => {
@@ -900,7 +899,7 @@ test("an open install question is reported until it is answered", async (t) => {
 	assert.deepEqual(reports.at(-2), { alias: "wb-test-a" });
 });
 
-test("a quiesce closes an open install question", async (t) => {
+test("a quiesce closes an open install question, and one it lands before", async (t) => {
 	const { flow } = await installFlow(t, "ask");
 	const answer = Promise.withResolvers<boolean | undefined>();
 	flow.confirm = () => answer.promise;
@@ -913,6 +912,26 @@ test("a quiesce closes an open install question", async (t) => {
 	await new Promise((resolve) => setTimeout(resolve, 20));
 
 	assert.deepEqual(last(), { alias: "wb-test-a" });
+
+	const reading = await installFlow(t, "ask");
+	const read = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	const get = reading.flow.consent.get.bind(reading.flow.consent);
+	reading.flow.consent.get = async (alias) => {
+		read.resolve();
+		await release.promise;
+		return get(alias);
+	};
+	const other = hostFor(t, { attach: { code: 127 } }, 1, "wb-test-a", "/tmp/wb-ssh-test", reading.flow);
+
+	other.host.start();
+	await read.promise;
+	other.host.quiesce();
+	release.resolve();
+	await new Promise((resolve) => setTimeout(resolve, 20));
+
+	assert.equal(reading.prompts.length, 0);
+	assert.equal(other.last()?.asking, undefined);
 });
 
 test("a prompt nobody answered is not remembered, offers Install, and the next connect asks again", async (t) => {
@@ -1156,7 +1175,7 @@ test("agents are detected once after the first attach, with the installed CLI, a
 	const { flow } = await installFlow(t, "always");
 	const attached = new Set<string>();
 	const firstAttach = (key: string) => !attached.has(key) && !!attached.add(key);
-	const remote: FakeRemote = { detect: { code: 0, stdout: `noise\n${detectOutput([{ id: "pi", name: "Pi", present: true, connected: false }])}` } };
+	const remote: FakeRemote = { detect: { code: 0, stdout: `noise\n${detectOutput([{ id: "pi", name: "Pi", connected: false }])}` } };
 	const { host, ssh, last } = hostFor(t, remote, port, "wb-test-a", "/tmp/wb-ssh-test", flow, "0.1.6", { firstAttach });
 
 	host.start();
@@ -1195,8 +1214,8 @@ test("connecting runs the agents' commands with the installed CLI, and refuses a
 		detect: {
 			code: 0,
 			stdout: detectOutput([
-				{ id: "pi", present: true, connected: false },
-				{ id: "codex", present: true, connected: false, manual: true },
+				{ id: "pi", connected: false },
+				{ id: "codex", connected: false, manual: true },
 			]),
 		},
 	};
@@ -1222,7 +1241,7 @@ test("connecting runs the agents' commands with the installed CLI, and refuses a
 test("a connect that prints no result fails with ssh's words, as plain text", async (t) => {
 	const port = await healthServer(t);
 	const remote: FakeRemote = {
-		detect: { code: 0, stdout: detectOutput([{ id: "pi", present: true, connected: false }]) },
+		detect: { code: 0, stdout: detectOutput([{ id: "pi", connected: false }]) },
 		connect: { code: 1, stderr: "\u001b[31mboom\u001b[0m\r\nmore\n" },
 	};
 	const { host, last } = hostFor(t, remote, port, "wb-test-a", "/tmp/wb-ssh-test", undefined, "0.1.6", { firstAttach: () => true });

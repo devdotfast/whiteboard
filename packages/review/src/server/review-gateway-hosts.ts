@@ -5,6 +5,7 @@ import {
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
   type REVIEW_REMOTE_INSTALL_STEPS,
+  REVIEW_REMOTE_VERSION,
   type ReviewGatewayHost,
   type ReviewGatewayHostState,
 } from "@dev.fast/review-protocol";
@@ -30,8 +31,6 @@ export const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const jitter = (ms: number) => ms * (0.75 + Math.random() * 0.5);
-
-const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 
 const INSTALLS = new Set<ReviewGatewayHostState["state"]>([
   "incompatible",
@@ -385,7 +384,10 @@ export function createGatewayHosts(input: {
 
       if (restarted) return restartedHost(host);
 
-      if (health.version !== "unknown" && !VERSION.test(health.version)) {
+      if (
+        health.version !== "unknown" &&
+        !REVIEW_REMOTE_VERSION.test(health.version)
+      ) {
         host.status = "incompatible";
         host.detail = `${host.alias} reports an invalid version.`;
       } else if (

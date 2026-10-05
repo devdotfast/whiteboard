@@ -119,7 +119,9 @@ When Desktop updates, it installs its new version beside the old one without
 asking again, and restarts the review server it started on the new version.
 Your reviews stay. Desktop keeps two versions on a host, and any older one
 that a running process still uses; it removes the rest after the next
-install.
+install. If the new version fails to install but a `whiteboard` of that version
+on `PATH` attaches, the host is `online` and Settings does not show the
+failure; the next connection tries the install again.
 
 Desktop does not stop a review server that you started yourself
 (`whiteboard server start`). If that server runs another version, the host is
