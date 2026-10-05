@@ -103,6 +103,16 @@ test("a slow remote that keeps reading is not a stall, and one that stops readin
 	);
 });
 
+test("a remote without sha256sum checks the file with openssl", async () => {
+	const { local, content, target } = await fixture();
+	const spawnSsh = localSsh({ rewrite: (command) => command.replace("command -v sha256sum", "command -v no-such-sha256sum") });
+
+	const sent = await uploadFile(session, local, target, { spawn: spawnSsh, env });
+
+	assert.equal(sent.sha256, createHash("sha256").update(content).digest("hex"));
+	assert.deepEqual(await readFile(target), content);
+});
+
 test("a .part that does not match what was sent is removed, not renamed", async () => {
 	const { root, local, target } = await fixture();
 	const spawnSsh = localSsh({ rewrite: (command) => command.replace('cat > "$1.part"', 'cat > "$1.part"; printf x >> "$1.part"') });

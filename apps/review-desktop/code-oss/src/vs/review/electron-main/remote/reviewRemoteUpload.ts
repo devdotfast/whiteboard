@@ -52,7 +52,7 @@ export async function uploadFile(
 	const script = [
 		`f='${remotePath}'`,
 		`size=$(wc -c < "$f.part") || exit 3`,
-		`sum=$(sha256sum "$f.part") || exit 3`,
+		`if command -v sha256sum >/dev/null 2>&1; then sum=$(sha256sum "$f.part"); else sum=$(openssl dgst -sha256 -r "$f.part"); fi || exit 3`,
 		`sum=\${sum%% *}`,
 		`if [ $size -eq ${total} ] && [ "$sum" = ${sha256} ]; then mv -f "$f.part" "$f" && echo ${OK}`,
 		`else rm -f "$f.part"; echo ${MISMATCH} $size $sum; fi`,
