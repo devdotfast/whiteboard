@@ -49,13 +49,14 @@ const versions = new Map<
   { read: number; version: Promise<number[] | undefined> }
 >();
 
-function piVersion(executable: string) {
+function piVersion(executable: string, env: NodeJS.ProcessEnv) {
   const cached = versions.get(executable);
 
   if (cached && Date.now() - cached.read < VERSION_TTL_MS)
     return cached.version;
 
   const version = promisify(execFile)(executable, ["--version"], {
+    env,
     timeout: 5_000,
   })
     .then(({ stdout }) =>
@@ -69,9 +70,12 @@ function piVersion(executable: string) {
 }
 
 /** Whether this Pi can be given MCP servers. */
-export async function piTakesMcp(executable: string): Promise<boolean> {
+export async function piTakesMcp(
+  executable: string,
+  env: NodeJS.ProcessEnv,
+): Promise<boolean> {
   if (process.platform === "win32") return false;
-  const version = await piVersion(executable);
+  const version = await piVersion(executable, env);
 
   if (!version) return false;
 
