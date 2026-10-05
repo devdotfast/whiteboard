@@ -17,6 +17,11 @@ const RETRIED = new Set<ReviewGatewayHostState["state"]>([
   "unreachable",
 ]);
 
+const plain = (text: string) =>
+  text
+    .replaceAll(/[\t\n\u2028\u2029]/g, " ")
+    .replaceAll(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
+
 export function RemoteHostsSection({
   hosts,
 }: {
@@ -98,6 +103,13 @@ export function RemoteHostsSection({
                 <span {...stylex.props(styles.rowDescription, local.detail)}>
                   {(state?.state ?? "connecting").replace("-", " ")}
                   {state?.detail ? ` · ${state.detail}` : null}
+                </span>
+              ) : null}
+              {state?.state === "online" ? (
+                <span {...stylex.props(styles.rowDescription, local.detail)}>
+                  {state.languageFeatures
+                    ? "Language features: available"
+                    : `Language features: unavailable${state.languageFeaturesDetail ? ` — ${plain(state.languageFeaturesDetail)}` : ""}`}
                 </span>
               ) : null}
               {state?.installCommand ? (
