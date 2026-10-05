@@ -9,7 +9,11 @@ import type { URI } from "../../../base/common/uri.js";
 import type { ITextModel } from "../../../editor/common/model.js";
 import { ILanguageFeaturesService } from "../../../editor/common/services/languageFeatures.js";
 import { IModelService } from "../../../editor/common/services/model.js";
+import { ICommandService } from "../../../platform/commands/common/commands.js";
+import type { IExtensionDescription } from "../../../platform/extensions/common/extensions.js";
+import { IFileService } from "../../../platform/files/common/files.js";
 import { SyncDescriptor } from "../../../platform/instantiation/common/descriptors.js";
+import type { ServicesAccessor } from "../../../platform/instantiation/common/instantiation.js";
 import { ServiceCollection } from "../../../platform/instantiation/common/serviceCollection.js";
 import { IMarkerService } from "../../../platform/markers/common/markers.js";
 import { IRemoteAuthorityResolverService, type IRemoteConnectionData, type ResolverResult } from "../../../platform/remote/common/remoteAuthorityResolver.js";
@@ -22,9 +26,13 @@ import {
 	Workspace,
 	WorkspaceFolder,
 } from "../../../platform/workspace/common/workspace.js";
+import { CommandService } from "../../../workbench/services/commands/common/commandService.js";
+import { IExtensionService } from "../../../workbench/services/extensions/common/extensions.js";
 import { ISearchService } from "../../../workbench/services/search/common/search.js";
 import { SearchService } from "../../../workbench/services/search/common/searchService.js";
 import { override, ownsRemoteResource } from "./reviewRemoteAuthority.js";
+import { reviewRemoteExtensionService } from "./reviewRemoteExtensionService.js";
+import { reviewRemoteFileEvents } from "./reviewRemoteFileEvents.js";
 
 export function reviewRemoteModelService(base: IModelService, authority: string): IModelService {
 	const mine = (model: ITextModel) => ownsRemoteResource(authority, model.uri);
@@ -155,18 +163,23 @@ export class ReviewRemoteWorkspace extends Disposable implements IWorkspaceConte
 
 export function reviewRemoteScope(input: {
 	authority: string;
+	extensions: readonly IExtensionDescription[];
+	activate: (event: string) => Promise<void>;
 	languageFeatures: ILanguageFeaturesService;
 	workspace: ReviewRemoteWorkspace;
 	resolver: IRemoteAuthorityResolverService;
-	modelService: IModelService;
-	markerService: IMarkerService;
-}): ServiceCollection {
+}, window: ServicesAccessor): ServiceCollection {
+	const { authority } = input;
 	return new ServiceCollection(
 		[ILanguageFeaturesService, input.languageFeatures],
-		[IModelService, reviewRemoteModelService(input.modelService, input.authority)],
+		[IModelService, reviewRemoteModelService(window.get(IModelService), authority)],
 		[IWorkspaceContextService, input.workspace],
-		[IMarkerService, reviewRemoteMarkerService(input.markerService, input.authority)],
+		[IMarkerService, reviewRemoteMarkerService(window.get(IMarkerService), authority)],
 		[ISearchService, new SyncDescriptor(SearchService)],
 		[IRemoteAuthorityResolverService, input.resolver],
+		[IExtensionService, reviewRemoteExtensionService(window.get(IExtensionService), input.extensions, input.activate)],
+		// So a host's `vscode.execute*Provider` calls use this scope's registry and models.
+		[ICommandService, new SyncDescriptor(CommandService)],
+		[IFileService, reviewRemoteFileEvents(window.get(IFileService), authority)],
 	);
 }

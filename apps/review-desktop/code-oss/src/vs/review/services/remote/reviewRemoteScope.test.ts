@@ -1,10 +1,21 @@
 import assert from "node:assert/strict";
+import { createRequire, registerHooks } from "node:module";
 import test from "node:test";
-import { Emitter } from "../../../base/common/event.js";
+import { Emitter, Event } from "../../../base/common/event.js";
 import { URI } from "../../../base/common/uri.js";
-import type { IModelService } from "../../../editor/common/services/model.js";
+import { Range } from "../../../editor/common/core/range.js";
+import type { Hover } from "../../../editor/common/languages.js";
+import { ILanguageFeaturesService } from "../../../editor/common/services/languageFeatures.js";
+import { LanguageFeaturesService } from "../../../editor/common/services/languageFeaturesService.js";
+import { IModelService } from "../../../editor/common/services/model.js";
+import { ICommandService } from "../../../platform/commands/common/commands.js";
+import { IFileService } from "../../../platform/files/common/files.js";
+import { InstantiationService } from "../../../platform/instantiation/common/instantiationService.js";
+import { ServiceCollection } from "../../../platform/instantiation/common/serviceCollection.js";
+import { ILogService, NullLogService } from "../../../platform/log/common/log.js";
 import { MarkerService } from "../../../platform/markers/common/markerService.js";
-import { MarkerSeverity } from "../../../platform/markers/common/markers.js";
+import { IMarkerService, MarkerSeverity } from "../../../platform/markers/common/markers.js";
+import { IExtensionService } from "../../../workbench/services/extensions/common/extensions.js";
 import type { IRemoteAuthorityResolverService } from "../../../platform/remote/common/remoteAuthorityResolver.js";
 import { reviewRemoteAuthority } from "./reviewRemoteAuthority.js";
 import {
@@ -12,6 +23,7 @@ import {
 	reviewRemoteMarkerService,
 	reviewRemoteModelService,
 	reviewRemoteResolver,
+	reviewRemoteScope,
 } from "./reviewRemoteScope.js";
 
 const A = "whiteboard+aaaa-1111";
@@ -120,4 +132,42 @@ test("a host's workspace holds each root while any caller holds it", () => {
 	third.dispose();
 	assert.deepEqual(events, ["+/home/dev/proj -", "+/home/dev/other -", "+ -/home/dev/proj", "+ -/home/dev/other"]);
 	workspace.dispose();
+});
+
+test("a host's vscode.executeHoverProvider runs on that host's providers and activates on that host", async () => {
+	const { JSDOM } = createRequire(import.meta.url)("jsdom");
+	const dom = new JSDOM("<html><body></body></html>");
+	for (const key of ["window", "document", "HTMLElement", "HTMLCanvasElement", "Node", "MutationObserver", "Element", "navigator", "customElements", "UIEvent", "MouseEvent", "KeyboardEvent", "FocusEvent"] as const) Object.defineProperty(globalThis, key, { configurable: true, value: dom.window[key] });
+	dom.window.matchMedia = () => ({ matches: false, addEventListener() { }, removeEventListener() { } }) as never;
+	registerHooks({ load: (url, context, next) => (url.endsWith(".css") ? { format: "module", source: "", shortCircuit: true } : next(url, context)) });
+	await import("../../../editor/contrib/hover/browser/getHover.js");
+	const model = { uri: onA, getLanguageId: () => "typescript", isTooLargeForSyncing: () => false };
+	const remote = new LanguageFeaturesService();
+	const laptopFeatures = new LanguageFeaturesService();
+	const range = new Range(1, 1, 1, 5);
+	remote.hoverProvider.register({ language: "typescript" }, { provideHover: () => ({ range, contents: [{ value: "from host A" }] }) });
+	laptopFeatures.hoverProvider.register("*", { provideHover: () => ({ range, contents: [{ value: "the window's" }] }) });
+	const activated: string[] = [];
+	const window = new ServiceCollection(
+		[ILogService, new NullLogService()],
+		[ILanguageFeaturesService, laptopFeatures],
+		[IModelService, { getModel: (uri: URI) => (uri.toString() === onA.toString() ? model : null) }],
+		[IMarkerService, new MarkerService()],
+		[IFileService, { onDidFilesChange: Event.None, onDidRunOperation: Event.None }],
+		[IExtensionService, { activateByEvent: async (event: string) => { activated.push(`window ${event}`); } }],
+	);
+	const parent = new InstantiationService(window, true);
+	const scope = parent.createChild(parent.invokeFunction((accessor) => reviewRemoteScope({
+		authority: A,
+		extensions: [],
+		activate: async (event) => { activated.push(`host ${event}`); },
+		languageFeatures: remote,
+		workspace: new ReviewRemoteWorkspace("w"),
+		resolver: {} as IRemoteAuthorityResolverService,
+	}, accessor)));
+
+	const hovers = await scope.invokeFunction((accessor) => accessor.get(ICommandService).executeCommand<Hover[]>("_executeHoverProvider", onA, { lineNumber: 1, column: 2 }));
+
+	assert.deepEqual(hovers?.map((hover) => hover.contents.map((content) => content.value)), [["from host A"]]);
+	assert.deepEqual(activated, ["host onCommand:_executeHoverProvider"]);
 });
