@@ -615,6 +615,48 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     );
   });
 
+  configureJsonOutput(
+    remote
+      .command("extensions")
+      .description("Language extensions for the VS Code server on a remote")
+      .command("ensure")
+      .description(
+        "Download the curated extensions for this machine and list them for the VS Code server",
+      )
+      .option(
+        "--groups <groups>",
+        "comma-separated optional extension groups the Desktop has enabled, such as go",
+      ),
+    "plain",
+  ).action(async (_options, command: Command) => {
+    const { json, groups } = command.optsWithGlobals<{
+      json?: boolean;
+      groups?: string;
+    }>();
+
+    const { ensureRemoteExtensions } = await import("./remote-extensions.js");
+
+    const result = await ensureRemoteExtensions({
+      env,
+      groups: groups?.split(",").map((group) => group.trim()),
+    });
+
+    input.stdout.write(
+      json
+        ? `${JSON.stringify(result)}\n`
+        : [
+            ...result.installed.map((id) => `Installed ${id}`),
+            ...result.skipped.map(
+              ({ id, reason }) => `Skipped ${id}: ${reason}`,
+            ),
+            ...result.failed.map(({ id, error }) => `Failed ${id}: ${error}`),
+          ]
+            .map((line) => `${line}\n`)
+            .join(""),
+    );
+    state.exitCode = result.failed.length > 0 ? 1 : 0;
+  });
+
   async function writeServerStatus(
     discovery: ReviewServerDiscovery,
     stateDir: string,
