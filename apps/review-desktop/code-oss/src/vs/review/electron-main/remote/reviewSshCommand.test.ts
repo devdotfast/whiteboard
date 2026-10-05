@@ -6,15 +6,17 @@
 import assert from "node:assert/strict";
 import { chmod, lstat, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import test from "node:test";
 
 import {
 	prepareSshControlDirectory,
 	reviewSshConfigPath,
 	reviewSshControlDirectory,
+	reviewSshInstancePrefix,
 	reviewSshSession,
 	sshCancelForwardArgs,
+	sshCheckArgs,
 	sshCloseArgs,
 	sshExecArgs,
 	sshForwardArgs,
@@ -30,6 +32,7 @@ const allArgs = (env: NodeJS.ProcessEnv = {}) => [
 	sshForwardArgs(session, 41000, 42000, env),
 	sshCancelForwardArgs(session, 41000, 42000, env),
 	sshCloseArgs(session, env),
+	sshCheckArgs(session, env),
 ];
 
 test("refuses aliases that could become options or reach a shell", () => {
@@ -79,6 +82,12 @@ test("the control path is under 100 bytes for a 40-character alias", () => {
 	assert.ok(Buffer.byteLength(controlPath) < 100, controlPath);
 	assert.ok(controlPath.startsWith(reviewSshControlDirectory()));
 	assert.notEqual(reviewSshSession("b".repeat(40)).controlPath, controlPath);
+	const instance = "/Users/u/Library/Application Support/Whiteboard";
+	const ofInstance = reviewSshSession(alias, undefined, instance).controlPath;
+	assert.notEqual(ofInstance, controlPath);
+	assert.ok(Buffer.byteLength(ofInstance) < 100, ofInstance);
+	assert.ok(basename(ofInstance).startsWith(reviewSshInstancePrefix(instance)));
+	assert.ok(!basename(reviewSshSession(alias, undefined, `${instance} Preview`).controlPath).startsWith(reviewSshInstancePrefix(instance)));
 });
 
 test("the control directory is created 0700, repaired, and a symlink is refused", async (t) => {

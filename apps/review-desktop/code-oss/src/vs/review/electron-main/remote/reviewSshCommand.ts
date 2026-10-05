@@ -40,9 +40,15 @@ export function reviewSshControlDirectory(): string {
 	return join(tmpdir(), `wb-ssh-${currentUid()}`);
 }
 
-export function reviewSshSession(alias: string, controlDirectory = reviewSshControlDirectory()): ReviewSshSession {
+const sha = (value: string) => createHash("sha256").update(value).digest("hex");
+
+export function reviewSshInstancePrefix(instance: string): string {
+	return `${sha(instance).slice(0, 6)}-`;
+}
+
+export function reviewSshSession(alias: string, controlDirectory = reviewSshControlDirectory(), instance?: string): ReviewSshSession {
 	checkAlias(alias);
-	const name = createHash("sha256").update(alias).digest("hex").slice(0, 12);
+	const name = instance === undefined ? sha(alias).slice(0, 12) : `${reviewSshInstancePrefix(instance)}${sha(`${instance}\n${alias}`).slice(0, 12)}`;
 	return { alias, controlPath: join(controlDirectory, name) };
 }
 
@@ -116,6 +122,10 @@ export function sshCancelForwardArgs(
 	env: NodeJS.ProcessEnv = process.env,
 ): string[] {
 	return [...base(session, env), "-O", "cancel", "-L", localForward(localPort, remotePort), "--", session.alias];
+}
+
+export function sshCheckArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = process.env): string[] {
+	return [...base(session, env), "-O", "check", "--", session.alias];
 }
 
 export function sshCloseArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = process.env): string[] {
