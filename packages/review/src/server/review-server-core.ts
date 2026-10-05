@@ -4,7 +4,11 @@ import type {
   ReviewServerHealthWithToken,
 } from "@dev.fast/review-protocol";
 import { traceMachineEnabled } from "@dev.fast/trace-core";
-import { detectAskAgents, launchAskAgent } from "@review/ask/agents.js";
+import {
+  type AskAgentLauncher,
+  detectAskAgents,
+  launchAskAgent,
+} from "@review/ask/agents.js";
 import { AskThreads, type AskTools } from "@review/ask/threads.js";
 import {
   readBuildCommit,
@@ -128,7 +132,11 @@ export interface WhiteboardCoreInput {
   scratchpad: () => boolean;
   status: () => JsonObject;
   hooks?: ReviewApiHooks;
-  ask?: { tools: AskTools };
+  ask?: {
+    tools: AskTools;
+    /** Tests only: an in-process agent. */
+    launch?: AskAgentLauncher;
+  };
 }
 
 export function createWhiteboardCore(input: WhiteboardCoreInput) {
@@ -144,7 +152,8 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
   const callbacks = relayReviewCallbacks(input.relay, input.softwareMapEnabled);
 
   const askThreads =
-    input.ask && new AskThreads(launchAskAgent, input.ask.tools);
+    input.ask &&
+    new AskThreads(input.ask.launch ?? launchAskAgent, input.ask.tools);
 
   const api = createReviewApi(
     store,

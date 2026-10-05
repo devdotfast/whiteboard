@@ -19,6 +19,11 @@ import { DatabaseSync } from "node:sqlite";
 import { PassThrough } from "node:stream";
 
 import {
+  type ClientConnection,
+  agent,
+  methods,
+} from "@agentclientprotocol/sdk";
+import {
   type JsonValue,
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
@@ -26,6 +31,7 @@ import {
   STRUCTURAL_DIFF_WIRE_VERSION,
   parseReviewDesktopVerbFrame,
 } from "@dev.fast/review-protocol";
+import type { AskAgentLauncher } from "@review/ask/agents.js";
 import { runReviewCli } from "@review/cli-runner.js";
 import {
   connectReviewApi,
@@ -81,6 +87,7 @@ afterEach(async () => {
 async function start(
   stateDir = path.join(root, "server"),
   softwareMapEnabled = false,
+  launchAskAgent?: AskAgentLauncher,
 ) {
   const controller = new AbortController();
   const ready = Promise.withResolvers<ReviewServerDiscovery>();
@@ -90,6 +97,7 @@ async function start(
     softwareMapEnabled,
     signal: controller.signal,
     onReady: ready.resolve,
+    launchAskAgent,
   });
 
   const stop = async () => {
@@ -1488,4 +1496,74 @@ it("gives a remote caller no paths from a failed structural diff", async () => {
   expect(await structuralDiffEvents(server.discovery, reviewId, true)).toEqual([
     { type: "error", message: REMOTE_STRUCTURAL_DIFF_ERROR },
   ]);
+});
+
+async function askCall(
+  server: Awaited<ReturnType<typeof start>>,
+  route: string,
+  body?: JsonValue,
+) {
+  return fetch(`${server.discovery.url}/reviews-api/${route}`, {
+    headers: {
+      "x-review-token": server.discovery.token,
+      "content-type": "application/json",
+    },
+    ...(body !== undefined && { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+it("opens an Ask thread in the review's checkout and closes it on stop", async () => {
+  const launched = Promise.withResolvers<void>();
+  let stopped = 0;
+
+  const fake = agent({ name: "fake" })
+    .onRequest(methods.agent.initialize, () => ({
+      protocolVersion: 1,
+      agentCapabilities: {},
+      authMethods: [],
+    }))
+    .onRequest(methods.agent.session.new, () => ({ sessionId: "session" }))
+    .onRequest(methods.agent.session.prompt, () => ({
+      stopReason: "end_turn" as const,
+    }));
+
+  const server = await start(undefined, false, async () => {
+    let connection: ClientConnection | undefined;
+    launched.resolve();
+
+    return {
+      connect: (client) => (connection = client.connect(fake)),
+      diagnostics: () => "",
+      stop: () => {
+        stopped++;
+        connection?.close();
+      },
+    };
+  });
+
+  const { root: checkout, worktree } = await reviewsOfBothKinds(server.client);
+
+  const opened = await askCall(server, `${worktree}/ask`, {
+    agent: "claude",
+    question: { text: "Why?" },
+    selection: { target: { kind: "text", quote: "value" }, title: "value" },
+  });
+
+  expect(opened.status).toBe(200);
+
+  const { threadId } = await opened.json();
+
+  const reader = (await askCall(server, `${worktree}/ask/${threadId}/watch`))
+    .body!.pipeThrough(new TextDecoderStream())
+    .getReader();
+
+  const { value = "" } = await reader.read();
+  expect(JSON.parse(value.split("\n")[0]!).snapshot.cwd).toBe(checkout);
+
+  await launched.promise;
+  expect(stopped).toBe(0);
+  await server.stop();
+  expect(stopped).toBe(1);
+
+  while (!(await reader.read()).done);
 });

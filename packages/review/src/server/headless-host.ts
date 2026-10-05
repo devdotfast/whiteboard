@@ -1,10 +1,15 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
+import { existsSync } from "node:fs";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import { createServer } from "node:http";
+import path from "node:path";
 
 import { isObjectValue } from "@dev.fast/json";
 import { withFileLock, writePrivateJsonAtomic } from "@dev.fast/trace-core";
+import type { AskAgentLauncher } from "@review/ask/agents.js";
+import { cliAskTools } from "@review/ask/threads.js";
+import { findReviewPackageRoot } from "@review/package-paths.js";
 import { openReviewProfile } from "@review/review-api/profile.js";
 import {
   type ReviewServerDiscovery,
@@ -30,6 +35,7 @@ interface HeadlessServerInput {
   /** The CLI's instance, already on the `headless` surface. */
   telemetry?: Pick<ReviewTelemetryCapture, "captureUiEvent">;
   onReady(discovery: ReviewServerDiscovery): void;
+  launchAskAgent?: AskAgentLauncher;
 }
 
 export class HeadlessServerBusyError extends Error {}
@@ -92,7 +98,13 @@ async function serve(input: HeadlessServerInput) {
 
   const relay = new GlobalReviewDesktopVerbRelay();
 
-  const { app, api } = createWhiteboardCore({
+  const cliPath = path.join(
+    findReviewPackageRoot(import.meta.url),
+    "dist",
+    "cli.js",
+  );
+
+  const { app, api, close } = createWhiteboardCore({
     profile: local,
     relay,
     token: discovery.token,
@@ -101,6 +113,13 @@ async function serve(input: HeadlessServerInput) {
     // The scratchpad is the laptop's alone, even with a Desktop attached.
     scratchpad: () => false,
     status: () => ({ key: "headless", home: input.stateDir }),
+    ask: {
+      tools: cliAskTools(() => (existsSync(cliPath) ? cliPath : undefined), {
+        name: "DEV_REVIEW_SERVER_DIR",
+        value: input.stateDir,
+      }),
+      launch: input.launchAskAgent,
+    },
   });
 
   app.route("/reviews-api", api);
@@ -130,6 +149,8 @@ async function serve(input: HeadlessServerInput) {
         input.signal.addEventListener("abort", () => resolve(), { once: true });
     });
   } finally {
+    close();
+
     // Watch streams may live forever. Drain ordinary requests, then bound shutdown.
     const forceClose = setTimeout(() => server.closeAllConnections(), 5_000);
     forceClose.unref();
