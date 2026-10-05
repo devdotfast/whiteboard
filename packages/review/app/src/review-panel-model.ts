@@ -45,6 +45,14 @@ export interface PeekPanel {
   content: ReviewPeekContent;
 }
 
+/** Asked-about words whose conversations the history lists alone. */
+export interface AskPassage {
+  quote: string;
+  threadIds: string[];
+  /** Several passages, folded into one pin's +N; `quote` joins them. */
+  several?: boolean;
+}
+
 /** What the Ask panel shows: a new question about a selection, a saved
  * conversation, or the list of saved ones, all or those about one passage. */
 export type AskView =
@@ -63,7 +71,7 @@ export type AskView =
   | {
       type: "history";
       /** Only the conversations about this passage, from its pin. */
-      passage?: { quote: string; threadIds: string[] };
+      passage?: AskPassage;
     };
 
 /** What the pill says about a conversation it stands in for. */

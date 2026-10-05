@@ -259,13 +259,6 @@ button {
   font-size: 1.04em;
 }
 
-/* A pin row past a narrow document's edge moves inside it. StyleX has no
-   @position-try. */
-@position-try --ask-pin-inside {
-  right: 4px;
-  left: auto;
-}
-
 /* The software map's React Flow layers: edges under the cards, edge labels
    selectable like prose, and the map view's pane on the board grid. */
 
