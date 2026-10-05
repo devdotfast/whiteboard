@@ -9,6 +9,7 @@ import { Disposable, toDisposable } from "../../base/common/lifecycle.js";
 import { join } from "../../base/common/path.js";
 import { IConfigurationService } from "../../platform/configuration/common/configuration.js";
 import { IEnvironmentMainService } from "../../platform/environment/electron-main/environmentMainService.js";
+import { IInstantiationService } from "../../platform/instantiation/common/instantiation.js";
 import {
   ILifecycleMainService,
   LifecycleMainPhase,
@@ -20,6 +21,7 @@ import { IApplicationStorageMainService } from "../../platform/storage/electron-
 import { NullTelemetryService } from "../../platform/telemetry/common/telemetryUtils.js";
 import { IUpdateService } from "../../platform/update/common/update.js";
 import { UtilityProcess } from "../../platform/utilityProcess/electron-main/utilityProcess.js";
+import { IWindowsMainService } from "../../platform/windows/electron-main/windows.js";
 import type { ReviewDesktopConnection } from "../common/reviewDesktopBootstrap.js";
 import type {
   ReviewGatewayHostState,
@@ -52,7 +54,7 @@ import type {
   ReviewRemoteInstallFlow,
   ReviewRemoteInstallMode,
 } from "./remote/reviewRemoteHost.js";
-import { ReviewRemoteHosts } from "./remote/reviewRemoteHosts.js";
+import { closeRemoteHostWindows, ReviewRemoteHosts } from "./remote/reviewRemoteHosts.js";
 import {
   openRemoteInstallConsent,
   reviewRemoteInstallConsentPath,
@@ -103,6 +105,8 @@ export class ReviewDesktopHost extends Disposable {
     @IUpdateService private readonly updateService: IUpdateService,
     @IApplicationStorageMainService
     private readonly applicationStorageMainService: IApplicationStorageMainService,
+    @IInstantiationService
+    private readonly instantiationService: IInstantiationService,
   ) {
     super();
     let resolvedEnvironment: Promise<NodeJS.ProcessEnv> | undefined;
@@ -258,17 +262,23 @@ export class ReviewDesktopHost extends Disposable {
 
   async getRemoteLanguageEndpoint(serverId: string) {
     const manager = this.remoteHosts;
-    if (!manager) return undefined;
+    const states = manager && (await this.remoteHostStates());
+    return states && manager.languageEndpoint(serverId, states).catch(() => undefined);
+  }
+
+  async getRemoteHostState(serverId: string) {
+    const manager = this.remoteHosts;
+    const states = manager && (await this.remoteHostStates());
+    return states && manager.hostState(serverId, states);
+  }
+
+  private async remoteHostStates(): Promise<ReviewGatewayHostState[] | undefined> {
     try {
       const { url, token } = await this.whenConnected();
       const response = await fetch(new URL("/remote-hosts", url), {
         headers: { "x-review-token": token },
       });
-      if (!response.ok) return undefined;
-      return await manager.languageEndpoint(
-        serverId,
-        (await response.json()) as ReviewGatewayHostState[],
-      );
+      return response.ok ? ((await response.json()) as ReviewGatewayHostState[]) : undefined;
     } catch {
       return undefined;
     }
@@ -366,6 +376,10 @@ export class ReviewDesktopHost extends Disposable {
       send: (hosts) => this.supervisor.setRemoteHosts(hosts),
       log: (message) => this.logService.info(`[Remote hosts] ${message}`),
       install: this.remoteInstallFlow(),
+      removed: (serverId) =>
+        this.instantiationService.invokeFunction((accessor) =>
+          closeRemoteHostWindows(accessor.get(IWindowsMainService), serverId),
+        ),
     });
     this.remoteHosts = manager;
     const update = () => {
