@@ -22,6 +22,7 @@ import { REVIEW_CRASH_DUMPS_DIRNAME } from "../node/reviewCrashReporter.js";
 import { ReviewCrashDumps } from "./reviewCrashDumps.js";
 import { ReviewCrashTelemetry } from "./reviewCrashTelemetry.js";
 import { ReviewMainErrorTelemetry } from "./reviewMainErrorTelemetry.js";
+import { startReviewSshDevConnect } from "./remote/reviewSshDevConnect.js";
 import { ReviewServerSupervisor } from "./reviewServerSupervisor.js";
 import {
   darwinShipItLogPath,
@@ -120,6 +121,10 @@ export class ReviewDesktopHost extends Disposable {
         event.join("reviewDesktopHost", this.supervisor.stop());
       }),
     );
+    if (!this.environmentMainService.isBuilt)
+      this._register(
+        startReviewSshDevConnect((message) => this.logService.info(message)),
+      );
     // Main-process errors report through the embedded server, so they pass the
     // same opt-out checks and the same redaction step as every other event.
     errorTelemetry = new ReviewMainErrorTelemetry({
