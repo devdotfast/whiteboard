@@ -611,6 +611,324 @@ it("pins every passage in one lane, side by side on a shared line, and pairs a p
   await act(async () => root.unmount());
 });
 
+it("pins a passage beside its own line of a paragraph, and follows it as the document narrows", async () => {
+  const session = testReviewSession();
+  const quote = "the passage asked about";
+
+  // Hard breaks put the passage on the third line at any width.
+  const document_ = (
+    <MarkdownBlock
+      id="block-1"
+      source={`A first line.  \nA second line.  \nThen a sentence long enough to wrap once the document narrows, and ${quote}.`}
+    />
+  );
+
+  const [anchor] = await anchorsIn(document_, [{ words: quote }]);
+
+  vi.spyOn(session, "fetch").mockImplementation(async () =>
+    Response.json({ threads: [saved(quote, quote, anchor)] }),
+  );
+
+  const container = document.createElement("div");
+  container.style.width = "1100px";
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () =>
+    root.render(
+      <ReviewSessionProvider session={session}>
+        <ReviewPanelProvider>
+          <AskHistoryProvider>
+            <Document revision="1">{document_}</Document>
+          </AskHistoryProvider>
+        </ReviewPanelProvider>
+      </ReviewSessionProvider>,
+    ),
+  );
+
+  const pin = () => container.querySelector<HTMLElement>(".ask-mark-pin");
+  const paragraph = () => container.querySelector("p")!;
+  const middle = (rect: DOMRect) => rect.top + rect.height / 2;
+
+  // From the middle of the pin to the middle of the passage's first line.
+  const misalignment = () => {
+    const [line] = [...rangeOf(paragraph(), quote).getClientRects()].toSorted(
+      (above, below) => above.top - below.top,
+    );
+
+    return Math.abs(middle(pin()!.getBoundingClientRect()) - middle(line!));
+  };
+
+  await vi.waitFor(async () => {
+    await frame();
+    expect(pin()).toBeTruthy();
+  });
+
+  const lineHeight = parseFloat(getComputedStyle(paragraph()).lineHeight);
+  const wide = pin()!.getBoundingClientRect();
+
+  expect(misalignment()).toBeLessThan(2);
+  // Two lines below the first, not beside it.
+  expect(wide.top - paragraph().getBoundingClientRect().top).toBeGreaterThan(
+    1.5 * lineHeight,
+  );
+
+  // The sentence wraps, and the passage moves down a line or more.
+  container.style.width = "560px";
+
+  await vi.waitFor(async () => {
+    await frame();
+    expect(misalignment()).toBeLessThan(2);
+  });
+
+  const narrow = pin()!.getBoundingClientRect();
+
+  expect(narrow.top - wide.top).toBeGreaterThan(lineHeight / 2);
+  expect(narrow.left).toBeLessThan(wide.left);
+  expect(narrow.left).toBeGreaterThan(
+    paragraph().getBoundingClientRect().right,
+  );
+
+  await act(async () => root.unmount());
+});
+
+it("rests a pin as a tick in the margin when the column leaves no gutter, and opens it on hover or focus", async () => {
+  const session = testReviewSession();
+  const quote = "four columns";
+
+  const document_ = (
+    <MarkdownBlock
+      id="block-1"
+      source={`Code blocks drew a tab eight columns wide; now a tab is ${quote} in every diff, matching the editor.`}
+    />
+  );
+
+  const [anchor] = await anchorsIn(document_, [{ words: quote }]);
+
+  vi.spyOn(session, "fetch").mockImplementation(async () =>
+    Response.json({ threads: [saved(quote, quote, anchor)] }),
+  );
+
+  // The review's content area, which the document's padding narrows with.
+  const container = document.createElement("div");
+  container.style.width = "360px";
+  container.style.container = "review-content / inline-size";
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () =>
+    root.render(
+      <ReviewSessionProvider session={session}>
+        <ReviewPanelProvider>
+          <AskHistoryProvider>
+            <Document revision="1">{document_}</Document>
+            <Probe />
+          </AskHistoryProvider>
+        </ReviewPanelProvider>
+      </ReviewSessionProvider>,
+    ),
+  );
+
+  const pin = () => container.querySelector<HTMLElement>(".ask-mark-pin")!;
+
+  const tick = () =>
+    container.querySelector<HTMLButtonElement>(
+      'button[aria-label^="Show the pin"]',
+    );
+
+  const shown = () => getComputedStyle(pin()).visibility === "visible";
+
+  await vi.waitFor(async () => {
+    await frame();
+    expect(tick()).toBeTruthy();
+  });
+
+  // At rest only the tick shows, in the padding past the words.
+  const paragraph = container.querySelector("p")!.getBoundingClientRect();
+  const mark = tick()!.firstElementChild!.getBoundingClientRect();
+
+  expect(shown()).toBe(false);
+  expect(mark.left).toBeGreaterThanOrEqual(paragraph.right);
+  expect(mark.right).toBeLessThanOrEqual(
+    container.querySelector("article")!.getBoundingClientRect().right,
+  );
+
+  await userEvent.hover(tick()!);
+  await vi.waitFor(() => expect(shown()).toBe(true));
+
+  await userEvent.unhover(tick()!);
+  await vi.waitFor(() => expect(shown()).toBe(false));
+
+  // Focus opens it too, and its pin opens the conversation.
+  await act(async () => tick()!.click());
+  expect(document.activeElement).toBe(pin());
+  expect(shown()).toBe(true);
+  await act(async () => pin().click());
+  expect(view).toMatchObject({ type: "saved", threadId: quote });
+
+  // With room again, the pin is back in the gutter.
+  container.style.width = "1100px";
+  await vi.waitFor(async () => {
+    await frame();
+    expect(tick()).toBeNull();
+  });
+  expect(shown()).toBe(true);
+
+  await act(async () => root.unmount());
+});
+
+it("rests every pin as a tick once one row has no room, never mixing the two", async () => {
+  const session = testReviewSession();
+
+  const document_ = (
+    <>
+      <MarkdownBlock id="block-1" source="One passage asked about here." />
+      <MarkdownBlock id="block-2" source="A first and a second passage." />
+    </>
+  );
+
+  const quotes = ["One passage", "A first", "a second"];
+
+  const anchors = await anchorsIn(
+    document_,
+    quotes.map((words) => ({ words })),
+  );
+
+  vi.spyOn(session, "fetch").mockImplementation(async () =>
+    Response.json({
+      threads: quotes.map((quote, index) =>
+        saved(quote, quote, anchors[index]),
+      ),
+    }),
+  );
+
+  // Room in the gutter for one pin, not two side by side.
+  const container = document.createElement("div");
+  container.style.width = "820px";
+  container.style.container = "review-content / inline-size";
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () =>
+    root.render(
+      <ReviewSessionProvider session={session}>
+        <ReviewPanelProvider>
+          <AskHistoryProvider>
+            <Document revision="1">{document_}</Document>
+          </AskHistoryProvider>
+        </ReviewPanelProvider>
+      </ReviewSessionProvider>,
+    ),
+  );
+
+  const ticks = () =>
+    container.querySelectorAll('button[aria-label^="Show the"]');
+
+  await vi.waitFor(async () => {
+    await frame();
+    expect(ticks()).toHaveLength(2);
+  });
+
+  expect(
+    [...container.querySelectorAll(".ask-mark-pin")].map(
+      (pin) => getComputedStyle(pin).visibility,
+    ),
+  ).toEqual(["hidden", "hidden", "hidden"]);
+
+  // With room for both, all are pins again.
+  container.style.width = "1100px";
+  await vi.waitFor(async () => {
+    await frame();
+    expect(ticks()).toHaveLength(0);
+  });
+
+  await act(async () => root.unmount());
+});
+
+it("folds a line of more than two passages into its first pin and a +N chip", async () => {
+  const session = testReviewSession();
+  const quotes = ["Tabs", "spaces", "columns", "widths"];
+
+  const document_ = (
+    <MarkdownBlock id="block-1" source="Tabs, spaces, columns and widths." />
+  );
+
+  const anchors = await anchorsIn(
+    document_,
+    quotes.map((words) => ({ words })),
+  );
+
+  vi.spyOn(session, "fetch").mockImplementation(async () =>
+    Response.json({
+      threads: quotes.map((quote, index) =>
+        saved(quote, quote, anchors[index]),
+      ),
+    }),
+  );
+
+  const container = document.createElement("div");
+  container.style.width = "1100px";
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () =>
+    root.render(
+      <ReviewSessionProvider session={session}>
+        <ReviewPanelProvider>
+          <AskHistoryProvider>
+            <Document revision="1">{document_}</Document>
+            <Probe />
+          </AskHistoryProvider>
+        </ReviewPanelProvider>
+      </ReviewSessionProvider>,
+    ),
+  );
+
+  const more = () =>
+    [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "+3",
+    );
+
+  await vi.waitFor(async () => {
+    await frame();
+    expect(more()).toBeTruthy();
+  });
+
+  const pins = [...container.querySelectorAll(".ask-mark-pin")];
+
+  // The first in reading order, then the chip, level on the line.
+  expect(pins.map((pin) => pin.getAttribute("aria-label"))).toEqual([
+    expect.stringContaining("Tabs"),
+  ]);
+  expect(
+    new Set(
+      [...pins, more()!].map((element) =>
+        Math.round(element.getBoundingClientRect().top),
+      ),
+    ).size,
+  ).toBe(1);
+
+  // The pointer on it pairs it with every passage it folds.
+  await userEvent.hover(more()!);
+  await vi.waitFor(() =>
+    expect(
+      [...(CSS.highlights.get("ask-thread-active") ?? [])].map(String),
+    ).toEqual(["spaces", "columns", "widths"]),
+  );
+
+  await act(async () => more()!.click());
+  expect(view).toEqual({
+    type: "history",
+    passage: {
+      quote: "spaces · columns · widths",
+      threadIds: ["spaces", "columns", "widths"],
+      several: true,
+    },
+  });
+
+  await act(async () => root.unmount());
+});
+
 function HistoryDocument() {
   const articleRef = useRef<HTMLElement>(null);
   const scrollRegionRef = useRef<HTMLDivElement>(null);

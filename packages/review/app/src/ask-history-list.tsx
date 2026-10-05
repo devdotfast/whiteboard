@@ -11,7 +11,7 @@ import { useReviewSession } from "./host/review-session";
 import { ChatIcon, HistoryIcon } from "./icons";
 import { formatRelativeTime } from "./review-home-view";
 import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
-import type { AskView } from "./review-panel-model";
+import type { AskPassage, AskView } from "./review-panel-model";
 import { useReviewRoots } from "./review-root-context";
 import { fontSize } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
@@ -113,8 +113,8 @@ export function AskHistoryControl(): ReactElement | null {
 export function AskHistoryList({
   passage,
 }: {
-  /** Only the conversations about this passage. */
-  passage?: { quote: string; threadIds: string[] };
+  /** Only the conversations about this passage, or these. */
+  passage?: AskPassage;
 }): ReactElement {
   const history = useAskHistory();
   const panels = useOptionalReviewPanelStore();
@@ -152,7 +152,11 @@ export function AskHistoryList({
             styles.historyHeading,
           )}
         >
-          {passage ? "About this passage" : "Saved conversations"}
+          {passage?.several
+            ? "About these passages"
+            : passage
+              ? "About this passage"
+              : "Saved conversations"}
         </h3>
         {passage ? (
           <figure {...stylex.props(askPanelStyles.selection)}>
