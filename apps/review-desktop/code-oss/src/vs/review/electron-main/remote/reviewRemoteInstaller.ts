@@ -87,14 +87,14 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 	const alias = session.alias;
 	signal.throwIfAborted();
 	// The marker is JSON read back with sed: no quote or backslash in any path it holds.
-	for (const path of [probe.home, probe.node?.path, probe.npm]) {
+	for (const path of [probe.home, probe.root, probe.node?.path, probe.npm]) {
 		if (path && /['"\\]/.test(path)) throw new Error(`Whiteboard cannot install on ${alias}: ${JSON.stringify(path)} holds a quote or backslash.`);
 	}
 	if (!REVIEW_REMOTE_VERSION.test(input.version)) throw new Error(`${JSON.stringify(input.version)} is not a version.`);
 	const { integrity, sha512, nodeVersion, nodeSha256 } = pinned(input.artifacts);
 	if (!input.artifacts.node.name.endsWith(`-${input.target}.tar.xz`)) throw new Error(`${input.artifacts.node.name} is not the Node for ${input.target}.`);
 
-	const context: ReviewRemoteInstallContext = { home: probe.home, token: randomBytes(8).toString("hex") };
+	const context: ReviewRemoteInstallContext = { home: probe.home, root: probe.root, token: randomBytes(8).toString("hex") };
 	const owner = (input.owner ?? hostname()).replace(/[^\w.-]/g, "-").slice(0, 64) || "unknown";
 
 	const children = new Set<SshChildProcess>();
@@ -141,7 +141,7 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 		});
 		const marker = checked?.has("COMPLETE") ? readMarker(checked.get("MARKER")) : undefined;
 		if (!marker) return undefined;
-		const launcher = `${reviewRemoteVersionDir(probe.home, input.version)}/whiteboard`;
+		const launcher = `${reviewRemoteVersionDir(probe.root, input.version)}/whiteboard`;
 		input.onProgress({ step: "done", cliPath: marker.cli });
 		return { nodePath: marker.node, cliPath: marker.cli, launcher, diffr: diffrReady(checked!.lines) };
 	}
@@ -169,7 +169,7 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 
 		if (prepared.has("COMPLETE")) {
 			const marker = readMarker(prepared.get("MARKER"));
-			if (marker) return finish({ nodePath: marker.node, cliPath: marker.cli, launcher: `${reviewRemoteVersionDir(probe.home, input.version)}/whiteboard` });
+			if (marker) return finish({ nodePath: marker.node, cliPath: marker.cli, launcher: `${reviewRemoteVersionDir(probe.root, input.version)}/whiteboard` });
 		}
 
 		const { node, npm } = await ensureNode(prepared.has("MANAGED-NODE"));
@@ -186,7 +186,7 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 			throw new Error(`The package installed on ${alias} reports version ${reported ?? "nothing"}, not ${input.version}.`);
 		}
 
-		const dir = reviewRemoteVersionDir(probe.home, input.version);
+		const dir = reviewRemoteVersionDir(probe.root, input.version);
 		const cliPath = `${dir}/node_modules/@dev.fast/whiteboard/${bin}`;
 		const launcher = `${dir}/whiteboard`;
 		const newest = [input.version, ...prepared.all("HAVE").filter((name) => REVIEW_REMOTE_VERSION.test(name))].sort(compareVersions).at(-1);
@@ -225,7 +225,7 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 
 	async function ensureNode(managed: boolean): Promise<{ node: string; npm: string }> {
 		if (probe.node && probe.npm) return { node: probe.node.path, npm: probe.npm };
-		const bin = `${reviewRemoteNodeDir(probe.home, nodeVersion)}/bin`;
+		const bin = `${reviewRemoteNodeDir(probe.root, nodeVersion)}/bin`;
 		const paths = { node: `${bin}/node`, npm: `${bin}/npm` };
 		if (managed) return paths;
 

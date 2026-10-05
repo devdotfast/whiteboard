@@ -14,6 +14,8 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 
 import type { SpawnSsh } from "./reviewRemoteHost.js";
+import { probeRemote } from "./reviewRemoteProbe.js";
+import { uninstallRemote } from "./reviewRemoteUninstall.js";
 import { compareVersions, installRemote, type ReviewRemoteInstallInput, type ReviewRemoteInstallProgress } from "./reviewRemoteInstaller.js";
 import {
 	lockScript,
@@ -30,11 +32,11 @@ import { reviewSshSession } from "./reviewSshCommand.js";
 const VERSION = "9.9.9";
 
 const localRemote =
-	(home: string, uploadDelaySeconds = 0): SpawnSsh =>
+	(home: string, uploadDelaySeconds = 0, extra: NodeJS.ProcessEnv = {}): SpawnSsh =>
 	(args, options) => {
 		let command = args.slice(args.indexOf("--") + 2).join(" ");
 		if (uploadDelaySeconds && command.includes("cat >")) command = `sleep ${uploadDelaySeconds}; ${command}`;
-		const env = { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin` };
+		const env = { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin`, ...extra };
 		return spawn("/bin/sh", ["-c", `${command}; exit $?`], { ...options, env });
 	};
 
@@ -73,12 +75,14 @@ async function fixture(t: test.TestContext, cli = CLI) {
 		arch: "aarch64",
 		glibc: "2.35",
 		home,
+		root: join(home, ".dev", "whiteboard-remote"),
 		homeWritable: true,
 		freeBytes: 20e9,
 		node: { path: process.execPath, version: "24.18.0" },
 		npm: join(dirname(process.execPath), "npm"),
 		installed: [],
 		managedNode: null,
+		pathCli: null,
 		downloader: "curl",
 		registryReachable: true,
 		tools: ["tar", "xz", "sha256sum", "sha512sum"],
@@ -108,6 +112,41 @@ async function fixture(t: test.TestContext, cli = CLI) {
 }
 
 const run = (file: string, ...args: string[]) => execFileSync(file, args, { encoding: "utf8" }).trim();
+
+test("a DEV_REVIEW_HOME the remote cannot normalise is refused by the probe and the uninstall, before anything is written", async (t) => {
+	const f = await fixture(t);
+	for (const home of ["relative/home", `${f.root}/a/../b`, `${f.root}//b`, `${f.root}/./b`, `${f.root}/a\nb`, `${f.root}/a\tb`]) {
+		const spawn = localRemote(f.home, 0, { DEV_REVIEW_HOME: home });
+		const probed = await probeRemote({ session: reviewSshSession("devbox", tmpdir()), spawn, env: {} });
+		assert.match("error" in probed ? probed.error : "", /DEV_REVIEW_HOME there is not an absolute, normalised path/, home);
+		await assert.rejects(uninstallRemote({ session: reviewSshSession("devbox", tmpdir()), spawn, env: {} }), /DEV_REVIEW_HOME there is not an absolute, normalised path/);
+	}
+	assert.deepEqual(await readdir(f.home), []);
+});
+
+test("DEV_REVIEW_HOME moves the probe's versions, the install, its launcher and the uninstall together", async (t) => {
+	const uninstalled = `else if (a === "remote" && b === "uninstall") console.log(JSON.stringify({ event: "remote.uninstall", ok: true, removed: [], keptReviews: true }));\n`;
+	const f = await fixture(t, CLI.replace("else console.log", `${uninstalled}else console.log`));
+	const moved = join(f.root, "moved home");
+	const spawn = localRemote(f.home, 0, { DEV_REVIEW_HOME: ` ${moved}/ ` });
+	const probed = async () => {
+		const result = await probeRemote({ session: reviewSshSession("devbox", tmpdir()), spawn, env: {} });
+		assert.ok("probe" in result, "error" in result ? result.error : "");
+		return result.probe;
+	};
+	const root = join(moved, "whiteboard-remote");
+
+	const before = await probed();
+	assert.equal(before.root, root);
+	const result = await installRemote(f.input({ probe: { ...f.probe, root: before.root }, spawn }));
+
+	assert.ok(result.cliPath.startsWith(`${root}/versions/${VERSION}/`), result.cliPath);
+	assert.equal(result.launcher, `${root}/versions/${VERSION}/whiteboard`);
+	assert.equal(run(result.launcher, "version", "--json"), `{"event":"version","version":"${VERSION}"}`);
+	assert.deepEqual((await probed()).installed, [{ version: VERSION, integrity: f.pack.integrity }]);
+	await uninstallRemote({ session: reviewSshSession("devbox", tmpdir()), spawn, env: {} });
+	assert.deepEqual(await readdir(f.home), [".local"]);
+});
 
 test("installs the package, its launcher and ~/.local/bin/whiteboard; a second call finds it complete", async (t) => {
 	const f = await fixture(t);
@@ -318,7 +357,7 @@ function sh(home: string, script: string): Promise<string> {
 
 test("a Node tarball with the wrong checksum is removed before it is unpacked", async (t) => {
 	const f = await fixture(t);
-	const context = { home: f.home, token: "00112233aabbccdd" };
+	const context = { home: f.home, root: f.remoteRoot, token: "00112233aabbccdd" };
 	assert.match(await sh(f.home, lockScript(context, "me")), /LOCKED/);
 	assert.match(await sh(f.home, partScript(context, { node: "24.18.0" })), /READY/);
 	const part = join(f.remoteRoot, "node", "v24.18.0.00112233aabbccdd.part");
@@ -373,7 +412,7 @@ esac
 		child.stdout.setEncoding("utf8").on("data", (chunk: string) => (text += chunk));
 		child.once("error", reject);
 		child.once("close", () => resolve(text));
-		child.stdin.end(lockScript({ home: f.home, token: "00112233aabbccdd" }, "stealer"));
+		child.stdin.end(lockScript({ home: f.home, root: f.remoteRoot, token: "00112233aabbccdd" }, "stealer"));
 	});
 
 	assert.match(out, /WHITEBOARD-INSTALL BUSY winner/);
@@ -449,7 +488,7 @@ test("a Node path with a quote is refused before anything runs", async (t) => {
 
 test("a read of the lock's start time during refreshes never finds it empty", async (t) => {
 	const f = await fixture(t);
-	const context = { home: f.home, token: "00112233aabbccdd" };
+	const context = { home: f.home, root: f.remoteRoot, token: "00112233aabbccdd" };
 	assert.match(await sh(f.home, lockScript(context, "me")), /LOCKED/);
 	const started = join(f.remoteRoot, "install.lock", "started");
 	const refreshes = sh(f.home, refreshScript(context).replace("own\n", "i=0\nwhile [ $i -lt 400 ]; do own; i=$((i + 1)); done\n"));
@@ -478,6 +517,6 @@ test("a lock whose start time cannot be read counts as fresh", async (t) => {
 	await writeFile(join(lock, "started"), "");
 	execFileSync("touch", ["-t", "202001010000", lock]);
 
-	assert.match(await sh(f.home, lockScript({ home: f.home, token: "00112233aabbccdd" }, "me")), /BUSY busy-laptop/);
+	assert.match(await sh(f.home, lockScript({ home: f.home, root: f.remoteRoot, token: "00112233aabbccdd" }, "me")), /BUSY busy-laptop/);
 	assert.equal(await readFile(join(lock, "token"), "utf8"), "0123456789abcdef\n");
 });

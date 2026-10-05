@@ -6,20 +6,20 @@
 import { plainText } from "./reviewRemoteAgents.js";
 import { runSsh, type SpawnSsh } from "./reviewRemoteHost.js";
 import { compareVersions } from "./reviewRemoteInstaller.js";
-import { REVIEW_REMOTE_INSTALL_MARKER, REVIEW_REMOTE_INSTALL_SAY, REVIEW_REMOTE_VERSION, shellQuote } from "./reviewRemoteInstallScript.js";
+import { REVIEW_REMOTE_INSTALL_MARKER, REVIEW_REMOTE_INSTALL_SAY, REVIEW_REMOTE_ROOT_SCRIPT, REVIEW_REMOTE_VERSION, shellQuote } from "./reviewRemoteInstallScript.js";
 import { sshExecArgs, type ReviewSshSession } from "./reviewSshCommand.js";
 
 export const REVIEW_REMOTE_UNINSTALL_TIMEOUT = 60_000;
 
-const LIST = `root="$HOME/.dev/whiteboard-remote"
+const LIST = `${REVIEW_REMOTE_ROOT_SCRIPT}printf '%s ROOT %s\\n' ${REVIEW_REMOTE_INSTALL_SAY} "$root"
 for d in "$root"/versions/*; do
 	[ -f "$d/${REVIEW_REMOTE_INSTALL_MARKER}" ] && printf '%s HAVE %s\\n' ${REVIEW_REMOTE_INSTALL_SAY} "\${d##*/}"
 done
 printf '%s LISTED\\n' ${REVIEW_REMOTE_INSTALL_SAY}
 `;
 
-function uninstallScript(version: string): string {
-	return `m="$HOME/.dev/whiteboard-remote/versions/"${shellQuote(version)}"/${REVIEW_REMOTE_INSTALL_MARKER}"
+function uninstallScript(root: string, version: string): string {
+	return `m=${shellQuote(`${root}/versions/${version}/${REVIEW_REMOTE_INSTALL_MARKER}`)}
 node=$(sed -n 's/.*"node":"\\([^"]*\\)".*/\\1/p' "$m")
 cli=$(sed -n 's/.*"cli":"\\([^"]*\\)".*/\\1/p' "$m")
 DEV_FAST_REVIEW_CLI_NO_DELEGATE=1 "$node" "$cli" remote uninstall --keep-reviews --json </dev/null
@@ -43,13 +43,15 @@ export async function uninstallRemote(input: {
 			.filter((line) => line.startsWith(`${REVIEW_REMOTE_INSTALL_SAY} ${word}`))
 			.map((line) => line.slice(REVIEW_REMOTE_INSTALL_SAY.length + word.length + 2).trim());
 	if (!said("LISTED").length) throw failed(sshProblem(listed));
+	const root = said("ROOT")[0];
+	if (!root?.startsWith("/")) throw failed("DEV_REVIEW_HOME there is not an absolute, normalised path.");
 	const newest = said("HAVE")
 		.filter((name) => REVIEW_REMOTE_VERSION.test(name))
 		.sort(compareVersions)
 		.at(-1);
 	if (!newest) throw failed("Whiteboard Desktop installed nothing there.");
 
-	const ran = await runSsh(spawn, env, sshExecArgs(session, env), timeout, uninstallScript(newest));
+	const ran = await runSsh(spawn, env, sshExecArgs(session, env), timeout, uninstallScript(root, newest));
 	const result = ran.stdout
 		.split("\n")
 		.map((line) => {

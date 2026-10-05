@@ -15,12 +15,18 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { REVIEW_REMOTE_WRAPPER_MARK } from "@dev.fast/review-protocol";
-import { processIsAlive } from "@dev.fast/trace-core";
 
+import { whiteboardRemoteHome } from "./remote-extensions";
+import {
+  remoteLanguageServerGroups,
+  stopProcessGroup,
+} from "./remote-language-server";
+import { DEV_REVIEW_HOME_ENV } from "./review-home-paths";
 import {
   readReviewServerDiscovery,
   readReviewServerHealth,
 } from "./server-discovery";
+import { stopBackgroundServer } from "./server/background-server";
 
 const LOCK_STALE_MS = 15 * 60_000;
 
@@ -45,6 +51,7 @@ export type RemoteUninstallResult =
 
 export async function remoteUninstall(input: {
   home: string;
+  env: NodeJS.ProcessEnv;
   stateDir: string;
   deleteReviews: boolean;
 }): Promise<RemoteUninstallResult> {
@@ -65,7 +72,19 @@ export async function remoteUninstall(input: {
       `The review home ${JSON.stringify(input.stateDir)} is not an absolute path.`,
     );
 
-  const install = path.join(input.home, ".dev", "whiteboard-remote");
+  const override = input.env[DEV_REVIEW_HOME_ENV]?.trim();
+
+  if (
+    override &&
+    (/[\x00-\x1f\x7f-\x9f]/.test(override) ||
+      override.includes("//") ||
+      path.resolve(override) !== (override.replace(/\/$/, "") || "/"))
+  )
+    return refuse(
+      `DEV_REVIEW_HOME is ${JSON.stringify(override)}; Whiteboard removes nothing under a review home that is not an absolute, normalised path.`,
+    );
+
+  const install = whiteboardRemoteHome(input.env);
   const wrapper = path.join(input.home, ".local", "bin", "whiteboard");
   const lock = path.join(install, "install.lock");
 
@@ -98,6 +117,7 @@ export async function remoteUninstall(input: {
         ? recorded.serverPid
         : undefined;
 
+    const groups = await remoteLanguageServerGroups(input.env);
     const running = await processesFrom(`${install}/`);
 
     if (running === undefined)
@@ -105,7 +125,9 @@ export async function remoteUninstall(input: {
         `Cannot list this host's processes to check that none runs from ${install}.`,
       );
 
-    const others = running.filter((pid) => pid !== stoppable);
+    const others = running
+      .filter(({ pid, pgid }) => pid !== stoppable && !groups.includes(pgid))
+      .map(({ pid }) => pid);
 
     if (others.length)
       return refuse(
@@ -117,15 +139,25 @@ export async function remoteUninstall(input: {
         `A Whiteboard server you started (process ${recorded.serverPid}) uses the reviews in ${input.stateDir}. Stop it, then run whiteboard remote uninstall again.`,
       );
 
+    await Promise.all(groups.map(stopProcessGroup));
     let stoppedServer: { pid: number; version: string | null } | undefined;
 
     if (recorded && stoppable !== undefined) {
-      if (!(await stop(stoppable)))
-        return refuse(
-          `The Whiteboard server (process ${stoppable}) did not stop within 10 s.`,
-        );
+      try {
+        await stopBackgroundServer({ serverPid: stoppable });
+      } catch (error) {
+        return refuse(error instanceof Error ? error.message : String(error));
+      }
+
       stoppedServer = { pid: stoppable, version: recorded.version };
     }
+
+    const left = await processesFrom(`${install}/`);
+
+    if (left?.length !== 0)
+      return refuse(
+        `${left ? `Process ${left.map(({ pid }) => pid).join(", ")}` : "A process"} still runs from ${install}. Stop it, then run whiteboard remote uninstall again.`,
+      );
 
     const removed: string[] = [];
 
@@ -270,61 +302,49 @@ const readText = (file: string) =>
   );
 
 async function processesFrom(prefix: string) {
-  let lines: [number, string][];
+  let lines: { pid: number; pgid: number; args: string }[];
 
   try {
     const pids = (await readdir("/proc")).filter((name) => /^\d+$/.test(name));
 
     lines = await Promise.all(
-      pids.map(
-        async (pid): Promise<[number, string]> => [
-          Number(pid),
-          await readFile(`/proc/${pid}/cmdline`, "utf8").then(
-            (text) => text.replaceAll("\0", " "),
-            () => "",
+      pids.map(async (pid) => {
+        const [args = "", stat = ""] = await Promise.all(
+          [`/proc/${pid}/cmdline`, `/proc/${pid}/stat`].map((file) =>
+            readFile(file, "utf8").catch(() => ""),
           ),
-        ],
-      ),
+        );
+
+        // The group follows the state and the parent, after the command's parentheses.
+        const pgid = Number(
+          stat.slice(stat.lastIndexOf(")") + 2).split(" ")[2],
+        );
+
+        return { pid: Number(pid), pgid, args: args.replaceAll("\0", " ") };
+      }),
     );
   } catch {
     try {
       const { stdout } = await promisify(execFile)(
         "ps",
-        ["-eo", "pid=,args="],
+        ["-eo", "pid=,pgid=,args="],
         { maxBuffer: 16 << 20 },
       );
 
-      lines = stdout.split("\n").map((line): [number, string] => {
-        const [, pid = "", args = ""] = /^\s*(\d+)\s(.*)$/.exec(line) ?? [];
+      lines = stdout.split("\n").map((line) => {
+        const [, pid = "", pgid = "", args = ""] =
+          /^\s*(\d+)\s+(\d+)\s(.*)$/.exec(line) ?? [];
 
-        return [Number(pid), args];
+        return { pid: Number(pid), pgid: Number(pgid), args };
       });
     } catch {
       return undefined;
     }
   }
 
-  return lines
-    .filter(
-      ([pid, args]) => pid && pid !== process.pid && args.includes(prefix),
-    )
-    .map(([pid]) => pid);
-}
-
-async function stop(pid: number) {
-  try {
-    process.kill(pid, "SIGTERM");
-  } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "ESRCH"))
-      throw error;
-  }
-
-  for (let waited = 0; processIsAlive(pid); waited += 100) {
-    if (waited >= 10_000) return false;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  return true;
+  return lines.filter(
+    ({ pid, args }) => pid && pid !== process.pid && args.includes(prefix),
+  );
 }
 
 async function desktopWrote(file: string) {
