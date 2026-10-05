@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { REVIEW_REMOTE_ATTACH_BEGIN, REVIEW_REMOTE_ATTACH_END } from "../../common/reviewProtocol.js";
-import { shellQuote } from "./reviewRemoteInstallScript.js";
+import { REVIEW_REMOTE_VERSION, shellQuote } from "./reviewRemoteInstallScript.js";
 
 export function pathCliScript(words: string): string {
 	return `wb=$(command -v whiteboard 2>/dev/null)
@@ -132,7 +132,7 @@ function languageGroupsOf(value: unknown): ReviewRemoteLanguageGroup[] {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const versionText = (value: unknown) => (typeof value === "string" && /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(value) ? value : "unknown");
+const versionText = (value: unknown) => (typeof value === "string" && REVIEW_REMOTE_VERSION.test(value) ? value : "unknown");
 
 function loopbackPort(url: unknown): number | undefined {
 	if (typeof url !== "string") return undefined;

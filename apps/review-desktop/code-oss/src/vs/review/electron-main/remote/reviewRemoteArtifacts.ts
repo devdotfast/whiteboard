@@ -60,6 +60,14 @@ export async function remoteArtifacts(
 	};
 }
 
+export async function remotePackageIntegrity(options: ReviewRemoteArtifactsOptions): Promise<string> {
+	if (options.pin) return options.pin.package.integrity;
+	if (!options.checkout) throw new Error("This build has no pinned remote package and no checkout to pack one from.");
+	await mkdir(options.cacheDirectory, { recursive: true });
+	const { integrity } = await packCheckout(options.checkout, options.cacheDirectory);
+	return integrity!;
+}
+
 const tarballName = (name: string, version: string) => `${name.replace(/^@/, "").replace("/", "-")}-${version}.tgz`;
 
 function cachePath(cacheDirectory: string, artifact: ReviewRemoteArtifact): string {

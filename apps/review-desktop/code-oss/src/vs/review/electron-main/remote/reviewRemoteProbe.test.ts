@@ -11,9 +11,12 @@ import { join } from "node:path";
 import test from "node:test";
 
 import type { SpawnSsh } from "./reviewRemoteHost.js";
+import { REVIEW_REMOTE_INSTALL_MARKER } from "./reviewRemoteInstallScript.js";
 import { judgeRemote, parseRemoteProbe, probeRemote, type ReviewRemoteProbe } from "./reviewRemoteProbe.js";
 import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END } from "./reviewRemoteProbeScript.js";
 import { reviewSshSession } from "./reviewSshCommand.js";
+
+const INTEGRITY = `sha512-${"A".repeat(86)}==`;
 
 const supported: ReviewRemoteProbe = {
 	os: "Linux",
@@ -24,7 +27,7 @@ const supported: ReviewRemoteProbe = {
 	freeBytes: 20e9,
 	node: { path: "/home/dev/.nvm/versions/node/v24.18.0/bin/node", version: "24.18.0" },
 	npm: "/home/dev/.nvm/versions/node/v24.18.0/bin/npm",
-	installed: ["0.1.6"],
+	installed: [{ version: "0.1.6", integrity: INTEGRITY }],
 	managedNode: null,
 	downloader: "curl",
 	registryReachable: true,
@@ -85,7 +88,7 @@ test("a malformed answer is an error, never an exception", () => {
 		{ node: "/usr/bin/node" },
 		{ npm: "npm" },
 		{ installed: "0.1.6" },
-		{ installed: Array(300).fill("0.1.6") },
+		{ installed: Array(300).fill({ version: "0.1.6", integrity: INTEGRITY }) },
 		{ managedNode: 7 },
 		{ downloader: "fetch" },
 		{ registryReachable: 1 },
@@ -103,12 +106,29 @@ test("tools keeps only the tools asked about", () => {
 	assert.deepEqual(parsed.probe.tools, ["tar", "openssl"]);
 });
 
-test("installed keeps only version names", () => {
+test("installed keeps only versions with an npm sha512 integrity", () => {
+	const entry = (version: unknown, integrity: unknown = INTEGRITY) => ({ version, integrity });
 	const parsed = parseRemoteProbe(
-		answer({ ...supported, installed: ["0.1.6", "0.1.7-preview.20261003.2", "0.1.8.part", "0.1.9-preview.1.part", "x; rm", 5, "latest"] }),
+		answer({
+			...supported,
+			installed: [
+				entry("0.1.6"),
+				entry("0.1.7-preview.20261003.2"),
+				entry("0.1.8.part"),
+				entry("0.1.9-preview.1.part"),
+				entry("x; rm"),
+				entry(5),
+				entry("latest"),
+				entry("0.2.0", "sha512-abc"),
+				entry("0.2.1", `sha1-${"A".repeat(26)}=`),
+				entry("0.2.2", null),
+				"0.2.3",
+				null,
+			],
+		}),
 	);
 	assert.ok("probe" in parsed);
-	assert.deepEqual(parsed.probe.installed, ["0.1.6", "0.1.7-preview.20261003.2"]);
+	assert.deepEqual(parsed.probe.installed, [entry("0.1.6"), entry("0.1.7-preview.20261003.2")]);
 });
 
 async function executable(path: string, body: string) {
@@ -129,7 +149,16 @@ async function fakeRemote(t: test.TestContext) {
 	await executable(join(home, ".volta/tools/image/node/24.2.0/bin/node"), "echo v24.2.0");
 	await executable(join(home, ".asdf/installs/nodejs/24.99.0/bin/node"), "echo v20.0.0");
 	await executable(join(home, ".dev/whiteboard-remote/node/v24.18.0/bin/node"), "echo v24.18.0");
-	for (const version of ["0.1.6", "0.1.7.part"]) await mkdir(join(home, ".dev/whiteboard-remote/versions", version), { recursive: true });
+	const versions = join(home, ".dev/whiteboard-remote/versions");
+	for (const version of ["0.1.6", "0.1.7.part", "0.1.8", "0.1.9", "0.2.0"]) await mkdir(join(versions, version), { recursive: true });
+	const node = join(home, ".dev/whiteboard-remote/node/v24.18.0/bin/node");
+	const cli = (version: string) => join(versions, version, "cli.js");
+	const marker = (version: string, integrity: string) => writeFile(join(versions, version, REVIEW_REMOTE_INSTALL_MARKER), `${JSON.stringify({ version, integrity, node, cli: cli(version) })}\n`);
+	await marker("0.1.6", INTEGRITY);
+	await writeFile(cli("0.1.6"), "");
+	await marker("0.1.9", "");
+	await writeFile(cli("0.1.9"), "");
+	await marker("0.2.0", INTEGRITY);
 	return { home, env: { HOME: home, PATH: `${bin}:/usr/bin:/bin` } };
 }
 
@@ -145,7 +174,7 @@ async function tree(dir: string): Promise<string[]> {
 	return Promise.all(entries.sort().map(async (entry) => `${entry} ${(await stat(join(dir, entry))).mtimeMs}`));
 }
 
-test("the script finds the highest Node 24, the installed versions and the managed Node, and writes nothing", async (t) => {
+test("the script finds the highest Node 24, the complete installed versions and the managed Node, and writes nothing", async (t) => {
 	const { home, env } = await fakeRemote(t);
 	const before = await tree(home);
 
@@ -156,7 +185,7 @@ test("the script finds the highest Node 24, the installed versions and the manag
 	assert.deepEqual(probe.node, { path: join(home, ".nvm/versions/node/v24.10.0/bin/node"), version: "24.10.0" });
 	assert.equal(probe.npm, join(home, ".nvm/versions/node/v24.10.0/bin/npm"));
 	assert.equal(probe.managedNode, join(home, ".dev/whiteboard-remote/node/v24.18.0/bin/node"));
-	assert.deepEqual(probe.installed, ["0.1.6"]);
+	assert.deepEqual(probe.installed, [{ version: "0.1.6", integrity: INTEGRITY }]);
 	assert.equal(probe.home, home);
 	assert.equal(probe.homeWritable, true);
 	assert.ok(probe.freeBytes > 0);

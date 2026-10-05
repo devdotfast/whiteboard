@@ -9,6 +9,7 @@ export { REVIEW_REMOTE_WRAPPER_MARK };
 
 export const REVIEW_REMOTE_INSTALL_SAY = "WHITEBOARD-INSTALL";
 export const REVIEW_REMOTE_INSTALL_MARKER = ".whiteboard-install.json";
+export const REVIEW_REMOTE_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 export const REVIEW_REMOTE_LOCK_STALE_SECONDS = 15 * 60;
 
 export function shellQuote(value: string, lines = false): string {
@@ -112,7 +113,7 @@ export function prepareScript(context: ReviewRemoteInstallContext, input: { vers
 	const nodeDir = reviewRemoteNodeDir(context.home, input.nodeVersion);
 	return `${prelude(context)}own
 rm -rf "$root"/versions/*.part "$root"/node/*.part "$root"/install.lock.*.stale "$root"/install.lock.*.done
-mkdir -p "$root/versions" "$root/node" || fail cannot create "$root/versions"
+mkdir -p "$root/versions" || fail cannot create "$root/versions"
 ${markerCheck(context, input)}
 if [ -n "$complete" ]; then
 	say COMPLETE
@@ -131,15 +132,19 @@ say PREPARED
 `;
 }
 
+export const REVIEW_REMOTE_COMPLETE_INTEGRITY = `completeIntegrity() {
+	ci=$(sed -n 's/.*"integrity":"\\([^"][^"]*\\)".*/\\1/p' "$1" 2>/dev/null)
+	cn=$(sed -n 's/.*"node":"\\([^"]*\\)".*/\\1/p' "$1" 2>/dev/null)
+	cc=$(sed -n 's/.*"cli":"\\([^"]*\\)".*/\\1/p' "$1" 2>/dev/null)
+	[ -n "$ci" ] && [ -x "$cn" ] && [ -f "$cc" ] && printf '%s' "$ci"
+}`;
+
 function markerCheck(context: ReviewRemoteInstallContext, input: { version: string; integrity: string }): string {
 	return `v=${shellQuote(reviewRemoteVersionDir(context.home, input.version))}
 m="$v/${REVIEW_REMOTE_INSTALL_MARKER}"
+${REVIEW_REMOTE_COMPLETE_INTEGRITY}
 complete=
-if [ -f "$m" ] && [ "$(sed -n 's/.*"integrity":"\\([^"]*\\)".*/\\1/p' "$m")" = ${shellQuote(input.integrity)} ]; then
-	node=$(sed -n 's/.*"node":"\\([^"]*\\)".*/\\1/p' "$m")
-	cli=$(sed -n 's/.*"cli":"\\([^"]*\\)".*/\\1/p' "$m")
-	[ -x "$node" ] && [ -f "$cli" ] && complete=1
-fi`;
+[ -f "$m" ] && [ "$(completeIntegrity "$m")" = ${shellQuote(input.integrity)} ] && complete=1`;
 }
 
 export function completeScript(context: ReviewRemoteInstallContext, input: { version: string; integrity: string }): string {

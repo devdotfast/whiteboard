@@ -210,7 +210,7 @@ test("a package with the wrong integrity fails the install and leaves nothing", 
 
 	await assert.rejects(installRemote({ ...value, published: true, artifacts: { ...value.artifacts, package: wrong } }), /does not match its pinned integrity/);
 
-	assert.deepEqual(await leftovers("node"), ["./node", "./versions"]);
+	assert.deepEqual(await leftovers("node"), ["./versions"]);
 	assert.equal(await inContainer("node", "ls ~/.local/bin 2>/dev/null | wc -l"), "0");
 });
 

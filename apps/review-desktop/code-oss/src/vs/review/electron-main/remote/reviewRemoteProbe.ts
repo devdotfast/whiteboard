@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { runSsh, type SpawnSsh } from "./reviewRemoteHost.js";
+import { REVIEW_REMOTE_VERSION } from "./reviewRemoteInstallScript.js";
 import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_SCRIPT } from "./reviewRemoteProbeScript.js";
 import { sshExecArgs, type ReviewSshSession } from "./reviewSshCommand.js";
 
@@ -16,7 +17,7 @@ export interface ReviewRemoteProbe {
 	freeBytes: number;
 	node: { path: string; version: string } | null;
 	npm: string | null;
-	installed: string[];
+	installed: ReviewRemoteInstalled[];
 	managedNode: string | null;
 	downloader: "curl" | "wget" | null;
 	registryReachable: boolean;
@@ -27,6 +28,11 @@ export const REVIEW_REMOTE_PROBE_TOOLS = ["tar", "xz", "sha256sum", "sha512sum",
 export type ReviewRemoteTool = (typeof REVIEW_REMOTE_PROBE_TOOLS)[number];
 
 export type ReviewRemoteTarget = "linux-x64" | "linux-arm64";
+
+export interface ReviewRemoteInstalled {
+	version: string;
+	integrity: string;
+}
 
 export type ReviewRemoteSupport = { supported: true; target: ReviewRemoteTarget } | { supported: false; reason: string };
 
@@ -78,8 +84,8 @@ export async function probeRemote(input: {
 const LINE_LIMIT = 64 * 1024;
 const STRING_LIMIT = 4096;
 const INSTALLED_LIMIT = 256;
-const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 const WORD = /^[\w.-]{1,64}$/;
+const INTEGRITY = /^sha512-[A-Za-z0-9+/]{86}==$/;
 const CONTROL = /[\x00-\x1f\x7f-\x9f]/;
 
 export function parseRemoteProbe(stdout: string): ReviewRemoteProbeResult {
@@ -124,7 +130,13 @@ function readProbe(value: unknown): ReviewRemoteProbe {
 		freeBytes,
 		node: node && { path: path(node.path, "node.path"), version: string(node.version, "node.version", /^24\.\d{1,4}\.\d{1,4}$/) },
 		npm: nullable(record.npm, "npm", (v) => path(v, "npm")),
-		installed: installed.filter((entry): entry is string => typeof entry === "string" && entry.length <= 128 && VERSION.test(entry) && !entry.endsWith(".part")),
+		installed: installed.flatMap((entry): ReviewRemoteInstalled[] => {
+			if (!entry || typeof entry !== "object") return [];
+			const { version, integrity } = entry as Record<string, unknown>;
+			return typeof version === "string" && version.length <= 128 && REVIEW_REMOTE_VERSION.test(version) && !version.endsWith(".part") && typeof integrity === "string" && INTEGRITY.test(integrity)
+				? [{ version, integrity }]
+				: [];
+		}),
 		managedNode: nullable(record.managedNode, "managedNode", (v) => path(v, "managedNode")),
 		downloader,
 		registryReachable: boolean(record.registryReachable, "registryReachable"),

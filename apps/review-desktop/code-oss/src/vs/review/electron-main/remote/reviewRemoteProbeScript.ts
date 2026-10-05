@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { REVIEW_REMOTE_COMPLETE_INTEGRITY, REVIEW_REMOTE_INSTALL_MARKER } from "./reviewRemoteInstallScript.js";
+
 export const REVIEW_REMOTE_PROBE_BEGIN = "WHITEBOARD-PROBE-BEGIN";
 export const REVIEW_REMOTE_PROBE_END = "WHITEBOARD-PROBE-END";
 
@@ -64,11 +66,14 @@ bestVersion=
 pick "$remote"/node/v24*/bin/node
 managed=$best
 
+${REVIEW_REMOTE_COMPLETE_INTEGRITY}
 installed=
 for dir in "$remote"/versions/*; do
 	[ -d "$dir" ] || continue
 	case "$dir" in *.part) continue ;; esac
-	installed="$installed\${installed:+,}$(str "\${dir##*/}")"
+	integrity=$(completeIntegrity "$dir/${REVIEW_REMOTE_INSTALL_MARKER}")
+	[ -n "$integrity" ] || continue
+	installed="$installed\${installed:+,}{\\"version\\":$(str "\${dir##*/}"),\\"integrity\\":$(str "$integrity")}"
 done
 
 tools=
