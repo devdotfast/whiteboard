@@ -3,12 +3,16 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { app, BrowserWindow } from "electron";
+import { spawn } from "node:child_process";
+import { app, BrowserWindow, powerMonitor } from "electron";
 import { Disposable, toDisposable } from "../../base/common/lifecycle.js";
 import { join } from "../../base/common/path.js";
 import { IConfigurationService } from "../../platform/configuration/common/configuration.js";
 import { IEnvironmentMainService } from "../../platform/environment/electron-main/environmentMainService.js";
-import { ILifecycleMainService } from "../../platform/lifecycle/electron-main/lifecycleMainService.js";
+import {
+  ILifecycleMainService,
+  LifecycleMainPhase,
+} from "../../platform/lifecycle/electron-main/lifecycleMainService.js";
 import { ILogService } from "../../platform/log/common/log.js";
 import { IProductService } from "../../platform/product/common/productService.js";
 import { getResolvedShellEnv } from "../../platform/shell/node/shellEnv.js";
@@ -17,12 +21,23 @@ import { NullTelemetryService } from "../../platform/telemetry/common/telemetryU
 import { IUpdateService } from "../../platform/update/common/update.js";
 import { UtilityProcess } from "../../platform/utilityProcess/electron-main/utilityProcess.js";
 import type { ReviewDesktopConnection } from "../common/reviewDesktopBootstrap.js";
-import { REVIEW_TELEMETRY_SETTING } from "../common/reviewConfigurationDefaults.js";
+import {
+  REVIEW_REMOTE_HOSTS_ENABLED_SETTING,
+  REVIEW_REMOTE_HOSTS_SETTING,
+  REVIEW_TELEMETRY_SETTING,
+} from "../common/reviewConfigurationDefaults.js";
 import { REVIEW_CRASH_DUMPS_DIRNAME } from "../node/reviewCrashReporter.js";
 import { ReviewCrashDumps } from "./reviewCrashDumps.js";
 import { ReviewCrashTelemetry } from "./reviewCrashTelemetry.js";
 import { ReviewMainErrorTelemetry } from "./reviewMainErrorTelemetry.js";
-import { startReviewSshDevConnect } from "./remote/reviewSshDevConnect.js";
+import { ReviewRemoteHosts } from "./remote/reviewRemoteHosts.js";
+import { createSshAskpass } from "./remote/reviewSshAskpass.js";
+import {
+  reviewSshConfigPath,
+  reviewSshControlDirectory,
+} from "./remote/reviewSshCommand.js";
+import { listSshAliases } from "./remote/reviewSshConfigAliases.js";
+import { reviewSshPromptRelay } from "./remote/reviewSshPromptRelay.js";
 import { ReviewServerSupervisor } from "./reviewServerSupervisor.js";
 import {
   darwinShipItLogPath,
@@ -36,7 +51,9 @@ import {
  */
 export class ReviewDesktopHost extends Disposable {
   private readonly supervisor: ReviewServerSupervisor;
+  private remoteHosts: ReviewRemoteHosts | undefined;
   private terminating = false;
+  private disposed = false;
 
   private readonly onTerminationSignal = () => {
     if (this.terminating) return;
@@ -59,6 +76,13 @@ export class ReviewDesktopHost extends Disposable {
   ) {
     super();
     let resolvedEnvironment: Promise<NodeJS.ProcessEnv> | undefined;
+    const shellEnvironment = () =>
+      (resolvedEnvironment ??= getResolvedShellEnv(
+        this.configurationService,
+        this.logService,
+        this.environmentMainService.args,
+        process.env,
+      ));
     let crashTelemetry: ReviewCrashTelemetry | undefined;
     let errorTelemetry: ReviewMainErrorTelemetry | undefined;
     const crashDumpsDir = join(
@@ -80,13 +104,7 @@ export class ReviewDesktopHost extends Disposable {
         appUrlProtocol: this.productService.urlProtocol,
         releaseChannel: this.productService.quality,
         serverEntryOverride: process.env["DEV_FAST_REVIEW_SERVER_ENTRY"],
-        resolveEnvironment: () =>
-          (resolvedEnvironment ??= getResolvedShellEnv(
-            this.configurationService,
-            this.logService,
-            this.environmentMainService.args,
-            process.env,
-          )),
+        resolveEnvironment: shellEnvironment,
         logInfo: (message) => this.logService.info(message),
         logError: (message) => this.logService.error(message),
         createProcess: () =>
@@ -104,6 +122,7 @@ export class ReviewDesktopHost extends Disposable {
           crashTelemetry?.reportServerExit(detail);
         },
         onServerReady: () => errorTelemetry?.serverReady(),
+        onRemoteHostRestarted: (alias) => this.remoteHosts?.reattach(alias),
       }),
     );
     this._register(
@@ -119,12 +138,13 @@ export class ReviewDesktopHost extends Disposable {
     this._register(
       this.lifecycleMainService.onWillShutdown((event) => {
         event.join("reviewDesktopHost", this.supervisor.stop());
+        if (this.remoteHosts)
+          event.join("reviewRemoteHosts", this.remoteHosts.dispose());
       }),
     );
-    if (!this.environmentMainService.isBuilt)
-      this._register(
-        startReviewSshDevConnect((message) => this.logService.info(message)),
-      );
+    void this.lifecycleMainService
+      .when(LifecycleMainPhase.AfterWindowOpen)
+      .then(() => this.startRemoteHosts(shellEnvironment));
     // Main-process errors report through the embedded server, so they pass the
     // same opt-out checks and the same redaction step as every other event.
     errorTelemetry = new ReviewMainErrorTelemetry({
@@ -198,7 +218,85 @@ export class ReviewDesktopHost extends Disposable {
     this.supervisor.stageRustAnalyzer();
   }
 
+  listSshAliases(): Promise<string[]> {
+    return listSshAliases(reviewSshConfigPath());
+  }
+
+  retryRemoteHost(alias: string): void {
+    this.remoteHosts?.retry(alias);
+  }
+
+  private startRemoteHosts(
+    shellEnvironment: () => Promise<NodeJS.ProcessEnv>,
+  ): void {
+    if (this.disposed) return;
+    let version: Promise<string> | undefined;
+    const manager = new ReviewRemoteHosts({
+      spawn: (args, options) => spawn("ssh", args, options),
+      controlDirectory: reviewSshControlDirectory(),
+      instance: this.environmentMainService.userDataPath,
+      environment: async () => ({
+        ...process.env,
+        ...(await shellEnvironment().catch(() => ({}))),
+      }),
+      createAskpass: (input) => createSshAskpass(input),
+      prompt: (request) => reviewSshPromptRelay.prompt(request),
+      desktopVersion: () => (version ??= this.desktopVersion()),
+      send: (hosts) => this.supervisor.setRemoteHosts(hosts),
+      log: (message) => this.logService.info(`[Remote hosts] ${message}`),
+    });
+    this.remoteHosts = manager;
+    const update = () => {
+      const aliases = this.configurationService.getValue<unknown>(
+        REVIEW_REMOTE_HOSTS_SETTING,
+      );
+      manager.update(
+        this.configurationService.getValue(
+          REVIEW_REMOTE_HOSTS_ENABLED_SETTING,
+        ) === true,
+        Array.isArray(aliases)
+          ? aliases.filter((alias) => typeof alias === "string")
+          : [],
+      );
+    };
+    const onResume = () => manager.resume();
+    const onExit = () => manager.killNow();
+    powerMonitor.on("resume", onResume);
+    process.once("exit", onExit);
+    this._register(
+      toDisposable(() => {
+        powerMonitor.off("resume", onResume);
+        process.off("exit", onExit);
+        void manager.dispose();
+      }),
+    );
+    this._register(
+      this.configurationService.onDidChangeConfiguration((event) => {
+        if (
+          event.affectsConfiguration(REVIEW_REMOTE_HOSTS_SETTING) ||
+          event.affectsConfiguration(REVIEW_REMOTE_HOSTS_ENABLED_SETTING)
+        )
+          update();
+      }),
+    );
+    update();
+  }
+
+  private async desktopVersion(): Promise<string> {
+    const fallback =
+      this.productService.reviewVersion ?? this.productService.version;
+    try {
+      const { url } = await this.whenConnected();
+      const response = await fetch(new URL("/health", url));
+      const { version } = (await response.json()) as { version?: unknown };
+      return typeof version === "string" ? version : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
   override dispose(): void {
+    this.disposed = true;
     process.off("SIGINT", this.onTerminationSignal);
     process.off("SIGTERM", this.onTerminationSignal);
     super.dispose();
