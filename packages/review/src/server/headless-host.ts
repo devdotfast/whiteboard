@@ -119,6 +119,7 @@ async function serve(input: HeadlessServerInput) {
         value: input.stateDir,
       }),
       launch: input.launchAskAgent,
+      idleCloseMs: 30 * 60_000,
     },
   });
 

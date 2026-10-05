@@ -9,6 +9,7 @@ import {
   detectAskAgents,
   launchAskAgent,
 } from "@review/ask/agents.js";
+import { askThreadLimits } from "@review/ask/thread.js";
 import { AskThreads, type AskTools } from "@review/ask/threads.js";
 import {
   readBuildCommit,
@@ -136,6 +137,8 @@ export interface WhiteboardCoreInput {
     tools: AskTools;
     /** Tests only: an in-process agent. */
     launch?: AskAgentLauncher;
+    /** Close a thread nobody has watched for this long. */
+    idleCloseMs?: number;
   };
 }
 
@@ -153,7 +156,10 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
 
   const askThreads =
     input.ask &&
-    new AskThreads(input.ask.launch ?? launchAskAgent, input.ask.tools);
+    new AskThreads(input.ask.launch ?? launchAskAgent, input.ask.tools, {
+      ...askThreadLimits,
+      idleCloseMs: input.ask.idleCloseMs,
+    });
 
   const api = createReviewApi(
     store,

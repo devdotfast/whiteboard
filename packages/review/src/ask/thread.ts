@@ -156,6 +156,7 @@ export class AskThread {
   /** The number of changes so far; a snapshot carries the one it includes. */
   private seq = 0;
   private readonly listeners = new Set<(update: AskUpdate) => void>();
+  private watched?: (unwatched: boolean) => void;
   private readonly closers = new Set<() => void>();
   private readonly decisions = new Map<
     string,
@@ -246,8 +247,27 @@ export class AskThread {
   /** Every change after the current `seq`, in order. */
   subscribe(listener: (update: AskUpdate) => void) {
     this.listeners.add(listener);
+    this.noteWatchers();
 
-    return () => this.listeners.delete(listener);
+    return () => {
+      this.listeners.delete(listener);
+      this.noteWatchers();
+    };
+  }
+
+  /** Tells `watch`, on each change, whether the thread is unwatched and not working. */
+  onUnwatched(watch: (unwatched: boolean) => void) {
+    this.watched = watch;
+    this.noteWatchers();
+  }
+
+  private noteWatchers() {
+    if (!this.closed)
+      this.watched?.(
+        !this.listeners.size &&
+          this.state.status !== "starting" &&
+          this.state.status !== "running",
+      );
   }
 
   /** Starts the agent and asks the first question, or loads an earlier
@@ -1396,5 +1416,6 @@ export class AskThread {
     const update = { seq: this.seq, change };
 
     for (const listener of this.listeners) listener(update);
+    this.noteWatchers();
   }
 }

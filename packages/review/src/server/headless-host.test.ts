@@ -62,7 +62,7 @@ import {
   reviewServerIsHealthy,
 } from "@review/server-discovery.js";
 import sharp from "sharp";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { z } from "zod";
 
 import { createGlobalReviewServer } from "./desktop-server.js";
@@ -1566,4 +1566,82 @@ it("opens an Ask thread in the review's checkout and closes it on stop", async (
   expect(stopped).toBe(1);
 
   while (!(await reader.read()).done);
+});
+
+it("closes an Ask thread half an hour after its last watcher leaves and reopens it from history", async () => {
+  let launches = 0,
+    stopped = 0;
+
+  const fake = agent({ name: "fake" })
+    .onRequest(methods.agent.initialize, () => ({
+      protocolVersion: 1,
+      agentCapabilities: { loadSession: true },
+      authMethods: [],
+    }))
+    .onRequest(methods.agent.session.new, () => ({ sessionId: "session" }))
+    .onRequest(methods.agent.session.load, () => ({}))
+    .onRequest(methods.agent.session.prompt, () => ({
+      stopReason: "end_turn" as const,
+    }));
+
+  const server = await start(undefined, false, async () => {
+    let connection: ClientConnection | undefined;
+    launches++;
+
+    return {
+      connect: (client) => (connection = client.connect(fake)),
+      diagnostics: () => "",
+      stop: () => {
+        stopped++;
+        connection?.close();
+      },
+    };
+  });
+
+  const { worktree } = await reviewsOfBothKinds(server.client);
+
+  vi.useFakeTimers({
+    shouldAdvanceTime: true,
+    toFake: ["setTimeout", "clearTimeout"],
+  });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+
+  const { threadId } = await (
+    await askCall(server, `${worktree}/ask`, {
+      agent: "claude",
+      question: { text: "Why?" },
+      selection: { target: { kind: "text", quote: "value" }, title: "value" },
+    })
+  ).json();
+
+  const reader = (await askCall(server, `${worktree}/ask/${threadId}/watch`))
+    .body!.pipeThrough(new TextDecoderStream())
+    .getReader();
+
+  let seen = "";
+
+  while (!seen.includes('"status":"idle"'))
+    seen += (await reader.read()).value ?? "";
+
+  await vi.advanceTimersByTimeAsync(60 * 60_000);
+  expect(stopped).toBe(0);
+
+  await reader.cancel();
+  await vi.waitFor(async () => {
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    expect(stopped).toBe(1);
+  });
+
+  const { threads } = await (
+    await askCall(server, `${worktree}/ask/threads`)
+  ).json();
+
+  expect(threads).toMatchObject([{ id: threadId }]);
+
+  expect(
+    (await askCall(server, `${worktree}/ask/${threadId}/open`, {})).status,
+  ).toBe(200);
+  await vi.waitFor(() => expect(launches).toBe(2));
 });
