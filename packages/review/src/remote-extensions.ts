@@ -16,12 +16,7 @@ import { pipeline } from "node:stream/promises";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { promisify } from "node:util";
 
-import {
-  jsonArray,
-  jsonObject,
-  jsonString,
-  parseJsonText,
-} from "@dev.fast/json";
+import { jsonObject, jsonString, parseJsonText } from "@dev.fast/json";
 import yauzl from "yauzl";
 import { z } from "zod";
 
@@ -52,7 +47,6 @@ const curatedExtensionSchema = z.object({
   group: z.string(),
   executables: z.array(z.string()),
   stripExtensionPack: z.boolean(),
-  addActivationEvents: z.array(z.string()),
   targets: z.object({
     "linux-x64": curatedDownloadSchema,
     "linux-arm64": curatedDownloadSchema,
@@ -450,13 +444,6 @@ async function sanitizeManifest(
   delete manifest.devDependencies;
 
   if (extension.stripExtensionPack) delete manifest.extensionPack;
-
-  const events = jsonArray(manifest.activationEvents) ?? [];
-
-  for (const event of extension.addActivationEvents)
-    if (!events.includes(event)) events.push(event);
-
-  if (events.length > 0) manifest.activationEvents = events;
 
   await writeFile(file, `${JSON.stringify(manifest, undefined, 2)}\n`);
 }

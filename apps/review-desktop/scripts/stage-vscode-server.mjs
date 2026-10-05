@@ -117,7 +117,6 @@ export function remoteCuratedExtensions() {
         group: extension.group,
         executables: extension.executables,
         stripExtensionPack: extension.stripExtensionPack,
-        addActivationEvents: extension.addActivationEvents ?? [],
         targets: Object.fromEntries(
           remoteTargets.map((target) => {
             const key = targetKeyFor(extension, target);

@@ -106,7 +106,6 @@ function tyExtension(
           scripts: { build: "x" },
           dependencies: { a: "1" },
           extensionPack: ["ms-python.vscode-pylance"],
-          activationEvents: ["onLanguage:python"],
         }),
       },
       "extension/bundled/libs/bin/ty": {
@@ -123,7 +122,6 @@ function tyExtension(
     group: "python",
     executables: ["bundled/libs/bin/ty"],
     stripExtensionPack: true,
-    addActivationEvents: ["onLanguage:ty-test"],
     targets: { "linux-x64": download, "linux-arm64": download },
     ...overrides,
   };
@@ -150,7 +148,6 @@ function goExtension(): CuratedRemoteExtension {
     group: "go",
     executables: [],
     stripExtensionPack: false,
-    addActivationEvents: [],
     targets: { "linux-x64": download, "linux-arm64": download },
   };
 }
@@ -209,10 +206,6 @@ it("installs the extension, applies the manifest's changes, lists it for the sca
   expect(manifest).not.toHaveProperty("scripts");
   expect(manifest).not.toHaveProperty("dependencies");
   expect(manifest).not.toHaveProperty("extensionPack");
-  expect(manifest.activationEvents).toEqual([
-    "onLanguage:python",
-    "onLanguage:ty-test",
-  ]);
   expect(
     (await stat(path.join(directory, "bundled/libs/bin/ty"))).mode & 0o111,
   ).not.toBe(0);
