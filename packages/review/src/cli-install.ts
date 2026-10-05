@@ -769,7 +769,7 @@ if [ -z "$cli" ] || [ ! -f "$cli" ] || { [ -n "$runtime" ] && [ ! -x "$runtime" 
 fi
 
 if [ ! -f "$cli" ]; then
-  echo "Whiteboard CLI not found at $cli. Start Whiteboard Desktop, or run npx @dev.fast/review instead." >&2
+  echo "Whiteboard CLI not found at $cli. Start Whiteboard Desktop, or run npx @dev.fast/whiteboard instead." >&2
   exit 1
 fi
 

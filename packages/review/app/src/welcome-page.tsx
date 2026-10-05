@@ -166,7 +166,7 @@ export function WelcomePage({
             <>
               CLI build missing. If you’re running from source, run{" "}
               <code {...stylex.props(styles.hintCode)}>
-                pnpm --filter @dev.fast/review build
+                pnpm --filter @dev.fast/whiteboard build
               </code>{" "}
               from the repository root, then restart Whiteboard. Otherwise,
               reinstall Whiteboard.

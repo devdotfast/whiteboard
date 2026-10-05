@@ -70,15 +70,15 @@ DOM-facing tests run in Chromium through Vitest Browser Mode. Install the
 browser once, then run the headless suite or watch mode:
 
 ```sh
-pnpm --filter @dev.fast/review exec playwright install chromium
-pnpm --filter @dev.fast/review test:browser
-pnpm --filter @dev.fast/review test:browser:watch
+pnpm --filter @dev.fast/whiteboard exec playwright install chromium
+pnpm --filter @dev.fast/whiteboard test:browser
+pnpm --filter @dev.fast/whiteboard test:browser:watch
 ```
 
 Pure Node, filesystem, and server tests run through
-`pnpm --filter @dev.fast/review test:node`.
+`pnpm --filter @dev.fast/whiteboard test:node`.
 
-`pnpm --filter @dev.fast/review test:legacy-corpus` replays a private corpus of
+`pnpm --filter @dev.fast/whiteboard test:legacy-corpus` replays a private corpus of
 legacy Reviews (from before the Whiteboard rename) through migration. Point
 `REVIEW_LEGACY_CORPUS` at a directory whose children are Review UUID folders;
 the script fails if the variable is unset. The corpus is copied before it is

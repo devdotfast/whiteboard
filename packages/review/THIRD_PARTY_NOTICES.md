@@ -1,13 +1,13 @@
 # Third-Party Notices
 
 This file records third-party license considerations for
-`@dev.fast/review`. Before publishing to npm, distributing as source, or
+`@dev.fast/whiteboard`. Before publishing to npm, distributing as source, or
 shipping as a built app, refresh this file from the current lockfile:
 
 ```sh
-pnpm --filter @dev.fast/review licenses list --json
-pnpm --filter @dev.fast/review audit --json
-pnpm --filter @dev.fast/review audit signatures --json
+pnpm --filter @dev.fast/whiteboard licenses list --json
+pnpm --filter @dev.fast/whiteboard audit --json
+pnpm --filter @dev.fast/whiteboard audit signatures --json
 ```
 
 ## License Summary

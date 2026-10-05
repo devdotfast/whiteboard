@@ -25,8 +25,8 @@
     "app:package:windows": "bash scripts/package-windows.sh"
   },
   "dependencies": {
-    "@dev.fast/review": "workspace:*",
-    "@dev.fast/review-protocol": "workspace:*"
+    "@dev.fast/review-protocol": "workspace:*",
+    "@dev.fast/whiteboard": "workspace:*"
   },
   "devDependencies": {
     "@dev.fast/diffr": "0.1.10",

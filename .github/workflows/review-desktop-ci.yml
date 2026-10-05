@@ -146,7 +146,7 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-code-oss-deps-v3-${{ steps.code-oss-dependency-digest.outputs.digest }}
 
       - name: Check the tutorial assets
-        run: pnpm --filter @dev.fast/review check:tutorial
+        run: pnpm --filter @dev.fast/whiteboard check:tutorial
 
       # The build already built workspace dependencies and typechecked Code OSS.
       - name: Typecheck
@@ -161,8 +161,8 @@ jobs:
 
       - name: Bundled diffr integration
         run: |
-          pnpm --filter @dev.fast/review ensure:diffr --required
-          pnpm --filter @dev.fast/review exec vitest run --config vitest.integration.config.ts
+          pnpm --filter @dev.fast/whiteboard ensure:diffr --required
+          pnpm --filter @dev.fast/whiteboard exec vitest run --config vitest.integration.config.ts
 
       - name: Upload browser test diagnostics
         if: failure()

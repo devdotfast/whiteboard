@@ -135,7 +135,7 @@ export async function stageReviewRuntime(packagedRoot) {
       // their own dependency graphs. Injecting copies them in with their deps.
       "--config.inject-workspace-packages=true",
       "--filter",
-      "@dev.fast/review",
+      "@dev.fast/whiteboard",
       "--prod",
       "deploy",
       "--legacy",
@@ -179,7 +179,7 @@ export async function stageDiffrBinary(
 ) {
   if (!(await stat(source).catch(() => null))?.isFile()) {
     throw new Error(
-      `Missing ${source}. Run pnpm --filter @dev.fast/review ensure:diffr before packaging.`,
+      `Missing ${source}. Run pnpm --filter @dev.fast/whiteboard ensure:diffr before packaging.`,
     );
   }
 
