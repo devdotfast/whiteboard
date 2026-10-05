@@ -1,7 +1,10 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import type { ReviewStackLayer } from "@dev.fast/review-protocol";
+import type {
+  ReviewApiSummary,
+  ReviewStackLayer,
+} from "@dev.fast/review-protocol";
 import { z } from "zod";
 
 const execFileAsync = promisify(execFile);
@@ -17,26 +20,17 @@ const GitHubStacksSchema = z.array(
   }),
 );
 
-export interface ReviewStackSubject {
-  pullRequestUrl?: string | null;
-}
-
-export interface ReviewStackCandidate {
-  uuid: string;
-  title: string;
-  repoKey: string;
-  pullRequestNumber?: number | null;
-  presentedDocumentRevision: string | null;
-}
-
 export type RunGitHubApi = (host: string, endpoint: string) => Promise<string>;
 
 export async function resolveReviewStackLayers(
-  subject: ReviewStackSubject,
-  reviews: readonly ReviewStackCandidate[],
+  subject: Pick<ReviewApiSummary, "origin">,
+  reviews: readonly Pick<
+    ReviewApiSummary,
+    "reviewId" | "title" | "origin" | "pins"
+  >[],
   runGitHubApi: RunGitHubApi = defaultRunGitHubApi,
 ): Promise<ReviewStackLayer[]> {
-  const binding = subject.pullRequestUrl?.match(
+  const binding = subject.origin?.pullRequestUrl?.match(
     /^https:\/\/([a-z0-9.-]+)\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/([1-9]\d*)$/,
   );
 
@@ -72,18 +66,22 @@ export async function resolveReviewStackLayers(
   );
 
   return stack.pull_requests.map((pr, index) => {
-    const review = reviews.find(
-      (candidate) =>
-        candidate.repoKey === repoKey &&
-        candidate.pullRequestNumber === pr.number &&
-        candidate.presentedDocumentRevision,
-    );
+    const review = reviews.find((candidate) => {
+      const repository =
+        candidate.origin?.pullRequestUrl?.replace(/\/pull\/\d+.*$/, "") ??
+        candidate.pins?.repositoryId;
+
+      return (
+        repository === repoKey &&
+        candidate.origin?.pullRequestNumber === pr.number
+      );
+    });
 
     return {
       branch: pr.head.ref,
       pullRequestNumber: pr.number,
       pullRequestUrl: `${repoKey}/pull/${pr.number}`,
-      reviewUuid: review?.uuid ?? null,
+      reviewUuid: review?.reviewId ?? null,
       reviewTitle: review?.title ?? null,
       relation:
         index < currentIndex

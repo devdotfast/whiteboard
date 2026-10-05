@@ -1550,25 +1550,7 @@ export function createReviewApi(
     const snapshot = readReview(id, query.version);
 
     if (isShared(id) || !snapshot.pins) return context.json({ layers: [] });
-    const repositoryId = snapshot.pins.repositoryId;
-
-    const repoKey = (review: Pick<Snapshot, "origin" | "pins">) =>
-      review.origin?.pullRequestUrl?.replace(/\/pull\/\d+.*$/, "") ??
-      review.pins?.repositoryId ??
-      "";
-
-    const layers = await resolveReviewStackLayers(
-      {
-        pullRequestUrl: snapshot.origin?.pullRequestUrl,
-      },
-      store.list().map((review) => ({
-        uuid: review.reviewId,
-        title: review.title,
-        repoKey: repoKey(review),
-        pullRequestNumber: review.origin?.pullRequestNumber,
-        presentedDocumentRevision: String(review.version),
-      })),
-    );
+    const layers = await resolveReviewStackLayers(snapshot, store.list());
 
     return context.json({ layers });
   });

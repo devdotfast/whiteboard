@@ -1,21 +1,20 @@
+import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import { type RunGitHubApi, resolveReviewStackLayers } from "./review-stack";
 
-const publishedReview = (input: {
-  uuid: string;
-  repoKey: string;
+const reviewSummary = (input: {
+  reviewId: string;
+  repositoryUrl: string;
   pullRequestNumber: number;
   title: string;
-}) => ({
-  ...input,
-  status: "awaiting-review",
-  worktreePath: "/repo",
-  sourceBranch: "feature",
-  presentedDocumentRevision: "a".repeat(40),
-  presentedSoftwareMapRevision: null,
-  lastPublishedAt: "2026-09-01T00:00:00.000Z",
-  available: true,
+}): Pick<ReviewApiSummary, "reviewId" | "title" | "origin"> => ({
+  reviewId: input.reviewId,
+  title: input.title,
+  origin: {
+    pullRequestNumber: input.pullRequestNumber,
+    pullRequestUrl: `${input.repositoryUrl}/pull/${input.pullRequestNumber}`,
+  },
 });
 
 describe("resolveReviewStackLayers", () => {
@@ -33,16 +32,16 @@ describe("resolveReviewStackLayers", () => {
       ]),
     );
 
-    const reviewA = publishedReview({
-      uuid: "11111111-1111-4111-8111-111111111111",
-      repoKey: "https://github.com/o/r",
+    const reviewA = reviewSummary({
+      reviewId: "11111111-1111-4111-8111-111111111111",
+      repositoryUrl: "https://github.com/o/r",
       pullRequestNumber: 10,
       title: "Review A",
     });
 
-    const reviewB = publishedReview({
-      uuid: "22222222-2222-4222-8222-222222222222",
-      repoKey: "https://github.com/o/r",
+    const reviewB = reviewSummary({
+      reviewId: "22222222-2222-4222-8222-222222222222",
+      repositoryUrl: "https://github.com/o/r",
       pullRequestNumber: 20,
       title: "Review B",
     });
@@ -50,7 +49,7 @@ describe("resolveReviewStackLayers", () => {
     await expect(
       resolveReviewStackLayers(
         {
-          pullRequestUrl: "https://github.com/o/r/pull/20",
+          origin: { pullRequestUrl: "https://github.com/o/r/pull/20" },
         },
         [reviewA, reviewB],
         run,
@@ -60,7 +59,7 @@ describe("resolveReviewStackLayers", () => {
         branch: "a",
         pullRequestNumber: 10,
         pullRequestUrl: "https://github.com/o/r/pull/10",
-        reviewUuid: reviewA.uuid,
+        reviewUuid: reviewA.reviewId,
         reviewTitle: "Review A",
         relation: "earlier",
       },
@@ -68,7 +67,7 @@ describe("resolveReviewStackLayers", () => {
         branch: "b",
         pullRequestNumber: 20,
         pullRequestUrl: "https://github.com/o/r/pull/20",
-        reviewUuid: reviewB.uuid,
+        reviewUuid: reviewB.reviewId,
         reviewTitle: "Review B",
         relation: "current",
       },
@@ -97,7 +96,7 @@ describe("resolveReviewStackLayers", () => {
 
   it("fails closed when stack discovery is unavailable or malformed", async () => {
     const subject = {
-      pullRequestUrl: "https://github.com/o/r/pull/30",
+      origin: { pullRequestUrl: "https://github.com/o/r/pull/30" },
     };
 
     await expect(
@@ -117,7 +116,7 @@ describe("resolveReviewStackLayers", () => {
       "https://github.com/o/r/issues/20",
     ]) {
       expect(
-        await resolveReviewStackLayers({ pullRequestUrl }, [], run),
+        await resolveReviewStackLayers({ origin: { pullRequestUrl } }, [], run),
       ).toEqual([]);
     }
 
@@ -125,7 +124,10 @@ describe("resolveReviewStackLayers", () => {
   });
 
   it("returns no layers for a standalone PR or a stack that does not contain it", async () => {
-    const subject = { pullRequestUrl: "https://github.com/o/r/pull/20" };
+    const subject = {
+      origin: { pullRequestUrl: "https://github.com/o/r/pull/20" },
+    };
+
     expect(
       await resolveReviewStackLayers(subject, [], async () => "[]"),
     ).toEqual([]);
@@ -140,12 +142,12 @@ describe("resolveReviewStackLayers", () => {
 
   it("does not attach reviews of the same PR number in another repository", async () => {
     const result = await resolveReviewStackLayers(
-      { pullRequestUrl: "https://github.com/o/r/pull/20" },
+      { origin: { pullRequestUrl: "https://github.com/o/r/pull/20" } },
       [
-        publishedReview({
-          uuid: "other",
+        reviewSummary({
+          reviewId: "other",
           title: "Other repo",
-          repoKey: "https://github.com/o/other",
+          repositoryUrl: "https://github.com/o/other",
           pullRequestNumber: 20,
         }),
       ],
@@ -180,12 +182,12 @@ describe("resolveReviewStackLayers", () => {
     );
 
     const layers = await resolveReviewStackLayers(
-      { pullRequestUrl: "https://ghe.example.com/o/r/pull/20" },
+      { origin: { pullRequestUrl: "https://ghe.example.com/o/r/pull/20" } },
       [
-        publishedReview({
-          uuid: "github-com",
+        reviewSummary({
+          reviewId: "github-com",
           title: "Same repository name on github.com",
-          repoKey: "https://github.com/o/r",
+          repositoryUrl: "https://github.com/o/r",
           pullRequestNumber: 10,
         }),
       ],
