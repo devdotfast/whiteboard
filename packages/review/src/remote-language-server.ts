@@ -4,7 +4,6 @@ import {
   mkdir,
   readFile,
   rename,
-  rm,
   stat,
   writeFile,
 } from "node:fs/promises";
@@ -68,6 +67,12 @@ const runningSchema = z.object({
 
 type Running = z.infer<typeof runningSchema>;
 
+export interface RemoteLanguageGroup {
+  group: string;
+  installed: boolean;
+  detail?: string;
+}
+
 export interface RemoteLanguageServer {
   port: number;
   connectionToken: string;
@@ -79,7 +84,10 @@ interface EnsureExtensions {
     env: NodeJS.ProcessEnv;
     groups?: string[];
     signal?: AbortSignal;
-  }): Promise<{ failed: { id: string; error: string }[] }>;
+  }): Promise<{
+    failed: { id: string; error: string }[];
+    groups?: RemoteLanguageGroup[];
+  }>;
 }
 
 export interface EnsureRemoteLanguageServerInput {
@@ -93,7 +101,7 @@ export interface EnsureRemoteLanguageServerInput {
   cli?: readonly string[];
 }
 
-export function remoteLanguageServerFiles(env: NodeJS.ProcessEnv) {
+function remoteLanguageServerFiles(env: NodeJS.ProcessEnv) {
   const { serverDataDir } = remoteServerPaths(env);
 
   return {
@@ -114,6 +122,7 @@ export async function ensureRemoteLanguageServer(
   languageServer: RemoteLanguageServer | null;
   languageServerDetail?: string;
   languageServerPending?: true;
+  languageGroups: RemoteLanguageGroup[];
 }> {
   const root = path.join(
     input.packageRoot ?? findReviewPackageRoot(import.meta.url),
@@ -122,6 +131,10 @@ export async function ensureRemoteLanguageServer(
 
   const files = remoteLanguageServerFiles(input.env);
   const capped = new AbortController();
+
+  let languageGroups: RemoteLanguageGroup[] = (input.groups ?? []).map(
+    (group) => ({ group, installed: false }),
+  );
 
   const cap = setTimeout(
     () => capped.abort(),
@@ -133,9 +146,9 @@ export async function ensureRemoteLanguageServer(
     const ensure = input.ensure ?? ensureRemoteExtensions;
     await mkdir(files.serverDataDir, { recursive: true, mode: 0o700 });
 
-    if (await installing(files)) return PENDING;
+    if (await installing(files)) return { ...PENDING, languageGroups };
 
-    const { failed } = await ensure({
+    const { failed, groups } = await ensure({
       env: input.env,
       groups: input.groups,
       signal: AbortSignal.any([
@@ -144,11 +157,15 @@ export async function ensureRemoteLanguageServer(
       ]),
     });
 
-    if (failed.length > 0 && capped.signal.aborted && !input.signal?.aborted) {
-      await installDetached(files, input);
+    if (
+      failed.length > 0 &&
+      capped.signal.aborted &&
+      !input.signal?.aborted &&
+      (await installDetached(files, input))
+    )
+      return { ...PENDING, languageGroups };
 
-      return PENDING;
-    }
+    if (groups) languageGroups = groups;
 
     if (failed.length > 0)
       throw new Error(
@@ -176,12 +193,13 @@ export async function ensureRemoteLanguageServer(
     if (!outcome.acquired)
       throw new Error("Another start of the VS Code server did not finish.");
 
-    return { languageServer: outcome.result };
+    return { languageServer: outcome.result, languageGroups };
   } catch (error) {
     return {
       languageServer: null,
       languageServerDetail:
         error instanceof Error ? error.message : String(error),
+      languageGroups,
     };
   } finally {
     clearTimeout(cap);
@@ -204,7 +222,7 @@ async function installDetached(
   files: ReturnType<typeof remoteLanguageServerFiles>,
   input: EnsureRemoteLanguageServerInput,
 ) {
-  await withFileLock(
+  const outcome = await withFileLock(
     files.installLock,
     { ...LOCK, timeoutMs: 10_000 },
     async () => {
@@ -234,14 +252,8 @@ async function installDetached(
         );
     },
   );
-}
 
-export async function stopRemoteLanguageServer(env: NodeJS.ProcessEnv) {
-  const files = remoteLanguageServerFiles(env);
-  const running = await readRunning(files.runningFile);
-
-  if (running) await stop(running);
-  await rm(files.runningFile, { force: true });
+  return outcome.acquired;
 }
 
 async function readCommit(root: string) {

@@ -174,6 +174,52 @@ test("says whether an online host has language features, and why not as one line
   expect(section()!.querySelector("a, b")).toBeNull();
 });
 
+test("lists an online host's language groups after its language features, each with what is missing as plain text", async () => {
+  await render(
+    remoteHosts(
+      ["devbox", "box2"],
+      [
+        {
+          alias: "devbox",
+          serverId: "s1",
+          state: "online",
+          languageFeatures: true,
+          languageGroups: [
+            { group: "rust", installed: true },
+            {
+              group: "swift",
+              installed: true,
+              detail:
+                "swift was not found\non the <b>login</b> shell's PATH\u0007",
+            },
+            { group: "csharp", installed: false, detail: "download failed" },
+          ],
+        },
+        {
+          alias: "box2",
+          state: "offline",
+          languageGroups: [{ group: "rust", installed: true }],
+        },
+      ],
+    ),
+  );
+  await vi.waitFor(() => expect(rows()[0]).toContain("online"));
+  expect(
+    [
+      ...document.querySelector("[data-remote-host]")!.querySelectorAll("span"),
+    ].map((line) => line.textContent),
+  ).toEqual([
+    "devbox",
+    "online",
+    "Language features: available",
+    "rust: installed",
+    "swift: installed — swift was not found on the <b>login</b> shell's PATH",
+    "csharp: not installed — download failed",
+  ]);
+  expect(rows()[1]).not.toContain("rust");
+  expect(section()!.querySelector("b")).toBeNull();
+});
+
 test("reads the states again only once the last read has answered", async () => {
   const pending = Promise.withResolvers<ReviewGatewayHostState[]>();
   const hosts = remoteHosts(["devbox"]);

@@ -11,14 +11,11 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { withFileLock } from "@dev.fast/trace-core";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
 import { remoteServerPaths } from "./remote-extensions.js";
-import {
-  ensureRemoteLanguageServer,
-  remoteLanguageServerFiles,
-  stopRemoteLanguageServer,
-} from "./remote-language-server.js";
+import { ensureRemoteLanguageServer } from "./remote-language-server.js";
 import {
   isolatedEnv,
   stopServersUnder,
@@ -42,7 +39,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await stopRemoteLanguageServer(env);
   await stopServersUnder(root);
   await rm(root, { recursive: true, force: true });
 });
@@ -60,12 +56,13 @@ it("starts the server on loopback with a private token, and a second call report
       connectionToken: expect.stringMatching(/^[0-9a-f]{64}$/),
       commit: COMMIT,
     },
+    languageGroups: [],
   });
   const { port, connectionToken } = first.languageServer!;
   expect(await text(port, "/version")).toBe(COMMIT);
   expect(await text(port, "/token")).toBe(connectionToken);
 
-  const { tokenFile, logFile } = remoteLanguageServerFiles(env);
+  const { tokenFile, logFile } = serverFiles();
   expect((await stat(tokenFile)).mode & 0o777).toBe(0o600);
   expect(await readFile(logFile, "utf8")).not.toContain(connectionToken);
   expect(
@@ -156,10 +153,9 @@ it("runs extensions ensure first, with the groups, and starts nothing when it fa
     languageServer: null,
     languageServerDetail:
       "Could not install the language extensions: astral-sh.ty: Network error reaching open-vsx.org: ENETUNREACH",
+    languageGroups: [{ group: "go", installed: false }],
   });
-  expect(
-    await stat(remoteLanguageServerFiles(env).runningFile).catch(() => null),
-  ).toBeNull();
+  expect(await stat(serverFiles().runningFile).catch(() => null)).toBeNull();
 });
 
 it("hands downloads that outlast the attach to one detached install, and reports pending until it is done", async () => {
@@ -175,7 +171,15 @@ it("hands downloads that outlast the attach to one detached install, and reports
     ensured++;
     await new Promise((resolve) => signal?.addEventListener("abort", resolve));
 
-    return { failed: [{ id: "astral-sh.ty", error: "aborted" }] };
+    const error =
+      "Network error reaching open-vsx.org: This operation was aborted";
+
+    return {
+      failed: [{ id: "golang.go", error }],
+      groups: [
+        { group: "go", installed: false, detail: `golang.go: ${error}` },
+      ],
+    };
   };
 
   const attach = () =>
@@ -193,6 +197,7 @@ it("hands downloads that outlast the attach to one detached install, and reports
     languageServerDetail:
       "Installing the language extensions on this host; they will be available on the next connection.",
     languageServerPending: true,
+    languageGroups: [{ group: "go", installed: false }],
   };
 
   expect(await attach()).toEqual(pending);
@@ -206,7 +211,7 @@ it("hands downloads that outlast the attach to one detached install, and reports
     "remote extensions ensure --json --groups go\n",
   );
 
-  const { installLog } = remoteLanguageServerFiles(env);
+  const { installLog } = serverFiles();
   expect((await stat(installLog)).mode & 0o777).toBe(0o600);
 
   await stopServersUnder(root);
@@ -218,6 +223,47 @@ it("hands downloads that outlast the attach to one detached install, and reports
   });
 
   expect(done.languageServer?.commit).toBe(COMMIT);
+}, 30_000);
+
+it("reports the download failure, not pending, when the detached install's lock cannot be had", async () => {
+  const error =
+    "Network error reaching open-vsx.org: This operation was aborted";
+
+  const stalled = async ({ signal }: { signal?: AbortSignal }) => {
+    await new Promise((resolve) => signal?.addEventListener("abort", resolve));
+
+    return {
+      failed: [{ id: "golang.go", error }],
+      groups: [
+        { group: "go", installed: false, detail: `golang.go: ${error}` },
+      ],
+    };
+  };
+
+  const held = await withFileLock(
+    serverFiles().installLock,
+    { retryMs: 100, staleMs: 60_000, unownedGraceMs: 5_000, timeoutMs: 1_000 },
+    () =>
+      ensureRemoteLanguageServer({
+        env,
+        packageRoot,
+        groups: ["go"],
+        ensure: stalled,
+        installTimeoutMs: 200,
+        cli: [process.execPath, "-e", "process.exit(9)"],
+      }),
+  );
+
+  expect(held).toEqual({
+    acquired: true,
+    result: {
+      languageServer: null,
+      languageServerDetail: `Could not install the language extensions: golang.go: ${error}`,
+      languageGroups: [
+        { group: "go", installed: false, detail: `golang.go: ${error}` },
+      ],
+    },
+  });
 }, 30_000);
 
 it("reports a package without a VS Code server", async () => {
@@ -248,6 +294,19 @@ it("reports a server that exits at start with the end of its log", async () => {
     /did not start\. The end of .*server\.log:\ncannot start/,
   );
 });
+
+function serverFiles() {
+  const file = (name: string) =>
+    path.join(remoteServerPaths(env).serverDataDir, name);
+
+  return {
+    tokenFile: file("connection-token"),
+    logFile: file("server.log"),
+    runningFile: file("server.json"),
+    installLog: file("install.log"),
+    installLock: file("install.lock"),
+  };
+}
 
 async function standInServer(commit: string) {
   const server = path.join(packageRoot, "vscode-server");
