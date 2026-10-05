@@ -593,6 +593,35 @@ export interface ReviewRemoteHostsSettings {
   set(aliases: string[]): Promise<string[]>;
   retry(alias: string): Promise<void>;
   install(alias: string): Promise<void>;
+  agents(alias: string): Promise<ReviewRemoteAgent[] | null>;
+  connectAgents(
+    alias: string,
+    agents: ReviewRemoteAgentId[],
+  ): Promise<ReviewRemoteAgentResult[]>;
+}
+
+export const REVIEW_REMOTE_WRAPPER_MARK =
+  "# Written by Whiteboard Desktop, which replaces it with each install.";
+
+export const REVIEW_REMOTE_AGENT_IDS = [
+  "claude",
+  "codex",
+  "opencode",
+  "pi",
+] as const satisfies readonly ReviewCliInstallTarget[];
+
+export type ReviewRemoteAgentId = (typeof REVIEW_REMOTE_AGENT_IDS)[number];
+
+export interface ReviewRemoteAgent {
+  id: ReviewRemoteAgentId;
+  connected: boolean;
+  manual?: true;
+}
+
+export interface ReviewRemoteAgentResult {
+  id: ReviewRemoteAgentId;
+  connected: boolean;
+  output: string;
 }
 
 export const REVIEW_REMOTE_ATTACH_BEGIN = "WHITEBOARD-REMOTE-BEGIN";

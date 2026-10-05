@@ -11,7 +11,7 @@ import type { IReviewDesktopConnectionService } from "../services/reviewDesktopC
 export function reviewRemoteHostsSettings(input: {
 	get(key: string): unknown;
 	update(key: string, value: string[]): Promise<void>;
-	connection: Pick<IReviewDesktopConnectionService, "readRemoteHosts" | "listSshAliases" | "retryRemoteHost" | "installRemoteHost">;
+	connection: Pick<IReviewDesktopConnectionService, "readRemoteHosts" | "listSshAliases" | "retryRemoteHost" | "installRemoteHost" | "detectRemoteAgents" | "connectRemoteAgents">;
 }): ReviewRemoteHostsSettings {
 	const configured = () => remoteHostAliases(input.get(REVIEW_REMOTE_HOSTS_SETTING));
 	return {
@@ -21,6 +21,8 @@ export function reviewRemoteHostsSettings(input: {
 		states: () => input.connection.readRemoteHosts(),
 		retry: (alias) => input.connection.retryRemoteHost(alias),
 		install: (alias) => input.connection.installRemoteHost(alias),
+		agents: (alias) => input.connection.detectRemoteAgents(alias),
+		connectAgents: (alias, agents) => input.connection.connectRemoteAgents(alias, agents),
 		set: async (aliases) => {
 			for (const alias of aliases) {
 				const valid = validateSshAlias(alias);

@@ -1,11 +1,13 @@
 import { Button } from "@canvas/ui/button";
 import type {
   ReviewGatewayHostState,
+  ReviewRemoteAgent,
   ReviewRemoteHostsSettings,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useState } from "react";
 
+import { TARGET_LABELS } from "./connect-card";
 import { settingsStyles as styles } from "./settings-styles";
 import { tokens } from "./tokens.stylex";
 
@@ -124,6 +126,9 @@ export function RemoteHostsSection({
                     </span>
                   ))
                 : null}
+              {state?.state === "online" ? (
+                <RemoteHostAgents hosts={hosts} alias={name} />
+              ) : null}
               {state?.installCommand ? (
                 <span {...stylex.props(styles.rowDescription, local.detail)}>
                   <code {...stylex.props(local.command)}>
@@ -206,6 +211,100 @@ export function RemoteHostsSection({
         </p>
       ) : null}
     </section>
+  );
+}
+
+function RemoteHostAgents({
+  hosts,
+  alias,
+}: {
+  hosts: ReviewRemoteHostsSettings;
+  alias: string;
+}) {
+  const [agents, setAgents] = useState<ReviewRemoteAgent[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string>();
+
+  useEffect(() => {
+    let live = true;
+
+    void hosts
+      .agents(alias)
+      .then((next) => {
+        if (live) setAgents(next);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      live = false;
+    };
+  }, [hosts, alias]);
+
+  const offered = agents?.filter((agent) => !agent.connected && !agent.manual);
+  const manual = agents?.filter((agent) => !agent.connected && agent.manual);
+
+  const connect = async (ids: ReviewRemoteAgent["id"][]) => {
+    setBusy(true);
+    setResult(undefined);
+
+    try {
+      const results = await hosts.connectAgents(alias, ids);
+
+      setResult(
+        results
+          .map((done) =>
+            done.connected
+              ? `${TARGET_LABELS[done.id]} is connected on ${alias}.`
+              : `${TARGET_LABELS[done.id]} was not connected on ${alias}: ${done.output || "it printed nothing"}`,
+          )
+          .join(" "),
+      );
+      setAgents(await hosts.agents(alias));
+    } catch (cause) {
+      setResult(
+        `Could not connect agents on ${alias}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      {offered?.length ? (
+        <span {...stylex.props(styles.rowDescription, local.detail)}>
+          Agents on {alias}:{" "}
+          {offered.map((agent) => TARGET_LABELS[agent.id]).join(", ")} —{" "}
+          <Button
+            aria-label={`Connect agents on ${alias}`}
+            disabled={busy}
+            onClick={() => void connect(offered.map((agent) => agent.id))}
+          >
+            Connect
+          </Button>
+        </span>
+      ) : null}
+      {manual?.map((agent) => (
+        <span
+          key={agent.id}
+          {...stylex.props(styles.rowDescription, local.detail)}
+        >
+          Paste into {TARGET_LABELS[agent.id]} on {alias}:{" "}
+          <code {...stylex.props(local.command)}>
+            Run `whiteboard connect {agent.id}` and follow the instructions to
+            connect this agent to Whiteboard.
+          </code>
+        </span>
+      ))}
+      {result ? (
+        <span
+          role="status"
+          {...stylex.props(styles.rowDescription, local.detail)}
+        >
+          {result}
+        </span>
+      ) : null}
+    </>
   );
 }
 

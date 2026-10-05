@@ -3,9 +3,12 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { REVIEW_REMOTE_WRAPPER_MARK } from "../../common/reviewProtocol.js";
+
+export { REVIEW_REMOTE_WRAPPER_MARK };
+
 export const REVIEW_REMOTE_INSTALL_SAY = "WHITEBOARD-INSTALL";
 export const REVIEW_REMOTE_INSTALL_MARKER = ".whiteboard-install.json";
-export const REVIEW_REMOTE_WRAPPER_MARK = "# Written by Whiteboard Desktop, which replaces it with each install.";
 export const REVIEW_REMOTE_LOCK_STALE_SECONDS = 15 * 60;
 
 export function shellQuote(value: string, lines = false): string {

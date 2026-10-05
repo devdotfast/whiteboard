@@ -6,7 +6,7 @@
 import { readdir, rm } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { join } from "node:path";
-import type { ReviewGatewayHost, ReviewGatewayHostState } from "../../common/reviewProtocol.js";
+import type { ReviewGatewayHost, ReviewGatewayHostState, ReviewRemoteAgent, ReviewRemoteAgentResult } from "../../common/reviewProtocol.js";
 import {
 	REVIEW_REMOTE_TIMEOUTS,
 	ReviewRemoteHost,
@@ -73,6 +73,7 @@ export class ReviewRemoteHosts {
 	private sentAny = false;
 	private disposed = false;
 	private disposing: Promise<void> | undefined;
+	private readonly agentsRead = new Set<string>();
 
 	private readonly flow: ReviewRemoteInstallFlow | undefined;
 
@@ -142,6 +143,16 @@ export class ReviewRemoteHosts {
 		this.hosts.get(alias)?.retry();
 	}
 
+	detectAgents(alias: string): Promise<ReviewRemoteAgent[] | undefined> {
+		return this.hosts.get(alias)?.detectAgents() ?? Promise.resolve(undefined);
+	}
+
+	connectAgents(alias: string, ids: readonly unknown[]): Promise<ReviewRemoteAgentResult[]> {
+		const host = this.hosts.get(alias);
+		if (!host) return Promise.reject(new Error(`${alias} is not a remote host in Settings.`));
+		return host.connectAgents(ids);
+	}
+
 	reattach(alias: string): void {
 		void this.hosts.get(alias)?.reattach();
 	}
@@ -184,6 +195,7 @@ export class ReviewRemoteHosts {
 			clock: this.clock,
 			timeouts: this.options.timeouts,
 			install: this.flow,
+			firstAttach: (key) => !this.agentsRead.has(key) && !!this.agentsRead.add(key),
 		});
 	}
 

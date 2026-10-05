@@ -5,9 +5,9 @@
 
 import { rm } from "node:fs/promises";
 import { get } from "node:http";
-import { stripVTControlCharacters } from "node:util";
 import type { Readable, Writable } from "node:stream";
-import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
+import type { ReviewGatewayHost, ReviewRemoteAgent, ReviewRemoteAgentResult } from "../../common/reviewProtocol.js";
+import { isRemoteAgentId, parseRemoteAgents, parseRemoteConnect, plainText as plain, remoteConnectScript, type ReviewRemoteCli } from "./reviewRemoteAgents.js";
 import { installedAttachScript, parseRemoteAttach, reviewRemoteAttachScript, type ReviewRemoteAttach } from "./reviewRemoteAttachScript.js";
 import type { ReviewRemoteInstallConsent } from "./reviewRemoteInstallConsent.js";
 import type { ReviewRemoteInstallInput, ReviewRemoteInstallResult } from "./reviewRemoteInstaller.js";
@@ -59,6 +59,8 @@ export const REVIEW_REMOTE_TIMEOUTS = {
 	attach: 60_000,
 	operation: 10_000,
 	close: 2_000,
+	agents: 10_000,
+	agentConnect: 130_000,
 	stable: 30_000,
 };
 
@@ -215,6 +217,11 @@ type InstallStep = NonNullable<ReviewGatewayHost["installing"]>["step"];
 
 type AttachScript = (groups: readonly string[]) => string;
 
+interface PreparedAttach {
+	readonly script: AttachScript;
+	readonly cli?: ReviewRemoteCli;
+}
+
 const STEP_WORDS: Record<InstallStep, string> = {
 	preparing: "preparing",
 	"waiting-for-lock": "waiting for another install",
@@ -230,8 +237,6 @@ export function installPromptText(alias: string, version: string, probe: ReviewR
 	const node = probe.node || probe.managedNode ? "" : `, and about 200 MB for Node 24, which ${alias} does not have`;
 	return `Whiteboard ${version} is not installed on ${alias}. Install it in ~/.dev/whiteboard-remote? It takes about 60 MB${node}. Whiteboard also adds ~/.local/bin/whiteboard if that path is free.`;
 }
-
-const plain = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x1f\x7f-\x9f]+/g, " ").trim();
 
 export function installFailureText(alias: string, version: string, step: InstallStep, message: string): string {
 	const said = /^Installing on .+? failed( while .+?)?: ([\s\S]*)$/.exec(message);
@@ -253,6 +258,7 @@ export interface ReviewRemoteHostOptions {
 	readonly timeouts?: Partial<typeof REVIEW_REMOTE_TIMEOUTS>;
 	readonly random?: () => number;
 	readonly install?: ReviewRemoteInstallFlow;
+	firstAttach?(key: string): boolean;
 }
 
 export class ReviewRemoteHost {
@@ -279,6 +285,9 @@ export class ReviewRemoteHost {
 	private promptCancelled = false;
 	private disposed = false;
 	private attachScript: AttachScript = reviewRemoteAttachScript;
+	private cli: ReviewRemoteCli;
+	private agents: ReviewRemoteAgent[] | undefined;
+	private detecting: Promise<ReviewRemoteAgent[] | undefined> | undefined;
 	private declined = false;
 	private installFailure: string | undefined;
 	private installing: AbortController | undefined;
@@ -352,7 +361,7 @@ export class ReviewRemoteHost {
 			const check = await this.run(sshCheckArgs(this.options.session, env), this.timeouts.operation);
 			if (stale()) return;
 			if (check.code !== 0) throw unreachable(`The SSH connection to ${this.alias} did not answer. ${firstLines(check.stderr)}`.trim());
-			await this.establish(env, stale, this.attachScript, reuse);
+			await this.establish(env, stale, { script: this.attachScript, cli: this.cli }, reuse);
 		} catch (error) {
 			if (stale()) return;
 			this.fail(error instanceof HostFailure ? error.problem : { state: "unreachable", detail: (error as Error).message });
@@ -439,6 +448,7 @@ export class ReviewRemoteHost {
 		this.promptCancelled = false;
 		this.declined = false;
 		this.installFailure = undefined;
+		this.agents = undefined;
 		try {
 			const env = await this.options.environment();
 			if (stale()) return;
@@ -449,22 +459,23 @@ export class ReviewRemoteHost {
 			if (stale()) return;
 			const master = this.startMaster(env);
 			await this.waitForMaster(master, env, stale);
-			const script = await this.prepareAttach(env, stale);
-			if (script === undefined) return;
-			await this.establish(env, stale, script);
+			const prepared = await this.prepareAttach(env, stale);
+			if (prepared === undefined) return;
+			await this.establish(env, stale, prepared);
 			if (stale()) return;
 			const serverId = this.serverId;
 			if (serverId) void this.options.install?.consent.attached(this.alias, serverId).catch((error: Error) => this.options.log(`${this.alias}: could not keep its install consent: ${error.message}`));
+			if (this.options.firstAttach?.(serverId ?? `alias:${this.alias}`)) void this.detectAgents();
 		} catch (error) {
 			if (stale()) return;
 			this.fail(error instanceof HostFailure ? error.problem : { state: "unreachable", detail: (error as Error).message });
 		}
 	}
 
-	private async establish(env: NodeJS.ProcessEnv, stale: () => boolean, script: AttachScript, reuse = false): Promise<void> {
+	private async establish(env: NodeJS.ProcessEnv, stale: () => boolean, prepared: PreparedAttach, reuse = false): Promise<void> {
 		const old = this.forwarded;
 		const oldLanguage = this.language;
-		const attach = await this.attach(env, script);
+		const attach = await this.attach(env, prepared.script);
 		if (stale()) return;
 		const kept = reuse && old !== undefined && attach.port === old.remote && (await probeHealth(old.local, this.timeouts.operation).then(() => true, () => false));
 		if (stale()) return;
@@ -477,7 +488,8 @@ export class ReviewRemoteHost {
 			if (forward) await this.run(sshCancelForwardArgs(this.options.session, forward.local, forward.remote, env), this.timeouts.operation);
 			if (stale()) return;
 		}
-		this.attachScript = script;
+		this.attachScript = prepared.script;
+		this.cli = prepared.cli;
 		this.connectedAt = this.clock.now();
 		this.serverId = attach.serverId;
 		this.masterStderr = "";
@@ -545,10 +557,11 @@ export class ReviewRemoteHost {
 		}
 	}
 
-	private async prepareAttach(env: NodeJS.ProcessEnv, stale: () => boolean): Promise<AttachScript | undefined> {
+	private async prepareAttach(env: NodeJS.ProcessEnv, stale: () => boolean): Promise<PreparedAttach | undefined> {
+		const onPath = { script: reviewRemoteAttachScript };
 		const flow = this.options.install;
 		const mode = flow?.mode() ?? "never";
-		if (!flow || mode === "never") return reviewRemoteAttachScript;
+		if (!flow || mode === "never") return onPath;
 		const probed = await probeRemote({ session: this.options.session, spawn: this.options.spawn, env });
 		if (stale()) return;
 		if ("error" in probed) throw unreachable(probed.error);
@@ -558,14 +571,18 @@ export class ReviewRemoteHost {
 		const present = probed.probe.installed.includes(version);
 		if (!present && mode === "ask" && !(await this.agreed(flow, probed.probe, version, stale))) {
 			this.declined = true;
-			return stale() ? undefined : reviewRemoteAttachScript;
+			return stale() ? undefined : onPath;
 		}
 		if (stale()) return;
 		const installed = await this.install(flow, env, probed.probe, support.target, version, present, stale);
-		if (!installed || "path" in installed) return installed && (() => installedAttachScript(installed.path.nodePath, installed.path.cliPath));
+		if (!installed) return undefined;
+		if ("path" in installed) {
+			const { nodePath, cliPath } = installed.path;
+			return { script: () => installedAttachScript(nodePath, cliPath), cli: { nodePath, cliPath } };
+		}
 		if (!probed.probe.installed.some((other) => other !== version)) throw new HostFailure({ state: "not-installed", detail: installed.failed });
 		this.installFailure = installed.failed;
-		return reviewRemoteAttachScript;
+		return onPath;
 	}
 
 	private async agreed(flow: ReviewRemoteInstallFlow, probe: ReviewRemoteProbe, version: string, stale: () => boolean): Promise<boolean> {
@@ -618,6 +635,51 @@ export class ReviewRemoteHost {
 		} finally {
 			if (this.installing === abort) this.installing = undefined;
 		}
+	}
+
+	detectAgents(): Promise<ReviewRemoteAgent[] | undefined> {
+		if (this.agents) return Promise.resolve(this.agents);
+		return (this.detecting ??= this.readAgents().finally(() => (this.detecting = undefined)));
+	}
+
+	private async readAgents(): Promise<ReviewRemoteAgent[] | undefined> {
+		const env = this.env;
+		if (this.disposed || !this.master || this.connectedAt === undefined || !env) return undefined;
+		const generation = this.generation;
+		const result = await this.run(sshExecArgs(this.options.session, env), this.timeouts.agents, remoteConnectScript(this.cli, ["--detect", "--json"]));
+		if (generation !== this.generation || this.disposed) return undefined;
+		const agents = parseRemoteAgents(result.stdout);
+		if (!agents) {
+			this.options.log(`${this.alias}: could not read its agents: ${result.timedOut ? `no answer within ${this.timeouts.agents / 1000} seconds` : plain(firstLines(result.stderr)) || `exit ${result.code ?? "none"}`}.`);
+			return undefined;
+		}
+		return (this.agents = agents);
+	}
+
+	async connectAgents(ids: readonly unknown[]): Promise<ReviewRemoteAgentResult[]> {
+		const known = await this.detectAgents();
+		if (!known) throw new Error(`${this.alias} is not connected, or its agents could not be read.`);
+		const wanted = [...new Set(ids)];
+		for (const id of wanted) {
+			if (!isRemoteAgentId(id) || !known.some((agent) => agent.id === id && !agent.manual)) {
+				throw new Error(`Whiteboard cannot connect ${isRemoteAgentId(id) ? id : "that agent"} on ${this.alias}.`);
+			}
+		}
+		const env = this.env;
+		if (!wanted.length) return [];
+		if (!this.master || !env) throw new Error(`The connection to ${this.alias} dropped; connect again to connect its agents.`);
+		const generation = this.generation;
+		const result = await this.run(sshExecArgs(this.options.session, env), this.timeouts.agentConnect * wanted.length, remoteConnectScript(this.cli, ["--yes", "--json", ...(wanted as string[])]));
+		const results = parseRemoteConnect(result.stdout);
+		if (!results) {
+			throw new Error(
+				`Connecting agents on ${this.alias} failed: ${result.timedOut ? "it did not finish in time" : plain(firstLines(result.stderr)) || `exit ${result.code ?? "none"}`}`,
+			);
+		}
+		if (generation === this.generation && this.agents) {
+			this.agents = this.agents.map((agent) => ({ ...agent, connected: results.find((done) => done.id === agent.id)?.connected ?? agent.connected }));
+		}
+		return results;
 	}
 
 	private async attach(env: NodeJS.ProcessEnv, script: AttachScript): Promise<ReviewRemoteAttach> {

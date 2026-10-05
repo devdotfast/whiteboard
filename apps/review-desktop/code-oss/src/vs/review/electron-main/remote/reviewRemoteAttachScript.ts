@@ -6,10 +6,7 @@
 import { REVIEW_REMOTE_ATTACH_BEGIN, REVIEW_REMOTE_ATTACH_END } from "../../common/reviewProtocol.js";
 import { shellQuote } from "./reviewRemoteInstallScript.js";
 
-export function reviewRemoteAttachScript(groups: readonly string[] = []): string {
-	for (const group of groups) {
-		if (!/^[a-z0-9-]+$/.test(group)) throw new Error(`Invalid extension group ${JSON.stringify(group)}.`);
-	}
+export function pathCliScript(words: string): string {
 	return `wb=$(command -v whiteboard 2>/dev/null)
 case "$wb" in /*) ;; *) wb= ;; esac
 if [ -z "$wb" ] && [ -x "$HOME/.local/bin/whiteboard" ]; then wb="$HOME/.local/bin/whiteboard"; fi
@@ -19,8 +16,15 @@ fi
 if [ -z "$wb" ] || [ ! -x "$wb" ]; then exit 127; fi
 PATH="\${wb%/*}:$PATH"
 export PATH
-exec "$wb" remote attach --json${groups.length ? ` --groups ${groups.join(",")}` : ""}
+exec "$wb" ${words}
 `;
+}
+
+export function reviewRemoteAttachScript(groups: readonly string[] = []): string {
+	for (const group of groups) {
+		if (!/^[a-z0-9-]+$/.test(group)) throw new Error(`Invalid extension group ${JSON.stringify(group)}.`);
+	}
+	return pathCliScript(`remote attach --json${groups.length ? ` --groups ${groups.join(",")}` : ""}`);
 }
 
 export function installedAttachScript(nodePath: string, cliPath: string): string {

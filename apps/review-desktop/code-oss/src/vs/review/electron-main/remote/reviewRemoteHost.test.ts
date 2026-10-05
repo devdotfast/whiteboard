@@ -13,8 +13,8 @@ import { join } from "node:path";
 import test from "node:test";
 
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
-import { attachOutput, FAKE_SERVER_ID, fakeClock, fakeSsh, until, type FakeRemote } from "./test/fakeSsh.js";
-import { classifySshFailure, languageCommitMismatch, ReviewRemoteHost, type ReviewRemoteInstallFlow, type ReviewRemoteInstallMode, type ReviewRemoteInstallRunInput } from "./reviewRemoteHost.js";
+import { attachOutput, detectOutput, FAKE_SERVER_ID, fakeClock, fakeSsh, until, type FakeRemote } from "./test/fakeSsh.js";
+import { classifySshFailure, languageCommitMismatch, ReviewRemoteHost, type ReviewRemoteHostOptions, type ReviewRemoteInstallFlow, type ReviewRemoteInstallMode, type ReviewRemoteInstallRunInput } from "./reviewRemoteHost.js";
 import { openRemoteInstallConsent } from "./reviewRemoteInstallConsent.js";
 import type { ReviewRemoteInstallProgress, ReviewRemoteInstallResult } from "./reviewRemoteInstaller.js";
 import { reviewSshSession } from "./reviewSshCommand.js";
@@ -46,7 +46,7 @@ function hostFor(
 	controlDirectory = "/tmp/wb-ssh-test",
 	install?: ReviewRemoteInstallFlow,
 	version = "0.1.6",
-	desktopCommit?: string,
+	extra: Partial<ReviewRemoteHostOptions> = {},
 ) {
 	const free = typeof ports === "function" ? [] : [ports].flat();
 	let next = 0;
@@ -58,7 +58,6 @@ function hostFor(
 		spawn: ssh.spawn,
 		environment: async () => ({ PATH: "/usr/bin" }),
 		desktopVersion: async () => version,
-		desktopCommit,
 		groups: async () => ["go"],
 		freePort: typeof ports === "function" ? ports : async () => free[next++ % free.length],
 		report: (state) => reports.push(state),
@@ -66,6 +65,7 @@ function hostFor(
 		clock,
 		timeouts: { poll: 1 },
 		install,
+		...extra,
 	});
 	t.after(() => host.dispose());
 	return { host, ssh, clock, reports, last: () => reports.at(-1) };
@@ -182,7 +182,7 @@ test("the remote's language groups reach the gateway: well-formed, asked for by 
 test("a VS Code server of another commit leaves the review online without language features", async (t) => {
 	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
 	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
-	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", { languageServer }) } }, ports, "wb-test-a", "/tmp/wb-ssh-test", undefined, undefined, "b".repeat(40));
+	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", { languageServer }) } }, ports, "wb-test-a", "/tmp/wb-ssh-test", undefined, undefined, { desktopCommit: "b".repeat(40) });
 
 	host.start();
 	await until(() => last()?.endpoint !== undefined);
@@ -1045,4 +1045,89 @@ test("a newer server the CLI started says so", async (t) => {
 	await until(() => last()?.problem !== undefined);
 
 	assert.equal(last()?.problem?.detail, "A newer Whiteboard 0.1.7 is running on wb-test-a, started by the CLI; update this Desktop to use it.");
+});
+
+test("agents are detected once after the first attach, with the installed CLI, and kept", async (t) => {
+	const port = await healthServer(t);
+	const { flow } = await installFlow(t, "always");
+	const attached = new Set<string>();
+	const firstAttach = (key: string) => !attached.has(key) && !!attached.add(key);
+	const remote: FakeRemote = { detect: { code: 0, stdout: `noise\n${detectOutput([{ id: "pi", name: "Pi", present: true, connected: false }])}` } };
+	const { host, ssh, last } = hostFor(t, remote, port, "wb-test-a", "/tmp/wb-ssh-test", flow, "0.1.6", { firstAttach });
+
+	host.start();
+	await until(() => ssh.of("wb-test-a", "detect").length === 1);
+
+	assert.ok(last()?.endpoint, "online before agents are read");
+	const [detect] = ssh.of("wb-test-a", "detect");
+	assert.match(detect.input!, new RegExp(`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' 'connect' '--detect' '--json'\n$`));
+	assert.deepEqual(await host.detectAgents(), [{ id: "pi", connected: false }]);
+	assert.equal(ssh.of("wb-test-a", "detect").length, 1, "the kept answer");
+	assert.equal(ssh.of("wb-test-a", "connect").length, 0, "nothing changed on the host");
+	assert.deepEqual([...attached], [FAKE_SERVER_ID]);
+
+	host.retry();
+	await until(() => ssh.of("wb-test-a", "exec").length === 2);
+	await until(() => last()?.endpoint !== undefined);
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	assert.equal(ssh.of("wb-test-a", "detect").length, 1);
+});
+
+test("a hand-installed host detects with the CLI on its PATH", async (t) => {
+	const port = await healthServer(t);
+	const { host, ssh, last } = hostFor(t, {}, port, "wb-test-a", "/tmp/wb-ssh-test", undefined, "0.1.6", { firstAttach: () => true });
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined && ssh.of("wb-test-a", "detect").length === 1);
+
+	assert.match(ssh.of("wb-test-a", "detect")[0].input!, /exec "\$wb" 'connect' '--detect' '--json'\n$/);
+	assert.deepEqual(await host.detectAgents(), []);
+});
+
+test("connecting runs the agents' commands with the installed CLI, and refuses agents it did not find or cannot connect alone", async (t) => {
+	const port = await healthServer(t);
+	const { flow } = await installFlow(t, "always");
+	const remote: FakeRemote = {
+		detect: {
+			code: 0,
+			stdout: detectOutput([
+				{ id: "pi", present: true, connected: false },
+				{ id: "codex", present: true, connected: false, manual: true },
+			]),
+		},
+	};
+	const { host, ssh, last } = hostFor(t, remote, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	for (const ids of [["cursor"], ["codex"], ["claude"], ["__proto__"], ["pi", "x".repeat(10)]]) {
+		await assert.rejects(host.connectAgents(ids), /Whiteboard cannot connect .* on wb-test-a/);
+	}
+	assert.equal(ssh.of("wb-test-a", "connect").length, 0);
+
+	assert.deepEqual(await host.connectAgents(["pi", "pi"]), [{ id: "pi", connected: true, output: "" }]);
+	const [connect] = ssh.of("wb-test-a", "connect");
+	assert.match(connect.input!, new RegExp(`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' 'connect' '--yes' '--json' 'pi'\n$`));
+	assert.deepEqual(await host.detectAgents(), [
+		{ id: "codex", connected: false, manual: true },
+		{ id: "pi", connected: true },
+	]);
+});
+
+test("a connect that prints no result fails with ssh's words, as plain text", async (t) => {
+	const port = await healthServer(t);
+	const remote: FakeRemote = {
+		detect: { code: 0, stdout: detectOutput([{ id: "pi", present: true, connected: false }]) },
+		connect: { code: 1, stderr: "\u001b[31mboom\u001b[0m\r\nmore\n" },
+	};
+	const { host, last } = hostFor(t, remote, port, "wb-test-a", "/tmp/wb-ssh-test", undefined, "0.1.6", { firstAttach: () => true });
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	await assert.rejects(host.connectAgents(["pi"]), (error: Error) => {
+		assert.equal(error.message, "Connecting agents on wb-test-a failed: boom more");
+		return true;
+	});
 });

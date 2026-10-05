@@ -24,6 +24,8 @@ function fixture(values: Record<string, unknown>) {
 			readRemoteHosts: async () => [{ alias: "devbox", state: "online" }],
 			retryRemoteHost: async (alias) => { retried.push(alias); },
 			installRemoteHost: async (alias) => { retried.push(`install ${alias}`); },
+			detectRemoteAgents: async () => null,
+			connectRemoteAgents: async () => [],
 		},
 	});
 	return { hosts, writes, retried };

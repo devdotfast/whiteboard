@@ -12,7 +12,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
-import { attachOutput, FAKE_SERVER_ID, fakeClock, fakeSsh, until, type FakeRemote } from "./test/fakeSsh.js";
+import { attachOutput, detectOutput, FAKE_SERVER_ID, fakeClock, fakeSsh, until, type FakeRemote } from "./test/fakeSsh.js";
 import type { ReviewRemoteInstallFlow } from "./reviewRemoteHost.js";
 import { ReviewRemoteHosts } from "./reviewRemoteHosts.js";
 import { openRemoteInstallConsent } from "./reviewRemoteInstallConsent.js";
@@ -423,4 +423,25 @@ test("a question cancelled while still queued is not joined: the next connection
 	assert.equal(asked[1].alias, other);
 	assert.equal(asked[1].signal?.aborted, false);
 	asked[1].answer(undefined);
+});
+
+test("a server's agents are read on their own once a session, and again only when asked", async (t) => {
+	const { manager, ssh, sentUntil } = await managerFor(t, { "wb-test-a": { detect: { code: 0, stdout: detectOutput([{ id: "pi", present: true, connected: false }]) } } });
+
+	manager.update(true, ["wb-test-a"]);
+	await sentUntil((hosts) => byAlias(hosts, "wb-test-a")?.endpoint !== undefined);
+	await until(() => ssh.of("wb-test-a", "detect").length === 1);
+
+	manager.update(true, []);
+	manager.update(true, ["wb-test-a"]);
+	await sentUntil((hosts) => byAlias(hosts, "wb-test-a")?.endpoint !== undefined);
+	await until(() => ssh.of("wb-test-a", "exec").length === 2);
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	assert.equal(ssh.of("wb-test-a", "detect").length, 1);
+
+	assert.deepEqual(await manager.detectAgents("wb-test-a"), [{ id: "pi", connected: false }]);
+	assert.equal(ssh.of("wb-test-a", "detect").length, 2);
+	assert.equal(await manager.detectAgents("wb-test-b"), undefined);
+	assert.deepEqual(await manager.connectAgents("wb-test-a", ["pi"]), [{ id: "pi", connected: true, output: "" }]);
+	await assert.rejects(manager.connectAgents("wb-test-b", ["pi"]), /wb-test-b is not a remote host/);
 });
