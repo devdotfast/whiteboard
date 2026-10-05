@@ -5,6 +5,7 @@ import {
   chmod,
   mkdir,
   readFile,
+  readdir,
   rename,
   rm,
   writeFile,
@@ -205,6 +206,22 @@ export async function ensureRemoteExtensions(
       force: true,
     });
   }
+
+  const kept = new Set(listed.map((entry) => entry.relativeLocation));
+
+  for (const folder of await readdir(extensionsDir))
+    if (
+      !kept.has(folder) &&
+      curated.some(
+        ({ id }) =>
+          folder.startsWith(`${id}-`) &&
+          /^\d/.test(folder.slice(id.length + 1)),
+      )
+    )
+      await rm(path.join(extensionsDir, folder), {
+        recursive: true,
+        force: true,
+      });
 
   return {
     event: "remote.extensions" as const,

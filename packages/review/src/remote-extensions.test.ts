@@ -273,6 +273,31 @@ it("downloads nothing and leaves the list alone the second time", async () => {
   ).toBe(list);
 });
 
+it("removes the folders of other versions of a curated extension", async () => {
+  await ensureRemoteExtensions({
+    env,
+    curated: [tyExtension()],
+    target: "linux-x64",
+  });
+
+  const { extensionsDir } = remoteServerPaths(env);
+  await mkdir(path.join(extensionsDir, "astral-sh.ty-0.9.0"));
+  await mkdir(path.join(extensionsDir, "someone.else-1.0.0"));
+
+  const result = await ensureRemoteExtensions({
+    env,
+    curated: [tyExtension({ version: "1.1.0" })],
+    target: "linux-x64",
+  });
+
+  expect(result).toMatchObject({ installed: ["astral-sh.ty"], failed: [] });
+  expect((await readdir(extensionsDir)).sort()).toEqual([
+    "astral-sh.ty-1.1.0",
+    "extensions.json",
+    "someone.else-1.0.0",
+  ]);
+});
+
 it("deletes a download that fails its checksum and installs nothing", async () => {
   const extension = tyExtension();
   const wrong = { ...extension.targets["linux-x64"], sha256: "0".repeat(64) };
