@@ -7,7 +7,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { ReviewRemoteClock, SpawnSsh, SshChildProcess } from "../reviewRemoteHost.js";
 import { REVIEW_REMOTE_INSTALL_SAY } from "../reviewRemoteInstallScript.js";
-import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END } from "../reviewRemoteProbeScript.js";
+import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_PATH_CLI } from "../reviewRemoteProbeScript.js";
 
 class FakeChild extends EventEmitter {
 	static nextPid = 1000;
@@ -92,6 +92,7 @@ export const probeOutput = (probe: Partial<Record<string, unknown>> = {}) =>
 		arch: "aarch64",
 		glibc: "2.35",
 		home: "/home/dev",
+		root: "/home/dev/.dev/whiteboard-remote",
 		homeWritable: true,
 		freeBytes: 50e9,
 		node: null,
@@ -102,7 +103,7 @@ export const probeOutput = (probe: Partial<Record<string, unknown>> = {}) =>
 		registryReachable: true,
 		tools: ["tar", "xz", "sha256sum", "sha512sum"],
 		...probe,
-	})}\n${REVIEW_REMOTE_PROBE_END}\n`;
+	})}\n${REVIEW_REMOTE_PROBE_END}\n${probe.pathCli ? `${REVIEW_REMOTE_PROBE_PATH_CLI} ${JSON.stringify(probe.pathCli)}\n` : ""}`;
 
 export function fakeClock() {
 	let time = 0;
@@ -182,7 +183,7 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 					}
 					if (child.input.includes(" LISTED\\n")) {
 						entry.kind = "uninstall";
-						return child.finish(0, { stdout: `${REVIEW_REMOTE_INSTALL_SAY} HAVE 0.1.6\n${REVIEW_REMOTE_INSTALL_SAY} LISTED\n` });
+						return child.finish(0, { stdout: `${REVIEW_REMOTE_INSTALL_SAY} ROOT /home/dev/.dev/whiteboard-remote\n${REVIEW_REMOTE_INSTALL_SAY} HAVE 0.1.6\n${REVIEW_REMOTE_INSTALL_SAY} LISTED\n` });
 					}
 					if (child.input.includes("remote uninstall")) {
 						entry.kind = "uninstall";

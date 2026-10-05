@@ -236,7 +236,8 @@ const VIA = { "remote-download": "downloaded on the host", upload: "uploaded fro
 
 export function installPromptText(alias: string, version: string, probe: ReviewRemoteProbe): string {
 	const node = probe.node || probe.managedNode ? "" : `, and about 200 MB for Node 24, which ${alias} does not have`;
-	return `Whiteboard ${version} is not installed on ${alias}. Install it in ~/.dev/whiteboard-remote? It takes about 60 MB${node}. Whiteboard also adds ~/.local/bin/whiteboard if that path is free.`;
+	const where = probe.root === `${probe.home}/.dev/whiteboard-remote` ? "~/.dev/whiteboard-remote" : "whiteboard-remote under DEV_REVIEW_HOME";
+	return `Whiteboard ${version} is not installed on ${alias}. Install it in ${where}? It takes about 800 MB${node}. Whiteboard also adds ~/.local/bin/whiteboard if that path is free.`;
 }
 
 export function installFailureText(alias: string, version: string, step: InstallStep, message: string): string {
@@ -385,6 +386,7 @@ export class ReviewRemoteHost {
 		this.cancelPending = undefined;
 		this.installing?.abort();
 		this.options.install?.cancel?.(this.alias);
+		if (this.reported.asking) this.set({ alias: this.alias });
 	}
 
 	get quiesced(): boolean {
@@ -596,6 +598,7 @@ export class ReviewRemoteHost {
 			: undefined;
 		if (stale()) return;
 		const present = probed.probe.installed.some((entry) => entry.version === version && entry.integrity === integrity);
+		if (!present && probed.probe.pathCli?.version === version) return { script: (groups) => reviewRemoteAttachScript(groups, true) };
 		if (!present && mode === "ask" && !(await this.agreed(flow, probed.probe, version, stale))) {
 			this.declined = true;
 			return stale() ? undefined : onPath;
@@ -605,7 +608,7 @@ export class ReviewRemoteHost {
 		if (!installed) return undefined;
 		if ("path" in installed) {
 			const { nodePath, cliPath } = installed.path;
-			return { script: () => installedAttachScript(nodePath, cliPath), cli: { nodePath, cliPath } };
+			return { script: (groups) => installedAttachScript(nodePath, cliPath, groups), cli: { nodePath, cliPath } };
 		}
 		if (!probed.probe.installed.some((other) => other.version !== version)) throw new HostFailure({ state: "not-installed", detail: installed.failed });
 		this.installFailure = installed.failed;
@@ -616,7 +619,9 @@ export class ReviewRemoteHost {
 		const log = (error: Error) => this.options.log(`${this.alias}: install consent: ${error.message}`);
 		const stored = await flow.consent.get(this.alias).catch(log);
 		if (stored) return stored === "allow";
+		this.set({ alias: this.alias, asking: version });
 		const answer = await flow.confirm({ alias: this.alias, text: installPromptText(this.alias, version, probe) });
+		if (!stale()) this.set({ alias: this.alias });
 		if (answer !== undefined && !stale()) await flow.consent.set(this.alias, answer ? "allow" : "deny").catch(log);
 		return answer === true;
 	}

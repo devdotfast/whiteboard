@@ -6,29 +6,39 @@
 import { REVIEW_REMOTE_ATTACH_BEGIN, REVIEW_REMOTE_ATTACH_END } from "../../common/reviewProtocol.js";
 import { REVIEW_REMOTE_VERSION, shellQuote } from "./reviewRemoteInstallScript.js";
 
-export function pathCliScript(words: string): string {
-	return `wb=$(command -v whiteboard 2>/dev/null)
+export const REVIEW_REMOTE_FIND_CLI = `bounded() {
+	if timeout -k 1 1 true >/dev/null 2>&1; then timeout -k 1 "$@"; else shift; "$@"; fi
+}
+wb=$(command -v whiteboard 2>/dev/null)
 case "$wb" in /*) ;; *) wb= ;; esac
 if [ -z "$wb" ] && [ -x "$HOME/.local/bin/whiteboard" ]; then wb="$HOME/.local/bin/whiteboard"; fi
 if [ -z "$wb" ] && [ -n "$SHELL" ]; then
-	wb=$("$SHELL" -lic 'command -v whiteboard' </dev/null 2>/dev/null | tr -d '\\r' | grep '^/.*/whiteboard$' | tail -n 1)
+	wb=$(bounded 3 "$SHELL" -lic 'command -v whiteboard' </dev/null 2>/dev/null | tr -d '\\r' | grep '^/.*/whiteboard$' | tail -n 1)
 fi
-if [ -z "$wb" ] || [ ! -x "$wb" ]; then exit 127; fi
+[ -n "$wb" ] && [ -x "$wb" ] || wb=
+`;
+
+export function pathCliScript(words: string): string {
+	return `${REVIEW_REMOTE_FIND_CLI}if [ -z "$wb" ]; then exit 127; fi
 PATH="\${wb%/*}:$PATH"
 export PATH
 exec "$wb" ${words}
 `;
 }
 
-export function reviewRemoteAttachScript(groups: readonly string[] = []): string {
+function attachWords(groups: readonly string[], replace: boolean): string {
 	for (const group of groups) {
 		if (!/^[a-z0-9-]+$/.test(group)) throw new Error(`Invalid extension group ${JSON.stringify(group)}.`);
 	}
-	return pathCliScript(`remote attach --json${groups.length ? ` --groups ${groups.join(",")}` : ""}`);
+	return `remote attach --json${replace ? " --replace" : ""}${groups.length ? ` --groups ${groups.join(",")}` : ""}`;
 }
 
-export function installedAttachScript(nodePath: string, cliPath: string): string {
-	return `exec ${shellQuote(nodePath)} ${shellQuote(cliPath)} remote attach --json --replace\n`;
+export function reviewRemoteAttachScript(groups: readonly string[] = [], replace = false): string {
+	return pathCliScript(attachWords(groups, replace));
+}
+
+export function installedAttachScript(nodePath: string, cliPath: string, groups: readonly string[] = []): string {
+	return `exec ${shellQuote(nodePath)} ${shellQuote(cliPath)} ${attachWords(groups, true)}\n`;
 }
 
 export interface ReviewRemoteLanguageServer {

@@ -745,7 +745,38 @@ test("the version present: no prompt and no install shown; the installed CLI att
 	assert.equal(ssh.of("wb-test-a", "probe").length, 1);
 	assert.equal(
 		ssh.of("wb-test-a", "exec")[0].input,
-		`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' remote attach --json --replace\n`,
+		`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' remote attach --json --replace --groups go\n`,
+	);
+});
+
+test("an installed host attaches again for its pending extensions by the installed CLI, with --replace and the groups enabled then", async (t) => {
+	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
+	const { flow } = await installFlow(t, "ask");
+	let groups = ["go"];
+	const { host, ssh, clock, last } = hostFor(
+		t,
+		{
+			probe: { installed: [at("0.1.6")] },
+			attach: (call) => ({ code: 0, stdout: call === 1 ? pendingOutput(41234) : attachOutput(41234, "remote-token", { languageServer: { port: 45678, connectionToken: "vscode-token", commit: COMMIT } }) }),
+		},
+		ports,
+		"wb-test-a",
+		"/tmp/wb-ssh-test",
+		flow,
+		undefined,
+		{ groups: async () => groups },
+	);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	groups = ["go", "rust"];
+	assert.ok(clock.next());
+	await until(() => last()?.languageFeatures === true);
+
+	const installed = `exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' remote attach --json --replace`;
+	assert.deepEqual(
+		ssh.of("wb-test-a", "exec").map((call) => call.input),
+		[`${installed} --groups go\n`, `${installed} --groups go,rust\n`],
 	);
 });
 
@@ -799,7 +830,7 @@ test("the version absent, asked and declined: not-installed and declined, and no
 	assert.match(prompts[0].text, /Whiteboard 0\.1\.6 is not installed on wb-test-a/);
 	assert.match(prompts[0].text, /Install it in ~\/\.dev\/whiteboard-remote\?/);
 	assert.doesNotMatch(prompts[0].text, /\/home\/dev/);
-	assert.match(prompts[0].text, /about 60 MB, and about 200 MB for Node 24/);
+	assert.match(prompts[0].text, /about 800 MB, and about 200 MB for Node 24/);
 	assert.deepEqual(last(), {
 		alias: "wb-test-a",
 		problem: { state: "not-installed", detail: "Whiteboard is not installed on wb-test-a. Install Whiteboard 0.1.6 there; Node 24 is needed." },
@@ -826,7 +857,62 @@ test("a declined host with another version's CLI on PATH attaches it, and still 
 	assert.equal(last()?.declined, true);
 	assert.equal(runs.length, 0);
 	assert.match(ssh.of("wb-test-a", "exec")[0].input!, /command -v whiteboard/);
+	assert.doesNotMatch(ssh.of("wb-test-a", "exec")[0].input!, /--replace/);
 	assert.equal(await flow.consent.get("wb-test-a"), "deny");
+});
+
+test("this version's CLI on PATH counts as installed: no prompt, no install, and stage 1's attach", async (t) => {
+	const port = await healthServer(t);
+	const { flow, prompts, runs } = await installFlow(t, "ask");
+	const { host, ssh, last } = hostFor(t, { probe: { pathCli: { path: "/usr/local/bin/whiteboard", version: "0.1.6" } } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.deepEqual([prompts.length, runs.length], [0, 0]);
+	assert.equal(last()?.declined, undefined);
+	assert.match(ssh.of("wb-test-a", "exec")[0].input!, /command -v whiteboard[\s\S]*remote attach --json --replace/);
+});
+
+test("another version's CLI on PATH does not count: the user is asked", async (t) => {
+	const port = await healthServer(t);
+	const { flow, prompts } = await installFlow(t, "ask", { answers: [false] });
+	const { host, last } = hostFor(t, { probe: { pathCli: { path: "/usr/local/bin/whiteboard", version: "0.1.5" } } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(prompts.length, 1);
+});
+
+test("an open install question is reported until it is answered", async (t) => {
+	const { flow } = await installFlow(t, "ask");
+	const answer = Promise.withResolvers<boolean>();
+	flow.confirm = () => answer.promise;
+	const { host, reports, last } = hostFor(t, { attach: { code: 127 } }, 1, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.asking !== undefined);
+	assert.deepEqual(last(), { alias: "wb-test-a", asking: "0.1.6" });
+
+	answer.resolve(false);
+	await until(() => last()?.problem !== undefined);
+	assert.deepEqual(reports.at(-2), { alias: "wb-test-a" });
+});
+
+test("a quiesce closes an open install question", async (t) => {
+	const { flow } = await installFlow(t, "ask");
+	const answer = Promise.withResolvers<boolean | undefined>();
+	flow.confirm = () => answer.promise;
+	const { host, last } = hostFor(t, { attach: { code: 127 } }, 1, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.asking !== undefined);
+	host.quiesce();
+	answer.resolve(undefined);
+	await new Promise((resolve) => setTimeout(resolve, 20));
+
+	assert.deepEqual(last(), { alias: "wb-test-a" });
 });
 
 test("a prompt nobody answered is not remembered, offers Install, and the next connect asks again", async (t) => {

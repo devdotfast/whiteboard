@@ -5,7 +5,7 @@
 
 import { runSsh, type SpawnSsh } from "./reviewRemoteHost.js";
 import { REVIEW_REMOTE_VERSION } from "./reviewRemoteInstallScript.js";
-import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_SCRIPT } from "./reviewRemoteProbeScript.js";
+import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_PATH_CLI, REVIEW_REMOTE_PROBE_SCRIPT } from "./reviewRemoteProbeScript.js";
 import { sshExecArgs, type ReviewSshSession } from "./reviewSshCommand.js";
 
 export interface ReviewRemoteProbe {
@@ -13,12 +13,14 @@ export interface ReviewRemoteProbe {
 	arch: string;
 	glibc: string | null;
 	home: string;
+	root: string;
 	homeWritable: boolean;
 	freeBytes: number;
 	node: { path: string; version: string } | null;
 	npm: string | null;
 	installed: ReviewRemoteInstalled[];
 	managedNode: string | null;
+	pathCli: { path: string; version: string | null } | null;
 	downloader: "curl" | "wget" | null;
 	registryReachable: boolean;
 	tools: ReviewRemoteTool[];
@@ -74,9 +76,9 @@ export async function probeRemote(input: {
 	const alias = input.session.alias;
 	const result = await runSsh(input.spawn, input.env, sshExecArgs(input.session, input.env), timeout, REVIEW_REMOTE_PROBE_SCRIPT);
 	if (result.error) return { error: `The probe of ${alias} could not start: ${result.error.message}` };
-	if (result.timedOut) return { error: `The probe of ${alias} did not answer within ${timeout / 1000} seconds.` };
 	const parsed = parseRemoteProbe(result.stdout);
 	if ("probe" in parsed) return parsed;
+	if (result.timedOut) return { error: `The probe of ${alias} did not answer within ${timeout / 1000} seconds.` };
 	const stderr = result.stderr.trim().split("\n").at(-1)?.slice(0, 300);
 	return { error: `The probe of ${alias} failed: ${parsed.error}${result.code ? ` It exited with ${result.code}${stderr ? `: ${stderr}` : ""}.` : ""}` };
 }
@@ -101,13 +103,24 @@ export function parseRemoteProbe(stdout: string): ReviewRemoteProbeResult {
 		return { error: "its answer is not JSON." };
 	}
 	try {
-		return { probe: readProbe(value) };
+		return { probe: { ...readProbe(value), pathCli: readPathCli(stdout.slice(end)) } };
 	} catch (error) {
 		return { error: `its answer is malformed: ${(error as Error).message}` };
 	}
 }
 
-function readProbe(value: unknown): ReviewRemoteProbe {
+function readPathCli(after: string): ReviewRemoteProbe["pathCli"] {
+	const line = after.split("\n").find((candidate) => candidate.startsWith(`${REVIEW_REMOTE_PROBE_PATH_CLI} `));
+	try {
+		const cli = object(JSON.parse(line?.slice(REVIEW_REMOTE_PROBE_PATH_CLI.length + 1) ?? "null"), "pathCli");
+		const { version } = cli;
+		return { path: path(cli.path, "pathCli.path"), version: typeof version === "string" && version.length <= 128 && REVIEW_REMOTE_VERSION.test(version) ? version : null };
+	} catch {
+		return null;
+	}
+}
+
+function readProbe(value: unknown): Omit<ReviewRemoteProbe, "pathCli"> {
 	const record = object(value, "the answer");
 	const node = record.node === null ? null : object(record.node, "node");
 	const installed = record.installed;
@@ -119,6 +132,7 @@ function readProbe(value: unknown): ReviewRemoteProbe {
 	});
 	const tools = record.tools;
 	if (!Array.isArray(tools) || tools.length > INSTALLED_LIMIT) throw new Error("tools is not a short list.");
+	if (record.root === "") throw new Error("DEV_REVIEW_HOME there is not an absolute, normalised path.");
 	const freeBytes = record.freeBytes;
 	if (typeof freeBytes !== "number" || !Number.isSafeInteger(freeBytes) || freeBytes < 0) throw new Error("freeBytes is not a byte count.");
 	return {
@@ -126,6 +140,7 @@ function readProbe(value: unknown): ReviewRemoteProbe {
 		arch: string(record.arch, "arch", WORD),
 		glibc,
 		home: path(record.home, "home"),
+		root: path(record.root, "root"),
 		homeWritable: boolean(record.homeWritable, "homeWritable"),
 		freeBytes,
 		node: node && { path: path(node.path, "node.path"), version: string(node.version, "node.version", /^24\.\d{1,4}\.\d{1,4}$/) },

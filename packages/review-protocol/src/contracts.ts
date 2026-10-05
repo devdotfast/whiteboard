@@ -929,6 +929,7 @@ export const ReviewGatewayHostSchema = z.strictObject({
     })
     .optional(),
   declined: z.literal(true).optional(),
+  asking: requiredString.optional(),
   installFailure: stringAllowEmpty.optional(),
   installing: z
     .strictObject({

@@ -105,6 +105,10 @@ host at once take turns.
 | `~/.dev/whiteboard-remote/install.lock/` | Present while an install runs. |
 | `~/.local/bin/whiteboard` | A launcher for the newest version, so that you and your agents can run `whiteboard` there. Desktop writes it only if that path is free or Desktop's own; a `whiteboard` you installed yourself is left alone. |
 
+With `DEV_REVIEW_HOME` set in the remote's environment, `whiteboard-remote/`
+is under that directory instead of `~/.dev`, as is everything below that
+Desktop and the VS Code server keep there.
+
 As before, the review server keeps its reviews in `~/.dev`
 (`review-api.db` and its companion files), and the structural diff's `diffr`
 in `~/.dev/review-tools/`.
@@ -168,7 +172,8 @@ In Settings, click **Remove** on the host, check **Also remove Whiteboard from
 `<alias>`**, and click **Remove host**. Desktop runs the host's own
 `whiteboard remote uninstall --keep-reviews` over the connection, which:
 
-- stops the review server that Desktop or the CLI started;
+- stops the review server that Desktop or the CLI started, and the VS Code
+  server and any extension download that `remote attach` started;
 - removes `~/.dev/whiteboard-remote/`, and `~/.local/bin/whiteboard` if
   Desktop wrote it;
 - keeps your reviews in `~/.dev`.
