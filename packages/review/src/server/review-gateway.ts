@@ -78,11 +78,11 @@ const FORWARDED_ROUTES: readonly (readonly [string, RegExp])[] = [
   ["DELETE", /^ask\/[^/]+$/],
 ];
 
-const LANGUAGE_CONTEXT_TIMEOUT_MS = 120_000;
+const SLOW_ROUTE_TIMEOUT_MS = 120_000;
 
 /** Routes that may wait on preparing a checkout or launching an agent. */
 const SLOW_ROUTES =
-  /^(language-context|ask|ask\/agents\/[^/]+\/offer|ask\/[^/]+\/open|ask\/mentions)$/;
+  /^(language-context|ask|ask\/agents\/[^/]+\/offer|ask\/[^/]+\/(open|choice|permissions)|ask\/mentions)$/;
 
 const WHOLE_BODY_ROUTES =
   /^(file|language-context|navigator|ask\/agents(\/[^/]+\/offer)?|ask\/mentions|ask\/threads)$/;
@@ -147,7 +147,7 @@ export function createReviewGateway(input: {
   home: string;
   relay: ReviewDesktopVerbRelay;
   heartbeatMs?: number;
-  languageContextMs?: number;
+  slowRouteMs?: number;
   restarted?(alias: string): void;
   log?(message: string): void;
 }) {
@@ -347,7 +347,7 @@ export function createReviewGateway(input: {
     const waits = SLOW_ROUTES.test(options.route ?? "");
 
     const limit = waits
-      ? (input.languageContextMs ?? LANGUAGE_CONTEXT_TIMEOUT_MS)
+      ? (input.slowRouteMs ?? SLOW_ROUTE_TIMEOUT_MS)
       : FIRST_BYTE_TIMEOUT_MS;
 
     const firstByte = setTimeout(() => {
