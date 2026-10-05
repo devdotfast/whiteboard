@@ -3,6 +3,7 @@ import {
   type PointerEvent,
   type ReactElement,
   type ReactNode,
+  type Ref,
   type RefObject,
   useLayoutEffect,
   useRef,
@@ -112,12 +113,14 @@ export function AskWindow({
   actions,
   titleAccessory,
   onClose,
+  closeRef,
   children,
 }: {
   /** The conversation's own buttons, before dock, minimize and close. */
   actions: ReactNode;
   titleAccessory?: ReactNode;
   onClose: () => void;
+  closeRef?: Ref<HTMLButtonElement>;
   children: ReactNode;
 }): ReactElement {
   const store = useReviewPanelStore();
@@ -288,7 +291,12 @@ export function AskWindow({
                 xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
               />
             </IconButton>
-            <IconButton size="large" aria-label="Close Ask" onClick={onClose}>
+            <IconButton
+              ref={closeRef}
+              size="large"
+              aria-label="Close Ask"
+              onClick={onClose}
+            >
               <CloseIcon xstyle={controlStyles.inertIcon} />
             </IconButton>
           </div>

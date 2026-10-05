@@ -146,7 +146,7 @@ it("asks before closing an Ask whose agent works, and keeps it going minimized",
 
     // Closing would stop the agent, so it asks first.
     await act(async () => button(/^Close Ask$/)!.click());
-    expect(document.body.textContent).toContain("Codex is still working.");
+    expect(document.body.textContent).toContain("Stop Codex?");
     expect(closed()).toEqual([]);
 
     // Minimized, the agent keeps going, and the pill says so.
@@ -242,7 +242,7 @@ it("closes an Ask at once once its agent has answered", async () => {
     );
 
     await act(async () => button(/^Close Ask$/)!.click());
-    expect(document.body.textContent).not.toContain("still working");
+    expect(document.body.textContent).not.toContain("Stop Codex?");
     expect(store.getState().ask).toBeNull();
     expect(
       fetch.mock.calls.filter(([endpoint]) => endpoint === "/ask/saved/close"),
