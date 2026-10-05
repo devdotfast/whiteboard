@@ -7,17 +7,26 @@ import type { Writable } from "node:stream";
 import { promisify } from "node:util";
 
 import { jsonObject, jsonString, parseJsonText } from "@dev.fast/json";
+import { gt as greaterVersion, valid as validVersion } from "semver";
 
-import { findReviewPackageRoot } from "./package-paths";
+import {
+  findReviewPackageRoot,
+  readReviewPackageVersion,
+} from "./package-paths";
 import {
   type EnsureRemoteLanguageServerInput,
   ensureRemoteLanguageServer,
 } from "./remote-language-server";
 import { missingToolchains } from "./remote-toolchains";
-import { readReviewServerHealth, serverNotReady } from "./server-discovery";
+import {
+  readReviewServerDiscovery,
+  readReviewServerHealth,
+  serverNotReady,
+} from "./server-discovery";
 import {
   type EnsureBackgroundServerInput,
   ensureBackgroundServer,
+  stopBackgroundServer,
 } from "./server/background-server";
 import { diffrExecutable, fetchedDiffrPath } from "./server/structural-diff";
 
@@ -39,6 +48,8 @@ export async function remoteAttach(
     groups?: string[];
     ensureExtensions?: EnsureRemoteLanguageServerInput["ensure"];
     installTimeoutMs?: number;
+    replace?: boolean;
+    version?: string;
   },
 ) {
   const abort = new AbortController();
@@ -58,8 +69,26 @@ export async function remoteAttach(
   const toolchains = missingToolchains(input.groups ?? [], input.env);
 
   let server: Awaited<ReturnType<typeof ensureBackgroundServer>>;
+  let previousVersion: string | undefined;
+
+  let incompatibleRunning:
+    | { version: string; pid: number; startedBy: "user" | "cli" | "desktop" }
+    | undefined;
 
   try {
+    const version = input.version ?? readReviewPackageVersion(import.meta.url);
+
+    const other = input.replace
+      ? await otherVersionRunning(input.stateDir, version)
+      : undefined;
+
+    if (other && (other.startedBy === "user" || newer(other.version, version)))
+      incompatibleRunning = other;
+    else if (other) {
+      await stopBackgroundServer({ serverPid: other.pid });
+      previousVersion = other.version;
+    }
+
     server = await ensureBackgroundServer({
       stateDir: input.stateDir,
       env: input.env,
@@ -106,7 +135,30 @@ export async function remoteAttach(
 
       return { group, installed, ...(details && { detail: details }) };
     }),
+    ...(previousVersion !== undefined && { replaced: true, previousVersion }),
+    ...(incompatibleRunning && { incompatibleRunning }),
   };
+}
+
+const newer = (running: string, own: string) =>
+  validVersion(running) !== null &&
+  validVersion(own) !== null &&
+  greaterVersion(running, own);
+
+async function otherVersionRunning(stateDir: string, version: string) {
+  const discovery = await readReviewServerDiscovery(stateDir).catch(() => null);
+  const health = discovery && (await readReviewServerHealth(discovery));
+
+  if (!health || health.serverPid !== discovery.serverPid) return undefined;
+  const running = health.version ?? "unknown";
+
+  return running === version
+    ? undefined
+    : {
+        version: running,
+        pid: discovery.serverPid,
+        startedBy: discovery.startedBy,
+      };
 }
 
 export async function ensureDiffr(input: EnsureDiffrInput) {

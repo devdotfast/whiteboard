@@ -574,6 +574,10 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       .option(
         "--groups <groups>",
         "comma-separated optional extension groups the Desktop has enabled, such as go",
+      )
+      .option(
+        "--replace",
+        "stop a running server of another version that the CLI or Desktop started, and start this one",
       ),
     "plain",
   ).action(async (_options, command: Command) => {
@@ -581,6 +585,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       stateDir?: string;
       json?: boolean;
       groups?: string;
+      replace?: boolean;
     }>();
 
     const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
@@ -595,6 +600,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         env,
         stderr: input.stderr,
         groups: options.groups?.split(",").map((group) => group.trim()),
+        replace: options.replace,
       });
     } catch (error) {
       if (!options.json) throw error;
