@@ -667,6 +667,40 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     state.exitCode = result.failed.length > 0 ? 1 : 0;
   });
 
+  configureJsonOutput(
+    remote
+      .command("diffr")
+      .description("Structural diff on this host")
+      .command("ensure")
+      .description(
+        "Fetch diffr for this platform unless a current copy is present",
+      )
+      .option(
+        "--state-dir <path>",
+        "directory for saved reviews and server discovery",
+      ),
+    "plain",
+  ).action(async (_options, command: Command) => {
+    const options = command.optsWithGlobals<{
+      stateDir?: string;
+      json?: boolean;
+    }>();
+
+    const { ensureDiffr } = await import("./remote-attach.js");
+
+    const diffr = await ensureDiffr({
+      stateDir: reviewServerStateDir(authoringEnv(options.stateDir)),
+      env,
+      stderr: input.stderr,
+    });
+
+    input.stdout.write(
+      options.json
+        ? `${JSON.stringify({ event: "remote.diffr", diffr })}\n`
+        : `Structural diff: ${diffr ? "available" : "unavailable (no diffr)"}\n`,
+    );
+  });
+
   async function writeServerStatus(
     discovery: ReviewServerDiscovery,
     stateDir: string,

@@ -314,6 +314,30 @@ it("prints a failed attach between the sentinels and exits non-zero", async () =
   });
 }, 30_000);
 
+it("ensures diffr on its own, one JSON line, without starting a server", async () => {
+  const found = await cli(
+    ["remote", "diffr", "ensure", "--json"],
+    await fakeDiffr(),
+  );
+
+  expect(found.code).toBe(0);
+  expect(JSON.parse(found.stdout)).toEqual({
+    event: "remote.diffr",
+    diffr: true,
+  });
+
+  const missing = await cli(["remote", "diffr", "ensure", "--json"], {
+    REVIEW_DIFFR_BINARY: path.join(root, "absent", "diffr"),
+  });
+
+  expect(missing.code).toBe(0);
+  expect(JSON.parse(missing.stdout)).toEqual({
+    event: "remote.diffr",
+    diffr: false,
+  });
+  expect(existsSync(reviewServerDiscoveryPath(stateDir))).toBe(false);
+}, 60_000);
+
 it("attaches without a network, with structural diff off and nothing written", async () => {
   const packageRoot = path.join(root, "package");
   await mkdir(packageRoot);
