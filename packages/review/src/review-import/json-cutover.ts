@@ -31,6 +31,7 @@ import { reviewVcs } from "@review/review-vcs";
 import {
   type ImportLegacyReviewInput,
   type ImportOutcome,
+  IncompleteHistoryError,
   importLegacyReview,
 } from "./import-review";
 
@@ -204,10 +205,23 @@ export async function migrateJsonReviews(input: {
 
             input.log?.(`${original.review.title}: ${outcome.kind}`);
           } catch (error) {
-            report.errors.push({
-              reviewId: original.review.uuid,
-              reason: errorMessage(error),
-            });
+            const reason = errorMessage(error);
+
+            // One review's lost history must not keep every other review out
+            // of the new store. Its directory stays as it was.
+            if (error instanceof IncompleteHistoryError) {
+              report.skipped.push({
+                reviewId: original.review.uuid,
+                dir: original.dir,
+                reason,
+              });
+              input.log?.(
+                `${original.dir}: incomplete history, left untouched and skipped: ${reason}`,
+              );
+              continue;
+            }
+
+            report.errors.push({ reviewId: original.review.uuid, reason });
           }
         }
       } finally {
