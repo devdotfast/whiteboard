@@ -779,6 +779,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
           }
         : await remoteUninstall({
             home: env.HOME ?? "",
+            env,
             stateDir,
             deleteReviews,
           });
