@@ -5,11 +5,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { stageReviewDocs } from "../apps/review-desktop/scripts/stage-review-runtime.mjs";
-import { parseVersion } from "./review-cli-release.mjs";
+import { distTag } from "./review-cli-release.mjs";
 
 /** Pack from the workspace, then add the docs and version metadata shipped by Desktop. */
-export async function packReviewCli({ version, commit }, outputDirectory) {
-  parseVersion(version);
+export async function packReviewCli(
+  { version, commit },
+  outputDirectory,
+  { packageDirectory = "packages/review", stdio = "inherit" } = {},
+) {
+  distTag(version);
 
   const actualCommit = execFileSync("git", ["rev-parse", "HEAD"], {
     encoding: "utf8",
@@ -20,22 +24,23 @@ export async function packReviewCli({ version, commit }, outputDirectory) {
   const output = path.resolve(outputDirectory);
   await mkdir(output, { recursive: true });
   const scratch = await mkdtemp(path.join(os.tmpdir(), "review-cli-pack-"));
-  const manifestPath = "packages/review/package.json";
+  const manifestPath = path.join(packageDirectory, "package.json");
   const original = await readFile(manifestPath, "utf8");
 
   try {
     const pkg = JSON.parse(original);
+    const tarball = `${pkg.name.slice(1).replace("/", "-")}-${version}.tgz`;
     pkg.version = version;
     pkg.gitHead = commit;
     await writeFile(manifestPath, `${JSON.stringify(pkg, null, 2)}\n`);
     execFileSync(
       "pnpm",
-      ["--filter", "@dev.fast/review", "pack", "--pack-destination", scratch],
-      { stdio: "inherit" },
+      ["--dir", packageDirectory, "pack", "--pack-destination", scratch],
+      { stdio },
     );
     execFileSync("tar", [
       "-xzf",
-      path.join(scratch, `dev.fast-review-${version}.tgz`),
+      path.join(scratch, tarball),
       "-C",
       scratch,
     ]);
@@ -45,10 +50,10 @@ export async function packReviewCli({ version, commit }, outputDirectory) {
     execFileSync(
       "npm",
       ["pack", "--ignore-scripts", "--pack-destination", output],
-      { cwd: staged, stdio: "inherit" },
+      { cwd: staged, stdio },
     );
 
-    return path.join(output, `dev.fast-review-${version}.tgz`);
+    return path.join(output, tarball);
   } finally {
     await writeFile(manifestPath, original);
     await rm(scratch, { recursive: true, force: true });

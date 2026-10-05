@@ -274,9 +274,74 @@ jobs:
             --draft \
             --generate-notes
 
+  npm:
+    name: Publish npm package
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      COMMIT: ${{ needs.version.outputs.commit }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.version.outputs.commit }}
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+      - name: Install build dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Resolve dist-tag and publication state
+        id: npm
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          DIST_TAG=$(node scripts/review-cli-release.mjs dist-tag "$VERSION")
+          if PUBLISHED=$(node scripts/review-cli-release.mjs published "$VERSION" "$COMMIT"); then
+            :
+          elif [ "$DRY_RUN" = true ]; then
+            echo "::warning::@dev.fast/whiteboard@${VERSION} exists on npm from another commit, or the registry check failed (see above); this dry run skips publish validation."
+            PUBLISHED=true
+          else
+            exit 1
+          fi
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "published=$PUBLISHED" >> "$GITHUB_OUTPUT"
+      - name: Build release tarball
+        run: |
+          jq -n --arg version "$VERSION" --arg commit "$COMMIT" '{$version, $commit}' > release-plan.json
+          node scripts/pack-review-cli.mjs release-artifacts
+      - name: Test installed tarball without Desktop
+        run: node scripts/smoke-review-cli.mjs "release-artifacts/dev.fast-whiteboard-${VERSION}.tgz" "$VERSION"
+      - name: Validate npm publish command
+        if: ${{ steps.npm.outputs.published != 'true' }}
+        env:
+          DIST_TAG: ${{ steps.npm.outputs.dist_tag }}
+        run: npm publish "./release-artifacts/dev.fast-whiteboard-${VERSION}.tgz" --dry-run --registry=https://registry.npmjs.org --access public --tag "$DIST_TAG" --ignore-scripts
+      - name: Retain tested package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: whiteboard-npm-${{ env.VERSION }}
+          path: release-artifacts/*.tgz
+          if-no-files-found: error
+      - name: Publish tested package
+        if: ${{ !inputs.dry_run && steps.npm.outputs.published != 'true' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          DIST_TAG: ${{ steps.npm.outputs.dist_tag }}
+        run: |
+          test -n "$NODE_AUTH_TOKEN" || { echo 'NPM_TOKEN secret is missing.' >&2; exit 1; }
+          npm publish "./release-artifacts/dev.fast-whiteboard-${VERSION}.tgz" --registry=https://registry.npmjs.org --access public --tag "$DIST_TAG" --provenance --ignore-scripts
+
   linux:
     if: ${{ inputs.platforms == 'all' || inputs.platforms == 'linux' }}
-    needs: version
+    needs: [version, npm]
     uses: ./.github/workflows/review-linux-build.yml
     with:
       commit: ${{ needs.version.outputs.commit }}
@@ -287,7 +352,7 @@ jobs:
   # Signs even on a dry run, so the run validates exactly what would ship.
   windows:
     if: ${{ inputs.platforms == 'all' || inputs.platforms == 'windows' }}
-    needs: version
+    needs: [version, npm]
     permissions:
       contents: read
       id-token: write
@@ -299,7 +364,7 @@ jobs:
 
   macos:
     if: ${{ inputs.platforms == 'all' || inputs.platforms == 'macos' }}
-    needs: version
+    needs: [version, npm]
     permissions:
       contents: read
       actions: read
