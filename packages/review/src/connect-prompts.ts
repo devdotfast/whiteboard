@@ -89,6 +89,55 @@ export const CLAUDE_WINDOWS_MCP_ADD = `claude mcp add -s user whiteboard -- ${WI
 /** Copilot CLI loads the Claude plugin, so on Windows it too registers the server directly. */
 export const COPILOT_WINDOWS_MCP_ADD = `copilot mcp add whiteboard -- ${WINDOWS_MCP_LAUNCH.command} ${WINDOWS_MCP_LAUNCH.args.join(" ")}`;
 
+export interface ConnectCommand {
+  argv: readonly string[];
+  ifAny?: true;
+}
+
+export const CONNECT_COMMANDS = {
+  claude: [
+    {
+      argv: ["claude", "plugin", "marketplace", "add", "devdotfast/whiteboard"],
+    },
+    {
+      argv: [
+        "claude",
+        "plugin",
+        "install",
+        "whiteboard@devfast",
+        "--scope",
+        "user",
+      ],
+    },
+    {
+      argv: ["claude", "mcp", "remove", "-s", "user", "whiteboard"],
+      ifAny: true,
+    },
+  ],
+  codex: [
+    {
+      argv: ["codex", "plugin", "marketplace", "add", "devdotfast/whiteboard"],
+    },
+    { argv: ["codex", "plugin", "add", "whiteboard@devfast"] },
+    { argv: ["codex", "mcp", "remove", "whiteboard"], ifAny: true },
+  ],
+  opencode: [
+    {
+      argv: ["opencode", "plugin", "@dev.fast/opencode-whiteboard", "--global"],
+    },
+  ],
+  pi: [{ argv: ["pi", "install", PI_WHITEBOARD_PACKAGE] }],
+} as const satisfies Record<string, readonly ConnectCommand[]>;
+
+function runBlock(commands: readonly ConnectCommand[]): string {
+  const lines = commands.map(
+    ({ argv, ifAny }) =>
+      `${argv.join(" ")}${ifAny ? " # old manual registration, if any" : ""}`,
+  );
+
+  return `Run:\n\n\`\`\`sh\n${lines.join("\n")}\n\`\`\``;
+}
+
 function pluginSteps(
   target: Exclude<InstallTarget, "cursor">,
   platform: NodeJS.Platform,
@@ -100,13 +149,9 @@ function pluginSteps(
           `Run:\n\n\`\`\`sh\nclaude plugin uninstall whiteboard@devfast # its launch cannot start on Windows, if installed\nclaude mcp remove -s user whiteboard # old registration, if any\n${CLAUDE_WINDOWS_MCP_ADD}\n\`\`\``,
         ];
 
-      return [
-        "Run:\n\n```sh\nclaude plugin marketplace add devdotfast/whiteboard\nclaude plugin install whiteboard@devfast --scope user\nclaude mcp remove -s user whiteboard # old manual registration, if any\n```",
-      ];
+      return [runBlock(CONNECT_COMMANDS.claude)];
     case "codex":
-      return [
-        "Run:\n\n```sh\ncodex plugin marketplace add devdotfast/whiteboard\ncodex plugin add whiteboard@devfast\ncodex mcp remove whiteboard # old manual registration, if any\n```",
-      ];
+      return [runBlock(CONNECT_COMMANDS.codex)];
     case "opencode": {
       const launch = reviewMcpLaunch(true, platform);
 

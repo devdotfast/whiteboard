@@ -46,6 +46,12 @@ import {
   windowsInstallerCommand,
 } from "./cli-install";
 import { cliRuntimeInfo, describeCliRuntime } from "./cli-runtime-info";
+import {
+  AGENT_CONNECT_TARGETS,
+  type AgentConnectTarget,
+  connectAgents,
+  detectAgents,
+} from "./connect-agents";
 import { connectPrompts } from "./connect-prompts";
 import {
   ReviewInstanceUnavailableError,
@@ -932,53 +938,125 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
           "copilot",
           "all",
         ]),
+      )
+      .addOption(
+        new Option(
+          "--detect",
+          "list the agents on this machine and whether each is connected; changes nothing",
+        ).conflicts("yes"),
+      )
+      .option(
+        "--yes",
+        "run the commands the prompt gives, without an agent: claude, codex, opencode or pi",
       ),
     "plain",
   );
 
-  connect.action(async (targets: string[], options: { json?: boolean }) => {
-    const selected = parseTargets(targets);
+  connect.action(
+    async (
+      targets: string[],
+      options: { json?: boolean; detect?: boolean; yes?: boolean },
+    ) => {
+      const output = {
+        json: options.json,
+        stdout: input.stdout,
+        stderr: input.stderr,
+      };
 
-    const { homeDir, devHome } = scope;
+      if (options.detect) {
+        const agents = await detectAgents({ homeDir: scope.homeDir, env });
 
-    const prompts = connectPrompts({
-      legacyPaths: await scanLegacySkills(homeDir),
-      hasShim:
-        (await isOwnedShim(pathShimPath(homeDir))) ||
-        (await windowsInstallerCommand(
-          findReviewPackageRoot(import.meta.url),
+        if (options.json) {
+          emitJsonEvent(output, { event: "connect.detect", agents });
+
+          return;
+        }
+
+        humanStream(output).write(
+          agents.length
+            ? `${agents.map((agent) => `${agent.name}: ${agent.connected ? "connected" : "not connected"}${agent.manual ? " (its command is not on PATH)" : ""}`).join("\n")}\n`
+            : "No agents found.\n",
+        );
+
+        return;
+      }
+
+      if (options.yes) {
+        const agents = parseTargets(targets);
+
+        if (
+          targets.length === 0 ||
+          !agents.every((target): target is AgentConnectTarget =>
+            AGENT_CONNECT_TARGETS.some((known) => known === target),
+          )
+        )
+          throw new Error(
+            "connect --yes takes one or more of claude, codex, opencode or pi.",
+          );
+
+        const results = await connectAgents({
+          agents,
+          homeDir: scope.homeDir,
           env,
-        )) !== undefined,
-      traceEnabled: await traceMachineEnabled({ homeDir, env }),
-      fffBinaryPath: path.join(homeDir, ".local", "bin", "fff-mcp"),
-      fffCorpusRoot: path.join(devHome, "trace-search"),
-    });
+        });
 
-    const output = {
-      json: options.json,
-      stdout: input.stdout,
-      stderr: input.stderr,
-    };
+        state.exitCode = results.every((result) => result.connected) ? 0 : 1;
 
-    if (options.json) {
-      emitJsonEvent(output, {
-        event: "connect",
-        prompts: Object.fromEntries(
-          selected.map((target) => [target, prompts[target]]),
-        ),
+        if (options.json) {
+          emitJsonEvent(output, { event: "connect.run", agents: results });
+
+          return;
+        }
+
+        humanStream(output).write(
+          results
+            .map(
+              (result) =>
+                `${result.output}${result.name}: ${result.connected ? "connected" : "not connected"}\n`,
+            )
+            .join(""),
+        );
+
+        return;
+      }
+
+      const selected = parseTargets(targets);
+
+      const { homeDir, devHome } = scope;
+
+      const prompts = connectPrompts({
+        legacyPaths: await scanLegacySkills(homeDir),
+        hasShim:
+          (await isOwnedShim(pathShimPath(homeDir))) ||
+          (await windowsInstallerCommand(
+            findReviewPackageRoot(import.meta.url),
+            env,
+          )) !== undefined,
+        traceEnabled: await traceMachineEnabled({ homeDir, env }),
+        fffBinaryPath: path.join(homeDir, ".local", "bin", "fff-mcp"),
+        fffCorpusRoot: path.join(devHome, "trace-search"),
       });
 
-      return;
-    }
+      if (options.json) {
+        emitJsonEvent(output, {
+          event: "connect",
+          prompts: Object.fromEntries(
+            selected.map((target) => [target, prompts[target]]),
+          ),
+        });
 
-    const sections = selected.map((target) =>
-      selected.length > 1
-        ? `## ${TARGET_LABELS[target]}\n\n${prompts[target]}`
-        : prompts[target],
-    );
+        return;
+      }
 
-    humanStream(output).write(`${sections.join("\n\n")}\n`);
-  });
+      const sections = selected.map((target) =>
+        selected.length > 1
+          ? `## ${TARGET_LABELS[target]}\n\n${prompts[target]}`
+          : prompts[target],
+      );
+
+      humanStream(output).write(`${sections.join("\n\n")}\n`);
+    },
+  );
 
   const migrate = configureOutput(
     program.command("migrate", { hidden: true }),
