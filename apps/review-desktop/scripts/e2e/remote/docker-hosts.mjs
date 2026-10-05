@@ -15,14 +15,23 @@ const packageDir = path.resolve(
   "../../../../../packages/review",
 );
 
+const TOOLCHAIN_IMAGES = {
+  rust: "rust:1.98-bookworm",
+  swift: "swift:6.4-noble",
+  dotnet: "mcr.microsoft.com/dotnet/sdk:10.0-noble",
+};
+
 /** Tags are per run, so removing one run's tag never touches another run's containers. */
-async function buildImage(runState, { platform, image, node, shell }) {
+async function buildImage(
+  runState,
+  { platform, image, node, shell, toolchain },
+) {
   const hash = createHash("sha256");
 
   for (const file of ["Dockerfile", "setup.sh", "start.sh"])
     hash.update(await readFile(path.join(imageDir, file)));
 
-  hash.update(JSON.stringify([platform, image, node, shell]));
+  hash.update(JSON.stringify([platform, image, node, shell, toolchain]));
 
   const tag = `wb-test-${runState.id}-image:${hash.digest("hex").slice(0, 12)}`;
 
@@ -38,6 +47,8 @@ async function buildImage(runState, { platform, image, node, shell }) {
     `NODE=${node}`,
     "--build-arg",
     `LOGIN_SHELL=${shell}`,
+    "--build-arg",
+    `TOOLCHAIN=${toolchain}`,
     "-t",
     tag,
     imageDir,
@@ -114,11 +125,17 @@ export async function up(runState, name, options) {
 
   if (jump && port) throw new Error("--port and --jump cannot be combined");
 
+  const toolchain = options.toolchain ?? "none";
+
+  if (toolchain !== "none" && !TOOLCHAIN_IMAGES[toolchain])
+    throw new Error(`--toolchain ${toolchain}: expected rust, swift or dotnet`);
+
   const image = await buildImage(runState, {
     platform: options.platform,
-    image: options.image ?? "ubuntu:22.04",
+    image: options.image ?? TOOLCHAIN_IMAGES[toolchain] ?? "ubuntu:22.04",
     node: options.node ?? "24",
     shell: options.shell ?? "bash",
+    toolchain,
   });
 
   const network = `wb-test-${runState.id}`;

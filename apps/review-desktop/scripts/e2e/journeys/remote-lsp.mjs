@@ -23,7 +23,7 @@ const remoteScript = path.join(import.meta.dirname, "../remote/remote.mjs");
 
 const runId = process.env.WB_TEST_RUN ?? `e2e${Date.now().toString(36)}`;
 
-const runDir = `/tmp/wbt.${runId}`;
+export const runDir = `/tmp/wbt.${runId}`;
 
 const prepared = process.env.REVIEW_E2E_REMOTE_HOSTS?.split(",");
 
@@ -112,7 +112,7 @@ echo
 ps -eo pid=,ppid=,rss=,args=
 `;
 
-function bounded(promise, ms, label) {
+export function bounded(promise, ms, label) {
   let timer;
 
   return Promise.race([
@@ -126,7 +126,7 @@ function bounded(promise, ms, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
-async function remote(...args) {
+export async function remote(...args) {
   return (
     await exec(process.execPath, [remoteScript, ...args], {
       env: { ...process.env, WB_TEST_RUN: runId },
@@ -136,7 +136,7 @@ async function remote(...args) {
   ).stdout.trim();
 }
 
-function onRemote(alias, command, input = "", timeout = 300000) {
+export function onRemote(alias, command, input = "", timeout = 300000) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       "ssh",
@@ -191,11 +191,11 @@ async function attach(alias, env = "") {
   return parsed.serverId;
 }
 
-async function extensionHosts(alias) {
+export async function extensionHosts(alias) {
   return Number(await onRemote(alias, `pgrep -fc '[e]xtensionHost' || true`));
 }
 
-async function remoteMemory(alias) {
+export async function remoteMemory(alias) {
   const [serverJson, , ...lines] = (await onRemote(alias, processTree)).split(
     "\n",
   );
@@ -823,15 +823,15 @@ async function laptopFixture() {
   return { base, head: await git("rev-parse", "HEAD") };
 }
 
-const visibleCanvas = (page) =>
+export const visibleCanvas = (page) =>
   page
     .locator(".review-canvas-root [data-review-api]")
     .filter({ visible: true });
 
-const tab = (page, text) =>
+export const tab = (page, text) =>
   page.locator(".tabs-container .tab").filter({ hasText: text });
 
-async function showDiff(ctx, title, file) {
+export async function showDiff(ctx, title, file) {
   await tab(ctx.page, title).click();
   await ctx.page
     .locator('[aria-label="Session views"] button[aria-label="Diff"]')
@@ -849,13 +849,13 @@ async function showDiff(ctx, title, file) {
   );
 }
 
-async function lines(scope) {
+export async function lines(scope) {
   return (await scope.locator(".view-line").allInnerTexts())
     .join("\n")
     .replaceAll(" ", " ");
 }
 
-async function pointerHover(page, point, pattern, timeout) {
+export async function pointerHover(page, point, pattern, timeout) {
   const started = Date.now();
   const seen = [];
   let moved = 0;
@@ -910,7 +910,7 @@ async function windowLog(ctx) {
   ).join("\n");
 }
 
-async function waitFor(check, label, timeout) {
+export async function waitFor(check, label, timeout) {
   const deadline = Date.now() + timeout;
 
   while (Date.now() < deadline) {
@@ -921,7 +921,7 @@ async function waitFor(check, label, timeout) {
   throw new Error(`Timed out waiting for ${label}`);
 }
 
-async function windowCall(ctx, command, ...args) {
+export async function windowCall(ctx, command, ...args) {
   const cdp = await bounded(
     ctx.page.context().newCDPSession(ctx.page),
     30000,

@@ -15,6 +15,7 @@ const usage = `usage: remote.mjs <command>
   up <name> [--platform linux/amd64|linux/arm64] [--image <image>] [--node 24|20|none]
             [--auth key|password] [--banner] [--shell bash|fish] [--jump <name>]
             [--sealed] [--delay-ms <n>] [--no-forwarding] [--port <n>]
+            [--toolchain rust|swift|dotnet]
   install <name> [--version <v>] [--runtime <remote runtime dir>]
   pack --out <file.tgz> [--version <v>] [--runtime <remote runtime dir>]
   ssh <name> -- <command...>
@@ -47,6 +48,7 @@ async function main(argv) {
       "delay-ms": { type: "string" },
       "no-forwarding": { type: "boolean" },
       port: { type: "string" },
+      toolchain: { type: "string" },
       version: { type: "string" },
       runtime: { type: "string" },
       out: { type: "string" },
