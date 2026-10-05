@@ -31,9 +31,9 @@ import {
   supportedTargets,
   targetKeyFor,
 } from "./curated-extensions.manifest.mjs";
+import { extractVsix } from "../../../packages/review/src/vsix.ts";
 import {
   copyCuratedExtensions,
-  extractVsixPayload,
   verifyCuratedExtensions,
 } from "./curated-extensions.mjs";
 
@@ -217,7 +217,7 @@ test("extracts nested Windows executables from a VSIX archive", async () => {
   try {
     await complete;
     writeFileSync(archive, Buffer.concat(chunks));
-    await extractVsixPayload(archive, destination);
+    await extractVsix(archive, destination);
 
     assert.equal(
       readFileSync(

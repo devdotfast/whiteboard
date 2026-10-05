@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import {
-  chmod,
   mkdir,
   readFile,
   readdir,
@@ -16,12 +15,12 @@ import { pipeline } from "node:stream/promises";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { promisify } from "node:util";
 
-import { jsonObject, jsonString, parseJsonText } from "@dev.fast/json";
-import yauzl from "yauzl";
+import { parseJsonText } from "@dev.fast/json";
 import { z } from "zod";
 
 import { findReviewPackageRoot } from "./package-paths";
 import { devReviewHome } from "./review-home-paths";
+import { extractVsix, sanitizeVsixManifest } from "./vsix";
 
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 
@@ -275,7 +274,7 @@ async function install(
     await fetchVerified(download, part, timeoutMs, signal);
     await rm(staging, { recursive: true, force: true });
     await extractVsix(part, staging, download.size * 8);
-    await sanitizeManifest(staging, extension);
+    await sanitizeVsixManifest(staging, extension);
 
     await checkExecutables(staging, extension);
 
@@ -362,91 +361,6 @@ const networkCause = (error: Error) =>
   error.name === "TimeoutError"
     ? "timed out"
     : (networkCauseSchema.safeParse(error.cause).data?.code ?? error.message);
-
-async function extractVsix(
-  vsix: string,
-  destination: string,
-  maxBytes: number,
-) {
-  let unpacked = 0;
-
-  const zip = await new Promise<yauzl.ZipFile>((resolve, reject) =>
-    yauzl.open(vsix, { lazyEntries: true }, (error, opened) =>
-      error ? reject(error) : resolve(opened),
-    ),
-  );
-
-  const openReadStream = (entry: yauzl.Entry) =>
-    new Promise<Readable>((resolve, reject) =>
-      zip.openReadStream(entry, (error, stream) =>
-        error ? reject(error) : resolve(stream),
-      ),
-    );
-
-  try {
-    await new Promise<void>((resolve, reject) => {
-      zip.on("error", reject);
-      zip.on("end", () => resolve());
-      zip.on("entry", (entry: yauzl.Entry) => {
-        void (async () => {
-          const name = entry.fileName.replaceAll("\\", "/");
-
-          if (name.endsWith("/") || !name.startsWith("extension/")) return;
-
-          const relative = name.slice("extension/".length);
-          const mode = (entry.externalFileAttributes >>> 16) & 0o177777;
-
-          if (
-            relative.split("/").some((part) => part === ".." || part === "") ||
-            path.posix.isAbsolute(relative)
-          )
-            throw new Error(`VSIX contains an unsafe path: ${name}`);
-
-          if ((mode & 0o170000) === 0o120000)
-            throw new Error(`VSIX contains a symlink: ${name}`);
-
-          unpacked += entry.uncompressedSize;
-
-          if (unpacked > maxBytes)
-            throw new Error(`VSIX unpacks to more than ${maxBytes} bytes`);
-
-          const output = path.join(destination, ...relative.split("/"));
-          await mkdir(path.dirname(output), { recursive: true });
-          await pipeline(
-            await openReadStream(entry),
-            createWriteStream(output),
-          );
-
-          if (mode & 0o111) await chmod(output, mode & 0o777);
-        })().then(() => zip.readEntry(), reject);
-      });
-      zip.readEntry();
-    });
-  } finally {
-    zip.close();
-  }
-}
-
-async function sanitizeManifest(
-  directory: string,
-  extension: CuratedRemoteExtension,
-) {
-  const file = path.join(directory, "package.json");
-
-  const manifest = jsonObject(parseJsonText(await readFile(file, "utf8")));
-  const declared = `${jsonString(manifest?.publisher)}.${jsonString(manifest?.name)}`;
-
-  if (!manifest || declared.toLowerCase() !== extension.id)
-    throw new Error(`${extension.id}: the VSIX declares ${declared}`);
-
-  delete manifest.scripts;
-  delete manifest.dependencies;
-  delete manifest.devDependencies;
-
-  if (extension.stripExtensionPack) delete manifest.extensionPack;
-
-  await writeFile(file, `${JSON.stringify(manifest, undefined, 2)}\n`);
-}
 
 async function checkExecutables(
   directory: string,
