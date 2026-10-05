@@ -64,6 +64,12 @@ test("follows absolute Include paths and stops a cyclic Include", async (t) => {
 	assert.deepEqual(await listSshAliases(join(dir, "config")), ["top", "looped", "absolute"]);
 });
 
+test("leaves out aliases Whiteboard would refuse", async (t) => {
+	const dir = await fixture(t, { config: 'Host ok db(prod) -flag a;b "two words"\n' });
+
+	assert.deepEqual(await listSshAliases(join(dir, "config")), ["ok"]);
+});
+
 test("a missing or unreadable file gives an empty list", async (t) => {
 	const dir = await fixture(t, { "config/inner": "" });
 	assert.deepEqual(await listSshAliases(join(dir, "nothing")), []);

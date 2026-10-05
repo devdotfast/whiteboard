@@ -7,10 +7,12 @@ import { glob, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 
+import { validateSshAlias } from "../../common/reviewSshAlias.js";
+
 export async function listSshAliases(configPath: string): Promise<string[]> {
 	const aliases = new Set<string>();
 	await readConfig(configPath, dirname(configPath), new Set(), aliases);
-	return [...aliases];
+	return [...aliases].filter((alias) => validateSshAlias(alias).ok);
 }
 
 async function readConfig(file: string, includeDir: string, read: Set<string>, aliases: Set<string>): Promise<void> {
