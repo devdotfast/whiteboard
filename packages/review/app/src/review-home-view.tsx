@@ -14,6 +14,7 @@ import type {
   ReviewCanvasInstallContent,
   ReviewCanvasOnboarding,
   ReviewCanvasSetupActions,
+  ReviewGatewayHostState,
 } from "@dev.fast/review-protocol";
 import { fuzzyMatches, fuzzySegments } from "@review/fuzzy-match";
 import * as stylex from "@stylexjs/stylex";
@@ -46,6 +47,7 @@ interface ReviewHomeProps {
   // support them.
   onDismiss?(review: ReviewApiSummary): Promise<void>;
   onRestore?(review: ReviewApiSummary): Promise<void>;
+  hostStates?(): Promise<readonly ReviewGatewayHostState[]>;
   // Present only while the list is empty: Home then renders Welcome.
   install?: ReviewCanvasInstallContent;
   setupActions?: ReviewCanvasSetupActions;
@@ -100,6 +102,7 @@ export function ReviewHome({
   onDelete,
   onDismiss,
   onRestore,
+  hostStates,
   install,
   setupActions,
   onboarding,
@@ -117,6 +120,34 @@ export function ReviewHome({
   );
 
   const [deleteError, setDeleteError] = useState<string>();
+  const [hostMessage, setHostMessage] = useState<string>();
+  const hostMessageGeneration = useRef(0);
+
+  useEffect(() => {
+    hostMessageGeneration.current++;
+    setHostMessage(undefined);
+  }, [reviews]);
+
+  const open = useCallback(
+    async (review: ReviewApiSummary) => {
+      const generation = ++hostMessageGeneration.current;
+
+      if (!unavailable(review)) {
+        setHostMessage(undefined);
+        onOpen(review);
+
+        return;
+      }
+
+      setHostMessage(`${review.host} is ${review.hostState}.`);
+      const states = await hostStates?.().catch(() => undefined);
+      const detail = states?.find((host) => host.alias === review.host)?.detail;
+
+      if (detail && generation === hostMessageGeneration.current)
+        setHostMessage(detail);
+    },
+    [onOpen, hostStates],
+  );
 
   // Keep successful deletions hidden until the catalog acknowledges removal.
   useEffect(() => {
@@ -250,6 +281,7 @@ export function ReviewHome({
             </div>
           </div>
           {deleteError ? <p role="alert">{deleteError}</p> : null}
+          {hostMessage ? <p role="alert">{hostMessage}</p> : null}
           {/* Keyed off the active list, not the whole result: a query that hits
               only dismissed reviews empties the main area, and the collapsed
               Dismissed count alone does not explain why. */}
@@ -268,14 +300,14 @@ export function ReviewHome({
                 <ScratchpadGroup review={scratchpad} onOpen={onOpen} />
               ) : null}
               {active.length > 0 ? (
-                <ReviewTable reviews={active} onOpen={onOpen} />
+                <ReviewTable reviews={active} onOpen={open} />
               ) : null}
               {dismissed.length > 0 ? (
                 <DismissedSection
                   reviews={dismissed}
                   expanded={showDismissed}
-                  onToggle={() => setShowDismissed((open) => !open)}
-                  onOpen={onOpen}
+                  onToggle={() => setShowDismissed((shown) => !shown)}
+                  onOpen={open}
                   onDelete={actions.onDelete}
                 />
               ) : null}
@@ -452,10 +484,15 @@ function ReviewTable({
 }) {
   const [repository, setRepository] = useState("");
   const [sort, setSort] = useState<ReviewSort>("newest");
-  const repositories = [...new Set(reviews.map(repositoryLabel))].sort();
+
+  const repositories = [
+    ...new Map(
+      reviews.map((review) => [repositoryKey(review), repositoryLabel(review)]),
+    ),
+  ].sort(([, left], [, right]) => left.localeCompare(right));
 
   const filtered = reviews.filter(
-    (review) => !repository || repositoryLabel(review) === repository,
+    (review) => !repository || repositoryKey(review) === repository,
   );
 
   const sorted = [...filtered].sort((left, right) => {
@@ -490,7 +527,7 @@ function ReviewTable({
             value={repository}
             options={[
               { value: "", label: "All repos" },
-              ...repositories.map((name) => ({ value: name, label: name })),
+              ...repositories.map(([value, label]) => ({ value, label })),
             ]}
             onChange={setRepository}
           />
@@ -548,7 +585,12 @@ function ReviewTable({
               return (
                 <tr
                   key={review.reviewId}
-                  {...stylex.props(stylex.defaultMarker(), styles.row)}
+                  {...stylex.props(
+                    stylex.defaultMarker(),
+                    styles.row,
+                    unavailable(review) && styles.unavailableRow,
+                  )}
+                  data-unavailable={unavailable(review) ? "" : undefined}
                   onClick={() => onOpen(review)}
                 >
                   <td
@@ -570,7 +612,12 @@ function ReviewTable({
                         event.stopPropagation();
                         onOpen(review);
                       }}
-                      title={reviewTitle(review)}
+                      aria-disabled={unavailable(review) || undefined}
+                      title={
+                        unavailable(review)
+                          ? `${review.host} is ${review.hostState}`
+                          : reviewTitle(review)
+                      }
                     >
                       <span {...stylex.props(styles.title, styles.tableTitle)}>
                         <MatchedText text={reviewTitle(review)} />
@@ -583,6 +630,11 @@ function ReviewTable({
                         }
                       >
                         <RepositoryName review={review} />
+                        {unavailable(review) ? (
+                          <span {...stylex.props(styles.cardMetaNext)}>
+                            {review.hostState}
+                          </span>
+                        ) : null}
                       </span>
                     </button>
                   </td>
@@ -943,7 +995,21 @@ function matchesQuery(review: ReviewApiSummary, query: string): boolean {
   );
 }
 
+function unavailable(review: ReviewApiSummary): boolean {
+  return review.hostState !== undefined && review.hostState !== "online";
+}
+
+function repositoryKey(review: ReviewApiSummary): string {
+  return review.repositoryGroup?.key ?? repositoryLabel(review);
+}
+
 function repositoryLabel(review: ReviewApiSummary): string {
+  const label = localRepositoryLabel(review);
+
+  return review.host ? `${review.host}: ${label}` : label;
+}
+
+function localRepositoryLabel(review: ReviewApiSummary): string {
   if (review.repositoryGroup) return review.repositoryGroup.label;
 
   if (review.shared?.cloneUrl) {
@@ -1511,5 +1577,8 @@ const styles = stylex.create({
   rowActions: {
     display: "flex",
     justifyContent: "center",
+  },
+  unavailableRow: {
+    opacity: 0.55,
   },
 });
