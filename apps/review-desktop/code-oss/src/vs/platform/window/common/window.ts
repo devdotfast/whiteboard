@@ -80,8 +80,8 @@ export interface IOpenWindowOptions extends IBaseOpenWindowsOptions {
 	/** Run Find References at this source location in the opened window. */
 	readonly reviewReferencesToShow?: { readonly resource: URI; readonly lineNumber: number; readonly column: number };
 
-	/** The review and side the opened Source window shows; its title names both. */
-	readonly reviewSourceTitle?: { readonly side: 'live' | 'base' | 'head'; readonly title: string };
+	/** The review and side the opened Source window shows; its title names both. `alias` names a remote review's host. */
+	readonly reviewSourceTitle?: { readonly side: 'live' | 'base' | 'head'; readonly title: string; readonly alias?: string };
 }
 
 export interface IAddRemoveFoldersRequest {

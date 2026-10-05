@@ -27,6 +27,7 @@ import {
 import { reviewSourceQuery, type ReviewRemoteNavigatorAnswer, type ReviewSourceSelection } from "../common/reviewProtocol.js";
 import { REVIEW_LANGUAGE_SOURCE_SCHEME } from "../common/reviewReadonlySource.js";
 import { sourceLocation, sourceSelectionIdentity, REVIEW_API_SOURCE_SCHEME } from "../common/reviewSourceView.js";
+import { IReviewApiCatalogService } from "./reviewApiCatalogService.js";
 import { IReviewDesktopConnectionService, reviewResponseError } from "./reviewDesktopConnectionService.js";
 
 type NavigatorAnswer = { workspacePath: string; filePath?: string } | ReviewRemoteNavigatorAnswer;
@@ -74,6 +75,7 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		@ILogService private readonly logService: ILogService,
 		@IFileService private readonly files: IFileService,
 		@IEnvironmentService private readonly environment: IEnvironmentService,
+		@IReviewApiCatalogService private readonly catalog: IReviewApiCatalogService,
 	) {
 		super();
 		this._register(
@@ -125,7 +127,7 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 	async openApiSource(selection: ReviewSourceSelection, title: string, live: boolean): Promise<void> {
 		const result = await this.navigatorWorkspace(selection.reviewId, selection.kind === "version" ? { version: selection.version } : {});
 		const { workspaceUri, remote } = workspace(result);
-		await this.host.openWindow([{ workspaceUri, label: title }], { forceNewWindow: true, ...remote, reviewSourceTitle: { side: live ? "live" : "head", title } });
+		await this.host.openWindow([{ workspaceUri, label: title }], { forceNewWindow: true, ...remote, reviewSourceTitle: this.sourceTitle(selection.reviewId, live ? "live" : "head", title, remote) });
 	}
 
 	/** Hand source opens to the native workspace before Review creates an editor group. */
@@ -172,7 +174,13 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		const input = this.inputs.get(`api:${target.view.reviewId}`);
 		const title = input?.target.kind === "api" ? input.target.title : basename(workspaceUri).replace(/\.code-workspace$/, "");
 		const side = target.side === "base" ? "base" : target.view.generation && !target.view.commit && !target.view.pins ? "live" : "head";
-		return { workspaceUri, fileUri, remote, reviewSourceTitle: { side, title } as const };
+		return { workspaceUri, fileUri, remote, reviewSourceTitle: this.sourceTitle(target.view.reviewId, side, title, remote) };
+	}
+
+	/** A remote review's Source window also keeps its host's alias, for when main does not know it yet. */
+	private sourceTitle(reviewId: string, side: "live" | "base" | "head", title: string, remote: { remoteAuthority?: string }) {
+		const alias = remote.remoteAuthority && this.catalog.reviews.find(review => review.reviewId === reviewId)?.host;
+		return { side, title, ...(alias && { alias }) };
 	}
 
 	private async emptyFile(): Promise<URI> {

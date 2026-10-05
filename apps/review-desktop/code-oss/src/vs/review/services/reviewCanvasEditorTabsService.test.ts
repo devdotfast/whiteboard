@@ -39,6 +39,7 @@ async function closeWelcome(updateNeeded: boolean): Promise<number> {
 		{ warn() {} } as never,
 		{} as never,
 		{} as never,
+		{ reviews: [] } as never,
 	);
 	try {
 		const welcome = await tabs.openWelcome(true);
@@ -59,7 +60,7 @@ const HOST = "whiteboard+c0ffee";
 const remote = (path: string) => URI.from({ scheme: "vscode-remote", authority: HOST, path }).toString();
 const view = (generation?: string) => ({ reviewId: "r1", version: 2, generation });
 
-function sourceTabs(t: TestContext, answer: (url: URL) => object) {
+function sourceTabs(t: TestContext, answer: (url: URL) => object, reviews: object[] = []) {
 	const opened: { toOpen: { workspaceUri?: URI; fileUri?: URI; label?: string }[]; options: Record<string, unknown> }[] = [];
 	const written: string[] = [];
 	t.mock.method(globalThis, "fetch", async (url: string) => Response.json(answer(new URL(url))));
@@ -72,6 +73,7 @@ function sourceTabs(t: TestContext, answer: (url: URL) => object) {
 		{ warn() {} } as never,
 		{ async writeFile(resource: URI, content: VSBuffer) { written.push(`${resource.toString()}=${content.toString()}`); } } as never,
 		{ cacheHome: URI.file("/laptop/cache") } as never,
+		{ reviews } as never,
 	);
 	t.after(() => tabs.dispose());
 	return { tabs, opened, written };

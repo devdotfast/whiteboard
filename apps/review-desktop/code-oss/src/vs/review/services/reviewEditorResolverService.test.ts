@@ -30,6 +30,7 @@ test("source tree, selected code, definitions and diffs hand off before creating
 		{ warn() {} } as never,
 		{} as never,
 		{} as never,
+		{ reviews: [] } as never,
 	);
 	const resolver = new ReviewEditorResolverService(
 		{ get activeGroup() { throw new Error("Review must not create an editor group"); } } as never,
