@@ -12,14 +12,11 @@ import * as url from 'url';
 import { VSBuffer } from '../../base/common/buffer.js';
 import { CharCode } from '../../base/common/charCode.js';
 import { isSigPipeError, onUnexpectedError, setUnexpectedErrorHandler } from '../../base/common/errors.js';
-import { isEqualOrParent } from '../../base/common/extpath.js';
 import { Disposable, DisposableMap, DisposableStore } from '../../base/common/lifecycle.js';
-import { connectionTokenQueryName, FileAccess, getServerProductSegment, Schemas } from '../../base/common/network.js';
+import { FileAccess, getServerProductSegment } from '../../base/common/network.js';
 import { dirname, join } from '../../base/common/path.js';
 import * as perf from '../../base/common/performance.js';
 import * as platform from '../../base/common/platform.js';
-import { createRegExp, escapeRegExpCharacters } from '../../base/common/strings.js';
-import { URI } from '../../base/common/uri.js';
 import { generateUuid } from '../../base/common/uuid.js';
 import { getOSReleaseInfo } from '../../base/node/osReleaseInfo.js';
 import { findFreePort } from '../../base/node/ports.js';
@@ -39,7 +36,6 @@ import { determineServerConnectionToken, requestHasValidConnectionToken as httpR
 import { IServerEnvironmentService, ServerParsedArgs } from './serverEnvironmentService.js';
 import { IServerLifetimeService } from './serverLifetimeService.js';
 import { setupServerServices, SocketServer } from './serverServices.js';
-import { CacheControl, serveError, serveFile, WebClientServer } from './webClientServer.js';
 const require = createRequire(import.meta.url);
 
 declare namespace vsda {
@@ -62,8 +58,6 @@ class RemoteExtensionHostAgentServer extends Disposable implements IServerAPI {
 	private readonly _managementConnections: { [reconnectionToken: string]: ManagementConnection };
 	private readonly _allReconnectionTokens: Set<string>;
 	private readonly _extHostLifetimeTokens = this._register(new DisposableMap<string>());
-	private readonly _webClientServer: WebClientServer | null;
-	private readonly _webEndpointOriginChecker: WebEndpointOriginChecker;
 	private readonly _reconnectionGraceTime: number;
 
 	private readonly _serverBasePath: string | undefined;
@@ -73,7 +67,6 @@ class RemoteExtensionHostAgentServer extends Disposable implements IServerAPI {
 		private readonly _socketServer: SocketServer<RemoteAgentConnectionContext>,
 		private readonly _connectionToken: ServerConnectionToken,
 		private readonly _vsdaMod: typeof vsda | null,
-		hasWebClient: boolean,
 		serverBasePath: string | undefined,
 		@IServerEnvironmentService private readonly _environmentService: IServerEnvironmentService,
 		@IProductService private readonly _productService: IProductService,
@@ -82,8 +75,6 @@ class RemoteExtensionHostAgentServer extends Disposable implements IServerAPI {
 		@IServerLifetimeService private readonly _serverLifetimeService: IServerLifetimeService,
 	) {
 		super();
-		this._webEndpointOriginChecker = WebEndpointOriginChecker.create(this._productService);
-
 		if (serverBasePath !== undefined && serverBasePath.charCodeAt(serverBasePath.length - 1) === CharCode.Slash) {
 			// Remove trailing slash from base path
 			serverBasePath = serverBasePath.substring(0, serverBasePath.length - 1);
@@ -93,11 +84,6 @@ class RemoteExtensionHostAgentServer extends Disposable implements IServerAPI {
 		this._extHostConnections = Object.create(null);
 		this._managementConnections = Object.create(null);
 		this._allReconnectionTokens = new Set<string>();
-		this._webClientServer = (
-			hasWebClient
-				? this._instantiationService.createInstance(WebClientServer, this._connectionToken, serverBasePath ?? '/', this._serverProductPath)
-				: null
-		);
 		this._logService.info(`Extension host agent started.`);
 		this._reconnectionGraceTime = this._environmentService.reconnectionGraceTime;
 	}
@@ -146,45 +132,7 @@ class RemoteExtensionHostAgentServer extends Disposable implements IServerAPI {
 			return serveError(req, res, 403, `Forbidden.`);
 		}
 
-		if (pathname === '/vscode-remote-resource') {
-			// Handle HTTP requests for resources rendered in the rich client (images, fonts, etc.)
-			// These resources could be files shipped with extensions or even workspace files.
-			const desiredPath = parsedUrl.query['path'];
-			if (typeof desiredPath !== 'string') {
-				return serveError(req, res, 400, `Bad request.`);
-			}
-
-			let filePath: string;
-			try {
-				filePath = URI.from({ scheme: Schemas.file, path: desiredPath }).fsPath;
-			} catch (err) {
-				return serveError(req, res, 400, `Bad request.`);
-			}
-
-			const responseHeaders: Record<string, string> = Object.create(null);
-			if (this._environmentService.isBuilt) {
-				if (isEqualOrParent(filePath, this._environmentService.builtinExtensionsPath, !platform.isLinux)
-					|| isEqualOrParent(filePath, this._environmentService.extensionsPath, !platform.isLinux)
-				) {
-					responseHeaders['Cache-Control'] = 'public, max-age=31536000';
-				}
-			}
-
-			// Allow cross origin requests from the web worker extension host
-			responseHeaders['Vary'] = 'Origin';
-			const requestOrigin = req.headers['origin'];
-			if (requestOrigin && this._webEndpointOriginChecker.matches(requestOrigin)) {
-				responseHeaders['Access-Control-Allow-Origin'] = requestOrigin;
-			}
-			return serveFile(filePath, CacheControl.ETAG, this._logService, req, res, responseHeaders);
-		}
-
-		// workbench web UI
-		if (this._webClientServer) {
-			this._webClientServer.handle(req, res, parsedUrl, pathname);
-			return;
-		}
-
+		// Whiteboard: the web client and `/vscode-remote-resource` are cut.
 		res.writeHead(404, { 'Content-Type': 'text/plain' });
 		return void res.end('Not found');
 	}
@@ -709,15 +657,7 @@ export async function createServer(address: string | net.AddressInfo | null, arg
 		serverBasePath = `/${serverBasePath}`;
 	}
 
-	const hasWebClient = fs.existsSync(FileAccess.asFileUri(`vs/code/browser/workbench/workbench.html`).fsPath);
-
-	if (hasWebClient && address && typeof address !== 'string') {
-		// ships the web ui!
-		const queryPart = (connectionToken.type !== ServerConnectionTokenType.None ? `?${connectionTokenQueryName}=${connectionToken.value}` : '');
-		console.log(`Web UI available at http://localhost${address.port === 80 ? '' : `:${address.port}`}${serverBasePath ?? ''}${queryPart}`);
-	}
-
-	const remoteExtensionHostAgentServer = instantiationService.createInstance(RemoteExtensionHostAgentServer, socketServer, connectionToken, vsdaMod, hasWebClient, serverBasePath);
+	const remoteExtensionHostAgentServer = instantiationService.createInstance(RemoteExtensionHostAgentServer, socketServer, connectionToken, vsdaMod, serverBasePath);
 
 	perf.mark('code/server/ready');
 	const currentTime = performance.now();
@@ -789,44 +729,8 @@ export async function createServer(address: string | net.AddressInfo | null, arg
 	return remoteExtensionHostAgentServer;
 }
 
-class WebEndpointOriginChecker {
-
-	public static create(productService: IProductService): WebEndpointOriginChecker {
-		const webEndpointUrlTemplate = productService.webEndpointUrlTemplate;
-		const commit = productService.commit;
-		const quality = productService.quality;
-		if (!webEndpointUrlTemplate || !commit || !quality) {
-			return new WebEndpointOriginChecker(null);
-		}
-
-		const uuid = generateUuid();
-		const exampleUrl = new URL(
-			webEndpointUrlTemplate
-				.replace('{{uuid}}', uuid)
-				.replace('{{commit}}', commit)
-				.replace('{{quality}}', quality)
-		);
-		const exampleOrigin = exampleUrl.origin;
-		const originRegExpSource = (
-			escapeRegExpCharacters(exampleOrigin)
-				.replace(uuid, '[a-zA-Z0-9\\-]+')
-		);
-		try {
-			const originRegExp = createRegExp(`^${originRegExpSource}$`, true, { matchCase: false });
-			return new WebEndpointOriginChecker(originRegExp);
-		} catch (err) {
-			return new WebEndpointOriginChecker(null);
-		}
-	}
-
-	constructor(
-		private readonly _originRegExp: RegExp | null
-	) { }
-
-	public matches(origin: string): boolean {
-		if (!this._originRegExp) {
-			return false;
-		}
-		return this._originRegExp.test(origin);
-	}
+// Whiteboard: replaces the web client server's `serveError`.
+function serveError(req: http.IncomingMessage, res: http.ServerResponse, errorCode: number, errorMessage: string): void {
+	res.writeHead(errorCode, { 'Content-Type': 'text/plain' });
+	res.end(errorMessage);
 }
