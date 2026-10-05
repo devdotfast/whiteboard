@@ -9,6 +9,10 @@ on:
       version:
         type: string
         required: true
+      whiteboard_remote:
+        description: The npm job's remote pin (stamp-remote-package.mjs); required with a version.
+        type: string
+        default: ""
       artifact_name:
         type: string
         default: windows-packages
@@ -65,6 +69,10 @@ jobs:
           QUALITY=stable
           if [[ "$VERSION" == *-preview.* ]]; then QUALITY=preview; fi
           node apps/review-desktop/scripts/stamp-release-channel.mjs --version "$VERSION" --quality "$QUALITY"
+      - name: Pin the remote package and Node
+        env:
+          WHITEBOARD_REMOTE: ${{ inputs.whiteboard_remote }}
+        run: node apps/review-desktop/scripts/stamp-remote-package.mjs --pinned "$WHITEBOARD_REMOTE"
       - name: Restore native dependencies
         id: native-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6

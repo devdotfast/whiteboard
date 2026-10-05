@@ -282,6 +282,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    outputs:
+      whiteboard_remote: ${{ steps.remote.outputs.whiteboard_remote }}
     env:
       VERSION: ${{ needs.version.outputs.version }}
       COMMIT: ${{ needs.version.outputs.commit }}
@@ -359,6 +361,18 @@ jobs:
           node scripts/pack-review-cli.mjs release-artifacts
       - name: Test installed tarball without Desktop
         run: node scripts/smoke-review-cli.mjs "release-artifacts/dev.fast-whiteboard-${VERSION}.tgz" "$VERSION"
+      - name: Pin the remote package and Node
+        id: remote
+        env:
+          PUBLISHED: ${{ steps.npm.outputs.published }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          TARBALL="release-artifacts/dev.fast-whiteboard-${VERSION}.tgz"
+          if [ "$PUBLISHED" = true ] && [ "$DRY_RUN" != true ]; then
+            TARBALL="$RUNNER_TEMP/$(cd "$RUNNER_TEMP" && npm pack "@dev.fast/whiteboard@${VERSION}" --silent)"
+          fi
+          PIN=$(node apps/review-desktop/scripts/stamp-remote-package.mjs "$TARBALL")
+          echo "whiteboard_remote=$PIN" >> "$GITHUB_OUTPUT"
       - name: Validate npm publish command
         if: ${{ steps.npm.outputs.published != 'true' }}
         env:
@@ -386,6 +400,7 @@ jobs:
     with:
       commit: ${{ needs.version.outputs.commit }}
       version: ${{ needs.version.outputs.version }}
+      whiteboard_remote: ${{ needs.npm.outputs.whiteboard_remote }}
       release_signing: ${{ !inputs.dry_run }}
     secrets: inherit
 
@@ -400,6 +415,7 @@ jobs:
     with:
       commit: ${{ needs.version.outputs.commit }}
       version: ${{ needs.version.outputs.version }}
+      whiteboard_remote: ${{ needs.npm.outputs.whiteboard_remote }}
       sign: true
 
   macos:
@@ -412,6 +428,7 @@ jobs:
     with:
       commit: ${{ needs.version.outputs.commit }}
       version: ${{ needs.version.outputs.version }}
+      whiteboard_remote: ${{ needs.npm.outputs.whiteboard_remote }}
       channel: stable
     secrets: inherit
 
