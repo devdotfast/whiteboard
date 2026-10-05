@@ -878,7 +878,12 @@ export const ReviewGatewayHostSchema = z.strictObject({
     .optional(),
   problem: z
     .strictObject({
-      state: z.enum(["unreachable", "not-installed", "auth-failed"]),
+      state: z.enum([
+        "unreachable",
+        "not-installed",
+        "auth-failed",
+        "unsupported",
+      ]),
       detail: stringAllowEmpty,
     })
     .optional(),
@@ -908,7 +913,9 @@ export interface ReviewGatewayHostState {
     | "duplicate"
     | "unreachable"
     | "not-installed"
-    | "auth-failed";
+    | "auth-failed"
+    | "unsupported"
+    | "installing";
   detail?: string;
   installCommand?: string;
   languageFeatures?: boolean;

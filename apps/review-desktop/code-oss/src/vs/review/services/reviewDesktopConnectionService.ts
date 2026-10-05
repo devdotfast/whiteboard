@@ -589,7 +589,7 @@ export async function reviewResponseError(response: Response, fallback: string):
 	return new Error(typeof payload?.error === "string" && payload.error ? payload.error : fallback);
 }
 
-const REMOTE_HOST_STATES = new Set(["connecting", "online", "offline", "incompatible", "duplicate", "unreachable", "not-installed", "auth-failed"]);
+const REMOTE_HOST_STATES = new Set(["connecting", "online", "offline", "incompatible", "duplicate", "unreachable", "not-installed", "auth-failed", "unsupported", "installing"]);
 
 function parseRemoteHostStates(value: unknown): ReviewGatewayHostState[] {
 	const optionalString = (field: unknown) => field === undefined || typeof field === "string";

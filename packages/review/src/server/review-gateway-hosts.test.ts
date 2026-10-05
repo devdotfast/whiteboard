@@ -124,6 +124,17 @@ it("names the laptop's install command for a host without Whiteboard", () => {
   ]);
 });
 
+it("an unsupported host keeps its reason and gets no install command", () => {
+  const gateway = hosts("0.1.6");
+  const detail = "This host runs glibc 2.31; Whiteboard needs 2.34 or newer.";
+
+  gateway.set([{ alias: "old", problem: { state: "unsupported", detail } }]);
+
+  expect(gateway.states()).toEqual([
+    { alias: "old", state: "unsupported", detail },
+  ]);
+});
+
 it("refuses a host whose version could not be read", async () => {
   const fake = await startFake({ version: "unknown" });
   const gateway = hosts("unknown");

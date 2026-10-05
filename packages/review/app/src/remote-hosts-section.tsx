@@ -15,6 +15,7 @@ const RETRIED = new Set<ReviewGatewayHostState["state"]>([
   "auth-failed",
   "not-installed",
   "unreachable",
+  "unsupported",
 ]);
 
 const plain = (text: string) =>
