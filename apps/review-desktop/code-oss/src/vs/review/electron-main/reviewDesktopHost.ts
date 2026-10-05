@@ -26,6 +26,7 @@ import {
   REVIEW_REMOTE_HOSTS_SETTING,
   REVIEW_TELEMETRY_SETTING,
 } from "../common/reviewConfigurationDefaults.js";
+import { remoteHostAliases } from "../common/reviewSshAlias.js";
 import { REVIEW_CRASH_DUMPS_DIRNAME } from "../node/reviewCrashReporter.js";
 import { ReviewCrashDumps } from "./reviewCrashDumps.js";
 import { ReviewCrashTelemetry } from "./reviewCrashTelemetry.js";
@@ -247,16 +248,13 @@ export class ReviewDesktopHost extends Disposable {
     });
     this.remoteHosts = manager;
     const update = () => {
-      const aliases = this.configurationService.getValue<unknown>(
-        REVIEW_REMOTE_HOSTS_SETTING,
-      );
       manager.update(
         this.configurationService.getValue(
           REVIEW_REMOTE_HOSTS_ENABLED_SETTING,
         ) === true,
-        Array.isArray(aliases)
-          ? aliases.filter((alias) => typeof alias === "string")
-          : [],
+        remoteHostAliases(
+          this.configurationService.getValue(REVIEW_REMOTE_HOSTS_SETTING),
+        ),
       );
     };
     const onResume = () => manager.resume();

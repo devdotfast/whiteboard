@@ -261,6 +261,7 @@ export interface ReviewDiffViewSpec {
   onToggleSection?: (id: string) => void;
   lens?: ReviewDiffLens;
   scope?: ReviewCommitScope;
+  openFile?: boolean;
 }
 
 export interface ReviewDiffViewHandle extends ReviewDisposable {
@@ -581,6 +582,16 @@ export interface ReviewCanvasSettingsContent {
   // has reviews and no longer shows the Welcome rail. Absent when the
   // install status endpoint is unavailable.
   install?: ReviewCanvasInstallContent;
+  remoteHosts: ReviewRemoteHostsSettings;
+}
+
+export interface ReviewRemoteHostsSettings {
+  enabled: boolean;
+  configured: string[];
+  suggestions(): Promise<string[]>;
+  states(): Promise<ReviewGatewayHostState[]>;
+  set(aliases: string[]): Promise<string[]>;
+  retry(alias: string): Promise<void>;
 }
 
 export const REVIEW_REMOTE_ATTACH_BEGIN = "WHITEBOARD-REMOTE-BEGIN";
@@ -694,6 +705,8 @@ export type ReviewCanvasContent =
       documentWidth?: ReviewDocumentWidthChoice;
       reviewId: string;
       version?: number;
+      host?: string;
+      available?: ReviewApiSummary["available"];
       bridge: ReviewCanvasBridge;
       setTitle?(title: string): void;
       setSourceView?(
@@ -726,6 +739,7 @@ export type ReviewCanvasContent =
       // not support them.
       dismissReview?(uuid: string): Promise<void>;
       restoreReview?(uuid: string): Promise<void>;
+      hostStates?(): Promise<ReviewGatewayHostState[]>;
       // Opens the review and pins its read-only source tree open. Absent when
       // the host cannot show the tree.
       openSourceTree?(uuid: string): void;
@@ -878,6 +892,7 @@ export interface ReviewGatewayHostState {
     | "not-installed"
     | "auth-failed";
   detail?: string;
+  installCommand?: string;
 }
 
 export const ReviewRepositoryIdentitySchema = z.strictObject({

@@ -8,6 +8,10 @@ import { chmod, lstat, mkdir } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { validateSshAlias } from "../../common/reviewSshAlias.js";
+
+export { validateSshAlias };
+
 /**
  * Development only: an ssh_config file every `ssh` call and the alias list
  * use, because OpenSSH finds `~/.ssh` from the account, not from `HOME`.
@@ -17,16 +21,6 @@ export const REVIEW_SSH_CONFIG_ENV = "DEV_FAST_REVIEW_SSH_CONFIG";
 export interface ReviewSshSession {
 	readonly alias: string;
 	readonly controlPath: string;
-}
-
-export function validateSshAlias(alias: string): { ok: true } | { ok: false; reason: string } {
-	if (!alias) return { ok: false, reason: "is empty" };
-	if (alias.startsWith("-")) return { ok: false, reason: "starts with -" };
-	if (/\s/.test(alias)) return { ok: false, reason: "contains whitespace" };
-	if (/[\x00-\x1f\x7f-\x9f]/.test(alias)) return { ok: false, reason: "contains a control character" };
-	const meta = /[`$;|&<>()'"\\]/.exec(alias);
-	if (meta) return { ok: false, reason: `contains ${meta[0]}` };
-	return { ok: true };
 }
 
 /** Connection sharing needs Unix sockets and a uid; Windows has neither. */
