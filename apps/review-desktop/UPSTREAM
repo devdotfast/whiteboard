@@ -172,8 +172,9 @@ The `.vscode/` trees and Monaco `dist/` fixture are upstream development-only
 files ignored by the vendored tree's own ignore rules; they are not required
 to build or run Review Desktop. Their dangling postinstall targets are removed
 from `build/npm/dirs.ts`, and their dangling TypeScript compilations are
-removed from `build/gulpfile.extensions.ts`. Review also keeps the remote and
-default-test source while omitting their unused package installs.
+removed from `build/gulpfile.extensions.ts`. Review keeps the remote source
+while omitting its unused package installs. Unused upstream test tooling is
+pruned as documented below.
 
 ## Pruned built-in extensions
 
@@ -216,6 +217,10 @@ or runs them, and their lockfiles only produced Dependabot alerts:
 - `cli/` (the Rust `code` CLI) and `build/gulpfile.cli.ts`
 - `test/automation/`, `test/smoke/`, `test/mcp/`
 - `test/sanity/`, `test/monaco/`, `test/componentFixtures/`
+- `test/integration/browser/` and `scripts/test-web-integration.sh` / `.bat`.
+  Whiteboard never runs this upstream extension API browser harness. Its
+  package and lockfile are removed rather than merely skipping installation.
+  Whiteboard's own browser and packaged-app tests are retained.
 - `scripts/chat-simulation/`, `scripts/mock-policy-server/`
 
 Their npm scripts, ESLint import rules, hygiene filters and ignore entries are
