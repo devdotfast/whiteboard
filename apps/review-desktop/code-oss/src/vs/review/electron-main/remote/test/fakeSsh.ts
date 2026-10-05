@@ -67,10 +67,11 @@ export interface FakeCall {
 	readonly args: readonly string[];
 	readonly at: number;
 	readonly wall: number;
+	input(): string;
 }
 
-export const attachOutput = (port: number, token = "remote-token") =>
-	`WHITEBOARD-REMOTE-BEGIN\n${JSON.stringify({ event: "remote.attach", version: "0.1.6", commit: "abc", serverId: "s1", url: `http://127.0.0.1:${port}`, token, startedServer: true, diffr: true })}\nWHITEBOARD-REMOTE-END\n`;
+export const attachOutput = (port: number, token = "remote-token", languageServer?: { port: number; connectionToken: string; commit: string }) =>
+	`WHITEBOARD-REMOTE-BEGIN\n${JSON.stringify({ event: "remote.attach", version: "0.1.6", commit: "abc", serverId: "s1", url: `http://127.0.0.1:${port}`, token, startedServer: true, diffr: true, ...(languageServer && { languageServer }) })}\nWHITEBOARD-REMOTE-END\n`;
 
 export function fakeClock() {
 	let time = 0;
@@ -113,7 +114,7 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 		const remote = remotes[alias] ?? {};
 		const operation = args.includes("-O") ? args[args.indexOf("-O") + 1] : undefined;
 		const kind: FakeCall["kind"] = args.includes("-M") ? "master" : args.at(-1) === "-s" ? "exec" : (operation as FakeCall["kind"]);
-		calls.push({ alias, kind, args, at: clock?.now() ?? Date.now(), wall: Date.now() });
+		calls.push({ alias, kind, args, at: clock?.now() ?? Date.now(), wall: Date.now(), input: () => child.input });
 		const master = masters.get(alias);
 		setImmediate(() => {
 			if (kind === "master") {
