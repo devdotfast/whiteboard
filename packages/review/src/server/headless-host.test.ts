@@ -806,7 +806,7 @@ const workspaceFiles = async () =>
     entry.endsWith(".code-workspace"),
   );
 
-it("gives a remote caller no local paths and no source window", async () => {
+it("gives a remote caller no local paths beyond the navigator's host paths", async () => {
   const server = await start();
   const desktop = await attachDesktop(server.discovery);
 
@@ -889,22 +889,29 @@ it("gives a remote caller no local paths and no source window", async () => {
       expect(remoteFile).toMatchObject({ text: expect.any(String) });
       expect(JSON.stringify(remoteFile)).not.toContain(home);
 
-      const navigator = await call(reviewId, "/navigator", true, "POST");
-      expect(navigator.status).toBe(409);
-      expect(await navigator.json()).toEqual({
-        error:
-          "Source windows are not available for a review on another machine.",
-      });
+      const navigator = await call(
+        reviewId,
+        "/navigator?file=example.ts",
+        true,
+        "POST",
+      );
+
+      expect(navigator.status).toBe(200);
+      const answer = await navigator.json();
+      expect(answer.filePath).toEqual(expect.stringMatching(/example\.ts$/));
+
+      const own = await call(
+        reviewId,
+        "/navigator?file=example.ts",
+        false,
+        "POST",
+      );
+
+      expect(await own.json()).toEqual(answer);
     }
 
-    expect(await workspaceFiles()).toEqual([]);
+    expect(await workspaceFiles()).toHaveLength(2);
     expect(desktop.verbs).toEqual([]);
-
-    // The same search finds the file an unmarked call writes.
-    const navigator = await call(worktree, "/navigator", false, "POST");
-    expect(navigator.status).toBe(200);
-    expect(await navigator.json()).toHaveProperty("workspacePath");
-    expect(await workspaceFiles()).toHaveLength(1);
   } finally {
     desktop.detach();
   }
