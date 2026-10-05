@@ -183,6 +183,12 @@ export async function stageVscodeServer(
   fs.rmSync(destination, { recursive: true, force: true });
   fs.cpSync(runtime, destination, { recursive: true });
 
+  for (const notice of ["LICENSE.txt", "ThirdPartyNotices.txt"])
+    fs.copyFileSync(
+      path.join(import.meta.dirname, "../code-oss", notice),
+      path.join(destination, notice),
+    );
+
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "wb-vscode-server-"));
 
   try {

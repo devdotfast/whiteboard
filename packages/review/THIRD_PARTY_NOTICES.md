@@ -97,9 +97,21 @@ Direct third-party runtime/UI dependencies currently include:
 
 The published package carries `vscode-server/`, staged by
 `apps/review-desktop/scripts/stage-vscode-server.mjs`. It is built from the
-Code OSS fork (`MIT`) and bundles, besides the fork's own JavaScript
-dependencies:
+Code OSS fork (`MIT`) and carries the fork's `LICENSE.txt` and
+`ThirdPartyNotices.txt`. It bundles:
 
+- in the server and extension host (`MIT` unless noted): `@vscode/proxy-agent`,
+  `agent-base`, `cookie`, `debug`, `http-proxy-agent`, `https-proxy-agent`,
+  `ip-address`, `minimist`, `ms`, `smart-buffer`, `socks`,
+  `socks-proxy-agent`, `supports-color`, `undici`, `vscode-regexpp` and
+  `tslib` (`0BSD`)
+- in the built-in language extensions (`MIT` unless noted): `@vscode/l10n`,
+  `@vscode/sync-api-client`, `@vscode/sync-api-common`,
+  `@vscode/sync-api-service`, `@vscode/ts-package-manager`, `jsonc-parser`,
+  `request-light`, `semver` (`ISC`), `vscode-css-languageservice`,
+  `vscode-html-languageservice`, `vscode-json-languageservice`,
+  `vscode-languageclient`, `vscode-languageserver`,
+  `vscode-languageserver-textdocument`, `vscode-tas-client` and `vscode-uri`
 - `typescript` (`Apache-2.0`), for the built-in TypeScript extension
 - `@vscode/ripgrep-universal` (`MIT`), whose `rg` binaries are ripgrep
   (`MIT OR Unlicense`)
