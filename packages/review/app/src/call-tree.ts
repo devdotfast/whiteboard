@@ -1,4 +1,3 @@
-import { frameIdentity } from "@review/call-stack-frames";
 import {
   type DiffSelection,
   type LensSource,
@@ -51,7 +50,7 @@ export function callTreeStops(block: CallStackDiffBlock): CallTreeStop[] {
         nodes.set(id, {
           id,
           source,
-          anchorId: frame.id ?? frameIdentity(frame),
+          anchorId: frame.id ?? frame.key ?? frame.source,
           label: frame.label ?? source.file.split("/").pop()!,
           sources,
           parentId:
