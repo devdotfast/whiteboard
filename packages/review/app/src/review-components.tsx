@@ -3,7 +3,6 @@ import { fontSize, fontWeight } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { textStyles } from "@canvas/ui/text";
 import { extractTraceEventText } from "@dev.fast/trace-protocol";
-import type { ReviewComponentProps } from "@review/review-document-data";
 import * as stylex from "@stylexjs/stylex";
 import type {
   CSSProperties,
@@ -39,6 +38,7 @@ import type {
   GuidedTourStop,
   PeekAnchor,
   ReviewPeekContent,
+  SourcePeekAnchor,
 } from "./review-panel-model";
 import { askShown } from "./review-panel-store";
 import { useReviewRoots } from "./review-root-context";
@@ -184,13 +184,6 @@ function ReviewPanelFrame({
   );
 }
 
-/**
- * Collapsible document section. The section owns its heading: it renders
- * `title` as the H2, with the id the projection pass assigned (or the heading
- * slug on the JSON path), and treats every child as body. Collapse state persists
- * per document+section in localStorage; sections marked `[collapsed]` in the
- * MDX start collapsed for first-time readers.
- */
 export function ReviewSection({
   stateKey,
   title,
@@ -198,7 +191,9 @@ export function ReviewSection({
   id,
   children,
   summary,
-}: ReviewComponentProps<"ReviewSection"> & {
+}: {
+  title: string;
+  defaultCollapsed?: boolean;
   stateKey?: string;
   id?: string;
   summary?: ReviewSectionSummary;
@@ -389,7 +384,10 @@ export function ProsePeekAnchor({
 export function AnchorLink({
   anchor,
   children,
-}: ReviewComponentProps<"AnchorLink"> & { children?: ReactNode }) {
+}: {
+  anchor: SourcePeekAnchor;
+  children?: ReactNode;
+}) {
   const openPeek = useReviewPanel((state) => state.openPeek);
 
   const peekOpen = useReviewPanel(

@@ -165,10 +165,7 @@ export interface RenderedReviewDocument {
   key: string;
   routePath: string;
   filePath: string;
-  anchors: ReadonlyMap<
-    string,
-    import("@review/review-document-data").DocumentAnchor
-  >;
+  anchors: ReadonlyMap<string, import("./review-panel-model").PeekAnchor>;
   documentSoftwareModels: NormalizedSoftwareModel[];
   tocEntries?: import("./review-document-headings").ReviewTocEntry[];
   /** True while the document has no blocks at all, as right after creation. */

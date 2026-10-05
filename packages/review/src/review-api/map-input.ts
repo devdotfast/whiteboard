@@ -1,10 +1,54 @@
-import { softwareDataStoreCollectionInputSchema } from "@review/authoring.js";
-import type { SoftwareModelInput } from "@review/software-map-model.js";
+import type {
+  SoftwareDataStoreFieldSchema,
+  SoftwareModelInput,
+} from "@review/software-map-model.js";
 import { z } from "zod";
 
 // Decode the existing map authoring format at the HTTP boundary. The existing
 // defineSoftwareMap normalizer remains responsible for relationships/coverage.
 const label = z.string().trim().min(1);
+
+const nonEmptyStringSchema = z
+  .string()
+  .refine((value) => value.trim().length > 0, "Must not be empty");
+
+const optionalNonEmptyStringSchema = nonEmptyStringSchema.optional();
+
+const softwareDataStoreForeignKeyRefSchema = z.union([
+  nonEmptyStringSchema,
+  z.strictObject({
+    store: optionalNonEmptyStringSchema,
+    table: nonEmptyStringSchema,
+    field: nonEmptyStringSchema,
+    label: optionalNonEmptyStringSchema,
+    cardinality: z.enum(["one-to-one", "many-to-one"]).optional(),
+    onDelete: optionalNonEmptyStringSchema,
+    onUpdate: optionalNonEmptyStringSchema,
+  }),
+]);
+
+const softwareDataStoreFieldSchema: z.ZodType<SoftwareDataStoreFieldSchema> =
+  z.lazy(() =>
+    z.record(
+      nonEmptyStringSchema,
+      z.union([
+        z.strictObject({
+          type: nonEmptyStringSchema,
+          example: z.unknown().optional(),
+          pk: z.boolean().optional(),
+          fk: softwareDataStoreForeignKeyRefSchema.optional(),
+          schema: softwareDataStoreFieldSchema.optional(),
+        }),
+        softwareDataStoreFieldSchema,
+      ]),
+    ),
+  );
+
+const softwareDataStoreCollectionInputSchema = z.strictObject({
+  label: optionalNonEmptyStringSchema,
+  key: optionalNonEmptyStringSchema,
+  schema: softwareDataStoreFieldSchema,
+});
 
 const endpoint = label.describe(
   'Existing element or data-store schema path. Resolution order: relative to the containing element, relative to its parent, then full path. "." means the containing element. At model root use full paths. Cross-level endpoints are allowed.',

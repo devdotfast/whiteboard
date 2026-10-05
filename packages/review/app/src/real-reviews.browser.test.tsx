@@ -10,9 +10,7 @@ import { afterEach, expect, it } from "vitest";
 
 import { mountReviewCanvas as mount } from "./desktop-entry";
 import { fixtureReviewBridge, settled } from "./fixture-review-bridge";
-import { testReviewBridge } from "./review-session-test-utils";
 
-// Saved canonical documents exercise rendering without the retired importer.
 const goldens = import.meta.glob<{ default: JsonValue }>(
   "./fixtures/saved-reviews/*.json",
   { eager: true },
@@ -30,37 +28,6 @@ let canvas: ReturnType<typeof mount> | undefined;
 afterEach(async () => {
   await act(async () => canvas?.dispose());
   canvas = undefined;
-});
-
-it("shows migration guidance in the existing error surface for an unavailable old review", async () => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  await act(async () => {
-    canvas = mount(container, {
-      kind: "api",
-      reviewId: "11111111-1111-4111-8111-111111111111",
-      bridge: testReviewBridge(
-        {},
-        {
-          request: async () =>
-            Response.json(
-              {
-                error:
-                  "Review not found. If this is an old Whiteboard review, ask your agent to migrate your old Whiteboard reviews.",
-              },
-              { status: 404 },
-            ),
-        },
-      ),
-    });
-  });
-  expect(
-    await settled(() =>
-      container.textContent?.includes(
-        "ask your agent to migrate your old Whiteboard reviews",
-      ),
-    ),
-  ).toBe(true);
 });
 
 it.each(Object.keys(phrases) as (keyof typeof phrases)[])(

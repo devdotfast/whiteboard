@@ -14,9 +14,7 @@ export type ReviewPeekContent =
       quote: string;
     };
 
-/** What a peek or tour stop needs to know about its subject. Components build
- * one from their own document props; it is the panel's contract, not the
- * authoring anchor. */
+/** The subject of a peek or tour stop. */
 export interface PeekAnchor {
   id: string;
   title: string;
@@ -24,6 +22,8 @@ export interface PeekAnchor {
   peek?: DiffSelection;
   softwareMapPath?: string;
 }
+
+export type SourcePeekAnchor = PeekAnchor & { peek: DiffSelection };
 
 export interface GuidedTourStop {
   anchor: PeekAnchor;

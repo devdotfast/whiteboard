@@ -90,7 +90,6 @@
     "@dev.fast/trace-core": "workspace:*",
     "@dev.fast/trace-protocol": "workspace:*",
     "@types/node": "24.12.2",
-    "@types/react": "19.2.14",
     "@types/semver": "7.7.1",
     "micromark-extension-math": "3.1.0",
     "pino-pretty": "13.1.3",

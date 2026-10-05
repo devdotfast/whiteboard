@@ -1,5 +1,4 @@
 import type { ReviewKeymapChoice } from "@dev.fast/review-protocol";
-import type { ReviewComponentProps } from "@review/review-document-data";
 import * as stylex from "@stylexjs/stylex";
 import { useState } from "react";
 
@@ -14,9 +13,7 @@ const choices: readonly { value: ReviewKeymapChoice; label: string }[] = [
   { value: "sublime", label: "Sublime Text" },
 ];
 
-export function TutorialKeymapPicker(
-  _props: ReviewComponentProps<"TutorialKeymapPicker">,
-) {
+export function TutorialKeymapPicker() {
   const tutorial = useTutorial();
   const [pending, setPending] = useState<ReviewKeymapChoice | null>(null);
 

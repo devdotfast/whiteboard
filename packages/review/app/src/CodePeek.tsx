@@ -8,7 +8,6 @@ import {
   selectionKey,
   sourceAnchor,
 } from "@review/lens-selection";
-import type { ReviewComponentProps } from "@review/review-document-data";
 import { type FileLineRange, codePeekSource } from "@review/source";
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useMemo, useRef } from "react";
@@ -19,6 +18,7 @@ import { useReviewSession } from "./host/review-session";
 import { codeInspectorMarker, documentMarker } from "./markers.stylex";
 import { peekResolutionOutcome } from "./peek-telemetry";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
+import type { SourcePeekAnchor } from "./review-panel-model";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
@@ -117,7 +117,7 @@ export function CodePeekGroup({
   );
 }
 
-export function ReviewCodePeek({ anchor }: ReviewComponentProps<"CodePeek">) {
+export function ReviewCodePeek({ anchor }: { anchor: SourcePeekAnchor }) {
   return <CodePeekCard source={anchor.peek} />;
 }
 

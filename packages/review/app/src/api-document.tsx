@@ -9,7 +9,6 @@ import {
 } from "@review/review-api/document";
 import type { LocalReviewData } from "@review/review-api/local-data";
 import type { Snapshot } from "@review/review-api/store";
-import type { DocumentPeekableAnchor } from "@review/review-document-data";
 import type { NormalizedSoftwareModel } from "@review/software-map-model";
 import * as stylex from "@stylexjs/stylex";
 import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -35,6 +34,7 @@ import { documentNodeMarker, proseMarker } from "./markers.stylex";
 import { reportReviewDocumentRenderError } from "./review-document-error-report";
 import { ReviewDocumentTitle } from "./review-document-surface";
 import { cssIdentifier, scrollToReviewHeading } from "./review-heading-scroll";
+import type { SourcePeekAnchor } from "./review-panel-model";
 import { useReviewRoots } from "./review-root-context";
 import type { SoftwareMapResolvedDataPayload } from "./software-map/software-map-snapshot";
 
@@ -47,7 +47,7 @@ export interface ApiDocumentData {
   snapshot: Snapshot;
   headings: ApiHeadingIds;
   commits: ReviewCommitSummary[];
-  anchors: Map<string, DocumentPeekableAnchor>;
+  anchors: Map<string, SourcePeekAnchor>;
   images: Map<string, string>;
   traces: Map<string, Trace>;
   maps: Map<
@@ -196,8 +196,8 @@ export function sourceAnchor(
   id: string,
   source: DiffSelection,
   title: string,
-): DocumentPeekableAnchor {
-  return { __kind: "db-anchor-ref", id, title, peek: source };
+): SourcePeekAnchor {
+  return { id, title, peek: source };
 }
 
 export const documentHasTitle = (document: Snapshot["document"]) =>

@@ -1,4 +1,3 @@
-import type { ReviewComponentProps } from "@review/review-document-data";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, isValidElement } from "react";
 
@@ -26,7 +25,12 @@ export function TraceQuote({
   trace,
   event,
   children,
-}: ReviewComponentProps<"TraceQuote"> & { children?: ReactNode }) {
+}: {
+  sessionId: string;
+  trace?: string;
+  event?: number;
+  children?: ReactNode;
+}) {
   const quote = extractText(children);
   const openPeek = useOptionalReviewPanel((state) => state.openPeek);
 

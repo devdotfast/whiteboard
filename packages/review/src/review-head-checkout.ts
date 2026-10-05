@@ -1,5 +1,5 @@
 import { existsSync, realpathSync, rmSync } from "node:fs";
-import { lstat, mkdir, readdir, rm, rmdir } from "node:fs/promises";
+import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -12,7 +12,6 @@ import { errorMessage, withFileLock } from "@dev.fast/trace-core";
 
 import {
   type ReviewCheckoutRole,
-  legacyReviewWorktreesDir,
   reviewManagedCheckoutDir,
   reviewManagedCheckoutRoot,
   reviewManagedCheckoutsDir,
@@ -206,67 +205,6 @@ export async function removeReviewManagedCheckouts(
   if (errors.length) throw new Error(errors.join("\n"));
 }
 
-/** Remove commit-owned checkouts from releases before Review ownership. */
-export async function removeLegacyReviewCheckouts(input: {
-  rootPath: string;
-  onBlocker?: (message: string) => void;
-}): Promise<number> {
-  const commonDir = await gitCommonDir(input.rootPath);
-
-  if (!commonDir) return 0;
-  const legacyRoot = legacyReviewWorktreesDir(commonDir);
-  const worktrees = await listRegisteredWorktrees(input.rootPath);
-  let removed = 0;
-
-  for (const worktree of worktrees) {
-    if (!isInsideDirectory(worktree.worktreePath, legacyRoot)) continue;
-
-    if (!isManagedLegacyReviewWorktree(worktree, legacyRoot)) {
-      input.onBlocker?.(
-        `Legacy checkout ${worktree.worktreePath} was not removed because it does not match the managed commit checkout layout.`,
-      );
-      continue;
-    }
-
-    // The path is a registered, commit-owned checkout inside our legacy
-    // namespace. Force is safe because users cannot write through Review.
-    const removal = await git(
-      input.rootPath,
-      ["worktree", "remove", "--force", worktree.worktreePath],
-      { allowFailure: true },
-    );
-
-    if (!removal.ok) {
-      const detail = removal.stderr.trim() || removal.stdout.trim();
-      input.onBlocker?.(
-        `Legacy checkout ${worktree.worktreePath} could not be removed${detail ? `: ${detail}` : "."}`,
-      );
-      continue;
-    }
-
-    removed += 1;
-  }
-
-  const prune = await git(input.rootPath, ["worktree", "prune"], {
-    allowFailure: true,
-  });
-
-  if (!prune.ok) {
-    const detail = prune.stderr.trim() || prune.stdout.trim();
-    input.onBlocker?.(
-      `Legacy checkout registrations were not pruned${detail ? `: ${detail}` : "."}`,
-    );
-  }
-
-  // Remove only an empty container. Keep any unregistered files for manual
-  // inspection instead of deleting them recursively.
-  await rmdir(legacyRoot).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "ENOENT" && error.code !== "ENOTEMPTY") throw error;
-  });
-
-  return removed;
-}
-
 // Resolve a pinned ref to a commit. Prefer the jj-first local-vcs
 // resolution (worktree-aware for HEAD/@ and branch names); fall back to git
 // against the shared git dir for refs only the backing store knows, like the
@@ -345,22 +283,6 @@ async function listRegisteredWorktrees(
   }).catch(() => null);
 
   return listed?.ok ? parseWorktreeList(listed.stdout) : [];
-}
-
-function isManagedLegacyReviewWorktree(
-  worktree: { worktreePath: string; headCommit: string | null },
-  legacyRoot: string,
-): boolean {
-  const relative = path.relative(
-    path.resolve(legacyRoot),
-    path.resolve(worktree.worktreePath),
-  );
-
-  if (relative.includes(path.sep) || !/^[0-9a-f]{12}$/iu.test(relative)) {
-    return false;
-  }
-
-  return worktree.headCommit?.startsWith(relative.toLowerCase()) ?? false;
 }
 
 function realPath(filePath: string): string {

@@ -1,5 +1,4 @@
 import { fontSize } from "@canvas/scale.stylex";
-import type { ReviewComponentProps } from "@review/review-document-data";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement, ReactNode } from "react";
 
@@ -12,13 +11,15 @@ import {
   tutorialViewVisible,
 } from "./tutorial-render-visibility";
 
-type TutorialViewButtonProps = ReviewComponentProps<"TutorialViewButton"> & {
+type TutorialViewButtonProps = {
+  view: "review" | "commits" | "diff" | "map";
   children?: ReactNode;
 };
 
 export function TutorialFeature({
   children,
-}: ReviewComponentProps<"TutorialFeature"> & {
+}: {
+  feature: "softwareMap";
   children?: ReactNode;
 }): ReactElement | null {
   const tutorial = useTutorial();
@@ -35,9 +36,7 @@ export function TutorialFeature({
 export function TutorialViewButton({
   view,
   children,
-}: ReviewComponentProps<"TutorialViewButton"> & {
-  children?: ReactNode;
-}): ReactElement | null {
+}: TutorialViewButtonProps): ReactElement | null {
   const tutorial = useTutorial();
   const { softwareMapEnabled } = useReviewActions();
 

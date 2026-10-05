@@ -1,5 +1,4 @@
 import { REVIEW_CANVAS_RESUME_EVENT } from "@dev.fast/review-protocol";
-import type { AnchorRef } from "@review/authoring";
 import { type ReactNode, act, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +12,7 @@ import {
   useReviewPanel,
   useSuppressPanelMotionOnCanvasResume,
 } from "./review-panel";
+import type { PeekAnchor } from "./review-panel-model";
 import type { GuidedTour } from "./review-panel-model";
 import { testReviewSession } from "./review-session-test-utils";
 
@@ -273,12 +273,12 @@ function OpenReplacingPanel() {
   useEffect(() => {
     openPeek({
       kind: "peek",
-      anchor: { id: "earlier", title: "Earlier detail" } as AnchorRef,
+      anchor: { id: "earlier", title: "Earlier detail" } as PeekAnchor,
       content: { kind: "inline-code", text: "earlier();" },
     });
     openPeek({
       kind: "peek",
-      anchor: { id: "startup", title: "Startup detail" } as AnchorRef,
+      anchor: { id: "startup", title: "Startup detail" } as PeekAnchor,
       content: { kind: "inline-code", text: "start();" },
     });
   }, [openPeek]);
@@ -288,7 +288,7 @@ function OpenReplacingPanel() {
 
 const peekFixture = {
   kind: "peek",
-  anchor: { id: "startup", title: "Startup detail" } as AnchorRef,
+  anchor: { id: "startup", title: "Startup detail" } as PeekAnchor,
   content: { kind: "inline-code", text: "start();" },
 } as const;
 
@@ -311,8 +311,8 @@ function RestorePeekPanel() {
 }
 
 function tourFixture(): GuidedTour {
-  const first = { id: "first", title: "First" } as AnchorRef;
-  const second = { id: "second", title: "Second" } as AnchorRef;
+  const first = { id: "first", title: "First" } as PeekAnchor;
+  const second = { id: "second", title: "Second" } as PeekAnchor;
 
   return {
     id: "tour",

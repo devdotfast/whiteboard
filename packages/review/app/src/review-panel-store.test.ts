@@ -1,14 +1,14 @@
 import type { ReviewCommitSummary } from "@dev.fast/review-protocol";
-import type { AnchorRef } from "@review/authoring";
 import { describe, expect, it } from "vitest";
 
+import type { PeekAnchor } from "./review-panel-model";
 import type { ReviewPeekContent } from "./review-panel-model";
 import { askShown, createReviewPanelStore } from "./review-panel-store";
 
 const anchor = {
   id: "startup",
   title: "Startup",
-} as AnchorRef;
+} as PeekAnchor;
 
 const content: ReviewPeekContent = {
   kind: "inline-code",

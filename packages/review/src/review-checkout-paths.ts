@@ -5,11 +5,6 @@ import { devFastGitDir } from "./software-map-paths";
 
 export type ReviewCheckoutRole = "head" | "base";
 
-/** Root for legacy commit-owned Review checkouts. Migration removes it. */
-export function legacyReviewWorktreesDir(gitCommonDir: string): string {
-  return path.join(devFastGitDir(gitCommonDir), "worktrees");
-}
-
 /**
  * Root for Review-owned checkouts. A Review UUID identifies one subtree.
  */

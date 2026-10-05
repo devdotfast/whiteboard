@@ -2,10 +2,10 @@ import { radius } from "@canvas/scale.stylex";
 import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { type JsonValue, isStringValue } from "@dev.fast/review-protocol";
-import type { DatabaseLensBlockProps } from "@review/database-lens-block";
 import { type DiffSelection, anchorSelection } from "@review/lens-selection";
 import type {
   DatabaseField,
+  DatabaseLensBlock,
   DatabaseOperation,
   DatabaseStore,
 } from "@review/review-api/document";
@@ -46,8 +46,14 @@ import { captureUiEvent } from "./ui-telemetry";
 
 type OperationKind = "read" | "write";
 
-/** The canonical `database_lens` block as the document stores it. */
-export type DatabaseLensProps = DatabaseLensBlockProps;
+export type DatabaseLensProps = Omit<
+  DatabaseLensBlock,
+  "type" | "id" | "title"
+> & {
+  id: string;
+  title?: string;
+  height?: number;
+};
 
 export type LensStores = Record<string, DatabaseStore>;
 

@@ -1,5 +1,5 @@
 import { fontSize, fontWeight, radius, tracking } from "@canvas/scale.stylex";
-import type { ReviewComponentProps } from "@review/review-document-data";
+import type { TutorialAuthoringConversation as Conversation } from "@review/tutorial-conversation";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
@@ -7,7 +7,9 @@ import { tokens } from "./tokens.stylex";
 
 export function TutorialAuthoringConversation({
   conversation,
-}: ReviewComponentProps<"TutorialAuthoringConversation">): ReactElement {
+}: {
+  conversation: Conversation;
+}): ReactElement {
   return (
     <details {...stylex.props(styles.conversation)}>
       <summary {...stylex.props(styles.summary)}>
