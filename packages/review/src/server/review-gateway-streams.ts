@@ -11,16 +11,9 @@ import { coverageModeSchema } from "@review/review-api/review-progress.js";
 import { z } from "zod";
 
 import {
-  FIRST_BYTE_TIMEOUT_MS,
-  FIRST_RETRY_MS,
   type GatewayHosts,
   type GatewayRemote,
-  MAX_RETRY_MS,
-  NO_ANSWER,
   UUID,
-  jitter,
-  remoteHeaders,
-  send,
 } from "./review-gateway-hosts.js";
 import { mergeLists } from "./review-gateway-list.js";
 import {
@@ -32,7 +25,7 @@ import {
   chunks,
   keepOpen,
   readLines,
-  sleep,
+  reconnect,
 } from "./review-gateway-transport.js";
 import { serverJson } from "./review-server-core.js";
 
@@ -269,36 +262,25 @@ export function createGatewayStreams(input: {
         ...[...ids].map(([reviewId, mode]) => ({ reviewId, mode })),
       ]);
 
-      void (async () => {
-        let delay = FIRST_RETRY_MS;
+      void reconnect(abort, async () => {
+        try {
+          const response = await input.local(
+            new Request(`http://gateway${path}`),
+          );
 
-        while (!abort.aborted) {
-          try {
-            const response = await input.local(
-              new Request(`http://gateway${path}`),
-            );
+          if (response.body)
+            await readLines(chunks(response.body, abort), (text) => {
+              const line = parseLine(text);
 
-            if (response.body)
-              await readLines(chunks(response.body, abort), (text) => {
-                const line = parseLine(text);
-
-                if (line?.kind === "list" && modes.has(line.mode)) {
-                  // SAFETY: the laptop's own server writes ReviewApiSummary entries.
-                  laptopLists.set(
-                    line.mode,
-                    line.reviews as ReviewApiSummary[],
-                  );
-                  emitList(line.mode);
-                } else if (line?.kind === "review" && ids.has(line.reviewId))
-                  emitReview(line.reviewId, text);
-              });
-          } catch {}
-
-          if (abort.aborted) return;
-          await sleep(jitter(delay), abort);
-          delay = Math.min(delay * 2, MAX_RETRY_MS);
-        }
-      })();
+              if (line?.kind === "list" && modes.has(line.mode)) {
+                // SAFETY: the laptop's own server writes ReviewApiSummary entries.
+                laptopLists.set(line.mode, line.reviews as ReviewApiSummary[]);
+                emitList(line.mode);
+              } else if (line?.kind === "review" && ids.has(line.reviewId))
+                emitReview(line.reviewId, text);
+            });
+        } catch {}
+      });
     };
 
     const openRemote = (

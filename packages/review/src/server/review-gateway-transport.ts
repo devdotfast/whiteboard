@@ -1,4 +1,5 @@
 import type http from "node:http";
+import { setTimeout as delay } from "node:timers/promises";
 
 import {
   FIRST_BYTE_TIMEOUT_MS,
@@ -16,17 +17,26 @@ const STEADY_MS = 10_000;
 
 const MAX_LINE_CHARS = 64 * 1024 * 1024;
 
-export const sleep = (ms: number, signal: AbortSignal) =>
-  new Promise<void>((resolve) => {
-    const done = () => {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", done);
-      resolve();
-    };
+const sleep = (ms: number, signal: AbortSignal) =>
+  delay(ms, undefined, { signal }).catch(() => undefined);
 
-    const timer = setTimeout(done, ms);
-    signal.addEventListener("abort", done, { once: true });
-  });
+export async function reconnect(
+  signal: AbortSignal,
+  attempt: () => Promise<void>,
+) {
+  let wait = FIRST_RETRY_MS;
+
+  while (!signal.aborted) {
+    const started = Date.now();
+    await attempt();
+
+    if (signal.aborted) return;
+
+    if (Date.now() - started >= STEADY_MS) wait = FIRST_RETRY_MS;
+    await sleep(jitter(wait), signal);
+    wait = Math.min(wait * 2, MAX_RETRY_MS);
+  }
+}
 
 export async function readLines(
   body: AsyncIterable<Uint8Array>,
@@ -85,47 +95,38 @@ export function keepOpen(input: {
 }) {
   const { remote, signal } = input;
 
-  void (async () => {
-    let delay = FIRST_RETRY_MS;
+  void reconnect(signal, async () => {
+    const abort = new AbortController();
+    const leave = () => abort.abort();
+    signal.addEventListener("abort", leave, { once: true });
+    let timedOut = false;
 
-    while (!signal.aborted) {
-      const started = Date.now();
-      const abort = new AbortController();
-      const leave = () => abort.abort();
-      signal.addEventListener("abort", leave, { once: true });
-      let timedOut = false;
+    const firstByte = setTimeout(() => {
+      timedOut = true;
+      abort.abort();
+    }, FIRST_BYTE_TIMEOUT_MS);
 
-      const firstByte = setTimeout(() => {
-        timedOut = true;
-        abort.abort();
-      }, FIRST_BYTE_TIMEOUT_MS);
+    try {
+      const response = await send(remote, {
+        method: "GET",
+        path: input.path,
+        headers: remoteHeaders(remote),
+        signal: abort.signal,
+      });
 
-      try {
-        const response = await send(remote, {
-          method: "GET",
-          path: input.path,
-          headers: remoteHeaders(remote),
-          signal: abort.signal,
-        });
+      clearTimeout(firstByte);
 
-        clearTimeout(firstByte);
-
-        if (response.statusCode === 200) await input.read(response);
-      } catch {
-      } finally {
-        clearTimeout(firstByte);
-        signal.removeEventListener("abort", leave);
-        abort.abort();
-      }
-
-      if (signal.aborted) return;
-
-      if (timedOut) input.hosts.failed(remote, NO_ANSWER);
-      else input.hosts.recheck(remote);
-
-      if (Date.now() - started >= STEADY_MS) delay = FIRST_RETRY_MS;
-      await sleep(jitter(delay), signal);
-      delay = Math.min(delay * 2, MAX_RETRY_MS);
+      if (response.statusCode === 200) await input.read(response);
+    } catch {
+    } finally {
+      clearTimeout(firstByte);
+      signal.removeEventListener("abort", leave);
+      abort.abort();
     }
-  })();
+
+    if (signal.aborted) return;
+
+    if (timedOut) input.hosts.failed(remote, NO_ANSWER);
+    else input.hosts.recheck(remote);
+  });
 }
