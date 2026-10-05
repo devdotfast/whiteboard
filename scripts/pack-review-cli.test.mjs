@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -63,6 +64,16 @@ async function fixture(t, { runtimeCommit = commit } = {}) {
   const tarballs = path.join(root, "tarballs");
   const downloads = [];
 
+  const server = createServer((request, response) =>
+    readFile(path.join(tarballs, path.basename(request.url))).then(
+      (data) => response.end(data),
+      () => response.writeHead(404).end(),
+    ),
+  );
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
   for (const [name, files] of [
     ["rg", { "bin/linux-x64/rg": "x64", "bin/linux-arm64/rg": "arm64" }],
     ["watcher", { "package.json": "{}" }],
@@ -73,7 +84,7 @@ async function fixture(t, { runtimeCommit = commit } = {}) {
     const tarball = path.join(tarballs, `${name}.tgz`);
     execFileSync("tar", ["-czf", tarball, "-C", path.join(tarballs, name), "package"]);
     downloads.push({
-      url: `file://${tarball}`,
+      url: `http://127.0.0.1:${server.address().port}/${name}.tgz`,
       sha256: createHash("sha256")
         .update(await readFile(tarball))
         .digest("hex"),
@@ -93,7 +104,7 @@ async function fixture(t, { runtimeCommit = commit } = {}) {
   for (const { url, sha256 } of downloads)
     await writeFile(
       path.join(cacheDir, `${sha256}-${path.basename(url)}`),
-      await readFile(new URL(url)),
+      await readFile(path.join(tarballs, path.basename(url))),
     );
 
   return {
@@ -192,8 +203,8 @@ test("deletes a download that fails its checksum and packs nothing", async (t) =
     await fixture(t);
 
   const [rg] = downloads;
+  rg.sha256 = "0".repeat(64);
   const cachedFile = path.join(cacheDir, `${rg.sha256}-${path.basename(rg.url)}`);
-  await writeFile(cachedFile, "tampered");
 
   await assert.rejects(
     packReviewCli({ version, commit }, path.join(root, "output"), {
@@ -201,7 +212,7 @@ test("deletes a download that fails its checksum and packs nothing", async (t) =
       stdio: "pipe",
       vscodeServer,
     }),
-    /checksum mismatch/,
+    /Checksum mismatch/,
   );
   await assert.rejects(stat(cachedFile));
   await assert.rejects(stat(path.join(root, "output", `dev.fast-whiteboard-${version}.tgz`)));

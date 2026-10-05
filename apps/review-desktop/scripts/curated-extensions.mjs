@@ -13,7 +13,6 @@
 //   node scripts/curated-extensions.mjs --clean          # remove materialized dirs
 //   node scripts/curated-extensions.mjs --copy-to <dir>  # stage into a package
 
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -30,6 +29,11 @@ import {
   supportedTargets,
   targetKeyFor,
 } from "./curated-extensions.manifest.mjs";
+import {
+  downloadFile,
+  downloadPinned,
+  sha256File,
+} from "../../../packages/review/src/pinned-download.ts";
 import {
   extractVsix,
   sanitizeVsixManifest,
@@ -139,10 +143,6 @@ export function selectExtensions(target, groups) {
   return selected;
 }
 
-function sha256Of(file) {
-  return createHash("sha256").update(fs.readFileSync(file)).digest("hex");
-}
-
 function vsixUrlFor(extension, targetKey) {
   const pinnedUrl = extension.targets[targetKey].url;
 
@@ -167,51 +167,14 @@ function cachePathFor(extension, targetKey) {
   );
 }
 
-/** Downloads to a temp file and renames, so a killed run never leaves a torn cache entry. */
-async function download(url, destination) {
-  fs.mkdirSync(path.dirname(destination), { recursive: true });
-  // Open VSX answers with a 302 to its storage host; fetch follows by default.
-  const response = await fetch(url, { redirect: "follow" });
-
-  if (!response.ok) {
-    throw new Error(
-      `GET ${url} failed with ${response.status} ${response.statusText}`,
-    );
-  }
-
-  const partial = `${destination}.part`;
-  fs.writeFileSync(partial, Buffer.from(await response.arrayBuffer()));
-  fs.renameSync(partial, destination);
-}
-
-async function ensureVsix(
-  extension,
-  targetKey,
-  expectedSha,
-  { allowDownload },
-) {
+async function ensureVsix(extension, targetKey) {
   const cached = cachePathFor(extension, targetKey);
+  const { sha256, size } = extension.targets[targetKey];
 
-  if (!fs.existsSync(cached)) {
-    if (!allowDownload) {
-      throw new Error(
-        `${extension.id}: ${cached} is missing and downloads are disabled`,
-      );
-    }
-
-    await download(vsixUrlFor(extension, targetKey), cached);
-  }
-
-  const actual = sha256Of(cached);
-
-  if (actual !== expectedSha) {
-    // A mismatch means the pin is stale or the download was tampered with.
-    // Drop the file so the next run refetches instead of failing forever.
-    fs.rmSync(cached, { force: true });
-    throw new Error(
-      `${extension.id} checksum mismatch for ${targetKey}\n  expected ${expectedSha}\n  actual   ${actual}`,
-    );
-  }
+  await downloadPinned(
+    { url: vsixUrlFor(extension, targetKey), sha256, size },
+    cached,
+  );
 
   return cached;
 }
@@ -456,11 +419,11 @@ async function printHashes(target) {
     for (const targetKey of targetKeys) {
       const cached = cachePathFor(extension, targetKey);
 
-      if (!fs.existsSync(cached)) {
-        await download(vsixUrlFor(extension, targetKey), cached);
-      }
+      const sha256 = fs.existsSync(cached)
+        ? await sha256File(cached)
+        : await downloadFile(vsixUrlFor(extension, targetKey), cached);
 
-      console.log(`${extension.id} ${targetKey} ${sha256Of(cached)}`);
+      console.log(`${extension.id} ${targetKey} ${sha256}`);
     }
   }
 
@@ -540,9 +503,7 @@ async function main() {
       throw new Error(`${extension.id} is not materialized for ${target}`);
     }
 
-    const vsix = await ensureVsix(extension, targetKey, sha256, {
-      allowDownload: !options.check,
-    });
+    const vsix = await ensureVsix(extension, targetKey);
 
     await materializeVsix(vsix, extension, targetKey, sha256);
     verifyEngine(destination, extension);

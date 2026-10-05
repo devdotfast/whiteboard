@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -15,6 +14,7 @@ import {
   remoteTargets,
   targetKeyFor,
 } from "./curated-extensions.manifest.mjs";
+import { downloadPinned } from "../../../packages/review/src/pinned-download.ts";
 
 const DEFAULT_CACHE = path.join(
   path.dirname(DEFAULT_REMOTE_RUNTIME),
@@ -77,30 +77,14 @@ export const REMOTE_SERVER_DOWNLOADS = [
   })),
 ];
 
-const sha256Of = (file) =>
-  createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+async function cached(cacheDir, download) {
+  const file = path.join(
+    cacheDir,
+    `${download.sha256}-${path.basename(download.url)}`,
+  );
 
-async function cached(cacheDir, { url, sha256 }) {
-  const file = path.join(cacheDir, `${sha256}-${path.basename(url)}`);
-
-  if (!fs.existsSync(file)) {
-    fs.mkdirSync(cacheDir, { recursive: true });
-    const response = await fetch(url, { signal: AbortSignal.timeout(120_000) });
-
-    if (!response.ok) throw new Error(`GET ${url}: ${response.status}`);
-
-    fs.writeFileSync(`${file}.part`, Buffer.from(await response.arrayBuffer()));
-    fs.renameSync(`${file}.part`, file);
-  }
-
-  const actual = sha256Of(file);
-
-  if (actual !== sha256) {
-    fs.rmSync(file, { force: true });
-    throw new Error(
-      `${url} checksum mismatch\n  expected ${sha256}\n  actual   ${actual}`,
-    );
-  }
+  fs.mkdirSync(cacheDir, { recursive: true });
+  await downloadPinned(download, file);
 
   return file;
 }
