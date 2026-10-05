@@ -71,6 +71,11 @@ for dir in "$remote"/versions/*; do
 	installed="$installed\${installed:+,}$(str "\${dir##*/}")"
 done
 
+tools=
+for tool in tar xz sha256sum sha512sum openssl; do
+	command -v "$tool" >/dev/null 2>&1 && tools="$tools\${tools:+,}\\"$tool\\""
+done
+
 registry=https://registry.npmjs.org/
 downloader=
 reachable=false
@@ -98,7 +103,7 @@ if [ -n "$node" ]; then
 else
 	printf '"node":null,'
 fi
-printf '"npm":%s,"installed":[%s],"managedNode":%s,"downloader":%s,"registryReachable":%s}\\n' \\
-	"$(strOrNull "$npm")" "$installed" "$(strOrNull "$managed")" "$(strOrNull "$downloader")" "$reachable"
+printf '"npm":%s,"installed":[%s],"managedNode":%s,"downloader":%s,"registryReachable":%s,"tools":[%s]}\\n' \\
+	"$(strOrNull "$npm")" "$installed" "$(strOrNull "$managed")" "$(strOrNull "$downloader")" "$reachable" "$tools"
 echo ${REVIEW_REMOTE_PROBE_END}
 `;

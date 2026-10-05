@@ -20,7 +20,11 @@ export interface ReviewRemoteProbe {
 	managedNode: string | null;
 	downloader: "curl" | "wget" | null;
 	registryReachable: boolean;
+	tools: ReviewRemoteTool[];
 }
+
+export const REVIEW_REMOTE_PROBE_TOOLS = ["tar", "xz", "sha256sum", "sha512sum", "openssl"] as const;
+export type ReviewRemoteTool = (typeof REVIEW_REMOTE_PROBE_TOOLS)[number];
 
 export type ReviewRemoteTarget = "linux-x64" | "linux-arm64";
 
@@ -107,6 +111,8 @@ function readProbe(value: unknown): ReviewRemoteProbe {
 		if (v !== "curl" && v !== "wget") throw new Error("downloader is neither curl nor wget.");
 		return v;
 	});
+	const tools = record.tools;
+	if (!Array.isArray(tools) || tools.length > INSTALLED_LIMIT) throw new Error("tools is not a short list.");
 	const freeBytes = record.freeBytes;
 	if (typeof freeBytes !== "number" || !Number.isSafeInteger(freeBytes) || freeBytes < 0) throw new Error("freeBytes is not a byte count.");
 	return {
@@ -122,6 +128,7 @@ function readProbe(value: unknown): ReviewRemoteProbe {
 		managedNode: nullable(record.managedNode, "managedNode", (v) => path(v, "managedNode")),
 		downloader,
 		registryReachable: boolean(record.registryReachable, "registryReachable"),
+		tools: REVIEW_REMOTE_PROBE_TOOLS.filter((tool) => tools.includes(tool)),
 	};
 }
 
