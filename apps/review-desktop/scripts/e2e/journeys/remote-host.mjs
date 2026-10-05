@@ -12,11 +12,11 @@ const remoteScript = path.join(import.meta.dirname, "../remote/remote.mjs");
 
 const runId = process.env.WB_TEST_RUN ?? `e2e${Date.now().toString(36)}`;
 
-const runDir = `/tmp/wbt.${runId}`;
+export const runDir = `/tmp/wbt.${runId}`;
 
 const prepared = process.env.REVIEW_E2E_REMOTE_HOST;
 
-const alias = `wb-test-${prepared ?? "a"}`;
+export const alias = `wb-test-${prepared ?? "a"}`;
 
 const title = "Remote order";
 
@@ -32,7 +32,7 @@ export const options = {
   env: { DEV_FAST_REVIEW_SSH_CONFIG: `${runDir}/ssh_config` },
 };
 
-const createRemoteReview = String.raw`
+export const createRemoteReview = String.raw`
 set -e
 field() { node -pe "JSON.parse(require('fs').readFileSync(0, 'utf8')).$1"; }
 rm -rf ~/wbrepo
@@ -52,7 +52,7 @@ echo "$id"
 pwd
 `;
 
-async function remote(...args) {
+export async function remote(...args) {
   return (
     await exec(process.execPath, [remoteScript, ...args], {
       env: { ...process.env, WB_TEST_RUN: runId },
@@ -61,7 +61,7 @@ async function remote(...args) {
   ).stdout.trim();
 }
 
-function onRemote(command, input = "") {
+export function onRemote(command, input = "") {
   return new Promise((resolve, reject) => {
     const child = spawn(
       "ssh",
@@ -87,7 +87,7 @@ function onRemote(command, input = "") {
 const remoteApi = (tool, input) =>
   onRemote(`whiteboard api ${tool} -`, JSON.stringify(input));
 
-async function remoteToken() {
+export async function remoteToken() {
   const out = (await onRemote("whiteboard remote attach --json")).split("\n");
 
   let token;
@@ -106,7 +106,7 @@ async function remoteToken() {
   return token;
 }
 
-async function recordRequests(page, streamed) {
+export async function recordRequests(page, streamed) {
   const cdp = await page.context().newCDPSession(page);
   const requests = new Map();
   const entry = (id) => requests.get(id) ?? requests.set(id, { id }).get(id);
@@ -666,7 +666,7 @@ async function desktopSshProcesses() {
 const desktopSsh = async () =>
   (await desktopSshProcesses()).map(([pid]) => pid);
 
-async function masterPid() {
+export async function masterPid() {
   return (await desktopSshProcesses()).find(
     ([, args]) => args.includes(" -M -N ") && args.endsWith(`-- ${alias}`),
   )?.[0];
