@@ -14,7 +14,7 @@ const runId = process.env.WB_TEST_RUN ?? `e2e${Date.now().toString(36)}`;
 
 export const runDir = `/tmp/wbt.${runId}`;
 
-const prepared = process.env.REVIEW_E2E_REMOTE_HOST;
+export const prepared = process.env.REVIEW_E2E_REMOTE_HOST;
 
 export const alias = `wb-test-${prepared ?? "a"}`;
 
@@ -182,7 +182,7 @@ export async function run(ctx) {
   }
 }
 
-async function closeDesktop(ctx) {
+export async function closeDesktop(ctx) {
   const session = await ctx.browser.newBrowserCDPSession().catch(() => null);
 
   await Promise.race([

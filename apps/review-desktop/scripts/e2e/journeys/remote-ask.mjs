@@ -6,9 +6,11 @@ import { promisify } from "node:util";
 import { openHome, openSettings } from "../harness.mjs";
 import {
   alias,
+  closeDesktop,
   createRemoteReview,
   masterPid,
   onRemote,
+  prepared,
   recordRequests,
   remote,
   remoteToken,
@@ -37,24 +39,41 @@ export async function run(ctx) {
   if (ctx.report.mode === "packaged")
     throw new Error("skip: remote-ask runs in development mode only");
 
-  if (process.env.REVIEW_E2E_REMOTE_HOST)
-    throw new Error("skip: remote-ask brings up its own container");
-
-  try {
-    await exec("docker", ["info", "--format", "{{.ServerVersion}}"]);
-  } catch (error) {
-    throw new Error(
-      `skip: remote-ask needs Docker for its SSH server (${error.message.split("\n")[0]})`,
-    );
-  }
+  if (prepared === undefined)
+    try {
+      await exec("docker", ["info", "--format", "{{.ServerVersion}}"]);
+    } catch (error) {
+      throw new Error(
+        `skip: remote-ask needs Docker for its SSH server (${error.message.split("\n")[0]})`,
+      );
+    }
 
   try {
     await journey(ctx);
   } finally {
-    await remote("down", "--all").catch((error) =>
-      console.error(`[remote-ask] down --all: ${error.message}`),
-    );
+    if (prepared === undefined)
+      await remote("down", "--all").catch((error) =>
+        console.error(`[remote-ask] down --all: ${error.message}`),
+      );
+    else await closeDesktop(ctx);
   }
+}
+
+/** Pauses the container, or stops a prepared host's server and returns its resume. */
+async function freeze() {
+  if (prepared === undefined) {
+    await remote("pause", "a");
+
+    return undefined;
+  }
+
+  const { serverPid } = JSON.parse(
+    await onRemote("whiteboard server status --json"),
+  );
+
+  await onRemote(`kill -STOP ${serverPid}`);
+
+  return () => onRemote(`kill -CONT ${serverPid}`);
 }
 
 async function journey(ctx) {
@@ -156,9 +175,11 @@ async function journey(ctx) {
     );
   }
 
-  // 1. A container with sshd, this checkout's package and the fake OpenCode, holding a review.
-  await remote("up", "a", "--fake-agent");
-  await remote("install", "a");
+  // 1. A container with sshd, this checkout's package and the fake OpenCode, or a prepared host, holding a review.
+  if (prepared === undefined) {
+    await remote("up", "a", "--fake-agent");
+    await remote("install", "a");
+  }
 
   const [reviewId] = (
     await onRemote(`bash -s -- '${title}'`, createRemoteReview)
@@ -313,7 +334,7 @@ async function journey(ctx) {
   // 10. The host goes away with a conversation open: the panel says so, and the host reads offline.
   await askAboutSentence();
   await send("and then");
-  await remote("pause", "a");
+  const thaw = await freeze();
 
   const paused = Date.now();
 
@@ -334,8 +355,9 @@ async function journey(ctx) {
     `alert after ${timings.streamEnded} ms`,
   );
   assert.ok(timings.offline <= 15000, `offline after ${timings.offline} ms`);
+  await thaw?.();
   ctx.check(
-    `10. docker pause: the panel said it lost OpenCode after ${timings.streamEnded} ms; ${alias} offline after ${timings.offline} ms`,
+    `10. ${prepared === undefined ? "docker pause" : "server SIGSTOP"}: the panel said it lost OpenCode after ${timings.streamEnded} ms; ${alias} offline after ${timings.offline} ms`,
   );
 
   // 11. Removing the host takes the review out of Home.
