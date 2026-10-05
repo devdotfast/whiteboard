@@ -89,8 +89,8 @@ export function sshMasterArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv 
 	];
 }
 
-export function sshExecArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = process.env): string[] {
-	return [...base(session, env), "-oControlMaster=no", "-T", "--", session.alias, "sh", "-s"];
+export function sshExecArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = process.env, command: readonly string[] = ["sh", "-s"]): string[] {
+	return [...base(session, env), "-oControlMaster=no", "-T", "--", session.alias, ...command];
 }
 
 function localForward(localPort: number, remotePort: number): string {
