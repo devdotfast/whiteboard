@@ -265,9 +265,9 @@ test("a server that keeps restarting is attached again with growing delays, unti
 	assert.equal(last()?.endpoint?.token, "token-5");
 });
 
-test("a retry drops a reattach waiting for its delay, and reattach is accepted again", async (t) => {
+test("a retry drops a reattach waiting for its delay, and the next reattach runs at once", async (t) => {
 	const port = await healthServer(t);
-	const { host, clock, last } = hostFor(t, {}, port);
+	const { host, ssh, clock, last } = hostFor(t, {}, port);
 
 	host.start();
 	await until(() => last()?.endpoint !== undefined);
@@ -278,8 +278,27 @@ test("a retry drops a reattach waiting for its delay, and reattach is accepted a
 	await until(() => last()?.endpoint !== undefined);
 
 	assert.equal(clock.pending, 0);
+	const execs = ssh.of("wb-test-a", "exec").length;
+	await host.reattach();
+	assert.equal(clock.pending, 0);
+	assert.equal(ssh.of("wb-test-a", "exec").length, execs + 1);
+});
+
+test("a resume while a reattach waits for its delay closes the old master before connecting again", async (t) => {
+	const port = await healthServer(t);
+	const { host, ssh, clock, last } = hostFor(t, {}, port);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	const first = ssh.master("wb-test-a")!;
+	await host.reattach();
 	await host.reattach();
 	assert.equal(clock.pending, 1);
+	await host.resume();
+	await until(() => ssh.of("wb-test-a", "master").length === 2 && last()?.endpoint !== undefined);
+
+	assert.equal(first.alive, false);
+	assert.equal(clock.pending, 0);
 });
 
 test("a retry starts the new master only after the old one has exited", async (t) => {

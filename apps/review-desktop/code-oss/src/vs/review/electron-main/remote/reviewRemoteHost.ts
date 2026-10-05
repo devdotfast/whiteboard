@@ -193,8 +193,6 @@ export class ReviewRemoteHost {
 	private readonly closing = new Map<SshChildProcess, Promise<void>>();
 	private forwarded: { local: number; remote: number } | undefined;
 	private reattaching = false;
-	private reattaches = 0;
-	private cancelReattach: (() => void) | undefined;
 	private masterStderr = "";
 	private env: NodeJS.ProcessEnv | undefined;
 	private connectedAt: number | undefined;
@@ -221,9 +219,7 @@ export class ReviewRemoteHost {
 
 	retry(): void {
 		if (this.disposed) return;
-		this.generation++;
 		this.failures = 0;
-		this.dropMaster();
 		this.set({ alias: this.alias });
 		void this.connect();
 	}
@@ -241,19 +237,17 @@ export class ReviewRemoteHost {
 			if (master !== this.master || this.disposed) return;
 			this.options.log(`${this.alias}: no answer through the forward after resume (${(error as Error).message}); reconnecting.`);
 		}
-		this.generation++;
-		this.dropMaster();
 		void this.connect();
 	}
 
 	reattach(): Promise<void> {
-		if (this.disposed || this.reattaching || this.cancelReattach || !this.master || this.connectedAt === undefined) return Promise.resolve();
-		if (this.clock.now() - this.connectedAt >= this.timeouts.stable) this.reattaches = 0;
-		if (this.reattaches++ === 0) return this.attachAgain();
-		const delay = reconnectDelay(this.reattaches - 2, this.options.random);
+		if (this.disposed || this.reattaching || this.cancelTimer || !this.master || this.connectedAt === undefined) return Promise.resolve();
+		const attempt = this.nextAttempt();
+		if (attempt === 0) return this.attachAgain();
+		const delay = reconnectDelay(attempt - 1, this.options.random);
 		this.options.log(`${this.alias}: its server restarted again; attaching again in ${Math.round(delay / 1000)} s.`);
-		this.cancelReattach = this.clock.schedule(delay, () => {
-			this.cancelReattach = undefined;
+		this.cancelTimer = this.clock.schedule(delay, () => {
+			this.cancelTimer = undefined;
 			void this.attachAgain();
 		});
 		return Promise.resolve();
@@ -261,8 +255,7 @@ export class ReviewRemoteHost {
 
 	private async attachAgain(): Promise<void> {
 		const env = this.env;
-		const old = this.forwarded;
-		if (this.disposed || this.reattaching || !this.master || this.connectedAt === undefined || !env || !old) return;
+		if (this.disposed || this.reattaching || !this.master || this.connectedAt === undefined || !env || !this.forwarded) return;
 		const generation = this.generation;
 		const stale = () => generation !== this.generation || this.disposed;
 		this.reattaching = true;
@@ -271,14 +264,7 @@ export class ReviewRemoteHost {
 			const check = await this.run(sshCheckArgs(this.options.session, env), this.timeouts.operation);
 			if (stale()) return;
 			if (check.code !== 0) throw unreachable(`The SSH connection to ${this.alias} did not answer. ${firstLines(check.stderr)}`.trim());
-			const attach = await this.attach(env);
-			if (stale()) return;
-			const url = await this.forward(env, attach, stale);
-			if (stale()) return;
-			await this.run(sshCancelForwardArgs(this.options.session, old.local, old.remote, env), this.timeouts.operation);
-			if (stale()) return;
-			this.connectedAt = this.clock.now();
-			this.set({ alias: this.alias, endpoint: { url, token: attach.token } });
+			await this.establish(env, stale);
 		} catch (error) {
 			if (stale()) return;
 			this.fail(error instanceof HostFailure ? error.problem : { state: "unreachable", detail: (error as Error).message });
@@ -301,8 +287,6 @@ export class ReviewRemoteHost {
 		this.generation++;
 		this.cancelTimer?.();
 		this.cancelTimer = undefined;
-		this.cancelReattach?.();
-		this.cancelReattach = undefined;
 		const master = this.master;
 		this.master = undefined;
 		await this.close(master);
@@ -326,8 +310,7 @@ export class ReviewRemoteHost {
 		const stale = () => generation !== this.generation || this.disposed;
 		this.cancelTimer?.();
 		this.cancelTimer = undefined;
-		this.cancelReattach?.();
-		this.cancelReattach = undefined;
+		this.dropMaster();
 		this.connectedAt = undefined;
 		this.promptCancelled = false;
 		try {
@@ -340,17 +323,29 @@ export class ReviewRemoteHost {
 			if (stale()) return;
 			const master = this.startMaster(env);
 			await this.waitForMaster(master, env, stale);
-			const attach = await this.attach(env);
-			if (stale()) return;
-			const url = await this.forward(env, attach, stale);
-			if (stale()) return;
-			this.connectedAt = this.clock.now();
-			this.masterStderr = "";
-			this.set({ alias: this.alias, endpoint: { url, token: attach.token } });
+			await this.establish(env, stale);
 		} catch (error) {
 			if (stale()) return;
 			this.fail(error instanceof HostFailure ? error.problem : { state: "unreachable", detail: (error as Error).message });
 		}
+	}
+
+	private async establish(env: NodeJS.ProcessEnv, stale: () => boolean): Promise<void> {
+		const old = this.forwarded;
+		const attach = await this.attach(env);
+		if (stale()) return;
+		const url = await this.forward(env, attach, stale);
+		if (stale()) return;
+		if (old) await this.run(sshCancelForwardArgs(this.options.session, old.local, old.remote, env), this.timeouts.operation);
+		if (stale()) return;
+		this.connectedAt = this.clock.now();
+		this.masterStderr = "";
+		this.set({ alias: this.alias, endpoint: { url, token: attach.token } });
+	}
+
+	private nextAttempt(): number {
+		if (this.connectedAt !== undefined && this.clock.now() - this.connectedAt >= this.timeouts.stable) this.failures = 0;
+		return this.failures++;
 	}
 
 	private startMaster(env: NodeJS.ProcessEnv): SshChildProcess {
@@ -381,7 +376,6 @@ export class ReviewRemoteHost {
 		if (error?.code === "ENOENT") return this.fail({ state: "unreachable", detail: OPENSSH_NEEDED });
 		const exited = error?.message || `ssh exited with code ${code ?? "none"}.`;
 		if (this.connectedAt !== undefined) {
-			if (this.clock.now() - this.connectedAt >= this.timeouts.stable) this.failures = 0;
 			return this.fail({
 				state: "unreachable",
 				detail: `The SSH connection to ${this.alias} ended: ${lastLines(this.masterStderr) || exited}`,
@@ -441,14 +435,15 @@ export class ReviewRemoteHost {
 	}
 
 	private fail(problem: Problem): void {
+		const attempt = this.nextAttempt();
 		this.generation++;
-		this.cancelReattach?.();
-		this.cancelReattach = undefined;
+		this.cancelTimer?.();
+		this.cancelTimer = undefined;
 		this.connectedAt = undefined;
 		this.dropMaster();
 		this.set({ alias: this.alias, problem });
 		if (problem.state !== "unreachable" || this.disposed) return;
-		const delay = reconnectDelay(this.failures++, this.options.random);
+		const delay = reconnectDelay(attempt, this.options.random);
 		this.cancelTimer = this.clock.schedule(delay, () => {
 			this.cancelTimer = undefined;
 			void this.connect();
