@@ -43,8 +43,9 @@ prints a JSON summary on stdout, one entry per journey, `ok | failed | skipped`.
 ## Phases
 
 Phase 1 runs offline, after a one-time network fetch of the curated VSIX cache
-that `lsp-python` triggers. Phase 2 (`lsp-go`, `lsp-rust`) downloads toolchains
-and runs only with `REVIEW_E2E_NETWORK=1`. In development mode each journey
+that `lsp-python` triggers. Phase 2 (`lsp-go`, `lsp-rust`, `remote-host`)
+downloads toolchains or a container image and runs only with
+`REVIEW_E2E_NETWORK=1` or when named with `--journey`. In development mode each journey
 re-materializes its extension group through `run.sh`, so this checkout's
 `code-oss/extensions` holds the last journey's selection afterwards;
 `node scripts/curated-extensions.mjs --only=all` restores it.
@@ -106,3 +107,47 @@ request fails; `install` gives the route back only while `npm` runs, then
 checks again. `--delay-ms` delays both directions with `netem`. Both run their
 network commands from a throwaway container, so the remote itself never holds
 `NET_ADMIN`.
+
+## The remote-host journey
+
+`remote-host` runs the review server on another machine: a container from
+`remote.mjs` with `sshd` on a loopback port and the package from this checkout.
+It needs Docker; without it the journey is skipped with
+`skip: remote-host needs Docker for its SSH server`. The Desktop gets
+`DEV_FAST_REVIEW_SSH_CONFIG`, so its `ssh` uses the run's configuration and
+key, and the journey adds `wb-test-a` in Settings as a user would. It checks,
+on the DOM and on the page's requests: the host goes `online`; Home lists the
+container's review as `wb-test-a: wbrepo`; the document, a code peek, the Diff
+view and the structural diff load; an edit and a `session_create` on the
+remote reach the window; a killed `ssh` master shows "Connection lost" and
+recovers without a reload; a stopped server is `offline` within 15 s while a
+laptop review still opens; another package version is `incompatible` with the
+install command in Settings; and removing the host takes its reviews out of
+Home. Throughout, no Desktop route fails, and no request from the window goes
+anywhere but the local server or carries the remote's token.
+
+It runs in development mode only: a packaged build ignores
+`DEV_FAST_REVIEW_SSH_CONFIG`, so with `--app` the journey is skipped.
+
+To run it against a host you prepared yourself, such as an AWS instance with
+the package installed by hand, set `REVIEW_E2E_REMOTE_HOST` to the host's name
+in the `WB_TEST_RUN` run. The journey then skips the Docker check, `up` and
+`install`, and step 8, which would replace the package. It never removes that
+run: it quits the Desktop and ends the Desktop's `ssh`, and you remove the run.
+
+```sh
+export WB_TEST_RUN=aws-$$
+$R aws-up b --arch arm64     # prints wb-test-b; install the package there by hand
+REVIEW_E2E_REMOTE_HOST=b node apps/review-desktop/scripts/e2e/run.mjs --runtime "$REVIEW_E2E_RUNTIME" --journey remote-host
+$R down --all; $R verify-clean
+```
+
+Otherwise the journey removes its run with `down --all` when it ends. A runner killed
+before that leaves the run behind, so name the run and trap it:
+
+```sh
+R="node apps/review-desktop/scripts/e2e/remote/remote.mjs"
+export WB_TEST_RUN=e2e-$$
+trap '$R down --all; $R verify-clean' EXIT
+node apps/review-desktop/scripts/e2e/run.mjs --runtime "$REVIEW_E2E_RUNTIME" --journey remote-host
+```
