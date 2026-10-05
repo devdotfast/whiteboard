@@ -197,7 +197,6 @@ export const copyrightFilter = Object.freeze<string[]>([
 	'!extensions/typescript-language-features/node-maintainer/**',
 	'!extensions/html-language-features/server/src/modes/typescript/*',
 	'!extensions/*/server/bin/*',
-	'!src/vs/platform/agentHost/node/codex/protocol/generated/**',
 	'!src/vs/review/common/reviewProtocol.ts',
 	'!src/vs/workbench/contrib/terminal/common/scripts/psreadline/**',
 	'!extensions/mermaid-markdown-features/chat-webview-out/**',
@@ -227,7 +226,6 @@ export const tsFormattingFilter = Object.freeze<string[]>([
 	'!extensions/html-language-features/server/lib/jquery.d.ts',
 	'!extensions/terminal-suggest/src/shell/zshBuiltinsCache.ts',
 	'!extensions/terminal-suggest/src/shell/fishBuiltinsCache.ts',
-	'!src/vs/platform/agentHost/node/codex/protocol/generated/**',
 	'!src/vs/review/common/reviewProtocol.ts',
 
 ]);
@@ -236,7 +234,6 @@ export const eslintFilter = Object.freeze<string[]>([
 	'**/*.{js,cjs,mjs}',
 	'**/*.{ts,tsx,mts,cts}',
 	'.eslint-plugin-local/**/*.ts',
-	'!src/vs/platform/agentHost/node/codex/protocol/generated/**',
 	'!src/vs/review/common/reviewProtocol.ts',
 	...readFileSync(join(import.meta.dirname, '..', '.eslint-ignore'))
 		.toString()

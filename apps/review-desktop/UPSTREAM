@@ -235,6 +235,51 @@ theme tokens now live under `src/vs/workbench/common`. Shared chat styles use
 the existing platform font sizes. The agent-host MCP server type now lives
 under `src/vs/platform/agentHost/common`.
 
+## Pruned upstream agent host
+
+Whiteboard Ask launches the reviewer's own agent CLI, directly or through an
+ACP adapter, from `packages/review/src/ask/agents.ts`. It communicates over
+stdio using `@agentclientprotocol/sdk`; it does not use VS Code's agent host.
+
+Review removes the upstream execution and distribution paths:
+
+- `src/vs/platform/agentHost/node/` and `electron-main/`, including the agent
+  host and diff-worker entry points, Claude/Codex/Copilot backends, SDK
+  downloader, and local/SSH/WSL/tunnel host implementations.
+- The agent-host process manager in `src/vs/code/electron-main/app.ts` and
+  the agent-host services and IPC channels in the shared process.
+- The agent-host and diff-worker bundles in `build/next/index.ts` and
+  `build/buildfile.ts`, plus SDK product metadata in `build/gulpfile.vscode.ts`
+  and `src/vs/base/common/product.ts`.
+- `build/agent-sdk/`, `build/codex/`, `scripts/sync-agent-host-protocol.ts`,
+  and `build/lib/test/agentHostDependencies.test.ts`. Their build-test targets,
+  protocol scripts, generated-source filters, and runtime import exceptions
+  are removed too.
+- Root development dependencies `@anthropic-ai/claude-agent-sdk`,
+  `@anthropic-ai/sdk`, and `@openai/codex`; remote dependencies
+  `@github/copilot`, `@github/copilot-sdk`, and `@vscode/copilot-api`.
+  Their orphaned lockfile entries are removed. The unused Copilot SDK and
+  Copilot API declarations and TypeScript alias are removed as well.
+
+Only the dependency closure of `src/vs/platform/agentHost/common/` imported
+by retained upstream chat/editor source remains. These shared interfaces,
+URI helpers, and state/protocol definitions have no agent process startup or
+SDK imports. Unreferenced common modules, host configuration registration,
+and the agent-host mock TypeScript root are removed. The generated protocol
+files in this retained closure are frozen at the upstream pin. The retained
+common files are unchanged by this pruning.
+
+For an upstream refresh, exclude the removed execution and tooling directories
+listed above and preserve the small startup, entry-point, configuration, and
+manifest diffs. Do not exclude the whole `agentHost/` tree: retain the common
+module dependency closure needed by the refreshed chat/editor source, then
+type-check and bundle to catch new dependencies. The pruning commit records
+the exact selectively deleted common files for comparison.
+
+Whiteboard's ACP adapters, agent discovery, permissions, and session handling
+are unchanged. Restore the removed implementation from the recorded upstream
+commit and restore its build/startup wiring before enabling VS Code agent hosts.
+
 ## Restored extension webview API
 
 The vendored tree shipped the webview, webview panel, and webview view
@@ -396,11 +441,10 @@ one of these entries:
 - `build/copilot-migrate-pr.ts` (deleted)
 - `build/lib/copilot.ts` (deleted)
 - `build/lib/test/copilot.test.ts` (deleted)
-- `src/tsconfig.json` and `src/typings/github-copilot-sdk/`: type-check dormant
-  upstream agent-host code against pinned MIT declarations without installing
-  or shipping the Copilot SDK runtime. The normal Review build excludes
-  upstream `vs/**/test/**` directories while retaining their source; the
-  production-imported agent-host mock remains part of the program.
+- `src/tsconfig.json`: the normal Review build excludes upstream
+  `vs/**/test/**` directories while retaining their source. The former
+  Copilot SDK type alias and agent-host mock root are removed with the host
+  implementation (see Pruned upstream agent host above).
 - `src/vs/code/electron-browser/workbench/workbench.ts`: load the native code
   navigator entry for workspace windows and the Review entry for empty windows,
   with the matching stylesheet. Both entries share the curated editor services.

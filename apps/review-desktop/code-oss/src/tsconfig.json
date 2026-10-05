@@ -9,11 +9,6 @@
 		"resolveJsonModule": true,
 		"isolatedModules": false,
 		"skipLibCheck": true,
-		"paths": {
-			"@github/copilot-sdk": [
-				"./typings/github-copilot-sdk/index.d.ts"
-			]
-		},
 		"outDir": "../out/vs",
 		"types": [
 			"@webgpu/types",
@@ -31,9 +26,6 @@
 			}
 		]
 	},
-	"files": [
-		"./vs/platform/agentHost/test/node/mockAgent.ts"
-	],
 	"include": [
 		"./*.ts",
 		"./typings",

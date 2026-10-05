@@ -49,7 +49,6 @@
 **/src/typings/**/*.d.ts
 **/src/vs/*/**/*.d.ts
 **/src/vs/base/test/common/filters.perf.data.js
-**/src/vs/platform/agentHost/node/codex/protocol/generated/**
 **/src/vs/review/common/reviewProtocol.ts
 **/test/unit/assert.js
 **/typings/**
