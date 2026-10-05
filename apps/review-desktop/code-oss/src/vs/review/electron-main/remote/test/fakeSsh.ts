@@ -5,7 +5,7 @@
 
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import type { ReviewRemoteClock, SpawnSsh, SshChildProcess } from "./reviewRemoteHost.js";
+import type { ReviewRemoteClock, SpawnSsh, SshChildProcess } from "../reviewRemoteHost.js";
 
 class FakeChild extends EventEmitter {
 	static nextPid = 1000;

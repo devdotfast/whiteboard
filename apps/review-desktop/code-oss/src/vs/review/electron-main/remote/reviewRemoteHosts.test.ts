@@ -12,7 +12,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
-import { fakeClock, fakeSsh, until, type FakeRemote } from "./reviewRemoteFakeSsh.js";
+import { fakeClock, fakeSsh, until, type FakeRemote } from "./test/fakeSsh.js";
 import { ReviewRemoteHosts } from "./reviewRemoteHosts.js";
 import type { SshPromptRequest } from "./reviewSshAskpass.js";
 import { reviewSshInstancePrefix } from "./reviewSshCommand.js";
