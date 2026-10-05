@@ -52,7 +52,7 @@ export function freeLoopbackPort(): Promise<number> {
 export class ReviewRemoteHosts {
 	private readonly clock: ReviewRemoteClock;
 	private readonly hosts = new Map<string, ReviewRemoteHost>();
-	private readonly closing = new Set<ReviewRemoteHost>();
+	private readonly closing = new Map<ReviewRemoteHost, Promise<void>>();
 	private readonly refused = new Map<string, ReviewGatewayHost>();
 	private order: string[] = [];
 	private prepared: Promise<ReviewSshAskpass> | undefined;
@@ -73,8 +73,7 @@ export class ReviewRemoteHosts {
 			if (wanted.includes(alias)) continue;
 			this.hosts.delete(alias);
 			this.options.log(`${alias}: removed from the setting; closing its connection.`);
-			this.closing.add(host);
-			void host.dispose().finally(() => this.closing.delete(host));
+			this.closing.set(host, host.dispose().finally(() => this.closing.delete(host)));
 		}
 		this.order = wanted;
 		this.refused.clear();
@@ -91,7 +90,10 @@ export class ReviewRemoteHosts {
 			}
 			const host = this.createHost(alias);
 			this.hosts.set(alias, host);
-			host.start();
+			// The same alias still closing uses the same socket path, which the new host would unlink under it.
+			const previous = [...this.closing].filter(([old]) => old.state.alias === alias).map(([, closed]) => closed);
+			if (previous.length) void Promise.all(previous).then(() => this.hosts.get(alias) === host && host.start());
+			else host.start();
 		}
 		this.publish();
 	}
@@ -112,7 +114,7 @@ export class ReviewRemoteHosts {
 		return (this.disposing ??= (async () => {
 			this.disposed = true;
 			this.cancelSend?.();
-			const hosts = [...this.hosts.values(), ...this.closing];
+			const hosts = [...this.hosts.values(), ...this.closing.keys()];
 			this.hosts.clear();
 			await Promise.all(hosts.map((host) => host.dispose()));
 			(await this.prepared?.catch(() => undefined))?.dispose();
@@ -120,7 +122,7 @@ export class ReviewRemoteHosts {
 	}
 
 	killNow(): void {
-		for (const host of [...this.hosts.values(), ...this.closing]) host.killNow();
+		for (const host of [...this.hosts.values(), ...this.closing.keys()]) host.killNow();
 	}
 
 	private createHost(alias: string): ReviewRemoteHost {

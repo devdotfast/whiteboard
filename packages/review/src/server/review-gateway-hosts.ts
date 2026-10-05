@@ -13,7 +13,7 @@ import { StreamLimitError } from "./bounded-stream.js";
 
 const HEALTH_TIMEOUT_MS = 3_000;
 
-const HEARTBEAT_MS = 30_000;
+const HEARTBEAT_MS = 10_000;
 
 export const FIRST_RETRY_MS = 500;
 
@@ -40,11 +40,13 @@ export interface GatewayRemote {
   readonly endpoint?: { url: string; token: string };
   readonly agent?: http.Agent;
   readonly serverId?: string;
+  readonly unauthorized?: () => void;
 }
 
 interface Host extends GatewayRemote {
   endpoint?: { url: string; token: string };
   agent?: http.Agent;
+  unauthorized?: () => void;
   problem?: ReviewGatewayHost["problem"];
   serverId?: string;
   instanceId?: string;
@@ -54,6 +56,7 @@ interface Host extends GatewayRemote {
   retry?: NodeJS.Timeout;
   checking?: AbortController;
   checked?: boolean;
+  restarted?: boolean;
 }
 
 export function createGatewayHosts(input: {
@@ -62,6 +65,7 @@ export function createGatewayHosts(input: {
   remembered?(serverId: string): string | undefined;
   machine?(serverId: string, alias: string): void;
   changed?(): void;
+  restarted?(alias: string): void;
   heartbeatMs?: number;
 }) {
   const log = input.log ?? (() => {});
@@ -183,6 +187,21 @@ export function createGatewayHosts(input: {
     input.changed?.();
   }
 
+  function restartedHost(
+    host: Host,
+    detail = `${host.alias} restarted; attaching again.`,
+  ) {
+    if (host.restarted || closed) return;
+    host.restarted = true;
+    clearTimeout(host.retry);
+    host.checking?.abort();
+    host.checking = undefined;
+    host.status = "offline";
+    host.detail = detail;
+    report();
+    input.restarted?.(host.alias);
+  }
+
   function dispose(host: Host) {
     clearTimeout(host.retry);
     host.checking?.abort();
@@ -205,7 +224,10 @@ export function createGatewayHosts(input: {
       host.detail = given.problem.detail;
     } else if (!given.endpoint)
       host.detail = `Waiting for a connection to ${given.alias}.`;
-    else host.agent = new http.Agent({ keepAlive: true, timeout: 60_000 });
+    else {
+      host.agent = new http.Agent({ keepAlive: true, timeout: 60_000 });
+      host.unauthorized = () => restartedHost(host);
+    }
 
     return host;
   }
@@ -218,7 +240,7 @@ export function createGatewayHosts(input: {
   }
 
   async function check(host: Host) {
-    if (closed || !host.endpoint || host.problem) return;
+    if (closed || !host.endpoint || host.problem || host.restarted) return;
     clearTimeout(host.retry);
     host.checking?.abort();
     const abort = new AbortController();
@@ -256,15 +278,27 @@ export function createGatewayHosts(input: {
     host.checking = undefined;
     host.checked = true;
 
+    if (
+      !health &&
+      host.instanceId !== undefined &&
+      (code === "ECONNRESET" || code === "ECONNREFUSED")
+    )
+      return restartedHost(
+        host,
+        `${host.alias} is offline: ${reason}; attaching again.`,
+      );
+
     if (!health) {
       host.status = "offline";
       host.detail = `${host.alias} is offline: ${reason}.`;
       retryLater(host);
     } else if (health.serverId === undefined) {
-      host.instanceId = health.instanceId;
-      host.status = "offline";
-      host.detail = `${host.alias} is offline: it did not accept the token.`;
-      retryLater(host);
+      if (host.serverId !== undefined)
+        for (const other of hosts)
+          if (other !== host && other.serverId === host.serverId)
+            void check(other);
+
+      return restartedHost(host);
     } else {
       const restarted =
         host.serverId === health.serverId &&
@@ -278,6 +312,8 @@ export function createGatewayHosts(input: {
           if (other !== host && other.serverId === health.serverId)
             void check(other);
       host.retryMs = FIRST_RETRY_MS;
+
+      if (restarted) return restartedHost(host);
 
       if (health.version === "unknown" || health.version !== input.version) {
         host.status = "incompatible";
@@ -405,6 +441,7 @@ export function send(
     else request.signal.addEventListener("abort", abort, { once: true });
 
     outgoing.on("response", (response) => {
+      if (response.statusCode === 401) remote.unauthorized?.();
       response.on("close", release);
       resolve(response);
     });

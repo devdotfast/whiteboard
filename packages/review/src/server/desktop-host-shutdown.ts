@@ -11,12 +11,23 @@ import {
 interface DesktopHostMessagePort {
   on(event: "message", listener: (event: { data: JsonValue }) => void): void;
   off(event: "message", listener: (event: { data: JsonValue }) => void): void;
+  postMessage?(message: JsonValue): void;
 }
 
 interface DesktopHostProcess {
   parentPort?: DesktopHostMessagePort;
   on(event: "message", listener: (message: JsonValue) => void): void;
   off(event: "message", listener: (message: JsonValue) => void): void;
+  send?(message: JsonValue): void;
+}
+
+export function postToDesktop(
+  hostProcess: DesktopHostProcess,
+  message: JsonValue,
+): void {
+  if (hostProcess.parentPort?.postMessage)
+    hostProcess.parentPort.postMessage(message);
+  else hostProcess.send?.(message);
 }
 
 export function listenForDesktopHostShutdown(

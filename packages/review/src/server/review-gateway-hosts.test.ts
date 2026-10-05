@@ -178,6 +178,9 @@ it("keeps a copied store a duplicate while the first alias is down", async () =>
     state: "offline",
   });
 
+  await expect
+    .poll(() => gateway.states()[0]?.detail)
+    .toBe("wb-a is offline: it refused the connection; attaching again.");
   const restarted = await startRemote(path.join(root, "a"), port);
 
   gateway.set([
@@ -295,4 +298,113 @@ it("sends a request again when the host closed the kept-alive socket it reused",
   expect(await get()).toBe("ok");
   expect(await get()).toBe("ok");
   expect(requests).toBe(3);
+});
+
+it("a restarted server is offline until Desktop attaches again, then online with the new token", async () => {
+  const stateDir = path.join(root, "a");
+  const a = await startRemote(stateDir);
+  const port = Number(new URL(a.endpoint.url).port);
+  const restarted: string[] = [];
+
+  const gateway = createGatewayHosts({
+    version,
+    restarted: (alias) => restarted.push(alias),
+  });
+
+  closes.push(() => gateway.close());
+
+  gateway.set([
+    { alias: "wb-a1", endpoint: a.endpoint },
+    { alias: "wb-a2", endpoint: a.endpoint },
+  ]);
+  const { serverId } = await a.health();
+  await expect
+    .poll(() => gateway.states().map((host) => host.state))
+    .toEqual(["online", "online"]);
+
+  await a.stop();
+  const b = await startRemote(stateDir, port);
+  gateway.failed(gateway.serving(serverId)!, "test");
+
+  await expect
+    .poll(() => gateway.states().map((host) => [host.state, host.detail]))
+    .toEqual([
+      ["offline", "wb-a1 restarted; attaching again."],
+      ["offline", "wb-a2 restarted; attaching again."],
+    ]);
+  expect(restarted).toEqual(["wb-a1", "wb-a2"]);
+
+  gateway.set([
+    { alias: "wb-a1", endpoint: b.endpoint },
+    { alias: "wb-a2", endpoint: b.endpoint },
+  ]);
+  await expect
+    .poll(() => gateway.states().map((host) => host.state))
+    .toEqual(["online", "online"]);
+  expect(restarted).toHaveLength(2);
+  expect(gateway.serving(serverId)?.alias).toBe("wb-a1");
+}, 20_000);
+
+it("a 401 from a host asks Desktop once to attach again", async () => {
+  const fake = await startFake({
+    version,
+    handle: (request, response) => {
+      if (request.url === "/health") return false;
+      response.statusCode = 401;
+      response.end();
+
+      return true;
+    },
+  });
+
+  const restarted: string[] = [];
+
+  const gateway = createGatewayHosts({
+    version,
+    restarted: (alias) => restarted.push(alias),
+  });
+
+  closes.push(() => gateway.close());
+
+  gateway.set([{ alias: "devbox", endpoint: fake.endpoint }]);
+  await expect.poll(() => gateway.states()[0]?.state).toBe("online");
+  const [remote] = gateway.online();
+
+  for (let i = 0; i < 2; i++)
+    (
+      await send(remote!, {
+        method: "GET",
+        path: "/reviews-api",
+        signal: new AbortController().signal,
+      })
+    ).resume();
+
+  expect(gateway.states()[0]).toMatchObject({
+    state: "offline",
+    detail: "devbox restarted; attaching again.",
+  });
+  expect(restarted).toEqual(["devbox"]);
+});
+
+it("a server gone from behind a working forward asks Desktop to attach again", async () => {
+  const a = await startRemote(path.join(root, "a"));
+  const restarted: string[] = [];
+
+  const gateway = createGatewayHosts({
+    version,
+    restarted: (alias) => restarted.push(alias),
+  });
+
+  closes.push(() => gateway.close());
+  gateway.set([{ alias: "wb-a", endpoint: a.endpoint }]);
+  await expect.poll(() => gateway.states()[0]?.state).toBe("online");
+
+  await a.stop();
+  gateway.failed(gateway.online()[0]!, "test");
+
+  await expect.poll(() => restarted).toEqual(["wb-a"]);
+  expect(gateway.states()[0]).toMatchObject({
+    state: "offline",
+    detail: "wb-a is offline: it refused the connection; attaching again.",
+  });
 });

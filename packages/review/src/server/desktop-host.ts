@@ -12,7 +12,10 @@ import { ReviewTelemetry } from "@review/review-telemetry";
 import { SharedReviewStore } from "@review/sharing/import.js";
 import { reviewTelemetryChannel } from "@review/telemetry-config";
 
-import { listenForDesktopHostShutdown } from "./desktop-host-shutdown";
+import {
+  listenForDesktopHostShutdown,
+  postToDesktop,
+} from "./desktop-host-shutdown";
 import { createGlobalReviewServer } from "./desktop-server";
 import {
   drainServerCrashReport,
@@ -96,6 +99,8 @@ export async function runDesktopHost(
     reviewData: local.data,
     cliRuntimePath: env.DEV_FAST_REVIEW_CLI_RUNTIME,
     crashDumpsDir: env.DEV_FAST_REVIEW_CRASH_DUMPS_DIR,
+    onRemoteHostRestarted: (alias) =>
+      postToDesktop(process, { type: "remote-host-restarted", alias }),
   });
 
   try {

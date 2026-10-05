@@ -123,6 +123,7 @@ export function createReviewGateway(input: {
   home: string;
   relay: ReviewDesktopVerbRelay;
   heartbeatMs?: number;
+  restarted?(alias: string): void;
   log?(message: string): void;
 }) {
   const log = input.log ?? (() => {});
@@ -136,6 +137,7 @@ export function createReviewGateway(input: {
     remembered: (serverId) => memory.alias(serverId),
     machine: (serverId, alias) => memory.rename(serverId, alias),
     ...(input.heartbeatMs !== undefined && { heartbeatMs: input.heartbeatMs }),
+    restarted: (alias) => input.restarted?.(alias),
     changed() {
       if (changing) return;
       changing = true;
