@@ -3,14 +3,12 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { REVIEW_REMOTE_WRAPPER_MARK } from "../../common/reviewProtocol.js";
+import { REVIEW_REMOTE_INSTALL_LOCK, REVIEW_REMOTE_LOCK_STALE_SECONDS, REVIEW_REMOTE_VERSION, REVIEW_REMOTE_WRAPPER_MARK } from "../../common/reviewProtocol.js";
 
-export { REVIEW_REMOTE_WRAPPER_MARK };
+export { REVIEW_REMOTE_LOCK_STALE_SECONDS, REVIEW_REMOTE_VERSION, REVIEW_REMOTE_WRAPPER_MARK };
 
 export const REVIEW_REMOTE_INSTALL_SAY = "WHITEBOARD-INSTALL";
 export const REVIEW_REMOTE_INSTALL_MARKER = ".whiteboard-install.json";
-export const REVIEW_REMOTE_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
-export const REVIEW_REMOTE_LOCK_STALE_SECONDS = 15 * 60;
 
 export function shellQuote(value: string, lines = false): string {
 	if ((lines ? /[\x00-\x09\x0b-\x1f\x7f-\x9f]/ : /[\x00-\x1f\x7f-\x9f]/).test(value)) {
@@ -50,7 +48,7 @@ umask 022
 trap '' PIPE
 exec 3>&1
 root=${shellQuote(context.root)}
-lock="$root/install.lock"
+lock="$root/${REVIEW_REMOTE_INSTALL_LOCK}"
 token=${context.token}
 say() { printf '\\n%s %s\\n' ${REVIEW_REMOTE_INSTALL_SAY} "$*" >&3; }
 fail() { say FAIL "$*"; exit 3; }
@@ -94,7 +92,7 @@ case "$started" in
 	if [ ! -e "$lock/started" ] && [ -n "$(find "$lock" -prune -mmin +${staleMinutes} 2>/dev/null)" ]; then started=0; else started=$(date +%s); fi ;;
 esac
 if [ $(( $(date +%s) - started )) -ge ${staleSeconds} ]; then
-	stale="$root/install.lock.$token.stale"
+	stale="$lock.$token.stale"
 	if mv "$lock" "$stale" 2>/dev/null; then
 		# Another install may have taken it over first: give that one back.
 		if [ "$(cat "$stale/token" 2>/dev/null)" = "$held" ] || [ -e "$lock" ]; then rm -rf "$stale"; else mv "$stale" "$lock"; fi
@@ -112,8 +110,8 @@ say REFRESHED
 }
 
 export function releaseScript(context: ReviewRemoteInstallContext): string {
-	return `${prelude(context)}if [ "$(cat "$lock/token" 2>/dev/null)" = "$token" ] && mv "$lock" "$root/install.lock.$token.done" 2>/dev/null; then
-	rm -rf "$root/install.lock.$token.done"
+	return `${prelude(context)}if [ "$(cat "$lock/token" 2>/dev/null)" = "$token" ] && mv "$lock" "$lock.$token.done" 2>/dev/null; then
+	rm -rf "$lock.$token.done"
 fi
 say RELEASED
 `;
@@ -122,7 +120,7 @@ say RELEASED
 export function prepareScript(context: ReviewRemoteInstallContext, input: { version: string; integrity: string; nodeVersion: string }): string {
 	const nodeDir = reviewRemoteNodeDir(context.root, input.nodeVersion);
 	return `${prelude(context)}own
-rm -rf "$root"/versions/*.part "$root"/node/*.part "$root"/install.lock.*.stale "$root"/install.lock.*.done
+rm -rf "$root"/versions/*.part "$root"/node/*.part "$lock".*.stale "$lock".*.done
 mkdir -p "$root/versions" || fail cannot create "$root/versions"
 ${markerCheck(context, input)}
 if [ -n "$complete" ]; then

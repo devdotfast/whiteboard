@@ -19,13 +19,12 @@ test("detection keeps only known agents, once each, and nothing the remote adds"
 		JSON.stringify({
 			event: "connect.detect",
 			agents: [
-				{ id: "pi", name: "\u001b[31mEvil\u001b[0m", present: true, connected: false, manual: "yes", configPath: "/home/dev/.pi" },
-				{ id: "claude", name: "Claude Code", present: true, connected: true },
-				{ id: "pi", present: true, connected: true },
-				{ id: "cursor", present: true, connected: false },
-				{ id: "codex", present: true, connected: "no" },
-				{ id: "opencode", present: false, connected: false },
-				{ id: "__proto__", present: true, connected: false },
+				{ id: "pi", name: "\u001b[31mEvil\u001b[0m", connected: false, manual: "yes", configPath: "/home/dev/.pi" },
+				{ id: "claude", name: "Claude Code", connected: true },
+				{ id: "pi", connected: true },
+				{ id: "cursor", connected: false },
+				{ id: "codex", connected: "no" },
+				{ id: "__proto__", connected: false },
 				"codex",
 				null,
 			],
@@ -37,13 +36,13 @@ test("detection keeps only known agents, once each, and nothing the remote adds"
 		{ id: "claude", connected: true },
 		{ id: "pi", connected: false },
 	]);
-	assert.deepEqual(parseRemoteAgents(JSON.stringify({ event: "connect.detect", agents: [{ id: "codex", present: true, connected: false, manual: true }] })), [
+	assert.deepEqual(parseRemoteAgents(JSON.stringify({ event: "connect.detect", agents: [{ id: "codex", connected: false, manual: true }] })), [
 		{ id: "codex", connected: false, manual: true },
 	]);
 	assert.equal(parseRemoteAgents("bash: whiteboard: command not found\n"), undefined);
 	assert.equal(parseRemoteAgents(JSON.stringify({ event: "connect.detect", agents: "all" })), undefined);
-	const many = Array.from({ length: 10_000 }, () => ({ id: "codex", present: true, connected: false }));
-	assert.deepEqual(parseRemoteAgents(JSON.stringify({ event: "connect.detect", agents: [...many, { id: "pi", present: true, connected: true }] })), [
+	const many = Array.from({ length: 10_000 }, () => ({ id: "codex", connected: false }));
+	assert.deepEqual(parseRemoteAgents(JSON.stringify({ event: "connect.detect", agents: [...many, { id: "pi", connected: true }] })), [
 		{ id: "codex", connected: false },
 	]);
 });

@@ -4,6 +4,7 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  REVIEW_CLI_INSTALL_TARGET_LABELS,
   REVIEW_REMOTE_AGENT_IDS,
   type ReviewRemoteAgentId,
 } from "@dev.fast/review-protocol";
@@ -22,17 +23,9 @@ export const AGENT_CONNECT_TARGETS: readonly (ReviewRemoteAgentId &
 
 export type AgentConnectTarget = ReviewRemoteAgentId;
 
-export const AGENT_NAMES: Record<AgentConnectTarget, string> = {
-  claude: "Claude Code",
-  codex: "Codex",
-  opencode: "OpenCode",
-  pi: "Pi",
-};
-
 export interface DetectedAgent {
   id: AgentConnectTarget;
   name: string;
-  present: true;
   connected: boolean;
   manual?: true;
 }
@@ -68,8 +61,7 @@ export async function detectAgents(scope: Scope): Promise<DetectedAgent[]> {
 
     found.push({
       id,
-      name: AGENT_NAMES[id],
-      present: true,
+      name: REVIEW_CLI_INSTALL_TARGET_LABELS[id],
       connected: await connected(id, scope),
       ...(manual && { manual: true as const }),
     });
@@ -108,7 +100,7 @@ export async function connectAgents(
 
     results.push({
       id,
-      name: AGENT_NAMES[id],
+      name: REVIEW_CLI_INSTALL_TARGET_LABELS[id],
       connected: await connected(id, input),
       output: output.slice(-OUTPUT_LIMIT),
     });

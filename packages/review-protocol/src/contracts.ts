@@ -604,6 +604,16 @@ export interface ReviewRemoteHostsSettings {
 export const REVIEW_REMOTE_WRAPPER_MARK =
   "# Written by Whiteboard Desktop, which replaces it with each install.";
 
+export const REVIEW_REMOTE_ATTACH_BEGIN = "WHITEBOARD-REMOTE-BEGIN";
+
+export const REVIEW_REMOTE_ATTACH_END = "WHITEBOARD-REMOTE-END";
+
+export const REVIEW_REMOTE_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+
+export const REVIEW_REMOTE_INSTALL_LOCK = "install.lock";
+
+export const REVIEW_REMOTE_LOCK_STALE_SECONDS = 15 * 60;
+
 export const REVIEW_REMOTE_AGENT_IDS = [
   "claude",
   "codex",
@@ -624,10 +634,6 @@ export interface ReviewRemoteAgentResult {
   connected: boolean;
   output: string;
 }
-
-export const REVIEW_REMOTE_ATTACH_BEGIN = "WHITEBOARD-REMOTE-BEGIN";
-
-export const REVIEW_REMOTE_ATTACH_END = "WHITEBOARD-REMOTE-END";
 
 /** Workspace attachment identity is independent of the displayed source generation. */
 export interface ReviewLanguageEnvironment {
@@ -1082,6 +1088,19 @@ export const ReviewCliInstallTargetSchema = z.enum(
 export type ReviewCliInstallTarget = z.infer<
   typeof ReviewCliInstallTargetSchema
 >;
+
+export const REVIEW_CLI_INSTALL_TARGET_LABELS: Record<
+  ReviewCliInstallTarget,
+  string
+> = {
+  claude: "Claude Code",
+  codex: "Codex",
+  cursor: "Cursor",
+  opencode: "OpenCode",
+  pi: "Pi",
+  omp: "oh-my-pi",
+  copilot: "Copilot CLI",
+};
 
 export const ReviewCliInstallStampSchema = z.object({
   consent: z.enum(["granted", "declined", "skipped"], {

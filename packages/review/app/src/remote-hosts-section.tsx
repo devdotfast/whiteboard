@@ -1,13 +1,13 @@
 import { Button } from "@canvas/ui/button";
-import type {
-  ReviewGatewayHostState,
-  ReviewRemoteAgent,
-  ReviewRemoteHostsSettings,
+import {
+  REVIEW_CLI_INSTALL_TARGET_LABELS,
+  type ReviewGatewayHostState,
+  type ReviewRemoteAgent,
+  type ReviewRemoteHostsSettings,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useState } from "react";
 
-import { TARGET_LABELS } from "./connect-card";
 import { settingsStyles as styles } from "./settings-styles";
 import { tokens } from "./tokens.stylex";
 
@@ -298,8 +298,8 @@ function RemoteHostAgents({
         results
           .map((done) =>
             done.connected
-              ? `${TARGET_LABELS[done.id]} is connected on ${alias}.`
-              : `${TARGET_LABELS[done.id]} was not connected on ${alias}: ${done.output || "it printed nothing"}`,
+              ? `${REVIEW_CLI_INSTALL_TARGET_LABELS[done.id]} is connected on ${alias}.`
+              : `${REVIEW_CLI_INSTALL_TARGET_LABELS[done.id]} was not connected on ${alias}: ${done.output || "it printed nothing"}`,
           )
           .join(" "),
       );
@@ -318,7 +318,10 @@ function RemoteHostAgents({
       {offered?.length ? (
         <span {...stylex.props(styles.rowDescription, local.detail)}>
           Agents on {alias}:{" "}
-          {offered.map((agent) => TARGET_LABELS[agent.id]).join(", ")} —{" "}
+          {offered
+            .map((agent) => REVIEW_CLI_INSTALL_TARGET_LABELS[agent.id])
+            .join(", ")}{" "}
+          —{" "}
           <Button
             aria-label={`Connect agents on ${alias}`}
             disabled={busy}
@@ -333,7 +336,7 @@ function RemoteHostAgents({
           key={agent.id}
           {...stylex.props(styles.rowDescription, local.detail)}
         >
-          Paste into {TARGET_LABELS[agent.id]} on {alias}:{" "}
+          Paste into {REVIEW_CLI_INSTALL_TARGET_LABELS[agent.id]} on {alias}:{" "}
           <code {...stylex.props(local.command)}>
             Run `whiteboard connect {agent.id}` and follow the instructions to
             connect this agent to Whiteboard.

@@ -59,7 +59,7 @@ describe("detectAgents", () => {
     await fakeCli(bin, "codex");
 
     expect(await detectAgents({ homeDir, env })).toEqual([
-      { id: "codex", name: "Codex", present: true, connected: false },
+      { id: "codex", name: "Codex", connected: false },
     ]);
   });
 
@@ -116,11 +116,10 @@ describe("detectAgents", () => {
       {
         id: "codex",
         name: "Codex",
-        present: true,
         connected: false,
         manual: true,
       },
-      { id: "pi", name: "Pi", present: true, connected: false, manual: true },
+      { id: "pi", name: "Pi", connected: false, manual: true },
     ]);
   });
 
@@ -133,7 +132,7 @@ describe("detectAgents", () => {
     );
 
     expect(await detectAgents({ homeDir, env })).toEqual([
-      { id: "claude", name: "Claude Code", present: true, connected: false },
+      { id: "claude", name: "Claude Code", connected: false },
     ]);
   });
 });

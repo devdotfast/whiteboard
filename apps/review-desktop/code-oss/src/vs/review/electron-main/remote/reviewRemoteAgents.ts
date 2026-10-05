@@ -56,7 +56,7 @@ function agentsOf<T extends { id: ReviewRemoteAgentId }>(record: Record<string, 
 
 export function parseRemoteAgents(stdout: string): ReviewRemoteAgent[] | undefined {
 	return agentsOf(lastEvent(stdout, "connect.detect"), (item) =>
-		item.present === true && typeof item.connected === "boolean"
+		typeof item.connected === "boolean"
 			? { id: item.id as ReviewRemoteAgentId, connected: item.connected, ...(item.manual === true && { manual: true as const }) }
 			: undefined,
 	);

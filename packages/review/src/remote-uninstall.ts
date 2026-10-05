@@ -14,7 +14,11 @@ import {
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { REVIEW_REMOTE_WRAPPER_MARK } from "@dev.fast/review-protocol";
+import {
+  REVIEW_REMOTE_INSTALL_LOCK,
+  REVIEW_REMOTE_LOCK_STALE_SECONDS,
+  REVIEW_REMOTE_WRAPPER_MARK,
+} from "@dev.fast/review-protocol";
 
 import { whiteboardRemoteHome } from "./remote-extensions";
 import {
@@ -23,12 +27,11 @@ import {
 } from "./remote-language-server";
 import { DEV_REVIEW_HOME_ENV } from "./review-home-paths";
 import {
-  readReviewServerDiscovery,
-  readReviewServerHealth,
-} from "./server-discovery";
-import { stopBackgroundServer } from "./server/background-server";
+  recordedBackgroundServer,
+  stopBackgroundServer,
+} from "./server/background-server";
 
-const LOCK_STALE_MS = 15 * 60_000;
+const LOCK_STALE_MS = REVIEW_REMOTE_LOCK_STALE_SECONDS * 1000;
 
 const REVIEW_STORE = [
   "review-api.db",
@@ -86,7 +89,7 @@ export async function remoteUninstall(input: {
 
   const install = whiteboardRemoteHome(input.env);
   const wrapper = path.join(input.home, ".local", "bin", "whiteboard");
-  const lock = path.join(install, "install.lock");
+  const lock = path.join(install, REVIEW_REMOTE_INSTALL_LOCK);
 
   const taken = existsSync(install)
     ? await takeInstallLock(install)
@@ -101,16 +104,12 @@ export async function remoteUninstall(input: {
   let removedInstall = false;
 
   try {
-    const discovery = await readReviewServerDiscovery(input.stateDir).catch(
-      () => null,
-    );
+    const server = await recordedBackgroundServer(input.stateDir);
 
-    const health = discovery && (await readReviewServerHealth(discovery));
-
-    const recorded =
-      discovery && health?.serverPid === discovery.serverPid
-        ? { ...discovery, version: health.version ?? null }
-        : undefined;
+    const recorded = server && {
+      ...server.discovery,
+      version: server.health.version ?? null,
+    };
 
     const stoppable =
       recorded && recorded.startedBy !== "user"
@@ -204,7 +203,7 @@ export async function takeInstallLock(
     afterMkdir?(): Promise<void>;
   } = {},
 ): Promise<{ token: string } | { holder: string }> {
-  const lock = path.join(install, "install.lock");
+  const lock = path.join(install, REVIEW_REMOTE_INSTALL_LOCK);
   const token = randomBytes(8).toString("hex");
 
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -238,7 +237,11 @@ export async function takeInstallLock(
       return { holder: await readText(path.join(lock, "owner")) };
 
     await hooks.beforeMove?.();
-    const aside = path.join(install, `install.lock.${token}.stale`);
+
+    const aside = path.join(
+      install,
+      `${REVIEW_REMOTE_INSTALL_LOCK}.${token}.stale`,
+    );
 
     if (
       !(await rename(lock, aside).then(

@@ -223,7 +223,7 @@ test("a window gets the VS Code server of a machine only while the gateway has i
 });
 
 const INSTALLED_INTEGRITY = `sha512-${"A".repeat(86)}==`;
-const INSTALLED = { nodePath: "/n/bin/node", cliPath: "/v/cli.js", launcher: "/v/whiteboard", diffr: true };
+const INSTALLED = { nodePath: "/n/bin/node", cliPath: "/v/cli.js" };
 
 test("install progress is sent at most once a second, the latest step only", async (t) => {
 	const gate = Promise.withResolvers<void>();
@@ -558,7 +558,7 @@ test("quitting while a removed host's master closes waits for it", async (t) => 
 });
 
 test("a server's agents are read on their own once a session, and again only when asked", async (t) => {
-	const { manager, ssh, sentUntil } = await managerFor(t, { "wb-test-a": { detect: { code: 0, stdout: detectOutput([{ id: "pi", present: true, connected: false }]) } } });
+	const { manager, ssh, sentUntil } = await managerFor(t, { "wb-test-a": { detect: { code: 0, stdout: detectOutput([{ id: "pi", connected: false }]) } } });
 
 	manager.update(true, ["wb-test-a"]);
 	await sentUntil((hosts) => byAlias(hosts, "wb-test-a")?.endpoint !== undefined);

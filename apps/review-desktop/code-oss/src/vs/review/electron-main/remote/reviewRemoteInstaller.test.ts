@@ -108,7 +108,8 @@ async function fixture(t: test.TestContext, cli = CLI) {
 		...change,
 	});
 	const remoteRoot = join(home, ".dev", "whiteboard-remote");
-	return { root, home, cache, pack, probe, progress, input, remoteRoot, versions: () => readdir(join(remoteRoot, "versions")).catch((): string[] => []) };
+	const launcher = join(remoteRoot, "versions", VERSION, "whiteboard");
+	return { root, home, cache, pack, probe, progress, input, remoteRoot, launcher, versions: () => readdir(join(remoteRoot, "versions")).catch((): string[] => []) };
 }
 
 const run = (file: string, ...args: string[]) => execFileSync(file, args, { encoding: "utf8" }).trim();
@@ -141,8 +142,7 @@ test("DEV_REVIEW_HOME moves the probe's versions, the install, its launcher and 
 	const result = await installRemote(f.input({ probe: { ...f.probe, root: before.root }, spawn }));
 
 	assert.ok(result.cliPath.startsWith(`${root}/versions/${VERSION}/`), result.cliPath);
-	assert.equal(result.launcher, `${root}/versions/${VERSION}/whiteboard`);
-	assert.equal(run(result.launcher, "version", "--json"), `{"event":"version","version":"${VERSION}"}`);
+	assert.equal(run(`${root}/versions/${VERSION}/whiteboard`, "version", "--json"), `{"event":"version","version":"${VERSION}"}`);
 	assert.deepEqual((await probed()).installed, [{ version: VERSION, integrity: f.pack.integrity }]);
 	await uninstallRemote({ session: reviewSshSession("devbox", tmpdir()), spawn, env: {} });
 	assert.deepEqual(await readdir(f.home), [".local"]);
@@ -156,9 +156,8 @@ test("installs the package, its launcher and ~/.local/bin/whiteboard; a second c
 	const dir = join(f.remoteRoot, "versions", VERSION);
 	assert.equal(result.cliPath, join(dir, "node_modules/@dev.fast/whiteboard/dist/cli.js"));
 	assert.equal(result.nodePath, process.execPath);
-	assert.equal(result.diffr, false);
 	assert.deepEqual(f.progress, [{ step: "package", via: "upload" }, { step: "verifying" }, { step: "done", cliPath: result.cliPath }]);
-	assert.equal(run(result.launcher, "version", "--json"), `{"event":"version","version":"${VERSION}"}`);
+	assert.equal(run(f.launcher, "version", "--json"), `{"event":"version","version":"${VERSION}"}`);
 	const wrapper = join(f.home, ".local/bin/whiteboard");
 	assert.ok((await readFile(wrapper, "utf8")).includes(REVIEW_REMOTE_WRAPPER_MARK));
 	assert.equal(run(wrapper, "a b"), "ran a b");
@@ -195,7 +194,7 @@ test("another pack under the same version is installed again", async (t) => {
 
 	assert.ok(f.progress.some((p) => p.step === "package"));
 	assert.match(await readFile(result.cliPath, "utf8"), /another build/);
-	assert.equal(JSON.parse(await readFile(join(dirname(result.launcher), REVIEW_REMOTE_INSTALL_MARKER), "utf8")).integrity, other.integrity);
+	assert.equal(JSON.parse(await readFile(join(dirname(f.launcher), REVIEW_REMOTE_INSTALL_MARKER), "utf8")).integrity, other.integrity);
 	assert.deepEqual(await f.versions(), [VERSION]);
 });
 
@@ -222,10 +221,10 @@ test("an existing ~/.local/bin/whiteboard that Desktop did not write is left alo
 	await mkdir(dirname(wrapper), { recursive: true });
 	await writeFile(wrapper, "#!/bin/sh\necho mine\n", { mode: 0o755 });
 
-	const result = await installRemote(f.input());
+	await installRemote(f.input());
 
 	assert.equal(await readFile(wrapper, "utf8"), "#!/bin/sh\necho mine\n");
-	assert.equal(run(result.launcher, "version", "--json"), `{"event":"version","version":"${VERSION}"}`);
+	assert.equal(run(f.launcher, "version", "--json"), `{"event":"version","version":"${VERSION}"}`);
 });
 
 async function earlierVersion(remoteRoot: string, version: string): Promise<string> {
@@ -300,8 +299,8 @@ test("an abort while npm runs ends it, leaves no version and no lock, and the ne
 	assert.ok(!(await f.versions()).includes(VERSION));
 	assert.ok(!(await readdir(f.remoteRoot)).includes("install.lock"));
 
-	const result = await installRemote(f.input());
-	assert.equal(run(result.launcher, "version", "--json"), `{"event":"version","version":"${VERSION}"}`);
+	await installRemote(f.input());
+	assert.equal(run(f.launcher, "version", "--json"), `{"event":"version","version":"${VERSION}"}`);
 	assert.deepEqual(await f.versions(), [VERSION]);
 });
 
@@ -464,8 +463,8 @@ test("an abort during an upload is an AbortError", async (t) => {
 
 test("a marker whose integrity only contains the pin is not complete", async (t) => {
 	const f = await fixture(t);
-	const result = await installRemote(f.input());
-	const marker = join(dirname(result.launcher), REVIEW_REMOTE_INSTALL_MARKER);
+	await installRemote(f.input());
+	const marker = join(dirname(f.launcher), REVIEW_REMOTE_INSTALL_MARKER);
 	const text = await readFile(marker, "utf8");
 	await writeFile(marker, text.replace(f.pack.integrity, `${f.pack.integrity}x`));
 	f.progress.length = 0;
