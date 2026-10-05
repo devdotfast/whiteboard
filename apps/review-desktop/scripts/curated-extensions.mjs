@@ -26,6 +26,8 @@ import {
   curatedGroups,
   openVsxUrl,
   parseGroupSelection,
+  remoteExtensionIds,
+  remoteTargets,
   supportedTargets,
   targetKeyFor,
 } from "./curated-extensions.manifest.mjs";
@@ -562,7 +564,12 @@ async function printHashes(target) {
   for (const extension of curatedExtensions) {
     const targetKeys = extension.targets.universal
       ? ["universal"]
-      : supportedTargets;
+      : [
+          ...new Set([
+            ...supportedTargets,
+            ...(remoteExtensionIds.includes(extension.id) ? remoteTargets : []),
+          ]),
+        ];
 
     for (const targetKey of targetKeys) {
       const cached = cachePathFor(extension, targetKey);

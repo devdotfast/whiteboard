@@ -26,6 +26,8 @@ import {
   openVsxUrl,
   optionalExtensions,
   parseGroupSelection,
+  remoteExtensionIds,
+  remoteTargets,
   supportedTargets,
   targetKeyFor,
 } from "./curated-extensions.manifest.mjs";
@@ -94,9 +96,13 @@ test("pins every curated extension to a checksum for every supported target", ()
     if (extension.targets.universal) {
       assert.deepEqual(targetKeys, ["universal"], `${extension.id} targets`);
     } else {
+      const expected = remoteExtensionIds.includes(extension.id)
+        ? new Set([...supportedTargets, ...remoteTargets])
+        : new Set(supportedTargets);
+
       assert.deepEqual(
         targetKeys.sort(),
-        [...supportedTargets].sort(),
+        [...expected].sort(),
         `${extension.id} must pin every supported target`,
       );
     }

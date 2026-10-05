@@ -43,6 +43,53 @@ export const OPTIONAL_NATIVE_PACKAGES = [
   "vsda",
 ];
 
+export const REMOTE_BUILTIN_EXTENSIONS = [
+  "typescript-language-features",
+  "json-language-features",
+  "css-language-features",
+  "html-language-features",
+];
+
+async function buildBuiltinExtensions(out) {
+  const buildRequire = createRequire(path.join(codeOss, "build/package.json"));
+  const vsce = buildRequire("@vscode/vsce");
+  const extensions = path.join(codeOss, "extensions");
+
+  for (const name of REMOTE_BUILTIN_EXTENSIONS) {
+    const source = path.join(extensions, name);
+    const destination = path.join(out, "extensions", name);
+
+    execFileSync(process.execPath, ["esbuild.mts"], {
+      cwd: source,
+      stdio: ["ignore", "ignore", "inherit"],
+    });
+
+    const files = await vsce.listFiles({
+      cwd: source,
+      packageManager: vsce.PackageManager.None,
+    });
+
+    for (const file of files.filter((f) => !f.endsWith(".map"))) {
+      fs.cpSync(path.join(source, file), path.join(destination, file));
+    }
+
+    const manifestPath = path.join(destination, "package.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+
+    delete manifest.scripts;
+    delete manifest.dependencies;
+    delete manifest.devDependencies;
+    manifest.main &&= manifest.main.replace("/out/", "/dist/");
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  }
+
+  fs.cpSync(
+    path.join(extensions, "node_modules/typescript"),
+    path.join(out, "extensions/node_modules/typescript"),
+    { recursive: true },
+  );
+}
+
 function desktopCommit() {
   const fromEnv = process.env.BUILD_SOURCEVERSION?.trim();
 
@@ -153,6 +200,8 @@ export async function buildRemoteRuntime({
       `remote runtime left imports unbundled: ${[...unexpected].join(", ")}`,
     );
   }
+
+  await buildBuiltinExtensions(out);
 
   return { out, commit };
 }

@@ -1,12 +1,21 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { REMOTE_RUNTIME_ENTRIES } from "./build-remote-runtime.mjs";
+import {
+  REMOTE_BUILTIN_EXTENSIONS,
+  REMOTE_RUNTIME_ENTRIES,
+} from "./build-remote-runtime.mjs";
 
 const script = fileURLToPath(
   new URL("./build-remote-runtime.mjs", import.meta.url),
@@ -30,6 +39,23 @@ test("builds a runtime that starts on this Node and reports the Desktop's commit
   for (const entry of REMOTE_RUNTIME_ENTRIES) {
     assert.ok(existsSync(path.join(runtime, "out", `${entry}.js`)), entry);
   }
+
+  for (const name of REMOTE_BUILTIN_EXTENSIONS) {
+    const extension = path.join(runtime, "extensions", name);
+
+    const { main } = JSON.parse(
+      readFileSync(path.join(extension, "package.json"), "utf8"),
+    );
+
+    assert.ok(existsSync(path.join(extension, `${main}.js`)), `${name} ${main}`);
+    assert.ok(!existsSync(path.join(extension, "node_modules")), name);
+  }
+
+  assert.ok(
+    existsSync(
+      path.join(runtime, "extensions/node_modules/typescript/lib/tsserver.js"),
+    ),
+  );
 
   const tokenFile = path.join(root, "token");
   writeFileSync(tokenFile, "token", { mode: 0o600 });
