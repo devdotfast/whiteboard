@@ -592,6 +592,7 @@ export interface ReviewRemoteHostsSettings {
   states(): Promise<ReviewGatewayHostState[]>;
   set(aliases: string[]): Promise<string[]>;
   retry(alias: string): Promise<void>;
+  install(alias: string): Promise<void>;
 }
 
 export const REVIEW_REMOTE_ATTACH_BEGIN = "WHITEBOARD-REMOTE-BEGIN";
@@ -871,6 +872,15 @@ export interface ReviewServerHealthWithToken extends ReviewServerHealth {
   commit: string | null;
 }
 
+export const REVIEW_REMOTE_INSTALL_STEPS = [
+  "preparing",
+  "waiting-for-lock",
+  "node",
+  "package",
+  "verifying",
+  "done",
+] as const;
+
 export const ReviewGatewayHostSchema = z.strictObject({
   alias: requiredString,
   endpoint: z
@@ -883,8 +893,17 @@ export const ReviewGatewayHostSchema = z.strictObject({
         "not-installed",
         "auth-failed",
         "unsupported",
+        "incompatible",
       ]),
       detail: stringAllowEmpty,
+    })
+    .optional(),
+  declined: z.literal(true).optional(),
+  installFailure: stringAllowEmpty.optional(),
+  installing: z
+    .strictObject({
+      step: z.enum(REVIEW_REMOTE_INSTALL_STEPS),
+      detail: stringAllowEmpty.optional(),
     })
     .optional(),
   languageFeatures: z.boolean().optional(),
@@ -921,6 +940,7 @@ export interface ReviewGatewayHostState {
   languageFeatures?: boolean;
   languageFeaturesDetail?: string;
   languageGroups?: ReviewGatewayHost["languageGroups"];
+  declined?: true;
 }
 
 export const ReviewRepositoryIdentitySchema = z.strictObject({

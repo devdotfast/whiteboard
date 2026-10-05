@@ -13,6 +13,7 @@ const STATES_EVERY_MS = 3000;
 
 const RETRIED = new Set<ReviewGatewayHostState["state"]>([
   "auth-failed",
+  "incompatible",
   "not-installed",
   "unreachable",
   "unsupported",
@@ -132,6 +133,16 @@ export function RemoteHostsSection({
               ) : null}
             </div>
             <div {...stylex.props(styles.rowControl, local.actions)}>
+              {state?.declined ? (
+                <Button
+                  aria-label={`Install ${name}`}
+                  onClick={() =>
+                    void hosts.install(name).catch(() => undefined)
+                  }
+                >
+                  Install
+                </Button>
+              ) : null}
               {state && RETRIED.has(state.state) ? (
                 <Button
                   aria-label={`Retry ${name}`}
@@ -163,8 +174,8 @@ export function RemoteHostsSection({
         <div {...stylex.props(styles.rowText)}>
           <span {...stylex.props(styles.rowLabel)}>Add a host</span>
           <span {...stylex.props(styles.rowDescription)}>
-            An alias from your SSH configuration. Whiteboard must be installed
-            there.
+            An alias from your SSH configuration. Whiteboard offers to install
+            itself there.
           </span>
         </div>
         <div {...stylex.props(styles.rowControl, local.actions)}>

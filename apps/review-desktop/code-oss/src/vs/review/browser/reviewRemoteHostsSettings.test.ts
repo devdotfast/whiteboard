@@ -23,6 +23,7 @@ function fixture(values: Record<string, unknown>) {
 			listSshAliases: async () => ["devbox"],
 			readRemoteHosts: async () => [{ alias: "devbox", state: "online" }],
 			retryRemoteHost: async (alias) => { retried.push(alias); },
+			installRemoteHost: async (alias) => { retried.push(`install ${alias}`); },
 		},
 	});
 	return { hosts, writes, retried };
