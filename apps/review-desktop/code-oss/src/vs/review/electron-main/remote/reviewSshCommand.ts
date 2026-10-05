@@ -118,6 +118,16 @@ export function sshCancelForwardArgs(
 	return [...base(session, env), "-O", "cancel", "-L", localForward(localPort, remotePort), "--", session.alias];
 }
 
+export function sshRemoteForwardArgs(
+	session: ReviewSshSession,
+	localPort: number,
+	operation: "forward" | "cancel",
+	env: NodeJS.ProcessEnv = process.env,
+): string[] {
+	if (!Number.isInteger(localPort) || localPort < 1 || localPort > 65535) throw new Error(`Invalid port ${localPort}.`);
+	return [...base(session, env), "-O", operation, "-R", `127.0.0.1:0:127.0.0.1:${localPort}`, "--", session.alias];
+}
+
 export function sshCheckArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = process.env): string[] {
 	return [...base(session, env), "-O", "check", "--", session.alias];
 }
