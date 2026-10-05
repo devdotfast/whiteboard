@@ -43,7 +43,7 @@ prints a JSON summary on stdout, one entry per journey, `ok | failed | skipped`.
 ## Phases
 
 Phase 1 runs offline, after a one-time network fetch of the curated VSIX cache
-that `lsp-python` triggers. Phase 2 (`lsp-go`, `lsp-rust`, `remote-host`)
+that `lsp-python` triggers. Phase 2 (`lsp-go`, `lsp-rust`, `remote-host`, `remote-lsp`)
 downloads toolchains or a container image and runs only with
 `REVIEW_E2E_NETWORK=1` or when named with `--journey`. In development mode each journey
 re-materializes its extension group through `run.sh`, so this checkout's
@@ -150,4 +150,60 @@ R="node apps/review-desktop/scripts/e2e/remote/remote.mjs"
 export WB_TEST_RUN=e2e-$$
 trap '$R down --all; $R verify-clean' EXIT
 node apps/review-desktop/scripts/e2e/run.mjs --runtime "$REVIEW_E2E_RUNTIME" --journey remote-host
+```
+
+## The remote-lsp journey
+
+`remote-lsp` checks language features for remote reviews: a laptop and two
+containers (`wb-test-a`, `wb-test-b`) in one window. `a.ts` exports `answer`
+as `1`, `42` and `99` at the same path, `/tmp/wbt.<run>/proj`, on each
+machine, and a hover in each review's Diff tab must show that machine's
+number. In order, it checks:
+
+1. both hosts report language features available;
+2. four reviews are open at once;
+3. hovers and go to definition answer from their own machine;
+4. a Python hover from ty works on A;
+5. the laptop's own providers are unchanged;
+6. A and the laptop keep answering while B is frozen and its ssh master killed
+   for longer than its reconnection grace, and B answers again after, without
+   a reload;
+7. B answers again after its VS Code server is killed;
+8. B with another commit reads normally, has no hovers, and Settings says why;
+9. after two reloads each remote has one extension host, and none after the
+   close;
+10. times and memory, failing a first hover over 10 s or a warm one over
+    500 ms.
+
+Before running it, build the Desktop and the remote runtime from this
+checkout, and stage the runtime as above:
+
+```sh
+REVIEW_DESKTOP_DEV_FAST=1 DEV_REVIEW_EXTENSIONS=none pnpm desktop:build
+node apps/review-desktop/scripts/build-remote-runtime.mjs
+R="node apps/review-desktop/scripts/e2e/remote/remote.mjs"
+export WB_TEST_RUN=e2e-$$ DEV_FAST_REVIEW_DESKTOP_BACKGROUND=1
+trap '$R down --all; $R verify-clean' EXIT
+node apps/review-desktop/scripts/e2e/run.mjs --runtime "$REVIEW_E2E_RUNTIME" --journey remote-lsp
+```
+
+Like `remote-host`, it needs Docker and runs in development mode only. The
+containers download the language extensions from Open VSX. For the
+commit check, the journey writes `code-oss/product.overrides.json` with the
+remote runtime's commit and removes it when the run ends; it refuses to run
+over a different one. Each check is printed on stderr as it passes.
+
+Against two hosts you prepared, such as AWS instances, set
+`REVIEW_E2E_REMOTE_HOSTS` to their two names in the `WB_TEST_RUN` run. Install
+Node 24 and the package on each by hand, from `$R pack --out <file.tgz>`. The
+journey then skips `up` and `install` and the package swap (step 8). It
+freezes B with `kill -STOP` on its servers, and it leaves the run for you to
+remove:
+
+```sh
+export WB_TEST_RUN=aws-$$
+$R aws-up a --arch x64; $R aws-up b --arch arm64
+$R pack --out /tmp/wb.tgz    # then, on each host: Node 24, `sudo npm install -g` the tarball
+REVIEW_E2E_REMOTE_HOSTS=a,b node apps/review-desktop/scripts/e2e/run.mjs --runtime "$REVIEW_E2E_RUNTIME" --journey remote-lsp
+$R down --all; $R verify-clean
 ```

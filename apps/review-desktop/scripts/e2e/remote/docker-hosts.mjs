@@ -291,9 +291,8 @@ export function containerOf(runState, name) {
   return host;
 }
 
-export async function install(runState, name, version) {
-  const host = containerOf(runState, name);
-  const scratch = await mkdtemp(`${runState.dir}/pack-`);
+export async function packStaged(tarball, { version, runtime } = {}) {
+  const scratch = await mkdtemp(`${path.dirname(tarball)}/pack-`);
 
   try {
     await run("pnpm", [
@@ -315,11 +314,23 @@ export async function install(runState, name, version) {
       await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     }
 
-    await stageVscodeServer(path.join(scratch, "package"));
-    const tarball = path.join(scratch, "staged.tgz");
+    await stageVscodeServer(path.join(scratch, "package"), { runtime });
     await run("tar", ["-czf", tarball, "-C", scratch, "package"], {
       env: { ...process.env, COPYFILE_DISABLE: "1" },
     });
+
+    return `${manifest.name}@${manifest.version}`;
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+export async function install(runState, name, { version, runtime } = {}) {
+  const host = containerOf(runState, name);
+  const tarball = `${runState.dir}/staged-${randomBytes(3).toString("hex")}.tgz`;
+
+  try {
+    const packed = await packStaged(tarball, { version, runtime });
 
     await docker("cp", tarball, `${host.container}:/tmp/wb-test-package.tgz`);
 
@@ -347,8 +358,8 @@ export async function install(runState, name, version) {
     }
 
     await docker("exec", host.container, "rm", "/tmp/wb-test-package.tgz");
-    console.log(`${manifest.name}@${manifest.version}`);
+    console.log(packed);
   } finally {
-    await rm(scratch, { recursive: true, force: true });
+    await rm(tarball, { force: true });
   }
 }

@@ -75,11 +75,40 @@ never stored.
 While a host is not `online`, its reviews stay in Home, drawn as unavailable.
 Opening one says why.
 
+## Language features
+
+Hover and go to definition work in a remote review's code, answered on the
+remote by the same language extensions a laptop review uses. Desktop runs a
+VS Code server and one extension host on each remote it connects to.
+
+- **Which languages:** TypeScript, JavaScript, JSON, CSS and HTML always.
+  Python, with ty, Ruff and the Python extension. Go when you have installed
+  the Go extensions in Whiteboard (Settings → Tools → Extensions) and Go is
+  installed on the remote.
+- **First use:** the remote downloads its language extensions from Open VSX
+  (`open-vsx.org`) the first time Desktop connects. That takes a few seconds
+  to a minute, and the remote needs network access to Open VSX for it. A
+  remote without that access still shows its reviews, without hovers.
+- **Memory:** plan on about 1 GB for the VS Code server, its extension host and
+  the language servers of one TypeScript and one Python project; about 0.8 GB
+  with TypeScript alone. The server exits 5 minutes after the last window
+  leaves.
+- **Same version:** language features need the same Whiteboard version on
+  both ends. Otherwise the host stays `online` and its reviews open, and
+  Settings says under the host why language features are unavailable.
+
+Settings shows "Language features: available" or why not for each online host.
+
+Extensions on a remote are trusted the way VS Code Remote trusts them: they
+run on that machine and can do in the window what a local extension can. The
+code in a review stays read-only.
+
+An extension on a remote that asks for call or type hierarchies may also get
+answers about another remote's files.
+
 ## Not available for remote reviews yet
 
 - Source windows: "Open file" and the source tree are hidden.
-- Language features, such as hover and go to definition, in code on the
-  remote.
 - Sharing.
 - Traces.
 - Scratchpads. The scratchpad is always the laptop's.
