@@ -28,6 +28,8 @@ test("source tree, selected code, definitions and diffs hand off before creating
 		{ async getConnection() { return { serverUrl: "http://localhost", token: "test" }; } } as never,
 		{ async openWindow(openables: IWindowOpenable[], options: IOpenWindowOptions) { windows.push({ openables, options }); } } as never,
 		{ warn() {} } as never,
+		{} as never,
+		{} as never,
 	);
 	const resolver = new ReviewEditorResolverService(
 		{ get activeGroup() { throw new Error("Review must not create an editor group"); } } as never,
@@ -46,7 +48,7 @@ test("source tree, selected code, definitions and diffs hand off before creating
 		{ workspaceUri: URI.file("/navigator/base.code-workspace") },
 		{ fileUri: URI.file("/navigator/base/old-name.ts:42:3") },
 	]);
-	assert.deepEqual(windows[1].options, { forceNewWindow: true, gotoLineMode: true, diffMode: false });
+	assert.deepEqual(windows[1].options, { forceNewWindow: true, gotoLineMode: true, diffMode: false, reviewSourceTitle: { side: "base", title: "base" } });
 	assert.equal(requests[1].searchParams.get("version"), "7");
 	assert.equal(requests[1].searchParams.get("commit"), "selected-commit");
 	assert.equal(requests[1].searchParams.get("repositoryId"), "other-repository");
