@@ -189,6 +189,7 @@ export async function startGateway(
     home?: string;
     relay?: ReviewDesktopVerbRelay;
     heartbeatMs?: number;
+    languageContextMs?: number;
   } = {},
 ) {
   const home = options.home ?? path.join(root, "laptop");
@@ -222,6 +223,9 @@ export async function startGateway(
     relay,
     ...(options.heartbeatMs !== undefined && {
       heartbeatMs: options.heartbeatMs,
+    }),
+    ...(options.languageContextMs !== undefined && {
+      languageContextMs: options.languageContextMs,
     }),
     log: (message) => logged.push(message),
   });
