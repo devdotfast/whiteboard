@@ -135,6 +135,33 @@ const PI_PACKAGE = /^npm:@dev\.fast\/pi-whiteboard(@.*)?$/;
 const OPENCODE_PLUGIN =
   /"plugin"\s*:\s*\[[^\]]*"@dev\.fast\/opencode-whiteboard(@[^"]*)?"/;
 
+const OpenCodeConfigSchema = z.object({
+  mcp: z.object({
+    whiteboard: z.unknown().optional(),
+    servers: z.object({ whiteboard: z.unknown().optional() }).optional(),
+  }),
+});
+
+/** OpenCode's config is JSONC: drop comments and trailing commas, keep strings. */
+const JSONC_EXTRAS =
+  /("(?:\\.|[^"\\])*")|\/\/[^\n]*|\/\*[\s\S]*?\*\/|,(?=\s*[}\]])/g;
+
+function openCodeConnected(text: string): boolean {
+  if (OPENCODE_PLUGIN.test(text)) return true;
+
+  try {
+    const { mcp } = OpenCodeConfigSchema.parse(
+      JSON.parse(text.replace(JSONC_EXTRAS, "$1")),
+    );
+
+    return (
+      mcp.whiteboard !== undefined || mcp.servers?.whiteboard !== undefined
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function connected(
   id: AgentConnectTarget,
   scope: Scope,
@@ -168,10 +195,8 @@ async function connected(
       }
 
       case "opencode": {
-        // JSONC: read as text, not parsed.
         for (const name of ["opencode.json", "opencode.jsonc", "config.json"]) {
-          if (OPENCODE_PLUGIN.test(await read(name).catch(() => "")))
-            return true;
+          if (openCodeConnected(await read(name).catch(() => ""))) return true;
         }
 
         return false;

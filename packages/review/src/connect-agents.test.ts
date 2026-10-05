@@ -101,6 +101,31 @@ describe("detectAgents", () => {
     ]);
   });
 
+  it("finds OpenCode's whiteboard MCP server in its JSONC config", async () => {
+    const opencode = async (text: string) => {
+      const { homeDir, bin, env } = await fakeHome();
+      await fakeCli(bin, "opencode");
+      await write(
+        path.join(homeDir, ".config", "opencode", "opencode.jsonc"),
+        text,
+      );
+
+      return (await detectAgents({ homeDir, env }))[0]?.connected;
+    };
+
+    expect(
+      await opencode(
+        '{\n  "$schema": "https://opencode.ai/config.json", // mine\n  "mcp": {\n    /* added */ "whiteboard": { "type": "local" },\n  },\n}\n',
+      ),
+    ).toBe(true);
+    expect(
+      await opencode('{ "mcp": { "servers": { "whiteboard": {} } } }'),
+    ).toBe(true);
+    expect(
+      await opencode('{ "mcp": { "other": { "url": "//whiteboard" } } }'),
+    ).toBe(false);
+  });
+
   it("is not connected by a disabled or other plugin, and a harness without its CLI on PATH is manual", async () => {
     const { homeDir, env } = await fakeHome();
     await write(
@@ -160,6 +185,27 @@ describe("connectAgents", () => {
       "pi install npm:@dev.fast/pi-whiteboard\n",
     );
     expect(await readFile(codexConfig, "utf8")).toBe('model = "x"\n');
+  });
+
+  it("adds OpenCode's MCP server with the whiteboard launch", async () => {
+    const { homeDir, bin, env } = await fakeHome();
+    await mkdir(path.join(homeDir, ".config", "opencode"), { recursive: true });
+    await fakeCli(
+      bin,
+      "opencode",
+      `printf '{"mcp":{"whiteboard":{}}}' > "$HOME/.config/opencode/opencode.json"`,
+    );
+
+    const [result] = await connectAgents({
+      agents: ["opencode"],
+      homeDir,
+      env,
+    });
+
+    expect(result).toMatchObject({ id: "opencode", connected: true });
+    expect(await readFile(path.join(homeDir, "calls.log"), "utf8")).toBe(
+      'opencode mcp add --global whiteboard -- sh -c exec "$HOME/.local/bin/whiteboard" mcp\n',
+    );
   });
 
   async function claudeHome(installExit: number) {

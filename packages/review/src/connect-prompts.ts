@@ -123,7 +123,16 @@ export const CONNECT_COMMANDS = {
   ],
   opencode: [
     {
-      argv: ["opencode", "plugin", "@dev.fast/opencode-whiteboard", "--global"],
+      argv: [
+        "opencode",
+        "mcp",
+        "add",
+        "--global",
+        "whiteboard",
+        "--",
+        REVIEW_MCP_LAUNCH.command,
+        ...REVIEW_MCP_LAUNCH.args,
+      ],
     },
   ],
   pi: [{ argv: ["pi", "install", PI_WHITEBOARD_PACKAGE] }],
