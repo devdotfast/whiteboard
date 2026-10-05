@@ -137,6 +137,8 @@ export interface WhiteboardCoreInput {
     tools: AskTools;
     /** Tests only: an in-process agent. */
     launch?: AskAgentLauncher;
+    /** Where agents are found, and the environment they run in. */
+    env?: NodeJS.ProcessEnv;
     /** Close a thread nobody has watched for this long. */
     idleCloseMs?: number;
   };
@@ -154,12 +156,17 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
 
   const callbacks = relayReviewCallbacks(input.relay, input.softwareMapEnabled);
 
+  const { ask } = input;
+
+  const launch = ask?.launch ?? launchAskAgent;
+
   const askThreads =
-    input.ask &&
-    new AskThreads(input.ask.launch ?? launchAskAgent, input.ask.tools, {
-      ...askThreadLimits,
-      idleCloseMs: input.ask.idleCloseMs,
-    });
+    ask &&
+    new AskThreads(
+      (agent, cwd, options) => launch(agent, cwd, { ...options, env: ask.env }),
+      ask.tools,
+      { ...askThreadLimits, idleCloseMs: ask.idleCloseMs },
+    );
 
   const api = createReviewApi(
     store,
@@ -171,7 +178,10 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
     () => traceMachineEnabled(),
     input.status,
     input.hooks,
-    askThreads && { threads: askThreads, agents: () => detectAskAgents() },
+    askThreads && {
+      threads: askThreads,
+      agents: () => detectAskAgents(ask?.env),
+    },
   );
 
   // A shared store mounts the publisher with the rest of sharing.
