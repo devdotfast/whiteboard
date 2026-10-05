@@ -30,7 +30,8 @@ Here’s a 1 min demo video explaining more: https://www.youtube.com/watch?v=ChP
 
 ## Quickstart
 
-1. [Download Whiteboard](https://dev.fast/install) and open the app.
+1. [Download Whiteboard](https://dev.fast/install) and open the app. On macOS
+   you can also run `brew install --cask devdotfast/tap/whiteboard`.
 2. Connect Claude Code, Codex, or another coding agent from the welcome screen.
 3. Ask your agent to review your current branch against up-to-date main and
    open the result in Whiteboard.

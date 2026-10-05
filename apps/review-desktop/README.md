@@ -301,6 +301,9 @@ keys stay version-free for that reason, so the version rides on each object's
 `df-whiteboard-preview-<preview-version>.dmg`. curl only honours that with `-J`; a
 browser download always does.
 
+Homebrew casks (`devdotfast/tap/whiteboard`, `whiteboard@preview`) install the
+same versioned zips. The tap's hourly workflow bumps them from the update feed.
+
 ```
 update/stable/<target>/latest.json        current-release manifest
 update/preview/<target>/latest.json       current-preview manifest
