@@ -71,6 +71,9 @@ function hostFor(
 	return { host, ssh, clock, reports, last: () => reports.at(-1) };
 }
 
+const INTEGRITY = `sha512-${"A".repeat(86)}==`;
+const at = (version: string, integrity = INTEGRITY) => ({ version, integrity });
+
 const INSTALLED: ReviewRemoteInstallResult = {
 	nodePath: "/home/dev/.dev/whiteboard-remote/node/v24.18.0/bin/node",
 	cliPath: "/home/dev/.dev/whiteboard-remote/versions/0.1.6/node_modules/@dev.fast/whiteboard/dist/cli.js",
@@ -108,6 +111,7 @@ async function installFlow(
 			if (error) throw error;
 			return INSTALLED;
 		},
+		integrity: async () => INTEGRITY,
 	};
 	return { flow, prompts, runs, consentFile };
 }
@@ -730,7 +734,7 @@ test("installs off: no probe, stage 1's attach through PATH, and not-installed w
 test("the version present: no prompt and no install shown; the installed CLI attaches by its path, with --replace", async (t) => {
 	const port = await healthServer(t);
 	const { flow, prompts, runs } = await installFlow(t, "ask");
-	const { host, ssh, reports, last } = hostFor(t, { probe: { installed: ["0.1.5", "0.1.6"] } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+	const { host, ssh, reports, last } = hostFor(t, { probe: { installed: [at("0.1.5"), at("0.1.6")] } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
 
 	host.start();
 	await until(() => last()?.endpoint !== undefined);
@@ -743,6 +747,20 @@ test("the version present: no prompt and no install shown; the installed CLI att
 		ssh.of("wb-test-a", "exec")[0].input,
 		`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' remote attach --json --replace\n`,
 	);
+});
+
+test("the version present with another integrity is not installed: the user is asked and the install is shown", async (t) => {
+	const port = await healthServer(t);
+	const { flow, prompts, runs } = await installFlow(t, "ask", { answers: [true], steps: STEPS });
+	const { host, reports, last } = hostFor(t, { probe: { installed: [at("0.1.5"), at("0.1.6", `sha512-${"B".repeat(86)}==`)] } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(prompts.length, 1);
+	assert.equal(runs.length, 1);
+	assert.deepEqual(reports.find((report) => report.installing)?.installing, { step: "preparing" });
+	assert.equal(await flow.consent.get("wb-test-a"), "allow");
 });
 
 test("the version absent with installs always: each step is reported, then the host attaches", async (t) => {
@@ -839,7 +857,7 @@ test("a host the user agreed to is remembered by its server id, so a Desktop upd
 	assert.deepEqual(JSON.parse(await readFile(first.consentFile, "utf8")), { servers: { [FAKE_SERVER_ID]: { consent: "allow", alias: "wb-test-a" } }, aliases: {} });
 
 	const second = await installFlow(t, "ask", { steps: STEPS, consentFile: first.consentFile });
-	const two = hostFor(t, { probe: { installed: ["0.1.6"] } }, port, "wb-test-a", "/tmp/wb-ssh-test", second.flow, "0.1.7");
+	const two = hostFor(t, { probe: { installed: [at("0.1.6")] } }, port, "wb-test-a", "/tmp/wb-ssh-test", second.flow, "0.1.7");
 
 	two.host.start();
 	await until(() => two.last()?.endpoint !== undefined);
@@ -978,7 +996,7 @@ test("a failed upgrade attaches the older version, which reports why, and Retry 
 		steps: [{ step: "verifying" }],
 		fails: (call) => (call === 1 ? new Error("The package installed on wb-test-a reports version 0.1.5, not 0.1.6.") : undefined),
 	});
-	const { host, ssh, clock, last } = hostFor(t, { probe: { installed: ["0.1.5"] } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+	const { host, ssh, clock, last } = hostFor(t, { probe: { installed: [at("0.1.5")] } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
 
 	host.start();
 	await until(() => last()?.endpoint !== undefined);

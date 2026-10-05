@@ -14,15 +14,13 @@ import {
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { REVIEW_REMOTE_WRAPPER_MARK } from "@dev.fast/review-protocol";
 import { processIsAlive } from "@dev.fast/trace-core";
 
 import {
   readReviewServerDiscovery,
   readReviewServerHealth,
 } from "./server-discovery";
-
-export const REMOTE_WRAPPER_MARK =
-  "# Written by Whiteboard Desktop, which replaces it with each install.";
 
 const LOCK_STALE_MS = 15 * 60_000;
 
@@ -336,5 +334,5 @@ async function desktopWrote(file: string) {
 
   return (await readFile(file, "utf8"))
     .split("\n")
-    .includes(REMOTE_WRAPPER_MARK);
+    .includes(REVIEW_REMOTE_WRAPPER_MARK);
 }

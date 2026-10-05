@@ -6,6 +6,7 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { ReviewRemoteClock, SpawnSsh, SshChildProcess } from "../reviewRemoteHost.js";
+import { REVIEW_REMOTE_INSTALL_SAY } from "../reviewRemoteInstallScript.js";
 import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END } from "../reviewRemoteProbeScript.js";
 
 class FakeChild extends EventEmitter {
@@ -61,13 +62,14 @@ export interface FakeRemote {
 	checkAnswered?: (call: number) => Promise<unknown> | undefined;
 	detect?: Attach;
 	connect?: Attach;
+	uninstall?: { ok: boolean; after?: Promise<unknown> };
 }
 
 type Attach = { code: number; stdout?: string; stderr?: string };
 
 export interface FakeCall {
 	readonly alias: string;
-	kind: "master" | "check" | "exec" | "probe" | "detect" | "connect" | "forward" | "cancel" | "exit";
+	kind: "master" | "check" | "exec" | "probe" | "detect" | "connect" | "uninstall" | "forward" | "cancel" | "exit";
 	readonly args: readonly string[];
 	input?: string;
 	readonly at: number;
@@ -177,6 +179,15 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 						entry.kind = "connect";
 						const answer = remote.connect ?? { code: 0, stdout: connectedOutput(child.input) };
 						return child.finish(answer.code, answer);
+					}
+					if (child.input.includes(" LISTED\\n")) {
+						entry.kind = "uninstall";
+						return child.finish(0, { stdout: `${REVIEW_REMOTE_INSTALL_SAY} HAVE 0.1.6\n${REVIEW_REMOTE_INSTALL_SAY} LISTED\n` });
+					}
+					if (child.input.includes("remote uninstall")) {
+						entry.kind = "uninstall";
+						const done = () => child.finish(0, { stdout: `${JSON.stringify({ event: "remote.uninstall", ok: remote.uninstall?.ok ?? true, reason: "refused" })}\n` });
+						return void (remote.uninstall?.after ?? Promise.resolve()).then(done);
 					}
 					const call = calls.filter((c) => c.alias === alias && c.kind === "exec").length;
 					const attach =

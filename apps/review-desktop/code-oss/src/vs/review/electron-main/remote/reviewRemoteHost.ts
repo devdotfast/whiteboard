@@ -211,6 +211,7 @@ export interface ReviewRemoteInstallFlow {
 	confirm(request: { alias: string; text: string; signal?: AbortSignal }): Promise<boolean | undefined>;
 	cancel?(alias: string): void;
 	run(input: ReviewRemoteInstallRunInput): Promise<ReviewRemoteInstallResult>;
+	integrity(): Promise<string>;
 }
 
 type InstallStep = NonNullable<ReviewGatewayHost["installing"]>["step"];
@@ -273,7 +274,6 @@ export class ReviewRemoteHost {
 	private language: { local: number; remote: number; connectionToken: string; commit: string } | undefined;
 	private pendingAttaches = 0;
 	private cancelPending: (() => void) | undefined;
-	private serverId: string | null = null;
 	private reattaching = false;
 	private queuedReattach = false;
 	private masterStderr = "";
@@ -291,6 +291,8 @@ export class ReviewRemoteHost {
 	private declined = false;
 	private installFailure: string | undefined;
 	private installing: AbortController | undefined;
+	private removing = false;
+	serverId: string | undefined;
 
 	constructor(private readonly options: ReviewRemoteHostOptions) {
 		this.alias = options.session.alias;
@@ -308,7 +310,7 @@ export class ReviewRemoteHost {
 	}
 
 	retry(): void {
-		if (this.disposed) return;
+		if (this.disposed || this.removing) return;
 		this.failures = 0;
 		this.pendingAttaches = 0;
 		this.declined = false;
@@ -318,7 +320,7 @@ export class ReviewRemoteHost {
 	}
 
 	async resume(): Promise<void> {
-		if (this.disposed) return;
+		if (this.disposed || this.removing) return;
 		if (this.cancelTimer) return void this.connect();
 		const master = this.master;
 		const port = this.forwarded?.local;
@@ -334,7 +336,7 @@ export class ReviewRemoteHost {
 	}
 
 	reattach(): Promise<void> {
-		if (this.disposed || this.cancelTimer || !this.master || this.connectedAt === undefined) return Promise.resolve();
+		if (this.disposed || this.removing || this.cancelTimer || !this.master || this.connectedAt === undefined) return Promise.resolve();
 		if (this.reattaching) {
 			this.queuedReattach = true;
 			return Promise.resolve();
@@ -352,7 +354,7 @@ export class ReviewRemoteHost {
 
 	private async attachAgain(reason: string, reuse: boolean): Promise<void> {
 		const env = this.env;
-		if (this.disposed || this.reattaching || !this.master || this.connectedAt === undefined || !env || !this.forwarded) return;
+		if (this.disposed || this.removing || this.reattaching || !this.master || this.connectedAt === undefined || !env || !this.forwarded) return;
 		const generation = this.generation;
 		const stale = () => generation !== this.generation || this.disposed;
 		this.reattaching = true;
@@ -372,6 +374,26 @@ export class ReviewRemoteHost {
 				void this.reattach();
 			}
 		}
+	}
+
+	quiesce(): void {
+		this.removing = true;
+		this.generation++;
+		this.cancelTimer?.();
+		this.cancelTimer = undefined;
+		this.cancelPending?.();
+		this.cancelPending = undefined;
+		this.installing?.abort();
+		this.options.install?.cancel?.(this.alias);
+	}
+
+	get quiesced(): boolean {
+		return this.removing;
+	}
+
+	unquiesce(): void {
+		this.removing = false;
+		this.retry();
 	}
 
 	promptOpened(): void {
@@ -436,6 +458,7 @@ export class ReviewRemoteHost {
 	}
 
 	private async connect(): Promise<void> {
+		if (this.removing) return;
 		const generation = ++this.generation;
 		const stale = () => generation !== this.generation || this.disposed;
 		this.cancelTimer?.();
@@ -491,7 +514,7 @@ export class ReviewRemoteHost {
 		this.attachScript = prepared.script;
 		this.cli = prepared.cli;
 		this.connectedAt = this.clock.now();
-		this.serverId = attach.serverId;
+		this.serverId = attach.serverId ?? undefined;
 		this.masterStderr = "";
 		this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language, ...groupsOf(attach), ...this.facts() });
 		this.whilePending(attach);
@@ -568,7 +591,11 @@ export class ReviewRemoteHost {
 		const support = judgeRemote(probed.probe);
 		if (!support.supported) throw new HostFailure({ state: "unsupported", detail: support.reason });
 		const version = await this.options.desktopVersion();
-		const present = probed.probe.installed.includes(version);
+		const integrity = probed.probe.installed.some((entry) => entry.version === version)
+			? await flow.integrity().catch((error: Error) => void this.options.log(`${this.alias}: no package integrity to compare: ${error.message}`))
+			: undefined;
+		if (stale()) return;
+		const present = probed.probe.installed.some((entry) => entry.version === version && entry.integrity === integrity);
 		if (!present && mode === "ask" && !(await this.agreed(flow, probed.probe, version, stale))) {
 			this.declined = true;
 			return stale() ? undefined : onPath;
@@ -580,7 +607,7 @@ export class ReviewRemoteHost {
 			const { nodePath, cliPath } = installed.path;
 			return { script: () => installedAttachScript(nodePath, cliPath), cli: { nodePath, cliPath } };
 		}
-		if (!probed.probe.installed.some((other) => other !== version)) throw new HostFailure({ state: "not-installed", detail: installed.failed });
+		if (!probed.probe.installed.some((other) => other.version !== version)) throw new HostFailure({ state: "not-installed", detail: installed.failed });
 		this.installFailure = installed.failed;
 		return onPath;
 	}

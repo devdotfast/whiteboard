@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { plainText } from "./reviewRemoteAgents.js";
 import { runSsh, type SpawnSsh } from "./reviewRemoteHost.js";
-import { compareVersions, REVIEW_REMOTE_VERSION } from "./reviewRemoteInstaller.js";
-import { REVIEW_REMOTE_INSTALL_MARKER, REVIEW_REMOTE_INSTALL_SAY, shellQuote } from "./reviewRemoteInstallScript.js";
+import { compareVersions } from "./reviewRemoteInstaller.js";
+import { REVIEW_REMOTE_INSTALL_MARKER, REVIEW_REMOTE_INSTALL_SAY, REVIEW_REMOTE_VERSION, shellQuote } from "./reviewRemoteInstallScript.js";
 import { sshExecArgs, type ReviewSshSession } from "./reviewSshCommand.js";
 
 export const REVIEW_REMOTE_UNINSTALL_TIMEOUT = 60_000;
@@ -61,7 +62,7 @@ export async function uninstallRemote(input: {
 		.filter((value) => value?.event === "remote.uninstall")
 		.at(-1);
 	if (result?.ok === true) return;
-	throw failed(typeof result?.reason === "string" ? result.reason.replace(/[\x00-\x1f\x7f-\x9f]+/g, " ").slice(0, 300) : sshProblem(ran));
+	throw failed(typeof result?.reason === "string" ? plainText(result.reason).slice(0, 300) : sshProblem(ran));
 }
 
 function sshProblem(result: Awaited<ReturnType<typeof runSsh>>): string {

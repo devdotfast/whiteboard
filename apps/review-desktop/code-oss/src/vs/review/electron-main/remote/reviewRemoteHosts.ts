@@ -66,6 +66,8 @@ export class ReviewRemoteHosts {
 	private readonly clock: ReviewRemoteClock;
 	private readonly hosts = new Map<string, ReviewRemoteHost>();
 	private readonly closing = new Map<ReviewRemoteHost, Promise<void>>();
+	private readonly uninstalling = new Map<string, Promise<void>>();
+	private readonly removed = new Set<string>();
 	private readonly refused = new Map<string, ReviewGatewayHost>();
 	private order: string[] = [];
 	private prepared: Promise<ReviewSshAskpass> | undefined;
@@ -114,7 +116,9 @@ export class ReviewRemoteHosts {
 		}
 		this.order = wanted;
 		this.refused.clear();
+		for (const alias of this.removed) if (!wanted.includes(alias)) this.removed.delete(alias);
 		for (const alias of wanted) {
+			if (this.removed.has(alias)) continue;
 			const valid = validateSshAlias(alias);
 			if (!valid.ok) {
 				this.refused.set(alias, { alias, problem: { state: "unreachable", detail: `The SSH alias ${JSON.stringify(alias)} ${valid.reason}.` } });
@@ -122,7 +126,9 @@ export class ReviewRemoteHosts {
 			}
 			const existing = this.hosts.get(alias);
 			if (existing) {
-				if (existing.state.problem && existing.state.problem.state !== "unreachable") existing.retry();
+				if (existing.quiesced) {
+					if (!this.uninstalling.has(alias)) existing.unquiesce();
+				} else if (existing.state.problem && existing.state.problem.state !== "unreachable") existing.retry();
 				continue;
 			}
 			const host = this.createHost(alias);
@@ -136,7 +142,9 @@ export class ReviewRemoteHosts {
 	}
 
 	retry(alias: string): void {
-		this.hosts.get(alias)?.retry();
+		const host = this.hosts.get(alias);
+		if (host?.quiesced && !this.uninstalling.has(alias)) host.unquiesce();
+		else host?.retry();
 	}
 
 	async install(alias: string): Promise<void> {
@@ -154,11 +162,39 @@ export class ReviewRemoteHosts {
 		return host.connectAgents(ids);
 	}
 
-	async uninstall(alias: string): Promise<void> {
+	uninstall(alias: string): Promise<void> {
+		const running = this.uninstalling.get(alias);
+		if (running) return running;
+		const done = this.uninstallOnce(alias).finally(() => this.uninstalling.delete(alias));
+		this.uninstalling.set(alias, done);
+		return done;
+	}
+
+	private async uninstallOnce(alias: string): Promise<void> {
 		const valid = validateSshAlias(alias);
 		if (!valid.ok) throw new Error(`The SSH alias ${JSON.stringify(alias)} ${valid.reason}.`);
-		const env = { ...(await this.options.environment()), ...(await this.askpass()).env(alias) };
-		await uninstallRemote({ session: reviewSshSession(alias, this.options.controlDirectory, this.options.instance), spawn: this.options.spawn, env });
+		const host = this.hosts.get(alias);
+		host?.quiesce();
+		try {
+			const env = { ...(await this.options.environment()), ...(await this.askpass()).env(alias) };
+			await uninstallRemote({ session: reviewSshSession(alias, this.options.controlDirectory, this.options.instance), spawn: this.options.spawn, env });
+		} catch (error) {
+			this.options.log(`${alias}: Whiteboard was not removed; the host waits for the setting.`);
+			throw error;
+		}
+		await this.options.install?.consent.forget(alias, host?.serverId);
+		if (host && this.hosts.get(alias) === host) {
+			this.hosts.delete(alias);
+			this.removed.add(alias);
+			this.publish();
+		}
+		if (!host) return;
+		let closed = this.closing.get(host);
+		if (!closed) {
+			closed = host.dispose().finally(() => this.closing.delete(host));
+			this.closing.set(host, closed);
+		}
+		await closed;
 	}
 
 	reattach(alias: string): void {
@@ -178,9 +214,9 @@ export class ReviewRemoteHosts {
 		return (this.disposing ??= (async () => {
 			this.disposed = true;
 			this.cancelSend?.();
-			const hosts = [...this.hosts.values(), ...this.closing.keys()];
+			const hosts = [...this.hosts.values()];
 			this.hosts.clear();
-			await Promise.all(hosts.map((host) => host.dispose()));
+			await Promise.all([...hosts.map((host) => host.dispose()), ...this.closing.values()]);
 			(await this.prepared?.catch(() => undefined))?.dispose();
 		})());
 	}
@@ -261,7 +297,7 @@ export class ReviewRemoteHosts {
 			this.cancelSend = undefined;
 			this.lastSent = this.clock.now();
 			this.sentAny = true;
-			this.options.send(this.order.map((alias) => this.refused.get(alias) ?? this.hosts.get(alias)!.state));
+			this.options.send(this.order.flatMap((alias) => this.refused.get(alias) ?? this.hosts.get(alias)?.state ?? []));
 		});
 	}
 }
