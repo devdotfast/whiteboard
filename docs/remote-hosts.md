@@ -65,8 +65,8 @@ never stored.
 |---|---|---|
 | `connecting` | Whiteboard is opening the SSH connection and starting the review server. | Wait. |
 | `online` | Connected. The host's reviews are listed and open. | Nothing. |
-| `offline` | The connection is up, but the review server did not answer. Whiteboard checks every 10 seconds, so a host that hangs shows `offline` within about 15 seconds. | It returns by itself when the server answers. If it stays offline, check the remote's load. |
-| `unreachable` | `ssh` could not connect, or the connection ended. | Whiteboard tries again by itself, waiting 1 to 60 seconds between tries; **Retry** tries now. Check that `ssh <alias>` works in a terminal. |
+| `offline` | The connection is up, but the review server did not answer. Whiteboard checks every 10 seconds, so a host that hangs shows `offline` within about 15 seconds. | It returns by itself when the server answers. After three checks in a row without an answer, Whiteboard attaches again. A hung server then shows `unreachable`, and its detail names `whiteboard server stop`: run it on the host. |
+| `unreachable` | `ssh` could not connect, the connection ended, or the review server there did not start (the detail says why). | Whiteboard tries again by itself, waiting 1 to 60 seconds between tries; **Retry** tries now. Check that `ssh <alias>` works in a terminal, or do what the detail says. |
 | `auth-failed` | The login was refused, a prompt was cancelled, or the host key did not match. | Fix the login, then click **Retry**. Whiteboard does not retry this by itself. |
 | `not-installed` | `whiteboard` was not found on the remote. | Install it with the command that Settings shows, then click **Retry**. Whiteboard does not retry this by itself. |
 | `incompatible` | The remote runs another version of Whiteboard. | Run the install command that Settings shows, then `whiteboard server stop` on the remote. Desktop starts the new server within about 10 seconds. |

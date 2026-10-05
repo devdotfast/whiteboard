@@ -15,6 +15,8 @@ const HEALTH_TIMEOUT_MS = 3_000;
 
 const HEARTBEAT_MS = 10_000;
 
+const TIMEOUTS_BEFORE_ATTACH = 3;
+
 export const FIRST_RETRY_MS = 500;
 
 export const MAX_RETRY_MS = 30_000;
@@ -64,6 +66,7 @@ interface Host extends GatewayRemote {
   checking?: AbortController;
   checked?: boolean;
   restarted?: boolean;
+  timeouts?: number;
 }
 
 export function createGatewayHosts(input: {
@@ -259,6 +262,7 @@ export function createGatewayHosts(input: {
     let health: z.infer<typeof healthSchema> | undefined;
     let reason = "it did not answer";
     let code: string | undefined;
+    let timedOut = false;
 
     try {
       const response = await send(host, {
@@ -278,8 +282,10 @@ export function createGatewayHosts(input: {
       if (!abort.signal.aborted) {
         code = errorCode(error);
         reason = errorText(error);
-      } else if (host.checking === abort)
+      } else if (host.checking === abort) {
+        timedOut = true;
         reason = `it did not answer within ${HEALTH_TIMEOUT_MS / 1_000} seconds`;
+      }
     } finally {
       clearTimeout(timer);
     }
@@ -296,6 +302,17 @@ export function createGatewayHosts(input: {
       return restartedHost(
         host,
         `${host.alias} is offline: ${reason}; attaching again.`,
+      );
+
+    host.timeouts = timedOut ? (host.timeouts ?? 0) + 1 : 0;
+
+    if (
+      host.instanceId !== undefined &&
+      host.timeouts >= TIMEOUTS_BEFORE_ATTACH
+    )
+      return restartedHost(
+        host,
+        `${host.alias} is offline: ${reason}, ${host.timeouts} times in a row; attaching again.`,
       );
 
     if (!health) {
