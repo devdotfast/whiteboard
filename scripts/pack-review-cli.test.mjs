@@ -25,7 +25,7 @@ async function fixture(t, { runtimeCommit = commit } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "whiteboard-pack-test-"));
   t.after(() => rm(root, { recursive: true, force: true }));
 
-  const { scripts, dependencies, devDependencies, ...manifest } = JSON.parse(
+  const { scripts, devDependencies, ...manifest } = JSON.parse(
     await readFile("packages/review/package.json", "utf8"),
   );
 
