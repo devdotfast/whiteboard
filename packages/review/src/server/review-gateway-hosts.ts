@@ -28,6 +28,13 @@ export const UUID =
 
 export const jitter = (ms: number) => ms * (0.75 + Math.random() * 0.5);
 
+const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+
+const INSTALLS = new Set<ReviewGatewayHostState["state"]>([
+  "incompatible",
+  "not-installed",
+]);
+
 const healthSchema = z.object({
   ok: z.literal(true),
   serverId: z.string().optional(),
@@ -158,6 +165,9 @@ export function createGatewayHosts(input: {
       ...known,
       state: host.status,
       ...(host.detail !== undefined && { detail: host.detail }),
+      ...(INSTALLS.has(host.status) && {
+        installCommand: `npm install -g @dev.fast/whiteboard@${input.version}`,
+      }),
     };
   }
 
@@ -315,7 +325,13 @@ export function createGatewayHosts(input: {
 
       if (restarted) return restartedHost(host);
 
-      if (health.version === "unknown" || health.version !== input.version) {
+      if (health.version !== "unknown" && !VERSION.test(health.version)) {
+        host.status = "incompatible";
+        host.detail = `${host.alias} reports an invalid version.`;
+      } else if (
+        health.version === "unknown" ||
+        health.version !== input.version
+      ) {
         host.status = "incompatible";
         host.detail = `${host.alias} runs Whiteboard ${health.version}; this Desktop runs ${input.version}. Install Whiteboard ${input.version} on ${host.alias}.`;
       } else {

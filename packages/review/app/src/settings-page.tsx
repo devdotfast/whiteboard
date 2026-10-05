@@ -15,6 +15,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
 import { DiffrConfigSection } from "./diffr-config-section";
 import { homeStyles } from "./home-styles";
+import { RemoteHostsSection } from "./remote-hosts-section";
 import { Choice } from "./settings-choice";
 import { settingsStyles as styles } from "./settings-styles";
 import { withClass } from "./stylex-props";
@@ -299,6 +300,10 @@ export function SettingsPage({
               <Button onClick={settings.manageExtensions}>Manage…</Button>
             </Row>
           </Section>
+
+          {settings.remoteHosts.enabled ? (
+            <RemoteHostsSection hosts={settings.remoteHosts} />
+          ) : null}
 
           <Section label="Experimental Features">
             <Row

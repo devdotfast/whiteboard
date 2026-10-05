@@ -62,7 +62,7 @@ it("never contacts a host that arrives with a problem", async () => {
   expect(fake.requests).toEqual([]);
 });
 
-it("refuses a host on another version, naming both versions", async () => {
+it("refuses a host on another version, naming both versions, with the install command beside the detail", async () => {
   const remote = await startRemote(path.join(root, "a"));
   const gateway = hosts("0.0.0-other");
 
@@ -75,7 +75,53 @@ it("refuses a host on another version, naming both versions", async () => {
   expect(state?.detail).toContain("0.0.0-other");
   expect(state?.detail).toContain("Install Whiteboard 0.0.0-other on devbox.");
   expect(state?.detail).not.toContain("npm install");
+  expect(state?.installCommand).toBe(
+    "npm install -g @dev.fast/whiteboard@0.0.0-other",
+  );
   expect(gateway.online()).toEqual([]);
+});
+
+it("refuses a host whose version is not a version, without repeating it", async () => {
+  const fake = await startFake({ version: "x npm install -g evil" });
+  const gateway = hosts("0.1.6");
+
+  gateway.set([{ alias: "devbox", endpoint: fake.endpoint }]);
+
+  await expect.poll(() => gateway.states()[0]?.state).toBe("incompatible");
+  const [state] = gateway.states();
+  expect(state?.detail).toBe("devbox reports an invalid version.");
+  expect(state?.installCommand).toBe(
+    "npm install -g @dev.fast/whiteboard@0.1.6",
+  );
+  expect(gateway.online()).toEqual([]);
+});
+
+it("names the laptop's install command for a host without Whiteboard", () => {
+  const gateway = hosts("0.1.6");
+
+  gateway.set([
+    {
+      alias: "devbox",
+      problem: {
+        state: "not-installed",
+        detail: "Whiteboard is not installed on devbox.",
+      },
+    },
+    {
+      alias: "other",
+      problem: { state: "auth-failed", detail: "Permission denied." },
+    },
+  ]);
+
+  expect(gateway.states()).toEqual([
+    {
+      alias: "devbox",
+      state: "not-installed",
+      detail: "Whiteboard is not installed on devbox.",
+      installCommand: "npm install -g @dev.fast/whiteboard@0.1.6",
+    },
+    { alias: "other", state: "auth-failed", detail: "Permission denied." },
+  ]);
 });
 
 it("refuses a host whose version could not be read", async () => {

@@ -139,7 +139,7 @@ export function ReviewHome({
         return;
       }
 
-      setHostMessage(`${review.host} is ${review.hostState}.`);
+      setHostMessage(`${review.host} is ${hostStateWords(review)}.`);
       const states = await hostStates?.().catch(() => undefined);
       const detail = states?.find((host) => host.alias === review.host)?.detail;
 
@@ -615,7 +615,7 @@ function ReviewTable({
                       aria-disabled={unavailable(review) || undefined}
                       title={
                         unavailable(review)
-                          ? `${review.host} is ${review.hostState}`
+                          ? `${review.host} is ${hostStateWords(review)}`
                           : reviewTitle(review)
                       }
                     >
@@ -632,7 +632,7 @@ function ReviewTable({
                         <RepositoryName review={review} />
                         {unavailable(review) ? (
                           <span {...stylex.props(styles.cardMetaNext)}>
-                            {review.hostState}
+                            {hostStateWords(review)}
                           </span>
                         ) : null}
                       </span>
@@ -997,6 +997,10 @@ function matchesQuery(review: ReviewApiSummary, query: string): boolean {
 
 function unavailable(review: ReviewApiSummary): boolean {
   return review.hostState !== undefined && review.hostState !== "online";
+}
+
+function hostStateWords(review: ReviewApiSummary): string {
+  return review.hostState?.replace("-", " ") ?? "";
 }
 
 function repositoryKey(review: ReviewApiSummary): string {

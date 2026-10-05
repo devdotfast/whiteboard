@@ -121,6 +121,8 @@ export function ApiCanvas({
     const lensMemory: CursorMemory = {};
 
     const show = async (snapshot: Snapshot) => {
+      if (snapshot.reviewId !== content.reviewId)
+        throw new Error("The server answered with another review.");
       const next = await loader.load(snapshot);
 
       if (abort.signal.aborted) return;
@@ -379,8 +381,11 @@ export function ApiCanvas({
   }, [Boolean(data), content.bridge]);
 
   useEffect(() => {
-    if (data) content.setTutorial?.(data.snapshot.origin?.tutorial === true);
-  }, [data?.snapshot.origin?.tutorial, content.setTutorial]);
+    if (data)
+      content.setTutorial?.(
+        !content.host && data.snapshot.origin?.tutorial === true,
+      );
+  }, [data?.snapshot.origin?.tutorial, content.host, content.setTutorial]);
 
   const sharing = useMemo(
     () =>
