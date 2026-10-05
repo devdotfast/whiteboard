@@ -106,38 +106,47 @@ if (external) {
 	let server: ChildProcess;
 	let output = '';
 	let target: Target;
+	const servers: ChildProcess[] = [];
 
-	before(async () => {
-		root = mkdtempSync(join(tmpdir(), 'wb-server-'));
-		const runtime = join(root, 'remote-runtime');
-		execFileSync(process.execPath, [join(scripts, 'build-remote-runtime.mjs'), '--out', runtime, '--commit', COMMIT], { stdio: 'pipe' });
+	async function startServer(extraArgs: string[] = []) {
 		const tokenFile = join(root, 'token');
 		writeFileSync(tokenFile, 'test-token', { mode: 0o600 });
-		server = spawn(process.execPath, [
-			join(runtime, 'out/server-main.js'),
+		const child = spawn(process.execPath, [
+			join(root, 'remote-runtime', 'out/server-main.js'),
 			'--host', '127.0.0.1',
 			'--port', '0',
 			'--connection-token-file', tokenFile,
 			'--server-data-dir', join(root, 'data'),
 			'--extensions-dir', join(root, 'extensions'),
+			...extraArgs,
 		], { stdio: ['ignore', 'pipe', 'pipe'] });
-		server.stdout!.on('data', chunk => output += chunk);
-		server.stderr!.on('data', chunk => output += chunk);
+		servers.push(child);
+		let text = '';
+		child.stdout!.on('data', chunk => { text += chunk; output += chunk; });
+		child.stderr!.on('data', chunk => output += chunk);
 		const port = await new Promise<number>((resolve, reject) => {
 			const timer = setTimeout(() => reject(new Error(`the server did not start:\n${output}`)), 30_000);
-			server.stdout!.on('data', () => {
-				const match = /Extension host agent listening on (\d+)/.exec(output);
+			child.stdout!.on('data', () => {
+				const match = /Extension host agent listening on (\d+)/.exec(text);
 				if (match) {
 					clearTimeout(timer);
 					resolve(Number(match[1]));
 				}
 			});
 		});
-		target = { host: '127.0.0.1', port, token: 'test-token' };
+		return { child, target: { host: '127.0.0.1', port, token: 'test-token' } };
+	}
+
+	before(async () => {
+		root = mkdtempSync(join(tmpdir(), 'wb-server-'));
+		execFileSync(process.execPath, [join(scripts, 'build-remote-runtime.mjs'), '--out', join(root, 'remote-runtime'), '--commit', COMMIT], { stdio: 'pipe' });
+		({ child: server, target } = await startServer());
 	});
 
 	after(async () => {
-		server?.kill();
+		for (const child of servers) {
+			child.kill();
+		}
 		for (const match of output.matchAll(/<(\d+)> Launched Extension Host Process/g)) {
 			try {
 				process.kill(Number(match[1]));
@@ -166,6 +175,22 @@ if (external) {
 		assert.equal(server.exitCode, null, output);
 		assert.equal(await version(target), COMMIT);
 		close(await handshake(target));
+	});
+
+	test('with auto-shutdown, the server exits once the last extension host leaves', async () => {
+		const idle = await startServer(['--enable-remote-auto-shutdown', '--reconnection-grace-time', '600', '--remote-auto-shutdown-without-delay']);
+		const connection = await handshake(idle.target);
+		await new Promise(resolve => setTimeout(resolve, 500));
+		assert.equal(idle.child.exitCode, null, 'it runs while a client is connected');
+		close(connection);
+		const exited = await new Promise<boolean>(resolve => {
+			const timer = setTimeout(() => resolve(false), 10_000);
+			idle.child.once('exit', () => {
+				clearTimeout(timer);
+				resolve(true);
+			});
+		});
+		assert.ok(exited, output);
 	});
 
 	test('refuses a wrong connection token', async () => {

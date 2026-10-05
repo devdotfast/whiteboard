@@ -321,6 +321,37 @@ it("names the network when the download cannot reach it", async () => {
   ]);
 });
 
+it("stops a stalled download when its signal aborts, and leaves nothing behind", async () => {
+  const extension = tyExtension();
+  server.removeAllListeners("request");
+  server.on("request", (_request, response) =>
+    response.writeHead(200).write("x"),
+  );
+  const stop = new AbortController();
+  setTimeout(() => stop.abort(new Error("stopped for the test")), 200);
+
+  const started = Date.now();
+
+  const result = await ensureRemoteExtensions({
+    env,
+    curated: [extension],
+    target: "linux-x64",
+    signal: stop.signal,
+  });
+
+  expect(Date.now() - started).toBeLessThan(5_000);
+  expect(result.failed).toEqual([
+    {
+      id: "astral-sh.ty",
+      error: expect.stringMatching(/stopped for the test$/),
+    },
+  ]);
+  expect(await readdir(remoteServerPaths(env).extensionsDir)).toEqual([
+    "extensions.json",
+  ]);
+  server.closeAllConnections();
+});
+
 it("fails an extension whose executable does not run", async () => {
   const extension = tyExtension({ executables: ["bundled/libs/bin/missing"] });
 

@@ -9,6 +9,10 @@ import { promisify } from "node:util";
 import { jsonObject, jsonString, parseJsonText } from "@dev.fast/json";
 
 import { findReviewPackageRoot } from "./package-paths";
+import {
+  type EnsureRemoteLanguageServerInput,
+  ensureRemoteLanguageServer,
+} from "./remote-language-server";
 import { readReviewServerHealth, serverNotReady } from "./server-discovery";
 import {
   type EnsureBackgroundServerInput,
@@ -29,10 +33,27 @@ interface EnsureDiffrInput {
 }
 
 export async function remoteAttach(
-  input: EnsureDiffrInput & { cli?: EnsureBackgroundServerInput["cli"] },
+  input: EnsureDiffrInput & {
+    cli?: EnsureBackgroundServerInput["cli"];
+    groups?: string[];
+    ensureExtensions?: EnsureRemoteLanguageServerInput["ensure"];
+    installTimeoutMs?: number;
+  },
 ) {
   const abort = new AbortController();
   const fetching = ensureDiffr({ ...input, signal: abort.signal });
+  const extensions = new AbortController();
+
+  const language = ensureRemoteLanguageServer({
+    env: input.env,
+    packageRoot: input.packageRoot,
+    groups: input.groups,
+    signal: extensions.signal,
+    ensure: input.ensureExtensions,
+    installTimeoutMs: input.installTimeoutMs,
+    cli: input.cli,
+  });
+
   let server: Awaited<ReturnType<typeof ensureBackgroundServer>>;
 
   try {
@@ -44,12 +65,17 @@ export async function remoteAttach(
     });
   } catch (error) {
     abort.abort();
-    await fetching;
+    extensions.abort();
+    await Promise.all([fetching, language]);
     throw error;
   }
 
   const { discovery, started } = server;
   const diffr = await fetching;
+
+  const { languageServer, languageServerDetail, languageServerPending } =
+    await language;
+
   const health = await readReviewServerHealth(discovery);
 
   if (!health) throw serverNotReady(input.stateDir);
@@ -63,6 +89,9 @@ export async function remoteAttach(
     token: discovery.token,
     startedServer: started,
     diffr,
+    languageServer,
+    ...(languageServerDetail !== undefined && { languageServerDetail }),
+    ...(languageServerPending && { languageServerPending }),
   };
 }
 

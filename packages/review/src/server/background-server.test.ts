@@ -259,6 +259,8 @@ it("attaches with one JSON line between the sentinels, and its token reaches the
     token: expect.any(String),
     startedServer: true,
     diffr: true,
+    languageServer: null,
+    languageServerDetail: expect.stringContaining("has no VS Code server"),
   });
 
   const reviews = (token?: string) =>
@@ -326,6 +328,40 @@ it("attaches without a network, with structural diff off and nothing written", a
   expect(attach).toMatchObject({ startedServer: true, diffr: false });
   expect(existsSync(path.join(packageRoot, "bin", "diffr"))).toBe(false);
   expect(existsSync(fetchedDiffrPath(stateDir))).toBe(false);
+}, 60_000);
+
+it("attaches the review server when the language extensions cannot be installed", async () => {
+  const packageRoot = path.join(root, "package");
+  await mkdir(path.join(packageRoot, "vscode-server"), { recursive: true });
+  await writeFile(
+    path.join(packageRoot, "vscode-server", "product.json"),
+    JSON.stringify({ commit: "f".repeat(40) }),
+  );
+
+  const attach = await remoteAttach({
+    stateDir,
+    env: { ...env, PATH: path.dirname(process.execPath) },
+    stderr: discard(),
+    packageRoot,
+    cli: sourceCli,
+    groups: ["go"],
+    ensureExtensions: async ({ groups }) => ({
+      failed: [{ id: "golang.go", error: `groups ${groups?.join(",")}` }],
+    }),
+  });
+
+  expect(attach).toMatchObject({
+    startedServer: true,
+    languageServer: null,
+    languageServerDetail:
+      "Could not install the language extensions: golang.go: groups go",
+  });
+
+  const reviews = await fetch(`${attach.url}/reviews-api`, {
+    headers: { "x-review-token": attach.token },
+  });
+
+  expect(reviews.status).toBe(200);
 }, 60_000);
 
 it("gives up on a refused download at once and on a stalled one at the bound", async () => {
