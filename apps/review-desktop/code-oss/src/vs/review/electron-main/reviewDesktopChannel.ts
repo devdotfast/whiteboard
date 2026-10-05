@@ -78,6 +78,10 @@ export class ReviewDesktopChannel implements IServerChannel {
       if (typeof arg === "string") await this.host.installRemoteHost(arg);
       return undefined as T;
     }
+    if (command === "uninstallRemoteHost") {
+      if (typeof arg !== "string") throw new Error("uninstallRemoteHost needs an alias.");
+      return (await this.host.uninstallRemoteHost(arg)) as T;
+    }
     if (command === REVIEW_SSH_ANSWER_CALL || command === REVIEW_REMOTE_INSTALL_ANSWER_CALL) {
       const { id, answer } = (arg ?? {}) as { id?: unknown; answer?: unknown };
       const relay = command === REVIEW_SSH_ANSWER_CALL ? this.sshPrompts : this.installPrompts;

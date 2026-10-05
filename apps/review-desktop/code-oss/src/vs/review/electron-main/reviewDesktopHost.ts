@@ -286,6 +286,16 @@ export class ReviewDesktopHost extends Disposable {
     return this.remoteHosts.connectAgents(alias, ids);
   }
 
+  async uninstallRemoteHost(alias: string): Promise<string | null> {
+    if (!this.remoteHosts) return "Remote hosts are off.";
+    try {
+      await this.remoteHosts.uninstall(alias);
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  }
+
   private remoteInstallFlow(): ReviewRemoteInstallFlow {
     const { userDataPath, isBuilt, appRoot } = this.environmentMainService;
     const cacheDirectory = reviewRemoteCacheDirectory(userDataPath);

@@ -13,6 +13,7 @@ function fixture(values: Record<string, unknown>) {
 	const settings = new Map(Object.entries(values));
 	const writes: unknown[] = [];
 	const retried: string[] = [];
+	const uninstalled: string[] = [];
 	const hosts = reviewRemoteHostsSettings({
 		get: (key) => settings.get(key),
 		update: async (key, value) => {
@@ -26,9 +27,10 @@ function fixture(values: Record<string, unknown>) {
 			installRemoteHost: async (alias) => { retried.push(`install ${alias}`); },
 			detectRemoteAgents: async () => null,
 			connectRemoteAgents: async () => [],
+			uninstallRemoteHost: async (alias) => { uninstalled.push(alias); },
 		},
 	});
-	return { hosts, writes, retried };
+	return { hosts, writes, retried, uninstalled };
 }
 
 test("reads the two settings as main does", () => {

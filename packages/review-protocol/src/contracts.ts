@@ -598,6 +598,7 @@ export interface ReviewRemoteHostsSettings {
     alias: string,
     agents: ReviewRemoteAgentId[],
   ): Promise<ReviewRemoteAgentResult[]>;
+  uninstall(alias: string): Promise<void>;
 }
 
 export const REVIEW_REMOTE_WRAPPER_MARK =

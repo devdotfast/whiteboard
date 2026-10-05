@@ -37,6 +37,7 @@ function remoteHosts(
     connectAgents: vi.fn<ReviewRemoteHostsSettings["connectAgents"]>(
       async () => [],
     ),
+    uninstall: vi.fn<ReviewRemoteHostsSettings["uninstall"]>(async () => {}),
   };
 }
 
@@ -439,6 +440,68 @@ test("adds a host from the suggestions, and removes one", async () => {
   expect(hosts.set).toHaveBeenLastCalledWith(["other", "devbox"]);
   await vi.waitFor(() => expect(rows()).toHaveLength(2));
   await page.getByRole("button", { name: "Remove other" }).click();
-  expect(hosts.set).toHaveBeenLastCalledWith(["devbox"]);
+  expect(hosts.set).toHaveBeenLastCalledWith(["other", "devbox"]);
+  await page.getByRole("button", { name: "Remove host" }).click();
+  await vi.waitFor(() =>
+    expect(hosts.set).toHaveBeenLastCalledWith(["devbox"]),
+  );
   await vi.waitFor(() => expect(rows()).toHaveLength(1));
+});
+
+test("removing a host leaves Whiteboard on it unless asked", async () => {
+  const hosts = remoteHosts(["devbox", "<b>box2</b>"]);
+
+  await render(hosts);
+  await page.getByRole("button", { name: "Remove devbox" }).click();
+  const also = page.getByLabelText("Also remove Whiteboard from devbox");
+  await expect.element(also).not.toBeChecked();
+  await page.getByRole("button", { name: "Remove host" }).click();
+  await vi.waitFor(() =>
+    expect(hosts.set).toHaveBeenLastCalledWith(["<b>box2</b>"]),
+  );
+  expect(hosts.uninstall).not.toHaveBeenCalled();
+
+  await page.getByRole("button", { name: "Remove <b>box2</b>" }).click();
+  await expect
+    .element(page.getByLabelText("Also remove Whiteboard from <b>box2</b>"))
+    .not.toBeChecked();
+  expect(section()!.querySelector("b")).toBeNull();
+});
+
+test("also removing Whiteboard uninstalls before the host goes, and a failure is shown while the host is still removed", async () => {
+  const hosts = remoteHosts(["devbox", "box2"]);
+  const order: string[] = [];
+
+  vi.mocked(hosts.uninstall).mockImplementation(async (alias) => {
+    order.push(`uninstall ${alias}`);
+
+    if (alias === "box2")
+      throw new Error(
+        "Could not remove Whiteboard from box2: A Whiteboard server you started (process 7) runs from it.",
+      );
+  });
+  vi.mocked(hosts.set).mockImplementation(async (aliases) => {
+    order.push(`set ${aliases.join(",")}`);
+
+    return aliases;
+  });
+  await render(hosts);
+
+  await page.getByRole("button", { name: "Remove devbox" }).click();
+  await page.getByLabelText("Also remove Whiteboard from devbox").click();
+  await page.getByRole("button", { name: "Remove host" }).click();
+  await vi.waitFor(() => expect(rows()).toHaveLength(1));
+  expect(order).toEqual(["uninstall devbox", "set box2"]);
+  expect(section()!.querySelector('[role="alert"]')).toBeNull();
+
+  await page.getByRole("button", { name: "Remove box2" }).click();
+  await page.getByLabelText("Also remove Whiteboard from box2").click();
+  await page.getByRole("button", { name: "Remove host" }).click();
+  await vi.waitFor(() =>
+    expect(section()!.querySelector('[role="alert"]')?.textContent).toBe(
+      "Could not remove Whiteboard from box2: A Whiteboard server you started (process 7) runs from it.",
+    ),
+  );
+  expect(rows()).toEqual([]);
+  expect(order.slice(2)).toEqual(["uninstall box2", "set "]);
 });

@@ -82,6 +82,7 @@ export interface IReviewDesktopConnectionService {
 	installRemoteHost(alias: string): Promise<void>;
 	detectRemoteAgents(alias: string): Promise<ReviewRemoteAgent[] | null>;
 	connectRemoteAgents(alias: string, agents: ReviewRemoteAgentId[]): Promise<ReviewRemoteAgentResult[]>;
+	uninstallRemoteHost(alias: string): Promise<void>;
 	getTutorialStatus(): Promise<{ version: 1; reviewUuid: string | null }>;
 	prepareTutorial(): Promise<void>;
 	openTutorial(): Promise<ReviewTutorialOpenResponse>;
@@ -263,6 +264,11 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 
 	connectRemoteAgents(alias: string, agents: ReviewRemoteAgentId[]): Promise<ReviewRemoteAgentResult[]> {
 		return this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("connectRemoteAgents", { alias, agents });
+	}
+
+	async uninstallRemoteHost(alias: string): Promise<void> {
+		const problem: unknown = await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("uninstallRemoteHost", alias);
+		if (typeof problem === "string") throw new Error(problem);
 	}
 
 	async saveDiffrSummarizer(input: ReviewDiffrSummarizerInput): Promise<ReviewDiffrConfig> {

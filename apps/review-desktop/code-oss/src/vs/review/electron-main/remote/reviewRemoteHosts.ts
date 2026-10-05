@@ -18,6 +18,7 @@ import {
 	type SpawnSsh,
 } from "./reviewRemoteHost.js";
 import type { ReviewSshAskpass, SshPromptRequest } from "./reviewSshAskpass.js";
+import { uninstallRemote } from "./reviewRemoteUninstall.js";
 import {
 	prepareSshControlDirectory,
 	reviewSshInstancePrefix,
@@ -151,6 +152,13 @@ export class ReviewRemoteHosts {
 		const host = this.hosts.get(alias);
 		if (!host) return Promise.reject(new Error(`${alias} is not a remote host in Settings.`));
 		return host.connectAgents(ids);
+	}
+
+	async uninstall(alias: string): Promise<void> {
+		const valid = validateSshAlias(alias);
+		if (!valid.ok) throw new Error(`The SSH alias ${JSON.stringify(alias)} ${valid.reason}.`);
+		const env = { ...(await this.options.environment()), ...(await this.askpass()).env(alias) };
+		await uninstallRemote({ session: reviewSshSession(alias, this.options.controlDirectory, this.options.instance), spawn: this.options.spawn, env });
 	}
 
 	reattach(alias: string): void {
