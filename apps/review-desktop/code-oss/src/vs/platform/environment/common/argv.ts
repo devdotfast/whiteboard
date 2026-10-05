@@ -88,8 +88,6 @@ export interface NativeParsedArgs {
 	debugRenderer?: boolean; // whether we expect a debugger (js-debug) to attach to the renderer, incl webviews+webworker
 	'inspect-ptyhost'?: string;
 	'inspect-brk-ptyhost'?: string;
-	'inspect-agenthost'?: string;
-	'inspect-brk-agenthost'?: string;
 	'inspect-sharedprocess'?: string;
 	'inspect-brk-sharedprocess'?: string;
 	'disable-extensions'?: boolean;

@@ -2,7 +2,7 @@
 # Launch Code OSS (VS Code from sources) with:
 #   - a fresh, slimmed copy of the authenticated user-data-dir (so Copilot/GitHub auth works)
 #   - an isolated --shared-data-dir (otherwise two instances share ~/.vscode-oss-shared and crash each other)
-#   - unique debug ports for renderer (CDP), extension host, main process, and agent host
+#   - unique debug ports for renderer (CDP), extension host, and main process
 #
 # Auth on macOS comes from the OS keychain (per-app, shared automatically) plus
 # the encrypted blob in User/globalStorage/state.vscdb (per-UDD). The slim copy
@@ -72,7 +72,6 @@ pick_port() {
 CDP_PORT=$(pick_port)
 EXTHOST_PORT=$(pick_port)
 MAIN_PORT=$(pick_port)
-AGENTHOST_PORT=$(pick_port)
 
 STAMP=$(date +%Y%m%d-%H%M%S)-$$
 RUN_DIR="${TMPDIR:-/tmp}/code-oss-dev/$STAMP"
@@ -208,7 +207,6 @@ ARGS=(
 	"--remote-debugging-port=$CDP_PORT"
 	"--inspect-extensions=$EXTHOST_PORT"
 	"--inspect=$MAIN_PORT"
-	"--inspect-agenthost=$AGENTHOST_PORT"
 )
 if (( ${#EXTRA_ARGS[@]} )); then
 	ARGS+=("${EXTRA_ARGS[@]}")
@@ -267,7 +265,6 @@ node -e '
 		cdpPort: '"$CDP_PORT"',
 		extHostPort: '"$EXTHOST_PORT"',
 		mainPort: '"$MAIN_PORT"',
-		agentHostPort: '"$AGENTHOST_PORT"',
 		userDataDir: process.argv[1],
 		extensionsDir: process.argv[2],
 		sharedDataDir: process.argv[3],

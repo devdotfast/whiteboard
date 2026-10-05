@@ -255,6 +255,10 @@ Review removes the upstream execution and distribution paths:
   and `build/lib/test/agentHostDependencies.test.ts`. Their build-test targets,
   protocol scripts, generated-source filters, and runtime import exceptions
   are removed too.
+- `inspect-agenthost` and `inspect-brk-agenthost` CLI options and the unused
+  `parseAgentHostDebugPort` helper. The upstream launch skill no longer
+  allocates or passes an agent-host debugger port, emits `agentHostPort`, or
+  documents attaching to the deleted host.
 - Root development dependencies `@anthropic-ai/claude-agent-sdk`,
   `@anthropic-ai/sdk`, and `@openai/codex`; remote dependencies
   `@github/copilot`, `@github/copilot-sdk`, and `@vscode/copilot-api`.

@@ -67,7 +67,7 @@ Excluded (transient, regenerable, or known-not-needed):
 The script runs pre-launch (electron download, compile-if-missing, built-in extensions) **in the foreground**, then starts Code OSS detached and **blocks until the renderer's CDP endpoint is responding** (up to ~90s) before printing the JSON line on stdout. If anything fails — preLaunch errors, code.sh exits early, CDP never opens — the script exits non-zero and dumps the relevant log tail to stderr.
 
 ```json
-{"pid":12345,"cdpPort":53111,"extHostPort":53112,"mainPort":53113,"agentHostPort":53114,"userDataDir":".../user-data","extensionsDir":".../extensions","sharedDataDir":".../shared-data","runDir":"...","logFile":".../code.log","repo":"..."}
+{"pid":12345,"cdpPort":53111,"extHostPort":53112,"mainPort":53113,"userDataDir":".../user-data","extensionsDir":".../extensions","sharedDataDir":".../shared-data","runDir":"...","logFile":".../code.log","repo":"..."}
 ```
 
 Capture it with `jq` — no retry loop needed, CDP is already up when the JSON is printed:
@@ -77,7 +77,6 @@ INFO=$("$LAUNCH" | tail -n1)
 CDP=$(jq -r .cdpPort        <<<"$INFO")
 EXT=$(jq -r .extHostPort    <<<"$INFO")
 MAIN=$(jq -r .mainPort      <<<"$INFO")
-AGENT=$(jq -r .agentHostPort <<<"$INFO")
 LOG=$(jq -r .logFile        <<<"$INFO")
 PID=$(jq -r .pid            <<<"$INFO")
 ```
@@ -89,7 +88,6 @@ PID=$(jq -r .pid            <<<"$INFO")
 | `cdpPort` (`--remote-debugging-port`) | Renderer (the workbench window) | `@playwright/cli` over CDP, also Chrome DevTools |
 | `extHostPort` (`--inspect-extensions`) | Extension host (Node) | `dap-cli` (Node inspector protocol) |
 | `mainPort` (`--inspect`) | Electron main process (Node) | `dap-cli` (Node inspector protocol) |
-| `agentHostPort` (`--inspect-agenthost`) | Agent host process (Node) | `dap-cli` (Node inspector protocol) |
 
 ## Drive the UI with @playwright/cli
 
@@ -260,7 +258,6 @@ To set breakpoints in VS Code source while the window is running, attach `dap-cl
 
 - **Extension host** (most common - Copilot Chat extension, built-in extensions, your own extension under development) -> `extHostPort`
 - **Main process** (Electron lifecycle, window/menu wiring, IPC) -> `mainPort`
-- **Local agent host** (`src/vs/platform/agentHost/node/...`, agent session lifecycle, AHP wiring, Claude/Copilot agent providers) -> `agentHostPort`
 - **Renderer** (the workbench itself, `src/vs/workbench/...`) -> `cdpPort`
 
 You can run `@playwright/cli` and `dap-cli` against the **same window simultaneously** - drive the UI with one terminal, hit a breakpoint and inspect state in another.
