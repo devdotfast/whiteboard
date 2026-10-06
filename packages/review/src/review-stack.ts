@@ -23,10 +23,10 @@ const GitHubStacksSchema = z.array(
 export type RunGitHubApi = (host: string, endpoint: string) => Promise<string>;
 
 export async function resolveReviewStackLayers(
-  subject: Pick<ReviewApiSummary, "origin">,
+  subject: Pick<ReviewApiSummary, "origin"> & { reviewId?: string },
   reviews: readonly Pick<
     ReviewApiSummary,
-    "reviewId" | "title" | "origin" | "pins"
+    "reviewId" | "title" | "origin" | "pins" | "dismissedAt"
   >[],
   runGitHubApi: RunGitHubApi = defaultRunGitHubApi,
 ): Promise<ReviewStackLayer[]> {
@@ -66,7 +66,7 @@ export async function resolveReviewStackLayers(
   );
 
   return stack.pull_requests.map((pr, index) => {
-    const review = reviews.find((candidate) => {
+    const matches = reviews.filter((candidate) => {
       const repository =
         candidate.origin?.pullRequestUrl?.replace(/\/pull\/\d+.*$/, "") ??
         candidate.pins?.repositoryId;
@@ -76,6 +76,11 @@ export async function resolveReviewStackLayers(
         candidate.origin?.pullRequestNumber === pr.number
       );
     });
+
+    const review =
+      matches.find((candidate) => candidate.reviewId === subject.reviewId) ??
+      matches.findLast((candidate) => !candidate.dismissedAt) ??
+      matches.at(-1);
 
     return {
       branch: pr.head.ref,

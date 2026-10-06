@@ -8,9 +8,14 @@ const reviewSummary = (input: {
   repositoryUrl: string;
   pullRequestNumber: number;
   title: string;
-}): Pick<ReviewApiSummary, "reviewId" | "title" | "origin"> => ({
+  dismissedAt?: string;
+}): Pick<
+  ReviewApiSummary,
+  "reviewId" | "title" | "origin" | "dismissedAt"
+> => ({
   reviewId: input.reviewId,
   title: input.title,
+  dismissedAt: input.dismissedAt ?? null,
   origin: {
     pullRequestNumber: input.pullRequestNumber,
     pullRequestUrl: `${input.repositoryUrl}/pull/${input.pullRequestNumber}`,
@@ -166,6 +171,48 @@ describe("resolveReviewStackLayers", () => {
         reviewTitle: null,
         relation: "current",
       },
+    ]);
+  });
+
+  it("links the open review for its own PR and the newest undismissed review elsewhere", async () => {
+    const review = (reviewId: string, number: number, dismissedAt?: string) =>
+      reviewSummary({
+        reviewId,
+        title: reviewId,
+        repositoryUrl: "https://github.com/o/r",
+        pullRequestNumber: number,
+        dismissedAt,
+      });
+
+    const layers = await resolveReviewStackLayers(
+      {
+        reviewId: "open-20",
+        origin: { pullRequestUrl: "https://github.com/o/r/pull/20" },
+      },
+      [
+        review("old-10", 10),
+        review("new-10", 10),
+        review("dismissed-10", 10, "2026-10-06T00:00:00.000Z"),
+        review("open-20", 20),
+        review("newer-20", 20),
+        review("only-dismissed-30", 30, "2026-10-06T00:00:00.000Z"),
+      ],
+      async () =>
+        JSON.stringify([
+          {
+            pull_requests: [
+              { number: 10, head: { ref: "a" } },
+              { number: 20, head: { ref: "b" } },
+              { number: 30, head: { ref: "c" } },
+            ],
+          },
+        ]),
+    );
+
+    expect(layers.map((layer) => layer.reviewUuid)).toEqual([
+      "new-10",
+      "open-20",
+      "only-dismissed-30",
     ]);
   });
 
