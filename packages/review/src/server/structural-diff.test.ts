@@ -120,6 +120,30 @@ test("yields records before process completion and joins split chunks", async ()
   expect((await iterator.next()).done).toBe(true);
 });
 
+// JSON leaves U+2028 and U+2029 unescaped in strings, and Node 24's readline
+// treats both as line endings, so only 0x0A may end a record.
+const SEPARATORS = {
+  type: "file",
+  file: FILE,
+  diff: {
+    type: "text",
+    rhs: { text: "a\u2028b\u2029c\n", regions: [] },
+    structural_changes: { base: [], head: [[0, 1]] },
+    stats: {
+      textual: { added: 1, removed: 0 },
+      visible: { added: 1, removed: 0 },
+    },
+  },
+};
+
+test("keeps U+2028 and U+2029 inside a record", async () => {
+  const root = await executable(
+    `${emit(START)} ${emit(SEPARATORS)} ${emit(COMPLETE)}`,
+  );
+
+  expect(await collect(request(root))).toEqual([START, SEPARATORS, COMPLETE]);
+});
+
 test("yields file errors and continues to successful files, accepting exit 2", async () => {
   const error = {
     type: "file",

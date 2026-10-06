@@ -1,4 +1,4 @@
-import { decodeReviewStructuralDiffEvent, reviewSourceQuery, type ReviewSourceView } from "../common/reviewProtocol.js";
+import { decodeReviewStructuralDiffEvent, NdjsonFramer, reviewSourceQuery, type ReviewSourceView } from "../common/reviewProtocol.js";
 import type { StructuralEvent } from "../common/reviewStructuralDiff.js";
 import type { IReviewDesktopConnectionService } from "./reviewDesktopConnectionService.js";
 
@@ -23,16 +23,11 @@ export class StructuralDiffClient implements StructuralDiffStream {
 			throw new Error("The Whiteboard host must be updated to stream structural diffs.");
 		}
 		const reader = response.body.getReader();
-		const decoder = new TextDecoder();
-		let buffer = "";
+		const framer = new NdjsonFramer();
 		try {
 			while (true) {
 				const chunk = await reader.read();
-				buffer += decoder.decode(chunk.value, { stream: !chunk.done });
-				const lines = buffer.split("\n");
-				buffer = lines.pop()!;
-				if (chunk.done && buffer.trim()) { lines.push(buffer); buffer = ""; }
-				for (const line of lines) {
+				for (const line of chunk.done ? framer.flush() : framer.push(chunk.value)) {
 					if (!line.trim()) continue;
 					const event = decodeReviewStructuralDiffEvent(line);
 					if (event.type === "error") throw new Error(event.message);

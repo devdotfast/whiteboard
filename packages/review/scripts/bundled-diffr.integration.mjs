@@ -168,6 +168,30 @@ describe("Relocated runtime diffr integrates with Review streams and settings", 
     assert.equal(existsSync(sentinel), false);
   });
 
+  test("a file holding U+2028 and U+2029 streams as one record", async () => {
+    const separators = await gitRepository();
+
+    const git = (...args) =>
+      execFileSync("git", ["-C", separators, ...args], {
+        encoding: "utf8",
+      }).trim();
+
+    const separatorsBase = git("rev-parse", "HEAD");
+
+    const text = "export const terminators = ['a\u2028b', 'c\u2029d'];\n";
+
+    await writeFile(path.join(separators, "terminators.ts"), text);
+    git("add", ".");
+    git("commit", "-qm", "separators");
+
+    const [file] = successfulFiles(
+      await collect(separators, separatorsBase, git("rev-parse", "HEAD")),
+      1,
+    );
+
+    assert.equal(file.diff.rhs.text, text);
+  });
+
   test("merge-base comparison filters a path containing spaces", async () => {
     const events = await collect(
       repository,
