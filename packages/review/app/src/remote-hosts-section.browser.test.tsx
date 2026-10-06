@@ -129,7 +129,6 @@ test("lists each host with its state and detail as plain text, and the install c
   expect(rows()[1]).toContain(
     "Whiteboard is not installed on box2. Install Whiteboard 0.1.6 there; Node 24 is needed.",
   );
-  expect(rows()[2]).toContain("incompatible");
   expect(rows()[2]).toContain(
     "box3 runs Whiteboard x npm install -g evil; run it.",
   );
@@ -250,9 +249,9 @@ test("reads the states again only once the last read has answered", async () => 
   }
 });
 
-test("offers Retry to a host that failed to authenticate, is unreachable, not installed or unsupported", async () => {
+test("offers Retry to a host that failed to authenticate, is offline or unreachable, not installed or unsupported", async () => {
   const hosts = remoteHosts(
-    ["devbox", "box2", "box3", "box4", "box5"],
+    ["devbox", "box2", "box3", "box4", "box5", "box6"],
     [
       { alias: "devbox", state: "auth-failed", detail: "Permission denied" },
       { alias: "box2", state: "unreachable", detail: "timed out" },
@@ -263,6 +262,7 @@ test("offers Retry to a host that failed to authenticate, is unreachable, not in
         detail: "This host runs glibc 2.31; Whiteboard needs 2.34 or newer.",
       },
       { alias: "box5", state: "installing" },
+      { alias: "box6", state: "offline" },
     ],
   );
 
@@ -272,7 +272,6 @@ test("offers Retry to a host that failed to authenticate, is unreachable, not in
       page.getByRole("button", { name: "Retry devbox" }).elements(),
     ).toHaveLength(1),
   );
-  expect(rows()[3]).toContain("unsupported");
   expect(rows()[3]).toContain("glibc 2.31");
   expect(rows()[4]).toContain("installing");
   expect(
@@ -280,7 +279,13 @@ test("offers Retry to a host that failed to authenticate, is unreachable, not in
       .getByRole("button", { name: /^Retry / })
       .elements()
       .map((button) => button.getAttribute("aria-label")),
-  ).toEqual(["Retry devbox", "Retry box2", "Retry box3", "Retry box4"]);
+  ).toEqual([
+    "Retry devbox",
+    "Retry box2",
+    "Retry box3",
+    "Retry box4",
+    "Retry box6",
+  ]);
   await page.getByRole("button", { name: "Retry box2" }).click();
   expect(hosts.retry).toHaveBeenCalledWith("box2");
   await page.getByRole("button", { name: "Retry box3" }).click();
@@ -322,7 +327,7 @@ test("shows the install step, offers Install to a declined host, and Retry after
   await render(hosts);
   await vi.waitFor(() =>
     expect(rows()[0]).toContain(
-      "installing · Installing Node 24 (uploaded from this computer).",
+      "Installing Node 24 (uploaded from this computer).",
     ),
   );
   expect(
@@ -526,13 +531,9 @@ test("a failed host's detail copies on click; a healthy one does not", async () 
     ),
   );
 
-  await vi.waitFor(() =>
-    expect(rows()[1]).toContain("unreachable · ssh: timed out"),
-  );
+  await vi.waitFor(() => expect(rows()[1]).toContain("ssh: timed out"));
   expect(page.getByRole("button", { name: "online" }).query()).toBeNull();
 
-  await page
-    .getByRole("button", { name: "unreachable · ssh: timed out" })
-    .click();
-  expect(writeText).toHaveBeenCalledWith("unreachable · ssh: timed out");
+  await page.getByRole("button", { name: "ssh: timed out" }).click();
+  expect(writeText).toHaveBeenCalledWith("ssh: timed out");
 });

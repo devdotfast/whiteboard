@@ -519,7 +519,10 @@ async function journey(ctx, page, until) {
     30000,
   );
   assert.equal(
-    await canvas.locator("[role=status]").filter({ hasText: "Connection lost" }).count(),
+    await canvas
+      .locator("[role=status]")
+      .filter({ hasText: "Connection lost" })
+      .count(),
     0,
   );
   await until(
@@ -529,8 +532,7 @@ async function journey(ctx, page, until) {
     60000,
   );
   await until(
-    async () =>
-      (await canvas.locator(".connection-chip").count()) === 0,
+    async () => (await canvas.locator(".connection-chip").count()) === 0,
     "the chip to clear",
   );
   await remoteApi("session_edit", {
@@ -584,8 +586,11 @@ async function journey(ctx, page, until) {
 
     section = settings.getByRole("region", { name: "Remote hosts" });
     await until(
-      async () => /incompatible/.test(await hostRow().innerText()),
-      "the Settings row to read incompatible",
+      async () =>
+        /runs Whiteboard .+; this Desktop runs/.test(
+          await hostRow().innerText(),
+        ),
+      "the Settings row to name both versions",
     );
     assert.match(
       await hostRow().locator("code").innerText(),
