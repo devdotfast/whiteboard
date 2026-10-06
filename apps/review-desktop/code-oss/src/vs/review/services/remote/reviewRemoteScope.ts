@@ -11,6 +11,7 @@ import { ILanguageFeaturesService } from "../../../editor/common/services/langua
 import { IModelService } from "../../../editor/common/services/model.js";
 import { IOutlineModelService, OutlineModelService } from "../../../editor/contrib/documentSymbols/browser/outlineModel.js";
 import { ICommandService } from "../../../platform/commands/common/commands.js";
+import { IExtensionStorageService } from "../../../platform/extensionManagement/common/extensionStorage.js";
 import type { IExtensionDescription } from "../../../platform/extensions/common/extensions.js";
 import { IFileService } from "../../../platform/files/common/files.js";
 import { SyncDescriptor } from "../../../platform/instantiation/common/descriptors.js";
@@ -63,6 +64,17 @@ export function reviewRemoteMarkerService(base: IMarkerService, authority: strin
 			Event.map(base.onMarkerChanged, (resources) => resources.filter(mine)),
 			(resources) => resources.length > 0,
 		),
+	});
+}
+
+/** Upstream keeps `workspaceState` per window, so each host keeps its own under its authority; `globalState` stays shared. */
+export function reviewRemoteExtensionStorage(base: IExtensionStorageService, authority: string): IExtensionStorageService {
+	const key = (extension: Parameters<IExtensionStorageService["getExtensionState"]>[0], global: boolean) =>
+		global ? extension : `${authority}/${typeof extension === "string" ? extension : extension.identifier.id}`;
+	return override(base, {
+		getExtensionState: (extension, global) => base.getExtensionState(key(extension, global), global),
+		getExtensionStateRaw: (extension, global) => base.getExtensionStateRaw(key(extension, global), global),
+		setExtensionState: (extension, state, global) => base.setExtensionState(key(extension, global), state, global),
 	});
 }
 
@@ -196,6 +208,7 @@ export function reviewRemoteScope(input: {
 		[IModelService, reviewRemoteModelService(window.get(IModelService), authority)],
 		[IWorkspaceContextService, input.workspace],
 		[IMarkerService, reviewRemoteMarkerService(window.get(IMarkerService), authority)],
+		[IExtensionStorageService, reviewRemoteExtensionStorage(window.get(IExtensionStorageService), authority)],
 		[ISearchService, new SyncDescriptor(SearchService)],
 		[IRemoteAuthorityResolverService, input.resolver],
 		[IExtensionService, reviewRemoteExtensionService(window.get(IExtensionService), input.extensions, input.activate)],

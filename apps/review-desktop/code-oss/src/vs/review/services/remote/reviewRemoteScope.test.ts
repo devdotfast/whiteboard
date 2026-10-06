@@ -12,6 +12,7 @@ import { IModelService } from "../../../editor/common/services/model.js";
 import { ITextModelService } from "../../../editor/common/services/resolverService.js";
 import { IOutlineModelService, OutlineModelService } from "../../../editor/contrib/documentSymbols/browser/outlineModel.js";
 import { CommandsRegistry, ICommandService } from "../../../platform/commands/common/commands.js";
+import { IExtensionStorageService } from "../../../platform/extensionManagement/common/extensionStorage.js";
 import { IFileService } from "../../../platform/files/common/files.js";
 import { SyncDescriptor } from "../../../platform/instantiation/common/descriptors.js";
 import { InstantiationService } from "../../../platform/instantiation/common/instantiationService.js";
@@ -25,6 +26,7 @@ import type { IRemoteAuthorityResolverService } from "../../../platform/remote/c
 import { reviewRemoteAuthority } from "./reviewRemoteAuthority.js";
 import {
 	ReviewRemoteWorkspace,
+	reviewRemoteExtensionStorage,
 	reviewRemoteMarkerService,
 	reviewRemoteModelService,
 	reviewRemoteResolver,
@@ -97,6 +99,25 @@ test("a host's markers use its own owner names, and it sees and changes markers 
 	markers.dispose();
 });
 
+test("each host keeps its own workspace state for an extension, and shares global state with the window", () => {
+	const storage = new Map<string, string>();
+	const base = {
+		getExtensionStateRaw: (id: string, global: boolean) => storage.get(`${global}:${id}`),
+		getExtensionState: (id: string, global: boolean) => JSON.parse(storage.get(`${global}:${id}`) ?? "null") ?? undefined,
+		setExtensionState: (id: string, state: object, global: boolean) => storage.set(`${global}:${id}`, JSON.stringify(state)),
+	} as unknown as IExtensionStorageService;
+	const a = reviewRemoteExtensionStorage(base, A);
+	const b = reviewRemoteExtensionStorage(base, B);
+	base.setExtensionState("pub.ext", { project: "laptop" }, false);
+	a.setExtensionState("pub.ext", { project: "a" }, false);
+	b.setExtensionState("pub.ext", { project: "b" }, false);
+	a.setExtensionState("pub.ext", { theme: "a" }, true);
+
+	assert.deepEqual([base, a, b].map((service) => service.getExtensionState("pub.ext", false)), [{ project: "laptop" }, { project: "a" }, { project: "b" }]);
+	assert.equal(b.getExtensionStateRaw("pub.ext", false), JSON.stringify({ project: "b" }));
+	assert.deepEqual([base, b].map((service) => service.getExtensionState("pub.ext", true)), [{ theme: "a" }, { theme: "a" }]);
+});
+
 test("a host's resolver answers for its own authority with a fresh address, and leaves others to the window", async () => {
 	let port = 4000;
 	const base = {
@@ -166,6 +187,7 @@ test("a host's vscode.executeHoverProvider and executeDocumentSymbolProvider run
 		[ILanguageFeatureDebounceService, { for: () => ({ get: () => 0, update: () => 0, default: () => 0 }) }],
 		[IOutlineModelService, new SyncDescriptor(OutlineModelService)],
 		[IMarkerService, new MarkerService()],
+		[IExtensionStorageService, {}],
 		[IFileService, { onDidFilesChange: Event.None, onDidRunOperation: Event.None }],
 		[IExtensionService, { activateByEvent: async (event: string) => { activated.push(`window ${event}`); } }],
 	);
