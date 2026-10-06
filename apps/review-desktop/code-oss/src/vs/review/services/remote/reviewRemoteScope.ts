@@ -9,12 +9,14 @@ import type { URI } from "../../../base/common/uri.js";
 import type { ITextModel } from "../../../editor/common/model.js";
 import { ILanguageFeaturesService } from "../../../editor/common/services/languageFeatures.js";
 import { IModelService } from "../../../editor/common/services/model.js";
+import { IOutlineModelService, OutlineModelService } from "../../../editor/contrib/documentSymbols/browser/outlineModel.js";
 import { ICommandService } from "../../../platform/commands/common/commands.js";
 import type { IExtensionDescription } from "../../../platform/extensions/common/extensions.js";
 import { IFileService } from "../../../platform/files/common/files.js";
 import { SyncDescriptor } from "../../../platform/instantiation/common/descriptors.js";
-import type { ServicesAccessor } from "../../../platform/instantiation/common/instantiation.js";
+import { IInstantiationService, type ServicesAccessor } from "../../../platform/instantiation/common/instantiation.js";
 import { ServiceCollection } from "../../../platform/instantiation/common/serviceCollection.js";
+import { ILogService } from "../../../platform/log/common/log.js";
 import { IMarkerService } from "../../../platform/markers/common/markers.js";
 import { IRemoteAuthorityResolverService, type IRemoteConnectionData, type ResolverResult } from "../../../platform/remote/common/remoteAuthorityResolver.js";
 import {
@@ -26,6 +28,7 @@ import {
 	Workspace,
 	WorkspaceFolder,
 } from "../../../platform/workspace/common/workspace.js";
+import type { IWorkspaceSymbol } from "../../../workbench/contrib/search/common/search.js";
 import { CommandService } from "../../../workbench/services/commands/common/commandService.js";
 import { IExtensionService } from "../../../workbench/services/extensions/common/extensions.js";
 import { ISearchService } from "../../../workbench/services/search/common/search.js";
@@ -77,6 +80,24 @@ export function reviewRemoteResolver(
 		},
 		getConnectionData: (name: string) => (name === authority ? last : base.getConnectionData(name)),
 	});
+}
+
+/** Every host registers into the one workspace-symbol registry, so a host keeps only its own files' symbols. */
+class ReviewRemoteCommandService extends CommandService {
+	constructor(
+		private readonly authority: string,
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IExtensionService extensionService: IExtensionService,
+		@ILogService logService: ILogService,
+	) {
+		super(instantiationService, extensionService, logService);
+	}
+
+	override async executeCommand<T>(id: string, ...args: unknown[]): Promise<T> {
+		const result = await super.executeCommand<T>(id, ...args);
+		if (id !== "_executeWorkspaceSymbolProvider") return result;
+		return (result as IWorkspaceSymbol[]).filter((symbol) => ownsRemoteResource(this.authority, symbol.location.uri)) as T;
+	}
 }
 
 export class ReviewRemoteWorkspace extends Disposable implements IWorkspaceContextService {
@@ -179,7 +200,8 @@ export function reviewRemoteScope(input: {
 		[IRemoteAuthorityResolverService, input.resolver],
 		[IExtensionService, reviewRemoteExtensionService(window.get(IExtensionService), input.extensions, input.activate)],
 		// So a host's `vscode.execute*Provider` calls use this scope's registry and models.
-		[ICommandService, new SyncDescriptor(CommandService)],
+		[ICommandService, new SyncDescriptor(ReviewRemoteCommandService, [authority])],
+		[IOutlineModelService, new SyncDescriptor(OutlineModelService)],
 		[IFileService, reviewRemoteFileEvents(window.get(IFileService), authority)],
 	);
 }
