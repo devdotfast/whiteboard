@@ -210,3 +210,9 @@ it("preserves external links, anchors, and literal link examples", () => {
     ),
   ).toEqual([]);
 });
+
+it("reads whiteboard:source/ links and retired review-source: links alike", () => {
+  expect(
+    sources("[save](whiteboard:source/head/src/save.ts#L2-L4)")[0]!.source,
+  ).toEqual(sources("[save](review-source:head/src/save.ts#L2-L4)")[0]!.source);
+});

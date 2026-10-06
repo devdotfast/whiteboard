@@ -147,7 +147,7 @@ retrying.
 
 ## Validation and remaining work
 
-Markdown source links use `[label](review-source:head/src/save.ts#L10-L24)`
+Markdown source links use `[label](whiteboard:source/head/src/save.ts#L10-L24)`
 (or `base`, or `#L10` for one line). Paths are repository-relative and URL-encoded
 where needed. Inline and reference-style links open the existing native side peek.
 The same Markdown parser feeds the host's source checks and the renderer, so code

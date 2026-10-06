@@ -2044,6 +2044,70 @@ describe("snapshot authoring", () => {
     });
   });
 
+  it("respells a whole board's retired links on any save, not only the edit's", async () => {
+    const { reviewId } = await create();
+    await store.close();
+
+    const db = new DatabaseSync(database);
+    db.prepare(
+      "UPDATE versions SET snapshot=json_set(snapshot,'$.document',json(?)) WHERE review_id=?",
+    ).run(
+      JSON.stringify([
+        {
+          type: "markdown",
+          id: "markdown-1",
+          markdown: "[old](review-source:head/src/store.ts#L1)",
+        },
+      ]),
+      reviewId,
+    );
+    db.close();
+    store = new ReviewStore(database, providers);
+
+    await edit(reviewId, {
+      type: "insert",
+      content: { type: "markdown", markdown: "New." },
+    });
+
+    // Stored as saved: the new version respelled, history as it was written.
+    const stored = (version: number) =>
+      new DatabaseSync(database, { readOnly: true })
+        .prepare(
+          "SELECT json_extract(snapshot,'$.document[0].markdown') AS markdown FROM versions WHERE review_id=? AND version=?",
+        )
+        .get(reviewId, version)!.markdown;
+
+    expect(stored(1)).toBe("[old](whiteboard:source/head/src/store.ts#L1)");
+    expect(stored(0)).toBe("[old](review-source:head/src/store.ts#L1)");
+  });
+
+  it("reads a board's retired links in their current spelling", async () => {
+    const { reviewId } = await create();
+    await store.close();
+
+    const db = new DatabaseSync(database);
+    db.prepare(
+      "UPDATE versions SET snapshot=json_set(snapshot,'$.document',json(?)) WHERE review_id=?",
+    ).run(
+      JSON.stringify([
+        {
+          type: "markdown",
+          id: "markdown-1",
+          markdown: "[old](review-source:head/src/store.ts#L1)",
+        },
+      ]),
+      reviewId,
+    );
+    db.close();
+    store = new ReviewStore(database, providers);
+
+    // So the editor, which saves what it read, never saves a respelling
+    // the person didn't make.
+    expect(store.read(reviewId).document[0]).toMatchObject({
+      markdown: "[old](whiteboard:source/head/src/store.ts#L1)",
+    });
+  });
+
   it("serializes edits through async validation and preserves different-field patches", async () => {
     const { reviewId } = await create();
 

@@ -11,9 +11,8 @@ import type {
 } from "@dev.fast/review-protocol";
 import { sourceAnchors } from "@review/lens-selection.js";
 import {
-  liftFileLenses,
-  migrateStoredDocument,
   migrateStoredLenses,
+  readStoredDocument,
 } from "@review/stored-document-migration.js";
 import {
   type Coverage,
@@ -59,6 +58,8 @@ import {
   isUnit,
   pinnedRepositoryIds,
   resourceReferences,
+  respellDocumentLinks,
+  respellEditLinks,
   reviewTargetSchema,
   sourceReferences,
   summarizeEdit,
@@ -1141,9 +1142,7 @@ export class ReviewStore {
     // retired attachment representations with their canonical equivalent and
     // drops retired fields.
     // Lenses saved as document blocks read as the snapshot's own.
-    const { document, lenses } = liftFileLenses(
-      migrateStoredDocument(snapshot.document),
-    );
+    const { document, lenses } = readStoredDocument(snapshot.document);
 
     // SAFETY: stored blocks were validated on write; migration only replaces
     // retired representations and lifts retired lens blocks out.
@@ -1659,18 +1658,22 @@ export class ReviewStore {
         }
 
         case "edit": {
+          const edit = respellEditLinks(op.edit);
+
           applied = applyEdit(
             snapshot.document,
-            op.edit,
+            edit,
             (prefix) => `${prefix}-${++nextId}`,
           );
 
           snapshot.lastEdit = summarizeEdit(
-            op.edit,
+            edit,
             applied,
             previous!.document,
             snapshot.document,
           );
+
+          snapshot.document = respellDocumentLinks(snapshot.document);
 
           if (snapshot.staleSources?.length) {
             const oldSources = new Map(

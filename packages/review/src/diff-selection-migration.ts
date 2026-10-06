@@ -1,4 +1,5 @@
 import {
+  type JsonObject,
   type JsonValue,
   isJsonObject,
   isNumberValue,
@@ -14,50 +15,63 @@ export function migrateDiffSelections(input: unknown): JsonValue {
   return migrateNode(jsonValueSchema.parse(input));
 }
 
+/** Keys whose values held retired attachments. */
+export const ATTACHMENT_KEYS = [
+  "source",
+  "peek",
+  "sources",
+  "contextSources",
+  "callSite",
+];
+
+/** A retired attachment as a selection, or undefined for anything else. */
+export function retiredSelection(value: JsonObject): JsonObject | undefined {
+  if (!isStringValue(value.file)) return undefined;
+
+  if (isNumberValue(value.fromLine) && isNumberValue(value.toLine)) {
+    const side = value.side ?? value.graph ?? "head";
+
+    return {
+      file: value.file,
+      start: { side, line: value.fromLine },
+      end: { side, line: value.toLine },
+    };
+  }
+
+  if (
+    isJsonObject(value.start) &&
+    isJsonObject(value.end) &&
+    "baseLine" in value.start
+  ) {
+    const endpoint = (row: JsonObject) =>
+      isNumberValue(row.headLine)
+        ? { side: "head", line: row.headLine }
+        : { side: "base", line: row.baseLine ?? null };
+
+    return {
+      file: value.file,
+      start: endpoint(value.start),
+      end: endpoint(value.end),
+    };
+  }
+
+  return undefined;
+}
+
 function migrateNode(value: JsonValue, attachment = false): JsonValue {
   if (Array.isArray(value))
     return value.map((child) => migrateNode(child, attachment));
 
   if (!isJsonObject(value)) return value;
 
-  if (attachment && isStringValue(value.file)) {
-    if (isNumberValue(value.fromLine) && isNumberValue(value.toLine)) {
-      const side = value.side ?? value.graph ?? "head";
+  const selection = attachment ? retiredSelection(value) : undefined;
 
-      return {
-        file: value.file,
-        start: { side, line: value.fromLine },
-        end: { side, line: value.toLine },
-      };
-    }
-
-    if (
-      isJsonObject(value.start) &&
-      isJsonObject(value.end) &&
-      "baseLine" in value.start
-    ) {
-      const endpoint = (row: typeof value.start) =>
-        isNumberValue(row.headLine)
-          ? { side: "head", line: row.headLine }
-          : { side: "base", line: row.baseLine };
-
-      return {
-        file: value.file,
-        start: endpoint(value.start),
-        end: endpoint(value.end),
-      };
-    }
-  }
+  if (selection) return selection;
 
   return Object.fromEntries(
     Object.entries(value).map(([key, child]) => [
       key,
-      migrateNode(
-        child,
-        ["source", "peek", "sources", "contextSources", "callSite"].includes(
-          key,
-        ),
-      ),
+      migrateNode(child, ATTACHMENT_KEYS.includes(key)),
     ]),
   );
 }
