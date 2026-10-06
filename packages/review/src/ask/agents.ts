@@ -19,6 +19,7 @@ import {
   type AskPermissions,
   askAgentIds,
 } from "@review/ask/thread-state.js";
+import { ASK_THREAD_ENV } from "@review/review-api/request-origin.js";
 
 /** How Whiteboard runs an agent that speaks ACP on stdio. */
 type AskAgentLaunch =
@@ -246,6 +247,8 @@ export type AskAgentLauncher = (
     /** The MCP servers its sessions are given. */
     mcpServers?: McpServer[];
     env?: NodeJS.ProcessEnv;
+    /** The Ask thread this agent serves. */
+    threadId?: string;
   },
 ) => Promise<AskAgentProcess>;
 
@@ -330,7 +333,12 @@ const STDERR_LIMIT = 8_000;
 export const launchAskAgent: AskAgentLauncher = async (
   agent,
   cwd,
-  { permissions = "read-only", mcpServers = [], env: base = process.env } = {},
+  {
+    permissions = "read-only",
+    mcpServers = [],
+    env: base = process.env,
+    threadId,
+  } = {},
 ) => {
   const spec = askAgents[agent];
   const executable = await findAgent(spec, base);
@@ -341,6 +349,10 @@ export const launchAskAgent: AskAgentLauncher = async (
     ...base,
     ...askAgentSettings(agent, permissions).env,
   };
+
+  // Lets `whiteboard api` calls from the agent's shell name the thread.
+  // The MCP server gets it in its own env, since MCP clients may not pass theirs on.
+  if (threadId) env[ASK_THREAD_ENV] = threadId;
 
   // A server started from inside a Claude Code session must not look nested.
   delete env.CLAUDECODE;
