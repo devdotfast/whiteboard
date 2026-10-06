@@ -13,6 +13,7 @@ import {
 	type ResolverResult,
 	WebSocketRemoteConnection,
 } from "../../../platform/remote/common/remoteAuthorityResolver.js";
+import type { ReviewGatewayHostState } from "../../common/reviewProtocol.js";
 import type { ReviewRemoteLanguageEndpoint } from "../reviewDesktopConnectionService.js";
 import { isReviewRemoteAuthority, override } from "./reviewRemoteAuthority.js";
 
@@ -21,7 +22,7 @@ export const REMOTE_WINDOW_RESOLVE_WAIT_MS = 60_000;
 
 export interface ReviewWindowHosts {
 	endpoint(serverId: string): Promise<ReviewRemoteLanguageEndpoint | undefined>;
-	state(serverId: string): Promise<{ alias?: string; state: string } | undefined>;
+	state(serverId: string): Promise<({ alias?: string } & Pick<ReviewGatewayHostState, "state" | "detail">) | undefined>;
 }
 
 export function parseRemoteLanguageEndpoint(endpoint: unknown): ReviewRemoteLanguageEndpoint | undefined {
@@ -55,8 +56,13 @@ export function reviewWindowHosts(channel: IChannel): ReviewWindowHosts {
 		state: async (serverId) => {
 			const state: unknown = await channel.call("getRemoteHostState", serverId);
 			if (typeof state !== "object" || state === null) return undefined;
-			const { alias, state: name } = state as Record<string, unknown>;
-			return typeof name === "string" ? { alias: typeof alias === "string" ? alias : undefined, state: name } : undefined;
+			const { alias, state: name, detail } = state as Record<string, unknown>;
+			if (typeof name !== "string") return undefined;
+			return {
+				alias: typeof alias === "string" ? alias : undefined,
+				state: name as ReviewGatewayHostState["state"],
+				detail: typeof detail === "string" ? detail : undefined,
+			};
 		},
 	};
 }

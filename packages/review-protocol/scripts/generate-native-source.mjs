@@ -123,6 +123,7 @@ const MODULE_PATHS = [
   path.join(sourceRoot, "structural-diff.ts"),
   path.join(sourceRoot, "source-alignment.ts"),
   path.join(sourceRoot, "contracts.ts"),
+  path.join(sourceRoot, "review-host-status.ts"),
   path.join(sourceRoot, "code-peek-diff.ts"),
   path.join(sourceRoot, "review-api-client.ts"),
   path.join(sourceRoot, "index.ts"),

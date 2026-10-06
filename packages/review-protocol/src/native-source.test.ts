@@ -79,6 +79,7 @@ describe("native Review Protocol source generation", () => {
       "structural-diff.ts",
       "source-alignment.ts",
       "contracts.ts",
+      "review-host-status.ts",
       "code-peek-diff.ts",
       "review-api-client.ts",
       "index.ts",
@@ -166,6 +167,7 @@ describe("native Review Protocol source generation", () => {
     await writeFile(path.join(sourceRoot, "runtime-value.ts"), "");
     await writeFile(path.join(sourceRoot, "json.ts"), "");
     await writeFile(path.join(sourceRoot, "trace-contracts.ts"), "");
+    await writeFile(path.join(sourceRoot, "review-host-status.ts"), "");
     await writeFile(path.join(sourceRoot, "code-peek-diff.ts"), "");
     await writeFile(path.join(sourceRoot, "review-api-client.ts"), "");
     await writeFile(

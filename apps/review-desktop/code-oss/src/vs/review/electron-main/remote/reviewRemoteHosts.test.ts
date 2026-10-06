@@ -131,12 +131,12 @@ test("removing a machine's last alias closes the windows bound to it, and no oth
 	assert.deepEqual(closed, [`whiteboard+${FAKE_SERVER_ID}`]);
 });
 
-test("a window waiting on a machine sees its alias and state, or connecting while an alias has not reported its id", () => {
+test("a window waiting on a machine sees its alias, state and detail, or connecting while an alias has not reported its id", () => {
 	assert.deepEqual(remoteHostState("s1", [
 		{ alias: "copy", serverId: "s1", state: "duplicate" },
 		{ alias: "devbox", serverId: "s1", state: "online" },
 	]), { alias: "devbox", state: "online" });
-	assert.deepEqual(remoteHostState("s1", [{ alias: "devbox", serverId: "s1", state: "offline" }]), { alias: "devbox", state: "offline" });
+	assert.deepEqual(remoteHostState("s1", [{ alias: "devbox", serverId: "s1", state: "auth-failed", detail: "Permission denied." }]), { alias: "devbox", state: "auth-failed", detail: "Permission denied." });
 	assert.deepEqual(remoteHostState("s1", [{ alias: "new", state: "connecting" }]), { state: "connecting" });
 	assert.equal(remoteHostState("s1", [{ alias: "gone", state: "unreachable" }, { alias: "other", serverId: "s2", state: "connecting" }]), undefined);
 });
