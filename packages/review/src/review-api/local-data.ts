@@ -1184,7 +1184,7 @@ export class LocalReviewData {
   /** The PR's current comparison, fetched into a registered checkout of its repository. */
   async resolvePullRequest(
     url: string,
-    repository: { id?: string; preferred?: string },
+    repository: { id: string },
   ): Promise<ResolvedPullRequest> {
     const deps = this.options.pullRequests ?? defaultPullRequestDeps;
     const { provider, address } = resolvePullRequest(url);
@@ -1232,19 +1232,14 @@ export class LocalReviewData {
   private async pullRequestCheckout(
     provider: PullRequestProvider,
     address: PullRequestAddress,
-    repository: { id?: string; preferred?: string },
+    repository: { id: string },
     deps: PullRequestDeps,
   ) {
-    const registered = this.store.repositories();
+    const candidates = this.store
+      .repositories()
+      .filter((entry) => entry.id === repository.id);
 
-    const candidates = repository.id
-      ? registered.filter((entry) => entry.id === repository.id)
-      : [
-          ...registered.filter((entry) => entry.id === repository.preferred),
-          ...registered.filter((entry) => entry.id !== repository.preferred),
-        ];
-
-    if (repository.id && candidates.length === 0)
+    if (candidates.length === 0)
       throw new ReviewInputError("Repository is not registered.", 404);
 
     for (const { id } of candidates) {
@@ -1272,9 +1267,7 @@ export class LocalReviewData {
     const name = host === "github.com" ? slug : `${host}/${slug}`;
 
     throw new ReviewInputError(
-      repository.id
-        ? `That checkout has no remote for ${name}. Add one, or omit repositoryId.`
-        : `No registered checkout has a remote for ${name}. Register a checkout of ${name} with review_register_repository first, or pass a target.`,
+      `That checkout has no remote for ${name}. Name a checkout of ${name} as the target's repositoryPath.`,
       404,
     );
   }

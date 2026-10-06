@@ -101,7 +101,7 @@ export const commandSchema = z.strictObject({
         .min(1)
         .optional()
         .describe(
-          "Only with pullRequestUrl and no target: the registered checkout to fetch the PR into. Default: the existing review's, else the first registered checkout with a remote for the PR's repository.",
+          "Only with pullRequestUrl and no target: the registered checkout to fetch the PR into.",
         ),
       /** Return the existing review for pullRequestUrl instead of creating one. */
       reuseExisting: z
@@ -281,11 +281,10 @@ export interface ResolvedPullRequest {
 export interface ReviewProviders {
   headBranch?(pins: Pins, headRef?: string): Promise<string | undefined>;
   projectSource?(snapshot: Snapshot, pins: Pins): Promise<Snapshot>;
-  /** Fetch a PR into a registered checkout: the named one, else the first
-   * preferred one that still matches, else any whose remote is the PR's. */
+  /** Fetch a PR into the registered checkout the caller names. */
   resolvePullRequest?(
     url: string,
-    repository: { id?: string; preferred?: string },
+    repository: { id: string },
   ): Promise<ResolvedPullRequest>;
   /** Undefined when the forge can't be read. */
   pullRequestTitle?(url: string): Promise<string | undefined>;
@@ -1693,7 +1692,14 @@ export class ReviewStore {
         new ReviewInputError("Pull request targets are unavailable."),
       );
 
-    // Keep an existing review's checkout so headMoved compares like with like.
+    if (!op.repositoryId)
+      return Promise.reject(
+        new ReviewInputError(
+          'Name the checkout to fetch the PR into: target {kind:"pullRequest", repositoryPath, pullRequest}.',
+        ),
+      );
+
+    // A PR whose review is in Trash is refused before it is fetched.
     const [existing] =
       op.reuseExisting === false
         ? []
@@ -1709,7 +1715,6 @@ export class ReviewStore {
 
     return this.providers.resolvePullRequest(op.pullRequestUrl, {
       id: op.repositoryId,
-      preferred: existing && this.read(existing).pins?.repositoryId,
     });
   }
   private startPullRequestTitle(
@@ -1758,9 +1763,8 @@ export class ReviewStore {
 
     this.assertReusableReview(reviewId);
 
-    const headMoved =
-      snapshot.pins?.repositoryId !== requested.repositoryId ||
-      snapshot.pins?.head !== requested.head;
+    // Worktrees share commits, so comparing heads is enough.
+    const headMoved = snapshot.pins?.head !== requested.head;
 
     const working = this.activity.read(reviewId).activities ?? [];
 

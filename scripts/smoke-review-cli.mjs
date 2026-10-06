@@ -167,13 +167,10 @@ try {
   );
   const head = (await git("rev-parse", "HEAD")).stdout.trim();
 
-  const registered = await api("session_register_repository", {
-    path: repository,
-  });
-
+  // Checkouts are named by path; the host registers them.
   const created = await api("session_create", {
     title: "Packed CLI smoke",
-    target: { kind: "commits", repositoryId: registered.id, base: head, head },
+    target: { kind: "commits", repositoryPath: repository, base: head, head },
     open: false,
   });
 
