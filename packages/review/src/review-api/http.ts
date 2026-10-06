@@ -1175,13 +1175,13 @@ export function createReviewApi(
       ].join("\n");
     };
 
-    // Each agent with the models and efforts it offered last; none until
-    // it has run.
     // The agents answering in any review, which quitting the app would stop.
     app.get("/ask/working", (context) =>
       context.json({ agents: ask.threads.working() }),
     );
 
+    // Each agent with the models and efforts it offered last; none until
+    // it has run.
     app.get("/:id/ask/agents", async (context) =>
       context.json({ agents: await ask.agents() }),
     );
