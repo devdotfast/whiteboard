@@ -243,27 +243,6 @@ export function AskHistoryList({
                       history?.reveal(entry);
                       history?.preview(null);
 
-                      if (target.kind === "code") {
-                        void session.surface
-                          .post({
-                            name: "reveal",
-                            args: {
-                              path: target.path,
-                              startLine: target.startLine,
-                              endLine: target.endLine,
-                              side: target.side,
-                              highlight: true,
-                              preserveFocus: true,
-                            },
-                          })
-                          .catch(() =>
-                            session.bridge.notify?.({
-                              kind: "error",
-                              text: "Original source unavailable.",
-                            }),
-                          );
-                      }
-
                       panels?.getState().openAskView(
                         {
                           type: "saved",
