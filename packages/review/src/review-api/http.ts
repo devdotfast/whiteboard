@@ -1,4 +1,10 @@
-import { type JsonObject, isJsonObject } from "@dev.fast/json";
+import {
+  type JsonObject,
+  type JsonValue,
+  isJsonObject,
+  isStringValue,
+} from "@dev.fast/json";
+import { resolveRepoContextSync } from "@dev.fast/local-vcs";
 import {
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
@@ -51,7 +57,7 @@ import { anchorQuotes } from "./anchor-quotes.js";
 import type { AskRecord } from "./ask-history.js";
 import { authoringTools } from "./authoring-tools.js";
 import { documentText } from "./document-text.js";
-import { ReviewInputError } from "./document.js";
+import { ReviewInputError, type ReviewTarget } from "./document.js";
 import { instructionsQuerySchema, renderInstructions } from "./instructions.js";
 import type { LocalReviewData } from "./local-data.js";
 import { registerOnboardingRoutes } from "./onboarding.js";
@@ -730,13 +736,27 @@ export function createReviewApi(
 
       return context.json(await data!.register(input.path));
     });
-    app.post("/resources", async (context) =>
-      context.json(
-        await data!.upload(
-          await readBoundedRequestJson(context.req.raw, 8 * 1024 * 1024),
-        ),
-      ),
-    );
+    app.post("/resources", async (context) => {
+      const body = await readBoundedRequestJson(
+        context.req.raw,
+        8 * 1024 * 1024,
+      );
+
+      // Agents send a checkout path; swap it for a repository id.
+      const named = z
+        .looseObject({ repositoryPath: z.string().min(1) })
+        .safeParse(body);
+
+      if (!named.success) return context.json(await data!.upload(body));
+      const { repositoryPath, ...upload } = named.data;
+
+      return context.json(
+        await data!.upload({
+          ...upload,
+          repositoryId: (await data!.register(repositoryPath)).id,
+        }),
+      );
+    });
     app.get("/:id/resources/:resourceId", async (context) => {
       const id = context.req.param("id");
       const snapshot = readReview(id);
@@ -1034,7 +1054,6 @@ export function createReviewApi(
         : []),
       ...(selection.apiSource?.pins
         ? [
-            `Selected repository ID: ${selection.apiSource.pins.repositoryId}`,
             ...(selection.apiSource.pins.base
               ? [`Selected base: ${selection.apiSource.pins.base}`]
               : []),
@@ -1043,7 +1062,6 @@ export function createReviewApi(
         : []),
       ...(snapshot.pins
         ? [
-            `Repository ID: ${snapshot.pins.repositoryId}`,
             `Session base: ${snapshot.pins.base}`,
             `Session head: ${snapshot.pins.head}`,
           ]
@@ -1719,11 +1737,27 @@ export function createReviewApi(
       await readBoundedRequestJson(context.req.raw),
     );
 
-    const request = await locateRepositories(body, (path) => {
-      if (!data) throw new ReviewInputError("Repositories are unavailable.");
+    // Without local data (a bare store), a path is recorded as it is.
+    const register = async (path: string) =>
+      data ? data.register(path) : store.registerRepository(path);
 
-      return data.register(path);
-    });
+    const request = withBoardRepository(
+      await locateRepositories(
+        await pullRequestTargets(
+          body,
+          register,
+          (url, repositoryId) => {
+            if (!data)
+              throw new ReviewInputError("Repositories are unavailable.");
+
+            return data.resolvePullRequest(url, { id: repositoryId });
+          },
+          (id) => store.read(id),
+        ),
+        register,
+      ),
+      (id) => (store.has(id) ? store.read(id) : undefined),
+    );
 
     const input = commandSchema.parse(request);
 
@@ -1905,6 +1939,149 @@ async function locateRepositories(
       ...(target && { target: await byId(target) }),
       ...(repositoryPath && (await byId({ repositoryPath }))),
     },
+  };
+}
+
+/** Turns an agent's pullRequest target into what the store takes: a create
+ * from pullRequestUrl, or for set_target the PR's resolved commits. */
+async function pullRequestTargets(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Request body boundary: commandSchema parses the result.
+  body: unknown,
+  register: (path: string) => Promise<{ id: string }>,
+  resolve: (
+    url: string,
+    repositoryId: string,
+  ) => Promise<{ target: ReviewTarget }>,
+  board: (id: string) => void,
+) {
+  const target = z.strictObject({
+    kind: z.literal("pullRequest"),
+    repositoryPath: z.string().min(1),
+    pullRequest: z.union([z.string().min(1), z.number().int().positive()]),
+  });
+
+  // A set_target is checked whole before anything is registered or fetched.
+  const located = z
+    .looseObject({
+      operation: z.discriminatedUnion("type", [
+        z.looseObject({ type: z.literal("create"), target }),
+        z.strictObject({
+          type: z.literal("set_target"),
+          reviewId: z.string().min(1),
+          target,
+        }),
+      ]),
+    })
+    .safeParse(body);
+
+  if (!located.success) return body;
+  const { target: pullRequest, ...operation } = located.data.operation;
+
+  if (operation.type === "set_target") board(operation.reviewId);
+  const { id: repositoryId } = await register(pullRequest.repositoryPath);
+
+  const url = pullRequestAt(
+    pullRequest.repositoryPath,
+    pullRequest.pullRequest,
+  );
+
+  if (operation.type === "create")
+    return {
+      ...located.data,
+      operation: { ...operation, pullRequestUrl: url, repositoryId },
+    };
+
+  return {
+    ...located.data,
+    operation: {
+      ...operation,
+      target: (await resolve(url, repositoryId)).target,
+      pullRequestUrl: url,
+    },
+  };
+}
+
+/** A PR's URL: as given, or its number on the checkout's GitHub repository. */
+function pullRequestAt(repositoryPath: string, pullRequest: string | number) {
+  if (isStringValue(pullRequest) && !/^\d+$/.test(pullRequest))
+    return pullRequest;
+
+  const slug = resolveRepoContextSync(repositoryPath)?.githubSlug;
+
+  if (!slug)
+    throw new ReviewInputError(
+      "This checkout has no GitHub remote to find the PR number in; pass the PR's URL.",
+    );
+
+  return `https://github.com/${slug}/pull/${pullRequest}`;
+}
+
+/** A pins object as an edit spells it: commits, with no other fields. A
+ * diagram may key its own data `pins`, and that is left alone. */
+/** Pins as an agent writes them: the board's repository is the host's to
+ * add. */
+const agentPinsSchema = z.strictObject({
+  head: z.string().min(1),
+  base: z.string().min(1).optional(),
+});
+
+/** An object an agent meant as pins: one naming a head, base or repository.
+ * Content may have a field called `pins` that is nothing of the kind. */
+const meantAsPins = (value: JsonValue): value is JsonObject =>
+  isJsonObject(value) &&
+  ["head", "base", "repositoryId"].some((key) => key in value);
+
+/** Sets every pins object in an edit to the board's own repository. */
+function withBoardRepository(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Request body boundary: commandSchema parses the result.
+  body: unknown,
+  board: (id: string) => Snapshot | undefined,
+) {
+  const located = z
+    .looseObject({
+      operation: z.looseObject({
+        type: z.enum(["edit", "lens_edit"]),
+        reviewId: z.string(),
+        edit: z.json(),
+      }),
+    })
+    .safeParse(body);
+
+  if (!located.success) return body;
+  const snapshot = board(located.data.operation.reviewId);
+
+  const repositoryId =
+    snapshot?.target?.repositoryId ?? snapshot?.pins?.repositoryId;
+
+  const edit = JSON.parse(
+    JSON.stringify(located.data.operation.edit),
+    (key, value: JsonValue) => {
+      if (key !== "pins" || !meantAsPins(value)) return value;
+
+      // Checked as the agent wrote them, so a mistake names head or base,
+      // never the repository the host adds.
+      const { repositoryId: _ignored, ...written } = value;
+      const pins = agentPinsSchema.safeParse(written);
+
+      if (!pins.success)
+        throw new ReviewInputError(
+          `Write pins as {head, base?}, each a commit: ${pins.error.issues
+            .map((issue) => `pins.${issue.path.join(".")}: ${issue.message}`)
+            .join("; ")}.`,
+        );
+
+      if (!repositoryId)
+        throw new ReviewInputError(
+          "This whiteboard has no repository for its pins to name commits of.",
+        );
+
+      return { ...pins.data, repositoryId };
+    },
+  );
+
+  return {
+    ...located.data,
+    operation: { ...located.data.operation, edit },
   };
 }
 

@@ -164,8 +164,16 @@ const targets = <Repository extends Record<string, z.ZodType>>(
 
 export const reviewTargetSchema = targets({ repositoryId: label });
 
-/** How agents name a target: by the checkout's path, registered on acceptance. */
-export const pathTargetSchema = targets({ repositoryPath: label });
+/** Targets as agents write them: a checkout path instead of a repository id,
+ * plus a PR by URL or number. */
+export const pathTargetSchema = z.discriminatedUnion("kind", [
+  ...targets({ repositoryPath: label }).options,
+  z.strictObject({
+    kind: z.literal("pullRequest"),
+    repositoryPath: label,
+    pullRequest: z.union([label, z.number().int().positive()]),
+  }),
+]);
 
 export type ReviewTarget = z.infer<typeof reviewTargetSchema>;
 

@@ -76,7 +76,7 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
     title: "Authoring",
     target: {
       kind: "commits",
-      repositoryId: "repo",
+      repositoryPath: "repo",
       base: "base",
       head: "head",
     },
@@ -491,7 +491,7 @@ it("binds existing content through the host-advertised PR tool", async () => {
       reviewId: created.reviewId,
       target: {
         kind: "commits",
-        repositoryId: "repo",
+        repositoryPath: "repo",
         base: "base",
         head: "head",
       },

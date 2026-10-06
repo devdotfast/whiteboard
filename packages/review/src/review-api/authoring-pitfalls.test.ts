@@ -125,7 +125,12 @@ beforeEach(async () => {
     operation: {
       type: "create",
       title: "Pitfalls",
-      target: { kind: "commits", ...pins },
+      target: {
+        kind: "commits",
+        repositoryPath: repository,
+        base: pins.base,
+        head: pins.head,
+      },
     },
   });
 
@@ -394,7 +399,8 @@ describe("anchors written as strings", () => {
       type: "sequence",
       title: "Save",
       actors: { a: "Agent", b: "Host" },
-      pins: elementPins,
+      // Agents write {base, head}; the host adds the board's repository.
+      pins: { base: pins.base, head: pins.head },
       steps: [
         {
           from: "a",

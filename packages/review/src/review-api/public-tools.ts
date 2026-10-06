@@ -98,5 +98,20 @@ export async function callPublicTool(
   if (sessionId !== undefined) fields.reviewId = sessionId;
   const result = await callAuthoringTool(client, tool, fields, signal);
 
-  return result instanceof ToolText ? result : publicResult(result);
+  return result instanceof ToolText
+    ? result
+    : withoutRepositoryIds(publicResult(result));
+}
+
+/** Agents never see repository ids. */
+function withoutRepositoryIds(value: JsonValue): JsonValue {
+  if (Array.isArray(value)) return value.map(withoutRepositoryIds);
+
+  if (!isJsonObject(value)) return value;
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== "repositoryId")
+      .map(([key, item]) => [key, withoutRepositoryIds(item)]),
+  );
 }

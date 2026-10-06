@@ -46,6 +46,14 @@ let directory: string, repository: string, database: string, pins: Pins;
 
 let local: ReturnType<typeof openLocalReviewStore>;
 
+/** The commits target as HTTP callers write it: by the checkout's path. */
+const pathTarget = () => ({
+  kind: "commits" as const,
+  repositoryPath: repository,
+  base: pins.base,
+  head: pins.head,
+});
+
 const command = <Operation>(operation: Operation) => ({
   operation,
 });
@@ -358,7 +366,7 @@ it("opens a created review in Desktop unless the author opts out", async () => {
     command({
       type: "create",
       title: "Shown",
-      target: { kind: "commits", ...pins },
+      target: pathTarget(),
     }),
   );
 
@@ -373,7 +381,7 @@ it("opens a created review in Desktop unless the author opts out", async () => {
   const background = command({
     type: "create",
     title: "Background",
-    target: { kind: "commits", ...pins },
+    target: pathTarget(),
     open: false,
   });
 
@@ -403,7 +411,7 @@ it("opens the PR's existing review that create returns instead of a new one", as
       command({
         type: "create",
         title: "PR",
-        target: { kind: "commits", ...pins },
+        target: pathTarget(),
         pullRequestUrl,
       }),
     )
@@ -415,7 +423,7 @@ it("opens the PR's existing review that create returns instead of a new one", as
     command({
       type: "create",
       title: "PR again",
-      target: { kind: "commits", ...pins },
+      target: pathTarget(),
       pullRequestUrl,
     }),
   );
@@ -446,7 +454,7 @@ it("does not open a created review when Desktop is not attached", async () => {
     command({
       type: "create",
       title: "Headless",
-      target: { kind: "commits", ...pins },
+      target: pathTarget(),
     }),
   );
 
@@ -475,7 +483,7 @@ it("keeps a created review when Desktop fails to open it", async () => {
     command({
       type: "create",
       title: "Saved anyway",
-      target: { kind: "commits", ...pins },
+      target: pathTarget(),
     }),
   );
 
@@ -2271,7 +2279,7 @@ it("exposes real source and resource operations through the authenticated deskto
         command({
           type: "create",
           title: "HTTP",
-          target: { kind: "commits", ...pins },
+          target: pathTarget(),
         }),
       )
     ).json();
@@ -2395,7 +2403,7 @@ it("copies prose with the displayed version's title and immutable review identit
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({
-    text: `Whiteboard: Original title\nSession ID: ${reviewId}\nVersion: 0\nRepository ID: ${pins.repositoryId}\nSession base: ${pins.base}\nSession head: ${pins.head}\nRead this version with session_get({"sessionId":"${reviewId}","version":0,"full":true}).\n\nSelected text:\n> First line\n> Second line\n\n`,
+    text: `Whiteboard: Original title\nSession ID: ${reviewId}\nVersion: 0\nSession base: ${pins.base}\nSession head: ${pins.head}\nRead this version with session_get({"sessionId":"${reviewId}","version":0,"full":true}).\n\nSelected text:\n> First line\n> Second line\n\n`,
   });
 });
 
@@ -2437,7 +2445,7 @@ it("copies code from historical pins after a repin, never from working-tree cont
 
   expect(historical.status).toBe(200);
   expect(await historical.json()).toEqual({
-    text: `Whiteboard: Code\nSession ID: ${reviewId}\nVersion: 0\nRepository ID: ${pins.repositoryId}\nSession base: ${pins.base}\nSession head: ${pins.head}\nRead this version with session_get({"sessionId":"${reviewId}","version":0,"full":true}).\n\nSelected code:\n## Value\n\nSelected source\n\n## head: example.ts:1-1 (${pins.head})\n    export const value = 2;\n\n`,
+    text: `Whiteboard: Code\nSession ID: ${reviewId}\nVersion: 0\nSession base: ${pins.base}\nSession head: ${pins.head}\nRead this version with session_get({"sessionId":"${reviewId}","version":0,"full":true}).\n\nSelected code:\n## Value\n\nSelected source\n\n## head: example.ts:1-1 (${pins.head})\n    export const value = 2;\n\n`,
   });
 
   const latest = await app.request(`/${reviewId}/copy-context`, {
