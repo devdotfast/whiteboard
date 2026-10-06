@@ -33,7 +33,7 @@ function copyReview(from: string, to: string, title: string) {
 
   try {
     db.prepare(
-      "INSERT INTO reviews SELECT ?,version,next_id FROM reviews WHERE id=?",
+      "INSERT INTO reviews(id,version,next_id,project_id) SELECT ?,version,next_id,project_id FROM reviews WHERE id=?",
     ).run(to, from);
     db.prepare(
       "INSERT INTO versions SELECT ?,version,json_set(snapshot,'$.reviewId',?,'$.title',?) FROM versions WHERE review_id=?",

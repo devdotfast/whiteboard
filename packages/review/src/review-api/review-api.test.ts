@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1503,6 +1504,197 @@ describe("snapshot authoring", () => {
       request({ type: "restore", reviewId: SCRATCHPAD_ID, version: 1 }),
     );
     expect(store.read(SCRATCHPAD_ID).document).toHaveLength(1);
+  });
+
+  it("puts a plan in its repository's project, which the repository's worktrees share", async () => {
+    const checkout = path.join(directory, "checkout");
+
+    const git = (...args: string[]) =>
+      execFileSync("git", ["-C", checkout, ...args]);
+
+    execFileSync("git", ["init", "-q", checkout]);
+    git(
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@t",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "first",
+    );
+    git("worktree", "add", "-q", path.join(directory, "worktree"));
+    const { id: repositoryId } = store.registerRepository(checkout);
+
+    const { reviewId } = await store.execute(
+      request({
+        type: "create",
+        title: "Plan",
+        target: { kind: "project", repositoryId },
+      }),
+    );
+
+    expect(store.read(reviewId).pins).toBeUndefined();
+    expect(store.summary(reviewId)).toMatchObject({
+      target: { kind: "project", repositoryId },
+      project: { name: "checkout" },
+    });
+
+    const worktree = store.registerRepository(path.join(directory, "worktree"));
+
+    expect(store.projectOfRepository(worktree.id)).toBe(
+      store.projectOf(reviewId),
+    );
+  });
+
+  describe("upgrading a store saved before projects", () => {
+    const repository = (name: string) => {
+      const checkout = path.join(directory, name);
+      execFileSync("git", ["init", "-q", checkout]);
+      execFileSync("git", [
+        "-C",
+        checkout,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "first",
+      ]);
+
+      return checkout;
+    };
+
+    const plan = async (repositoryId: string) =>
+      (
+        await store.execute(
+          request({
+            type: "create",
+            title: "Plan",
+            target: { kind: "project", repositoryId },
+          }),
+        )
+      ).reviewId;
+
+    /** Reopens the store as main left it, after `sql` runs on it. */
+    const reopenBeforeProjects = async (sql = "") => {
+      await store.close();
+      const db = new DatabaseSync(database);
+      db.exec(`PRAGMA foreign_keys=OFF;
+        CREATE TABLE old_reviews(id TEXT PRIMARY KEY, version INTEGER NOT NULL, next_id INTEGER NOT NULL);
+        INSERT INTO old_reviews SELECT id,version,next_id FROM reviews ORDER BY rowid;
+        DROP TABLE reviews; ALTER TABLE old_reviews RENAME TO reviews;
+        ALTER TABLE repositories DROP COLUMN project_id; DELETE FROM projects; PRAGMA user_version=0;
+        ${sql}`);
+      db.close();
+      store = new ReviewStore(database, providers);
+    };
+
+    it("gives every board its repository's project", async () => {
+      const { id: repositoryId } = store.registerRepository(
+        repository("checkout"),
+      );
+
+      const reviewId = await plan(repositoryId);
+
+      await reopenBeforeProjects();
+
+      expect(store.summary(reviewId)?.project).toEqual({
+        id: store.projectOfRepository(repositoryId),
+        name: "checkout",
+      });
+    });
+
+    it("keeps boards in the order they were made", async () => {
+      const { id: repositoryId } = store.registerRepository(
+        repository("checkout"),
+      );
+
+      const first = await plan(repositoryId);
+      const second = await plan(repositoryId);
+
+      await reopenBeforeProjects(`
+        INSERT OR REPLACE INTO review_attention(review_id,viewed_at) VALUES('${first}','2020-01-01'),('${second}','2021-01-01');`);
+
+      expect(store.list().map(({ reviewId }) => reviewId)).toEqual([
+        first,
+        second,
+      ]);
+    });
+
+    it("files a deleted worktree's boards under its repository", async () => {
+      const checkout = repository("checkout");
+      const worktree = path.join(directory, "worktree");
+      execFileSync("git", ["-C", checkout, "worktree", "add", "-q", worktree]);
+      const main = store.registerRepository(checkout);
+      const reviewId = await plan(store.registerRepository(worktree).id);
+
+      rmSync(worktree, { recursive: true, force: true });
+      await reopenBeforeProjects();
+
+      expect(store.projectOf(reviewId)).toBe(
+        store.projectOfRepository(main.id),
+      );
+    });
+
+    it("keeps a board whose current version is missing", async () => {
+      const { id: repositoryId } = store.registerRepository(
+        repository("checkout"),
+      );
+
+      const kept = await plan(repositoryId);
+      const broken = await plan(repositoryId);
+
+      await reopenBeforeProjects(
+        `DELETE FROM versions WHERE review_id='${broken}';`,
+      );
+
+      expect(store.projectOf(broken)).toBe(store.projectOf(kept));
+    });
+
+    it("upgrades past a reference it didn't break", async () => {
+      const { id: repositoryId } = store.registerRepository(
+        repository("checkout"),
+      );
+
+      const reviewId = await plan(repositoryId);
+
+      await reopenBeforeProjects(
+        "INSERT INTO review_attention(review_id,viewed_at) VALUES('gone','2020-01-01');",
+      );
+
+      expect(store.projectOf(reviewId)).toBe(
+        store.projectOfRepository(repositoryId),
+      );
+    });
+
+    it("leaves the store as it was when the upgrade fails", async () => {
+      const { id: repositoryId } = store.registerRepository(
+        repository("checkout"),
+      );
+
+      await plan(repositoryId);
+
+      await expect(
+        // The rebuild's scratch table, as a crash could leave it.
+        reopenBeforeProjects("CREATE TABLE reviews_with_projects(id TEXT);"),
+      ).rejects.toThrow(Error);
+
+      const db = new DatabaseSync(database);
+
+      expect(
+        db
+          .prepare("SELECT name FROM pragma_table_info('reviews')")
+          .all()
+          .map(({ name }) => name),
+      ).toEqual(["id", "version", "next_id"]);
+      db.close();
+      store = new ReviewStore(path.join(directory, "other.db"), providers);
+    });
   });
 
   it("logs the scratchpad newest first while a review keeps appending", async () => {

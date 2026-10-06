@@ -684,21 +684,15 @@ export function createReviewApi(
     });
 
     // Traces are stored beside the review's own repository.
-    const tracePins = (id: string, version?: number) => {
-      const { pins } = readReview(id, version);
+    const tracePins = async (id: string, version?: number) => {
+      const snapshot = readReview(id, version);
 
-      if (!pins)
-        throw new ReviewInputError(
-          "This document has no source pins of its own.",
-          409,
-        );
-
-      return pins;
+      return snapshot.pins ?? (await data.documentPins(snapshot));
     };
 
     app.get("/:id/agent-traces", async (context) => {
       const query = traceQuery.parse(context.req.query());
-      const pins = tracePins(context.req.param("id"), query.version);
+      const pins = await tracePins(context.req.param("id"), query.version);
 
       return context.json(
         await listPinnedTraces(
@@ -710,7 +704,7 @@ export function createReviewApi(
     });
     app.get("/:id/agent-traces/:sessionId", async (context) => {
       const query = traceQuery.parse(context.req.query());
-      const pins = tracePins(context.req.param("id"), query.version);
+      const pins = await tracePins(context.req.param("id"), query.version);
 
       const result = await readStoredTrace(
         store.repositoryPath(pins.repositoryId),

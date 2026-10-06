@@ -17,7 +17,7 @@ export interface ReviewSessionData {
   pins?: { base: string; head: string };
   /** `worktree` when the head side is the checkout's working files rather
    * than the pinned head commit. */
-  targetKind?: "worktree" | "commits";
+  targetKind?: "worktree" | "commits" | "project";
   historicalRevision: string | null;
   updatedAtMs: number;
   /** Head branch captured with the displayed snapshot. */

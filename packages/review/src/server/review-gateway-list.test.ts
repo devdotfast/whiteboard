@@ -102,7 +102,7 @@ it("lists a server two aliases share once, under the first, offline", () => {
   expect(summary(merged)).toEqual([["on a", "first", "offline"]]);
 });
 
-it("puts the alias in front of the group key and keeps the label", () => {
+it("puts the alias in front of the project id and keeps its name", () => {
   const [merged] = mergeLists(
     [],
     source(
@@ -110,7 +110,7 @@ it("puts the alias in front of the group key and keeps the label", () => {
       {
         A: [
           entry("grouped", {
-            repositoryGroup: { key: "git:/srv/r/.git", label: "r" },
+            project: { id: "project-1", name: "r" },
           }),
         ],
       },
@@ -118,10 +118,7 @@ it("puts the alias in front of the group key and keeps the label", () => {
     ),
   );
 
-  expect(merged?.repositoryGroup).toEqual({
-    key: "a:git:/srv/r/.git",
-    label: "r",
-  });
+  expect(merged?.project).toEqual({ id: "a:project-1", name: "r" });
 });
 
 it("keeps the last list of a host that is connecting, offline, incompatible or unreachable, with its state", () => {

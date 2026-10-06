@@ -262,7 +262,14 @@ const execFilePromise = promisify(execFile);
 export async function runVcs(
   tool: VcsTool,
   vcsArgs: readonly VcsArg[],
-  options: ExecFileOptions & { encoding?: "utf8" | BufferEncoding } = {},
+  {
+    input,
+    ...options
+  }: ExecFileOptions & {
+    encoding?: "utf8" | BufferEncoding;
+    /** Written to the command's stdin, which then closes. */
+    input?: string;
+  } = {},
 ): Promise<{ stdout: string; stderr: string }> {
   const args = renderVcsArgs(vcsArgs);
 
@@ -273,12 +280,20 @@ export async function runVcs(
   });
 
   try {
-    const result = await execFilePromise(tool, args, {
+    const running = execFilePromise(tool, args, {
       ...options,
       env: vcsEnvironment(tool, args, options.env),
       timeout: options.timeout ?? defaultVcsTimeout(tool, args),
       encoding: options.encoding ?? "utf8",
     });
+
+    if (input !== undefined) {
+      // A command that exits before reading it all closes the pipe early.
+      running.child.stdin?.on("error", () => {});
+      running.child.stdin?.end(input);
+    }
+
+    const result = await running;
 
     finish?.({ ok: true });
 

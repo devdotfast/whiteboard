@@ -144,6 +144,11 @@ const targets = <Repository extends Record<string, z.ZodType>>(
   repository: Repository,
 ) =>
   z.discriminatedUnion("kind", [
+    /** The project of the repository, no change: a plan. */
+    z.strictObject({
+      kind: z.literal("project"),
+      ...repository,
+    }),
     z.strictObject({
       kind: z.literal("worktree"),
       ...repository,

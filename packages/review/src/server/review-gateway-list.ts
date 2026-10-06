@@ -32,11 +32,9 @@ function decorate(
 
   return {
     ...entry,
-    ...(entry.repositoryGroup && {
-      repositoryGroup: {
-        key: `${alias}:${entry.repositoryGroup.key}`,
-        label: entry.repositoryGroup.label,
-      },
+    // A project on another machine is that machine's.
+    ...(entry.project && {
+      project: { id: `${alias}:${entry.project.id}`, name: entry.project.name },
     }),
     host: alias,
     hostState,

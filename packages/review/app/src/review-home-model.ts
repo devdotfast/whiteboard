@@ -124,13 +124,16 @@ export function trashDaysLeft(review: ReviewApiSummary, now: number): number {
 export function repositoryIdentity(
   review: ReviewApiSummary,
 ): { key: string; label: string } | undefined {
-  if (review.repositoryGroup)
-    return review.host
-      ? {
-          key: review.repositoryGroup.key,
-          label: `${review.host}: ${review.repositoryGroup.label}`,
-        }
-      : review.repositoryGroup;
+  // A board's project names its repository, across its checkouts. One on
+  // another machine is that machine's: the gateway keys it with the host.
+  if (review.project)
+    return {
+      key: review.project.id,
+      label: review.host
+        ? `${review.host}: ${review.project.name}`
+        : review.project.name,
+    };
+
   const remote = review.shared?.cloneUrl || review.origin?.pullRequestUrl;
 
   if (!remote) return undefined;
