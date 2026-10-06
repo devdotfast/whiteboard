@@ -18,8 +18,10 @@ import { z } from "zod";
 import { useReviewSession } from "./host/review-session";
 
 export interface AskHistory {
-  /** Newest first; null until the first read. */
+  /** The project's conversations, newest first; null until the first read. */
   entries: AskHistoryEntry[] | null;
+  /** The board on screen. Only threads anchored on it get marks. */
+  board: string | null;
   error: string | null;
   /** Reads the list again, after a conversation is saved or continued. */
   refresh: () => void;
@@ -38,7 +40,10 @@ export interface AskHistory {
 
 const AskHistoryContext = createContext<AskHistory | null>(null);
 
-const listSchema = z.object({ threads: z.array(askHistoryEntrySchema) });
+const listSchema = z.object({
+  threads: z.array(askHistoryEntrySchema),
+  board: z.string().optional(),
+});
 
 /** This review's saved conversations, shared by the document's marks, the
  * history list, and the Ask panel that adds to them. */
@@ -49,6 +54,7 @@ export function AskHistoryProvider({
 }): ReactElement {
   const session = useReviewSession();
   const [entries, setEntries] = useState<AskHistoryEntry[] | null>(null);
+  const [board, setBoard] = useState<string | null>(null);
   const [previewId, preview] = useState<string | null>(null);
 
   const [revealRequest, setRevealRequest] = useState<AskHistoryEntry | null>(
@@ -86,10 +92,11 @@ export function AskHistoryProvider({
       .then(async (response) => {
         if (!response.ok) throw new Error("Unavailable");
 
-        const { threads } = listSchema.parse(await response.json());
+        const list = listSchema.parse(await response.json());
 
         if (read !== reads.current) return;
-        setEntries(threads);
+        setEntries(list.threads);
+        setBoard(list.board ?? null);
         setError(null);
       })
       .catch(() => {
@@ -123,6 +130,7 @@ export function AskHistoryProvider({
   const value = useMemo(
     () => ({
       entries,
+      board,
       error,
       refresh,
       forget,
@@ -135,6 +143,7 @@ export function AskHistoryProvider({
     }),
     [
       entries,
+      board,
       error,
       refresh,
       forget,

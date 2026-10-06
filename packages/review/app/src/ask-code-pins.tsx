@@ -51,15 +51,19 @@ export function askedText(
   return text;
 }
 
-/** Asks from the same commit's diff, or from the review's own. */
+/** Asks on the board on screen, from the same commit's diff or from the
+ * review's own. */
 function codeMarks(
   entries: readonly AskHistoryEntry[],
+  board: string | null,
   commit: string | undefined,
 ): CodeMark[] {
   const marks = new Map<string, CodeMark>();
 
   for (const entry of entries) {
     const { target, apiSource } = entry.selection;
+
+    if ((entry.anchor?.board ?? board) !== board) continue;
 
     if (target.kind !== "code" || apiSource?.commit !== commit) continue;
     const id = `${target.path}:${target.side}:${target.startLine}:${target.endLine}`;
@@ -90,11 +94,13 @@ export function AskCodePins({
   handle: ReviewDiffViewHandle | ReviewInlineEditorHandle | null;
   commit?: string;
 }): ReactElement {
-  const entries = useAskHistory()?.entries;
+  const history = useAskHistory();
+  const entries = history?.entries;
+  const board = history?.board ?? null;
 
   const marks = useMemo(
-    () => codeMarks(entries ?? [], commit),
-    [entries, commit],
+    () => codeMarks(entries ?? [], board, commit),
+    [entries, board, commit],
   );
 
   const [nodes, setNodes] = useState<ReadonlyMap<HTMLElement, string>>(

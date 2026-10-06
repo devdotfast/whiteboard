@@ -375,6 +375,10 @@ export const askHistoryEntrySchema = z.object({
   head: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** The board the conversation started on, and the block if it was about one. */
+  anchor: z
+    .object({ board: z.string(), block: z.string().optional() })
+    .optional(),
 });
 
 export type AskHistoryEntry = z.infer<typeof askHistoryEntrySchema>;

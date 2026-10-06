@@ -7,7 +7,7 @@ import { migrateStoredDocument } from "@review/stored-document-migration.js";
 import { type Block, sourceReferences } from "./document.js";
 import { snapshotForeignReferences } from "./foreign-references.js";
 import type { StoreUpgradeContext } from "./store-migrations.js";
-import { BOARD_REPOSITORY_ID_SQL, hasTable } from "./store-schema.js";
+import { BOARD_REPOSITORY_ID_SQL, columnsOf } from "./store-schema.js";
 
 // The old global scratchpad becomes a plan titled "Scratchpad", history
 // kept, in the project of the repository its blocks quote most, else of the
@@ -229,17 +229,24 @@ export function planFromScratchpad(context: StoreUpgradeContext) {
 
   db.prepare("UPDATE reviews SET next_id=? WHERE id=?").run(nextId, id);
 
-  // Tables a store makes after its upgrades may not exist yet.
-  for (const table of [
-    "ask_conversations",
-    "authoring_presences",
-    "review_coverage",
-    "review_attention",
-  ])
-    if (hasTable(db, table))
-      db.prepare(`UPDATE ${table} SET review_id=? WHERE review_id=?`).run(
+  // Tables a store makes after its upgrades may not exist yet. A thread's
+  // board is its review_id until ask-threads-by-project renames it, which
+  // a development build may have done already.
+  for (const [table, ...names] of [
+    ["ask_conversations", "review_id", "anchor_board"],
+    ["authoring_presences", "review_id"],
+    ["review_coverage", "review_id"],
+    ["review_attention", "review_id"],
+  ]) {
+    const columns = columnsOf(db, table!);
+    const column = names.find((name) => columns.has(name));
+
+    if (column)
+      db.prepare(`UPDATE ${table} SET ${column}=? WHERE ${column}=?`).run(
         id,
         OLD_SCRATCHPAD_ID,
       );
+  }
+
   db.prepare("DELETE FROM reviews WHERE id=?").run(OLD_SCRATCHPAD_ID);
 }
