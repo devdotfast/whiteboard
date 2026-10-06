@@ -40,6 +40,7 @@ import {
 } from "./authoring-cursor";
 import { SaveMarkdown } from "./blocks";
 import { CanvasQueryProvider } from "./canvas-query";
+import { ConnectionContext, HostWaiting } from "./connection-chip";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { DrawQueueProvider } from "./draw-queue-provider";
 import {
@@ -110,10 +111,12 @@ export function ApiCanvas({
   const sourceRef = useRef<{ key: string; version: number }>(undefined);
   const sourceVersion = sourceRef.current?.key;
   const [error, setError] = useState<string>();
+  const [lost, setLost] = useState<string>();
   useEffect(() => {
     const abort = new AbortController();
     const loader = createDocumentLoader(client);
     setData(undefined);
+    setLost(undefined);
     setActivity(undefined);
     setCursor(null);
     setLensCursor(null);
@@ -173,6 +176,7 @@ export function ApiCanvas({
         content.reviewId,
         abort.signal,
         async (snapshot) => {
+          setLost(undefined);
           setActivity(snapshot.activity);
           setCursor((current) => nextCursor(current, cursorMemory, snapshot));
           setLensCursor((current) =>
@@ -235,9 +239,7 @@ export function ApiCanvas({
             return;
           }
 
-          setError(
-            `Connection lost. Reconnecting… ${cause instanceof Error ? cause.message : ""}`,
-          );
+          setLost(cause instanceof Error ? cause.message : "");
         },
       );
     })();
@@ -406,15 +408,38 @@ export function ApiCanvas({
     [client, content.reviewId, content.host, data],
   );
 
+  const { host, remoteHosts } = content;
+
+  const connection = useMemo(
+    () =>
+      lost === undefined
+        ? undefined
+        : {
+            host,
+            hosts: remoteHosts,
+            detail: lost,
+            reconnect: () => client.reconnect(),
+          },
+    [lost, host, remoteHosts, client],
+  );
+
   // Loads are near-instant, so stay blank until there is data or an error.
   // Both branches root the same query provider, so its cache outlives a load.
+  // Without data there is no top bar for the connection chip.
   if (!data)
     return (
       <CanvasQueryProvider client={client} reviewId={content.reviewId}>
-        {error !== undefined && (
+        {error === undefined && host && remoteHosts ? (
+          <HostWaiting
+            host={host}
+            hosts={remoteHosts}
+            reconnect={() => client.reconnect()}
+            lost={lost}
+          />
+        ) : (error ?? lost) !== undefined ? (
           <>
             <p {...stylex.props(styles.error)} role="status">
-              {error}
+              {error ?? `Connection lost. Reconnecting… ${lost}`}
             </p>
             {version !== undefined && (
               <button onClick={() => setVersion(undefined)}>
@@ -422,7 +447,7 @@ export function ApiCanvas({
               </button>
             )}
           </>
-        )}
+        ) : null}
       </CanvasQueryProvider>
     );
 
@@ -461,37 +486,41 @@ export function ApiCanvas({
                       {error}
                     </p>
                   )}
-                  <AuthoringActivityContext.Provider
-                    value={version === undefined ? activity : undefined}
-                  >
-                    <DrawQueueProvider
-                      cursor={version === undefined ? cursor : undefined}
+                  <ConnectionContext.Provider value={connection}>
+                    <AuthoringActivityContext.Provider
+                      value={version === undefined ? activity : undefined}
                     >
                       <DrawQueueProvider
-                        scope="lenses"
-                        cursor={version === undefined ? lensCursor : undefined}
+                        cursor={version === undefined ? cursor : undefined}
                       >
-                        <DisplayedReviewVersionContext.Provider
-                          value={data.snapshot.version}
+                        <DrawQueueProvider
+                          scope="lenses"
+                          cursor={
+                            version === undefined ? lensCursor : undefined
+                          }
                         >
-                          <MapEnabled.Provider
-                            value={content.softwareMapEnabled === true}
+                          <DisplayedReviewVersionContext.Provider
+                            value={data.snapshot.version}
                           >
-                            <SaveMarkdown.Provider value={saveMarkdown}>
-                              <CanvasDocument
-                                data={data}
-                                findHost={findHost}
-                                softwareMapEnabled={
-                                  content.softwareMapEnabled === true
-                                }
-                                documentWidth={content.documentWidth}
-                              />
-                            </SaveMarkdown.Provider>
-                          </MapEnabled.Provider>
-                        </DisplayedReviewVersionContext.Provider>
+                            <MapEnabled.Provider
+                              value={content.softwareMapEnabled === true}
+                            >
+                              <SaveMarkdown.Provider value={saveMarkdown}>
+                                <CanvasDocument
+                                  data={data}
+                                  findHost={findHost}
+                                  softwareMapEnabled={
+                                    content.softwareMapEnabled === true
+                                  }
+                                  documentWidth={content.documentWidth}
+                                />
+                              </SaveMarkdown.Provider>
+                            </MapEnabled.Provider>
+                          </DisplayedReviewVersionContext.Provider>
+                        </DrawQueueProvider>
                       </DrawQueueProvider>
-                    </DrawQueueProvider>
-                  </AuthoringActivityContext.Provider>
+                    </AuthoringActivityContext.Provider>
+                  </ConnectionContext.Provider>
                 </TutorialProvider>
               </ReviewLensesProvider>
             </DocumentData.Provider>

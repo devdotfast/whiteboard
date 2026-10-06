@@ -121,7 +121,7 @@ key, and the journey adds `wb-test-a` in Settings as a user would. It checks,
 on the DOM and on the page's requests: the host goes `online`; Home lists the
 container's review as `wb-test-a: wbrepo`; the document, a code peek, the Diff
 view and the structural diff load; an edit and a `session_create` on the
-remote reach the window; a killed `ssh` master shows "Connection lost" and
+remote reach the window; a killed `ssh` master shows a chip in the top bar and
 recovers without a reload; a stopped server is `offline` within 15 s while a
 laptop review still opens; another package version is `incompatible` with the
 install command in Settings; and removing the host takes its reviews out of

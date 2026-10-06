@@ -1339,6 +1339,175 @@ it("gives a review on another machine no tutorial controls, whatever its snapsho
   expect(tutorial).not.toHaveBeenCalledWith(true);
 });
 
+it("shows a lost remote host as a top-bar chip that retries the host and the stream", async () => {
+  const review = await command({
+    type: "create",
+    title: "Remote",
+    target: { kind: "commits", ...pins },
+  });
+
+  const app = new Hono().route("/reviews-api", createReviewApi(store));
+  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+  let down = false;
+  let watches = 0;
+  let cut: (() => void) | undefined;
+
+  const bridge = testReviewBridge(
+    {},
+    {
+      request: async (url, init) => {
+        if (!new URL(String(url)).pathname.endsWith("/watch"))
+          return app.request(url, init);
+        watches++;
+
+        if (down)
+          return Response.json(
+            { ok: false, error: "wb-a is offline: it did not answer." },
+            { status: 503 },
+          );
+        const response = await app.request(url, init);
+
+        return new Response(
+          response.body!.pipeThrough(
+            new TransformStream({
+              start: (controller) => {
+                cut = () =>
+                  controller.error(
+                    new Error("wb-a is offline: it did not answer."),
+                  );
+              },
+            }),
+          ),
+          response,
+        );
+      },
+    },
+  );
+
+  const retry = vi.fn<(alias: string) => Promise<void>>(async () => {
+    down = false;
+  });
+
+  const remoteHosts = {
+    states: async () => [
+      down
+        ? {
+            alias: "wb-a",
+            state: "offline" as const,
+            detail: "wb-a is offline: it did not answer.",
+          }
+        : { alias: "wb-a", state: "online" as const },
+    ],
+    retry,
+    install: async () => {},
+    openSettings: async () => {},
+  };
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  await act(async () => {
+    canvas = mount(container, {
+      kind: "api",
+      reviewId: review.reviewId,
+      host: "wb-a",
+      remoteHosts,
+      bridge,
+      setSourceView: () => {},
+    });
+  });
+  await act(() =>
+    vi.waitFor(() =>
+      expect(container.querySelector("h1")?.textContent).toBe("Remote"),
+    ),
+  );
+
+  down = true;
+  await act(async () => cut?.());
+
+  const chip = await vi.waitFor(() => {
+    const found = container.querySelector<HTMLButtonElement>(
+      "button.connection-chip",
+    );
+
+    expect(found?.textContent).toBe("wb-a offline");
+
+    return found!;
+  });
+
+  expect(container.textContent).not.toContain("Connection lost");
+  expect(chip.title).toBe(
+    "Click to retry\nwb-a is offline: it did not answer.",
+  );
+
+  const before = watches;
+  await act(async () => chip.click());
+  expect(retry).toHaveBeenCalledWith("wb-a");
+  await act(() =>
+    vi.waitFor(() => {
+      expect(container.querySelector(".connection-chip")).toBeNull();
+    }),
+  );
+  // The stream came back at once, not after its backoff.
+  expect(watches).toBe(before + 1);
+});
+
+it("shows why a remote review has not loaded, with its host's next step", async () => {
+  const install = vi.fn<(alias: string) => Promise<void>>(async () => {});
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  await act(async () => {
+    canvas = mount(container, {
+      kind: "api",
+      reviewId: "11111111-1111-4111-8111-111111111111",
+      host: "wb-a",
+      remoteHosts: {
+        states: async () => [
+          {
+            alias: "wb-a",
+            state: "incompatible",
+            detail: "wb-a runs Whiteboard 0.1.0; this Desktop runs 0.2.0.",
+          },
+        ],
+        retry: async () => {},
+        install,
+        openSettings: async () => {},
+      },
+      bridge: testReviewBridge(
+        {},
+        {
+          request: async () =>
+            Response.json(
+              { ok: false, error: "wb-a runs Whiteboard 0.1.0." },
+              { status: 503 },
+            ),
+        },
+      ),
+    });
+  });
+
+  const waiting = await vi.waitFor(() => {
+    const found = container.querySelector<HTMLElement>(".host-waiting");
+
+    expect(found?.querySelector("h2")?.textContent).toBe(
+      "wb-a needs an update",
+    );
+
+    return found!;
+  });
+
+  expect(waiting.textContent).toContain(
+    "wb-a runs Whiteboard 0.1.0; this Desktop runs 0.2.0.",
+  );
+  expect(container.textContent).not.toContain("Connection lost");
+  await act(async () =>
+    [...waiting.querySelectorAll("button")]
+      .find((button) => button.textContent === "Install")!
+      .click(),
+  );
+  expect(install).toHaveBeenCalledWith("wb-a");
+});
+
 async function mountPeekReview(content: {
   host?: string;
   available?: { sourceWindows: boolean; languageFeatures: boolean };
