@@ -29,6 +29,7 @@ import {
   CopyIcon,
   ShiftKeyIcon,
 } from "./icons";
+import { useReviewDiffFiles } from "./review-diff-files-context";
 import { useOptionalReviewPanelStore } from "./review-panel";
 import { fontSize, layer } from "./scale.stylex";
 import { themeStyles } from "./theme-styles";
@@ -65,6 +66,7 @@ export function AgentSelectionProvider({
   const panels = useOptionalReviewPanelStore();
   // Ask needs a panel to answer in and a host that runs agents (Desktop).
   const askAgents = useAskAgents(panels ? session : null);
+  const checkoutGone = useReviewDiffFiles().status === "unavailable";
   const [overlayHost, setOverlayHost] = useState<HTMLElement | null>(null);
 
   const bindOverlay = useCallback((node: HTMLSpanElement | null) => {
@@ -211,7 +213,8 @@ export function AgentSelectionProvider({
     }
   }, [selection, session, revision]);
 
-  const askAgent = askAgents && preferredAskAgent(session, askAgents);
+  const askAgent =
+    !checkoutGone && askAgents && preferredAskAgent(session, askAgents);
 
   const canChooseAgent =
     (askAgents?.filter((candidate) => candidate.available).length ?? 0) > 1;
