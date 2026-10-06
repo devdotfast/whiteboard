@@ -89,10 +89,10 @@ The canvas continues to use the JSON snapshot routes above.
 }
 ```
 
-Commands: `create {title,target,pullRequestUrl?,reuseExisting?}` or `create {pullRequestUrl,title?,repositoryId?,reuseExisting?}`, `set_target {reviewId,target,pullRequestUrl?}`, `edit {reviewId,edit}`, `rename {reviewId,title}`,
-`restore {reviewId,version}`. A review's pins, `{repositoryId,base,head}`, are its target resolved to immutable commits.
-Agents name the checkout by `repositoryPath` in a target, or on a create from a PR alone; `/commands` registers the path and passes the store its id. Retargeting preserves content and component IDs. Restore restores title, target, PR identity, and content. Live targets still read the current checkout.
-PR URLs must be canonical `https://github.com/owner/repository/pull/123` URLs. The PR number is derived from the URL; identity is metadata alongside immutable pins, not a moving source reference. A `create` with a target keeps that target and treats the URL as identity only. A `create` with the URL and no target resolves the PR when accepted: it reads the PR with `gh pr view` (falling back to the public GitHub API), picks the registered checkout named by `repositoryId`, else the checkout of the PR's existing review, else the first registered checkout with a remote whose configured URL is `github.com/owner/repository`, and fetches `refs/pull/N/head` and the base branch from that remote into `refs/review/github/owner/repository/pull/N/*`, never moving branches or bookmarks (a jj repository indexes the commits through a transient tag). It pins that head and its merge base with the base branch; for a PR absorbed by a merge commit it uses the merge base with GitHub's frozen base commit instead. The title defaults to the PR title. A repeat resolves the PR again, so `headMoved` compares the existing review with the PR's current head. `set_target` preserves the document and component IDs, including when source commits change. Its response reports retained source ranges to verify, those in files the new commits changed, and resources that no longer match the pins; agents repair these with `edit`. Existing versions keep their original pins and content. It preserves omitted PR identity within one repository, clears it when switching repositories, and accepts an explicit URL or null.
+Commands: `create {title?,target,reuseExisting?,open?}`, `set_target {reviewId,target}`, `edit {reviewId,edit}`, `rename {reviewId,title}`,
+`restore {reviewId,version}`. A target names its checkout by `repositoryPath` (see Review targets). A PR is a `pullRequest` target. A review's pins are its target resolved to immutable commits. Agents write pins as `{head,base?}`, and the host adds the board's repository.
+`/commands` registers the path and passes its id to the store. Agent tools never show repository ids, and `/commands` sets every pins object in an edit to the board's own repository. Retargeting preserves content and component IDs. Restore restores title, target, PR identity, and content. Live targets still read the current checkout.
+PR URLs must be canonical `https://github.com/owner/repository/pull/123` URLs. The PR number is derived from the URL; identity is metadata alongside immutable pins, not a moving source reference. A `pullRequest` target names the PR by URL or by number (a number is looked up on the checkout's GitHub remote) and resolves it when accepted: it reads the PR with `gh pr view` (falling back to the public GitHub API) and fetches `refs/pull/N/head` and the base branch from the checkout named by `repositoryPath` into `refs/review/github/owner/repository/pull/N/*`, never moving branches or bookmarks (a jj repository indexes the commits through a transient tag). It pins that head and its merge base with the base branch; for a PR absorbed by a merge commit it uses the merge base with GitHub's frozen base commit instead. The title defaults to the PR title. A repeat resolves the PR again, so `headMoved` compares the existing review with the PR's current head. `set_target` preserves the document and component IDs, including when source commits change. Its response reports retained source ranges to verify, those in files the new commits changed, and resources that no longer match the pins; agents repair these with `edit`. Existing versions keep their original pins and content. It preserves omitted PR identity within one repository, clears it when switching repositories, and accepts an explicit URL or null.
 
 `attention {reviewId,action:"view"}` records viewing without changing lifecycle or document history.
 `lifecycle {reviewId,state:"active"|"trash"}` moves a whiteboard to Trash or restores it.
@@ -162,9 +162,10 @@ working-copy files. It checks code ranges and resource ownership before saving.
 Images are fully decoded to PNG; traces retain supplied text with an explicit
 client-supplied provenance label. Map uploads use the existing nested map format,
 with a JSON shape check followed by the existing relationship/coverage validator
-and pinned source-range checks. Uploads take `{id,repositoryId,kind,...}` with
+and pinned source-range checks. Uploads take `{id,repositoryPath,kind,...}` with
 `base64` for images, `trace:{label,events:[{id,role,text}]}` for traces, or
-`pins,side,model` for maps. Reusing an upload ID requires identical content.
+`pins,side,model` for maps, whose pins still name `{repositoryId,head,base}`
+(no agent tool uploads maps). Reusing an upload ID requires identical content.
 
 The canvas preserves React identities during updates. The stream coalesces
 updates when a reader falls behind; reconnecting starts with the current saved
@@ -276,8 +277,11 @@ commands are local and are never authored into review documents.
 
 ## Review targets
 
-`target` is either `{kind:"worktree",repositoryId,base?}` or
-`{kind:"commits",repositoryId,head,base?}`. Commit revisions resolve on acceptance.
+`target` names its checkout by path and is one of `{kind:"project",repositoryPath}`
+(a plan in that repository's project, with no change), `{kind:"worktree",repositoryPath,base?}`,
+`{kind:"commits",repositoryPath,head,base?}` or
+`{kind:"pullRequest",repositoryPath,pullRequest}` (stored as commits plus the PR
+origin). Commit revisions resolve on acceptance.
 Omitted commit base means source at head with no diff, exactly as base=head;
 supply its parent to review the changes introduced by a single commit.
 

@@ -22,6 +22,7 @@ import { documentText } from "./document-text.js";
 import { ReviewInputError } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { LocalReviewData } from "./local-data";
+import { callPublicTool, publicTool } from "./public-tools.js";
 import { STORE_UPGRADES } from "./store-migrations.js";
 import { type ReviewProviders, ReviewStore, inspectSnapshot } from "./store.js";
 
@@ -1854,6 +1855,195 @@ describe("snapshot authoring", () => {
     });
   });
 
+  it("takes repositories by path and pins without them, and never shows their ids", async () => {
+    const checkout = path.join(directory, "checkout");
+    execFileSync("git", ["init", "-q", checkout]);
+    const api = createReviewApi(store, new LocalReviewData(store));
+
+    const client = new ReviewApiClient(
+      { serverUrl: "http://review.test", token: "t" },
+      async (url, init) =>
+        api.request(
+          new URL(url).pathname.replace(/^\/reviews-api/, "") +
+            new URL(url).search,
+          init,
+        ),
+    );
+
+    // SAFETY: the published tools as the server lists them over /authoring.
+    const tools = (authoringTools() as AuthoringTool[]).map(publicTool);
+    const named = (name: string) => tools.find((tool) => tool.name === name)!;
+
+    const created = await callPublicTool(client, named("session_create"), {
+      title: "Plan",
+      target: { kind: "project", repositoryPath: checkout },
+      open: false,
+    });
+
+    expect(JSON.stringify(created)).not.toContain("repositoryId");
+    const { sessionId } = created as { sessionId: string };
+
+    await callPublicTool(client, named("session_edit"), {
+      sessionId,
+      edit: {
+        type: "insert",
+        content: {
+          type: "code_peek",
+          source: rangeAnchor(source),
+          pins: { head: "h".repeat(40) },
+        },
+      },
+    });
+
+    // The host fills in the board's repository.
+    expect(store.read(sessionId).document[0]).toMatchObject({
+      pins: {
+        repositoryId: store.read(sessionId).target!.repositoryId,
+        head: "h".repeat(40),
+      },
+    });
+  });
+
+  it("names head or base, never the repository, when an agent's pins are malformed", async () => {
+    const checkout = path.join(directory, "checkout");
+    execFileSync("git", ["init", "-q", checkout]);
+    const api = createReviewApi(store, new LocalReviewData(store));
+
+    const post = <Operation>(operation: Operation) =>
+      api.request("/commands", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ operation }),
+      });
+
+    const { reviewId } = (await (
+      await post({
+        type: "create",
+        title: "Pins",
+        target: { kind: "project", repositoryPath: checkout },
+      })
+    ).json()) as { reviewId: string };
+
+    for (const pins of [
+      { head: 7 },
+      { base: "b".repeat(40) },
+      { head: "", extra: 1 },
+    ]) {
+      const response = await post({
+        type: "edit",
+        reviewId,
+        edit: {
+          type: "insert",
+          content: { type: "code_peek", source: rangeAnchor(source), pins },
+        },
+      });
+
+      const { error } = (await response.json()) as { error: string };
+
+      expect(response.status).toBe(400);
+      expect(error).toMatch(/pins\.(head|base|extra)/);
+      expect(error).not.toMatch(/repositoryId/);
+    }
+  });
+
+  it("pins every edit to the board's own repository, whichever one it names", async () => {
+    const checkout = path.join(directory, "checkout");
+    execFileSync("git", ["init", "-q", checkout]);
+    const api = createReviewApi(store, new LocalReviewData(store));
+
+    const post = <Operation>(operation: Operation) =>
+      api.request("/commands", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ operation }),
+      });
+
+    const created = await post({
+      type: "create",
+      title: "Schema",
+      target: { kind: "project", repositoryPath: checkout },
+    });
+
+    const { reviewId } = (await created.json()) as { reviewId: string };
+
+    // A lens of this very schema keys its fields repositoryId and pins.
+    const field = (label: string) => ({ label, dataType: "text" });
+
+    const inserted = await post({
+      type: "edit",
+      reviewId,
+      edit: {
+        type: "insert",
+        content: {
+          type: "database_lens",
+          title: "Boards",
+          actors: { app: "App" },
+          pins: { head: "h".repeat(40) },
+          stores: {
+            db: {
+              label: "Database",
+              storage: "relational",
+              collections: {
+                boards: {
+                  label: "boards",
+                  fields: {
+                    repositoryId: field("repositoryId"),
+                    pins: field("pins"),
+                  },
+                },
+              },
+            },
+          },
+          useCases: [
+            {
+              label: "Save",
+              operations: [
+                {
+                  kind: "write",
+                  store: "db",
+                  collection: "boards",
+                  field: "pins",
+                  actor: "app",
+                  label: "Write pins",
+                  source: rangeAnchor(source),
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(inserted.status).toBe(200);
+    expect(store.read(reviewId).document[0]).toMatchObject({
+      pins: { repositoryId: store.read(reviewId).target!.repositoryId },
+      stores: {
+        db: { collections: { boards: { fields: { pins: field("pins") } } } },
+      },
+    });
+
+    const elsewhere = await post({
+      type: "edit",
+      reviewId,
+      edit: {
+        type: "insert",
+        content: {
+          type: "code_peek",
+          source: rangeAnchor(source),
+          pins: { repositoryId: "an-id", head: "h".repeat(40) },
+        },
+      },
+    });
+
+    expect(elsewhere.status).toBe(200);
+    expect(store.read(reviewId).document.at(-1)).toMatchObject({
+      pins: {
+        repositoryId: store.read(reviewId).target!.repositoryId,
+        head: "h".repeat(40),
+      },
+    });
+  });
+
   it("serializes edits through async validation and preserves different-field patches", async () => {
     const { reviewId } = await create();
 
@@ -2087,7 +2277,7 @@ describe("create for a pull request", () => {
     providers.resolvePullRequest = resolvePullRequest;
 
     const untitled = await store.execute(
-      request({ type: "create", pullRequestUrl: url }),
+      request({ type: "create", pullRequestUrl: url, repositoryId: "repo" }),
     );
 
     const titled = await store.execute(
@@ -2106,17 +2296,11 @@ describe("create for a pull request", () => {
       origin: { pullRequestUrl: url, pullRequestTitle: "From GitHub" },
     });
     expect(store.read(titled.reviewId).title).toBe("Mine");
-    expect(resolvePullRequest.mock.calls).toEqual([
-      [url, { id: undefined, preferred: undefined }],
-      [url, { id: "repo", preferred: undefined }],
-    ]);
 
-    // A repeat prefers the checkout of the review it will find.
-    await store.execute(request({ type: "create", pullRequestUrl: url }));
-    expect(resolvePullRequest).toHaveBeenLastCalledWith(url, {
-      id: undefined,
-      preferred: "repo",
-    });
+    // The checkout to fetch into is never guessed.
+    await expect(
+      store.execute(request({ type: "create", pullRequestUrl: url })),
+    ).rejects.toBeInstanceOf(ReviewInputError);
   });
 
   it("needs a source, and a title unless a PR supplies it", async () => {
@@ -2180,10 +2364,19 @@ it("serves the experiment through the real desktop HTTP server and existing auth
         body: JSON.stringify(request(operation)),
       });
 
+    // HTTP callers name the checkout by its path.
+    const checkout = path.join(directory, "checkout");
+    execFileSync("git", ["init", "-q", checkout]);
+
     const response = await post({
       type: "create",
       title: "HTTP review",
-      target: { kind: "commits", ...pins },
+      target: {
+        kind: "commits",
+        repositoryPath: checkout,
+        base: pins.base,
+        head: pins.head,
+      },
     });
 
     expect(response.status).toBe(200);
@@ -2257,8 +2450,8 @@ it("serves the experiment through the real desktop HTTP server and existing auth
       ),
     ).toEqual({
       issues: [
-        { side: "head" as const, message: "Repository is not registered." },
-        { side: "base", message: "Repository is not registered." },
+        { side: "head" as const, message: expect.any(String) },
+        { side: "base", message: expect.any(String) },
       ],
     });
 
@@ -3444,9 +3637,12 @@ it("reports a created review with the origin its headers claim", async () => {
   const { createReviewApi } = await import("./http.js");
   const created: unknown[] = [];
 
+  const checkout = path.join(directory, "checkout");
+  execFileSync("git", ["init", "-q", checkout]);
+
   const api = createReviewApi(
     store,
-    undefined,
+    new LocalReviewData(store),
     undefined,
     undefined,
     undefined,
@@ -3463,7 +3659,7 @@ it("reports a created review with the origin its headers claim", async () => {
         request({
           type: "create",
           title,
-          target: { kind: "commits", ...pins },
+          target: { kind: "project", repositoryPath: checkout },
         }),
       ),
     });
