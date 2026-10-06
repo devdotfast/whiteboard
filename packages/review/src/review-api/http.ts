@@ -1154,15 +1154,15 @@ export function createReviewApi(
         checkout.live
           ? "Your working directory is the repository the review describes."
           : `Your working directory is a checkout of the review's head commit, ${checkout.head}. Answer from this code, not from other branches.`,
-        "Answer the question.",
+        "Answer the question for a staff engineer: lead with the answer and keep it short. Explain at the level of components and data flow before functions, and check each claim about the code against code you have read.",
         "Name files by their path from the checkout root, with a line where it helps, as in `src/app.ts:42`; the reviewer can open them from your answer.",
         ...(reach?.kind === "mcp"
           ? [
-              `The whiteboard MCP tools read and change this review: its sessionId is "${reviewId}". Read it with session_get. If the reviewer asks you to change the review, edit it with session_edit; do not write files to do it.`,
+              `The whiteboard MCP tools read and change this review: its sessionId is "${reviewId}". Read it with session_get. If the reviewer asks you to change the review, first read session_get_instructions({}) for its guidelines and each component's fields (the review exists, so skip creating one), then edit it with session_edit; do not write files to do it.`,
             ]
           : reach?.kind === "cli"
             ? [
-                `Whiteboard's CLI reads and changes this review from your shell: its sessionId is "${reviewId}". Read it with \`${reach.command} api session_get '{"sessionId":"${reviewId}"}'\`. If the reviewer asks you to change the review, edit it with \`${reach.command} api session_edit '<json>'\`; do not write files to do it. \`${reach.command} api tools\` lists each tool's input.`,
+                `Whiteboard's CLI reads and changes this review from your shell: its sessionId is "${reviewId}". Read it with \`${reach.command} api session_get '{"sessionId":"${reviewId}"}'\`. If the reviewer asks you to change the review, first read \`${reach.command} api session_get_instructions '{}'\` for its guidelines and each component's fields (the review exists, so skip creating one), then edit it with \`${reach.command} api session_edit '<json>'\`; do not write files to do it. \`${reach.command} api tools\` lists each tool's input.`,
               ]
             : []),
         "",
