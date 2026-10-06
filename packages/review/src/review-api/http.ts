@@ -12,11 +12,12 @@ import {
   AgentSelectionSchema,
   selectionMarkdown,
 } from "@review/agent-selection.js";
-import type { AskAgentStatus } from "@review/ask/agents.js";
+import { type AskAgentStatus, askAgents } from "@review/ask/agents.js";
 import { checkoutFiles, mentionableFiles } from "@review/ask/checkout-files.js";
 import { parseFileRef, resolveFileRefs } from "@review/ask/file-refs.js";
 import {
   type AskAgentId,
+  type AskThreadState,
   askAgentIds,
   askChoiceKinds,
   askPicksSchema,
@@ -1307,6 +1308,32 @@ export function createReviewApi(
       readReview(reviewId);
 
       return context.json({ threads: store.askHistory.list(reviewId) });
+    });
+
+    // A saved conversation, without starting its agent.
+    app.get("/:id/ask/:threadId", (context) => {
+      const record = store.askHistory.get(context.req.param("threadId"));
+
+      if (record?.reviewId !== context.req.param("id"))
+        throw new ReviewInputError("This conversation was not found.", 404);
+      const target = record.selection.target;
+
+      return context.json({
+        id: record.id,
+        agent: record.agent,
+        agentName: askAgents[record.agent].name,
+        status: "idle",
+        readOnly: true,
+        bypass: false,
+        head: record.head,
+        cwd: record.cwd,
+        title: record.title,
+        selection: {
+          title: record.selection.title,
+          quote: target.kind === "text" ? target.quote : undefined,
+        },
+        entries: record.entries ?? [],
+      } satisfies AskThreadState);
     });
 
     // A saved conversation: attach to it if it is still running, else start

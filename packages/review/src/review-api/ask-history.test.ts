@@ -1,6 +1,9 @@
 import { DatabaseSync } from "node:sqlite";
 
+import type { AskThreads } from "@review/ask/threads.js";
 import { AskHistory, type AskRecord } from "@review/review-api/ask-history.js";
+import { createReviewApi } from "@review/review-api/http.js";
+import type { LocalReviewData } from "@review/review-api/local-data.js";
 import { ReviewStore } from "@review/review-api/store.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
@@ -159,4 +162,41 @@ it("reopens a conversation in the new session that replaced one its agent lost, 
     sessionId: "session-new",
     entries,
   });
+});
+
+it("serves a saved conversation without its agent or its checkout", async () => {
+  const { reviewId } = await store.execute(
+    command({
+      type: "create",
+      title: "Payments",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  const entries = [
+    { kind: "user" as const, id: "q", text: "Is this safe?", at: 1 },
+    { kind: "agent" as const, id: "a", text: "It does." },
+  ];
+
+  store.askHistory.save(record(reviewId, "thread", "2026-09-01T10:00:00.000Z"));
+  store.askHistory.saveEntries("thread", entries);
+
+  const api = createReviewApi(
+    store,
+    {} as LocalReviewData,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { threads: {} as AskThreads, agents: async () => [] },
+  );
+
+  const response = await api.request(`/${reviewId}/ask/thread`);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ entries });
+
+  expect((await api.request(`/another-review/ask/thread`)).status).toBe(404);
 });
