@@ -630,6 +630,7 @@ export class AskThread {
     const launched = await this.launch(this.start.agent, this.start.cwd, {
       permissions: this.state.permissions,
       mcpServers: this.mcpServers,
+      threadId: this.id,
     });
 
     // Closed, stopped or given up on while the process started.

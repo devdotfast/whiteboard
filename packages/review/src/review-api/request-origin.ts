@@ -13,6 +13,12 @@ export const REVIEW_VIA_HEADER = "x-review-via";
 
 export const REVIEW_AGENT_HEADER = "x-review-agent";
 
+/** The Ask thread a request comes from. The CLI reads it from ASK_THREAD_ENV,
+ * which Desktop sets for the thread's agent. */
+export const REVIEW_THREAD_HEADER = "x-review-thread";
+
+export const ASK_THREAD_ENV = "DEV_REVIEW_ASK_THREAD";
+
 export type ReviewRequestVia = "api" | "mcp" | "other";
 
 const viaSchema = z.enum(["api", "mcp", "other"]).catch("other");

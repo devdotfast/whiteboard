@@ -2212,6 +2212,37 @@ describe("snapshot authoring", () => {
     });
   });
 
+  it("names the Ask thread that asked for an edit on its version", async () => {
+    const api = createReviewApi(store);
+    const { reviewId } = await create();
+
+    const write = (headers: Record<string, string>) =>
+      api.request("/commands", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({
+          operation: {
+            type: "edit",
+            reviewId,
+            edit: {
+              type: "insert",
+              content: { type: "markdown", markdown: "Noted." },
+            },
+          },
+        }),
+      });
+
+    expect((await write({ "x-review-thread": "thread-1" })).status).toBe(200);
+    expect(store.read(reviewId).lastEdit?.threadId).toBe("thread-1");
+
+    await write({});
+    expect(store.read(reviewId).lastEdit?.threadId).toBeUndefined();
+
+    // A remote caller cannot speak for a thread.
+    await write({ "x-review-thread": "thread-2", "x-review-client": "remote" });
+    expect(store.read(reviewId).lastEdit?.threadId).toBeUndefined();
+  });
+
   it("serializes edits through async validation and preserves different-field patches", async () => {
     const { reviewId } = await create();
 

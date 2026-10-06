@@ -18,6 +18,7 @@ import {
   type AskThreadStart,
   askThreadLimits,
 } from "@review/ask/thread.js";
+import { ASK_THREAD_ENV } from "@review/review-api/request-origin.js";
 
 /** How long an agent may take to say what it offers. */
 const OFFER_TIMEOUT_MS = 30_000;
@@ -163,7 +164,7 @@ export function cliAskTools(
   ];
 
   return {
-    mcpServers: () => {
+    mcpServers: (threadId) => {
       const cli = cliPath();
 
       return cli
@@ -172,7 +173,9 @@ export function cliAskTools(
               name: "whiteboard",
               command: process.execPath,
               args: [cli, "mcp"],
-              env: env(),
+              // MCP clients may not pass their own env on, so the server
+              // gets the thread it serves in its own.
+              env: [...env(), { name: ASK_THREAD_ENV, value: threadId }],
             },
           ]
         : [];

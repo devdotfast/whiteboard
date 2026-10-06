@@ -754,6 +754,8 @@ export interface EditSummary {
   units?: string[];
   /** The agent whose courier draws this edit, when the host could tell. */
   activityId?: string;
+  /** The Ask thread that made this edit, if any. */
+  threadId?: string;
 }
 
 /** A component an edit wrote, named so the author can address it. */
