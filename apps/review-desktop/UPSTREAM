@@ -355,12 +355,15 @@ one of these entries:
 - `src/vs/platform/terminal/common/terminalEnvironment.ts`: quote complete path
   arguments with each shell's native rules instead of stripping metacharacters
   and emitting invalid POSIX quoting for apostrophes.
-- `src/vs/platform/remote/common/remoteAgentConnection.ts`: an
-  `isolatePermanentFailure` connection option. Upstream's permanent failure is
-  one static flag that ends every connection in the window; with several
-  remotes per window a failed remote must end only its own connection. A
-  failed connection also sets upstream's never-written per-instance flag so
-  it does not reconnect again.
+- `src/vs/platform/remote/common/remoteAgentConnection.ts`: a permanent
+  failure ends only its own connection. Upstream's permanent failure is one
+  static flag that ends every connection in the window; with several remotes
+  per window a failed remote must end only its own connection. A failed
+  connection also sets upstream's never-written per-instance flag so it does
+  not reconnect again. A Management connection's reconnection failure is not
+  fatal either: it ends that connection only. Isolation is unconditional, so a
+  remote Source window gets no upstream reload dialog; it reconnects through
+  the fork's resolver and shows its host state in the status bar.
 - `extensions/package.json` and the extension `package.json`/`package-lock.json`
   files: `@vscode/extension-telemetry` is hoisted to the shared extensions
   install (github keeps its own ^1.0.0 copy; the shared copy is ^0.9.8). The

@@ -385,8 +385,6 @@ export interface IConnectionOptions<T extends RemoteConnection = RemoteConnectio
 	signService: ISignService;
 	logService: ILogService;
 	ipcLogger: IIPCLogger | null;
-	/** Whiteboard: a permanent failure ends only this connection, not every connection in the window. */
-	isolatePermanentFailure?: boolean;
 }
 
 async function resolveConnectionOptions<T extends RemoteConnection>(options: IConnectionOptions<T>, reconnectionToken: string, reconnectionProtocol: PersistentProtocol | null): Promise<ISimpleConnectionOptions<T>> {
@@ -452,9 +450,6 @@ async function createInitialConnection<T extends PersistentConnection, O extends
 			} else {
 				options.logService.error(`[remote-connection][attempt ${attempt}]  An error occurred in initial connection! It will be treated as a permanent error. Error:`);
 				options.logService.error(err);
-				if (!options.isolatePermanentFailure) {
-					PersistentConnection.triggerPermanentFailure(0, 0, RemoteAuthorityResolverError.isHandled(err));
-				}
 				throw err;
 			}
 		}
@@ -761,7 +756,7 @@ export class ManagementPersistentConnection extends PersistentConnection {
 	public readonly client: Client<RemoteAgentConnectionContext>;
 
 	constructor(options: IConnectionOptions, remoteAuthority: string, clientId: string, reconnectionToken: string, protocol: PersistentProtocol) {
-		super(ConnectionType.Management, options, reconnectionToken, protocol, /*reconnectionFailureIsFatal*/!options.isolatePermanentFailure);
+		super(ConnectionType.Management, options, reconnectionToken, protocol, /*reconnectionFailureIsFatal*/false);
 		this.client = this._register(new Client<RemoteAgentConnectionContext>(protocol, {
 			remoteAuthority: remoteAuthority,
 			clientId: clientId

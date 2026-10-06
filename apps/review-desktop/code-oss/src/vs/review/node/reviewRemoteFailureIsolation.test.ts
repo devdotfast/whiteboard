@@ -104,7 +104,6 @@ function options(remote: FakeRemote): IConnectionOptions {
 		signService,
 		logService: new NullLogService(),
 		ipcLogger: null,
-		isolatePermanentFailure: true,
 	};
 }
 
