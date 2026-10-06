@@ -2108,6 +2108,50 @@ describe("snapshot authoring", () => {
     });
   });
 
+  it("sends a board again when a board it links to is deleted", async () => {
+    const plan = await create();
+    const pr = await create();
+
+    await edit(pr.reviewId, {
+      type: "insert",
+      content: {
+        type: "markdown",
+        markdown: `See [the plan](whiteboard:board/${plan.reviewId}).`,
+      },
+    });
+
+    const watch = await createReviewApi(store).request(
+      `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId: pr.reviewId, mode: "textual" }]))}`,
+    );
+
+    const reader = watch.body!.pipeThrough(new TextDecoderStream()).getReader();
+
+    let buffered = "";
+
+    const next = async () => {
+      while (!buffered.includes("\n")) buffered += (await reader.read()).value;
+      const line = buffered.slice(0, buffered.indexOf("\n"));
+      buffered = buffered.slice(line.length + 1);
+
+      // A review's line; the list's lines are not asked for here.
+      return JSON.parse(line).value;
+    };
+
+    try {
+      expect(await next()).toMatchObject({ linksRevision: 0 });
+      await store.execute(
+        request({ type: "lifecycle", state: "trash", reviewId: plan.reviewId }),
+      );
+      await store.execute(request({ type: "delete", reviewId: plan.reviewId }));
+      expect(await next()).toMatchObject({
+        reviewId: pr.reviewId,
+        linksRevision: 1,
+      });
+    } finally {
+      await reader.cancel();
+    }
+  });
+
   it("links boards to existing boards and blocks, and indexes the links both ways", async () => {
     const plan = await create();
 
@@ -2141,6 +2185,31 @@ describe("snapshot authoring", () => {
       { from: linkFrom, to: { board: plan.reviewId } },
       { from: linkFrom, to: { board: plan.reviewId, block: section } },
     ]);
+
+    await store.execute(
+      request({ type: "lifecycle", state: "trash", reviewId: plan.reviewId }),
+    );
+    await store.execute(request({ type: "delete", reviewId: plan.reviewId }));
+
+    // Deleting the target keeps the link and marks it missing.
+    expect(store.links(pr.reviewId).outgoing).toMatchObject([
+      {
+        from: linkFrom,
+        to: { board: plan.reviewId },
+        missing: true,
+        title: "Example",
+        deletedAt: expect.any(String),
+      },
+      {
+        from: linkFrom,
+        to: { board: plan.reviewId, block: section },
+        missing: true,
+      },
+    ]);
+    await edit(pr.reviewId, {
+      type: "insert",
+      content: { type: "markdown", markdown: "Still saves." },
+    });
   });
 
   it("serializes edits through async validation and preserves different-field patches", async () => {

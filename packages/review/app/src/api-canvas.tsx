@@ -43,6 +43,7 @@ import { CanvasQueryProvider } from "./canvas-query";
 import { ConnectionContext, HostWaiting } from "./connection-chip";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { DrawQueueProvider } from "./draw-queue-provider";
+import { CanvasUiContext } from "./host/canvas-ui";
 import {
   ReviewSessionProvider,
   createReviewSession,
@@ -172,8 +173,13 @@ export function ApiCanvas({
       }
 
       let shownVersion: string | undefined;
+      let shownLinks = 0;
       await client.follow<
-        Snapshot & { activity: ActivitySnapshot; coverageRevision?: number }
+        Snapshot & {
+          activity: ActivitySnapshot;
+          coverageRevision?: number;
+          linksRevision?: number;
+        }
       >(
         content.reviewId,
         abort.signal,
@@ -188,18 +194,27 @@ export function ApiCanvas({
 
           if (version !== undefined) return;
 
-          if (
-            shownVersion ===
-            `${snapshot.version}:${snapshot.pins?.worktreeRevision ?? ""}:${snapshot.sourceUnavailable ?? false}:${snapshot.trashedAt ?? ""}`
-          ) {
+          const shown = `${snapshot.version}:${snapshot.pins?.worktreeRevision ?? ""}:${snapshot.sourceUnavailable ?? false}:${snapshot.trashedAt ?? ""}`;
+          const links = snapshot.linksRevision ?? 0;
+
+          if (shownVersion === shown) {
             setError(undefined);
+
+            // A board it links to changed: only its links' targets load again.
+            if (links !== shownLinks && dataRef.current) {
+              shownLinks = links;
+              const next = await loader.relink(dataRef.current);
+
+              if (!abort.signal.aborted) setData(next);
+            }
 
             return;
           }
 
           try {
             await show(snapshot);
-            shownVersion = `${snapshot.version}:${snapshot.pins?.worktreeRevision ?? ""}:${snapshot.sourceUnavailable ?? false}:${snapshot.trashedAt ?? ""}`;
+            shownVersion = shown;
+            shownLinks = links;
           } catch (cause) {
             // A failed resource or source fetch is a document problem. The
             // stream and the activity signal are still healthy, so do not
@@ -311,6 +326,8 @@ export function ApiCanvas({
     return session;
   }, [content.bridge, content.reviewId, nativeSources]);
 
+  const ui = useContext(CanvasUiContext);
+
   const session = useMemo(() => {
     if (!data) return baseSession;
     const snapshot = data.snapshot;
@@ -362,6 +379,15 @@ export function ApiCanvas({
             })
           ).reviewId,
         dismiss: async () => {
+          if (
+            ui?.confirmDelete &&
+            !(await ui.confirmDelete([snapshot.title], {
+              reviewIds: [content.reviewId],
+              trash: true,
+            }))
+          )
+            return false;
+
           await client.post("/commands", {
             operation: {
               type: "lifecycle",
@@ -369,6 +395,8 @@ export function ApiCanvas({
               state: "trash",
             },
           });
+
+          return true;
         },
       },
     };
@@ -382,6 +410,7 @@ export function ApiCanvas({
     content.available,
     data,
     version,
+    ui,
   ]);
 
   // Only the latest version of a review this machine owns takes edits.

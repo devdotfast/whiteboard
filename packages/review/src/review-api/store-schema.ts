@@ -34,10 +34,13 @@ export function initializeReviewStoreSchema(db: DatabaseSync): void {
       depends_on TEXT NOT NULL REFERENCES reviews(id) ON DELETE CASCADE, PRIMARY KEY(review_id,depends_on));
     CREATE INDEX IF NOT EXISTS board_dependencies_depends_on ON board_dependencies(depends_on);
     -- A link goes with the board it is on. Where it points stays plain
-    -- text, no foreign key: a link to a deleted board stays, dangling.
+    -- text, no foreign key: a link to a deleted board stays, and reads
+    -- "Board deleted" from the deleted_boards tombstone.
     CREATE TABLE IF NOT EXISTS board_links(from_review TEXT NOT NULL REFERENCES reviews(id) ON DELETE CASCADE, from_block TEXT NOT NULL,
       to_review TEXT NOT NULL, to_block TEXT);
     CREATE INDEX IF NOT EXISTS board_links_from ON board_links(from_review);
     CREATE INDEX IF NOT EXISTS board_links_to ON board_links(to_review);
+    CREATE TABLE IF NOT EXISTS deleted_boards(id TEXT PRIMARY KEY, title TEXT NOT NULL, deleted_at TEXT NOT NULL,
+      project_id TEXT);
   `);
 }

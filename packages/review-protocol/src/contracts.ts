@@ -892,7 +892,14 @@ export interface ReviewMenuRequest {
 
 export interface ReviewCanvasUi {
   setupTooltip?: ReviewCanvasBridge["setupTooltip"];
-  confirmDelete?(titles: readonly string[]): Promise<boolean>;
+  /** Asks before deleting the boards with these titles. reviewIds let the
+   * host name the whiteboards that link to them and the children that move
+   * up. With trash, they move to Trash, and the host asks only when other
+   * boards need them. */
+  confirmDelete?(
+    titles: readonly string[],
+    options?: { reviewIds?: readonly string[]; trash?: boolean },
+  ): Promise<boolean>;
   notify?: ReviewCanvasBridge["notify"];
   showMenu(request: ReviewMenuRequest): ReviewDisposable;
 }
