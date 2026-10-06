@@ -1237,11 +1237,6 @@ export class ReviewStore {
         ...(applied?.children && { children: applied.children }),
       };
 
-      if (snapshot.staleSources?.length)
-        warnings.push(
-          "Some authored source ranges changed. Update their references before presenting this review.",
-        );
-
       if (warnings.length) result.warnings = warnings;
 
       this.commitCommand(
