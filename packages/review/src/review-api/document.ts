@@ -1,3 +1,4 @@
+import { type JsonValue, isStringValue } from "@dev.fast/json";
 import {
   type Anchor,
   type LensSource,
@@ -188,11 +189,57 @@ const unitTypes = new Set(["step", "flow_node", "flow_edge"]);
 export const isUnit = (element: Element): element is Unit =>
   unitTypes.has(element.type);
 
+/** Rewrites old review-source: and review-trace: links to their whiteboard: form. */
+export function canonicalLink(href: string): string {
+  return href.replace(
+    /^review-(source|trace):/i,
+    (_, kind: string) => `whiteboard:${kind.toLowerCase()}/`,
+  );
+}
+
+/** Markdown link destinations and definitions that begin with `target`, a
+ * regex source; the match's first group is what comes before it. */
+const linkDestination = (target: string) =>
+  new RegExp(String.raw`(\]\(\s*<?|^\s*\[[^\]\n]+\]:\s*<?)` + target, "gim");
+
+/** Every Markdown text in `value`, rewritten. */
+function rewriteMarkdown<T>(
+  value: T,
+  rewrite: (markdown: string) => string,
+): T {
+  // SAFETY: a JSON round trip of stored or parsed JSON, rewriting only
+  // Markdown text.
+  return JSON.parse(JSON.stringify(value), (key, field: JsonValue) =>
+    key === "markdown" && isStringValue(field) ? rewrite(field) : field,
+  ) as T;
+}
+
+const retiredLinks = linkDestination("review-(source|trace):");
+
+/** Rewrites old link prefixes in Markdown link destinations and definitions. */
+export function respellLinks(markdown: string): string {
+  return markdown.replace(
+    retiredLinks,
+    (_, before: string, kind: string) =>
+      `${before}whiteboard:${kind.toLowerCase()}/`,
+  );
+}
+
+/** Every Markdown text in `document` with its links spelled the current
+ * way. */
+export function respellDocumentLinks<T>(document: T): T {
+  return rewriteMarkdown(document, respellLinks);
+}
+
+export function respellEditLinks(edit: Edit): Edit {
+  return rewriteMarkdown(edit, respellLinks);
+}
+
 /** Inline trace quotes keep paragraph/list layout while using retained resources. */
 export function traceQuoteLink(
   href: string,
 ): { traceId: string; eventId: string } | undefined {
-  const match = /^review-trace:([^#]+)#(.+)$/.exec(href);
+  const match = /^whiteboard:trace\/([^#]+)#(.+)$/.exec(canonicalLink(href));
 
   return match
     ? {
@@ -228,9 +275,12 @@ export function resourceReferences(document: Block[]): Block[] {
 
     return [...markdownNodes(parseMarkdown(block.markdown))].flatMap(
       (node): Block[] => {
-        if (node.type !== "link" || !node.url?.startsWith("review-trace:"))
+        if (
+          node.type !== "link" ||
+          !canonicalLink(node.url ?? "").startsWith("whiteboard:trace/")
+        )
           return [];
-        const quote = traceQuoteLink(node.url);
+        const quote = traceQuoteLink(node.url ?? "");
 
         if (!quote) throw new ReviewInputError("Invalid trace quote link.");
 
@@ -287,23 +337,25 @@ function documentReferences(
       return [...markdownNodes(parseMarkdown(element.markdown))].flatMap(
         (node) => {
           if (node.type !== "link") return [];
-          const href = node.url ?? "";
+          const href = canonicalLink(node.url ?? "");
 
-          if (!/^review-source:/i.test(href)) {
+          if (!href.startsWith("whiteboard:source/")) {
             // Trace links are checked by resourceReferences.
-            if (href.startsWith("review-trace:")) return [];
+            if (href.startsWith("whiteboard:trace/")) return [];
 
             if (/^(?:https?:\/\/|mailto:|#)/i.test(href)) return [];
 
             return reject(
-              `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](review-source:head/path#L10-L24) or review-source:base/path#L10-L24 for repository files, or review-source:diff/path#L84-R90 across sides, with a repository-relative path and verified line numbers. External links must use https://, http://, or mailto:; document anchors use #heading.`,
+              `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](whiteboard:source/head/path#L10-L24) or whiteboard:source/base/path#L10-L24 for repository files, or whiteboard:source/diff/path#L84-R90 across sides, with a repository-relative path and verified line numbers. External links must use https://, http://, or mailto:; document anchors use #heading.`,
             );
           }
 
           let target: string;
 
           try {
-            target = decodeURIComponent(href.slice("review-source:".length));
+            target = decodeURIComponent(
+              href.slice("whiteboard:source/".length),
+            );
           } catch {
             return reject("Invalid URL encoding in source link.");
           }
@@ -315,7 +367,7 @@ function documentReferences(
 
           if (!parseAnchor(anchor))
             return reject(
-              "Use review-source:head/path#L10-L24 (or base, or diff/path#L84-R90 across sides) for a source link.",
+              "Use whiteboard:source/head/path#L10-L24 (or base, or diff/path#L84-R90 across sides) for a source link.",
             );
 
           return select(anchor, element.pins).map((source) => ({

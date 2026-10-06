@@ -25,7 +25,7 @@ const sameSideAnchor = /^(head|base)\/(.+)#L(\d+)(?:-L(\d+))?$/;
 const crossSideAnchor = /^diff\/(.+)#([LR])(\d+)-([LR])(\d+)$/;
 
 /** An anchor's selection, as markdown source links write it too (without
- * their `review-source:` scheme). Undefined when it isn't one. */
+ * their `whiteboard:source/` prefix). Undefined when it isn't one. */
 export function parseAnchor(text: string): DiffSelection | undefined {
   const same = sameSideAnchor.exec(text);
 

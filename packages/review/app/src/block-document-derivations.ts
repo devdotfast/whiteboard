@@ -1,5 +1,5 @@
 import { markdownNodes, parseMarkdown } from "@review/markdown";
-import type { Block } from "@review/review-api/document";
+import { type Block, canonicalLink } from "@review/review-api/document";
 
 import type { ReviewSectionSummary } from "./review-section-summary";
 
@@ -29,7 +29,10 @@ export function blockSectionSummary(children: Block[]): ReviewSectionSummary {
           if (node.type === "paragraph") summary.paragraphs += 1;
 
         for (const node of markdownNodes(markdown))
-          if (node.type === "link" && /^review-source:/i.test(node.url ?? ""))
+          if (
+            node.type === "link" &&
+            canonicalLink(node.url ?? "").startsWith("whiteboard:source/")
+          )
             summary.codeRefs += 1;
         break;
       }

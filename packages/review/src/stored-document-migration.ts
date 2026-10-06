@@ -1,18 +1,124 @@
-import { type JsonValue, isJsonObject } from "@dev.fast/review-protocol";
+import {
+  type JsonObject,
+  type JsonValue,
+  isBooleanValue,
+  isJsonObject,
+  isNumberValue,
+  isStringValue,
+} from "@dev.fast/review-protocol";
 import { z } from "zod";
 
-import { migrateDiffSelections } from "./diff-selection-migration.js";
+import {
+  ATTACHMENT_KEYS,
+  migrateDiffSelections,
+  retiredSelection,
+} from "./diff-selection-migration.js";
 import { formatAnchor } from "./lens-selection.js";
 import { label } from "./review-api/blocks/definition.js";
 import { type Lens, lensTargetsSchema } from "./review-api/diff-lenses.js";
+import { respellLinks } from "./review-api/document.js";
 
 /** Upgrade a saved or shared Review document to the current block schema at the
  * read/import boundary. New edits use the strict schema and never accept these
- * retired forms. */
+ * retired forms. One walk makes a fresh copy: retired attachments become
+ * selections, anchors become strings, sections lose their status, and
+ * Markdown links are spelled the current way. */
 // This is the decoder boundary for stored documents in retired wire formats.
 // oxlint-disable-next-line anti-slop/no-unknown-parameters
 export function migrateStoredDocument(input: unknown): JsonValue {
-  return anchorStrings(dropSectionStatus(migrateDiffSelections(input)));
+  return upgradeNode(input, { attachment: false, anchors: true });
+}
+
+/** Where a node sits: under a key that held a retired attachment, and
+ * whether its anchors still need converting (not inside an anchor). */
+interface NodePlace {
+  attachment: boolean;
+  anchors: boolean;
+  blockPins?: JsonValue;
+}
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Decoder boundary: every value is checked to be JSON as it is copied.
+function upgradeNode(value: unknown, place: NodePlace): JsonValue {
+  if (isStringValue(value) || isBooleanValue(value) || value === null)
+    return value;
+
+  if (isNumberValue(value) && Number.isFinite(value)) return value;
+
+  if (Array.isArray(value))
+    return value.map((child) => upgradeNode(child, place));
+
+  if (!isJsonObject(value)) throw new TypeError("A document must be JSON.");
+
+  const selection = place.attachment ? retiredSelection(value) : undefined;
+
+  if (selection)
+    return upgradeNode(selection, { attachment: false, anchors: false });
+
+  const inherited = place.anchors ? (value.pins ?? place.blockPins) : undefined;
+  let pins: JsonValue | undefined;
+
+  const convert = (anchor: JsonValue): JsonValue => {
+    // Most anchors are strings already.
+    if (isStringValue(anchor)) return anchor;
+
+    const parsed = selectionObjectSchema.safeParse(anchor);
+
+    if (!parsed.success) return anchor;
+
+    const { pins: own, ...anchorAt } = parsed.data;
+
+    if (own) pins = own;
+
+    return formatAnchor(anchorAt);
+  };
+
+  const entries: [string, JsonValue][] = [];
+
+  for (const [key, child] of Object.entries(value)) {
+    if (key === "status" && value.type === "section") continue;
+
+    if (key === "markdown" && isStringValue(child)) {
+      entries.push([key, respellLinks(child)]);
+      continue;
+    }
+
+    const attachment = ATTACHMENT_KEYS.includes(key);
+
+    if (place.anchors && ANCHOR_KEYS.includes(key)) {
+      const anchors = upgradeNode(child, { attachment, anchors: false });
+
+      entries.push([
+        key,
+        Array.isArray(anchors) ? anchors.map(convert) : convert(anchors),
+      ]);
+    } else
+      entries.push([
+        key,
+        upgradeNode(child, {
+          attachment,
+          anchors: place.anchors,
+          blockPins: inherited,
+        }),
+      ]);
+  }
+
+  const upgraded: JsonObject = Object.fromEntries(entries);
+
+  if (
+    pins !== undefined &&
+    value.kind !== "ranges" &&
+    JSON.stringify(pins) !== JSON.stringify(place.blockPins)
+  )
+    upgraded.pins = pins;
+
+  return upgraded;
+}
+
+/** A stored document as the store reads it: retired forms upgraded, and
+ * lens blocks lifted out to the snapshot's own lenses. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Decoder boundary for stored documents in retired formats.
+export function readStoredDocument(input: unknown): LiftedLenses {
+  return liftFileLenses(migrateStoredDocument(input));
 }
 
 /** Lenses saved before ranges were anchor strings. */
@@ -80,21 +186,6 @@ export function anchorStrings(
     migrated.pins = pins;
 
   return migrated;
-}
-
-/** Sections once carried an optional `status` (pending, in_progress or
- * complete). The authoring lease is now the only signal of work in progress,
- * so versions saved before it was retired drop the field when read. */
-function dropSectionStatus(value: JsonValue): JsonValue {
-  if (Array.isArray(value)) return value.map(dropSectionStatus);
-
-  if (!isJsonObject(value)) return value;
-
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([key]) => !(value.type === "section" && key === "status"))
-      .map(([key, child]) => [key, dropSectionStatus(child)]),
-  );
 }
 
 /** A saved `file_lens` block, from before lenses left the document. */
