@@ -318,6 +318,8 @@ export function ApiCanvas({
       review: {
         kind: snapshot.kind,
         host: content.host,
+        hostState: content.hostState,
+        hosts: content.remoteHosts,
         available: content.available,
         pins: snapshot.pins
           ? { base: snapshot.pins.base, head: snapshot.pins.head }
@@ -354,6 +356,8 @@ export function ApiCanvas({
     client,
     content.reviewId,
     content.host,
+    content.hostState,
+    content.remoteHosts,
     content.available,
     data,
     version,

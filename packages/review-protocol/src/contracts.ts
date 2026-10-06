@@ -770,6 +770,7 @@ export type ReviewCanvasContent =
       reviewId: string;
       version?: number;
       host?: string;
+      hostState?: ReviewApiSummary["hostState"];
       available?: ReviewApiSummary["available"];
       remoteHosts?: ReviewRemoteHostActions;
       bridge: ReviewCanvasBridge;

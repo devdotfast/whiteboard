@@ -10,7 +10,7 @@ import {
   useShowOpenThread,
 } from "./ask-delete";
 import { AskHistoryProvider, useAskHistory } from "./ask-history";
-import { AskHistoryList } from "./ask-history-list";
+import { AskHistoryControl, AskHistoryList } from "./ask-history-list";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
 import { AskSignIn } from "./ask-setup";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
@@ -1513,6 +1513,202 @@ it("shows a saved conversation whose checkout is gone, with nothing to ask", asy
   } finally {
     await act(async () => root.unmount());
     container.remove();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
+
+const twoAgents = () =>
+  Response.json({
+    agents: [
+      { id: "claude", name: "Claude Code", available: true },
+      { id: "codex", name: "Codex", available: true },
+    ],
+  });
+
+it("asks nothing while a remote review's host is down, and says why with its next step", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const session = testReviewSession();
+
+  const hosts = {
+    states: async () => [
+      { alias: "wb-a", state: "offline" as const, detail: "ssh timed out." },
+    ],
+    retry: vi.fn<(alias: string) => Promise<void>>(async () => {}),
+    install: async () => {},
+    openSettings: async () => {},
+  };
+
+  session.review = {
+    ...session.review!,
+    host: "wb-a",
+    hostState: "offline",
+    hosts,
+  };
+
+  const fetch = vi
+    .spyOn(session, "fetch")
+    .mockImplementation(async (endpoint) =>
+      endpoint === "/ask/agents"
+        ? twoAgents()
+        : Response.json({ ok: true }, { status: 404 }),
+    );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  try {
+    await act(async () =>
+      root.render(
+        <ReviewSessionProvider session={session}>
+          <AskPanelContent selection={selection} agent="claude" />
+        </ReviewSessionProvider>,
+      ),
+    );
+
+    const textarea = container.querySelector("textarea")!;
+
+    expect(textarea.disabled).toBe(true);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      "wb-a offline · ssh timed out.",
+    );
+
+    await type(textarea, "Is this safe?");
+    await act(async () => textarea.form!.requestSubmit());
+    expect(fetch.mock.calls.some(([called]) => called === "/ask")).toBe(false);
+
+    await act(async () => buttonNamed(container, "Retry")!.click());
+    expect(hosts.retry).toHaveBeenCalledWith("wb-a");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("offers to try again a question that did not go, and sends it again", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const session = testReviewSession();
+  let refused = false;
+
+  const fetch = vi
+    .spyOn(session, "fetch")
+    .mockImplementation(async (endpoint, init) => {
+      if (endpoint === "/ask/agents") return twoAgents();
+
+      if (endpoint === "/ask") {
+        if (refused) return Response.json({ threadId: "thread" });
+        refused = true;
+
+        return Response.json({ error: "Busy." }, { status: 500 });
+      }
+
+      if (endpoint === "/ask/watch") return new Response(new ReadableStream());
+
+      return Response.json({ ok: true }, { status: init?.method ? 200 : 404 });
+    });
+
+  const asked = () =>
+    fetch.mock.calls
+      .filter(([called]) => called === "/ask")
+      .map(([, init]) => JSON.parse(String(init?.body)).question);
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  try {
+    await act(async () =>
+      root.render(
+        <ReviewSessionProvider session={session}>
+          <AskPanelContent selection={selection} agent="claude" />
+        </ReviewSessionProvider>,
+      ),
+    );
+
+    const textarea = container.querySelector("textarea")!;
+
+    await type(textarea, "Is this safe?");
+    await enter(textarea);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Busy.",
+    );
+
+    await act(async () => buttonNamed(container, "Try again")!.click());
+    expect(asked()).toEqual([
+      { text: "Is this safe?" },
+      { text: "Is this safe?" },
+    ]);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(textarea.value).toBe("");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("keeps Ask while its host cannot list agents, and lets an agent be picked again once the host is back", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const session = testReviewSession();
+  const header = document.createElement("div");
+  document.body.append(header);
+  let hostState: "online" | "offline" = "online";
+
+  vi.spyOn(session, "fetch").mockImplementation(async (endpoint) => {
+    if (endpoint === "/ask/agents")
+      return hostState === "online"
+        ? twoAgents()
+        : Response.json({ error: "wb-a is offline." }, { status: 503 });
+
+    return Response.json({ ok: true }, { status: 404 });
+  });
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  const picker = () =>
+    header.querySelector('button[aria-haspopup="menu"]:not([aria-label])');
+
+  // The catalog hands the canvas a new session as the host changes state.
+  const render = async () =>
+    act(async () =>
+      root.render(
+        <ReviewSessionProvider
+          session={{
+            ...session,
+            review: { ...session.review!, host: "wb-a", hostState },
+          }}
+        >
+          <ReviewPanelProvider>
+            <AskHistoryControl />
+            <AskPanelContent selection={selection} header={header} />
+          </ReviewPanelProvider>
+        </ReviewSessionProvider>,
+      ),
+    );
+
+  try {
+    await render();
+    expect(picker()).not.toBeNull();
+
+    hostState = "offline";
+    await render();
+    expect(picker()).toBeNull();
+    expect(header.textContent).toBe("Claude Code");
+    expect(buttonNamed(container, "Saved conversations")).not.toBeNull();
+
+    hostState = "online";
+    await render();
+    expect(picker()).not.toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    header.remove();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   }
