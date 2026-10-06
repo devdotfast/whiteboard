@@ -24,6 +24,9 @@ const MAX_VISIBLE_LINES = 18;
 
 const INLINE_HEADER_HEIGHT = 40;
 
+/** Sent up the page from an editor's host once the editor is made in it. */
+export const INLINE_EDITOR_MADE = "review-inline-editor-made";
+
 export function DocumentCodeView({
   path,
   title,
@@ -252,6 +255,7 @@ export function DocumentCodeView({
 
     handle.setCollapsed(collapsedRef.current);
     handleRef.current = handle;
+    container.dispatchEvent(new Event(INLINE_EDITOR_MADE, { bubbles: true }));
 
     for (const resolve of handleWaitersRef.current.splice(0)) resolve(handle);
     setHeight(handle.height);

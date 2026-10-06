@@ -18,6 +18,7 @@ import { AGENT_LOGOS } from "./agent-logos";
 import { resolveAskAnchor } from "./ask-anchor";
 import { useAskHistory } from "./ask-history";
 import { setCssHighlight } from "./css-highlights";
+import { INLINE_EDITOR_MADE } from "./DocumentCodeView";
 import { useOptionalReviewPanelStore } from "./review-panel";
 import type { AskPassage } from "./review-panel-model";
 import type { ReviewPanelStore } from "./review-panel-store";
@@ -478,8 +479,9 @@ export function AskThreadMarks({
       });
     };
 
-    // An editor draws its lines once it nears the screen, after the marks
-    // were placed; asked-about code is then found on its line.
+    // An editor draws its lines once it nears the screen, and a diff's
+    // editor is made once its lines are found, both after the marks were
+    // placed; asked-about code is then found on its line.
     // Watched only until then: an editor in use changes all the time.
     const files = new Set(
       entries.flatMap(({ selection: { target } }) =>
@@ -487,30 +489,42 @@ export function AskThreadMarks({
       ),
     );
 
-    const waiting = [...article.querySelectorAll<HTMLElement>(EDITOR)].flatMap(
-      (editor) => {
-        if (
-          !files.has(editor.dataset.reviewInlineEditor ?? "") ||
-          editor.querySelector(".line-numbers")
-        )
-          return [];
+    const waiting = new Set<MutationObserver>();
 
-        const drawn = new MutationObserver(() => {
-          if (!editor.querySelector(".line-numbers")) return;
-          drawn.disconnect();
-          place();
-        });
+    const wait = (editor: HTMLElement) => {
+      if (!files.has(editor.dataset.reviewInlineEditor ?? "")) return;
 
-        drawn.observe(editor, { childList: true, subtree: true });
+      if (editor.querySelector(".line-numbers")) {
+        place();
 
-        return [drawn];
-      },
-    );
+        return;
+      }
+
+      const drawn = new MutationObserver(() => {
+        if (!editor.querySelector(".line-numbers")) return;
+        drawn.disconnect();
+        waiting.delete(drawn);
+        place();
+      });
+
+      drawn.observe(editor, { childList: true, subtree: true });
+      waiting.add(drawn);
+    };
+
+    for (const editor of article.querySelectorAll<HTMLElement>(EDITOR))
+      if (!editor.querySelector(".line-numbers")) wait(editor);
+
+    const made = (event: Event) => {
+      if (event.target instanceof HTMLElement) wait(event.target);
+    };
+
+    if (files.size) article.addEventListener(INLINE_EDITOR_MADE, made);
 
     place();
 
     return () => {
       cancelAnimationFrame(frame);
+      article.removeEventListener(INLINE_EDITOR_MADE, made);
 
       for (const drawn of waiting) drawn.disconnect();
 

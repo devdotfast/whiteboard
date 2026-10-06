@@ -1,4 +1,4 @@
-import { type ReactNode, act, useRef } from "react";
+import { type ReactNode, act, useLayoutEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -9,6 +9,7 @@ import { AskHistoryProvider, useAskHistory } from "./ask-history";
 import { AskHistoryList } from "./ask-history-list";
 import { AskThreadMarks } from "./ask-marks";
 import { documentStyles } from "./document-styles";
+import { INLINE_EDITOR_MADE } from "./DocumentCodeView";
 import { drawStyles } from "./draw-styles";
 import { ReviewSessionProvider } from "./host/review-session";
 import { documentMarker } from "./markers.stylex";
@@ -39,12 +40,16 @@ let view: unknown;
 
 let outdated: ReadonlySet<string> | undefined;
 
+let asked = 0;
+
 function Probe() {
   view = useReviewPanel(
     ({ asks, askDocked }) =>
       asks.find((ask) => ask.key === askDocked)?.view ?? null,
   );
-  outdated = useAskHistory()?.outdated;
+  const history = useAskHistory();
+  outdated = history?.outdated;
+  asked = history?.entries?.length ?? 0;
 
   return null;
 }
@@ -154,6 +159,7 @@ afterEach(() => {
   document.body.replaceChildren();
   vi.restoreAllMocks();
   outdated = undefined;
+  asked = 0;
 });
 
 it("marks each asked-about passage beside it and reopens its conversation", async () => {
@@ -275,8 +281,17 @@ function CodeBlock({
   from: number;
   lines: number;
 }) {
+  const host = useRef<HTMLDivElement>(null);
+
+  // As the canvas's code view does once it makes the editor.
+  useLayoutEffect(() => {
+    host.current!.dispatchEvent(
+      new Event(INLINE_EDITOR_MADE, { bubbles: true }),
+    );
+  }, []);
+
   return (
-    <div data-review-node-id="code" data-review-inline-editor={path}>
+    <div ref={host} data-review-node-id="code" data-review-inline-editor={path}>
       <div className="editor modified">
         {Array.from({ length: lines }, (_, index) => (
           <div key={index} style={{ display: "flex", height: 20 }}>
@@ -369,6 +384,69 @@ it("marks asked-about code beside its line in the editor showing its file, witho
 
   await act(async () => pin!.click());
   expect(view).toMatchObject({ type: "saved", threadId: "tab-size" });
+
+  await act(async () => root.unmount());
+});
+
+it("marks asked-about code once a diff's editor appears, after its lines are found", async () => {
+  const session = testReviewSession();
+
+  vi.spyOn(session, "fetch").mockImplementation(async () =>
+    Response.json({
+      threads: [
+        {
+          ...saved("tab-size", "app/src/code-block.tsx:299", undefined),
+          selection: {
+            title: "app/src/code-block.tsx:299–299",
+            target: {
+              kind: "code",
+              path: "app/src/code-block.tsx",
+              side: "head",
+              startLine: 299,
+              endLine: 299,
+            },
+          },
+        },
+      ],
+    }),
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  const render = (found: boolean) =>
+    root.render(
+      <ReviewSessionProvider session={session}>
+        <ReviewPanelProvider>
+          <AskHistoryProvider>
+            <Document revision="1">
+              {found ? (
+                <CodeBlock path="app/src/code-block.tsx" from={296} lines={6} />
+              ) : (
+                <section role="status">Loading diff selection…</section>
+              )}
+            </Document>
+            <Probe />
+          </AskHistoryProvider>
+        </ReviewPanelProvider>
+      </ReviewSessionProvider>,
+    );
+
+  const pins = () => container.querySelectorAll(".ask-mark-pin");
+
+  await act(async () => render(false));
+  await vi.waitFor(() => expect(asked).toBe(1));
+  await frame();
+  expect(pins()).toHaveLength(0);
+
+  // The same version of the review, its diff's lines now found.
+  await act(async () => render(true));
+
+  await vi.waitFor(async () => {
+    await frame();
+    expect(pins()).toHaveLength(1);
+  });
 
   await act(async () => root.unmount());
 });
