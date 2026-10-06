@@ -3,6 +3,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   rm,
   stat,
   writeFile,
@@ -11,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildRemoteRuntime } from "../apps/review-desktop/scripts/build-remote-runtime.mjs";
 import { stageReviewDocs } from "../apps/review-desktop/scripts/stage-review-runtime.mjs";
 import { stageVscodeServer } from "../apps/review-desktop/scripts/stage-vscode-server.mjs";
 import { distTag } from "./review-cli-release.mjs";
@@ -36,28 +38,66 @@ export async function packReviewCli(
   if (actualCommit !== commit)
     throw new Error("Release source differs from the planned commit");
   const output = path.resolve(outputDirectory);
-  await mkdir(output, { recursive: true });
-  const scratch = await mkdtemp(path.join(os.tmpdir(), "review-cli-pack-"));
   const manifestPath = path.join(packageDirectory, "package.json");
   const original = await readFile(manifestPath, "utf8");
 
   try {
     const pkg = JSON.parse(original);
-    const tarball = `${pkg.name.slice(1).replace("/", "-")}-${version}.tgz`;
     pkg.version = version;
     pkg.gitHead = commit;
     await writeFile(manifestPath, `${JSON.stringify(pkg, null, 2)}\n`);
+
+    return await packStaged(output, {
+      packageDirectory,
+      commit,
+      stdio,
+      vscodeServer,
+      maxBytes,
+    });
+  } finally {
+    await writeFile(manifestPath, original);
+  }
+}
+
+export async function packDevelopment(
+  commit,
+  outputDirectory,
+  { stdio = "inherit" } = {},
+) {
+  await buildRemoteRuntime({ commit });
+
+  return packStaged(path.resolve(outputDirectory), {
+    packageDirectory: "packages/review",
+    commit,
+    stdio,
+  });
+}
+
+async function packStaged(
+  output,
+  {
+    packageDirectory,
+    commit,
+    stdio,
+    vscodeServer = {},
+    maxBytes = MAX_TARBALL_BYTES,
+  },
+) {
+  await mkdir(output, { recursive: true });
+  const scratch = await mkdtemp(path.join(os.tmpdir(), "review-cli-pack-"));
+
+  try {
     execFileSync(
       "pnpm",
       ["--dir", packageDirectory, "pack", "--pack-destination", scratch],
       { stdio },
     );
-    execFileSync("tar", [
-      "-xzf",
-      path.join(scratch, tarball),
-      "-C",
-      scratch,
-    ]);
+
+    const tarball = (await readdir(scratch)).find((name) =>
+      name.endsWith(".tgz"),
+    );
+
+    execFileSync("tar", ["-xzf", path.join(scratch, tarball), "-C", scratch]);
     const staged = path.join(scratch, "package");
     await stageReviewDocs(staged);
     await stageVscodeServer(staged, { ...vscodeServer, commit });
@@ -80,12 +120,18 @@ export async function packReviewCli(
 
     return packed;
   } finally {
-    await writeFile(manifestPath, original);
     await rm(scratch, { recursive: true, force: true });
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] === fileURLToPath(import.meta.url) &&
+  process.argv[2] === "--dev"
+) {
+  console.log(
+    await packDevelopment(process.argv[3], process.argv[4], { stdio: "pipe" }),
+  );
+} else if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const plan = JSON.parse(await readFile("release-plan.json", "utf8"));
   console.log(
     await packReviewCli(plan, process.argv[2] || "release-artifacts"),

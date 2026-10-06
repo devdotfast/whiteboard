@@ -109,7 +109,15 @@ async function checkout(counter: string) {
 	await writeFile(join(root, "apps/review-desktop/code-oss/.nvmrc"), "24.18.0\n");
 	await writeFile(
 		join(root, "packages/review/package.json"),
-		JSON.stringify({ name: "@dev.fast/whiteboard", version: "0.0.1", files: ["index.js"], scripts: { prepack: `echo x >> '${counter}'` } }),
+		JSON.stringify({ name: "@dev.fast/whiteboard", version: "0.0.1", files: ["index.js"] }),
+	);
+	await mkdir(join(root, "scripts"), { recursive: true });
+	await writeFile(
+		join(root, "scripts/pack-review-cli.mjs"),
+		`import { appendFileSync } from "node:fs"; import { execFileSync } from "node:child_process";
+const [, , flag, commit, output] = process.argv;
+appendFileSync(${JSON.stringify(counter)}, \`\${flag} \${commit}\\n\`);
+execFileSync("pnpm", ["--dir", "packages/review", "pack", "--pack-destination", output]);`,
 	);
 	await writeFile(join(root, "packages/review/index.js"), "export {};\n");
 	run("init", "-b", "main");
@@ -125,7 +133,8 @@ test("a development build packs its checkout once per state and fetches Node's c
 	const shasums = [`${"c".repeat(64)}  node-v24.18.0-linux-x64.tar.xz`, `${"d".repeat(64)}  node-v24.18.0-linux-arm64.tar.xz`, ""].join("\n");
 	const { base, requests } = await serve({ "/dist/v24.18.0/SHASUMS256.txt": shasums });
 	const options = { pin: undefined, checkout: root, cacheDirectory, nodeDist: `${base}/dist` };
-	const packs = async () => (await readFile(counter, "utf8")).split("\n").filter(Boolean).length;
+	const calls = async () => (await readFile(counter, "utf8")).split("\n").filter(Boolean);
+	const packs = async () => (await calls()).length;
 
 	const first = await remoteArtifacts("linux-x64", options);
 	const again = await remoteArtifacts("linux-x64", options);
@@ -145,4 +154,7 @@ test("a development build packs its checkout once per state and fetches Node's c
 
 	assert.equal(await packs(), 2);
 	assert.notEqual(edited.package.integrity, first.package.integrity);
+	const [before, after] = await calls();
+	assert.match(before, /^--dev [0-9a-f]{40}$/);
+	assert.notEqual(after, before);
 });

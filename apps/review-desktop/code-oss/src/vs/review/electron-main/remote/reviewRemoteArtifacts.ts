@@ -147,11 +147,12 @@ async function checkoutState(checkout: string): Promise<string> {
 	await git("rev-parse", "HEAD");
 	await git("status", "--porcelain=v1", "-z", "--untracked-files=all");
 	await git("diff", "HEAD", "--binary");
-	return hash.digest("hex").slice(0, 32);
+	return hash.digest("hex").slice(0, 40);
 }
 
 async function packCheckout(checkout: string, cacheDirectory: string): Promise<ReviewRemoteArtifact> {
-	const record = join(cacheDirectory, `dev-pack-${await checkoutState(checkout)}.json`);
+	const state = await checkoutState(checkout);
+	const record = join(cacheDirectory, `dev-pack-${state}.json`);
 	const previous = await readFile(record, "utf8").then(
 		(text) => JSON.parse(text) as ReviewRemoteArtifact,
 		() => undefined,
@@ -162,9 +163,9 @@ async function packCheckout(checkout: string, cacheDirectory: string): Promise<R
 	const manifest = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as { name: string; version: string };
 	const scratch = await mkdtemp(join(cacheDirectory, "dev-pack-"));
 	try {
-		await run("pnpm", ["--dir", directory, "pack", "--pack-destination", scratch], checkout, REVIEW_REMOTE_ARTIFACT_TIMEOUTS.pack);
+		await run("node", ["scripts/pack-review-cli.mjs", "--dev", state, scratch], checkout, REVIEW_REMOTE_ARTIFACT_TIMEOUTS.pack);
 		const [packed] = (await readdir(scratch)).filter((name) => name.endsWith(".tgz"));
-		if (!packed) throw new Error(`pnpm pack of ${directory} wrote no tarball.`);
+		if (!packed) throw new Error(`Packing ${directory} wrote no tarball.`);
 		const integrity = `sha512-${await digest(join(scratch, packed), "sha512", "base64")}`;
 		const file = cachePath(cacheDirectory, { name: packed, url: "", integrity });
 		await rename(join(scratch, packed), file);
