@@ -277,6 +277,9 @@ export interface Snapshot {
   /** The edit that produced this version, when one did; absent for a
    * rename, set_target, restore or import, which the canvas does not draw. */
   lastEdit?: EditSummary;
+  /** The Ask thread that caused this version when it made no edit to
+   * name it on: a create, rename, retarget or restore. */
+  threadId?: string;
 }
 
 export interface Result {
@@ -1384,6 +1387,8 @@ export class ReviewStore {
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Command boundary: commandSchema.parse below rejects malformed input before mutation.
     input: unknown,
     initial?: { document: Block[]; origin: SnapshotOrigin },
+    /** The Ask thread that sent this command, if known. */
+    from: { threadId?: string } = {},
   ): Promise<Result> {
     if (this.closing)
       return Promise.reject(new Error("Review store is closing."));
@@ -1572,6 +1577,7 @@ export class ReviewStore {
       delete snapshot.sourceUnavailable;
       // Each version describes only its own edit.
       delete snapshot.lastEdit;
+      delete snapshot.threadId;
 
       let nextId = previous
         ? Number(
@@ -1680,6 +1686,7 @@ export class ReviewStore {
         case "restore":
           snapshot = this.read(id, op.version);
           delete snapshot.lastEdit;
+          delete snapshot.threadId;
           break;
         case "lens_edit": {
           const lenses = snapshot.lenses ?? [];
@@ -1744,6 +1751,13 @@ export class ReviewStore {
 
           break;
         }
+      }
+
+      // Every version a thread causes names it: on its edit, or, for a
+      // create, rename, retarget or restore, on the version itself.
+      if (from.threadId) {
+        if (snapshot.lastEdit) snapshot.lastEdit.threadId = from.threadId;
+        else snapshot.threadId = from.threadId;
       }
 
       if (

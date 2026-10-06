@@ -73,6 +73,7 @@ import {
   readQuerySchemas,
 } from "./read-schemas.js";
 import {
+  REVIEW_THREAD_HEADER,
   type ReviewRequestVia,
   reviewRequestOrigin,
 } from "./request-origin.js";
@@ -164,6 +165,10 @@ export interface ReviewApiHooks {
   }) => void;
   sharing?: SharingHostEvents;
 }
+
+/** A request the gateway forwarded from another machine. */
+const remoteCaller = (context: Context) =>
+  context.req.header(REVIEW_CLIENT_HEADER) === REVIEW_CLIENT_REMOTE;
 
 /** Both hosts mount this behind their token authentication. */
 export function createReviewApi(
@@ -1926,7 +1931,12 @@ export function createReviewApi(
       throw new ReviewInputError("Shared reviews are read-only.", 409);
     }
 
-    const result = await store.execute(input);
+    // Trust the thread header only from local callers.
+    const threadId = remoteCaller(context)
+      ? undefined
+      : context.req.header(REVIEW_THREAD_HEADER)?.trim() || undefined;
+
+    const result = await store.execute(input, undefined, { threadId });
 
     if (
       result.deleted ||
