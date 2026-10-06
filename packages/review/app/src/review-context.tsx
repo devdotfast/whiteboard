@@ -75,7 +75,7 @@ export function ReviewProvider({
   );
 
   const dismissReview = useCallback(async () => {
-    await review.dismiss();
+    if (!(await review.dismiss())) return;
     captureUiEvent(session, "review_dismissed", { via: "review_topbar" });
     setSubmissionOutcome("dismissed");
   }, [review, session]);

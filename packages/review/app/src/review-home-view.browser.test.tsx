@@ -709,6 +709,39 @@ describe("Home interactions", () => {
       container.querySelector('[aria-label="Selected whiteboards"]'),
     ).toBeNull();
   });
+  it("asks once before moving boards others need to Trash, and keeps them all if refused", async () => {
+    const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+      async () => {},
+    );
+
+    vi.mocked(host.ui.confirmDelete!).mockResolvedValue(false);
+    await render([summary("One"), summary("Two")], { onTrash });
+    await key("a", { metaKey: true });
+    await key("Backspace", { metaKey: true });
+    expect(host.ui.confirmDelete).toHaveBeenCalledExactlyOnceWith(
+      ["One", "Two"],
+      { reviewIds: ["One", "Two"], trash: true },
+    );
+    expect(onTrash).not.toHaveBeenCalled();
+    expect(titles()).toEqual(["One", "Two"]);
+  });
+  it("deletes from Trash once the host's dialog, naming the linking boards, says so", async () => {
+    const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+      async () => {},
+    );
+
+    await render([summary("Gone", { trashedAt: "2026-10-10" })], {
+      onDelete,
+    });
+    await click("1 in Trash ›");
+    await select("Gone");
+    await key("Backspace", { metaKey: true });
+    expect(host.ui.confirmDelete).toHaveBeenCalledExactlyOnceWith(["Gone"], {
+      reviewIds: ["Gone"],
+    });
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(titles()).toEqual([]);
+  });
   it("deletes in a batch with Undo, and restores a deleted selection", async () => {
     const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
       async () => {},
@@ -852,7 +885,9 @@ describe("Home interactions", () => {
     await click("1 in Trash ›");
     await select("Gone");
     await key("Backspace", { metaKey: true });
-    expect(confirmDelete).toHaveBeenLastCalledWith(["Gone"]);
+    expect(confirmDelete).toHaveBeenLastCalledWith(["Gone"], {
+      reviewIds: ["Gone"],
+    });
     expect(onDelete).not.toHaveBeenCalled();
     await key("Backspace", { metaKey: true });
     expect(onDelete).toHaveBeenCalledOnce();

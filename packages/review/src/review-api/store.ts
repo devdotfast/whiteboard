@@ -1077,7 +1077,11 @@ export class ReviewStore {
 
     return row?.deleted_at ? String(row.deleted_at) : null;
   }
+  /** Removes a board for good, from Delete… or Trash's purge. Links into
+   * it stay, and show it as deleted. */
   private removePermanently(id: string) {
+    const { title } = this.read(id);
+
     for (const table of [
       "ask_conversations",
       "authoring_presences",
@@ -1087,7 +1091,13 @@ export class ReviewStore {
     ])
       this.db.prepare(`DELETE FROM ${table} WHERE review_id=?`).run(id);
     // Its children move up to top level, its dependencies and the links
-    // on it go, by the schema's foreign keys.
+    // on it go, by the schema's foreign keys. Links into it stay, and the
+    // tombstone shows it as deleted, in the project it was in.
+    this.db
+      .prepare(
+        "INSERT OR REPLACE INTO deleted_boards(id,title,deleted_at,project_id) VALUES(?,?,?,(SELECT project_id FROM reviews WHERE id=?))",
+      )
+      .run(id, title, new Date().toISOString(), id);
     this.db.prepare("DELETE FROM reviews WHERE id=?").run(id);
     this.liveSources.delete(id);
   }
@@ -2166,6 +2176,13 @@ export class ReviewStore {
         );
     }
   }
+  /** The boards that link to a board or its blocks. */
+  linkingBoards(id: string): string[] {
+    return this.db
+      .prepare("SELECT DISTINCT from_review FROM board_links WHERE to_review=?")
+      .all(id)
+      .map((row) => String(row.from_review));
+  }
   /** Rebuilds the board_links rows for one board. */
   private indexBoardLinks(id: string, document: Block[]) {
     this.db.prepare("DELETE FROM board_links WHERE from_review=?").run(id);
@@ -2177,7 +2194,8 @@ export class ReviewStore {
     for (const { from, to } of boardLinks(id, document))
       insert.run(from.board, from.block, to.board, to.block ?? null);
   }
-  /** A version's outgoing links and the board's current backlinks. */
+  /** A version's outgoing links and the board's current backlinks. Links to a
+   * deleted board or block are marked missing. */
   links(id: string, version?: number) {
     const titles = new Map<string, Snapshot | undefined>();
 
@@ -2195,6 +2213,19 @@ export class ReviewStore {
       ({ from, to }) => {
         const target = board(to.board);
 
+        const missing =
+          !target ||
+          (to.block !== undefined &&
+            !elements(target.document).some(
+              (element) => element.id === to.block,
+            ));
+
+        const deleted = target
+          ? undefined
+          : this.db
+              .prepare("SELECT title,deleted_at FROM deleted_boards WHERE id=?")
+              .get(to.board);
+
         return {
           from,
           to,
@@ -2204,6 +2235,11 @@ export class ReviewStore {
               pullRequestNumber: target.origin.pullRequestNumber,
             }),
             updatedAt: target.createdAt,
+          }),
+          missing,
+          ...(deleted && {
+            title: String(deleted.title),
+            deletedAt: String(deleted.deleted_at),
           }),
         };
       },

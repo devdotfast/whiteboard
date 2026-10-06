@@ -308,7 +308,7 @@ describe("ReviewTraceView", () => {
           traces: new Map(),
           stack: async () => [],
           createBranchReview: async () => "",
-          dismiss: async () => {},
+          dismiss: async () => true,
         };
 
       await act(async () => {

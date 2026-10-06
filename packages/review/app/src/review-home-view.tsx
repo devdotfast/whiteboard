@@ -585,13 +585,28 @@ export function ReviewHome({
   }
 
   async function changeLifecycle(
-    targets = selectedReviews,
+    chosen = selectedReviews,
     restore = false,
     undoing = false,
   ) {
     const action = restore ? onRestore : onTrash;
 
-    if (!action || busyRef.current || !targets.length) return;
+    if (!action || busyRef.current || !chosen.length) return;
+
+    // Boards other boards need ask first, together, naming their children
+    // and the boards that link to them; the host lets the rest through.
+    if (
+      !restore &&
+      !undoing &&
+      ui?.confirmDelete &&
+      !(await ui.confirmDelete(chosen.map(reviewTitle), {
+        reviewIds: chosen.map((review) => review.reviewId),
+        trash: true,
+      }))
+    )
+      return;
+
+    const targets = chosen;
     const timestamp = restore ? null : new Date().toISOString();
 
     setLifecycle((current) =>
@@ -636,7 +651,9 @@ export function ReviewHome({
     if (
       !onDelete ||
       busyRef.current ||
-      !(await ui?.confirmDelete?.(targets.map(reviewTitle)))
+      !(await ui?.confirmDelete?.(targets.map(reviewTitle), {
+        reviewIds: targets.map((review) => review.reviewId),
+      }))
     )
       return;
 

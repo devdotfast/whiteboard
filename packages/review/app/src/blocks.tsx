@@ -87,7 +87,11 @@ function MarkdownBlock({ node, data }: BlockProps<"markdown">) {
 
         if (board)
           return (
-            <BoardLink reviewId={board.board} blockId={board.block}>
+            <BoardLink
+              reviewId={board.board}
+              blockId={board.block}
+              target={data.boards.get(`${board.board}#${board.block ?? ""}`)}
+            >
               {children}
             </BoardLink>
           );

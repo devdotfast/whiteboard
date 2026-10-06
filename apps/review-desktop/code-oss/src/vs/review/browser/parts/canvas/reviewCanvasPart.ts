@@ -58,7 +58,7 @@ import {
 	REVIEW_SOFTWARE_MAP_SETTING,
 	REVIEW_TELEMETRY_SETTING,
 } from "../../../common/reviewConfigurationDefaults.js";
-import { resolveReviewSourceView, reviewSourceAnchor, type ReviewSourceView, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
+import { ReviewApiClient, type ReviewApiSummary, resolveReviewSourceView, reviewSourceAnchor, type ReviewSourceView, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
 import type {
 	ReviewCanvasBridge,
 	ReviewCanvasContent,
@@ -93,7 +93,7 @@ import {
 import { IReviewVerbsService } from "../../../contrib/verbs/reviewVerbs.js";
 import { vetoStoppingAskAgents } from "../../reviewAskShutdown.js";
 import { notifyOpenFailure } from "./reviewHostFailure.js";
-import { confirmReviewDeletion } from "../../reviewDeleteConfirmation.js";
+import { confirmReviewDeletion, type ReviewDeleteListedBoard, type ReviewDeleteNamed } from "../../reviewDeleteConfirmation.js";
 import { showReviewNotification } from "../../reviewNotification.js";
 import { showReviewCanvasMenu } from "../../reviewCanvasMenu.js";
 import { ReviewTooltip } from "../../reviewTooltip.js";
@@ -1121,10 +1121,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				},
 				setupTooltip: this.setupTooltip,
 				notify: (notification) => showReviewNotification(this.notificationService, notification),
-				confirmDelete: titles => {
+				confirmDelete: async (titles, options) => {
 					const openedGeneration = this.loadGeneration;
+					const ids = options?.reviewIds ?? [];
 					return confirmReviewDeletion(this.dialogService, titles,
-						() => openedGeneration === this.loadGeneration && this.isVisible());
+						() => openedGeneration === this.loadGeneration && this.isVisible(),
+						ids.length ? await this.namedOnDelete(ids) : undefined, options?.trash);
 				},
 				showMenu: request => {
 					const openedGeneration = this.loadGeneration;
@@ -1198,6 +1200,41 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		}
 		return store;
 	};
+
+	/** The boards linking to these, and their children, for the delete
+	 * confirmation, leaving out the boards asked about. Either is empty when
+	 * it can't be read. */
+	private async namedOnDelete(reviewIds: readonly string[]): Promise<ReviewDeleteNamed> {
+		const listed = ({ title, pullRequestNumber }: ReviewDeleteListedBoard): ReviewDeleteListedBoard => ({
+			title,
+			...(pullRequestNumber && { pullRequestNumber }),
+		});
+		const asked = new Set(reviewIds);
+		const client = new ReviewApiClient(await this.desktopConnection.getConnection());
+		const [linkedFrom, movesUp] = await Promise.all([
+			Promise.all(reviewIds.map((reviewId) => client.read<{ backlinks: ({ from: { board: string } } & ReviewDeleteListedBoard)[] }>(`/${encodeURIComponent(reviewId)}/links`)))
+				.then((reads) => [...new Map(reads.flatMap(({ backlinks }) => backlinks)
+					.filter((link) => !asked.has(link.from.board))
+					.map((link) => [link.from.board, listed(link)])).values()])
+				.catch((error) => {
+					this.logService.warn("[Whiteboard] Could not read the boards linking here:", error);
+					return [];
+				}),
+			client.read<ReviewApiSummary[]>("")
+				.then((boards) => {
+					const byId = new Map(boards.map((board) => [board.reviewId, board]));
+					return reviewIds.flatMap((reviewId) => byId.get(reviewId)?.children ?? []).flatMap((id) => {
+						const child = byId.get(id);
+						return child && !asked.has(id) ? [listed({ ...child, pullRequestNumber: child.origin?.pullRequestNumber })] : [];
+					});
+				})
+				.catch((error) => {
+					this.logService.warn("[Whiteboard] Could not read the boards nested here:", error);
+					return [];
+				}),
+		]);
+		return { linkedFrom, movesUp };
+	}
 
 	/** Hands a pending block reveal to the canvas once it shows that board. */
 	private revealPending(): void {

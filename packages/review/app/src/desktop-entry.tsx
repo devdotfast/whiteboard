@@ -11,9 +11,11 @@ import type {
   ReviewCanvasInstallContent,
   ReviewCanvasUi,
   ReviewCliInstallStatus,
+  ReviewDisposable,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
+  type ReactElement,
   type RefObject,
   createRef,
   useEffect,
@@ -293,6 +295,59 @@ function workbenchColorTheme(container: HTMLElement): "dark" | "light" {
     workbench.classList.contains("hc-black")
     ? "dark"
     : "light";
+}
+
+interface ThemedRoot {
+  render(element: ReactElement): void;
+  dispose(): void;
+}
+
+/** A React root in workbench DOM that follows the workbench theme. */
+function mountThemed(container: HTMLElement): ThemedRoot {
+  let disposed = false;
+  container.classList.add("review-canvas-root");
+  const themeHost = container.ownerDocument.createElement("div");
+
+  const applyTheme = () => {
+    const light = workbenchColorTheme(container) === "light";
+
+    themeHost.className = [
+      light && "review-app--theme-light",
+      stylex.props(
+        themeStyles.vars,
+        styles.themeHost,
+        light && themeStyles.light,
+      ).className,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  };
+
+  applyTheme();
+  container.appendChild(themeHost);
+  const root = createRoot(themeHost);
+  const workbench = container.ownerDocument.querySelector(".monaco-workbench");
+  const observer = new MutationObserver(applyTheme);
+
+  if (workbench)
+    observer.observe(workbench, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+  return {
+    render(element) {
+      if (!disposed) root.render(element);
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      observer.disconnect();
+      root.unmount();
+      themeHost.remove();
+      container.classList.remove("review-canvas-root");
+    },
+  };
 }
 
 export function mountReviewCanvas(
