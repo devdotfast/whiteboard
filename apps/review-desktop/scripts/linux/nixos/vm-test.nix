@@ -7,19 +7,13 @@ let
     inherit pkgs;
     release = release // { revision = toString (builtins.fromJSON (toString release.revision) + 1); };
   };
-  rust = builtins.fromJSON (builtins.readFile ./rust-extension.json);
-  rustVsix = pkgs.fetchurl { inherit (rust) url sha256; };
   probe = pkgs.buildFHSEnv {
     pname = "${app}-probe";
     inherit (release) version;
-    targetPkgs = p: package.runtimePackages p ++ [ p.unzip p.file p.binutils p.cargo p.rustc ];
+    targetPkgs = p: package.runtimePackages p ++ [ p.file p.binutils ];
     runScript = pkgs.writeShellScript "probe-installed-whiteboard" ''
       set -eu
       ${raw}/resources/app/review-runtime/bin/diffr --version
-      mkdir -p "$HOME/rust-extension"
-      unzip -qo ${rustVsix} -d "$HOME/rust-extension"
-      chmod +x "$HOME/rust-extension/extension/server/rust-analyzer"
-      "$HOME/rust-extension/extension/server/rust-analyzer" --version
       while IFS= read -r -d $'\0' binary; do
         if file -b "$binary" | grep -q '^ELF .*dynamically linked'; then
           if ldd "$binary" 2>&1 | grep -q 'not found'; then
@@ -31,7 +25,6 @@ let
       done < <(find ${raw} -type f -print0)
       export APP=${app}
       export REVIEW_LINUX_DESKTOP_COMMAND=${package.payload}/bin/${app}-desktop
-      export SMOKE_RUST_VSIX=${rustVsix}
       exec env ELECTRON_RUN_AS_NODE=1 ${raw}/${app} ${./smoke-installed-linux.mjs}
     '';
   };
@@ -71,11 +64,8 @@ in pkgs.testers.runNixOSTest {
     registered = user("gio mime x-scheme-handler/${release.urlProtocol}")
     assert handler in registered, handler + "\n" + registered + user("printf 'PATH=%s\nXDG_DATA_DIRS=%s\n' \"$PATH\" \"$XDG_DATA_DIRS\"; cat ${package}/share/applications/mimeinfo.cache")
 
-    print(user("DISPLAY=:0 XAUTHORITY=/home/tester/.Xauthority DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus DO_NOT_TRACK=1 SMOKE_DEEP_LINK_PROTOCOL=${release.urlProtocol} SMOKE_SCREENSHOT=/home/tester/onboarding.png ${probe}/bin/${app}-probe"))
+    print(user("DISPLAY=:0 XAUTHORITY=/home/tester/.Xauthority DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus DO_NOT_TRACK=1 SMOKE_SCREENSHOT=/home/tester/onboarding.png ${probe}/bin/${app}-probe"))
     machine.copy_from_vm("/home/tester/onboarding.png", "onboarding.png")
-    machine.copy_from_vm("/home/tester/onboarding-cold-link.png", "cold-link.png")
-    machine.copy_from_vm("/home/tester/onboarding-deep-links.png", "deep-links.png")
-    machine.copy_from_vm("/home/tester/onboarding-rust.png", "rust.png")
 
     user("mkdir -p ~/.dev/reviews && echo retained > ~/.dev/reviews/nixos-install-sentinel")
     before = user("readlink -f ~/.nix-profile")

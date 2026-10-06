@@ -1,5 +1,3 @@
-import { writeFile } from "node:fs/promises";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -10,7 +8,6 @@ import {
   prepareReviewNixPackage,
   prepareReviewRpmPackage,
 } from "../code-oss/build/linux/review-package.ts";
-import { curatedExtensions } from "./curated-extensions.manifest.mjs";
 
 const root = fileURLToPath(new URL("../code-oss", import.meta.url));
 
@@ -31,15 +28,4 @@ if (format === "deb" || format === "all") {
 
 if (format === "arch" || format === "all") await prepareReviewArchPackage(root);
 
-if (format === "nixos" || format === "all") {
-  await prepareReviewNixPackage(root);
-
-  const rust = curatedExtensions.find(
-    ({ id }) => id === "rust-lang.rust-analyzer",
-  );
-
-  await writeFile(
-    path.join(root, ".build/linux/nixos/x86_64/package/rust-extension.json"),
-    `${JSON.stringify(rust.targets["linux-x64"], null, 2)}\n`,
-  );
-}
+if (format === "nixos" || format === "all") await prepareReviewNixPackage(root);
