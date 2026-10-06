@@ -5,6 +5,7 @@ import {
   type ReactNode,
   type Ref,
   type RefObject,
+  useCallback,
   useLayoutEffect,
   useRef,
   useState,
@@ -22,6 +23,7 @@ import type {
   AskPanel,
   AskPresence,
   AskSize,
+  AskView,
 } from "./review-panel-model";
 import { useReviewContainer } from "./review-root-context";
 import { elevation, fontSize, radius } from "./scale.stylex";
@@ -31,8 +33,10 @@ import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { IconButton } from "./ui/button";
 import { Chip } from "./ui/chip";
+import { menuStyles } from "./ui/menu";
 import { surfaceStyles } from "./ui/surface";
 import { textStyles } from "./ui/text";
+import { useDismissOnOutside } from "./use-dismiss-on-outside";
 import { useTooltip } from "./use-tooltip";
 
 export type { AskPresence };
@@ -57,6 +61,13 @@ const PILL_GAP = 8;
 
 // A press on the pill that moves less than this is a click.
 const DRAG_THRESHOLD = 4;
+
+// From two minimized Asks, which pills of their own wouldn't tell apart,
+// they fold into one pill that lists them.
+const FOLD_AT = 2;
+
+// The folded pill's height, which the list above it leaves room for.
+const PILL_HEIGHT = 34;
 
 // Bottom right, beside any docked panel.
 const DEFAULT_ANCHOR: AskAnchor = {
@@ -322,7 +333,8 @@ export function AskWindow({
 
 /** The Asks minimized or covered: who is answering and how it is going,
  * in the window's corner, or beside the window while one is open. Drag
- * them anywhere; a press that barely moves opens that Ask. */
+ * them anywhere; a press that barely moves opens that Ask. From two on,
+ * they fold into one pill, which opens a list of them. */
 export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
   const store = useReviewPanelStore();
   const anchor = useReviewPanel((state) => state.askAnchor) ?? DEFAULT_ANCHOR;
@@ -341,6 +353,14 @@ export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
 
   // The click that ends a drag drops the pills; it does not open an Ask.
   const dropped = useRef(false);
+
+  const folded = asks.length >= FOLD_AT;
+  const [listed, setListed] = useState(false);
+  const listOpen = folded && listed;
+  const closeList = useCallback(() => setListed(false), []);
+
+  // Close, Esc or a press elsewhere closes the list.
+  useDismissOnOutside(tray, listOpen, closeList);
 
   const measured = useElementSize(tray);
 
@@ -413,6 +433,77 @@ export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
     setLive(null);
   };
 
+  /** What every pill does with a press: drag the pills, or open. */
+  const pressHandlers = (open: () => void) => ({
+    onPointerDown: startPress,
+    onPointerMove: movePress,
+    onPointerUp: endPress,
+    onPointerCancel: () => {
+      press.current = null;
+      setLive(null);
+    },
+    onClick: () => {
+      if (dropped.current) {
+        dropped.current = false;
+
+        return;
+      }
+
+      open();
+    },
+  });
+
+  const needsYou = asks.filter((ask) => ask.presence.tone === "waiting").length;
+
+  const answering = asks.filter(
+    (ask) => ask.busy && ask.presence.tone === "quiet",
+  ).length;
+
+  const foldedPill = (
+    <button
+      type="button"
+      {...stylex.props(
+        surfaceStyles.popover,
+        styles.pill,
+        needsYou > 0 && styles.pillWaiting,
+        live && styles.pillLifted,
+        windowOpen && styles.pillFixed,
+      )}
+      aria-label={`${listOpen ? "Close" : "Open"} the list of ${asks.length} minimized Asks`}
+      aria-expanded={listOpen}
+      {...pressHandlers(() => setListed(!listOpen))}
+    >
+      <ChatIcon xstyle={[styles.logo, styles.askGlyph]} />
+      <span {...stylex.props(styles.name)}>{asks.length} Asks</span>
+      {needsYou ? (
+        <span {...stylex.props(styles.status, styles.statusWaiting)}>
+          {needsYou} needs you
+        </span>
+      ) : answering ? (
+        <span {...stylex.props(styles.status)}>{answering} answering</span>
+      ) : null}
+      <Chip
+        variant="pill"
+        size="large"
+        xstyle={[styles.open, needsYou > 0 && !listOpen && styles.openWaiting]}
+      >
+        {listOpen ? "Close" : needsYou ? "Review" : "Open"}
+      </Chip>
+    </button>
+  );
+
+  const list = listOpen ? (
+    <AskList
+      asks={asks}
+      answering={answering}
+      maxHeight={canvas.height - PILL_EDGE * 2 - PILL_GAP - PILL_HEIGHT}
+      onOpen={(key) => {
+        setListed(false);
+        store.getState().restoreAsk(key);
+      }}
+    />
+  ) : null;
+
   return (
     <AskLayer>
       <div
@@ -427,65 +518,152 @@ export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
             : { visibility: "hidden" }
         }
       >
-        {asks.map(({ key, presence }) => {
-          const waiting = presence.tone === "waiting";
+        {folded ? (
+          // The list opens away from the canvas's edge the pill keeps to.
+          anchor.y === "top" && !windowOpen ? (
+            <>
+              {foldedPill}
+              {list}
+            </>
+          ) : (
+            <>
+              {list}
+              {foldedPill}
+            </>
+          )
+        ) : (
+          asks.map(({ key, presence }) => {
+            const waiting = presence.tone === "waiting";
 
-          return (
-            <button
-              key={key}
-              type="button"
-              {...stylex.props(
-                surfaceStyles.popover,
-                styles.pill,
-                waiting && styles.pillWaiting,
-                live && styles.pillLifted,
-                windowOpen && styles.pillFixed,
-              )}
-              aria-label={`Open Ask: ${presence.agentName}, ${presence.status}`}
-              onPointerDown={startPress}
-              onPointerMove={movePress}
-              onPointerUp={endPress}
-              onPointerCancel={() => {
-                press.current = null;
-                setLive(null);
-              }}
-              onClick={() => {
-                if (dropped.current) {
-                  dropped.current = false;
-
-                  return;
-                }
-
-                store.getState().restoreAsk(key);
-              }}
-            >
-              {presence.agent ? (
-                logos[presence.agent]({ xstyle: styles.logo })
-              ) : (
-                <ChatIcon xstyle={[styles.logo, styles.askGlyph]} />
-              )}
-              <span {...stylex.props(styles.name)}>{presence.agentName}</span>
-              <span
+            return (
+              <button
+                key={key}
+                type="button"
                 {...stylex.props(
-                  styles.status,
-                  waiting && styles.statusWaiting,
-                  presence.tone === "failed" && styles.statusFailed,
+                  surfaceStyles.popover,
+                  styles.pill,
+                  waiting && styles.pillWaiting,
+                  live && styles.pillLifted,
+                  windowOpen && styles.pillFixed,
                 )}
+                aria-label={`Open Ask: ${presence.agentName}, ${presence.status}`}
+                {...pressHandlers(() => store.getState().restoreAsk(key))}
               >
-                {presence.status}
-              </span>
-              <Chip
-                variant="pill"
-                size="large"
-                xstyle={[styles.open, waiting && styles.openWaiting]}
-              >
-                {waiting ? "Review" : "Open"}
-              </Chip>
-            </button>
-          );
-        })}
+                <PresenceLogo presence={presence} />
+                <span {...stylex.props(styles.name)}>{presence.agentName}</span>
+                <PresenceStatus presence={presence} />
+                <Chip
+                  variant="pill"
+                  size="large"
+                  xstyle={[styles.open, waiting && styles.openWaiting]}
+                >
+                  {waiting ? "Review" : "Open"}
+                </Chip>
+              </button>
+            );
+          })
+        )}
       </div>
     </AskLayer>
+  );
+}
+
+/** The agent's logo, or Ask's own for the list of conversations. */
+function PresenceLogo({ presence }: { presence: AskPresence }) {
+  return presence.agent ? (
+    logos[presence.agent]({ xstyle: styles.logo })
+  ) : (
+    <ChatIcon xstyle={[styles.logo, styles.askGlyph]} />
+  );
+}
+
+function PresenceStatus({ presence }: { presence: AskPresence }) {
+  return (
+    <span
+      {...stylex.props(
+        styles.status,
+        presence.tone === "waiting" && styles.statusWaiting,
+        presence.tone === "failed" && styles.statusFailed,
+      )}
+    >
+      {presence.status}
+    </span>
+  );
+}
+
+/** What an Ask asked about, to tell apart Asks with the same agent. */
+function passage(view: AskView): string | null {
+  if (view.type === "history") return null;
+  const { target, title } = view.selection;
+
+  return target.kind === "text"
+    ? `\u201c${target.quote.replace(/\s+/g, " ").trim()}\u201d`
+    : title;
+}
+
+/** Every minimized Ask, those waiting on the reviewer first, then the
+ * newest. A row opens its Ask. */
+function AskList({
+  asks,
+  answering,
+  maxHeight,
+  onOpen,
+}: {
+  asks: AskPanel[];
+  answering: number;
+  maxHeight: number;
+  onOpen: (key: number) => void;
+}) {
+  const ordered = [...asks].sort(
+    (a, b) =>
+      Number(b.presence.tone === "waiting") -
+        Number(a.presence.tone === "waiting") || b.key - a.key,
+  );
+
+  return (
+    <div
+      role="group"
+      aria-label="Minimized Asks"
+      {...stylex.props(surfaceStyles.popover, styles.list)}
+      style={{ maxHeight }}
+    >
+      <div {...stylex.props(menuStyles.label, styles.listHeader)}>
+        <span {...stylex.props(textStyles.eyebrow)}>
+          Minimized · {asks.length}
+        </span>
+        {answering ? (
+          <span {...stylex.props(styles.listCount, textStyles.count)}>
+            {answering} answering
+          </span>
+        ) : null}
+      </div>
+      {ordered.map(({ key, presence, view }) => {
+        const asked = passage(view);
+
+        return (
+          <button
+            key={key}
+            type="button"
+            {...stylex.props(menuStyles.item, styles.row)}
+            aria-label={`Open Ask: ${presence.agentName}, ${presence.status}`}
+            onClick={() => onOpen(key)}
+          >
+            <span {...stylex.props(styles.rowLogo)}>
+              <PresenceLogo presence={presence} />
+            </span>
+            <span {...stylex.props(styles.rowText)}>
+              <span {...stylex.props(styles.rowLine)}>
+                <span {...stylex.props(styles.name)}>{presence.agentName}</span>
+                <PresenceStatus presence={presence} />
+              </span>
+              {asked ? (
+                <span {...stylex.props(styles.passage)}>{asked}</span>
+              ) : null}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -912,6 +1090,63 @@ const styles = stylex.create({
   openWaiting: {
     backgroundColor: tokens.changeModified,
     color: tokens.onWarning,
+  },
+  // Laid out as a menu; scrolls once taller than the canvas has room for.
+  list: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "2px",
+    width: "300px",
+    maxWidth: "100%",
+    padding: "4px",
+    overflowY: "auto",
+    overscrollBehavior: "contain",
+  },
+  listHeader: {
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: "8px",
+  },
+  listCount: {
+    color: tokens.inkFaint,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    whiteSpace: "nowrap",
+  },
+  // A menu item with the passage under the agent.
+  row: {
+    gap: "10px",
+    padding: "6px 8px",
+  },
+  rowLogo: {
+    display: "flex",
+    flex: "0 0 16px",
+    alignItems: "center",
+    justifyContent: "center",
+    height: "16px",
+  },
+  rowText: {
+    display: "flex",
+    flex: "1 1 0",
+    flexDirection: "column",
+    gap: "1px",
+    minWidth: 0,
+  },
+  rowLine: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: "8px",
+    minWidth: 0,
+  },
+  passage: {
+    overflow: "hidden",
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontSerif,
+    fontSize: fontSize.ui,
+    lineHeight: "17px",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
 });
 

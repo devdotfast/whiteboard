@@ -272,3 +272,51 @@ it("follows the threads of every open Ask over one connection", async () => {
     "/ask/watch?threads=thread-1,thread-2,thread-3",
   ]);
 });
+
+it("folds two or more minimized Asks into one pill that lists them", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await using canvas = askCanvas();
+  const { streams, askQuestion } = canvas;
+
+  await canvas.mount();
+  const store = canvas.store();
+
+  const minimize = async (question: string, threadId: string) => {
+    await act(async () => store.getState().openAsk(selection));
+    await askQuestion(question);
+    await act(async () =>
+      streams.get(threadId)!({ seq: 1, snapshot: running(threadId) }),
+    );
+    await act(async () => button(/^Minimize Ask$/)!.click());
+  };
+
+  const pills = () =>
+    document.querySelectorAll('button[aria-label^="Open Ask: "]');
+
+  // One keeps a pill of its own.
+  await minimize("One?", "thread-1");
+  expect(pills()).toHaveLength(1);
+
+  // The second folds both into one, which says how many are answering:
+  // pills of their own wouldn't tell them apart.
+  await minimize("Two?", "thread-2");
+  expect(pills()).toHaveLength(0);
+
+  const folded = button(/minimized Asks$/)!;
+
+  expect(folded.textContent).toContain("2 Asks");
+  expect(folded.textContent).toContain("2 answering");
+
+  // It lists each, with what it asked about; a row opens that Ask.
+  await act(async () => folded.click());
+  expect(pills()).toHaveLength(2);
+  expect(pills()[0]!.textContent).toContain(
+    "\u201cThe index is created concurrently.\u201d",
+  );
+
+  await act(async () => (pills()[0] as HTMLButtonElement).click());
+  expect(document.querySelector("textarea")).not.toBeNull();
+  // One minimized again: its own pill, and no list.
+  expect(button(/minimized Asks$/)).toBeNull();
+  expect(pills()).toHaveLength(1);
+});
