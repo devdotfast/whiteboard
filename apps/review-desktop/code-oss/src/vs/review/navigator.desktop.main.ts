@@ -8,7 +8,7 @@
 // own entry point; the editor/extension-host services are shared.
 import './editor.common.main.js';
 import './editor.desktop.main.js';
-import { reviewConfigurationDefaults } from './common/reviewConfigurationDefaults.js';
+import { reviewConfigurationDefaults, reviewSourceWindowDefaults } from './common/reviewConfigurationDefaults.js';
 import '../workbench/browser/workbench.zenMode.contribution.js';
 import '../workbench/browser/actions/layoutActions.js';
 import '../workbench/browser/parts/editor/editorParts.js';
@@ -47,6 +47,33 @@ import { ILanguageFeaturesService } from '../editor/common/services/languageFeat
 import { SymbolNavigationAnchor } from '../editor/contrib/gotoSymbol/browser/goToCommands.js';
 import { CommandsRegistry, ICommandService } from '../platform/commands/common/commands.js';
 import { IEditorService } from '../workbench/services/editor/common/editorService.js';
+import { NativeExtensionService } from '../workbench/services/extensions/electron-browser/nativeExtensionService.js';
+import { IExtensionService } from '../workbench/services/extensions/common/extensions.js';
+import { IRemoteAuthorityResolverService, type ResolverResult } from '../platform/remote/common/remoteAuthorityResolver.js';
+import { IMainProcessService } from '../platform/ipc/common/mainProcessService.js';
+import { REVIEW_DESKTOP_CHANNEL } from './common/reviewDesktopBootstrap.js';
+import { isReviewRemoteAuthority } from './services/remote/reviewRemoteAuthority.js';
+import { reloadWhenOnline, reviewWindowAuthorityResolver, reviewWindowHosts } from './services/remote/reviewWindowAuthorityResolver.js';
+import { IHostService } from '../workbench/services/host/browser/host.js';
+import { DesktopMain } from '../workbench/electron-browser/desktop.main.js';
+import type { INativeWindowConfiguration } from '../platform/window/common/window.js';
+import type { WorkspaceService } from '../workbench/services/configuration/browser/configurationService.js';
+import { isReviewSourceTitle, reviewSourceWindowConfiguration, type ReviewSourceWindowConfiguration } from './services/configuration/reviewSourceWindowConfiguration.js';
+
+const SOURCE_TITLE_KEY = 'review.source.title';
+let sourceWindow: ReviewSourceWindowConfiguration<WorkspaceService> | undefined;
+
+class NavigatorDesktopMain extends DesktopMain {
+	protected override async createWorkspaceService(...args: Parameters<DesktopMain['createWorkspaceService']>): Promise<WorkspaceService> {
+		const [, , , , , , , logService] = args;
+		sourceWindow = reviewSourceWindowConfiguration(await super.createWorkspaceService(...args), logService);
+		return sourceWindow.service;
+	}
+}
+
+export function main(configuration: INativeWindowConfiguration): Promise<void> {
+	return new NavigatorDesktopMain(configuration).open();
+}
 
 class NavigatorDefaults {
 	constructor(@IStorageService storage: IStorageService) {
@@ -55,10 +82,42 @@ class NavigatorDefaults {
 		if (storage.get(key, StorageScope.PROFILE) === undefined) {
 			storage.store(key, false, StorageScope.PROFILE, StorageTarget.USER);
 		}
+		const title = storage.getObject(SOURCE_TITLE_KEY, StorageScope.WORKSPACE);
+		if (isReviewSourceTitle(title)) sourceWindow?.setTitle(title);
 	}
 }
 
 registerWorkbenchContribution2('review.navigator.defaults', NavigatorDefaults, WorkbenchPhase.BlockStartup);
+
+class NavigatorExtensionService extends NativeExtensionService {
+	private readonly windowHosts = this._instantiationService.invokeFunction((accessor) => reviewWindowHosts(accessor.get(IMainProcessService).getChannel(REVIEW_DESKTOP_CHANNEL)));
+	protected override readonly _remoteAuthorityResolverService = this._instantiationService.invokeFunction((accessor) =>
+		reviewWindowAuthorityResolver(accessor.get(IRemoteAuthorityResolverService), this.windowHosts));
+	private retrying = false;
+
+	protected override async _resolveAuthority(remoteAuthority: string): Promise<ResolverResult> {
+		if (!isReviewRemoteAuthority(remoteAuthority)) return super._resolveAuthority(remoteAuthority);
+		try {
+			return await this._remoteAuthorityResolverService.resolveAuthority(remoteAuthority);
+		} catch (error) {
+			if (!this.retrying) {
+				this.retrying = true;
+				const host = this._instantiationService.invokeFunction((accessor) => accessor.get(IHostService));
+				this._register(reloadWhenOnline(this.windowHosts, remoteAuthority.slice('whiteboard+'.length), () => void host.reload()));
+			}
+			throw error;
+		}
+	}
+}
+
+registerSingleton(IExtensionService, NavigatorExtensionService, InstantiationType.Eager);
+
+CommandsRegistry.registerCommand('review.action.setSourceTitle', (accessor, title: unknown) => {
+	if (!isReviewSourceTitle(title)) return;
+	const value = { side: title.side, title: title.title };
+	accessor.get(IStorageService).store(SOURCE_TITLE_KEY, value, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+	sourceWindow?.setTitle(value);
+});
 
 CommandsRegistry.registerCommand('review.action.showReferencesInSource', async (accessor, resource: string, lineNumber: number, column: number) => {
 	const editorService = accessor.get(IEditorService);
@@ -111,7 +170,6 @@ Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerDefaultCon
 		'workbench.colorTheme': reviewConfigurationDefaults['workbench.colorTheme'],
 		'workbench.preferredDarkColorTheme': reviewConfigurationDefaults['workbench.preferredDarkColorTheme'],
 		'workbench.preferredLightColorTheme': reviewConfigurationDefaults['workbench.preferredLightColorTheme'],
+		...reviewSourceWindowDefaults,
 	},
 }]);
-
-export { main } from '../workbench/electron-browser/desktop.main.js';

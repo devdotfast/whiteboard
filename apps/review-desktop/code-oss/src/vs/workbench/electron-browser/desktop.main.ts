@@ -366,7 +366,7 @@ export class DesktopMain extends Disposable {
 		return toWorkspaceIdentifier(this.configuration.backupPath, environmentService.isExtensionDevelopment);
 	}
 
-	private async createWorkspaceService(
+	protected async createWorkspaceService(
 		workspace: IAnyWorkspaceIdentifier,
 		environmentService: INativeWorkbenchEnvironmentService,
 		userDataProfileService: IUserDataProfileService,
