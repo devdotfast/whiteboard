@@ -49,6 +49,9 @@ import { CommandsRegistry, ICommandService } from '../platform/commands/common/c
 import { IEditorService } from '../workbench/services/editor/common/editorService.js';
 import { NativeExtensionService } from '../workbench/services/extensions/electron-browser/nativeExtensionService.js';
 import { IExtensionService } from '../workbench/services/extensions/common/extensions.js';
+import { ReviewExtensionGalleryManifestService, ReviewExtensionManagementServerService } from './services/remote/reviewRemoteWindowExtensionManagement.js';
+import { IExtensionManagementServerService } from '../workbench/services/extensionManagement/common/extensionManagement.js';
+import { IExtensionGalleryManifestService } from '../platform/extensionManagement/common/extensionGalleryManifest.js';
 import { IRemoteAuthorityResolverService, type ResolverResult } from '../platform/remote/common/remoteAuthorityResolver.js';
 import { IMainProcessService } from '../platform/ipc/common/mainProcessService.js';
 import { REVIEW_DESKTOP_CHANNEL } from './common/reviewDesktopBootstrap.js';
@@ -112,6 +115,8 @@ class NavigatorExtensionService extends NativeExtensionService {
 }
 
 registerSingleton(IExtensionService, NavigatorExtensionService, InstantiationType.Eager);
+registerSingleton(IExtensionManagementServerService, ReviewExtensionManagementServerService, InstantiationType.Delayed);
+registerSingleton(IExtensionGalleryManifestService, ReviewExtensionGalleryManifestService, InstantiationType.Eager);
 
 CommandsRegistry.registerCommand('review.action.setSourceTitle', (accessor, title: unknown) => {
 	if (!isReviewSourceTitle(title)) return;
