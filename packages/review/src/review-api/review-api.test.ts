@@ -2232,6 +2232,23 @@ describe("snapshot authoring", () => {
         }),
       });
 
+    // A thread this host knows.
+    store.askHistory.save({
+      id: "thread-1",
+      anchor: { board: reviewId },
+      projectId: store.projectOf(reviewId),
+      agent: "claude",
+      sessionId: "session-1",
+      version: 0,
+      head: "7fd03b8e2",
+      cwd: "/checkout",
+      title: "Question",
+      selection: { title: "Paragraph", target: { kind: "text", quote: "Q." } },
+      createdAt: "2026-09-01T10:00:00.000Z",
+      updatedAt: "2026-09-01T10:00:00.000Z",
+      permissions: "read-only",
+    });
+
     expect((await write({ "x-review-thread": "thread-1" })).status).toBe(200);
     expect(store.read(reviewId).lastEdit?.threadId).toBe("thread-1");
 

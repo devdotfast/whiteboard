@@ -1,3 +1,7 @@
+import { execFile, execFileSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { AskThreads } from "@review/ask/threads.js";
@@ -8,7 +12,11 @@ import type { LocalReviewData } from "@review/review-api/local-data.js";
 import { ReviewStore } from "@review/review-api/store.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import { STORE_UPGRADES } from "./store-migrations.js";
 import { initializeReviewStoreSchema } from "./store-schema.js";
+
+const upgradeVersion = (name: string) =>
+  STORE_UPGRADES.find((step) => step.name === name)!.version;
 
 const pins = { repositoryId: "repo", base: "base", head: "head" };
 
@@ -28,13 +36,58 @@ afterEach(async () => {
   await store.close();
 });
 
+it("lets two hosts open an old store at once, the second finding the first's upgrade", async () => {
+  const file = path.join(
+    mkdtempSync(path.join(tmpdir(), "ask-")),
+    "review-api.db",
+  );
+
+  const db = new DatabaseSync(file);
+
+  db.exec(`PRAGMA journal_mode=WAL;
+    CREATE TABLE ask_conversations(id TEXT PRIMARY KEY, review_id TEXT NOT NULL,
+      agent TEXT NOT NULL, session_id TEXT NOT NULL, version INTEGER NOT NULL,
+      head TEXT NOT NULL, cwd TEXT NOT NULL, selection TEXT NOT NULL,
+      title TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      entries TEXT, UNIQUE(agent, session_id));`);
+
+  // Both hosts start while a third holds the write lock, so each reads the
+  // old table before either can change it.
+  db.exec("BEGIN IMMEDIATE");
+
+  const host = () =>
+    new Promise<number | null>((resolve) =>
+      execFile(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "--input-type=module",
+          "-e",
+          `const { ReviewStore } = await import(${JSON.stringify(new URL("./store.ts", import.meta.url).href)});
+          const providers = { validatePins: async () => {}, validateSource: async () => {}, validateResource: async () => {} };
+          await new ReviewStore(${JSON.stringify(file)}, providers).close();`,
+        ],
+        (error) => resolve(error ? (error.code as number) : 0),
+      ),
+    );
+
+  const hosts = [host(), host()];
+
+  await new Promise((resolve) => setTimeout(resolve, 1_500));
+  db.exec("COMMIT");
+  db.close();
+
+  expect(await Promise.all(hosts)).toEqual([0, 0]);
+}, 20_000);
+
 const record = (
   reviewId: string,
   id: string,
   updatedAt: string,
 ): AskRecord => ({
   id,
-  reviewId,
+  anchor: { board: reviewId },
   agent: "claude",
   sessionId: `session-${id}`,
   version: 0,
@@ -77,9 +130,11 @@ it("keeps each review's conversations, newest first, until the review is deleted
     "older",
     "newer",
   ]);
-  expect(history.get("older")).toEqual(
-    record(reviewId, "older", "2026-09-01T12:30:00.000Z"),
-  );
+  // Its project is its board's.
+  expect(history.get("older")).toEqual({
+    ...record(reviewId, "older", "2026-09-01T12:30:00.000Z"),
+    projectId: store.projectOf(reviewId),
+  });
 
   history.delete("newer");
   expect(history.get("newer")).toBeUndefined();
@@ -203,8 +258,216 @@ it("serves a saved conversation without its agent or its checkout", async () => 
   const response = await api.request(`/${reviewId}/ask/thread`);
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ entries });
+});
 
-  expect((await api.request(`/another-review/ask/thread`)).status).toBe(404);
+it("lists a project's conversations on every board in it, each with the board it started on", async () => {
+  const checkout = path.join(mkdtempSync(path.join(tmpdir(), "ask-")), "repo");
+  execFileSync("git", ["init", "-q", checkout]);
+  const { id: repositoryId } = store.registerRepository(checkout);
+
+  const board = async (title: string) =>
+    (
+      await store.execute(
+        command({
+          type: "create",
+          title,
+          target: { kind: "commits", ...pins, repositoryId },
+        }),
+      )
+    ).reviewId;
+
+  const plan = await board("Plan");
+  const pr = await board("PR");
+  const projectId = store.projectOf(plan);
+
+  store.askHistory.save({
+    ...record(plan, "thread", "2026-09-01T10:00:00.000Z"),
+    projectId,
+  });
+
+  expect(store.askHistory.list(pr, store.projectOf(pr))).toMatchObject([
+    { id: "thread", anchor: { board: plan } },
+  ]);
+  // A board in no project sees only its own.
+  expect(store.askHistory.list("elsewhere")).toEqual([]);
+
+  const api = createReviewApi(
+    store,
+    {} as LocalReviewData,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { threads: {} as AskThreads, agents: async () => [] },
+  );
+
+  // Any board in the project opens the thread.
+  expect((await api.request(`/${pr}/ask/thread`)).status).toBe(200);
+});
+
+it("lets a thread change boards in any project, and lists the boards it changed", async () => {
+  const repository = (name: string) => {
+    const checkout = path.join(mkdtempSync(path.join(tmpdir(), "ask-")), name);
+
+    execFileSync("git", ["init", "-q", checkout]);
+
+    return store.registerRepository(checkout).id;
+  };
+
+  const board = async (repositoryId: string, title: string) =>
+    (
+      await store.execute(
+        command({
+          type: "create",
+          title,
+          target: { kind: "commits", ...pins, repositoryId },
+        }),
+      )
+    ).reviewId;
+
+  const app = repository("app");
+  const plan = await board(app, "Plan");
+  const pr = await board(app, "PR");
+  const elsewhere = await board(repository("other"), "Elsewhere");
+
+  store.askHistory.save({
+    ...record(plan, "thread", "2026-09-01T10:00:00.000Z"),
+    projectId: store.projectOf(plan),
+  });
+
+  // A create names its checkout by path; the rest goes unused.
+  const local = {} as LocalReviewData;
+
+  local.register = async (checkout) => store.registerRepository(checkout);
+
+  const api = createReviewApi(
+    store,
+    local,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { threads: {} as AskThreads, agents: async () => [] },
+  );
+
+  const edit = (reviewId: string) =>
+    api.request("/commands", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-review-thread": "thread",
+      },
+      body: JSON.stringify(
+        command({
+          type: "edit",
+          reviewId,
+          edit: {
+            type: "insert",
+            content: { type: "markdown", markdown: "Noted." },
+          },
+        }),
+      ),
+    });
+
+  expect((await edit(pr)).status).toBe(200);
+  expect((await edit(elsewhere)).status).toBe(200);
+
+  const create = (
+    repositoryId: string,
+    relations: { parentId?: string; dependsOn?: string[] } = {},
+  ) =>
+    api.request("/commands", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-review-thread": "thread",
+      },
+      body: JSON.stringify(
+        command({
+          type: "create",
+          title: "Step",
+          target: {
+            kind: "project",
+            repositoryPath: store
+              .repositories()
+              .find(({ id }) => id === repositoryId)!.path,
+          },
+          ...relations,
+        }),
+      ),
+    });
+
+  expect((await create(app, { parentId: plan })).status).toBe(200);
+
+  // A rename is the thread's too, as its edits and creates are.
+  await api.request("/commands", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-review-thread": "thread",
+    },
+    body: JSON.stringify(
+      command({ type: "rename", reviewId: plan, title: "The plan" }),
+    ),
+  });
+
+  const changed = await api.request(`/${plan}/ask/thread/boards`);
+
+  const { boards } = (await changed.json()) as {
+    boards: { title: string }[];
+  };
+
+  expect(boards.map(({ title }) => title).sort()).toEqual([
+    "Elsewhere",
+    "PR",
+    "Step",
+    "The plan",
+  ]);
+  // Only for a local caller: it names boards across projects.
+  expect(
+    (
+      await api.request(`/${plan}/ask/thread/boards`, {
+        headers: { "x-review-client": "remote" },
+      })
+    ).status,
+  ).toBe(404);
+});
+
+it("anchors a conversation saved per review on that review", async () => {
+  const file = path.join(
+    mkdtempSync(path.join(tmpdir(), "ask-")),
+    "reviews.db",
+  );
+
+  const db = new DatabaseSync(file);
+
+  db.exec(`CREATE TABLE ask_conversations(id TEXT PRIMARY KEY, review_id TEXT NOT NULL,
+    agent TEXT NOT NULL, session_id TEXT NOT NULL, version INTEGER NOT NULL, head TEXT NOT NULL,
+    cwd TEXT NOT NULL, selection TEXT NOT NULL, title TEXT NOT NULL, created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL, entries TEXT, bypass INTEGER NOT NULL DEFAULT 0, UNIQUE(agent, session_id));
+  CREATE INDEX ask_conversations_review ON ask_conversations(review_id, updated_at);`);
+  db.prepare(
+    "INSERT INTO ask_conversations VALUES('old','board-1','claude','s',0,'h','/c',?,'Old','t','t',NULL,0)",
+  ).run(JSON.stringify(record("x", "y", "t").selection));
+  db.close();
+
+  const opened = new ReviewStore(file, {
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+  });
+
+  try {
+    expect(opened.askHistory.get("old")).toMatchObject({
+      anchor: { board: "board-1" },
+    });
+  } finally {
+    await opened.close();
+  }
 });
 
 it("follows as many threads as a review has open over one watch", async () => {

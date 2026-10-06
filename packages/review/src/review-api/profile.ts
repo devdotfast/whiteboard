@@ -147,10 +147,11 @@ async function importHeadlessStore(home: string, source: string) {
             );
           database.exec(`
           INSERT OR IGNORE INTO resources SELECT s.id,r.new_id,s.kind,s.mime_type,s.data FROM headless.resources s JOIN repository_ids r ON s.repository_id=r.old_id;
-          INSERT INTO versions SELECT s.review_id,s.version,
+          INSERT INTO versions(review_id,version,snapshot,thread_id) SELECT s.review_id,s.version,
             CASE WHEN json_type(s.snapshot,'$.target')='object'
               THEN json_set(s.snapshot,'$.pins.repositoryId',r.new_id,'$.target.repositoryId',r.new_id)
-              ELSE json_set(s.snapshot,'$.pins.repositoryId',r.new_id) END
+              ELSE json_set(s.snapshot,'$.pins.repositoryId',r.new_id) END,
+            s.thread_id
             FROM headless.versions s JOIN repository_ids r ON json_extract(s.snapshot,'$.pins.repositoryId')=r.old_id;
           INSERT INTO review_attention SELECT * FROM headless.review_attention;
         `);
