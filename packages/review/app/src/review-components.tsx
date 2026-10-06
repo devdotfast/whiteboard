@@ -16,7 +16,7 @@ import { createPortal } from "react-dom";
 
 import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
 import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
-import { AskPanelContent } from "./ask-panel";
+import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
 import { AskPill, type AskPresence, AskSlot, AskWindow } from "./ask-window";
 import { AuthoredCodeSurface } from "./authored-code-surface";
 import { CodePeekCard } from "./CodePeek";
@@ -32,6 +32,7 @@ import { CloseIcon, DisclosureChevron, MapPinIcon, PopOutIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
 import { chevronMarker, documentMarker } from "./markers.stylex";
 import { useReviewActions } from "./review-context";
+import { useReviewDiffFiles } from "./review-diff-files-context";
 import { useOptionalReviewPanelStore, useReviewPanel } from "./review-panel";
 import type {
   GuidedTour,
@@ -496,6 +497,8 @@ function AskHost() {
     tone: "quiet",
   });
 
+  const checkoutGone = useReviewDiffFiles().status === "unavailable";
+
   if (!ask || !shown) return null;
 
   const actions = (
@@ -510,6 +513,12 @@ function AskHost() {
       {createPortal(
         ask.view.type === "history" ? (
           <AskHistoryList passage={ask.view.passage} />
+        ) : ask.view.type === "saved" && checkoutGone ? (
+          <AskReadOnlyThread
+            selection={ask.view.selection}
+            threadId={ask.view.threadId}
+            onPresence={setPresence}
+          />
         ) : (
           <AskPanelContent
             selection={ask.view.selection}

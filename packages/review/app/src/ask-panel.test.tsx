@@ -11,7 +11,8 @@ import {
 } from "./ask-delete";
 import { AskHistoryProvider, useAskHistory } from "./ask-history";
 import { AskHistoryList } from "./ask-history-list";
-import { AskPanelContent } from "./ask-panel";
+import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewPanelProvider, useReviewPanel } from "./review-panel";
 import { testReviewSession } from "./review-session-test-utils";
@@ -1380,6 +1381,53 @@ it("keeps what is written while a question goes, and puts back one that did not"
     await type(textarea, "And on replicas?");
     await act(async () => asks[1]!(Response.json({ threadId: "thread" })));
     expect(textarea.value).toBe("And on replicas?");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("shows a saved conversation whose checkout is gone, with nothing to ask", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const session = testReviewSession();
+
+  const fetch = vi.spyOn(session, "fetch").mockImplementation(async () =>
+    Response.json(
+      state({
+        id: "saved",
+        status: "idle",
+        entries: [
+          { kind: "user", id: "q", text: "Is this safe?", at: Date.now() },
+          { kind: "agent", id: "a", text: "Only on Postgres 12 and later." },
+        ],
+      }),
+    ),
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  try {
+    await act(async () =>
+      root.render(
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <AskReadOnlyThread selection={selection} threadId="saved" />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
+      ),
+    );
+    await act(() => new Promise((resolve) => setTimeout(resolve)));
+
+    expect(container.textContent).toContain("Only on Postgres 12 and later.");
+    expect(container.querySelector("textarea")).toBeNull();
+    expect(fetch).not.toHaveBeenCalledWith(
+      "/ask/saved/open",
+      expect.anything(),
+    );
   } finally {
     await act(async () => root.unmount());
     container.remove();

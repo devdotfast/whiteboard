@@ -1,4 +1,5 @@
 import { fontSize } from "@canvas/scale.stylex";
+import type { StyleArg } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement, ReactNode } from "react";
@@ -6,12 +7,14 @@ import type { ReactElement, ReactNode } from "react";
 export function StatusBanner({
   children,
   action,
+  xstyle,
 }: {
   children: ReactNode;
   action?: ReactNode;
+  xstyle?: StyleArg;
 }): ReactElement {
   return (
-    <div {...stylex.props(styles.banner)} role="status">
+    <div {...stylex.props(styles.banner, xstyle)} role="status">
       <span>{children}</span>
       {action}
     </div>

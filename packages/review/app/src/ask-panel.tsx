@@ -7,8 +7,10 @@ import {
   type AskQuestion,
   type AskThreadState,
   askChoiceKinds,
+  askThreadStateSchema,
 } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
+import { useQuery } from "@tanstack/react-query";
 import {
   type ReactElement,
   type ReactNode,
@@ -49,6 +51,7 @@ import { askPanelStyles } from "./ask-styles";
 import { useLatest, useThread } from "./ask-thread-stream";
 import { AskAgentTurn, AskWorking, turns } from "./ask-turn";
 import type { AskPresence } from "./ask-window";
+import { canvasQueryKeys } from "./canvas-query";
 import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
 import { ArrowUpIcon, ImageIcon, LockIcon } from "./icons";
@@ -59,6 +62,7 @@ import type { StyleArg } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { IconButton } from "./ui/button";
 import { Chip } from "./ui/chip";
+import { StatusBanner } from "./ui/status-banner";
 import { surfaceStyles } from "./ui/surface";
 import { useFollowLatest } from "./use-follow-latest";
 import { useTooltip } from "./use-tooltip";
@@ -666,6 +670,64 @@ export function AskPanelContent({
   );
 }
 
+/** A saved conversation whose checkout is gone, read-only. */
+export function AskReadOnlyThread({
+  selection,
+  threadId,
+  onPresence,
+}: {
+  selection: AgentSelection;
+  threadId: string;
+  onPresence?: (presence: AskPresence) => void;
+}): ReactElement {
+  const session = useReviewSession();
+
+  const { data: thread, error } = useQuery({
+    queryKey: canvasQueryKeys.askThread(threadId),
+    queryFn: async () => {
+      const response = await session.fetch(`/ask/${threadId}`);
+
+      if (!response.ok)
+        throw new Error(
+          (await readError(response)) ??
+            "Whiteboard could not load this conversation.",
+        );
+
+      return askThreadStateSchema.parse(await response.json());
+    },
+  });
+
+  useShowOpenThread(threadId);
+
+  const agentName = thread?.agentName ?? "Ask";
+
+  useEffect(() => {
+    onPresence?.({
+      agent: thread?.agent,
+      agentName,
+      status: "Read-only",
+      tone: "quiet",
+    });
+  }, [onPresence, thread?.agent, agentName]);
+
+  return (
+    <div {...stylex.props(askPanelStyles.body)}>
+      <div {...stylex.props(styles.thread)}>
+        <AskSelectionQuote selection={selection} />
+        {thread ? <AskTurns thread={thread} onDecide={() => {}} /> : null}
+        {error ? (
+          <p {...stylex.props(askPanelStyles.error)} role="alert">
+            {error.message}
+          </p>
+        ) : null}
+      </div>
+      <StatusBanner xstyle={styles.readOnlyBanner}>
+        Read-only history
+      </StatusBanner>
+    </div>
+  );
+}
+
 function ToLatestButton({ onClick }: { onClick: () => void }): ReactElement {
   const label = "Scroll to the latest";
 
@@ -866,6 +928,12 @@ const styles = stylex.create({
     padding: "20px 16px 16px",
     overflowY: "auto",
     overscrollBehavior: "contain",
+  },
+  readOnlyBanner: {
+    borderTopWidth: "1px",
+    borderTopStyle: "solid",
+    borderTopColor: tokens.ruleSoft,
+    borderBottomWidth: 0,
   },
   userMessage: {
     maxWidth: "88%",
