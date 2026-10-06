@@ -10,6 +10,7 @@ import type { VSBuffer } from "../../base/common/buffer.js";
 import { Event } from "../../base/common/event.js";
 import { URI } from "../../base/common/uri.js";
 import { ReviewCanvasEditorInput } from "../browser/parts/canvas/reviewCanvasEditorInput.js";
+import { ReviewHostDown } from "../browser/parts/canvas/reviewHostFailure.js";
 import { apiSourceUri } from "../common/reviewSourceView.js";
 import { ReviewCanvasEditorTabsService } from "./reviewCanvasEditorTabsService.js";
 
@@ -68,7 +69,7 @@ function sourceTabs(t: TestContext, answer: (url: URL) => object, reviews: objec
 		{ createInstance: (_ctor: unknown, target: never) => new ReviewCanvasEditorInput(target, {} as never) } as never,
 		{ onDidCloseEditor: Event.None } as never,
 		{} as never,
-		{ async getConnection() { return { serverUrl: "http://localhost", token: "test" }; } } as never,
+		{ async getConnection() { return { serverUrl: "http://localhost", token: "test" }; }, async readRemoteHosts() { return []; } } as never,
 		{ async openWindow(toOpen: never, options: never) { opened.push({ toOpen, options }); } } as never,
 		{ warn() {} } as never,
 		{ async writeFile(resource: URI, content: VSBuffer) { written.push(`${resource.toString()}=${content.toString()}`); } } as never,
@@ -129,4 +130,19 @@ test("references and the source tree open a remote review's window on its host",
 	assert.deepEqual({ ...reviewReferencesToShow, resource: reviewReferencesToShow.resource.toString() }, { resource: remote("/home/dev/repo/src/a b.ts"), lineNumber: 4, column: 5 });
 	assert.deepEqual(tree.toOpen.map(item => [item.workspaceUri!.toString(), item.label]), [[remote("/home/dev/navigator/repo.code-workspace"), "Fix the parser"]]);
 	assert.deepEqual(tree.options, { forceNewWindow: true, remoteAuthority: HOST, reviewSourceTitle: { side: "live", title: "Fix the parser" } });
+});
+
+test("an offline host's review fails at once with its host's words and asks nothing", async (t) => {
+	const { tabs } = sourceTabs(t, () => remoteAnswer, [{ reviewId: "r1", host: "devbox", hostState: "offline" }]);
+	const fetch = globalThis.fetch as unknown as { mock: { callCount(): number } };
+	await assert.rejects(tabs.openApiSource({ reviewId: "r1", kind: "current" }, "Fix the parser", true), (error: unknown) =>
+		error instanceof ReviewHostDown && error.host.alias === "devbox" && error.message === "devbox offline.");
+	assert.equal(fetch.mock.callCount(), 0);
+});
+
+test("a gateway 503 naming a host is that host's error", async (t) => {
+	const { tabs } = sourceTabs(t, () => remoteAnswer);
+	t.mock.method(globalThis, "fetch", async () => Response.json({ ok: false, error: "gateway text" }, { status: 503, headers: { "x-review-host": "devbox" } }));
+	await assert.rejects(tabs.openApiSource({ reviewId: "r1", kind: "current" }, "Fix the parser", true), (error: unknown) =>
+		error instanceof ReviewHostDown && error.host.alias === "devbox" && error.host.state === "offline");
 });

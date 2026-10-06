@@ -618,10 +618,10 @@ function ReviewLayoutContent({
                       captureUiEvent(session, "source_tree_opened", {
                         via: "topbar",
                       });
-                      session.surface.post({
-                        name: "openSourceTree",
-                        args: {},
-                      });
+                      // The desktop already showed why it failed.
+                      session.surface
+                        .post({ name: "openSourceTree", args: {} })
+                        .catch(() => undefined);
                     }}
                   >
                     <span {...stylex.props(shellStyles.openSourceTreeLabel)}>
