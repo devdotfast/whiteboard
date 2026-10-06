@@ -282,6 +282,11 @@ export interface Snapshot {
   threadId?: string;
 }
 
+/** The Ask thread a version names, on its edit or on itself; stored in
+ * `versions.thread_id` so a thread's boards are one index away. */
+const versionThread = (snapshot: Snapshot) =>
+  snapshot.lastEdit?.threadId ?? snapshot.threadId ?? null;
+
 export interface Result {
   /** Create only: false when an existing review for the same PR came back. */
   created?: boolean;
@@ -1096,13 +1101,15 @@ export class ReviewStore {
     const { title } = this.read(id);
 
     for (const table of [
-      "ask_conversations",
       "authoring_presences",
       "review_coverage",
       "review_attention",
       "versions",
     ])
       this.db.prepare(`DELETE FROM ${table} WHERE review_id=?`).run(id);
+    this.db
+      .prepare("DELETE FROM ask_conversations WHERE anchor_board=?")
+      .run(id);
     // Its children move up to top level, its dependencies and the links
     // on it go, by the schema's foreign keys. Links into it stay, and the
     // tombstone shows it as deleted, in the project it was in.
@@ -1834,9 +1841,14 @@ export class ReviewStore {
             .run(id, snapshot.version, nextId, projectId);
           this.db
             .prepare(
-              "INSERT INTO versions(review_id,version,snapshot) VALUES(?,?,?)",
+              "INSERT INTO versions(review_id,version,snapshot,thread_id) VALUES(?,?,?,?)",
             )
-            .run(id, snapshot.version, JSON.stringify(snapshot));
+            .run(
+              id,
+              snapshot.version,
+              JSON.stringify(snapshot),
+              versionThread(snapshot),
+            );
           this.indexBoardLinks(id, snapshot.document);
 
           if (op.type === "create" && op.parentId)
@@ -2303,6 +2315,23 @@ export class ReviewStore {
       });
 
     return { outgoing, backlinks };
+  }
+  /** Boards edited by an Ask thread, most recent first. */
+  boardsChangedBy(threadId: string): { reviewId: string; title: string }[] {
+    return this.db
+      .prepare(
+        `SELECT edits.review_id, json_extract(current.snapshot,'$.title') AS title
+        FROM versions edits
+        JOIN reviews ON reviews.id=edits.review_id
+        JOIN versions current ON current.review_id=reviews.id AND current.version=reviews.version
+        WHERE edits.thread_id=?
+        GROUP BY edits.review_id ORDER BY MAX(json_extract(edits.snapshot,'$.createdAt')) DESC`,
+      )
+      .all(threadId)
+      .map((row) => ({
+        reviewId: String(row.review_id),
+        title: String(row.title),
+      }));
   }
   /** Resolve a target-less PR create before it queues, when it will need it. */
   private startPullRequest(

@@ -462,7 +462,7 @@ export function registerOnboardingRoutes(
       agent: input.agent,
       ...host.historyHooks({
         id,
-        reviewId,
+        anchor: { board: reviewId },
         agent: input.agent,
         version: created.version,
         head,

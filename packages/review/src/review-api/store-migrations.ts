@@ -8,7 +8,7 @@ import {
   planFromScratchpad,
   readScratchpadQuotes,
 } from "./scratchpad-plan-upgrade.js";
-import { hasTable } from "./store-schema.js";
+import { columnsOf, hasTable } from "./store-schema.js";
 
 // A store's one-time upgrades, in order. PRAGMA user_version holds the last
 // one a store has run, so each runs once per store and a later launch runs
@@ -51,14 +51,6 @@ interface StoreUpgrade {
   foreignKeysOff?: true;
   run(context: StoreUpgradeContext): void;
 }
-
-const columnsOf = (db: DatabaseSync, table: string) =>
-  new Set(
-    db
-      .prepare("SELECT name FROM pragma_table_info(?)")
-      .all(table)
-      .map(({ name }) => String(name)),
-  );
 
 export const STORE_UPGRADES: readonly StoreUpgrade[] = [
   {
@@ -184,6 +176,43 @@ export const STORE_UPGRADES: readonly StoreUpgrade[] = [
   },
   {
     version: 5,
+    name: "ask-threads-by-project",
+    // Threads were kept per review. Each is now anchored on the board it
+    // started on, and is in that board's project.
+    run: ({ db }) => {
+      // The Threads tab's Project filter finds a project's boards by it.
+      db.exec(
+        "CREATE INDEX IF NOT EXISTS reviews_project ON reviews(project_id)",
+      );
+      const columns = columnsOf(db, "ask_conversations");
+
+      if (columns.size === 0) return;
+
+      if (columns.has("review_id"))
+        db.exec(
+          "ALTER TABLE ask_conversations RENAME COLUMN review_id TO anchor_board",
+        );
+
+      if (!columns.has("anchor_block"))
+        db.exec("ALTER TABLE ask_conversations ADD COLUMN anchor_block TEXT");
+    },
+  },
+  {
+    version: 6,
+    name: "version-threads",
+    // A version names the Ask thread that caused it in its own column.
+    // No release wrote one into a version, so earlier versions have none.
+    run: ({ db }) => {
+      if (!columnsOf(db, "versions").has("thread_id"))
+        db.exec("ALTER TABLE versions ADD COLUMN thread_id TEXT");
+
+      db.exec(
+        "CREATE INDEX IF NOT EXISTS versions_thread_id ON versions(thread_id)",
+      );
+    },
+  },
+  {
+    version: 7,
     name: "ask-permissions",
     // Auto mode keeps what an Ask thread may do without asking; threads
     // saved before it lack the column.

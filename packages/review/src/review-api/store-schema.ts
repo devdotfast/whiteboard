@@ -5,6 +5,14 @@ import type { DatabaseSync } from "node:sqlite";
 export const BOARD_REPOSITORY_ID_SQL =
   "CASE WHEN json_valid(versions.snapshot) THEN COALESCE(json_extract(versions.snapshot,'$.target.repositoryId'),json_extract(versions.snapshot,'$.pins.repositoryId')) END";
 
+export const columnsOf = (db: DatabaseSync, table: string) =>
+  new Set(
+    db
+      .prepare("SELECT name FROM pragma_table_info(?)")
+      .all(table)
+      .map(({ name }) => String(name)),
+  );
+
 export const hasTable = (db: DatabaseSync, table: string) =>
   Boolean(
     db
@@ -19,7 +27,7 @@ export function initializeReviewStoreSchema(db: DatabaseSync): void {
     CREATE TABLE IF NOT EXISTS reviews(id TEXT PRIMARY KEY, version INTEGER NOT NULL, next_id INTEGER NOT NULL,
       project_id TEXT NOT NULL REFERENCES projects(id), parent_id TEXT REFERENCES reviews(id) ON DELETE SET NULL);
     CREATE TABLE IF NOT EXISTS versions(review_id TEXT REFERENCES reviews(id), version INTEGER, snapshot TEXT NOT NULL,
-      PRIMARY KEY(review_id,version));
+      thread_id TEXT, PRIMARY KEY(review_id,version));
     CREATE TABLE IF NOT EXISTS review_attention(review_id TEXT PRIMARY KEY REFERENCES reviews(id), viewed_at TEXT, deleted_at TEXT);
     CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, name TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS repositories(id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL,

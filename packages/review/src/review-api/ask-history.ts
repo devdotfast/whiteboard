@@ -17,7 +17,11 @@ import { ReviewInputError } from "./document.js";
 
 /** A saved Ask conversation: its history entry, and how to reopen it. */
 export const askRecordSchema = askHistoryEntrySchema.extend({
-  reviewId: z.string(),
+  /** The board the conversation started on, and the block if any. */
+  anchor: z.object({ board: z.string(), block: z.string().optional() }),
+  /** The project of the board it started on, read from that board, or its
+   * tombstone once deleted; absent for a shared board. */
+  projectId: z.string().optional(),
   /** The ACP session the agent keeps the transcript under. */
   sessionId: z.string(),
   /** The review version asked about; its pins recreate the checkout. */
@@ -34,7 +38,9 @@ export type AskRecord = z.infer<typeof askRecordSchema>;
 const rowSchema = z
   .object({
     id: z.string(),
-    review_id: z.string(),
+    anchor_board: z.string(),
+    anchor_block: z.string().nullable(),
+    project_id: z.string().nullable(),
     agent: z.string(),
     session_id: z.string(),
     version: z.number(),
@@ -51,7 +57,11 @@ const rowSchema = z
   .transform((row) =>
     askRecordSchema.parse({
       id: row.id,
-      reviewId: row.review_id,
+      anchor:
+        row.anchor_block === null
+          ? { board: row.anchor_board }
+          : { board: row.anchor_board, block: row.anchor_block },
+      projectId: row.project_id ?? undefined,
       agent: row.agent,
       sessionId: row.session_id,
       version: row.version,
@@ -68,8 +78,19 @@ const rowSchema = z
     }),
   );
 
-/** Saved Ask conversations, per review. Shared reviews are not in
- * `reviews`, so there is no foreign key; deleting a review deletes its rows. */
+/** A thread's project: its anchor board's, or a deleted board's from its
+ * tombstone. The one place a thread's project comes from, so it can never
+ * disagree with its board's. */
+const THREAD_PROJECT_SQL = `COALESCE(
+  (SELECT project_id FROM reviews WHERE reviews.id=ask_conversations.anchor_board),
+  (SELECT project_id FROM deleted_boards WHERE deleted_boards.id=ask_conversations.anchor_board))`;
+
+/** Every column of a thread, with its project. */
+const THREAD_COLUMNS = `ask_conversations.*, ${THREAD_PROJECT_SQL} AS project_id`;
+
+/** Saved Ask conversations by project, each anchored on the board it started
+ * on. No foreign key on the anchor: shared reviews are not in `reviews`.
+ * So deleting a board removes its threads by hand (removeReview). */
 export class AskHistory {
   private externalWriteGuard?: (reviewId: string) => void;
   setExternalWriteGuard(guard: (reviewId: string) => void) {
@@ -78,7 +99,8 @@ export class AskHistory {
   constructor(private readonly db: DatabaseSync) {
     db.exec(`CREATE TABLE IF NOT EXISTS ask_conversations(
       id TEXT PRIMARY KEY,
-      review_id TEXT NOT NULL,
+      anchor_board TEXT NOT NULL,
+      anchor_block TEXT,
       agent TEXT NOT NULL,
       session_id TEXT NOT NULL,
       version INTEGER NOT NULL,
@@ -91,8 +113,11 @@ export class AskHistory {
       entries TEXT,
       bypass INTEGER NOT NULL DEFAULT 0,
       permissions TEXT,
-      UNIQUE(agent, session_id));
-    CREATE INDEX IF NOT EXISTS ask_conversations_review ON ask_conversations(review_id, updated_at);`);
+      UNIQUE(agent, session_id));`);
+
+    db.exec(
+      "CREATE INDEX IF NOT EXISTS ask_conversations_review ON ask_conversations(anchor_board, updated_at)",
+    );
 
     // What each agent offered last, so a new question can pick a model and
     // effort, and a command, before its agent starts.
@@ -121,18 +146,19 @@ export class AskHistory {
   private assertThreadWritable(id: string) {
     const record = this.get(id);
 
-    if (record) this.assertWritable(record.reviewId);
+    if (record) this.assertWritable(record.anchor.board);
   }
   save(record: AskRecord) {
-    this.assertWritable(record.reviewId);
+    this.assertWritable(record.anchor.board);
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO ask_conversations(id,review_id,agent,session_id,version,head,cwd,selection,title,created_at,updated_at,bypass,permissions)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT OR REPLACE INTO ask_conversations(id,anchor_board,anchor_block,agent,session_id,version,head,cwd,selection,title,created_at,updated_at,bypass,permissions)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         record.id,
-        record.reviewId,
+        record.anchor.board,
+        record.anchor.block ?? null,
         record.agent,
         record.sessionId,
         record.version,
@@ -230,16 +256,22 @@ export class AskHistory {
       .run(at, id);
   }
 
-  /** Newest first. */
-  list(reviewId: string): AskHistoryEntry[] {
+  /** Conversations in a board's project, or started on the board when it
+   * has none. Newest first. */
+  list(board: string, projectId?: string): AskHistoryEntry[] {
     return this.db
       .prepare(
-        "SELECT * FROM ask_conversations WHERE review_id=? ORDER BY updated_at DESC",
+        // The project's boards by their index on project_id, then their
+        // threads by ask_conversations_review.
+        `SELECT ${THREAD_COLUMNS} FROM ask_conversations
+        WHERE anchor_board=? OR anchor_board IN (SELECT id FROM reviews WHERE project_id=? UNION ALL SELECT id FROM deleted_boards WHERE project_id=?)
+        ORDER BY updated_at DESC`,
       )
-      .all(reviewId)
+      .all(board, projectId ?? null, projectId ?? null)
       .map((row) => {
         const {
-          reviewId: _reviewId,
+          anchor,
+          projectId: _projectId,
           sessionId: _sessionId,
           version: _version,
           cwd: _cwd,
@@ -252,13 +284,13 @@ export class AskHistory {
 
         if (question?.trim()) entry.question = question;
 
-        return entry;
+        return { ...entry, anchor };
       });
   }
 
   get(id: string): AskRecord | undefined {
     const row = this.db
-      .prepare("SELECT * FROM ask_conversations WHERE id=?")
+      .prepare(`SELECT ${THREAD_COLUMNS} FROM ask_conversations WHERE id=?`)
       .get(id);
 
     return row ? rowSchema.parse(row) : undefined;
@@ -266,7 +298,7 @@ export class AskHistory {
 
   removeReview(reviewId: string) {
     this.db
-      .prepare("DELETE FROM ask_conversations WHERE review_id=?")
+      .prepare("DELETE FROM ask_conversations WHERE anchor_board=?")
       .run(reviewId);
   }
 
