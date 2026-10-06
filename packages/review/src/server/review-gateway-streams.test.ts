@@ -176,14 +176,11 @@ it("lists this machine's reviews, then each host's in the setting's order, with 
   )!;
 
   const fromA = merged.find((review) => review.reviewId === onA)!;
-  const { repositoryGroup, ...rest } = asSent;
+  const { project, ...rest } = asSent;
 
   expect(fromA).toEqual({
     ...rest,
-    repositoryGroup: {
-      key: `wb-a:${repositoryGroup!.key}`,
-      label: repositoryGroup!.label,
-    },
+    project: { id: `wb-a:${project!.id}`, name: project!.name },
     host: "wb-a",
     hostState: "online",
     available: { sourceWindows: false },

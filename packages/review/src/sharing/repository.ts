@@ -95,6 +95,27 @@ export async function fetchPinnedRepository(
       await sharedGit(root, ["cat-file", "-e", `${commit}^{commit}`]);
 }
 
+/** A managed clone of a repository's default branch, for a shared board
+ * with no pins whose repository the receiver has no checkout of. */
+export async function cloneSharedRepository(root: string, url: string) {
+  await mkdir(root, { recursive: true, mode: 0o700 });
+  await sharedGit(root, ["init", "--quiet"]);
+  await sharedGit(root, ["config", "core.hooksPath", "/dev/null"]);
+  await sharedGit(root, ["config", "core.fsmonitor", "false"]);
+  await sharedGit(root, ["remote", "add", "origin", url]);
+
+  try {
+    await sharedGit(root, ["fetch", "--no-tags", "origin", "HEAD"]);
+  } catch (error) {
+    throw fetchError(
+      error instanceof Error && "stderr" in error ? String(error.stderr) : "",
+      false,
+    );
+  }
+
+  await sharedGit(root, ["checkout", "--detach", "FETCH_HEAD"]);
+}
+
 export async function repositoryReady(
   root: string,
   pins: Pick<Pins, "base" | "head">,

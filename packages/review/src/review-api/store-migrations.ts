@@ -1,4 +1,7 @@
-import type { DatabaseSync } from "node:sqlite";
+import { existsSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
+
+import { CheckoutGroups } from "./checkout-groups.js";
 
 // A store's one-time upgrades, in order. PRAGMA user_version holds the last
 // one a store has run, so each runs once per store and a later launch runs
@@ -12,11 +15,26 @@ import type { DatabaseSync } from "node:sqlite";
 /** What a step may use besides the database. */
 export interface StoreUpgradeContext {
   db: DatabaseSync;
+  /** Groups the registered checkouts, reading their git metadata. */
+  prepareCheckouts(): void;
+  repositories(): { id: string }[];
+  /** A checkout's project, made on first use. */
+  projectOfRepository(repositoryId: string): string;
+  /** The first checkout's project, else one with no repository. */
+  firstRepositoryProject(): string;
 }
 
 interface StoreUpgrade {
   version: number;
   name: string;
+  /** It groups the checkouts, which the store can work out before it
+   * opens (`groupCheckoutsAhead`), else does before the write lock. */
+  groupsCheckouts?: true;
+  /** Slow reads to do before taking the write lock other hosts wait on. */
+  beforeLock?(context: StoreUpgradeContext): void;
+  /** For a table rebuild: foreign keys can't be turned off in a
+   * transaction. */
+  foreignKeysOff?: true;
   run(context: StoreUpgradeContext): void;
 }
 
@@ -58,6 +76,84 @@ export const STORE_UPGRADES: readonly StoreUpgrade[] = [
   },
   {
     version: 3,
+    name: "board-projects",
+    // Every board belongs to a project: its repository's, else the one of
+    // the board opened last. With hundreds of checkouts, grouping them
+    // reads a good deal of git metadata.
+    groupsCheckouts: true,
+    foreignKeysOff: true,
+    run: ({
+      db,
+      repositories,
+      projectOfRepository,
+      firstRepositoryProject,
+    }) => {
+      // A new store has the column from the start.
+      if (columnsOf(db, "reviews").has("project_id")) return;
+
+      // A checkout names its project; stores from before projects lack
+      // the column.
+      if (!columnsOf(db, "repositories").has("project_id"))
+        db.exec(
+          "ALTER TABLE repositories ADD COLUMN project_id TEXT REFERENCES projects(id)",
+        );
+
+      // In creation order, which the rebuild keeps. A board whose current
+      // version is missing is kept too, in the fallback project.
+      const boards = db
+        .prepare(
+          `SELECT reviews.id, CASE WHEN json_valid(versions.snapshot) THEN COALESCE(json_extract(versions.snapshot,'$.target.repositoryId'),json_extract(versions.snapshot,'$.pins.repositoryId')) END AS repository_id,
+            review_attention.viewed_at
+          FROM reviews LEFT JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
+          LEFT JOIN review_attention ON review_attention.review_id=reviews.id
+          ORDER BY reviews.rowid`,
+        )
+        .all();
+
+      const registered = new Set(repositories().map(({ id }) => id));
+      const projects = new Map<string, string>();
+
+      for (const { id, repository_id: repository } of boards)
+        if (repository && registered.has(String(repository)))
+          projects.set(String(id), projectOfRepository(String(repository)));
+
+      // The project of the board opened last.
+      const [opened] = boards
+        .filter(({ id, viewed_at }) => viewed_at && projects.has(String(id)))
+        .sort((a, b) => String(b.viewed_at).localeCompare(String(a.viewed_at)));
+
+      let fallback = opened && projects.get(String(opened.id));
+
+      const brokenReferences = () =>
+        db
+          .prepare("PRAGMA foreign_key_check")
+          .all()
+          .filter(({ parent }) => parent === "reviews").length;
+
+      // Only references this rebuild breaks; older dangling rows stay.
+      const broken = brokenReferences();
+
+      db.exec(`CREATE TABLE reviews_with_projects(id TEXT PRIMARY KEY, version INTEGER NOT NULL, next_id INTEGER NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id))`);
+
+      const insert = db.prepare(
+        "INSERT INTO reviews_with_projects SELECT id,version,next_id,? FROM reviews WHERE id=?",
+      );
+
+      for (const { id } of boards)
+        insert.run(
+          projects.get(String(id)) ?? (fallback ??= firstRepositoryProject()),
+          String(id),
+        );
+      db.exec(`DROP TABLE reviews;
+        ALTER TABLE reviews_with_projects RENAME TO reviews;`);
+
+      if (brokenReferences() > broken)
+        throw new Error("Giving boards projects broke a reference.");
+    },
+  },
+  {
+    version: 4,
     name: "ask-permissions",
     // Auto mode keeps what an Ask thread may do without asking; threads
     // saved before it lack the column.
@@ -85,6 +181,11 @@ export function upgradeStore(context: StoreUpgradeContext) {
   for (const step of STORE_UPGRADES) {
     if (storeVersion(db) >= step.version) continue;
 
+    if (step.groupsCheckouts) context.prepareCheckouts();
+    step.beforeLock?.(context);
+
+    if (step.foreignKeysOff) db.exec("PRAGMA foreign_keys=OFF");
+
     db.exec("BEGIN IMMEDIATE");
 
     try {
@@ -103,6 +204,43 @@ export function upgradeStore(context: StoreUpgradeContext) {
         `Could not upgrade the whiteboard store: step ${step.version} (${step.name}) failed and was rolled back. ${error instanceof Error ? error.message : String(error)}`,
         { cause: error },
       );
+    } finally {
+      if (step.foreignKeysOff) db.exec("PRAGMA foreign_keys=ON");
     }
+  }
+}
+
+/** How the store's checkouts group, worked out before it opens, asking
+ * several repositories at once, when an upgrade still to run needs it;
+ * undefined otherwise, or when the store can't be read so, and the step
+ * works it out itself. */
+export async function groupCheckoutsAhead(
+  databasePath: string,
+): Promise<ReadonlyMap<string, string> | undefined> {
+  if (!existsSync(databasePath)) return undefined;
+
+  let db: DatabaseSync | undefined;
+
+  try {
+    db = new DatabaseSync(databasePath, { timeout: 5000 });
+    const version = storeVersion(db);
+
+    if (
+      !STORE_UPGRADES.some(
+        (step) => step.groupsCheckouts && step.version > version,
+      ) ||
+      !columnsOf(db, "repositories").size
+    )
+      return undefined;
+
+    const groups = new CheckoutGroups(db);
+
+    await groups.prepareConcurrently();
+
+    return groups.prepared;
+  } catch {
+    return undefined;
+  } finally {
+    db?.close();
   }
 }
