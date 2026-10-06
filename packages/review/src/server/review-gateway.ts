@@ -408,7 +408,7 @@ export function createReviewGateway(input: {
 
       return answer(remote.alias, timedOut ? 504 : 502, {
         ok: false,
-        error: `${remote.alias} did not answer: ${reason}.`,
+        error: `Could not reach ${remote.alias}: ${reason}.`,
       });
     }
 
@@ -461,7 +461,7 @@ export function createReviewGateway(input: {
 
         return answer(remote.alias, cut ? 504 : 502, {
           ok: false,
-          error: `${remote.alias} did not answer: ${cut ?? errorText(error)}.`,
+          error: `Could not reach ${remote.alias}: ${cut ?? errorText(error)}.`,
         });
       }
 

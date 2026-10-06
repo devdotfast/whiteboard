@@ -1285,7 +1285,7 @@ it("answers 504 for an answer that stalls after its headers, and keeps the host 
   expect(stalled.status).toBe(504);
   expect(await stalled.json()).toEqual({
     ok: false,
-    error: "wb-a did not answer: its answer stalled for 10 seconds.",
+    error: "Could not reach wb-a: its answer stalled for 10 seconds.",
   });
   expect(Date.now() - started).toBeLessThan(11_500);
   expect(gateway.hosts()[0]?.state).toBe("online");
