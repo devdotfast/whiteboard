@@ -28,7 +28,6 @@ function summary(
     title,
     version: 1,
     repositoryName: "whiteboard",
-    repositoryGroup: { key: "whiteboard", label: "whiteboard" },
     repositoryPath: PROJECT.path,
     createdAt: "2026-10-10T12:00:00Z",
     viewedAt: null,

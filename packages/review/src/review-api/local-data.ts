@@ -300,7 +300,12 @@ export class LocalReviewData {
     if (commit && !anchor)
       await this.comparison(await this.documentPins(snapshot), commit);
 
-    const repositoryId = anchor?.repositoryId ?? snapshot.pins?.repositoryId;
+    const repositoryId =
+      anchor?.repositoryId ??
+      snapshot.pins?.repositoryId ??
+      (snapshot.target?.kind === "project"
+        ? snapshot.target.repositoryId
+        : undefined);
 
     if (!repositoryId)
       throw new ReviewInputError(
@@ -517,9 +522,14 @@ export class LocalReviewData {
     return { workspacePath, filePath };
   }
 
-  /** A document read that needs default pins; 409 when the document has none. */
+  /** A document read that needs default pins: its own, or for a plan its
+   * repository's live checkout with base at head; 409 when it has neither. */
   async documentPins(snapshot: Snapshot): Promise<Pins> {
-    const pins = await this.sourcePins(snapshot);
+    const pins =
+      (await this.sourcePins(snapshot)) ??
+      (snapshot.target?.kind === "project"
+        ? await this.livePins(snapshot.target.repositoryId)
+        : undefined);
 
     if (!pins)
       throw new ReviewInputError(
@@ -528,6 +538,21 @@ export class LocalReviewData {
       );
 
     return pins;
+  }
+
+  /** A checkout's current state, base at head: what a plan reads. */
+  private async livePins(repositoryId: string): Promise<Pins> {
+    const vcs = await this.vcs(repositoryId);
+
+    if (!vcs) throw unavailableCheckout();
+    const { revision, commit } = await this.worktreeState(repositoryId, vcs);
+
+    return {
+      repositoryId,
+      base: commit,
+      head: commit,
+      worktreeRevision: revision,
+    };
   }
 
   /** Pins a reference names itself, checked against the registered checkout. */
@@ -988,6 +1013,13 @@ export class LocalReviewData {
     if (snapshot.target?.kind === "worktree")
       return (await this.resolveTarget(snapshot.target, snapshot.pins)).pins;
 
+    // A plan has no pins of its own, but its checkout must exist.
+    if (
+      snapshot.target?.kind === "project" &&
+      !existsSync(this.store.repositoryPath(snapshot.target.repositoryId))
+    )
+      throw unavailableCheckout();
+
     if (!snapshot.pins) return undefined;
 
     if (!existsSync(this.store.repositoryPath(snapshot.pins.repositoryId)))
@@ -1035,6 +1067,9 @@ export class LocalReviewData {
     target: ReviewTarget,
     pinned?: Pins,
   ): Promise<{ target: ReviewTarget; pins: Pins }> {
+    if (target.kind === "project")
+      throw new ReviewInputError("A project target has no commits.");
+
     const vcs = await this.vcs(target.repositoryId);
 
     if (!vcs) throw unavailableCheckout();
@@ -1921,29 +1956,37 @@ export function openLocalReviewStore(
     manageWorkspaces?: boolean;
     subscribe?: typeof subscribe;
     pullRequests?: PullRequestDeps;
+    /** From `groupCheckoutsAhead`. */
+    checkoutOwners?: ReadonlyMap<string, string>;
   } = {},
 ) {
-  const store: ReviewStore = new ReviewStore(databasePath, {
-    projectSource: (snapshot, pins) => data.projectSource(snapshot, pins),
-    resolveTarget: (target, pinned) => data.resolveTarget(target, pinned),
-    resolvePullRequest: (url, repository) =>
-      data.resolvePullRequest(url, repository),
-    pullRequestTitle: (url) => data.pullRequestTitle(url),
-    headBranch: (pins, headRef) => data.headBranch(pins, headRef),
-    sourcePins: (snapshot) => data.sourcePins(snapshot),
-    unavailableAnchors: (snapshot) => data.unavailableAnchors(snapshot),
-    validatePins: (pins) => data.validatePins(pins),
-    filesChangedBetween: (from, to) => data.filesChangedBetween(from, to),
-    validateSource: (pins, source, options) =>
-      data.validateSource(pins, source, options),
-    validateResource: (pins, block) => data.validateResource(pins, block),
-  });
+  const { checkoutOwners, ...dataOptions } = options;
+
+  const store: ReviewStore = new ReviewStore(
+    databasePath,
+    {
+      projectSource: (snapshot, pins) => data.projectSource(snapshot, pins),
+      resolveTarget: (target, pinned) => data.resolveTarget(target, pinned),
+      resolvePullRequest: (url, repository) =>
+        data.resolvePullRequest(url, repository),
+      pullRequestTitle: (url) => data.pullRequestTitle(url),
+      headBranch: (pins, headRef) => data.headBranch(pins, headRef),
+      sourcePins: (snapshot) => data.sourcePins(snapshot),
+      unavailableAnchors: (snapshot) => data.unavailableAnchors(snapshot),
+      validatePins: (pins) => data.validatePins(pins),
+      filesChangedBetween: (from, to) => data.filesChangedBetween(from, to),
+      validateSource: (pins, source, options) =>
+        data.validateSource(pins, source, options),
+      validateResource: (pins, block) => data.validateResource(pins, block),
+    },
+    checkoutOwners,
+  );
 
   let data: LocalReviewData;
 
   try {
     data = new LocalReviewData(store, {
-      ...options,
+      ...dataOptions,
       workspaceDatabase: `${databasePath}.workspaces`,
     });
   } catch (error) {

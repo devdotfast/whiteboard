@@ -55,6 +55,7 @@ import {
   validateShareSources,
 } from "./export.js";
 import {
+  cloneSharedRepository,
   fetchPinnedRepository,
   repositoryReady,
   sharedGit,
@@ -167,7 +168,7 @@ export function validateShareBundle(bundle: ShareBundle) {
   checkReferences(snapshot.document);
   validateShareSources(snapshot);
 
-  if (Boolean(snapshot.pins) !== Boolean(manifest.repository))
+  if (snapshot.pins && !manifest.repository)
     throw new Error("Shared source pins require a repository.");
 
   const presentation = sharePresentationSchema.parse(
@@ -285,6 +286,7 @@ export class SharedReviewStore {
   constructor(
     readonly root: string,
     private readonly fetchRepository = fetchPinnedRepository,
+    private readonly cloneRepository = cloneSharedRepository,
   ) {
     this.purgeTimer = setInterval(() => {
       void this.purgeExpired().catch((error) =>
@@ -372,7 +374,7 @@ export class SharedReviewStore {
       throw new ReviewInputError("Shared review is not available.", 404);
 
     if (!saved.snapshot.pins) {
-      this.setStatus(id, "ready");
+      await this.prepareUnpinned(id, saved.manifest.repository?.cloneUrl);
 
       return;
     }
@@ -435,6 +437,57 @@ export class SharedReviewStore {
       await writeFile(
         path.join(this.root, id, "repository.json"),
         JSON.stringify({ repositoryId: repository.id, ready: true }),
+        { mode: 0o600 },
+      );
+      this.setStatus(id, "ready");
+    } catch (error) {
+      const message =
+        error instanceof ReviewInputError
+          ? error.message
+          : "Could not prepare the shared repository. Check Git credentials and retry.";
+
+      this.setStatus(id, "error", message);
+      throw new ReviewInputError(message, 409);
+    }
+  }
+
+  /** Files an unpinned board under a local checkout of its repository,
+   * else a managed clone. */
+  private async prepareUnpinned(id: string, cloneUrl: string | undefined) {
+    const local = this.local;
+
+    if (!cloneUrl || !local) {
+      this.setStatus(id, "ready");
+
+      return;
+    }
+
+    const root = this.repositoryRoot(id);
+
+    try {
+      this.setStatus(id, "fetching");
+      const managed = path.join(await realpath(this.root), ".repositories");
+
+      let repositoryId = local.store
+        .checkoutsOf(cloneUrl)
+        .find(
+          (checkout) =>
+            !local.store.repositoryPath(checkout).startsWith(managed),
+        );
+
+      if (!repositoryId) {
+        if (!existsSync(path.join(root, ".git"))) {
+          await rm(root, { recursive: true, force: true });
+          await this.cloneRepository(root, cloneUrl);
+        }
+
+        repositoryId = (await local.data.register(root)).id;
+      }
+
+      this.repositories.set(id, repositoryId);
+      await writeFile(
+        path.join(this.root, id, "repository.json"),
+        JSON.stringify({ repositoryId, ready: true }),
         { mode: 0o600 },
       );
       this.setStatus(id, "ready");
@@ -517,9 +570,14 @@ export class SharedReviewStore {
             ),
           );
 
+        // A board with no pins may use the receiver's own checkout.
         if (
           this.local?.store.repositoryPath(metadata.repositoryId) ===
-          path.join(await realpath(this.root), ".repositories", id)
+            path.join(await realpath(this.root), ".repositories", id) ||
+          (!validated.snapshot.pins &&
+            this.local?.store
+              .repositories()
+              .some((repository) => repository.id === metadata.repositoryId))
         ) {
           this.repositories.set(id, metadata.repositoryId);
           prepared = metadata.ready;
@@ -528,8 +586,11 @@ export class SharedReviewStore {
         /* A first or interrupted import has no local registration yet. */
       }
 
-      if (!validated.snapshot.pins) this.setStatus(id, "ready");
-      else if (
+      if (!validated.snapshot.pins) {
+        if (this.repositories.has(id) || !validated.manifest.repository)
+          this.setStatus(id, "ready");
+        else void this.prepare(id).catch(() => {});
+      } else if (
         prepared &&
         this.local &&
         (await repositoryReady(
@@ -637,7 +698,9 @@ export class SharedReviewStore {
               ...validated.snapshot.pins,
               repositoryId: repositoryId!,
             }
-          : undefined,
+          : repositoryId
+            ? { kind: "project" as const, repositoryId }
+            : undefined,
         shared: {
           ...bundle.attribution,
           cloneUrl: bundle.manifest.repository?.cloneUrl,
@@ -658,11 +721,16 @@ export class SharedReviewStore {
       .map((id) => {
         const { document: _document, ...snapshot } = this.get(id).snapshot;
 
+        const project = snapshot.target
+          ? this.local?.store.checkoutProject(snapshot.target.repositoryId)
+          : undefined;
+
         return {
           ...snapshot,
           firstCreatedAt:
             snapshot.version === 0 ? snapshot.createdAt : undefined,
           repositoryName: "Shared review",
+          ...(project && { project }),
           viewedAt: this.attention.get(id)?.viewedAt ?? null,
           trashedAt: this.attention.get(id)?.trashedAt ?? null,
         };

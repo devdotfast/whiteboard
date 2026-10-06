@@ -25,6 +25,7 @@ import {
   REVIEW_CLIENT_REMOTE,
 } from "@dev.fast/review-protocol";
 import { type SubscribeCallback, subscribe } from "@parcel/watcher";
+import { AskThreads } from "@review/ask/threads.js";
 import { rangeAnchor } from "@review/lens-selection";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { Hono } from "hono";
@@ -3970,4 +3971,54 @@ it("quotes the first and last line of each anchor an edit adds", async () => {
       { anchor: "base/example.ts#L1", first: "export const value = 1;" },
     ],
   });
+});
+
+it("starts Ask on a plan, which has no pins, in its repository's live checkout", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Plan",
+      target: { kind: "project", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  expect(local.store.read(reviewId).pins).toBeUndefined();
+
+  // No agent starts here; the thread records where it would have.
+  const threads = new AskThreads(() => {
+    throw new Error("No agent starts here.");
+  });
+
+  const open = vi.spyOn(threads, "open");
+
+  const app = createReviewApi(
+    local.store,
+    local.data,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { threads, agents: async () => [] },
+  );
+
+  const response = await app.request(`/${reviewId}/ask`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      agent: "claude",
+      question: { text: "Where does this start?" },
+      selection: { title: "Plan", target: { kind: "text", quote: "Plan" } },
+    }),
+  });
+
+  expect(response.status).toBe(200);
+  expect(open.mock.calls[0]?.[0]).toMatchObject({
+    cwd: realpathSync(repository),
+    head: git("rev-parse", "HEAD"),
+  });
+  // Agent traces are optional for Ask; a plan reads them from its checkout.
+  expect((await app.request(`/${reviewId}/agent-traces`)).status).toBe(200);
 });

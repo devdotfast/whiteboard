@@ -325,7 +325,7 @@ describe("local stacks", () => {
     title: `Review ${branch}`,
     origin: { branch, baseBranch },
     trashedAt,
-    repositoryGroup: { key: "repo", label: "repo" },
+    project: { id: "repo", name: "repo" },
   });
 
   const rows = (layers: ReviewStackLayer[]) =>
@@ -351,7 +351,7 @@ describe("local stacks", () => {
         review("c-trashed", "c", "b", "2026-10-13T00:00:00.000Z"),
         {
           ...review("other", "d", "b"),
-          repositoryGroup: { key: "other", label: "other" },
+          project: { id: "other", name: "other" },
         },
       ],
       { repositoryPath: root },

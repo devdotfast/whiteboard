@@ -20,7 +20,7 @@ const board: ReviewApiSummary = {
   version: 1,
   title: "Fold query contract",
   repositoryName: "whiteboard",
-  repositoryGroup: { key: "repo", label: "devdotfast/whiteboard" },
+  project: { id: "repo", name: "devdotfast/whiteboard" },
   repositoryPath: "/checkouts/fold-query",
   origin: { branch: "sm/grammar", pullRequestNumber: 1091 },
   createdAt: new Date(now).toISOString(),
@@ -34,7 +34,7 @@ describe("Home model", () => {
       ...board,
       reviewId: host,
       host,
-      repositoryGroup: { key: `${host}:repo`, label: "devdotfast/whiteboard" },
+      project: { id: `${host}:project`, name: "devdotfast/whiteboard" },
     });
 
     expect(
@@ -103,7 +103,7 @@ describe("Home model", () => {
   it("groups remote worktrees together without conflating same-name local repositories", () => {
     const imported = {
       ...board,
-      repositoryGroup: undefined,
+      project: undefined,
       shared: { cloneUrl: "git@github.com:devdotfast/whiteboard.git" },
     };
 
@@ -117,14 +117,14 @@ describe("Home model", () => {
       repositoryIdentity(otherTree)?.key,
     );
     expect(
-      repositoryIdentity({ ...board, repositoryGroup: undefined }),
+      repositoryIdentity({ ...board, project: undefined }),
     ).toBeUndefined();
     const filters = { ...defaultHomeFilters, repositories: ["git:/one/.git"] };
     expect(
       matchesHomeFilters(
         {
           ...board,
-          repositoryGroup: { key: "git:/two/.git", label: "same-name" },
+          project: { id: "git:/two/.git", name: "same-name" },
         },
         filters,
       ),
@@ -178,7 +178,7 @@ it("normalizes all unresolved worktrees without limiting the unfiltered list", (
   const local = ["one", "two"].map((name) => ({
     ...board,
     reviewId: name,
-    repositoryGroup: undefined,
+    project: undefined,
     repositoryPath: `/local/${name}`,
   }));
 

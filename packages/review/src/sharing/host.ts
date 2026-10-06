@@ -223,13 +223,26 @@ export function mountSharingPublisher(
         409,
       );
 
-    const root = snapshot.pins
-      ? store.repositoryPath(snapshot.pins.repositoryId)
-      : undefined;
+    const repositoryId =
+      snapshot.pins?.repositoryId ?? snapshot.target?.repositoryId;
 
-    const repository = root
-      ? await (options.readRepository ?? readShareRepository)(root)
-      : undefined;
+    const root = repositoryId ? store.repositoryPath(repositoryId) : undefined;
+
+    const readRepository = options.readRepository ?? readShareRepository;
+
+    // Unpinned boards name their repository when they can, so receivers can
+    // group them.
+    const repository = !root
+      ? undefined
+      : snapshot.pins
+        ? await readRepository(root)
+        : await (async () => {
+            try {
+              return await readRepository(root);
+            } catch {
+              return undefined;
+            }
+          })();
 
     const bundle = await exportShare({
       store,

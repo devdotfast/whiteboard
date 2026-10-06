@@ -61,7 +61,7 @@ export async function exportShare(input: {
   version?: number;
   repository?: ShareManifest["repository"];
 }): Promise<ShareBundle> {
-  // A share is the finished document: what edit last touched it stays home.
+  // Local-only fields stay home; the target names a local checkout.
   const {
     target,
     kind: _kind,
@@ -116,7 +116,7 @@ export async function exportShare(input: {
 
   validateShareSources(snapshot);
 
-  if (Boolean(pins) !== Boolean(input.repository))
+  if (pins && !input.repository)
     throw new ReviewInputError("Shared source pins require a repository.", 409);
 
   for (const block of elements(snapshot.document)) {

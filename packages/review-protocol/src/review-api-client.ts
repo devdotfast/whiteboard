@@ -19,6 +19,7 @@ export interface ReviewApiSummary {
     worktreeRevision?: string;
   };
   target?:
+    | { kind: "project"; repositoryId: string }
     | { kind: "worktree"; repositoryId: string; base?: string }
     | { kind: "commits"; repositoryId: string; head: string; base?: string };
   createdAt: string;
@@ -36,8 +37,9 @@ export interface ReviewApiSummary {
   };
   /** Shared imports have separate local checkouts but retain their remote identity. */
   shared?: { cloneUrl?: string };
-  /** Display grouping only; source pins remain bound to their own checkout. */
-  repositoryGroup?: { key: string; label: string };
+  /** The project the board belongs to; absent for a share with no
+   * repository here. */
+  project?: { id: string; name: string };
   repositoryName: string;
   repositoryPath?: string;
   diffStats?: {

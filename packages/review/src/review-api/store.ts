@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { resolveRepoContextSync } from "@dev.fast/local-vcs";
+import { gitCommonDirSync, resolveRepoContextSync } from "@dev.fast/local-vcs";
 import {
   type ReviewApiSummary,
   SCRATCHPAD_REVIEW_ID,
@@ -24,6 +24,7 @@ import { z } from "zod";
 
 import { type ActivitySurface, ReviewActivity } from "./activity.js";
 import { AskHistory } from "./ask-history.js";
+import { CheckoutGroups } from "./checkout-groups.js";
 import {
   type Lens,
   applyLensEdit,
@@ -166,6 +167,73 @@ export interface SnapshotOrigin {
   pullRequestTitle?: string;
   /** The legacy review revision this version was imported from. */
   revision?: string;
+}
+
+/** A board version's repository in SQL over `versions.snapshot`, as
+ * `boardRepositoryId` reads it: its target's, else its pins'. */
+const BOARD_REPOSITORY_ID_SQL =
+  "CASE WHEN json_valid(versions.snapshot) THEN COALESCE(json_extract(versions.snapshot,'$.target.repositoryId'),json_extract(versions.snapshot,'$.pins.repositoryId')) END";
+
+/**
+ * The project of a registered checkout, made on first use. Checkouts of one
+ * repository (worktrees, or clones of one GitHub repository) share it. A
+ * deleted checkout joins the project of the existing one it belonged to
+ * (see `CheckoutGroups.ownerOf`), else gets its own.
+ */
+export function projectOfCheckout(
+  db: DatabaseSync,
+  repositoryId: string,
+  groups = new CheckoutGroups(db),
+): string {
+  const {
+    path: root,
+    name,
+    project_id: projectOf,
+  } = db
+    .prepare("SELECT path, name, project_id FROM repositories WHERE id=?")
+    .get(repositoryId)!;
+
+  if (projectOf) return String(projectOf);
+
+  const join = (projectId: string) => {
+    db.prepare("UPDATE repositories SET project_id=? WHERE id=?").run(
+      projectId,
+      repositoryId,
+    );
+
+    return projectId;
+  };
+
+  if (!existsSync(String(root))) {
+    const owner = groups.ownerOf(repositoryId);
+
+    if (owner) return join(projectOfCheckout(db, owner, groups));
+  }
+
+  const group = groups.group(String(root));
+
+  const sibling =
+    group &&
+    db
+      .prepare(
+        "SELECT project_id, path FROM repositories WHERE project_id IS NOT NULL",
+      )
+      .all()
+      .find(
+        ({ path: checkout }) =>
+          groups.group(String(checkout))?.key === group.key,
+      );
+
+  if (sibling) return join(String(sibling.project_id));
+
+  const projectId = randomUUID();
+
+  db.prepare("INSERT INTO projects(id,name) VALUES(?,?)").run(
+    projectId,
+    group?.label ?? String(name),
+  );
+
+  return join(projectId);
 }
 
 export interface Snapshot {
@@ -515,11 +583,20 @@ export class ReviewStore {
   constructor(
     databasePath: string,
     private readonly providers: ReviewProviders,
+    /** How the checkouts group, if `groupCheckoutsAhead` worked it out. */
+    private readonly checkoutOwners?: ReadonlyMap<string, string>,
   ) {
     // WAL plus a busy timeout: another host on the same home waits instead of failing.
     this.db = new DatabaseSync(databasePath, { timeout: 5000 });
     initializeReviewStoreSchema(this.db);
-    upgradeStore({ db: this.db });
+    upgradeStore({
+      db: this.db,
+      prepareCheckouts: () => this.checkouts.prepare(),
+      repositories: () => this.repositories(),
+      projectOfRepository: (repositoryId) =>
+        this.projectOfRepository(repositoryId),
+      firstRepositoryProject: () => this.firstRepositoryProject(),
+    });
     this.activity = new ReviewActivity(this.db, (id) =>
       this.assertWritable(id),
     );
@@ -537,6 +614,85 @@ export class ReviewStore {
       250,
     );
     this.externalChanges.unref();
+  }
+
+  /** The project of a registered checkout, made on first use. Checkouts of
+   * one repository (worktrees, or clones of one GitHub repository) share it. */
+  projectOfRepository(repositoryId: string): string {
+    const row = this.db
+      .prepare("SELECT project_id FROM repositories WHERE id=?")
+      .get(repositoryId);
+
+    if (!row) return this.fallbackProject();
+
+    if (row.project_id) return String(row.project_id);
+
+    return projectOfCheckout(this.db, repositoryId, this.checkouts);
+  }
+
+  /** For a board with no repository: the project of the board opened last,
+   * else of the first registered checkout, else one with no repository. */
+  private fallbackProject(): string {
+    const recent = this.db
+      .prepare(
+        `SELECT reviews.project_id FROM reviews
+        JOIN review_attention ON review_attention.review_id=reviews.id
+        WHERE review_attention.viewed_at IS NOT NULL
+        ORDER BY review_attention.viewed_at DESC LIMIT 1`,
+      )
+      .get();
+
+    return recent ? String(recent.project_id) : this.firstRepositoryProject();
+  }
+
+  private firstRepositoryProject(): string {
+    const [first] = this.repositories();
+
+    if (first) return this.projectOfRepository(first.id);
+
+    const empty = this.db
+      .prepare(
+        "SELECT id FROM projects WHERE id NOT IN (SELECT project_id FROM repositories WHERE project_id IS NOT NULL) LIMIT 1",
+      )
+      .get();
+
+    if (empty) return String(empty.id);
+
+    const projectId = randomUUID();
+
+    this.db
+      .prepare("INSERT INTO projects(id,name) VALUES(?,?)")
+      .run(projectId, "Whiteboards");
+
+    return projectId;
+  }
+
+  /** A checkout's project, as the catalog lists it; undefined once the
+   * checkout is unregistered. */
+  checkoutProject(
+    repositoryId: string,
+  ): ReviewApiSummary["project"] | undefined {
+    if (!this.repositories().some(({ id }) => id === repositoryId))
+      return undefined;
+
+    const id = this.projectOfRepository(repositoryId);
+
+    const { name } = this.db
+      .prepare("SELECT name FROM projects WHERE id=?")
+      .get(id)!;
+
+    return { id, name: String(name) };
+  }
+
+  /** A board's project. */
+  projectOf(id: string): string {
+    const row = this.db
+      .prepare("SELECT project_id FROM reviews WHERE id=?")
+      .get(id);
+
+    if (!row) this.assertExists(id);
+
+    return String(row!.project_id);
   }
 
   private dataVersion() {
@@ -660,34 +816,19 @@ export class ReviewStore {
       throw error;
     }
   }
-  private readonly repositoryGroups = new Map<
-    string,
-    ReviewApiSummary["repositoryGroup"]
-  >();
+  private checkoutGroups: CheckoutGroups | undefined;
 
-  private repositoryGroup(root: string): ReviewApiSummary["repositoryGroup"] {
-    if (this.repositoryGroups.has(root)) return this.repositoryGroups.get(root);
+  /** How the store's checkouts group into projects, kept for the open. */
+  private get checkouts() {
+    return (this.checkoutGroups ??= new CheckoutGroups(
+      this.db,
+      undefined,
+      this.checkoutOwners,
+    ));
+  }
 
-    // Resolving a missing checkout would spawn on every listing.
-    if (!existsSync(root)) return undefined;
-
-    const context = resolveRepoContextSync(root);
-
-    if (!context) return undefined;
-
-    const group = context.githubSlug
-      ? {
-          key: `remote:https://github.com/${context.githubSlug.toLowerCase()}.git`,
-          label: context.githubSlug,
-        }
-      : {
-          key: `git:${context.commonDir}`,
-          label: path.basename(path.dirname(context.commonDir)),
-        };
-
-    this.repositoryGroups.set(root, group);
-
-    return group;
+  private repositoryGroup(root: string) {
+    return this.checkouts.group(root);
   }
 
   registerRepository(root: string) {
@@ -699,16 +840,49 @@ export class ReviewStore {
       .prepare("SELECT id,name FROM repositories WHERE path=?")
       .get(root)!;
 
+    this.projectOfRepository(String(row.id));
+
     return { id: String(row.id), name: String(row.name) };
   }
   unregisterRepository(id: string) {
-    this.db
+    const used = this.db
       // Document pins and per-reference pins both spell the id in the snapshot.
-      .prepare(`DELETE FROM repositories WHERE id=?
-      AND NOT EXISTS (SELECT 1 FROM versions WHERE instr(snapshot, ?) > 0)
-      AND NOT EXISTS (SELECT 1 FROM resources WHERE repository_id=?)`)
-      .run(id, `"repositoryId":${JSON.stringify(id)}`, id);
+      .prepare(`SELECT EXISTS (SELECT 1 FROM versions WHERE instr(snapshot, ?) > 0)
+      OR EXISTS (SELECT 1 FROM resources WHERE repository_id=?) AS used`)
+      .get(`"repositoryId":${JSON.stringify(id)}`, id)!.used;
+
+    // Its project stays, with any boards in it.
+    if (used) return;
+    this.db.prepare("DELETE FROM repositories WHERE id=?").run(id);
   }
+  /** Checkouts whose remote is cloneUrl, most recently used first. */
+  checkoutsOf(cloneUrl: string): string[] {
+    const key = `remote:${cloneUrl.toLowerCase()}`;
+
+    const used = (repositoryId: string) =>
+      String(
+        this.db
+          .prepare(
+            `SELECT MAX(json_extract(versions.snapshot,'$.createdAt')) AS at
+            FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
+            WHERE json_extract(versions.snapshot,'$.target.repositoryId')=?`,
+          )
+          .get(repositoryId)?.at ?? "",
+      );
+
+    return this.repositories()
+      .filter((repository) => {
+        try {
+          return this.repositoryGroup(repository.path)?.key === key;
+        } catch {
+          return false;
+        }
+      })
+      .map((repository) => ({ id: repository.id, at: used(repository.id) }))
+      .sort((left, right) => right.at.localeCompare(left.at))
+      .map((repository) => repository.id);
+  }
+
   /** Registered checkouts, oldest registration first. */
   repositories() {
     return this.db
@@ -965,11 +1139,13 @@ export class ReviewStore {
       .prepare(
         `SELECT json_remove(versions.snapshot,'$.document') AS summary,
           (SELECT json_extract(first.snapshot,'$.createdAt') FROM versions AS first WHERE first.review_id=reviews.id ORDER BY first.version LIMIT 1) AS first_created_at,
-          review_attention.viewed_at, review_attention.deleted_at, repositories.name AS repository_name, repositories.path AS repository_path
+          review_attention.viewed_at, review_attention.deleted_at, repositories.name AS repository_name, repositories.path AS repository_path,
+          projects.id AS project_id, projects.name AS project_name
         FROM reviews
+        JOIN projects ON projects.id=reviews.project_id
         JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
         LEFT JOIN review_attention ON review_attention.review_id=reviews.id
-        LEFT JOIN repositories ON repositories.id=json_extract(versions.snapshot,'$.pins.repositoryId')
+        LEFT JOIN repositories ON repositories.id=${BOARD_REPOSITORY_ID_SQL}
         ${id === undefined ? "" : "WHERE reviews.id=?"}
         ORDER BY reviews.rowid`,
       )
@@ -1005,9 +1181,10 @@ export class ReviewStore {
           repositoryPath: row.repository_path
             ? String(row.repository_path)
             : undefined,
-          repositoryGroup: row.repository_path
-            ? this.repositoryGroup(String(row.repository_path))
-            : undefined,
+          project: {
+            id: String(row.project_id),
+            name: String(row.project_name),
+          },
           repositoryName: row.repository_name
             ? String(row.repository_name)
             : (summary.pins?.repositoryId ?? ""),
@@ -1168,10 +1345,15 @@ export class ReviewStore {
 
       const fromPullRequest = await pullRequest;
 
-      const resolvedTarget = requestedTarget
-        ? await (this.providers.resolveTarget?.(requestedTarget) ??
-            namedCommits(requestedTarget))
-        : fromPullRequest;
+      // No commits to resolve; repositoryPath throws if it is unregistered.
+      const resolvedTarget: { target: ReviewTarget; pins?: Pins } | undefined =
+        requestedTarget?.kind === "project"
+          ? (this.repositoryPath(requestedTarget.repositoryId),
+            { target: requestedTarget })
+          : requestedTarget
+            ? await (this.providers.resolveTarget?.(requestedTarget) ??
+                namedCommits(requestedTarget))
+            : fromPullRequest;
 
       if (requestedTarget && !resolvedTarget)
         throw new ReviewInputError("Review targets are unavailable.");
@@ -1189,7 +1371,8 @@ export class ReviewStore {
           const result = this.existingReview(
             found,
             others,
-            resolvedTarget!.pins,
+            // A PR always resolves to commits, so pins are set.
+            resolvedTarget!.pins!,
           );
 
           return result;
@@ -1322,12 +1505,12 @@ export class ReviewStore {
         };
 
       // A base named rather than given as a commit; a stacked review names
-      // the branch below it.
-      if (requestedTarget)
+      // the branch below it. A plan compares nothing.
+      if (requestedTarget && requestedTarget.kind !== "project")
         snapshot.origin = {
           ...snapshot.origin,
           baseBranch:
-            requestedTarget.base === resolvedTarget?.pins.base
+            requestedTarget.base === resolvedTarget?.pins?.base
               ? undefined
               : requestedTarget.base,
         };
@@ -1355,14 +1538,17 @@ export class ReviewStore {
             snapshot,
             op.pullRequestUrl ??
               (op.pullRequestUrl === null ||
-              snapshot.pins?.repositoryId !== resolvedTarget!.pins.repositoryId
+              snapshot.target?.repositoryId !==
+                resolvedTarget!.target.repositoryId
                 ? null
                 : undefined),
             await pullRequestTitle,
           );
           snapshot.staleSources = [];
           snapshot.target = resolvedTarget!.target;
-          snapshot.pins = resolvedTarget!.pins;
+
+          if (resolvedTarget!.pins) snapshot.pins = resolvedTarget!.pins;
+          else delete snapshot.pins;
           break;
         case "restore":
           snapshot = this.read(id, op.version);
@@ -1484,14 +1670,21 @@ export class ReviewStore {
 
       if (warnings.length) result.warnings = warnings;
 
+      // A board belongs to its repository's project.
+      const projectId = snapshot.target
+        ? this.projectOfRepository(snapshot.target.repositoryId)
+        : previous
+          ? this.projectOf(id)
+          : this.fallbackProject();
+
       this.commitCommand(
         result,
         () => {
           this.db
             .prepare(
-              "INSERT INTO reviews(id,version,next_id) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,next_id=excluded.next_id",
+              "INSERT INTO reviews(id,version,next_id,project_id) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,next_id=excluded.next_id,project_id=excluded.project_id",
             )
-            .run(id, snapshot.version, nextId);
+            .run(id, snapshot.version, nextId, projectId);
           this.db
             .prepare(
               "INSERT INTO versions(review_id,version,snapshot) VALUES(?,?,?)",
@@ -1869,7 +2062,7 @@ function namedCommits(target: ReviewTarget) {
 function createdSnapshot(
   id: string,
   op: { title?: string; kind?: "scratchpad" },
-  resolved: { target: ReviewTarget; pins: Pins } | undefined,
+  resolved: { target: ReviewTarget; pins?: Pins } | undefined,
   defaultTitle?: string,
 ): Snapshot {
   const title = op.title ?? defaultTitle;
@@ -1886,15 +2079,18 @@ function createdSnapshot(
       createdAt: "",
     };
 
-  return {
+  const snapshot: Snapshot = {
     reviewId: id,
     version: 0,
     title,
-    pins: resolved.pins,
     target: resolved.target,
     document: [],
     createdAt: "",
   };
+
+  if (resolved.pins) snapshot.pins = resolved.pins;
+
+  return snapshot;
 }
 
 export function inspectSnapshot(snapshot: Snapshot, targetId?: string) {

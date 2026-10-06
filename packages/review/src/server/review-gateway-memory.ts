@@ -16,7 +16,7 @@ const listEntrySchema = z.looseObject({
   repositoryName: z.string(),
   viewedAt: z.string().nullable(),
   trashedAt: z.string().nullable(),
-  repositoryGroup: z.object({ key: z.string(), label: z.string() }).optional(),
+  project: z.object({ id: z.string(), name: z.string() }).optional(),
 });
 
 export const listEntriesSchema = z.array(z.unknown()).transform(

@@ -22,7 +22,7 @@ type Subject = Pick<ReviewApiSummary, "origin"> & { reviewId?: string };
 
 type Candidate = Pick<
   ReviewApiSummary,
-  "reviewId" | "title" | "origin" | "pins" | "trashedAt" | "repositoryGroup"
+  "reviewId" | "title" | "origin" | "pins" | "trashedAt" | "project"
 >;
 
 interface StackEntry {
@@ -135,7 +135,7 @@ async function localStack(
   repositoryPath: string,
 ): Promise<StackEntry[]> {
   const group = reviews.find((review) => review.reviewId === subject.reviewId)
-    ?.repositoryGroup?.key;
+    ?.project?.id;
 
   const current = subject.origin?.branch;
 
@@ -147,9 +147,7 @@ async function localStack(
 
   const name = (ref: string) => ref.replace(/^origin\//, "");
 
-  const inGroup = reviews.filter(
-    (review) => review.repositoryGroup?.key === group,
-  );
+  const inGroup = reviews.filter((review) => review.project?.id === group);
 
   const latest = (field: "branch" | "baseBranch", branch: string) => {
     const matches = inGroup.filter(
