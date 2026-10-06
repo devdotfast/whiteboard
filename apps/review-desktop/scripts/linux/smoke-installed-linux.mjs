@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import {
   mkdir,
   mkdtemp,
@@ -369,41 +368,36 @@ async function rustExtension() {
 
   const repository = await post("/repositories", { path: directory });
 
-  const pins = await post("/pins", {
-    repositoryId: repository.id,
-    base: stdout.trim(),
-    head: stdout.trim(),
-  });
+  const commit = stdout.trim();
 
   const created = await post("/commands", {
-    commandId: randomUUID(),
-    operation: { type: "create", title: "NixOS Rust", pins, open: true },
+    operation: {
+      type: "create",
+      title: "NixOS Rust",
+      target: {
+        kind: "commits",
+        repositoryId: repository.id,
+        base: commit,
+        head: commit,
+      },
+      open: true,
+    },
   });
 
-  const { leaseId } = await post(`/${created.reviewId}/activity/begin`, {
-    scope: "document",
-  });
+  const { activityId } = await post(`/${created.reviewId}/activity/begin`, {});
 
   await post("/commands", {
-    commandId: randomUUID(),
-    leaseId,
     operation: {
       type: "edit",
       reviewId: created.reviewId,
+      activityId,
       edit: {
         type: "insert",
-        content: {
-          type: "code_peek",
-          source: {
-            file: "src/main.rs",
-            start: { side: "head", line: 1 },
-            end: { side: "head", line: 1 },
-          },
-        },
+        content: { type: "code_peek", source: "head/src/main.rs#L1" },
       },
     },
   });
-  await post(`/${created.reviewId}/activity/end`, { leaseId });
+  await post(`/${created.reviewId}/activity/end`, { activityId });
   await post(`/${created.reviewId}/open`, {});
   await waitFor(
     'Boolean(document.querySelector(".code-peek .monaco-editor .view-lines"))',
