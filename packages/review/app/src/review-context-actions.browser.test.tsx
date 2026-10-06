@@ -59,13 +59,18 @@ describe("ReviewProvider session facts", () => {
     };
 
     session.review!.dismiss = vi
-      .fn<() => Promise<void>>()
+      .fn<() => Promise<boolean>>()
       .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValueOnce(undefined);
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
 
     await renderProvider(session);
 
     await expect(requireReview().dismissReview()).rejects.toThrow("offline");
+    expect(posted).toEqual([]);
+
+    // Kept, when asked: nothing to report.
+    await act(() => requireReview().dismissReview());
     expect(posted).toEqual([]);
 
     await act(() => requireReview().dismissReview());

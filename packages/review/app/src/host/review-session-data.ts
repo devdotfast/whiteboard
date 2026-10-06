@@ -30,5 +30,7 @@ export interface ReviewSessionData {
     base: string,
     title: string,
   ): Promise<string>;
-  dismiss(): Promise<void>;
+  /** Moves the board to Trash, asking first when other boards need it.
+   * False when the person kept it. */
+  dismiss(): Promise<boolean>;
 }

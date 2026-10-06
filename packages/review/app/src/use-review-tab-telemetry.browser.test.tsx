@@ -45,7 +45,7 @@ it("keeps dwell continuous through live review updates and sends the latest vers
     traces: new Map(),
     stack: async () => [],
     createBranchReview: async () => "",
-    dismiss: async () => {},
+    dismiss: async () => true,
   };
 
   const container = document.createElement("div");

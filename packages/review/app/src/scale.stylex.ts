@@ -10,6 +10,7 @@ export const fontSize = stylex.defineConsts({
   // Chrome and most canvas text; matches --chrome-font-size.
   body: "12px",
   ui: "13px",
+  title: "14px",
   reading: "15px",
   heading: "18px",
   display: "22px",

@@ -67,6 +67,8 @@ export type ReviewStreamSnapshot<Snapshot extends object = JsonObject> =
   Snapshot & {
     activity: { workingCount: number; expiresAt: number | null };
     coverageRevision: number;
+    /** Bumped when a board the review links to changes. */
+    linksRevision?: number;
     /** Bumped when the review's parent or siblings change. */
     placeRevision?: number;
   };
