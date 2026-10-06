@@ -255,6 +255,15 @@ export const askUpdateSchema = z.union([
 
 export type AskUpdate = z.infer<typeof askUpdateSchema>;
 
+/** One line of a watch of several threads: a thread's update, or that it
+ * has ended. */
+export const askWatchLineSchema = z.union([
+  z.object({ threadId: z.string(), update: askUpdateSchema }),
+  z.object({ threadId: z.string(), ended: z.literal(true) }),
+]);
+
+export type AskWatchLine = z.infer<typeof askWatchLineSchema>;
+
 /** The server and the panel both advance a thread with this, so they agree. */
 export function applyAskChange(
   state: AskThreadState,

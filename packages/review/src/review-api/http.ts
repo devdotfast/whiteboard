@@ -24,7 +24,7 @@ import {
   askQuestionSchema,
 } from "@review/ask/thread-state.js";
 import type { AskThreads } from "@review/ask/threads.js";
-import { watchAskThread } from "@review/ask/watch.js";
+import { watchAskThreads } from "@review/ask/watch.js";
 import { fuzzyRank } from "@review/fuzzy-match.js";
 import { resolveReviewStackLayers } from "@review/review-stack.js";
 import { readBoundedRequestJson } from "@review/server/hono-http.js";
@@ -90,6 +90,9 @@ const askStartSchema = z.strictObject({
 });
 
 const askPermitSchema = z.strictObject({ bypass: z.boolean() });
+
+/** The threads one watch follows: those of a review's open Asks. */
+const askWatchThreadsSchema = z.array(z.string().min(1)).max(100);
 
 const askOpenSchema = z.strictObject({ picks: askPicksSchema.optional() });
 
@@ -1310,6 +1313,31 @@ export function createReviewApi(
       return context.json({ threads: store.askHistory.list(reviewId) });
     });
 
+    // The threads of every open Ask in a review, over one connection. Before
+    // the route for one thread, which would read `watch` as its id.
+    app.get("/:id/ask/watch", (context) => {
+      const reviewId = context.req.param("id");
+
+      readReview(reviewId);
+
+      const threadIds = askWatchThreadsSchema.parse(
+        (context.req.query("threads") ?? "").split(",").filter(Boolean),
+      );
+
+      return watchAskThreads(
+        new Map(
+          threadIds.map((threadId) => {
+            const thread = ask.threads.get(threadId);
+
+            return [
+              threadId,
+              thread?.reviewId === reviewId ? thread : undefined,
+            ];
+          }),
+        ),
+      );
+    });
+
     // A saved conversation, without starting its agent.
     app.get("/:id/ask/:threadId", (context) => {
       const record = store.askHistory.get(context.req.param("threadId"));
@@ -1388,15 +1416,6 @@ export function createReviewApi(
       });
 
       return context.json({ threadId: record.id });
-    });
-
-    app.get("/:id/ask/:threadId/watch", (context) => {
-      const thread = readThread(
-        context.req.param("id"),
-        context.req.param("threadId"),
-      );
-
-      return watchAskThread(thread);
     });
 
     app.post("/:id/ask/:threadId/prompt", async (context) => {

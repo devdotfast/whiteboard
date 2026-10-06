@@ -1,5 +1,9 @@
-import type { AskThreadState, AskUpdate } from "@review/ask/thread-state.js";
-import { watchAskThread } from "@review/ask/watch.js";
+import type {
+  AskThreadState,
+  AskUpdate,
+  AskWatchLine,
+} from "@review/ask/thread-state.js";
+import { watchAskThreads } from "@review/ask/watch.js";
 import { expect, it } from "vitest";
 
 const state: AskThreadState = {
@@ -63,26 +67,77 @@ async function lines(response: Response, count: number) {
   return text
     .split("\n")
     .slice(0, count)
-    .map((line) => JSON.parse(line) as AskUpdate);
+    .map((line) => JSON.parse(line) as AskWatchLine);
+}
+
+async function all(response: Response) {
+  return (await response.text())
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as AskWatchLine);
 }
 
 it("sends a snapshot, then each change in order", async () => {
   const source = thread();
-  const response = watchAskThread(source);
+  const response = watchAskThreads(new Map([["a", source]]));
 
   source.append("It ");
   source.append("does.");
 
   expect(await lines(response, 3)).toEqual([
-    { seq: 0, snapshot: state },
-    { seq: 1, change: { type: "append", id: "a", text: "It " } },
-    { seq: 2, change: { type: "append", id: "a", text: "does." } },
+    { threadId: "a", update: { seq: 0, snapshot: state } },
+    {
+      threadId: "a",
+      update: { seq: 1, change: { type: "append", id: "a", text: "It " } },
+    },
+    {
+      threadId: "a",
+      update: { seq: 2, change: { type: "append", id: "a", text: "does." } },
+    },
   ]);
+});
+
+it("carries several threads on one stream, taking turns", async () => {
+  const first = thread();
+  const second = thread();
+
+  const response = watchAskThreads(
+    new Map([
+      ["first", first],
+      ["second", second],
+    ]),
+  );
+
+  first.append("One.");
+  second.append("Two.");
+  first.close();
+  second.close();
+
+  expect(await all(response)).toEqual([
+    { threadId: "first", update: { seq: 0, snapshot: state } },
+    { threadId: "second", update: { seq: 0, snapshot: state } },
+    {
+      threadId: "first",
+      update: { seq: 1, change: { type: "append", id: "a", text: "One." } },
+    },
+    {
+      threadId: "second",
+      update: { seq: 1, change: { type: "append", id: "a", text: "Two." } },
+    },
+    { threadId: "first", ended: true },
+    { threadId: "second", ended: true },
+  ]);
+});
+
+it("says at once that a thread which isn't running has ended", async () => {
+  const response = watchAskThreads(new Map([["gone", undefined]]));
+
+  expect(await all(response)).toEqual([{ threadId: "gone", ended: true }]);
 });
 
 it("replaces the backlog of a reader that falls behind with one snapshot", async () => {
   const source = thread();
-  const response = watchAskThread(source, 3);
+  const response = watchAskThreads(new Map([["a", source]]), 3);
 
   // Nothing reads while five changes arrive: more than the backlog holds.
   for (const text of ["a", "b", "c", "d", "e"]) source.append(text);
@@ -90,28 +145,30 @@ it("replaces the backlog of a reader that falls behind with one snapshot", async
   // The stream already held the first snapshot. The fourth change overflows
   // the backlog, which becomes a snapshot; the fifth follows it.
   expect(await lines(response, 3)).toEqual([
-    { seq: 0, snapshot: state },
-    { seq: 4, snapshot: state },
-    { seq: 5, change: { type: "append", id: "a", text: "e" } },
+    { threadId: "a", update: { seq: 0, snapshot: state } },
+    { threadId: "a", update: { seq: 4, snapshot: state } },
+    {
+      threadId: "a",
+      update: { seq: 5, change: { type: "append", id: "a", text: "e" } },
+    },
   ]);
 });
 
-it("ends once the thread closes, after what it already sent", async () => {
+it("ends a thread once it closes, after what it already sent", async () => {
   const source = thread();
-  const response = watchAskThread(source);
+  const response = watchAskThreads(new Map([["a", source]]));
 
   source.append("Stopped.");
   source.close();
   // A change after closing is not the thread's any more.
   source.append("Late.");
 
-  expect(
-    (await response.text())
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line)),
-  ).toEqual([
-    { seq: 0, snapshot: state },
-    { seq: 1, change: { type: "append", id: "a", text: "Stopped." } },
+  expect(await all(response)).toEqual([
+    { threadId: "a", update: { seq: 0, snapshot: state } },
+    {
+      threadId: "a",
+      update: { seq: 1, change: { type: "append", id: "a", text: "Stopped." } },
+    },
+    { threadId: "a", ended: true },
   ]);
 });

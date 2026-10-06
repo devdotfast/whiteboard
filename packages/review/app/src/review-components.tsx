@@ -26,6 +26,10 @@ import { AskCloseWarning } from "./ask-close";
 import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
 import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
+import {
+  AskThreadsWatchContext,
+  useAskThreadsWatch,
+} from "./ask-thread-stream";
 import { AskPills, AskSlot, AskWindow } from "./ask-window";
 import { AuthoredCodeSurface } from "./authored-code-surface";
 import { CodePeekCard } from "./CodePeek";
@@ -508,14 +512,16 @@ function AskHost() {
   );
 
   const pills = useReviewPanel(useShallow(askPills));
+  // Every open Ask follows its thread over this one stream.
+  const watch = useAskThreadsWatch(useReviewSession());
 
   return (
-    <>
+    <AskThreadsWatchContext.Provider value={watch}>
       {keys.map((key) => (
         <OpenAsk key={key} askKey={key} />
       ))}
       {pills.length ? <AskPills asks={pills} /> : null}
-    </>
+    </AskThreadsWatchContext.Provider>
   );
 }
 

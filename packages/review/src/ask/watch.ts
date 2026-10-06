@@ -1,4 +1,4 @@
-import type { AskUpdate } from "@review/ask/thread-state.js";
+import type { AskUpdate, AskWatchLine } from "@review/ask/thread-state.js";
 
 /** What a watch stream needs from a thread. */
 export interface AskWatchable {
@@ -7,35 +7,55 @@ export interface AskWatchable {
   onClose(closed: () => void): () => void;
 }
 
-/** Changes a slow reader may fall behind by before its backlog is replaced
- * with one snapshot, which bounds the memory a stalled panel holds. */
+/** Changes a slow reader may fall behind by on one thread before that
+ * thread's backlog is replaced with one snapshot, which bounds the memory a
+ * stalled panel holds. */
 export const ASK_WATCH_BACKLOG = 256;
 
 /**
- * NDJSON of a thread: a snapshot, then each change in `seq` order. Answer
- * tokens arrive as appends, so a reply costs about what the agent sent.
+ * NDJSON of several threads over one connection: for each, a snapshot, then
+ * each change in `seq` order, then `ended` once it closes. A thread that
+ * isn't running is `ended` at once. Answer tokens arrive as appends, so a
+ * reply costs about what the agent sent.
+ *
+ * One stream for every open Ask of a review: a browser opens only a few
+ * connections to a host, and each stream holds one for as long as it runs.
  */
-export function watchAskThread(
-  thread: AskWatchable,
+export function watchAskThreads(
+  threads: ReadonlyMap<string, AskWatchable | undefined>,
   backlog = ASK_WATCH_BACKLOG,
 ): Response {
   const encoder = new TextEncoder();
-  let pending: AskUpdate[] = [thread.snapshot()];
-  let stop = () => {};
-
-  /** The thread closed; the stream ends once `pending` is sent. */
-  let ended = false;
+  const queues = new Map<string, AskWatchLine[]>();
+  /** Threads still running, which may send more. */
+  const live = new Set<string>();
+  const stops: (() => void)[] = [];
   /** The stream ended, so nothing more may be enqueued. */
   let finished = false;
 
+  // A line from each thread in turn, so one busy thread can't hold back
+  // the others.
   const flush = (controller: ReadableStreamDefaultController<Uint8Array>) => {
-    while (pending.length && (controller.desiredSize ?? 0) > 0)
-      controller.enqueue(
-        encoder.encode(`${JSON.stringify(pending.shift())}\n`),
-      );
+    let sent = true;
 
-    // A closed thread sends nothing more; its watchers hear it end.
-    if (ended && !pending.length && !finished) {
+    while (sent && (controller.desiredSize ?? 0) > 0) {
+      sent = false;
+
+      for (const queue of queues.values()) {
+        const line = queue.shift();
+
+        if (!line) continue;
+        controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+        sent = true;
+      }
+    }
+
+    // Every thread has closed and said so; the stream ends.
+    if (
+      !live.size &&
+      [...queues.values()].every((queue) => !queue.length) &&
+      !finished
+    ) {
       finished = true;
       controller.close();
     }
@@ -43,30 +63,46 @@ export function watchAskThread(
 
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
-      const unsubscribe = thread.subscribe((update) => {
-        pending.push(update);
+      for (const [threadId, thread] of threads) {
+        const queue: AskWatchLine[] = [];
 
-        // The snapshot already holds every change it would replay.
-        if (pending.length > backlog) pending = [thread.snapshot()];
-        flush(controller);
-      });
+        queues.set(threadId, queue);
 
-      const unclose = thread.onClose(() => {
-        ended = true;
-        unsubscribe();
-        flush(controller);
-      });
+        if (!thread) {
+          queue.push({ threadId, ended: true });
+          continue;
+        }
 
-      stop = () => {
-        unsubscribe();
-        unclose();
-      };
+        live.add(threadId);
+        queue.push({ threadId, update: thread.snapshot() });
+
+        const unsubscribe = thread.subscribe((update) => {
+          queue.push({ threadId, update });
+
+          // The snapshot already holds every change it would replay.
+          if (queue.length > backlog)
+            queue.splice(0, queue.length, {
+              threadId,
+              update: thread.snapshot(),
+            });
+          flush(controller);
+        });
+
+        const unclose = thread.onClose(() => {
+          live.delete(threadId);
+          unsubscribe();
+          queue.push({ threadId, ended: true });
+          flush(controller);
+        });
+
+        stops.push(unsubscribe, unclose);
+      }
 
       flush(controller);
     },
     pull: flush,
     cancel() {
-      stop();
+      for (const stop of stops) stop();
     },
   });
 

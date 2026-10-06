@@ -1,59 +1,193 @@
 import {
   type AskThreadState,
   applyAskChange,
-  askUpdateSchema,
+  askWatchLineSchema,
 } from "@review/ask/thread-state";
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 import type { ReviewSession } from "./host/review-session";
 
+/** How a panel hears about the thread it follows. */
+interface ThreadFollower {
+  onState(state: AskThreadState): void;
+  /** The thread is gone from the server, or can't be followed. */
+  onEnd(): void;
+}
+
+/** Gaps in one thread's changes that start the stream over before the
+ * thread is given up on rather than followed forever. */
+const MAX_RESYNCS = 3;
+
 /**
- * Reads one watch stream: a snapshot, then changes in `seq` order. Returns
- * "ended" when the server closes it, or "gap" when a change is missing and a
- * new stream has to start over from a snapshot.
+ * Follows the threads of every open Ask in a review over one stream. A
+ * browser opens only a few connections to a host, and each stream holds one
+ * for as long as it runs: a stream per Ask would leave nothing for the
+ * review's other requests once a few were open.
+ *
+ * The stream starts over, from a snapshot of each thread, whenever the
+ * threads followed change, and when one thread misses a change.
  */
-async function followThread(
-  session: ReviewSession,
-  threadId: string,
-  signal: AbortSignal,
-  onState: (state: AskThreadState) => void,
-): Promise<"ended" | "gap"> {
-  const response = await session.fetch(`/ask/${threadId}/watch`, { signal });
+export class AskThreadsWatch {
+  private readonly followers = new Map<string, Set<ThreadFollower>>();
+  private readonly resyncs = new Map<string, number>();
+  private abort: AbortController | null = null;
+  private scheduled = false;
 
-  if (!response.ok || !response.body) throw new Error("Unavailable");
+  constructor(private readonly session: () => ReviewSession) {}
 
-  const lines = response.body.pipeThrough(new TextDecoderStream()).getReader();
-  let buffer = "";
-  let state: AskThreadState | null = null;
-  let seq = 0;
+  /** Follows a thread until the returned function is called. */
+  follow(threadId: string, follower: ThreadFollower): () => void {
+    const followers = this.followers.get(threadId) ?? new Set();
 
-  try {
-    for (;;) {
-      const { done, value } = await lines.read();
+    followers.add(follower);
+    this.followers.set(threadId, followers);
+    this.restart();
 
-      if (done) return "ended";
-      buffer += value;
-      const complete = buffer.split("\n");
-      buffer = complete.pop() ?? "";
-      const before: AskThreadState | null = state;
+    return () => {
+      if (!followers.delete(follower) || followers.size) return;
 
-      for (const line of complete) {
-        if (!line.trim()) continue;
-        const update = askUpdateSchema.parse(JSON.parse(line));
-
-        if ("snapshot" in update) state = update.snapshot;
-        else if (state && update.seq === seq + 1)
-          state = applyAskChange(state, update.change);
-        else return "gap";
-        seq = update.seq;
-      }
-
-      // One render per read, however many changes it carried.
-      if (state && state !== before) onState(state);
-    }
-  } finally {
-    void lines.cancel().catch(() => {});
+      if (this.followers.get(threadId) === followers)
+        this.followers.delete(threadId);
+      this.resyncs.delete(threadId);
+      this.restart();
+    };
   }
+
+  /** Starts the stream over for the threads followed now; panels that open
+   * or close together start it over once. */
+  private restart() {
+    if (this.scheduled) return;
+    this.scheduled = true;
+
+    queueMicrotask(() => {
+      this.scheduled = false;
+      this.abort?.abort();
+      this.abort = null;
+
+      const threadIds = [...this.followers.keys()].sort();
+
+      if (!threadIds.length) return;
+      const abort = new AbortController();
+
+      this.abort = abort;
+      void this.read(threadIds, abort.signal);
+    });
+  }
+
+  private async read(threadIds: string[], signal: AbortSignal) {
+    const states = new Map<string, AskThreadState>();
+    const seqs = new Map<string, number>();
+
+    try {
+      const response = await this.session().fetch(
+        `/ask/watch?threads=${threadIds.map(encodeURIComponent).join(",")}`,
+        { signal },
+      );
+
+      if (!response.ok || !response.body) throw new Error("Unavailable");
+
+      const lines = response.body
+        .pipeThrough(new TextDecoderStream())
+        .getReader();
+
+      let buffer = "";
+
+      try {
+        for (;;) {
+          const { done, value } = await lines.read();
+
+          if (done) break;
+          buffer += value;
+          const complete = buffer.split("\n");
+          buffer = complete.pop() ?? "";
+          // One render per read for each thread, however many changes it
+          // carried.
+          const changed = new Set<string>();
+
+          for (const line of complete) {
+            if (!line.trim()) continue;
+            const parsed = askWatchLineSchema.parse(JSON.parse(line));
+            const { threadId } = parsed;
+
+            if ("ended" in parsed) {
+              changed.delete(threadId);
+              this.end(threadId);
+              continue;
+            }
+
+            const { update } = parsed;
+            const state = states.get(threadId);
+
+            if ("snapshot" in update) states.set(threadId, update.snapshot);
+            else if (state && update.seq === (seqs.get(threadId) ?? 0) + 1)
+              states.set(threadId, applyAskChange(state, update.change));
+            else {
+              // A missed change: a new stream resyncs the thread from a
+              // snapshot, unless that keeps happening.
+              this.resynced(threadId);
+
+              return;
+            }
+
+            seqs.set(threadId, update.seq);
+            changed.add(threadId);
+          }
+
+          for (const threadId of changed) {
+            const state = states.get(threadId);
+
+            if (!state) continue;
+
+            for (const follower of this.followers.get(threadId) ?? [])
+              follower.onState(state);
+          }
+        }
+      } finally {
+        void lines.cancel().catch(() => {});
+      }
+    } catch {
+      /* An unreachable stream ends its threads below. */
+    }
+
+    // A stream that ends on its own has ended every thread it followed.
+    if (signal.aborted) return;
+
+    for (const threadId of threadIds) this.end(threadId);
+  }
+
+  private resynced(threadId: string) {
+    const resyncs = (this.resyncs.get(threadId) ?? 0) + 1;
+
+    if (resyncs > MAX_RESYNCS) this.end(threadId);
+    else this.resyncs.set(threadId, resyncs);
+
+    this.restart();
+  }
+
+  private end(threadId: string) {
+    const followers = [...(this.followers.get(threadId) ?? [])];
+
+    // Emptied, so letting go of an ended thread starts nothing over.
+    this.followers.get(threadId)?.clear();
+    this.followers.delete(threadId);
+    this.resyncs.delete(threadId);
+
+    for (const follower of followers) follower.onEnd();
+  }
+}
+
+/** The one watch of a review's open Asks. A panel outside it follows its
+ * thread on a stream of its own. */
+export const AskThreadsWatchContext = createContext<AskThreadsWatch | null>(
+  null,
+);
+
+/** The watch the Asks of a review share, for `AskThreadsWatchContext`. */
+export function useAskThreadsWatch(session: ReviewSession) {
+  const current = useLatest(session);
+  const [watch] = useState(() => new AskThreadsWatch(() => current.current));
+
+  return watch;
 }
 
 /** Follows one thread until the panel lets go of it. */
@@ -63,11 +197,11 @@ export function useThread(session: ReviewSession, threadId: string | null) {
   // Each new version of the review is a new session object; the agent
   // belongs to the panel, so only the panel closing ends it.
   const current = useLatest(session);
+  const own = useAskThreadsWatch(session);
+  const watch = useContext(AskThreadsWatchContext) ?? own;
 
   useEffect(() => {
     if (!threadId) return;
-    const session = current.current;
-    const abort = new AbortController();
 
     setLost(false);
 
@@ -75,31 +209,16 @@ export function useThread(session: ReviewSession, threadId: string | null) {
     // to close; a late close could end the same thread reopened.
     let gone = false;
 
-    void (async () => {
-      try {
-        // A gap means this panel missed a change; a new stream resyncs it.
-        // Give up if that keeps happening rather than reconnect forever.
-        for (let resyncs = 0; resyncs <= 3; resyncs++) {
-          const outcome = await followThread(
-            session,
-            threadId,
-            abort.signal,
-            setThread,
-          );
-
-          if (outcome === "ended") break;
-        }
-      } catch {
-        /* An unreachable thread reads as a lost conversation below. */
-      }
-
-      if (abort.signal.aborted) return;
-      gone = true;
-      setLost(true);
-    })();
+    const stop = watch.follow(threadId, {
+      onState: setThread,
+      onEnd() {
+        gone = true;
+        setLost(true);
+      },
+    });
 
     return () => {
-      abort.abort();
+      stop();
 
       if (gone) return;
       // The agent process belongs to this panel; closing the panel ends it.
@@ -108,7 +227,7 @@ export function useThread(session: ReviewSession, threadId: string | null) {
         .fetch(`/ask/${threadId}/close`, { method: "POST", keepalive: true })
         .catch(() => {});
     };
-  }, [current, threadId]);
+  }, [current, threadId, watch]);
 
   // A thread the panel lost is not running any more, whatever it last said.
   return {

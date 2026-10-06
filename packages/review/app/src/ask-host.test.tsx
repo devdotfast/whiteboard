@@ -81,17 +81,24 @@ function askCanvas() {
       if (endpoint === "/ask")
         return Response.json({ threadId: `thread-${++asked}` });
 
-      const watched = /^\/ask\/(.+)\/watch$/.exec(String(endpoint))?.[1];
+      // Every open Ask follows its thread over one stream; the newest
+      // carries each thread's updates.
+      const watched = /^\/ask\/watch\?threads=(.+)$/.exec(
+        String(endpoint),
+      )?.[1];
 
       if (watched)
         return new Response(
           new ReadableStream<Uint8Array>({
             start(controller) {
-              streams.set(watched, (update) =>
-                controller.enqueue(
-                  new TextEncoder().encode(JSON.stringify(update) + "\n"),
-                ),
-              );
+              for (const threadId of watched.split(",").map(decodeURIComponent))
+                streams.set(threadId, (update) =>
+                  controller.enqueue(
+                    new TextEncoder().encode(
+                      JSON.stringify({ threadId, update }) + "\n",
+                    ),
+                  ),
+                );
             },
           }),
         );
@@ -154,6 +161,15 @@ function askCanvas() {
     store: () => store,
     streams,
     closed: () => requested("/close"),
+    /** The watch streams still open. */
+    watching: () =>
+      fetch.mock.calls
+        .filter(
+          ([endpoint, init]) =>
+            String(endpoint).startsWith("/ask/watch?") &&
+            !init?.signal?.aborted,
+        )
+        .map(([endpoint]) => String(endpoint)),
     mount,
     askQuestion,
     async [Symbol.asyncDispose]() {
@@ -228,4 +244,31 @@ it("asks before closing an Ask whose agent works, and keeps it going minimized b
   await act(async () => button(/^Close Ask$/)!.click());
   expect(closed()).toEqual(["/ask/thread-1/close", "/ask/thread-2/close"]);
   expect(document.querySelector("textarea")).toBeNull();
+});
+
+it("follows the threads of every open Ask over one connection", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await using canvas = askCanvas();
+  const { streams, askQuestion } = canvas;
+
+  await canvas.mount();
+  const store = canvas.store();
+
+  // A browser opens only a few connections to a host: a stream for each
+  // Ask would soon leave none for the review's other requests.
+  for (const [index, question] of ["One?", "Two?", "Three?"].entries()) {
+    await act(async () => store.getState().openAsk(selection));
+    await askQuestion(question);
+
+    const threadId = `thread-${index + 1}`;
+
+    await act(async () =>
+      streams.get(threadId)!({ seq: 1, snapshot: running(threadId) }),
+    );
+    await act(async () => button(/^Minimize Ask$/)!.click());
+  }
+
+  expect(canvas.watching()).toEqual([
+    "/ask/watch?threads=thread-1,thread-2,thread-3",
+  ]);
 });

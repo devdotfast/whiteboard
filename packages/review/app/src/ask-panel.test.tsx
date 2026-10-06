@@ -92,7 +92,9 @@ it("asks the chosen agent, streams its answer, relays a decision, and closes the
         watches += 1;
         push = (update) =>
           controller.enqueue(
-            new TextEncoder().encode(JSON.stringify(update) + "\n"),
+            new TextEncoder().encode(
+              JSON.stringify({ threadId: "thread", update }) + "\n",
+            ),
           );
       },
     });
@@ -110,7 +112,8 @@ it("asks the chosen agent, streams its answer, relays a decision, and closes the
 
       if (endpoint === "/ask") return Response.json({ threadId: "thread" });
 
-      if (endpoint === "/ask/thread/watch") return new Response(watch());
+      if (endpoint === "/ask/watch?threads=thread")
+        return new Response(watch());
 
       return Response.json({ ok: true }, { status: init?.method ? 200 : 404 });
     });
@@ -398,13 +401,15 @@ it("shows a refused plan as the answer, and names options the agent offers twice
     if (endpoint === "/ask/saved/open")
       return Response.json({ threadId: "saved" });
 
-    if (endpoint === "/ask/saved/watch")
+    if (endpoint === "/ask/watch?threads=saved")
       return new Response(
         new ReadableStream<Uint8Array>({
           start(controller) {
             push = (update) =>
               controller.enqueue(
-                new TextEncoder().encode(JSON.stringify(update) + "\n"),
+                new TextEncoder().encode(
+                  JSON.stringify({ threadId: "saved", update }) + "\n",
+                ),
               );
           },
         }),
@@ -512,7 +517,11 @@ it("keeps the agent through new versions of the review, and says so when the con
   let stream!: ReadableStreamDefaultController<Uint8Array>;
 
   const push = (update: AskUpdate) =>
-    stream.enqueue(new TextEncoder().encode(JSON.stringify(update) + "\n"));
+    stream.enqueue(
+      new TextEncoder().encode(
+        JSON.stringify({ threadId: "saved", update }) + "\n",
+      ),
+    );
 
   const fetch = vi
     .spyOn(session, "fetch")
@@ -525,7 +534,7 @@ it("keeps the agent through new versions of the review, and says so when the con
       if (endpoint === "/ask/saved/open")
         return Response.json({ threadId: "saved" });
 
-      if (endpoint === "/ask/saved/watch")
+      if (endpoint === "/ask/watch?threads=saved")
         return new Response(
           new ReadableStream<Uint8Array>({
             start(controller) {
@@ -587,7 +596,7 @@ it("keeps the agent through new versions of the review, and says so when the con
     await act(async () => render({ ...session }));
     expect(calls("/ask/saved/close")).toBe(0);
     expect(calls("/ask/saved/open")).toBe(1);
-    expect(calls("/ask/saved/watch")).toBe(1);
+    expect(calls("/ask/watch?threads=saved")).toBe(1);
 
     await act(async () => stream.close());
     await act(async () => new Promise((resolve) => setTimeout(resolve)));
@@ -665,13 +674,15 @@ it("asks with the model and effort the reviewer picks, and switches them between
 
       if (endpoint === "/ask") return Response.json({ threadId: "thread" });
 
-      if (endpoint === "/ask/thread/watch")
+      if (endpoint === "/ask/watch?threads=thread")
         return new Response(
           new ReadableStream<Uint8Array>({
             start(controller) {
               push = (update) =>
                 controller.enqueue(
-                  new TextEncoder().encode(JSON.stringify(update) + "\n"),
+                  new TextEncoder().encode(
+                    JSON.stringify({ threadId: "thread", update }) + "\n",
+                  ),
                 );
             },
           }),
@@ -804,7 +815,7 @@ it("completes the agent's commands after / and the checkout's files after @, and
 
       if (endpoint === "/ask") return Response.json({ threadId: "thread" });
 
-      if (endpoint === "/ask/thread/watch")
+      if (endpoint === "/ask/watch?threads=thread")
         return new Response(new ReadableStream<Uint8Array>());
 
       return Response.json({ ok: true });
@@ -892,7 +903,9 @@ it("says how to sign a signed-out agent back in, and tries again once it is", as
       start(controller) {
         push = (update) =>
           controller.enqueue(
-            new TextEncoder().encode(JSON.stringify(update) + "\n"),
+            new TextEncoder().encode(
+              JSON.stringify({ threadId: "saved", update }) + "\n",
+            ),
           );
       },
     });
@@ -900,7 +913,7 @@ it("says how to sign a signed-out agent back in, and tries again once it is", as
   const fetch = vi
     .spyOn(session, "fetch")
     .mockImplementation(async (endpoint) =>
-      endpoint === "/ask/saved/watch"
+      endpoint === "/ask/watch?threads=saved"
         ? new Response(watch())
         : Response.json({ ok: true }),
     );
@@ -995,7 +1008,7 @@ it("offers a new conversation when one cannot be reopened: one lost before it wa
 
     if (endpoint === "/ask") return Response.json({ threadId: "thread" });
 
-    if (endpoint === "/ask/thread/watch")
+    if (endpoint === "/ask/watch?threads=thread")
       return new Response(
         new ReadableStream<Uint8Array>({
           start(controller) {
@@ -1064,7 +1077,11 @@ it("offers a new conversation when one cannot be reopened: one lost before it wa
     );
 
     const push = (update: AskUpdate) =>
-      stream.enqueue(new TextEncoder().encode(JSON.stringify(update) + "\n"));
+      stream.enqueue(
+        new TextEncoder().encode(
+          JSON.stringify({ threadId: "thread", update }) + "\n",
+        ),
+      );
 
     // The agent never started a session, so Whiteboard saved nothing.
     await act(async () =>
@@ -1118,7 +1135,7 @@ it("stops a conversation while it reopens, and takes no answer to a permission o
       if (endpoint === "/ask/saved/open")
         return Response.json({ threadId: "saved" });
 
-      if (endpoint === "/ask/saved/watch")
+      if (endpoint === "/ask/watch?threads=saved")
         return new Response(
           new ReadableStream<Uint8Array>({
             start(controller) {
@@ -1131,7 +1148,11 @@ it("stops a conversation while it reopens, and takes no answer to a permission o
     });
 
   const push = (update: AskUpdate) =>
-    stream.enqueue(new TextEncoder().encode(JSON.stringify(update) + "\n"));
+    stream.enqueue(
+      new TextEncoder().encode(
+        JSON.stringify({ threadId: "saved", update }) + "\n",
+      ),
+    );
 
   const container = document.createElement("div");
   document.body.append(container);
