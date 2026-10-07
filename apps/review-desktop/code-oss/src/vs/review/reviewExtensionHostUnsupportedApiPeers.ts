@@ -98,3 +98,48 @@ export class ReviewMainThreadUrls {
 	$unregisterUriHandler(): Promise<void> { return Promise.resolve(); }
 	$createAppUri(uri: UriComponents): Promise<UriComponents> { return Promise.resolve(uri); }
 }
+
+// A Linux remote extension host calls $setRemoteTunnelService at start-up.
+@extHostNamedCustomer(MainContext.MainThreadTunnelService)
+export class ReviewMainThreadTunnelService {
+	constructor(_context: IExtHostContext) { }
+	dispose(): void { }
+	$openTunnel(): Promise<undefined> { return Promise.resolve(undefined); }
+	$closeTunnel(): Promise<void> { return Promise.resolve(); }
+	$getTunnels(): Promise<never[]> { return Promise.resolve([]); }
+	$setTunnelProvider(): Promise<void> { return Promise.resolve(); }
+	$hasTunnelProvider(): Promise<boolean> { return Promise.resolve(false); }
+	$setRemoteTunnelService(): Promise<void> { return Promise.resolve(); }
+	$setCandidateFilter(): Promise<void> { return Promise.resolve(); }
+	$onFoundNewCandidates(): Promise<void> { return Promise.resolve(); }
+	$setCandidatePortSource(): Promise<void> { return Promise.resolve(); }
+	$registerPortsAttributesProvider(): Promise<void> { return Promise.resolve(); }
+	$unregisterPortsAttributesProvider(): Promise<void> { return Promise.resolve(); }
+}
+
+@extHostNamedCustomer(MainContext.MainThreadTesting)
+export class ReviewMainThreadTesting {
+	constructor(_context: IExtHostContext) { }
+	dispose(): void { }
+	$registerTestController(): void { }
+	$updateController(): void { }
+	$unregisterTestController(): void { }
+	$subscribeToDiffs(): void { }
+	$unsubscribeFromDiffs(): void { }
+	$publishDiff(): void { }
+	$getCoverageDetails(): Promise<never> { return unavailable('testing'); }
+	$publishTestRunProfile(): void { }
+	$updateTestRunConfig(): void { }
+	$removeTestProfile(): void { }
+	$runTests(): Promise<never> { return unavailable('testing'); }
+	$addTestsToRun(): void { }
+	$updateTestStateInRun(): void { }
+	$appendTestMessagesInRun(): void { }
+	$appendOutputToRun(): void { }
+	$appendCoverage(): void { }
+	$startedTestRunTask(): void { }
+	$finishedTestRunTask(): void { }
+	$startedExtensionTestRun(): void { }
+	$finishedExtensionTestRun(): void { }
+	$markTestRetired(): void { }
+}

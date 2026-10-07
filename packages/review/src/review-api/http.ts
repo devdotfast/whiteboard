@@ -4,6 +4,7 @@ import { type JsonObject, isJsonObject } from "@dev.fast/json";
 import {
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
+  type ReviewRemoteLanguageEnvironment,
   type ReviewStreamLine,
   type ReviewStructuralDiffEvent,
 } from "@dev.fast/review-protocol";
@@ -842,17 +843,19 @@ export function createReviewApi(
         queryAnchor(input),
       );
 
-      return context.json(
-        remoteCaller(context)
-          ? {
-              // A live checkout's identity names its path; keep only its equality.
-              identity: createHash("sha256")
-                .update(environment.identity)
-                .digest("hex"),
-              ...(environment.issue && { issue: REMOTE_CHECKOUT_ISSUE }),
-            }
-          : environment,
-      );
+      if (!remoteCaller(context)) return context.json(environment);
+
+      const remote: ReviewRemoteLanguageEnvironment = {
+        remoteRootPath: environment.rootPath ?? null,
+        // A live checkout's identity names its path; keep only its equality.
+        identity: createHash("sha256")
+          .update(environment.identity)
+          .digest("hex"),
+        serverId: store.serverId(),
+        ...(environment.issue && { issue: REMOTE_CHECKOUT_ISSUE }),
+      };
+
+      return context.json(remote);
     });
     app.post("/:id/environment", async (context) => {
       const input = z

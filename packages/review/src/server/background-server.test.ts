@@ -17,6 +17,7 @@ import {
   REVIEW_REMOTE_ATTACH_END,
 } from "@dev.fast/review-protocol";
 import { processStartIdentity } from "@dev.fast/trace-core";
+import { remoteAttach } from "@review/remote-attach.js";
 import {
   headlessServerLockPath,
   readReviewServerDiscovery,
@@ -251,6 +252,8 @@ it("attaches with one JSON line between the sentinels, and its token reaches the
     url: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
     token: expect.any(String),
     startedServer: true,
+    languageServer: null,
+    languageServerDetail: expect.stringContaining("has no VS Code server"),
   });
 
   const reviews = (token?: string) =>
@@ -302,6 +305,39 @@ it("prints a failed attach between the sentinels and exits non-zero", async () =
     error: { message: expect.stringContaining("ENOTDIR") },
   });
 }, 30_000);
+
+it("attaches the review server when the language extensions cannot be installed", async () => {
+  const packageRoot = path.join(root, "package");
+  await mkdir(path.join(packageRoot, "vscode-server"), { recursive: true });
+  await writeFile(
+    path.join(packageRoot, "vscode-server", "product.json"),
+    JSON.stringify({ commit: "f".repeat(40) }),
+  );
+
+  const attach = await remoteAttach({
+    stateDir,
+    env: { ...env, PATH: path.dirname(process.execPath) },
+    packageRoot,
+    cli: sourceCli,
+    groups: ["go"],
+    ensureExtensions: async ({ groups }) => ({
+      failed: [{ id: "golang.go", error: `groups ${groups?.join(",")}` }],
+    }),
+  });
+
+  expect(attach).toMatchObject({
+    startedServer: true,
+    languageServer: null,
+    languageServerDetail:
+      "Could not install the language extensions: golang.go: groups go",
+  });
+
+  const reviews = await fetch(`${attach.url}/reviews-api`, {
+    headers: { "x-review-token": attach.token },
+  });
+
+  expect(reviews.status).toBe(200);
+}, 60_000);
 
 it("runs the detached server in its state directory, not the caller's", async () => {
   const caller = path.join(root, "caller");

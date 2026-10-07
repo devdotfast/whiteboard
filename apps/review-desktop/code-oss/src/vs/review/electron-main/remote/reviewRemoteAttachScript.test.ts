@@ -10,16 +10,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { REVIEW_REMOTE_ATTACH_SCRIPT } from "./reviewRemoteAttachScript.js";
+import { reviewRemoteAttachScript } from "./reviewRemoteAttachScript.js";
 
 async function executable(path: string, body: string) {
 	await writeFile(path, `#!/bin/sh\n${body}\n`);
 	await chmod(path, 0o755);
 }
 
-function attach(home: string, shell: string) {
+function attach(home: string, shell: string, groups: string[] = []) {
 	return spawnSync("/bin/sh", ["-s"], {
-		input: REVIEW_REMOTE_ATTACH_SCRIPT,
+		input: reviewRemoteAttachScript(groups),
 		encoding: "utf8",
 		env: { HOME: home, SHELL: shell, PATH: "/usr/bin:/bin" },
 	});
@@ -45,4 +45,14 @@ test("with no CLI anywhere the script exits 127", async (t) => {
 	await executable(join(home, "login-shell"), "echo /home/u/.nvm/nvm.sh");
 
 	assert.equal(attach(home, join(home, "login-shell")).status, 127);
+});
+
+test("the Desktop's enabled extension groups reach the CLI, and nothing else can", async (t) => {
+	const home = await mkdtemp(join(tmpdir(), "wb-attach-"));
+	t.after(() => rm(home, { recursive: true, force: true }));
+	await mkdir(join(home, ".local/bin"), { recursive: true });
+	await executable(join(home, ".local/bin/whiteboard"), 'echo "attached: $*"');
+
+	assert.equal(attach(home, "/bin/false", ["go", "rust"]).stdout, "attached: remote attach --json --groups go,rust\n");
+	assert.throws(() => reviewRemoteAttachScript(["go; rm -rf ~"]), /Invalid extension group/);
 });

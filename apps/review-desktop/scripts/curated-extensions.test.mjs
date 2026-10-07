@@ -26,12 +26,14 @@ import {
   openVsxUrl,
   optionalExtensions,
   parseGroupSelection,
+  remoteExtensionIds,
+  remoteTargets,
   supportedTargets,
   targetKeyFor,
 } from "./curated-extensions.manifest.mjs";
+import { extractVsix } from "../../../packages/review/src/vsix.ts";
 import {
   copyCuratedExtensions,
-  extractVsixPayload,
   verifyCuratedExtensions,
 } from "./curated-extensions.mjs";
 
@@ -94,9 +96,13 @@ test("pins every curated extension to a checksum for every supported target", ()
     if (extension.targets.universal) {
       assert.deepEqual(targetKeys, ["universal"], `${extension.id} targets`);
     } else {
+      const expected = remoteExtensionIds.includes(extension.id)
+        ? new Set([...supportedTargets, ...remoteTargets])
+        : new Set(supportedTargets);
+
       assert.deepEqual(
         targetKeys.sort(),
-        [...supportedTargets].sort(),
+        [...expected].sort(),
         `${extension.id} must pin every supported target`,
       );
     }
@@ -211,7 +217,7 @@ test("extracts nested Windows executables from a VSIX archive", async () => {
   try {
     await complete;
     writeFileSync(archive, Buffer.concat(chunks));
-    await extractVsixPayload(archive, destination);
+    await extractVsix(archive, destination);
 
     assert.equal(
       readFileSync(
