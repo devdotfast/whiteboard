@@ -172,6 +172,9 @@ importers:
       smol-toml:
         specifier: 1.9.0
         version: 1.9.0
+      undici:
+        specifier: 7.29.1
+        version: 7.29.1
       yauzl:
         specifier: 3.4.0
         version: 3.4.0

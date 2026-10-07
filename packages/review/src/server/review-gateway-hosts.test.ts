@@ -1,11 +1,11 @@
 import { once } from "node:events";
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import http from "node:http";
 import net, { type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { readReviewPackageVersion } from "@review/package-paths.js";
+import { Agent } from "undici";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { createGatewayHosts, readBody, send } from "./review-gateway-hosts.js";
@@ -480,46 +480,65 @@ it("leaves a host in backoff alone when only another host changes, and checks it
     .toBe("online");
 }, 20_000);
 
-it("sends a request again when the host closed the kept-alive socket it reused", async () => {
+async function listen(answer: (socket: net.Socket, request: number) => void) {
   let requests = 0;
 
   const server = net.createServer((socket) => {
-    socket.on("data", () => {
-      requests += 1;
+    let received = "";
 
-      if (requests === 2) socket.destroy();
-      else socket.write("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
+    socket.on("data", (chunk) => {
+      received += chunk.toString();
+
+      if (!received.endsWith("\r\n\r\nhi")) return;
+      received = "";
+      requests += 1;
+      answer(socket, requests);
     });
   });
 
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   closes.push(() => server.close());
-  const agent = new http.Agent({ keepAlive: true });
-  closes.push(() => agent.destroy());
+  const dispatcher = new Agent();
+  closes.push(() => dispatcher.destroy());
 
   // SAFETY: a TCP listener's address() is an AddressInfo.
   const { port } = server.address() as AddressInfo;
 
-  const remote = {
-    alias: "devbox",
-    endpoint: { url: `http://127.0.0.1:${port}`, token: "" },
-    agent,
+  const post = async () => {
+    const response = await send(
+      {
+        alias: "devbox",
+        endpoint: { url: `http://127.0.0.1:${port}`, token: "" },
+        dispatcher,
+      },
+      { method: "POST", path: "/ask", body: Buffer.from("hi") },
+    );
+
+    return (await readBody(response.body, 64)).toString();
   };
 
-  const get = async () => {
-    const response = await send(remote, {
-      method: "GET",
-      path: "/health",
-      signal: new AbortController().signal,
-    });
+  return { post, requests: () => requests };
+}
 
-    return (await readBody(response, 64)).toString();
-  };
+it("sends a request again when the host closed the kept-alive socket it reused", async () => {
+  const host = await listen((socket, request) => {
+    if (request === 2) socket.destroy();
+    else socket.write("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
+  });
 
-  expect(await get()).toBe("ok");
-  expect(await get()).toBe("ok");
-  expect(requests).toBe(3);
+  expect(await host.post()).toBe("ok");
+  // Wait for undici to free the connection, so the next request reuses it.
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(await host.post()).toBe("ok");
+  expect(host.requests()).toBe(3);
+});
+
+it("does not send a request with a body again when a new connection closed", async () => {
+  const host = await listen((socket) => socket.destroy());
+
+  await expect(host.post()).rejects.toMatchObject({ code: "UND_ERR_SOCKET" });
+  expect(host.requests()).toBe(1);
 });
 
 it("a restarted server is offline until Desktop attaches again, then online with the new token", async () => {
@@ -593,13 +612,9 @@ it("a 401 from a host asks Desktop once to attach again", async () => {
   const [remote] = gateway.online();
 
   for (let i = 0; i < 2; i++)
-    (
-      await send(remote!, {
-        method: "GET",
-        path: "/reviews-api",
-        signal: new AbortController().signal,
-      })
-    ).resume();
+    await (
+      await send(remote!, { method: "GET", path: "/reviews-api" })
+    ).body.dump();
 
   expect(gateway.states()[0]).toMatchObject({
     state: "offline",
