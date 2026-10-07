@@ -552,6 +552,8 @@ export class UnchangedRegion {
 	public readLabel(_reader: IReader | undefined): string | undefined { return undefined; }
 	public get foldStateId(): number | undefined { return undefined; }
 	public get breadcrumbs(): boolean { return true; }
+	public get foldControl(): boolean { return true; }
+	public get band(): boolean { return true; }
 	/** What the hidden lines are; supplied gaps say, computed regions are unchanged context. */
 	public get owner(): 'base' | 'head' | 'both' { return 'both'; }
 	public get change(): 'unchanged' | 'inserted' | 'removed' | 'modified' { return 'unchanged'; }
@@ -694,6 +696,8 @@ class SuppliedContextGap extends UnchangedRegion {
 	override get owner(): 'base' | 'head' | 'both' { return this.gap.owner ?? 'both'; }
 	override get change(): 'unchanged' | 'inserted' | 'removed' | 'modified' { return this.gap.change ?? 'unchanged'; }
 	override get breadcrumbs(): boolean { return this.gap.breadcrumbs ?? true; }
+	override get foldControl(): boolean { return this.gap.foldControl ?? true; }
+	override get band(): boolean { return this.gap.band ?? true; }
 	override get originalUnchangedRange(): LineRange { return LineRange.ofLength(this.gap.originalStart, this.gap.originalCount); }
 	override get modifiedUnchangedRange(): LineRange { return LineRange.ofLength(this.gap.modifiedStart, this.gap.modifiedCount); }
 	private hidden(start: number, count: number, reader: IReader | undefined): LineRange {

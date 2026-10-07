@@ -1260,6 +1260,74 @@ body
   color: var(--vscode-descriptionForeground);
 }
 
+/* Scope chevrons, rails and braces in structural diffs. The marker blue is
+   fixed because some themes make focusBorder transparent. */
+.review-workbench .monaco-editor {
+  --review-scope-marker: #2B55E6;
+}
+.review-workbench .monaco-editor:is(.vs-dark, .hc-black) {
+  --review-scope-marker: #5B7CFF;
+}
+.review-workbench .monaco-editor .review-fold-chevron {
+  cursor: pointer;
+  opacity: .45;
+}
+.review-workbench .monaco-editor .review-fold-chevron.is-collapsed {
+  opacity: .7;
+}
+.review-workbench .monaco-editor .review-fold-chevron.is-target {
+  opacity: 1;
+  color: var(--review-scope-marker);
+}
+.review-workbench .monaco-editor.review-fold-rail .view-lines {
+  cursor: pointer;
+}
+.review-workbench .monaco-editor .review-scope-rail {
+  width: 0;
+  border-left: 1px solid var(--review-scope-marker);
+  pointer-events: none;
+}
+.review-workbench .monaco-editor .review-scope-rail.is-target {
+  border-left-width: 2px;
+}
+.review-workbench .monaco-editor .review-scope-brace {
+  color: var(--review-scope-marker) !important;
+}
+.review-workbench .monaco-editor .review-scope-brace.is-target {
+  color: var(--vscode-editor-foreground) !important;
+  background: color-mix(in srgb, var(--review-scope-marker) 30%, transparent);
+  outline: 1px solid var(--review-scope-marker);
+  border-radius: 2px;
+}
+.review-workbench .monaco-editor .review-fold-wash {
+  background: color-mix(in srgb, var(--review-scope-marker) 8%, transparent);
+}
+.review-workbench .monaco-editor .review-fold-hint {
+  margin-left: 2ch;
+  color: var(--review-scope-marker);
+  font-family: var(--review-chrome-font, inherit);
+  font-size: 11px;
+}
+
+/* A scope folded into its header line: `opener { ⋯ N lines }`. */
+.review-workbench .monaco-editor .review-fold-pill {
+  margin: 0 .5ch;
+  padding: 0 .6ch;
+  border: 1px solid var(--vscode-editorIndentGuide-activeBackground1);
+  border-radius: 3px;
+  color: var(--vscode-descriptionForeground);
+  font-size: .92em;
+  cursor: pointer;
+}
+.review-workbench .monaco-editor .review-fold-pill.is-target {
+  border-color: var(--review-scope-marker);
+  color: var(--vscode-editor-foreground);
+}
+.review-workbench .monaco-editor .review-fold-closer {
+  color: var(--vscode-editor-foreground);
+  cursor: pointer;
+}
+
 /* A fold inside removed code, drawn as a row of the removed block. */
 .review-workbench .monaco-editor .diff-fold-placeholder {
   color: var(--vscode-descriptionForeground) !important;

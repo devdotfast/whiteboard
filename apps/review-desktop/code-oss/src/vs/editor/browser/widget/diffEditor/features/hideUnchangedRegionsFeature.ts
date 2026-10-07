@@ -210,7 +210,7 @@ export class HideUnchangedRegionsFeature extends Disposable {
 				options: unchangedLinesDecoration,
 			}));
 			for (const r of curUnchangedRegions) {
-				if (r.shouldHideControls(reader)) {
+				if (r.shouldHideControls(reader) && r.foldControl) {
 					result.push({
 						range: Range.fromPositions(new Position(r.originalLineNumber, 1)),
 						options: unchangedLinesDecorationShow,
@@ -231,7 +231,7 @@ export class HideUnchangedRegionsFeature extends Disposable {
 				options: unchangedLinesDecoration,
 			}));
 			for (const r of curUnchangedRegions) {
-				if (r.shouldHideControls(reader)) {
+				if (r.shouldHideControls(reader) && r.foldControl) {
 					result.push({
 						range: LineRange.ofLength(r.modifiedLineNumber, 1).toInclusiveRange()!,
 						options: unchangedLinesDecorationShow,

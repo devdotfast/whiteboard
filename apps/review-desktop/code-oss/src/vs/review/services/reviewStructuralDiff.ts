@@ -28,6 +28,7 @@ import {
 	structuralHighlights,
 } from "../common/reviewStructuralDiff.js";
 import type { ReviewFilesEditorEntry } from "./reviewFilesDiffView.js";
+import { StructuralFoldControls } from "./reviewStructuralFolds.js";
 import { REVIEW_API_SOURCE_SCHEME } from "../common/reviewSourceView.js";
 
 /** View-owned Monaco providers and editor listeners; comparison state lives in session. */
@@ -165,13 +166,13 @@ export class StructuralDiffProvider implements IDocumentDiffProvider {
 			quitEarly: false,
 			sourceLineAlignment: rows,
 			contextScopes: structuralContextScopes(diff),
-			// Every collapsed region is a hidden-region band, labelled by the wire. A band's depth shows
-			// where it sits, so it names no symbols.
+			// Every collapsed region is hidden, labelled by the wire, as a band or on its header line.
+			// StructuralFoldControls draws the fold controls.
 			contextGaps: structuralContextGaps(
 				diff,
 				(id) => this.session.isRegionCollapsed(path!, id) === true,
 				(id) => this.session.isRegionCollapsed(path!, id),
-			).map(gap => ({ ...gap, breadcrumbs: false })),
+			).map(gap => ({ ...gap, foldControl: false, breadcrumbs: false })),
 			changeHighlights: highlights,
 		};
 	}
@@ -196,11 +197,16 @@ function attachStructuralEditors(
 		if (!widget.unchangedRegions) return;
 		const store = new DisposableStore();
 		watched.set(editor, store);
+		const pathOf = () => {
+			const model = editor.getModel();
+			return model ? pairs.get(model.original.uri.with({ fragment: "" }).toString() + "\n" + model.modified.uri.with({ fragment: "" }).toString()) : undefined;
+		};
+		store.add(new StructuralFoldControls(editor.getOriginalEditor(), "lhs", pathOf, session, widget.unchangedRegions));
+		store.add(new StructuralFoldControls(editor.getModifiedEditor(), "rhs", pathOf, session, widget.unchangedRegions));
 		let revealed = new Set<UnchangedRegion>();
 		store.add(
 			autorun((reader) => {
-				const model = editor.getModel();
-				const path = model && pairs.get(model.original.uri.with({ fragment: "" }).toString() + "\n" + model.modified.uri.with({ fragment: "" }).toString());
+				const path = pathOf();
 				const regions = widget.unchangedRegions!.read(reader);
 				if (!path || !session.getTextDiff(path)) return;
 				const gaps = structuralContextGaps(session.getTextDiff(path)!, (id) => session.isRegionCollapsed(path, id) === true, (id) => session.isRegionCollapsed(path, id));
@@ -208,7 +214,14 @@ function attachStructuralEditors(
 				const gapOf = (region: UnchangedRegion) =>
 					gaps.find((g) => g.originalStart === region.originalLineNumber && g.modifiedStart === region.modifiedLineNumber && g.foldStateId === region.foldStateId);
 				for (const region of regions) {
-					const fullyShown = region.visibleLineCountTop.read(reader) + region.visibleLineCountBottom.read(reader) >= region.lineCount;
+					const shown = region.visibleLineCountTop.read(reader) + region.visibleLineCountBottom.read(reader);
+					const fullyShown = shown >= region.lineCount;
+					if (shown > 0 && !fullyShown && !region.band) {
+						// A fold on its header line has no band to show a partial reveal, so open it fully.
+						const gap = gapOf(region);
+						if (gap) session.setRegionCollapsed(path, gap.foldStateId, false);
+						continue;
+					}
 					if (fullyShown) {
 						next.add(region);
 						if (revealed.has(region)) continue;

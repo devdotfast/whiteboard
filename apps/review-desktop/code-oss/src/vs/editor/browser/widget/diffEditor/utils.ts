@@ -565,6 +565,8 @@ export interface IBandRegion {
 	readonly label: string | undefined;
 	readLabel?(reader: IReader | undefined): string | undefined;
 	shouldHideControls(reader: IReader | undefined): boolean;
+	/** False when the region has no band. */
+	readonly band?: boolean;
 }
 
 /** Whether a region hides lines that exist on the base side only. */
@@ -574,12 +576,12 @@ export function isRemovedOnlyFold(region: { readonly owner: 'base' | 'head' | 'b
 
 /**
  * The height of the band the region at `index` shows, or undefined when it shows none: a fully revealed
- * region has no band, and compact mode drops the first and last. The band zones and the side-by-side
+ * region has no band, nor does one with `band` false, and compact mode drops the first and last. The band zones and the side-by-side
  * alignment both size a band here, so a one-sided band gets exactly its height of room on the other side.
  */
 export function bandZoneHeightPx(regions: readonly IBandRegion[], index: number, compactMode: boolean, lineHeight: number, reader: IReader | undefined): number | undefined {
 	const region = regions[index];
-	if (region.shouldHideControls(reader)) { return undefined; }
+	if (region.shouldHideControls(reader) || region.band === false) { return undefined; }
 	if (compactMode) { return index === 0 || index === regions.length - 1 ? undefined : 12; }
 	return bandHeightPx(region.readLabel ? region.readLabel(reader) : region.label, lineHeight);
 }

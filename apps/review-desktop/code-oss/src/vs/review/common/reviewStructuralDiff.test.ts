@@ -174,10 +174,10 @@ test("every collapsed region becomes a labelled band: paired across sides, or on
 	};
 	const gaps = structuralContextGaps(diff, (id) => id === 1 || id === 2 || id === 5);
 	assert.deepEqual(gaps, [
-		{ originalStart: 1, originalCount: 40, modifiedStart: 1, modifiedCount: 40, label: "40 unchanged lines", owner: "both", change: "unchanged", collapsed: true, foldStateId: 1, breadcrumbs: true },
+		{ originalStart: 1, originalCount: 40, modifiedStart: 1, modifiedCount: 40, label: "40 unchanged lines", owner: "both", change: "unchanged", collapsed: true, foldStateId: 1, breadcrumbs: true, band: true },
 		// The removed body hides lines 42..60 on the left; its rows precede the added body's, so it anchors before them on the right.
-		{ originalStart: 42, originalCount: 19, modifiedStart: 41, modifiedCount: 0, label: "19 lines removed", owner: "base", change: "removed", collapsed: true, foldStateId: 2, breadcrumbs: true },
-		{ originalStart: 61, originalCount: 0, modifiedStart: 42, modifiedCount: 29, label: pseudocode, owner: "head", change: "inserted", collapsed: true, foldStateId: 5, breadcrumbs: true },
+		{ originalStart: 42, originalCount: 19, modifiedStart: 41, modifiedCount: 0, label: "19 lines removed", owner: "base", change: "removed", collapsed: true, foldStateId: 2, breadcrumbs: true, band: true },
+		{ originalStart: 61, originalCount: 0, modifiedStart: 42, modifiedCount: 29, label: pseudocode, owner: "head", change: "inserted", collapsed: true, foldStateId: 5, breadcrumbs: true, band: true },
 	]);
 	// A region the reader revealed stays a band, marked open, so the editor keeps a fold control on it.
 	const revealed = structuralContextGaps(diff, (id) => id === 2 || id === 5, (id) => (id === 1 ? false : id === 2 || id === 5 ? true : undefined));
@@ -208,7 +208,7 @@ test("a one-sided band also hides the opposite lines the zip aligned with it", (
 	const [gap] = structuralContextGaps(diff, (id) => id === 2);
 	assert.deepEqual(gap, {
 		originalStart: 2, originalCount: 5, modifiedStart: 2, modifiedCount: 5,
-		label: "5 unchanged lines", owner: "base", change: "unchanged", collapsed: true, foldStateId: 2, breadcrumbs: true,
+		label: "5 unchanged lines", owner: "base", change: "unchanged", collapsed: true, foldStateId: 2, breadcrumbs: true, band: true,
 	});
 });
 
@@ -228,7 +228,7 @@ test("a one-sided band starts after the row before its fold and hides only the o
 	]);
 	assert.deepEqual(structuralContextGaps(inserted, (id) => id === 20), [{
 		originalStart: 3, originalCount: 2, modifiedStart: 4, modifiedCount: 6,
-		label: "// pseudocode\nreturn rows", owner: "head", change: "inserted", collapsed: true, foldStateId: 20, breadcrumbs: true,
+		label: "// pseudocode\nreturn rows", owner: "head", change: "inserted", collapsed: true, foldStateId: 20, breadcrumbs: true, band: true,
 	}]);
 	// The mirror: a left-only function whose rows are all filler on the right, followed by a right-only line.
 	const removed = fold(20, [leaf(22, 3, 6)], ["deleted-bodies:function"]);
@@ -242,7 +242,7 @@ test("a one-sided band starts after the row before its fold and hides only the o
 	assert.deepEqual(structuralRows(deleted).slice(0, 8), [[0, 0], [1, 1], [2, null], [3, null], [4, null], [5, null], [null, 2], [6, 3]]);
 	assert.deepEqual(structuralContextGaps(deleted, (id) => id === 20), [{
 		originalStart: 4, originalCount: 3, modifiedStart: 3, modifiedCount: 0,
-		label: "3 lines removed", owner: "base", change: "removed", collapsed: true, foldStateId: 20, breadcrumbs: true,
+		label: "3 lines removed", owner: "base", change: "removed", collapsed: true, foldStateId: 20, breadcrumbs: true, band: true,
 	}]);
 });
 
@@ -263,7 +263,7 @@ test("alignment and fold state are separate: the zip follows one, collapse follo
 	assert.deepEqual(gaps.map((g) => [g.change, g.foldStateId]).sort(), [["inserted", 7], ["unchanged", 7]]);
 	assert.deepEqual(gaps.find((g) => g.change === "unchanged"), {
 		originalStart: 2, originalCount: 3, modifiedStart: 4, modifiedCount: 3,
-		label: "3 hidden lines", owner: "both", change: "unchanged", collapsed: true, foldStateId: 7, breadcrumbs: true,
+		label: "3 hidden lines", owner: "both", change: "unchanged", collapsed: true, foldStateId: 7, breadcrumbs: true, band: true,
 	});
 	// With fold state 7 open, neither the docstring nor the function is a band.
 	assert.deepEqual(structuralContextGaps(diff, () => false), []);
@@ -343,4 +343,28 @@ test("base-owned unchanged fold projects both ranges and retains its toggle iden
 	l.changed = [{ line: 0, start_column: 0, end_column: 1 }]; r.changed = [{ line: 0, start_column: 0, end_column: 1 }];
 	diff.structural_changes = { base: [[0, 1]], head: [[0, 1]] };
 	assert.equal(structuralContextGaps(diff, id => id === 26)[0].change, "modified");
+});
+
+/** The function from diffr's TypeScript context plugin: a scope over the whole construct, holding header, body, closer. */
+function functionScope(): StructuralRegion[] {
+	const body = fold(3, [leaf(4, 1, 2), fold(5, [leaf(6, 2, 3), leaf(7, 3, 4)], ["context:scope"]), leaf(8, 4, 5)]);
+	if (body.kind !== "fold") throw new Error("Expected a fold");
+	body.syntax = { start: { line: 0, column: 22 }, end: { line: 5, column: 0 } };
+	return [fold(1, [leaf(2, 0, 1), body, leaf(9, 5, 6)], ["context:scope"])];
+}
+const functionLines = ["function walk(items) {", "  const out = [];", "  for (const item of items) {", "    out.push(item);", "  return out;", "}"];
+
+test("a folded body with an opener folds into its header line, closer and all, and a summarised one keeps its band", () => {
+	const diff: StructuralTextDiff = {
+		type: "text", structural_changes: { base: [], head: [] }, stats,
+		lhs: text(functionLines, functionScope()), rhs: text(functionLines, functionScope()),
+	};
+	const [inline] = structuralContextGaps(diff, id => id === 3);
+	assert.deepEqual([inline.originalStart, inline.originalCount, inline.modifiedStart, inline.modifiedCount, inline.band], [2, 5, 2, 5, false]);
+	for (const side of [diff.lhs!, diff.rhs!]) {
+		const body = ((side.root as StructuralFold).children[0] as StructuralFold).children[1];
+		body.visibility = { collapsed: true, label: "// pseudocode\ncollect items" };
+	}
+	const [summary] = structuralContextGaps(diff, id => id === 3);
+	assert.deepEqual([summary.originalStart, summary.originalCount, summary.band], [2, 4, true]);
 });
