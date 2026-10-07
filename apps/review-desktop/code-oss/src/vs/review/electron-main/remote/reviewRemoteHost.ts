@@ -624,7 +624,9 @@ export class ReviewRemoteHost {
 		if (stale()) return;
 		const present = probed.probe.installed.some((entry) => entry.version === version && entry.integrity === integrity);
 		if (!present && probed.probe.pathCli?.version === version) return { script: (groups) => reviewRemoteAttachScript(groups, true) };
-		if (!present && mode === "ask" && !(await this.agreed(flow, probed.probe, version, stale))) {
+		// Like VS Code's server, a host that already has Whiteboard is updated without asking.
+		const upgrade = probed.probe.installed.length > 0 || probed.probe.pathCli !== null;
+		if (!present && !upgrade && mode === "ask" && !(await this.agreed(flow, probed.probe, version, stale))) {
 			this.declined = true;
 			return stale() ? undefined : onPath;
 		}
