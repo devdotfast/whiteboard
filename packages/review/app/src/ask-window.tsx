@@ -82,11 +82,34 @@ const RESIZE_EDGES = ["n", "e", "s", "w", "ne", "se", "sw", "nw"] as const;
 
 type ResizeEdges = (typeof RESIZE_EDGES)[number];
 
+type Scrolled = { element: HTMLElement; top: number; atEnd: boolean };
+
+// Where each conversation was scrolled when it last left a slot. A
+// detached element forgets its scrolling, so it is read before leaving.
+const scrolledOnLeave = new WeakMap<HTMLElement, Scrolled[]>();
+
+function scrolledWithin(node: HTMLElement): Scrolled[] {
+  return [...node.querySelectorAll<HTMLElement>("*")].flatMap((element) =>
+    element.scrollTop > 0
+      ? [
+          {
+            element,
+            top: element.scrollTop,
+            atEnd:
+              element.scrollHeight - element.scrollTop - element.clientHeight <=
+              2,
+          },
+        ]
+      : [],
+  );
+}
+
 /**
  * Where Ask's conversation is attached right now. The conversation renders
  * once, into `node`, and moves between the side panel and the window, so
  * switching never restarts it. Moving an element resets its scrolling, so
- * the slot carries that across: a thread at its latest stays there.
+ * the slot carries that across, including through a minimize: a thread at
+ * its latest stays there, and one read partway back reopens where it was.
  */
 export function AskSlot({ node }: { node: HTMLElement }): ReactElement {
   const slot = useRef<HTMLDivElement>(null);
@@ -97,22 +120,9 @@ export function AskSlot({ node }: { node: HTMLElement }): ReactElement {
     if (!parent) return;
     node.className = stylex.props(styles.fill).className ?? "";
 
-    const scrolled = [...node.querySelectorAll<HTMLElement>("*")].flatMap(
-      (element) =>
-        element.scrollTop > 0
-          ? [
-              {
-                element,
-                top: element.scrollTop,
-                atEnd:
-                  element.scrollHeight -
-                    element.scrollTop -
-                    element.clientHeight <=
-                  2,
-              },
-            ]
-          : [],
-    );
+    const scrolled = node.isConnected
+      ? scrolledWithin(node)
+      : (scrolledOnLeave.get(node) ?? []);
 
     parent.append(node);
 
@@ -120,7 +130,9 @@ export function AskSlot({ node }: { node: HTMLElement }): ReactElement {
       element.scrollTop = atEnd ? element.scrollHeight : top;
 
     return () => {
-      if (node.parentNode === parent) node.remove();
+      if (node.parentNode !== parent) return;
+      scrolledOnLeave.set(node, scrolledWithin(node));
+      node.remove();
     };
   }, [node]);
 
