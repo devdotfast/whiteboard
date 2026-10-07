@@ -14,8 +14,8 @@ export const chevronMarker = stylex.defineMarker();
 /** A call tree's call-site edge; its highlight draws while it is hovered. */
 export const callEdgeMarker = stylex.defineMarker();
 
-/** A lens filter toggle; the clear mark washes while it is hovered. */
-export const lensToggleMarker = stylex.defineMarker();
+/** A lens filter chip; its clear mark washes while it is hovered. */
+export const lensChipMarker = stylex.defineMarker();
 
 /** An agent trace tool call; its chevron turns and figure shows while open. */
 export const traceToolMarker = stylex.defineMarker();

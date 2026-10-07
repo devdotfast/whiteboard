@@ -39,7 +39,7 @@ import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
 import {
   diffWorkspaceMarker,
-  lensToggleMarker,
+  lensChipMarker,
   scopedDiffMarker,
 } from "./markers.stylex";
 import { useReviewDiffFiles } from "./review-diff-files-context";
@@ -364,7 +364,6 @@ export function ReviewDiffView({
                   >
                     <button
                       {...stylex.props(
-                        lensToggleMarker,
                         styles.toggle,
                         empty && styles.toggleEmpty,
                         selected && styles.toggleActive,
@@ -376,10 +375,11 @@ export function ReviewDiffView({
                         selected ? lenses.clear() : lenses.select(item.id)
                       }
                     >
-                      {/* The title sits on the chip, not the toggle, so it
-                          never stacks on the counts' own tooltip. */}
+                      {/* The title and hover wash sit on the chip, not the
+                          toggle, so they never stack on the counts' tooltip. */}
                       <span
                         {...stylex.props(
+                          lensChipMarker,
                           styles.chip,
                           selected && styles.chipActive,
                         )}
@@ -1167,7 +1167,7 @@ const styles = stylex.create({
     borderRadius: radius.pill,
     backgroundColor: {
       default: null,
-      [stylex.when.ancestor(":hover", lensToggleMarker)]: tokens.markerGlow,
+      [stylex.when.ancestor(":hover", lensChipMarker)]: tokens.markerGlow,
     },
   },
   clearMark: {
