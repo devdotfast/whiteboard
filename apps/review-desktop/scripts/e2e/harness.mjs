@@ -563,13 +563,16 @@ export async function createHarness({
         }
 
       // Artifacts are best-effort: a Desktop that outlives the runner is worse than a missing screenshot.
-      if (!success && page) {
-        await page
+      // A journey may have moved ctx.page to another window after a relaunch.
+      const shown = ctx.page ?? page;
+
+      if (!success && shown) {
+        await shown
           .screenshot({ path: path.join(root, "failure.png") })
           .catch(() => {});
         await writeFile(
           path.join(root, "failure-dom.txt"),
-          await page
+          await shown
             .locator("body")
             .innerText()
             .catch(() => ""),

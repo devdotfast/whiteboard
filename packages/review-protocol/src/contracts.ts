@@ -982,6 +982,15 @@ export interface ReviewGatewayHostState {
   declined?: true;
 }
 
+/** `POST /:id/navigator` for a review on another machine: its host paths as
+ * `vscode-remote` URIs. `emptySide`: the diff side has no file; open one locally. */
+export interface ReviewRemoteNavigatorAnswer {
+  workspaceUri: string;
+  fileUri?: string;
+  remoteAuthority: string;
+  emptySide?: true;
+}
+
 export const ReviewRepositoryIdentitySchema = z.strictObject({
   kind: z.enum(["git", "jj", "none"], {
     error: "must be git, jj, or none",

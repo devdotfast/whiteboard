@@ -452,7 +452,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 							request: requestReviewApi,
 							post: async (request) => {
 								if (request.name === "openSourceTree") {
-									await this.tabsService.openApiSource(sourceSelection, input.getName());
+									await this.tabsService.openApiSource(sourceSelection, input.getName(), !!sourceView.generation);
 									return { ok: true };
 								}
 								if (request.name === "reveal") {
@@ -533,7 +533,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 						openSourceTree: (uuid) => {
 							const api = this.apiCatalog.reviews.find((review) => review.reviewId === uuid);
 							if (api) {
-								void this.tabsService.openApiSource({ reviewId: api.reviewId, kind: "current" }, api.title).catch(error => this.notificationService.error(error));
+								void this.tabsService.openApiSource({ reviewId: api.reviewId, kind: "current" }, api.title, !!api.pins?.worktreeRevision).catch(error => this.notificationService.error(error));
 								return;
 							}
 						},
