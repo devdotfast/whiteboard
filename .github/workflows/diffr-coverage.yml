@@ -1,6 +1,13 @@
 name: Diffr Coverage
 
-on: [pull_request, push]
+on:
+  pull_request:
+    paths:
+      - "diffr/**"
+  push:
+    paths:
+      - "diffr/**"
+  workflow_dispatch:
 
 jobs:
   coverage:
