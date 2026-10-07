@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 
-import type { AskThreads } from "@review/ask/threads.js";
+import { AskThreads } from "@review/ask/threads.js";
 import { AskHistory, type AskRecord } from "@review/review-api/ask-history.js";
 import { createReviewApi } from "@review/review-api/http.js";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
@@ -221,7 +221,10 @@ it("follows as many threads as a review has open over one watch", async () => {
     undefined,
     undefined,
     {
-      threads: { get: () => undefined } as unknown as AskThreads,
+      // No agent starts: none of the threads is running.
+      threads: new AskThreads(() => {
+        throw new Error("No agent starts here.");
+      }),
       agents: async () => [],
     },
   );
