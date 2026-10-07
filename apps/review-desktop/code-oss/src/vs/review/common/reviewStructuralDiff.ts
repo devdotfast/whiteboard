@@ -79,19 +79,19 @@ export function structuralContextScopes(diff: StructuralTextDiff) {
 			}
 			region.children.forEach(visit);
 		};
-		source?.regions?.forEach(visit);
+		if (source) visit(source.root);
 		return result;
 	};
 	return { original: scopes(diff.lhs), modified: scopes(diff.rhs) };
 }
 
-export function structuralLeaves(regions: readonly StructuralRegion[] | undefined): StructuralLeaf[] {
+function structuralLeaves(root: StructuralRegion): StructuralLeaf[] {
 	const leaves: StructuralLeaf[] = [];
 	const walk = (region: StructuralRegion) => {
 		if (region.kind === "leaf") leaves.push(region);
 		else for (const child of region.children) walk(child);
 	};
-	for (const region of regions ?? []) walk(region);
+	walk(root);
 	return leaves;
 }
 
@@ -120,7 +120,7 @@ export function structuralHighlights(diff: StructuralTextDiff) {
 			for (let line = start; line < end; line++) changedLines.push(line + 1);
 		}
 		const spans = [];
-		for (const leaf of structuralLeaves(source.regions)) {
+		for (const leaf of structuralLeaves(source.root)) {
 			for (const span of leaf.changed ?? []) {
 				spans.push({
 					startLineNumber: span.line + 1,
@@ -177,8 +177,6 @@ export interface StructuralGap {
 	collapsed: boolean;
 	/** The fold-state id of the region(s) this band hides; toggling the band toggles it. */
 	foldStateId: number;
-	/** Label precedence: head first, then base. */
-	regionIds: readonly number[];
 	/** False for a bundled docstring: its band shows the bare count, no symbol names. */
 	breadcrumbs: boolean;
 }
@@ -196,36 +194,19 @@ export function bandDetail(label: string): string {
 }
 
 /**
- * The lines a collapsed region hides on its side, zero-based half-open: every
- * line it covers, fold or leaf. A fold covers its body alone — the line that
- * opens the construct is the last line of the leaf before it — so a band
- * hides exactly the fold's range, and the signature above it stays a row.
- */
-export function hiddenLinesOf(region: StructuralRegion): { start: number; end: number } {
-	return regionLines(region);
-}
-
-/** Collapsed regions of one side, outermost first; a collapsed descendant of a collapsed region is subsumed. `isCollapsed` answers for a fold-state id. */
-export function collapsedRegions(
-	regions: readonly StructuralRegion[] | undefined,
-	isCollapsed: (foldStateId: number) => boolean,
-): StructuralRegion[] {
-	return knownRegions(regions, (id) => (isCollapsed(id) ? true : undefined)).map((r) => r.region);
-}
-
-/**
  * Regions of one side the state knows about, outermost first: collapsed ones
  * and ones a reader revealed. A collapsed region subsumes its descendants; a
  * revealed one still lists them, since a child may be collapsed on its own.
  */
-export function knownRegions(
-	regions: readonly StructuralRegion[] | undefined,
+function knownRegions(
+	root: StructuralRegion | undefined,
 	state: (foldStateId: number) => boolean | undefined,
 ): { region: StructuralRegion; collapsed: boolean }[] {
 	const result: { region: StructuralRegion; collapsed: boolean }[] = [];
 	const walk = (region: StructuralRegion) => {
 		const known = state(region.fold_state_id);
-		const hides = hiddenLinesOf(region).end > hiddenLinesOf(region).start;
+		const { start, end } = regionLines(region);
+		const hides = end > start;
 		if (known === true) {
 			if (hides) result.push({ region, collapsed: true });
 			return;
@@ -234,7 +215,7 @@ export function knownRegions(
 		if (known === false && hides && region.visibility?.collapsed === true) result.push({ region, collapsed: false });
 		if (region.kind === "fold") for (const child of region.children) walk(child);
 	};
-	for (const region of regions ?? []) walk(region);
+	if (root) walk(root);
 	return result;
 }
 
@@ -270,8 +251,8 @@ export function structuralContextGaps(
 		for (let index = first; index <= last; index++) if (rows[index][other] !== null) count++;
 		return { start: before + 2, count };
 	};
-	const lhs = knownRegions(diff.lhs?.regions, state);
-	const rhs = knownRegions(diff.rhs?.regions, state);
+	const lhs = knownRegions(diff.lhs?.root, state);
+	const rhs = knownRegions(diff.rhs?.root, state);
 	// Leaves pair by alignment; folds pair by fold state, the only identity they share across sides.
 	const usedRhs = new Set<StructuralRegion>();
 	const pairs = (left: StructuralRegion, right: StructuralRegion) => {
@@ -282,18 +263,18 @@ export function structuralContextGaps(
 		rhs.find(({ region: right }) => !usedRhs.has(right) && pairs(left, right));
 	const gaps: StructuralGap[] = [];
 	for (const { region: left, collapsed } of lhs) {
-		const hidden = hiddenLinesOf(left);
+		const hidden = regionLines(left);
 		const partner = counterpart(left);
 		if (partner) {
 			usedRhs.add(partner.region);
-			const right = hiddenLinesOf(partner.region);
+			const right = regionLines(partner.region);
 			gaps.push({
 				originalStart: hidden.start + 1, originalCount: hidden.end - hidden.start,
 				modifiedStart: right.start + 1, modifiedCount: right.end - right.start,
 				label: partner.region.visibility?.label || left.visibility?.label || "",
 				owner: "both", change: "unchanged",
 				collapsed: collapsed && partner.collapsed,
-				foldStateId: left.fold_state_id, regionIds: [partner.region.id, left.id],
+				foldStateId: left.fold_state_id,
 				breadcrumbs: !isDocstring(left) && !isDocstring(partner.region),
 			});
 			continue;
@@ -302,18 +283,18 @@ export function structuralContextGaps(
 		gaps.push({
 			originalStart: hidden.start + 1, originalCount: hidden.end - hidden.start,
 			modifiedStart: opposite.start, modifiedCount: opposite.count,
-			label: left.visibility?.label || "", owner: "base", change: "unchanged", collapsed, foldStateId: left.fold_state_id, regionIds: [left.id],
+			label: left.visibility?.label || "", owner: "base", change: "unchanged", collapsed, foldStateId: left.fold_state_id,
 			breadcrumbs: !isDocstring(left),
 		});
 	}
 	for (const { region: right, collapsed } of rhs) {
 		if (usedRhs.has(right)) continue;
-		const hidden = hiddenLinesOf(right);
+		const hidden = regionLines(right);
 		const opposite = oppositeSpan(1, hidden);
 		gaps.push({
 			originalStart: opposite.start, originalCount: opposite.count,
 			modifiedStart: hidden.start + 1, modifiedCount: hidden.end - hidden.start,
-			label: right.visibility?.label || "", owner: "head", change: "unchanged", collapsed, foldStateId: right.fold_state_id, regionIds: [right.id],
+			label: right.visibility?.label || "", owner: "head", change: "unchanged", collapsed, foldStateId: right.fold_state_id,
 			breadcrumbs: !isDocstring(right),
 		});
 	}

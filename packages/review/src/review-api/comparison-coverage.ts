@@ -4,7 +4,6 @@ import {
   type StructuralDiff,
   type StructuralRegion,
   type StructuralSource,
-  type StructuralVisibility,
   structuralRows,
 } from "@dev.fast/review-protocol";
 import type { AlignmentRow } from "@review/lens-selection.js";
@@ -217,7 +216,7 @@ export async function comparisonCoverage(
         fingerprint,
         changed:
           diff.type === "text" ? diff.structural_changes : emptyCoverage(),
-        folded: foldedChanges(event.visibility, diff),
+        folded: foldedChanges(diff),
         viewed: emptyCoverage(),
       });
       publish?.({
@@ -244,21 +243,17 @@ export async function comparisonCoverage(
  * the lines, not just the counts, are known. A paired leaf contributes its
  * changed spans' lines; an unpaired leaf, all of its lines.
  */
-export function foldedChanges(
-  visibility: StructuralVisibility | undefined,
-  diff: StructuralDiff,
-): Coverage {
+export function foldedChanges(diff: StructuralDiff): Coverage {
   if (diff.type !== "text") return emptyCoverage();
   const all = diff.structural_changes;
-
-  if (visibility?.collapsed)
-    return { base: unionIntervals(all.base), head: unionIntervals(all.head) };
 
   const side = (
     changed: readonly LineInterval[],
     source: StructuralSource | undefined,
     other: StructuralSource | undefined,
   ): LineInterval[] => {
+    if (source?.root.visibility?.collapsed) return unionIntervals(changed);
+
     const paired = new Set<number>();
 
     const pair = (region: StructuralRegion) => {
@@ -266,7 +261,7 @@ export function foldedChanges(
       else region.children.forEach(pair);
     };
 
-    other?.regions?.forEach(pair);
+    if (other) pair(other.root);
 
     const hidden: LineInterval[] = [],
       visible: LineInterval[] = [];
@@ -292,7 +287,7 @@ export function foldedChanges(
         ]);
     };
 
-    for (const region of source?.regions ?? []) collect(region, false);
+    if (source) collect(source.root, false);
 
     return subtractIntervals(intersectIntervals(changed, hidden), visible);
   };

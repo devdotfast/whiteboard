@@ -30,9 +30,6 @@ import { IProgressService, ProgressLocation } from '../../../platform/progress/c
 import { IQuickInputService, type IQuickPickItem } from '../../../platform/quickinput/common/quickInput.js';
 import { Registry } from '../../../platform/registry/common/platform.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../platform/storage/common/storage.js';
-import { IReviewDesktopConnectionService } from '../../services/reviewDesktopConnectionService.js';
-import { IEditorService } from '../../../workbench/services/editor/common/editorService.js';
-import { ReviewCanvasEditorPane } from '../../browser/parts/canvas/reviewCanvasPart.js';
 import { LifecyclePhase } from '../../../workbench/services/lifecycle/common/lifecycle.js';
 import {
 	Extensions as WorkbenchExtensions,
@@ -740,22 +737,3 @@ Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench).regi
 	OptionalExtensionPinUpgrades,
 	LifecyclePhase.Eventually
 );
-
-class InstallExtraDiffLanguagesAction extends Action2 {
-	constructor() {
-		super({ id: 'review.installExtraDiffLanguages', title: localize2('review.diff.installLanguages', "Install extra diffr languages"), f1: true });
-	}
-	override async run(accessor: ServicesAccessor): Promise<void> {
-		const connection = accessor.get(IReviewDesktopConnectionService);
-		const progress = accessor.get(IProgressService);
-		const editors = accessor.get(IEditorService);
-		await progress.withProgress({ location: ProgressLocation.Notification, title: localize('review.diff.installingLanguages', "Installing extra diffr languages..."), delay: 0 }, async () => {
-			const { serverUrl, token } = await connection.getConnection();
-			const response = await fetch(`${serverUrl}/diffr-languages/install`, { method: 'POST', headers: { 'x-review-token': token } });
-			if (!response.ok) throw new Error((await response.json()).error);
-			const pane = editors.activeEditorPane;
-			if (pane instanceof ReviewCanvasEditorPane) await pane.refreshComparison();
-		});
-	}
-}
-registerAction2(InstallExtraDiffLanguagesAction);

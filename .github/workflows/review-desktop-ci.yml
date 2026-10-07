@@ -161,7 +161,6 @@ jobs:
 
       - name: Bundled diffr integration
         run: |
-          pnpm --filter @dev.fast/whiteboard ensure:diffr --required
           pnpm --filter @dev.fast/whiteboard exec vitest run --config vitest.integration.config.ts
 
       - name: Upload browser test diagnostics

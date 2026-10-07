@@ -3,6 +3,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import {
+  STRUCTURAL_DIFF_WIRE_VERSION,
+  type StructuralSource,
+} from "@dev.fast/review-protocol";
 import { rangeAnchor } from "@review/lens-selection.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -302,7 +306,7 @@ it("reports the changed lines no lens selects after each lens write", async () =
   vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
     yield {
       type: "start",
-      version: 4,
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
       lhs: { type: "revision", rev: "base" },
       rhs: { type: "revision", rev: "head" },
       files: [api, readme].map(({ file }) => ({ file, status: "modified" })),
@@ -314,8 +318,8 @@ it("reports the changed lines no lens selects after each lens write", async () =
         file,
         diff: {
           type: "text",
-          lhs: { text },
-          rhs: { text },
+          lhs: structuralSource(text),
+          rhs: structuralSource(text),
           structural_changes: {
             base: [[0, text.split("\n").length]],
             head: [[0, text.split("\n").length]],
@@ -391,3 +395,19 @@ it("reports the changed lines no lens selects after each lens write", async () =
     await data.close();
   }
 });
+
+function structuralSource(text: string): StructuralSource {
+  const lines = text.split("\n");
+
+  return {
+    text,
+    root: {
+      kind: "leaf",
+      id: 1,
+      fold_state_id: 1,
+      alignment_id: 1,
+      start: { line: 0, column: 0 },
+      end: { line: lines.length - 1, column: lines.at(-1)!.length },
+    },
+  };
+}

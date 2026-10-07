@@ -14,9 +14,7 @@ function alignmentRegionLines(region: StructuralRegion) {
   };
 }
 
-function alignmentLeaves(
-  regions: readonly StructuralRegion[] | undefined,
-): AlignmentLeaf[] {
+function alignmentLeaves(root: StructuralRegion | undefined): AlignmentLeaf[] {
   const leaves: AlignmentLeaf[] = [];
 
   const walk = (region: StructuralRegion) => {
@@ -24,7 +22,7 @@ function alignmentLeaves(
     else for (const child of region.children) walk(child);
   };
 
-  for (const region of regions ?? []) walk(region);
+  if (root) walk(root);
 
   return leaves;
 }
@@ -43,8 +41,8 @@ function monacoLineCount(source: StructuralSource | undefined): number {
 export function structuralRows(
   diff: Extract<StructuralDiff, { type: "text" }>,
 ): [number | null, number | null][] {
-  const lhsLeaves = alignmentLeaves(diff.lhs?.regions);
-  const rhsLeaves = alignmentLeaves(diff.rhs?.regions);
+  const lhsLeaves = alignmentLeaves(diff.lhs?.root);
+  const rhsLeaves = alignmentLeaves(diff.rhs?.root);
   const leftCount = monacoLineCount(diff.lhs);
   const rightCount = monacoLineCount(diff.rhs);
   const rows: [number | null, number | null][] = [];

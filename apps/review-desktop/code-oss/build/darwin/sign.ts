@@ -19,7 +19,7 @@ function getElectronVersion(): string {
 }
 
 function getEntitlementsForFile(filePath: string): string {
-	if (filePath.endsWith('/Contents/Resources/app/review-runtime/bin/diffr')) {
+	if (/\/Contents\/Resources\/app\/review-runtime\/node_modules\/@dev\.fast\/diffr-darwin-(arm64|x64)\/diffr$/.test(filePath)) {
 		return path.join(entitlementsDir, 'diffr.plist');
 	}
 	if (filePath.includes(' Helper (GPU).app')) {

@@ -1,17 +1,13 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import path from "node:path";
 import { createInterface } from "node:readline";
 
+import { diffrBinaryPath } from "@dev.fast/diffr";
 import {
   STRUCTURAL_DIFF_WIRE_VERSION,
   type StructuralDiffEvent,
   type StructuralProblem,
   decodeStructuralDiffEvent,
 } from "@dev.fast/review-protocol";
-import { findReviewPackageRoot } from "@review/package-paths";
-
-import { installedFullDiffr } from "./diffr-languages.js";
 
 export type DiffComparison =
   | { kind: "trees"; base: string; head: string }
@@ -26,27 +22,17 @@ export interface StructuralDiffRequest {
   signal: AbortSignal;
 }
 
-export function diffrExecutable(
-  packageRoot = findReviewPackageRoot(import.meta.url),
-): string {
-  if (process.env.REVIEW_DIFFR_BINARY) return process.env.REVIEW_DIFFR_BINARY;
+export function diffrExecutable(): string {
+  const executable = diffrBinaryPath();
 
-  const full = installedFullDiffr(packageRoot);
+  if (!executable) throw diffrMissingError();
 
-  if (full) return full;
-
-  const bundled = path.join(
-    packageRoot,
-    "bin",
-    process.platform === "win32" ? "diffr.exe" : "diffr",
-  );
-
-  return existsSync(bundled) ? bundled : "diffr";
+  return executable;
 }
 
 export function diffrMissingError(): Error {
   return new Error(
-    `Cannot find diffr at ${diffrExecutable()}. Whiteboard Desktop bundles it at bin/diffr under its runtime; in a checkout, run \`pnpm --filter @dev.fast/whiteboard ensure:diffr\` or install diffr on PATH, or set REVIEW_DIFFR_BINARY to its executable.`,
+    "The bundled diffr executable is missing. Reinstall Whiteboard.",
   );
 }
 
@@ -59,15 +45,10 @@ export async function* structuralDiff(
   input: StructuralDiffRequest,
 ): AsyncGenerator<StructuralDiffEvent> {
   input.signal.throwIfAborted();
+  const executable = diffrExecutable();
   const comparison = input.comparison;
 
-  const args = [
-    "--repo",
-    input.repositoryPath,
-    "--format",
-    "ndjson",
-    "--stream-annotations",
-  ];
+  const args = ["--repo", input.repositoryPath, "--format", "ndjson"];
 
   switch (comparison.kind) {
     case "worktree":
@@ -88,11 +69,9 @@ export async function* structuralDiff(
 
   // The host inherits its own environment and runs from the repository, so
   // diffr reads the user's config and keys exactly as it would from a shell.
-  console.info(
-    `[Review] structural diff: ${diffrExecutable()} ${args.join(" ")}`,
-  );
+  console.info(`[Review] structural diff: ${executable} ${args.join(" ")}`);
 
-  const child = spawn(diffrExecutable(), args, {
+  const child = spawn(executable, args, {
     cwd: input.repositoryPath,
     stdio: ["ignore", "pipe", "pipe"],
     signal,
@@ -120,7 +99,6 @@ export async function* structuralDiff(
   let completed = false;
   let aborted: StructuralProblem | undefined;
   let failed = 0;
-  let annotationFailed = false;
   const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
 
   try {
@@ -152,8 +130,6 @@ export async function* structuralDiff(
 
         failed = event.failed;
         aborted = event.aborted;
-      } else if (event.type === "annotations") {
-        annotationFailed ||= event.error !== undefined;
       } else if (event.type !== "file") {
         throw new Error(`Unexpected diffr event: ${event.type}`);
       }
@@ -168,13 +144,10 @@ export async function* structuralDiff(
       throw new Error("diffr stream ended before completion.");
     }
 
-    // diffr exits 2 for file or enrichment failures already reported by the stream.
+    // diffr exits 2 for file failures already reported by the stream.
     const code = await exited;
 
-    if (
-      code !== 0 &&
-      !(code === 2 && (failed > 0 || annotationFailed || aborted !== undefined))
-    )
+    if (code !== 0 && !(code === 2 && (failed > 0 || aborted !== undefined)))
       throw exitError(code);
   } finally {
     clearTimeout(idle);

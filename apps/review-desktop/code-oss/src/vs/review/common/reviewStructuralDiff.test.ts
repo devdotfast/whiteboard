@@ -7,8 +7,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { projectInlineSourceAlignment, projectSplitSourceAlignment } from "../../editor/common/diff/sourceLineAlignment.js";
 import {
-	collapsedRegions,
-	hiddenLinesOf,
 	structuralContextGaps,
 	bandDetail,
 	structuralHighlights,
@@ -30,10 +28,10 @@ function leaf(id: number, start: number, end: number, extra: Partial<StructuralL
 }
 function fold(id: number, children: StructuralRegion[], tags: string[] = ["context:body"]): StructuralFold {
 	const first = children[0], last = children[children.length - 1];
-	return { id, fold_state_id: id, kind: "fold", start: first.start, end: last.end, tags, children };
+	return { id, fold_state_id: id, kind: "fold", indent: first.start, start: first.start, end: last.end, tags, children };
 }
 function text(lines: string[], regions: StructuralRegion[]) {
-	return { text: lines.join("\n") + "\n", regions };
+	return { text: lines.join("\n") + "\n", root: {kind: "fold" as const, id: 1000, fold_state_id: 1000, start: {line: 0, column: 0}, end: {line: lines.length, column: 0}, indent: {line: 0, column: 0}, children: regions} };
 }
 const stats = { textual: { added: 0, removed: 0 }, visible: { added: 0, removed: 0 } };
 
@@ -156,18 +154,6 @@ test("Tree-sitter byte offsets convert to Monaco UTF-16 columns", () => {
 });
 
 
-test("a collapsed region hides every line it covers, fold or leaf; nested collapses are subsumed", () => {
-	const collapsed = { collapsed: true, label: "x" };
-	const inner = fold(3, [leaf(4, 3, 4), leaf(5, 4, 6)]);
-	inner.visibility = collapsed;
-	const body = fold(2, [leaf(6, 2, 3), inner, leaf(7, 6, 8)]);
-	body.visibility = collapsed;
-	assert.deepEqual(hiddenLinesOf(body), { start: 2, end: 8 });
-	assert.deepEqual(hiddenLinesOf(leaf(1, 0, 2, { visibility: collapsed })), { start: 0, end: 2 });
-	assert.deepEqual(collapsedRegions([leaf(1, 0, 2, { visibility: collapsed }), body], (id) => id === 1 || id === 2 || id === 3).map((r) => r.fold_state_id), [1, 2]);
-	assert.deepEqual(collapsedRegions([leaf(1, 0, 2), body], (id) => id === 3).map((r) => r.fold_state_id), [3]);
-});
-
 test("every collapsed region becomes a labelled band: paired across sides, or one-sided at the aligned line", () => {
 	const pseudocode = "// pseudocode\nif not key: return None\nreturn call(key)";
 	const gapL = leaf(1, 0, 40, { visibility: { collapsed: true, label: "40 unchanged lines" } });
@@ -188,10 +174,10 @@ test("every collapsed region becomes a labelled band: paired across sides, or on
 	};
 	const gaps = structuralContextGaps(diff, (id) => id === 1 || id === 2 || id === 5);
 	assert.deepEqual(gaps, [
-		{ originalStart: 1, originalCount: 40, modifiedStart: 1, modifiedCount: 40, label: "40 unchanged lines", owner: "both", change: "unchanged", collapsed: true, foldStateId: 1, regionIds: [11, 1], breadcrumbs: true },
+		{ originalStart: 1, originalCount: 40, modifiedStart: 1, modifiedCount: 40, label: "40 unchanged lines", owner: "both", change: "unchanged", collapsed: true, foldStateId: 1, breadcrumbs: true },
 		// The removed body hides lines 42..60 on the left; its rows precede the added body's, so it anchors before them on the right.
-		{ originalStart: 42, originalCount: 19, modifiedStart: 41, modifiedCount: 0, label: "19 lines removed", owner: "base", change: "removed", collapsed: true, foldStateId: 2, regionIds: [2], breadcrumbs: true },
-		{ originalStart: 61, originalCount: 0, modifiedStart: 42, modifiedCount: 29, label: pseudocode, owner: "head", change: "inserted", collapsed: true, foldStateId: 5, regionIds: [5], breadcrumbs: true },
+		{ originalStart: 42, originalCount: 19, modifiedStart: 41, modifiedCount: 0, label: "19 lines removed", owner: "base", change: "removed", collapsed: true, foldStateId: 2, breadcrumbs: true },
+		{ originalStart: 61, originalCount: 0, modifiedStart: 42, modifiedCount: 29, label: pseudocode, owner: "head", change: "inserted", collapsed: true, foldStateId: 5, breadcrumbs: true },
 	]);
 	// A region the reader revealed stays a band, marked open, so the editor keeps a fold control on it.
 	const revealed = structuralContextGaps(diff, (id) => id === 2 || id === 5, (id) => (id === 1 ? false : id === 2 || id === 5 ? true : undefined));
@@ -222,7 +208,7 @@ test("a one-sided band also hides the opposite lines the zip aligned with it", (
 	const [gap] = structuralContextGaps(diff, (id) => id === 2);
 	assert.deepEqual(gap, {
 		originalStart: 2, originalCount: 5, modifiedStart: 2, modifiedCount: 5,
-		label: "5 unchanged lines", owner: "base", change: "unchanged", collapsed: true, foldStateId: 2, regionIds: [2], breadcrumbs: true,
+		label: "5 unchanged lines", owner: "base", change: "unchanged", collapsed: true, foldStateId: 2, breadcrumbs: true,
 	});
 });
 
@@ -242,7 +228,7 @@ test("a one-sided band starts after the row before its fold and hides only the o
 	]);
 	assert.deepEqual(structuralContextGaps(inserted, (id) => id === 20), [{
 		originalStart: 3, originalCount: 2, modifiedStart: 4, modifiedCount: 6,
-		label: "// pseudocode\nreturn rows", owner: "head", change: "inserted", collapsed: true, foldStateId: 20, regionIds: [20], breadcrumbs: true,
+		label: "// pseudocode\nreturn rows", owner: "head", change: "inserted", collapsed: true, foldStateId: 20, breadcrumbs: true,
 	}]);
 	// The mirror: a left-only function whose rows are all filler on the right, followed by a right-only line.
 	const removed = fold(20, [leaf(22, 3, 6)], ["deleted-bodies:function"]);
@@ -256,7 +242,7 @@ test("a one-sided band starts after the row before its fold and hides only the o
 	assert.deepEqual(structuralRows(deleted).slice(0, 8), [[0, 0], [1, 1], [2, null], [3, null], [4, null], [5, null], [null, 2], [6, 3]]);
 	assert.deepEqual(structuralContextGaps(deleted, (id) => id === 20), [{
 		originalStart: 4, originalCount: 3, modifiedStart: 3, modifiedCount: 0,
-		label: "3 lines removed", owner: "base", change: "removed", collapsed: true, foldStateId: 20, regionIds: [20], breadcrumbs: true,
+		label: "3 lines removed", owner: "base", change: "removed", collapsed: true, foldStateId: 20, breadcrumbs: true,
 	}]);
 });
 
@@ -277,7 +263,7 @@ test("alignment and fold state are separate: the zip follows one, collapse follo
 	assert.deepEqual(gaps.map((g) => [g.change, g.foldStateId]).sort(), [["inserted", 7], ["unchanged", 7]]);
 	assert.deepEqual(gaps.find((g) => g.change === "unchanged"), {
 		originalStart: 2, originalCount: 3, modifiedStart: 4, modifiedCount: 3,
-		label: "3 hidden lines", owner: "both", change: "unchanged", collapsed: true, foldStateId: 7, regionIds: [5, 2], breadcrumbs: true,
+		label: "3 hidden lines", owner: "both", change: "unchanged", collapsed: true, foldStateId: 7, breadcrumbs: true,
 	});
 	// With fold state 7 open, neither the docstring nor the function is a band.
 	assert.deepEqual(structuralContextGaps(diff, () => false), []);

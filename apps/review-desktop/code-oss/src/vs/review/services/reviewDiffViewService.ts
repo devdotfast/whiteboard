@@ -37,7 +37,7 @@ import { ReviewFilesDiffView, ReviewFilesEditorInput, type ReviewFilesEditorEntr
 import { ReviewEmbeddedEditors } from "./reviewEmbeddedEditors.js";
 
 import { createStructuralDiffEditors } from "./reviewStructuralDiff.js";
-import { StructuralDiffSession } from "./reviewStructuralDiffSession.js";
+import { StructuralDiffSession, type StructuralSessionChange } from "./reviewStructuralDiffSession.js";
 import type { StructuralDiffStream } from "./reviewStructuralDiffClient.js";
 
 export interface ReviewDiffViewSource {
@@ -360,17 +360,12 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 
 	private observeSession(session: StructuralDiffSession, entries: readonly ReviewFilesEditorEntry[], view: ReviewFilesDiffView, store: DisposableStore, structuralEnabled: boolean): void {
 		const rendered = new Set<string>();
-		const annotationWarnings = new Set<string>();
-		const renderCurrentState = (change?: import("./reviewStructuralDiffSession.js").StructuralSessionChange) => {
+		const renderCurrentState = (change?: StructuralSessionChange) => {
 			if (this.disposed) return;
 			for (const entry of entries) {
 				const path = entry.file.path;
-				if (change && !change.files.has(path) && !change.labels.has(path)) continue;
+				if (change && !change.files.has(path)) continue;
 				const result = entry.file.status === "unchanged" ? {} : session.getFileResult(path);
-				if (result?.annotationError && !annotationWarnings.has(path)) {
-					annotationWarnings.add(path);
-					this._onDidError.fire(`Summary unavailable for ${path}: ${result.annotationError}`);
-				}
 				if (!result || rendered.has(path)) continue;
 				rendered.add(path);
 				if (structuralEnabled && result.hidden !== undefined) view.hideFile(path, result.hidden);

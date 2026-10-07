@@ -41,7 +41,6 @@
   },
   "scripts": {
     "prebuild": "pnpm run build:workspace-deps",
-    "ensure:diffr": "diffr-fetch --into bin",
     "build": "node --max-old-space-size=8192 node_modules/tsdown/dist/run.mjs",
     "build:tutorial-assets": "tsx scripts/build-tutorial-assets.ts",
     "ensure:tutorial-assets": "tsx scripts/ensure-tutorial-assets.ts",
@@ -57,13 +56,14 @@
     "test:node": "vitest run --config vitest.config.ts --project shared-module-graph",
     "test:telemetry-privacy": "vitest run --config vitest.config.ts src/ui-telemetry-events.test.ts src/error-telemetry.test.ts",
     "typecheck": "pnpm -w exec tsc --noEmit -p packages/review",
-    "test:integration:diffr": "pnpm run build:workspace-deps && pnpm run ensure:diffr --required && vitest run --config vitest.integration.config.ts",
+    "test:integration:diffr": "pnpm run build:workspace-deps && vitest run --config vitest.integration.config.ts",
     "whiteboard": "tsx src/cli.ts"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.84.0",
     "@agentclientprotocol/codex-acp": "2.0.0",
     "@agentclientprotocol/sdk": "1.5.1",
+    "@dev.fast/diffr": "catalog:",
     "@hono/node-server": "2.0.12",
     "@img/sharp-wasm32": "0.35.4",
     "@modelcontextprotocol/sdk": "1.30.0",
@@ -82,7 +82,6 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@dev.fast/diffr": "0.1.10",
     "@dev.fast/json": "workspace:*",
     "@dev.fast/local-vcs": "^0.1.0",
     "@dev.fast/review-protocol": "workspace:*",

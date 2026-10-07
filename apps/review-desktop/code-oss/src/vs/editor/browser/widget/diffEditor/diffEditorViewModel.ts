@@ -689,7 +689,7 @@ class SuppliedContextGap extends UnchangedRegion {
 	constructor(private readonly gap: NonNullable<IDocumentDiff['contextGaps']>[number]) {
 		super(gap.originalStart, gap.modifiedStart, Math.max(gap.originalCount, gap.modifiedCount), 0, 0);
 	}
-	override readLabel(reader: IReader | undefined): string | undefined { return this.gap.labelObservable?.read(reader) ?? this.gap.label; }
+	override readLabel(_reader: IReader | undefined): string | undefined { return this.gap.label; }
 	override get foldStateId(): number | undefined { return this.gap.foldStateId; }
 	override get owner(): 'base' | 'head' | 'both' { return this.gap.owner ?? 'both'; }
 	override get change(): 'unchanged' | 'inserted' | 'removed' | 'modified' { return this.gap.change ?? 'unchanged'; }

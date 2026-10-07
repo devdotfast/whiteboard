@@ -4,6 +4,10 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
+import {
+  STRUCTURAL_DIFF_WIRE_VERSION,
+  type StructuralSource,
+} from "@dev.fast/review-protocol";
 import { anchorSelection, rangeAnchor } from "@review/lens-selection.js";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { GlobalReviewDesktopVerbRelay } from "@review/server/global-verb-relay.js";
@@ -2088,7 +2092,7 @@ it("keeps reference coverage apart by pins: one path, changed under one comparis
 
     yield {
       type: "start",
-      version: 4,
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
       lhs: { type: "revision", rev: at.base },
       rhs: { type: "revision", rev: at.head },
       files,
@@ -2100,8 +2104,8 @@ it("keeps reference coverage apart by pins: one path, changed under one comparis
         file: file.file,
         diff: {
           type: "text",
-          lhs: { text: text },
-          rhs: { text: text },
+          lhs: structuralSource(text),
+          rhs: structuralSource(text),
           structural_changes: { base: [], head: [[0, 3]] },
           stats: {
             textual: { added: 3, removed: 0 },
@@ -2176,7 +2180,7 @@ it("preserves unchanged partial file coverage across pins and rejects stale writ
   vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
     yield {
       type: "start",
-      version: 4,
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
       lhs: { type: "revision", rev: "base" },
       rhs: { type: "revision", rev: "head" },
       files: [
@@ -2197,8 +2201,8 @@ it("preserves unchanged partial file coverage across pins and rejects stale writ
       },
       diff: {
         type: "text",
-        lhs: { text: base },
-        rhs: { text: head },
+        lhs: structuralSource(base),
+        rhs: structuralSource(head),
         structural_changes: { base: [[1, 2]], head: [[1, 2]] },
         stats: {
           textual: { added: 99, removed: 99 },
@@ -2307,7 +2311,7 @@ it("still reports structural read failures", async () => {
 
     yield {
       type: "start",
-      version: 4,
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
       lhs: { type: "revision", rev: pins.base },
       rhs: { type: "revision", rev: pins.head },
       files: [{ file, status: "added" }],
@@ -2377,7 +2381,7 @@ it("textual coverage uses Git ranges without launching diffr", async () => {
 
     yield {
       type: "start",
-      version: 4,
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
       lhs: { type: "revision", rev: "base" },
       rhs: { type: "revision", rev: "head" },
       files: [{ file, status: "modified" }],
@@ -2387,8 +2391,8 @@ it("textual coverage uses Git ranges without launching diffr", async () => {
       file,
       diff: {
         type: "text",
-        lhs: { text: "const x=1;" },
-        rhs: { text: "const x = 1;" },
+        lhs: structuralSource("const x=1;"),
+        rhs: structuralSource("const x = 1;"),
         structural_changes: { base: [], head: [] },
         stats: {
           textual: { added: 1, removed: 1 },
@@ -2447,7 +2451,7 @@ it("resolves file lenses to whole changed files, preserves empty groups, and sha
   vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
     yield {
       type: "start",
-      version: 4,
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
       lhs: { type: "revision", rev: "base" },
       rhs: { type: "revision", rev: "head" },
       files: [
@@ -2468,8 +2472,8 @@ it("resolves file lenses to whole changed files, preserves empty groups, and sha
       },
       diff: {
         type: "text",
-        lhs: { text: "base\ncontext\nmore context" },
-        rhs: { text: "head\ncontext\nmore context" },
+        lhs: structuralSource("base\ncontext\nmore context"),
+        rhs: structuralSource("head\ncontext\nmore context"),
         structural_changes: { base: [[0, 1]], head: [[0, 1]] },
         stats: {
           textual: { added: 99, removed: 99 },
@@ -2567,7 +2571,7 @@ it("validates range lens evidence and scopes progress and Uncategorized to disti
   vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
     yield {
       type: "start",
-      version: 4,
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
       lhs: { type: "revision", rev: "base" },
       rhs: { type: "revision", rev: "head" },
       files: [
@@ -2588,8 +2592,8 @@ it("validates range lens evidence and scopes progress and Uncategorized to disti
       },
       diff: {
         type: "text",
-        lhs: { text: "base1\nbase2\nbase3" },
-        rhs: { text: "head1\nhead2\nhead3" },
+        lhs: structuralSource("base1\nbase2\nbase3"),
+        rhs: structuralSource("head1\nhead2\nhead3"),
         structural_changes: { base: [[0, 3]], head: [[0, 3]] },
         stats: {
           textual: { added: 99, removed: 99 },
@@ -2693,7 +2697,7 @@ it("returns coverage and lenses after initial files without requesting summary e
   vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
     yield {
       type: "start",
-      version: 4,
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
       lhs: { type: "empty_tree" },
       rhs: { type: "revision", rev: "head" },
       files: [{ file, status: "added" }],
@@ -2703,7 +2707,7 @@ it("returns coverage and lenses after initial files without requesting summary e
       file,
       diff: {
         type: "text",
-        rhs: { text: "added" },
+        rhs: structuralSource("added"),
         structural_changes: { base: [], head: [[0, 1]] },
         stats: {
           textual: { added: 1, removed: 0 },
@@ -2955,7 +2959,7 @@ it("shares pending comparison work even when more than 32 reviews are opened", a
     await gate;
     yield {
       type: "start",
-      version: 4,
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
       lhs: { type: "revision", rev: "base" },
       rhs: { type: "revision", rev: "head" },
       files: [],
@@ -3029,3 +3033,19 @@ it("reports a created review with the origin its headers claim", async () => {
     { reviewId: expect.any(String), kind: "review", blocks: 0, via: "other" },
   ]);
 });
+
+function structuralSource(text: string): StructuralSource {
+  const lines = text.split("\n");
+
+  return {
+    text,
+    root: {
+      kind: "leaf",
+      id: 1,
+      fold_state_id: 1,
+      alignment_id: 1,
+      start: { line: 0, column: 0 },
+      end: { line: lines.length - 1, column: lines.at(-1)!.length },
+    },
+  };
+}

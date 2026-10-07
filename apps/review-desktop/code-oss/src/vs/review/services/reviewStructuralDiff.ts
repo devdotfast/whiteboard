@@ -19,7 +19,7 @@ import { ICodeEditorService } from "../../editor/browser/services/codeEditorServ
 import type { IDiffEditor } from "../../editor/browser/editorBrowser.js";
 import { LineRange } from "../../editor/common/core/ranges/lineRange.js";
 import { DetailedLineRangeMapping } from "../../editor/common/diff/rangeMapping.js";
-import { autorun, derived, type IObservable } from "../../base/common/observable.js";
+import { autorun, type IObservable } from "../../base/common/observable.js";
 import type { UnchangedRegion } from "../../editor/browser/widget/diffEditor/diffEditorViewModel.js";
 import {
 	structuralContextGaps,
@@ -170,16 +170,7 @@ export class StructuralDiffProvider implements IDocumentDiffProvider {
 				diff,
 				(id) => this.session.isRegionCollapsed(path!, id) === true,
 				(id) => this.session.isRegionCollapsed(path!, id),
-			).map(gap => ({
-				...gap, labelObservable: derived(reader => {
-					for (const id of gap.regionIds) {
-						const label = this.session.regionLabel(path!, id).read(reader);
-						if (label) return label;
-					}
-					const count = Math.max(gap.originalCount, gap.modifiedCount);
-					return `${count} hidden line${count === 1 ? "" : "s"}`;
-				})
-			})),
+			),
 			changeHighlights: highlights,
 		};
 	}

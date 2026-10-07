@@ -13,7 +13,7 @@ let
     targetPkgs = p: package.runtimePackages p ++ [ p.file p.binutils ];
     runScript = pkgs.writeShellScript "probe-installed-whiteboard" ''
       set -eu
-      ${raw}/resources/app/review-runtime/bin/diffr --version
+      ${raw}/resources/app/review-runtime/node_modules/@dev.fast/diffr-linux-*/diffr --version
       while IFS= read -r -d $'\0' binary; do
         if file -b "$binary" | grep -q '^ELF .*dynamically linked'; then
           if ldd "$binary" 2>&1 | grep -q 'not found'; then

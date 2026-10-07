@@ -38,17 +38,13 @@ const { values } = parseArgs({
   options: { app: { type: "string" }, keep: { type: "boolean" } },
 });
 
-const bundledDiffr = values.app
-  ? path.join(values.app, "Contents/Resources/app/review-runtime/bin/diffr")
-  : path.join(workspace, "packages/review/bin/diffr");
+const diffrPackage = `node_modules/@dev.fast/diffr-${process.platform}-${process.arch}/diffr`;
 
-const structuralDiffAvailable =
-  !!process.env.REVIEW_DIFFR_BINARY ||
-  existsSync(bundledDiffr) ||
-  (await exec("which", ["diffr"]).then(
-    () => true,
-    () => false,
-  ));
+const bundledDiffr = values.app
+  ? path.join(values.app, "Contents/Resources/app/review-runtime", diffrPackage)
+  : path.join(workspace, diffrPackage);
+
+const structuralDiffAvailable = existsSync(bundledDiffr);
 
 const root = await realpath(
   await mkdtemp(
