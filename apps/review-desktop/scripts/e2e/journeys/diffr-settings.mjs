@@ -11,7 +11,6 @@ export const phase = 1;
 export const options = {
   settings: { "review.experimental.structuralDiff.enabled": true },
   env: {
-    REVIEW_DIFFR_BINARY: "",
     GEMINI_API_KEY: "",
     GOOGLE_API_KEY: "",
     OPENAI_API_KEY: "",
@@ -54,7 +53,7 @@ function testFolds(events) {
 
   return events
     .filter((event) => event.type === "file")
-    .flatMap((event) => walk(event.diff?.rhs?.regions))
+    .flatMap((event) => walk(event.diff?.rhs ? [event.diff.rhs.root] : []))
     .filter(
       (region) =>
         region.tags?.includes("test-bodies:test") &&
@@ -117,8 +116,9 @@ export async function run(ctx) {
   await toggle.click();
   await ctx.until(
     async () =>
-      (await ctx.apiOk("/diffr-config")).values.plugins.bundled["test-bodies"]
-        .enabled === false,
+      (await ctx.apiOk("/diffr-config")).values.plugins.shape.bundled[
+        "test-bodies"
+      ].enabled === false,
     "diffr persisted the setting",
   );
   await settings

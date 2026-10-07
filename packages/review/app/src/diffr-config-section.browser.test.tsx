@@ -44,26 +44,34 @@ function config(): ReviewDiffrConfig {
       keylessCustomEndpoint: id === "openai",
     })),
     defaultPrompt: "Default prompt.",
+    defaultHiddenTags: ["generated", "vendored", "test"],
     values: {
+      version: 2,
       plugins: {
-        bundled: {
-          context: { enabled: true, lines: 3 },
-          "test-bodies": { enabled: true },
-          "deleted-bodies": { enabled: true },
-          "removed-runs": { enabled: true },
-          group: { enabled: true },
-          "hide-files": { enabled: true, deleted: true, tags: ["test"] },
-          summarize: {
-            enabled: false,
-            provider: "gemini",
-            model: "test-model",
-            tests: true,
-            system_prompt: "Default prompt.",
+        classify: { bundled: { hide: ["test"], hide_deleted: true } },
+        // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- Native diffr v2 config key.
+        shape: {
+          bundled: {
+            context: { enabled: true, lines: 3 },
+            "test-bodies": { enabled: true },
+            "deleted-bodies": { enabled: true },
+            "removed-runs": { enabled: true },
+            summarize: {
+              enabled: false,
+              provider: "gemini",
+              model: "test-model",
+              tests: true,
+              system_prompt: "Default prompt.",
+            },
           },
         },
       },
     },
   };
+}
+
+function pluginSettings(config: ReviewDiffrConfig): JsonObject {
+  return config.values.plugins as JsonObject;
 }
 
 async function mount(overrides: Partial<ReviewDiffrConfig> = {}) {
@@ -79,16 +87,22 @@ async function mount(overrides: Partial<ReviewDiffrConfig> = {}) {
       async (input) => ({
         ...current,
         changed: true,
+        defaultHiddenTags: ["generated", "vendored", "test"],
         values: {
+          version: 2,
           plugins: {
-            bundled: {
-              summarize: {
-                enabled: input.enabled,
-                provider: input.provider,
-                model: input.model,
-                endpoint: input.endpoint,
-                system_prompt: input.systemPrompt,
-                tests: input.tests,
+            classify: { bundled: { hide: ["test"], hide_deleted: true } },
+            // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- Native diffr v2 config key.
+            shape: {
+              bundled: {
+                summarize: {
+                  enabled: input.enabled,
+                  provider: input.provider,
+                  model: input.model,
+                  endpoint: input.endpoint,
+                  system_prompt: input.systemPrompt,
+                  tests: input.tests,
+                },
               },
             },
           },
@@ -122,6 +136,57 @@ async function open() {
     .toBeVisible();
 }
 
+test("file-hiding controls use classify fields and retain custom tags across off and on", async () => {
+  const { actions, current } = await mount();
+  pluginSettings(current).classify = {
+    bundled: { hide: ["custom"], hide_deleted: true },
+  };
+  vi.mocked(actions.set).mockImplementation(async (key, value) => {
+    const field = key.split(".").at(-1)!;
+    const classify = pluginSettings(current).classify as JsonObject;
+    classify.bundled = {
+      ...(classify.bundled as JsonObject),
+      [field]: value,
+    };
+
+    return { ...current, changed: true };
+  });
+  await open();
+  await act(async () => page.getByLabelText("Hide files by tag").click());
+  expect(pluginSettings(current).classify).toMatchObject({
+    bundled: { hide: [] },
+  });
+  await act(async () => page.getByLabelText("Hide files by tag").click());
+  expect(pluginSettings(current).classify).toMatchObject({
+    bundled: { hide: ["custom"] },
+  });
+  await act(async () => page.getByLabelText("Hide deleted files").click());
+  expect(pluginSettings(current).classify).toMatchObject({
+    bundled: { hide_deleted: false },
+  });
+  expect(actions.set).toHaveBeenCalledWith("plugins.classify.bundled.hide", []);
+  expect(actions.set).toHaveBeenCalledWith("plugins.classify.bundled.hide", [
+    "custom",
+  ]);
+  expect(actions.set).toHaveBeenCalledWith(
+    "plugins.classify.bundled.hide_deleted",
+    false,
+  );
+});
+
+test("enabling tag hiding from an empty list uses the schema defaults", async () => {
+  const { actions, current } = await mount();
+  pluginSettings(current).classify = {
+    bundled: { hide: [], hide_deleted: false },
+  };
+  await open();
+  await act(async () => page.getByLabelText("Hide files by tag").click());
+  expect(actions.set).toHaveBeenCalledWith(
+    "plugins.classify.bundled.hide",
+    current.defaultHiddenTags,
+  );
+});
+
 test("starts collapsed and reads only on first expansion", async () => {
   const { actions } = await mount();
   expect(actions.read).not.toHaveBeenCalled();
@@ -144,7 +209,7 @@ test("writes the selected key and keeps reload visible when collapsed", async ()
     await page.getByLabelText("Collapse test bodies").click();
   });
   expect(actions.set).toHaveBeenCalledWith(
-    "plugins.bundled.test-bodies.enabled",
+    "plugins.shape.bundled.test-bodies.enabled",
     false,
   );
   await expect
@@ -178,8 +243,14 @@ test("rejects invalid context lines without writing", async () => {
   expect(actions.set).not.toHaveBeenCalled();
 });
 
-test("tests draft settings without saving, then saves and clears the key", async () => {
-  const { actions } = await mount();
+test("tests draft settings without saving, then saves the custom prompt and clears the key", async () => {
+  const saved = config();
+
+  const foldPlugins = (pluginSettings(saved).shape as JsonObject)
+    .bundled as JsonObject;
+
+  (foldPlugins.summarize as JsonObject).system_prompt = "Keep my wording.";
+  const { actions } = await mount(saved);
   await open();
   expect(
     (document.querySelector("input[type=password]") as HTMLInputElement).value,
@@ -203,13 +274,16 @@ test("tests draft settings without saving, then saves and clears the key", async
     provider: "gemini",
     model: "test-model",
     endpoint: "",
-    systemPrompt: "Default prompt.",
+    systemPrompt: "Keep my wording.",
     tests: true,
     apiKey: "test-secret",
   });
   await expect
     .element(page.getByLabelText("API key", { exact: true }))
     .toHaveValue("");
+  await expect
+    .element(page.getByLabelText("Prompt", { exact: true }))
+    .toHaveValue("Keep my wording.");
 });
 
 test("confirms discarding unsaved summary edits before reloading", async () => {
@@ -268,31 +342,6 @@ test("does not prompt for reload after a no-op and disables reload while testing
     .element(page.getByRole("button", { name: "Reload window", exact: true }))
     .toBeDisabled();
   await act(async () => finish("summary"));
-});
-
-test("shows partial save errors with authoritative values and a reload prompt", async () => {
-  const { actions, current } = await mount();
-  await open();
-  vi.mocked(actions.saveSummarizer).mockResolvedValue({
-    ...current,
-    changed: true,
-    error: "Some settings were saved.",
-  });
-  await act(async () => {
-    await page.getByLabelText("Model", { exact: true }).fill("new-model");
-  });
-  await act(async () => {
-    await page.getByRole("button", { name: "Save summaries" }).click();
-  });
-  await expect
-    .element(page.getByRole("alert"))
-    .toHaveTextContent("Some settings were saved.");
-  await expect
-    .element(page.getByLabelText("Model", { exact: true }))
-    .toHaveValue("test-model");
-  await expect
-    .element(page.getByRole("button", { name: "Reload window", exact: true }))
-    .toBeVisible();
 });
 
 test("defaults to Gemini and switching provider resets the model and key", async () => {
@@ -392,7 +441,16 @@ test("switching provider clears a custom endpoint, and a new endpoint warns abou
     system_prompt: "Default prompt.",
   };
 
-  await mount({ values: { ...values, plugins: { bundled: { summarize } } } });
+  await mount({
+    values: {
+      ...values,
+      plugins: {
+        ...(values.plugins as JsonObject),
+        // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- Native diffr v2 config key.
+        shape: { bundled: { summarize } },
+      },
+    },
+  });
   await open();
   const endpoint = page.getByLabelText("Endpoint URL", { exact: true });
   await expect.element(endpoint).toHaveValue("https://openrouter.ai/api/v1");

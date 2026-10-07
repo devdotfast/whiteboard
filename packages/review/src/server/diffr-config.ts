@@ -15,6 +15,7 @@ import {
   type ReviewDiffrConfig,
   type ReviewDiffrProvider,
   type ReviewDiffrSummarizerInput,
+  type StructuralRegion,
   decodeStructuralDiffEvent,
   reviewDiffrSummarizerInputSchema,
 } from "@dev.fast/review-protocol";
@@ -36,29 +37,91 @@ function serialized<T>(operation: () => Promise<T>): Promise<T> {
   return next;
 }
 
+type DiffrArguments =
+  | { command: "schema" }
+  | { command: "show"; reveal: boolean }
+  | { command: "set"; patch: JsonObject }
+  | { command: "migrate" }
+  | { command: "diff"; before: string; after: string };
+
+function diffrArgv(args: DiffrArguments): string[] {
+  switch (args.command) {
+    case "schema":
+      return ["config", "schema"];
+    case "show":
+      return ["config", "show", "--json", ...(args.reveal ? ["--reveal"] : [])];
+    case "set":
+      return ["config", "set", "--stdin", "--json"];
+    case "migrate":
+      return ["config", "migrate", "--json"];
+    case "diff":
+      return [
+        "--no-index",
+        "--format",
+        "ndjson",
+        "--",
+        args.before,
+        args.after,
+      ];
+  }
+}
+
 async function diffr(
-  args: string[],
+  args: DiffrArguments,
   rootPath?: string,
   options: { signal?: AbortSignal; env?: NodeJS.ProcessEnv } = {},
 ): Promise<string> {
+  const executable = diffrExecutable();
+
   try {
-    const { stdout } = await execFileAsync(diffrExecutable(), args, {
+    const operation = execFileAsync(executable, diffrArgv(args), {
       cwd: rootPath,
       maxBuffer: 16 * 1024 * 1024,
       signal: options.signal ?? AbortSignal.timeout(30_000),
       env: options.env ?? process.env,
     });
 
+    if (args.command === "set")
+      operation.child.stdin?.end(JSON.stringify(args.patch));
+    const { stdout } = await operation;
+
     return stdout;
   } catch (error) {
-    // SAFETY: execFile rejects with an Error carrying its exit or spawn code.
+    // SAFETY: execFile adds the exit or spawn code and stdout to its Error.
     // Do not forward its message: it includes command arguments.
-    const failure = error as NodeJS.ErrnoException;
+    const failure = error as NodeJS.ErrnoException & { stdout?: string };
 
     if (failure.code === "ENOENT") throw diffrMissingError();
 
     if (failure.name === "AbortError")
       throw new Error("diffr timed out or was cancelled.");
+
+    if (
+      (args.command === "set" || args.command === "migrate") &&
+      failure.stdout
+    ) {
+      let details: JsonValue | undefined;
+
+      try {
+        details = parseJsonText(failure.stdout);
+      } catch {
+        /* Do not echo raw output in parse errors. */
+      }
+
+      if (
+        isJsonObject(details) &&
+        isJsonObject(details.error) &&
+        isStringValue(details.error.message)
+      ) {
+        const { message, repair_prompt: prompt } = details.error;
+        throw new Error(
+          isStringValue(prompt)
+            ? `${message}\n\nCopy this as a prompt to your coding agent:\n${prompt}`
+            : message,
+        );
+      }
+    }
+
     throw new Error(
       "diffr could not complete the operation. Check its configuration and credentials.",
     );
@@ -70,13 +133,7 @@ async function values(
   reveal = false,
   signal?: AbortSignal,
 ): Promise<JsonObject> {
-  return json(
-    await diffr(
-      ["config", "show", "--json", ...(reveal ? ["--reveal"] : [])],
-      rootPath,
-      { signal },
-    ),
-  );
+  return json(await diffr({ command: "show", reveal }, rootPath, { signal }));
 }
 
 function json(output: string): JsonObject {
@@ -100,16 +157,10 @@ function valueAt(object: JsonObject, key: string): JsonValue | undefined {
   return value;
 }
 
-const prefix = "plugins.bundled.summarize";
+const prefix = "plugins.shape.bundled.summarize";
 
 function savedProvider(config: JsonObject): string {
   const value = valueAt(config, `${prefix}.provider`);
-
-  return isStringValue(value) ? value : "";
-}
-
-function savedEndpoint(config: JsonObject): string {
-  const value = valueAt(config, `${prefix}.endpoint`);
 
   return isStringValue(value) ? value : "";
 }
@@ -119,9 +170,11 @@ function movesKey(
   config: JsonObject,
   draft: Pick<ReviewDiffrSummarizerInput, "provider" | "endpoint">,
 ): boolean {
+  const endpoint = valueAt(config, `${prefix}.endpoint`);
+
   return (
     draft.provider !== savedProvider(config) ||
-    draft.endpoint !== savedEndpoint(config)
+    draft.endpoint !== (isStringValue(endpoint) ? endpoint : "")
   );
 }
 
@@ -151,27 +204,35 @@ function strings(value: JsonValue | undefined): string[] {
 }
 
 /**
- * What diffr's schema says about summaries: each provider's defaults, and
- * the default prompt with the link its description gives. Nothing when
- * diffr cannot describe its schema: the rest of Settings still works.
+ * Defaults supplied by diffr's schema for tag hiding and summary controls.
+ * If the schema cannot be read, resolved settings still work.
  */
-async function summaryDefaults(
+async function configDefaults(
   rootPath?: string,
-): Promise<Pick<ReviewDiffrConfig, "providers" | "defaultPrompt">> {
+): Promise<
+  Pick<ReviewDiffrConfig, "providers" | "defaultPrompt" | "defaultHiddenTags">
+> {
   let schema: JsonObject;
 
   try {
-    schema = json(await diffr(["config", "schema"], rootPath));
+    schema = json(await diffr({ command: "schema" }, rootPath));
   } catch {
     return {};
   }
 
   const options = valueAt(
     schema,
-    "properties.plugins.properties.bundled.properties.summarize.properties",
+    "properties.plugins.properties.shape.properties.bundled.properties.summarize.properties",
   );
 
-  if (!isJsonObject(options)) return {};
+  const defaultHiddenTags = strings(
+    valueAt(
+      schema,
+      "properties.plugins.properties.classify.properties.bundled.properties.hide.default",
+    ),
+  );
+
+  if (!isJsonObject(options)) return { defaultHiddenTags };
 
   const option = (name: string) =>
     isJsonObject(options[name]) ? options[name] : {};
@@ -200,6 +261,7 @@ async function summaryDefaults(
   const prompt = option("system_prompt");
 
   return {
+    defaultHiddenTags,
     providers,
     defaultPrompt: isStringValue(prompt.default) ? prompt.default : undefined,
   };
@@ -207,7 +269,7 @@ async function summaryDefaults(
 
 async function read(rootPath?: string): Promise<ReviewDiffrConfig> {
   const config = await values(rootPath);
-  const defaults = await summaryDefaults(rootPath);
+  const defaults = await configDefaults(rootPath);
   const saved = valueAt(config, `${prefix}.api_key`);
 
   const credentialSource =
@@ -217,16 +279,15 @@ async function read(rootPath?: string): Promise<ReviewDiffrConfig> {
         ? "environment"
         : "missing";
 
-  const plugins = config.plugins;
+  const plugins = valueAt(config, "plugins.shape");
 
   if (isJsonObject(plugins)) {
-    for (const namespace of Object.values(plugins)) {
-      if (!isJsonObject(namespace)) continue;
+    const entries = isJsonObject(plugins.bundled)
+      ? [...Object.values(plugins), ...Object.values(plugins.bundled)]
+      : Object.values(plugins);
 
-      for (const plugin of Object.values(namespace)) {
-        if (isJsonObject(plugin)) delete plugin.api_key;
-      }
-    }
+    for (const plugin of entries)
+      if (isJsonObject(plugin)) delete plugin.api_key;
   }
 
   return { values: config, credentialSource, ...defaults };
@@ -236,35 +297,35 @@ export function readDiffrConfig(rootPath?: string): Promise<ReviewDiffrConfig> {
   return serialized(() => read(rootPath));
 }
 
-export function diffrConfigValueText(value: JsonValue): string {
-  return isStringValue(value) ? value : JSON.stringify(value);
+export async function migrateDiffrConfig(
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const result = json(
+    await diffr({ command: "migrate" }, undefined, { signal }),
+  );
+
+  if (result.changed === true) invalidateStructuralComparisons();
+
+  return result.changed === true;
 }
 
 async function writeSettings(
-  entries: [string, JsonValue][],
+  patch: JsonObject,
   rootPath?: string,
 ): Promise<ReviewDiffrConfig> {
   let changed = false;
   let error: string | undefined;
-  let current = await values(rootPath);
 
   try {
-    for (const [key, value] of entries) {
-      if (valueAt(current, key) === value) continue;
-      await diffr(
-        ["config", "set", key, diffrConfigValueText(value)],
-        rootPath,
-      );
-      changed = true;
-      // A write can clear others, such as a provider's endpoint and key.
-      current = await values(rootPath);
-    }
-  } catch {
-    error = changed
-      ? "Some settings were saved before diffr rejected a change. Check the current values and try again."
-      : "diffr could not save the setting. Check its configuration and the entered value.";
-  } finally {
+    const result = json(await diffr({ command: "set", patch }, rootPath));
+    changed = result.changed === true;
+
     if (changed) invalidateStructuralComparisons();
+  } catch (cause) {
+    error =
+      cause instanceof Error
+        ? cause.message
+        : "diffr could not save the settings.";
   }
 
   return { ...(await read(rootPath)), changed, error };
@@ -275,13 +336,16 @@ export function setDiffrConfigValue(
   value: JsonValue,
   rootPath?: string,
 ): Promise<ReviewDiffrConfig> {
-  if (
-    !/^[A-Za-z0-9_][A-Za-z0-9_-]*(\.[A-Za-z0-9_][A-Za-z0-9_-]*)*$/.test(key)
-  ) {
+  if (!/^[A-Za-z0-9_][A-Za-z0-9_-]*(\.[^.\r\n\0]+)*$/u.test(key)) {
     throw new Error("Invalid diffr config key.");
   }
 
-  return serialized(() => writeSettings([[key, value]], rootPath));
+  const parts = key.split(".");
+  let patch: JsonObject = { [parts.pop()!]: value };
+
+  for (const part of parts.reverse()) patch = { [part]: patch };
+
+  return serialized(() => writeSettings(patch, rootPath));
 }
 
 export function saveDiffrSummarizer(
@@ -313,40 +377,24 @@ export function saveDiffrSummarizer(
       };
     }
 
-    const entries: [string, JsonValue][] = [];
+    const summarize: JsonObject = {
+      enabled: draft.enabled,
+      provider: draft.provider,
+      endpoint: draft.endpoint,
+      model: draft.model,
+      tests: draft.tests,
+    };
 
-    if (!draft.enabled) entries.push([`${prefix}.enabled`, false]);
+    if (draft.apiKey) summarize.api_key = draft.apiKey;
+    else if (moving && savedKey) summarize.api_key = "";
 
-    // Clear a key before its destination changes and write a new one only
-    // after, so a failure part way never pairs a key with another vendor.
-    if (moving && savedKey) entries.push([`${prefix}.api_key`, ""]);
-    entries.push([`${prefix}.provider`, draft.provider]);
+    if (draft.systemPrompt.trim()) summarize.system_prompt = draft.systemPrompt;
 
-    // diffr clears a provider's endpoint when the provider changes, so a
-    // custom one kept across a switch is written again.
-    if (
-      draft.endpoint !== savedEndpoint(current.values) ||
-      (draft.endpoint && draft.provider !== savedProvider(current.values))
-    )
-      entries.push([`${prefix}.endpoint`, draft.endpoint]);
-
-    if (draft.apiKey) entries.push([`${prefix}.api_key`, draft.apiKey]);
-
-    // A blank prompt leaves diffr's own in place.
-    if (
-      draft.systemPrompt.trim() &&
-      draft.systemPrompt !== valueAt(current.values, `${prefix}.system_prompt`)
-    )
-      entries.push([`${prefix}.system_prompt`, draft.systemPrompt]);
-
-    entries.push(
-      [`${prefix}.model`, draft.model],
-      [`${prefix}.tests`, draft.tests],
+    return writeSettings(
+      // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- Native diffr config key.
+      { plugins: { shape: { bundled: { summarize } } } },
+      rootPath,
     );
-
-    if (draft.enabled) entries.push([`${prefix}.enabled`, true]);
-
-    return writeSettings(entries, rootPath);
   });
 }
 
@@ -373,7 +421,7 @@ export async function testDiffrSummarizer(
       throw new Error("The summarizer is not available in this configuration.");
 
     const { provider, endpoint, model, systemPrompt } = parsed.data;
-    const providers = (await summaryDefaults(rootPath)).providers ?? [];
+    const providers = (await configDefaults(rootPath)).providers ?? [];
 
     const variables =
       providers.find((known) => known.id === provider)?.keyVariables ?? [];
@@ -410,10 +458,13 @@ export async function testDiffrSummarizer(
     await writeFile(
       join(directory, "diffr", "config.toml"),
       stringify({
-        version: 1,
+        version: 2,
         plugins: {
-          order: ["bundled.summarize"],
-          bundled: { summarize: options },
+          // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- Native diffr v2 config key.
+          shape: {
+            order: ["bundled.summarize"],
+            bundled: { summarize: options },
+          },
         },
       }),
       { mode: 0o600 },
@@ -425,56 +476,47 @@ export async function testDiffrSummarizer(
     await writeFile(before, "");
     await writeFile(after, SUMMARY_SAMPLE);
 
-    const output = await diffr(
-      [
-        "--no-index",
-        "--format",
-        "ndjson",
-        "--stream-annotations",
-        "--",
-        before,
-        after,
-      ],
-      directory,
-      {
-        env: {
-          ...process.env,
-          ...Object.fromEntries(
-            providers
-              .flatMap((known) => known.keyVariables)
-              .map((name) => [name, ""]),
-          ),
-          ...(apiKey && variables[0] && { [variables[0]]: apiKey }),
-          XDG_CONFIG_HOME: directory,
-        },
-        signal: deadline,
+    const output = await diffr({ command: "diff", before, after }, directory, {
+      env: {
+        ...process.env,
+        ...Object.fromEntries(
+          providers
+            .flatMap((known) => known.keyVariables)
+            .map((name) => [name, ""]),
+        ),
+        ...(apiKey && variables[0] && { [variables[0]]: apiKey }),
+        XDG_CONFIG_HOME: directory,
       },
-    );
+      signal: deadline,
+    });
 
     try {
       const events = output.trim().split("\n").map(decodeStructuralDiffEvent);
       const complete = events.at(-1);
 
-      const annotation = events
+      const labels = (region: StructuralRegion): string[] => [
+        ...(region.visibility?.label ? [region.visibility.label] : []),
+        ...(region.kind === "fold" ? region.children.flatMap(labels) : []),
+      ];
+
+      const summary = events
         .flatMap((event) =>
-          event.type === "annotations" ? event.annotations : [],
+          event.type === "file" && event.diff?.type === "text"
+            ? [event.diff.rhs, event.diff.lhs].flatMap((source) =>
+                source ? labels(source.root) : [],
+              )
+            : [],
         )
-        .find((item) => item.label.trim());
+        .find((label) => label.trim());
 
       if (
         complete?.type === "complete" &&
         complete.failed === 0 &&
         !complete.aborted &&
-        !events.some(
-          (event) =>
-            (event.type === "annotations" || event.type === "file") &&
-            event.error,
-        ) &&
-        annotation
+        !events.some((event) => event.type === "file" && event.error) &&
+        summary
       ) {
-        return apiKey
-          ? annotation.label.split(apiKey).join("[redacted]")
-          : annotation.label;
+        return apiKey ? summary.split(apiKey).join("[redacted]") : summary;
       }
     } catch {
       /* Never return provider output or parser causes. */

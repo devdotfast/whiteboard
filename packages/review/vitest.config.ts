@@ -12,6 +12,10 @@ export default defineConfig({
         os.tmpdir(),
         `progressive-review-tests-${process.pid}`,
       ),
+      XDG_CONFIG_HOME: path.join(
+        os.tmpdir(),
+        `progressive-review-config-tests-${process.pid}`,
+      ),
       // GitHub Actions exports the repository slug, which the trace code
       // honors over a checkout's remote; scratch repositories in tests must
       // resolve to their own remotes.
@@ -27,6 +31,7 @@ export default defineConfig({
           name: "shared-module-graph",
           environment: "node",
           isolate: false,
+          server: { deps: { inline: ["@dev.fast/diffr"] } },
           exclude: [...configDefaults.exclude, "app/**"],
           // Integration cases can exceed Vitest's
           // 5 second default while sharing a two-core hosted runner.

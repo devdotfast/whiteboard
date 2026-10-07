@@ -57,12 +57,12 @@ import { z } from "zod";
 import { aliasInstallationToAccount } from "./account-alias";
 import { CrashReportRequestSchema, reportCrashDump } from "./crash-report";
 import {
+  migrateDiffrConfig,
   readDiffrConfig,
   saveDiffrSummarizer,
   setDiffrConfigValue,
   testDiffrSummarizer,
 } from "./diffr-config";
-import { installFullDiffr } from "./diffr-languages.js";
 import {
   GlobalReviewDesktopVerbRelay,
   type ReviewDesktopVerbRelay,
@@ -397,18 +397,6 @@ export function createGlobalReviewServer(
 
     return serverJson(200, { ok: true });
   });
-  app.post("/diffr-languages/install", async () => {
-    try {
-      await installFullDiffr();
-      invalidateStructuralComparisons();
-
-      return serverJson(200, { installed: true });
-    } catch (error) {
-      return serverJson(503, {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
 
   app.get("/diffr-config", async () =>
     serverJson(200, await readDiffrConfig()),
@@ -580,6 +568,7 @@ export function createGlobalReviewServer(
       return urlForBoundPort();
     },
     listen: async () => {
+      await migrateDiffrConfig();
       scratchpadEnabled = await readScratchpadEnabled();
       boundPort = await listen(httpServer, input.port);
       discovery.url = urlForBoundPort();

@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { build } from "tsdown";
 import { afterAll, beforeAll, describe, test } from "vitest";
 
-import { stageDiffrBinary } from "../../../apps/review-desktop/scripts/stage-review-runtime.mjs";
 import {
   cleanupTempDirs,
   gitRepository,
@@ -20,9 +20,27 @@ let structuralDiff,
   readDiffrConfig,
   setDiffrConfigValue,
   saveDiffrSummarizer,
-  testDiffrSummarizer;
+  testDiffrSummarizer,
+  migrateDiffrConfig;
 
-const source = path.resolve(import.meta.dirname, "../bin/diffr");
+const diffrPackage = path.dirname(
+  createRequire(import.meta.url).resolve("@dev.fast/diffr/package.json"),
+);
+
+const platformPackage = path.dirname(
+  createRequire(path.join(diffrPackage, "package.json")).resolve(
+    `@dev.fast/diffr-${process.platform}-${process.arch}/package.json`,
+  ),
+);
+
+async function stageDiffr(runtime) {
+  for (const directory of [diffrPackage, platformPackage])
+    await cp(
+      directory,
+      path.join(runtime, "node_modules/@dev.fast", path.basename(directory)),
+      { recursive: true, dereference: true },
+    );
+}
 
 async function collect(repositoryPath, base, head, paths, kind = "trees") {
   return Array.fromAsync(
@@ -37,7 +55,7 @@ async function collect(repositoryPath, base, head, paths, kind = "trees") {
 
 function successfulFiles(events, count) {
   assert.equal(events[0].type, "start");
-  assert.equal(events[0].version, 4);
+  assert.equal(events[0].version, 3);
   assert.deepEqual(events.at(-1), {
     type: "complete",
     succeeded: count,
@@ -100,7 +118,7 @@ describe("Relocated runtime diffr integrates with Review streams and settings", 
     git("add", "-A");
     git("commit", "-qm", "head");
     head = git("rev-parse", "HEAD");
-    await stageDiffrBinary(runtime, source);
+    await stageDiffr(runtime);
     await build({
       config: false,
       entry: {
@@ -129,6 +147,7 @@ describe("Relocated runtime diffr integrates with Review streams and settings", 
 
     ({ structuralDiff } = await load("structural-diff"));
     ({
+      migrateDiffrConfig,
       readDiffrConfig,
       setDiffrConfigValue,
       saveDiffrSummarizer,
@@ -140,10 +159,10 @@ describe("Relocated runtime diffr integrates with Review streams and settings", 
       { mode: 0o755 },
     );
     process.env.PATH = `${trap}${path.delimiter}${savedEnv.PATH}`;
-    delete process.env.REVIEW_DIFFR_BINARY;
+    process.env.REVIEW_DIFFR_BINARY = path.join(trap, "diffr");
   });
 
-  test("bundled binary streams added, modified and deleted files without using PATH", async () => {
+  test("bundled binary streams files and ignores host overrides", async () => {
     const events = await collect(repository, base, head);
     const files = successfulFiles(events, 3);
     assert.deepEqual(events[0].files.map(({ status }) => status).sort(), [
@@ -187,34 +206,89 @@ describe("Relocated runtime diffr integrates with Review streams and settings", 
     assert.deepEqual(events[0].files, []);
   });
 
+  test("a saved UI config migrates through the staged binary with its overrides intact", async () => {
+    const previous = process.env.XDG_CONFIG_HOME;
+    process.env.XDG_CONFIG_HOME = path.join(root, "migration");
+    const directory = path.join(process.env.XDG_CONFIG_HOME, "diffr");
+    await mkdir(directory, { recursive: true });
+
+    const original = await readFile(
+      new URL(
+        "../src/server/test-fixtures/diffr-ui-overrides.toml",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    await writeFile(path.join(directory, "config.toml"), original, {
+      mode: 0o600,
+    });
+
+    try {
+      assert.equal(await migrateDiffrConfig(), true);
+      const config = await readDiffrConfig(repository);
+      assert.equal(config.values.version, 2);
+      assert.deepEqual(config.values.plugins.classify.bundled.hide, [
+        "test",
+        "generated",
+      ]);
+      assert.equal(config.values.plugins.classify.bundled.hide_deleted, false);
+      assert.equal(config.values.plugins.shape.bundled.context.lines, 17);
+      assert.equal(
+        config.values.plugins.shape.bundled.summarize.system_prompt,
+        "  Use my exact custom instructions.\nKeep # inside the prompt, and answer with JSON if I ask for it.\n",
+      );
+
+      const migrated = await readFile(
+        path.join(directory, "config.toml"),
+        "utf8",
+      );
+
+      assert.equal(await migrateDiffrConfig(), false);
+      await readDiffrConfig(repository);
+      assert.equal(
+        await readFile(path.join(directory, "config.toml"), "utf8"),
+        migrated,
+      );
+    } finally {
+      process.env.XDG_CONFIG_HOME = previous;
+    }
+  });
+
   test("settings values and edits round-trip through the staged binary", async () => {
     const config = await readDiffrConfig(repository);
-    assert.ok(Number.isInteger(config.values.plugins.bundled.context.lines));
-    assert.equal(config.values.plugins.bundled.summarize.api_key, undefined);
+    assert.ok(
+      Number.isInteger(config.values.plugins.shape.bundled.context.lines),
+    );
+    assert.equal(
+      config.values.plugins.shape.bundled.summarize.api_key,
+      undefined,
+    );
     assert.ok(
       ["config", "environment", "missing"].includes(config.credentialSource),
     );
 
     const updated = await setDiffrConfigValue(
-      "plugins.bundled.context.lines",
+      "plugins.shape.bundled.context.lines",
       7,
       repository,
     );
 
-    assert.equal(updated.values.plugins.bundled.context.lines, 7);
+    assert.equal(updated.values.plugins.shape.bundled.context.lines, 7);
     assert.equal(updated.changed, true);
     assert.equal(updated.error, undefined);
     assert.equal(
-      (await readDiffrConfig(repository)).values.plugins.bundled.context.lines,
+      (await readDiffrConfig(repository)).values.plugins.shape.bundled.context
+        .lines,
       7,
     );
     assert.equal(existsSync(sentinel), false);
   });
 
-  test("a provider switch saves through the binary, clears the old key and keeps the file sparse", async () => {
+  test("a provider switch saves through the binary and clears the old key", async () => {
     delete process.env.ANTHROPIC_API_KEY;
     await setDiffrConfigValue(
-      "plugins.bundled.summarize.api_key",
+      "plugins.shape.bundled.summarize.api_key",
       "old-secret",
       repository,
     );
@@ -235,15 +309,11 @@ describe("Relocated runtime diffr integrates with Review streams and settings", 
     );
 
     assert.equal(saved.error, undefined);
-    assert.equal(saved.values.plugins.bundled.summarize.provider, "anthropic");
-    assert.equal(saved.credentialSource, "missing");
-
-    const file = await readFile(
-      path.join(process.env.XDG_CONFIG_HOME, "diffr", "config.toml"),
-      "utf8",
+    assert.equal(
+      saved.values.plugins.shape.bundled.summarize.provider,
+      "anthropic",
     );
-
-    assert.doesNotMatch(file, /system_prompt/);
+    assert.equal(saved.credentialSource, "missing");
   });
 
   test("setup summarizes through a keyless OpenAI-compatible server", async () => {
@@ -260,19 +330,7 @@ describe("Relocated runtime diffr integrates with Review streams and settings", 
           body: JSON.parse(body),
         };
 
-        const id = Number(
-          /fold (\d+):/.exec(received.body.messages[1].content)[1],
-        );
-
-        const content = JSON.stringify({
-          summaries: [
-            {
-              id,
-              summary: "",
-              pseudocode: "count and average positive values",
-            },
-          ],
-        });
+        const content = "count and average positive values";
 
         response.setHeader("content-type", "application/json");
         response.end(JSON.stringify({ choices: [{ message: { content } }] }));
@@ -304,78 +362,19 @@ describe("Relocated runtime diffr integrates with Review streams and settings", 
       server.close();
     }
   });
-  test("an explicit executable override takes precedence over the bundle", async () => {
-    const override = path.join(root, "override");
-    await writeFile(
-      override,
-      `#!/bin/sh\necho explicit-override >&2\nexit 93\n`,
-      { mode: 0o755 },
-    );
-    process.env.REVIEW_DIFFR_BINARY = override;
-    await assert.rejects(collect(repository, base, head), /explicit-override/);
-    assert.equal(existsSync(sentinel), false);
-  });
-
-  test("an unbundled installation falls back to PATH", async () => {
-    delete process.env.REVIEW_DIFFR_BINARY;
-    await rm(path.join(runtime, "bin"), { recursive: true, force: true });
+  test("a missing bundle fails without using PATH", async () => {
+    await rm(path.join(runtime, "node_modules"), {
+      recursive: true,
+      force: true,
+    });
     await assert.rejects(
       collect(repository, base, head),
-      /diffr exited with 97/,
+      /The bundled diffr executable is missing/,
     );
-    assert.equal(existsSync(sentinel), true);
-  });
-
-  describe("a working host installation coexists with the Desktop bundle", () => {
-    let called, launcher;
-    beforeAll(async () => {
-      await stageDiffrBinary(runtime, source);
-      const host = path.join(root, "host");
-      const traced = path.join(root, "traced-host");
-      called = path.join(root, "host-called");
-      await Promise.all([mkdir(host), mkdir(traced)]);
-      const binary = path.join(host, "diffr");
-      await copyFile(source, binary);
-      launcher = path.join(traced, "diffr");
-      await writeFile(
-        launcher,
-        `#!${process.execPath}
-const { appendFileSync } = require("node:fs");
-const { spawnSync } = require("node:child_process");
-appendFileSync(${JSON.stringify(called)}, "called\\n");
-const result = spawnSync(${JSON.stringify(binary)}, process.argv.slice(2), { stdio: "inherit" });
-process.exit(result.status ?? 1);
-`,
-        { mode: 0o755 },
-      );
-      process.env.PATH = `${traced}${path.delimiter}${host}${path.delimiter}${savedEnv.PATH}`;
-    });
-
-    test("prefers the bundle over a working host binary", async () => {
-      delete process.env.REVIEW_DIFFR_BINARY;
-      successfulFiles(await collect(repository, base, head), 3);
-      await readDiffrConfig(repository);
-      assert.equal(existsSync(called), false);
-    });
-
-    test("an explicit host override runs real diffs and settings", async () => {
-      process.env.REVIEW_DIFFR_BINARY = launcher;
-      successfulFiles(await collect(repository, base, head), 3);
-      assert.equal(existsSync(called), true);
-      await rm(called);
-      await readDiffrConfig(repository);
-      assert.equal(existsSync(called), true);
-      await rm(called);
-    });
-
-    test("without a bundle the host binary runs real diffs and settings", async () => {
-      delete process.env.REVIEW_DIFFR_BINARY;
-      await rm(path.join(runtime, "bin"), { recursive: true, force: true });
-      successfulFiles(await collect(repository, base, head), 3);
-      assert.equal(existsSync(called), true);
-      await rm(called);
-      await readDiffrConfig(repository);
-      assert.equal(existsSync(called), true);
-    });
+    await assert.rejects(
+      readDiffrConfig(repository),
+      /The bundled diffr executable is missing/,
+    );
+    assert.equal(existsSync(sentinel), false);
   });
 });

@@ -1,5 +1,6 @@
 import { Button } from "@canvas/ui/button";
 import { TextField, fieldStyles } from "@canvas/ui/text-field";
+import { isStringValue } from "@dev.fast/json";
 import {
   type JsonValue,
   type ReviewDiffrConfig,
@@ -13,14 +14,21 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Choice } from "./settings-choice";
 import { settingsStyles as styles } from "./settings-styles";
 
+const hideKey = "plugins.classify.bundled.hide";
+
 const displaySettings = [
-  ["context.enabled", "Collapse unchanged lines"],
-  ["test-bodies.enabled", "Collapse test bodies"],
-  ["deleted-bodies.enabled", "Collapse deleted function bodies"],
-  ["removed-runs.enabled", "Collapse long removed stretches"],
-  ["group.enabled", "Group adjacent folds"],
-  ["hide-files.enabled", "Hide files by tag"],
-  ["hide-files.deleted", "Hide deleted files"],
+  ["plugins.shape.bundled.context.enabled", "Collapse unchanged lines"],
+  ["plugins.shape.bundled.test-bodies.enabled", "Collapse test bodies"],
+  [
+    "plugins.shape.bundled.deleted-bodies.enabled",
+    "Collapse deleted function bodies",
+  ],
+  [
+    "plugins.shape.bundled.removed-runs.enabled",
+    "Collapse long removed stretches",
+  ],
+  [hideKey, "Hide files by tag"],
+  ["plugins.classify.bundled.hide_deleted", "Hide deleted files"],
 ] as const;
 
 function setting(
@@ -29,14 +37,16 @@ function setting(
 ): JsonValue | undefined {
   let value: JsonValue | undefined = config.values;
 
-  for (const part of `plugins.bundled.${key}`.split("."))
+  for (const part of key.split("."))
     value = isJsonObject(value) ? value[part] : undefined;
 
   return value;
 }
 
 function provider(config: ReviewDiffrConfig): string {
-  return String(setting(config, "summarize.provider") ?? "");
+  return String(
+    setting(config, "plugins.shape.bundled.summarize.provider") ?? "",
+  );
 }
 
 /** The provider diffr describes as `id`, if any. */
@@ -50,14 +60,21 @@ function title(config: ReviewDiffrConfig, id: string): string {
 
 function summaryDraft(config: ReviewDiffrConfig): ReviewDiffrSummarizerInput {
   return {
-    enabled: setting(config, "summarize.enabled") === true,
+    enabled:
+      setting(config, "plugins.shape.bundled.summarize.enabled") === true,
     provider: provider(config),
-    model: String(setting(config, "summarize.model") ?? ""),
-    endpoint: String(setting(config, "summarize.endpoint") ?? ""),
-    systemPrompt: String(
-      setting(config, "summarize.system_prompt") ?? config.defaultPrompt ?? "",
+    model: String(
+      setting(config, "plugins.shape.bundled.summarize.model") ?? "",
     ),
-    tests: setting(config, "summarize.tests") === true,
+    endpoint: String(
+      setting(config, "plugins.shape.bundled.summarize.endpoint") ?? "",
+    ),
+    systemPrompt: String(
+      setting(config, "plugins.shape.bundled.summarize.system_prompt") ??
+        config.defaultPrompt ??
+        "",
+    ),
+    tests: setting(config, "plugins.shape.bundled.summarize.tests") === true,
     apiKey: "",
   };
 }
@@ -74,6 +91,7 @@ export function DiffrConfigSection({
   const [draft, setDraft] = useState<ReviewDiffrSummarizerInput>();
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
+  const rememberedTags = useRef<string[] | undefined>(undefined);
   const [error, setError] = useState<string>();
   const [summary, setSummary] = useState<string>();
   const [changed, setChanged] = useState(false);
@@ -85,6 +103,7 @@ export function DiffrConfigSection({
     actions.read().then(
       (result) => {
         if (cancelled) return;
+        rememberTags(result);
         setConfig(result);
         setDraft(summaryDraft(result));
       },
@@ -121,7 +140,15 @@ export function DiffrConfigSection({
     }
   }
 
+  function rememberTags(result: ReviewDiffrConfig) {
+    const tags = setting(result, hideKey);
+
+    if (Array.isArray(tags) && tags.length)
+      rememberedTags.current = tags.filter(isStringValue);
+  }
+
   function saved(result: ReviewDiffrConfig) {
+    rememberTags(result);
     setConfig(result);
 
     if (result.changed) setChanged(true);
@@ -134,11 +161,12 @@ export function DiffrConfigSection({
     JSON.stringify(draft) !== JSON.stringify(summaryDraft(config));
 
   const unavailable =
-    !config || setting(config, "summarize.enabled") === undefined;
+    !config ||
+    setting(config, "plugins.shape.bundled.summarize.enabled") === undefined;
 
   const summaryValid = !!draft?.model.trim();
   const savedDraft = config && summaryDraft(config);
-  const hiddenTags = config ? setting(config, "hide-files.tags") : undefined;
+  const hiddenTags = config && setting(config, hideKey);
 
   return (
     <div {...stylex.props(styles.diffr)}>
@@ -164,17 +192,24 @@ export function DiffrConfigSection({
                       <input
                         type="checkbox"
                         aria-label={label}
-                        checked={setting(config, key) === true}
+                        checked={
+                          key === hideKey
+                            ? Array.isArray(hiddenTags) && hiddenTags.length > 0
+                            : setting(config, key) === true
+                        }
                         disabled={busy || setting(config, key) === undefined}
                         onChange={(event) => {
-                          const value = event.target.checked;
+                          const value =
+                            key === hideKey
+                              ? event.target.checked
+                                ? (rememberedTags.current ??
+                                  config.defaultHiddenTags ??
+                                  [])
+                                : []
+                              : event.target.checked;
+
                           void run(async () =>
-                            saved(
-                              await actions.set(
-                                `plugins.bundled.${key}`,
-                                value,
-                              ),
-                            ),
+                            saved(await actions.set(key, value)),
                           );
                         }}
                       />
@@ -184,16 +219,19 @@ export function DiffrConfigSection({
                         Not available in this configuration.
                       </p>
                     )}
-                    {key === "context.enabled" && (
+                    {key === "plugins.shape.bundled.context.enabled" && (
                       <SettingRow label="Context lines">
                         <ContextLines
-                          value={setting(config, "context.lines")}
+                          value={setting(
+                            config,
+                            "plugins.shape.bundled.context.lines",
+                          )}
                           disabled={busy || setting(config, key) !== true}
                           commit={(value) =>
                             void run(async () =>
                               saved(
                                 await actions.set(
-                                  "plugins.bundled.context.lines",
+                                  "plugins.shape.bundled.context.lines",
                                   value,
                                 ),
                               ),
@@ -202,12 +240,11 @@ export function DiffrConfigSection({
                         />
                       </SettingRow>
                     )}
-                    {key === "hide-files.enabled" &&
-                      Array.isArray(hiddenTags) && (
-                        <p {...stylex.props(styles.rowDescription)}>
-                          Tags: {hiddenTags.join(", ")}
-                        </p>
-                      )}
+                    {key === hideKey && Array.isArray(hiddenTags) && (
+                      <p {...stylex.props(styles.rowDescription)}>
+                        Tags: {hiddenTags.join(", ")}
+                      </p>
+                    )}
                   </div>
                 ))}
                 <h3>AI summaries</h3>

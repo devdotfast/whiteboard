@@ -12,6 +12,7 @@ import {
   reviewServerDiscoveryPath,
 } from "@review/server-discovery.js";
 
+import { migrateDiffrConfig } from "./diffr-config.js";
 import { GlobalReviewDesktopVerbRelay } from "./global-verb-relay.js";
 import { createNodeRequestListener } from "./hono-http.js";
 import {
@@ -71,6 +72,8 @@ export function withHeadlessServerLock<T>(
 
 async function serve(input: HeadlessServerInput) {
   if (input.signal.aborted) return;
+
+  await migrateDiffrConfig(input.signal);
 
   if (input.telemetry) await drainServerCrashReport(input.telemetry);
 

@@ -1,0 +1,38 @@
+# Overrides saved by Whiteboard 0.1.10. Migration must retain these comments.
+version = 1
+
+[plugins.bundled.context]
+enabled = false # Collapse unchanged lines
+lines = 17 # Context lines
+
+[plugins.bundled.test-bodies]
+enabled = false # Collapse test bodies
+
+[plugins.bundled.deleted-bodies]
+enabled = false # Collapse deleted function bodies
+
+[plugins.bundled.removed-runs]
+enabled = false # Collapse long removed stretches
+
+[plugins.bundled.group]
+enabled = false # Group adjacent folds; retired
+
+[plugins.bundled.hide-files]
+enabled = true # Hide files by tag
+tags = ["test", "generated"]
+deleted = false # Hide deleted files
+
+[plugins.bundled.summarize]
+enabled = true # Enable summaries
+provider = "openai" # Provider
+api_key = "synthetic-key" # API key
+model = "custom-model" # Model
+endpoint = "http://127.0.0.1:9/v1" # Endpoint URL
+system_prompt = '''  Use my exact custom instructions.
+Keep # inside the prompt, and answer with JSON if I ask for it.
+''' # Prompt
+tests = false # Include tests
+max_concurrency = 2 # Old ignored option
+
+[diff]
+byte_limit = 123456 # Unrelated file-only override
