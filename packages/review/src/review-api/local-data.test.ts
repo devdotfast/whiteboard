@@ -1618,7 +1618,8 @@ it("detects again when the repository root goes away and comes back", async () =
   await expect(local.data.file(pins, "head", source.file)).rejects.toThrow(
     "File is unavailable at the pinned commit.",
   );
-  expect(detections()).toEqual(detectionPair(root));
+  // A missing root is not worth a spawn.
+  expect(detections()).toEqual([]);
   execFileSync("git", ["clone", "--quiet", backup, repository], {
     stdio: "pipe",
   });
@@ -1626,10 +1627,7 @@ it("detects again when the repository root goes away and comes back", async () =
   expect(await local.data.file(pins, "head", source.file)).toMatchObject({
     text: "export const value = 2;\nexport const saved = true;\n",
   });
-  expect(detections()).toEqual([
-    ...detectionPair(root),
-    ...detectionPair(root),
-  ]);
+  expect(detections()).toEqual(detectionPair(root));
 });
 
 it("relists a pinned tree after the repository root comes back", async () => {
@@ -3456,6 +3454,31 @@ it("marks a commit-pinned review unavailable while its repository is gone", asyn
   expect(
     await (await app.request(`/${review.reviewId}?full=true&version=0`)).json(),
   ).toMatchObject({ sourceUnavailable: true });
+
+  renameSync(moved, repository);
+  await local.store.refreshWorktrees();
+
+  expect(local.store.read(review.reviewId).sourceUnavailable).toBeUndefined();
+});
+
+it("marks a worktree review unavailable while its checkout is gone, without spawning", async () => {
+  const review = await local.store.execute(
+    command({
+      type: "create",
+      title: "Removed worktree",
+      target: { kind: "worktree", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  const moved = `${repository}-moved`;
+  renameSync(repository, moved);
+  await local.store.refreshWorktrees();
+  expect(local.store.read(review.reviewId).sourceUnavailable).toBe(true);
+
+  recordSpawns();
+
+  for (let i = 0; i < 5; i++) await local.store.refreshWorktrees();
+  expect(spawns).toEqual([]);
 
   renameSync(moved, repository);
   await local.store.refreshWorktrees();

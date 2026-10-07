@@ -738,6 +738,13 @@ export class LocalReviewData {
     this.forgetWorktree(repositoryId);
     const rootPath = this.store.repositoryPath(repositoryId);
 
+    // Detection in a missing directory spawns and fails as "tools missing".
+    if (!existsSync(rootPath)) {
+      this.repositories.delete(repositoryId);
+
+      return Promise.resolve(null);
+    }
+
     const forget = () => {
       this.repositories.delete(repositoryId);
       this.closeReader(repositoryId);

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -526,6 +527,9 @@ export class ReviewStore {
 
   private repositoryGroup(root: string): ReviewApiSummary["repositoryGroup"] {
     if (this.repositoryGroups.has(root)) return this.repositoryGroups.get(root);
+
+    // Resolving a missing checkout would spawn on every listing.
+    if (!existsSync(root)) return undefined;
 
     const context = resolveRepoContextSync(root);
 
