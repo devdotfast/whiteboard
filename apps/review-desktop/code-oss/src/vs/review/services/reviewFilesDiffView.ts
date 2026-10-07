@@ -220,6 +220,7 @@ export class ReviewFilesDiffView extends Disposable {
 		private readonly onToggleViewed: ((path: string, sectionId?: string) => void) | undefined,
 		private readonly onToggleSection: ((id: string) => void) | undefined,
 		private readonly document: ReviewDiffViewSpec["document"],
+		openFile: boolean,
 		@IInstantiationService
 		private readonly reviewInstantiationService: IInstantiationService,
 		@IEditorService private readonly editorService: IEditorService,
@@ -256,8 +257,7 @@ export class ReviewFilesDiffView extends Disposable {
 						// A binary is folded like a hidden file, with its size as the reason.
 						note: entry.file.status === "unchanged" ? "Unchanged" : entry.file.binary ? this.binaryNote(entry.file.path) : this.hiddenFiles.get(entry.file.path),
 						noteTooltip: entry.file.binary ? { label: "No text to show · binary files stay folded" } : undefined,
-							// A binary has no text to open.
-							onDidOpen: entry.file.binary ? undefined : () => {
+							onDidOpen: entry.file.binary || !(document ? document.onDidOpen : openFile) ? undefined : () => {
 								if (document?.onDidOpen) { document.onDidOpen(); return; }
 								const target = this.widget.tryGetCodeEditor(entry.goToFileResource);
 								const change = isDiffEditor(target?.diffEditor) ? target.diffEditor.getDiffComputationResult()?.changes2[0] : undefined;

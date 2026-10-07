@@ -104,6 +104,8 @@ import "../../media/review.css";
 import { ReviewSessionTelemetry } from "../../reviewSessionTelemetry.js";
 import { applyReviewThemeChoice, currentReviewThemeChoice } from "../../reviewThemeChoice.js";
 import { ReviewCanvasEditorInput } from "./reviewCanvasEditorInput.js";
+import { remoteEntry, withRemoteEntry } from "./reviewRemoteEntry.js";
+import { reviewRemoteHostsSettings } from "../../reviewRemoteHostsSettings.js";
 
 interface ReviewCanvasAssetsModule extends ReviewCanvasModule {
 	readonly clearReviewViewState: (config: ReviewRuntimeConfig) => void;
@@ -236,6 +238,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			const previous = catalog;
 			catalog = this.apiCatalog.reviews;
 			this.sessionTelemetry.catalogChanged(previous, catalog);
+			const content = this.apiContent;
+			const updated = content && withRemoteEntry(content, catalog.find((review) => review.reviewId === content.reviewId));
+			if (updated) {
+				this.apiContent = updated;
+				this.canvas.value?.update(updated);
+			}
 		}));
 		this.inlineEditors = this._register(reviewInstantiationService.createInstance(ReviewEmbeddedEditors));
 		this.refreshProgress = this._register(new LongRunningOperation(editorProgressService));
@@ -439,6 +447,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 						},
 						kind: "api",
 						reviewId,
+						...remoteEntry(this.apiCatalog.reviews.find((review) => review.reviewId === reviewId)),
 						structuralDiffEnabled: this.currentStructuralDiffEnabled(),
 						softwareMapEnabled: this.currentSoftwareMapEnabled(),
 						documentWidth: this.currentDocumentWidth(),
@@ -544,6 +553,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 							this.reviewTelemetryService.capture("review_restored", { via: "home" });
 							return this.apiCatalog.attention(uuid, "restore");
 						},
+						hostStates: () => this.desktopConnection.readRemoteHosts(),
 						openSourceTree: (uuid) => {
 							const api = this.apiCatalog.reviews.find((review) => review.reviewId === uuid);
 							if (api) {
@@ -884,6 +894,11 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				);
 				return this.currentStructuralDiffEnabled();
 			},
+			remoteHosts: reviewRemoteHostsSettings({
+				get: (key) => this.configurationService.getValue(key),
+				update: (key, value) => this.configurationService.updateValue(key, value, ConfigurationTarget.APPLICATION),
+				connection: this.desktopConnection,
+			}),
 			reloadWindow: async () => { await this.commandService.executeCommand("workbench.action.reloadWindow"); },
 			diffrConfig: {
 				saveSummarizer: (input) => this.desktopConnection.saveDiffrSummarizer(input),

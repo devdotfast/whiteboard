@@ -163,4 +163,69 @@ describe("ReviewDocumentMetaLine", () => {
     await render(2);
     await vi.waitFor(() => expect(container.querySelector("a")).toBeNull());
   });
+
+  it.each([
+    ["file:///etc/passwd", false],
+    ["javascript:alert(1)", false],
+    ["https://github.com/o/r/pull/12/../../../evil", false],
+    ["https://github.com/o/r/pull/12", true],
+    ["https://github.example.com/o/r/pull/12", true],
+  ])("links the PR only for a canonical URL: %s", async (url, linked) => {
+    const session = testReviewSession();
+    session.review = {
+      ...session.review!,
+      pullRequestNumber: 12,
+      pullRequestUrl: url,
+    };
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root?.render(
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <DisplayedReviewVersionContext.Provider value={0}>
+              <ReviewDocumentMetaLine />
+            </DisplayedReviewVersionContext.Provider>
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
+      ),
+    );
+
+    expect(container.textContent).toContain("PR #12");
+    expect(container.querySelector("a")?.getAttribute("href") ?? null).toBe(
+      linked ? url : null,
+    );
+  });
+
+  it.each([
+    ["https://github.com/o/r/pull/12", "devbox: o / r·PR #12"],
+    [undefined, "devbox"],
+  ])("leads with the SSH alias of a remote review: %s", async (url, top) => {
+    const session = testReviewSession();
+    session.review = {
+      ...session.review!,
+      host: "devbox",
+      pullRequestNumber: url ? 12 : undefined,
+      pullRequestUrl: url,
+    };
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root?.render(
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <DisplayedReviewVersionContext.Provider value={0}>
+              <ReviewDocumentMetaLine />
+            </DisplayedReviewVersionContext.Provider>
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
+      ),
+    );
+
+    expect(container.querySelector("header > div > div")?.textContent).toBe(
+      top,
+    );
+  });
 });
