@@ -61,6 +61,8 @@ export function DocumentCodeView({
   const session = useReviewSession();
   const contextLenses = useReviewLenses();
   const lenses = lensesOverride ?? contextLenses;
+  const markRef = useRef(contextLenses?.mark);
+  markRef.current = contextLenses?.mark;
 
   const sources = (countRanges ?? ranges).map((range) => ({
     file: path,
@@ -228,6 +230,10 @@ export function DocumentCodeView({
     try {
       handle = inlineEditorFactory.create({
         progress: progressRef.current,
+        onSetViewed:
+          !pins && !lensesOverride && contextLenses
+            ? (ranges, viewed) => markRef.current?.(ranges, viewed)
+            : undefined,
         container,
         path,
         title,

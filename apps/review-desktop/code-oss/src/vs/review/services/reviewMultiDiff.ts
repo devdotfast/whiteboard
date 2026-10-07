@@ -42,6 +42,7 @@ export interface ReviewMultiDiffHeaderEntry {
 	readonly onToggleSection?: () => void;
   readonly onDidOpen?: () => void;
 	readonly viewedState?: ReviewDiffProgressState;
+	readonly viewedScope?: 'lens';
 	readonly onToggleViewed?: () => void;
 }
 
@@ -211,10 +212,10 @@ export class ReviewMultiDiffUIElementFactory
         }
 			countsTooltip.content = current.countsTooltip;
 			const path = current.modified ?? current.original;
-			viewed.update(current.viewedState, path ? reviewMultiDiffLabelPath(path) : "file", !current.onToggleViewed);
+			viewed.update(current.viewedState, `${current.viewedScope === 'lens' ? 'selected lens in ' : ''}${path ? reviewMultiDiffLabelPath(path) : 'file'}`, !current.onToggleViewed);
 			counts.classList.toggle("review-counts-viewed", current.viewedState === "viewed" || current.viewedState === "folded");
 			counts.classList.toggle("review-counts-folded", current.viewedState === "folded");
-			if (current.viewedState === "viewed") { additions.textContent = "Viewed"; deletions.textContent = ""; }
+			if (current.viewedState === "viewed") { additions.textContent = current.viewedScope === 'lens' ? 'Lens viewed' : 'Viewed'; deletions.textContent = ""; }
 			else if (current.viewedState === "folded") {
 				// A hidden file's note already says why it is folded.
 				additions.textContent = "Folded"; deletions.textContent = "";

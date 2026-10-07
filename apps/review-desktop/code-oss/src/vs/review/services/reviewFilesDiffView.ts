@@ -106,6 +106,12 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 								contextLineCount: 0,
 							},
 							folding: false,
+							// Structural rails use one geometry through code, folds and deleted rows.
+							...(structural ? {
+								guides: { indentation: false, bracketPairs: false },
+								// Fold controls follow the line numbers, with breathing room before code.
+								lineDecorationsWidth: 24,
+							} : {}),
 							glyphMargin: true,
 							experimental: { useTrueInlineView: false },
 						}
@@ -204,6 +210,7 @@ export class ReviewFilesDiffView extends Disposable {
 	private readonly streamStatus: HTMLElement;
 	private offscreen = false;
 	private layoutDeferred = false;
+	viewedScope: 'lens' | undefined;
 
 	constructor(
 		private readonly container: HTMLElement,
@@ -239,6 +246,7 @@ export class ReviewFilesDiffView extends Disposable {
 							collapseLocked: !!entry.file.binary,
 						countsTooltip: this.progressTooltip(entry) ?? this.streamStats.get(entry.file.path)?.tooltip,
 						viewedState: this.entryProgress(entry)?.state,
+						viewedScope: this.viewedScope,
 						onToggleViewed: entry.file.status !== "unchanged" && this.onToggleViewed ? () => this.onToggleViewed!(entry.file.path, entry.sectionId) : undefined,
 						sectionId: entry.sectionId,
 						sectionCollapsed: !!entry.sectionId && this.collapsedSections.has(entry.sectionId),
@@ -283,7 +291,7 @@ export class ReviewFilesDiffView extends Disposable {
 		);
 		// The widget's own switch, not the per-item option refresh: it pins the
 		// width heuristic off, so the chosen layout is what renders at any width.
-		const applyLayout = () => this.widget.setRenderSideBySide(!document && layout.get() === "split");
+		const applyLayout = () => this.widget.setRenderSideBySide(layout.get() === "split");
 		this._register(layout.onDidChange(applyLayout));
 		applyLayout();
 		if (document) {

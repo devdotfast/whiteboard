@@ -22,7 +22,9 @@ export function lensContextGaps(diff: IDocumentDiff, originalCount: number, modi
 		const enclosing = scopes.map((sideScopes, side) => sideScopes.filter(([start, end]) =>
 			rows.some((row, index) => visible[index] && row[side] !== null && row[side]! >= start && row[side]! < end)));
 		const open = rows.map(row => row.every((line, side) => line === null || !(diff.contextGaps ?? []).some(gap => {
-			if (gap.collapsed === false) return false;
+			// An inline scope folds into its header. Its fold state must not
+			// move the lens boundary and swallow that header's reopen control.
+			if (gap.collapsed === false || gap.band === false) return false;
 			const start = side === 0 ? gap.originalStart : gap.modifiedStart;
 			const count = side === 0 ? gap.originalCount : gap.modifiedCount;
 			return line + 1 >= start && line + 1 < start + count;

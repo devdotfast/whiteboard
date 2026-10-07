@@ -15,7 +15,7 @@ export function lensRanges(lens: ReviewDiffLens, entry: ReviewFilesEditorEntry):
 	return lens.ranges.filter(range => range.file === (range.side === 'base' ? entry.file.previousPath ?? entry.file.path : entry.file.path));
 }
 
-export function withLens(instantiation: IInstantiationService, entries: readonly ReviewFilesEditorEntry[], lens: ReviewDiffLens | undefined, lifetime: DisposableStore, progress: () => ReviewDiffProgress | undefined, onProgress: Event<void>): IInstantiationService {
+export function withLens(instantiation: IInstantiationService, entries: readonly ReviewFilesEditorEntry[], lens: ReviewDiffLens | undefined, lifetime: DisposableStore, progress: () => ReviewDiffProgress | undefined, onProgress: Event<void>, structuralViewed = false): IInstantiationService {
 	const delegate = instantiation.invokeFunction(a => a.get(IDiffProviderFactoryService));
 	const factory: IDiffProviderFactoryService = {
 		_serviceBrand: undefined,
@@ -50,8 +50,10 @@ export function withLens(instantiation: IInstantiationService, entries: readonly
 					if (!diff.sourceLineAlignment) diff = { ...diff, sourceLineAlignment: alignmentRows(diff, original.getLineCount(), modified.getLineCount()) };
 					const file = progress()?.files.find(file => file.path === entry.file.path);
 					if (file && (!lens || lens.wholeFiles) && !diff.contextGaps) diff = { ...diff, contextGaps: lensContextGaps(diff, original.getLineCount(), modified.getLineCount(), file.changedRanges).map(gap => ({ ...gap, label: 'Unchanged' })) };
-					if (file) diff = { ...diff, contextGaps: viewedContextGaps(diff, original.getLineCount(), modified.getLineCount(), file.viewedRanges, file.changedRanges) };
-					if (file?.unfoldRanges?.length) diff = {
+					if (file && !structuralViewed) diff = { ...diff, contextGaps: viewedContextGaps(diff, original.getLineCount(), modified.getLineCount(), file.viewedRanges, file.changedRanges) };
+					// StructuralViewedState opens newly unviewed scopes once. Reapplying the
+					// legacy range override here would prevent subsequent user folds.
+					if (!structuralViewed && file?.unfoldRanges?.length) diff = {
 						...diff, contextGaps: diff.contextGaps?.map(gap => file.unfoldRanges!.some(range => {
 							const start = range.side === 'base' ? gap.originalStart : gap.modifiedStart;
 							const count = range.side === 'base' ? gap.originalCount : gap.modifiedCount;

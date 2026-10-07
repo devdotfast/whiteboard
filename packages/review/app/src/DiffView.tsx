@@ -524,6 +524,7 @@ export function ReviewDiffView({
             treeContainer={fullTree}
             progress={fullProgress}
             onToggleViewed={(path) => markFile(path, false)}
+            onSetViewed={(ranges, viewed) => lenses.mark(ranges, viewed)}
             hidden={!!lens}
             inWorkspace
           />
@@ -534,6 +535,7 @@ export function ReviewDiffView({
             treeContainer={lensTree}
             progress={lensProgress}
             onToggleViewed={(path) => markFile(path, true)}
+            onSetViewed={(ranges, viewed) => lenses.mark(ranges, viewed)}
             inWorkspace
           />
         )}
@@ -555,6 +557,7 @@ function NativeDiffView({
   treeContainer,
   progress,
   onToggleViewed,
+  onSetViewed,
   hidden = false,
   inWorkspace = false,
 }: {
@@ -565,6 +568,10 @@ function NativeDiffView({
   treeContainer?: HTMLElement;
   progress?: ReviewDiffProgress;
   onToggleViewed?(path: string): void;
+  onSetViewed?(
+    ranges: ReviewDiffLens["ranges"],
+    viewed: boolean,
+  ): void | Promise<void>;
   hidden?: boolean;
   /** Fills the workspace's editor column. */
   inWorkspace?: boolean;
@@ -577,9 +584,9 @@ function NativeDiffView({
   const revision = useReviewDiffFiles().revision;
   const liveRevision = scope ? undefined : revision;
 
-  const current = useRef({ progress, onToggleViewed });
+  const current = useRef({ progress, onToggleViewed, onSetViewed });
 
-  current.current = { progress, onToggleViewed };
+  current.current = { progress, onToggleViewed, onSetViewed };
   useLayoutEffect(() => {
     if (!container) return;
     setError(null);
@@ -593,6 +600,9 @@ function NativeDiffView({
         progress: current.current.progress,
         onToggleViewed: current.current.onToggleViewed
           ? (path) => current.current.onToggleViewed?.(path)
+          : undefined,
+        onSetViewed: current.current.onSetViewed
+          ? (ranges, viewed) => current.current.onSetViewed?.(ranges, viewed)
           : undefined,
       });
 

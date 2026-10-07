@@ -138,6 +138,7 @@ export interface ReviewSourcePins {
 
 export interface ReviewInlineEditorSpec {
   progress?: ReviewDiffProgress;
+  onSetViewed?: ReviewDiffViewSpec["onSetViewed"];
   container: HTMLElement;
   path: string;
   title: string;
@@ -258,6 +259,11 @@ export interface ReviewDiffViewSpec {
   fileTreeContainer?: HTMLElement;
   progress?: ReviewDiffProgress;
   onToggleViewed?: (path: string, sectionId?: string) => void;
+  /** Mark a structural scope using the same persisted line coverage as file marks. */
+  onSetViewed?: (
+    ranges: ReviewDiffLens["ranges"],
+    viewed: boolean,
+  ) => void | Promise<void>;
   onToggleSection?: (id: string) => void;
   lens?: ReviewDiffLens;
   scope?: ReviewCommitScope;

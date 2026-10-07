@@ -66,3 +66,47 @@ test('progress invalidates only relevant file ranges and coalesces a burst', asy
 		assert.equal(invalidations, 1);
 	} finally { store.dispose(); }
 });
+
+test('unmarking a structural scope leaves its child folds under user control', async () => {
+	const store = new DisposableStore();
+	const changed = store.add(new Emitter<void>());
+	let factory!: IDiffProviderFactoryService;
+	let collapsed = false;
+	const instantiation = {
+		invokeFunction: (fn: (accessor: { get(): unknown }) => unknown) => fn({ get: () => ({
+			createDiffProvider: () => ({ onDidChange: changed.event, computeDiff: async () => ({
+				changes: [], moves: [], identical: false, quitEarly: false,
+				sourceLineAlignment: Array.from({ length: 12 }, (_, i) => [i, i]),
+				contextGaps: [{ originalStart: 4, modifiedStart: 4, originalCount: 3, modifiedCount: 3, foldStateId: 2, collapsed }],
+			}) }),
+		}) }),
+		createChild: (services: ServiceCollection) => {
+			factory = services.get(Factory) as IDiffProviderFactoryService;
+			return { dispose() { } };
+		},
+	} as unknown as IInstantiationService;
+	const ranges = [{ side: 'head' as const, file: 'a.ts', fromLine: 2, toLine: 10 }];
+	const file: ReviewDiffProgress['files'][number] = {
+		path: 'a.ts', state: 'unread', total: { additions: 9, deletions: 0 }, remaining: { additions: 9, deletions: 0 },
+		changedRanges: ranges, viewedRanges: [],
+	};
+	const original = URI.parse('test:/base/a.ts'), modified = URI.parse('test:/head/a.ts');
+	withLens(instantiation, [{ original, modified, file: { path: 'a.ts' } } as ReviewFilesEditorEntry], undefined, store, () => ({ files: [file] }), changed.event, true);
+	const provider = factory.createDiffProvider({});
+	const compute = () => provider.computeDiff(
+		{ uri: original, getLineCount: () => 12 } as Parameters<typeof provider.computeDiff>[0],
+		{ uri: modified, getLineCount: () => 12 } as Parameters<typeof provider.computeDiff>[1],
+		{ ignoreTrimWhitespace: false, maxComputationTimeMs: 0, computeMoves: false }, CancellationToken.None,
+	);
+	try {
+		file.viewedRanges = ranges;
+		await compute();
+		file.viewedRanges = [];
+		file.unfoldRanges = ranges;
+		assert.equal((await compute()).contextGaps?.[0].collapsed, false, 'unmarked scope opens');
+		collapsed = true;
+		assert.equal((await compute()).contextGaps?.[0].collapsed, true, 'a later user fold survives the unmark range');
+		collapsed = false;
+		assert.equal((await compute()).contextGaps?.[0].collapsed, false, 'the child can reopen too');
+	} finally { store.dispose(); }
+});

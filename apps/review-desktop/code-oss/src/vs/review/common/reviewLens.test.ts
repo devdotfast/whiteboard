@@ -34,3 +34,21 @@ test('viewed folds never hide an unread counterpart, and do not overlap structur
 	assert.equal(gaps[0].label, 'Viewed');
 	assert.equal(gaps[0].modifiedCount, 3);
 });
+
+test('folding an inline scope keeps its header inside a code peek', () => {
+	const scope = { originalStart: 21, modifiedStart: 21, originalCount: 19, modifiedCount: 19, foldStateId: 7, band: false };
+	const selection = [{ side: 'head' as const, file: 'a.ts', fromLine: 60, toLine: 65 }];
+	const project = (collapsed: boolean) => lensContextGaps({
+		...plain,
+		contextScopes: { original: [[10, 80]], modified: [[10, 80]] },
+		contextGaps: [
+			{ originalStart: 1, modifiedStart: 1, originalCount: 10, modifiedCount: 10 },
+			{ ...scope, collapsed },
+			{ originalStart: 81, modifiedStart: 81, originalCount: 20, modifiedCount: 20 },
+		],
+	}, 100, 100, selection);
+	const folded = project(true), expanded = project(false);
+	assert.deepEqual(folded.filter(gap => gap.label === 'Outside lens'), expanded.filter(gap => gap.label === 'Outside lens'));
+	assert.ok(folded.some(gap => gap.foldStateId === 7));
+	assert.ok(!folded.some(gap => gap.label === 'Outside lens' && gap.modifiedStart <= 20 && gap.modifiedStart + gap.modifiedCount > 20));
+});

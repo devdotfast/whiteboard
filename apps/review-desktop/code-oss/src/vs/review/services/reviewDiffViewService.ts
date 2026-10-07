@@ -1,3 +1,4 @@
+import { IHoverService } from "../../platform/hover/browser/hover.js";
 import { orderReviewDiffFiles } from "../common/reviewChangedFilesModel.js";
 import { CancellationToken } from "../../base/common/cancellation.js";
 import { Range } from "../../editor/common/core/range.js";
@@ -37,6 +38,8 @@ import { ReviewFilesDiffView, ReviewFilesEditorInput, type ReviewFilesEditorEntr
 import { ReviewEmbeddedEditors } from "./reviewEmbeddedEditors.js";
 
 import { createStructuralDiffEditors } from "./reviewStructuralDiff.js";
+import { StructuralViewedState } from "./reviewStructuralViewed.js";
+import { ScopeViewedControl } from "./reviewStructuralViewedControl.js";
 import { StructuralDiffSession, type StructuralSessionChange } from "./reviewStructuralDiffSession.js";
 import type { StructuralDiffStream } from "./reviewStructuralDiffClient.js";
 
@@ -126,6 +129,7 @@ export class ReviewDiffViewService extends Disposable {
 		let matches: DocumentMatch[] = [];
 		const view = this.create({
 			container: spec.container, lens, progress: spec.progress,
+			onSetViewed: spec.onSetViewed,
 			document: {
 				heightMode: spec.heightMode,
 				onDidChangeHeight: value => { height = value; heightChanged.fire(value); },
@@ -303,7 +307,9 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 			this.viewStateKey = `${data.stateKey ?? sourceUri.toString()}:${structuralEnabled}:${JSON.stringify(this.spec.lens ?? null)}:${this.spec.document ? "document" : "diff"}`;
 			if (this.disposed) return;
 			const store = this._register(new DisposableStore());
-			const structural = session && structuralEnabled ? createStructuralDiffEditors(this.instantiationService, entries, store, session)
+			const viewed = session && structuralEnabled && this.spec.onSetViewed
+				? store.add(new StructuralViewedState(session, entries, () => this.progress, this.progressChanged.event, this.spec.onSetViewed, (editor, onToggle) => new ScopeViewedControl(editor, this.instantiationService.invokeFunction(a => a.get(IHoverService)), onToggle))) : undefined;
+			const structural = session && structuralEnabled ? createStructuralDiffEditors(this.instantiationService, entries, store, session, viewed)
 				: { instantiation: this.instantiationService, entries };
 
 			if (this.disposed) return;
@@ -318,7 +324,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 				const byFile = new Map(selected.map(entry => [entry.file, entry]));
 				selected = orderReviewDiffFiles([...byFile.keys()]).map(file => byFile.get(file)!);
 			}
-			const instantiation = withLens(structural.instantiation, selected, lens, store, () => this.progress, this.progressChanged.event);
+			const instantiation = withLens(structural.instantiation, selected, lens, store, () => this.progress, this.progressChanged.event, !!viewed);
 			// The input owns the text-model references its view model resolves, so
 			// this handle disposes it alongside the view.
 			const input = store.add(instantiation.createInstance(ReviewFilesEditorInput, sourceUri, selected,
@@ -333,6 +339,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 				),
 			);
 			this.view = view;
+			view.viewedScope = lens && !lens.wholeFiles && !this.spec.document ? 'lens' : undefined;
 			if (this.progress) view.setProgress(this.progress);
 			if (structuralEnabled) view.startLoading(selected);
 			store.add(view.onDidChangeActiveControl(() => this.bindActiveControl(view)));

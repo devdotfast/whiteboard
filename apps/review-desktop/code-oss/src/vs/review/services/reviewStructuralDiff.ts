@@ -28,8 +28,9 @@ import {
 	structuralHighlights,
 } from "../common/reviewStructuralDiff.js";
 import type { ReviewFilesEditorEntry } from "./reviewFilesDiffView.js";
-import { StructuralFoldControls } from "./reviewStructuralFolds.js";
+import { StructuralFoldControls, StructuralFoldHover } from "./reviewStructuralFolds.js";
 import { REVIEW_API_SOURCE_SCHEME } from "../common/reviewSourceView.js";
+import type { StructuralViewedState } from "./reviewStructuralViewed.js";
 
 /** View-owned Monaco providers and editor listeners; comparison state lives in session. */
 export function createStructuralDiffEditors(
@@ -37,6 +38,7 @@ export function createStructuralDiffEditors(
 	entries: readonly ReviewFilesEditorEntry[],
 	lifetime: DisposableStore,
 	session: StructuralDiffSession,
+	viewed?: StructuralViewedState,
 ): { instantiation: IInstantiationService; entries: readonly ReviewFilesEditorEntry[] } {
 	// These models belong to this comparison. A live file can change while the
 	// comparison is open, so its editor text must come from diffr's own result.
@@ -96,7 +98,7 @@ export function createStructuralDiffEditors(
 	const child = lifetime.add(
 		instantiation.createChild(new ServiceCollection([IDiffProviderFactoryService, factory])),
 	);
-	attachStructuralEditors(instantiation, resolvedEntries, session, lifetime);
+	attachStructuralEditors(instantiation, resolvedEntries, session, lifetime, viewed);
 	return { instantiation: child, entries: resolvedEntries };
 }
 
@@ -188,6 +190,7 @@ function attachStructuralEditors(
 	entries: readonly ReviewFilesEditorEntry[],
 	session: StructuralDiffSession,
 	lifetime: DisposableStore,
+	viewed?: StructuralViewedState,
 ): void {
 	const editors = instantiation.invokeFunction((a) => a.get(ICodeEditorService));
 	const pairs = new Map(entries.map((e) => [e.original!.toString() + "\n" + e.modified!.toString(), e.file.path]));
@@ -201,8 +204,9 @@ function attachStructuralEditors(
 			const model = editor.getModel();
 			return model ? pairs.get(model.original.uri.with({ fragment: "" }).toString() + "\n" + model.modified.uri.with({ fragment: "" }).toString()) : undefined;
 		};
-		store.add(new StructuralFoldControls(editor.getOriginalEditor(), "lhs", pathOf, session, widget.unchangedRegions));
-		store.add(new StructuralFoldControls(editor.getModifiedEditor(), "rhs", pathOf, session, widget.unchangedRegions));
+		const hover = new StructuralFoldHover();
+		store.add(new StructuralFoldControls(editor.getOriginalEditor(), "lhs", pathOf, session, widget.unchangedRegions, hover, viewed));
+		store.add(new StructuralFoldControls(editor.getModifiedEditor(), "rhs", pathOf, session, widget.unchangedRegions, hover, viewed));
 		let revealed = new Set<UnchangedRegion>();
 		store.add(
 			autorun((reader) => {
