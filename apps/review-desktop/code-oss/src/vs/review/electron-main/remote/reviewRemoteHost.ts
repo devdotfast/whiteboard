@@ -81,6 +81,28 @@ export function classifySshFailure(stderr: string, promptCancelled: boolean): "a
 		: "unreachable";
 }
 
+const SSH_SENTENCES: [RegExp, (alias: string) => string][] = [
+	[/REMOTE HOST IDENTIFICATION HAS CHANGED/, (alias) => `${alias}'s host key changed since you last connected. If the machine was reinstalled, remove its old key from known_hosts, then retry.`],
+	[/Host key verification failed/, (alias) => `${alias}'s host key could not be verified. Run "ssh ${alias}" in a terminal to check and accept it.`],
+	[/Permission denied/, (alias) => `${alias} did not accept your SSH key. Check that "ssh ${alias}" works in a terminal.`],
+	[/Could not resolve hostname/, (alias) => `${alias}'s host name could not be found. Check its address in your SSH config.`],
+	[/Connection refused/, (alias) => `${alias} refused the SSH connection. Check that its SSH server is running.`],
+	[/(Operation|Connection) timed out/, (alias) => `The SSH connection to ${alias} timed out. Check that it is on and reachable from this network.`],
+];
+
+function sshFailureSentence(stderr: string, alias: string): string | undefined {
+	return SSH_SENTENCES.find(([pattern]) => pattern.test(stderr))?.[1](alias);
+}
+
+const SSH_DROPS: [RegExp, (alias: string) => string][] = [
+	[/Timeout, server .* not responding/, (alias) => `${alias} stopped answering over SSH. It may be asleep, or off this network.`],
+	[/Connection reset|Broken pipe|closed by remote host/, (alias) => `${alias} closed the SSH connection.`],
+];
+
+function sshDropSentence(lastLines: string, alias: string): string | undefined {
+	return SSH_DROPS.find(([pattern]) => pattern.test(lastLines))?.[1](alias);
+}
+
 export const OPENSSH_NEEDED = "OpenSSH is needed: no `ssh` command was found on PATH.";
 
 type Problem = NonNullable<ReviewGatewayHost["problem"]>;
@@ -556,14 +578,17 @@ export class ReviewRemoteHost {
 		if (error?.code === "ENOENT") return this.fail({ state: "unreachable", detail: OPENSSH_NEEDED });
 		const exited = error?.message || `ssh exited with code ${code ?? "none"}.`;
 		if (this.connectedAt !== undefined) {
+			const last = lastLines(this.masterStderr);
 			return this.fail({
 				state: "unreachable",
-				detail: `The SSH connection to ${this.alias} ended: ${lastLines(this.masterStderr) || exited}`,
+				detail: sshDropSentence(last, this.alias) ?? `The SSH connection to ${this.alias} ended: ${last || exited}`,
 			});
 		}
+		const sentence = sshFailureSentence(this.masterStderr, this.alias);
+		if (sentence) this.options.log(`${this.alias}: ${exited} ${firstLines(this.masterStderr)}`);
 		this.fail({
 			state: classifySshFailure(this.masterStderr, this.promptCancelled),
-			detail: firstLines(this.masterStderr) || exited,
+			detail: sentence ?? (firstLines(this.masterStderr) || exited),
 		});
 	}
 

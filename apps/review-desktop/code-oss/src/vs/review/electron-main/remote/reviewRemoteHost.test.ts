@@ -407,7 +407,7 @@ test("a cancelled prompt is auth-failed, and there is no second attempt", async 
 	await until(() => last()?.problem !== undefined);
 
 	assert.equal(last()?.problem?.state, "auth-failed");
-	assert.equal(last()!.problem!.detail, "dev@127.0.0.1: Permission denied (publickey,password).");
+	assert.equal(last()!.problem!.detail, `wb-test-a did not accept your SSH key. Check that "ssh wb-test-a" works in a terminal.`);
 	assert.equal(clock.pending, 0);
 	assert.equal(ssh.of("wb-test-a", "master").length, 1);
 });
@@ -430,7 +430,7 @@ test("the master exits and the host reconnects after the backoff", async (t) => 
 	await until(() => last()?.problem !== undefined);
 
 	assert.equal(last()?.problem?.state, "unreachable");
-	assert.match(last()!.problem!.detail, /closed by remote host/);
+	assert.equal(last()!.problem!.detail, "wb-test-a closed the SSH connection.");
 	assert.equal(ssh.of("wb-test-a", "master").length, 1);
 	assert.ok(clock.next());
 	await until(() => last()?.endpoint !== undefined);
@@ -514,7 +514,7 @@ test("an authenticated master that ends is unreachable and retried, whatever its
 	await until(() => last()?.problem !== undefined);
 
 	assert.equal(last()?.problem?.state, "unreachable");
-	assert.equal(last()!.problem!.detail, "The SSH connection to wb-test-a ended: Connection reset by peer");
+	assert.equal(last()!.problem!.detail, "wb-test-a closed the SSH connection.");
 	assert.equal(clock.pending, 1);
 });
 
