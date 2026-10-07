@@ -2,10 +2,13 @@ import { z } from "zod";
 
 import type { Snapshot } from "./store.js";
 
+export const PULL_REQUEST_URL =
+  /^https:\/\/[a-z0-9.-]+\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*$/;
+
 export const pullRequestUrl = z
   .string()
   .regex(
-    /^https:\/\/[a-z0-9.-]+\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*$/,
+    PULL_REQUEST_URL,
     "Use a canonical GitHub PR URL: https://github.com/owner/repository/pull/123, or the same path on a GitHub Enterprise host.",
   )
   .refine(

@@ -94,6 +94,12 @@ export function createReviewServerApp(input: {
 
     return serverJson(accepted ? 200 : 404, { ok: accepted });
   });
+  answerErrorsAsJson(app);
+
+  return app;
+}
+
+export function answerErrorsAsJson(app: Hono<ReviewHonoEnv>) {
   app.notFound(() => serverJson(404, { ok: false, error: "Not found." }));
   app.onError((error) => {
     const serverError = error instanceof ReviewServerError ? error : undefined;
@@ -107,8 +113,6 @@ export function createReviewServerApp(input: {
         : { ok: false, error: message },
     );
   });
-
-  return app;
 }
 
 export interface WhiteboardCoreInput {

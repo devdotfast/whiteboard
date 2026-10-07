@@ -585,6 +585,10 @@ export interface ReviewCanvasSettingsContent {
   install?: ReviewCanvasInstallContent;
 }
 
+export const REVIEW_REMOTE_ATTACH_BEGIN = "WHITEBOARD-REMOTE-BEGIN";
+
+export const REVIEW_REMOTE_ATTACH_END = "WHITEBOARD-REMOTE-END";
+
 /** Workspace attachment identity is independent of the displayed source generation. */
 export interface ReviewLanguageEnvironment {
   /** Absent for a caller on another machine. */
@@ -846,6 +850,36 @@ export interface ReviewServerHealthWithToken extends ReviewServerHealth {
   serverId: string; // stable, one per review store
   serverPid: number;
   commit: string | null;
+}
+
+export const ReviewGatewayHostSchema = z.strictObject({
+  alias: requiredString,
+  endpoint: z
+    .strictObject({ url: requiredString, token: requiredString })
+    .optional(),
+  problem: z
+    .strictObject({
+      state: z.enum(["unreachable", "not-installed", "auth-failed"]),
+      detail: stringAllowEmpty,
+    })
+    .optional(),
+});
+
+export type ReviewGatewayHost = z.infer<typeof ReviewGatewayHostSchema>;
+
+export interface ReviewGatewayHostState {
+  alias: string;
+  serverId?: string;
+  state:
+    | "connecting"
+    | "online"
+    | "offline"
+    | "incompatible"
+    | "duplicate"
+    | "unreachable"
+    | "not-installed"
+    | "auth-failed";
+  detail?: string;
 }
 
 export const ReviewRepositoryIdentitySchema = z.strictObject({

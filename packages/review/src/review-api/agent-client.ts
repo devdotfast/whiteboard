@@ -43,9 +43,15 @@ export async function connectReviewApi(
   return (await connectReviewInstance(env, headers)).client;
 }
 
+export interface ConnectReviewOptions {
+  desktopInstalled?: () => boolean;
+  cli?: readonly string[];
+}
+
 export async function connectReviewInstance(
   env = process.env,
   headers: Record<string, string> = {},
+  options: ConnectReviewOptions = {},
 ): Promise<ConnectedReview> {
   const request: ConstructorParameters<typeof ReviewApiClient>[1] = (
     url,
@@ -77,6 +83,23 @@ export async function connectReviewInstance(
   const discovery = healthyReviewInstance(selection);
 
   if (!discovery) {
+    const { ensureServerWithoutDesktop } =
+      await import("@review/server/background-server.js");
+
+    const server = await ensureServerWithoutDesktop({
+      selection,
+      env,
+      ...options,
+    });
+
+    if (server)
+      return {
+        client: new ReviewApiClient(
+          { serverUrl: server.url, token: server.token },
+          request,
+        ),
+      };
+
     const unavailable = reviewInstanceUnavailable(selection);
     const message = `${unavailable.message} For headless authoring, select a running server with --state-dir or DEV_REVIEW_SERVER_DIR.`;
 

@@ -1433,6 +1433,12 @@ export class ReviewStore {
       .all()
       .map((row) => String(row.review_id));
   }
+  reviewIds(): string[] {
+    return this.db
+      .prepare("SELECT id FROM reviews")
+      .all()
+      .map((row) => String(row.id));
+  }
   has(reviewId: string): boolean {
     return (
       this.db.prepare("SELECT 1 FROM reviews WHERE id=?").get(reviewId) !==
