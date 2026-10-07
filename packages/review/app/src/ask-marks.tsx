@@ -81,11 +81,24 @@ const CLOSE_DELAY = 150;
  * passage it folds. */
 const moreKey = (row: PinRow) => `more:${row.key}`;
 
-/** Whether a row would run past the article's edge in its gutter: its
- * probe stands where it would start. Offsets ignore the article's scroll
- * and the row's own place. */
-function overflows(article: HTMLElement, probe: HTMLElement, row: HTMLElement) {
-  return probe.offsetLeft + row.offsetWidth > article.clientWidth;
+/** Whether a row would run past the article's edge in its gutter: past the
+ * prose, where the probe stands, or past its lane's wider block. Offsets
+ * ignore the article's scroll and the row's own place. */
+function overflows(
+  article: HTMLElement,
+  probe: HTMLElement,
+  row: HTMLElement,
+  lane: HTMLElement,
+) {
+  const laneEnd =
+    lane.getBoundingClientRect().right -
+    article.getBoundingClientRect().left -
+    article.clientLeft;
+
+  return (
+    Math.max(probe.offsetLeft, laneEnd + GUTTER_GAP) + row.offsetWidth >
+    article.clientWidth
+  );
 }
 
 /** Opens a pin's conversations: the one, or the list of them. Passages
@@ -451,9 +464,7 @@ export function AskThreadMarks({
   const [ticked, setTicked] = useState(false);
   const [opened, setOpened] = useState<string | null>(null);
 
-  const rowElements = useRef(
-    new Map<string, { row?: HTMLElement; probe?: HTMLElement }>(),
-  );
+  const rowElements = useRef(new Map<string, HTMLElement>());
 
   const closing = useRef(0);
 
@@ -674,15 +685,19 @@ export function AskThreadMarks({
   // one page never mixes pins and ticks. Seen again as the article resizes,
   // before it paints; the pins keep their places by their anchors meanwhile.
   const laidRows = useRef(rows);
+  const probe = useRef<HTMLSpanElement>(null);
 
   const see = useCallback(() => {
-    if (!article) return;
+    if (!article || !probe.current) return;
+    const gutter = probe.current;
 
     setTicked(
       laidRows.current.some((row) => {
-        const { row: element, probe } = rowElements.current.get(row.key) ?? {};
+        const element = rowElements.current.get(row.key);
 
-        return !!element && !!probe && overflows(article, probe, element);
+        return (
+          !!element && overflows(article, gutter, element, row.marks[0]!.lane)
+        );
       }),
     );
   }, [article]);
@@ -732,23 +747,11 @@ export function AskThreadMarks({
           active === moreKey(row) ||
           row.marks.some((mark) => mark.key === active));
 
-      const elements = rowElements.current.get(row.key) ?? {};
-
-      rowElements.current.set(row.key, elements);
-
       return [
-        <span
-          key={`${row.key}:probe`}
-          ref={(probe) => {
-            elements.probe = probe ?? undefined;
-          }}
-          {...stylex.props(styles.probe)}
-          style={rowStyle(prefix, index, names, row)}
-        />,
         <div
           key={row.key}
           ref={(element) => {
-            elements.row = element ?? undefined;
+            if (element) rowElements.current.set(row.key, element);
           }}
           {...stylex.props(
             styles.row,
@@ -820,6 +823,7 @@ export function AskThreadMarks({
       data-ask-pins=""
       data-review-copy-ignore=""
     >
+      <span ref={probe} {...stylex.props(styles.probe)} />
       {layer}
     </div>,
     article,
@@ -930,8 +934,14 @@ function AskMore({
   );
 }
 
-/** 10px past the prose, or past a wider block beside it. */
-const GUTTER = `calc(max(50% + min(100% - 2 * ${tokens.reviewDocumentPaddingInline}, ${tokens.reviewProseMaxWidth}) / 2, anchor(var(--ask-pin-lane) right)) + 10px)`;
+/** Between the prose, or a wider block beside it, and its pins. */
+const GUTTER_GAP = 10;
+
+/** Where the prose ends. */
+const PROSE_END = `50% + min(100% - 2 * ${tokens.reviewDocumentPaddingInline}, ${tokens.reviewProseMaxWidth}) / 2`;
+
+/** Past the prose, or past a wider block beside it. */
+const GUTTER = `calc(max(${PROSE_END}, anchor(var(--ask-pin-lane) right)) + ${GUTTER_GAP}px)`;
 
 const styles = stylex.create({
   layer: {
@@ -951,12 +961,13 @@ const styles = stylex.create({
     left: GUTTER,
     positionVisibility: "anchors-visible",
   },
-  // Where its row would start in the gutter, to see whether it fits.
+  // Where the gutter past the prose starts, to see whether rows fit. Not
+  // anchored: anchored probes beside anchored rows kept Chromium laying the
+  // page out every frame once scrolled, until it crashed.
   probe: {
     position: "absolute",
-    positionAnchor: "var(--ask-pin-block)",
-    top: "anchor(top)",
-    left: GUTTER,
+    top: 0,
+    left: `calc(${PROSE_END} + ${GUTTER_GAP}px)`,
     width: 0,
     height: 0,
     visibility: "hidden",
