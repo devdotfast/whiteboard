@@ -7,6 +7,7 @@ import {
   type DiffSelection,
   selectionKey,
   sourceAnchor,
+  sourcePinsKey,
 } from "@review/lens-selection";
 import { type FileLineRange, codePeekSource } from "@review/source";
 import * as stylex from "@stylexjs/stylex";
@@ -121,16 +122,7 @@ export function ReviewCodePeek({ anchor }: { anchor: SourcePeekAnchor }) {
   return <CodePeekCard source={anchor.peek} />;
 }
 
-/** A document peek is an interval of the same alignment used by diff lenses. */
-export function CodePeekCard({
-  source,
-  active = false,
-  heightMode = "capped",
-  onNativeFocus,
-  lenses: lensesOverride,
-  reportOutcome = false,
-}: {
-  source: DiffSelection;
+interface CodePeekCardOptions {
   active?: boolean;
   heightMode?: ReviewInlineEditorHeightMode;
   onNativeFocus?: () => void;
@@ -138,11 +130,74 @@ export function CodePeekCard({
   /** Report resolution telemetry. Only the panel the user opened sets this,
    * so an authored document with many inline peeks sends one event, not N. */
   reportOutcome?: boolean;
-}) {
+}
+
+/** A document peek is an interval of the same alignment used by diff lenses. */
+export function CodePeekCard({
+  source,
+  ...options
+}: CodePeekCardOptions & { source: DiffSelection }) {
+  const sources = useMemo(() => [source], [source]);
+
+  return <CodePeekFileCard sources={sources} {...options} />;
+}
+
+/** Several chunks, one card per file: chunks in the same file share a card so
+ * its lens folds the code between them. */
+export function CodePeekStack({
+  sources,
+  ...options
+}: CodePeekCardOptions & { sources: readonly DiffSelection[] }) {
+  const groups = useMemo(() => codePeekFileGroups(sources), [sources]);
+
+  return (
+    <div {...withClass("code-peek-stack", styles.stack)}>
+      {groups.map((group) => (
+        <CodePeekFileCard
+          key={group.map(selectionKey).join("\n")}
+          sources={group}
+          {...options}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Chunks group by file, diff side and pins, in the order each group first
+ * appears. */
+export function codePeekFileGroups(
+  sources: readonly DiffSelection[],
+): DiffSelection[][] {
+  const groups = new Map<string, DiffSelection[]>();
+
+  for (const source of sources) {
+    const key = JSON.stringify([
+      source.file,
+      sourceAnchor(source).side,
+      source.pins ? sourcePinsKey(source.pins) : null,
+    ]);
+
+    groups.set(key, [...(groups.get(key) ?? []), source]);
+  }
+
+  return [...groups.values()];
+}
+
+/** Every source names the same file, side and pins; the first one anchors
+ * the card's jump-to-source. */
+function CodePeekFileCard({
+  sources,
+  active = false,
+  heightMode = "capped",
+  onNativeFocus,
+  lenses: lensesOverride,
+  reportOutcome = false,
+}: CodePeekCardOptions & { sources: readonly DiffSelection[] }) {
   const session = useReviewSession();
   const contextLenses = useReviewLenses();
   const lenses = lensesOverride ?? contextLenses;
-  const resolved = lenses?.resolve([source]) ?? [];
+  const resolved = lenses?.resolve(sources) ?? [];
+  const source = sources[0]!;
   const anchor = sourceAnchor(source);
 
   const ranges = resolved.map((range) => ({
@@ -151,12 +206,14 @@ export function CodePeekCard({
     endLine: range.toLine,
   }));
 
-  const key = selectionKey(source);
+  const key = sources.map(selectionKey).join("\n");
 
   const outcome = peekResolutionOutcome({
     resolvedCount: ranges.length,
     complete: Boolean(lenses?.progress?.complete),
-    unavailable: Boolean(lenses?.progress?.unavailableSelections?.[key]),
+    unavailable: sources.some(
+      (item) => lenses?.progress?.unavailableSelections?.[selectionKey(item)],
+    ),
     error: Boolean(lenses?.error),
   });
 
@@ -192,15 +249,7 @@ export function CodePeekCard({
     >
       <DocumentCodeView
         path={source.file}
-        title={
-          source.start.side === source.end.side
-            ? codePeekRangeTitle(
-                source.file,
-                source.start.line,
-                source.end.line,
-              )
-            : source.file
-        }
+        title={codePeekSelectionTitle(sources)}
         side={anchor.side}
         pins={source.pins}
         ranges={ranges}
@@ -219,6 +268,21 @@ export function CodePeekCard({
       />
     </section>
   );
+}
+
+/** One-sided chunks list their line ranges; a chunk that spans both sides
+ * leaves only the path. */
+function codePeekSelectionTitle(sources: readonly DiffSelection[]): string {
+  const file = sources[0]!.file;
+
+  if (sources.some((source) => source.start.side !== source.end.side))
+    return file;
+
+  const lines = sources.map(({ start, end }) =>
+    start.line === end.line ? `${start.line}` : `${start.line}-${end.line}`,
+  );
+
+  return `${file}:${lines.join(", ")}`;
 }
 
 function FileSnippetCard({
@@ -403,5 +467,11 @@ const styles = stylex.create({
     },
     color: tokens.ink,
     fontFamily: tokens.fontMono,
+  },
+  stack: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "14px",
+    minWidth: 0,
   },
 });

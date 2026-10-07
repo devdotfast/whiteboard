@@ -15,7 +15,7 @@ export const COMPONENT_REFERENCE = [
   "- trace_quote {traceId, eventId, text}",
   "- software_map {mapVersionId, focusElementId?}",
   "- sequence {title, actors: {key: label}, steps: step[], pins?}",
-  "- step {from, to (actor keys), label, style?: call|return|async, and exactly one of source: anchor, explanation, or code: {text, language?}; pins?}",
+  "- step {from, to (actor keys), label, style?: call|return|async, and exactly one of source: anchor, sources: anchor[] (1 to 10, in reading order, for a step whose code spans several places), explanation, or code: {text, language?}; pins?}",
   "- flow_diagram {title, nodes: flow_node[] (1 to 100), edges: flow_edge[], description?, direction?: right|down, pins?}",
   "- flow_node {key, label, description?, kind?: process|decision|terminal, attachments?: {label, sources: anchor[], pins?}[], link?: {from or to, label?, style?}}",
   "- flow_edge {from, to (node keys), label?, style?: solid|dashed}",

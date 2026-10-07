@@ -299,16 +299,27 @@ function documentReferences(
     // whitespace-only range is an authoring mistake for each of them; prose
     // links and context sources only need the range to exist.
     if (element.type === "sequence")
-      return element.steps.flatMap((step) =>
-        step.source
-          ? select(step.source, step.pins ?? element.pins).map((source) => ({
-              id: step.id!,
-              source,
-              label: step.label,
-              peek: true,
-            }))
-          : [],
-      );
+      return element.steps.flatMap((step) => {
+        const pins = step.pins ?? element.pins;
+
+        // Each chunk of a multi-chunk step is its own reference, so one stale
+        // chunk marks only itself.
+        const anchors = step.source
+          ? [{ id: step.id!, anchor: step.source }]
+          : (step.sources ?? []).map((anchor, index) => ({
+              id: `${step.id}:${index}`,
+              anchor,
+            }));
+
+        return anchors.flatMap(({ id, anchor }) =>
+          select(anchor, pins).map((source) => ({
+            id,
+            source,
+            label: step.label,
+            peek: true,
+          })),
+        );
+      });
 
     if (element.type === "flow_diagram")
       return element.nodes.flatMap((node) =>

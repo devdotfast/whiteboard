@@ -20,7 +20,7 @@ import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
 import { AskPill, type AskPresence, AskSlot, AskWindow } from "./ask-window";
 import { AuthoredCodeSurface } from "./authored-code-surface";
-import { CodePeekCard } from "./CodePeek";
+import { CodePeekCard, CodePeekStack } from "./CodePeek";
 import { controlStyles } from "./controls-styles";
 import { documentStyles } from "./document-styles";
 import { drawStyles } from "./draw-styles";
@@ -836,7 +836,7 @@ function CodeReviewPeekPanel({
   anchor: PeekAnchor;
   content: Extract<
     ReviewPeekContent,
-    { kind: "source" | "inline-code" | "explanation" }
+    { kind: "source" | "sources" | "inline-code" | "explanation" }
   >;
   onClose: () => void;
 }) {
@@ -1286,6 +1286,18 @@ function ReviewPeekContentView({
     return (
       <CodePeekCard
         source={content.source}
+        active={active}
+        heightMode="content"
+        onNativeFocus={onNativeFocus}
+        reportOutcome={reportOutcome}
+      />
+    );
+  }
+
+  if (content.kind === "sources") {
+    return (
+      <CodePeekStack
+        sources={content.sources}
         active={active}
         heightMode="content"
         onNativeFocus={onNativeFocus}
