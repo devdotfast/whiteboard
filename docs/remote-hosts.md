@@ -100,7 +100,7 @@ host at once take turns.
 
 | Path | What it is |
 |---|---|
-| `~/.dev/whiteboard-remote/versions/<version>/` | One Whiteboard version: the package, its dependencies, a `whiteboard` launcher and a marker file that records what was checked. |
+| `~/.dev/whiteboard-remote/versions/<version>/` | One Whiteboard version: the package, its dependencies and the host's `diffr` for structural diff, a `whiteboard` launcher and a marker file that records what was checked. |
 | `~/.dev/whiteboard-remote/node/v<node version>/` | Node 24, only when the host has none. |
 | `~/.dev/whiteboard-remote/install.lock/` | Present while an install runs. |
 | `~/.local/bin/whiteboard` | A launcher for the newest version, so that you and your agents can run `whiteboard` there. Desktop writes it only if that path is free or Desktop's own; a `whiteboard` you installed yourself is left alone. |

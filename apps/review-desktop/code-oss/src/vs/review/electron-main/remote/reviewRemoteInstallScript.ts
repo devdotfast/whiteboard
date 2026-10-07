@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { ReviewRemoteTarget } from "./reviewRemoteProbe.js";
 import { REVIEW_REMOTE_INSTALL_LOCK, REVIEW_REMOTE_LOCK_STALE_SECONDS, REVIEW_REMOTE_VERSION, REVIEW_REMOTE_WRAPPER_MARK } from "../../common/reviewProtocol.js";
 
 export { REVIEW_REMOTE_LOCK_STALE_SECONDS, REVIEW_REMOTE_VERSION, REVIEW_REMOTE_WRAPPER_MARK };
@@ -209,11 +210,12 @@ say NODE-OK
 
 export function packageInstallScript(
 	context: ReviewRemoteInstallContext,
-	input: { version: string; sha512: string; node: string; npm: string; registry?: string },
+	input: { version: string; target: ReviewRemoteTarget; sha512: string; node: string; npm: string; registry?: string },
 ): string {
 	if (!/^[0-9a-f]{128}$/.test(input.sha512)) throw new Error("The package checksum is not a sha512.");
 	const nodeBin = input.node.slice(0, input.node.lastIndexOf("/"));
 	const registry = input.registry ? ` --registry=${shellQuote(input.registry)}` : "";
+	// --omit=optional skips unused agent binaries, so diffr's platform package is named directly.
 	return `${prelude(context)}own
 p=${shellQuote(versionPart(context, input.version))}
 f="$p/package.tgz"
@@ -224,7 +226,8 @@ sum=\${sum%% *}
 [ "$sum" = ${input.sha512} ] || { rm -rf "$p"; say MISMATCH "$sum"; exit 3; }
 PATH=${shellQuote(nodeBin)}:$PATH
 export PATH
-guard ${shellQuote(input.npm)} install --ignore-scripts --omit=optional --no-audit --no-fund --no-update-notifier --loglevel=error --cache "$p/.npm-cache" --prefix "$p"${registry} "$f" > "$p/.npm.log" 2>&1 || {
+dv=$(tar -xzOf "$f" package/package.json 2>/dev/null | sed -n 's/.*"@dev\\.fast\\/diffr": *"\\([0-9][^"]*\\)".*/\\1/p' | head -n 1)
+guard ${shellQuote(input.npm)} install --ignore-scripts --omit=optional --no-audit --no-fund --no-update-notifier --loglevel=error --cache "$p/.npm-cache" --prefix "$p"${registry} "$f" \${dv:+"@dev.fast/diffr-${input.target}@$dv"} > "$p/.npm.log" 2>&1 || {
 	tail -n 15 "$p/.npm.log" >&3
 	rm -rf "$p"
 	fail npm could not install the package

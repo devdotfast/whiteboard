@@ -147,6 +147,7 @@ test("an install has the adapters but not the bundled agent binaries; images dec
 	assert.equal(await inContainer("node", `test -f ${modules}/@agentclientprotocol/codex-acp/dist/index.js && echo yes`), "yes");
 	assert.equal(await inContainer("node", `test -f ${modules}/@agentclientprotocol/claude-agent-acp/dist/index.js && echo yes`), "yes");
 	assert.equal(await inContainer("node", `ls -d ${modules}/@openai/codex-* ${modules}/@anthropic-ai/claude-agent-sdk-* 2>/dev/null | wc -l`), "0");
+	assert.equal(await inContainer("node", `test -x ${modules}/@dev.fast/diffr-linux-*/diffr && echo yes`), "yes");
 	assert.equal(await version("node"), VERSION);
 
 	await inContainer(
@@ -195,6 +196,7 @@ test("a sealed host gets Node by upload and the dependencies through the relay",
 		{ step: "package", via: "upload" },
 	]);
 	assert.equal(await version("sealed"), VERSION);
+	assert.match(await inContainer("sealed", `~/.dev/whiteboard-remote/versions/${VERSION}/node_modules/@dev.fast/diffr-linux-*/diffr --version`), /^diffr /);
 	assert.equal(await inContainer("sealed", "ss -Htln | grep -c 127.0.0.1: || true"), "0");
 });
 
