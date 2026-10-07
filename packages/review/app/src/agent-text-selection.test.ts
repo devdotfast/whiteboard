@@ -112,3 +112,38 @@ it("rejects selections crossing a diagram, but permits consecutive prose blocks"
     article.remove();
   }
 });
+
+it("waits for the pointer to release before reporting a dragged selection", () => {
+  const article = document.createElement("article");
+  article.innerHTML = "<p data-review-copy-prose>dragged words</p>";
+  document.body.append(article);
+  const select = vi.fn<Parameters<typeof observeAgentTextSelection>[1]>();
+  const stop = observeAgentTextSelection(article, select);
+  const selection = document.getSelection()!;
+  const range = document.createRange();
+  range.selectNodeContents(article.querySelector("p")!);
+  Object.defineProperty(range, "getBoundingClientRect", {
+    value: () => ({ left: 0, top: 0, width: 0 }),
+  });
+
+  try {
+    document.dispatchEvent(new MouseEvent("pointerdown"));
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    expect(select).not.toHaveBeenCalled();
+    document.dispatchEvent(new Event("pointerup"));
+    expect(select).toHaveBeenCalledOnce();
+    expect(select.mock.lastCall?.[0]?.target).toEqual({
+      kind: "text",
+      quote: "dragged words",
+    });
+    document.dispatchEvent(new MouseEvent("pointerdown"));
+    document.dispatchEvent(new Event("pointerup"));
+    expect(select).toHaveBeenCalledOnce();
+  } finally {
+    stop();
+    selection.removeAllRanges();
+    article.remove();
+  }
+});

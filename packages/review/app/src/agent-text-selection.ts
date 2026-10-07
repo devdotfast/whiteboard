@@ -15,9 +15,20 @@ export function observeAgentTextSelection(
 ): () => void {
   const document = article.ownerDocument;
   let hadSelection = false;
+  let dragging = false;
+  let pending = false;
 
   const update = () => {
     const selection = document.getSelection();
+
+    if (dragging && selection && !selection.isCollapsed) {
+      pending = true;
+
+      return;
+    }
+
+    pending = false;
+
     const quote = selection?.toString() ?? "";
 
     const eligible = (node: Node | null) => {
@@ -94,7 +105,25 @@ export function observeAgentTextSelection(
     });
   };
 
-  document.addEventListener("selectionchange", update);
+  const release = () => {
+    dragging = false;
 
-  return () => document.removeEventListener("selectionchange", update);
+    if (pending) update();
+  };
+
+  const listening = new AbortController();
+  const { signal } = listening;
+  const capture = { capture: true, signal };
+  document.addEventListener("selectionchange", update, { signal });
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      dragging = event.button === 0;
+    },
+    capture,
+  );
+  document.addEventListener("pointerup", release, capture);
+  document.addEventListener("pointercancel", release, capture);
+
+  return () => listening.abort();
 }
