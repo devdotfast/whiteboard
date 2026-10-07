@@ -130,6 +130,13 @@ export const panelStyles = stylex.create({
     alignItems: "center",
     gap: "2px",
   },
+  // As tall as the window controls beside it, with no rule: the header row
+  // of Desktop's Ask panel.
+  nativeHeader: {
+    height: "40px",
+    minHeight: "40px",
+    borderBottomWidth: 0,
+  },
   // A conversation sits on the tray, header and all.
   tray: {
     backgroundColor: tokens.tray,

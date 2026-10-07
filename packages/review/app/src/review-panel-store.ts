@@ -107,7 +107,7 @@ export interface ReviewPanelActions {
   openAskView: (view: AskView, options?: AskOpenOptions) => void;
   /** An open Ask says what its conversation is doing. */
   reportAsk: (key: number, report: AskReport) => void;
-  /** Closes the peek; a docked Ask it covered comes back. */
+  /** Closes the peek. */
   close: () => void;
   closeAsk: (key: number) => void;
   popOutAsk: (key: number) => void;
@@ -268,7 +268,9 @@ export function createReviewPanelStore({
     mapFocus: null,
     overlayTour: initialView === "review" ? overlayTour : null,
     suppressMotion: () => set({ motion: "restored" }),
-    openPeek: (panel) => set({ active: panel, motion: "live" }),
+    // A peek replaces a docked Ask, which leaves the screen.
+    openPeek: (panel) =>
+      set({ active: panel, motion: "live", askDocked: null }),
     openAsk: (selection, agent, options = {}) =>
       set((state) => ({
         ...showAsk(state, { type: "new", selection, agent }, options),
@@ -390,14 +392,12 @@ export function createReviewPanelStore({
 type AskShownState = ReviewPanelState &
   Pick<ReviewNavigationState, "overlayTour">;
 
-/** How the Ask with this key shows now, if it shows: a peek or a
- * fullscreen diagram covers a docked Ask until it closes. */
+/** How the Ask with this key shows now, if it shows: a fullscreen
+ * diagram covers the docked Ask until it closes. */
 export function askShown(state: AskShownState, key: number): AskShown | null {
   if (key === state.askWindow) return "window";
 
-  return key === state.askDocked && !state.active && !state.overlayTour
-    ? "panel"
-    : null;
+  return key === state.askDocked && !state.overlayTour ? "panel" : null;
 }
 
 /** Whether an Ask fills the side panel. */

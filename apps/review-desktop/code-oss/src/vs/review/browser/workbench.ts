@@ -75,12 +75,14 @@ import {
 } from '../../workbench/common/notifications.js';
 import { IReviewCanvasPartsService } from './parts/canvas/reviewCanvasPart.js';
 import { IReviewSidebarPartsService } from './parts/sidebar/reviewSidebarPart.js';
+import { IReviewAskPartsService } from './parts/ask/reviewAskPart.js';
 import { initialReviewPartVisibility } from '../common/reviewWorkbenchVisibility.js';
 import { REVIEW_CHROME_HEIGHT } from '../common/reviewChrome.js';
 
 const EDITOR_PART_MINIMUM_WIDTH = 300;
 const EDITOR_PART_DEFAULT_WIDTH = 600;
 const EXPLORER_PART_DEFAULT_WIDTH = 288;
+const ASK_PART_DEFAULT_WIDTH = 480;
 const EditorMaximizedContext = new RawContextKey<boolean>('editorMaximized', false);
 
 //#region ReviewWorkbench Options
@@ -122,6 +124,7 @@ export interface IPartVisibilityState {
 	panel: boolean;
 	sessions: boolean;
 	explorer: boolean;
+	ask: boolean;
 }
 
 interface IPartSizesState {
@@ -131,6 +134,7 @@ interface IPartSizesState {
 	editor?: number;
 	panel?: number;
 	explorer?: number;
+	ask?: number;
 }
 
 //#endregion
@@ -289,6 +293,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 
 	protected sessionsPartView!: ISerializableView;
 	protected explorerPartView!: ISerializableView;
+	protected askPartView!: ISerializableView;
 
 	/** The editor part container; the auxiliary bar is docked inside it. */
 	protected _editorPartContainer: HTMLElement | undefined;
@@ -299,7 +304,8 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 		editor: false,
 		panel: false,
 		sessions: true,
-		explorer: false
+		explorer: false,
+		ask: false
 	};
 
 	private mainWindowFullscreen = false;
@@ -730,6 +736,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 			// The explorer is hidden on most tabs, so this is usually the grid's
 			// cached visible size — the width the user last dragged the sash to.
 			explorer: this._persistedGridViewSize(this.explorerPartView, 'width', this.partVisibility.explorer),
+			ask: this._persistedGridViewSize(this.askPartView, 'width', this.partVisibility.ask),
 		};
 
 		this.storageService.store(ReviewWorkbench._PART_SIZES_KEY, JSON.stringify(sizes), StorageScope.WORKSPACE, StorageTarget.MACHINE);
@@ -794,6 +801,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 
 		// Create Review Explorer Part (hidden until a file or diff tab is active)
 		this.createExplorerPart();
+		this.createAskPart();
 
 		// Notification Handlers
 		this.createNotificationsHandlers(instantiationService, notificationService, configurationService);
@@ -927,6 +935,19 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 		this.mainContainer.appendChild(explorerPartContainer);
 	}
 
+	private createAskPart(): void {
+		const askPartContainer = document.createElement('div');
+		askPartContainer.classList.add('part', 'review-ask-part');
+		askPartContainer.id = Parts.REVIEW_ASK_PART;
+		askPartContainer.setAttribute('role', 'complementary');
+
+		mark(`code/willCreatePart/${Parts.REVIEW_ASK_PART}`);
+		this.getPart(Parts.REVIEW_ASK_PART).create(askPartContainer);
+		mark(`code/didCreatePart/${Parts.REVIEW_ASK_PART}`);
+
+		this.mainContainer.appendChild(askPartContainer);
+	}
+
 	private restore(lifecycleService: ILifecycleService): void {
 		// Update perf marks
 		mark('code/didStartWorkbench');
@@ -961,6 +982,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 		accessor.get(IReviewCanvasPartsService);
 		// Same for the sidebar part.
 		accessor.get(IReviewSidebarPartsService);
+		accessor.get(IReviewAskPartsService);
 		// The sidebar, panel, and auxiliary bar stay hidden in Review, but the
 		// part-visibility setters below still reach for this service; leaving it
 		// unassigned would throw the moment any of them ran.
@@ -1262,15 +1284,18 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 		const editorPart = this.getPart(Parts.EDITOR_PART);
 		const sessionsPart = this.getPart(Parts.SESSIONS_PART);
 		const explorerPart = this.getPart(Parts.REVIEW_SIDEBAR_PART);
+		const askPart = this.getPart(Parts.REVIEW_ASK_PART);
 
 		this.sessionsPartView = sessionsPart;
 		this.editorPartView = editorPart;
 		this.explorerPartView = explorerPart;
+		this.askPartView = askPart;
 
 		const viewMap: { [key: string]: ISerializableView } = {
 			[Parts.SESSIONS_PART]: this.sessionsPartView,
 			[Parts.EDITOR_PART]: this.editorPartView,
-			[Parts.REVIEW_SIDEBAR_PART]: this.explorerPartView
+			[Parts.REVIEW_SIDEBAR_PART]: this.explorerPartView,
+			[Parts.REVIEW_ASK_PART]: this.askPartView
 		};
 
 		const fromJSON = ({ type }: { type: string }) => viewMap[type];
@@ -1288,7 +1313,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 		// width, so a later reveal must not force an even split over it.
 		this._hasAppliedInitialEditorSplit = this.partVisibility.editor;
 
-		for (const part of [sessionsPart, editorPart, explorerPart]) {
+		for (const part of [sessionsPart, editorPart, explorerPart, askPart]) {
 			this._register(part.onDidVisibilityChange(visible => {
 				// A grid branch forwards its own show/hide to every child leaf,
 				// including leaves whose slot stays hidden. That notification
@@ -1311,6 +1336,10 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 
 				if (part === explorerPart) {
 					this.setExplorerHidden(!visible);
+				}
+
+				if (part === askPart) {
+					this.setAskHidden(!visible);
 				}
 
 				this._onDidChangePartVisibility.fire({ partId: part.getId(), visible });
@@ -1373,9 +1402,17 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 			visible: this.partVisibility.explorer
 		};
 
+		// Hidden until a board's canvas opens something in the right column.
+		const askNode: ISerializedLeafNode = {
+			type: 'leaf',
+			data: { type: Parts.REVIEW_ASK_PART },
+			size: this._savedPartSizes.ask ?? ASK_PART_DEFAULT_WIDTH,
+			visible: this.partVisibility.ask
+		};
+
 		const contentSection: ISerializedNode = {
 			type: 'branch',
-			data: [sessionsNode, explorerNode, editorNode],
+			data: [sessionsNode, explorerNode, editorNode, askNode],
 			size: contentHeight
 		};
 
@@ -1565,6 +1602,8 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 				return this.partVisibility.sessions;
 			case Parts.REVIEW_SIDEBAR_PART:
 				return this.partVisibility.explorer;
+			case Parts.REVIEW_ASK_PART:
+				return this.partVisibility.ask;
 			case Parts.ACTIVITYBAR_PART:
 			case Parts.STATUSBAR_PART:
 			case Parts.BANNER_PART:
@@ -1592,6 +1631,9 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 				break;
 			case Parts.REVIEW_SIDEBAR_PART:
 				this.setExplorerHidden(hidden);
+				break;
+			case Parts.REVIEW_ASK_PART:
+				this.setAskHidden(hidden);
 				break;
 		}
 	}
@@ -1778,6 +1820,24 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 		}
 	}
 
+	/** Shows or hides Ask's panel; `ReviewAskParts` derives it from the
+	 * active board's canvas. */
+	private setAskHidden(hidden: boolean): void {
+		if (!hidden && this._editorMaximized) {
+			return;
+		}
+
+		if (this.partVisibility.ask === !hidden) {
+			return;
+		}
+
+		this.partVisibility.ask = !hidden;
+
+		if (this.workbenchGrid) {
+			this.workbenchGrid.setViewVisible(this.askPartView, !hidden);
+		}
+	}
+
 	//#endregion
 
 	//#region Position Methods (Fixed - Not Configurable)
@@ -1862,6 +1922,8 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 				return this.sessionsPartView;
 			case Parts.REVIEW_SIDEBAR_PART:
 				return this.explorerPartView;
+			case Parts.REVIEW_ASK_PART:
+				return this.askPartView;
 			default:
 				return undefined;
 		}
@@ -1922,6 +1984,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 				panel: this.partVisibility.panel,
 				sessions: this.partVisibility.sessions,
 				explorer: this.partVisibility.explorer,
+				ask: this.partVisibility.ask,
 			};
 
 			// Save the editor part size so it can be restored on un-maximize.
@@ -1947,6 +2010,9 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 			if (this.partVisibility.explorer) {
 				this.setExplorerHidden(true);
 			}
+			if (this.partVisibility.ask) {
+				this.setAskHidden(true);
+			}
 
 			this._editorMaximized = true;
 		} else {
@@ -1964,6 +2030,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 
 			// After the flag clears, so `setExplorerHidden` no longer refuses to show.
 			this.setExplorerHidden(!state?.explorer);
+			this.setAskHidden(!state?.ask);
 
 			// Restore the editor part width captured before maximizing.
 			if (this.editorPartView && size) {
@@ -2061,6 +2128,9 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 		}
 		if (neighborView === this.explorerPartView) {
 			return Parts.REVIEW_SIDEBAR_PART;
+		}
+		if (neighborView === this.askPartView) {
+			return Parts.REVIEW_ASK_PART;
 		}
 
 		return undefined;
