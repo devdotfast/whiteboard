@@ -151,6 +151,9 @@ export function languageCommitMismatch(alias: string, serverCommit: string, desk
 
 type LanguageFeatures = Pick<ReviewGatewayHost, "languageFeatures" | "languageFeaturesDetail">;
 
+const groupsOf = ({ languageGroups }: ReviewRemoteAttach): Pick<ReviewGatewayHost, "languageGroups"> =>
+	languageGroups.length > 0 ? { languageGroups: [...languageGroups] } : {};
+
 export interface RunResult {
 	readonly code: number | null;
 	readonly stdout: string;
@@ -417,7 +420,7 @@ export class ReviewRemoteHost {
 		this.connectedAt = this.clock.now();
 		this.serverId = attach.serverId;
 		this.masterStderr = "";
-		this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language });
+		this.set({ alias: this.alias, endpoint: { url, token: attach.token }, ...language, ...groupsOf(attach) });
 		this.whilePending(attach);
 	}
 
@@ -481,10 +484,16 @@ export class ReviewRemoteHost {
 	}
 
 	private async attach(env: NodeJS.ProcessEnv): Promise<ReviewRemoteAttach> {
-		const script = reviewRemoteAttachScript((await this.options.groups?.()) ?? []);
+		const groups = (await this.options.groups?.()) ?? [];
+		const script = reviewRemoteAttachScript(groups);
 		const result = await this.run(sshExecArgs(this.options.session, env), this.timeouts.attach, script);
 		const parsed = parseRemoteAttach(result.stdout);
-		if (parsed && "attach" in parsed) return parsed.attach;
+		if (parsed && "attach" in parsed) {
+			const languageGroups = parsed.attach.languageGroups.filter(
+				(entry, index, all) => groups.includes(entry.group) && all.findIndex((other) => other.group === entry.group) === index,
+			);
+			return { ...parsed.attach, languageGroups };
+		}
 		if (parsed) throw unreachable(`whiteboard remote attach failed on ${this.alias}: ${parsed.error}`);
 		if (result.timedOut) throw unreachable(`whiteboard remote attach on ${this.alias} did not finish within ${this.timeouts.attach / 1000} seconds.`);
 		if (result.code === 127) {
@@ -517,7 +526,7 @@ export class ReviewRemoteHost {
 		this.language = undefined;
 		const server = attach.languageServer;
 		const unavailable = (detail: string): LanguageFeatures => ({ languageFeatures: false, languageFeaturesDetail: detail });
-		if (!server) return unavailable(`Language features are unavailable on ${this.alias}: ${attach.languageServerDetail ?? "it has no VS Code server"}`);
+		if (!server) return unavailable(attach.languageServerDetail ?? "This host has no VS Code server.");
 		const mismatch = languageCommitMismatch(this.alias, server.commit, this.options.desktopCommit);
 		if (mismatch) return unavailable(mismatch);
 		const port = await this.options.freePort();
