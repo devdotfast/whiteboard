@@ -381,7 +381,7 @@ describe("Home interactions", () => {
     await key(" ", {}, button("beta"));
     expect(titles()).toEqual(["Two"]);
     expect(button("beta").getAttribute("aria-checked")).toBe("true");
-    await click("Remove Repo beta");
+    await click("Remove Project beta");
     expect(button("beta").getAttribute("aria-checked")).toBe("false");
     expect(titles()).toHaveLength(2);
     await key("Escape");
@@ -418,7 +418,7 @@ describe("Home interactions", () => {
     expect(titles()).toEqual(["One"]);
     expect(button("alpha").getAttribute("aria-checked")).toBe("mixed");
     await click("feature");
-    expect(button("Repo alpha")).toBeTruthy();
+    expect(button("Project alpha")).toBeTruthy();
     expect(button("alpha").getAttribute("aria-checked")).toBe("true");
     expect(button("main").getAttribute("aria-checked")).toBe("true");
     await render([
@@ -438,7 +438,7 @@ describe("Home interactions", () => {
     await key("Escape");
     await click("Worktree feature +1");
     await key("Escape");
-    await click("Repo beta");
+    await click("Project beta");
     await click("alpha");
     expect(container.querySelector("[data-home-submenu]")).not.toBeNull();
     await key("ArrowLeft", {}, document.activeElement!);
@@ -448,10 +448,12 @@ describe("Home interactions", () => {
         button("alpha").querySelector("[data-picker-check]") as HTMLElement
       ).click(),
     );
-    expect(button("Repo beta +1")).toBeTruthy();
+    expect(button("Project beta +1")).toBeTruthy();
     await key(" ", {}, button("gamma"));
     expect(titles()).toHaveLength(5);
-    expect(container.querySelector('[aria-label^="Remove Repo"]')).toBeNull();
+    expect(
+      container.querySelector('[aria-label^="Remove Project"]'),
+    ).toBeNull();
     expect(container.querySelector("[data-home-picker]")).toBeNull();
     await openFilters();
     expect(button("alpha").getAttribute("aria-checked")).toBe("false");
@@ -476,7 +478,7 @@ describe("Home interactions", () => {
     await click("alpha › feature");
     expect(titles()).toEqual(["Fold one"]);
     await key("Escape");
-    await click("Remove Repo alpha");
+    await click("Remove Project alpha");
     expect(titles()).toHaveLength(2);
   });
   it("keeps the caret in the menu under the pointer when hover opens or switches submenus", async () => {

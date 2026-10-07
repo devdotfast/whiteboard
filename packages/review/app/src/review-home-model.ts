@@ -8,7 +8,7 @@ export type HomeGroup = "unread" | "week" | "earlier";
 export type HomeFacet = "repositories" | "worktrees" | "branches";
 
 export const homeFacetLabels: Record<HomeFacet, string> = {
-  repositories: "Repo",
+  repositories: "Project",
   worktrees: "Worktree",
   branches: "Branch",
 };
