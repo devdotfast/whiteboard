@@ -152,6 +152,61 @@ export async function recordRequests(page, streamed) {
   return requests;
 }
 
+/** Every other workbench window than `ctx.page`: the Source windows. */
+export function sourcePages(ctx) {
+  return ctx.browser
+    .contexts()
+    .flatMap((context) => context.pages())
+    .filter((page) => page !== ctx.page && !page.isClosed());
+}
+
+/** Pushes every `navigator` answer `page` receives, with its body, to `answers`. */
+export async function recordNavigator(page, answers) {
+  const cdp = await page.context().newCDPSession(page);
+  const urls = new Map();
+
+  cdp.on("Network.responseReceived", ({ requestId, response }) => {
+    if (/\/reviews-api\/[^/]+\/navigator(\?|$)/.test(response.url))
+      urls.set(requestId, { url: response.url, status: response.status });
+  });
+  cdp.on("Network.loadingFinished", ({ requestId }) => {
+    const answer = urls.get(requestId);
+
+    if (answer)
+      cdp
+        .send("Network.getResponseBody", { requestId })
+        .then(({ body }) => answers.push({ ...answer, body }))
+        .catch((error) => answers.push({ ...answer, error: error.message }));
+  });
+  await cdp.send("Network.enable");
+}
+
+/** Asserts each 200 `navigator` answer named URIs on `authority` and no host path; returns how many there were. */
+export function assertUriAnswers(answers, authority) {
+  const bodies = answers.flatMap((answer) =>
+    answer.status === 200 ? [JSON.parse(answer.body)] : [],
+  );
+
+  assert.ok(bodies.length > 0, "no navigator answer was recorded");
+
+  for (const body of bodies) {
+    assert.deepEqual(
+      Object.keys(body).filter((key) => /Path$/.test(key)),
+      [],
+      JSON.stringify(body),
+    );
+    assert.equal(body.remoteAuthority, authority);
+    assert.ok(body.workspaceUri.startsWith(`vscode-remote://${authority}/`));
+    assert.ok(
+      body.emptySide === true ||
+        body.fileUri.startsWith(`vscode-remote://${authority}/`),
+      JSON.stringify(body),
+    );
+  }
+
+  return bodies.length;
+}
+
 const DESKTOP_ROUTE =
   /^\/(app|control|crash-reports|diffr-config|install|preferences|remote-hosts|telemetry|tutorial)(\/|$)|^\/reviews-api\/[^/]+\/telemetry\//;
 
@@ -403,12 +458,15 @@ async function journey(ctx, page, until) {
   await canvas.getByRole("heading", { name: second }).waitFor();
 
   const laptopOnly = canvas.locator(
-    'button[aria-label="Source tree ↗"], button[aria-label="Share review"], button[aria-label="Shared review"], [aria-label="Session views"] button[aria-label="Trace"]',
+    'button[aria-label="Share review"], button[aria-label="Shared review"], [aria-label="Session views"] button[aria-label="Trace"]',
   );
 
+  const sourceTree = canvas.locator('button[aria-label="Source tree ↗"]');
+
   await until(
-    async () => (await laptopOnly.count()) === 0,
-    "the pushed tab without Source tree, Share and Trace",
+    async () =>
+      (await laptopOnly.count()) === 0 && (await sourceTree.count()) === 1,
+    "the pushed tab with Source tree, without Share and Trace",
     10000,
   );
   await view("Diff").click();
@@ -419,15 +477,18 @@ async function journey(ctx, page, until) {
       ),
     "the pushed tab's Diff view to show f.ts",
   );
-  assert.ok(
-    await page
-      .locator(".review-multidiff-open-container")
-      .evaluateAll((all) => all.length > 0 && all.every((e) => e.hidden)),
-    "Open file shown for a review on another machine",
+  // A host with language features opens a review's files in a Source window on it.
+  await until(
+    () =>
+      page
+        .locator(".review-multidiff-open-container")
+        .evaluateAll((all) => all.length > 0 && all.some((e) => !e.hidden)),
+    "Open file in the pushed tab's Diff view",
+    10000,
   );
   await view("Whiteboard").click();
   ctx.check(
-    "5. session_create with open: true on the remote opened a tab without Open file, Source tree, Share or Trace",
+    "5. session_create with open: true on the remote opened a tab with Open file and Source tree, without Share or Trace",
   );
 
   // 6. The ssh master dies: the review says so, then recovers in the same page.

@@ -6,6 +6,7 @@ import type {
 import { traceMachineEnabled } from "@dev.fast/trace-core";
 import {
   type AskAgentLauncher,
+  askAgentTakesMcp,
   detectAskAgents,
   launchAskAgent,
 } from "@review/ask/agents.js";
@@ -161,7 +162,7 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
     ask &&
     new AskThreads(
       (agent, cwd, options) => launch(agent, cwd, { ...options, env: ask.env }),
-      ask.tools,
+      { takesMcp: (agent) => askAgentTakesMcp(agent, ask.env), ...ask.tools },
     );
 
   const api = createReviewApi(

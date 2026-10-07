@@ -373,7 +373,8 @@ one of these entries:
 - `src/vs/platform/window/common/window.ts` and
   `src/vs/platform/native/electron-main/nativeHostMainService.ts`: the
   `openWindow` options `reviewReferencesToShow` and `reviewSourceTitle` run a
-  navigator command in the opened window (Find References, the title's review and side).
+  navigator command in the opened window (Find References, the title's review and side,
+  and a remote review's host alias for the window's host-state entry).
 - `extensions/package.json` and the extension `package.json`/`package-lock.json`
   files: `@vscode/extension-telemetry` is hoisted to the shared extensions
   install (github keeps its own ^1.0.0 copy; the shared copy is ^0.9.8). The

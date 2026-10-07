@@ -56,7 +56,7 @@ interface AskAgentSpec {
 
 interface AskAgentMcp {
   /** Whether this install can take them. */
-  supported(executable: string): Promise<boolean>;
+  supported(executable: string, env: NodeJS.ProcessEnv): Promise<boolean>;
   /** What the adapter runs in place of the user's CLI to give them, with
    * what it needs in `env`. */
   launch(
@@ -252,13 +252,16 @@ async function findAgent(
 }
 
 /** Whether the agent's model gets the MCP servers its sessions are given. */
-export async function askAgentTakesMcp(agent: AskAgentId): Promise<boolean> {
+export async function askAgentTakesMcp(
+  agent: AskAgentId,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<boolean> {
   const spec = askAgents[agent];
 
   if (!spec.mcp) return true;
-  const executable = await findAgent(spec);
+  const executable = await findAgent(spec, env);
 
-  return executable !== undefined && spec.mcp.supported(executable);
+  return executable !== undefined && spec.mcp.supported(executable, env);
 }
 
 export async function detectAskAgents(
@@ -305,7 +308,9 @@ export const launchAskAgent: AskAgentLauncher = async (
 
   if ("adapter" in launch) {
     env[launch.executableEnv] =
-      spec.mcp && mcpServers.length && (await spec.mcp.supported(executable))
+      spec.mcp &&
+      mcpServers.length &&
+      (await spec.mcp.supported(executable, env))
         ? await spec.mcp.launch(executable, mcpServers, env)
         : executable;
 

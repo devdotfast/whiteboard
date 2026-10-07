@@ -248,26 +248,31 @@ export function ApiCanvas({
     };
   }, [client, content.reviewId, version]);
 
-  const openFile = content.available?.sourceWindows !== false;
+  // Read at create, so a host going offline keeps the open editors.
+  const openFile = useRef(true);
+
+  openFile.current = content.available?.sourceWindows !== false;
 
   const nativeSources = useMemo(() => {
     const { inlineEditors, diffView } = content.bridge;
 
-    return openFile
-      ? { inlineEditors: { ...inlineEditors }, diffView: { ...diffView } }
-      : {
-          inlineEditors: {
-            ...inlineEditors,
-            create: (spec: ReviewInlineEditorSpec) =>
-              inlineEditors.create({ ...spec, onDidOpen: undefined }),
-          },
-          diffView: {
-            ...diffView,
-            create: (spec: ReviewDiffViewSpec) =>
-              diffView.create({ ...spec, openFile: false }),
-          },
-        };
-  }, [content.bridge, sourceVersion, content.structuralDiffEnabled, openFile]);
+    return {
+      inlineEditors: {
+        ...inlineEditors,
+        create: (spec: ReviewInlineEditorSpec) =>
+          inlineEditors.create(
+            openFile.current ? spec : { ...spec, onDidOpen: undefined },
+          ),
+      },
+      diffView: {
+        ...diffView,
+        create: (spec: ReviewDiffViewSpec) =>
+          diffView.create(
+            openFile.current ? spec : { ...spec, openFile: false },
+          ),
+      },
+    };
+  }, [content.bridge, sourceVersion, content.structuralDiffEnabled]);
 
   const baseSession = useMemo(() => {
     const bridge = {
