@@ -1,8 +1,8 @@
 [package]
 name = "diffr-cli"
 description = "Structural diffs with a streaming API and interactive terminal frontend."
-repository = "https://github.com/devdotfast/diffr"
-homepage = "https://github.com/devdotfast/diffr"
+repository = "https://github.com/devdotfast/whiteboard"
+homepage = "https://github.com/devdotfast/whiteboard/tree/main/diffr"
 license = "MIT"
 version = "0.1.16"
 authors = ["dev.fast"]

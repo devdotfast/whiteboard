@@ -1,10 +1,9 @@
 ---
-name: Bug Report
-about: Report an issue
+name: Diffr Bug Report
+about: Report an issue with diffr
 title: ''
 labels: ''
 assignees: ''
-
 ---
 
 Thanks for reporting a bug! Please include all of the following:

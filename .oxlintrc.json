@@ -24,6 +24,7 @@
     "**/dist/**",
     "**/.vite/**",
     "apps/review-desktop/code-oss/**",
+    "diffr/**",
     ".agent/**",
     ".agents/**",
     ".claude/**",

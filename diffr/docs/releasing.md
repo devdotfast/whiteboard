@@ -11,8 +11,8 @@ Start from current `origin/main` and choose an unused `X.Y.Z` version.
    Cargo stages the internal dependencies locally and builds the extracted
    archives. Symlinks under the library crates point to the repository's
    canonical assets; Cargo packages their contents as regular files.
-3. Merge the release PR after CI passes, then push an annotated tag matching
-   the version exactly, without a `v` prefix.
+3. Merge the release PR after CI passes, then push an annotated tag named
+   `diffr-X.Y.Z`.
 4. Verify the Release workflow. It builds five platform archives, generates
    checksums and a Homebrew formula, tests installation, publishes the GitHub
    release and npm packages, and tests npm installation on all five platforms.

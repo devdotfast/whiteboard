@@ -1,10 +1,13 @@
-name: Coverage
+name: Diffr Coverage
 
 on: [pull_request, push]
 
 jobs:
   coverage:
     runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: diffr
     steps:
       # v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -23,5 +26,5 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5
         with:
-          files: lcov.info
+          files: diffr/lcov.info
           fail_ci_if_error: false

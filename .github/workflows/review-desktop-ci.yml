@@ -157,7 +157,7 @@ jobs:
       - name: Test
         run: |
           node --test "scripts/**/*.test.mjs"
-          pnpm -r --no-sort --workspace-concurrency=3 --if-present test
+          pnpm -r --filter '!@dev.fast/diffr' --no-sort --workspace-concurrency=3 --if-present test
 
       - name: Bundled diffr integration
         run: |

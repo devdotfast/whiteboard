@@ -1,6 +1,6 @@
 # Security Policy
 
-Report a suspected Whiteboard vulnerability through this repository's
+Report a suspected Whiteboard or diffr vulnerability through this repository's
 private GitHub security advisory form. Do not open a public issue.
 
 Do not report Whiteboard issues to Microsoft. The security document under

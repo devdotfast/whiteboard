@@ -166,7 +166,12 @@ export async function comparisonCoverage(
         throw new Error(`Unexpected structural result: ${path}`);
 
       if (event.error) {
-        if (event.error.code !== "unsupported_file_type")
+        // Neither kind has line ranges to count. Keep the rest of the review
+        // available when a repository contains non-UTF-8 fixtures or links.
+        if (
+          event.error.code !== "unsupported_file_type" &&
+          event.error.code !== "not_utf8"
+        )
           throw new Error(`Cannot count ${path}: ${event.error.message}`);
 
         if (!remaining.size) break;

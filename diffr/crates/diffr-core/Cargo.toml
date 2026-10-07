@@ -1,8 +1,8 @@
 [package]
 name = "diffr-core"
 description = "The diffr engine: parsing, structural diffing, configuration and the plugin cursor."
-repository = "https://github.com/devdotfast/diffr"
-homepage = "https://github.com/devdotfast/diffr"
+repository = "https://github.com/devdotfast/whiteboard"
+homepage = "https://github.com/devdotfast/whiteboard/tree/main/diffr"
 license = "MIT"
 version = "0.1.16"
 authors = ["dev.fast"]

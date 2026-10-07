@@ -221,16 +221,28 @@ test("streams a large comparison without treating accumulated file bytes as one 
   expect(complete).toBe(true);
 });
 
+test("accepts a generated-parser-sized individual record", async () => {
+  const root = await executable(`
+    ${emit(START)}
+    process.stdout.write(JSON.stringify({
+      ...${JSON.stringify(BINARY)}, padding: 'x'.repeat(80 * 1024 * 1024),
+    }) + '\\n');
+    ${emit(COMPLETE)}
+  `);
+
+  expect(await collect(request(root))).toEqual([START, BINARY, COMPLETE]);
+});
+
 test("rejects an oversized individual record", async () => {
   const root = await executable(`
     ${emit(START)}
     process.stdout.write(JSON.stringify({
-      ...${JSON.stringify(BINARY)}, oversized: 'x'.repeat(65 * 1024 * 1024),
+      ...${JSON.stringify(BINARY)}, oversized: 'x'.repeat(97 * 1024 * 1024),
     }) + '\\n');
   `);
 
   await expect(collect(request(root))).rejects.toThrow(
-    "Structural diff record exceeded 64 MiB",
+    "Structural diff record exceeded 96 MiB",
   );
 });
 

@@ -43,9 +43,9 @@ cargo binstall diffr-cli
 cargo install diffr-cli --locked
 ```
 
-Windows x64: download `diffr-<version>-<target>.tar.gz` from [Releases](https://github.com/devdotfast/diffr/releases) and extract it with `tar -xzf`, or use `cargo binstall`.
+Windows x64: download `diffr-<version>-<target>.tar.gz` from [Whiteboard Releases](https://github.com/devdotfast/whiteboard/releases) and extract it with `tar -xzf`, or use `cargo binstall`.
 
-From source: `cargo xtask install` (requires Rust and [Bun](https://bun.sh)).
+From a Whiteboard checkout: `cd diffr && cargo xtask install` (requires Rust and [Bun](https://bun.sh)).
 
 ## History
 
