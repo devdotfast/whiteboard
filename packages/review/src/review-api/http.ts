@@ -92,7 +92,7 @@ const askStartSchema = z.strictObject({
 const askPermitSchema = z.strictObject({ bypass: z.boolean() });
 
 /** The threads one watch follows: those of a review's open Asks. */
-const askWatchThreadsSchema = z.array(z.string().min(1)).max(100);
+const askWatchThreadsSchema = z.array(z.string().min(1));
 
 const askOpenSchema = z.strictObject({ picks: askPicksSchema.optional() });
 
