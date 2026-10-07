@@ -295,7 +295,7 @@ async function addHost(ctx, host) {
   return section;
 }
 
-async function removeHost(ctx, host, { uninstall = false } = {}) {
+export async function removeHost(ctx, host, { uninstall = false } = {}) {
   const section = await hostsSection(ctx);
 
   await section.getByRole("button", { name: `Remove ${host}` }).click();

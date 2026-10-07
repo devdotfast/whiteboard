@@ -1,5 +1,5 @@
 import { PROTOCOL_VERSION, client, methods } from "@agentclientprotocol/sdk";
-import { errorMessage } from "@dev.fast/trace-core";
+import { errorMessage, shellQuote } from "@dev.fast/trace-core";
 import {
   type AskAgentLauncher,
   askAgentTakesMcp,
@@ -138,6 +138,52 @@ export interface AskTools {
   takesMcp?: (agent: AskAgentId) => Promise<boolean>;
 }
 
+/** Whiteboard's CLI as the tools, with `selector` in its env so it reaches
+ * this server and no other. */
+export function cliAskTools(
+  cliPath: () => string | undefined,
+  selector: { name: string; value: string },
+): AskTools {
+  const env = () => [
+    selector,
+    ...(process.versions.electron
+      ? [{ name: "ELECTRON_RUN_AS_NODE", value: "1" }]
+      : []),
+    ...(process.env.DEV_REVIEW_HOME
+      ? [{ name: "DEV_REVIEW_HOME", value: process.env.DEV_REVIEW_HOME }]
+      : []),
+  ];
+
+  return {
+    mcpServers: () => {
+      const cli = cliPath();
+
+      return cli
+        ? [
+            {
+              name: "whiteboard",
+              command: process.execPath,
+              args: [cli, "mcp"],
+              env: env(),
+            },
+          ]
+        : [];
+    },
+    cli: () => {
+      const cli = cliPath();
+
+      return (
+        cli &&
+        [
+          ...env().map(({ name, value }) => `${name}=${shellQuote(value)}`),
+          shellQuote(process.execPath),
+          shellQuote(cli),
+        ].join(" ")
+      );
+    },
+  };
+}
+
 /** How an agent reaches Whiteboard's tools, which its first prompt says. */
 export type AskToolsReach =
   | { kind: "mcp" }
@@ -156,7 +202,9 @@ export class AskThreads {
   constructor(
     private readonly launch: AskAgentLauncher,
     private readonly tools: AskTools = {},
-    private readonly limits: AskThreadLimits = askThreadLimits,
+    private readonly limits: AskThreadLimits & {
+      idleCloseMs?: number;
+    } = askThreadLimits,
   ) {
     this.mcpServers = tools.mcpServers ?? (() => []);
   }
@@ -183,6 +231,22 @@ export class AskThreads {
     );
 
     this.threads.set(thread.id, thread);
+    const { idleCloseMs } = this.limits;
+
+    if (idleCloseMs !== undefined) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+
+      thread.onUnwatched((unwatched) => {
+        if (unwatched)
+          timer ??= setTimeout(() => this.close(thread.id), idleCloseMs);
+        else {
+          clearTimeout(timer);
+          timer = undefined;
+        }
+      });
+      thread.onClose(() => clearTimeout(timer));
+    }
+
     void thread.open();
 
     return thread;

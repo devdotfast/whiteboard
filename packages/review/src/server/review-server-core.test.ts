@@ -26,6 +26,7 @@ beforeEach(async () => {
   root = await mkdtemp(path.join(tmpdir(), "review-server-core-"));
   vi.stubEnv("DEV_REVIEW_HOME", root);
   vi.stubEnv("DEV_FAST_REVIEW_TELEMETRY_DISABLED", "1");
+  vi.stubEnv("SHELL", "");
 });
 
 afterEach(async () => {

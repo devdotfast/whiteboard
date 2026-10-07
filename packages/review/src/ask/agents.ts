@@ -200,6 +200,8 @@ export type AskAgentLauncher = (
     bypass?: boolean;
     /** The MCP servers its sessions are given. */
     mcpServers?: McpServer[];
+    /** Where it is found, and the environment it runs in. */
+    env?: NodeJS.ProcessEnv;
   },
 ) => Promise<AskAgentProcess>;
 
@@ -280,15 +282,15 @@ const STDERR_LIMIT = 8_000;
 export const launchAskAgent: AskAgentLauncher = async (
   agent,
   cwd,
-  { bypass = false, mcpServers = [] } = {},
+  { bypass = false, mcpServers = [], env: base = process.env } = {},
 ) => {
   const spec = askAgents[agent];
-  const executable = await findAgent(spec);
+  const executable = await findAgent(spec, base);
 
   if (!executable) throw new Error(`${spec.name} is not installed.`);
 
   const env: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...base,
     ...((bypass && spec.bypass?.env) || spec.env),
   };
 

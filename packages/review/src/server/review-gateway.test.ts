@@ -324,7 +324,7 @@ it("waits past the 10 s limit for a slow language context and keeps the host onl
   const { request, gateway } = await startLaptopGateway(
     root,
     [{ alias: "wb-a", endpoint: fake.endpoint }],
-    { languageContextMs: 14_000 },
+    { slowRouteMs: 14_000 },
   );
 
   await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
@@ -394,6 +394,10 @@ it.each([
   ["navigator", "POST", "workspacePath"],
   ["navigator", "POST", "filePath"],
   ["language-context", "GET", "rootPath"],
+  ["ask/agents", "GET", "localPath"],
+  ["ask/agents/codex/offer", "GET", "localPath"],
+  ["ask/mentions", "GET", "localPath"],
+  ["ask/threads", "GET", "localPath"],
 ])(
   "refuses a remote %s answer that carries %s",
   async (route, method, field) => {
@@ -1217,3 +1221,193 @@ it("ends a forwarded stream when the heartbeat finds its host gone", async () =>
   expect(laptop.gateway.hosts()[0]?.state).toBe("offline");
   expect(Date.now() - started).toBeLessThan(1_000 + 3_000 + 500);
 }, 10_000);
+
+const ASK_ROUTES: [string, string][] = [
+  ["GET", "ask/agents"],
+  ["GET", "ask/agents/codex/offer"],
+  ["GET", "ask/mentions?query=f"],
+  ["GET", "ask/threads"],
+  ["POST", "ask"],
+  ["POST", "ask/t1/open"],
+  ["POST", "ask/t1/prompt"],
+  ["POST", "ask/t1/permission"],
+  ["POST", "ask/t1/permissions"],
+  ["POST", "ask/t1/files"],
+  ["POST", "ask/t1/choice"],
+  ["POST", "ask/t1/retry"],
+  ["POST", "ask/t1/cancel"],
+  ["POST", "ask/t1/close"],
+  ["DELETE", "ask/t1"],
+];
+
+it("forwards every Ask route of a remote review and marks the caller remote", async () => {
+  const reviewId = randomUUID();
+  const seen: string[] = [];
+
+  const fake = await startFake({
+    version,
+    reviewIds: [reviewId],
+    handle(request, response) {
+      if (!request.url?.startsWith(`/reviews-api/${reviewId}/ask`))
+        return false;
+      seen.push(
+        `${request.method} ${request.url.split(`/${reviewId}/`)[1]} ${request.headers["x-review-client"]}`,
+      );
+      response.setHeader("content-type", "application/json");
+      response.end('{"ok":true}');
+
+      return true;
+    },
+  });
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: fake.endpoint },
+  ]);
+
+  await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+
+  for (const [method, route] of ASK_ROUTES) {
+    const response = await request(`/${reviewId}/${route}`, {
+      method,
+      body: method === "GET" ? undefined : "{}",
+    });
+
+    expect(response.status, `${method} ${route}`).toBe(200);
+  }
+
+  expect(seen).toEqual(
+    ASK_ROUTES.map(([method, route]) => `${method} ${route} remote`),
+  );
+});
+
+it("keeps an Ask watch stream open across a 12 s silence and ends it when the host goes", async () => {
+  const reviewId = randomUUID();
+  let hang = false;
+  let remote: import("node:http").ServerResponse | undefined;
+
+  const fake = await startFake({
+    version,
+    reviewIds: [reviewId],
+    handle(request, response) {
+      if (request.url === "/health") return hang;
+
+      if (!request.url?.startsWith(`/reviews-api/${reviewId}/ask/t1/watch`))
+        return false;
+      remote = response;
+      response.setHeader("content-type", "text/event-stream");
+      response.write('data: {"n":1}\n\n');
+
+      return true;
+    },
+  });
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: fake.endpoint },
+  ]);
+
+  await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+
+  const response = await request(`/${reviewId}/ask/t1/watch`);
+  expect(response.status).toBe(200);
+
+  const reader = response
+    .body!.pipeThrough(new TextDecoderStream())
+    .getReader();
+
+  expect((await reader.read()).value).toContain('{"n":1}');
+  await new Promise((resolve) => setTimeout(resolve, 12_000));
+  remote!.write('data: {"n":2}\n\n');
+  expect((await reader.read()).value).toContain('{"n":2}');
+
+  hang = true;
+  await expect
+    .poll(() => gateway.hosts()[0]?.state, { timeout: 15_000 })
+    .toBe("offline");
+  await expect(reader.read()).rejects.toThrow("terminated");
+}, 40_000);
+
+it("passes a 2 MB Ask files body to the remote intact", async () => {
+  const reviewId = randomUUID();
+  let received = 0;
+
+  const fake = await startFake({
+    version,
+    reviewIds: [reviewId],
+    handle(request, response) {
+      if (!request.url?.startsWith(`/reviews-api/${reviewId}/ask/t1/files`))
+        return false;
+      request.on("data", (chunk: Buffer) => (received += chunk.length));
+      request.on("end", () => response.end('{"ok":true}'));
+
+      return true;
+    },
+  });
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: fake.endpoint },
+  ]);
+
+  await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+
+  const body = JSON.stringify({ paths: ["x".repeat(2 * 1024 * 1024)] });
+
+  const response = await request(`/${reviewId}/ask/t1/files`, {
+    method: "POST",
+    body,
+  });
+
+  expect(response.status).toBe(200);
+  expect(received).toBe(Buffer.byteLength(body));
+});
+
+it.each([
+  ["GET", "ask/agents/codex/offer"],
+  ["POST", "ask/t1/permissions"],
+  ["POST", "ask/t1/choice"],
+])(
+  "waits past the 10 s limit for a slow %s %s and keeps the host online when it never answers",
+  async (method, route) => {
+    const slow = randomUUID();
+    const hung = randomUUID();
+
+    const fake = await startFake({
+      version,
+      reviewIds: [slow, hung],
+      handle(request, response) {
+        if (request.url?.startsWith(`/reviews-api/${hung}/${route}`))
+          return true;
+
+        if (!request.url?.startsWith(`/reviews-api/${slow}/${route}`))
+          return false;
+
+        setTimeout(() => {
+          response.setHeader("content-type", "application/json");
+          response.end('{"ok":true}');
+        }, 11_000);
+
+        return true;
+      },
+    });
+
+    const { request, gateway } = await startLaptopGateway(
+      root,
+      [{ alias: "wb-a", endpoint: fake.endpoint }],
+      { slowRouteMs: 14_000 },
+    );
+
+    await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+
+    const init = method === "POST" ? { method, body: "{}" } : {};
+
+    const [answered, unanswered] = await Promise.all([
+      request(`/${slow}/${route}`, init),
+      request(`/${hung}/${route}`, init),
+    ]);
+
+    expect(answered.status).toBe(200);
+    expect(unanswered.status).toBe(504);
+    expect(unanswered.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+    expect(gateway.hosts()[0]?.state).toBe("online");
+  },
+  30_000,
+);

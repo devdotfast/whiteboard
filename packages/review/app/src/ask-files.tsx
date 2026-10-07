@@ -3,6 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
   type ReactNode,
+  cloneElement,
   createContext,
   useContext,
   useEffect,
@@ -16,6 +17,9 @@ import { useReviewSession } from "./host/review-session";
 import { radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { useTooltip } from "./use-tooltip";
+
+const NO_SOURCE_WINDOWS =
+  "Source windows are not available for a review on another machine.";
 
 const resolvedSchema = z.object({
   files: z.array(z.object({ path: z.string(), file: z.string() })),
@@ -137,18 +141,28 @@ function AskFileLink({
   children,
 }: {
   fileRef: AskFileRef;
-  fallback: ReactNode;
+  fallback: ReactElement;
   children: ReactNode;
 }): ReactNode {
   const files = useContext(AskFilesContext);
+  const canOpen = useReviewSession().review?.available?.sourceWindows !== false;
   const { path, line } = fileRef;
 
-  useEffect(() => files?.request(path), [files, path]);
+  useEffect(() => {
+    if (canOpen) files?.request(path);
+  }, [canOpen, files, path]);
   const file = files?.lookup(path);
 
   const tooltip = useTooltip<HTMLAnchorElement>(
     `Open ${file}${line ? `:${line}` : ""}`,
   );
+
+  if (!canOpen) {
+    // SAFETY: the fallback is a <code> or <span>, which take a title.
+    const text = fallback as ReactElement<{ title?: string }>;
+
+    return cloneElement(text, { title: NO_SOURCE_WINDOWS });
+  }
 
   if (!files || !file) return fallback;
   const open = () => files.open(file, line);

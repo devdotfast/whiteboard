@@ -166,6 +166,14 @@ with **Connect**, which runs that agent's own install commands on the host,
 the same ones `whiteboard connect` gives. An agent whose command is not on the
 login shell's `PATH` gets the text to paste into it instead.
 
+**Ask.** Ask works on a review that lives on a host. The agent runs on the
+host, in the review's checkout, with the agents and sign-ins already there
+(`claude auth login`, `codex login`, `opencode auth login`,
+`cursor-agent login`, Pi's `/login`). Threads are kept on the host, so every
+laptop that attaches it sees the same history for its reviews. A file that an
+answer names shows as text, because Source windows are not available for a
+remote review.
+
 ## Remove Whiteboard from a host
 
 In Settings, click **Remove** on the host, check **Also remove Whiteboard from

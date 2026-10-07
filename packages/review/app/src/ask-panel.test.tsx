@@ -12,6 +12,7 @@ import {
 import { AskHistoryProvider, useAskHistory } from "./ask-history";
 import { AskHistoryList } from "./ask-history-list";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
+import { AskSignIn } from "./ask-setup";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewPanelProvider, useReviewPanel } from "./review-panel";
@@ -1263,6 +1264,57 @@ it("moves from setup to asking once an agent is installed", async () => {
     available = true;
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(container.querySelector("textarea")).not.toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("names the host a remote review's agents run on (wb-test-a)", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const remote = testReviewSession();
+  remote.review = { ...remote.review!, host: "wb-test-a" };
+  const laptop = testReviewSession();
+
+  for (const session of [remote, laptop])
+    vi.spyOn(session, "fetch").mockImplementation(async (endpoint) =>
+      endpoint === "/ask/agents"
+        ? Response.json({
+            agents: [{ id: "claude", name: "Claude Code", available: false }],
+          })
+        : Response.json({ ok: true }, { status: 404 }),
+    );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  const render = async (session: typeof remote) =>
+    act(async () =>
+      root.render(
+        <ReviewSessionProvider session={session}>
+          <AskPanelContent selection={selection} />
+          <AskSignIn
+            agentName="Claude Code"
+            command="claude auth login"
+            onRetry={() => {}}
+          />
+        </ReviewSessionProvider>,
+      ),
+    );
+
+  try {
+    await render(remote);
+    expect(container.textContent).toContain("Not installed on wb-test-a");
+    expect(
+      container.querySelector('[aria-label="Sign in"]')?.textContent,
+    ).toContain("wb-test-a");
+
+    await render(laptop);
+    expect(container.textContent).toContain("Not installed");
+    expect(container.textContent).not.toContain("wb-test-a");
   } finally {
     await act(async () => root.unmount());
     container.remove();
