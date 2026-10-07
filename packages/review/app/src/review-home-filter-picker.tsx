@@ -433,8 +433,8 @@ export function HomeFilterPicker({
                 </section>
               )}
               {(repoRows.length > 0 || treeRows.length > 0) && (
-                <section aria-label="Repository filters">
-                  <Label>Repository</Label>
+                <section aria-label="Project filters">
+                  <Label>Project</Label>
                   {repoRows.map(repoRow)}
                   {treeRows}
                 </section>
