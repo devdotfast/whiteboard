@@ -27,7 +27,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it("exposes JSON section and Markdown headings plus imported PR navigation", async () => {
+it("exposes JSON section and Markdown headings plus imported PR and its place under its parent", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal(
     "ResizeObserver",
@@ -79,6 +79,34 @@ it("exposes JSON section and Markdown headings plus imported PR navigation", asy
     },
   );
 
+  // Its parent, and the sibling it builds on.
+  const board = async (title: string) =>
+    (
+      await store.execute({
+        operation: {
+          type: "create",
+          title,
+          target: {
+            kind: "commits",
+            repositoryId: "repo",
+            base: "base",
+            head: "head",
+          },
+        },
+      })
+    ).reviewId;
+
+  const parent = await board("Stack");
+  const earlier = await board("Earlier");
+
+  for (const child of [earlier, reviewId])
+    await store.execute({
+      operation: { type: "set_parent", reviewId: child, parentId: parent },
+    });
+  await store.execute({
+    operation: { type: "set_dependencies", reviewId, dependsOn: [earlier] },
+  });
+
   const app = new Hono();
   app.get("/reviews-api/:id/stack", (c) => c.json({ layers: [] }));
   app.route("/reviews-api", createReviewApi(store));
@@ -123,7 +151,7 @@ it("exposes JSON section and Markdown headings plus imported PR navigation", asy
   expect(
     container.querySelector('a[href="https://github.com/example/repo/pull/42"]')
       ?.textContent,
-  ).toContain("42");
+  ).toContain("#42");
   const headings = [...container.querySelectorAll("article h2, article h3")];
   expect(headings.map((heading) => heading.textContent)).toEqual([
     "Summary",
@@ -157,6 +185,9 @@ it("exposes JSON section and Markdown headings plus imported PR navigation", asy
         listener({ event: "revealHeading", reviewId, headingId: id });
     });
   expect(scroll).toHaveBeenCalledTimes(4);
+  expect(
+    container.querySelector('[aria-label="2 of 2 in Stack"]'),
+  ).not.toBeNull();
 });
 
 it("reports a board's Contents without waiting for its diff", async () => {

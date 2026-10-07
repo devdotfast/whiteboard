@@ -302,11 +302,13 @@ describe("ReviewTraceView", () => {
 
       if (jsonReview)
         session.review = {
+          reviewId: "test-review",
           pins: { base: "base", head: "head" },
           historicalRevision: null,
           updatedAtMs: 0,
           traces: new Map(),
-          stack: async () => [],
+          place: async () => ({ siblings: [] }),
+          stack: async () => ({ layers: [] }),
           createBranchReview: async () => "",
           dismiss: async () => true,
         };

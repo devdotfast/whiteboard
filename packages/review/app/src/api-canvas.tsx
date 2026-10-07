@@ -4,6 +4,7 @@ import {
   type ReviewDiffViewSpec,
   type ReviewDocumentWidthChoice,
   type ReviewInlineEditorSpec,
+  parseReviewBoardPlace,
   parseReviewStackResponse,
   resolveReviewSourceView,
 } from "@dev.fast/review-protocol";
@@ -104,6 +105,9 @@ export function ApiCanvas({
 
   const [version, setVersion] = useState(content.version);
   const [coverageRevision, setCoverageRevision] = useState(0);
+  // Bumped when the board's parent or siblings change, so its header
+  // reads them again.
+  const [placeRevision, setPlaceRevision] = useState(0);
   const [activity, setActivity] = useState<ActivitySnapshot | "unknown">();
   const [cursor, setCursor] = useState<AuthoringCursor | null>(null);
   const [lensCursor, setLensCursor] = useState<AuthoringCursor | null>(null);
@@ -180,6 +184,7 @@ export function ApiCanvas({
           activity: ActivitySnapshot;
           coverageRevision?: number;
           linksRevision?: number;
+          placeRevision?: number;
         }
       >(
         content.reviewId,
@@ -192,6 +197,7 @@ export function ApiCanvas({
             nextCursor(current, lensMemory, snapshot, "lenses"),
           );
           setCoverageRevision(snapshot.coverageRevision ?? 0);
+          setPlaceRevision(snapshot.placeRevision ?? 0);
 
           if (version !== undefined) return;
 
@@ -329,6 +335,10 @@ export function ApiCanvas({
 
   const ui = useContext(CanvasUiContext);
 
+  // The header's reads, one per what they read: the page bar and the meta
+  // line share them, and a new snapshot of the same board reads nothing.
+  const headerReads = useMemo(() => sharedReads(), [client, content.reviewId]);
+
   const session = useMemo(() => {
     if (!data) return baseSession;
     const snapshot = data.snapshot;
@@ -337,6 +347,7 @@ export function ApiCanvas({
       ...baseSession,
       review: {
         trashedAt: snapshot.trashedAt,
+        reviewId: snapshot.reviewId,
         host: content.host,
         hostState: content.hostState,
         hosts: content.remoteHosts,
@@ -348,18 +359,36 @@ export function ApiCanvas({
         historicalRevision: version === undefined ? null : String(version),
         updatedAtMs: Date.parse(snapshot.createdAt),
         headBranch: snapshot.origin?.branch,
+        baseRef:
+          snapshot.origin?.baseBranch ??
+          snapshot.origin?.baseRef ??
+          (snapshot.target && "base" in snapshot.target
+            ? snapshot.target.base
+            : undefined),
+        headRef:
+          snapshot.target?.kind === "commits"
+            ? snapshot.target.head
+            : undefined,
         pullRequestNumber: snapshot.origin?.pullRequestNumber,
         pullRequestUrl: snapshot.origin?.pullRequestUrl,
         traces: new Map(
           [...data.traces].map(([id, trace]) => [id, retainedTrace(id, trace)]),
         ),
-        stack: async (signal: AbortSignal) =>
-          parseReviewStackResponse(
-            await client.read(
-              `/${snapshot.reviewId}/stack?version=${snapshot.version}`,
-              signal,
+        placeRevision,
+        place: () =>
+          headerReads(`place:${snapshot.version}:${placeRevision}`, async () =>
+            parseReviewBoardPlace(
+              await client.read(`/${snapshot.reviewId}/place`),
             ),
-          ).layers,
+          ),
+        stack: () =>
+          headerReads(`stack:${snapshot.version}:${placeRevision}`, async () =>
+            parseReviewStackResponse(
+              await client.read(
+                `/${snapshot.reviewId}/stack?version=${snapshot.version}`,
+              ),
+            ),
+          ),
         createBranchReview: async (
           branch: string,
           base: string,
@@ -410,6 +439,8 @@ export function ApiCanvas({
     content.remoteHosts,
     content.available,
     data,
+    headerReads,
+    placeRevision,
     version,
     ui,
   ]);
@@ -717,3 +748,24 @@ const styles = stylex.create({
     font: `${fontSize.reading}/1.6 ${tokens.chromeFont}`,
   },
 });
+
+/** Reads shared by key: the first caller's request answers every caller,
+ * and a failed one is read again next time. The last few are kept. */
+function sharedReads() {
+  const reads = new Map<string, Promise<unknown>>();
+
+  return <T,>(key: string, read: () => Promise<T>): Promise<T> => {
+    // SAFETY: a key always names one read, so its promise is that read's T.
+    let pending = reads.get(key) as Promise<T> | undefined;
+
+    if (!pending) {
+      pending = read();
+      pending.catch(() => reads.delete(key));
+      reads.set(key, pending);
+
+      if (reads.size > 8) reads.delete(reads.keys().next().value!);
+    }
+
+    return pending;
+  };
+}
