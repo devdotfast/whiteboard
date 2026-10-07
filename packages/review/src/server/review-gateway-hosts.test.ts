@@ -124,6 +124,124 @@ it("names the laptop's install command for a host without Whiteboard", () => {
   ]);
 });
 
+it("an unsupported host keeps its reason and gets no install command", () => {
+  const gateway = hosts("0.1.6");
+  const detail = "This host runs glibc 2.31; Whiteboard needs 2.34 or newer.";
+
+  gateway.set([{ alias: "old", problem: { state: "unsupported", detail } }]);
+
+  expect(gateway.states()).toEqual([
+    { alias: "old", state: "unsupported", detail },
+  ]);
+});
+
+it("a host Desktop is installing on shows the step, and the next step replaces it", () => {
+  const gateway = hosts("0.1.6");
+
+  gateway.set([
+    {
+      alias: "box",
+      installing: { step: "node", detail: "uploaded from this computer" },
+    },
+  ]);
+  expect(gateway.states()).toEqual([
+    {
+      alias: "box",
+      state: "installing",
+      detail: "Installing Node 24 (uploaded from this computer).",
+    },
+  ]);
+
+  gateway.set([{ alias: "box", installing: { step: "verifying" } }]);
+  expect(gateway.states()).toEqual([
+    { alias: "box", state: "installing", detail: "Checking the install." },
+  ]);
+});
+
+it("a host whose install question is open says so, and the answer clears it", () => {
+  const gateway = hosts("0.1.6");
+
+  gateway.set([{ alias: "box", asking: "0.1.6" }]);
+  expect(gateway.states()).toEqual([
+    {
+      alias: "box",
+      state: "connecting",
+      detail: "Waiting for an answer: install Whiteboard 0.1.6 on box?",
+    },
+  ]);
+
+  gateway.set([{ alias: "box" }]);
+  expect(gateway.states()[0]?.detail).toBe("Waiting for a connection to box.");
+});
+
+it("a declined host keeps the install command and says it was declined", () => {
+  const gateway = hosts("0.1.6");
+  const detail = "Whiteboard is not installed on box.";
+
+  gateway.set([
+    {
+      alias: "box",
+      problem: { state: "not-installed", detail },
+      declined: true,
+    },
+  ]);
+
+  expect(gateway.states()).toEqual([
+    {
+      alias: "box",
+      state: "not-installed",
+      detail,
+      installCommand: "npm install -g @dev.fast/whiteboard@0.1.6",
+      declined: true,
+    },
+  ]);
+});
+
+it("an older server after a failed or declined install is incompatible, says why, and offers the install", async () => {
+  const fake = await startFake({ version: "0.1.5" });
+  const gateway = hosts("0.1.6");
+
+  const installFailure =
+    "Installing Whiteboard 0.1.6 on box failed while installing the package: npm ERR! 404.";
+
+  gateway.set([
+    { alias: "box", endpoint: fake.endpoint, installFailure, declined: true },
+  ]);
+
+  await expect
+    .poll(() => gateway.states()[0])
+    .toMatchObject({
+      state: "incompatible",
+      detail: `box runs Whiteboard 0.1.5; this Desktop runs 0.1.6. Install Whiteboard 0.1.6 on box. ${installFailure}`,
+      declined: true,
+    });
+});
+
+it("a declined host on this Desktop's version is online, with no install offered", async () => {
+  const fake = await startFake({ version: "0.1.6" });
+  const gateway = hosts("0.1.6");
+
+  gateway.set([{ alias: "box", endpoint: fake.endpoint, declined: true }]);
+  expect(gateway.states()[0]).toMatchObject({ state: "connecting" });
+  expect(gateway.states()[0]).not.toHaveProperty("declined");
+
+  await expect.poll(() => gateway.states()[0]?.state).toBe("online");
+  expect(gateway.states()[0]).not.toHaveProperty("declined");
+});
+
+it("a server a user started at another version is incompatible, with no install command", () => {
+  const gateway = hosts("0.1.7");
+
+  const detail =
+    "A Whiteboard server 0.1.6 started by a user is running on box; stop it to use this Desktop's version.";
+
+  gateway.set([{ alias: "box", problem: { state: "incompatible", detail } }]);
+
+  expect(gateway.states()).toEqual([
+    { alias: "box", state: "incompatible", detail },
+  ]);
+});
+
 it("refuses a host whose version could not be read", async () => {
   const fake = await startFake({ version: "unknown" });
   const gateway = hosts("unknown");

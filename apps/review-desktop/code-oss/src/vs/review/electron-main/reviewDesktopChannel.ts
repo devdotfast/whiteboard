@@ -7,8 +7,13 @@ import { Event } from "../../base/common/event.js";
 import { IServerChannel } from "../../base/parts/ipc/common/ipc.js";
 import type { IWindowsMainService } from "../../platform/windows/electron-main/windows.js";
 import type { ReviewDesktopConnection } from "../common/reviewDesktopBootstrap.js";
+import { REVIEW_REMOTE_INSTALL_ANSWER_CALL, REVIEW_REMOTE_INSTALL_PROMPT_EVENT } from "../common/reviewRemoteInstallPrompt.js";
 import { REVIEW_SSH_ANSWER_CALL, REVIEW_SSH_PROMPT_EVENT } from "../common/reviewSshPrompt.js";
-import { reviewSshPromptRelay, type ReviewSshPromptRelay } from "./remote/reviewSshPromptRelay.js";
+import {
+  reviewRemoteInstallPromptRelay,
+  reviewSshPromptRelay,
+  type ReviewSshPromptRelay,
+} from "./remote/reviewSshPromptRelay.js";
 import type { ReviewDesktopHost } from "./reviewDesktopHost.js";
 
 export { REVIEW_DESKTOP_CHANNEL } from "../common/reviewDesktopBootstrap.js";
@@ -24,10 +29,12 @@ export class ReviewDesktopChannel implements IServerChannel {
     private readonly windows: IWindowsMainService,
     private readonly moveToApplications: () => boolean,
     private readonly sshPrompts: ReviewSshPromptRelay = reviewSshPromptRelay,
+    private readonly installPrompts: ReviewSshPromptRelay = reviewRemoteInstallPromptRelay,
   ) {}
 
   listen<T>(_context: string, event: string): Event<T> {
     if (event === REVIEW_SSH_PROMPT_EVENT) return this.sshPrompts.onPrompt as Event<T>;
+    if (event === REVIEW_REMOTE_INSTALL_PROMPT_EVENT) return this.installPrompts.onPrompt as Event<T>;
     return Event.None as Event<T>;
   }
 
@@ -58,10 +65,28 @@ export class ReviewDesktopChannel implements IServerChannel {
       if (typeof arg === "string") this.host.retryRemoteHost(arg);
       return undefined as T;
     }
-    if (command === REVIEW_SSH_ANSWER_CALL) {
+    if (command === "detectRemoteAgents") {
+      if (typeof arg !== "string") throw new Error("Unknown agents request.");
+      return ((await this.host.detectRemoteAgents(arg)) ?? null) as T;
+    }
+    if (command === "connectRemoteAgents") {
+      const { alias, agents } = (arg ?? {}) as { alias?: unknown; agents?: unknown };
+      if (typeof alias !== "string" || !Array.isArray(agents) || agents.length > 16) throw new Error("Unknown agents request.");
+      return (await this.host.connectRemoteAgents(alias, agents)) as T;
+    }
+    if (command === "installRemoteHost") {
+      if (typeof arg === "string") await this.host.installRemoteHost(arg);
+      return undefined as T;
+    }
+    if (command === "uninstallRemoteHost") {
+      if (typeof arg !== "string") throw new Error("uninstallRemoteHost needs an alias.");
+      return (await this.host.uninstallRemoteHost(arg)) as T;
+    }
+    if (command === REVIEW_SSH_ANSWER_CALL || command === REVIEW_REMOTE_INSTALL_ANSWER_CALL) {
       const { id, answer } = (arg ?? {}) as { id?: unknown; answer?: unknown };
+      const relay = command === REVIEW_SSH_ANSWER_CALL ? this.sshPrompts : this.installPrompts;
       if (typeof id === "number")
-        this.sshPrompts.answer(id, typeof answer === "string" ? answer : undefined);
+        relay.answer(id, typeof answer === "string" ? answer : undefined);
       return undefined as T;
     }
     throw new Error(`Unknown Review Desktop channel call: ${command}`);

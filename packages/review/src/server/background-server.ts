@@ -101,6 +101,15 @@ export async function headlessServerOwner(stateDir: string) {
   return liveLockOwner(headlessServerLockPath(resolved));
 }
 
+export async function recordedBackgroundServer(stateDir: string) {
+  const discovery = await readReviewServerDiscovery(stateDir).catch(() => null);
+  const health = discovery && (await readReviewServerHealth(discovery));
+
+  return discovery && health?.serverPid === discovery.serverPid
+    ? { discovery, health }
+    : undefined;
+}
+
 export async function stopBackgroundServer(
   discovery: Pick<ReviewServerDiscovery, "serverPid">,
 ) {

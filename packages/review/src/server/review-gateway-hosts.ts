@@ -4,6 +4,8 @@ import { Readable } from "node:stream";
 import {
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
+  type REVIEW_REMOTE_INSTALL_STEPS,
+  REVIEW_REMOTE_VERSION,
   type ReviewGatewayHost,
   type ReviewGatewayHostState,
 } from "@dev.fast/review-protocol";
@@ -30,12 +32,22 @@ export const UUID =
 
 export const jitter = (ms: number) => ms * (0.75 + Math.random() * 0.5);
 
-const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
-
 const INSTALLS = new Set<ReviewGatewayHostState["state"]>([
   "incompatible",
   "not-installed",
 ]);
+
+const INSTALL_STEPS: Record<
+  (typeof REVIEW_REMOTE_INSTALL_STEPS)[number],
+  string
+> = {
+  preparing: "Preparing to install Whiteboard",
+  "waiting-for-lock": "Waiting for another install to finish",
+  node: "Installing Node 24",
+  package: "Installing the Whiteboard package",
+  verifying: "Checking the install",
+  done: "Installed; starting the server",
+};
 
 const healthSchema = z.object({
   ok: z.literal(true),
@@ -60,6 +72,10 @@ interface Host extends GatewayRemote {
   languageFeatures?: boolean;
   languageFeaturesDetail?: string;
   languageGroups?: ReviewGatewayHost["languageGroups"];
+  installing?: ReviewGatewayHost["installing"];
+  declined?: true;
+  asking?: string;
+  installFailure?: string;
   serverId?: string;
   instanceId?: string;
   status: ReviewGatewayHostState["state"];
@@ -167,13 +183,22 @@ export function createGatewayHosts(input: {
         detail: `${first?.alias} and ${host.alias} report the same server id. If they are one machine, remove one of the aliases. If they are two machines, run \`whiteboard server reset-id\` on ${host.alias}.`,
       };
 
+    const detail =
+      host.status === "incompatible" && host.installFailure
+        ? `${host.detail ? `${host.detail} ` : ""}${host.installFailure}`
+        : host.detail;
+
     return {
       ...known,
       state: host.status,
-      ...(host.detail !== undefined && { detail: host.detail }),
-      ...(INSTALLS.has(host.status) && {
-        installCommand: `npm install -g @dev.fast/whiteboard@${input.version}`,
-      }),
+      ...(detail !== undefined && { detail }),
+      ...(INSTALLS.has(host.status) &&
+        host.problem?.state !== "incompatible" && {
+          installCommand: `npm install -g @dev.fast/whiteboard@${input.version}`,
+        }),
+      ...(host.declined &&
+        host.status !== "online" &&
+        host.status !== "connecting" && { declined: true as const }),
       ...(host.status === "online" && languageOf(host)),
     };
   }
@@ -236,10 +261,22 @@ export function createGatewayHosts(input: {
 
     if (given.endpoint) host.endpoint = given.endpoint;
 
+    if (given.declined) host.declined = true;
+
+    if (given.installFailure) host.installFailure = given.installFailure;
+
     if (given.problem) {
       host.problem = given.problem;
       host.status = given.problem.state;
       host.detail = given.problem.detail;
+    } else if (given.installing && !given.endpoint) {
+      const { step, detail } = given.installing;
+      host.installing = given.installing;
+      host.status = "installing";
+      host.detail = `${INSTALL_STEPS[step]}${detail ? ` (${detail})` : ""}.`;
+    } else if (given.asking && !given.endpoint) {
+      host.asking = given.asking;
+      host.detail = `Waiting for an answer: install Whiteboard ${given.asking} on ${given.alias}?`;
     } else if (!given.endpoint)
       host.detail = `Waiting for a connection to ${given.alias}.`;
     else {
@@ -347,7 +384,10 @@ export function createGatewayHosts(input: {
 
       if (restarted) return restartedHost(host);
 
-      if (health.version !== "unknown" && !VERSION.test(health.version)) {
+      if (
+        health.version !== "unknown" &&
+        !REVIEW_REMOTE_VERSION.test(health.version)
+      ) {
         host.status = "incompatible";
         host.detail = `${host.alias} reports an invalid version.`;
       } else if (
@@ -383,8 +423,22 @@ export function createGatewayHosts(input: {
 
         if (
           current &&
-          JSON.stringify([current.endpoint, current.problem]) ===
-            JSON.stringify([given.endpoint, given.problem])
+          JSON.stringify([
+            current.endpoint,
+            current.problem,
+            current.installing,
+            current.declined,
+            current.asking,
+            current.installFailure,
+          ]) ===
+            JSON.stringify([
+              given.endpoint,
+              given.problem,
+              given.installing,
+              given.declined,
+              given.asking,
+              given.installFailure,
+            ])
         ) {
           previous.delete(given.alias);
           current.languageFeatures = given.languageFeatures;

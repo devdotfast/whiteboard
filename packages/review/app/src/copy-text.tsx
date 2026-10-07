@@ -1,6 +1,6 @@
 import { IconButton } from "@canvas/ui/button";
 import * as stylex from "@stylexjs/stylex";
-import { type ReactElement, useEffect, useState } from "react";
+import { type ReactElement, type ReactNode, useEffect, useState } from "react";
 
 import { CheckIcon, CopyIcon as CopyGlyph } from "./icons";
 import { useTooltip } from "./use-tooltip";
@@ -72,6 +72,62 @@ export function CopyIcon() {
 
 const COPIED_FOR_MS = 1200;
 
+function useCopy(text: string) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), COPIED_FOR_MS);
+
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  // The workbench denies DOM clipboard requests; copyText falls back to
+  // execCommand and reports whether anything was copied.
+  const copy = () =>
+    void copyText(text).then((ok) => {
+      if (ok) setCopied(true);
+    });
+
+  return [copied, copy] as const;
+}
+
+/** Text, such as an error, that underlines on hover and copies on click. */
+export function CopyableText({
+  text,
+  children = text,
+}: {
+  text: string;
+  children?: ReactNode;
+}): ReactElement {
+  const [copied, copy] = useCopy(text);
+
+  const tooltip = useTooltip<HTMLSpanElement>(
+    copied ? "Copied" : "Click to copy",
+    { instant: true },
+  );
+
+  return (
+    <span
+      ref={tooltip}
+      role="button"
+      tabIndex={0}
+      {...stylex.props(styles.copyable)}
+      onClick={() => {
+        // A drag that selects part of the text should not copy all of it.
+        if (document.getSelection()?.isCollapsed !== false) copy();
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        copy();
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 /** An icon button that copies `text` and shows a check while it is copied. */
 export function CopyButton({
   text,
@@ -86,15 +142,8 @@ export function CopyButton({
   xstyle?: stylex.StyleXStyles;
   iconStyle: stylex.StyleXStyles;
 }): ReactElement {
-  const [copied, setCopied] = useState(false);
+  const [copied, copy] = useCopy(text);
   const tooltip = useTooltip(label);
-
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), COPIED_FOR_MS);
-
-    return () => clearTimeout(timer);
-  }, [copied]);
 
   return (
     <IconButton
@@ -103,13 +152,7 @@ export function CopyButton({
       xstyle={xstyle}
       aria-label={label}
       data-copied={copied ? "" : undefined}
-      onClick={() => {
-        // The workbench denies DOM clipboard requests; copyText falls back to
-        // execCommand and reports whether anything was copied.
-        void copyText(text).then((ok) => {
-          if (ok) setCopied(true);
-        });
-      }}
+      onClick={copy}
     >
       {copied ? (
         <CheckIcon xstyle={iconStyle} />
@@ -121,6 +164,11 @@ export function CopyButton({
 }
 
 const styles = stylex.create({
+  copyable: {
+    cursor: "pointer",
+    textDecorationLine: { default: "none", ":hover": "underline" },
+    textUnderlineOffset: "2px",
+  },
   icon: {
     width: "12px",
     height: "12px",

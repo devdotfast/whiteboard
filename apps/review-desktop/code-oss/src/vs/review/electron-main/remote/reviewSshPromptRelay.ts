@@ -73,3 +73,5 @@ export class ReviewSshPromptRelay {
 }
 
 export const reviewSshPromptRelay = new ReviewSshPromptRelay();
+
+export const reviewRemoteInstallPromptRelay = new ReviewSshPromptRelay();

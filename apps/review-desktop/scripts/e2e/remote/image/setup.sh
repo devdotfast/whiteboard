@@ -10,6 +10,11 @@ if command -v apk >/dev/null; then
   adduser -D -s "$(command -v "$LOGIN_SHELL")" dev
 else
   export DEBIAN_FRONTEND=noninteractive
+  # Bullseye's security pool left the mirrors in 2026 while its index still lists it: use the image's snapshot.
+  if grep -qs 'VERSION_CODENAME=bullseye' /etc/os-release; then
+    sed -n 's|^# deb http://snapshot|deb [check-valid-until=no] http://snapshot|p' /etc/apt/sources.list > /tmp/sources.list
+    mv /tmp/sources.list /etc/apt/sources.list
+  fi
   apt-get update -qq
   apt-get install -y -qq --no-install-recommends $packages xz-utils >/dev/null
   rm -rf /var/lib/apt/lists/*
