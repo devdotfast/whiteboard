@@ -26,7 +26,7 @@ import type {
   AskView,
 } from "./review-panel-model";
 import { useReviewContainer } from "./review-root-context";
-import { elevation, fontSize, radius } from "./scale.stylex";
+import { elevation, fontSize, motion, radius } from "./scale.stylex";
 import { panelStyles } from "./side-panel-styles";
 import { withClass } from "./stylex-props";
 import { themeStyles } from "./theme-styles";
@@ -494,6 +494,7 @@ export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
 
   const list = listOpen ? (
     <AskList
+      below={anchor.y === "top" && !windowOpen}
       asks={asks}
       answering={answering}
       maxHeight={canvas.height - PILL_EDGE * 2 - PILL_GAP - PILL_HEIGHT}
@@ -604,11 +605,14 @@ function passage(view: AskView): string | null {
 /** Every minimized Ask, those waiting on the reviewer first, then the
  * newest. A row opens its Ask. */
 function AskList({
+  below,
   asks,
   answering,
   maxHeight,
   onOpen,
 }: {
+  /** It opens under the pill, which keeps to the canvas's top. */
+  below: boolean;
   asks: AskPanel[];
   answering: number;
   maxHeight: number;
@@ -624,7 +628,11 @@ function AskList({
     <div
       role="group"
       aria-label="Minimized Asks"
-      {...stylex.props(surfaceStyles.popover, styles.list)}
+      {...stylex.props(
+        surfaceStyles.popover,
+        styles.list,
+        below && styles.listBelow,
+      )}
       style={{ maxHeight }}
     >
       <div {...stylex.props(menuStyles.label, styles.listHeader)}>
@@ -804,26 +812,34 @@ function useElementSize(
     null,
   );
 
+  const measure = useCallback(() => {
+    const node = element.current;
+
+    if (!node) return;
+    setSize((current) =>
+      current?.width === node.offsetWidth &&
+      current.height === node.offsetHeight
+        ? current
+        : { width: node.offsetWidth, height: node.offsetHeight },
+    );
+  }, [element]);
+
+  // After each render, before it paints: a render that resizes the box,
+  // as opening the list does, moves it in the same frame. An observer's
+  // change lands a frame late, the box painted where it was.
+  useLayoutEffect(measure);
+
+  // What resizes it otherwise, such as its text wrapping anew.
   useLayoutEffect(() => {
     const node = element.current;
 
     if (!node) return;
-
-    const measure = () =>
-      setSize((current) =>
-        current?.width === node.offsetWidth &&
-        current.height === node.offsetHeight
-          ? current
-          : { width: node.offsetWidth, height: node.offsetHeight },
-      );
-
-    measure();
     const observer = new ResizeObserver(measure);
 
     observer.observe(node);
 
     return () => observer.disconnect();
-  }, [element]);
+  }, [element, measure]);
 
   return size;
 }
@@ -966,6 +982,19 @@ function useAskCanvas(): AskCanvas {
   return canvas;
 }
 
+const reducedMotion = "@media (prefers-reduced-motion: reduce)";
+
+// The list rises out of the pill it opens from.
+const listIn = stylex.keyframes({
+  from: { opacity: 0, transform: "translateY(6px) scale(0.98)" },
+  to: { opacity: 1, transform: "none" },
+});
+
+const listInBelow = stylex.keyframes({
+  from: { opacity: 0, transform: "translateY(-6px) scale(0.98)" },
+  to: { opacity: 1, transform: "none" },
+});
+
 const styles = stylex.create({
   // One above the fullscreen diagrams.
   layer: {
@@ -1101,6 +1130,17 @@ const styles = stylex.create({
     padding: "4px",
     overflowY: "auto",
     overscrollBehavior: "contain",
+    transformOrigin: "bottom right",
+    animationName: { default: listIn, [reducedMotion]: "none" },
+    animationDuration: {
+      default: motion.fast,
+      [reducedMotion]: motion.instant,
+    },
+    animationTimingFunction: "ease-out",
+  },
+  listBelow: {
+    transformOrigin: "top right",
+    animationName: { default: listInBelow, [reducedMotion]: "none" },
   },
   listHeader: {
     display: "flex",
