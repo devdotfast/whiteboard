@@ -533,8 +533,9 @@ export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
             </>
           )
         ) : (
-          asks.map(({ key, presence }) => {
+          asks.map(({ key, presence, view }) => {
             const waiting = presence.tone === "waiting";
+            const asked = passage(view);
 
             return (
               <button
@@ -551,7 +552,17 @@ export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
                 {...pressHandlers(() => store.getState().restoreAsk(key))}
               >
                 <PresenceLogo presence={presence} />
-                <span {...stylex.props(styles.name)}>{presence.agentName}</span>
+                {/* The logo says which agent; what it was asked says which
+                    Ask. */}
+                {asked ? (
+                  <span {...stylex.props(styles.passage, styles.pillPassage)}>
+                    {asked}
+                  </span>
+                ) : (
+                  <span {...stylex.props(styles.name)}>
+                    {presence.agentName}
+                  </span>
+                )}
                 <PresenceStatus presence={presence} />
                 <Chip
                   variant="pill"
@@ -1180,6 +1191,7 @@ const styles = stylex.create({
     minWidth: 0,
   },
   passage: {
+    minWidth: 0,
     overflow: "hidden",
     color: tokens.inkMuted,
     fontFamily: tokens.fontSerif,
@@ -1187,6 +1199,11 @@ const styles = stylex.create({
     lineHeight: "17px",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
+  },
+  pillPassage: {
+    flex: "0 1 auto",
+    maxWidth: "260px",
+    color: tokens.ink,
   },
 });
 

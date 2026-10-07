@@ -293,9 +293,12 @@ it("folds two or more minimized Asks into one pill that lists them", async () =>
   const pills = () =>
     document.querySelectorAll('button[aria-label^="Open Ask: "]');
 
-  // One keeps a pill of its own.
+  // One keeps a pill of its own, which says what it asked about.
   await minimize("One?", "thread-1");
   expect(pills()).toHaveLength(1);
+  expect(pills()[0]!.textContent).toContain(
+    "\u201cThe index is created concurrently.\u201d",
+  );
 
   // The second folds both into one, which says how many are answering:
   // pills of their own wouldn't tell them apart.
