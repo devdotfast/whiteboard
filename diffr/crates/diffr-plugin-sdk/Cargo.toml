@@ -1,0 +1,12 @@
+[package]
+name = "diffr-plugin-sdk"
+description = "The Rust SDK for diffr WebAssembly plugins."
+version = "0.1.1"
+edition = "2021"
+rust-version = "1.85.0"
+license = "MIT"
+
+[dependencies]
+# Component bindings and the records used by the host.
+# Async exports share the runtime used by WASIp3 HTTP.
+wit-bindgen = "0.62.0"

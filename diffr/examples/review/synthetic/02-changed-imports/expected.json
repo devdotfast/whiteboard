@@ -1,0 +1,32 @@
+{
+  "folds": [
+    {
+      "regions": {
+        "Paired": {
+          "lhs": {
+            "start": {
+              "line": 0,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 2,
+              "byte_column": 11
+            }
+          },
+          "rhs": {
+            "start": {
+              "line": 0,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 3,
+              "byte_column": 24
+            }
+          }
+        }
+      },
+      "placeholder": "Imports"
+    }
+  ],
+  "context": []
+}

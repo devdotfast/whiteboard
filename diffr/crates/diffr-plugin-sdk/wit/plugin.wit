@@ -1,0 +1,253 @@
+/// Two kinds of plugin. The one classifier tags each changed file before
+/// anything is diffed; shape plugins then walk each diffed file's region trees
+/// and decide how it starts out. Both may read the repository through `git`.
+package diffr:plugin@0.3.0;
+
+interface types {
+    enum visit { pre, post }
+
+    /// The before (`lhs`) or after (`rhs`) side of a comparison.
+    enum side {
+        lhs,
+        rhs,
+    }
+
+    /// Git's delta status.
+    enum file-status {
+        added,
+        deleted,
+        modified,
+        renamed,
+        copied,
+        type-changed,
+    }
+
+    /// One side of a git delta, as the manifest names it.
+    record file-ref {
+        path: string,
+        /// The blob. Empty when the comparison is not of a repository: two
+        /// paths compared directly have no blobs.
+        oid: string,
+        /// Git's octal mode text, e.g. `100644`.
+        mode: string,
+    }
+
+    /// The sides a changed file has. A deletion is `left-only`, an addition
+    /// `right-only`.
+    variant file-sides {
+        both(tuple<file-ref, file-ref>),
+        left-only(file-ref),
+        right-only(file-ref),
+    }
+
+    /// One changed file, as its manifest entry describes it. `file` says
+    /// which sides the file has and names each; `status` says how the two
+    /// relate, which having both sides does not answer: a path that changed
+    /// is `renamed`, an object kind that changed `type-changed`.
+    record file-entry {
+        file: file-sides,
+        status: file-status,
+        /// The classifier's tags, as names, sorted and deduplicated.
+        tags: list<string>,
+    }
+
+    /// 0-based line, and 0-based byte column in the UTF-8 text.
+    record position {
+        line: u32,
+        column: u32,
+    }
+
+    /// Half-open.
+    record range {
+        start: position,
+        end: position,
+    }
+
+    /// Bytes painted as changed on one line.
+    record span {
+        line: u32,
+        start-column: u32,
+        end-column: u32,
+    }
+
+    /// How a region starts out: collapsed or open, and the label shown while
+    /// it is collapsed (empty for none).
+    record visibility {
+        collapsed: bool,
+        label: string,
+    }
+
+    record leaf {
+        /// Row alignment: the leaf on the other side with the same value
+        /// lines up with this one.
+        alignment-id: u32,
+        changed: list<span>,
+    }
+
+    /// A leaf tiles the file; a fold's range is the hull of its children.
+    variant kind {
+        leaf(leaf),
+        fold,
+    }
+
+    /// One region of a side's tree.
+    record region {
+        /// Unique across both sides of the file.
+        id: u32,
+        /// The fold that holds this region; none for a top-level region.
+        parent: option<u32>,
+        /// Regions sharing it open and close together, on either side.
+        fold-state-id: u32,
+        range: range,
+        /// The tags the fold queries set, `<plugin>:<name>`.
+        tags: list<string>,
+        visibility: visibility,
+        kind: kind,
+    }
+
+    /// One shallow region, with child IDs rather than nested subtrees.
+    record region-view {
+        side: side,
+        data: region,
+        children: list<u32>,
+    }
+
+    variant region-ids {
+        both(tuple<u32, u32>),
+        left-only(u32),
+        right-only(u32),
+    }
+
+    /// Visible collapsed rows and open-line runs within a node.
+    record row-summary { collapsed: u32, leading: u32, trailing: u32, longest-gap: u32 }
+
+    enum grouping { link, join }
+    record cut-outside { id: u32, offset: u32, len: u32 }
+    record repeated { grouping: grouping, ids: list<u32> }
+
+    /// Typed failures from host tree operations.
+    variant move-error {
+        no-region(u32),
+        cut-fold(u32),
+        cut-outside(cut-outside),
+        uneven-sides(u32),
+        too-few-regions(grouping),
+        repeated(repeated),
+        one-sided(list<u32>),
+        not-siblings(list<u32>),
+        no-next-sibling(u32),
+    }
+
+    /// What a file is. The well-known kinds are typed; anything else is
+    /// `custom`, a tag name of lowercase letters, digits, `-` and `_`.
+    variant tag {
+        generated,
+        vendored,
+        docs,
+        test,
+        custom(string),
+    }
+
+    /// What `git check-attr` reports for one attribute on one path.
+    variant attribute {
+        unspecified,
+        unset,
+        set,
+        value(string),
+    }
+}
+
+interface host {
+    use types.{file-entry, region-view, side, region, region-ids, row-summary, move-error};
+    resource cursor {
+        file: func() -> file-entry;
+        /// Current node, positioned by the host before each callback.
+        id: func() -> u32;
+        /// Same-side siblings in source order, including the target.
+        siblings: func(id: u32) -> result<list<u32>, move-error>;
+        /// Enclosing folds, nearest first.
+        ancestors: func(id: u32) -> result<list<region>, move-error>;
+        get: func(id: u32) -> result<region-view, move-error>;
+        text: func(id: u32) -> result<string, move-error>;
+        display: func(id: u32) -> result<row-summary, move-error>;
+        /// None means conflicting alignment; empty means no opposite-side members.
+        matching-siblings: func(ids: list<u32>) -> result<option<list<u32>>, move-error>;
+        /// Leaves intersecting a half-open source line interval.
+        leaves: func(side: side, start: u32, end: u32) -> list<u32>;
+        /// Changed bytes or unpaired leaves on this region's own side.
+        has-changes: func(id: u32) -> result<bool, move-error>;
+        /// Opposite-side aligned leaf; none for folds or unmatched leaves.
+        paired-leaf: func(id: u32) -> result<option<u32>, move-error>;
+        /// All members of the shared collapse state, including this region.
+        linked-regions: func(id: u32) -> result<list<u32>, move-error>;
+        /// No leaf in the subtree has an opposite-side alignment.
+        is-one-sided: func(id: u32) -> result<bool, move-error>;
+        /// Original file text; none means that side is absent.
+        source: func(side: side) -> option<string>;
+
+        /// Split a leaf and its paired leaf at an interior relative line offset.
+        cut: func(region: u32, offset: u32) -> result<region-ids, move-error>;
+        /// Wrap consecutive siblings on each side in a new open, unlabelled fold.
+        join: func(regions: list<u32>) -> result<region-ids, move-error>;
+        /// Link collapse states, preserving labels and collapse if any input is collapsed.
+        link: func(regions: list<u32>) -> result<_, move-error>;
+        /// Update the entire shared fold state.
+        set-collapsed: func(region: u32, collapsed: bool) -> result<_, move-error>;
+        /// Set or clear one region's label.
+        set-label: func(region: u32, label: option<string>) -> result<_, move-error>;
+    }
+}
+
+/// The repository being diffed, read the way git reads it.
+interface git {
+    use types.{attribute};
+    /// `git check-attr <attributes>... -- <path>`: one state per attribute,
+    /// in the order asked, with git's precedence of attribute files.
+    check-attr: func(attributes: list<string>, path: string) -> result<list<attribute>, string>;
+    /// `git cat-file blob <object>`: the blob's bytes. A working-tree side
+    /// has the null object id and is read from the file system instead.
+    cat-file: func(object: string) -> result<list<u8>, string>;
+}
+interface api {
+    use host.{cursor};
+    use types.{visit};
+    /// A configured plugin.
+    resource plugin {
+        /// Construct a ready plugin from validated JSON options; errors stop setup.
+        constructor(options: string) -> result<plugin, string>;
+        /// One node, one phase. False on Pre skips children and Post.
+        /// Errors end this traversal.
+        visit: async func(cursor: borrow<cursor>, phase: visit) -> result<bool, string>;
+    }
+}
+interface classify {
+    use types.{file-entry, tag};
+    /// What the classifier decided about one file.
+    record classification {
+        /// Every tag the file carries.
+        tags: list<tag>,
+        /// Hide the whole file behind this reason: it is shown collapsed,
+        /// diffed by line and not shaped. None shows it normally.
+        hidden: option<string>,
+    }
+    /// The one classifier.
+    resource classifier {
+        /// Construct a ready classifier from validated JSON options; errors stop setup.
+        constructor(options: string) -> result<classifier, string>;
+        /// Errors stop the run.
+        classify: func(file: file-entry) -> result<classification, string>;
+    }
+}
+
+/// A shape plugin.
+world diffr-plugin {
+    import host;
+    import git;
+    export api;
+}
+
+/// The classifier.
+world diffr-classifier {
+    import git;
+    export classify;
+}

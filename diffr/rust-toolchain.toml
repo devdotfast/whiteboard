@@ -1,0 +1,5 @@
+[toolchain]
+channel = "1.99.0"
+targets = ["wasm32-wasip2"]
+components = ["rustfmt", "rust-src", "rust-analyzer"]
+profile = "minimal"

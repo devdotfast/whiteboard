@@ -1,0 +1,30 @@
+{
+  "repo": "devdotfast/review",
+  "pr_number": 175,
+  "pr_title": "fix(progressive-review): confine diff header parsing to the metadata region so `-- `/`++ ` content lines cannot hijack file paths or undercount stats",
+  "pr_url": "https://github.com/devdotfast/review/pull/175",
+  "language": "TypeScript",
+  "status": "modified",
+  "base_branch_sha": "5ef7c9292a33be2a97dd1b36c0b4883ceaa810dc",
+  "comparison_base_sha": "5ef7c9292a33be2a97dd1b36c0b4883ceaa810dc",
+  "head_sha": "b182a6e47266f257304d6f37f075e30166b10ecb",
+  "merged_at": "2026-09-07T16:25:40Z",
+  "comparison": "PR merge-base to head",
+  "sources": {
+    "lhs": {
+      "file": "before.ts",
+      "path": "packages/progressive-review/src/review-diff-files.ts",
+      "commit": "5ef7c9292a33be2a97dd1b36c0b4883ceaa810dc",
+      "git_blob_sha": "8980abe9728bd4f862e463536fde953ebc473714",
+      "sha256": "6ab7ae6872d60e28d62a2e7a49c57be5b924618e898afea2825e155b96f3306a"
+    },
+    "rhs": {
+      "file": "after.ts",
+      "path": "packages/progressive-review/src/review-diff-files.ts",
+      "commit": "b182a6e47266f257304d6f37f075e30166b10ecb",
+      "git_blob_sha": "9d1bc12a4a65bd0ac4a35453e412bb0f004854ab",
+      "sha256": "8d2b2fc9cbad2bf30da5fe9af19219834f35844d9a50fd99e5198d43b93db200"
+    }
+  },
+  "visibility": "private"
+}

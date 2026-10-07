@@ -1,0 +1,108 @@
+{
+  "folds": [
+    {
+      "regions": {
+        "Paired": {
+          "lhs": {
+            "start": {
+              "line": 2,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 14,
+              "byte_column": 1
+            }
+          },
+          "rhs": {
+            "start": {
+              "line": 2,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 14,
+              "byte_column": 1
+            }
+          }
+        }
+      },
+      "placeholder": "Imports"
+    },
+    {
+      "regions": {
+        "Paired": {
+          "lhs": {
+            "start": {
+              "line": 235,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 241,
+              "byte_column": 2
+            }
+          },
+          "rhs": {
+            "start": {
+              "line": 235,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 251,
+              "byte_column": 2
+            }
+          }
+        }
+      },
+      "placeholder": "Resolve a missing token from the keyring."
+    }
+  ],
+  "context": [
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 230,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 230,
+            "byte_column": 68
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 230,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 230,
+            "byte_column": 68
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 243,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 243,
+            "byte_column": 1
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 253,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 253,
+            "byte_column": 1
+          }
+        }
+      }
+    }
+  ]
+}

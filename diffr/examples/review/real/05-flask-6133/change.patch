@@ -1,0 +1,19 @@
+diff --git a/before.py b/after.py
+index a04c38adc..fbe9c661a 100644
+--- a/before.py
++++ b/after.py
+@@ -300,6 +300,14 @@ class Scaffold:
+         """
+         return self._method_route("GET", rule, options)
+ 
++    @setupmethod
++    def query(self, rule: str, **options: t.Any) -> t.Callable[[T_route], T_route]:
++        """Shortcut for :meth:`route` with ``methods=["QUERY"]``.
++
++        .. versionadded:: 3.2
++        """
++        return self._method_route("QUERY", rule, options)
++
+     @setupmethod
+     def post(self, rule: str, **options: t.Any) -> t.Callable[[T_route], T_route]:
+         """Shortcut for :meth:`route` with ``methods=["POST"]``.

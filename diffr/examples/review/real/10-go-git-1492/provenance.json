@@ -1,0 +1,30 @@
+{
+  "repo": "go-git/go-git",
+  "pr_number": 1492,
+  "pr_title": " utils: merkletrie, Fix diff on sparse-checkout index. Fixes #1406",
+  "pr_url": "https://github.com/go-git/go-git/pull/1492",
+  "language": "Go",
+  "status": "modified",
+  "base_branch_sha": "00907d9ee306d0dabe4a4306cd35ad1efa6bc849",
+  "comparison_base_sha": "00907d9ee306d0dabe4a4306cd35ad1efa6bc849",
+  "head_sha": "e8c9fcd5571191ca3227c5e67bf9d2ebc2533135",
+  "merged_at": "2025-04-14T17:05:46Z",
+  "comparison": "PR merge-base to head",
+  "sources": {
+    "lhs": {
+      "file": "before.go",
+      "path": "utils/merkletrie/difftree.go",
+      "commit": "00907d9ee306d0dabe4a4306cd35ad1efa6bc849",
+      "git_blob_sha": "4ef2d9907a1881b84da6276ee1194079fc5ea9b2",
+      "sha256": "7ee373388d1c8b151a44a800740ed4c2f04515d333c08cb497364f1a763f44d8"
+    },
+    "rhs": {
+      "file": "after.go",
+      "path": "utils/merkletrie/difftree.go",
+      "commit": "e8c9fcd5571191ca3227c5e67bf9d2ebc2533135",
+      "git_blob_sha": "7fc8d02d75713578f25cc1d2d2fa74810715c2c9",
+      "sha256": "7ea686e421fd47f644c23e5e2e3d2d029d3d201f492b995e9a5e710e972e0f2e"
+    }
+  },
+  "visibility": "public"
+}

@@ -1,0 +1,22 @@
+[package]
+workspace = "../../workspace"
+publish = false
+name = "diffr-plugin-classify"
+description = "The classifier: tag files as generated, vendored, docs or test."
+version = "0.1.1"
+edition = "2021"
+rust-version = "1.85.0"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+diffr-plugin-sdk = { path = "../../../crates/diffr-plugin-sdk", version = "0.1.1" }
+# Only the Unicode tables the patterns use: \d \s \w \b and (?i).
+regex = { version = "1.10.4", default-features = false, features = ["std", "perf", "unicode-perl", "unicode-case"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[build-dependencies]
+serde_yaml_ng = "0.10.0"

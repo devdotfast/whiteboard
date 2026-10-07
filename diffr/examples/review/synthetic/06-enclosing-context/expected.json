@@ -1,0 +1,77 @@
+{
+  "folds": [],
+  "context": [
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 0,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 0,
+            "byte_column": 21
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 0,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 0,
+            "byte_column": 21
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 6,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 6,
+            "byte_column": 12
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 6,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 6,
+            "byte_column": 12
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 18,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 18,
+            "byte_column": 5
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 19,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 19,
+            "byte_column": 5
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,156 @@
+{
+  "folds": [
+    {
+      "regions": {
+        "Paired": {
+          "lhs": {
+            "start": {
+              "line": 249,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 255,
+              "byte_column": 1
+            }
+          },
+          "rhs": {
+            "start": {
+              "line": 249,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 255,
+              "byte_column": 1
+            }
+          }
+        }
+      },
+      "placeholder": "Imports"
+    },
+    {
+      "regions": {
+        "Paired": {
+          "lhs": {
+            "start": {
+              "line": 318,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 340,
+              "byte_column": 4
+            }
+          },
+          "rhs": {
+            "start": {
+              "line": 316,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 337,
+              "byte_column": 4
+            }
+          }
+        }
+      },
+      "placeholder": "Advance the iterators or compare the current nodes."
+    }
+  ],
+  "context": [
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 276,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 277,
+            "byte_column": 42
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 276,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 277,
+            "byte_column": 42
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 343,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 345,
+            "byte_column": 1
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 340,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 342,
+            "byte_column": 1
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 295,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 295,
+            "byte_column": 33
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 295,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 295,
+            "byte_column": 33
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 285,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 285,
+            "byte_column": 6
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 285,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 285,
+            "byte_column": 6
+          }
+        }
+      }
+    }
+  ]
+}

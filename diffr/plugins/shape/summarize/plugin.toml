@@ -1,0 +1,179 @@
+name = "summarize"
+title = "Summaries"
+description = "Pseudocode summaries for large new function bodies and tests."
+
+# Off by default: the summarizer needs an API key.
+[enabled]
+title = "Summarize functions and tests"
+description = "Summarize large new function bodies and new tests as pseudocode. Needs an API key: `api_key`, or the provider's variable in the environment: `GEMINI_API_KEY` or `GOOGLE_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`."
+default = false
+
+[options.provider]
+enum = ["gemini", "openai", "anthropic"]
+"x-enum-titles" = ["Gemini", "OpenAI", "Anthropic"]
+title = "Provider"
+description = "Which model API to call. `openai` also reaches OpenRouter and any other OpenAI-compatible server through `endpoint`."
+default = "gemini"
+
+[options.model]
+type = "string"
+"x-reset-by" = "provider"
+title = "Model"
+description = "The model name sent to the provider. Unset uses the provider's default."
+
+[options.model."x-default-by"]
+key = "provider"
+values = { gemini = "gemini-3.8-flash", openai = "gpt-6-luna", anthropic = "claude-haiku-4-5" }
+
+[options.min_lines]
+type = "integer"
+minimum = 0
+title = "Shortest body to summarize (lines)"
+description = "New function bodies shorter than this are shown as code, not summarized: pseudocode only pays off once the body is long."
+default = 20
+
+[options.api_key]
+type = "string"
+"x-reset-by" = "provider"
+title = "API key"
+description = "Sent to the selected provider. The provider's variable in the environment is used when this is unset. Optional for `openai` with a custom `endpoint`."
+
+[options.endpoint]
+type = "string"
+"x-reset-by" = "provider"
+title = "Endpoint URL"
+description = "Override the provider's base URL, for proxies, OpenAI-compatible servers (for example `https://openrouter.ai/api/v1` or `http://localhost:11434/v1`) and tests. Empty uses the provider's default."
+
+[options.request_timeout_ms]
+type = "integer"
+minimum = 1
+title = "Request timeout (ms)"
+description = "Connect, first-byte and between-byte timeout, in milliseconds."
+default = 60000
+
+[options.retries]
+type = "integer"
+minimum = 0
+title = "Retries"
+description = "Retries after a timeout, rate limit, or server error before the run is aborted."
+default = 3
+
+[options.system_prompt]
+type = "string"
+title = "System prompt"
+description = "The system instruction sent with every request; diffr builds each request's message from one body's numbered lines."
+default = """\
+For each block of code, rewrite it as pseudocode a reviewer can \
+read instead of the code. First decide what the code does. If uncertain, \
+pick the option with the shortest output / explanation.
+
+Examples below are delimited with code fences, you should not add those to your output.
+
+A pure algorithm: plain-word steps, nested two spaces per level, for example:
+```pseudo
+if content is unchanged
+  return cached result
+write new content
+return fresh result
+```
+
+Control flow (mostly calls to other functions, in order): a call tree of the callees, \
+each call's own calls indented under it, for example:
+```pseudo
+createSession
+  persistPrompt
+  launchAgent
+navigateToSession
+```
+
+You can also create notional functions to make the pseudocode read easier in control-flow;
+just add a note that you've done so, e.g.: \
+```pseudo
+loadSettings
+reconcileSessions # summarization; not literal code
+  resumeRunningSessions
+  dropExpiredSessions
+saveSettings
+```
+
+UI (renders components or markup): a component tree, with the hooks and state that \
+matter under their component, and a component's module in parentheses when it comes \
+from elsewhere, for example:
+```pseudo
+<SessionToolbar>
+  useSessionEvents()
+  <RunSkillButton> (packages/ui)
+```
+
+Break a test into setup, action being tested, and assertion phases; summarize setup with the \
+methods above, e.g. control-flow pseudocode. For example:
+```pseudo
+Setup:
+  createSession
+    persistPrompt
+  stopAgent(session)
+Action:
+  resumed := resumeSession(session.id)
+Assertions:
+  assertEq(resumed.id, session.id)
+  assertEq(resumed.prompt, session.prompt)
+  assert agent is running
+```
+
+Reply with only pseudocode in the format above (code within the 'pseudo' blocks), nothing else."""
+
+[options.tests]
+type = "boolean"
+title = "Summarize tests"
+description = "Summarize new test bodies."
+default = true
+
+[options.test_min_lines]
+type = "integer"
+minimum = 0
+title = "Shortest test body to summarize (lines)"
+description = "Test bodies shorter than this keep their ordinary fold labels."
+default = 20
+
+# Per-provider facts the summarizer and settings screens share. Settings
+# screens do not edit an object option, so this is a file-only override.
+[options.provider_details]
+type = "object"
+"x-reset-by" = "provider"
+title = "Provider details"
+description = "The provider's default endpoint, the environment variables that hold its key, and whether a custom endpoint may go without a key."
+required = ["endpoint", "key_variables", "keyless_custom_endpoint"]
+additionalProperties = false
+
+[options.provider_details.properties]
+endpoint = { type = "string" }
+key_variables = { type = "array", items = { type = "string" } }
+keyless_custom_endpoint = { type = "boolean" }
+
+[options.provider_details."x-default-by"]
+key = "provider"
+
+[options.provider_details."x-default-by".values.gemini]
+endpoint = "https://generativelanguage.googleapis.com"
+key_variables = ["GEMINI_API_KEY", "GOOGLE_API_KEY"]
+keyless_custom_endpoint = false
+
+[options.provider_details."x-default-by".values.openai]
+endpoint = "https://api.openai.com/v1"
+key_variables = ["OPENAI_API_KEY"]
+keyless_custom_endpoint = true
+
+[options.provider_details."x-default-by".values.anthropic]
+endpoint = "https://api.anthropic.com"
+key_variables = ["ANTHROPIC_API_KEY"]
+keyless_custom_endpoint = false
+
+# The fold queries for each language, as files in this folder.
+[queries]
+rust = "queries/rust.scm"
+python = "queries/python.scm"
+go = "queries/go.scm"
+javascript = "queries/javascript.scm"
+javascriptjsx = "queries/jsx.scm"
+typescript = "queries/typescript.scm"
+typescripttsx = "queries/tsx.scm"

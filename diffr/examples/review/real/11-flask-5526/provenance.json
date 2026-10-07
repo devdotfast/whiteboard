@@ -1,0 +1,30 @@
+{
+  "repo": "pallets/flask",
+  "pr_number": 5526,
+  "pr_title": "Add encoding parameter to open resource",
+  "pr_url": "https://github.com/pallets/flask/pull/5526",
+  "language": "Python",
+  "status": "modified",
+  "base_branch_sha": "66af0e55ef6631d05c691707da19d0f1c46921ea",
+  "comparison_base_sha": "66af0e55ef6631d05c691707da19d0f1c46921ea",
+  "head_sha": "28d5a4d71824ff5823ae310e3fd014b48b33d583",
+  "merged_at": "2024-07-11T02:16:46Z",
+  "comparison": "PR merge-base to head",
+  "sources": {
+    "lhs": {
+      "file": "before.py",
+      "path": "src/flask/blueprints.py",
+      "commit": "66af0e55ef6631d05c691707da19d0f1c46921ea",
+      "git_blob_sha": "aa9eacf21b9e1a361ba3b3890173e8717a5b34aa",
+      "sha256": "ec83573f04e45317ce41738ebf5caee763691cf98f188e5f31330567e046f726"
+    },
+    "rhs": {
+      "file": "after.py",
+      "path": "src/flask/blueprints.py",
+      "commit": "28d5a4d71824ff5823ae310e3fd014b48b33d583",
+      "git_blob_sha": "86c5d59aa2b16a197c1610af2ccba71103c3a29a",
+      "sha256": "2a8bdb6b03e11a86992a06deffdc762ce47b59f72b67ce3afb96a870ed6226d3"
+    }
+  },
+  "visibility": "public"
+}

@@ -1,0 +1,153 @@
+{
+  "summary": "The both-have-nodes branch changes from sequential guards to a nested switch. Pair several statements while retaining other outer cases. Extra context shows the complete function signature, enclosing loop/switch openers and closing braces. The success return is already in the diff.",
+  "expected_text": {
+    "folds/0/lhs": "import (\n\t\"context\"\n\t\"errors\"\n\t\"fmt\"\n\n\t\"github.com/go-git/go-git/v5/utils/merkletrie/noder\"\n)",
+    "folds/0/rhs": "import (\n\t\"context\"\n\t\"errors\"\n\t\"fmt\"\n\n\t\"github.com/go-git/go-git/v5/utils/merkletrie/noder\"\n)",
+    "folds/1/lhs": "\t\tcase bothHaveNodes:\n\t\t\tif from.Skip() {\n\t\t\t\tif err = ret.AddRecursiveDelete(from); err != nil {\n\t\t\t\t\treturn nil, err\n\t\t\t\t}\n\t\t\t\tif err := ii.nextBoth(); err != nil {\n\t\t\t\t\treturn nil, err\n\t\t\t\t}\n\t\t\t\tbreak\n\t\t\t}\n\t\t\tif to.Skip() {\n\t\t\t\tif err = ret.AddRecursiveDelete(to); err != nil {\n\t\t\t\t\treturn nil, err\n\t\t\t\t}\n\t\t\t\tif err := ii.nextBoth(); err != nil {\n\t\t\t\t\treturn nil, err\n\t\t\t\t}\n\t\t\t\tbreak\n\t\t\t}\n\n\t\t\tif err = diffNodes(&ret, ii); err != nil {\n\t\t\t\treturn nil, err\n\t\t\t}",
+    "folds/1/rhs": "\t\tcase bothHaveNodes:\n\t\t\tvar err error\n\t\t\tswitch {\n\t\t\tcase from.Skip():\n\t\t\t\tif from.Name() == to.Name() {\n\t\t\t\t\terr = ii.nextBoth()\n\t\t\t\t} else {\n\t\t\t\t\terr = ii.nextFrom()\n\t\t\t\t}\n\t\t\tcase to.Skip():\n\t\t\t\tif from.Name() == to.Name() {\n\t\t\t\t\terr = ii.nextBoth()\n\t\t\t\t} else {\n\t\t\t\t\terr = ii.nextTo()\n\t\t\t\t}\n\t\t\tdefault:\n\t\t\t\terr = diffNodes(&ret, ii)\n\t\t\t}\n\n\t\t\tif err != nil {\n\t\t\t\treturn nil, err\n\t\t\t}",
+    "context/0/lhs": "func DiffTreeContext(ctx context.Context, fromTree, toTree noder.Noder,\n\thashEqual noder.Equal) (Changes, error) {",
+    "context/0/rhs": "func DiffTreeContext(ctx context.Context, fromTree, toTree noder.Noder,\n\thashEqual noder.Equal) (Changes, error) {",
+    "context/1/lhs": "\t\t}\n\t}\n}",
+    "context/1/rhs": "\t\t}\n\t}\n}",
+    "context/2/lhs": "\t\tswitch r := ii.remaining(); r {",
+    "context/2/rhs": "\t\tswitch r := ii.remaining(); r {",
+    "context/3/lhs": "\tfor {",
+    "context/3/rhs": "\tfor {"
+  },
+  "keep_visible": {
+    "lhs": [
+      {
+        "range": {
+          "start": {
+            "line": 298,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 298,
+            "byte_column": 23
+          }
+        },
+        "text": "\t\tcase onlyFromRemains:"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 343,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 345,
+            "byte_column": 1
+          }
+        },
+        "text": "\t\t}\n\t}\n}"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 295,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 295,
+            "byte_column": 33
+          }
+        },
+        "text": "\t\tswitch r := ii.remaining(); r {"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 297,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 297,
+            "byte_column": 18
+          }
+        },
+        "text": "\t\t\treturn ret, nil"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 285,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 285,
+            "byte_column": 6
+          }
+        },
+        "text": "\tfor {"
+      }
+    ],
+    "rhs": [
+      {
+        "range": {
+          "start": {
+            "line": 298,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 298,
+            "byte_column": 23
+          }
+        },
+        "text": "\t\tcase onlyFromRemains:"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 340,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 342,
+            "byte_column": 1
+          }
+        },
+        "text": "\t\t}\n\t}\n}"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 295,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 295,
+            "byte_column": 33
+          }
+        },
+        "text": "\t\tswitch r := ii.remaining(); r {"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 285,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 285,
+            "byte_column": 6
+          }
+        },
+        "text": "\tfor {"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 297,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 297,
+            "byte_column": 18
+          }
+        },
+        "text": "\t\t\treturn ret, nil"
+      }
+    ]
+  }
+}

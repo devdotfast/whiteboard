@@ -1,0 +1,38 @@
+{
+  "summary": "New decorated method: fold its added docstring, preserving the decorator, complete signature and return expression. The enclosing class is paired extra context; added lines are already visible in the diff.",
+  "expected_text": {
+    "folds/0/rhs": "        \"\"\"Shortcut for :meth:`route` with ``methods=[\"QUERY\"]``.\n\n        .. versionadded:: 3.2\n        \"\"\"",
+    "context/0/lhs": "class Scaffold:",
+    "context/0/rhs": "class Scaffold:"
+  },
+  "keep_visible": {
+    "rhs": [
+      {
+        "range": {
+          "start": {
+            "line": 302,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 303,
+            "byte_column": 83
+          }
+        },
+        "text": "    @setupmethod\n    def query(self, rule: str, **options: t.Any) -> t.Callable[[T_route], T_route]:"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 308,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 308,
+            "byte_column": 57
+          }
+        },
+        "text": "        return self._method_route(\"QUERY\", rule, options)"
+      }
+    ]
+  }
+}

@@ -1,0 +1,3 @@
+# diffr is implemented in Rust; keep GitHub's language stats honest.
+sample_files/** linguist-vendored
+vendored_parsers/** linguist-vendored

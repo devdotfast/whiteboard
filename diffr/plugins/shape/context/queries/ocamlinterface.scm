@@ -1,0 +1,28 @@
+; inherits: builtin:core/queries/ocamlinterface/folds.scm
+([
+  (application_expression)
+  (array_expression)
+  (assert_expression)
+  (class_definition)
+  (class_initializer)
+  (constructor_declaration)
+  (for_expression)
+  (function_expression)
+  (if_expression)
+  (match_expression)
+  (method_definition)
+  (method_invocation)
+  (module_definition)
+  (record_declaration)
+  (string)
+  (try_expression)
+  (tuple_expression)
+  (value_specification)
+  (while_expression)
+] @fold (#set! tag "context:scope"))
+([
+  (if_expression)
+  (match_expression)
+  (try_expression)
+] @fold (#set! tag "context:branches"))
+

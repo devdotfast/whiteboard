@@ -1,0 +1,30 @@
+{
+  "repo": "pallets/flask",
+  "pr_number": 6096,
+  "pr_title": "Fix `.partition(\":\")` usage on potential IPv6 addresses",
+  "pr_url": "https://github.com/pallets/flask/pull/6096",
+  "language": "Python",
+  "status": "modified",
+  "base_branch_sha": "514fc6b3e8402e4c646d5284e97a4f0ab50a7c4b",
+  "comparison_base_sha": "514fc6b3e8402e4c646d5284e97a4f0ab50a7c4b",
+  "head_sha": "7203feabf723edae0286ae5dc64fec8ac4c91735",
+  "merged_at": "2026-08-11T19:48:41Z",
+  "comparison": "PR merge-base to head",
+  "sources": {
+    "lhs": {
+      "file": "before.py",
+      "path": "src/flask/app.py",
+      "commit": "514fc6b3e8402e4c646d5284e97a4f0ab50a7c4b",
+      "git_blob_sha": "7585dda61457dcd35128f114a09e3bcd8987a610",
+      "sha256": "ed0ad667fc7ac326a7bdc317532d943af1dc3d8a9ad9f80a0a51f7fd9e8d3ca7"
+    },
+    "rhs": {
+      "file": "after.py",
+      "path": "src/flask/app.py",
+      "commit": "7203feabf723edae0286ae5dc64fec8ac4c91735",
+      "git_blob_sha": "6203586958fedf21edd86e95874d22571af34fb9",
+      "sha256": "fdcffafdf4614b57f3f2a7f1e0ac945d639bfe19f742b8bf46deeb29b9837a84"
+    }
+  },
+  "visibility": "public"
+}

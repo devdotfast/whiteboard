@@ -1,0 +1,57 @@
+{
+  "folds": [
+    {
+      "regions": {
+        "Paired": {
+          "lhs": {
+            "start": {
+              "line": 104,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 126,
+              "byte_column": 73
+            }
+          },
+          "rhs": {
+            "start": {
+              "line": 106,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 125,
+              "byte_column": 35
+            }
+          }
+        }
+      },
+      "placeholder": "Open a blueprint-relative resource for reading."
+    }
+  ],
+  "context": [
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 17,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 17,
+            "byte_column": 33
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 17,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 17,
+            "byte_column": 33
+          }
+        }
+      }
+    }
+  ]
+}

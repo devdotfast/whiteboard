@@ -1,0 +1,30 @@
+{
+  "repo": "devdotfast/review",
+  "pr_number": 108,
+  "pr_title": "Split ReviewContext by volatility and shrink SoftwareMap.tsx",
+  "pr_url": "https://github.com/devdotfast/review/pull/108",
+  "language": "TSX",
+  "status": "modified",
+  "base_branch_sha": "de8ebb1b1fd5786577a68b70c80b0ab8f5bb83b4",
+  "comparison_base_sha": "de8ebb1b1fd5786577a68b70c80b0ab8f5bb83b4",
+  "head_sha": "f00d6a8b3cbe1b85f1deddbb9a016450003bb8a3",
+  "merged_at": "2026-09-03T15:46:29Z",
+  "comparison": "PR merge-base to head",
+  "sources": {
+    "lhs": {
+      "file": "before.tsx",
+      "path": "packages/progressive-review/app/src/review-context.tsx",
+      "commit": "de8ebb1b1fd5786577a68b70c80b0ab8f5bb83b4",
+      "git_blob_sha": "ce0546be7f9cb09971a9b4c4818a521a53b18af2",
+      "sha256": "91cdaf7208c4e219a69261e54c953108e4b833538b248553ea9bfe72aae3a72f"
+    },
+    "rhs": {
+      "file": "after.tsx",
+      "path": "packages/progressive-review/app/src/review-context.tsx",
+      "commit": "f00d6a8b3cbe1b85f1deddbb9a016450003bb8a3",
+      "git_blob_sha": "67ec5095dc2dcbffd7ef7414d73a797ba1c45d2c",
+      "sha256": "cd50dc9c5562a2cf201827357d5475dc53c83bd44436186d682febd0e3601a9b"
+    }
+  },
+  "visibility": "private"
+}

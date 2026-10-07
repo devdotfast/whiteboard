@@ -1,0 +1,6 @@
+[alias]
+xtask = "run --package xtask --"
+
+# Release binaries must run on Windows installs without the Visual C++ runtime.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]

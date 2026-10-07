@@ -1,0 +1,30 @@
+{
+  "repo": "BurntSushi/ripgrep",
+  "pr_number": 3496,
+  "pr_title": "ignore: skip loading unreachable ignore files",
+  "pr_url": "https://github.com/BurntSushi/ripgrep/pull/3496",
+  "language": "Rust",
+  "status": "modified",
+  "base_branch_sha": "dffd776a737dc19a48b758dd6a621de113794121",
+  "comparison_base_sha": "dffd776a737dc19a48b758dd6a621de113794121",
+  "head_sha": "5467965ad5824ca0d859a1b59dda9044c826c6e8",
+  "merged_at": "2026-07-29T15:00:03Z",
+  "comparison": "PR merge-base to head",
+  "sources": {
+    "lhs": {
+      "file": "before.rs",
+      "path": "crates/ignore/src/walk.rs",
+      "commit": "dffd776a737dc19a48b758dd6a621de113794121",
+      "git_blob_sha": "9e0776e6fb985c94d399f8eb2a14137d5f5fb58f",
+      "sha256": "c8e06f2e0e6014a1d655eff6868005d51bb45abbb5418f7b5b4df2b9d77cf655"
+    },
+    "rhs": {
+      "file": "after.rs",
+      "path": "crates/ignore/src/walk.rs",
+      "commit": "5467965ad5824ca0d859a1b59dda9044c826c6e8",
+      "git_blob_sha": "2b0300ed38e5e24991cbc050fc51d693c1253336",
+      "sha256": "a81c751dc22763d8efda6fb88fd77c0e03c42fb17538a94497a5737ba8b4b919"
+    }
+  },
+  "visibility": "public"
+}

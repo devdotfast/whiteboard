@@ -1,0 +1,67 @@
+{
+  "summary": "An existing method gains a typed encoding parameter; its signature grows from one line to three. Pair the docstring and setup as one fold, keeping complete signatures and final return expressions visible. The enclosing class is extra context; signatures and returns are already in the diff.",
+  "expected_text": {
+    "folds/0/lhs": "        \"\"\"Open a resource file relative to :attr:`root_path` for\n        reading.\n\n        For example, if the file ``schema.sql`` is next to the file\n        ``app.py`` where the ``Flask`` app is defined, it can be opened\n        with:\n\n        .. code-block:: python\n\n            with app.open_resource(\"schema.sql\") as f:\n                conn.executescript(f.read())\n\n        :param resource: Path to the resource relative to\n            :attr:`root_path`.\n        :param mode: Open the file in this mode. Only reading is\n            supported, valid values are \"r\" (or \"rt\") and \"rb\".\n\n        Note this is a duplicate of the same method in the Flask\n        class.\n\n        \"\"\"\n        if mode not in {\"r\", \"rt\", \"rb\"}:\n            raise ValueError(\"Resources can only be opened for reading.\")",
+    "folds/0/rhs": "        \"\"\"Open a resource file relative to :attr:`root_path` for reading. The\n        blueprint-relative equivalent of the app's :meth:`~.Flask.open_resource`\n        method.\n\n        :param resource: Path to the resource relative to :attr:`root_path`.\n        :param mode: Open the file in this mode. Only reading is supported,\n            valid values are ``\"r\"`` (or ``\"rt\"``) and ``\"rb\"``.\n        :param encoding: Open the file with this encoding when opening in text\n            mode. This is ignored when opening in binary mode.\n\n        .. versionchanged:: 3.1\n            Added the ``encoding`` parameter.\n        \"\"\"\n        if mode not in {\"r\", \"rt\", \"rb\"}:\n            raise ValueError(\"Resources can only be opened for reading.\")\n\n        path = os.path.join(self.root_path, resource)\n\n        if mode == \"rb\":\n            return open(path, mode)",
+    "context/0/lhs": "class Blueprint(SansioBlueprint):",
+    "context/0/rhs": "class Blueprint(SansioBlueprint):"
+  },
+  "keep_visible": {
+    "lhs": [
+      {
+        "range": {
+          "start": {
+            "line": 103,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 103,
+            "byte_column": 79
+          }
+        },
+        "text": "    def open_resource(self, resource: str, mode: str = \"rb\") -> t.IO[t.AnyStr]:"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 128,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 128,
+            "byte_column": 65
+          }
+        },
+        "text": "        return open(os.path.join(self.root_path, resource), mode)"
+      }
+    ],
+    "rhs": [
+      {
+        "range": {
+          "start": {
+            "line": 103,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 105,
+            "byte_column": 24
+          }
+        },
+        "text": "    def open_resource(\n        self, resource: str, mode: str = \"rb\", encoding: str | None = \"utf-8\"\n    ) -> t.IO[t.AnyStr]:"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 127,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 127,
+            "byte_column": 50
+          }
+        },
+        "text": "        return open(path, mode, encoding=encoding)"
+      }
+    ]
+  }
+}
