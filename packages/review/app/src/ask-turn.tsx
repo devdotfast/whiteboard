@@ -876,7 +876,9 @@ const styles = stylex.create({
       [reducedMotion]: "none",
     },
     backgroundPosition: "0 0",
-    backgroundSize: "250% 100%",
+    // Twice the label: the sweep moves it by one repeat, so each loop ends
+    // where the next begins.
+    backgroundSize: "200% 100%",
     backgroundClip: { default: "text", [reducedMotion]: "border-box" },
     color: { default: tokens.transparent, [reducedMotion]: tokens.inkMuted },
     textOverflow: "ellipsis",
