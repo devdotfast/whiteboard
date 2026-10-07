@@ -238,6 +238,7 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 			"installing the package",
 			packageInstallScript(context, {
 				version: input.version,
+				target: input.target,
 				sha512,
 				node,
 				npm,

@@ -122,3 +122,65 @@ it("links the files an answer names to the Source window, once the checkout has 
 
   await act(async () => root.unmount());
 });
+
+it("shows the files an answer names as text where Source windows are unavailable", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const post = vi.fn<ReviewCanvasBridge["post"]>(async () => ({ ok: true }));
+  const session = testReviewSession({}, { post });
+  const fetch = vi.spyOn(session, "fetch");
+
+  session.review!.available = {
+    sourceWindows: false,
+    languageFeatures: false,
+  };
+
+  const entries: AgentEntry[] = [
+    { kind: "agent", id: "answer", text: "See `src/f.ts:12`." },
+  ];
+
+  const thread: AskThreadState = {
+    id: "thread",
+    agent: "codex",
+    agentName: "Codex",
+    status: "idle",
+    readOnly: true,
+    bypass: false,
+    head: "7fd03b8e2",
+    cwd: "/checkouts/whiteboard",
+    selection: { title: "remote review" },
+    entries,
+  };
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () =>
+    root.render(
+      <ReviewSessionProvider session={session}>
+        <AskFilesProvider threadId="thread">
+          <AskAgentTurn
+            thread={thread}
+            entries={entries}
+            renderPermission={() => null}
+          />
+        </AskFilesProvider>
+      </ReviewSessionProvider>,
+    ),
+  );
+
+  const code = [...container.querySelectorAll("code")].find(
+    (element) => element.textContent === "src/f.ts:12",
+  )!;
+
+  expect(code.title).toBe(
+    "Source windows are not available for a review on another machine.",
+  );
+  expect(container.querySelector('[role="link"], a, button')).toBeNull();
+
+  await act(async () => code.click());
+  expect(fetch).not.toHaveBeenCalled();
+  expect(post).not.toHaveBeenCalled();
+
+  await act(async () => root.unmount());
+});

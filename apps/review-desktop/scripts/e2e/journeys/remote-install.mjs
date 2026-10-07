@@ -295,7 +295,7 @@ async function addHost(ctx, host) {
   return section;
 }
 
-async function removeHost(ctx, host, { uninstall = false } = {}) {
+export async function removeHost(ctx, host, { uninstall = false } = {}) {
   const section = await hostsSection(ctx);
 
   await section.getByRole("button", { name: `Remove ${host}` }).click();
@@ -553,8 +553,15 @@ async function steps(ctx, until, watch, timings, manifestPath) {
     onRemote(sealed, "curl -sS -m 5 -o /dev/null https://registry.npmjs.org/"),
     "the sealed host reaches the registry",
   );
+  assert.match(
+    await onRemote(
+      sealed,
+      "ls ~/.dev/whiteboard-remote/versions/*/node_modules/@dev.fast/diffr-linux-*/diffr",
+    ),
+    /diffr$/,
+  );
   ctx.check(
-    `3. ${sealed}: Node and the package uploaded from this computer, npm through the relay; online ${third.ms} ms after Install; the host still has no route out`,
+    `3. ${sealed}: Node and the package uploaded from this computer, npm through the relay; online ${third.ms} ms after Install; the host still has no route out, and diffr came through the relay`,
   );
 
   // 4. old: glibc 2.31 is refused before anything is written, and no question is asked.

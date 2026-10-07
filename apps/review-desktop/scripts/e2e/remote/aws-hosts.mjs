@@ -1,6 +1,6 @@
 /** Hosts on AWS: `aws-up`, and removing a run's instances, key pair and security groups. */
 import { addOnce, aws, run, sleep } from "./exec.mjs";
-import { waitForSsh } from "./ssh.mjs";
+import { installFakeAgent, waitForSsh } from "./ssh.mjs";
 
 const maxInstances = 2;
 
@@ -221,6 +221,9 @@ export async function awsUp(runState, name, options) {
     60,
     "test -f /run/systemd/shutdown/scheduled",
   );
+
+  if (options["fake-agent"]) await installFakeAgent(runState, host);
+
   console.log(alias);
 }
 

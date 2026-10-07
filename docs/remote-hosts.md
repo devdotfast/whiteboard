@@ -100,7 +100,7 @@ host at once take turns.
 
 | Path | What it is |
 |---|---|
-| `~/.dev/whiteboard-remote/versions/<version>/` | One Whiteboard version: the package, its dependencies, a `whiteboard` launcher and a marker file that records what was checked. |
+| `~/.dev/whiteboard-remote/versions/<version>/` | One Whiteboard version: the package, its dependencies and the host's `diffr` for structural diff, a `whiteboard` launcher and a marker file that records what was checked. |
 | `~/.dev/whiteboard-remote/node/v<node version>/` | Node 24, only when the host has none. |
 | `~/.dev/whiteboard-remote/install.lock/` | Present while an install runs. |
 | `~/.local/bin/whiteboard` | A launcher for the newest version, so that you and your agents can run `whiteboard` there. Desktop writes it only if that path is free or Desktop's own; a `whiteboard` you installed yourself is left alone. |
@@ -165,6 +165,14 @@ nothing. Settings lists the agents that are not yet connected to Whiteboard,
 with **Connect**, which runs that agent's own install commands on the host,
 the same ones `whiteboard connect` gives. An agent whose command is not on the
 login shell's `PATH` gets the text to paste into it instead.
+
+**Ask.** Ask works on a review that lives on a host. The agent runs on the
+host, in the review's checkout, with the agents and sign-ins already there
+(`claude auth login`, `codex login`, `opencode auth login`,
+`cursor-agent login`, Pi's `/login`). Threads are kept on the host, so every
+laptop that attaches it sees the same history for its reviews. A file that an
+answer names shows as text, because Source windows are not available for a
+remote review.
 
 ## Remove Whiteboard from a host
 

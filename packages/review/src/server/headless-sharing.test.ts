@@ -37,6 +37,7 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
   vi.stubEnv("DEV_REVIEW_SHARE_ORIGIN", "https://sharing.test");
   vi.stubEnv("DEV_REVIEW_HOME", stateDir);
   vi.stubEnv("DEV_FAST_REVIEW_TELEMETRY_DISABLED", "1");
+  vi.stubEnv("SHELL", "");
   const realFetch = globalThis.fetch;
   const requests: { url: string; headers: Headers; body?: string }[] = [];
   const blobs = new Map<string, Buffer>();
