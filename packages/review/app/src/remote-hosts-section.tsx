@@ -101,6 +101,23 @@ export function RemoteHostsSection({
                   {state?.detail ? ` · ${state.detail}` : null}
                 </span>
               ) : null}
+              {state?.state === "online" ? (
+                <span {...stylex.props(styles.rowDescription, local.detail)}>
+                  {state.languageFeatures
+                    ? "Language features: available"
+                    : `Language features: unavailable${state.languageFeaturesDetail ? ` — ${state.languageFeaturesDetail}` : ""}`}
+                </span>
+              ) : null}
+              {state?.state === "online"
+                ? state.languageGroups?.map(({ group, installed, detail }) => (
+                    <span
+                      key={group}
+                      {...stylex.props(styles.rowDescription, local.detail)}
+                    >
+                      {`${group}: ${installed ? "installed" : "not installed"}${detail ? ` — ${detail}` : ""}`}
+                    </span>
+                  ))
+                : null}
               {state?.installCommand ? (
                 <span {...stylex.props(styles.rowDescription, local.detail)}>
                   <code {...stylex.props(local.command)}>

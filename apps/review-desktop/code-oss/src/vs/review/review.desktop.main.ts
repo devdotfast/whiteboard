@@ -7,5 +7,6 @@ import './review.common.main.js';
 import './editor.desktop.main.js';
 import './contrib/update/reviewUpdate.contribution.js';
 import './contrib/remote/reviewSshPrompt.contribution.js';
+import './services/remote/reviewRemoteHosts.js';
 
 export { main } from './electron-browser/review.main.js';

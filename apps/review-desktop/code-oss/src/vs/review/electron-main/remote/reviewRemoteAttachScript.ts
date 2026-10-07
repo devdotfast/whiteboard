@@ -25,6 +25,12 @@ export interface ReviewRemoteLanguageServer {
 	readonly commit: string;
 }
 
+export interface ReviewRemoteLanguageGroup {
+	readonly group: string;
+	readonly installed: boolean;
+	readonly detail?: string;
+}
+
 export interface ReviewRemoteAttach {
 	readonly version: string | null;
 	readonly serverId: string | null;
@@ -33,6 +39,7 @@ export interface ReviewRemoteAttach {
 	readonly languageServer: ReviewRemoteLanguageServer | null;
 	readonly languageServerDetail?: string;
 	readonly languageServerPending?: true;
+	readonly languageGroups: readonly ReviewRemoteLanguageGroup[];
 }
 
 export function parseRemoteAttach(stdout: string): { attach: ReviewRemoteAttach } | { error: string } | undefined {
@@ -66,6 +73,7 @@ export function parseRemoteAttach(stdout: string): { attach: ReviewRemoteAttach 
 				token: record.token,
 				port,
 				...languageServerOf(record),
+				languageGroups: languageGroupsOf(record.languageGroups),
 			},
 		};
 	}
@@ -82,6 +90,15 @@ function languageServerOf(record: Record<string, unknown>): Pick<ReviewRemoteAtt
 		languageServerDetail: typeof record.languageServerDetail === "string" ? record.languageServerDetail : "The Whiteboard on this host has no VS Code server.",
 		...(record.languageServerPending === true && { languageServerPending: true as const }),
 	};
+}
+
+function languageGroupsOf(value: unknown): ReviewRemoteLanguageGroup[] {
+	if (!Array.isArray(value)) return [];
+	return value.flatMap((entry: unknown) => {
+		const { group, installed, detail } = (entry && typeof entry === "object" ? entry : {}) as Record<string, unknown>;
+		if (typeof group !== "string" || typeof installed !== "boolean") return [];
+		return [{ group, installed, ...(typeof detail === "string" && detail && { detail }) }];
+	});
 }
 
 function urlPort(url: unknown): number | undefined {

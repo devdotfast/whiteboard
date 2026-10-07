@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { URI } from '../../base/common/uri.js';
-import { acquireReviewLanguageRoot } from './reviewLocalWorkspace.js';
+import { acquireReviewLanguageRoot, reviewLanguageRoot } from './reviewLocalWorkspace.js';
 
 function workspace() {
 	const folders: string[] = [];
@@ -59,4 +59,13 @@ test('a shared checkout stays until its last owner releases it', async () => {
 	second.dispose();
 	await settled(target);
 	assert.ok(!target.folders.includes(a.toString()));
+});
+
+const SERVER_ID = '6F23D55B-8446-437e-afd6-ad3a40eecc4c';
+
+test('no root while a checkout is prepared, or for a server id that is not an id', () => {
+	assert.equal(reviewLanguageRoot({ remoteRootPath: null, identity: 'hash', serverId: SERVER_ID }), undefined);
+	assert.equal(reviewLanguageRoot({ remoteRootPath: '/repo', identity: 'hash', serverId: '../x' }), undefined);
+	assert.equal(reviewLanguageRoot({ rootPath: null, identity: 'id' }), undefined);
+	assert.equal(reviewLanguageRoot(undefined), undefined);
 });

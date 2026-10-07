@@ -45,6 +45,12 @@ export interface ReviewServerConnection {
 }
 
 
+export interface ReviewRemoteLanguageEndpoint {
+	readonly host: string;
+	readonly port: number;
+	readonly connectionToken: string;
+}
+
 export const IReviewDesktopConnectionService = createDecorator<IReviewDesktopConnectionService>(
 	"reviewDesktopConnectionService",
 );
@@ -71,6 +77,7 @@ export interface IReviewDesktopConnectionService {
 	readRemoteHosts(): Promise<ReviewGatewayHostState[]>;
 	listSshAliases(): Promise<string[]>;
 	retryRemoteHost(alias: string): Promise<void>;
+	getRemoteLanguageEndpoint(serverId: string): Promise<ReviewRemoteLanguageEndpoint | undefined>;
 	getTutorialStatus(): Promise<{ version: 1; reviewUuid: string | null }>;
 	prepareTutorial(): Promise<void>;
 	openTutorial(): Promise<ReviewTutorialOpenResponse>;
@@ -241,6 +248,15 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 
 	async retryRemoteHost(alias: string): Promise<void> {
 		await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("retryRemoteHost", alias);
+	}
+
+	async getRemoteLanguageEndpoint(serverId: string): Promise<ReviewRemoteLanguageEndpoint | undefined> {
+		const endpoint: unknown = await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("getRemoteLanguageEndpoint", serverId);
+		if (typeof endpoint !== "object" || endpoint === null) return undefined;
+		const { host, port, connectionToken } = endpoint as Record<string, unknown>;
+		return typeof host === "string" && Number.isInteger(port) && typeof connectionToken === "string"
+			? { host, port: port as number, connectionToken }
+			: undefined;
 	}
 
 	async saveDiffrSummarizer(input: ReviewDiffrSummarizerInput): Promise<ReviewDiffrConfig> {
