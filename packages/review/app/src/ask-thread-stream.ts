@@ -79,10 +79,12 @@ export class AskThreadsWatch {
     const seqs = new Map<string, number>();
 
     try {
-      const response = await this.session().fetch(
-        `/ask/watch?threads=${threadIds.map(encodeURIComponent).join(",")}`,
-        { signal },
-      );
+      const response = await this.session().fetch("/ask/watch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ threads: threadIds }),
+        signal,
+      });
 
       if (!response.ok || !response.body) throw new Error("Unavailable");
 

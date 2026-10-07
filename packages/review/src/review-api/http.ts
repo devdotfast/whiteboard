@@ -91,8 +91,9 @@ const askStartSchema = z.strictObject({
 
 const askPermitSchema = z.strictObject({ bypass: z.boolean() });
 
-/** The threads one watch follows: those of a review's open Asks. */
-const askWatchThreadsSchema = z.array(z.string().min(1));
+/** The threads one watch follows: those of a review's open Asks. A body,
+ * not the query, so there can be as many as are open. */
+const askWatchSchema = z.strictObject({ threads: z.array(z.string().min(1)) });
 
 const askOpenSchema = z.strictObject({ picks: askPicksSchema.optional() });
 
@@ -1315,18 +1316,18 @@ export function createReviewApi(
 
     // The threads of every open Ask in a review, over one connection. Before
     // the route for one thread, which would read `watch` as its id.
-    app.get("/:id/ask/watch", (context) => {
+    app.post("/:id/ask/watch", async (context) => {
       const reviewId = context.req.param("id");
 
       readReview(reviewId);
 
-      const threadIds = askWatchThreadsSchema.parse(
-        (context.req.query("threads") ?? "").split(",").filter(Boolean),
+      const { threads } = askWatchSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
       );
 
       return watchAskThreads(
         new Map(
-          threadIds.map((threadId) => {
+          threads.map((threadId) => {
             const thread = ask.threads.get(threadId);
 
             return [

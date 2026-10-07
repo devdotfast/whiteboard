@@ -61,6 +61,11 @@ function button(name: RegExp) {
   );
 }
 
+/** The threads a watch request follows. */
+function watchedThreads(init: RequestInit | undefined): string[] {
+  return (JSON.parse(String(init?.body)) as { threads: string[] }).threads;
+}
+
 /** A canvas with Ask: an agent named Codex that answers each question in a
  * thread of its own, which the test drives. */
 function askCanvas() {
@@ -83,15 +88,11 @@ function askCanvas() {
 
       // Every open Ask follows its thread over one stream; the newest
       // carries each thread's updates.
-      const watched = /^\/ask\/watch\?threads=(.+)$/.exec(
-        String(endpoint),
-      )?.[1];
-
-      if (watched)
+      if (endpoint === "/ask/watch")
         return new Response(
           new ReadableStream<Uint8Array>({
             start(controller) {
-              for (const threadId of watched.split(",").map(decodeURIComponent))
+              for (const threadId of watchedThreads(init))
                 streams.set(threadId, (update) =>
                   controller.enqueue(
                     new TextEncoder().encode(
@@ -161,15 +162,14 @@ function askCanvas() {
     store: () => store,
     streams,
     closed: () => requested("/close"),
-    /** The watch streams still open. */
+    /** The threads of each watch stream still open. */
     watching: () =>
       fetch.mock.calls
         .filter(
           ([endpoint, init]) =>
-            String(endpoint).startsWith("/ask/watch?") &&
-            !init?.signal?.aborted,
+            endpoint === "/ask/watch" && !init?.signal?.aborted,
         )
-        .map(([endpoint]) => String(endpoint)),
+        .map(([, init]) => watchedThreads(init)),
     mount,
     askQuestion,
     async [Symbol.asyncDispose]() {
@@ -268,9 +268,7 @@ it("follows the threads of every open Ask over one connection", async () => {
     await act(async () => button(/^Minimize Ask$/)!.click());
   }
 
-  expect(canvas.watching()).toEqual([
-    "/ask/watch?threads=thread-1,thread-2,thread-3",
-  ]);
+  expect(canvas.watching()).toEqual([["thread-1", "thread-2", "thread-3"]]);
 });
 
 it("folds two or more minimized Asks into one pill that lists them", async () => {
