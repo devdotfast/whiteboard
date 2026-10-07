@@ -39,7 +39,7 @@ describe('ReviewUserConfigImport', () => {
 		writeFileSync(path.join(fixture.sourceUser, 'keybindings.json'), keybindings);
 		writeFileSync(path.join(fixture.sourceUser, 'settings.json'), `{
 			// User-facing editor and keymap settings survive.
-			"editor.fontSize": 15,
+			"editor.cursorWidth": 15,
 			"vim.useSystemClipboard": true,
 			"telemetry.telemetryLevel": "all",
 			"extensions.autoUpdate": true,
@@ -69,7 +69,7 @@ describe('ReviewUserConfigImport', () => {
 		);
 		const settings = JSON.parse(readFileSync(path.join(fixture.target, 'User', 'settings.json'), 'utf8'));
 		assert.deepStrictEqual(settings, {
-			'editor.fontSize': 15,
+			'editor.cursorWidth': 15,
 			'vim.useSystemClipboard': true,
 			'review.keymap': 'vim',
 		});
@@ -226,7 +226,7 @@ describe('ReviewUserConfigImport', () => {
 			...Object.keys(curatedExtensionConfigurationDefaults),
 		];
 		assert.ok(hardened.length > 0);
-		const imported: Record<string, unknown> = { 'editor.fontSize': 15 };
+		const imported: Record<string, unknown> = { 'editor.cursorWidth': 15 };
 		for (const key of hardened) {
 			imported[key] = `imported:${key}`;
 		}
@@ -250,7 +250,7 @@ describe('ReviewUserConfigImport', () => {
 			[],
 		);
 		// The filter has to be the hardened key set, not a blanket refusal.
-		assert.strictEqual(settings['editor.fontSize'], 15);
+		assert.strictEqual(settings['editor.cursorWidth'], 15);
 	});
 
 	test('an empty or comment-only settings file does not block the keybindings import', () => {
@@ -272,7 +272,7 @@ describe('ReviewUserConfigImport', () => {
 
 	test('imports the settings VS Code recovers from a malformed settings file', () => {
 		const fixture = createFixture();
-		writeFileSync(path.join(fixture.sourceUser, 'settings.json'), '{\n\t"editor.fontSize": 15\n\t"editor.tabSize": 2\n}\n');
+		writeFileSync(path.join(fixture.sourceUser, 'settings.json'), '{\n\t"editor.cursorWidth": 15\n\t"editor.tabSize": 2\n}\n');
 
 		const result = importReviewUserConfig({
 			userDataPath: fixture.target,
@@ -283,7 +283,7 @@ describe('ReviewUserConfigImport', () => {
 		assert.strictEqual(result.status, 'imported');
 		assert.deepStrictEqual(
 			JSON.parse(readFileSync(path.join(fixture.target, 'User', 'settings.json'), 'utf8')),
-			{ 'editor.fontSize': 15, 'editor.tabSize': 2 },
+			{ 'editor.cursorWidth': 15, 'editor.tabSize': 2 },
 		);
 	});
 
