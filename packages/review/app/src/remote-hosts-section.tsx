@@ -1,12 +1,15 @@
 import { Button } from "@canvas/ui/button";
 import { TextField } from "@canvas/ui/text-field";
-import type {
-  ReviewGatewayHostState,
-  ReviewRemoteHostsSettings,
+import {
+  REVIEW_CLI_INSTALL_TARGET_LABELS,
+  type ReviewGatewayHostState,
+  type ReviewRemoteAgent,
+  type ReviewRemoteHostsSettings,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useState } from "react";
 
+import { CopyableText } from "./copy-text";
 import { settingsStyles as styles } from "./settings-styles";
 import { tokens } from "./tokens.stylex";
 
@@ -14,8 +17,10 @@ const STATES_EVERY_MS = 3000;
 
 const RETRIED = new Set<ReviewGatewayHostState["state"]>([
   "auth-failed",
+  "incompatible",
   "not-installed",
   "unreachable",
+  "unsupported",
 ]);
 
 const plain = (text: string) =>
@@ -34,6 +39,8 @@ export function RemoteHostsSection({
   const [alias, setAlias] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [removing, setRemoving] = useState<string>();
+  const [uninstall, setUninstall] = useState(false);
 
   useEffect(() => {
     void hosts
@@ -90,6 +97,25 @@ export function RemoteHostsSection({
     if (await save([...configured, alias.trim()])) setAlias("");
   };
 
+  const remove = async (name: string) => {
+    setRemoving(undefined);
+    let problem: string | undefined;
+
+    if (uninstall) {
+      setBusy(true);
+
+      try {
+        await hosts.uninstall(name);
+      } catch (cause) {
+        problem = cause instanceof Error ? cause.message : String(cause);
+      }
+    }
+
+    await save(configured.filter((other) => other !== name));
+
+    if (problem) setError(problem);
+  };
+
   return (
     <section {...stylex.props(styles.section)} aria-label="Remote hosts">
       <h2 {...stylex.props(styles.sectionLabel)}>Remote hosts</h2>
@@ -101,28 +127,35 @@ export function RemoteHostsSection({
             <div {...stylex.props(styles.rowText)}>
               <span {...stylex.props(styles.rowLabel)}>{name}</span>
               {states ? (
-                <span {...stylex.props(styles.rowDescription, local.detail)}>
-                  {(state?.state ?? "connecting").replace("-", " ")}
-                  {state?.detail ? ` · ${state.detail}` : null}
-                </span>
+                <Detail
+                  failed={state !== undefined && RETRIED.has(state.state)}
+                  text={`${(state?.state ?? "connecting").replace("-", " ")}${state?.detail ? ` · ${state.detail}` : ""}`}
+                />
               ) : null}
               {state?.state === "online" ? (
-                <span {...stylex.props(styles.rowDescription, local.detail)}>
-                  {state.languageFeatures
-                    ? "Language features: available"
-                    : `Language features: unavailable${state.languageFeaturesDetail ? ` — ${plain(state.languageFeaturesDetail)}` : ""}`}
-                </span>
+                <Detail
+                  failed={
+                    !state.languageFeatures && !!state.languageFeaturesDetail
+                  }
+                  text={
+                    state.languageFeatures
+                      ? "Language features: available"
+                      : `Language features: unavailable${state.languageFeaturesDetail ? ` · ${plain(state.languageFeaturesDetail)}` : ""}`
+                  }
+                />
               ) : null}
               {state?.state === "online"
                 ? state.languageGroups?.map(({ group, installed, detail }) => (
-                    <span
+                    <Detail
                       key={group}
-                      {...stylex.props(styles.rowDescription, local.detail)}
-                    >
-                      {`${plain(group)}: ${installed ? "installed" : "not installed"}${detail ? ` — ${plain(detail)}` : ""}`}
-                    </span>
+                      failed={!!detail}
+                      text={`${plain(group)}: ${installed ? "installed" : "not installed"}${detail ? ` · ${plain(detail)}` : ""}`}
+                    />
                   ))
                 : null}
+              {state?.state === "online" ? (
+                <RemoteHostAgents hosts={hosts} alias={name} />
+              ) : null}
               {state?.installCommand ? (
                 <span {...stylex.props(styles.rowDescription, local.detail)}>
                   <code {...stylex.props(local.command)}>
@@ -132,6 +165,16 @@ export function RemoteHostsSection({
               ) : null}
             </div>
             <div {...stylex.props(styles.rowControl, local.actions)}>
+              {state?.declined ? (
+                <Button
+                  aria-label={`Install ${name}`}
+                  onClick={() =>
+                    void hosts.install(name).catch(() => undefined)
+                  }
+                >
+                  Install
+                </Button>
+              ) : null}
               {state && RETRIED.has(state.state) ? (
                 <Button
                   aria-label={`Retry ${name}`}
@@ -142,14 +185,37 @@ export function RemoteHostsSection({
               ) : null}
               <Button
                 aria-label={`Remove ${name}`}
+                aria-expanded={removing === name}
                 disabled={busy}
-                onClick={() =>
-                  void save(configured.filter((other) => other !== name))
-                }
+                onClick={() => {
+                  setUninstall(false);
+                  setRemoving(removing === name ? undefined : name);
+                }}
               >
                 Remove
               </Button>
             </div>
+            {removing === name ? (
+              <div
+                {...stylex.props(local.confirm)}
+                role="group"
+                aria-label={`Remove ${name}`}
+              >
+                <label {...stylex.props(styles.toggle)}>
+                  <input
+                    {...stylex.props(styles.checkbox)}
+                    type="checkbox"
+                    checked={uninstall}
+                    onChange={(event) => setUninstall(event.target.checked)}
+                  />
+                  Also remove Whiteboard from {name}
+                </label>
+                <Button disabled={busy} onClick={() => void remove(name)}>
+                  Remove host
+                </Button>
+                <Button onClick={() => setRemoving(undefined)}>Cancel</Button>
+              </div>
+            ) : null}
           </div>
         );
       })}
@@ -163,8 +229,8 @@ export function RemoteHostsSection({
         <div {...stylex.props(styles.rowText)}>
           <span {...stylex.props(styles.rowLabel)}>Add a host</span>
           <span {...stylex.props(styles.rowDescription)}>
-            An alias from your SSH configuration. Whiteboard must be installed
-            there.
+            An alias from your SSH configuration. Whiteboard offers to install
+            itself there.
           </span>
         </div>
         <div {...stylex.props(styles.rowControl, local.actions)}>
@@ -191,10 +257,128 @@ export function RemoteHostsSection({
       </form>
       {error ? (
         <p role="alert" {...stylex.props(styles.error)}>
-          {error}
+          <CopyableText text={error} />
         </p>
       ) : null}
     </section>
+  );
+}
+
+function RemoteHostAgents({
+  hosts,
+  alias,
+}: {
+  hosts: ReviewRemoteHostsSettings;
+  alias: string;
+}) {
+  const [agents, setAgents] = useState<ReviewRemoteAgent[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ text: string; failed: boolean }>();
+
+  useEffect(() => {
+    let live = true;
+
+    void hosts
+      .agents(alias)
+      .then((next) => {
+        if (live) setAgents(next);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      live = false;
+    };
+  }, [hosts, alias]);
+
+  const offered = agents?.filter((agent) => !agent.connected && !agent.manual);
+  const manual = agents?.filter((agent) => !agent.connected && agent.manual);
+
+  const connect = async (ids: ReviewRemoteAgent["id"][]) => {
+    setBusy(true);
+    setResult(undefined);
+
+    try {
+      const results = await hosts.connectAgents(alias, ids);
+
+      setResult({
+        failed: results.some((done) => !done.connected),
+        text: results
+          .map((done) =>
+            done.connected
+              ? `${REVIEW_CLI_INSTALL_TARGET_LABELS[done.id]} is connected on ${alias}.`
+              : `${REVIEW_CLI_INSTALL_TARGET_LABELS[done.id]} was not connected on ${alias}: ${done.output || "it printed nothing"}`,
+          )
+          .join(" "),
+      });
+      setAgents(await hosts.agents(alias));
+    } catch (cause) {
+      setResult({
+        failed: true,
+        text: `Could not connect agents on ${alias}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      {offered?.length ? (
+        <span {...stylex.props(styles.rowDescription, local.detail)}>
+          Agents on {alias}:{" "}
+          {offered
+            .map((agent) => REVIEW_CLI_INSTALL_TARGET_LABELS[agent.id])
+            .join(", ")}{" "}
+          —{" "}
+          <Button
+            aria-label={`Connect agents on ${alias}`}
+            disabled={busy}
+            onClick={() => void connect(offered.map((agent) => agent.id))}
+          >
+            Connect
+          </Button>
+        </span>
+      ) : null}
+      {manual?.map((agent) => (
+        <span
+          key={agent.id}
+          {...stylex.props(styles.rowDescription, local.detail)}
+        >
+          Paste into {REVIEW_CLI_INSTALL_TARGET_LABELS[agent.id]} on {alias}:{" "}
+          <code {...stylex.props(local.command)}>
+            Run `whiteboard connect {agent.id}` and follow the instructions to
+            connect this agent to Whiteboard.
+          </code>
+        </span>
+      ))}
+      {result ? (
+        <Detail role="status" failed={result.failed} text={result.text} />
+      ) : null}
+    </>
+  );
+}
+
+/** A row's detail line; a failure reads as an error and copies on click. */
+function Detail({
+  text,
+  failed,
+  role,
+}: {
+  text: string;
+  failed: boolean;
+  role?: "status";
+}) {
+  return (
+    <span
+      role={role}
+      {...stylex.props(
+        styles.rowDescription,
+        local.detail,
+        failed && local.failed,
+      )}
+    >
+      {failed ? <CopyableText text={text} /> : text}
+    </span>
   );
 }
 
@@ -203,7 +387,17 @@ const local = stylex.create({
     overflowWrap: "anywhere",
     userSelect: "text",
   },
+  failed: {
+    color: tokens.changeRemoved,
+  },
   actions: {
+    gap: "8px",
+  },
+  confirm: {
+    display: "flex",
+    gridColumn: "1 / -1",
+    flexWrap: "wrap",
+    alignItems: "center",
     gap: "8px",
   },
   alias: {

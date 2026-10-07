@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -13,8 +13,10 @@ import { join } from "node:path";
 import test from "node:test";
 
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
-import { attachOutput, fakeClock, fakeSsh, until, type FakeRemote } from "./test/fakeSsh.js";
-import { classifySshFailure, languageCommitMismatch, ReviewRemoteHost } from "./reviewRemoteHost.js";
+import { attachOutput, detectOutput, FAKE_SERVER_ID, fakeClock, fakeSsh, until, type FakeRemote } from "./test/fakeSsh.js";
+import { classifySshFailure, languageCommitMismatch, ReviewRemoteHost, type ReviewRemoteHostOptions, type ReviewRemoteInstallFlow, type ReviewRemoteInstallMode, type ReviewRemoteInstallRunInput } from "./reviewRemoteHost.js";
+import { openRemoteInstallConsent } from "./reviewRemoteInstallConsent.js";
+import type { ReviewRemoteInstallProgress, ReviewRemoteInstallResult } from "./reviewRemoteInstaller.js";
 import { reviewSshSession } from "./reviewSshCommand.js";
 
 async function healthServer(t: test.TestContext, servers?: Server[]): Promise<number> {
@@ -42,7 +44,9 @@ function hostFor(
 	ports: number | number[] | (() => Promise<number>),
 	alias = "wb-test-a",
 	controlDirectory = "/tmp/wb-ssh-test",
-	desktopCommit?: string,
+	install?: ReviewRemoteInstallFlow,
+	version = "0.1.6",
+	extra: Partial<ReviewRemoteHostOptions> = {},
 ) {
 	const free = typeof ports === "function" ? [] : [ports].flat();
 	let next = 0;
@@ -53,18 +57,69 @@ function hostFor(
 		session: reviewSshSession(alias, controlDirectory),
 		spawn: ssh.spawn,
 		environment: async () => ({ PATH: "/usr/bin" }),
-		desktopVersion: async () => "0.1.6",
-		desktopCommit,
+		desktopVersion: async () => version,
 		groups: async () => ["go"],
 		freePort: typeof ports === "function" ? ports : async () => free[next++ % free.length],
 		report: (state) => reports.push(state),
 		log: () => {},
 		clock,
 		timeouts: { poll: 1 },
+		install,
+		...extra,
 	});
 	t.after(() => host.dispose());
 	return { host, ssh, clock, reports, last: () => reports.at(-1) };
 }
+
+const INTEGRITY = `sha512-${"A".repeat(86)}==`;
+const at = (version: string, integrity = INTEGRITY) => ({ version, integrity });
+
+const INSTALLED: ReviewRemoteInstallResult = {
+	nodePath: "/home/dev/.dev/whiteboard-remote/node/v24.18.0/bin/node",
+	cliPath: "/home/dev/.dev/whiteboard-remote/versions/0.1.6/node_modules/@dev.fast/whiteboard/dist/cli.js",
+};
+
+async function installFlow(
+	t: test.TestContext,
+	mode: ReviewRemoteInstallMode,
+	options: {
+		answers?: (boolean | undefined)[];
+		steps?: ReviewRemoteInstallProgress[];
+		fails?: (call: number) => Error | undefined;
+		consentFile?: string;
+	} = {},
+) {
+	const dir = await mkdtemp(join(tmpdir(), "wb-flow-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
+	const consentFile = options.consentFile ?? join(dir, "consent.json");
+	const prompts: { alias: string; text: string }[] = [];
+	const runs: ReviewRemoteInstallRunInput[] = [];
+	const answers = [...(options.answers ?? [])];
+	const flow: ReviewRemoteInstallFlow = {
+		mode: () => mode,
+		consent: openRemoteInstallConsent(consentFile),
+		confirm: async (request) => {
+			prompts.push(request);
+			return answers.shift();
+		},
+		run: async (input) => {
+			runs.push(input);
+			for (const step of options.steps ?? [{ step: "done", cliPath: INSTALLED.cliPath }]) input.onProgress(step);
+			const error = options.fails?.(runs.length);
+			if (error) throw error;
+			return INSTALLED;
+		},
+		integrity: async () => INTEGRITY,
+	};
+	return { flow, prompts, runs, consentFile };
+}
+
+const STEPS: ReviewRemoteInstallProgress[] = [
+	{ step: "node", via: "upload" },
+	{ step: "package", via: "remote-download" },
+	{ step: "verifying" },
+	{ step: "done", cliPath: INSTALLED.cliPath },
+];
 
 test("a successful attach reports an endpoint at the forwarded port", async (t) => {
 	const port = await healthServer(t);
@@ -83,7 +138,7 @@ test("a successful attach reports an endpoint at the forwarded port", async (t) 
 test("the VS Code server gets a second forward on the same master, and only its endpoint reaches a window", async (t) => {
 	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
 	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
-	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", languageServer) } }, ports);
+	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", { languageServer }) } }, ports);
 
 	host.start();
 	await until(() => last()?.endpoint !== undefined);
@@ -92,7 +147,7 @@ test("the VS Code server gets a second forward on the same master, and only its 
 	assert.equal(ssh.of("wb-test-a", "master").length, 1);
 	const forwards = ssh.of("wb-test-a", "forward").map((call) => call.args.find((arg) => arg.startsWith("127.0.0.1:")));
 	assert.deepEqual(forwards, [`127.0.0.1:${ports[0]}:127.0.0.1:41234`, `127.0.0.1:${ports[1]}:127.0.0.1:45678`]);
-	assert.deepEqual(await host.languageEndpoint("s1"), { host: "127.0.0.1", port: ports[1], connectionToken: "vscode-token" });
+	assert.deepEqual(await host.languageEndpoint(FAKE_SERVER_ID), { host: "127.0.0.1", port: ports[1], connectionToken: "vscode-token" });
 	assert.equal(await host.languageEndpoint("another machine"), undefined);
 	assert.doesNotMatch(JSON.stringify(last()), /vscode-token/);
 });
@@ -104,7 +159,7 @@ test("the Desktop's enabled groups go to remote attach", async (t) => {
 	host.start();
 	await until(() => last()?.endpoint !== undefined);
 
-	assert.match(ssh.of("wb-test-a", "exec")[0].input(), /exec "\$wb" remote attach --json --groups go\n$/);
+	assert.match(ssh.of("wb-test-a", "exec")[0].input!, /exec "\$wb" remote attach --json --groups go\n$/);
 });
 
 test("the remote's language groups reach the gateway: well-formed, asked for by this Desktop, once each", async (t) => {
@@ -117,7 +172,7 @@ test("the remote's language groups reach the gateway: well-formed, asked for by 
 		{ group: "go", installed: true, detail: "x".repeat(900) },
 		{ group: "go", installed: false, detail: "a second go" },
 	];
-	const stdout = `WHITEBOARD-REMOTE-BEGIN\n${JSON.stringify({ event: "remote.attach", serverId: "s1", url: `http://127.0.0.1:${port}`, token: "remote-token", languageServer: null, languageServerDetail: "none", languageGroups })}\nWHITEBOARD-REMOTE-END\n`;
+	const stdout = `WHITEBOARD-REMOTE-BEGIN\n${JSON.stringify({ event: "remote.attach", serverId: FAKE_SERVER_ID, url: `http://127.0.0.1:${port}`, token: "remote-token", languageServer: null, languageServerDetail: "none", languageGroups })}\nWHITEBOARD-REMOTE-END\n`;
 	const { host, last } = hostFor(t, { attach: { code: 0, stdout } }, port);
 
 	host.start();
@@ -129,7 +184,7 @@ test("the remote's language groups reach the gateway: well-formed, asked for by 
 test("a VS Code server of another commit leaves the review online without language features", async (t) => {
 	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
 	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
-	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", languageServer) } }, ports, "wb-test-a", "/tmp/wb-ssh-test", "b".repeat(40));
+	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", { languageServer }) } }, ports, "wb-test-a", "/tmp/wb-ssh-test", undefined, undefined, { desktopCommit: "b".repeat(40) });
 
 	host.start();
 	await until(() => last()?.endpoint !== undefined);
@@ -141,7 +196,7 @@ test("a VS Code server of another commit leaves the review online without langua
 		languageFeaturesDetail: "language features need the same Whiteboard version on wb-test-a: it runs aaaaaaa, this Desktop bbbbbbb",
 	});
 	assert.equal(ssh.of("wb-test-a", "forward").length, 1);
-	assert.equal(await host.languageEndpoint("s1"), undefined);
+	assert.equal(await host.languageEndpoint(FAKE_SERVER_ID), undefined);
 });
 
 test("a dev Desktop, with no commit, accepts any VS Code server; a release Desktop only its own", () => {
@@ -153,7 +208,7 @@ test("a dev Desktop, with no commit, accepts any VS Code server; a release Deskt
 test("a VS Code server that does not answer through its forward is unavailable, and its forward is cancelled", async (t) => {
 	const ports = [await healthServer(t), await versionServer(t, "c".repeat(40))];
 	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
-	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", languageServer) } }, ports);
+	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", { languageServer }) } }, ports);
 
 	host.start();
 	await until(() => last()?.endpoint !== undefined);
@@ -163,14 +218,14 @@ test("a VS Code server that does not answer through its forward is unavailable, 
 	const cancels = ssh.of("wb-test-a", "cancel");
 	assert.equal(cancels.length, 1);
 	assert.ok(cancels[0].args.includes(`127.0.0.1:${ports[1]}:127.0.0.1:45678`));
-	assert.equal(await host.languageEndpoint("s1"), undefined);
+	assert.equal(await host.languageEndpoint(FAKE_SERVER_ID), undefined);
 });
 
 test("a reattach drops both old forwards", async (t) => {
 	const ports = [await healthServer(t), await versionServer(t, COMMIT), await healthServer(t), await versionServer(t, COMMIT)];
 	const { host, ssh, last } = hostFor(
 		t,
-		{ attach: (call) => ({ code: 0, stdout: attachOutput(41234 + call, `token-${call}`, { port: 45678 + call, connectionToken: `vscode-${call}`, commit: COMMIT }) }) },
+		{ attach: (call) => ({ code: 0, stdout: attachOutput(41234 + call, `token-${call}`, { languageServer: { port: 45678 + call, connectionToken: `vscode-${call}`, commit: COMMIT } }) }) },
 		ports,
 	);
 
@@ -184,13 +239,13 @@ test("a reattach drops both old forwards", async (t) => {
 		ssh.of("wb-test-a", "cancel").map((call) => call.args.find((arg) => arg.startsWith("127.0.0.1:"))),
 		[`127.0.0.1:${ports[0]}:127.0.0.1:41235`, `127.0.0.1:${ports[1]}:127.0.0.1:45679`],
 	);
-	assert.deepEqual(await host.languageEndpoint("s1"), { host: "127.0.0.1", port: ports[3], connectionToken: "vscode-2" });
+	assert.deepEqual(await host.languageEndpoint(FAKE_SERVER_ID), { host: "127.0.0.1", port: ports[3], connectionToken: "vscode-2" });
 });
 
 const PENDING_DETAIL = "Installing the language extensions on this host; they will be available on the next connection.";
 
 const pendingOutput = (port: number) =>
-	`WHITEBOARD-REMOTE-BEGIN\n${JSON.stringify({ event: "remote.attach", version: "0.1.6", commit: "abc", serverId: "s1", url: `http://127.0.0.1:${port}`, token: "remote-token", startedServer: false, languageServer: null, languageServerDetail: PENDING_DETAIL, languageServerPending: true })}\nWHITEBOARD-REMOTE-END\n`;
+	`WHITEBOARD-REMOTE-BEGIN\n${JSON.stringify({ event: "remote.attach", version: "0.1.6", commit: "abc", serverId: FAKE_SERVER_ID, url: `http://127.0.0.1:${port}`, token: "remote-token", startedServer: false, languageServer: null, languageServerDetail: PENDING_DETAIL, languageServerPending: true })}\nWHITEBOARD-REMOTE-END\n`;
 
 test("a VS Code server that stopped answering is not handed out, and the host attaches again", async (t) => {
 	const stopped: Server = createServer((request, response) => response.end(request.url === "/version" ? COMMIT : ""));
@@ -199,7 +254,7 @@ test("a VS Code server that stopped answering is not handed out, and the host at
 	const ports = [await healthServer(t), (stopped.address() as AddressInfo).port, await versionServer(t, COMMIT)];
 	const { host, ssh, last } = hostFor(
 		t,
-		{ attach: (call) => ({ code: 0, stdout: attachOutput(41234, "remote-token", { port: 45677 + call, connectionToken: `vscode-${call}`, commit: COMMIT }) }) },
+		{ attach: (call) => ({ code: 0, stdout: attachOutput(41234, "remote-token", { languageServer: { port: 45677 + call, connectionToken: `vscode-${call}`, commit: COMMIT } }) }) },
 		ports,
 	);
 
@@ -207,9 +262,9 @@ test("a VS Code server that stopped answering is not handed out, and the host at
 	await until(() => last()?.languageFeatures === true);
 	await new Promise((resolve) => stopped.close(resolve));
 
-	assert.equal(await host.languageEndpoint("s1"), undefined);
+	assert.equal(await host.languageEndpoint(FAKE_SERVER_ID), undefined);
 	await until(() => ssh.of("wb-test-a", "exec").length === 2 && ssh.of("wb-test-a", "cancel").length === 1);
-	assert.deepEqual(await host.languageEndpoint("s1"), { host: "127.0.0.1", port: ports[2], connectionToken: "vscode-2" });
+	assert.deepEqual(await host.languageEndpoint(FAKE_SERVER_ID), { host: "127.0.0.1", port: ports[2], connectionToken: "vscode-2" });
 	assert.equal(last()?.endpoint?.url, `http://127.0.0.1:${ports[0]}`);
 	assert.deepEqual(
 		ssh.of("wb-test-a", "cancel").map((call) => call.args.find((arg) => arg.startsWith("127.0.0.1:"))),
@@ -235,7 +290,7 @@ test("a reattach the gateway asks for during a pending attach runs after it, wit
 	const ports = [await healthServer(t), await versionServer(t, COMMIT), await healthServer(t), await versionServer(t, COMMIT)];
 	const { host, ssh, clock, last } = hostFor(
 		t,
-		{ attach: (call) => ({ code: 0, stdout: call === 1 ? pendingOutput(41234) : attachOutput(41234, "remote-token", { port: 45678, connectionToken: `vscode-${call}`, commit: COMMIT }) }) },
+		{ attach: (call) => ({ code: 0, stdout: call === 1 ? pendingOutput(41234) : attachOutput(41234, "remote-token", { languageServer: { port: 45678, connectionToken: `vscode-${call}`, commit: COMMIT } }) }) },
 		ports,
 	);
 
@@ -246,7 +301,7 @@ test("a reattach the gateway asks for during a pending attach runs after it, wit
 	await until(() => ssh.of("wb-test-a", "exec").length === 3 && last()?.endpoint?.url === `http://127.0.0.1:${ports[2]}`);
 
 	assert.equal(last()?.languageFeatures, true);
-	assert.deepEqual(await host.languageEndpoint("s1"), { host: "127.0.0.1", port: ports[3], connectionToken: "vscode-3" });
+	assert.deepEqual(await host.languageEndpoint(FAKE_SERVER_ID), { host: "127.0.0.1", port: ports[3], connectionToken: "vscode-3" });
 });
 
 test("a Retry after ten pending attaches attaches again on the same schedule", async (t) => {
@@ -273,7 +328,7 @@ test("a remote still installing its extensions is attached again after a minute,
 	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
 	const { host, ssh, clock, last } = hostFor(
 		t,
-		{ attach: (call) => ({ code: 0, stdout: call === 1 ? pendingOutput(41234) : attachOutput(41234, "remote-token", { port: 45678, connectionToken: "vscode-token", commit: COMMIT }) }) },
+		{ attach: (call) => ({ code: 0, stdout: call === 1 ? pendingOutput(41234) : attachOutput(41234, "remote-token", { languageServer: { port: 45678, connectionToken: "vscode-token", commit: COMMIT } }) }) },
 		ports,
 	);
 
@@ -641,7 +696,7 @@ test("a dispose while the language forward's port is chosen starts no language f
 	const asked = Promise.withResolvers<void>();
 	let calls = 0;
 	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
-	const { host, ssh, reports } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", languageServer) } }, async () => {
+	const { host, ssh, reports } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", { languageServer }) } }, async () => {
 		if (++calls === 1) return port;
 		asked.resolve();
 		return chosen.promise;
@@ -656,4 +711,546 @@ test("a dispose while the language forward's port is chosen starts no language f
 	assert.equal(ssh.of("wb-test-a", "forward").length, 1);
 	assert.equal(probes, 0);
 	assert.ok(reports.every((report) => !report.endpoint));
+});
+
+test("installs off: no probe, stage 1's attach through PATH, and not-installed with the version to install", async (t) => {
+	const { flow, prompts, runs } = await installFlow(t, "never");
+	const { host, ssh, clock, last } = hostFor(t, { attach: { code: 127 } }, 1, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.problem !== undefined);
+
+	assert.deepEqual(last(), {
+		alias: "wb-test-a",
+		problem: { state: "not-installed", detail: "Whiteboard is not installed on wb-test-a. Install Whiteboard 0.1.6 there; Node 24 is needed." },
+	});
+	assert.equal(ssh.of("wb-test-a", "probe").length, 0);
+	assert.match(ssh.of("wb-test-a", "exec")[0].input!, /command -v whiteboard/);
+	assert.deepEqual([prompts.length, runs.length, clock.pending], [0, 0, 0]);
+});
+
+test("the version present: no prompt and no install shown; the installed CLI attaches by its path, with --replace", async (t) => {
+	const port = await healthServer(t);
+	const { flow, prompts, runs } = await installFlow(t, "ask");
+	const { host, ssh, reports, last } = hostFor(t, { probe: { installed: [at("0.1.5"), at("0.1.6")] } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(prompts.length, 0);
+	assert.equal(runs.length, 1);
+	assert.ok(reports.every((report) => !report.installing));
+	assert.equal(ssh.of("wb-test-a", "probe").length, 1);
+	assert.equal(
+		ssh.of("wb-test-a", "exec")[0].input,
+		`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' remote attach --json --replace --groups go\n`,
+	);
+});
+
+test("an installed host attaches again for its pending extensions by the installed CLI, with --replace and the groups enabled then", async (t) => {
+	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
+	const { flow } = await installFlow(t, "ask");
+	let groups = ["go"];
+	const { host, ssh, clock, last } = hostFor(
+		t,
+		{
+			probe: { installed: [at("0.1.6")] },
+			attach: (call) => ({ code: 0, stdout: call === 1 ? pendingOutput(41234) : attachOutput(41234, "remote-token", { languageServer: { port: 45678, connectionToken: "vscode-token", commit: COMMIT } }) }),
+		},
+		ports,
+		"wb-test-a",
+		"/tmp/wb-ssh-test",
+		flow,
+		undefined,
+		{ groups: async () => groups },
+	);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	groups = ["go", "rust"];
+	assert.ok(clock.next());
+	await until(() => last()?.languageFeatures === true);
+
+	const installed = `exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' remote attach --json --replace`;
+	assert.deepEqual(
+		ssh.of("wb-test-a", "exec").map((call) => call.input),
+		[`${installed} --groups go\n`, `${installed} --groups go,rust\n`],
+	);
+});
+
+test("the version present with another integrity is not installed: the user is asked and the install is shown", async (t) => {
+	const port = await healthServer(t);
+	const { flow, prompts, runs } = await installFlow(t, "ask", { answers: [true], steps: STEPS });
+	const { host, reports, last } = hostFor(t, { probe: { installed: [at("0.1.5"), at("0.1.6", `sha512-${"B".repeat(86)}==`)] } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(prompts.length, 1);
+	assert.equal(runs.length, 1);
+	assert.deepEqual(reports.find((report) => report.installing)?.installing, { step: "preparing" });
+	assert.equal(await flow.consent.get("wb-test-a"), "allow");
+});
+
+test("the version absent with installs always: each step is reported, then the host attaches", async (t) => {
+	const port = await healthServer(t);
+	const { flow, prompts, runs } = await installFlow(t, "always", { steps: STEPS });
+	const { host, reports, last } = hostFor(t, {}, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(prompts.length, 0);
+	assert.equal(runs.length, 1);
+	assert.equal(runs[0].version, "0.1.6");
+	assert.equal(runs[0].target, "linux-arm64");
+	assert.deepEqual(
+		reports.filter((report) => report.installing).map((report) => report.installing),
+		[
+			{ step: "preparing" },
+			{ step: "node", detail: "uploaded from this computer" },
+			{ step: "package", detail: "downloaded on the host" },
+			{ step: "verifying" },
+			{ step: "done" },
+		],
+	);
+	assert.ok(reports.every((report) => !(report.installing && report.endpoint)));
+});
+
+test("the version absent, asked and declined: not-installed and declined, and no second prompt on reconnect", async (t) => {
+	const { flow, prompts, runs, consentFile } = await installFlow(t, "ask", { answers: [false] });
+	const { host, ssh, clock, last } = hostFor(t, { attach: { code: 127 } }, 1, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.problem !== undefined);
+
+	assert.equal(prompts.length, 1);
+	assert.match(prompts[0].text, /Whiteboard 0\.1\.6 is not installed on wb-test-a/);
+	assert.match(prompts[0].text, /Install it in ~\/\.dev\/whiteboard-remote\?/);
+	assert.doesNotMatch(prompts[0].text, /\/home\/dev/);
+	assert.match(prompts[0].text, /about 800 MB, and about 200 MB for Node 24/);
+	assert.deepEqual(last(), {
+		alias: "wb-test-a",
+		problem: { state: "not-installed", detail: "Whiteboard is not installed on wb-test-a. Install Whiteboard 0.1.6 there; Node 24 is needed." },
+		declined: true,
+	});
+	assert.equal(clock.pending, 0);
+	assert.deepEqual(JSON.parse(await readFile(consentFile, "utf8")).aliases, { "wb-test-a": "deny" });
+
+	host.retry();
+	await until(() => ssh.of("wb-test-a", "exec").length === 2 && last()?.problem !== undefined);
+	assert.equal(prompts.length, 1);
+	assert.equal(runs.length, 0);
+	assert.equal(last()?.declined, true);
+});
+
+test("a declined host with another version's CLI on PATH attaches it, and still offers the install", async (t) => {
+	const port = await healthServer(t);
+	const { flow, runs } = await installFlow(t, "ask", { answers: [false] });
+	const { host, ssh, last } = hostFor(t, {}, port, "wb-test-a", "/tmp/wb-ssh-test", flow, "0.1.7");
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(last()?.declined, true);
+	assert.equal(runs.length, 0);
+	assert.match(ssh.of("wb-test-a", "exec")[0].input!, /command -v whiteboard/);
+	assert.doesNotMatch(ssh.of("wb-test-a", "exec")[0].input!, /--replace/);
+	assert.equal(await flow.consent.get("wb-test-a"), "deny");
+});
+
+test("this version's CLI on PATH counts as installed: no prompt, no install, and it attaches through PATH with --replace", async (t) => {
+	const port = await healthServer(t);
+	const { flow, prompts, runs } = await installFlow(t, "ask");
+	const { host, ssh, last } = hostFor(t, { probe: { pathCli: { path: "/usr/local/bin/whiteboard", version: "0.1.6" } } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.deepEqual([prompts.length, runs.length], [0, 0]);
+	assert.equal(last()?.declined, undefined);
+	assert.match(ssh.of("wb-test-a", "exec")[0].input!, /command -v whiteboard[\s\S]*remote attach --json --replace/);
+});
+
+test("another version's CLI on PATH does not count: the user is asked", async (t) => {
+	const port = await healthServer(t);
+	const { flow, prompts } = await installFlow(t, "ask", { answers: [false] });
+	const { host, last } = hostFor(t, { probe: { pathCli: { path: "/usr/local/bin/whiteboard", version: "0.1.5" } } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(prompts.length, 1);
+	assert.equal(await flow.consent.get("wb-test-a"), "deny");
+});
+
+test("an open install question is reported until it is answered", async (t) => {
+	const { flow } = await installFlow(t, "ask");
+	const answer = Promise.withResolvers<boolean>();
+	flow.confirm = () => answer.promise;
+	const { host, reports, last } = hostFor(t, { attach: { code: 127 } }, 1, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.asking !== undefined);
+	assert.deepEqual(last(), { alias: "wb-test-a", asking: "0.1.6" });
+
+	answer.resolve(false);
+	await until(() => last()?.problem !== undefined);
+	assert.deepEqual(reports.at(-2), { alias: "wb-test-a" });
+});
+
+test("a quiesce closes an open install question, and one it lands before", async (t) => {
+	const { flow } = await installFlow(t, "ask");
+	const answer = Promise.withResolvers<boolean | undefined>();
+	flow.confirm = () => answer.promise;
+	const { host, last } = hostFor(t, { attach: { code: 127 } }, 1, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.asking !== undefined);
+	host.quiesce();
+	answer.resolve(undefined);
+	await new Promise((resolve) => setTimeout(resolve, 20));
+
+	assert.deepEqual(last(), { alias: "wb-test-a" });
+
+	const reading = await installFlow(t, "ask");
+	const read = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	const get = reading.flow.consent.get.bind(reading.flow.consent);
+	reading.flow.consent.get = async (alias) => {
+		read.resolve();
+		await release.promise;
+		return get(alias);
+	};
+	const other = hostFor(t, { attach: { code: 127 } }, 1, "wb-test-a", "/tmp/wb-ssh-test", reading.flow);
+
+	other.host.start();
+	await read.promise;
+	other.host.quiesce();
+	release.resolve();
+	await new Promise((resolve) => setTimeout(resolve, 20));
+
+	assert.equal(reading.prompts.length, 0);
+	assert.equal(other.last()?.asking, undefined);
+});
+
+test("a prompt nobody answered is not remembered, offers Install, and the next connect asks again", async (t) => {
+	const { flow, prompts, consentFile } = await installFlow(t, "ask", { answers: [undefined, undefined] });
+	const { host, ssh, last } = hostFor(t, { attach: { code: 127 } }, 1, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.problem !== undefined);
+	assert.equal(last()?.problem?.state, "not-installed");
+	assert.equal(last()?.declined, true);
+	await assert.rejects(readFile(consentFile), { code: "ENOENT" });
+	host.retry();
+	await until(() => ssh.of("wb-test-a", "exec").length === 2 && last()?.problem !== undefined);
+
+	assert.equal(prompts.length, 2);
+});
+
+test("a host the user agreed to is remembered by its server id, so a Desktop update installs without asking", async (t) => {
+	const port = await healthServer(t);
+	const first = await installFlow(t, "ask", { answers: [true], steps: STEPS });
+	const one = hostFor(t, {}, port, "wb-test-a", "/tmp/wb-ssh-test", first.flow);
+
+	one.host.start();
+	await until(() => one.last()?.endpoint !== undefined);
+	await one.host.dispose();
+	assert.equal(await first.flow.consent.get("wb-test-a"), "allow");
+	assert.equal(first.prompts.length, 1);
+	assert.deepEqual(JSON.parse(await readFile(first.consentFile, "utf8")), { servers: { [FAKE_SERVER_ID]: { consent: "allow", alias: "wb-test-a" } }, aliases: {} });
+
+	const second = await installFlow(t, "ask", { steps: STEPS, consentFile: first.consentFile });
+	const two = hostFor(t, { probe: { installed: [at("0.1.6")] } }, port, "wb-test-a", "/tmp/wb-ssh-test", second.flow, "0.1.7");
+
+	two.host.start();
+	await until(() => two.last()?.endpoint !== undefined);
+	assert.equal(second.prompts.length, 0);
+	assert.equal(second.runs[0].version, "0.1.7");
+	assert.equal(await second.flow.consent.get("wb-test-a"), "allow");
+});
+
+test("an unsupported host is reported with the reason, and nothing is installed or attached", async (t) => {
+	const { flow, prompts, runs } = await installFlow(t, "always");
+	const { host, ssh, clock, last } = hostFor(t, { probe: { glibc: "2.31" } }, 1, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.problem !== undefined);
+
+	assert.deepEqual(last()?.problem, { state: "unsupported", detail: "This host runs glibc 2.31; Whiteboard needs 2.34 or newer." });
+	assert.deepEqual([prompts.length, runs.length, ssh.of("wb-test-a", "exec").length, clock.pending], [0, 0, 0, 0]);
+});
+
+test("a server of another version the CLI started is replaced, and the host comes online", async (t) => {
+	const port = await healthServer(t);
+	const { flow } = await installFlow(t, "always");
+	const { host, last } = hostFor(
+		t,
+		{ attach: { code: 0, stdout: attachOutput(41234, "new-token", { replaced: true, previousVersion: "0.1.5", startedServer: true }) } },
+		port,
+		"wb-test-a",
+		"/tmp/wb-ssh-test",
+		flow,
+	);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(last()?.endpoint?.token, "new-token");
+});
+
+test("a server of another version a user started is left, and the host is incompatible until a retry", async (t) => {
+	const port = await healthServer(t);
+	const { flow } = await installFlow(t, "always");
+	const { host, ssh, clock, last } = hostFor(
+		t,
+		{
+			attach: (call) => ({
+				code: 0,
+				stdout: attachOutput(41234, "old-token", call === 1 ? { version: "0.1.5", startedServer: false, incompatibleRunning: { version: "0.1.5", pid: 4242, startedBy: "user" } } : {}),
+			}),
+		},
+		port,
+		"wb-test-a",
+		"/tmp/wb-ssh-test",
+		flow,
+	);
+
+	host.start();
+	await until(() => last()?.problem !== undefined);
+
+	assert.deepEqual(last(), {
+		alias: "wb-test-a",
+		problem: {
+			state: "incompatible",
+			detail: "A Whiteboard server 0.1.5 started by a user is running on wb-test-a; stop it to use this Desktop's version.",
+		},
+	});
+	assert.equal(clock.pending, 0);
+	assert.equal(ssh.of("wb-test-a", "exec").length, 1);
+	host.retry();
+	await until(() => last()?.endpoint !== undefined);
+	assert.equal(ssh.of("wb-test-a", "exec").length, 2);
+});
+
+test("a failed install names the step and the reason, is not retried alone, and Retry installs again", async (t) => {
+	const port = await healthServer(t);
+	const reason = "Installing on wb-test-a failed while installing the package: exit 1: \x1b[31mnpm ERR!\x1b[0m 404\r.";
+	const { flow, runs } = await installFlow(t, "always", {
+		steps: [{ step: "package", via: "upload" }],
+		fails: (call) => (call === 1 ? new Error(reason) : undefined),
+	});
+	const { host, clock, last } = hostFor(t, {}, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.problem !== undefined);
+
+	assert.deepEqual(last()?.problem, {
+		state: "not-installed",
+		detail: "Installing Whiteboard 0.1.6 on wb-test-a failed while installing the package: exit 1: npm ERR! 404 .",
+	});
+	assert.equal(clock.pending, 0);
+	host.retry();
+	await until(() => last()?.endpoint !== undefined);
+	assert.equal(runs.length, 2);
+});
+
+test("an install whose connection dropped is unreachable, and is tried again after the backoff", async (t) => {
+	const { flow } = await installFlow(t, "always", {
+		steps: [{ step: "node", via: "remote-download" }],
+		fails: () => new Error("Installing on wb-test-a failed while unpacking Node: exit 255: Connection to 127.0.0.1 closed by remote host."),
+	});
+	const { host, clock, last } = hostFor(t, {}, 1, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.problem !== undefined);
+
+	assert.deepEqual(last()?.problem, {
+		state: "unreachable",
+		detail: "The connection to wb-test-a dropped while installing Whiteboard 0.1.6 (installing Node).",
+	});
+	assert.equal(clock.pending, 1);
+});
+
+test("a retry during an install aborts it", async (t) => {
+	const port = await healthServer(t);
+	const signals: AbortSignal[] = [];
+	const { flow } = await installFlow(t, "always");
+	const run = flow.run;
+	flow.run = async (input) => {
+		signals.push(input.signal);
+		if (signals.length === 1) await new Promise((resolve) => input.signal.addEventListener("abort", resolve));
+		input.signal.throwIfAborted();
+		return run(input);
+	};
+	const { host, last } = hostFor(t, {}, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => signals.length === 1);
+	host.retry();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(signals[0].aborted, true);
+	assert.equal(signals.length, 2);
+});
+
+test("a failed upgrade attaches the older version, which reports why, and Retry installs again", async (t) => {
+	const port = await healthServer(t);
+	const { flow, runs } = await installFlow(t, "always", {
+		steps: [{ step: "verifying" }],
+		fails: (call) => (call === 1 ? new Error("The package installed on wb-test-a reports version 0.1.5, not 0.1.6.") : undefined),
+	});
+	const { host, ssh, clock, last } = hostFor(t, { probe: { installed: [at("0.1.5")] } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.deepEqual(last(), {
+		alias: "wb-test-a",
+		endpoint: { url: `http://127.0.0.1:${port}`, token: "remote-token" },
+		...NO_SERVER,
+		installFailure: "Installing Whiteboard 0.1.6 on wb-test-a failed while checking the install: The package installed on wb-test-a reports version 0.1.5, not 0.1.6.",
+	});
+	assert.match(ssh.of("wb-test-a", "exec")[0].input!, /command -v whiteboard/);
+	assert.equal(clock.pending, 0);
+	host.retry();
+	await until(() => last()?.endpoint !== undefined && !last()?.installFailure);
+	assert.equal(runs.length, 2);
+	assert.match(ssh.of("wb-test-a", "exec")[1].input!, /--replace/);
+});
+
+test("a newer server another Desktop started is left, and this Desktop is told to update", async (t) => {
+	const { flow } = await installFlow(t, "always");
+	const { host, clock, last } = hostFor(
+		t,
+		{ attach: { code: 0, stdout: attachOutput(41234, "t", { version: "0.1.7", startedServer: false, incompatibleRunning: { version: "0.1.7", pid: 77, startedBy: "desktop" } }) } },
+		1,
+		"wb-test-a",
+		"/tmp/wb-ssh-test",
+		flow,
+	);
+
+	host.start();
+	await until(() => last()?.problem !== undefined);
+
+	assert.deepEqual(last()?.problem, {
+		state: "incompatible",
+		detail: "A newer Whiteboard 0.1.7 is running on wb-test-a, started by another Desktop; update this Desktop to use it.",
+	});
+	assert.equal(clock.pending, 0);
+});
+
+test("a server id that is not a UUID is not used for the install consent", async (t) => {
+	const port = await healthServer(t);
+	const { flow, consentFile } = await installFlow(t, "ask", { answers: [true] });
+	const { host, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "t", { serverId: "__proto__" }) } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.equal(await flow.consent.get("wb-test-a"), "allow");
+	assert.deepEqual(JSON.parse(await readFile(consentFile, "utf8")), { servers: {}, aliases: { "wb-test-a": "allow" } });
+});
+
+test("a newer server the CLI started says so", async (t) => {
+	const { flow } = await installFlow(t, "always");
+	const { host, last } = hostFor(
+		t,
+		{ attach: { code: 0, stdout: attachOutput(41234, "t", { version: "0.1.7", incompatibleRunning: { version: "0.1.7", pid: 77, startedBy: "cli" } }) } },
+		1,
+		"wb-test-a",
+		"/tmp/wb-ssh-test",
+		flow,
+	);
+
+	host.start();
+	await until(() => last()?.problem !== undefined);
+
+	assert.equal(last()?.problem?.detail, "A newer Whiteboard 0.1.7 is running on wb-test-a, started by the CLI; update this Desktop to use it.");
+});
+
+test("agents are detected once after the first attach, with the installed CLI, and kept", async (t) => {
+	const port = await healthServer(t);
+	const { flow } = await installFlow(t, "always");
+	const attached = new Set<string>();
+	const firstAttach = (key: string) => !attached.has(key) && !!attached.add(key);
+	const remote: FakeRemote = { detect: { code: 0, stdout: `noise\n${detectOutput([{ id: "pi", name: "Pi", connected: false }])}` } };
+	const { host, ssh, last } = hostFor(t, remote, port, "wb-test-a", "/tmp/wb-ssh-test", flow, "0.1.6", { firstAttach });
+
+	host.start();
+	await until(() => ssh.of("wb-test-a", "detect").length === 1);
+
+	assert.ok(last()?.endpoint, "online before agents are read");
+	const [detect] = ssh.of("wb-test-a", "detect");
+	assert.match(detect.input!, new RegExp(`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' 'connect' '--detect' '--json'\n$`));
+	assert.deepEqual(await host.detectAgents(), [{ id: "pi", connected: false }]);
+	assert.equal(ssh.of("wb-test-a", "detect").length, 1, "the kept answer");
+	assert.equal(ssh.of("wb-test-a", "connect").length, 0, "nothing changed on the host");
+	assert.deepEqual([...attached], [FAKE_SERVER_ID]);
+
+	host.retry();
+	await until(() => ssh.of("wb-test-a", "exec").length === 2);
+	await until(() => last()?.endpoint !== undefined);
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	assert.equal(ssh.of("wb-test-a", "detect").length, 1);
+});
+
+test("a hand-installed host detects with the CLI on its PATH", async (t) => {
+	const port = await healthServer(t);
+	const { host, ssh, last } = hostFor(t, {}, port, "wb-test-a", "/tmp/wb-ssh-test", undefined, "0.1.6", { firstAttach: () => true });
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined && ssh.of("wb-test-a", "detect").length === 1);
+
+	assert.match(ssh.of("wb-test-a", "detect")[0].input!, /exec "\$wb" 'connect' '--detect' '--json'\n$/);
+	assert.deepEqual(await host.detectAgents(), []);
+});
+
+test("connecting runs the agents' commands with the installed CLI, and refuses agents it did not find or cannot connect alone", async (t) => {
+	const port = await healthServer(t);
+	const { flow } = await installFlow(t, "always");
+	const remote: FakeRemote = {
+		detect: {
+			code: 0,
+			stdout: detectOutput([
+				{ id: "pi", connected: false },
+				{ id: "codex", connected: false, manual: true },
+			]),
+		},
+	};
+	const { host, ssh, last } = hostFor(t, remote, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	for (const ids of [["cursor"], ["codex"], ["claude"], ["__proto__"], ["pi", "x".repeat(10)]]) {
+		await assert.rejects(host.connectAgents(ids), /Whiteboard cannot connect .* on wb-test-a/);
+	}
+	assert.equal(ssh.of("wb-test-a", "connect").length, 0);
+
+	assert.deepEqual(await host.connectAgents(["pi", "pi"]), [{ id: "pi", connected: true, output: "" }]);
+	const [connect] = ssh.of("wb-test-a", "connect");
+	assert.match(connect.input!, new RegExp(`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' 'connect' '--yes' '--json' 'pi'\n$`));
+	assert.deepEqual(await host.detectAgents(), [
+		{ id: "codex", connected: false, manual: true },
+		{ id: "pi", connected: true },
+	]);
+});
+
+test("a connect that prints no result fails with ssh's words, as plain text", async (t) => {
+	const port = await healthServer(t);
+	const remote: FakeRemote = {
+		detect: { code: 0, stdout: detectOutput([{ id: "pi", connected: false }]) },
+		connect: { code: 1, stderr: "\u001b[31mboom\u001b[0m\r\nmore\n" },
+	};
+	const { host, last } = hostFor(t, remote, port, "wb-test-a", "/tmp/wb-ssh-test", undefined, "0.1.6", { firstAttach: () => true });
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+
+	await assert.rejects(host.connectAgents(["pi"]), (error: Error) => {
+		assert.equal(error.message, "Connecting agents on wb-test-a failed: boom more");
+		return true;
+	});
 });

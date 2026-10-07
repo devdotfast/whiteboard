@@ -1,6 +1,7 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import {
+  REVIEW_CLI_INSTALL_TARGET_LABELS,
   type ReviewCanvasInstallContent,
   type ReviewCliInstallStatus,
   type ReviewCliInstallTarget,
@@ -18,16 +19,6 @@ import { newTabLinkProps } from "./link-props";
 import { OptionMenu } from "./option-menu";
 import { promptStyles } from "./prompt-styles";
 import { tokens } from "./tokens.stylex";
-
-export const TARGET_LABELS: Record<ReviewCliInstallTarget, string> = {
-  claude: "Claude Code",
-  codex: "Codex",
-  cursor: "Cursor",
-  opencode: "OpenCode",
-  pi: "Pi",
-  omp: "oh-my-pi",
-  copilot: "Copilot CLI",
-};
 
 /** The rest share the Other menu. */
 const TAB_TARGETS = ["claude", "codex", "cursor", "opencode"] as const;
@@ -100,7 +91,7 @@ export function ConnectCard({
     setExpanded(false);
   };
 
-  const agent = TARGET_LABELS[target];
+  const agent = REVIEW_CLI_INSTALL_TARGET_LABELS[target];
 
   const plugin = status.connect.plugins[target];
 
@@ -166,7 +157,7 @@ export function ConnectCard({
               onClick={() => selectTarget(tab)}
             >
               <Logo xstyle={styles.logo} />
-              {TARGET_LABELS[tab]}
+              {REVIEW_CLI_INSTALL_TARGET_LABELS[tab]}
             </button>
           );
         })}
@@ -296,7 +287,7 @@ function OtherAgentMenu({
 
         return {
           value: other,
-          label: TARGET_LABELS[other],
+          label: REVIEW_CLI_INSTALL_TARGET_LABELS[other],
           icon: <OptionLogo />,
         };
       })}
@@ -310,7 +301,7 @@ function OtherAgentMenu({
       triggerProps={{ "aria-pressed": selected !== undefined }}
     >
       {Logo ? <Logo xstyle={styles.logo} /> : null}
-      {selected ? TARGET_LABELS[selected] : "Other…"}
+      {selected ? REVIEW_CLI_INSTALL_TARGET_LABELS[selected] : "Other…"}
     </OptionMenu>
   );
 }

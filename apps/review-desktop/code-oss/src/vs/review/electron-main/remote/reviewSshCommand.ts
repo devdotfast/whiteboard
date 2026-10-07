@@ -89,8 +89,8 @@ export function sshMasterArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv 
 	];
 }
 
-export function sshExecArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = process.env): string[] {
-	return [...base(session, env), "-oControlMaster=no", "-T", "--", session.alias, "sh", "-s"];
+export function sshExecArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = process.env, command: readonly string[] = ["sh", "-s"]): string[] {
+	return [...base(session, env), "-oControlMaster=no", "-T", "--", session.alias, ...command];
 }
 
 function localForward(localPort: number, remotePort: number): string {
@@ -116,6 +116,16 @@ export function sshCancelForwardArgs(
 	env: NodeJS.ProcessEnv = process.env,
 ): string[] {
 	return [...base(session, env), "-O", "cancel", "-L", localForward(localPort, remotePort), "--", session.alias];
+}
+
+export function sshRemoteForwardArgs(
+	session: ReviewSshSession,
+	localPort: number,
+	operation: "forward" | "cancel",
+	env: NodeJS.ProcessEnv = process.env,
+): string[] {
+	if (!Number.isInteger(localPort) || localPort < 1 || localPort > 65535) throw new Error(`Invalid port ${localPort}.`);
+	return [...base(session, env), "-O", operation, "-R", `127.0.0.1:0:127.0.0.1:${localPort}`, "--", session.alias];
 }
 
 export function sshCheckArgs(session: ReviewSshSession, env: NodeJS.ProcessEnv = process.env): string[] {

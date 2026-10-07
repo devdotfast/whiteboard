@@ -6,6 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
+  REVIEW_REMOTE_WRAPPER_MARK,
   type ReviewCliInstallStamp,
   ReviewCliInstallStampSchema,
   type ReviewCliInstallStatus,
@@ -58,7 +59,8 @@ function hasManagedShimMarker(source: string): boolean {
   return (
     source.includes(SHIM_MARKER) ||
     source.includes("Managed by Review Desktop") ||
-    source.includes("Managed by Whiteboard Desktop")
+    source.includes("Managed by Whiteboard Desktop") ||
+    source.includes(REVIEW_REMOTE_WRAPPER_MARK)
   );
 }
 

@@ -29,6 +29,7 @@ import {
   useState,
 } from "react";
 
+import { CopyableText } from "./copy-text";
 import { homeStyles } from "./home-styles";
 import { CanvasUiContext, useCanvasMenu } from "./host/canvas-ui";
 import { OptionMenu } from "./option-menu";
@@ -281,7 +282,11 @@ export function ReviewHome({
             </div>
           </div>
           {deleteError ? <p role="alert">{deleteError}</p> : null}
-          {hostMessage ? <p role="alert">{hostMessage}</p> : null}
+          {hostMessage ? (
+            <p role="alert">
+              <CopyableText text={hostMessage} />
+            </p>
+          ) : null}
           {/* Keyed off the active list, not the whole result: a query that hits
               only dismissed reviews empties the main area, and the collapsed
               Dismissed count alone does not explain why. */}
