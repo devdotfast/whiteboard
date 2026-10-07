@@ -1269,6 +1269,27 @@ body
   background: color-mix(in srgb, var(--vscode-editor-foreground) 4%, transparent);
 }
 
+/* Bands read as `⋯ N lines` in faint text, with a dotted rule to the edge. */
+.review-workbench .review-files-editor .monaco-editor .diff-hidden-lines:not(.kind-inserted):not(.kind-removed) .center {
+  background: transparent;
+  box-shadow: none;
+}
+.review-workbench .review-files-editor .monaco-editor .diff-hidden-lines .diff-hidden-lines-label {
+  flex: 1;
+  justify-content: flex-start !important;
+  color: var(--vscode-descriptionForeground);
+  opacity: .75;
+}
+.review-workbench .review-files-editor .monaco-editor .diff-hidden-lines .diff-hidden-lines-label::before {
+  content: "\22EF\00a0";
+}
+.review-workbench .review-files-editor .monaco-editor .diff-hidden-lines .diff-hidden-lines-label::after {
+  content: "";
+  flex: 1;
+  margin: 0 16px 0 12px;
+  border-top: 1px dotted var(--vscode-editorIndentGuide-activeBackground1);
+}
+
 /* The unfold glyph sits where the fold glyph will appear once the region is
    open: in the glyph margin lane (an 18px square, the editor's line height)
    at the top-left of the row, not centered under the line numbers and the

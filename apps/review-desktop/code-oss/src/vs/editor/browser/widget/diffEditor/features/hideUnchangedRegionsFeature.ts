@@ -16,6 +16,7 @@ import { IInstantiationService } from '../../../../../platform/instantiation/com
 import { IThemeService } from '../../../../../platform/theme/common/themeService.js';
 import { diffUnchangedRegionForeground } from '../../../../../platform/theme/common/colors/editorColors.js';
 import { EditorOption } from '../../../../common/config/editorOptions.js';
+import { CursorColumns } from '../../../../common/core/cursorColumns.js';
 import { LineRange } from '../../../../common/core/ranges/lineRange.js';
 import { Position } from '../../../../common/core/position.js';
 import { Range } from '../../../../common/core/range.js';
@@ -335,7 +336,7 @@ class CollapsedCodeOverlayWidget extends ViewZoneOverlayWidget {
 				[$('a', { title: showTitle(this._unchangedRegion.change), role: 'button', onclick: () => { this._unchangedRegion.showAll(undefined); } },
 					...renderLabelWithIcons('$(unfold)'))]
 			),
-			h('div@others', { style: { display: 'flex', justifyContent: 'center', alignItems: 'center' } }),
+			h('div.diff-hidden-lines-label@others', { style: { display: 'flex', justifyContent: 'center', alignItems: 'center' } }),
 		]),
 		h('div.detail@detail', []),
 		h('div.bottom@bottom', { title: localize('diff.bottom', 'Click or drag to show more below'), role: 'button' }),
@@ -482,6 +483,9 @@ class CollapsedCodeOverlayWidget extends ViewZoneOverlayWidget {
 			const contentLeft = observableCodeEditor(this._editor).layoutInfoContentLeft.read(reader);
 			this._nodes.root.style.setProperty('--diff-fold-content-left', `${contentLeft}px`);
 			const lineCount = Math.max(_unchangedRegion.getHiddenModifiedRange(reader).length, _unchangedRegion.getHiddenOriginalRange(reader).length);
+			// Indent the band to the code it hides.
+			const indent = this._hiddenCodeIndent() * this._editor.getOption(EditorOption.fontInfo).spaceWidth;
+			this._nodes.others.style.paddingLeft = `${indent}px`;
 			if (detailText && !this._hide) {
 				const theme = this._themeService.getColorTheme();
 				const language = this._editor.getModel()?.getLanguageId() ?? 'plaintext';
@@ -489,14 +493,12 @@ class CollapsedCodeOverlayWidget extends ViewZoneOverlayWidget {
 				const commentColor = commentStyle?.foreground !== undefined ? theme.tokenColorMap[commentStyle.foreground] : undefined;
 				const color = commentColor ?? theme.getColor(diffUnchangedRegionForeground)?.toString() ?? '';
 				const fontSize = Math.max(11, this._editor.getOption(EditorOption.fontSize) - 1);
-				// One indent level under the header line, in the editor's own space width.
-				const indent = contentLeft + this._editor.getOption(EditorOption.fontInfo).spaceWidth * 4;
 				const pre = $('pre.diff-hidden-lines-detail', undefined, detailText);
 				pre.style.color = color;
 				pre.style.borderLeftColor = color;
 				pre.style.fontSize = `${fontSize}px`;
 				pre.style.lineHeight = `${this._editor.getOption(EditorOption.lineHeight)}px`;
-				pre.style.marginLeft = `${indent}px`;
+				pre.style.marginLeft = `${contentLeft + indent}px`;
 				reset(this._nodes.detail, pre);
 			} else {
 				reset(this._nodes.detail);
@@ -543,6 +545,20 @@ class CollapsedCodeOverlayWidget extends ViewZoneOverlayWidget {
 
 			reset(this._nodes.others, ...children);
 		}));
+	}
+
+	/** The indent, in visible columns, of the first non-blank line this band hides. */
+	private _hiddenCodeIndent(): number {
+		const model = this._editor.getModel();
+		if (!model) { return 0; }
+		const tabSize = model.getOptions().tabSize;
+		for (let line = this._unchangedRegionRange.startLineNumber; line < this._unchangedRegionRange.endLineNumberExclusive && line <= model.getLineCount(); line++) {
+			const column = model.getLineFirstNonWhitespaceColumn(line);
+			if (column > 0) {
+				return CursorColumns.visibleColumnFromColumn(model.getLineContent(line), column, tabSize);
+			}
+		}
+		return 0;
 	}
 }
 

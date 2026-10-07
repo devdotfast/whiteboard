@@ -165,12 +165,13 @@ export class StructuralDiffProvider implements IDocumentDiffProvider {
 			quitEarly: false,
 			sourceLineAlignment: rows,
 			contextScopes: structuralContextScopes(diff),
-			// Every collapsed region is a hidden-region band, labelled by the wire.
+			// Every collapsed region is a hidden-region band, labelled by the wire. A band's depth shows
+			// where it sits, so it names no symbols.
 			contextGaps: structuralContextGaps(
 				diff,
 				(id) => this.session.isRegionCollapsed(path!, id) === true,
 				(id) => this.session.isRegionCollapsed(path!, id),
-			),
+			).map(gap => ({ ...gap, breadcrumbs: false })),
 			changeHighlights: highlights,
 		};
 	}
