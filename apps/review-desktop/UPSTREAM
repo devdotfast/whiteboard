@@ -364,6 +364,16 @@ one of these entries:
   fatal either: it ends that connection only. Isolation is unconditional, so a
   remote Source window gets no upstream reload dialog; it reconnects through
   the fork's resolver and shows its host state in the status bar.
+- `src/vs/workbench/electron-browser/desktop.main.ts`: `createWorkspaceService`
+  is protected, not private, so the navigator entry's `DesktopMain` subclass
+  wraps a Source window's configuration service
+  (`review/services/configuration/reviewSourceWindowConfiguration.ts`): no
+  extension default, workspace file, folder or host machine setting can lower
+  its read-only rule, and the fork sets its title.
+- `src/vs/platform/window/common/window.ts` and
+  `src/vs/platform/native/electron-main/nativeHostMainService.ts`: the
+  `openWindow` options `reviewReferencesToShow` and `reviewSourceTitle` run a
+  navigator command in the opened window (Find References, the title's review and side).
 - `extensions/package.json` and the extension `package.json`/`package-lock.json`
   files: `@vscode/extension-telemetry` is hoisted to the shared extensions
   install (github keeps its own ^1.0.0 copy; the shared copy is ^0.9.8). The
