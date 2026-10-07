@@ -47,19 +47,6 @@ export const canvasQueryKeys = {
   askThread: (threadId: string) => ["ask-thread", threadId] as const,
   diffFiles: (documentKey: string, source: number, revision?: string) =>
     ["diff-files", documentKey, source, revision] as const,
-  reviewStack: (
-    version: number | undefined,
-    pullRequestNumber: number | null,
-    pullRequestUrl: string | null,
-    branch: string | null,
-  ) =>
-    [
-      "review-stack",
-      version,
-      pullRequestNumber,
-      pullRequestUrl,
-      branch,
-    ] as const,
   lensProgress: (version: number) => ["lens-progress", version] as const,
   allLensProgress: () => ["lens-progress"] as const,
 };

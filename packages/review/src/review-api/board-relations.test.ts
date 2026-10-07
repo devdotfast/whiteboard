@@ -161,6 +161,27 @@ it("keeps siblings in their order when one is edited, newest made first, then by
   ]);
 });
 
+it("counts a board's place among the siblings the sidebar lists, not ones in Trash", async () => {
+  const plan = await board("Plan");
+  const first = await board("First");
+  const trashed = await board("Trashed");
+  const last = await board("Last");
+
+  for (const child of [first, trashed, last]) await setParent(child, plan);
+  await store.execute({
+    operation: { type: "lifecycle", reviewId: trashed, state: "trash" },
+  });
+
+  expect(store.place(first).siblings.map(({ title }) => title)).toEqual([
+    "Last",
+    "First",
+  ]);
+  // The board in Trash still knows where it is.
+  expect(
+    store.place(trashed).siblings.map(({ reviewId }) => reviewId),
+  ).toContain(trashed);
+});
+
 it("orders a PR stack by its commits unless a dependency says otherwise", async () => {
   const stack = await board("Stack");
 
@@ -502,4 +523,29 @@ it("keeps a checkout registered when a board made with it is still being saved",
   expect(store.repositoryPath(repositoryId)).toBe(
     path.join(directory, "racing"),
   );
+});
+
+it("leaves a board in Trash out of its parent's children and others' dependencies until it is restored", async () => {
+  const plan = await board("Plan");
+  const step = await board("Step");
+  const after = await board("After");
+
+  await setParent(step, plan);
+  await setDependencies(after, [step]);
+
+  const lifecycle = (state: "trash" | "active") =>
+    store.execute({ operation: { type: "lifecycle", state, reviewId: step } });
+
+  await lifecycle("trash");
+  expect(store.relations(plan).children).toEqual([]);
+  expect(store.relations(after).dependsOn).toEqual([]);
+  expect(
+    store.list().find((summary) => summary.reviewId === plan)?.children ?? [],
+  ).toEqual([]);
+  // Its own place still knows where it was.
+  expect(store.place(step).parent?.reviewId).toBe(plan);
+
+  await lifecycle("active");
+  expect(store.relations(plan).children).toEqual([step]);
+  expect(store.relations(after).dependsOn).toEqual([step]);
 });

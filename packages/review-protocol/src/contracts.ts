@@ -1329,12 +1329,17 @@ export const ReviewStackLayerSchema = z.strictObject({
   reviewUuid: z.uuid({ error: "must be a UUID" }).nullable(),
   reviewTitle: stringAllowEmpty.nullable(),
   relation: z.enum(["earlier", "current", "later"]),
+  /** The layer's PR state, as last read from GitHub. */
+  pullRequestState: z.enum(PULL_REQUEST_STATES).optional(),
 });
 
 export type ReviewStackLayer = z.infer<typeof ReviewStackLayerSchema>;
 
 export const ReviewStackResponseSchema = z.strictObject({
+  /** Bottom first. */
   layers: z.array(ReviewStackLayerSchema),
+  /** The branch the stack sits on, as `main`. */
+  base: requiredString.optional(),
 });
 
 export type ReviewStackResponse = z.infer<typeof ReviewStackResponseSchema>;
@@ -1342,13 +1347,24 @@ export type ReviewStackResponse = z.infer<typeof ReviewStackResponseSchema>;
 const ReviewPlaceBoardSchema = z.strictObject({
   reviewId: requiredString,
   title: stringAllowEmpty,
+  icon: z.enum(["board", "code"]),
 });
 
-/** Where a board sits: its parent and the parent's children in order. */
+/** Where a board sits, for its header: its parent and the parent's
+ * children in order, and its PR's facts the summary lacks. */
 export const ReviewBoardPlaceSchema = z.strictObject({
+  /** The board's PR state and branches, as last read from GitHub. */
+  pullRequestState: z.enum(PULL_REQUEST_STATES).optional(),
+  baseBranch: requiredString.optional(),
+  headBranch: requiredString.optional(),
   parent: ReviewPlaceBoardSchema.optional(),
   /** Empty for a top-level board. */
-  siblings: z.array(ReviewPlaceBoardSchema),
+  siblings: z.array(
+    ReviewPlaceBoardSchema.extend({
+      pullRequestNumber: positiveInteger.optional(),
+      pullRequestState: z.enum(PULL_REQUEST_STATES).optional(),
+    }),
+  ),
 });
 
 export type ReviewBoardPlace = z.infer<typeof ReviewBoardPlaceSchema>;

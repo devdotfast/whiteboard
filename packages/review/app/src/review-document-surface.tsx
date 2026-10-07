@@ -31,7 +31,7 @@ const styles = stylex.create({
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.title },
     fontWeight: { default: null, [inDocument()]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument()]: "38px" },
+    lineHeight: { default: null, [inDocument()]: "36px" },
     letterSpacing: { default: null, [inDocument()]: tracking.tight },
     textAlign: { default: null, [inDocument()]: "left" },
   },

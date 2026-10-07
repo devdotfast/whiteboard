@@ -1,12 +1,14 @@
 import type { LoadedAgentTrace } from "@canvas/use-agent-trace";
 import type {
   ReviewApiSummary,
+  ReviewBoardPlace,
   ReviewRemoteHostActions,
-  ReviewStackLayer,
+  ReviewStackResponse,
 } from "@dev.fast/review-protocol";
 
 export interface ReviewSessionData {
   trashedAt?: string | null;
+  reviewId: string;
   host?: string;
   hostState?: ReviewApiSummary["hostState"];
   hosts?: ReviewRemoteHostActions;
@@ -20,11 +22,20 @@ export interface ReviewSessionData {
   updatedAtMs: number;
   /** Head branch captured with the displayed snapshot. */
   headBranch?: string;
+  /** The target's base and head as written, a branch name or a commit. */
+  baseRef?: string;
+  headRef?: string;
   pullRequestNumber?: number;
   pullRequestUrl?: string;
   traces: ReadonlyMap<string, LoadedAgentTrace>;
-  stack(signal: AbortSignal): Promise<ReviewStackLayer[]>;
-  /** Creates an empty review of `branch` against `base` and returns its id. */
+  /** Its parent, siblings and PR facts, read for its header. */
+  place(): Promise<ReviewBoardPlace>;
+  /** Changes whenever `place` would read something new. */
+  placeRevision?: number;
+  /** Its branch stack, apart from its place among boards. */
+  stack(): Promise<ReviewStackResponse>;
+  /** Creates an empty review of `branch` against `base` and returns its id:
+   * a branch in the board's stack that has no whiteboard yet. */
   createBranchReview(
     branch: string,
     base: string,
