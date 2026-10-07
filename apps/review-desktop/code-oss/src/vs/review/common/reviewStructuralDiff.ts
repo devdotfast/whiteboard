@@ -401,9 +401,17 @@ export function structuralContextGaps(
 		gap.change = removed && added ? "modified" : removed ? "removed" : added ? "inserted" : "unchanged";
 	}
 	gaps.sort((a, b) => (a.modifiedStart - b.modifiedStart) || (a.originalStart - b.originalStart));
-	for (const gap of gaps) if (!gap.label) {
+	// A rewritten body can fold on each side under its own fold state, over the same rows.
+	// Show one fold: drop a one-sided fold that another fold hides fully. Of two equal folds, keep the first.
+	const within = (inner: StructuralGap, outer: StructuralGap) =>
+		inner.originalStart >= outer.originalStart && inner.originalStart + inner.originalCount <= outer.originalStart + outer.originalCount &&
+		inner.modifiedStart >= outer.modifiedStart && inner.modifiedStart + inner.modifiedCount <= outer.modifiedStart + outer.modifiedCount;
+	const redundant = (gap: StructuralGap, index: number) => gaps.some((other, at) =>
+		at !== index && other.collapsed && within(gap, other) && !(within(other, gap) && at > index));
+	const shown = gaps.filter((gap, index) => gap.owner === "both" || !gap.collapsed || !redundant(gap, index));
+	for (const gap of shown) if (!gap.label) {
 		const count = Math.max(gap.originalCount, gap.modifiedCount);
 		gap.label = `${count} hidden line${count === 1 ? "" : "s"}`;
 	}
-	return gaps;
+	return shown;
 }

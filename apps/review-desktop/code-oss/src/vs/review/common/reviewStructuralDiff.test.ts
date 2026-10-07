@@ -368,3 +368,22 @@ test("a folded body with an opener folds into its header line, closer and all, a
 	const [summary] = structuralContextGaps(diff, id => id === 3);
 	assert.deepEqual([summary.originalStart, summary.originalCount, summary.band], [2, 4, true]);
 });
+
+test("a rewritten body folded on both sides under two fold states shows one fold, not a band beside it", () => {
+	// Each side's body is its own fold state, so neither pairs; their body leaves zip row for row.
+	const lhsBody = fold(2, [leaf(4, 1, 6)]);
+	lhsBody.visibility = { collapsed: true, label: "test body" };
+	const rhsBody = fold(5, [leaf(4, 1, 6)]);
+	rhsBody.visibility = { collapsed: true, label: "test body" };
+	const lines = (n: number) => Array.from({ length: n }, (_, i) => `l${i}`);
+	const diff: StructuralTextDiff = {
+		type: "text", structural_changes: { base: [], head: [] }, stats,
+		lhs: text(lines(7), [leaf(3, 0, 1), lhsBody, leaf(6, 6, 7)]),
+		rhs: text(lines(7), [leaf(3, 0, 1), rhsBody, leaf(6, 6, 7)]),
+	};
+	const gaps = structuralContextGaps(diff, (id) => id === 2 || id === 5);
+	assert.deepEqual(gaps.map(gap => [gap.foldStateId, gap.originalStart, gap.originalCount, gap.modifiedStart, gap.modifiedCount]), [[2, 2, 5, 2, 5]]);
+	// With the surviving fold open, the other side's fold shows.
+	const reopened = structuralContextGaps(diff, (id) => id === 5);
+	assert.deepEqual(reopened.map(gap => gap.foldStateId), [5]);
+});
