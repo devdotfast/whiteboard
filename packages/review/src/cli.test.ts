@@ -476,7 +476,11 @@ describe("Whiteboard CLI", () => {
       await expect(
         runReviewCli({
           argv: ["api", "tools"],
-          env: { DEV_REVIEW_HOME: rootPath },
+          // Installed but not running; otherwise Linux starts a headless server.
+          env: {
+            DEV_REVIEW_HOME: rootPath,
+            DEV_FAST_REVIEW_DESKTOP_COMMAND: "true",
+          },
           stdout: outputStream(),
           stderr: outputStream(),
           telemetry,

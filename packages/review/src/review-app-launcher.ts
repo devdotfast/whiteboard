@@ -1,6 +1,13 @@
-import { type SpawnOptions, spawn } from "node:child_process";
-import { closeSync, fstatSync, mkdtempSync, openSync, readSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { type SpawnOptions, execFileSync, spawn } from "node:child_process";
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdtempSync,
+  openSync,
+  readSync,
+} from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
 import {
@@ -19,10 +26,12 @@ import {
 const RELEASE_APPS = {
   stable: {
     bundleId: "dev.fast.review",
+    macApp: "Whiteboard.app",
     linuxLauncher: "/usr/bin/review-desktop",
   },
   preview: {
     bundleId: "dev.fast.review.preview",
+    macApp: "Whiteboard Preview.app",
     linuxLauncher: "/usr/bin/review-preview-desktop",
   },
 };
@@ -224,6 +233,55 @@ export async function focusReviewDesktop(
         ? `Whiteboard Desktop focus returned ${response.status}.`
         : result.error,
     );
+  }
+}
+
+export function desktopApplicationInstalled(
+  input: Pick<
+    LaunchDesktopApplicationInput,
+    "platform" | "electron" | "env"
+  > & {
+    exists?: (path: string) => boolean;
+    spotlight?: (bundleId: string) => boolean;
+  } = {},
+): boolean {
+  const env = input.env ?? process.env;
+  const platform = input.platform ?? process.platform;
+  const exists = input.exists ?? existsSync;
+  const apps = Object.values(RELEASE_APPS);
+
+  if (
+    (platform !== "linux" && platform !== "darwin") ||
+    (input.electron ?? Boolean(process.versions.electron)) ||
+    env.DEV_FAST_REVIEW_DESKTOP_COMMAND?.trim()
+  )
+    return true;
+
+  if (platform === "linux")
+    return apps.some(({ linuxLauncher }) => exists(linuxLauncher));
+
+  // Spotlight can be off on a headless Mac, so the usual folders come first.
+  return (
+    apps.some(({ macApp }) =>
+      ["/Applications", path.join(homedir(), "Applications")].some((dir) =>
+        exists(path.join(dir, macApp)),
+      ),
+    ) ||
+    apps.some(({ bundleId }) => (input.spotlight ?? spotlightFinds)(bundleId))
+  );
+}
+
+function spotlightFinds(bundleId: string): boolean {
+  try {
+    return (
+      execFileSync(
+        "/usr/bin/mdfind",
+        [`kMDItemCFBundleIdentifier == '${bundleId}'`],
+        { encoding: "utf8", timeout: 2_000 },
+      ).trim() !== ""
+    );
+  } catch {
+    return false;
   }
 }
 

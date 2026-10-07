@@ -20,6 +20,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ReviewInstanceSelection } from "./desktop-discovery";
 import {
   type LaunchDesktopApplicationInput,
+  desktopApplicationInstalled,
   launchDesktopApplication,
   runReviewAppLaunch,
 } from "./review-app-launcher";
@@ -698,6 +699,67 @@ describe("Review Desktop launcher", () => {
 
     child.emit("error", new Error("spawn /usr/bin/review-desktop ENOENT"));
     await expect(attempt.completion).rejects.toThrow("ENOENT");
+  });
+
+  it("finds an installed Desktop only where a launcher could start one", () => {
+    const linux = { platform: "linux" as const, electron: false, env: {} };
+
+    const installed = (paths: string[]) => (file: string) =>
+      paths.includes(file);
+
+    expect(
+      desktopApplicationInstalled({ ...linux, exists: installed([]) }),
+    ).toBe(false);
+    expect(
+      desktopApplicationInstalled({
+        ...linux,
+        exists: installed(["/usr/bin/review-preview-desktop"]),
+      }),
+    ).toBe(true);
+    expect(
+      desktopApplicationInstalled({
+        ...linux,
+        env: { DEV_FAST_REVIEW_DESKTOP_COMMAND: "/opt/wb/desktop" },
+        exists: installed([]),
+      }),
+    ).toBe(true);
+    expect(
+      desktopApplicationInstalled({
+        ...linux,
+        electron: true,
+        exists: installed([]),
+      }),
+    ).toBe(true);
+    const mac = { platform: "darwin" as const, electron: false, env: {} };
+
+    expect(
+      desktopApplicationInstalled({
+        ...mac,
+        exists: installed([]),
+        spotlight: () => false,
+      }),
+    ).toBe(false);
+    expect(
+      desktopApplicationInstalled({
+        ...mac,
+        exists: installed(["/Applications/Whiteboard Preview.app"]),
+        spotlight: () => false,
+      }),
+    ).toBe(true);
+    expect(
+      desktopApplicationInstalled({
+        ...mac,
+        exists: installed([]),
+        spotlight: (bundleId) => bundleId === "dev.fast.review",
+      }),
+    ).toBe(true);
+    expect(
+      desktopApplicationInstalled({
+        platform: "win32",
+        env: {},
+        exists: installed([]),
+      }),
+    ).toBe(true);
   });
 });
 

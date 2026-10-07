@@ -26,11 +26,14 @@ interface HeadlessServerInput {
   stateDir: string;
   port?: number;
   softwareMapEnabled?: boolean;
+  startedBy?: ReviewServerDiscovery["startedBy"];
   signal: AbortSignal;
   /** The CLI's instance, already on the `headless` surface. */
   telemetry?: Pick<ReviewTelemetryCapture, "captureUiEvent">;
   onReady(discovery: ReviewServerDiscovery): void;
 }
+
+export class HeadlessServerBusyError extends Error {}
 
 /** One foreground headless endpoint per profile; Desktop shares its database. */
 export async function runHeadlessServer(input: HeadlessServerInput) {
@@ -45,7 +48,7 @@ export async function runHeadlessServer(input: HeadlessServerInput) {
   ).finally(() => stopErrorTelemetry?.());
 
   if (!outcome.acquired)
-    throw new Error(
+    throw new HeadlessServerBusyError(
       `A Whiteboard server already owns ${stateDir}. Stop it first, or choose another --state-dir.`,
     );
 }
@@ -78,7 +81,7 @@ async function serve(input: HeadlessServerInput) {
   if (input.telemetry) await drainServerCrashReport(input.telemetry);
 
   const local = await openReviewProfile(input.stateDir, {
-    manageWorkspaces: false,
+    manageWorkspaces: true,
   });
 
   const discovery: ReviewServerDiscovery = {
@@ -87,6 +90,7 @@ async function serve(input: HeadlessServerInput) {
     url: "http://127.0.0.1:0",
     serverPid: process.pid,
     token: randomBytes(32).toString("base64url"),
+    startedBy: input.startedBy ?? "user",
   };
 
   const relay = new GlobalReviewDesktopVerbRelay();

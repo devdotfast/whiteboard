@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 
+import type { ReviewGatewayHost } from "@dev.fast/review-protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import { listenForDesktopHostShutdown } from "./desktop-host-shutdown";
@@ -39,6 +40,37 @@ describe("listenForDesktopHostShutdown", () => {
     expect(onStageRustAnalyzer).toHaveBeenCalledWith(
       "/extensions/rust/server/rust-analyzer",
     );
+  });
+
+  it("hands a valid remote host list to the gateway", () => {
+    const parentPort = new EventEmitter();
+    const onRemoteHosts = vi.fn<(hosts: ReviewGatewayHost[]) => void>();
+
+    listenForDesktopHostShutdown(
+      Object.assign(new EventEmitter(), { parentPort }),
+      () => {},
+      undefined,
+      undefined,
+      onRemoteHosts,
+    );
+
+    const hosts = [
+      {
+        alias: "devbox",
+        endpoint: { url: "http://127.0.0.1:41234", token: "secret" },
+      },
+      {
+        alias: "other",
+        problem: { state: "auth-failed", detail: "Permission denied." },
+      },
+    ];
+
+    parentPort.emit("message", { data: { type: "remote-hosts", hosts } });
+    parentPort.emit("message", {
+      data: { type: "remote-hosts", hosts: [{ alias: "" }] },
+    });
+
+    expect(onRemoteHosts.mock.calls).toEqual([[hosts]]);
   });
 
   it("accepts direct Node child-process messages", () => {
