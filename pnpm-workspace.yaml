@@ -5,7 +5,7 @@ packages:
   - "apps/*"
 
 catalog:
-  '@dev.fast/diffr': 0.1.14
+  "@dev.fast/diffr": 0.1.14
   zod: "4.6.5"
 
 catalogMode: strict
