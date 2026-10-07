@@ -450,7 +450,6 @@ async function createInitialConnection<T extends PersistentConnection, O extends
 			} else {
 				options.logService.error(`[remote-connection][attempt ${attempt}]  An error occurred in initial connection! It will be treated as a permanent error. Error:`);
 				options.logService.error(err);
-				PersistentConnection.triggerPermanentFailure(0, 0, RemoteAuthorityResolverError.isHandled(err));
 				throw err;
 			}
 		}
@@ -740,6 +739,7 @@ export abstract class PersistentConnection extends Disposable {
 	}
 
 	private _gotoPermanentFailure(millisSinceLastIncomingData: number, attempt: number, handled: boolean): void {
+		this._permanentFailure = true;
 		this._onDidStateChange.fire(new ReconnectionPermanentFailureEvent(this.reconnectionToken, millisSinceLastIncomingData, attempt, handled));
 		safeDisposeProtocolAndSocket(this.protocol);
 	}
@@ -756,7 +756,7 @@ export class ManagementPersistentConnection extends PersistentConnection {
 	public readonly client: Client<RemoteAgentConnectionContext>;
 
 	constructor(options: IConnectionOptions, remoteAuthority: string, clientId: string, reconnectionToken: string, protocol: PersistentProtocol) {
-		super(ConnectionType.Management, options, reconnectionToken, protocol, /*reconnectionFailureIsFatal*/true);
+		super(ConnectionType.Management, options, reconnectionToken, protocol, /*reconnectionFailureIsFatal*/false);
 		this.client = this._register(new Client<RemoteAgentConnectionContext>(protocol, {
 			remoteAuthority: remoteAuthority,
 			clientId: clientId

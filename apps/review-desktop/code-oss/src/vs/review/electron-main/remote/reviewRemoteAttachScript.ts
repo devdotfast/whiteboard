@@ -5,7 +5,11 @@
 
 import { REVIEW_REMOTE_ATTACH_BEGIN, REVIEW_REMOTE_ATTACH_END } from "../../common/reviewProtocol.js";
 
-export const REVIEW_REMOTE_ATTACH_SCRIPT = `wb=$(command -v whiteboard 2>/dev/null)
+export function reviewRemoteAttachScript(groups: readonly string[] = []): string {
+	for (const group of groups) {
+		if (!/^[a-z0-9-]+$/.test(group)) throw new Error(`Invalid extension group ${JSON.stringify(group)}.`);
+	}
+	return `wb=$(command -v whiteboard 2>/dev/null)
 case "$wb" in /*) ;; *) wb= ;; esac
 if [ -z "$wb" ] && [ -x "$HOME/.local/bin/whiteboard" ]; then wb="$HOME/.local/bin/whiteboard"; fi
 if [ -z "$wb" ] && [ -n "$SHELL" ]; then
@@ -14,14 +18,24 @@ fi
 if [ -z "$wb" ] || [ ! -x "$wb" ]; then exit 127; fi
 PATH="\${wb%/*}:$PATH"
 export PATH
-exec "$wb" remote attach --json
+exec "$wb" remote attach --json${groups.length ? ` --groups ${groups.join(",")}` : ""}
 `;
+}
+
+export interface ReviewRemoteLanguageServer {
+	readonly port: number;
+	readonly connectionToken: string;
+	readonly commit: string;
+}
 
 export interface ReviewRemoteAttach {
 	readonly version: string | null;
 	readonly serverId: string | null;
 	readonly token: string;
 	readonly port: number;
+	readonly languageServer: ReviewRemoteLanguageServer | null;
+	readonly languageServerDetail?: string;
+	readonly languageServerPending?: true;
 }
 
 export function parseRemoteAttach(stdout: string): { attach: ReviewRemoteAttach } | { error: string } | undefined {
@@ -54,10 +68,32 @@ export function parseRemoteAttach(stdout: string): { attach: ReviewRemoteAttach 
 				serverId: typeof record.serverId === "string" ? record.serverId : null,
 				token: record.token,
 				port,
+				...languageServerOf(record),
 			},
 		};
 	}
 	return { error: "remote attach printed nothing readable between its sentinels." };
+}
+
+function languageServerOf(record: Record<string, unknown>): Pick<ReviewRemoteAttach, "languageServer" | "languageServerDetail" | "languageServerPending"> {
+	const detail = typeof record.languageServerDetail === "string" ? record.languageServerDetail.slice(0, 2000) : undefined;
+	const server = record.languageServer as Record<string, unknown> | null | undefined;
+	if (server && typeof server === "object") {
+		const { port, connectionToken, commit } = server;
+		if (
+			typeof port === "number" && Number.isInteger(port) && port > 0 && port < 65536 &&
+			typeof connectionToken === "string" && /^[0-9A-Za-z_-]+$/.test(connectionToken) &&
+			typeof commit === "string" && /^[0-9a-f]{40}$/.test(commit)
+		) {
+			return { languageServer: { port, connectionToken, commit } };
+		}
+		return { languageServer: null, languageServerDetail: "remote attach reported a VS Code server without a port, a token and a commit." };
+	}
+	return {
+		languageServer: null,
+		languageServerDetail: detail ?? "The Whiteboard on this host has no VS Code server.",
+		...(record.languageServerPending === true && { languageServerPending: true as const }),
+	};
 }
 
 function loopbackPort(url: unknown): number | undefined {

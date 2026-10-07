@@ -60,3 +60,15 @@ test("relays ssh prompts to the window and takes its answer", async () => {
 	assert.equal(await answer, "hunter2");
 	relay.dispose();
 });
+
+test("hands a window a remote machine's VS Code server by its server id, and nothing for anything else", async () => {
+	const asked: string[] = [];
+	const endpoint = { host: "127.0.0.1", port: 50123, connectionToken: "vscode-token" };
+	const host = { getRemoteLanguageEndpoint: async (serverId: string) => (asked.push(serverId), serverId === "s1" ? endpoint : undefined) };
+	const channel = new ReviewDesktopChannel(host as never, { getWindows: () => [] } as never, () => false);
+
+	assert.deepEqual(await channel.call("window", "getRemoteLanguageEndpoint", "s1"), endpoint);
+	assert.equal(await channel.call("window", "getRemoteLanguageEndpoint", "s2"), undefined);
+	assert.equal(await channel.call("window", "getRemoteLanguageEndpoint", { serverId: "s1" }), undefined);
+	assert.deepEqual(asked, ["s1", "s2"]);
+});

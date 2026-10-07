@@ -64,7 +64,10 @@ const FORWARDED_ROUTES: readonly (readonly [string, RegExp])[] = [
   ["GET", /^maps\/[^/]+$/],
   ["POST", /^navigator$/],
   ["POST", /^copy-context$/],
+  ["GET", /^language-context$/],
 ];
+
+const LANGUAGE_CONTEXT_TIMEOUT_MS = 120_000;
 
 const PATH_ROUTES = new Set(["file", "language-context", "navigator"]);
 
@@ -108,6 +111,11 @@ const DROPPED_REQUEST_HEADERS = new Set([
   REVIEW_HOST_HEADER,
 ]);
 
+const remoteLanguageContext = z.object({
+  remoteRootPath: z.string().nullable(),
+  serverId: z.string(),
+});
+
 const commandTarget = z.object({
   operation: z.object({ reviewId: z.string().optional() }).optional(),
 });
@@ -123,6 +131,7 @@ export function createReviewGateway(input: {
   home: string;
   relay: ReviewDesktopVerbRelay;
   heartbeatMs?: number;
+  languageContextMs?: number;
   restarted?(alias: string): void;
   log?(message: string): void;
 }) {
@@ -319,11 +328,16 @@ export function createReviewGateway(input: {
     request.signal.addEventListener("abort", leave, { once: true });
 
     let timedOut = false;
+    const slow = options.route === "language-context";
+
+    const limit = slow
+      ? (input.languageContextMs ?? LANGUAGE_CONTEXT_TIMEOUT_MS)
+      : FIRST_BYTE_TIMEOUT_MS;
 
     const firstByte = setTimeout(() => {
       timedOut = true;
       abort.abort();
-    }, FIRST_BYTE_TIMEOUT_MS);
+    }, limit);
 
     // SAFETY: Node's Request body is its own web stream; the DOM type only
     // names the same object.
@@ -341,9 +355,13 @@ export function createReviewGateway(input: {
     } catch (error) {
       request.signal.removeEventListener("abort", leave);
 
-      const reason = timedOut ? NO_ANSWER : errorText(error);
+      const reason = !timedOut
+        ? errorText(error)
+        : slow
+          ? `it did not answer within ${limit / 1_000} seconds`
+          : NO_ANSWER;
 
-      if (!request.signal.aborted) hosts.failed(remote, reason);
+      if (!slow && !request.signal.aborted) hosts.failed(remote, reason);
 
       return answer(remote.alias, timedOut ? 504 : 502, {
         ok: false,
@@ -450,6 +468,20 @@ export function createReviewGateway(input: {
         return answer(remote.alias, 502, {
           ok: false,
           error: `${remote.alias} answered with a path on that machine, so the answer was refused.`,
+        });
+      }
+
+      const unusable =
+        slow && status === 200
+          ? unusableLanguageContext(body, remote.serverId)
+          : undefined;
+
+      if (unusable) {
+        log(`Refused ${remote.alias}'s /${options.route} answer: ${unusable}.`);
+
+        return answer(remote.alias, 502, {
+          ok: false,
+          error: `${remote.alias} answered with an unusable language context, so the answer was refused.`,
         });
       }
 
@@ -630,6 +662,18 @@ export function createReviewGateway(input: {
 }
 
 export type ReviewGateway = ReturnType<typeof createReviewGateway>;
+
+function unusableLanguageContext(body: Buffer, serverId: string | undefined) {
+  const context = remoteLanguageContext.safeParse(
+    parseJsonText(body.toString()),
+  );
+
+  if (!context.success) return "its remoteRootPath or serverId is malformed";
+
+  if (context.data.serverId !== serverId) return "it names another server";
+
+  return undefined;
+}
 
 function pathField(body: Buffer): string | undefined {
   const value = parseBody(body);
