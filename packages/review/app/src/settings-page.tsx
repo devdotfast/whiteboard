@@ -298,6 +298,12 @@ export function SettingsPage({
             >
               <Button onClick={settings.manageExtensions}>Manage…</Button>
             </Row>
+            <Row
+              label="VS Code settings"
+              description="Copy settings and keybindings from VS Code or Cursor again. Replaces Whiteboard's."
+            >
+              <Button onClick={settings.importVsCodeSettings}>Import…</Button>
+            </Row>
           </Section>
 
           <Section label="Experimental Features">
