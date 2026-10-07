@@ -1260,6 +1260,15 @@ body
   color: var(--vscode-descriptionForeground);
 }
 
+/* A fold inside removed code, drawn as a row of the removed block. */
+.review-workbench .monaco-editor .diff-fold-placeholder {
+  color: var(--vscode-descriptionForeground) !important;
+  opacity: .8;
+}
+.review-workbench .monaco-editor .diff-fold-placeholder-hit:hover {
+  background: color-mix(in srgb, var(--vscode-editor-foreground) 4%, transparent);
+}
+
 /* The unfold glyph sits where the fold glyph will appear once the region is
    open: in the glyph margin lane (an 18px square, the editor's line height)
    at the top-left of the row, not centered under the line numbers and the

@@ -13,6 +13,7 @@ import { ICodeEditor, IOverlayWidget, IViewZone } from '../../editorBrowser.js';
 import { Position } from '../../../common/core/position.js';
 import { Range } from '../../../common/core/range.js';
 import { DetailedLineRangeMapping } from '../../../common/diff/rangeMapping.js';
+import { LineRange } from '../../../common/core/ranges/lineRange.js';
 import { IModelDeltaDecoration } from '../../../common/model.js';
 import { TextLength } from '../../../common/core/text/textLength.js';
 
@@ -564,6 +565,11 @@ export interface IBandRegion {
 	readonly label: string | undefined;
 	readLabel?(reader: IReader | undefined): string | undefined;
 	shouldHideControls(reader: IReader | undefined): boolean;
+}
+
+/** Whether a region hides lines that exist on the base side only. */
+export function isRemovedOnlyFold(region: { readonly owner: 'base' | 'head' | 'both'; readonly modifiedUnchangedRange: LineRange }): boolean {
+	return region.owner === 'base' && region.modifiedUnchangedRange.isEmpty;
 }
 
 /**

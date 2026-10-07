@@ -27,7 +27,7 @@ import { observableCodeEditor } from '../../../observableCodeEditor.js';
 import { DiffEditorEditors } from '../components/diffEditorEditors.js';
 import { DiffEditorOptions } from '../diffEditorOptions.js';
 import { DiffEditorViewModel, RevealPreference, UnchangedRegion } from '../diffEditorViewModel.js';
-import { IObservableViewZone, PlaceholderViewZone, ViewZoneOverlayWidget, applyObservableDecorations, applyStyle, bandDetailText, bandZoneHeightPx } from '../utils.js';
+import { IObservableViewZone, PlaceholderViewZone, ViewZoneOverlayWidget, applyObservableDecorations, applyStyle, bandDetailText, bandZoneHeightPx, isRemovedOnlyFold } from '../utils.js';
 
 /**
  * Make sure to add the view zones to the editor!
@@ -121,7 +121,8 @@ export class HideUnchangedRegionsFeature extends Disposable {
 				// including head-only bands. Both use this height as summaries and folds change.
 				// Split layout adds opposite-side space through structural alignment instead.
 				const onOriginal = !sideBySide || r.owner !== 'head';
-				const onModified = !sideBySide || r.owner !== 'base';
+				// Unified layout draws a fold inside removed code in the removed block instead.
+				const onModified = sideBySide ? r.owner !== 'base' : !isRemovedOnlyFold(r);
 
 				if (compactMode) {
 					if (onOriginal) {
@@ -244,7 +245,12 @@ export class HideUnchangedRegionsFeature extends Disposable {
 			const curUnchangedRegions = unchangedRegions.read(reader);
 			this._isUpdatingHiddenAreas = true;
 			try {
-				this._editors.original.setHiddenAreas(curUnchangedRegions.map(r => r.getHiddenOriginalRange(reader).toInclusiveRange()).filter(isDefined));
+				// Unified layout keeps the first line of a fold inside removed code for its row in the removed block.
+				const sideBySide = this._options.renderSideBySide.read(reader);
+				this._editors.original.setHiddenAreas(curUnchangedRegions.map(r => {
+					const hidden = r.getHiddenOriginalRange(reader);
+					return (sideBySide || !isRemovedOnlyFold(r) || hidden.isEmpty ? hidden : new LineRange(hidden.startLineNumber + 1, hidden.endLineNumberExclusive)).toInclusiveRange();
+				}).filter(isDefined));
 				this._editors.modified.setHiddenAreas(curUnchangedRegions.map(r => r.getHiddenModifiedRange(reader).toInclusiveRange()).filter(isDefined));
 			} finally {
 				this._isUpdatingHiddenAreas = false;

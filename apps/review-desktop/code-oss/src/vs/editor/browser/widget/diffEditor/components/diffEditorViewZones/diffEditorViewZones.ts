@@ -16,11 +16,12 @@ import { applyFontInfo } from '../../../../config/domFontInfo.js';
 import { CodeEditorWidget } from '../../../codeEditor/codeEditorWidget.js';
 import { diffDeleteDecoration, diffRemoveIcon } from '../../registrations.contribution.js';
 import { DiffEditorEditors } from '../diffEditorEditors.js';
-import { DiffEditorViewModel, DiffMapping } from '../../diffEditorViewModel.js';
+import { DiffEditorViewModel, DiffMapping, UnchangedRegion } from '../../diffEditorViewModel.js';
 import { DiffEditorWidget } from '../../diffEditorWidget.js';
 import { InlineDiffDeletedCodeMargin } from './inlineDiffDeletedCodeMargin.js';
 import { LineSource, RenderOptions, renderLines } from './renderLines.js';
-import { IObservableViewZone, animatedObservable, bandZoneHeightPx, joinCombine } from '../../utils.js';
+import { LineTokens } from '../../../../../common/tokens/lineTokens.js';
+import { IObservableViewZone, animatedObservable, bandZoneHeightPx, isRemovedOnlyFold, joinCombine } from '../../utils.js';
 import { EditorOption } from '../../../../../common/config/editorOptions.js';
 import { LineRange } from '../../../../../common/core/ranges/lineRange.js';
 import { Position } from '../../../../../common/core/position.js';
@@ -212,6 +213,13 @@ export class DiffEditorViewZones extends Disposable {
 					return null;
 				}
 			};
+			// Unified layout draws a fold inside removed code as one row of the removed block, on the
+			// fold's first line. The base editor keeps that line visible and hides the rest.
+			const removedFolds = renderSideBySide ? [] : (this._diffModel.read(reader)?.unchangedRegions.read(reader) ?? [])
+				.filter(region => isRemovedOnlyFold(region) && !region.shouldHideControls(reader))
+				.map(region => ({ region, hidden: region.getHiddenOriginalRange(reader) }))
+				.filter(fold => !fold.hidden.isEmpty);
+			const foldedAway = (line: number) => removedFolds.some(fold => fold.hidden.contains(line));
 			const deletedCodeLineBreaksComputer = !renderSideBySide ? this._editors.modified._getViewModel()?.createLineBreaksComputer(context) : undefined;
 			if (deletedCodeLineBreaksComputer) {
 				const originalModel = this._editors.original.getModel()!;
@@ -224,7 +232,7 @@ export class DiffEditorViewZones extends Disposable {
 							if (i > originalModel.getLineCount()) {
 								return { orig: origViewZones, mod: modViewZones };
 							}
-							if (this._editors.original._getViewModel()!.coordinatesConverter.getModelLineViewLineCount(i) > 0) deletedCodeLineBreaksComputer?.addRequest(i, null);
+							if (!foldedAway(i) && this._editors.original._getViewModel()!.coordinatesConverter.getModelLineViewLineCount(i) > 0) deletedCodeLineBreaksComputer?.addRequest(i, null);
 						}
 					}
 				}
@@ -244,6 +252,7 @@ export class DiffEditorViewZones extends Disposable {
 			const changeHighlights = this._diffModel.read(reader)?.diff.read(reader)?.changeHighlights;
 			for (const a of alignmentsVal) {
 				if (a.diff && !renderSideBySide && (!this._options.useTrueInlineDiffRendering.read(reader) || !allowsTrueInlineDiffRendering(a.diff))) {
+					const placeholders = new Map(removedFolds.filter(fold => a.originalRange.contains(fold.hidden.startLineNumber)).map(fold => [fold.hidden.startLineNumber, fold.region]));
 					if (!a.originalRange.isEmpty && a.originalRange.mapToLineArray(l => this._editors.original._getViewModel()!.coordinatesConverter.getModelLineViewLineCount(l)).some(height => height > 0)) {
 						originalModelTokenizationCompleted.read(reader); // Update view-zones once tokenization completes
 
@@ -258,10 +267,25 @@ export class DiffEditorViewZones extends Disposable {
 						if (a.originalRange.endLineNumberExclusive - 1 > originalModel.getLineCount()) {
 							return { orig: origViewZones, mod: modViewZones };
 						}
-						const visibleOriginalLines = a.originalRange.mapToLineArray(l => l).filter(l => this._editors.original._getViewModel()!.coordinatesConverter.getModelLineViewLineCount(l) > 0);
+						const visibleOriginalLines = a.originalRange.mapToLineArray(l => l).filter(l => placeholders.has(l) || (!foldedAway(l) && this._editors.original._getViewModel()!.coordinatesConverter.getModelLineViewLineCount(l) > 0));
+						const placeholderText = (region: UnchangedRegion) => {
+							const hidden = region.getHiddenOriginalRange(reader);
+							let indent = '';
+							for (let l = hidden.startLineNumber; l < hidden.endLineNumberExclusive && !indent; l++) {
+								const content = originalModel.getLineContent(l);
+								if (content.trim()) indent = content.slice(0, content.length - content.trimStart().length);
+							}
+							const [label] = (region.readLabel(reader) ?? `${hidden.length} hidden lines`).split('\n');
+							return `${indent}\u22ef ${label}`;
+						};
 						const source = new LineSource(
-							visibleOriginalLines.map(l => originalModel.tokenization.getLineTokens(l)),
-							visibleOriginalLines.map(_ => lineBreakData[lineBreakDataIdx++]),
+							visibleOriginalLines.map(l => {
+								const region = placeholders.get(l);
+								const tokens = originalModel.tokenization.getLineTokens(l);
+								return region ? LineTokens.createEmpty(placeholderText(region), tokens.languageIdCodec) : tokens;
+							}),
+							// A placeholder row does not wrap.
+							visibleOriginalLines.map(l => placeholders.has(l) ? null : lineBreakData[lineBreakDataIdx++]),
 							mightContainNonBasicASCII,
 							mightContainRTL,
 						);
@@ -269,7 +293,7 @@ export class DiffEditorViewZones extends Disposable {
 						if (changeHighlights) {
 							// Source lines can be hidden by folds. Map paint into the compact
 							// deleted-code buffer rather than treating it as contiguous source.
-							const visibleRows = new Map(visibleOriginalLines.map((line, i) => [line, i + 1]));
+							const visibleRows = new Map(visibleOriginalLines.map((line, i) => [line, i + 1] as const).filter(([line]) => !placeholders.has(line)));
 							for (const highlight of changeHighlights.original) {
 								for (let line = highlight.startLineNumber; line <= highlight.endLineNumber; line++) {
 									const row = visibleRows.get(line);
@@ -284,7 +308,20 @@ export class DiffEditorViewZones extends Disposable {
 								decorations.push(new InlineDecoration(i.originalRange.delta(-(a.diff.original.startLineNumber - 1)), diffDeleteDecoration.className!, InlineDecorationType.Regular));
 							}
 						}
+						visibleOriginalLines.forEach((line, i) => {
+							if (placeholders.has(line)) decorations.push(new InlineDecoration(new Range(i + 1, 1, i + 1, source.lineTokens[i].getLineContent().length + 1), 'diff-fold-placeholder', InlineDecorationType.Regular));
+						});
 						const result = renderLines(source, renderOptions, decorations, deletedCodeDomNode, false, changeHighlights !== undefined);
+						visibleOriginalLines.forEach((line, i) => {
+							const region = placeholders.get(line);
+							if (!region) return;
+							const hit = document.createElement('div');
+							hit.className = 'diff-fold-placeholder-hit';
+							hit.title = 'Show removed lines';
+							hit.style.cssText = `position:absolute;left:0;right:0;top:${result.viewLineCounts.slice(0, i).reduce((x, y) => x + y, 0) * modLineHeight}px;height:${modLineHeight}px;cursor:pointer;z-index:10`;
+							alignmentViewZonesDisposables.add(addDisposableListener(hit, 'mousedown', e => { e.preventDefault(); e.stopPropagation(); region.showAll(undefined); }));
+							deletedCodeDomNode.appendChild(hit);
+						});
 
 						const marginDomNode = document.createElement('div');
 						marginDomNode.className = changeHighlights ? 'inline-original-margin-view-zone' : 'inline-deleted-margin-view-zone';
