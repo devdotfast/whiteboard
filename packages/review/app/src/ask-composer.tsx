@@ -206,9 +206,11 @@ export function AskComposer({
   /** Longest first: the first that fits on one line shows. */
   placeholders: readonly string[];
   disabled: boolean;
-  /** Whether a question can go now: an agent is chosen and none is busy. */
+  /** Whether a question can go now: an agent is chosen and none is busy,
+   * or one is answering and takes a follow-up. */
   canAsk: boolean;
-  /** Stops the turn under way; a Stop button replaces Ask while set. */
+  /** Stops the turn under way; a Stop button replaces Ask while set, unless
+   * a follow-up is written that can go. */
   stop?: () => void;
   /** The agent is still starting: Stop shows it connecting, not a turn to
    * stop. */
@@ -572,7 +574,7 @@ export function AskComposer({
             onPaste={paste}
           />
           <span {...stylex.props(styles.actions)}>
-            {stop ? (
+            {stop && !(canAsk && draft.trim()) ? (
               <IconButton
                 ref={stopTooltip}
                 aria-label={connecting ? "Stop connecting" : "Stop"}

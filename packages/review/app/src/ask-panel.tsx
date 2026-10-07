@@ -226,6 +226,13 @@ export function AskPanelContent({
     thread?.status === "running" ||
     thread?.status === "waiting";
 
+  // A follow-up can go while the agent answers: it joins the turn, or waits
+  // for it to end.
+  const answering =
+    thread?.status === "running" || thread?.status === "waiting";
+
+  const canAsk = Boolean(agent) && (!busy || (answering && !sending));
+
   const post = useCallback(
     async (endpoint: `/${string}`, body: AskRequest = {}) => {
       const response = await session.fetch(endpoint, {
@@ -246,7 +253,7 @@ export function AskPanelContent({
   );
 
   const ask = async (question: AskQuestion) => {
-    if (!agent || busy || thread?.status === "failed") return false;
+    if (!agent || !canAsk || thread?.status === "failed") return false;
     setSending(true);
     setRequestError(null);
 
@@ -621,6 +628,17 @@ export function AskPanelContent({
               />
             ) : null}
 
+            {thread?.queued?.map((queued) => (
+              <AgentChatUserMessage
+                key={queued.id}
+                xstyle={styles.userMessage}
+                bubbleXstyle={[styles.userBubble, styles.queuedBubble]}
+                caption={`Sends when ${agentName} finishes`}
+              >
+                {queued.text}
+              </AgentChatUserMessage>
+            ))}
+
             {thread?.signIn && retry && !requestError ? (
               <AskSignIn
                 agentName={agentName}
@@ -665,7 +683,7 @@ export function AskPanelContent({
             : "@ for files",
         )}
         disabled={thread?.status === "failed"}
-        canAsk={Boolean(agent) && !busy}
+        canAsk={canAsk}
         stop={busy && threadId ? stop : undefined}
         connecting={thread?.status === "starting"}
         status={
@@ -972,6 +990,9 @@ const styles = stylex.create({
   userBubble: {
     padding: "10px 14px",
     backgroundColor: tokens.trayRaised,
+  },
+  queuedBubble: {
+    opacity: 0.6,
   },
   attachments: {
     display: "flex",
