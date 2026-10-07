@@ -1,6 +1,7 @@
-import type {
-  ReviewApiSummary,
-  ReviewGatewayHostState,
+import {
+  type ReviewApiSummary,
+  type ReviewGatewayHostState,
+  reviewHostStatus,
 } from "@dev.fast/review-protocol";
 
 import { UUID } from "./review-gateway-hosts.js";
@@ -19,7 +20,18 @@ function decorate(
   hostState: NonNullable<ReviewApiSummary["hostState"]>,
 ): ReviewApiSummary {
   const { alias } = state;
-  const features = hostState === "online" && state.languageFeatures === true;
+  const online = hostState === "online";
+  const features = online && state.languageFeatures === true;
+
+  const reason = online
+    ? features
+      ? undefined
+      : state.languageFeaturesDetail
+    : reviewHostStatus({
+        alias,
+        state: hostState,
+        detail: hostState === state.state ? state.detail : undefined,
+      }).sentence;
 
   return {
     ...entry,
@@ -31,7 +43,11 @@ function decorate(
     }),
     host: alias,
     hostState,
-    available: { sourceWindows: features, languageFeatures: features },
+    available: {
+      sourceWindows: features,
+      languageFeatures: features,
+      ...(reason && { reason }),
+    },
   };
 }
 
