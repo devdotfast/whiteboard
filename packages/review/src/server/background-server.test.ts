@@ -254,6 +254,7 @@ it("attaches with one JSON line between the sentinels, and its token reaches the
     startedServer: true,
     languageServer: null,
     languageServerDetail: expect.stringContaining("has no VS Code server"),
+    languageGroups: [],
   });
 
   const reviews = (token?: string) =>
@@ -330,6 +331,7 @@ it("attaches the review server when the language extensions cannot be installed"
     languageServer: null,
     languageServerDetail:
       "Could not install the language extensions: golang.go: groups go",
+    languageGroups: [{ group: "go", installed: false }],
   });
 
   const reviews = await fetch(`${attach.url}/reviews-api`, {

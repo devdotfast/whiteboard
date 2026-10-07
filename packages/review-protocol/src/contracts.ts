@@ -886,6 +886,15 @@ export const ReviewGatewayHostSchema = z.strictObject({
     .optional(),
   languageFeatures: z.boolean().optional(),
   languageFeaturesDetail: stringAllowEmpty.optional(),
+  languageGroups: z
+    .array(
+      z.strictObject({
+        group: requiredString,
+        installed: z.boolean(),
+        detail: stringAllowEmpty.optional(),
+      }),
+    )
+    .optional(),
 });
 
 export type ReviewGatewayHost = z.infer<typeof ReviewGatewayHostSchema>;
@@ -906,6 +915,7 @@ export interface ReviewGatewayHostState {
   installCommand?: string;
   languageFeatures?: boolean;
   languageFeaturesDetail?: string;
+  languageGroups?: ReviewGatewayHost["languageGroups"];
 }
 
 export const ReviewRepositoryIdentitySchema = z.strictObject({

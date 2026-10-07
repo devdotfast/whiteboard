@@ -75,11 +75,75 @@ never stored.
 While a host is not `online`, its reviews stay in Home, drawn as unavailable.
 Opening one says why.
 
+## Language features
+
+Hover and go to definition work in a remote review's code, answered on the
+remote by the same language extensions a laptop review uses. Desktop runs a
+VS Code server and one extension host on each remote it connects to.
+
+- **Which languages:** TypeScript, JavaScript, JSON, CSS and HTML always.
+  Python, with ty, Ruff and the Python extension. Go, Rust, Swift and C# when
+  you have turned their group on in Whiteboard (Settings → Tools → Extensions);
+  see [Optional languages](#optional-languages).
+- **First use:** the remote downloads its language extensions from Open VSX
+  (`open-vsx.org`) the first time Desktop connects. That takes a few seconds
+  to a minute, and the remote needs network access to Open VSX for it. A
+  remote without that access still shows its reviews, without hovers.
+- **Memory:** plan on about 1 GB for the VS Code server, its extension host and
+  the language servers of one TypeScript and one Python project; about 0.8 GB
+  with TypeScript alone. The server exits 5 minutes after the last window
+  leaves.
+- **Same version:** language features need the same Whiteboard version on
+  both ends. Otherwise the host stays `online` and its reviews open, and
+  Settings says under the host why language features are unavailable.
+
+Settings shows "Language features: available" or why not for each online host.
+
+Extensions on a remote are trusted the way VS Code Remote trusts them: they
+run on that machine and can do in the window what a local extension can. The
+code in a review stays read-only.
+
+An extension on a remote that asks for call or type hierarchies may also get
+answers about another remote's files.
+
+### Optional languages
+
+A group you turn on in Whiteboard is installed on each remote at its next
+connection, at the same version as on your laptop. A group you have not turned
+on is never installed on a remote. Turning a group off leaves it on the remote,
+unused. Each group needs its toolchain on the remote, on the `PATH` of your
+login shell (`~/.profile` or your shell's own start-up file is enough):
+
+| Group | Needs on the remote | Extensions the remote downloads |
+|---|---|---|
+| Go | `go` | Go |
+| Rust | `cargo` and `rustc` | rust-analyzer, about 16 MB |
+| Swift | `swift` | Swift and LLDB DAP, about 16 MB |
+| C# | `dotnet` (a .NET SDK) | C# and .NET Runtime, about 80 MB |
+
+- When a toolchain is missing, the host still connects. Settings says under
+  the host which tool the login shell could not find, for example
+  "swift: installed — swift was not found on the login shell's PATH".
+- **Memory:** a small Rust project needs about 1 GB for the VS Code server,
+  its extension host and rust-analyzer.
+- **Rust** gives hover and go to definition on remotes. The glibc a remote
+  needs for Whiteboard (2.34 or newer) is enough for rust-analyzer.
+- **Swift and C#** are installed on a remote but do not answer hovers yet,
+  on a remote or on your laptop. Swift's extension needs the task API, which
+  Whiteboard does not expose yet, and on a remote also `node-pty`, which the
+  remote's VS Code server does not include. In a review's Diff view the C# extension
+  loads the project from the review's base side only, so a hover on the
+  changed side stays at "Loading...".
+- The debuggers in the Swift and C# groups are never started: reviews are
+  read-only.
+- The remote downloads each extension from Open VSX itself, and checks it
+  against the checksum Whiteboard pins. Whiteboard redistributes none of them.
+  The C# extension downloads its OmniSharp server from Microsoft the first
+  time it starts.
+
 ## Not available for remote reviews yet
 
 - Source windows: "Open file" and the source tree are hidden.
-- Language features, such as hover and go to definition, in code on the
-  remote.
 - Sharing.
 - Traces.
 - Scratchpads. The scratchpad is always the laptop's.
@@ -99,3 +163,10 @@ listens on a public address. So the remote's `sshd` must allow TCP
 forwarding, which is OpenSSH's default. If `sshd_config` sets
 `AllowTcpForwarding no`, the host shows `unreachable`, and the detail quotes
 OpenSSH's "administratively prohibited" message.
+
+Language features use a second forward, to the remote's VS Code server on its
+loopback interface. That server has its own connection token, new each time it
+starts. Unlike the review server's token, it reaches the Desktop window: the
+window connects to the VS Code server itself. Desktop hands it only to a window
+that asks for an `online` host running the same Whiteboard version, never on a
+command line, and never writes it to a log.
