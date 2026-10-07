@@ -15,13 +15,21 @@ export function readReviewPackageVersion(
   moduleUrl: string = import.meta.url,
 ): string {
   try {
+    const root = findReviewPackageRoot(moduleUrl);
+
+    const { DEV_FAST_REVIEW_CHECKOUT, DEV_FAST_REVIEW_DEV_VERSION } =
+      process.env;
+
+    // run.sh: a dev Desktop's version names its checkout's state.
+    if (
+      DEV_FAST_REVIEW_DEV_VERSION &&
+      DEV_FAST_REVIEW_CHECKOUT &&
+      root === path.join(DEV_FAST_REVIEW_CHECKOUT, "packages", "review")
+    )
+      return DEV_FAST_REVIEW_DEV_VERSION;
+
     const packageJson = jsonObject(
-      parseJsonText(
-        readFileSync(
-          path.join(findReviewPackageRoot(moduleUrl), "package.json"),
-          "utf8",
-        ),
-      ),
+      parseJsonText(readFileSync(path.join(root, "package.json"), "utf8")),
     );
 
     return jsonString(packageJson?.version) ?? "unknown";

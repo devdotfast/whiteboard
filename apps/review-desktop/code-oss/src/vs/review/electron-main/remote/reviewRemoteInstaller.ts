@@ -184,7 +184,10 @@ export async function installRemote(input: ReviewRemoteInstallInput): Promise<Re
 		const dir = reviewRemoteVersionDir(probe.root, input.version);
 		const cliPath = `${dir}/node_modules/@dev.fast/whiteboard/${bin}`;
 		const launcher = `${dir}/whiteboard`;
-		const newest = [input.version, ...prepared.all("HAVE").filter((name) => REVIEW_REMOTE_VERSION.test(name))].sort(compareVersions).at(-1);
+		const newest = prepared
+			.all("HAVE")
+			.filter((name) => REVIEW_REMOTE_VERSION.test(name))
+			.reduce((best, name) => (compareVersions(name, best) > 0 ? name : best), input.version);
 		const finished = await run(
 			"finishing",
 			finishScript(context, {
@@ -382,6 +385,7 @@ export function compareVersions(a: string, b: string): number {
 }
 
 function split(version: string): [number[], string[]] {
+	version = version.split("+")[0];
 	const dash = version.indexOf("-");
 	const core = (dash < 0 ? version : version.slice(0, dash)).split(".").map(Number);
 	return [core, dash < 0 ? [] : version.slice(dash + 1).split(".")];

@@ -115,8 +115,8 @@ async function checkout(counter: string) {
 	await writeFile(
 		join(root, "scripts/pack-review-cli.mjs"),
 		`import { appendFileSync } from "node:fs"; import { execFileSync } from "node:child_process";
-const [, , flag, commit, output] = process.argv;
-appendFileSync(${JSON.stringify(counter)}, \`\${flag} \${commit}\\n\`);
+const [, , flag, commit, output, version] = process.argv;
+appendFileSync(${JSON.stringify(counter)}, \`\${[flag, commit, version].filter(Boolean).join(" ")}\\n\`);
 execFileSync("pnpm", ["--dir", "packages/review", "pack", "--pack-destination", output]);`,
 	);
 	await writeFile(join(root, "packages/review/index.js"), "export {};\n");
@@ -157,4 +157,17 @@ test("a development build packs its checkout once per state and fetches Node's c
 	const [before, after] = await calls();
 	assert.match(before, /^--dev [0-9a-f]{40}$/);
 	assert.notEqual(after, before);
+});
+
+test("a dev Desktop's version is passed to the pack and names the package", async () => {
+	const counter = join(await temporary("wb-artifacts-packs-"), "packs.txt");
+	const root = await checkout(counter);
+	const cacheDirectory = await temporary("wb-artifacts-cache-");
+	const { base } = await serve({ "/dist/v24.18.0/SHASUMS256.txt": `${"c".repeat(64)}  node-v24.18.0-linux-x64.tar.xz\n` });
+	const version = "0.0.1+dev.0123456789ab";
+
+	const { package: stamped } = await remoteArtifacts("linux-x64", { pin: undefined, checkout: root, cacheDirectory, nodeDist: `${base}/dist`, devVersion: version });
+
+	assert.equal(stamped.name, `dev.fast-whiteboard-${version}.tgz`);
+	assert.match(await readFile(counter, "utf8"), new RegExp(`^--dev [0-9a-f]{40} ${version.replace("+", "\\+")}\n$`));
 });

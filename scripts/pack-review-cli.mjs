@@ -62,7 +62,7 @@ export async function packReviewCli(
 export async function packDevelopment(
   commit,
   outputDirectory,
-  { stdio = "inherit" } = {},
+  { stdio = "inherit", version } = {},
 ) {
   await buildRemoteRuntime({ commit });
 
@@ -70,6 +70,7 @@ export async function packDevelopment(
     packageDirectory: "packages/review",
     commit,
     stdio,
+    version,
   });
 }
 
@@ -81,6 +82,7 @@ async function packStaged(
     stdio,
     vscodeServer = {},
     maxBytes = MAX_TARBALL_BYTES,
+    version,
   },
 ) {
   await mkdir(output, { recursive: true });
@@ -93,12 +95,21 @@ async function packStaged(
       { stdio },
     );
 
-    const tarball = (await readdir(scratch)).find((name) =>
+    let tarball = (await readdir(scratch)).find((name) =>
       name.endsWith(".tgz"),
     );
 
     execFileSync("tar", ["-xzf", path.join(scratch, tarball), "-C", scratch]);
     const staged = path.join(scratch, "package");
+
+    if (version) {
+      const manifestPath = path.join(staged, "package.json");
+      const pkg = JSON.parse(await readFile(manifestPath, "utf8"));
+      pkg.version = version;
+      await writeFile(manifestPath, `${JSON.stringify(pkg, null, 2)}\n`);
+      tarball = `${pkg.name.slice(1).replace("/", "-")}-${version}.tgz`;
+    }
+
     await stageReviewDocs(staged);
     await stageVscodeServer(staged, { ...vscodeServer, commit });
 
@@ -129,7 +140,10 @@ if (
   process.argv[2] === "--dev"
 ) {
   console.log(
-    await packDevelopment(process.argv[3], process.argv[4], { stdio: "pipe" }),
+    await packDevelopment(process.argv[3], process.argv[4], {
+      stdio: "pipe",
+      version: process.argv[5],
+    }),
   );
 } else if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const plan = JSON.parse(await readFile("release-plan.json", "utf8"));

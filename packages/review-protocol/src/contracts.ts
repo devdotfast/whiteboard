@@ -628,7 +628,8 @@ export const REVIEW_REMOTE_ATTACH_BEGIN = "WHITEBOARD-REMOTE-BEGIN";
 
 export const REVIEW_REMOTE_ATTACH_END = "WHITEBOARD-REMOTE-END";
 
-export const REVIEW_REMOTE_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+export const REVIEW_REMOTE_VERSION =
+  /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/;
 
 export const REVIEW_REMOTE_INSTALL_LOCK = "install.lock";
 

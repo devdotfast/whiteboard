@@ -3,9 +3,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { findReviewPackageRoot, readBuildCommit } from "./package-paths";
+import {
+  findReviewPackageRoot,
+  readBuildCommit,
+  readReviewPackageVersion,
+} from "./package-paths";
 
 describe("findReviewPackageRoot", () => {
   it("resolves modules nested below source and distribution directories", () => {
@@ -50,6 +54,40 @@ describe("readBuildCommit", () => {
       expect(readBuildCommit(module("src", "server", "host.ts"))).toBeNull();
     } finally {
       await rm(packageRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("readReviewPackageVersion", () => {
+  it("reports a dev Desktop's version for its own checkout only", async () => {
+    const packageRoot = path.dirname(
+      path.dirname(fileURLToPath(import.meta.url)),
+    );
+
+    const other = await mkdtemp(path.join(tmpdir(), "review-package-"));
+
+    try {
+      await writeFile(
+        path.join(other, "package.json"),
+        JSON.stringify({ name: "@dev.fast/whiteboard", version: "9.9.9" }),
+      );
+      vi.stubEnv("DEV_FAST_REVIEW_DEV_VERSION", "0.2.0+dev.0123456789ab");
+      vi.stubEnv(
+        "DEV_FAST_REVIEW_CHECKOUT",
+        path.dirname(path.dirname(packageRoot)),
+      );
+
+      expect(readReviewPackageVersion(import.meta.url)).toBe(
+        "0.2.0+dev.0123456789ab",
+      );
+      expect(
+        readReviewPackageVersion(
+          pathToFileURL(path.join(other, "cli.js")).href,
+        ),
+      ).toBe("9.9.9");
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(other, { recursive: true, force: true });
     }
   });
 });

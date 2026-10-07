@@ -24,6 +24,8 @@ export interface ReviewRemoteArtifact {
 export interface ReviewRemoteArtifactsOptions {
 	readonly pin: IWhiteboardRemoteProduct | undefined;
 	readonly checkout?: string;
+	/** The dev Desktop's version, stamped into the package packed from its checkout. */
+	readonly devVersion?: string;
 	readonly cacheDirectory: string;
 	readonly nodeDist?: string;
 }
@@ -55,7 +57,7 @@ export async function remoteArtifacts(
 	if (!options.checkout) throw new Error("This build has no pinned remote package and no checkout to pack one from.");
 	await mkdir(options.cacheDirectory, { recursive: true });
 	return {
-		package: await packCheckout(options.checkout, options.cacheDirectory),
+		package: await packCheckout(options.checkout, options.cacheDirectory, options.devVersion),
 		node: await developmentNode(target, options.checkout, options.cacheDirectory, options.nodeDist ?? NODE_DIST),
 	};
 }
@@ -64,7 +66,7 @@ export async function remotePackageIntegrity(options: ReviewRemoteArtifactsOptio
 	if (options.pin) return options.pin.package.integrity;
 	if (!options.checkout) throw new Error("This build has no pinned remote package and no checkout to pack one from.");
 	await mkdir(options.cacheDirectory, { recursive: true });
-	const { integrity } = await packCheckout(options.checkout, options.cacheDirectory);
+	const { integrity } = await packCheckout(options.checkout, options.cacheDirectory, options.devVersion);
 	return integrity!;
 }
 
@@ -150,9 +152,9 @@ async function checkoutState(checkout: string): Promise<string> {
 	return hash.digest("hex").slice(0, 40);
 }
 
-async function packCheckout(checkout: string, cacheDirectory: string): Promise<ReviewRemoteArtifact> {
+async function packCheckout(checkout: string, cacheDirectory: string, devVersion: string | undefined): Promise<ReviewRemoteArtifact> {
 	const state = await checkoutState(checkout);
-	const record = join(cacheDirectory, `dev-pack-${state}.json`);
+	const record = join(cacheDirectory, `dev-pack-${state}${devVersion ? `-${devVersion}` : ""}.json`);
 	const previous = await readFile(record, "utf8").then(
 		(text) => JSON.parse(text) as ReviewRemoteArtifact,
 		() => undefined,
@@ -161,15 +163,16 @@ async function packCheckout(checkout: string, cacheDirectory: string): Promise<R
 
 	const directory = join(checkout, "packages", "review");
 	const manifest = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as { name: string; version: string };
+	const version = devVersion ?? manifest.version;
 	const scratch = await mkdtemp(join(cacheDirectory, "dev-pack-"));
 	try {
-		await run("node", ["scripts/pack-review-cli.mjs", "--dev", state, scratch], checkout, REVIEW_REMOTE_ARTIFACT_TIMEOUTS.pack);
+		await run("node", ["scripts/pack-review-cli.mjs", "--dev", state, scratch, ...(devVersion ? [devVersion] : [])], checkout, REVIEW_REMOTE_ARTIFACT_TIMEOUTS.pack);
 		const [packed] = (await readdir(scratch)).filter((name) => name.endsWith(".tgz"));
 		if (!packed) throw new Error(`Packing ${directory} wrote no tarball.`);
 		const integrity = `sha512-${await digest(join(scratch, packed), "sha512", "base64")}`;
 		const file = cachePath(cacheDirectory, { name: packed, url: "", integrity });
 		await rename(join(scratch, packed), file);
-		const artifact = { name: tarballName(manifest.name, manifest.version), url: pathToFileURL(file).href, integrity };
+		const artifact = { name: tarballName(manifest.name, version), url: pathToFileURL(file).href, integrity };
 		await writeFile(record, JSON.stringify(artifact));
 		return artifact;
 	} finally {
