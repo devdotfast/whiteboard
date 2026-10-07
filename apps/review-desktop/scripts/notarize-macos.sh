@@ -159,12 +159,17 @@ rm -f -- "$ARTIFACT_DIR"/*-"$DARWIN_TARGET"-"$VERSION".zip "$DMG"
 mkdir -p "$DMG_STAGE"
 ditto "$PACKAGED_APP" "$DMG_STAGE/$PRODUCT_NAME.app"
 ln -s /Applications "$DMG_STAGE/Applications"
-hdiutil create \
-  -volname "$PRODUCT_NAME" \
-  -srcfolder "$DMG_STAGE" \
-  -ov \
-  -format UDZO \
-  "$DMG"
+# XProtect can briefly hold the new image busy on hosted runners.
+for attempt in 1 2 3 4 5; do
+  hdiutil create \
+    -volname "$PRODUCT_NAME" \
+    -srcfolder "$DMG_STAGE" \
+    -ov \
+    -format UDZO \
+    "$DMG" && break
+  [[ "$attempt" == 5 ]] && exit 1
+  sleep $((attempt * 5))
+done
 
 CODESIGN_DMG_ARGS=(--force --timestamp --sign "$CODESIGN_IDENTITY")
 if [[ -n "${CODESIGN_KEYCHAIN:-}" ]]; then
