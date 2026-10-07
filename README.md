@@ -9,6 +9,7 @@
   <p>
     <a href="https://dev.fast/install">Download for macOS, Windows, and Linux</a> ·
     <a href="https://dev.fast">Website</a> ·
+    <a href="apps/docs/">Docs</a> ·
     <a href="https://github.com/devdotfast/whiteboard/wiki/Roadmap">Roadmap</a> ·
     <a href="https://discord.gg/wYvd2cpMQg">Discord</a>
   </p>
@@ -73,7 +74,6 @@ Raw diff views can be very noisy, so we wrote a semantic, AST-aware diff viewer 
 ### Decision log
 
 We found it difficult to reason about what set of decisions our agents made autonomously & how that impacts a change. So we built tools for agents to query and link their own traces on the Whiteboard, so you can visualize the requirements that you set, understand how they were implemented, and understand what decisions the agent made autonomously.
-
 
 ## Open source, on your machine
 

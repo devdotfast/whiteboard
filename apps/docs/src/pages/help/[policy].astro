@@ -1,0 +1,32 @@
+---
+import { getCollection, render } from "astro:content";
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+
+export async function getStaticPaths() {
+  const entries = await getCollection("policies");
+
+  return entries.map((entry) => ({
+    params: { policy: entry.id },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+
+const { Content, headings } = await render(entry);
+
+const privacy = entry.id === "privacy";
+---
+
+<StarlightPage
+  frontmatter={{
+    title: privacy ? "Privacy and data" : "Telemetry reference",
+    description: privacy
+      ? "What Whiteboard keeps locally, what it sends, and how to control your data."
+      : "The canonical reference for Whiteboard product telemetry and error reports.",
+    editUrl: `https://github.com/devdotfast/whiteboard/edit/main/docs/${entry.id}.md`,
+  }}
+  headings={headings}
+>
+  <Content />
+</StarlightPage>

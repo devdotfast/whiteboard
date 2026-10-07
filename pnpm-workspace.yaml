@@ -7,6 +7,21 @@ packages:
 catalog:
   zod: "4.6.5"
 
+catalogs:
+  docs:
+    "@astrojs/check": "0.9.10"
+    "@astrojs/markdown-remark": "7.3.1"
+    "@astrojs/starlight": "0.42.4"
+    "@types/hast": "3.0.5"
+    "@types/mdast": "4.0.4"
+    astro: "7.3.5"
+    parse5: "8.0.1"
+    prettier: "3.9.9"
+    prettier-plugin-astro: "1.1.0"
+    # astro check currently supports TypeScript 5/6, independently of the app.
+    typescript: "6.0.3"
+    unist-util-visit: "5.1.0"
+
 catalogMode: strict
 
 nodeLinker: hoisted
@@ -27,6 +42,9 @@ minimumReleaseAgeExclude:
   - "pi-acp@0.0.34"
 
 overrides:
+  # Keep the checker on the JS/WASM compiler until the native converter's
+  # required WASM runtime resolves reliably with pnpm's hoisted linker.
+  "@astrojs/check>@astrojs/language-server": "2.16.8"
   # @dev.fast/whiteboard declares a registry range; this override is what makes
   # it resolve to the workspace package. Do not remove it.
   "@dev.fast/local-vcs": "workspace:0.1.0"

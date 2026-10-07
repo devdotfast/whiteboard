@@ -1,0 +1,27 @@
+---
+title: Quick Start
+slug: start/quick-start
+description: Install Whiteboard, connect your agent, and open a review.
+---
+
+1. [Install Whiteboard](/installation/) and open the app.
+2. [Connect your agent](/agents/) via MCP. For example, in OpenCode v2:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "whiteboard": {
+        "type": "local",
+        "command": ["sh", "-c", "exec \"$HOME/.local/bin/whiteboard\" mcp"]
+      }
+    }
+  }
+}
+```
+
+3. Ask your agent to:
+
+```text
+Review changes from my current branch against main and open the result in Whiteboard.
+```

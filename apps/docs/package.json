@@ -1,0 +1,32 @@
+{
+  "name": "@dev.fast/docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "typecheck": "astro sync && node scripts/check-types.mjs",
+    "lint": "oxlint --config ../../.oxlintrc.json --disable-nested-config src scripts astro.config.mjs",
+    "format": "oxfmt --write \"src/**/*.{ts,css}\" \"scripts/*.mjs\" \"*.{json,mjs}\" && prettier --write \"src/**/*.{md,mdx,astro}\"",
+    "format:check": "oxfmt --check \"src/**/*.{ts,css}\" \"scripts/*.mjs\" \"*.{json,mjs}\" && prettier --check \"src/**/*.{md,mdx,astro}\"",
+    "check:links": "node scripts/check-links.mjs",
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm build && pnpm check:links"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "catalog:docs",
+    "@astrojs/starlight": "catalog:docs",
+    "astro": "catalog:docs",
+    "unist-util-visit": "catalog:docs"
+  },
+  "devDependencies": {
+    "@astrojs/check": "catalog:docs",
+    "@types/hast": "catalog:docs",
+    "@types/mdast": "catalog:docs",
+    "parse5": "catalog:docs",
+    "prettier": "catalog:docs",
+    "prettier-plugin-astro": "catalog:docs",
+    "typescript": "catalog:docs"
+  }
+}

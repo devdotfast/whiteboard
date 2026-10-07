@@ -1,0 +1,25 @@
+---
+import DefaultFooter from "@astrojs/starlight/components/Footer.astro";
+
+const base = import.meta.env.BASE_URL;
+---
+
+<DefaultFooter />
+<nav aria-label="Documentation resources" data-pagefind-ignore>
+  <a href={`${base}help/privacy/`}>Privacy and data</a>
+  <a href={`${base}help/telemetry/`}>Telemetry</a>
+</nav>
+
+<style>
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    margin-top: 2rem;
+    font-size: var(--sl-text-sm);
+  }
+
+  a {
+    color: var(--sl-color-text-accent);
+  }
+</style>

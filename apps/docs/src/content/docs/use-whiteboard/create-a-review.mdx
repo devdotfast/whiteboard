@@ -1,0 +1,27 @@
+---
+title: Create a review
+slug: guides/create-a-review
+description: Review changes, follow diagrams to code, and ask for more detail.
+---
+
+import DemoFigure from "../../../components/DemoFigure.astro";
+import diagramVideo from "../../../assets/demos/diagram-to-code.mp4?url";
+import diagramPoster from "../../../assets/demos/diagram-to-code.webp";
+
+Once you [connect an agent](/agents/), ask it to review your changes. Keep
+Whiteboard open and run your agent in the repository. For example:
+
+```text
+Review changes from my current branch against main and open the result in Whiteboard.
+```
+
+## Read the review
+
+The review appears in Whiteboard as your agent writes it. Select a diagram step
+or code link to open its source.
+
+<DemoFigure
+  image={diagramPoster}
+  video={diagramVideo}
+  alt="A sequence diagram beside the source code for its selected step"
+/>
