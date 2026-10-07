@@ -141,6 +141,7 @@ export const SETTING_NAME = [
   "ctrl_tab",
   "ready_notification",
   "document_width",
+  "code_font_size",
 ] as const;
 
 export const REVIEW_OPENED_VIA = ["home", "cli", "other"] as const;

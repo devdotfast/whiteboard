@@ -44,6 +44,17 @@ const DOCUMENT_WIDTH_LABELS: Record<ReviewDocumentWidthChoice, string> = {
   full: "Full",
 };
 
+const CODE_FONT_SIZES = [11, 12, 13, 14, 16];
+
+// A size set elsewhere, such as one imported from VS Code, gets its own segment.
+function codeFontSizeLabels(current: number) {
+  const sizes = [...new Set([...CODE_FONT_SIZES, current])].sort(
+    (left, right) => left - right,
+  );
+
+  return Object.fromEntries(sizes.map((size) => [String(size), String(size)]));
+}
+
 const READY_NOTIFICATION_LABELS: Record<ReviewReadyNotificationChoice, string> =
   {
     notificationAndBadge: "Notification and badge",
@@ -72,6 +83,7 @@ export function SettingsPage({
   const [keymap, setKeymap] = useState(settings.keymap);
   const [ctrlTab, setCtrlTab] = useState(settings.ctrlTab);
   const [documentWidth, setDocumentWidth] = useState(settings.documentWidth);
+  const [codeFontSize, setCodeFontSize] = useState(settings.codeFontSize);
 
   const [readyNotification, setReadyNotification] = useState(
     settings.readyNotification,
@@ -228,6 +240,24 @@ export function SettingsPage({
                     "document-width",
                     () => settings.setDocumentWidth(choice),
                     setDocumentWidth,
+                  )
+                }
+              />
+            </Row>
+            <Row
+              label="Code font size"
+              description="Text size in diffs, code peeks, and source tabs."
+            >
+              <Choice
+                label="Code font size"
+                value={String(codeFontSize)}
+                labels={codeFontSizeLabels(codeFontSize)}
+                disabled={busy !== null}
+                onChange={(choice) =>
+                  void run(
+                    "code-font-size",
+                    () => settings.setCodeFontSize(Number(choice)),
+                    setCodeFontSize,
                   )
                 }
               />

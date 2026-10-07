@@ -561,6 +561,9 @@ export interface ReviewCanvasSettingsContent {
   setDocumentWidth(
     choice: ReviewDocumentWidthChoice,
   ): Promise<ReviewDocumentWidthChoice>;
+  // `editor.fontSize`, which every diff, peek and source editor reads.
+  codeFontSize: number;
+  setCodeFontSize(size: number): Promise<number>;
   readyNotification: ReviewReadyNotificationChoice;
   setReadyNotification(
     choice: ReviewReadyNotificationChoice,

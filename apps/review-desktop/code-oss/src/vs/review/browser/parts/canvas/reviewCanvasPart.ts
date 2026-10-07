@@ -43,6 +43,7 @@ import { IHostService } from "../../../../workbench/services/host/browser/host.j
 import { ILifecycleService } from "../../../../workbench/services/lifecycle/common/lifecycle.js";
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import {
+	EDITOR_FONT_SIZE_SETTING,
 	REVIEW_CTRL_TAB_SETTING,
 	REVIEW_DOCUMENT_WIDTH_SETTING,
 	REVIEW_KEYMAP_SETTING,
@@ -812,6 +813,15 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.configurationService.updateValue(REVIEW_DOCUMENT_WIDTH_SETTING, choice, ConfigurationTarget.USER);
 				return this.currentDocumentWidth();
 			},
+			codeFontSize: this.currentCodeFontSize(),
+			setCodeFontSize: async (size) => {
+				this.reviewTelemetryService.capture("setting_changed", {
+					setting: "code_font_size",
+					enabled: size !== 12,
+				});
+				await this.configurationService.updateValue(EDITOR_FONT_SIZE_SETTING, size, ConfigurationTarget.USER);
+				return this.currentCodeFontSize();
+			},
 			readyNotification: this.currentReadyNotification(),
 			setReadyNotification: async (choice) => {
 				this.reviewTelemetryService.capture("setting_changed", {
@@ -880,6 +890,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	private currentDocumentWidth(): ReviewDocumentWidthChoice {
 		const choice = this.configurationService.getValue<ReviewDocumentWidthChoice>(REVIEW_DOCUMENT_WIDTH_SETTING);
 		return choice === "wide" || choice === "full" ? choice : "standard";
+	}
+
+	private currentCodeFontSize(): number {
+		return this.configurationService.getValue<number>(EDITOR_FONT_SIZE_SETTING);
 	}
 
 	private currentReadyNotification(): ReviewReadyNotificationChoice {
