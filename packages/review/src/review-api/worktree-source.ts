@@ -127,8 +127,9 @@ export async function inspectWorktree(repositoryId: string, vcs: LocalVcs) {
     EMPTY_SOURCE;
 
   const hash = createHash("sha256").update(`${repositoryId}\0${commit}`);
+  const files = await workingFiles(vcs);
 
-  for (const file of await workingFiles(vcs)) {
+  for (const file of files) {
     try {
       const info = await lstat(resolve(vcs.rootPath, file), { bigint: true });
       hash.update(
@@ -139,7 +140,7 @@ export async function inspectWorktree(repositoryId: string, vcs: LocalVcs) {
     }
   }
 
-  return { revision: hash.digest("hex"), commit };
+  return { revision: hash.digest("hex"), commit, files };
 }
 
 export async function readWorkingFile(

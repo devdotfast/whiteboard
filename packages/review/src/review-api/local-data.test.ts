@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
   type FSWatcher,
+  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -2618,6 +2619,89 @@ it("resolves omitted commit base once and preserves explicit parent comparisons"
   });
 
   expect(await local.data.changes(comparison.pins)).not.toEqual([]);
+});
+
+it("leaves other checkouts alone while a nested worktree works", async () => {
+  appendFileSync(path.join(repository, ".git/info/exclude"), ".claude/\n");
+
+  const worktree = (name: string) => {
+    const root = path.join(repository, ".claude/worktrees", name);
+    git("worktree", "add", "-q", "-b", name, root);
+
+    return root;
+  };
+
+  const sibling = worktree("sibling");
+  const own = worktree("own");
+
+  const review = async (root: string) => {
+    const { id } = await local.data.register(root);
+
+    return (
+      await local.store.execute(
+        command({
+          type: "create",
+          title: root,
+          target: { kind: "worktree", repositoryId: id },
+        }),
+      )
+    ).reviewId;
+  };
+
+  const reviews = [repository, own, sibling].map(review);
+  const siblingReview = (await Promise.all(reviews))[2]!;
+  await local.store.refreshWorktrees();
+  const before = local.store.read(siblingReview).pins!.worktreeRevision;
+  recordSpawns();
+
+  mkdirSync(path.join(sibling, "node_modules"));
+  writeFileSync(path.join(sibling, "node_modules/built.js"), "built\n");
+  writeFileSync(path.join(sibling, source.file), "export const edited = 1;\n");
+  execFileSync("git", ["add", source.file], { cwd: sibling });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await local.store.refreshWorktrees();
+
+  expect(local.store.read(siblingReview).pins!.worktreeRevision).not.toBe(
+    before,
+  );
+
+  for (const root of [repository, own])
+    expect(
+      spawns.filter((spawn) => spawn.includes(realpathSync(root))),
+    ).toEqual([]);
+});
+
+it("follows its base branch when only the ref moves", async () => {
+  const linked = path.join(directory, "linked");
+  git("worktree", "add", "-q", "-b", "linked", linked);
+
+  const linkedGit = (...args: string[]) =>
+    execFileSync("git", args, { cwd: linked, encoding: "utf8" }).trim();
+
+  const registered = await local.data.register(linked);
+
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Linked",
+      target: { kind: "worktree", repositoryId: registered.id },
+    }),
+  );
+
+  writeFileSync(path.join(linked, "linked.ts"), "export {};\n");
+  linkedGit("add", ".");
+  linkedGit("-c", "commit.gpgsign=false", "commit", "-qm", "Linked");
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await local.store.refreshWorktrees();
+  const head = linkedGit("rev-parse", "HEAD");
+  expect(local.store.read(reviewId).pins!.base).not.toBe(head);
+
+  // Nothing in the linked checkout changes: only main moves.
+  git("update-ref", "refs/heads/main", head);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await local.store.refreshWorktrees();
+
+  expect(local.store.read(reviewId).pins!.base).toBe(head);
 });
 
 it("reads current working source across authored versions, commits and retargeting", async () => {

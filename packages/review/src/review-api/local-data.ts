@@ -88,6 +88,12 @@ import {
 import { traceSchema } from "./trace-schema.js";
 import { ReviewWorkspaces } from "./workspaces.js";
 import {
+  gitDirectoryPrefix,
+  gitEventMatters,
+  rootEventMatters,
+  trackedDirectories,
+} from "./worktree-events.js";
+import {
   EMPTY_SOURCE,
   inspectWorktree,
   localSourcePath,
@@ -636,7 +642,8 @@ export class LocalReviewData {
       inspectedEpoch: number;
       watchers: FSWatcher[];
       healthy: boolean;
-      inspection?: Awaited<ReturnType<typeof inspectWorktree>>;
+      inspection?: Omit<Awaited<ReturnType<typeof inspectWorktree>>, "files">;
+      tracked?: Set<string>;
       /** Fork points by base ref, valid for the inspected epoch. */
       forks: Map<string, Promise<{ ref: string; commit: string }>>;
     }
@@ -662,18 +669,35 @@ export class LocalReviewData {
       };
       this.worktrees.set(repositoryId, entry);
       const state = entry;
-      const roots = new Set([vcs.rootPath]);
       const common = await gitCommonDir(vcs.rootPath);
 
-      if (common) roots.add(common);
+      // jj snapshots untracked files, so every event can matter there.
+      const prefix =
+        vcs.kind === "git" && common
+          ? await gitDirectoryPrefix(vcs.rootPath, common)
+          : null;
 
-      for (const root of roots) {
+      const roots = new Map([
+        [
+          vcs.rootPath,
+          (name: string) =>
+            prefix === null || rootEventMatters(name, state.tracked),
+        ],
+      ]);
+
+      if (common)
+        roots.set(
+          common,
+          (name) => prefix === null || gitEventMatters(name, prefix),
+        );
+
+      for (const [root, matters] of roots) {
         try {
           const watcher = (this.options.watch ?? watch)(
             root,
             { recursive: true },
-            () => {
-              state.epoch++;
+            (_event, name) => {
+              if (name === null || matters(String(name))) state.epoch++;
             },
           );
 
@@ -700,8 +724,9 @@ export class LocalReviewData {
       return { ...entry.inspection, forks: entry.forks };
 
     const epoch = entry.epoch;
-    const inspected = await inspectWorktree(repositoryId, vcs);
+    const { files, ...inspected } = await inspectWorktree(repositoryId, vcs);
     entry.inspection = inspected;
+    entry.tracked = trackedDirectories(files);
     entry.inspectedEpoch = epoch;
     entry.forks = new Map();
 
