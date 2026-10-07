@@ -567,6 +567,7 @@ export interface IBandRegion {
 	shouldHideControls(reader: IReader | undefined): boolean;
 	/** False when the region has no band. */
 	readonly band?: boolean;
+	readonly foldControl?: boolean;
 }
 
 /** Whether a region hides lines that exist on the base side only. */
@@ -583,5 +584,6 @@ export function bandZoneHeightPx(regions: readonly IBandRegion[], index: number,
 	const region = regions[index];
 	if (region.shouldHideControls(reader) || region.band === false) { return undefined; }
 	if (compactMode) { return index === 0 || index === regions.length - 1 ? undefined : 12; }
-	return bandHeightPx(region.readLabel ? region.readLabel(reader) : region.label, lineHeight);
+	const label = region.readLabel ? region.readLabel(reader) : region.label;
+	return bandHeightPx(label, lineHeight) - (region.foldControl === false && bandDetailText(label) ? 24 : 0);
 }

@@ -14,6 +14,11 @@
 	line-height: 14px;
 }
 
+/* Structural bands reveal as a whole and have no incremental drag handles. */
+.monaco-editor .diff-hidden-lines.structural-fold {
+	transform: none;
+}
+
 .monaco-editor .diff-hidden-lines:not(.dragging) .top:hover,
 .monaco-editor .diff-hidden-lines:not(.dragging) .bottom:hover,
 .monaco-editor .diff-hidden-lines .top.dragging,
@@ -484,4 +489,16 @@
 .line-delete-selectable .view-line {
 	user-select: text !important;
 	-webkit-user-select: text !important;
+}
+
+/* A summarized body uses its scope's header chevron and continuous rail. */
+.monaco-editor .diff-hidden-lines.summary-fold .center {
+	display: none !important;
+}
+.monaco-editor .diff-hidden-lines.summary-fold .detail {
+	cursor: pointer;
+}
+.monaco-editor .diff-hidden-lines.summary-fold .detail pre.diff-hidden-lines-detail {
+	border-left: none;
+	padding-left: 0;
 }

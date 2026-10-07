@@ -312,6 +312,9 @@ export class DiffEditorViewZones extends Disposable {
 							if (placeholders.has(line)) decorations.push(new InlineDecoration(new Range(i + 1, 1, i + 1, source.lineTokens[i].getLineContent().length + 1), 'diff-fold-placeholder', InlineDecorationType.Regular));
 						});
 						const result = renderLines(source, renderOptions, decorations, deletedCodeDomNode, false, changeHighlights !== undefined);
+						const marginDomNode = document.createElement('div');
+						marginDomNode.className = changeHighlights ? 'inline-original-margin-view-zone' : 'inline-deleted-margin-view-zone';
+						applyFontInfo(marginDomNode, renderOptions.fontInfo);
 						visibleOriginalLines.forEach((line, i) => {
 							const region = placeholders.get(line);
 							if (!region) return;
@@ -321,11 +324,24 @@ export class DiffEditorViewZones extends Disposable {
 							hit.style.cssText = `position:absolute;left:0;right:0;top:${result.viewLineCounts.slice(0, i).reduce((x, y) => x + y, 0) * modLineHeight}px;height:${modLineHeight}px;cursor:pointer;z-index:10`;
 							alignmentViewZonesDisposables.add(addDisposableListener(hit, 'mousedown', e => { e.preventDefault(); e.stopPropagation(); region.showAll(undefined); }));
 							deletedCodeDomNode.appendChild(hit);
+							const row = result.viewLineCounts.slice(0, i).reduce((a, b) => a + b, 0);
+							const chevron = document.createElement('button');
+							chevron.className = 'diff-fold-chevron ' + ThemeIcon.asClassName(Codicon.chevronRight);
+							chevron.title = 'Show removed lines';
+							chevron.setAttribute('aria-label', chevron.title);
+							chevron.style.cssText = `position:absolute;right:0;top:${row * modLineHeight}px;width:${renderOptions.lineDecorationsWidth}px;height:${modLineHeight}px;z-index:20`;
+							const paint = deletedCodeDomNode.querySelectorAll('.view-line')[row]?.querySelectorAll('.diff-fold-placeholder');
+							const highlight = (active: boolean) => {
+								chevron.classList.toggle('is-target', active);
+								paint?.forEach(node => node.classList.toggle('is-target', active));
+							};
+							for (const node of [hit, chevron]) {
+								alignmentViewZonesDisposables.add(addDisposableListener(node, 'mouseenter', () => highlight(true)));
+								alignmentViewZonesDisposables.add(addDisposableListener(node, 'mouseleave', () => highlight(false)));
+							}
+							alignmentViewZonesDisposables.add(addDisposableListener(chevron, 'click', e => { e.preventDefault(); e.stopPropagation(); region.showAll(undefined); }));
+							marginDomNode.appendChild(chevron);
 						});
-
-						const marginDomNode = document.createElement('div');
-						marginDomNode.className = changeHighlights ? 'inline-original-margin-view-zone' : 'inline-deleted-margin-view-zone';
-						applyFontInfo(marginDomNode, renderOptions.fontInfo);
 
 						if (!changeHighlights && this._options.renderIndicators.read(reader)) {
 							for (let i = 0; i < result.heightInLines; i++) {

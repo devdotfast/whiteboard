@@ -8,7 +8,7 @@ import { renderIcon, renderLabelWithIcons } from '../../../../../base/browser/ui
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { MarkdownString } from '../../../../../base/common/htmlContent.js';
 import { Disposable, IDisposable } from '../../../../../base/common/lifecycle.js';
-import { IObservable, IReader, autorun, derived, derivedDisposable, observableValue, transaction } from '../../../../../base/common/observable.js';
+import { IObservable, ISettableObservable, IReader, autorun, derived, derivedDisposable, observableValue, transaction } from '../../../../../base/common/observable.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { isDefined } from '../../../../../base/common/types.js';
 import { localize } from '../../../../../nls.js';
@@ -112,6 +112,7 @@ export class HideUnchangedRegionsFeature extends Disposable {
 			const compactMode = this._options.compactMode.read(reader);
 
 			const curUnchangedRegions = unchangedRegions.read(reader);
+			const hoveredBand = observableValue<UnchangedRegion | undefined>("hoveredFoldBand", undefined);
 			for (let i = 0; i < curUnchangedRegions.length; i++) {
 				const r = curUnchangedRegions[i];
 				const height = bandZoneHeightPx(curUnchangedRegions, i, compactMode, this._editors.modified.getOption(EditorOption.lineHeight), reader);
@@ -162,6 +163,7 @@ export class HideUnchangedRegionsFeature extends Disposable {
 							l => this._diffModel.get()!.ensureModifiedLineIsVisible(l, RevealPreference.FromBottom, undefined),
 							this._options,
 							this._themeService,
+							hoveredBand,
 						));
 					}
 					if (onModified) {
@@ -178,6 +180,7 @@ export class HideUnchangedRegionsFeature extends Disposable {
 							l => this._diffModel.get()!.ensureModifiedLineIsVisible(l, RevealPreference.FromBottom, undefined),
 							this._options,
 							this._themeService,
+							hoveredBand,
 						));
 					}
 				}
@@ -352,11 +355,39 @@ class CollapsedCodeOverlayWidget extends ViewZoneOverlayWidget {
 		private readonly _revealModifiedHiddenLine: (lineNumber: number) => void,
 		private readonly _options: DiffEditorOptions,
 		private readonly _themeService: IThemeService,
+		private readonly _hoveredBand: ISettableObservable<UnchangedRegion | undefined>,
 	) {
 		const root = h('div.diff-hidden-lines-widget');
 		super(_editor, _viewZone, root.root);
 		root.root.appendChild(this._nodes.root);
 		this._nodes.root.classList.add(`kind-${_unchangedRegion.change}`);
+		// A band has no visible model line: draw its single chevron in the view zone.
+		if (!_unchangedRegion.foldControl) {
+			const chevron = $('button.diff-fold-chevron', {
+				type: 'button', title: showTitle(_unchangedRegion.change), 'aria-label': showTitle(_unchangedRegion.change),
+			}, renderIcon(Codicon.chevronRight));
+			reset(this._nodes.first, chevron);
+			this._nodes.first.style.justifyContent = 'flex-end';
+			this._register(addDisposableListener(chevron, 'click', e => {
+				e.preventDefault(); e.stopPropagation(); _unchangedRegion.showAll(undefined);
+			}));
+			this._register(_editor.onDidLayoutChange(() => {
+				chevron.style.width = `${_editor.getLayoutInfo().decorationsWidth}px`;
+			}));
+			chevron.style.width = `${_editor.getLayoutInfo().decorationsWidth}px`;
+			this._register(addDisposableListener(this._nodes.root, 'mouseenter', () => this._hoveredBand.set(_unchangedRegion, undefined)));
+			this._register(addDisposableListener(this._nodes.root, 'mouseleave', () => {
+				if (this._hoveredBand.get() === _unchangedRegion) { this._hoveredBand.set(undefined, undefined); }
+			}));
+			this._register(autorun(reader => {
+				const hovered = this._hoveredBand.read(reader);
+				const selected = hovered === _unchangedRegion || (hovered?.foldStateId !== undefined && hovered.foldStateId === _unchangedRegion.foldStateId);
+				this._nodes.root.classList.toggle('is-target', selected);
+			}));
+			this._nodes.top.remove();
+			this._nodes.bottom.remove();
+			this._nodes.root.classList.add('structural-fold');
+		}
 
 		if (!this._hide) {
 			this._register(applyStyle(this._nodes.first, { width: observableCodeEditor(this._editor).layoutInfoContentLeft }));
@@ -365,114 +396,117 @@ class CollapsedCodeOverlayWidget extends ViewZoneOverlayWidget {
 			this._nodes.root.classList.add('empty-side');
 		}
 
-		this._register(autorun(reader => {
-			/** @description Update CollapsedCodeOverlayWidget canMove* css classes */
-			const isFullyRevealed = this._unchangedRegion.visibleLineCountTop.read(reader) + this._unchangedRegion.visibleLineCountBottom.read(reader) === this._unchangedRegion.lineCount;
+		if (_unchangedRegion.foldControl) {
+			this._register(autorun(reader => {
+				/** @description Update CollapsedCodeOverlayWidget canMove* css classes */
+				const isFullyRevealed = this._unchangedRegion.visibleLineCountTop.read(reader) + this._unchangedRegion.visibleLineCountBottom.read(reader) === this._unchangedRegion.lineCount;
 
-			this._nodes.bottom.classList.toggle('canMoveTop', !isFullyRevealed);
-			this._nodes.bottom.classList.toggle('canMoveBottom', this._unchangedRegion.visibleLineCountBottom.read(reader) > 0);
-			this._nodes.top.classList.toggle('canMoveTop', this._unchangedRegion.visibleLineCountTop.read(reader) > 0);
-			this._nodes.top.classList.toggle('canMoveBottom', !isFullyRevealed);
-			const isDragged = this._unchangedRegion.isDragged.read(reader);
-			const domNode = this._editor.getDomNode();
-			if (domNode) {
-				domNode.classList.toggle('draggingUnchangedRegion', !!isDragged);
-				if (isDragged === 'top') {
-					domNode.classList.toggle('canMoveTop', this._unchangedRegion.visibleLineCountTop.read(reader) > 0);
-					domNode.classList.toggle('canMoveBottom', !isFullyRevealed);
-				} else if (isDragged === 'bottom') {
-					domNode.classList.toggle('canMoveTop', !isFullyRevealed);
-					domNode.classList.toggle('canMoveBottom', this._unchangedRegion.visibleLineCountBottom.read(reader) > 0);
-				} else {
-					domNode.classList.toggle('canMoveTop', false);
-					domNode.classList.toggle('canMoveBottom', false);
+				this._nodes.bottom.classList.toggle('canMoveTop', !isFullyRevealed);
+				this._nodes.bottom.classList.toggle('canMoveBottom', this._unchangedRegion.visibleLineCountBottom.read(reader) > 0);
+				this._nodes.top.classList.toggle('canMoveTop', this._unchangedRegion.visibleLineCountTop.read(reader) > 0);
+				this._nodes.top.classList.toggle('canMoveBottom', !isFullyRevealed);
+				const isDragged = this._unchangedRegion.isDragged.read(reader);
+				const domNode = this._editor.getDomNode();
+				if (domNode) {
+					domNode.classList.toggle('draggingUnchangedRegion', !!isDragged);
+					if (isDragged === 'top') {
+						domNode.classList.toggle('canMoveTop', this._unchangedRegion.visibleLineCountTop.read(reader) > 0);
+						domNode.classList.toggle('canMoveBottom', !isFullyRevealed);
+					} else if (isDragged === 'bottom') {
+						domNode.classList.toggle('canMoveTop', !isFullyRevealed);
+						domNode.classList.toggle('canMoveBottom', this._unchangedRegion.visibleLineCountBottom.read(reader) > 0);
+					} else {
+						domNode.classList.toggle('canMoveTop', false);
+						domNode.classList.toggle('canMoveBottom', false);
+					}
 				}
-			}
-		}));
+			}));
 
-		const editor = this._editor;
+			const editor = this._editor;
 
-		this._register(addDisposableListener(this._nodes.top, 'mousedown', e => {
-			if (e.button !== 0) {
-				return;
-			}
-			this._nodes.top.classList.toggle('dragging', true);
-			this._nodes.root.classList.toggle('dragging', true);
-			e.preventDefault();
-			const startTop = e.clientY;
-			let didMove = false;
-			const cur = this._unchangedRegion.visibleLineCountTop.get();
-			this._unchangedRegion.isDragged.set('top', undefined);
-
-			const window = getWindow(this._nodes.top);
-
-			const mouseMoveListener = addDisposableListener(window, 'mousemove', e => {
-				const currentTop = e.clientY;
-				const delta = currentTop - startTop;
-				didMove = didMove || Math.abs(delta) > 2;
-				const lineDelta = Math.round(delta / editor.getOption(EditorOption.lineHeight));
-				const newVal = Math.max(0, Math.min(cur + lineDelta, this._unchangedRegion.getMaxVisibleLineCountTop()));
-				this._unchangedRegion.visibleLineCountTop.set(newVal, undefined);
-			});
-
-			const mouseUpListener = addDisposableListener(window, 'mouseup', e => {
-				if (!didMove) {
-					this._unchangedRegion.showMoreAbove(this._options.hideUnchangedRegionsRevealLineCount.get(), undefined);
+			this._register(addDisposableListener(this._nodes.top, 'mousedown', e => {
+				if (e.button !== 0) {
+					return;
 				}
-				this._nodes.top.classList.toggle('dragging', false);
-				this._nodes.root.classList.toggle('dragging', false);
-				this._unchangedRegion.isDragged.set(undefined, undefined);
-				mouseMoveListener.dispose();
-				mouseUpListener.dispose();
-			});
-		}));
+				this._nodes.top.classList.toggle('dragging', true);
+				this._nodes.root.classList.toggle('dragging', true);
+				e.preventDefault();
+				const startTop = e.clientY;
+				let didMove = false;
+				const cur = this._unchangedRegion.visibleLineCountTop.get();
+				this._unchangedRegion.isDragged.set('top', undefined);
 
-		this._register(addDisposableListener(this._nodes.bottom, 'mousedown', e => {
-			if (e.button !== 0) {
-				return;
-			}
-			this._nodes.bottom.classList.toggle('dragging', true);
-			this._nodes.root.classList.toggle('dragging', true);
-			e.preventDefault();
-			const startTop = e.clientY;
-			let didMove = false;
-			const cur = this._unchangedRegion.visibleLineCountBottom.get();
-			this._unchangedRegion.isDragged.set('bottom', undefined);
+				const window = getWindow(this._nodes.top);
 
-			const window = getWindow(this._nodes.bottom);
+				const mouseMoveListener = addDisposableListener(window, 'mousemove', e => {
+					const currentTop = e.clientY;
+					const delta = currentTop - startTop;
+					didMove = didMove || Math.abs(delta) > 2;
+					const lineDelta = Math.round(delta / editor.getOption(EditorOption.lineHeight));
+					const newVal = Math.max(0, Math.min(cur + lineDelta, this._unchangedRegion.getMaxVisibleLineCountTop()));
+					this._unchangedRegion.visibleLineCountTop.set(newVal, undefined);
+				});
 
-			const mouseMoveListener = addDisposableListener(window, 'mousemove', e => {
-				const currentTop = e.clientY;
-				const delta = currentTop - startTop;
-				didMove = didMove || Math.abs(delta) > 2;
-				const lineDelta = Math.round(delta / editor.getOption(EditorOption.lineHeight));
-				const newVal = Math.max(0, Math.min(cur - lineDelta, this._unchangedRegion.getMaxVisibleLineCountBottom()));
-				const top = this._unchangedRegionRange.endLineNumberExclusive > editor.getModel()!.getLineCount()
-					? editor.getContentHeight()
-					: editor.getTopForLineNumber(this._unchangedRegionRange.endLineNumberExclusive);
-				this._unchangedRegion.visibleLineCountBottom.set(newVal, undefined);
-				const top2 = this._unchangedRegionRange.endLineNumberExclusive > editor.getModel()!.getLineCount()
-					? editor.getContentHeight()
-					: editor.getTopForLineNumber(this._unchangedRegionRange.endLineNumberExclusive);
-				editor.setScrollTop(editor.getScrollTop() + (top2 - top));
-			});
+				const mouseUpListener = addDisposableListener(window, 'mouseup', e => {
+					if (!didMove) {
+						this._unchangedRegion.showMoreAbove(this._options.hideUnchangedRegionsRevealLineCount.get(), undefined);
+					}
+					this._nodes.top.classList.toggle('dragging', false);
+					this._nodes.root.classList.toggle('dragging', false);
+					this._unchangedRegion.isDragged.set(undefined, undefined);
+					mouseMoveListener.dispose();
+					mouseUpListener.dispose();
+				});
+			}));
 
-			const mouseUpListener = addDisposableListener(window, 'mouseup', e => {
-				this._unchangedRegion.isDragged.set(undefined, undefined);
+			this._register(addDisposableListener(this._nodes.bottom, 'mousedown', e => {
+				if (e.button !== 0) {
+					return;
+				}
+				this._nodes.bottom.classList.toggle('dragging', true);
+				this._nodes.root.classList.toggle('dragging', true);
+				e.preventDefault();
+				const startTop = e.clientY;
+				let didMove = false;
+				const cur = this._unchangedRegion.visibleLineCountBottom.get();
+				this._unchangedRegion.isDragged.set('bottom', undefined);
 
-				if (!didMove) {
-					const top = editor.getTopForLineNumber(this._unchangedRegionRange.endLineNumberExclusive);
+				const window = getWindow(this._nodes.bottom);
 
-					this._unchangedRegion.showMoreBelow(this._options.hideUnchangedRegionsRevealLineCount.get(), undefined);
-					const top2 = editor.getTopForLineNumber(this._unchangedRegionRange.endLineNumberExclusive);
+				const mouseMoveListener = addDisposableListener(window, 'mousemove', e => {
+					const currentTop = e.clientY;
+					const delta = currentTop - startTop;
+					didMove = didMove || Math.abs(delta) > 2;
+					const lineDelta = Math.round(delta / editor.getOption(EditorOption.lineHeight));
+					const newVal = Math.max(0, Math.min(cur - lineDelta, this._unchangedRegion.getMaxVisibleLineCountBottom()));
+					const top = this._unchangedRegionRange.endLineNumberExclusive > editor.getModel()!.getLineCount()
+						? editor.getContentHeight()
+						: editor.getTopForLineNumber(this._unchangedRegionRange.endLineNumberExclusive);
+					this._unchangedRegion.visibleLineCountBottom.set(newVal, undefined);
+					const top2 = this._unchangedRegionRange.endLineNumberExclusive > editor.getModel()!.getLineCount()
+						? editor.getContentHeight()
+						: editor.getTopForLineNumber(this._unchangedRegionRange.endLineNumberExclusive);
 					editor.setScrollTop(editor.getScrollTop() + (top2 - top));
-				}
-				this._nodes.bottom.classList.toggle('dragging', false);
-				this._nodes.root.classList.toggle('dragging', false);
-				mouseMoveListener.dispose();
-				mouseUpListener.dispose();
-			});
-		}));
+				});
+
+				const mouseUpListener = addDisposableListener(window, 'mouseup', e => {
+					this._unchangedRegion.isDragged.set(undefined, undefined);
+
+					if (!didMove) {
+						const top = editor.getTopForLineNumber(this._unchangedRegionRange.endLineNumberExclusive);
+
+						this._unchangedRegion.showMoreBelow(this._options.hideUnchangedRegionsRevealLineCount.get(), undefined);
+						const top2 = editor.getTopForLineNumber(this._unchangedRegionRange.endLineNumberExclusive);
+						editor.setScrollTop(editor.getScrollTop() + (top2 - top));
+					}
+					this._nodes.bottom.classList.toggle('dragging', false);
+					this._nodes.root.classList.toggle('dragging', false);
+					mouseMoveListener.dispose();
+					mouseUpListener.dispose();
+				});
+			}));
+
+		}
 
 		this._register(autorun(reader => {
 			/** @description update labels */
@@ -480,6 +514,10 @@ class CollapsedCodeOverlayWidget extends ViewZoneOverlayWidget {
 			const children: HTMLElement[] = [];
 			const label = _unchangedRegion.readLabel(reader);
 			const detailText = bandDetailText(label);
+			const summary = !!detailText && !_unchangedRegion.foldControl && _unchangedRegion.foldStateId !== undefined;
+			this._nodes.root.classList.toggle("summary-fold", summary);
+			if (summary) this._nodes.root.dataset.summaryFoldStateId = String(_unchangedRegion.foldStateId);
+			else delete this._nodes.root.dataset.summaryFoldStateId;
 			const contentLeft = observableCodeEditor(this._editor).layoutInfoContentLeft.read(reader);
 			this._nodes.root.style.setProperty('--diff-fold-content-left', `${contentLeft}px`);
 			const lineCount = Math.max(_unchangedRegion.getHiddenModifiedRange(reader).length, _unchangedRegion.getHiddenOriginalRange(reader).length);
@@ -494,6 +532,15 @@ class CollapsedCodeOverlayWidget extends ViewZoneOverlayWidget {
 				const color = commentColor ?? theme.getColor(diffUnchangedRegionForeground)?.toString() ?? '';
 				const fontSize = Math.max(11, this._editor.getOption(EditorOption.fontSize) - 1);
 				const pre = $('pre.diff-hidden-lines-detail', undefined, detailText);
+				if (summary) {
+					pre.tabIndex = 0;
+					pre.setAttribute('role', 'button');
+					pre.setAttribute('aria-label', `Expand code: ${lineCount} hidden lines`);
+					pre.addEventListener('click', () => _unchangedRegion.showAll(undefined));
+					pre.addEventListener('keydown', event => {
+						if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); _unchangedRegion.showAll(undefined); }
+					});
+				}
 				pre.style.color = color;
 				pre.style.borderLeftColor = color;
 				pre.style.fontSize = `${fontSize}px`;
@@ -507,8 +554,11 @@ class CollapsedCodeOverlayWidget extends ViewZoneOverlayWidget {
 				const [title] = label ? label.split('\n') : [];
 				// A band with detail keeps Monaco's own count; the detail is a comment attached to it.
 				const linesHiddenText = detailText || !label ? localize('hiddenLines', '{0} hidden lines', lineCount) : title;
-				const span = $('span', { title: localize('diff.hiddenLines.expandAll', 'Double click to unfold') }, linesHiddenText);
-				span.addEventListener('dblclick', e => {
+				const structural = !this._unchangedRegion.foldControl;
+				const span = structural
+					? $('button.diff-fold-reveal', { type: 'button', title: showTitle(this._unchangedRegion.change), 'aria-label': `${showTitle(this._unchangedRegion.change)}: ${linesHiddenText}` }, linesHiddenText)
+					: $('span', { title: localize('diff.hiddenLines.expandAll', 'Double click to unfold') }, linesHiddenText);
+				span.addEventListener(structural ? 'click' : 'dblclick', e => {
 					if (e.button !== 0) { return; }
 					e.preventDefault();
 					this._unchangedRegion.showAll(undefined);
