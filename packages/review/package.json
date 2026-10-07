@@ -80,6 +80,7 @@
     "semver": "7.8.5",
     "sharp": "0.35.4",
     "smol-toml": "1.8.0",
+    "undici": "7.29.0",
     "yauzl": "3.4.0",
     "zod": "catalog:"
   },

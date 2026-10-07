@@ -1,13 +1,12 @@
-import type http from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
 
 import {
-  FIRST_BYTE_TIMEOUT_MS,
   FIRST_RETRY_MS,
   type GatewayHosts,
   type GatewayRemote,
   MAX_RETRY_MS,
   NO_ANSWER,
+  errorCode,
   jitter,
   remoteHeaders,
   send,
@@ -91,37 +90,25 @@ export function keepOpen(input: {
   remote: GatewayRemote;
   path: string;
   signal: AbortSignal;
-  read(body: http.IncomingMessage): Promise<void>;
+  read(body: AsyncIterable<Uint8Array>): Promise<void>;
 }) {
   const { remote, signal } = input;
 
   void reconnect(signal, async () => {
-    const abort = new AbortController();
-    const leave = () => abort.abort();
-    signal.addEventListener("abort", leave, { once: true });
     let timedOut = false;
-
-    const firstByte = setTimeout(() => {
-      timedOut = true;
-      abort.abort();
-    }, FIRST_BYTE_TIMEOUT_MS);
 
     try {
       const response = await send(remote, {
         method: "GET",
         path: input.path,
         headers: remoteHeaders(remote),
-        signal: abort.signal,
+        signal,
       });
 
-      clearTimeout(firstByte);
-
-      if (response.statusCode === 200) await input.read(response);
-    } catch {
-    } finally {
-      clearTimeout(firstByte);
-      signal.removeEventListener("abort", leave);
-      abort.abort();
+      if (response.statusCode === 200) await input.read(response.body);
+      else await response.body.dump();
+    } catch (error) {
+      timedOut = errorCode(error) === "UND_ERR_HEADERS_TIMEOUT";
     }
 
     if (signal.aborted) return;

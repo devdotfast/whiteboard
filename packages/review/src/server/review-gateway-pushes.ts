@@ -64,9 +64,6 @@ export function createGatewayPushes(input: {
     id: string,
     response: ReviewVerbResponse,
   ) {
-    const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), FIRST_BYTE_TIMEOUT_MS);
-
     try {
       const answered = await send(remote, {
         method: "POST",
@@ -76,16 +73,14 @@ export function createGatewayPushes(input: {
           "content-type": "application/json",
         },
         body: Buffer.from(JSON.stringify({ id, response })),
-        signal: abort.signal,
+        signal: AbortSignal.timeout(FIRST_BYTE_TIMEOUT_MS),
       });
 
-      answered.resume();
+      await answered.body.dump();
     } catch (error) {
       input.log(
         `Could not answer ${remote.alias}'s push: ${errorText(error)}.`,
       );
-    } finally {
-      clearTimeout(timer);
     }
   }
 

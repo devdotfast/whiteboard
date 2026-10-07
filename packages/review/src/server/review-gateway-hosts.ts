@@ -1,4 +1,4 @@
-import http from "node:http";
+import { addAbortListener } from "node:events";
 import { Readable } from "node:stream";
 
 import {
@@ -9,6 +9,7 @@ import {
   type ReviewGatewayHost,
   type ReviewGatewayHostState,
 } from "@dev.fast/review-protocol";
+import { Agent, type Dispatcher, request } from "undici";
 import { z } from "zod";
 
 import { StreamLimitError } from "./bounded-stream.js";
@@ -59,14 +60,14 @@ const healthSchema = z.object({
 export interface GatewayRemote {
   readonly alias: string;
   readonly endpoint?: { url: string; token: string };
-  readonly agent?: http.Agent;
+  readonly dispatcher?: Agent;
   readonly serverId?: string;
   readonly unauthorized?: () => void;
 }
 
 interface Host extends GatewayRemote {
   endpoint?: { url: string; token: string };
-  agent?: http.Agent;
+  dispatcher?: Agent;
   unauthorized?: () => void;
   problem?: ReviewGatewayHost["problem"];
   languageFeatures?: boolean;
@@ -248,7 +249,7 @@ export function createGatewayHosts(input: {
     clearTimeout(host.retry);
     host.checking?.abort();
     host.checking = undefined;
-    host.agent?.destroy();
+    void host.dispatcher?.destroy();
   }
 
   function create(given: ReviewGatewayHost): Host {
@@ -280,7 +281,7 @@ export function createGatewayHosts(input: {
     } else if (!given.endpoint)
       host.detail = `Waiting for a connection to ${given.alias}.`;
     else {
-      host.agent = new http.Agent({ keepAlive: true, timeout: 60_000 });
+      host.dispatcher = new Agent();
       host.unauthorized = () => restartedHost(host);
     }
 
@@ -300,7 +301,7 @@ export function createGatewayHosts(input: {
     host.checking?.abort();
     const abort = new AbortController();
     host.checking = abort;
-    const timer = setTimeout(() => abort.abort(), HEALTH_TIMEOUT_MS);
+    const timeout = AbortSignal.timeout(HEALTH_TIMEOUT_MS);
     let health: z.infer<typeof healthSchema> | undefined;
     let reason = "it did not answer";
     let code: string | undefined;
@@ -311,25 +312,23 @@ export function createGatewayHosts(input: {
         method: "GET",
         path: "/health",
         headers: { "x-review-token": host.endpoint?.token ?? "" },
-        signal: abort.signal,
+        signal: AbortSignal.any([abort.signal, timeout]),
       });
 
       const parsed = healthSchema.safeParse(
-        JSON.parse((await readBody(response, 64 * 1024)).toString()),
+        JSON.parse((await readBody(response.body, 64 * 1024)).toString()),
       );
 
       if (parsed.success) health = parsed.data;
       else reason = "it did not answer as a Whiteboard server";
     } catch (error) {
-      if (!abort.signal.aborted) {
-        code = errorCode(error);
-        reason = errorText(error);
-      } else if (host.checking === abort) {
+      if (timeout.aborted) {
         timedOut = true;
         reason = `it did not answer within ${HEALTH_TIMEOUT_MS / 1_000} seconds`;
+      } else if (!abort.signal.aborted) {
+        code = errorCode(error);
+        reason = errorText(error);
       }
-    } finally {
-      clearTimeout(timer);
     }
 
     if (host.checking !== abort) return;
@@ -339,7 +338,9 @@ export function createGatewayHosts(input: {
     if (
       !health &&
       host.instanceId !== undefined &&
-      (code === "ECONNRESET" || code === "ECONNREFUSED")
+      (code === "ECONNRESET" ||
+        code === "ECONNREFUSED" ||
+        code === "UND_ERR_SOCKET")
     )
       return restartedHost(
         host,
@@ -518,80 +519,76 @@ export const remoteHeaders = (remote: GatewayRemote) => ({
   [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE,
 });
 
-export function send(
+export async function send(
   remote: GatewayRemote,
-  request: {
-    method: string;
+  input: {
+    method: Dispatcher.HttpMethod;
     path: string;
-    headers?: http.OutgoingHttpHeaders;
+    headers?: Record<string, string>;
     body?: Buffer | Readable;
-    signal: AbortSignal;
+    signal?: AbortSignal;
+    headersTimeout?: number;
+    bodyTimeout?: number;
   },
   retry = true,
-): Promise<http.IncomingMessage> {
-  return new Promise((resolve, reject) => {
-    if (!remote.endpoint) {
-      reject(new Error(`${remote.alias} has no endpoint.`));
+): Promise<Dispatcher.ResponseData> {
+  if (!remote.endpoint) throw new Error(`${remote.alias} has no endpoint.`);
+  let response: Dispatcher.ResponseData;
 
-      return;
-    }
-
-    const outgoing = http.request(new URL(request.path, remote.endpoint.url), {
-      method: request.method,
-      headers: request.headers,
-      agent: remote.agent,
+  try {
+    response = await request(new URL(input.path, remote.endpoint.url), {
+      dispatcher: remote.dispatcher,
+      method: input.method,
+      headers: input.headers,
+      body: input.body,
+      signal: input.signal,
+      headersTimeout: input.headersTimeout ?? FIRST_BYTE_TIMEOUT_MS,
+      bodyTimeout: input.bodyTimeout ?? 0,
     });
+  } catch (error) {
+    if (
+      retry &&
+      !input.signal?.aborted &&
+      !(input.body instanceof Readable) &&
+      errorCode(error) === "UND_ERR_SOCKET" &&
+      (input.body === undefined || reusedSocket(error))
+    )
+      return send(remote, input, false);
 
-    const abort = () => outgoing.destroy(new Error("The request was aborted."));
-    const release = () => request.signal.removeEventListener("abort", abort);
+    throw error;
+  }
 
-    if (request.signal.aborted) abort();
-    else request.signal.addEventListener("abort", abort, { once: true });
+  if (response.statusCode === 401) remote.unauthorized?.();
 
-    outgoing.on("response", (response) => {
-      if (response.statusCode === 401) remote.unauthorized?.();
-      response.on("close", release);
-      resolve(response);
-    });
-    outgoing.on("error", (error) => {
-      release();
-
-      if (
-        retry &&
-        outgoing.reusedSocket &&
-        !request.signal.aborted &&
-        !(request.body instanceof Readable) &&
-        errorCode(error) === "ECONNRESET"
-      )
-        resolve(send(remote, request, false));
-      else reject(error);
-    });
-
-    if (request.body instanceof Readable) request.body.pipe(outgoing);
-    else outgoing.end(request.body);
-  });
+  return response;
 }
 
 export async function readBody(
-  response: http.IncomingMessage,
+  body: Dispatcher.ResponseData["body"],
   limit: number,
-  received?: () => void,
+  signal?: AbortSignal,
 ) {
   const parts: Buffer[] = [];
   let size = 0;
 
-  for await (const part of response) {
-    // SAFETY: an IncomingMessage without an encoding yields Buffers.
-    const chunk = part as Buffer;
-    received?.();
-    size += chunk.byteLength;
+  const stop =
+    signal && addAbortListener(signal, () => body.destroy(signal.reason));
 
-    if (size > limit) {
-      response.destroy();
-      throw new StreamLimitError();
+  try {
+    for await (const part of body) {
+      // SAFETY: undici's body yields Buffers.
+      const chunk = part as Buffer;
+      size += chunk.byteLength;
+
+      if (size > limit) {
+        body.destroy();
+        throw new StreamLimitError();
+      }
+
+      parts.push(chunk);
     }
-
-    parts.push(chunk);
+  } finally {
+    stop?.[Symbol.dispose]();
   }
 
   return Buffer.concat(parts, size);
@@ -599,13 +596,21 @@ export async function readBody(
 
 const codedError = z.object({ code: z.string() });
 
+const socketError = z.object({ socket: z.object({ bytesRead: z.number() }) });
+
+// undici has no reusedSocket; a socket that already read bytes served an earlier response.
+const reusedSocket = (cause: unknown) =>
+  (socketError.safeParse(cause).data?.socket.bytesRead ?? 0) > 0;
+
 const ERROR_WORDS = new Map([
   ["ECONNREFUSED", "it refused the connection"],
   ["ECONNRESET", "it closed the connection"],
+  ["UND_ERR_SOCKET", "it closed the connection"],
   ["ETIMEDOUT", "it did not answer"],
+  ["UND_ERR_HEADERS_TIMEOUT", NO_ANSWER],
 ]);
 
-function errorCode(cause: unknown): string {
+export function errorCode(cause: unknown): string {
   if (!(cause instanceof Error)) return String(cause);
 
   return (
