@@ -14,6 +14,11 @@ export function ownsRemoteResource(authority: string, resource: URI): boolean {
 	return resource.scheme === Schemas.vscodeRemote && resource.authority.toLowerCase() === authority;
 }
 
+/** Exactly the lower-case `whiteboard+<serverId>` that `reviewRemoteAuthority` makes. */
+export function isReviewRemoteAuthority(authority: string | null | undefined): authority is string {
+	return !!authority && /^whiteboard\+[0-9a-z-]+$/.test(authority);
+}
+
 export function override<T extends object>(base: T, members: Partial<T>): T {
 	return new Proxy(base, {
 		get(target, key) {

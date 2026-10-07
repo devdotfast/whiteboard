@@ -49,6 +49,26 @@ export interface ReviewRemoteHostsOptions {
 	readonly clock?: ReviewRemoteClock;
 	readonly timeouts?: ReviewRemoteHostOptions["timeouts"];
 	readonly install?: ReviewRemoteInstallFlow;
+	/** No host in the setting serves this machine any more. */
+	removed?(serverId: string): void;
+}
+
+/** The gateway's state of the machine `serverId`; `configured` is the alias that served it. */
+export function remoteHostState(
+	serverId: string,
+	states: readonly ReviewGatewayHostState[],
+	configured?: string,
+): { alias?: string; state: ReviewGatewayHostState["state"] } | undefined {
+	const own = states.filter((state) => state.serverId === serverId);
+	const best = own.find((state) => state.state === "online") ?? own.find((state) => state.state === "connecting") ?? own[0];
+	if (best) return { alias: best.alias, state: best.state };
+	if (configured) return { alias: configured, state: states.find((state) => state.alias === configured)?.state ?? "connecting" };
+	return states.some((state) => state.serverId === undefined && state.state === "connecting") ? { state: "connecting" } : undefined;
+}
+
+export function closeRemoteHostWindows(windows: { getWindows(): readonly { readonly remoteAuthority?: string; close(): void }[] }, serverId: string): void {
+	const authority = `whiteboard+${serverId.toLowerCase()}`;
+	for (const window of windows.getWindows()) if (window.remoteAuthority === authority) window.close();
 }
 
 export function freeLoopbackPort(): Promise<number> {
@@ -113,6 +133,7 @@ export class ReviewRemoteHosts {
 			this.hosts.delete(alias);
 			this.options.log(`${alias}: removed from the setting; closing its connection.`);
 			this.closing.set(host, host.dispose().finally(() => this.closing.delete(host)));
+			this.forget(host);
 		}
 		this.order = wanted;
 		this.refused.clear();
@@ -186,6 +207,7 @@ export class ReviewRemoteHosts {
 		if (host && this.hosts.get(alias) === host) {
 			this.hosts.delete(alias);
 			this.removed.add(alias);
+			this.forget(host);
 			this.publish();
 		}
 		if (!host) return;
@@ -204,6 +226,12 @@ export class ReviewRemoteHosts {
 	async languageEndpoint(serverId: string, states: readonly ReviewGatewayHostState[]): ReturnType<ReviewRemoteHost["languageEndpoint"]> {
 		const online = states.find((state) => state.serverId === serverId && state.state === "online");
 		return online && this.hosts.get(online.alias)?.languageEndpoint(serverId);
+	}
+
+	/** The state of the machine `serverId`, through the alias in the setting that served it this session. */
+	hostState(serverId: string, states: readonly ReviewGatewayHostState[]): ReturnType<typeof remoteHostState> {
+		const configured = [...this.hosts.values()].find((host) => host.serverId === serverId)?.state.alias;
+		return remoteHostState(serverId, states, configured);
 	}
 
 	resume(): void {
@@ -241,6 +269,11 @@ export class ReviewRemoteHosts {
 			install: this.flow,
 			firstAttach: (key) => !this.agentsRead.has(key) && !!this.agentsRead.add(key),
 		});
+	}
+
+	private forget(host: ReviewRemoteHost): void {
+		const { serverId } = host;
+		if (serverId && ![...this.hosts.values()].some((other) => other.serverId === serverId)) this.options.removed?.(serverId);
 	}
 
 	private askpass(): Promise<ReviewSshAskpass> {
