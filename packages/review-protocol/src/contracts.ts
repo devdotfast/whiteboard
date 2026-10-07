@@ -612,6 +612,13 @@ export interface ReviewLanguageEnvironment {
   readonly issue?: string;
 }
 
+export interface ReviewRemoteLanguageEnvironment {
+  readonly remoteRootPath: string | null;
+  readonly identity: string;
+  readonly serverId: string;
+  readonly issue?: string;
+}
+
 /** Authored version selection is independent of whether source is live or fixed. */
 export type ReviewSourceSelection =
   | { readonly reviewId: string; readonly kind: "current" }
@@ -883,6 +890,8 @@ export const ReviewGatewayHostSchema = z.strictObject({
       detail: stringAllowEmpty,
     })
     .optional(),
+  languageFeatures: z.boolean().optional(),
+  languageFeaturesDetail: stringAllowEmpty.optional(),
 });
 
 export type ReviewGatewayHost = z.infer<typeof ReviewGatewayHostSchema>;
@@ -901,6 +910,8 @@ export interface ReviewGatewayHostState {
     | "auth-failed";
   detail?: string;
   installCommand?: string;
+  languageFeatures?: boolean;
+  languageFeaturesDetail?: string;
 }
 
 export const ReviewRepositoryIdentitySchema = z.strictObject({

@@ -28,6 +28,7 @@ import {
   downDetail,
 } from "./review-gateway-streams.js";
 import {
+  FIRST_BYTE_TIMEOUT_MS,
   errorCode,
   errorText,
   remoteHeaders,
@@ -47,7 +48,14 @@ const LOCAL_ROUTES = new Set([
   "commands",
 ]);
 
-const REMOTE_ROUTES: readonly { method: string; path: string }[] = [
+interface RemoteRoute {
+  method: string;
+  path: string;
+  /** May wait on preparing a checkout. */
+  slow?: true;
+}
+
+const REMOTE_ROUTES: readonly RemoteRoute[] = [
   { method: "GET", path: "" },
   { method: "GET", path: "progress" },
   { method: "POST", path: "progress" },
@@ -60,7 +68,10 @@ const REMOTE_ROUTES: readonly { method: string; path: string }[] = [
   { method: "GET", path: "resources/:name" },
   { method: "GET", path: "maps/:name" },
   { method: "POST", path: "copy-context" },
+  { method: "GET", path: "language-context", slow: true },
 ];
+
+const SLOW_ROUTE_TIMEOUT_MS = 120_000;
 
 const LIST_WAIT_MS = 2_000;
 
@@ -97,6 +108,7 @@ export function createReviewGateway(input: {
   home: string;
   relay: ReviewDesktopVerbRelay;
   heartbeatMs?: number;
+  slowRouteMs?: number;
   restarted?(alias: string): void;
   log?(message: string): void;
 }) {
@@ -191,9 +203,10 @@ export function createReviewGateway(input: {
   async function forward(
     remote: GatewayRemote,
     request: Request,
-    body?: Buffer,
+    options: { route?: RemoteRoute; body?: Buffer },
   ): Promise<Response> {
     const url = new URL(request.url);
+    const { route } = options;
 
     // The local token never leaves this machine, in a header or the query.
     if (url.searchParams.has("token")) url.searchParams.delete("token");
@@ -203,6 +216,10 @@ export function createReviewGateway(input: {
     request.headers.forEach((value, key) => {
       if (!DROPPED_REQUEST_HEADERS.has(key)) headers[key] = value;
     });
+
+    const limit = route?.slow
+      ? (input.slowRouteMs ?? SLOW_ROUTE_TIMEOUT_MS)
+      : FIRST_BYTE_TIMEOUT_MS;
 
     const abort = new AbortController();
 
@@ -216,14 +233,18 @@ export function createReviewGateway(input: {
         method: request.method,
         path: `${url.pathname}${url.search}`,
         headers,
-        body: body ?? (stream ? Readable.fromWeb(stream) : undefined),
+        body: options.body ?? (stream ? Readable.fromWeb(stream) : undefined),
         signal: AbortSignal.any([request.signal, abort.signal]),
+        headersTimeout: limit,
       });
     } catch (error) {
       const timedOut = errorCode(error) === "UND_ERR_HEADERS_TIMEOUT";
-      const reason = errorText(error);
 
-      if (!request.signal.aborted) hosts.failed(remote, reason);
+      const reason = timedOut
+        ? `it did not answer within ${limit / 1_000} seconds`
+        : errorText(error);
+
+      if (!route?.slow && !request.signal.aborted) hosts.failed(remote, reason);
 
       return answer(remote.alias, timedOut ? 504 : 502, {
         ok: false,
@@ -296,13 +317,13 @@ export function createReviewGateway(input: {
 
     if ("down" in owner) return unavailable(owner.down);
 
-    return forward(owner.remote, request, body);
+    return forward(owner.remote, request, { body });
   }
 
   async function review(
     request: Request,
     reviewId: string,
-    route?: "forward" | "telemetry",
+    route?: RemoteRoute | "telemetry",
   ): Promise<Response> {
     if (!reviewId || LOCAL_ROUTES.has(reviewId)) return input.local(request);
     const owner = await ownerOf(reviewId);
@@ -325,7 +346,7 @@ export function createReviewGateway(input: {
 
     if ("down" in owner) return unavailable(owner.down);
 
-    return forward(owner.remote, request);
+    return forward(owner.remote, request, { route });
   }
 
   const app = new Hono({ strict: false }).basePath("/reviews-api");
@@ -339,7 +360,7 @@ export function createReviewGateway(input: {
 
   for (const route of REMOTE_ROUTES)
     app.on(route.method, `/:id${route.path && `/${route.path}`}`, (context) =>
-      review(context.req.raw, context.req.param("id") ?? "", "forward"),
+      review(context.req.raw, context.req.param("id") ?? "", route),
     );
 
   for (const path of ["/:id", "/:id/*"])
@@ -390,3 +411,5 @@ export function createReviewGateway(input: {
     },
   };
 }
+
+export type ReviewGateway = ReturnType<typeof createReviewGateway>;

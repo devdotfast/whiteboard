@@ -20,6 +20,8 @@ import { PassThrough } from "node:stream";
 import * as diffr from "@dev.fast/diffr";
 import {
   type JsonValue,
+  REVIEW_CLIENT_HEADER,
+  REVIEW_CLIENT_REMOTE,
   type ReviewStreamLine,
   STRUCTURAL_DIFF_WIRE_VERSION,
   parseReviewDesktopVerbFrame,
@@ -835,6 +837,41 @@ it("gives a worktree file its local path and opens a source window", async () =>
       commit: repo.head,
       text: "export const value = 2;\n",
     });
+
+    const remoteContext = async (reviewId: string) => {
+      const response = await fetch(
+        `${server.discovery.url}/reviews-api/${reviewId}/language-context?side=head`,
+        {
+          headers: {
+            "x-review-token": server.discovery.token,
+            [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE,
+          },
+        },
+      );
+
+      expect(response.status).toBe(200);
+
+      return response.json();
+    };
+
+    const serverId = await serverIdOf(server.discovery);
+
+    expect(await remoteContext(worktree)).toMatchObject({
+      remoteRootPath: checkout,
+      serverId,
+    });
+
+    await expect
+      .poll(async () => (await remoteContext(commits)).remoteRootPath, {
+        timeout: 20_000,
+      })
+      .toEqual(expect.any(String));
+
+    const pinned = await remoteContext(commits);
+    expect(pinned.serverId).toBe(serverId);
+    expect(
+      await readFile(path.join(pinned.remoteRootPath, "example.ts"), "utf8"),
+    ).toBe("export const value = 2;\n");
 
     expect(await workspaceFiles()).toEqual([]);
     expect(desktop.verbs).toEqual([]);

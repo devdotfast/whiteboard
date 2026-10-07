@@ -1,5 +1,8 @@
 import { type JsonObject, isJsonObject } from "@dev.fast/json";
 import {
+  REVIEW_CLIENT_HEADER,
+  REVIEW_CLIENT_REMOTE,
+  type ReviewRemoteLanguageEnvironment,
   type ReviewStreamLine,
   type ReviewStructuralDiffEvent,
 } from "@dev.fast/review-protocol";
@@ -838,7 +841,17 @@ export function createReviewApi(
         queryAnchor(input),
       );
 
-      return context.json(environment);
+      if (context.req.header(REVIEW_CLIENT_HEADER) !== REVIEW_CLIENT_REMOTE)
+        return context.json(environment);
+
+      // The laptop opens a remote root on this server, so it needs the server id.
+      const { rootPath, ...rest } = environment;
+
+      return context.json({
+        ...rest,
+        remoteRootPath: rootPath ?? null,
+        serverId: store.serverId(),
+      } satisfies ReviewRemoteLanguageEnvironment);
     });
     app.post("/:id/environment", reviewAccess("active"), async (context) => {
       const input = z

@@ -14,9 +14,11 @@ export interface ListSource {
 
 function decorate(
   entry: ReviewApiSummary,
-  alias: string,
+  state: ReviewGatewayHostState,
   hostState: NonNullable<ReviewApiSummary["hostState"]>,
 ): ReviewApiSummary {
+  const { alias } = state;
+
   return {
     ...entry,
     ...(entry.repositoryGroup && {
@@ -27,7 +29,11 @@ function decorate(
     }),
     host: alias,
     hostState,
-    available: { sourceWindows: false, languageFeatures: false },
+    available: {
+      sourceWindows: false,
+      languageFeatures:
+        hostState === "online" && state.languageFeatures === true,
+    },
   };
 }
 
@@ -83,7 +89,7 @@ export function mergeLists(
     for (const entry of source.list(serverId, mode) ?? [])
       if (!ids.has(entry.reviewId)) {
         ids.add(entry.reviewId);
-        merged.push(decorate(entry, state.alias, hostState));
+        merged.push(decorate(entry, state, hostState));
       }
   }
 

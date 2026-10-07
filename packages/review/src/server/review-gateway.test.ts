@@ -200,7 +200,6 @@ it("answers per-review telemetry for a remote review itself and refuses local-on
     ["GET", "agent-traces"],
     ["GET", "workspaces"],
     ["POST", "environment"],
-    ["GET", "language-context?side=head"],
   ] as const) {
     const refused = await request(`/${reviewId}/${route}`, {
       method,
@@ -221,6 +220,93 @@ it("answers per-review telemetry for a remote review itself and refuses local-on
     ),
   ).toEqual([]);
 });
+
+it("gives a remote review's language context with its path on that machine and its server id", async () => {
+  const a = await startRemote(path.join(root, "a"));
+  const onA = await seed(a, "On a");
+
+  const { request, gateway } = await startGateway([
+    { alias: "wb-a", endpoint: a.endpoint },
+  ]);
+
+  await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+
+  const read = async () => {
+    const response = await request(`/${onA}/language-context?side=head`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+
+    return response.json();
+  };
+
+  await expect
+    .poll(async () => (await read()).remoteRootPath, { timeout: 20_000 })
+    .toEqual(expect.any(String));
+
+  const context = await read();
+  expect(context).toEqual({
+    remoteRootPath: expect.any(String),
+    identity: expect.any(String),
+    serverId: (await a.health()).serverId,
+  });
+  expect(
+    await readFile(path.join(context.remoteRootPath, "example.ts"), "utf8"),
+  ).toBe("export const a = 2;\n");
+});
+
+it("waits past the 10 s limit for a slow language context and keeps the host online when it never answers", async () => {
+  const slow = randomUUID();
+  const hung = randomUUID();
+  const serverId = randomUUID();
+
+  const fake = await startFake({
+    version,
+    serverId,
+    reviewIds: [slow, hung],
+    handle(request, response) {
+      if (request.url?.startsWith(`/reviews-api/${hung}/language-context`))
+        return true;
+
+      if (!request.url?.startsWith(`/reviews-api/${slow}/language-context`))
+        return false;
+
+      setTimeout(() => {
+        response.setHeader("content-type", "application/json");
+        response.end(
+          JSON.stringify({
+            remoteRootPath: "/home/dev/repo",
+            identity: "a",
+            serverId,
+          }),
+        );
+      }, 11_000);
+
+      return true;
+    },
+  });
+
+  const { request, gateway } = await startLocalGateway(
+    root,
+    [{ alias: "wb-a", endpoint: fake.endpoint }],
+    { slowRouteMs: 14_000 },
+  );
+
+  await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+
+  const [answered, unanswered] = await Promise.all([
+    request(`/${slow}/language-context`),
+    request(`/${hung}/language-context`),
+  ]);
+
+  expect(answered.status).toBe(200);
+  expect(await answered.json()).toMatchObject({
+    remoteRootPath: "/home/dev/repo",
+  });
+  expect(unanswered.status).toBe(504);
+  expect(unanswered.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+  expect(gateway.hosts()[0]?.state).toBe("online");
+  expect((await request(`/${slow}/progress`)).status).toBe(200);
+}, 30_000);
 
 it("streams a remote answer line by line and closes the remote connection when the client leaves", async () => {
   const reviewId = randomUUID();

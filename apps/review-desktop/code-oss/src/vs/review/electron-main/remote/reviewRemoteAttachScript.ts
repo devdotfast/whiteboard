@@ -5,7 +5,8 @@
 
 import { REVIEW_REMOTE_ATTACH_BEGIN, REVIEW_REMOTE_ATTACH_END } from "../../common/reviewProtocol.js";
 
-export const REVIEW_REMOTE_ATTACH_SCRIPT = `wb=$(command -v whiteboard 2>/dev/null)
+export function reviewRemoteAttachScript(groups: readonly string[] = []): string {
+	return `wb=$(command -v whiteboard 2>/dev/null)
 case "$wb" in /*) ;; *) wb= ;; esac
 if [ -z "$wb" ] && [ -x "$HOME/.local/bin/whiteboard" ]; then wb="$HOME/.local/bin/whiteboard"; fi
 if [ -z "$wb" ] && [ -n "$SHELL" ]; then
@@ -14,14 +15,24 @@ fi
 if [ -z "$wb" ] || [ ! -x "$wb" ]; then exit 127; fi
 PATH="\${wb%/*}:$PATH"
 export PATH
-exec "$wb" remote attach --json
+exec "$wb" remote attach --json${groups.length ? ` --groups ${groups.join(",")}` : ""}
 `;
+}
+
+export interface ReviewRemoteLanguageServer {
+	readonly port: number;
+	readonly connectionToken: string;
+	readonly commit: string;
+}
 
 export interface ReviewRemoteAttach {
 	readonly version: string | null;
 	readonly serverId: string | null;
 	readonly token: string;
 	readonly port: number;
+	readonly languageServer: ReviewRemoteLanguageServer | null;
+	readonly languageServerDetail?: string;
+	readonly languageServerPending?: true;
 }
 
 export function parseRemoteAttach(stdout: string): { attach: ReviewRemoteAttach } | { error: string } | undefined {
@@ -54,10 +65,23 @@ export function parseRemoteAttach(stdout: string): { attach: ReviewRemoteAttach 
 				serverId: typeof record.serverId === "string" ? record.serverId : null,
 				token: record.token,
 				port,
+				...languageServerOf(record),
 			},
 		};
 	}
 	return { error: "remote attach printed nothing readable between its sentinels." };
+}
+
+function languageServerOf(record: Record<string, unknown>): Pick<ReviewRemoteAttach, "languageServer" | "languageServerDetail" | "languageServerPending"> {
+	const { port, connectionToken, commit } = (record.languageServer ?? {}) as Record<string, unknown>;
+	if (typeof port === "number" && typeof connectionToken === "string" && typeof commit === "string") {
+		return { languageServer: { port, connectionToken, commit } };
+	}
+	return {
+		languageServer: null,
+		languageServerDetail: typeof record.languageServerDetail === "string" ? record.languageServerDetail : "The Whiteboard on this host has no VS Code server.",
+		...(record.languageServerPending === true && { languageServerPending: true as const }),
+	};
 }
 
 function urlPort(url: unknown): number | undefined {

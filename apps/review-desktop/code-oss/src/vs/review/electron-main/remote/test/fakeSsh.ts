@@ -69,10 +69,11 @@ export interface FakeCall {
 	readonly at: number;
 	readonly masterAlive: boolean;
 	closed?: boolean;
+	input(): string;
 }
 
-export const attachOutput = (port: number, token = "remote-token") =>
-	`WHITEBOARD-REMOTE-BEGIN\n${JSON.stringify({ event: "remote.attach", version: "0.1.6", commit: "abc", serverId: "s1", url: `http://127.0.0.1:${port}`, token, startedServer: true })}\nWHITEBOARD-REMOTE-END\n`;
+export const attachOutput = (port: number, token = "remote-token", languageServer?: { port: number; connectionToken: string; commit: string }) =>
+	`WHITEBOARD-REMOTE-BEGIN\n${JSON.stringify({ event: "remote.attach", version: "0.1.6", commit: "abc", serverId: "s1", url: `http://127.0.0.1:${port}`, token, startedServer: true, ...(languageServer && { languageServer }) })}\nWHITEBOARD-REMOTE-END\n`;
 
 export function fakeClock() {
 	let time = 0;
@@ -116,7 +117,7 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 		const operation = args.includes("-O") ? args[args.indexOf("-O") + 1] : undefined;
 		const kind: FakeCall["kind"] = args.includes("-M") ? "master" : args.at(-1) === "-s" ? "exec" : (operation as FakeCall["kind"]);
 		const master = masters.get(alias);
-		const entry: FakeCall = { alias, kind, args, at: clock?.now() ?? Date.now(), masterAlive: master?.alive ?? false };
+		const entry: FakeCall = { alias, kind, args, at: clock?.now() ?? Date.now(), masterAlive: master?.alive ?? false, input: () => child.input };
 		calls.push(entry);
 		child.once("close", () => (entry.closed = true));
 		setImmediate(() => {
@@ -164,8 +165,10 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 	};
 }
 
+export const COMMIT = "a".repeat(40);
+
 export async function healthServer(t: TestContext, servers?: Server[]): Promise<number> {
-	const server: Server = createServer((_request, response) => response.end('{"ok":true}'));
+	const server: Server = createServer((request, response) => response.end(request.url === "/version" ? COMMIT : '{"ok":true}'));
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 	t.after(() => new Promise((resolve) => server.close(() => resolve(undefined))));
 	servers?.push(server);

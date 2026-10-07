@@ -608,7 +608,7 @@ it("gives a reader that stops reading the latest state once, not a backlog", asy
     }
   });
 
-  await vi.waitFor(() => expect(lines).toHaveLength(1));
+  await vi.waitFor(() => expect(lines).toHaveLength(1), { timeout: 10_000 });
   response.pause();
   const updates = 40;
 

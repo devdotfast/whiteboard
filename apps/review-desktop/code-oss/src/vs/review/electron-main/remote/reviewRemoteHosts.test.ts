@@ -10,7 +10,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
-import { fakeClock, fakeSsh, flush, healthServer, until, type FakeRemote } from "./test/fakeSsh.js";
+import { attachOutput, COMMIT, fakeClock, fakeSsh, flush, healthServer, until, type FakeRemote } from "./test/fakeSsh.js";
 import { ReviewRemoteHosts } from "./reviewRemoteHosts.js";
 import type { SshPromptRequest } from "./reviewSshAskpass.js";
 import { reviewSshInstancePrefix } from "./reviewSshCommand.js";
@@ -50,7 +50,7 @@ async function managerFor(t: test.TestContext, remotes: Record<string, FakeRemot
 			const last = sent.at(-1);
 			return last !== undefined && condition(last.hosts);
 		});
-	return { manager, ssh, clock, sent, sentUntil, prompt: () => prompt! };
+	return { manager, ssh, clock, sent, sentUntil, port, prompt: () => prompt! };
 }
 
 const byAlias = (hosts: ReviewGatewayHost[], alias: string) => hosts.find((h) => h.alias === alias);
@@ -185,4 +185,18 @@ test("an entry the sweep cannot remove does not stop the sweep or the hosts", as
 
 	assert.equal(ssh.calls.filter((c) => c.kind === "exit").length, 2);
 	assert.deepEqual(await readdir(directory), [`${prefix}000000000000`]);
+});
+
+test("a window gets the VS Code server of a machine only while the gateway has it online", async (t) => {
+	const attach = { code: 0, stdout: attachOutput(41234, "remote-token", { port: 45678, connectionToken: "vscode-token", commit: COMMIT }) };
+	const { manager, sentUntil, port } = await managerFor(t, { "wb-test-a": { attach } });
+
+	manager.update(true, ["wb-test-a"]);
+	await sentUntil((hosts) => byAlias(hosts, "wb-test-a")?.languageFeatures === true);
+
+	const online = [{ alias: "wb-test-a", serverId: "s1", state: "online" as const }];
+	assert.deepEqual(await manager.languageEndpoint("s1", online), { host: "127.0.0.1", port, connectionToken: "vscode-token" });
+	assert.equal(await manager.languageEndpoint("s1", [{ ...online[0], state: "duplicate" }]), undefined);
+	assert.equal(await manager.languageEndpoint("s1", [{ ...online[0], serverId: "s2" }]), undefined);
+	assert.equal(await manager.languageEndpoint("s1", []), undefined);
 });

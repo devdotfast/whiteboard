@@ -112,6 +112,7 @@ export async function send(
     headers?: Record<string, string>;
     body?: Buffer | Readable;
     signal?: AbortSignal;
+    headersTimeout?: number;
   },
   retry = true,
 ): Promise<Dispatcher.ResponseData> {
@@ -125,7 +126,7 @@ export async function send(
       headers: input.headers,
       body: input.body,
       signal: input.signal,
-      headersTimeout: FIRST_BYTE_TIMEOUT_MS,
+      headersTimeout: input.headersTimeout ?? FIRST_BYTE_TIMEOUT_MS,
       bodyTimeout: 0,
     });
   } catch (error) {

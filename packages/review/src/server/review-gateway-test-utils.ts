@@ -210,6 +210,7 @@ export async function startGateway(
     home?: string;
     relay?: ReviewDesktopVerbRelay;
     heartbeatMs?: number;
+    slowRouteMs?: number;
   } = {},
 ) {
   const home = options.home ?? path.join(root, "local");
@@ -239,6 +240,9 @@ export async function startGateway(
     relay,
     ...(options.heartbeatMs !== undefined && {
       heartbeatMs: options.heartbeatMs,
+    }),
+    ...(options.slowRouteMs !== undefined && {
+      slowRouteMs: options.slowRouteMs,
     }),
     log: (message) => logged.push(message),
   });

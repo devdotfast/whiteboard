@@ -68,6 +68,30 @@ it("lists this machine first, then each machine in the setting's order", () => {
   });
 });
 
+it("offers language features only for an online host whose Desktop reported them", () => {
+  const merged = mergeLists(
+    "structural",
+    [],
+    source(
+      [
+        { alias: "a", serverId: "A", state: "online", languageFeatures: true },
+        { alias: "b", serverId: "B", state: "online", languageFeatures: false },
+        { alias: "c", serverId: "C", state: "offline", languageFeatures: true },
+      ],
+      { A: [entry("on a")], B: [entry("on b")], C: [entry("on c")] },
+      ["A", "B"],
+    ),
+  );
+
+  expect(
+    merged.map((review) => [review.host, review.available?.languageFeatures]),
+  ).toEqual([
+    ["a", true],
+    ["b", false],
+    ["c", false],
+  ]);
+});
+
 it("lists a server two aliases share once, under the first, offline", () => {
   const merged = mergeLists(
     "structural",
