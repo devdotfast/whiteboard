@@ -5,6 +5,7 @@
 
 import { reviewBottomScrollPadding } from "../../reviewScrollPadding.js";
 import { $, addDisposableListener, getWindow, type Dimension } from "../../../../base/browser/dom.js";
+import { mainWindow } from "../../../../base/browser/window.js";
 import type { IHoverOptions, IHoverWidget } from "../../../../base/browser/ui/hover/hover.js";
 import { HoverPosition } from "../../../../base/browser/ui/hover/hoverWidget.js";
 import type { CancellationToken } from "../../../../base/common/cancellation.js";
@@ -117,6 +118,7 @@ import { ReviewCanvasEditorInput } from "./reviewCanvasEditorInput.js";
 import { remoteEntry, withRemoteEntry } from "./reviewRemoteEntry.js";
 import { reviewRemoteHostsSettings } from "../../reviewRemoteHostsSettings.js";
 import { IReviewSidebarPartsService } from "../sidebar/reviewSidebarPart.js";
+import { IReviewAskPartsService } from "../ask/reviewAskPart.js";
 
 interface ReviewCanvasLoadLifecycle {
 	ready(): void;
@@ -183,6 +185,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		@IReviewRemoteHostsService private readonly remoteHosts: IReviewRemoteHostsService,
 		@IReviewVerbsService private readonly verbs: IReviewVerbsService,
 		@IReviewSidebarPartsService private readonly sidebar: IReviewSidebarPartsService,
+		@IReviewAskPartsService private readonly askParts: IReviewAskPartsService,
 		@IReviewCanvasEditorTabsService
 		private readonly tabsService: IReviewCanvasEditorTabsService,
 		@IInstantiationService
@@ -233,6 +236,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			}),
 		);
 		this._register(toDisposable(() => this.sessionTelemetry.end("closed")));
+		this._register(toDisposable(() => this.askParts.release(this)));
 		let catalog = this.apiCatalog.reviews;
 		this._register(this.apiCatalog.onDidChange(() => {
 			const previous = catalog;
@@ -696,6 +700,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	protected override setEditorVisible(visible: boolean): void {
 		super.setEditorVisible(visible);
+		this.askParts.setShown(this, visible);
 		if (!visible) {
 			this.canvasMenu.clear();
 			this.refreshProgress.stop();
@@ -1263,6 +1268,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		| "sidebarShowsBoard"
 		| "onDidChangeSidebarShowsBoard"
 		| "sidebarLensList"
+		| "askPanelHost"
 		| "reportAsk"
 		| "showThreads"
 	> {
@@ -1284,8 +1290,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			sidebarShowsBoard: () => this.sidebar.showsBoard(this.apiContent?.reviewId),
 			onDidChangeSidebarShowsBoard: (listener) => this.sidebar.onDidChangeBoard(listener),
 			sidebarLensList: () => this.sidebar.lensList(this.apiContent?.reviewId),
+			// Only the main window has the Ask column.
+			askPanelHost: () => this.targetDocument === mainWindow.document ? this.askParts.host(this) : undefined,
 			reportAsk: (state) => {
-				if (generation === this.loadGeneration) this.sidebar.reportAsk(this.apiContent?.reviewId, state);
+				if (generation !== this.loadGeneration) return;
+				this.askParts.setDocked(this, state.docked);
+				this.sidebar.reportAsk(this.apiContent?.reviewId, state);
 			},
 			showThreads: () => this.sidebar.showThreads(),
 			reportSidebarLenses: (lenses) => {

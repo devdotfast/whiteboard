@@ -33,6 +33,7 @@ import "./contrib/telemetry/reviewTelemetry.contribution.js";
 import "../workbench/browser/parts/editor/editorParts.js";
 import { IReviewCanvasPartsService, ReviewCanvasParts } from "./browser/parts/canvas/reviewCanvasPart.js";
 import { IReviewSidebarPartsService, ReviewSidebarParts } from "./browser/parts/sidebar/reviewSidebarPart.js";
+import { IReviewAskPartsService, ReviewAskParts } from "./browser/parts/ask/reviewAskPart.js";
 import "./browser/reviewPaneCompositePartService.js";
 import "./common/reviewConfiguration.js";
 import { IReviewVerbsService, ReviewVerbsService } from "./contrib/verbs/reviewVerbs.js";
@@ -64,6 +65,7 @@ registerSingleton(IReviewApiCatalogService, ReviewApiCatalogService, Instantiati
 registerSingleton(IReviewVerbsService, ReviewVerbsService, InstantiationType.Delayed);
 registerSingleton(IReviewCanvasPartsService, ReviewCanvasParts, InstantiationType.Eager);
 registerSingleton(IReviewSidebarPartsService, ReviewSidebarParts, InstantiationType.Eager);
+registerSingleton(IReviewAskPartsService, ReviewAskParts, InstantiationType.Eager);
 
 import "./contrib/sharing/reviewSharing.contribution.js";
 import "./contrib/notifications/reviewDoneNotification.contribution.js";

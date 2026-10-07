@@ -30,7 +30,7 @@ import {
 import { createPortal } from "react-dom";
 import { z } from "zod";
 
-import { AgentChatUserMessage } from "./agent-chat";
+import { AgentChatUserMessage, trayBubbleStyles } from "./agent-chat";
 import {
   AskAgentPicker,
   AskChoicePicker,
@@ -689,7 +689,7 @@ export function AskPanelContent({
               <AgentChatUserMessage
                 key={queued.id}
                 xstyle={styles.userMessage}
-                bubbleXstyle={[styles.userBubble, styles.queuedBubble]}
+                bubbleXstyle={[trayBubbleStyles.bubble, styles.queuedBubble]}
                 caption={`Sends when ${agentName} finishes`}
               >
                 {queued.text}
@@ -952,7 +952,7 @@ const AskTurns = memo(function AskTurns({
           <AgentChatUserMessage
             key={turn.entry.id}
             xstyle={styles.userMessage}
-            bubbleXstyle={styles.userBubble}
+            bubbleXstyle={trayBubbleStyles.bubble}
             caption={
               turn.entry.at === undefined
                 ? "You"
@@ -1046,10 +1046,6 @@ const styles = stylex.create({
   userMessage: {
     maxWidth: "88%",
     marginTop: 0,
-  },
-  userBubble: {
-    padding: "10px 14px",
-    backgroundColor: tokens.trayRaised,
   },
   queuedBubble: {
     opacity: 0.6,

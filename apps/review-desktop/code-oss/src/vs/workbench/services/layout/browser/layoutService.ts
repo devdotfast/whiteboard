@@ -28,6 +28,7 @@ export const enum Parts {
 	SESSIONS_PART = 'workbench.parts.sessions',
 	REVIEW_CANVAS_PART = 'workbench.parts.sessions',
 	REVIEW_SIDEBAR_PART = 'workbench.parts.reviewsidebar',
+	REVIEW_ASK_PART = 'workbench.parts.reviewask',
 	EDITOR_PART = 'workbench.parts.editor',
 	STATUSBAR_PART = 'workbench.parts.statusbar'
 }

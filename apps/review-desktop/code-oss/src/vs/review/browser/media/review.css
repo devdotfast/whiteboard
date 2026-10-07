@@ -1883,6 +1883,37 @@ body
   background-color: var(--vscode-charts-yellow);
 }
 
+/* The right column; its divider matches the sidebar's border. */
+.monaco-workbench .part.review-ask-part {
+  height: 100%;
+  box-sizing: border-box;
+  border-left: 1px solid
+    var(--vscode-panel-border, var(--vscode-sideBar-border, transparent));
+  overflow: hidden;
+}
+
+.monaco-workbench .review-ask-host.review-canvas-root {
+  height: 100%;
+  min-height: 0;
+  /* No canvas container, or Ask's narrow-canvas styles would apply. */
+  container-type: normal;
+  background-color: transparent;
+}
+
+.monaco-workbench .review-ask-host[hidden] {
+  display: none;
+}
+
+/* The header sits level with the window controls; its empty space drags
+   the window, as the tab strip does. */
+.monaco-workbench .review-ask-host .review-ask-chrome {
+  -webkit-app-region: drag;
+}
+
+.monaco-workbench .review-ask-host .review-ask-chrome :is(button, a, input) {
+  -webkit-app-region: no-drag;
+}
+
 /* A board tab draws the canvas's icon for its board (set as a mask by the
    board tabs contribution) in the codicon's slot. */
 .monaco-workbench .tab .monaco-icon-label.review-board-icon::before {

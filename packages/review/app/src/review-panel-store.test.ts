@@ -44,15 +44,10 @@ function working(store: ReviewPanelStore, key: number, threadId = "thread") {
 }
 
 describe("Ask", () => {
-  it("hides under a peek or a diagram, and comes back after", () => {
+  it("a peek takes a docked Ask's place; a diagram only covers it", () => {
     const store = createReviewPanelStore();
     store.getState().openAsk(selection);
     const key = shownAt(store, "docked")!;
-    expect(askShown(store.getState(), key)).toBe("panel");
-
-    store.getState().openPeek({ kind: "peek", anchor, content });
-    expect(askShown(store.getState(), key)).toBeNull();
-    store.getState().close();
     expect(askShown(store.getState(), key)).toBe("panel");
 
     store
@@ -61,6 +56,13 @@ describe("Ask", () => {
     expect(askShown(store.getState(), key)).toBeNull();
     store.getState().closeOverlayTour();
     expect(askShown(store.getState(), key)).toBe("panel");
+
+    // The column holds one thing: whatever opened last.
+    store.getState().openPeek({ kind: "peek", anchor, content });
+    expect(askShown(store.getState(), key)).toBeNull();
+    store.getState().close();
+    expect(askShown(store.getState(), key)).toBeNull();
+    expect(store.getState().asks).toHaveLength(1);
   });
 
   it("stays open in every view", () => {
@@ -71,13 +73,14 @@ describe("Ask", () => {
     expect(askShown(store.getState(), shownAt(store, "docked")!)).toBe("panel");
   });
 
-  it("pops out, hides, and docks in place of a peek", () => {
+  it("pops out over a peek, hides, and docks in place of a peek", () => {
     const store = createReviewPanelStore();
     store.getState().openAsk(selection);
     const key = shownAt(store, "docked")!;
-    store.getState().openPeek({ kind: "peek", anchor, content });
 
     store.getState().popOutAsk(key);
+    store.getState().openPeek({ kind: "peek", anchor, content });
+    // A window floats over the canvas and keeps showing beside the peek.
     expect(askShown(store.getState(), key)).toBe("window");
     expect(store.getState().active).toMatchObject({ kind: "peek" });
 
