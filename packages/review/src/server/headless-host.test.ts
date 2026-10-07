@@ -1,5 +1,7 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { once } from "node:events";
+import { chmodSync, existsSync } from "node:fs";
 import {
   access,
   mkdir,
@@ -13,12 +15,16 @@ import {
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { PassThrough } from "node:stream";
 
+import * as diffr from "@dev.fast/diffr";
 import {
   type JsonValue,
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
+  type ReviewStreamLine,
+  STRUCTURAL_DIFF_WIRE_VERSION,
   parseReviewDesktopVerbFrame,
 } from "@dev.fast/review-protocol";
 import { runReviewCli } from "@review/cli-runner.js";
@@ -28,10 +34,19 @@ import {
 } from "@review/review-api/agent-client.js";
 import { ReviewApiClient } from "@review/review-api/client.js";
 import type { Pins } from "@review/review-api/document.js";
-import { createReviewApi } from "@review/review-api/http.js";
+import {
+  REMOTE_CHECKOUT_ISSUE,
+  REMOTE_STRUCTURAL_DIFF_ERROR,
+  createReviewApi,
+} from "@review/review-api/http.js";
 import { serveReviewMcp } from "@review/review-api/mcp.js";
 import { openReviewProfile } from "@review/review-api/profile.js";
 import type { Result, Snapshot } from "@review/review-api/store.js";
+import type { WorkspaceStatus } from "@review/review-api/workspaces.js";
+import {
+  reviewManagedCheckoutDir,
+  reviewManagedCheckoutRoot,
+} from "@review/review-checkout-paths.js";
 import { writeScratchpadEnabled } from "@review/review-preferences.js";
 import { ReviewTelemetry } from "@review/review-telemetry.js";
 import {
@@ -172,12 +187,12 @@ it("shares review identity, resources, sessions and live changes with Desktop in
   );
 
   const abort = new AbortController();
-  const catalog = desktop.watch(null, abort.signal);
+  const catalog = desktop.watch([{ reviewId: null }], abort.signal);
   let reviewStream: ReturnType<ReviewApiClient["watch"]> | undefined;
 
   try {
     // The scratchpad is off by default, so there is nothing to list yet.
-    expect((await catalog.next()).value).toEqual([]);
+    expect((await catalog.next()).value).toMatchObject({ reviews: [] });
 
     const registered = await server.client.post<{ id: string }>(
       "/repositories",
@@ -199,18 +214,20 @@ it("shares review identity, resources, sessions and live changes with Desktop in
     });
 
     // Catalog refreshes can also report repository registration before creation.
-    for await (const value of catalog) {
+    for await (const line of catalog) {
       if (
-        Array.isArray(value) &&
-        value.some((item) => item.reviewId === created.reviewId)
+        line.kind === "list" &&
+        line.reviews.some((item) => item.reviewId === created.reviewId)
       )
         break;
     }
 
-    reviewStream = desktop.watch(created.reviewId, abort.signal);
+    reviewStream = desktop.watch(
+      [{ reviewId: created.reviewId }],
+      abort.signal,
+    );
     expect((await reviewStream.next()).value).toMatchObject({
-      reviewId: created.reviewId,
-      version: 0,
+      value: { reviewId: created.reviewId, version: 0 },
     });
 
     const { activityId } = await server.client.post<{ activityId: string }>(
@@ -219,14 +236,9 @@ it("shares review identity, resources, sessions and live changes with Desktop in
     );
 
     for (;;) {
-      const value = (await reviewStream.next()).value;
+      const line = (await reviewStream.next()).value;
 
-      if (
-        value &&
-        !Array.isArray(value) &&
-        "activity" in value &&
-        value.activity?.workingCount === 1
-      )
+      if (line && "value" in line && line.value.activity.workingCount === 1)
         break;
     }
 
@@ -263,15 +275,9 @@ it("shares review identity, resources, sessions and live changes with Desktop in
     });
 
     for (;;) {
-      const value = (await reviewStream.next()).value;
+      const line = (await reviewStream.next()).value;
 
-      if (
-        value &&
-        !Array.isArray(value) &&
-        "version" in value &&
-        value.version === 1
-      )
-        break;
+      if (line && "value" in line && line.value.version === 1) break;
     }
 
     await desktop.post(`/${created.reviewId}/open`, {});
@@ -297,10 +303,18 @@ it("shares review identity, resources, sessions and live changes with Desktop in
     await server.client.post("/commands", {
       operation: { type: "delete", reviewId: created.reviewId },
     });
-    await expect(async () => {
-      for await (const _value of reviewStream!) {
-      }
-    }).rejects.toThrow(/not found/i);
+    let deleted: ReviewStreamLine | void = undefined;
+
+    while (!(deleted && "error" in deleted)) {
+      const next = await reviewStream.next();
+
+      if (next.done) throw new Error("The stream ended before the deletion.");
+      deleted = next.value;
+    }
+
+    expect(deleted).toMatchObject({
+      error: expect.stringMatching(/not found/i),
+    });
   } finally {
     abort.abort();
     await local.data.close();
@@ -838,11 +852,11 @@ it("gives a remote caller no local paths and no source window", async () => {
     expect(localContext.rootPath).toBe(checkout);
     expect(localContext.identity).not.toMatch(hash);
 
-    // A headless server prepares no commit checkouts, so only the worktree
-    // review has a language context here.
-    const remoteContext = await read(worktree, context, true);
-    expect(remoteContext).toEqual({ identity: expect.stringMatching(hash) });
-    expect(JSON.stringify(remoteContext)).not.toContain(home);
+    for (const reviewId of [worktree, commits]) {
+      const remoteContext = await read(reviewId, context, true);
+      expect(remoteContext).toEqual({ identity: expect.stringMatching(hash) });
+      expect(JSON.stringify(remoteContext)).not.toContain(home);
+    }
 
     for (const reviewId of [worktree, commits]) {
       const remoteFile = await read(reviewId, file, true);
@@ -1120,4 +1134,349 @@ it("refuses the removed batch authoring mode instead of ignoring it", async () =
 
   expect(result.exitCode).not.toBe(0);
   expect(result.errors).toContain("--authoring-mode was removed");
+});
+
+async function stubDiffr() {
+  const executable = path.join(root, "diffr");
+  await writeFile(
+    executable,
+    `#!${process.execPath}
+const side = (rev) => ({ type: "revision", rev });
+if (process.argv[2] === "config") console.log(JSON.stringify({ changed: false }));
+else {
+  console.log(JSON.stringify({ type: "start", version: ${STRUCTURAL_DIFF_WIRE_VERSION}, lhs: side("base"), rhs: side("head"), files: [] }));
+  console.log(JSON.stringify({ type: "complete", succeeded: 0, failed: 0 }));
+}
+`,
+    { mode: 0o755 },
+  );
+
+  const binary = vi.spyOn(diffr, "diffrBinaryPath").mockReturnValue(executable);
+
+  const info = vi.spyOn(console, "info").mockImplementation(() => {});
+  stops.push(async () => {
+    binary.mockRestore();
+    info.mockRestore();
+  });
+}
+
+async function commitsReviews(client: ReviewApiClient) {
+  const repo = await repository();
+
+  const { id: repositoryId } = await client.post<{ id: string }>(
+    "/repositories",
+    { path: repo.directory },
+  );
+
+  const create = async (title: string) =>
+    (
+      await client.post<Result>("/commands", {
+        operation: {
+          type: "create",
+          title,
+          target: {
+            kind: "commits",
+            repositoryId,
+            base: repo.base,
+            head: repo.head,
+          },
+          open: false,
+        },
+      })
+    ).reviewId;
+
+  const worktrees = () =>
+    execFileSync("git", ["worktree", "list", "--porcelain"], {
+      cwd: repo.directory,
+      encoding: "utf8",
+    }).match(/^worktree /gm)?.length;
+
+  return {
+    repo,
+    create,
+    worktrees,
+    commonDir: path.join(repo.directory, ".git"),
+  };
+}
+
+async function structuralDiffEvents(
+  discovery: Pick<ReviewServerDiscovery, "url" | "token">,
+  reviewId: string,
+  remote = false,
+): Promise<{ type: string; message?: string }[]> {
+  const response = await fetch(
+    `${discovery.url}/reviews-api/${reviewId}/structural-diff`,
+    {
+      headers: {
+        "x-review-token": discovery.token,
+        ...(remote && { [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE }),
+      },
+    },
+  );
+
+  expect(response.status).toBe(200);
+
+  return (await response.text())
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+}
+
+async function structuralDiff(
+  discovery: Pick<ReviewServerDiscovery, "url" | "token">,
+  reviewId: string,
+) {
+  const events = await structuralDiffEvents(discovery, reviewId);
+  expect(events.filter((event) => event.type === "error")).toEqual([]);
+}
+
+const cleanupTimeout = { timeout: 10_000 };
+
+const attention = (
+  client: ReviewApiClient,
+  reviewId: string,
+  action: "dismiss" | "restore",
+) =>
+  client.post("/commands", {
+    operation: { type: "attention", reviewId, action },
+  });
+
+it("frees the checkouts a structural diff made when the review is dismissed or deleted", async () => {
+  await stubDiffr();
+  const server = await start();
+
+  const { repo, create, worktrees, commonDir } = await commitsReviews(
+    server.client,
+  );
+
+  const dismissed = await create("Dismissed");
+  const deleted = await create("Deleted");
+
+  for (const reviewId of [dismissed, deleted]) {
+    await structuralDiff(server.discovery, reviewId);
+    expect(
+      existsSync(
+        reviewManagedCheckoutDir(commonDir, reviewId, "head", repo.head),
+      ),
+    ).toBe(true);
+  }
+
+  await attention(server.client, dismissed, "dismiss");
+  await expect
+    .poll(
+      () => existsSync(reviewManagedCheckoutRoot(commonDir, dismissed)),
+      cleanupTimeout,
+    )
+    .toBe(false);
+
+  await server.client.post("/commands", {
+    operation: { type: "delete", reviewId: deleted },
+  });
+  await expect
+    .poll(
+      () => existsSync(reviewManagedCheckoutRoot(commonDir, deleted)),
+      cleanupTimeout,
+    )
+    .toBe(false);
+  expect(worktrees()).toBe(1);
+});
+
+it("leaves a review's checkouts to a live lease owner and takes over a dead owner's", async () => {
+  await stubDiffr();
+  const first = await start();
+
+  const { repo, create, worktrees, commonDir } = await commitsReviews(
+    first.client,
+  );
+
+  const reviewId = await create("Leased");
+  const deleted = await create("Leased and deleted");
+
+  for (const id of [reviewId, deleted])
+    await structuralDiff(first.discovery, id);
+  await first.stop();
+
+  const checkout = (id: string) =>
+    reviewManagedCheckoutDir(commonDir, id, "head", repo.head);
+
+  expect(existsSync(checkout(reviewId))).toBe(true);
+
+  const owner = spawn(process.execPath, ["-e", "setInterval(() => {}, 1e9)"], {
+    stdio: "ignore",
+  });
+
+  const exited = once(owner, "exit");
+
+  const stopOwner = async () => {
+    if (owner.exitCode === null && owner.signalCode === null) owner.kill();
+    await exited;
+  };
+
+  stops.push(stopOwner);
+
+  const leases = new DatabaseSync(
+    path.join(first.stateDir, "review-api.db.workspaces"),
+  );
+
+  try {
+    for (const id of [reviewId, deleted])
+      leases
+        .prepare("INSERT OR REPLACE INTO workspace_leases VALUES(?,?,?)")
+        .run(id, randomUUID(), owner.pid!);
+  } finally {
+    leases.close();
+  }
+
+  const leased = await start(first.stateDir);
+  await attention(leased.client, reviewId, "dismiss");
+  await leased.client.post("/commands", {
+    operation: { type: "delete", reviewId: deleted },
+  });
+  await leased.stop();
+  expect(existsSync(checkout(reviewId))).toBe(true);
+  expect(existsSync(checkout(deleted))).toBe(true);
+
+  await stopOwner();
+  await (await start(first.stateDir)).stop();
+  expect(existsSync(reviewManagedCheckoutRoot(commonDir, reviewId))).toBe(
+    false,
+  );
+  expect(worktrees()).toBe(2);
+});
+
+function caller(discovery: Pick<ReviewServerDiscovery, "url" | "token">) {
+  return async <T = unknown>(
+    route: string,
+    remote: boolean,
+    body?: JsonValue,
+  ): Promise<T> => {
+    const response = await fetch(`${discovery.url}/reviews-api${route}`, {
+      method: body === undefined ? "GET" : "POST",
+      headers: {
+        "x-review-token": discovery.token,
+        "content-type": "application/json",
+        ...(remote && { [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+    expect(response.status).toBe(200);
+
+    return response.json() as Promise<T>;
+  };
+}
+
+type Workspace = Partial<WorkspaceStatus>;
+
+it("gives a remote caller no checkout paths or logs from workspace management", async () => {
+  const server = await start();
+  const call = caller(server.discovery);
+  const { create, commonDir } = await commitsReviews(server.client);
+  const reviewId = await create("Workspaces");
+  const marker = path.basename(root);
+
+  await mkdir(path.join(commonDir, "dev-fast"), { recursive: true });
+  const blocker = path.join(commonDir, "dev-fast", "reviews");
+  await writeFile(blocker, "");
+
+  const environment = `/${reviewId}/environment`;
+  const localIssues = await call(environment, false, {});
+  expect(JSON.stringify(localIssues)).toContain(marker);
+  expect(await call(environment, true, {})).toEqual({
+    issues: [
+      { side: "head", message: REMOTE_CHECKOUT_ISSUE },
+      { side: "base", message: REMOTE_CHECKOUT_ISSUE },
+    ],
+  });
+
+  const workspaces = `/${reviewId}/workspaces`;
+  const failed = await call<Workspace[]>(workspaces, false);
+  expect(failed).toHaveLength(2);
+
+  for (const workspace of failed) {
+    expect(workspace).toMatchObject({ rootPath: null, state: "failed" });
+    expect(workspace.log).toContain(marker);
+  }
+
+  const remoteFailed = await call<Workspace[]>(workspaces, true);
+  expect(remoteFailed).toEqual(
+    failed.map(({ rootPath: _, log: __, ...status }) => ({
+      ...status,
+      issue: REMOTE_CHECKOUT_ISSUE,
+    })),
+  );
+
+  const retry = `${workspaces}/${failed[0]!.id}/retry`;
+  expect((await call<Workspace>(retry, false, {})).log).toContain(marker);
+  const remoteRetry = await call<Workspace>(retry, true, {});
+  expect(remoteRetry).toMatchObject({ issue: REMOTE_CHECKOUT_ISSUE });
+  expect(remoteRetry).not.toHaveProperty("rootPath");
+  expect(remoteRetry).not.toHaveProperty("log");
+  expect(JSON.stringify(remoteRetry)).not.toContain(marker);
+
+  await rm(blocker);
+  expect(await call(environment, false, { retry: true })).toEqual({
+    issues: [],
+  });
+
+  for (const workspace of await call<Workspace[]>(workspaces, false))
+    expect(workspace.rootPath).toContain(marker);
+
+  for (const workspace of await call<Workspace[]>(workspaces, true)) {
+    expect(workspace).not.toHaveProperty("rootPath");
+    expect(workspace).not.toHaveProperty("log");
+    expect(JSON.stringify(workspace)).not.toContain(marker);
+  }
+});
+
+it.skipIf(process.getuid?.() === 0)(
+  "gives a remote caller no paths from a failed checkout cleanup",
+  async () => {
+    const server = await start();
+    const call = caller(server.discovery);
+    const { create } = await commitsReviews(server.client);
+    const reviewId = await create("Cleanup");
+    const marker = path.basename(root);
+    await call(`/${reviewId}/environment`, false, {});
+
+    const [head] = await call<Workspace[]>(`/${reviewId}/workspaces`, false);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    chmodSync(head!.rootPath!, 0o500);
+    stops.push(async () => {
+      chmodSync(head!.rootPath!, 0o700);
+      error.mockRestore();
+    });
+    await attention(server.client, reviewId, "dismiss");
+
+    const cleanup = "/workspace-cleanup";
+
+    const failures = async (remote: boolean) =>
+      (await call<{ failures: Workspace[] }>(cleanup, remote, {})).failures;
+
+    await expect.poll(() => failures(false), cleanupTimeout).not.toEqual([]);
+    const local = await failures(false);
+    expect(JSON.stringify(local)).toContain(marker);
+
+    expect(await failures(true)).toEqual(
+      local.map(({ rootPath: _, log: __, ...status }) => status),
+    );
+  },
+);
+
+it("gives a remote caller no paths from a failed structural diff", async () => {
+  await stubDiffr();
+  const server = await start();
+  const { create, commonDir } = await commitsReviews(server.client);
+  const reviewId = await create("Blocked");
+  const marker = path.basename(root);
+
+  await mkdir(path.join(commonDir, "dev-fast"), { recursive: true });
+  await writeFile(path.join(commonDir, "dev-fast", "reviews"), "");
+
+  const local = await structuralDiffEvents(server.discovery, reviewId);
+  expect(local).toEqual([{ type: "error", message: expect.any(String) }]);
+  expect(local[0]!.message).toContain(marker);
+  expect(await structuralDiffEvents(server.discovery, reviewId, true)).toEqual([
+    { type: "error", message: REMOTE_STRUCTURAL_DIFF_ERROR },
+  ]);
 });

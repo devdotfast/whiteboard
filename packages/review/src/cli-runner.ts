@@ -2,9 +2,13 @@ import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
-import type { Writable } from "node:stream";
+import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
+import {
+  REVIEW_REMOTE_ATTACH_BEGIN,
+  REVIEW_REMOTE_ATTACH_END,
+} from "@dev.fast/review-protocol";
 import {
   StoreApiError,
   processIsAlive,
@@ -86,6 +90,7 @@ import {
   type ReviewTelemetryErrorName,
 } from "./review-telemetry";
 import {
+  type ReviewServerDiscovery,
   readReviewServerDiscovery,
   readReviewServerHealth,
   reviewServerIsHealthy,
@@ -265,6 +270,16 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       ? { ...env, DEV_REVIEW_SERVER_DIR: path.resolve(cwd, stateDir) }
       : env;
 
+  const refuse = (message: string, json?: boolean) => {
+    if (json)
+      emitReviewEvent(input.stdout, {
+        event: "error",
+        error: { name: "Error", message },
+      });
+    else input.stderr.write(`${message}\n`);
+    state.exitCode = 1;
+  };
+
   const serverCommand = configureOutput(
     program
       .command("server")
@@ -291,6 +306,16 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         "--software-maps",
         "allow the authoring skill to generate optional software maps",
       )
+      .option(
+        "--detach",
+        "start the server in the background, logging to review-server/server.log",
+      )
+      .addOption(
+        new Option("--started-by <who>")
+          .choices(["user", "cli", "desktop"])
+          .default("user")
+          .hideHelp(),
+      )
       // Batch authoring was removed; name that instead of "unknown option".
       .addOption(new Option("--authoring-mode <mode>").hideHelp()),
     "plain",
@@ -299,6 +324,8 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       stateDir?: string;
       port: string;
       softwareMaps?: boolean;
+      detach?: boolean;
+      startedBy: "user" | "cli" | "desktop";
       authoringMode?: string;
       json?: boolean;
     }>();
@@ -314,17 +341,40 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         "--port must be an integer between 0 and 65535.",
       );
     const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
+
+    if (options.detach) {
+      const { ensureBackgroundServer } =
+        await import("./server/background-server.js");
+
+      const { discovery, started } = await ensureBackgroundServer({
+        stateDir,
+        env,
+        args: [
+          "--port",
+          `${port}`,
+          ...(options.softwareMaps ? ["--software-maps"] : []),
+        ],
+      });
+
+      await writeServerStatus(discovery, stateDir, options.json, { started });
+
+      return;
+    }
+
     const controller = new AbortController();
     const stop = () => controller.abort();
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
 
+    const { HeadlessServerBusyError, runHeadlessServer } =
+      await import("./server/headless-host.js");
+
     try {
-      const { runHeadlessServer } = await import("./server/headless-host.js");
       await runHeadlessServer({
         stateDir,
         port,
         softwareMapEnabled: options.softwareMaps,
+        startedBy: options.startedBy,
         signal: controller.signal,
         telemetry,
         onReady: ({ url, serverPid }) => {
@@ -335,6 +385,9 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
           );
         },
       });
+    } catch (error) {
+      if (!(error instanceof HeadlessServerBusyError)) throw error;
+      refuse(error.message, options.json);
     } finally {
       process.off("SIGINT", stop);
       process.off("SIGTERM", stop);
@@ -358,15 +411,64 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
 
     const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
     const discovery = await readReviewServerDiscovery(stateDir);
-    const health = discovery && (await readReviewServerHealth(discovery));
 
-    if (!discovery || !health) throw serverNotReady(stateDir);
-    const { url, serverPid } = discovery;
-    const { version, serverId } = health;
+    if (!discovery) throw serverNotReady(stateDir);
+    await writeServerStatus(discovery, stateDir, options.json);
+  });
+
+  configureJsonOutput(
+    serverCommand
+      .command("stop")
+      .description(
+        "Stop a background server started by --detach, the CLI, or Desktop",
+      )
+      .option(
+        "--state-dir <path>",
+        "directory selected when starting the server",
+      ),
+    "plain",
+  ).action(async (_options, command: Command) => {
+    const options = command.optsWithGlobals<{
+      stateDir?: string;
+      json?: boolean;
+    }>();
+
+    const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
+
+    const { headlessServerOwner, stopBackgroundServer } =
+      await import("./server/background-server.js");
+
+    const owner = await headlessServerOwner(stateDir);
+    const discovery = await readReviewServerDiscovery(stateDir);
+
+    if (owner === undefined) {
+      input.stdout.write(
+        options.json
+          ? `${JSON.stringify({ event: "server.stop", stopped: false, stateDir })}\n`
+          : `No Whiteboard server is running in ${stateDir}.\n`,
+      );
+
+      return;
+    }
+
+    const serverPid = owner;
+
+    if (discovery?.serverPid !== owner)
+      throw new Error(
+        `Process ${owner} holds the Whiteboard server's lock in ${stateDir} but has published no server; it may be starting. Try again, or end that process.`,
+      );
+
+    if (discovery.startedBy === "user")
+      throw new Error(
+        `The Whiteboard server in ${stateDir} (process ${serverPid}) runs in the foreground of \`whiteboard server start\`. Stop it there with Ctrl-C.`,
+      );
+
+    await stopBackgroundServer(discovery);
+
     input.stdout.write(
       options.json
-        ? `${JSON.stringify({ event: "server.status", ready: true, url, serverPid, stateDir, version, serverId })}\n`
-        : `Whiteboard server ready at ${url}\nSaved reviews: ${stateDir}\n`,
+        ? `${JSON.stringify({ event: "server.stop", stopped: true, serverPid, stateDir })}\n`
+        : `Stopped the Whiteboard server (process ${serverPid}).\n`,
     );
   });
 
@@ -407,10 +509,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         `Cannot tell whether a Whiteboard Desktop is using ${stateDir}: ${problem.message}`,
       );
 
-    const inUse = () =>
-      new Error(
-        `A Whiteboard server is using ${stateDir}. Stop it first, then run whiteboard server reset-id again.`,
-      );
+    const inUse = `A Whiteboard server is using ${stateDir}. Stop it first, then run whiteboard server reset-id again.`;
 
     if (
       desktops.instances.some(({ discovery }) =>
@@ -419,7 +518,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         ),
       )
     )
-      throw inUse();
+      return refuse(inUse, options.json);
 
     const [{ openReviewProfile }, { withHeadlessServerLock }] =
       await Promise.all([
@@ -445,7 +544,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       },
     );
 
-    if (!reset.acquired) throw inUse();
+    if (!reset.acquired) return refuse(inUse, options.json);
     const serverId = reset.result;
 
     input.stdout.write(
@@ -454,6 +553,85 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         : `New server id ${serverId}\nSaved reviews: ${stateDir}\n`,
     );
   });
+
+  const remote = configureOutput(
+    program
+      .command("remote")
+      .description("Serve reviews to Whiteboard Desktop over SSH"),
+    "plain",
+  );
+
+  configureJsonOutput(
+    remote
+      .command("attach")
+      .description(
+        "Start a background server if none is healthy and report how to reach it",
+      )
+      .option(
+        "--state-dir <path>",
+        "directory for saved reviews and server discovery",
+      ),
+    "plain",
+  ).action(async (_options, command: Command) => {
+    const options = command.optsWithGlobals<{
+      stateDir?: string;
+      json?: boolean;
+    }>();
+
+    const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
+
+    const { remoteAttach } = await import("./remote-attach.js");
+
+    let attach: Awaited<ReturnType<typeof remoteAttach>>;
+
+    try {
+      attach = await remoteAttach({ stateDir, env });
+    } catch (error) {
+      if (!options.json) throw error;
+
+      let line = "";
+
+      emitReviewEvent(
+        new Writable({
+          write(chunk, _encoding, done) {
+            line += chunk;
+            done();
+          },
+        }),
+        { event: "error", error: serializeReviewError(error) },
+      );
+      input.stdout.write(
+        `${REVIEW_REMOTE_ATTACH_BEGIN}\n${ensureTrailingNewline(line)}${REVIEW_REMOTE_ATTACH_END}\n`,
+      );
+      state.exitCode = 1;
+
+      return;
+    }
+
+    input.stdout.write(
+      options.json
+        ? `${REVIEW_REMOTE_ATTACH_BEGIN}\n${JSON.stringify(attach)}\n${REVIEW_REMOTE_ATTACH_END}\n`
+        : `Whiteboard server ${attach.startedServer ? "started" : "already running"} at ${attach.url}\n`,
+    );
+  });
+
+  async function writeServerStatus(
+    discovery: ReviewServerDiscovery,
+    stateDir: string,
+    json: boolean | undefined,
+    extra: { started?: boolean } = {},
+  ) {
+    const health = await readReviewServerHealth(discovery);
+
+    if (!health) throw serverNotReady(stateDir);
+    const { url, serverPid } = discovery;
+    const { version, serverId } = health;
+    input.stdout.write(
+      json
+        ? `${JSON.stringify({ event: "server.status", ready: true, url, serverPid, stateDir, version, serverId, ...extra })}\n`
+        : `Whiteboard server ${extra.started === false ? "already running" : "ready"} at ${url}\nSaved reviews: ${stateDir}\n`,
+    );
+  }
 
   configureJsonOutput(
     program

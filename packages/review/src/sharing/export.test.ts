@@ -642,7 +642,7 @@ it("lists and streams shared diff counts with the same mode and persistence as l
     JSON.parse(new TextDecoder().decode((await reader.read()).value));
 
   try {
-    expect((await next())[0].value[0].diffStats).toBeNull();
+    expect((await next()).reviews[0].diffStats).toBeNull();
     expect((await app.request(`/${id}/progress?mode=textual`)).status).toBe(
       200,
     );
@@ -652,7 +652,7 @@ it("lists and streams shared diff counts with the same mode and persistence as l
     const expected = local.store.list("textual")[0].diffStats;
 
     expect(expected).toMatchObject({ fileCount: 4 });
-    expect((await next())[0].value[0].diffStats).toEqual(expected);
+    expect((await next()).reviews[0].diffStats).toEqual(expected);
     expect((await readCatalog("textual"))[0].diffStats).toEqual(expected);
     expect((await readCatalog("structural"))[0].diffStats).toBeNull();
 

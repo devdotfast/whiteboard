@@ -196,6 +196,7 @@ export {
 } from "./trace-machine-setup";
 
 export {
+  liveLockOwner,
   processIsAlive,
   processStartIdentity,
   withFileLock,

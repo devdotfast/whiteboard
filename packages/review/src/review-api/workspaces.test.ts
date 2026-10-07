@@ -14,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { reviewManagedCheckoutRoot } from "@review/review-checkout-paths.js";
 import { runPrepareCommand } from "@review/review-prepare.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { z } from "zod";
@@ -110,11 +111,11 @@ it("lets a second Desktop share the profile without preparing a review the first
       preparing,
     );
     await expect(second.data.workspaces.remove(reviewId)).rejects.toThrow(
-      /Another Desktop/,
+      /Another Whiteboard server/,
     );
     await expect(
       second.data.workspaces.retry(reviewId, preparing.id),
-    ).rejects.toThrow(/Another Desktop/);
+    ).rejects.toThrow(/Another Whiteboard server/);
     await local.data.close();
     await local.store.close();
     local = second;
@@ -311,7 +312,7 @@ it("claims unowned workspaces before removing them", async () => {
     await local.data.close();
     const removal = second.data.workspaces.remove(reviewId);
     await expect(third.data.workspaces.remove(reviewId)).rejects.toThrow(
-      /Another Desktop/,
+      /Another Whiteboard server/,
     );
     await removal;
     expect(third.data.workspaces.list(reviewId)).toEqual([]);
@@ -396,6 +397,28 @@ it("dismissing a review frees only its own managed checkout, leaving a user's si
   );
   expect(existsSync(path.join(userWorktree, "scratch.txt"))).toBe(true);
   expect(git("status", "--porcelain")).toBe(mainStatusBefore);
+});
+
+it("removes a deleted review's whole checkout directory", async () => {
+  const { workspacePath } = await local.data.navigatorWorkspace(
+    local.store.read(reviewId),
+  );
+
+  await local.data.workspaces.open(reviewId, pins);
+
+  const managed = reviewManagedCheckoutRoot(
+    path.join(repository, ".git"),
+    reviewId,
+  );
+
+  expect(existsSync(workspacePath)).toBe(true);
+  await command({ type: "delete", reviewId });
+  await local.data.workspaces.idle();
+  expect(local.data.workspaces.list(reviewId)).toEqual([]);
+  expect(existsSync(managed)).toBe(false);
+  expect(
+    git("worktree", "list", "--porcelain").match(/^worktree /gm),
+  ).toHaveLength(1);
 });
 
 it("removes checkouts left by reviews dismissed while Desktop was closed", async () => {
