@@ -4,6 +4,7 @@ import type { ReviewAgentTraceEvent } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactNode,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -11,8 +12,9 @@ import {
   useState,
 } from "react";
 
-import { AgentChatUserMessage } from "./agent-chat";
+import { AgentChatUserMessage, trayBubbleStyles } from "./agent-chat";
 import { AgentMarkdown } from "./agent-markdown";
+import { InRightColumn } from "./ask-dock";
 import {
   HighlightedText,
   QuoteMark,
@@ -316,10 +318,14 @@ export function TraceEvent({
   event: TraceTurnEvent;
   highlightQuote?: string;
 }) {
+  // On the right column's tray, the bubble lifts off it as Ask's does.
+  const inColumn = useContext(InRightColumn);
+
   if (event.kind === "user") {
     return (
       <AgentChatUserMessage
         caption={event.at ? timeLabel(event.at) : undefined}
+        bubbleXstyle={inColumn && trayBubbleStyles.bubble}
       >
         {highlightQuote ? (
           <HighlightedText text={event.text} quote={highlightQuote} />
@@ -635,6 +641,7 @@ export function ElidedMessage({
   quote?: string;
   onExpand: () => void;
 }) {
+  const inColumn = useContext(InRightColumn);
   const text = event.kind === "user" ? event.text : event.markdown;
   const segments = elideByKeep(text, keep);
 
@@ -672,6 +679,7 @@ export function ElidedMessage({
     return (
       <AgentChatUserMessage
         caption={event.at ? timeLabel(event.at) : undefined}
+        bubbleXstyle={inColumn && trayBubbleStyles.bubble}
       >
         {body}
       </AgentChatUserMessage>

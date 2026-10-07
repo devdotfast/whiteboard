@@ -27,7 +27,7 @@ import {
 
 import { AgentSelectionProvider, useAgentSelection } from "./agent-selection";
 import { observeAgentTextSelection } from "./agent-text-selection";
-import { AskDesktopSync } from "./ask-dock";
+import { AskDesktopSync, useAskPanelHost } from "./ask-dock";
 import { AskHistoryProvider } from "./ask-history";
 import { AskThreadMarks } from "./ask-marks";
 import {
@@ -50,6 +50,7 @@ import { useDocumentEmbedScroll } from "./document-embed-scroll";
 import { documentStyles } from "./document-styles";
 import { useReviewSession } from "./host/review-session";
 import { DiscordIcon, MarkerUnderline, SettingsSlidersIcon } from "./icons";
+import { useKeepPlace } from "./keep-place";
 import {
   appMarker,
   detailHostMarker,
@@ -304,7 +305,14 @@ function ReviewLayoutContent({
   const panelStore = useReviewPanelStore();
   useSuppressPanelMotionOnCanvasResume(appRef);
   const activePanel = useReviewPanel((state) => state.active);
-  const askDocked = useReviewPanel(askDockedShown);
+
+  // In Desktop, a docked Ask has a panel of its own beside the board.
+  const askBeside = !useAskPanelHost();
+
+  const askDocked = useReviewPanel(
+    (state) => askBeside && askDockedShown(state),
+  );
+
   const panelMotion = useReviewPanel((state) => state.motion);
   const activeView = useReviewPanel((state) => state.view);
   const diffScope = useReviewPanel((state) => state.diffScope);
@@ -340,7 +348,8 @@ function ReviewLayoutContent({
 
   const debugSettings = useReviewDebugSettings();
 
-  const rightPanelOpen = activePanel !== null || askDocked;
+  // In Desktop the column right of the board holds peeks and Ask alike.
+  const rightPanelOpen = askBeside && (activePanel !== null || askDocked);
 
   const sidePeekResize = useRightPanelResize({
     stateKey: "side-peek-width",
@@ -356,6 +365,8 @@ function ReviewLayoutContent({
   });
 
   useDocumentEmbedScroll(scrollRegionRef);
+  // The board keeps its place as the column beside it opens and closes.
+  useKeepPlace(scrollRegionRef);
   useReviewViewStateSync({ scrollRegionRef, panelStore });
 
   // Diagrams only read the open tour, so a restored tour whose diagram is

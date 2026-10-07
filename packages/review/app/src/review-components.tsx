@@ -18,6 +18,7 @@ import type {
 } from "react";
 import {
   useCallback,
+  useContext,
   useEffect,
   useEffectEvent,
   useMemo,
@@ -29,6 +30,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { AskCloseWarning } from "./ask-close";
 import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
+import { AskDock, InRightColumn, useAskPanelHost } from "./ask-dock";
 import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
 import { openHandedOffAsks, syncOpenAsks } from "./ask-open-state";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
@@ -150,6 +152,9 @@ function ReviewPanelFrame({
     [bodyRef],
   );
 
+  // In Desktop's right column, the header sits level with the window controls.
+  const nativeFrame = useContext(InRightColumn);
+
   const sheet = useBottomSheetResize({
     stateKey: "bottomSheetFraction",
     label: "Resize panel height",
@@ -181,8 +186,8 @@ function ReviewPanelFrame({
         "side-panel",
         panelStyles.panel,
         panelMotion === "restored" && panelStyles.restored,
-        docked && panelStyles.docked,
-        tray && panelStyles.tray,
+        (docked || nativeFrame) && panelStyles.docked,
+        (tray || nativeFrame) && panelStyles.tray,
       )}
       role="complementary"
       aria-label={title ?? label}
@@ -192,7 +197,14 @@ function ReviewPanelFrame({
         {...stylex.props(shellStyles.sheetResizer)}
         {...sheet.separatorProps}
       />
-      <header {...stylex.props(panelStyles.header, tray && panelStyles.tray)}>
+      <header
+        {...withClass(
+          nativeFrame ? "review-ask-chrome" : undefined,
+          panelStyles.header,
+          (tray || nativeFrame) && panelStyles.tray,
+          nativeFrame && panelStyles.nativeHeader,
+        )}
+      >
         <div {...stylex.props(panelStyles.title)}>
           <span
             {...stylex.props(
@@ -493,15 +505,18 @@ function keepAnchorLinkVisible(link: HTMLElement) {
 export function ReviewPanelHost() {
   const activePanel = useReviewPanel((state) => state.active);
   const close = useReviewPanel((state) => state.close);
+  const columnHost = useAskPanelHost();
 
   return (
     <>
       {activePanel ? (
-        <ReviewPeekPanel
-          anchor={activePanel.anchor}
-          content={activePanel.content}
-          onClose={close}
-        />
+        <AskDock host={columnHost}>
+          <ReviewPeekPanel
+            anchor={activePanel.anchor}
+            content={activePanel.content}
+            onClose={close}
+          />
+        </AskDock>
       ) : null}
       <AskHost />
     </>
@@ -565,6 +580,7 @@ function OpenAsk({ askKey }: { askKey: number }) {
   );
 
   const shown = useReviewPanel((state) => askShown(state, askKey));
+  const nativeHost = useAskPanelHost();
   const popOutTooltip = useTooltip("Pop out");
   const [node] = useState(() => document.createElement("div"));
   const [header, setHeader] = useState<HTMLDivElement | null>(null);
@@ -646,35 +662,40 @@ function OpenAsk({ askKey }: { askKey: number }) {
           node,
         )}
         {shown === "panel" ? (
-          <ReviewPanelFrame
-            tray
-            label="Ask"
-            titleAccessory={
-              <div ref={setHeader} {...stylex.props(panelStyles.title)} />
-            }
-            onClose={close}
-            onEscape={warning ? () => setWarning(false) : close}
-            closeLabel="Close Ask"
-            closeRef={closeButton}
-            headerActions={
-              <>
-                {actions}
-                <IconButton
-                  ref={popOutTooltip}
-                  size="large"
-                  aria-label="Pop out Ask"
-                  onClick={() => store.getState().popOutAsk(askKey)}
-                >
-                  <PopOutIcon
-                    xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
-                  />
-                </IconButton>
-              </>
-            }
-          >
-            {closeWarning}
-            <AskSlot node={node} />
-          </ReviewPanelFrame>
+          <AskDock host={nativeHost}>
+            <ReviewPanelFrame
+              tray
+              label="Ask"
+              titleAccessory={
+                <div ref={setHeader} {...stylex.props(panelStyles.title)} />
+              }
+              onClose={close}
+              onEscape={warning ? () => setWarning(false) : close}
+              closeLabel="Close Ask"
+              closeRef={closeButton}
+              headerActions={
+                <>
+                  {actions}
+                  <IconButton
+                    ref={popOutTooltip}
+                    size="large"
+                    aria-label="Pop out Ask"
+                    onClick={() => store.getState().popOutAsk(askKey)}
+                  >
+                    <PopOutIcon
+                      xstyle={[
+                        controlStyles.inertIcon,
+                        controlStyles.chromeIcon,
+                      ]}
+                    />
+                  </IconButton>
+                </>
+              }
+            >
+              {closeWarning}
+              <AskSlot node={node} />
+            </ReviewPanelFrame>
+          </AskDock>
         ) : shown === "window" ? (
           <AskWindow
             askKey={askKey}

@@ -419,13 +419,17 @@ export interface ReviewCanvasBridge {
   onDidChangeSidebarShowsBoard?(listener: () => void): ReviewDisposable;
   /** The sidebar's lens list, where the agent's cursor is drawn. */
   sidebarLensList?(): HTMLElement | undefined;
-  /** The thread Ask shows. */
+  /** Desktop's right column; undefined where Ask docks beside the document. */
+  askPanelHost?(): HTMLElement | undefined;
+  /** Whether the right column is open, and the thread Ask shows. */
   reportAsk?(state: ReviewAskState): void;
   /** Opens the sidebar on its Threads tab. */
   showThreads?(): void;
 }
 
 export interface ReviewAskState {
+  /** The right column shows something: Ask docked, or a peek. */
+  docked: boolean;
   /** The saved thread on screen, docked or not. */
   threadId?: string;
 }
