@@ -1,7 +1,9 @@
 import { fontSize } from "@canvas/scale.stylex";
 import {
   type ReviewCanvasContent,
+  type ReviewDiffViewSpec,
   type ReviewDocumentWidthChoice,
+  type ReviewInlineEditorSpec,
   parseReviewStackResponse,
   resolveReviewSourceView,
 } from "@dev.fast/review-protocol";
@@ -119,6 +121,8 @@ export function ApiCanvas({
     const lensMemory: CursorMemory = {};
 
     const show = async (snapshot: Snapshot) => {
+      if (snapshot.reviewId !== content.reviewId)
+        throw new Error("The server answered with another review.");
       const next = await loader.load(snapshot);
 
       if (abort.signal.aborted) return;
@@ -243,13 +247,26 @@ export function ApiCanvas({
     };
   }, [client, content.reviewId, version]);
 
-  const nativeSources = useMemo(
-    () => ({
-      inlineEditors: { ...content.bridge.inlineEditors },
-      diffView: { ...content.bridge.diffView },
-    }),
-    [content.bridge, sourceVersion, content.structuralDiffEnabled],
-  );
+  const openFile = content.available?.sourceWindows !== false;
+
+  const nativeSources = useMemo(() => {
+    const { inlineEditors, diffView } = content.bridge;
+
+    return openFile
+      ? { inlineEditors: { ...inlineEditors }, diffView: { ...diffView } }
+      : {
+          inlineEditors: {
+            ...inlineEditors,
+            create: (spec: ReviewInlineEditorSpec) =>
+              inlineEditors.create({ ...spec, onDidOpen: undefined }),
+          },
+          diffView: {
+            ...diffView,
+            create: (spec: ReviewDiffViewSpec) =>
+              diffView.create({ ...spec, openFile: false }),
+          },
+        };
+  }, [content.bridge, sourceVersion, content.structuralDiffEnabled, openFile]);
 
   const baseSession = useMemo(() => {
     const bridge = {
@@ -292,6 +309,8 @@ export function ApiCanvas({
       ...baseSession,
       review: {
         kind: snapshot.kind,
+        host: content.host,
+        available: content.available,
         pins: snapshot.pins
           ? { base: snapshot.pins.base, head: snapshot.pins.head }
           : undefined,
@@ -322,7 +341,15 @@ export function ApiCanvas({
         },
       },
     };
-  }, [baseSession, client, content.reviewId, data, version]);
+  }, [
+    baseSession,
+    client,
+    content.reviewId,
+    content.host,
+    content.available,
+    data,
+    version,
+  ]);
 
   // Only the latest version of a review this machine owns takes edits.
   const editable =
@@ -354,12 +381,15 @@ export function ApiCanvas({
   }, [Boolean(data), content.bridge]);
 
   useEffect(() => {
-    if (data) content.setTutorial?.(data.snapshot.origin?.tutorial === true);
-  }, [data?.snapshot.origin?.tutorial, content.setTutorial]);
+    if (data)
+      content.setTutorial?.(
+        !content.host && data.snapshot.origin?.tutorial === true,
+      );
+  }, [data?.snapshot.origin?.tutorial, content.host, content.setTutorial]);
 
   const sharing = useMemo(
     () =>
-      data
+      data && !content.host
         ? {
             client,
             reviewId: content.reviewId,
@@ -367,7 +397,7 @@ export function ApiCanvas({
             sender: data.snapshot.shared?.login,
           }
         : null,
-    [client, content.reviewId, data],
+    [client, content.reviewId, content.host, data],
   );
 
   // Loads are near-instant, so stay blank until there is data or an error.

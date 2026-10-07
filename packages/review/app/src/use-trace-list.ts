@@ -70,7 +70,7 @@ export function useTraceList(
     ),
     queryFn: ({ signal }) =>
       readTraceList(session.fetch, storageOverride, signal),
-    enabled: !usesProvided,
+    enabled: !usesProvided && !session.review?.host,
     staleTime: 0,
   });
 

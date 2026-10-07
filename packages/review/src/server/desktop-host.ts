@@ -1,13 +1,8 @@
 #!/usr/bin/env node
 
-import { readFileSync, unwatchFile, watchFile } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
-import {
-  type ReviewGatewayHost,
-  ReviewGatewayHostSchema,
-} from "@dev.fast/review-protocol";
 import { reviewInstanceIdentity } from "@review/desktop-discovery";
 import { findReviewPackageRoot } from "@review/package-paths";
 import { openReviewProfile } from "@review/review-api/profile";
@@ -17,7 +12,10 @@ import { ReviewTelemetry } from "@review/review-telemetry";
 import { SharedReviewStore } from "@review/sharing/import.js";
 import { reviewTelemetryChannel } from "@review/telemetry-config";
 
-import { listenForDesktopHostShutdown } from "./desktop-host-shutdown";
+import {
+  listenForDesktopHostShutdown,
+  postToDesktop,
+} from "./desktop-host-shutdown";
 import { createGlobalReviewServer } from "./desktop-server";
 import {
   drainServerCrashReport,
@@ -101,6 +99,8 @@ export async function runDesktopHost(
     reviewData: local.data,
     cliRuntimePath: env.DEV_FAST_REVIEW_CLI_RUNTIME,
     crashDumpsDir: env.DEV_FAST_REVIEW_CRASH_DUMPS_DIR,
+    onRemoteHostRestarted: (alias) =>
+      postToDesktop(process, { type: "remote-host-restarted", alias }),
   });
 
   try {
@@ -125,17 +125,10 @@ export async function runDesktopHost(
 
   void stageRustAnalyzer();
 
-  const stopHostsFile = watchRemoteHostsFile(
-    env,
-    (hosts) => server.setRemoteHosts(hosts),
-    log,
-  );
-
   let stopping: Promise<void> | null = null;
 
   const stop = () => {
     if (!stopping) {
-      stopHostsFile();
       stopping = server
         .close("app-exit")
         .finally(() => shared.close())
@@ -166,41 +159,6 @@ export async function runDesktopHost(
   process.once("SIGTERM", () => {
     void stop().then(() => process.exit(0));
   });
-}
-
-function watchRemoteHostsFile(
-  env: NodeJS.ProcessEnv,
-  setHosts: (hosts: ReviewGatewayHost[]) => void,
-  log: (message: string) => void,
-): () => void {
-  const file = env.DEV_FAST_REVIEW_REMOTE_HOSTS_FILE;
-
-  if (!file) return () => {};
-
-  if (reviewTelemetryChannel(env) !== "dev") {
-    log("Ignoring DEV_FAST_REVIEW_REMOTE_HOSTS_FILE in a packaged build.");
-
-    return () => {};
-  }
-
-  const read = () => {
-    try {
-      setHosts(
-        ReviewGatewayHostSchema.array().parse(
-          JSON.parse(readFileSync(file, "utf8")),
-        ),
-      );
-    } catch (error) {
-      log(
-        `Cannot read remote hosts from ${file}: ${error instanceof Error ? error.name : "unreadable"}.`,
-      );
-    }
-  };
-
-  read();
-  watchFile(file, { interval: 1_000 }, read);
-
-  return () => unwatchFile(file, read);
 }
 
 function isEnabledEnvValue(value: string | undefined): boolean {

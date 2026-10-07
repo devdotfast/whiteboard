@@ -1,6 +1,7 @@
 import type {
   ReviewApiSummary,
   ReviewCanvasUi,
+  ReviewGatewayHostState,
   ReviewMenuRequest,
 } from "@dev.fast/review-protocol";
 import { type ReactNode, act } from "react";
@@ -567,7 +568,239 @@ describe("ReviewHome", () => {
       expect(document.activeElement).toBe(search);
     },
   );
+
+  it("puts a remote review's host in front of its repository name", async () => {
+    const reviews = [
+      remote("devbox", { reviewId: uuid(1), title: "Remote" }),
+      summary({
+        reviewId: uuid(2),
+        title: "Laptop",
+        createdAt: "2026-07-28T11:54:00.000Z",
+        repositoryGroup: { key: "git:/repo/.git", label: "my-repo" },
+      }),
+    ];
+
+    await act(async () =>
+      renderWithHost(<ReviewHome reviews={reviews} onOpen={() => {}} />),
+    );
+    expect(repositories()).toEqual(["devbox: my-repo", "my-repo"]);
+  });
+
+  it("keeps two machines' repositories of one name in two groups", async () => {
+    const reviews = [
+      remote("devbox", { reviewId: uuid(1), title: "On devbox" }),
+      remote("other", { reviewId: uuid(2), title: "On other" }),
+    ];
+
+    await act(async () =>
+      renderWithHost(<ReviewHome reviews={reviews} onOpen={() => {}} />),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Filter by repository"]',
+        )!
+        .click(),
+    );
+    expect(host.menu.items.map((item) => item.label)).toEqual([
+      "All repos",
+      "devbox: my-repo",
+      "other: my-repo",
+    ]);
+    await act(async () => host.select("other:git:/repo/.git"));
+    expect(titles()).toEqual(["On other"]);
+  });
+
+  it.each([
+    ["offline", "offline"],
+    ["connecting", "connecting"],
+    ["not-installed", "not installed"],
+  ] as const)(
+    "draws a %s host's review as unavailable, and opening it shows the host's detail",
+    async (hostState, words) => {
+      const review = remote("devbox", { hostState });
+      const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
+
+      const hostStates = vi.fn<() => Promise<ReviewGatewayHostState[]>>(
+        async () => [
+          {
+            alias: "devbox",
+            state: hostState,
+            detail: "devbox is offline: it did not answer within 3 seconds.",
+          },
+        ],
+      );
+
+      await act(async () =>
+        renderWithHost(
+          <ReviewHome
+            reviews={[review]}
+            onOpen={onOpen}
+            hostStates={hostStates}
+          />,
+        ),
+      );
+
+      const row = container.querySelector("tbody tr")!;
+
+      const open = container.querySelector<HTMLButtonElement>(
+        "td:nth-child(2) > button",
+      )!;
+
+      expect(row.hasAttribute("data-unavailable")).toBe(true);
+      expect(row.textContent).toContain(words);
+      expect(open.getAttribute("aria-disabled")).toBe("true");
+      expect(open.title).toBe(`devbox is ${words}`);
+      await act(async () =>
+        container
+          .querySelector<HTMLButtonElement>("td:nth-child(2) > button")!
+          .click(),
+      );
+      expect(onOpen).not.toHaveBeenCalled();
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+        "devbox is offline: it did not answer within 3 seconds.",
+      );
+    },
+  );
+
+  it("says only the state while the host's detail loads or when it has none", async () => {
+    const answer = Promise.withResolvers<ReviewGatewayHostState[]>();
+    const review = remote("devbox", { hostState: "offline" });
+
+    await act(async () =>
+      renderWithHost(
+        <ReviewHome
+          reviews={[review]}
+          onOpen={() => {}}
+          hostStates={() => answer.promise}
+        />,
+      ),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("td:nth-child(2) > button")!
+        .click(),
+    );
+    expect(alert()).toBe("devbox is offline.");
+    await act(async () =>
+      answer.resolve([{ alias: "devbox", state: "offline" }]),
+    );
+    expect(alert()).toBe("devbox is offline.");
+  });
+
+  it("keeps the message of the last unavailable review opened, and drops it when the list changes", async () => {
+    const answers = [
+      Promise.withResolvers<ReviewGatewayHostState[]>(),
+      Promise.withResolvers<ReviewGatewayHostState[]>(),
+    ];
+
+    let calls = 0;
+
+    const hostStates = vi.fn<() => Promise<ReviewGatewayHostState[]>>(
+      () => answers[calls++]!.promise,
+    );
+
+    const reviews = [
+      remote("devbox", {
+        reviewId: uuid(1),
+        title: "One",
+        hostState: "offline",
+      }),
+      remote("other", {
+        reviewId: uuid(2),
+        title: "Two",
+        hostState: "offline",
+      }),
+    ];
+
+    const states = [
+      { alias: "devbox", state: "offline" as const, detail: "devbox detail" },
+      { alias: "other", state: "offline" as const, detail: "other detail" },
+    ];
+
+    await act(async () =>
+      renderWithHost(
+        <ReviewHome
+          reviews={reviews}
+          onOpen={() => {}}
+          hostStates={hostStates}
+        />,
+      ),
+    );
+
+    const open = (title: string) =>
+      [
+        ...container.querySelectorAll<HTMLButtonElement>(
+          "td:nth-child(2) > button",
+        ),
+      ]
+        .find((button) => button.textContent?.includes(title))!
+        .click();
+
+    await act(async () => open("One"));
+    await act(async () => open("Two"));
+    await act(async () => answers[1]!.resolve(states));
+    await act(async () => answers[0]!.resolve(states));
+    expect(alert()).toBe("other detail");
+    await act(async () =>
+      renderWithHost(
+        <ReviewHome
+          reviews={[{ ...reviews[1]!, hostState: "online" }]}
+          onOpen={() => {}}
+          hostStates={hostStates}
+        />,
+      ),
+    );
+    expect(alert()).toBeUndefined();
+  });
+
+  function alert() {
+    return container.querySelector('[role="alert"]')?.textContent;
+  }
+
+  it("draws an online remote review as available", async () => {
+    const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
+    const review = remote("devbox");
+
+    await act(async () =>
+      renderWithHost(<ReviewHome reviews={[review]} onOpen={onOpen} />),
+    );
+    expect(
+      container.querySelector("tbody tr")!.hasAttribute("data-unavailable"),
+    ).toBe(false);
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("td:nth-child(2) > button")!
+        .click(),
+    );
+    expect(onOpen).toHaveBeenCalledWith(review);
+  });
+
+  function titles() {
+    return [
+      ...container.querySelectorAll("tbody button > span:first-child"),
+    ].map((element) => element.textContent);
+  }
+
+  function repositories() {
+    return [
+      ...container.querySelectorAll("tbody button > span:nth-child(2)"),
+    ].map((element) => element.textContent);
+  }
 });
+
+function remote(
+  alias: string,
+  overrides: Partial<ReviewApiSummary> = {},
+): ReviewApiSummary {
+  return summary({
+    repositoryGroup: { key: `${alias}:git:/repo/.git`, label: "my-repo" },
+    host: alias,
+    hostState: "online",
+    available: { sourceWindows: false, languageFeatures: false },
+    ...overrides,
+  });
+}
 
 describe("formatRelativeTime", () => {
   const now = Date.parse("2026-07-29T12:00:00.000Z");

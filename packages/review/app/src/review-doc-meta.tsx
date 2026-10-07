@@ -3,6 +3,7 @@ import {
   type ReviewDiffStats,
   summarizeReviewDiffFiles,
 } from "@dev.fast/review-protocol";
+import { PULL_REQUEST_URL } from "@review/review-api/origin";
 import * as stylex from "@stylexjs/stylex";
 import {
   Fragment,
@@ -152,18 +153,21 @@ export function ReviewDocumentMetaLine({
     >
       <div {...stylex.props(styles.row, styles.top)} data-review-copy-ignore>
         <div {...stylex.props(styles.row, styles.identity)}>
-          {repository ? (
+          {review.host || repository ? (
             <span>
-              {repository[1]} / {repository[2]}
+              {review.host}
+              {review.host && repository ? ": " : null}
+              {repository ? `${repository[1]} / ${repository[2]}` : null}
             </span>
           ) : null}
-          {repository && meta.pullRequestNumber != null ? (
+          {(review.host || repository) && meta.pullRequestNumber != null ? (
             <span {...stylex.props(styles.separator)} aria-hidden="true">
               ·
             </span>
           ) : null}
           {meta.pullRequestNumber != null &&
-            (meta.pullRequestUrl ? (
+            (meta.pullRequestUrl &&
+            PULL_REQUEST_URL.test(meta.pullRequestUrl) ? (
               <a
                 href={meta.pullRequestUrl}
                 target="_blank"
