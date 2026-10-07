@@ -1209,8 +1209,9 @@ export class LocalReviewData {
     string,
     {
       state?: PullRequestState;
-      /** The branch it merges into. */
+      /** The branch it merges into, and its own. */
       baseBranch?: string;
+      headBranch?: string;
       readAt: number;
       /** When a board last showed it; a deleted board's PR is forgotten. */
       seenAt: number;
@@ -1307,11 +1308,13 @@ export class LocalReviewData {
         .then((pullRequest) => {
           if (
             (!pullRequest.state || pullRequest.state === entry.state) &&
-            pullRequest.baseRefName === entry.baseBranch
+            pullRequest.baseRefName === entry.baseBranch &&
+            pullRequest.headBranch === entry.headBranch
           )
             return;
           entry.state = pullRequest.state ?? entry.state;
           entry.baseBranch = pullRequest.baseRefName;
+          entry.headBranch = pullRequest.headBranch;
 
           for (const listener of this.pullRequestStateListeners) listener();
         })
@@ -1331,6 +1334,11 @@ export class LocalReviewData {
   /** The branch a PR merges into, as last read with its state. */
   pullRequestBaseBranch(url: string): string | undefined {
     return this.pullRequestStates.get(url)?.baseBranch;
+  }
+
+  /** A PR's own branch, as last read with its state. */
+  pullRequestHeadBranch(url: string): string | undefined {
+    return this.pullRequestStates.get(url)?.headBranch;
   }
 
   /** The PR's current comparison, fetched into a registered checkout of its repository. */

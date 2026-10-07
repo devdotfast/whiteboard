@@ -4,7 +4,7 @@ import {
   isJsonObject,
   isStringValue,
 } from "@dev.fast/json";
-import { resolveRepoContextSync } from "@dev.fast/local-vcs";
+import { defaultBranch, resolveRepoContextSync } from "@dev.fast/local-vcs";
 import {
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
@@ -89,6 +89,7 @@ import {
   uncategorizedReport,
 } from "./review-progress.js";
 import {
+  type PlacedBoard,
   type ReviewStore,
   type Snapshot,
   commandSchema,
@@ -311,10 +312,41 @@ export function createReviewApi(
     ...(shared?.list() ?? []),
   ];
 
-  /** Where a board sits among its project's: its parent, and the parent's
-   * children in order. */
-  const placeOf = (id: string): ReviewBoardPlace =>
-    isShared(id) || !store.has(id) ? { siblings: [] } : store.place(id);
+  /** Where a board sits among its project's, and its PR's facts, for the
+   * board's header. */
+  const placeOf = (id: string): ReviewBoardPlace => {
+    if (isShared(id) || !store.has(id)) return { siblings: [] };
+
+    const { board, parent, siblings } = store.place(id);
+    const url = board.origin?.pullRequestUrl;
+    const state = data?.pullRequestState(url);
+    const baseBranch = url && data?.pullRequestBaseBranch(url);
+    const headBranch = url && data?.pullRequestHeadBranch(url);
+
+    const place = ({ reviewId, title, target }: PlacedBoard) => ({
+      reviewId,
+      title,
+      icon: boardIconKind(target),
+    });
+
+    return {
+      ...(state && { pullRequestState: state }),
+      ...(baseBranch && { baseBranch }),
+      ...(headBranch && { headBranch }),
+      ...(parent && { parent: place(parent) }),
+      siblings: siblings.map((child) => {
+        const childState = data?.pullRequestState(child.origin?.pullRequestUrl);
+
+        return {
+          ...place(child),
+          ...(child.origin?.pullRequestNumber && {
+            pullRequestNumber: child.origin.pullRequestNumber,
+          }),
+          ...(childState && { pullRequestState: childState }),
+        };
+      }),
+    };
+  };
 
   app.get("/", (context) => context.json(catalog()));
 
@@ -603,6 +635,22 @@ export function createReviewApi(
       return true;
     };
 
+    /** Bumps the place of each board whose place changed. */
+    const refreshPlaces = () => {
+      let marked = false;
+
+      for (const [id, key] of placeKeys) {
+        const next = placeKey(id);
+
+        if (next === key) continue;
+        placeKeys.set(id, next);
+        placeRevision.set(id, (placeRevision.get(id) ?? 0) + 1);
+        marked = markReview(id) || marked;
+      }
+
+      return marked;
+    };
+
     const markLists = () => {
       dirtyList ||= lists;
 
@@ -632,9 +680,12 @@ export function createReviewApi(
         store.activity.subscribeWorking(() => {
           if (markLists()) notify();
         }),
-        // A PR's state shows on its board in the list, and on links to it.
+        // A PR's state shows on its board in the list, on links to it, and
+        // with its branches in its board's header.
         data?.subscribePullRequestStates(() => {
           let marked = markLists();
+
+          marked = refreshPlaces() || marked;
 
           for (const reviewId of reviewIds) {
             const next = linksKey(reviewId);
@@ -651,18 +702,9 @@ export function createReviewApi(
           if (markLists()) notify();
         }) ?? (() => {}),
         store.subscribeCatalog(() => {
-          let marked = markLists();
+          const marked = refreshPlaces();
 
-          for (const [id, key] of placeKeys) {
-            const next = placeKey(id);
-
-            if (next === key) continue;
-            placeKeys.set(id, next);
-            placeRevision.set(id, (placeRevision.get(id) ?? 0) + 1);
-            marked = markReview(id) || marked;
-          }
-
-          if (marked) notify();
+          if (markLists() || marked) notify();
         }),
       ];
 
@@ -1880,6 +1922,17 @@ export function createReviewApi(
     });
   }
 
+  app.get("/:id/place", (context) => {
+    const id = context.req.param("id");
+
+    if (!isShared(id)) store.assertExists(id);
+
+    return context.json(placeOf(id));
+  });
+
+  // The board's branch stack: its GitHub stack, else the reviews chained
+  // through the bases they name, bottom first. Apart from its place among
+  // boards.
   app.get("/:id/stack", async (context) => {
     const query = readQuerySchemas.get.parse(context.req.query());
     const id = context.req.param("id");
@@ -1887,14 +1940,30 @@ export function createReviewApi(
 
     if (isShared(id) || !snapshot.pins) return context.json({ layers: [] });
 
+    const repositoryPath = store
+      .repositories()
+      .find(
+        (repository) => repository.id === snapshot.pins!.repositoryId,
+      )?.path;
+
     const layers = await resolveReviewStackLayers(snapshot, store.list(), {
-      repositoryPath: store
-        .repositories()
-        .find((repository) => repository.id === snapshot.pins!.repositoryId)
-        ?.path,
+      repositoryPath,
     });
 
-    return context.json({ layers });
+    // The branch the stack sits on: the repository's default branch.
+    const trunk =
+      layers.length > 1 && repositoryPath
+        ? await defaultBranch(repositoryPath).catch(() => null)
+        : null;
+
+    return context.json({
+      layers: layers.map((layer) => {
+        const state = data?.pullRequestState(layer.pullRequestUrl ?? undefined);
+
+        return state ? { ...layer, pullRequestState: state } : layer;
+      }),
+      ...(trunk && { base: trunk.ref.replace(/^origin\//, "") }),
+    });
   });
 
   // The board's project and its whiteboards, for the board's sidebar.
@@ -1951,13 +2020,6 @@ export function createReviewApi(
     return context.json(
       store.linkPeek(id, { board, ...(block && { block }) }, version),
     );
-  });
-  app.get("/:id/place", (context) => {
-    const id = context.req.param("id");
-
-    if (!isShared(id)) store.assertExists(id);
-
-    return context.json(placeOf(id));
   });
 
   app.get("/:id/history", (context) => {

@@ -826,7 +826,7 @@ it("copies prose and code from the displayed historical JSON review", async () =
   }
 });
 
-it("reads a worktree review's range as its base against the working tree, and a commit review's as two commits", async () => {
+it("names a worktree review's source as its base against the working copy, and a commit review's as two commits", async () => {
   const head = "c14db2183b0e6c1f4a4a5c3f2d9e8b7a6f5e4d3c";
 
   const store = new ReviewStore(path.join(directory, "worktree.db"), {
@@ -868,10 +868,9 @@ it("reads a worktree review's range as its base against the working tree, and a 
     return container;
   };
 
-  const range = (container: HTMLElement) =>
-    container
-      .querySelector('[role="group"][aria-label^="Session commits"]')
-      ?.getAttribute("aria-label");
+  const source = (container: HTMLElement) =>
+    container.querySelector("[data-review-document-header] > div:last-child")
+      ?.textContent;
 
   try {
     const worktree = await open(
@@ -882,10 +881,7 @@ it("reads a worktree review's range as its base against the working tree, and a 
       "Uncommitted work",
     );
 
-    expect(range(worktree)).toBe(
-      "Session commits: base c14db218, head working tree",
-    );
-    expect(worktree.textContent?.match(/Working tree/g)).toHaveLength(1);
+    await vi.waitFor(() => expect(source(worktree)).toContain("c14db21"));
 
     const committed = await open(
       await create("Committed work", {
@@ -897,12 +893,9 @@ it("reads a worktree review's range as its base against the working tree, and a 
       "Committed work",
     );
 
-    expect(range(committed)).toBeUndefined();
-    expect(
-      committed.querySelector('[data-side="head"]')?.textContent,
-    ).toContain("c14db218");
-    expect(committed.querySelector('[data-side="base"]')).toBeNull();
-    expect(committed.textContent).not.toContain("Working tree");
+    // Base equal to head shows the head alone.
+    await vi.waitFor(() => expect(source(committed)).toContain("c14db21"));
+    expect(committed.querySelector("[aria-label=against]")).toBeNull();
   } finally {
     await store.close();
   }

@@ -8,7 +8,6 @@ import { runVcs } from "@dev.fast/local-vcs";
 import {
   type BoardIconKind,
   type ReviewApiSummary,
-  type ReviewBoardPlace,
   boardIconKind,
 } from "@dev.fast/review-protocol";
 import { sourceAnchors } from "@review/lens-selection.js";
@@ -316,6 +315,14 @@ export interface Result {
   /** After set_parent or set_dependencies: the board's relations. */
   relations?: BoardRelations;
   warnings?: string[];
+}
+
+/** A board as its place in a project shows it. */
+export interface PlacedBoard {
+  reviewId: string;
+  title: string;
+  target?: ReviewTarget;
+  origin?: SnapshotOrigin;
 }
 
 /** Where a board sits among its project's boards. Kept outside its versions. */
@@ -1608,16 +1615,18 @@ export class ReviewStore {
           baseBranch: fromPullRequest.baseBranch,
         };
 
-      // A base named rather than given as a commit; a stacked review names
-      // the branch below it. A plan compares nothing.
-      if (requestedTarget && requestedTarget.kind !== "project")
+      // A base named rather than given as a commit, whole or abbreviated;
+      // a stacked review names the branch below it. A plan compares nothing.
+      if (requestedTarget && requestedTarget.kind !== "project") {
+        const named = requestedTarget.base;
+        const base = resolvedTarget?.pins?.base;
+
         snapshot.origin = {
           ...snapshot.origin,
           baseBranch:
-            requestedTarget.base === resolvedTarget?.pins?.base
-              ? undefined
-              : requestedTarget.base,
+            named && !base?.startsWith(named.toLowerCase()) ? named : undefined,
         };
+      }
 
       switch (op.type) {
         case "create":
@@ -1899,32 +1908,53 @@ export class ReviewStore {
     return run;
   }
   /** Where a board sits: its parent, and the parent's children in order,
-   * each with its title. */
-  place(id: string): ReviewBoardPlace {
-    const graph = this.relationGraph();
+   * each with what its header shows. */
+  place(id: string) {
+    const graph = this.relationGraph(true);
     const parentId = graph.parents.get(id);
 
-    if (!parentId) return { siblings: [] };
+    const placed = (reviewId: string): PlacedBoard => {
+      const row = this.db
+        .prepare(
+          `SELECT json_extract(versions.snapshot,'$.title') AS title,
+            json_extract(versions.snapshot,'$.target') AS target,
+            json_extract(versions.snapshot,'$.origin') AS origin
+          FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
+          WHERE reviews.id=?`,
+        )
+        .get(reviewId)!;
 
-    const titled = (reviewId: string) => ({
-      reviewId,
-      title: String(
-        this.db
-          .prepare(
-            `SELECT json_extract(versions.snapshot,'$.title') AS title
-            FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
-            WHERE reviews.id=?`,
-          )
-          .get(reviewId)!.title,
-      ),
-    });
+      return {
+        reviewId,
+        title: String(row.title),
+        ...(row.target && {
+          // SAFETY: the target was validated when the version was saved.
+          target: JSON.parse(String(row.target)) as ReviewTarget,
+        }),
+        ...(row.origin && {
+          // SAFETY: the origin was validated when the version was saved.
+          origin: JSON.parse(String(row.origin)) as SnapshotOrigin,
+        }),
+      };
+    };
 
     return {
-      parent: titled(parentId),
-      siblings: this.orderChildren(graph.children.get(parentId)!, graph).map(
-        titled,
-      ),
+      board: placed(id),
+      ...(parentId && { parent: placed(parentId) }),
+      siblings: parentId
+        ? this.orderChildren(
+            this.listedSiblings(graph.children.get(parentId)!, id),
+            graph,
+          ).map(placed)
+        : [],
     };
+  }
+  /** The siblings Home and the sidebar list, which a board's place counts
+   * among: all but those in Trash, and the board itself. */
+  private listedSiblings(ids: readonly string[], self: string) {
+    const trashed = new Set(this.trashedIds());
+
+    return ids.filter((id) => id === self || !trashed.has(id));
   }
   /** A board's parent, its children in sibling order, and what it depends on. */
   relations(id: string): BoardRelations {
@@ -1936,10 +1966,13 @@ export class ReviewStore {
       dependsOn: graph.dependsOn.get(id) ?? [],
     };
   }
-  private relationGraph() {
+  /** Parents, children and dependencies. A board in Trash is out of them
+   * until it is restored, its rows kept; only its own place sees it. */
+  private relationGraph(withTrash = false) {
     const parents = new Map<string, string>();
     const children = new Map<string, string[]>();
     const dependsOn = new Map<string, string[]>();
+    const trashed = new Set(withTrash ? [] : this.trashedIds());
 
     for (const row of this.db
       .prepare(
@@ -1948,6 +1981,8 @@ export class ReviewStore {
       .all()) {
       const board = String(row.id);
       const parent = String(row.parent_id);
+
+      if (trashed.has(board) || trashed.has(parent)) continue;
 
       parents.set(board, parent);
       children.set(parent, [...(children.get(parent) ?? []), board]);
@@ -1959,11 +1994,11 @@ export class ReviewStore {
       )
       .all()) {
       const board = String(row.review_id);
+      const dependency = String(row.depends_on);
 
-      dependsOn.set(board, [
-        ...(dependsOn.get(board) ?? []),
-        String(row.depends_on),
-      ]);
+      if (trashed.has(board) || trashed.has(dependency)) continue;
+
+      dependsOn.set(board, [...(dependsOn.get(board) ?? []), dependency]);
     }
 
     return { parents, children, dependsOn };
