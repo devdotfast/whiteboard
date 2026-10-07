@@ -727,7 +727,7 @@ it("copies prose and code from the displayed historical JSON review", async () =
 
     const range = document.createRange();
     range.selectNodeContents(prose);
-    range.getBoundingClientRect = () => new DOMRect(10, 50, 100, 20);
+    range.getClientRects = () => [new DOMRect(10, 50, 100, 20)] as never;
     document.getSelection()!.removeAllRanges();
     document.getSelection()!.addRange(range);
     await act(async () => document.dispatchEvent(new Event("selectionchange")));

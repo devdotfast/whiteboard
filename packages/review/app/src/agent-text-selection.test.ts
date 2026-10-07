@@ -12,9 +12,10 @@ it("captures exact prose and its anchor, clears collapsed selections, and ignore
   const stop = observeAgentTextSelection(article, select);
   const selection = document.getSelection()!;
   const range = document.createRange();
+  article.getBoundingClientRect = () => new DOMRect(0, 0, 800, 800);
   range.selectNodeContents(article.querySelector("strong")!);
-  Object.defineProperty(range, "getBoundingClientRect", {
-    value: () => ({ left: 20, top: 50, width: 100 }),
+  Object.defineProperty(range, "getClientRects", {
+    value: () => [{ left: 20, right: 120, top: 50, bottom: 70 }],
   });
 
   try {
@@ -24,7 +25,7 @@ it("captures exact prose and its anchor, clears collapsed selections, and ignore
     expect(select).toHaveBeenLastCalledWith({
       target: { kind: "text", quote: "selected words" },
       title: "selected words",
-      anchor: { x: 70, y: 50 },
+      anchor: { x: 120, y: 108 },
       anchorElement: article.querySelector("strong"),
       range: expect.any(Range),
     });
@@ -92,8 +93,8 @@ it("rejects selections crossing a diagram, but permits consecutive prose blocks"
   const range = document.createRange();
   range.setStart(article.firstElementChild!.firstChild!, 0);
   range.setEnd(article.lastElementChild!.firstChild!, 4);
-  Object.defineProperty(range, "getBoundingClientRect", {
-    value: () => ({ left: 0, top: 0, width: 10 }),
+  Object.defineProperty(range, "getClientRects", {
+    value: () => [{ left: 0, right: 10, top: 0, bottom: 0 }],
   });
 
   try {
@@ -122,8 +123,8 @@ it("waits for the pointer to release before reporting a dragged selection", () =
   const selection = document.getSelection()!;
   const range = document.createRange();
   range.selectNodeContents(article.querySelector("p")!);
-  Object.defineProperty(range, "getBoundingClientRect", {
-    value: () => ({ left: 0, top: 0, width: 0 }),
+  Object.defineProperty(range, "getClientRects", {
+    value: () => [{ left: 0, right: 0, top: 0, bottom: 0 }],
   });
 
   try {
@@ -141,6 +142,34 @@ it("waits for the pointer to release before reporting a dragged selection", () =
     document.dispatchEvent(new MouseEvent("pointerdown"));
     document.dispatchEvent(new Event("pointerup"));
     expect(select).toHaveBeenCalledOnce();
+  } finally {
+    stop();
+    selection.removeAllRanges();
+    article.remove();
+  }
+});
+
+it("anchors a backward selection at the end it was dragged to", () => {
+  const article = document.createElement("article");
+  article.innerHTML = "<p data-review-copy-prose>dragged back</p>";
+  document.body.append(article);
+  const select = vi.fn<Parameters<typeof observeAgentTextSelection>[1]>();
+  const stop = observeAgentTextSelection(article, select);
+  const selection = document.getSelection()!;
+  const text = article.querySelector("p")!.firstChild!;
+  selection.setBaseAndExtent(text, 12, text, 3);
+  Object.defineProperty(selection.getRangeAt(0), "getClientRects", {
+    value: () => [
+      { left: 10, right: 90, top: 100, bottom: 120 },
+      { left: 10, right: 60, top: 300, bottom: 320 },
+    ],
+  });
+
+  try {
+    document.dispatchEvent(new Event("selectionchange"));
+    expect(select).toHaveBeenLastCalledWith(
+      expect.objectContaining({ anchor: { x: 10, y: 100 } }),
+    );
   } finally {
     stop();
     selection.removeAllRanges();
