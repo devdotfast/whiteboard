@@ -14438,7 +14438,6 @@ function splitArgs(text) {
 // src/protocol.ts
 var action = exports_external.union([
   exports_external.strictObject({ fold: exports_external.number().int(), file: exports_external.number().int() }),
-  exports_external.strictObject({ viewed: exports_external.number().int(), file: exports_external.number().int() }),
   exports_external.strictObject({ viewedFile: exports_external.number().int() }),
   exports_external.strictObject({ file: exports_external.number().int() }),
   exports_external.strictObject({ jump: exports_external.number().int() }),
@@ -14447,7 +14446,7 @@ var action = exports_external.union([
   exports_external.strictObject({ layout: exports_external.literal(true) })
 ]);
 var hover = exports_external.union([
-  exports_external.strictObject({ file: exports_external.number().int(), id: exports_external.number().int(), armed: exports_external.boolean(), box: exports_external.literal(true).optional() }),
+  exports_external.strictObject({ file: exports_external.number().int(), id: exports_external.number().int(), armed: exports_external.boolean() }),
   exports_external.strictObject({ file: exports_external.number().int(), header: exports_external.literal(true) })
 ]);
 var keyPress = exports_external.object({
@@ -15066,34 +15065,6 @@ function flatten(diff2) {
   const rhs = diff2.rhs ? flattenSide(diff2.rhs, 1) : { leaves: [], folds: [] };
   return { leaves: [lhs.leaves, rhs.leaves], folds: [lhs.folds, rhs.folds] };
 }
-function changedLines(leaves) {
-  const alignments = leaves.map((side) => new Set(side.map((leaf) => leaf.alignmentId)));
-  return [0, 1].map((side) => {
-    const lines = new Set;
-    for (const leaf of leaves[side]) {
-      const unpaired = !alignments[side ? 0 : 1].has(leaf.alignmentId);
-      for (let line = leaf.startLine;line < leaf.endLine; line++)
-        if (unpaired || leaf.changed.has(line))
-          lines.add(line);
-    }
-    return lines;
-  });
-}
-function scopeLines(diff2, id) {
-  const { leaves, folds } = flatten(diff2);
-  const lines = [new Set, new Set];
-  for (const fold of folds.flat().filter((fold2) => fold2.foldStateId === id)) {
-    const [first, last] = fold.syntax ? [fold.syntax.start.line, fold.syntax.end.line] : [fold.startLine, fold.lastHidden];
-    for (let line = first;line <= last; line++)
-      lines[fold.side].add(line);
-  }
-  for (const leaf of leaves.flat().filter((leaf2) => leaf2.foldStateId === id))
-    for (let line = leaf.startLine;line < leaf.endLine; line++)
-      lines[leaf.side].add(line);
-  if (!lines[0].size && !lines[1].size)
-    throw new Error(`Unknown region ${id}`);
-  return lines;
-}
 function defaultCollapsed(diff2) {
   const ids = new Set;
   const { leaves, folds } = flatten(diff2);
@@ -15191,72 +15162,6 @@ function foldHeaders(folds, leaves, collapsed, paired) {
     });
   }
   return headers;
-}
-
-// ../viewer/src/document/viewed.ts
-function linesToRead(diff2) {
-  if ((diff2.rhs ?? diff2.lhs).root.visibility.collapsed)
-    return [new Set, new Set];
-  const { leaves, folds } = flatten(diff2);
-  const changed = changedLines(leaves), collapsed = defaultCollapsed(diff2);
-  return [0, 1].map((side) => {
-    const hidden = hiddenLines(folds[side], collapsed);
-    return new Set([...changed[side]].filter((line) => !hidden.has(line)));
-  });
-}
-
-class ViewedLines {
-  read = new Map;
-  toRead = new WeakMap;
-  linesOf(diff2) {
-    let lines = this.toRead.get(diff2);
-    if (!lines) {
-      lines = linesToRead(diff2);
-      this.toRead.set(diff2, lines);
-    }
-    return lines;
-  }
-  progress(index, diff2, within) {
-    const read = this.read.get(index);
-    const count = (side) => {
-      let total = 0, left2 = 0;
-      for (const line of this.linesOf(diff2)[side]) {
-        if (within && !within[side].has(line))
-          continue;
-        total++;
-        if (!read?.[side].has(line))
-          left2++;
-      }
-      return [total, left2];
-    };
-    const [removed, removedLeft] = count(0), [added, addedLeft] = count(1);
-    if (!added && !removed)
-      return;
-    const left = addedLeft + removedLeft;
-    return {
-      remaining: { added: addedLeft, removed: removedLeft },
-      state: !left ? "viewed" : left === added + removed ? "unread" : "partial"
-    };
-  }
-  isRead(index, side, line) {
-    return this.read.get(index)?.[side].has(line) ?? false;
-  }
-  mark(index, diff2, viewed, within) {
-    let read = this.read.get(index);
-    if (!read) {
-      read = [new Set, new Set];
-      this.read.set(index, read);
-    }
-    for (const side of [0, 1])
-      for (const line of this.linesOf(diff2)[side]) {
-        if (within && !within[side].has(line))
-          continue;
-        if (viewed)
-          read[side].add(line);
-        else
-          read[side].delete(line);
-      }
-  }
 }
 
 // ../viewer/src/terminal/spans.ts
@@ -15562,8 +15467,8 @@ function rowsForFile(file2, fileIndex, layout, theme, collapsed = new Set) {
   };
   const tintOf = (region2) => foldTint(region2.id, region2.side, paired[region2.side]);
   const labelOf = (region2) => region2.label || lineCount("lastHidden" in region2 ? region2.lastHidden - region2.startLine + 1 : region2.endLine - region2.startLine);
-  const changed = changedLines(leaves);
-  const isChanged = (leaf, line) => changed[leaf.side].has(line);
+  const alignments = leaves.map((side) => new Set(side.map((leaf) => leaf.alignmentId)));
+  const isChanged = (leaf, line) => leaf.changed.has(line) || !alignments[leaf.side ? 0 : 1].has(leaf.alignmentId);
   const spanned = new Set(leaves.flat().filter((leaf) => leaf.changed.size).map((leaf) => leaf.alignmentId));
   const collapsedTint = (region2) => {
     const tint = tintOf(region2);
@@ -15612,10 +15517,10 @@ function rowsForFile(file2, fileIndex, layout, theme, collapsed = new Set) {
       ];
       fold = { id: folded.foldStateId, label: folded.label, collapsed: true, tint };
     }
-    const changed2 = isChanged(leaf, line);
+    const changed = isChanged(leaf, line);
     return {
-      kind: changed2 ? side ? "addition" : "deletion" : "context",
-      sign: changed2 ? side ? "+" : "-" : " ",
+      kind: changed ? side ? "addition" : "deletion" : "context",
+      sign: changed ? side ? "+" : "-" : " ",
       lineNumber: line + 1,
       spans: withGuides(spans, guides[side].get(line) ?? [], theme),
       fold,
@@ -15893,8 +15798,7 @@ class Viewer {
   closed = new Map;
   collapsed = new Map;
   pendingZ = false;
-  viewed = new ViewedLines;
-  scopes = new WeakMap;
+  viewed = new Set;
   rowCache = new WeakMap;
   revision = 0;
   measured;
@@ -15996,8 +15900,6 @@ class Viewer {
     const sticky = !!viewport.length && !viewport[0].row.key.endsWith(":header");
     const thumbHeight = Math.max(1, Math.floor(viewportHeight * viewportHeight / Math.max(viewportHeight, geometry.height)));
     const thumbTop = maxScroll ? Math.round(top / maxScroll * (viewportHeight - thumbHeight)) : 0;
-    const topFold = viewport[0] && rowFold(viewport[0].row);
-    const scope = this.hover && "id" in this.hover ? { file: this.hover.file, id: this.hover.id } : topFold && { file: viewport[0].row.fileIndex, id: topFold.id };
     return {
       size,
       snapshot: snapshot2,
@@ -16013,80 +15915,8 @@ class Viewer {
       viewport,
       currentFile,
       sticky,
-      thumb: { top: thumbTop, height: thumbHeight },
-      scope
+      thumb: { top: thumbTop, height: thumbHeight }
     };
-  }
-  textDiff(index) {
-    const diff2 = this.snapshot.files[index]?.diff;
-    return diff2?.type === "text" ? diff2 : undefined;
-  }
-  scopeLinesOf(diff2, id) {
-    let byId = this.scopes.get(diff2);
-    if (!byId) {
-      byId = new Map;
-      this.scopes.set(diff2, byId);
-    }
-    let lines = byId.get(id);
-    if (!lines) {
-      lines = scopeLines(diff2, id);
-      byId.set(id, lines);
-    }
-    return lines;
-  }
-  fileProgress(index) {
-    const diff2 = this.textDiff(index);
-    return diff2 && this.viewed.progress(index, diff2);
-  }
-  scopeProgress(index, id) {
-    const diff2 = this.textDiff(index);
-    return diff2 && this.viewed.progress(index, diff2, this.scopeLinesOf(diff2, id));
-  }
-  viewedFiles() {
-    let viewed = 0, total = 0;
-    this.snapshot.files.forEach((_, index) => {
-      const progress = this.fileProgress(index);
-      if (!progress)
-        return;
-      total++;
-      if (progress.state === "viewed")
-        viewed++;
-    });
-    return { viewed, total };
-  }
-  toggleViewedScope(index, id) {
-    const diff2 = this.textDiff(index);
-    if (!diff2)
-      throw new Error(`File ${index} has no scopes`);
-    const lines = this.scopeLinesOf(diff2, id), progress = this.viewed.progress(index, diff2, lines);
-    if (!progress)
-      return;
-    const viewed = progress.state !== "viewed";
-    this.viewed.mark(index, diff2, viewed, lines);
-    this.setFolds(index, diff2, [id], viewed);
-    this.reshape();
-  }
-  toggleViewedFile(index) {
-    const diff2 = this.textDiff(index);
-    const progress = diff2 && this.viewed.progress(index, diff2);
-    if (!diff2 || !progress)
-      return;
-    const viewed = progress.state !== "viewed";
-    this.viewed.mark(index, diff2, viewed);
-    this.setClosed(index, viewed);
-    this.reshape();
-  }
-  cellMarks(index, value, side, scope) {
-    const line = "lineNumber" in value ? value.lineNumber : side ? value.newLineNumber : value.oldLineNumber;
-    const changed = value.kind === "addition" || value.kind === "deletion";
-    const read = changed && line !== undefined && this.viewed.isRead(index, side, line - 1);
-    const fold = value.fold;
-    const foldViewed = !!fold?.collapsed && this.scopeProgress(index, fold.id)?.state === "viewed";
-    const diff2 = this.textDiff(index);
-    const boxed = !!fold && scope?.file === index && scope.id === fold.id && !!diff2 && (side === 1 || !this.scopeLinesOf(diff2, fold.id)[1].size);
-    const hover2 = this.hover;
-    const hint = boxed && !!hover2 && "id" in hover2 && !!hover2.box && hover2.file === index && hover2.id === fold.id;
-    return { read, foldViewed, box: boxed ? this.scopeProgress(index, fold.id) : undefined, hint };
   }
   current() {
     if (!this.size)
@@ -16124,6 +15954,34 @@ class Viewer {
     if (header.top < at.top)
       this.position = { key: header.row.key, fileIndex: index, offset: 0, side: "right" };
     this.closed.set(index, closed);
+  }
+  isViewed(index) {
+    const diff2 = this.snapshot.files[index]?.diff;
+    const markable = diff2?.type === "text" && diff2.stats.visible.added + diff2.stats.visible.removed > 0;
+    return markable ? this.viewed.has(index) : undefined;
+  }
+  viewedFiles() {
+    let viewed = 0, total = 0;
+    this.snapshot.files.forEach((_, index) => {
+      const state = this.isViewed(index);
+      if (state === undefined)
+        return;
+      total++;
+      if (state)
+        viewed++;
+    });
+    return { viewed, total };
+  }
+  toggleViewedFile(index) {
+    const state = this.isViewed(index);
+    if (state === undefined)
+      return;
+    if (state)
+      this.viewed.delete(index);
+    else
+      this.viewed.add(index);
+    this.setClosed(index, !state);
+    this.reshape();
   }
   setFolds(fileIndex, diff2, ids, collapse) {
     const next = new Set(this.foldsOf(fileIndex, diff2));
@@ -16321,10 +16179,6 @@ class Viewer {
       case "enter":
         this.toggleTopFile();
         break;
-      case "v":
-        if (at.scope)
-          this.toggleViewedScope(at.scope.file, at.scope.id);
-        break;
       case "V":
         if (at.currentFile >= 0)
           this.toggleViewedFile(at.currentFile);
@@ -16337,61 +16191,20 @@ class Viewer {
 }
 
 // ../viewer/src/viewport/cell.ts
-var viewedBox = (progress) => progress.state === "viewed" ? "[✓]" : progress.state === "partial" ? "[-]" : "[ ]";
-var viewedHint = (progress, key) => ` ${progress.state === "viewed" ? "Unmark viewed" : "Mark as viewed"} · ${key} `;
-function clip(runs, width) {
-  const result = [];
-  let room = width;
-  for (const run of runs) {
-    if (room <= 0)
-      break;
-    const cells = measureTextWidth(run.text);
-    result.push(cells <= room ? run : { ...run, text: sliceTextByWidth(run.text, 0, room).text });
-    room -= cells;
-  }
-  return result;
-}
+var viewedBox = (viewed) => viewed ? "[✓]" : "[ ]";
+var viewedHint = (viewed) => ` ${viewed ? "Unmark viewed" : "Mark as viewed"} · V `;
 function chevron(fold) {
   if (!fold)
     return " ";
   return fold.collapsed ? "▸" : "▾";
 }
-function planCell(value, spans, width, unified, { theme, geometry, visualLine, focus, selected = false, marks }) {
+function planCell(value, spans, width, unified, { theme, geometry, visualLine, focus, selected = false, read = false }) {
   const fold = value.fold;
   const washed = focus?.armed && value.body?.includes(focus.id);
-  const read = marks?.read ?? false;
+  const changed = value.kind === "addition" || value.kind === "deletion";
   const bg = selected ? theme.highlight : value.kind === "addition" ? read ? theme.readAddition : theme.addition : value.kind === "deletion" ? read ? theme.readDeletion : theme.deletion : washed ? theme.focusWash : theme.bg;
-  if (read)
+  if (read && changed)
     spans = spans.map((span2) => ({ ...span2, fg: theme.muted, bg: undefined }));
-  if (marks?.foldViewed) {
-    const at = spans.findIndex((span2) => span2.text.includes("⋯"));
-    if (at >= 0) {
-      const span2 = spans[at], cut = span2.text.indexOf("⋯");
-      spans = [
-        ...spans.slice(0, at),
-        { ...span2, text: span2.text.slice(0, cut) },
-        { ...span2, text: "✓", fg: theme.accent },
-        { ...span2, text: span2.text.slice(cut + 1) },
-        ...spans.slice(at + 1)
-      ];
-    }
-  }
-  const suffix = [];
-  if (marks?.box && !visualLine) {
-    const { remaining, state } = marks.box;
-    const parts = [];
-    if (remaining.added)
-      parts.push([`+${remaining.added}`, theme.addedText]);
-    if (remaining.removed)
-      parts.push([`−${remaining.removed}`, theme.removedText]);
-    for (const [text, fg] of parts)
-      suffix.push({ text: " ", fg, bg }, { text, fg, bg });
-    if (marks.hint)
-      suffix.push({ text: " ", fg: theme.fg, bg }, { text: viewedHint(marks.box, "v"), fg: theme.bg, bg: theme.accent });
-    suffix.push({ text: " ", fg: theme.fg, bg }, { text: viewedBox(marks.box), fg: state === "unread" ? theme.fg : theme.accent, bg }, { text: " ", fg: theme.fg, bg });
-  }
-  const suffixWidth = suffix.reduce((n, run) => n + measureTextWidth(run.text), 0);
-  const limit = Math.max(0, width - suffixWidth);
   const digits = geometry.gutter - 4;
   const number4 = (n) => `${visualLine ? "" : n ?? ""}`.padStart(digits);
   const numbers = unified ? ` ${number4(value.oldLineNumber)} ${number4(value.newLineNumber)} ` : ` ${number4("lineNumber" in value ? value.lineNumber : undefined)} `;
@@ -16433,10 +16246,8 @@ function planCell(value, spans, width, unified, { theme, geometry, visualLine, f
     }
     column += cells;
   }
-  const fitted = clip(runs, limit);
-  if (column < limit)
-    fitted.push({ text: " ".repeat(limit - column), fg: theme.fg, bg });
-  fitted.push(...suffix);
+  if (column < width)
+    runs.push({ text: " ".repeat(width - column), fg: theme.fg, bg });
   const opens = fold?.collapsed ? fold.id : value.labelOf;
   if (opens !== undefined) {
     hits.push([codeColumn, width, opens]);
@@ -16444,8 +16255,7 @@ function planCell(value, spans, width, unified, { theme, geometry, visualLine, f
   }
   if (value.scope !== undefined)
     hovers.push([0, width, { id: value.scope, armed: false }]);
-  const boxes = suffix.length && fold ? [[limit, width, fold.id]] : [];
-  return { bg, runs: fitted, hits, hovers, marks: boxes };
+  return { bg, runs, hits, hovers };
 }
 
 // ../viewer/src/document/selection.ts
@@ -16612,19 +16422,15 @@ function paintCell(line, value, spans, width, unified, { fileIndex, ...options }
   const plan = planCell(value, spans, width, unified, options);
   for (const run of plan.runs)
     line.text(run.text, run.fg, run.bg);
-  for (const [from, to, id] of plan.marks)
-    line.hit(start + from, start + to, { viewed: id, file: fileIndex });
   for (const [from, to, id] of plan.hits)
     line.hit(start + from, start + to, { fold: id, file: fileIndex });
-  for (const [from, to, id] of plan.marks)
-    line.hover(start + from, start + to, { file: fileIndex, id, armed: false, box: true });
   for (const [from, to, focus] of plan.hovers)
     line.hover(start + from, start + to, { file: fileIndex, ...focus });
 }
 
 // src/frame.ts
 var SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-var HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · v scope viewed · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ files · q close";
+var HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ files · q close";
 var SPLIT_COLUMNS = 180;
 var TREE_MIN_COLUMNS = 120;
 
@@ -16675,8 +16481,6 @@ class Pane {
     this.selecting = false;
     if ("fold" in action2)
       this.viewer.setFold(action2.file, action2.fold, "toggle", recursive);
-    else if ("viewed" in action2)
-      this.viewer.toggleViewedScope(action2.file, action2.viewed);
     else if ("viewedFile" in action2)
       this.viewer.toggleViewedFile(action2.viewedFile);
     else if ("file" in action2)
@@ -16753,16 +16557,13 @@ class Pane {
     const sidebar = this.sidebar(size);
     const contentWidth = this.layoutSize(size).columns;
     const at = viewer.lay(this.layoutSize(size));
-    const { snapshot: snapshot2, theme, hover: hover2, horizontal, layout, geometry, top, viewport, currentFile, sticky, thumb, scope } = at;
+    const { snapshot: snapshot2, theme, hover: hover2, horizontal, layout, geometry, top, viewport, currentFile, sticky, thumb } = at;
     const viewportHeight = at.size.rows;
     const { inventory, files, failures } = snapshot2;
     const colors = new Colors;
     const spinner = SPINNER[Math.floor(Date.now() / 80) % SPINNER.length];
     const statusGlyph = (index) => failures[index] || snapshot2.complete ? "!" : spinner;
-    const treeMark = (index) => {
-      const state = viewer.fileProgress(index)?.state;
-      return state === "viewed" ? "✓" : state === "partial" ? "-" : " ";
-    };
+    const treeMark = (index) => viewer.isViewed(index) ? "✓" : " ";
     const counts = files.map((file2) => file2 && lineCounts2(file2));
     const title = new LineBuilder(colors, theme.chrome);
     const loaded = counts.filter((c) => c !== undefined);
@@ -16788,12 +16589,10 @@ class Pane {
       const path = sanitizeTerminalLine(filePath(inventory[fileIndex].file));
       const shown = !!file2 && !!count;
       const start = line.width;
-      const progress = shown ? viewer.fileProgress(fileIndex) : undefined;
-      const viewed = progress?.state === "viewed";
-      const left = progress?.remaining ?? count;
-      const tally = shown && !viewed ? [` +${left.added}`, ` −${left.removed}`] : [];
-      const box = progress ? ` ${viewedBox(progress)}` : "";
-      const hint = progress && hover2 && "header" in hover2 && hover2.file === fileIndex ? viewedHint(progress, "V") : "";
+      const state = shown ? viewer.isViewed(fileIndex) : undefined, viewed = state === true;
+      const tally = shown && !viewed ? [` +${count.added}`, ` −${count.removed}`] : [];
+      const box = state === undefined ? "" : ` ${viewedBox(state)}`;
+      const hint = state !== undefined && hover2 && "header" in hover2 && hover2.file === fileIndex ? viewedHint(state) : "";
       const statsWidth = shown ? measureTextWidth(tally.join("") + (hint && ` ${hint}`) + box) + 1 : 0;
       const pathWidth = Math.max(1, contentWidth - statsWidth - 1);
       const glyph = shown ? viewer.isClosed(fileIndex, file2) ? "▸" : "▾" : statusGlyph(fileIndex);
@@ -16804,10 +16603,10 @@ class Pane {
         line.text(tally[0], theme.addedText, theme.fileHeader).text(tally[1], theme.removedText, theme.fileHeader);
       if (hint)
         line.text(" ", theme.fg, theme.fileHeader).text(hint, theme.bg, theme.accent);
-      if (progress) {
+      if (state !== undefined) {
         line.hit(line.width, line.width + measureTextWidth(box), { viewedFile: fileIndex });
         line.hover(line.width, line.width + measureTextWidth(box), { file: fileIndex, header: true });
-        line.text(box, progress.state === "unread" ? theme.fg : theme.accent, theme.fileHeader);
+        line.text(box, viewed ? theme.accent : theme.fg, theme.fileHeader);
       }
       line.fill(start + contentWidth, theme.fileHeader);
       if (shown)
@@ -16838,19 +16637,18 @@ class Pane {
         else
           body.push((line, y) => {
             const focus = hover2?.file === row.fileIndex && "id" in hover2 ? hover2 : undefined;
-            const paint = { theme, geometry, fileIndex: row.fileIndex, visualLine, focus };
+            const paint = { theme, geometry, fileIndex: row.fileIndex, visualLine, focus, read: viewer.isViewed(row.fileIndex) === true };
             const selected = selectedSide(row.key);
             if (row.cell) {
               const side = row.cell.newLineNumber === undefined ? "left" : "right";
               this.cellsAt.set(y + 1, { key: row.key, side: () => side });
-              const marks = viewer.cellMarks(row.fileIndex, row.cell, side === "left" ? 0 : 1, scope);
-              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, { ...paint, marks, selected: selected === side });
+              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, { ...paint, selected: selected === side });
             } else {
-              paintCell(line, row.left, measured.left[visualLine] ?? [], geometry.leftWidth, false, { ...paint, marks: viewer.cellMarks(row.fileIndex, row.left, 0, scope), selected: selected === "left" });
+              paintCell(line, row.left, measured.left[visualLine] ?? [], geometry.leftWidth, false, { ...paint, selected: selected === "left" });
               const divider = line.width;
               this.cellsAt.set(y + 1, { key: row.key, side: (x) => x < divider ? "left" : "right" });
               line.text("│", theme.muted, theme.bg);
-              paintCell(line, row.right, measured.right[visualLine] ?? [], geometry.rightWidth, false, { ...paint, marks: viewer.cellMarks(row.fileIndex, row.right, 1, scope), selected: selected === "right" });
+              paintCell(line, row.right, measured.right[visualLine] ?? [], geometry.rightWidth, false, { ...paint, selected: selected === "right" });
             }
           });
       }
@@ -16867,7 +16665,7 @@ class Pane {
           const { node, depth } = entry;
           const current = node.fileIndex === currentFile;
           const label = "  ".repeat(depth) + (node.fileIndex === undefined ? this.closedDirectories.has(node.key) ? "▸ " : "▾ " : `▤ ${files[node.fileIndex] ? treeMark(node.fileIndex) : statusGlyph(node.fileIndex)} `) + node.name;
-          const read2 = node.fileIndex !== undefined && viewer.fileProgress(node.fileIndex)?.state === "viewed";
+          const read2 = node.fileIndex !== undefined && viewer.isViewed(node.fileIndex) === true;
           line.text(fit(sanitizeTerminalLine(label), sidebar - 1), current ? theme.accent : node.fileIndex === undefined || read2 ? theme.muted : theme.fg, current ? theme.highlight : theme.bg);
           line.fill(sidebar - 1, current ? theme.highlight : theme.bg);
           line.hit(0, sidebar - 1, node.fileIndex === undefined ? { dir: node.key } : { jump: node.fileIndex });
@@ -16883,7 +16681,7 @@ class Pane {
     const status = new LineBuilder(colors, theme.bg);
     const errors3 = snapshot2.errors.length ? `${snapshot2.errors.length} errors  ` : "";
     const read = viewer.viewedFiles();
-    status.text(fit(`${this.message ? `${this.message} · ` : ""}${snapshot2.loaded}/${inventory.length} files · ${read.viewed}/${read.total} viewed ${snapshot2.complete ? "" : "loading… "}${errors3}` + ` [/] hunks · click ▾ or za fold · v/V viewed · drag selects · y/Y copy · h/l pan · ? keys`, size.columns), theme.muted);
+    status.text(fit(`${this.message ? `${this.message} · ` : ""}${snapshot2.loaded}/${inventory.length} files · ${read.viewed}/${read.total} viewed ${snapshot2.complete ? "" : "loading… "}${errors3}` + ` [/] hunks · click ▾ or za fold · V viewed · drag selects · y/Y copy · h/l pan · ? keys`, size.columns), theme.muted);
     lines.push(status.line(size.columns));
     return { colors: colors.list, fg: colors.of(theme.fg), lines, hover: hover2 };
   }

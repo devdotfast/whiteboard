@@ -12,7 +12,7 @@ import { Colors, fit, LineBuilder, paintCell } from "./paint";
 import type { Action, Frame, Input, Line } from "./protocol";
 
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-const HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · v scope viewed · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ files · q close";
+const HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ files · q close";
 
 /** What an input asks of the hooks module beyond a redraw. */
 export interface Outcome {
@@ -81,7 +81,6 @@ export class Pane {
     this.message = "";
     this.selecting = false;
     if ("fold" in action) this.viewer.setFold(action.file, action.fold, "toggle", recursive);
-    else if ("viewed" in action) this.viewer.toggleViewedScope(action.file, action.viewed);
     else if ("viewedFile" in action) this.viewer.toggleViewedFile(action.viewedFile);
     else if ("file" in action) this.viewer.toggleFile(action.file);
     else if ("jump" in action) this.viewer.jump(action.jump);
@@ -158,17 +157,14 @@ export class Pane {
     const sidebar = this.sidebar(size);
     const contentWidth = this.layoutSize(size).columns;
     const at = viewer.lay(this.layoutSize(size));
-    const { snapshot, theme, hover, horizontal, layout, geometry, top, viewport, currentFile, sticky, thumb, scope } = at;
+    const { snapshot, theme, hover, horizontal, layout, geometry, top, viewport, currentFile, sticky, thumb } = at;
     const viewportHeight = at.size.rows;
     const { inventory, files, failures } = snapshot;
     const colors = new Colors();
     const spinner = SPINNER[Math.floor(Date.now() / 80) % SPINNER.length]!;
     const statusGlyph = (index: number) => failures[index] || snapshot.complete ? "!" : spinner;
-    // A loaded file's mark in the tree: viewed, partly viewed, or blank.
-    const treeMark = (index: number) => {
-      const state = viewer.fileProgress(index)?.state;
-      return state === "viewed" ? "✓" : state === "partial" ? "-" : " ";
-    };
+    // A loaded file's mark in the tree: viewed, or blank.
+    const treeMark = (index: number) => (viewer.isViewed(index) ? "✓" : " ");
     const counts = files.map((file) => file && lineCounts(file));
 
     const title = new LineBuilder(colors, theme.chrome);
@@ -205,14 +201,12 @@ export class Pane {
       const path = sanitizeTerminalLine(filePath(inventory[fileIndex]!.file));
       const shown = !!file && !!count;
       const start = line.width;
-      const progress = shown ? viewer.fileProgress(fileIndex) : undefined;
-      const viewed = progress?.state === "viewed";
-      // What's left to read, then the viewed box. A viewed file has nothing left, so no counts.
-      const left = progress?.remaining ?? count;
-      const tally = shown && !viewed ? [` +${left!.added}`, ` −${left!.removed}`] : [];
-      const box = progress ? ` ${viewedBox(progress)}` : "";
+      const state = shown ? viewer.isViewed(fileIndex) : undefined, viewed = state === true;
+      // The counts, then the viewed box. A viewed file is read, so its counts go.
+      const tally = shown && !viewed ? [` +${count.added}`, ` −${count.removed}`] : [];
+      const box = state === undefined ? "" : ` ${viewedBox(state)}`;
       // While the pointer is on the box, say what a click does beside it.
-      const hint = progress && hover && "header" in hover && hover.file === fileIndex ? viewedHint(progress, "V") : "";
+      const hint = state !== undefined && hover && "header" in hover && hover.file === fileIndex ? viewedHint(state) : "";
       const statsWidth = shown ? measureTextWidth(tally.join("") + (hint && ` ${hint}`) + box) + 1 : 0;
       const pathWidth = Math.max(1, contentWidth - statsWidth - 1);
       const glyph = shown ? (viewer.isClosed(fileIndex, file) ? "▸" : "▾") : statusGlyph(fileIndex);
@@ -224,11 +218,11 @@ export class Pane {
         .fill(start + 1 + pathWidth, theme.fileHeader);
       if (tally.length) line.text(tally[0]!, theme.addedText, theme.fileHeader).text(tally[1]!, theme.removedText, theme.fileHeader);
       if (hint) line.text(" ", theme.fg, theme.fileHeader).text(hint, theme.bg, theme.accent);
-      if (progress) {
+      if (state !== undefined) {
         // Hits are matched first to last, so the box goes ahead of the header that opens the file.
         line.hit(line.width, line.width + measureTextWidth(box), { viewedFile: fileIndex });
         line.hover(line.width, line.width + measureTextWidth(box), { file: fileIndex, header: true });
-        line.text(box, progress.state === "unread" ? theme.fg : theme.accent, theme.fileHeader);
+        line.text(box, viewed ? theme.accent : theme.fg, theme.fileHeader);
       }
       line.fill(start + contentWidth, theme.fileHeader);
       if (shown) line.hit(start, start + contentWidth, { file: fileIndex });
@@ -261,22 +255,21 @@ export class Pane {
         else
           body.push((line, y) => {
             const focus = hover?.file === row.fileIndex && "id" in hover ? hover : undefined;
-            const paint = { theme, geometry, fileIndex: row.fileIndex, visualLine, focus };
+            const paint = { theme, geometry, fileIndex: row.fileIndex, visualLine, focus, read: viewer.isViewed(row.fileIndex) === true };
             const selected = selectedSide(row.key);
             if (row.cell) {
               const side = row.cell.newLineNumber === undefined ? "left" : "right";
               this.cellsAt.set(y + 1, { key: row.key, side: () => side });
-              const marks = viewer.cellMarks(row.fileIndex, row.cell, side === "left" ? 0 : 1, scope);
               paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true,
-                { ...paint, marks, selected: selected === side });
+                { ...paint, selected: selected === side });
             } else {
               paintCell(line, row.left!, measured.left[visualLine] ?? [], geometry.leftWidth, false,
-                { ...paint, marks: viewer.cellMarks(row.fileIndex, row.left!, 0, scope), selected: selected === "left" });
+                { ...paint, selected: selected === "left" });
               const divider = line.width;
               this.cellsAt.set(y + 1, { key: row.key, side: (x) => x < divider ? "left" : "right" });
               line.text("│", theme.muted, theme.bg);
               paintCell(line, row.right!, measured.right[visualLine] ?? [], geometry.rightWidth, false,
-                { ...paint, marks: viewer.cellMarks(row.fileIndex, row.right!, 1, scope), selected: selected === "right" });
+                { ...paint, selected: selected === "right" });
             }
           });
       }
@@ -296,7 +289,7 @@ export class Pane {
           const label = "  ".repeat(depth) + (node.fileIndex === undefined
             ? (this.closedDirectories.has(node.key) ? "▸ " : "▾ ")
             : `▤ ${files[node.fileIndex] ? treeMark(node.fileIndex) : statusGlyph(node.fileIndex)} `) + node.name;
-          const read = node.fileIndex !== undefined && viewer.fileProgress(node.fileIndex)?.state === "viewed";
+          const read = node.fileIndex !== undefined && viewer.isViewed(node.fileIndex) === true;
           line.text(fit(sanitizeTerminalLine(label), sidebar - 1),
             current ? theme.accent : node.fileIndex === undefined || read ? theme.muted : theme.fg,
             current ? theme.highlight : theme.bg);
@@ -317,7 +310,7 @@ export class Pane {
     const read = viewer.viewedFiles();
     // A message leads, so a narrow pane cuts the key hints rather than what just happened.
     status.text(fit(`${this.message ? `${this.message} · ` : ""}${snapshot.loaded}/${inventory.length} files · ${read.viewed}/${read.total} viewed ${snapshot.complete ? "" : "loading… "}${errors}` +
-      ` [/] hunks · click ▾ or za fold · v/V viewed · drag selects · y/Y copy · h/l pan · ? keys`, size.columns), theme.muted);
+      ` [/] hunks · click ▾ or za fold · V viewed · drag selects · y/Y copy · h/l pan · ? keys`, size.columns), theme.muted);
     lines.push(status.line(size.columns));
     return { colors: colors.list, fg: colors.of(theme.fg), lines, hover };
   }

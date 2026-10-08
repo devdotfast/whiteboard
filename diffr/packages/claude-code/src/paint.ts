@@ -80,10 +80,6 @@ export function paintCell(
   const start = line.width;
   const plan = planCell(value, spans, width, unified, options);
   for (const run of plan.runs) line.text(run.text, run.fg, run.bg);
-  // Hits are matched first to last, so the viewed box goes ahead of the fold row it sits on.
-  for (const [from, to, id] of plan.marks) line.hit(start + from, start + to, { viewed: id, file: fileIndex });
   for (const [from, to, id] of plan.hits) line.hit(start + from, start + to, { fold: id, file: fileIndex });
-  // Hovers are matched first to last too: on the box, the pointer is on the box, not the code under it.
-  for (const [from, to, id] of plan.marks) line.hover(start + from, start + to, { file: fileIndex, id, armed: false, box: true });
   for (const [from, to, focus] of plan.hovers) line.hover(start + from, start + to, { file: fileIndex, ...focus });
 }

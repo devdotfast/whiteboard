@@ -122,41 +122,6 @@ export function flatten(diff: TextDiff) {
   const rhs = diff.rhs ? flattenSide(diff.rhs, 1) : { leaves: [], folds: [] };
   return { leaves: [lhs.leaves, rhs.leaves] as const, folds: [lhs.folds, rhs.folds] as const };
 }
-/** Source lines on each side, base then head. */
-export type SideLines = readonly [ReadonlySet<number>, ReadonlySet<number>];
-/**
- * The lines a reader sees as changed, the `-` and `+` rows: a line with change spans, or any line
- * of a leaf the other side has no counterpart for.
- */
-export function changedLines(leaves: readonly [Leaf[], Leaf[]]): SideLines {
-  const alignments = leaves.map((side) => new Set(side.map((leaf) => leaf.alignmentId)));
-  return ([0, 1] as const).map((side) => {
-    const lines = new Set<number>();
-    for (const leaf of leaves[side]) {
-      const unpaired = !alignments[side ? 0 : 1]!.has(leaf.alignmentId);
-      for (let line = leaf.startLine; line < leaf.endLine; line++)
-        if (unpaired || leaf.changed.has(line)) lines.add(line);
-    }
-    return lines;
-  }) as unknown as SideLines;
-}
-/**
- * The lines a collapsible region covers on each side: every region sharing its fold-state id, a
- * scope from its opener's line to its closer's, so a docstring bundled with its function counts
- * with it.
- */
-export function scopeLines(diff: TextDiff, id: number): SideLines {
-  const { leaves, folds } = flatten(diff);
-  const lines = [new Set<number>(), new Set<number>()] as const;
-  for (const fold of folds.flat().filter((fold) => fold.foldStateId === id)) {
-    const [first, last] = fold.syntax ? [fold.syntax.start.line, fold.syntax.end.line] : [fold.startLine, fold.lastHidden];
-    for (let line = first; line <= last; line++) lines[fold.side].add(line);
-  }
-  for (const leaf of leaves.flat().filter((leaf) => leaf.foldStateId === id))
-    for (let line = leaf.startLine; line < leaf.endLine; line++) lines[leaf.side].add(line);
-  if (!lines[0].size && !lines[1].size) throw new Error(`Unknown region ${id}`);
-  return lines;
-}
 /** Fold-state ids diffr asks to start collapsed: context gaps and folded bodies, on either side. */
 export function defaultCollapsed(diff: TextDiff): Set<number> {
   const ids = new Set<number>();

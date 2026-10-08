@@ -10,8 +10,6 @@ export type Segment = [text: string, fg: number, bg: number, bold?: 1];
 
 const action = z.union([
   z.strictObject({ fold: z.number().int(), file: z.number().int() }),
-  /** A scope's viewed box: marks or unmarks that fold-state id. */
-  z.strictObject({ viewed: z.number().int(), file: z.number().int() }),
   /** A file header's viewed box. */
   z.strictObject({ viewedFile: z.number().int() }),
   z.strictObject({ file: z.number().int() }),
@@ -24,7 +22,7 @@ const action = z.union([
 export type Action = z.infer<typeof action>;
 
 const hover: z.ZodType<Hover> = z.union([
-  z.strictObject({ file: z.number().int(), id: z.number().int(), armed: z.boolean(), box: z.literal(true).optional() }),
+  z.strictObject({ file: z.number().int(), id: z.number().int(), armed: z.boolean() }),
   z.strictObject({ file: z.number().int(), header: z.literal(true) }),
 ]);
 

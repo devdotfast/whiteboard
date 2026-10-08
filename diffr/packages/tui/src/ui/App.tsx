@@ -65,7 +65,7 @@ export function App({
   const sidebar = showSidebar && width >= 60 ? Math.max(16, Math.min(sidebarWidth, width - 40)) : 0;
   const contentWidth = Math.max(10, width - sidebar - 1),
     viewportHeight = Math.max(1, height - 3);
-  const { snapshot, theme, wrap, hover: hovered, layout, rows, geometry, top, maxScroll, viewport, currentFile, sticky, thumb, scope } =
+  const { snapshot, theme, wrap, hover: hovered, layout, rows, geometry, top, maxScroll, viewport, currentFile, sticky, thumb } =
     viewer.lay({ columns: contentWidth, rows: viewportHeight });
   const [spinner, setSpinner] = useState(0);
   useEffect(() => {
@@ -78,11 +78,6 @@ export function App({
   // The file's mark in the tree and on its header while it has no diff.
   const statusGlyph = (index: number) => failures[index] || snapshot.complete ? "!" : loadingGlyph;
   const progress = viewer.viewedFiles();
-  // A loaded file's mark in the tree: viewed, partly viewed, or blank.
-  const treeMark = (index: number) => {
-    const state = viewer.fileProgress(index)?.state;
-    return state === "viewed" ? "✓" : state === "partial" ? "-" : " ";
-  };
   const tree = useMemo(() => buildFileTree(inventory), [inventory]);
   const fileOrder = useMemo(() => flattenFileTree(tree, new Set()).flatMap(({node}) =>
     node.fileIndex === undefined ? [] : [node.fileIndex]), [tree]);
@@ -167,14 +162,12 @@ export function App({
     const file = files[fileIndex], count = counts[fileIndex]?.visible;
     const path = sanitizeTerminalLine(filePath(inventory[fileIndex].file));
     const loaded = !!file && !!count;
-    const progress = loaded ? viewer.fileProgress(fileIndex) : undefined;
-    const viewed = progress?.state === "viewed";
-    // What's left to read, then the viewed box. A viewed file has nothing left, so no counts.
-    const left = progress?.remaining ?? count;
-    const tally = loaded && !viewed ? [` +${left!.added}`, ` −${left!.removed}`] : [];
-    const box = progress ? ` ${viewedBox(progress)}` : "";
+    const state = loaded ? viewer.isViewed(fileIndex) : undefined, viewed = state === true;
+    // The counts, then the viewed box. A viewed file is read, so its counts go.
+    const tally = loaded && !viewed ? [` +${count.added}`, ` −${count.removed}`] : [];
+    const box = state === undefined ? "" : ` ${viewedBox(state)}`;
     // While the pointer is on the box, say what a click does beside it.
-    const hint = progress && hovered && "header" in hovered && hovered.file === fileIndex ? ` ${viewedHint(progress, "V")}` : "";
+    const hint = state !== undefined && hovered && "header" in hovered && hovered.file === fileIndex ? ` ${viewedHint(state)}` : "";
     const statsWidth = loaded ? measureTextWidth(tally.join("") + hint + box) + 1 : 0;
     const pathWidth = Math.max(1, contentWidth - statsWidth - 1);
     const glyph = loaded ? (viewer.isClosed(fileIndex, file) ? "▸" : "▾") : statusGlyph(fileIndex);
@@ -196,7 +189,7 @@ export function App({
         <text selectable={false}> </text>
         <text fg={theme.bg} bg={theme.accent} selectable={false}>{hint.slice(1)}</text>
       </>}
-      {progress && <text fg={progress.state === "unread" ? theme.fg : theme.accent} selectable={false}
+      {state !== undefined && <text fg={viewed ? theme.accent : theme.fg} selectable={false}
         onMouseMove={() => viewer.setHover({ file: fileIndex, header: true })}
         onMouseOut={() => viewer.setHover(null)}
         onMouseUp={(event) => { event.stopPropagation(); viewer.toggleViewedFile(fileIndex); }}>{box}</text>}
@@ -254,8 +247,7 @@ export function App({
             focus={hovered?.file === row.fileIndex && "id" in hovered ? hovered : undefined}
             onHover={focus => viewer.setHover(focus ? { file: row.fileIndex, ...focus } : null)}
             onFold={(id, recursive) => viewer.setFold(row.fileIndex, id, "toggle", recursive)}
-            marksOf={(value, side) => viewer.cellMarks(row.fileIndex, value, side === "left" ? 0 : 1, scope)}
-            onMark={(id) => viewer.toggleViewedScope(row.fileIndex, id)}
+            read={viewer.isViewed(row.fileIndex) === true}
           />,
         );
     }
@@ -356,7 +348,7 @@ export function App({
             {treeRows.slice(sidebarStart, sidebarStart + viewportHeight).map(({node, depth}) => (
               <text key={node.key} height={1} width={sidebar - 1}
                 fg={node.fileIndex === currentFile ? theme.accent : node.fileIndex === undefined
-                  || viewer.fileProgress(node.fileIndex)?.state === "viewed" ? theme.muted : theme.fg}
+                  || viewer.isViewed(node.fileIndex) ? theme.muted : theme.fg}
                 bg={node.fileIndex === currentFile ? theme.highlight : theme.bg}
                 selectable={false}
                 onMouseUp={() => {
@@ -371,7 +363,7 @@ export function App({
                 }}>
                 {fit(sanitizeTerminalLine("  ".repeat(depth) + (node.fileIndex === undefined
                   ? (closedDirectories.has(node.key) ? "▸ " : "▾ ")
-                  : `▤ ${files[node.fileIndex] ? treeMark(node.fileIndex) : statusGlyph(node.fileIndex)} `) + node.name), sidebar - 1)}
+                  : `▤ ${files[node.fileIndex] ? (viewer.isViewed(node.fileIndex) ? "✓" : " ") : statusGlyph(node.fileIndex)} `) + node.name), sidebar - 1)}
               </text>
             ))}
           </box>
@@ -464,7 +456,7 @@ export function App({
       </box>}
       <text height={1} fg={theme.muted} selectable={false}>
         {fit(
-          `${snapshot.loaded}/${inventory.length} files · ${progress.viewed}/${progress.total} viewed ${snapshot.complete ? "" : "loading…"} ${snapshot.errors.length ? `${snapshot.errors.length} errors` : ""}  [/] hunks · za fold · v/V viewed · i breakdown · drag selects lines · y copy · Y for agent · q quit ${message}`,
+          `${snapshot.loaded}/${inventory.length} files · ${progress.viewed}/${progress.total} viewed ${snapshot.complete ? "" : "loading…"} ${snapshot.errors.length ? `${snapshot.errors.length} errors` : ""}  [/] hunks · za fold · V viewed · i breakdown · drag selects lines · y copy · Y for agent · q quit ${message}`,
           width,
         )}
       </text>

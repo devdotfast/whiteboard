@@ -71,31 +71,20 @@ test("the file tree shows on wide panes, and backslash hides and shows it", asyn
   expect(treeShown()).toBe(true);
 });
 
-test("a scope's viewed box marks it and folds it; the file header's box and V mark the whole file", async () => {
+test("the file header's box and V mark the whole file viewed: it closes, and the tree and the status line say so", async () => {
   const { pane } = await load(scopes);
-  const header = (frame: Frame) => screen(frame).find((line) => line.includes("▌"))!;
-  expect(header(pane.frame(wide))).toContain("[ ]");
-  // The pointer on a scope makes it current: its header line ends in what's left and a box.
-  const fold = cellAction(pane.frame(wide), "for (const plugin", "▾");
-  if (!("fold" in fold)) throw new Error("Expected the scope's chevron");
-  pane.hover({ file: fold.file, id: fold.fold, armed: false });
-  const scope = screen(pane.frame(wide)).find((line) => line.includes("for (const plugin"))!;
-  expect(scope).toMatch(/\+\d+.* \[ \] *$/);
-  const box = cellAction(pane.frame(wide), "for (const plugin", "[ ]");
-  expect(box).toEqual({ viewed: fold.fold, file: fold.file });
-  pane.input({ act: box });
-  const marked = screen(pane.frame(wide));
-  expect(marked.some((line) => line.includes("plugin.enabled"))).toBe(false);
-  expect(marked.find((line) => line.includes("for (const plugin"))).toContain("✓");
-  expect(header(pane.frame(wide))).toMatch(/\[-\]|\[✓\]/);
-  pane.hover(null);
-  pane.input({ press: { key: "V" } });
-  expect(header(pane.frame(wide))).toContain("[✓]");
-  expect(screen(pane.frame(wide)).at(-1)).toContain("1/1 viewed");
-  expect(cellAction(pane.frame(wide), "▌", "[✓]")).toEqual({ viewedFile: 0 });
-  pane.input({ act: { viewedFile: 0 } });
-  expect(header(pane.frame(wide))).toContain("[ ]");
+  const header = () => screen(pane.frame(wide)).find((line) => line.includes("▌"))!;
+  expect(header()).toMatch(/\+\d+ −\d+ \[ \] *$/);
   expect(screen(pane.frame(wide)).at(-1)).toContain("0/1 viewed");
+  expect(cellAction(pane.frame(wide), "▌", "[ ]")).toEqual({ viewedFile: 0 });
+  pane.input({ act: { viewedFile: 0 } });
+  expect(header()).toMatch(/\[✓\] *$/);
+  expect(header()).not.toMatch(/\+\d+/);
+  expect(screen(pane.frame(wide)).some((line) => line.includes("for (const plugin"))).toBe(false);
+  expect(screen(pane.frame(wide)).at(-1)).toContain("1/1 viewed");
+  pane.input({ press: { key: "V" } });
+  expect(header()).toMatch(/\[ \] *$/);
+  expect(screen(pane.frame(wide)).some((line) => line.includes("for (const plugin"))).toBe(true);
 });
 
 test("a drag across code lines selects them on one side; y copies them and Y copies a reference for an agent", async () => {
@@ -137,15 +126,11 @@ test("y with nothing selected says how to select, and copies nothing", async () 
   expect(screen(pane.frame(wide)).at(-1)).toStartWith("Drag across lines to select them first");
 });
 
-test("the pointer on a viewed box puts what a click does beside it", async () => {
+test("the pointer on the header's viewed box puts what a click does beside it", async () => {
   const { pane } = await load(scopes);
-  const fold = cellAction(pane.frame(wide), "for (const plugin", "▾");
-  if (!("fold" in fold)) throw new Error("Expected the scope's chevron");
-  pane.hover({ file: fold.file, id: fold.fold, armed: false, box: true });
-  const scope = screen(pane.frame(wide)).find((line) => line.includes("for (const plugin"))!;
-  expect(scope).toMatch(/Mark as viewed · v +\[ \] *$/);
+  const header = () => screen(pane.frame(wide)).find((line) => line.includes("▌"))!;
   pane.hover({ file: 0, header: true });
-  expect(screen(pane.frame(wide)).find((line) => line.includes("▌"))).toMatch(/Mark as viewed · V +\[ \] *$/);
+  expect(header()).toMatch(/Mark as viewed · V +\[ \] *$/);
   pane.input({ press: { key: "V" } });
-  expect(screen(pane.frame(wide)).find((line) => line.includes("▌"))).toMatch(/Unmark viewed · V +\[✓\] *$/);
+  expect(header()).toMatch(/Unmark viewed · V +\[✓\] *$/);
 });
