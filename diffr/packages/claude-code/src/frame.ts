@@ -8,7 +8,7 @@ import type { Palette } from "@diffr/viewer/theme/palette";
 import { Viewer, type Hover, type KeyPress, type Size } from "@diffr/viewer/viewer";
 import { litRuns, viewedBox, viewedHint } from "@diffr/viewer/viewport/cell";
 import { pickerLines } from "@diffr/viewer/viewport/picker";
-import { agentReference, copySelection, rangeName, rangeReference, selectedRanges, selectionBounds, selectionLead, type SourceSelection } from "@diffr/viewer/document/selection";
+import { agentReference, copySelection, rangeName, rangeReference, selectedRanges, selectionCover, selectionLead, type Side, type SourceSelection } from "@diffr/viewer/document/selection";
 import { Colors, fit, LineBuilder, paintCell } from "./paint";
 import type { Action, Frame, Input, Line } from "./protocol";
 
@@ -65,7 +65,7 @@ export class Pane {
   /** A press on code started the selection, so a drag moves its end; a click on anything else stops that. */
   private selecting = false;
   /** The code row on each frame line of the last frame, and which side a column falls on. */
-  private readonly cellsAt = new Map<number, { key: string; side: (x: number) => SourceSelection["side"] }>();
+  private readonly cellsAt = new Map<number, { key: string; side: (x: number) => Side }>();
   /** The key list, shown in place of the diff. */
   private helpView = false;
   /** A narrow pane showing the tree in place of the diff. */
@@ -120,8 +120,8 @@ export class Pane {
     const cell = this.cellsAt.get(y);
     if (!extend) {
       this.selecting = !!cell;
-      this.selection = cell ? { anchor: cell.key, end: cell.key, side: cell.side(x) } : null;
-    } else if (this.selecting && this.selection && cell) this.selection = { ...this.selection, end: cell.key };
+      this.selection = cell ? { anchor: cell.key, anchorSide: cell.side(x), end: cell.key, endSide: cell.side(x) } : null;
+    } else if (this.selecting && this.selection && cell) this.selection = { ...this.selection, end: cell.key, endSide: cell.side(x) };
   }
 
   /** `recursive`: an Alt-click. */
@@ -379,11 +379,7 @@ export class Pane {
     // Where each code row sits, so a press or drag on a frame line finds its row and side.
     this.cellsAt.clear();
     const rowIndex = new Map(at.rows.map((row, index) => [row.key, index]));
-    const [selectionStart, selectionEnd] = selectionBounds(at.rows, this.selection);
-    const selectedSide = (key: string) => {
-      const index = rowIndex.get(key)!;
-      return index >= selectionStart && index <= selectionEnd ? this.selection!.side : undefined;
-    };
+    const cover = selectionCover(at.rows, this.selection);
     // Deferred, so each paints after the tree's columns. `y` is the line's place in the body.
     const body: ((line: LineBuilder, y: number) => void)[] = [];
     for (const measured of viewport) {
@@ -404,20 +400,20 @@ export class Pane {
           body.push((line, y) => {
             const focus = hover?.file === row.fileIndex && "id" in hover ? hover : undefined;
             const paint = { theme, geometry, fileIndex: row.fileIndex, visualLine, focus, read: viewer.isViewed(row.fileIndex) === true };
-            const selected = selectedSide(row.key);
+            const selected = cover(rowIndex.get(row.key)!);
             if (row.cell) {
               const side = row.cell.newLineNumber === undefined ? "left" : "right";
               this.cellsAt.set(y + 1, { key: row.key, side: () => side });
               paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true,
-                { ...paint, selected: selected === side });
+                { ...paint, selected: selected !== undefined });
             } else {
               paintCell(line, row.left!, measured.left[visualLine] ?? [], geometry.leftWidth, false,
-                { ...paint, selected: selected === "left" });
+                { ...paint, selected: selected?.left === true });
               const divider = line.width;
               this.cellsAt.set(y + 1, { key: row.key, side: (x) => x < divider ? "left" : "right" });
               line.text("│", theme.muted, theme.bg);
               paintCell(line, row.right!, measured.right[visualLine] ?? [], geometry.rightWidth, false,
-                { ...paint, selected: selected === "right" });
+                { ...paint, selected: selected?.right === true });
             }
           });
       }

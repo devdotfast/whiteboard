@@ -131,14 +131,15 @@ test("wrapping adds equal split heights and windowing mounts only intersecting r
   );
   expect(visibleRows(geometry, 0, 2).length).toBe(2);
 });
-test("selection copies one source side and excludes padding and added lines", () => {
+test("a split selection kept to the left column copies the old source, without padding or added lines", () => {
   const file = createTestDiffFile(),
     rows = rowsForFile(file, 0, "split", dark);
   expect(
     copySelection([file], rows, {
       anchor: rows[1].key,
+      anchorSide: "left",
       end: rows.at(-1)!.key,
-      side: "left",
+      endSide: "left",
     }),
   ).toBe('start();\nsend("old");\nfinish();');
 });
@@ -182,10 +183,9 @@ test("unified trusts diffr's changed spans despite different source indentation"
   expect(rows).toHaveLength(2);
   expect(rows[1].cell).toMatchObject({kind: "context", sign: " ", oldLineNumber: 1, newLineNumber: 1});
   expect(rows[1].cell!.spans.map(s => s.text).join("")).toBe("    call();");
-  for (const side of ["left", "right"] as const) {
-    expect(copySelection([file], rows, {anchor: rows[1].key, end: rows[1].key, side}))
-      .toBe(side === "left" ? "  call();" : "    call();");
-  }
+  // An unchanged unified row is one line on both sides; a copy takes the new version's.
+  expect(copySelection([file], rows, {anchor: rows[1].key, anchorSide: "left", end: rows[1].key, endSide: "left"}))
+    .toBe("    call();");
   // Only the side with a changed span gets word emphasis, but the old line, printed alone with
   // its old number, still reads as removed.
   file.diff.rhs.root.children = [leaf(1, 0, 1, [line(0, 0, 11)])];

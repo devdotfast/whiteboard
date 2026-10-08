@@ -18205,67 +18205,251 @@ function selectionBounds(rows, selection) {
   const a = rows.findIndex((r) => r.key === selection.anchor), b = rows.findIndex((r) => r.key === selection.end);
   return a < 0 || b < 0 ? [-1, -1] : [Math.min(a, b), Math.max(a, b)];
 }
-var lineNumber = (row, side) => side === "left" ? row.left?.lineNumber ?? row.cell?.oldLineNumber : row.right?.lineNumber ?? row.cell?.newLineNumber;
-function whereToFind(version2) {
-  switch (version2.type) {
-    case "working_tree":
-      return "";
-    case "index":
-      return " in the git index (staged)";
-    case "revision":
-    case "path":
-      return ` at ${snapshotLabel(version2)}`;
-    case "empty_tree":
-      throw new Error("The empty tree has no source to copy");
-  }
+function selectionCover(rows, selection) {
+  const [a, b] = selectionBounds(rows, selection);
+  if (!selection || a < 0)
+    return () => {
+      return;
+    };
+  const anchor = rows.findIndex((r) => r.key === selection.anchor), end = rows.findIndex((r) => r.key === selection.end);
+  const position = (index, side) => index * 2 + (side === "right" ? 1 : 0);
+  const ends = [position(anchor, selection.anchorSide), position(end, selection.endSide)];
+  const [first, last] = [Math.min(...ends), Math.max(...ends)];
+  const oneColumn = selection.anchorSide === selection.endSide ? selection.anchorSide : undefined;
+  return (index) => {
+    if (index < a || index > b)
+      return;
+    if (rows[index].cell)
+      return { left: true, right: true };
+    if (oneColumn)
+      return { left: oneColumn === "left", right: oneColumn === "right" };
+    return {
+      left: position(index, "left") >= first && position(index, "left") <= last,
+      right: position(index, "right") >= first && position(index, "right") <= last
+    };
+  };
 }
 function selectedRanges(files, rows, selection) {
   const [a, b] = selectionBounds(rows, selection);
-  const ranges = new Map;
-  for (const row of rows.slice(a < 0 ? rows.length : a, b + 1)) {
-    const n = lineNumber(row, selection.side);
-    if (n === undefined)
+  if (a < 0)
+    return [];
+  const cover = selectionCover(rows, selection);
+  const oneColumn = selection.anchorSide === selection.endSide && !rows[a].cell ? selection.anchorSide : undefined;
+  const ranges = [];
+  let range;
+  let at = { old: 0, new: 0 };
+  let pendingOld = [], pendingNew = [];
+  const push = (line) => {
+    range.lines.push(line);
+    range.before.push({ ...at });
+  };
+  const flush = () => {
+    for (const line of [...pendingOld, ...pendingNew]) {
+      push(line);
+      at = { old: line.old ?? at.old, new: line.new ?? at.new };
+    }
+    pendingOld = [];
+    pendingNew = [];
+  };
+  let start = a;
+  while (start > 0 && rows[start - 1].fileIndex === rows[a].fileIndex)
+    start--;
+  let file2 = rows[start].fileIndex;
+  for (let index = start;index <= b; index++) {
+    const row = rows[index];
+    if (index === a || row.fileIndex !== file2) {
+      if (range)
+        flush();
+      if (row.fileIndex !== file2)
+        at = { old: 0, new: 0 };
+      file2 = row.fileIndex;
+      if (index >= a) {
+        const file3 = files[row.fileIndex];
+        range = {
+          fileIndex: row.fileIndex,
+          oldPath: file3?.file.lhs?.path,
+          newPath: file3?.file.rhs?.path,
+          start: {},
+          end: {},
+          side: oneColumn && (oneColumn === "left" ? "old" : "new"),
+          lines: [],
+          before: []
+        };
+        ranges.push(range);
+      }
+    }
+    const old = row.cell ? row.cell.oldLineNumber : row.left?.foldLabel ? undefined : row.left?.lineNumber;
+    const neu = row.cell ? row.cell.newLineNumber : row.right?.foldLabel ? undefined : row.right?.lineNumber;
+    const covered = index >= a ? cover(index) : undefined;
+    if (!covered || !range || range.fileIndex !== row.fileIndex) {
+      at = { old: old ?? at.old, new: neu ?? at.new };
       continue;
-    const range = ranges.get(row.fileIndex);
-    ranges.set(row.fileIndex, range ? [Math.min(range[0], n), Math.max(range[1], n)] : [n, n]);
+    }
+    const unchanged = !row.cell && old !== undefined && neu !== undefined && row.left.kind === "context" && row.right.kind === "context";
+    const [l, r] = unchanged && !range.side ? [old, neu] : [covered.left ? old : undefined, covered.right ? neu : undefined];
+    if (range.side) {
+      const line = range.side === "old" ? l : r;
+      if (line !== undefined)
+        push(range.side === "old" ? { old: line } : { new: line });
+      continue;
+    }
+    if (row.cell || unchanged) {
+      flush();
+      if (l === undefined && r === undefined)
+        continue;
+      push({ ...l !== undefined && { old: l }, ...r !== undefined && { new: r } });
+      at = { old: l ?? at.old, new: r ?? at.new };
+      continue;
+    }
+    if (l !== undefined)
+      pendingOld.push({ old: l });
+    if (r !== undefined)
+      pendingNew.push({ new: r });
+    if (l === undefined && r === undefined)
+      flush();
   }
-  return [...ranges].map(([fileIndex, [start, end]]) => {
-    const file2 = files[fileIndex];
-    const path = selection.side === "left" ? file2?.file.lhs?.path : file2?.file.rhs?.path;
-    if (path === undefined)
-      throw new Error(`File ${fileIndex} has no ${selection.side} side to select`);
-    return { fileIndex, path, side: selection.side, start, end };
-  });
+  flush();
+  for (const each of ranges) {
+    if (!each.lines.length)
+      continue;
+    each.start = each.lines[0];
+    each.end = each.lines.at(-1);
+  }
+  return ranges.filter((each) => each.lines.length);
 }
+function span2(range, side) {
+  const numbers = range.lines.flatMap((line) => line[side] ?? []);
+  return numbers.length ? [numbers[0], numbers.at(-1)] : undefined;
+}
+var removed = (line) => line.new === undefined;
+var added = (line) => line.old === undefined;
 function rangeName(range) {
-  return `${range.path}:${range.start === range.end ? range.start : `${range.start}-${range.end}`}`;
+  const both = !range.side && range.lines.some(removed) && range.lines.some(added);
+  const side = range.side ?? (both ? undefined : range.lines.some(removed) ? "old" : "new");
+  const path = side === "old" ? range.oldPath : range.newPath ?? range.oldPath;
+  if (side) {
+    const [first, last] = span2(range, side);
+    const letter = side === "old" ? "L" : "R";
+    return `${path}:${letter}${first}${first === last ? "" : `-${last}`}`;
+  }
+  return `${path}:L${span2(range, "old")[0]}-R${span2(range, "new")[1]}`;
+}
+function lineCount2(range) {
+  if (!range.side)
+    return range.lines.length;
+  const [first, last] = span2(range, range.side);
+  return last - first + 1;
 }
 function selectionLead(message, ranges, width) {
-  const count = ranges.reduce((sum, range2) => sum + range2.end - range2.start + 1, 0);
+  const count = ranges.reduce((sum, range) => sum + lineCount2(range), 0);
   const lead = (what) => ` ${message ? `${message} · ` : ""}${what} · ${count} ${count === 1 ? "line" : "lines"} `;
   if (ranges.length !== 1)
     return lead(`${ranges.length} files`);
-  const [range] = ranges;
-  const whole = lead(rangeName(range));
-  return measureTextWidth(whole) <= width ? whole : lead(rangeName({ ...range, path: range.path.split("/").at(-1) }));
+  const name = rangeName(ranges[0]);
+  const whole = lead(name);
+  if (measureTextWidth(whole) <= width)
+    return whole;
+  const colon = name.lastIndexOf(":");
+  return lead(`${name.slice(0, colon).split("/").at(-1)}${name.slice(colon)}`);
 }
-function rangeReference(files, comparison, range) {
-  const file2 = files[range.fileIndex];
-  const left = range.side === "left";
-  const source2 = file2?.diff.type === "text" ? left ? file2.diff.lhs : file2.diff.rhs : undefined;
-  if (!source2)
-    throw new Error(`File ${range.fileIndex} has no ${range.side} source to copy`);
-  const code = sourceLines(source2.text).slice(range.start - 1, range.end).join(`
-`);
+function versionName(version2) {
+  switch (version2.type) {
+    case "working_tree":
+      return "the working tree";
+    case "index":
+      return "the git index (staged)";
+    case "revision":
+    case "path":
+      return snapshotLabel(version2);
+    case "empty_tree":
+      return "the empty tree";
+  }
+}
+function fenceFor(text) {
   let fence = "```";
-  for (const run of code.matchAll(/`+/g))
+  for (const run of text.matchAll(/`+/g))
     if (run[0].length >= fence.length)
       fence = "`".repeat(run[0].length + 1);
-  const language = /\.([^./]+)$/.exec(range.path)?.[1] ?? "";
-  const where = whereToFind(left ? comparison.lhs : comparison.rhs);
-  return `${rangeName(range)}${where}
-${fence}${language}
+  return fence;
+}
+function sourcesOf(files, range) {
+  const diff2 = files[range.fileIndex]?.diff;
+  if (diff2?.type !== "text")
+    throw new Error(`File ${range.fileIndex} has no text to copy`);
+  return { old: diff2.lhs ? sourceLines(diff2.lhs.text) : [], new: diff2.rhs ? sourceLines(diff2.rhs.text) : [] };
+}
+function hunkHeader(lines, next) {
+  const side = (key) => {
+    const numbers = lines.flatMap((line) => line[key] ?? []);
+    const start = numbers[0] ?? next[key] - 1;
+    return numbers.length === 1 ? `${start}` : `${start},${numbers.length}`;
+  };
+  return `@@ -${side("old")} +${side("new")} @@`;
+}
+function patch(range, sources) {
+  const out = [
+    `--- ${range.oldPath === undefined ? "/dev/null" : `a/${range.oldPath}`}`,
+    `+++ ${range.newPath === undefined ? "/dev/null" : `b/${range.newPath}`}`
+  ];
+  const hunks = [];
+  let next = { old: 0, new: 0 };
+  range.lines.forEach((line, i) => {
+    const continues = hunks.length && (line.old === undefined || line.old === next.old) && (line.new === undefined || line.new === next.new);
+    if (!continues) {
+      const before = range.before[i];
+      next = {
+        old: line.old ?? before.old + (line.new - before.new),
+        new: line.new ?? before.new + (line.old - before.old)
+      };
+      hunks.push({ lines: [], next: { ...next } });
+    }
+    hunks.at(-1).lines.push(line);
+    if (line.old !== undefined)
+      next.old = line.old + 1;
+    if (line.new !== undefined)
+      next.new = line.new + 1;
+  });
+  for (const hunk of hunks) {
+    out.push(hunkHeader(hunk.lines, hunk.next));
+    for (const line of hunk.lines) {
+      const [before, after] = [
+        line.old === undefined ? undefined : sources.old[line.old - 1],
+        line.new === undefined ? undefined : sources.new[line.new - 1]
+      ];
+      if (before !== undefined && before === after)
+        out.push(` ${after}`);
+      else {
+        if (before !== undefined)
+          out.push(`-${before}`);
+        if (after !== undefined)
+          out.push(`+${after}`);
+      }
+    }
+  }
+  return out.join(`
+`);
+}
+function rangeReference(files, comparison, range) {
+  const sources = sourcesOf(files, range);
+  const name = rangeName(range);
+  if (range.side) {
+    const [first, last] = span2(range, range.side);
+    const code = sources[range.side].slice(first - 1, last).join(`
+`);
+    const path = range.side === "old" ? range.oldPath : range.newPath;
+    const language = /\.([^./]+)$/.exec(path)?.[1] ?? "";
+    const fence2 = fenceFor(code);
+    const version2 = versionName(range.side === "old" ? comparison.lhs : comparison.rhs);
+    return `${name} — ${range.side === "old" ? "L" : "R"} is ${version2}
+${fence2}${language}
 ${code}
+${fence2}`;
+  }
+  const body = patch(range, sources);
+  const fence = fenceFor(body);
+  return `${name} — L is ${versionName(comparison.lhs)}, R is ${versionName(comparison.rhs)}
+${fence}diff
+${body}
 ${fence}`;
 }
 function agentReference(files, comparison, rows, selection) {
@@ -18274,31 +18458,11 @@ function agentReference(files, comparison, rows, selection) {
 `);
 }
 function copySelection(files, rows, selection) {
-  const [a, b] = selectionBounds(rows, selection), seen2 = new Set, result = [];
-  const sources = new Map;
-  for (const row of rows.slice(a < 0 ? rows.length : a, b + 1)) {
-    const n = lineNumber(row, selection.side);
-    if (n === undefined)
-      continue;
-    const key = `${row.fileIndex}:${n}`;
-    if (seen2.has(key))
-      continue;
-    seen2.add(key);
-    const diff2 = files[row.fileIndex]?.diff;
-    if (!diff2 || diff2.type !== "text")
-      continue;
-    const source2 = selection.side === "left" ? diff2.lhs : diff2.rhs;
-    if (!source2)
-      continue;
-    let lines = sources.get(row.fileIndex);
-    if (!lines) {
-      lines = source2.text.split(`
-`);
-      sources.set(row.fileIndex, lines);
-    }
-    result.push(lines[n - 1]);
-  }
-  return result.join(`
+  return selectedRanges(files, rows, selection).flatMap((range) => {
+    const sources = sourcesOf(files, range);
+    const side = range.lines.some((line) => line.new !== undefined) ? "new" : "old";
+    return range.lines.flatMap((line) => line[side] === undefined ? [] : [sources[side][line[side] - 1]]);
+  }).join(`
 `);
 }
 
@@ -18470,9 +18634,9 @@ class Pane {
     const cell = this.cellsAt.get(y);
     if (!extend2) {
       this.selecting = !!cell;
-      this.selection = cell ? { anchor: cell.key, end: cell.key, side: cell.side(x) } : null;
+      this.selection = cell ? { anchor: cell.key, anchorSide: cell.side(x), end: cell.key, endSide: cell.side(x) } : null;
     } else if (this.selecting && this.selection && cell)
-      this.selection = { ...this.selection, end: cell.key };
+      this.selection = { ...this.selection, end: cell.key, endSide: cell.side(x) };
   }
   act(action2, recursive) {
     this.message = "";
@@ -18711,11 +18875,7 @@ class Pane {
     };
     this.cellsAt.clear();
     const rowIndex = new Map(at.rows.map((row, index) => [row.key, index]));
-    const [selectionStart, selectionEnd] = selectionBounds(at.rows, this.selection);
-    const selectedSide = (key) => {
-      const index = rowIndex.get(key);
-      return index >= selectionStart && index <= selectionEnd ? this.selection.side : undefined;
-    };
+    const cover = selectionCover(at.rows, this.selection);
     const body = [];
     for (const measured of viewport) {
       const row = measured.row;
@@ -18735,17 +18895,17 @@ class Pane {
           body.push((line, y) => {
             const focus = hover2?.file === row.fileIndex && "id" in hover2 ? hover2 : undefined;
             const paint = { theme, geometry, fileIndex: row.fileIndex, visualLine, focus, read: viewer.isViewed(row.fileIndex) === true };
-            const selected2 = selectedSide(row.key);
+            const selected2 = cover(rowIndex.get(row.key));
             if (row.cell) {
               const side = row.cell.newLineNumber === undefined ? "left" : "right";
               this.cellsAt.set(y + 1, { key: row.key, side: () => side });
-              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, { ...paint, selected: selected2 === side });
+              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, { ...paint, selected: selected2 !== undefined });
             } else {
-              paintCell(line, row.left, measured.left[visualLine] ?? [], geometry.leftWidth, false, { ...paint, selected: selected2 === "left" });
+              paintCell(line, row.left, measured.left[visualLine] ?? [], geometry.leftWidth, false, { ...paint, selected: selected2?.left === true });
               const divider = line.width;
               this.cellsAt.set(y + 1, { key: row.key, side: (x) => x < divider ? "left" : "right" });
               line.text("│", theme.muted, theme.bg);
-              paintCell(line, row.right, measured.right[visualLine] ?? [], geometry.rightWidth, false, { ...paint, selected: selected2 === "right" });
+              paintCell(line, row.right, measured.right[visualLine] ?? [], geometry.rightWidth, false, { ...paint, selected: selected2?.right === true });
             }
           });
       }

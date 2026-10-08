@@ -87,37 +87,68 @@ test("the file header's box and V mark the whole file viewed: it closes, and the
   expect(screen(pane.frame(wide)).some((line) => line.includes("for (const plugin"))).toBe(true);
 });
 
-test("a drag across code lines selects them on one side; y copies them and Y copies a reference for an agent", async () => {
+test("a unified drag selects every row it crosses, removed and added; y copies the new lines and Y a patch", async () => {
   const { pane } = await load(scopes);
   const at = (frame: Frame, content: string) => {
     const y = screen(frame).findIndex((line) => line.includes(content));
-    // The second occurrence is the head side of the split.
     return { y, x: screen(frame)[y]!.lastIndexOf(content) };
   };
-  const start = at(pane.frame(wide), "for (const plugin");
-  pane.input({ select: start });
-  const end = at(pane.frame(wide), "plugin.enabled");
-  pane.input({ select: { ...end, extend: true } });
-  // A selection keeps to one side: the head's lines in the drag light up, the deleted line between them doesn't.
+  pane.input({ select: at(pane.frame(wide), "for (const plugin") });
+  pane.input({ select: { ...at(pane.frame(wide), "plugin.enabled"), extend: true } });
   const highlight = loadBundledTheme("default-dark").highlight;
-  const frame = pane.frame(wide);
-  const lit = (content: string) => frame.lines[screen(frame).findIndex((line) => line.includes(content))]!
+  const lit = (frame: Frame, content: string) => frame.lines[screen(frame).findIndex((line) => line.includes(content))]!
     .segments.some(([, , bg]) => frame.colors[bg] === highlight);
-  expect(["for (const plugin", "Number(plugin.shape.lines)", "plugin.enabled"].map(lit)).toEqual([true, true, true]);
-  expect(lit("Number(plugin.lines)")).toBe(false);
+  const frame = pane.frame(wide);
+  expect(["for (const plugin", "Number(plugin.lines)", "Number(plugin.shape.lines)", "plugin.enabled"].map((content) => lit(frame, content)))
+    .toEqual([true, true, true, true]);
   const raw = pane.input({ press: { key: "y" } }).copy!;
   expect(raw.what).toBe("source lines");
-  expect(raw.text.split("\n")[0]).toContain("for (const plugin");
-  expect(raw.text).toContain("plugin.enabled");
+  expect(raw.text).toBe("  for (const plugin of config.plugins) {\n    plugin.lines = Number(plugin.shape.lines);\n    plugin.enabled = true;");
   const forAgent = pane.input({ press: { key: "Y" } }).copy!;
   expect(forAgent.what).toBe("for agent");
-  expect(forAgent.text).toMatch(/^\S+:\d+-\d+( at .+| in the git index \(staged\))?\n```/);
-  expect(forAgent.text).toContain(raw.text);
-  pane.copied("for agent");
+  expect(forAgent.text).toMatch(/^new\/migrate\.ts:L6-R8 — L is .+, R is .+\n```diff\n--- a\/old\/migrate\.ts\n\+\+\+ b\/new\/migrate\.ts\n@@ -6,3 \+6,3 @@\n /);
+  expect(forAgent.text).toContain("\n-    plugin.lines = Number(plugin.lines);\n+    plugin.lines = Number(plugin.shape.lines);\n     plugin.enabled = true;\n```");
   // The selection stays, so its bar holds the status line, and the message leads it.
+  pane.copied("for agent");
   expect(screen(pane.frame(wide)).at(-1)!.trim()).toStartWith("Copied for agent");
   pane.copied("for agent", "no-clipboard");
   expect(screen(pane.frame(wide)).at(-1)!.trim()).toStartWith("Not copied: no-clipboard");
+});
+
+test("in split, a drag kept to one column selects that version's lines; one that crosses takes both", async () => {
+  const { pane } = await load(scopes);
+  const split: Size = wide;
+  pane.frame(split);
+  pane.input({ press: { key: "s" } });
+  expect(screen(pane.frame(split))[0]).toContain("split [s]");
+  const at = (content: string, nth: "first" | "last") => {
+    const frame = pane.frame(split);
+    const y = screen(frame).findIndex((line) => line.includes(content));
+    return { y, x: nth === "first" ? screen(frame)[y]!.indexOf(content) : screen(frame)[y]!.lastIndexOf(content) };
+  };
+  const highlight = loadBundledTheme("default-dark").highlight;
+  const litHalves = (content: string) => {
+    const frame = pane.frame(split);
+    const line = frame.lines[screen(frame).findIndex((each) => each.includes(content))]!;
+    let x = 0;
+    const halves = new Set<string>();
+    // The halves' divider is the last │ before a line number; indent guides are │ too, but before code.
+    const divider = [...text(line).matchAll(/│ +\d+ /g)].at(-1)!.index;
+    for (const [segment, , bg] of line.segments) {
+      if (frame.colors[bg] === highlight) halves.add(x < divider ? "left" : "right");
+      x += measureTextWidth(segment);
+    }
+    return [...halves].sort();
+  };
+  pane.input({ select: at("for (const plugin", "last") });
+  pane.input({ select: { ...at("plugin.enabled", "last"), extend: true } });
+  expect(litHalves("Number(plugin.shape.lines)")).toEqual(["right"]);
+  expect(pane.input({ press: { key: "Y" } }).copy!.text).toStartWith("new/migrate.ts:R6-8 — R is ");
+  // From the old side's line 7 across to the new side's line 8.
+  pane.input({ select: at("Number(plugin.lines)", "first") });
+  pane.input({ select: { ...at("plugin.enabled", "last"), extend: true } });
+  expect(litHalves("Number(plugin.lines)")).toEqual(["left", "right"]);
+  expect(pane.input({ press: { key: "Y" } }).copy!.text).toStartWith("new/migrate.ts:L7-R8 — L is ");
 });
 
 test("while lines are selected the status line is a bright bar naming them, with a button and Enter to add them to the chat", async () => {
@@ -136,15 +167,13 @@ test("while lines are selected the status line is a bright bar naming them, with
   select();
   const bar = pane.frame(wide);
   const line = bar.lines.at(-1)!;
-  expect(text(line)).toMatch(/^ \S+\.ts:(\d+)-(\d+) · \d+ lines +Add to chat · enter /);
-  const [, from, to] = /:(\d+)-(\d+)/.exec(text(line))!;
-  expect(text(line)).toContain(`${Number(to) - Number(from) + 1} lines`);
+  expect(text(line)).toMatch(/^ new\/migrate\.ts:L6-R8 · 4 lines +Add to chat · enter /);
   expect(bar.colors[line.segments[0]![2]]).toBe(theme.accent);
   expect(target(bar, (act) => "chat" in act)).toEqual({ chat: true });
 
   const chat = pane.input({ press: { key: "return" } }).chat!;
   expect(chat).toHaveLength(1);
-  expect(chat[0]!.name).toMatch(/^\S+\.ts:\d+-\d+$/);
+  expect(chat[0]!.name).toBe("new/migrate.ts:L6-R8");
   // What the model reads: the name, then the selected code fenced.
   expect(chat[0]!.context).toStartWith(chat[0]!.name);
   expect(chat[0]!.context).toContain("for (const plugin");
