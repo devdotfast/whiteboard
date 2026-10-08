@@ -30,9 +30,11 @@ export interface Palette {
   /** A viewed line's tints: halfway back to the background, so read code recedes. */
   readAddition: string;
   readDeletion: string;
-  /** Every match of the last search, a soft wash; the one the view is on, solid. */
+  /** Every match of the last search, a wash of the accent; the one the view is on, solid in another hue. */
   searchMatch: string;
   searchCurrent: string;
+  /** Text on `searchCurrent`. */
+  searchCurrentText: string;
   addWord: string;
   deleteWord: string;
   addedText: string;
@@ -149,8 +151,9 @@ export function paletteFromHelix(theme: HelixTheme): Palette {
     modification: mix(bg, delta, 0.12),
     readAddition: mix(bg, plus, 0.06),
     readDeletion: mix(bg, minus, 0.06),
-    searchMatch: mix(bg, delta, 0.3),
-    searchCurrent: delta,
+    searchMatch: mix(bg, accent, 0.4),
+    searchCurrent: scopeFg(theme, "warning") ?? delta,
+    searchCurrentText: isLight ? fg : bg,
     addWord: mix(bg, plus, 0.28),
     deleteWord: mix(bg, minus, 0.28),
     addedText: plus,

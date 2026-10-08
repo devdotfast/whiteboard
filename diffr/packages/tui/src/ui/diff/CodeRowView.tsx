@@ -3,7 +3,7 @@ import { memo } from "react";
 import { StyledText, TextAttributes, parseColor, type MouseEvent } from "@opentui/core";
 import type { RenderSpan, SplitLineCell, UnifiedLineCell } from "@diffr/viewer/document/rows";
 import type { Geometry, MeasuredRow } from "@diffr/viewer/viewport/geometry";
-import { planCell, targetAt, type Lit, type PaintRun, type ScopeFocus } from "@diffr/viewer/viewport/cell";
+import { planCell, targetAt, type PaintRun, type ScopeFocus } from "@diffr/viewer/viewport/cell";
 import type { Palette } from "@diffr/viewer/theme/palette";
 const colors = new Map<string, ReturnType<typeof parseColor>>();
 function color(value: string) {
@@ -30,7 +30,6 @@ export const CodeRowView = memo(function CodeRowView({
   focus,
   onHover,
   read,
-  litOf,
 }: {
   measured: MeasuredRow;
   visualLine: number;
@@ -44,8 +43,6 @@ export const CodeRowView = memo(function CodeRowView({
   onFold: (id: number, recursive: boolean) => void;
   /** The row's file is marked viewed. */
   read: boolean;
-  /** The search pattern to light on one side of the row. */
-  litOf: (side: "left" | "right") => Lit | undefined;
 }) {
   const row = measured.row;
   function cell(
@@ -55,7 +52,7 @@ export const CodeRowView = memo(function CodeRowView({
     side: "left" | "right",
     unified = false,
   ) {
-    const plan = planCell(value, spans, width, unified, { theme, geometry, visualLine, focus, selected: selectedSide === side, read, search: litOf(side) });
+    const plan = planCell(value, spans, width, unified, { theme, geometry, visualLine, focus, selected: selectedSide === side, read });
     const column = (event: MouseEvent) => event.x - (event.currentTarget?.x ?? 0);
     // Pressing a fold target doesn't start a selection.
     const fold = (event: MouseEvent) => targetAt(plan.hits, column(event));

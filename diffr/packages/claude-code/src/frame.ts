@@ -312,7 +312,7 @@ export class Pane {
       const glyph = shown ? (viewer.isClosed(fileIndex, file) ? "▸" : "▾") : statusGlyph(fileIndex);
       const directory = fit(`${glyph} ${path.slice(0, path.lastIndexOf("/") + 1)}`, pathWidth);
       const name = fit(path.slice(path.lastIndexOf("/") + 1), Math.max(0, pathWidth - measureTextWidth(directory)));
-      const lit = viewer.highlight(fileIndex, `${fileIndex}:header`, "right");
+      const lit = viewer.headerLit(fileIndex);
       line.text("▌", viewed ? theme.muted : theme.accent, theme.fileHeader);
       for (const run of litRuns(directory, viewed ? theme.muted : theme.fileHeaderDir, theme.fileHeader, lit, theme))
         line.text(run.text, run.fg, run.bg);
@@ -364,15 +364,15 @@ export class Pane {
               const side = row.cell.newLineNumber === undefined ? "left" : "right";
               this.cellsAt.set(y + 1, { key: row.key, side: () => side });
               paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true,
-                { ...paint, selected: selected === side, search: viewer.highlight(row.fileIndex, row.key, side) });
+                { ...paint, selected: selected === side });
             } else {
               paintCell(line, row.left!, measured.left[visualLine] ?? [], geometry.leftWidth, false,
-                { ...paint, selected: selected === "left", search: viewer.highlight(row.fileIndex, row.key, "left") });
+                { ...paint, selected: selected === "left" });
               const divider = line.width;
               this.cellsAt.set(y + 1, { key: row.key, side: (x) => x < divider ? "left" : "right" });
               line.text("│", theme.muted, theme.bg);
               paintCell(line, row.right!, measured.right[visualLine] ?? [], geometry.rightWidth, false,
-                { ...paint, selected: selected === "right", search: viewer.highlight(row.fileIndex, row.key, "right") });
+                { ...paint, selected: selected === "right" });
             }
           });
       }

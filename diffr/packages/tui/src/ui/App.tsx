@@ -190,7 +190,7 @@ export function App({
     const directory = fit(`${glyph} ${path.slice(0, path.lastIndexOf("/") + 1)}`, pathWidth);
     const directoryWidth = measureTextWidth(directory);
     const name = fit(path.slice(path.lastIndexOf("/") + 1), Math.max(0, pathWidth - directoryWidth));
-    const lit = viewer.highlight(fileIndex, `${fileIndex}:header`, "right");
+    const lit = viewer.headerLit(fileIndex);
     return <box key={key} height={1} width={contentWidth} flexDirection="row"
       backgroundColor={theme.fileHeader}
       onMouseUp={() => { if (loaded) viewer.toggleFile(fileIndex); }}>
@@ -267,7 +267,6 @@ export function App({
             onHover={focus => viewer.setHover(focus ? { file: row.fileIndex, ...focus } : null)}
             onFold={(id, recursive) => viewer.setFold(row.fileIndex, id, "toggle", recursive)}
             read={viewer.isViewed(row.fileIndex) === true}
-            litOf={(side) => viewer.highlight(row.fileIndex, row.key, side)}
           />,
         );
     }

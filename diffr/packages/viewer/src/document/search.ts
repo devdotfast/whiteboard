@@ -8,6 +8,8 @@ export interface Match {
   side: "left" | "right";
   /** The 1-based source line the row shows on `side`; undefined on a header. */
   line?: number;
+  /** Which occurrence on its line or path this is, counted from 0. */
+  nth: number;
 }
 
 /** Vim's smartcase: a capital in the pattern makes it match case. */

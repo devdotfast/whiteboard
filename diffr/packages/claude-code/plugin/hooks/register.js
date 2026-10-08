@@ -126,8 +126,9 @@ function paletteFromHelix(theme) {
     modification: mix(bg, delta, 0.12),
     readAddition: mix(bg, plus, 0.06),
     readDeletion: mix(bg, minus, 0.06),
-    searchMatch: mix(bg, delta, 0.3),
-    searchCurrent: delta,
+    searchMatch: mix(bg, accent, 0.4),
+    searchCurrent: scopeFg(theme, "warning") ?? delta,
+    searchCurrentText: isLight ? fg : bg,
     addWord: mix(bg, plus, 0.28),
     deleteWord: mix(bg, minus, 0.28),
     addedText: plus,
@@ -17315,6 +17316,108 @@ function withGuides(spans, guides, theme) {
   return result;
 }
 
+// ../viewer/src/viewport/cell.ts
+function lightMatches(spans, lit, theme) {
+  const ranges = occurrences(spans.map((span2) => span2.text).join(""), lit.pattern);
+  if (!ranges.length)
+    return spans;
+  const result = [];
+  let offset = 0;
+  for (const span2 of spans) {
+    const end = offset + span2.text.length;
+    let cut = offset;
+    for (const [nth, [from, to]] of ranges.entries()) {
+      if (to <= cut || from >= end)
+        continue;
+      const start = Math.max(from, cut), stop = Math.min(to, end), current = nth === lit.current;
+      if (start > cut)
+        result.push({ ...span2, text: span2.text.slice(cut - offset, start - offset) });
+      result.push({
+        ...span2,
+        text: span2.text.slice(start - offset, stop - offset),
+        lit: true,
+        bg: current ? theme.searchCurrent : theme.searchMatch,
+        fg: current ? theme.searchCurrentText : span2.fg
+      });
+      cut = stop;
+    }
+    if (cut < end)
+      result.push({ ...span2, text: span2.text.slice(cut - offset) });
+    offset = end;
+  }
+  return result;
+}
+function litRuns(text, fg, bg, lit, theme) {
+  const spans = lit ? lightMatches([{ text, fg, bg }], lit, theme) : [{ text, fg, bg }];
+  return spans.map((span2) => ({ text: span2.text, fg: span2.fg ?? fg, bg: span2.bg ?? bg }));
+}
+var viewedBox = (viewed) => viewed ? "[✓]" : "[ ]";
+var viewedHint = (viewed) => ` ${viewed ? "Unmark viewed" : "Mark as viewed"} · V `;
+function chevron(fold) {
+  if (!fold)
+    return " ";
+  return fold.collapsed ? "▸" : "▾";
+}
+function planCell(value, spans, width, unified, { theme, geometry, visualLine, focus, selected = false, read = false }) {
+  const fold = value.fold;
+  const washed = focus?.armed && value.body?.includes(focus.id);
+  const changed = value.kind === "addition" || value.kind === "deletion";
+  const bg = selected ? theme.highlight : value.kind === "addition" ? read ? theme.readAddition : theme.addition : value.kind === "deletion" ? read ? theme.readDeletion : theme.deletion : washed ? theme.focusWash : theme.bg;
+  if (read && changed)
+    spans = spans.map((span2) => span2.lit ? span2 : { ...span2, fg: theme.muted, bg: undefined });
+  const digits = geometry.gutter - 4;
+  const number4 = (n) => `${visualLine ? "" : n ?? ""}`.padStart(digits);
+  const numbers = unified ? ` ${number4(value.oldLineNumber)} ${number4(value.newLineNumber)} ` : ` ${number4("lineNumber" in value ? value.lineNumber : undefined)} `;
+  const gutterWidth = unified ? geometry.unifiedGutter : geometry.gutter;
+  const available = Math.max(1, width - gutterWidth);
+  const used = Math.min(available, spans.reduce((n, s) => n + measureTextWidth(s.text), 0));
+  const rest = available - used;
+  const painted = value.band && rest > 0 ? [...spans, {
+    text: (value.fold ? "  " + "┄".repeat(rest) : " ".repeat(rest)).slice(0, rest),
+    fg: theme.guide,
+    bg: foldBackground(theme, value.band)
+  }] : spans;
+  const chevronFg = fold && fold.id === focus?.id ? theme.accent : fold?.collapsed ? theme.muted : theme.guide;
+  const chevronColumn = numbers.length, codeColumn = chevronColumn + 2;
+  const runs = [
+    { text: numbers, fg: theme.muted, bg },
+    { text: visualLine ? " " : chevron(fold), fg: chevronFg, bg },
+    { text: " ", fg: theme.fg, bg }
+  ];
+  const hits = [], hovers = [];
+  if (fold && !visualLine) {
+    hits.push([chevronColumn, chevronColumn + 1, fold.id]);
+    hovers.push([chevronColumn, chevronColumn + 1, { id: fold.id, armed: true }]);
+  }
+  let column = codeColumn;
+  for (const span2 of painted) {
+    const rail = span2.guide !== undefined && span2.guide === focus?.id;
+    const brace = span2.brace !== undefined && span2.brace === focus?.id;
+    const text = rail && focus.armed ? span2.text.replace(/│/g, "┃") : span2.text;
+    const cells = measureTextWidth(text);
+    runs.push({
+      text,
+      fg: rail || brace ? theme.accent : span2.fg ?? theme.fg,
+      bg: brace && focus.armed ? theme.focusBrace : selected ? bg : span2.bg ?? bg
+    });
+    if (span2.guide !== undefined) {
+      hits.push([column, column + cells, span2.guide]);
+      hovers.push([column, column + cells, { id: span2.guide, armed: true }]);
+    }
+    column += cells;
+  }
+  if (column < width)
+    runs.push({ text: " ".repeat(width - column), fg: theme.fg, bg });
+  const opens = fold?.collapsed ? fold.id : value.labelOf;
+  if (opens !== undefined) {
+    hits.push([codeColumn, width, opens]);
+    hovers.push([codeColumn, width, { id: opens, armed: true }]);
+  }
+  if (value.scope !== undefined)
+    hovers.push([0, width, { id: value.scope, armed: false }]);
+  return { bg, runs, hits, hovers };
+}
+
 // ../viewer/src/viewport/geometry.ts
 function measureRows(rows, width, wrap, horizontalOffset, maxLine) {
   const digits = String(maxLine).length;
@@ -17492,9 +17595,10 @@ class Viewer {
     const snapshot3 = this.snapshot;
     const { columns: contentWidth, rows: viewportHeight } = size;
     const layout = this.mode === "auto" ? contentWidth >= this.splitColumns ? "split" : "unified" : this.mode;
-    const key = `${this.revision}:${layout}:${contentWidth}:${this.wrap}:${this.horizontal}`;
+    const lit = this.lit();
+    const key = `${this.revision}:${layout}:${contentWidth}:${this.wrap}:${this.horizontal}:${lit ? JSON.stringify(lit) : ""}`;
     if (this.measured?.key !== key || this.measured.snapshot !== snapshot3) {
-      const rows2 = this.documentRows(snapshot3, layout);
+      const rows2 = lit ? this.lightRows(this.documentRows(snapshot3, layout), lit) : this.documentRows(snapshot3, layout);
       const maxLine = Math.max(1, ...snapshot3.files.flatMap((file2) => file2?.diff.type === "text" ? [file2.diff.lhs, file2.diff.rhs].map((source2) => source2 ? sourceLines(source2.text).length : 0) : []));
       this.measured = { key, snapshot: snapshot3, rows: rows2, geometry: measureRows(rows2, contentWidth, this.wrap, this.horizontal, maxLine) };
     }
@@ -17648,12 +17752,35 @@ class Viewer {
     const { pattern, matches, at } = this.search;
     return { pattern, at: at + 1, total: matches.length, files: new Set(matches.map((match) => match.fileIndex)).size };
   }
-  highlight(fileIndex, key, side) {
+  lit() {
     const pattern = this.prompt ?? this.search?.pattern;
     if (!pattern)
       return;
-    const on = this.prompt === null && this.search ? this.search.matches[this.search.at] : undefined;
-    return { pattern, current: !!on && on.fileIndex === fileIndex && on.key === key && on.side === side };
+    return { pattern, on: this.prompt === null && this.search ? this.search.matches[this.search.at] : undefined };
+  }
+  litFor(lit, fileIndex, key, side) {
+    const { on } = lit;
+    return { pattern: lit.pattern, current: on && on.fileIndex === fileIndex && on.key === key && on.side === side ? on.nth : undefined };
+  }
+  headerLit(fileIndex) {
+    const lit = this.lit();
+    return lit && this.litFor(lit, fileIndex, `${fileIndex}:header`, "right");
+  }
+  lightRows(rows, lit) {
+    const light2 = (cell, fileIndex, key, side) => {
+      if (!cell)
+        return cell;
+      const spans = lightMatches(cell.spans, this.litFor(lit, fileIndex, key, side), this.theme);
+      return spans === cell.spans ? cell : { ...cell, spans };
+    };
+    return rows.map((row) => {
+      if (row.cell) {
+        const cell = light2(row.cell, row.fileIndex, row.key, row.cell.newLineNumber === undefined ? "left" : "right");
+        return cell === row.cell ? row : { ...row, cell };
+      }
+      const left = light2(row.left, row.fileIndex, row.key, "left"), right = light2(row.right, row.fileIndex, row.key, "right");
+      return left === row.left && right === row.right ? row : { ...row, left, right };
+    });
   }
   allOpenRows(index, file2, layout) {
     let cached2 = this.openRows.get(file2);
@@ -17668,8 +17795,7 @@ class Viewer {
     const layout = this.current().layout;
     const matches = [];
     for (const index of this.fileOrder(this.snapshot)) {
-      for (const _ of occurrences(filePath(inventory[index].file), pattern))
-        matches.push({ fileIndex: index, key: `${index}:header`, side: "right" });
+      occurrences(filePath(inventory[index].file), pattern).forEach((_, nth) => matches.push({ fileIndex: index, key: `${index}:header`, side: "right", nth }));
       const file2 = files[index];
       if (!file2)
         continue;
@@ -17678,8 +17804,7 @@ class Viewer {
         for (const [side, cell, line] of cells) {
           if (!cell || line === undefined)
             continue;
-          for (const _ of occurrences(cell.spans.map((span2) => span2.text).join(""), pattern))
-            matches.push({ fileIndex: index, key: row.key, side, line });
+          occurrences(cell.spans.map((span2) => span2.text).join(""), pattern).forEach((_, nth) => matches.push({ fileIndex: index, key: row.key, side, line, nth }));
         }
       }
     }
@@ -17717,7 +17842,7 @@ class Viewer {
       const on = search.matches[search.at];
       search.matches = this.findMatches(search.pattern);
       search.snapshot = this.snapshot;
-      search.at = on ? search.matches.findIndex((m) => m.fileIndex === on.fileIndex && m.key === on.key && m.side === on.side) : -1;
+      search.at = on ? search.matches.findIndex((m) => m.fileIndex === on.fileIndex && m.key === on.key && m.side === on.side && m.nth === on.nth) : -1;
     }
     const total = search.matches.length;
     if (!total)
@@ -17982,109 +18107,6 @@ class Viewer {
     }
     return true;
   }
-}
-
-// ../viewer/src/viewport/cell.ts
-function lightMatches(spans, lit, theme) {
-  const ranges = occurrences(spans.map((span2) => span2.text).join(""), lit.pattern);
-  if (!ranges.length)
-    return spans;
-  const result = [];
-  let offset = 0;
-  for (const span2 of spans) {
-    const end = offset + span2.text.length;
-    let cut = offset;
-    for (const [from, to] of ranges) {
-      if (to <= cut || from >= end)
-        continue;
-      const start = Math.max(from, cut), stop = Math.min(to, end);
-      if (start > cut)
-        result.push({ ...span2, text: span2.text.slice(cut - offset, start - offset) });
-      result.push({
-        ...span2,
-        text: span2.text.slice(start - offset, stop - offset),
-        bg: lit.current ? theme.searchCurrent : theme.searchMatch,
-        fg: lit.current ? theme.bg : span2.fg
-      });
-      cut = stop;
-    }
-    if (cut < end)
-      result.push({ ...span2, text: span2.text.slice(cut - offset) });
-    offset = end;
-  }
-  return result;
-}
-function litRuns(text, fg, bg, lit, theme) {
-  const spans = lit ? lightMatches([{ text, fg, bg }], lit, theme) : [{ text, fg, bg }];
-  return spans.map((span2) => ({ text: span2.text, fg: span2.fg ?? fg, bg: span2.bg ?? bg }));
-}
-var viewedBox = (viewed) => viewed ? "[✓]" : "[ ]";
-var viewedHint = (viewed) => ` ${viewed ? "Unmark viewed" : "Mark as viewed"} · V `;
-function chevron(fold) {
-  if (!fold)
-    return " ";
-  return fold.collapsed ? "▸" : "▾";
-}
-function planCell(value, spans, width, unified, { theme, geometry, visualLine, focus, selected = false, read = false, search }) {
-  const fold = value.fold;
-  const washed = focus?.armed && value.body?.includes(focus.id);
-  const changed = value.kind === "addition" || value.kind === "deletion";
-  const bg = selected ? theme.highlight : value.kind === "addition" ? read ? theme.readAddition : theme.addition : value.kind === "deletion" ? read ? theme.readDeletion : theme.deletion : washed ? theme.focusWash : theme.bg;
-  if (read && changed)
-    spans = spans.map((span2) => ({ ...span2, fg: theme.muted, bg: undefined }));
-  if (search)
-    spans = lightMatches(spans, search, theme);
-  const digits = geometry.gutter - 4;
-  const number4 = (n) => `${visualLine ? "" : n ?? ""}`.padStart(digits);
-  const numbers = unified ? ` ${number4(value.oldLineNumber)} ${number4(value.newLineNumber)} ` : ` ${number4("lineNumber" in value ? value.lineNumber : undefined)} `;
-  const gutterWidth = unified ? geometry.unifiedGutter : geometry.gutter;
-  const available = Math.max(1, width - gutterWidth);
-  const used = Math.min(available, spans.reduce((n, s) => n + measureTextWidth(s.text), 0));
-  const rest = available - used;
-  const painted = value.band && rest > 0 ? [...spans, {
-    text: (value.fold ? "  " + "┄".repeat(rest) : " ".repeat(rest)).slice(0, rest),
-    fg: theme.guide,
-    bg: foldBackground(theme, value.band)
-  }] : spans;
-  const chevronFg = fold && fold.id === focus?.id ? theme.accent : fold?.collapsed ? theme.muted : theme.guide;
-  const chevronColumn = numbers.length, codeColumn = chevronColumn + 2;
-  const runs = [
-    { text: numbers, fg: theme.muted, bg },
-    { text: visualLine ? " " : chevron(fold), fg: chevronFg, bg },
-    { text: " ", fg: theme.fg, bg }
-  ];
-  const hits = [], hovers = [];
-  if (fold && !visualLine) {
-    hits.push([chevronColumn, chevronColumn + 1, fold.id]);
-    hovers.push([chevronColumn, chevronColumn + 1, { id: fold.id, armed: true }]);
-  }
-  let column = codeColumn;
-  for (const span2 of painted) {
-    const rail = span2.guide !== undefined && span2.guide === focus?.id;
-    const brace = span2.brace !== undefined && span2.brace === focus?.id;
-    const text = rail && focus.armed ? span2.text.replace(/│/g, "┃") : span2.text;
-    const cells = measureTextWidth(text);
-    runs.push({
-      text,
-      fg: rail || brace ? theme.accent : span2.fg ?? theme.fg,
-      bg: brace && focus.armed ? theme.focusBrace : selected ? bg : span2.bg ?? bg
-    });
-    if (span2.guide !== undefined) {
-      hits.push([column, column + cells, span2.guide]);
-      hovers.push([column, column + cells, { id: span2.guide, armed: true }]);
-    }
-    column += cells;
-  }
-  if (column < width)
-    runs.push({ text: " ".repeat(width - column), fg: theme.fg, bg });
-  const opens = fold?.collapsed ? fold.id : value.labelOf;
-  if (opens !== undefined) {
-    hits.push([codeColumn, width, opens]);
-    hovers.push([codeColumn, width, { id: opens, armed: true }]);
-  }
-  if (value.scope !== undefined)
-    hovers.push([0, width, { id: value.scope, armed: false }]);
-  return { bg, runs, hits, hovers };
 }
 
 // ../viewer/src/viewport/picker.ts
@@ -18585,7 +18607,7 @@ class Pane {
       const glyph = shown ? viewer.isClosed(fileIndex, file2) ? "▸" : "▾" : statusGlyph(fileIndex);
       const directory = fit(`${glyph} ${path.slice(0, path.lastIndexOf("/") + 1)}`, pathWidth);
       const name = fit(path.slice(path.lastIndexOf("/") + 1), Math.max(0, pathWidth - measureTextWidth(directory)));
-      const lit = viewer.highlight(fileIndex, `${fileIndex}:header`, "right");
+      const lit = viewer.headerLit(fileIndex);
       line.text("▌", viewed ? theme.muted : theme.accent, theme.fileHeader);
       for (const run of litRuns(directory, viewed ? theme.muted : theme.fileHeaderDir, theme.fileHeader, lit, theme))
         line.text(run.text, run.fg, run.bg);
@@ -18635,13 +18657,13 @@ class Pane {
             if (row.cell) {
               const side = row.cell.newLineNumber === undefined ? "left" : "right";
               this.cellsAt.set(y + 1, { key: row.key, side: () => side });
-              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, { ...paint, selected: selected === side, search: viewer.highlight(row.fileIndex, row.key, side) });
+              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, { ...paint, selected: selected === side });
             } else {
-              paintCell(line, row.left, measured.left[visualLine] ?? [], geometry.leftWidth, false, { ...paint, selected: selected === "left", search: viewer.highlight(row.fileIndex, row.key, "left") });
+              paintCell(line, row.left, measured.left[visualLine] ?? [], geometry.leftWidth, false, { ...paint, selected: selected === "left" });
               const divider = line.width;
               this.cellsAt.set(y + 1, { key: row.key, side: (x) => x < divider ? "left" : "right" });
               line.text("│", theme.muted, theme.bg);
-              paintCell(line, row.right, measured.right[visualLine] ?? [], geometry.rightWidth, false, { ...paint, selected: selected === "right", search: viewer.highlight(row.fileIndex, row.key, "right") });
+              paintCell(line, row.right, measured.right[visualLine] ?? [], geometry.rightWidth, false, { ...paint, selected: selected === "right" });
             }
           });
       }

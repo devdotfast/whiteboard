@@ -14,6 +14,8 @@ export interface RenderSpan {
   brace?: number;
   fg?: string;
   bg?: string;
+  /** A search match: its colours outlast a viewed line's fade. */
+  lit?: boolean;
 }
 
 export interface SplitLineCell {

@@ -3,7 +3,8 @@ import { buildFileTree, flattenFileTree } from "./document/fileTree";
 import { defaultCollapsed, foldIds, gapIds, hidingIds, nestedIds, sourceLines } from "./document/regions";
 import { occurrences, type Match } from "./document/search";
 import { rankFiles, type Pick } from "./document/pick";
-import { placeholderRows, rowsForFile, type Layout, type SplitLineCell, type UnifiedLineCell, type ViewerRow } from "./document/rows";
+import { placeholderRows, rowsForFile, type Layout, type RenderSpan, type SplitLineCell, type UnifiedLineCell, type ViewerRow } from "./document/rows";
+import { lightMatches, type Lit } from "./viewport/cell";
 import type { DiffStore, Snapshot } from "./protocol/store";
 import { filePath, fileVisibility, type DiffFile, type TextDiff } from "./protocol/wire";
 import { measureRows, positionAt, positionTop, rowFold, visibleRows, type Geometry, type MeasuredRow, type ViewPosition } from "./viewport/geometry";
@@ -181,9 +182,11 @@ export class Viewer {
     const snapshot = this.snapshot;
     const contentWidth = size.columns, viewportHeight = size.rows;
     const layout = this.mode === "auto" ? (contentWidth >= this.splitColumns ? "split" : "unified") : this.mode;
-    const key = `${this.revision}:${layout}:${contentWidth}:${this.wrap}:${this.horizontal}`;
+    // Search lights whole lines before wrap and pan cut them, so its colours travel with the text.
+    const lit = this.lit();
+    const key = `${this.revision}:${layout}:${contentWidth}:${this.wrap}:${this.horizontal}:${lit ? JSON.stringify(lit) : ""}`;
     if (this.measured?.key !== key || this.measured.snapshot !== snapshot) {
-      const rows = this.documentRows(snapshot, layout);
+      const rows = lit ? this.lightRows(this.documentRows(snapshot, layout), lit) : this.documentRows(snapshot, layout);
       const maxLine = Math.max(1, ...snapshot.files.flatMap((file) => file?.diff.type === "text"
         ? [file.diff.lhs, file.diff.rhs].map((source) => source ? sourceLines(source.text).length : 0) : []));
       this.measured = { key, snapshot, rows, geometry: measureRows(rows, contentWidth, this.wrap, this.horizontal, maxLine) };
@@ -336,12 +339,40 @@ export class Viewer {
     return { pattern, at: at + 1, total: matches.length, files: new Set(matches.map((match) => match.fileIndex)).size };
   }
 
-  /** The pattern to light on one side of a row: the one being typed, else the last search's; `current` on the match the view is on. */
-  highlight(fileIndex: number, key: string, side: "left" | "right"): { pattern: string; current: boolean } | undefined {
+  /** The pattern to light, the one being typed or else the last search's, and the match the view is on once a search is done. */
+  private lit(): { pattern: string; on?: Match } | undefined {
     const pattern = this.prompt ?? this.search?.pattern;
     if (!pattern) return undefined;
-    const on = this.prompt === null && this.search ? this.search.matches[this.search.at] : undefined;
-    return { pattern, current: !!on && on.fileIndex === fileIndex && on.key === key && on.side === side };
+    return { pattern, on: this.prompt === null && this.search ? this.search.matches[this.search.at] : undefined };
+  }
+
+  /** What to light on one side of a row: the pattern, and its occurrence the view is on when it's on this row. */
+  private litFor(lit: { pattern: string; on?: Match }, fileIndex: number, key: string, side: "left" | "right"): Lit {
+    const { on } = lit;
+    return { pattern: lit.pattern, current: on && on.fileIndex === fileIndex && on.key === key && on.side === side ? on.nth : undefined };
+  }
+
+  /** A file header's path lit for the last search, or the one being typed. */
+  headerLit(fileIndex: number): Lit | undefined {
+    const lit = this.lit();
+    return lit && this.litFor(lit, fileIndex, `${fileIndex}:header`, "right");
+  }
+
+  /** Rows with the pattern's occurrences lit on every side that has any; the rest as they were. */
+  private lightRows(rows: ViewerRow[], lit: { pattern: string; on?: Match }): ViewerRow[] {
+    const light = <Cell extends { spans: RenderSpan[] }>(cell: Cell | undefined, fileIndex: number, key: string, side: "left" | "right") => {
+      if (!cell) return cell;
+      const spans = lightMatches(cell.spans, this.litFor(lit, fileIndex, key, side), this.theme);
+      return spans === cell.spans ? cell : { ...cell, spans };
+    };
+    return rows.map((row) => {
+      if (row.cell) {
+        const cell = light(row.cell, row.fileIndex, row.key, row.cell.newLineNumber === undefined ? "left" : "right");
+        return cell === row.cell ? row : { ...row, cell };
+      }
+      const left = light(row.left, row.fileIndex, row.key, "left"), right = light(row.right, row.fileIndex, row.key, "right");
+      return left === row.left && right === row.right ? row : { ...row, left, right };
+    });
   }
 
   private allOpenRows(index: number, file: DiffFile, layout: Layout): ViewerRow[] {
@@ -359,8 +390,8 @@ export class Viewer {
     const layout = this.current().layout;
     const matches: Match[] = [];
     for (const index of this.fileOrder(this.snapshot)) {
-      for (const _ of occurrences(filePath(inventory[index]!.file), pattern))
-        matches.push({ fileIndex: index, key: `${index}:header`, side: "right" });
+      occurrences(filePath(inventory[index]!.file), pattern).forEach((_, nth) =>
+        matches.push({ fileIndex: index, key: `${index}:header`, side: "right", nth }));
       const file = files[index];
       if (!file) continue;
       for (const row of this.allOpenRows(index, file, layout)) {
@@ -369,8 +400,8 @@ export class Viewer {
           : [["left", row.left, row.left?.lineNumber], ["right", row.right, row.right?.lineNumber]];
         for (const [side, cell, line] of cells) {
           if (!cell || line === undefined) continue;
-          for (const _ of occurrences(cell.spans.map((span) => span.text).join(""), pattern))
-            matches.push({ fileIndex: index, key: row.key, side, line });
+          occurrences(cell.spans.map((span) => span.text).join(""), pattern).forEach((_, nth) =>
+            matches.push({ fileIndex: index, key: row.key, side, line, nth }));
         }
       }
     }
@@ -413,7 +444,7 @@ export class Viewer {
       const on = search.matches[search.at];
       search.matches = this.findMatches(search.pattern);
       search.snapshot = this.snapshot;
-      search.at = on ? search.matches.findIndex((m) => m.fileIndex === on.fileIndex && m.key === on.key && m.side === on.side) : -1;
+      search.at = on ? search.matches.findIndex((m) => m.fileIndex === on.fileIndex && m.key === on.key && m.side === on.side && m.nth === on.nth) : -1;
     }
     const total = search.matches.length;
     if (!total) return this.emit();
