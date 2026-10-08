@@ -1,3 +1,7 @@
+import {
+  type EnsureRemoteLanguageServerInput,
+  ensureRemoteLanguageServer,
+} from "./remote-language-server";
 import { readReviewServerHealth, serverNotReady } from "./server-discovery";
 import {
   type EnsureBackgroundServerInput,
@@ -7,14 +11,43 @@ import {
 export async function remoteAttach(input: {
   stateDir: string;
   env: NodeJS.ProcessEnv;
+  packageRoot?: string;
   cli?: EnsureBackgroundServerInput["cli"];
+  groups?: string[];
+  ensureExtensions?: EnsureRemoteLanguageServerInput["ensure"];
+  installTimeoutMs?: number;
 }) {
-  const { discovery, started } = await ensureBackgroundServer({
-    stateDir: input.stateDir,
+  const extensions = new AbortController();
+
+  const language = ensureRemoteLanguageServer({
     env: input.env,
-    startedBy: "desktop",
+    packageRoot: input.packageRoot,
+    groups: input.groups,
+    signal: extensions.signal,
+    ensure: input.ensureExtensions,
+    installTimeoutMs: input.installTimeoutMs,
     cli: input.cli,
   });
+
+  let server: Awaited<ReturnType<typeof ensureBackgroundServer>>;
+
+  try {
+    server = await ensureBackgroundServer({
+      stateDir: input.stateDir,
+      env: input.env,
+      startedBy: "desktop",
+      cli: input.cli,
+    });
+  } catch (error) {
+    extensions.abort();
+    await language;
+    throw error;
+  }
+
+  const { discovery, started } = server;
+
+  const { languageServer, languageServerDetail, languageServerPending } =
+    await language;
 
   const health = await readReviewServerHealth(discovery);
 
@@ -28,5 +61,8 @@ export async function remoteAttach(input: {
     url: discovery.url,
     token: discovery.token,
     startedServer: started,
+    languageServer,
+    ...(languageServerDetail !== undefined && { languageServerDetail }),
+    ...(languageServerPending && { languageServerPending }),
   };
 }

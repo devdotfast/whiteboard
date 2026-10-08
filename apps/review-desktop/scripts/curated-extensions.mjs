@@ -13,12 +13,10 @@
 //   node scripts/curated-extensions.mjs --clean          # remove materialized dirs
 //   node scripts/curated-extensions.mjs --copy-to <dir>  # stage into a package
 
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -26,9 +24,20 @@ import {
   curatedGroups,
   openVsxUrl,
   parseGroupSelection,
+  remoteExtensionIds,
+  remoteTargets,
   supportedTargets,
   targetKeyFor,
 } from "./curated-extensions.manifest.mjs";
+import {
+  downloadFile,
+  downloadPinned,
+  sha256File,
+} from "../../../packages/review/src/pinned-download.ts";
+import {
+  extractVsix,
+  sanitizeVsixManifest,
+} from "../../../packages/review/src/vsix.ts";
 
 const APP_DIR = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -39,8 +48,6 @@ const EXTENSIONS_DIR = path.join(CHECKOUT, "extensions");
 const CACHE_DIR = path.join(CHECKOUT, ".build", "curated-extensions", "cache");
 
 const STAMP_FILE = ".curated.json";
-
-const codeOssRequire = createRequire(path.join(CHECKOUT, "package.json"));
 
 /** Maps process.platform/arch onto the manifest's target names. */
 export function detectTarget() {
@@ -136,10 +143,6 @@ export function selectExtensions(target, groups) {
   return selected;
 }
 
-function sha256Of(file) {
-  return createHash("sha256").update(fs.readFileSync(file)).digest("hex");
-}
-
 function vsixUrlFor(extension, targetKey) {
   const pinnedUrl = extension.targets[targetKey].url;
 
@@ -164,51 +167,14 @@ function cachePathFor(extension, targetKey) {
   );
 }
 
-/** Downloads to a temp file and renames, so a killed run never leaves a torn cache entry. */
-async function download(url, destination) {
-  fs.mkdirSync(path.dirname(destination), { recursive: true });
-  // Open VSX answers with a 302 to its storage host; fetch follows by default.
-  const response = await fetch(url, { redirect: "follow" });
-
-  if (!response.ok) {
-    throw new Error(
-      `GET ${url} failed with ${response.status} ${response.statusText}`,
-    );
-  }
-
-  const partial = `${destination}.part`;
-  fs.writeFileSync(partial, Buffer.from(await response.arrayBuffer()));
-  fs.renameSync(partial, destination);
-}
-
-async function ensureVsix(
-  extension,
-  targetKey,
-  expectedSha,
-  { allowDownload },
-) {
+async function ensureVsix(extension, targetKey) {
   const cached = cachePathFor(extension, targetKey);
+  const { sha256, size } = extension.targets[targetKey];
 
-  if (!fs.existsSync(cached)) {
-    if (!allowDownload) {
-      throw new Error(
-        `${extension.id}: ${cached} is missing and downloads are disabled`,
-      );
-    }
-
-    await download(vsixUrlFor(extension, targetKey), cached);
-  }
-
-  const actual = sha256Of(cached);
-
-  if (actual !== expectedSha) {
-    // A mismatch means the pin is stale or the download was tampered with.
-    // Drop the file so the next run refetches instead of failing forever.
-    fs.rmSync(cached, { force: true });
-    throw new Error(
-      `${extension.id} checksum mismatch for ${targetKey}\n  expected ${expectedSha}\n  actual   ${actual}`,
-    );
-  }
+  await downloadPinned(
+    { url: vsixUrlFor(extension, targetKey), sha256, size },
+    cached,
+  );
 
   return cached;
 }
@@ -230,30 +196,6 @@ function stampMatches(stamp, extension, targetKey, sha256) {
     stamp?.target === targetKey &&
     stamp?.sha256 === sha256
   );
-}
-
-/**
- * VSIX payloads declare `dependencies` they ship prebundled and `scripts` that
- * only make sense in their own repo. Both confuse tooling that walks
- * extensions/*&#47;package.json (vsce's npm file listing in particular), so drop
- * them. `extensionPack` is dropped for extensions whose pack members Review
- * deliberately does not ship.
- */
-function sanitizeManifest(directory, extension) {
-  const manifestPath = path.join(directory, "package.json");
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  delete manifest.scripts;
-  delete manifest.dependencies;
-  delete manifest.devDependencies;
-
-  if (extension.stripExtensionPack) {
-    delete manifest.extensionPack;
-  }
-
-  const engine = manifest.engines?.vscode;
-  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`);
-
-  return { engine, id: `${manifest.publisher}.${manifest.name}` };
 }
 
 function prunePayload(directory, extension) {
@@ -280,96 +222,7 @@ function ensureExecutables(directory, extension, targetKey) {
   }
 }
 
-/** Extract the extension payload with Code OSS's pinned ZIP reader. */
-export async function extractVsixPayload(vsix, destination) {
-  const yauzl = codeOssRequire("yauzl");
-
-  await new Promise((resolve, reject) => {
-    yauzl.open(vsix, { lazyEntries: true }, (openError, zipFile) => {
-      if (openError) {
-        reject(openError);
-
-        return;
-      }
-
-      const pending = new Set();
-      let failure;
-
-      const fail = (error) => {
-        if (failure) {
-          return;
-        }
-
-        failure = error;
-        zipFile.close();
-        reject(error);
-      };
-
-      zipFile.on("error", fail);
-      zipFile.on("entry", (entry) => {
-        const name = entry.fileName.replaceAll("\\", "/");
-
-        if (name.endsWith("/") || !name.startsWith("extension/")) {
-          zipFile.readEntry();
-
-          return;
-        }
-
-        const relative = name.slice("extension/".length);
-        const parts = relative.split("/");
-
-        if (
-          parts.some((part) => part === ".." || part === "." || part === "") ||
-          path.posix.isAbsolute(relative) ||
-          path.win32.isAbsolute(relative) ||
-          parts.some((part) => part.includes(":"))
-        ) {
-          fail(new Error(`VSIX contains an unsafe extension path: ${name}`));
-
-          return;
-        }
-
-        const mode = (entry.externalFileAttributes >>> 16) & 0xffff;
-
-        if ((mode & 0o170000) === 0o120000) {
-          fail(new Error(`VSIX contains an unexpected symlink: ${name}`));
-
-          return;
-        }
-
-        const output = path.join(destination, ...parts);
-        fs.mkdirSync(path.dirname(output), { recursive: true });
-        zipFile.openReadStream(entry, (streamError, stream) => {
-          if (streamError) {
-            fail(streamError);
-
-            return;
-          }
-
-          const task = pipeline(stream, fs.createWriteStream(output))
-            .then(() => {
-              if (process.platform !== "win32" && (mode & 0o111) !== 0) {
-                fs.chmodSync(output, mode & 0o777);
-              }
-            })
-            .catch(fail)
-            .finally(() => pending.delete(task));
-
-          pending.add(task);
-          zipFile.readEntry();
-        });
-      });
-      zipFile.on("end", () => {
-        Promise.all(pending).then(() => {
-          if (!failure) resolve();
-        }, fail);
-      });
-      zipFile.readEntry();
-    });
-  });
-}
-
-async function extractVsix(vsix, extension, targetKey, sha256) {
+async function materializeVsix(vsix, extension, targetKey, sha256) {
   const destination = path.join(EXTENSIONS_DIR, extension.id);
   const staging = `${destination}.staging`;
   fs.rmSync(staging, { recursive: true, force: true });
@@ -378,20 +231,14 @@ async function extractVsix(vsix, extension, targetKey, sha256) {
   try {
     const payload = path.join(staging, "extension");
     fs.mkdirSync(payload, { recursive: true });
-    await extractVsixPayload(vsix, payload);
+    await extractVsix(vsix, payload);
 
     if (!fs.existsSync(payload)) {
       throw new Error(`${extension.id}: VSIX has no extension/ payload`);
     }
 
-    const { engine, id } = sanitizeManifest(payload, extension);
+    const engine = await sanitizeVsixManifest(payload, extension);
     prunePayload(payload, extension);
-
-    if (id.toLowerCase() !== extension.id.toLowerCase()) {
-      throw new Error(
-        `${extension.id}: VSIX declares a different identifier (${id})`,
-      );
-    }
 
     ensureExecutables(payload, extension, targetKey);
     fs.writeFileSync(
@@ -562,16 +409,21 @@ async function printHashes(target) {
   for (const extension of curatedExtensions) {
     const targetKeys = extension.targets.universal
       ? ["universal"]
-      : supportedTargets;
+      : [
+          ...new Set([
+            ...supportedTargets,
+            ...(remoteExtensionIds.includes(extension.id) ? remoteTargets : []),
+          ]),
+        ];
 
     for (const targetKey of targetKeys) {
       const cached = cachePathFor(extension, targetKey);
 
-      if (!fs.existsSync(cached)) {
-        await download(vsixUrlFor(extension, targetKey), cached);
-      }
+      const sha256 = fs.existsSync(cached)
+        ? await sha256File(cached)
+        : await downloadFile(vsixUrlFor(extension, targetKey), cached);
 
-      console.log(`${extension.id} ${targetKey} ${sha256Of(cached)}`);
+      console.log(`${extension.id} ${targetKey} ${sha256}`);
     }
   }
 
@@ -651,11 +503,9 @@ async function main() {
       throw new Error(`${extension.id} is not materialized for ${target}`);
     }
 
-    const vsix = await ensureVsix(extension, targetKey, sha256, {
-      allowDownload: !options.check,
-    });
+    const vsix = await ensureVsix(extension, targetKey);
 
-    await extractVsix(vsix, extension, targetKey, sha256);
+    await materializeVsix(vsix, extension, targetKey, sha256);
     verifyEngine(destination, extension);
     console.log(
       `materialized ${extension.id}@${extension.version} (${targetKey})`,

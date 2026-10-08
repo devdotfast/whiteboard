@@ -355,6 +355,15 @@ one of these entries:
 - `src/vs/platform/terminal/common/terminalEnvironment.ts`: quote complete path
   arguments with each shell's native rules instead of stripping metacharacters
   and emitting invalid POSIX quoting for apostrophes.
+- `src/vs/platform/remote/common/remoteAgentConnection.ts`: a permanent
+  failure ends only its own connection. Upstream's permanent failure is one
+  static flag that ends every connection in the window; with several remotes
+  per window a failed remote must end only its own connection. A failed
+  connection also sets upstream's never-written per-instance flag so it does
+  not reconnect again. A Management connection's reconnection failure is not
+  fatal either: it ends that connection only. Isolation is unconditional, so a
+  remote Source window gets no upstream reload dialog; it reconnects through
+  the fork's resolver and shows its host state in the status bar.
 - `extensions/package.json` and the extension `package.json`/`package-lock.json`
   files: `@vscode/extension-telemetry` is hoisted to the shared extensions
   install (github keeps its own ^1.0.0 copy; the shared copy is ^0.9.8). The
@@ -379,8 +388,10 @@ one of these entries:
   were regenerated rather than kept at the stock Code OSS GUIDs.
   Two identity gaps remain deliberately: `serverApplicationName`,
   `serverDataFolderName`, and `tunnelApplicationName` still hold their upstream
-  values because the fork ships no REH build and the agent-host stack uses those
-  names to locate a server on *remote* hosts; and `darwinProfileUUID` /
+  values because the agent-host stack uses those names to locate a server on
+  *remote* hosts. The fork does ship a trimmed remote server (below), but its
+  launcher (`whiteboard remote attach`) always passes `--server-data-dir`, so the
+  `serverDataFolderName` default is never used; and `darwinProfileUUID` /
   `darwinProfilePayloadUUID` are untouched upstream values kept only because
   `build/lib/policies/policyGenerator.ts` hard-throws without them, on a path
   nothing in this tree invokes.
@@ -581,6 +592,35 @@ one of these entries:
 - `licenses/`: fork-added third-party notices (eventsource-parser, zod,
   elkjs, libavoid-js, KaTeX, @vscode/codicons). `build/gulpfile.vscode.ts`
   copies this directory into packaged builds.
+- The remote server: a trimmed copy of upstream's server starts the stock
+  extension host on a remote machine, so remote reviews get language features
+  from the same extensions. `scripts/build-remote-runtime.mjs` bundles it.
+  Restored from the upstream commit above, unmodified: `src/server-main.ts`,
+  `src/bootstrap-server.ts`, and in `src/vs/server/node/`:
+  `extensionHostConnection.ts`, `extensionHostStatusService.ts`,
+  `extensionsScannerService.ts`, `remoteAgentEnvironmentImpl.ts`,
+  `remoteExtensionManagement.ts`, `remoteFileSystemProviderServer.ts`,
+  `remoteLanguagePacks.ts`, `serverConnectionToken.ts`,
+  `serverEnvironmentService.ts`, `serverLifetimeService.ts`.
+  Restored and trimmed, each trim marked with a `Whiteboard:` comment:
+  - `serverServices.ts`: keeps the logger, file, configuration, user data
+    profile, extension host status, lifetime and extensions scanner services,
+    and the `logger`, `userDataProfiles`, `remoteextensionsenvironment`,
+    `remoteExtensionsScanner`, `remoteFilesystem` and extension host debug
+    broadcast channels. `telemetry` is a no-op channel and `ITelemetryService`
+    is `NullTelemetryService`. Cuts requests, telemetry appenders and machine
+    ids, the gallery and extension installs, language packs, terminals, the
+    agent host, MCP and the sandbox helper. Installs the process error
+    listeners upstream's node `ErrorTelemetry` installs, so a cancelled request
+    after a clean disconnect does not end the server.
+  - `remoteExtensionsScanner.ts`: scans only; install-on-start, the gallery and
+    language pack installs are cut.
+  - `remoteExtensionHostAgentServer.ts`: the web client and
+    `/vscode-remote-resource` are cut, with a local `serveError`.
+  - `server.main.ts`: `spawnCli` reports that the extension management CLI is
+    not included.
+  The rest of `src/vs/server/` and `src/server-cli.ts` stay deleted.
+  `src/vs/server/node/reviewServerHandshake.test.ts` is fork-owned.
 
 ## Serialize the fork
 

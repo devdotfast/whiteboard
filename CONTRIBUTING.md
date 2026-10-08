@@ -66,15 +66,6 @@ Run the full check suite before you open a pull request:
 pnpm run ci
 ```
 
-DOM-facing tests run in Chromium through Vitest Browser Mode. Install the
-browser once, then run the headless suite or watch mode:
-
-```sh
-pnpm --filter @dev.fast/whiteboard exec playwright install chromium
-pnpm --filter @dev.fast/whiteboard test:browser
-pnpm --filter @dev.fast/whiteboard test:browser:watch
-```
-
 Pure Node, filesystem, and server tests run through
 `pnpm --filter @dev.fast/whiteboard test:node`.
 

@@ -570,12 +570,17 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       .option(
         "--state-dir <path>",
         "directory for saved reviews and server discovery",
+      )
+      .option(
+        "--groups <groups>",
+        "comma-separated optional extension groups the Desktop has enabled, such as go",
       ),
     "plain",
   ).action(async (_options, command: Command) => {
     const options = command.optsWithGlobals<{
       stateDir?: string;
       json?: boolean;
+      groups?: string;
     }>();
 
     const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
@@ -585,7 +590,11 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     let attach: Awaited<ReturnType<typeof remoteAttach>>;
 
     try {
-      attach = await remoteAttach({ stateDir, env });
+      attach = await remoteAttach({
+        stateDir,
+        env,
+        groups: options.groups?.split(",").map((group) => group.trim()),
+      });
     } catch (error) {
       if (!options.json) throw error;
 
@@ -611,8 +620,50 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     input.stdout.write(
       options.json
         ? `${REVIEW_REMOTE_ATTACH_BEGIN}\n${JSON.stringify(attach)}\n${REVIEW_REMOTE_ATTACH_END}\n`
-        : `Whiteboard server ${attach.startedServer ? "started" : "already running"} at ${attach.url}\n`,
+        : `Whiteboard server ${attach.startedServer ? "started" : "already running"} at ${attach.url}\nLanguage features: ${attach.languageServer ? `VS Code server on port ${attach.languageServer.port}` : `unavailable (${attach.languageServerDetail})`}\n`,
     );
+  });
+
+  configureJsonOutput(
+    remote
+      .command("extensions")
+      .description("Language extensions for the VS Code server on a remote")
+      .command("ensure")
+      .description(
+        "Download the curated extensions for this machine and list them for the VS Code server",
+      )
+      .option(
+        "--groups <groups>",
+        "comma-separated optional extension groups the Desktop has enabled, such as go",
+      ),
+    "plain",
+  ).action(async (_options, command: Command) => {
+    const { json, groups } = command.optsWithGlobals<{
+      json?: boolean;
+      groups?: string;
+    }>();
+
+    const { ensureRemoteExtensions } = await import("./remote-extensions.js");
+
+    const result = await ensureRemoteExtensions({
+      env,
+      groups: groups?.split(",").map((group) => group.trim()),
+    });
+
+    input.stdout.write(
+      json
+        ? `${JSON.stringify(result)}\n`
+        : [
+            ...result.installed.map((id) => `Installed ${id}`),
+            ...result.skipped.map(
+              ({ id, reason }) => `Skipped ${id}: ${reason}`,
+            ),
+            ...result.failed.map(({ id, error }) => `Failed ${id}: ${error}`),
+          ]
+            .map((line) => `${line}\n`)
+            .join(""),
+    );
+    state.exitCode = result.failed.length > 0 ? 1 : 0;
   });
 
   async function writeServerStatus(
