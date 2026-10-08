@@ -14553,38 +14553,12 @@ var controlCodeRegex = /[\x00-\x1f\x7f-\x9f]/;
 var sevenBitControlStrings = /\x1b(?:\][\s\S]*?(?:\x07|\x1b\\|\x9c)|[PX^_][\s\S]*?(?:\x1b\\|\x9c)|\[[0-?]*[ -/]*[@-~])/g;
 var c1ControlStrings = /[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x1b\\|\x9c)/g;
 var c1Csi = /\x9b[0-?]*[ -/]*[@-~]/g;
-var preservedStyleTokenDelimiters = /[\u{f0000}\u{f0001}]/gu;
-var preservedStyleTokens = /\u{f0000}(\d+)\u{f0001}/gu;
-function sanitizeTerminalText(text, {
-  preserveNewlines = true,
-  preserveTabs = true,
-  preserveAnsiStyle = false
-} = {}) {
+var controlCharacters = /[\x00-\x08\x0a-\x1f\x7f-\x9f]/g;
+function sanitizeTerminalLine(text) {
   if (!controlCodeRegex.test(text)) {
     return text;
   }
-  const controlCharacters = preserveNewlines ? preserveTabs ? /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g : /[\x00-\x09\x0b-\x1f\x7f-\x9f]/g : preserveTabs ? /[\x00-\x08\x0a-\x1f\x7f-\x9f]/g : /[\x00-\x1f\x7f-\x9f]/g;
-  const preservedStyles = [];
-  const preserveStyle = (sequence) => {
-    if (!preserveAnsiStyle || !/^\x1b\[[0-9;:]*m$/.test(sequence)) {
-      return "";
-    }
-    const token = `\uDB80\uDC00${preservedStyles.length}\uDB80\uDC01`;
-    preservedStyles.push(sequence);
-    return token;
-  };
-  const tokenSafeText = preserveAnsiStyle ? text.replace(preservedStyleTokenDelimiters, "") : text;
-  const sanitized = tokenSafeText.replace(sevenBitControlStrings, preserveStyle).replace(c1ControlStrings, "").replace(c1Csi, "").replace(controlCharacters, "");
-  if (preservedStyles.length === 0) {
-    return sanitized;
-  }
-  return sanitized.replace(preservedStyleTokens, (_token, index) => preservedStyles[Number(index)] ?? "");
-}
-function sanitizeTerminalLine(text) {
-  return sanitizeTerminalText(text, {
-    preserveNewlines: false,
-    preserveTabs: true
-  });
+  return text.replace(sevenBitControlStrings, "").replace(c1ControlStrings, "").replace(c1Csi, "").replace(controlCharacters, "");
 }
 function sanitizeTerminalSpans(spans) {
   let sanitized = null;
