@@ -96,6 +96,8 @@ pub struct Cursor {
     next_region_id: u32,
     next_alignment_id: u32,
     places: DftHashMap<u32, Place>,
+    /// The regions in each fold state.
+    states: DftHashMap<u32, Vec<u32>>,
 }
 
 impl Cursor {
@@ -108,8 +110,13 @@ impl Cursor {
         };
         let mut next_region_id = 1;
         let mut next_alignment_id = 0;
+        let mut states: DftHashMap<u32, Vec<u32>> = DftHashMap::default();
         for source in sides.sides() {
             walk(top(source), &mut |region| {
+                states
+                    .entry(region.fold_state_id)
+                    .or_default()
+                    .push(region.id);
                 next_region_id = next_region_id.max(region.id + 1);
                 if let Some(alignment) = region.alignment_id() {
                     next_alignment_id = next_alignment_id.max(alignment + 1);
@@ -130,6 +137,7 @@ impl Cursor {
             next_region_id,
             next_alignment_id,
             places,
+            states,
         })
     }
 
@@ -362,14 +370,12 @@ impl Cursor {
     /// All regions sharing this region's collapse state, including itself.
     pub fn linked_regions(&self, id: u32) -> Result<Vec<u32>, MoveError> {
         let state = self.region(id)?.fold_state_id;
-        let mut ids = Vec::new();
-        for tree in trees_ref(&self.sides) {
-            walk(tree, &mut |region| {
-                if region.fold_state_id == state {
-                    ids.push(region.id);
-                }
-            });
-        }
+        let mut ids = self.states[&state].clone();
+        // The lhs before the rhs, each in preorder.
+        ids.sort_by(|a, b| {
+            let (a, b) = (&self.places[a], &self.places[b]);
+            (a.side == Side::Rhs, &a.path).cmp(&(b.side == Side::Rhs, &b.path))
+        });
         Ok(ids)
     }
 
@@ -453,6 +459,7 @@ impl Cursor {
                 Side::Rhs => rhs = Some(tail),
             }
         }
+        self.states.insert(tails[0], tails);
         Ok(region_ids(lhs, rhs))
     }
 
@@ -514,6 +521,7 @@ impl Cursor {
                 Side::Rhs => rhs = Some(id),
             }
             let fold_state_id = *state.get_or_insert(id);
+            self.states.entry(fold_state_id).or_default().push(id);
             list.insert(
                 first,
                 Region {
@@ -543,30 +551,43 @@ impl Cursor {
         for &id in ids {
             collapsed |= self.region(id)?.visibility.collapsed;
         }
-        let states = ids
+        let merged = ids
             .iter()
             .map(|id| Ok(self.region(*id)?.fold_state_id))
             .collect::<Result<BTreeSet<u32>, MoveError>>()?;
-        for tree in trees(&mut self.sides) {
-            walk_mut(tree, &mut |region| {
-                if states.contains(&region.fold_state_id) {
-                    region.fold_state_id = state;
-                    region.visibility.collapsed = collapsed;
-                }
-            });
+        let mut members = Vec::new();
+        for old in merged {
+            members.extend(
+                self.states
+                    .remove(&old)
+                    .expect("every fold state is indexed"),
+            );
         }
+        let Cursor { sides, places, .. } = self;
+        for id in &members {
+            let place = &places[id];
+            let region = at_mut(tree_mut(sides, place.side), &place.path);
+            region.fold_state_id = state;
+            region.visibility.collapsed = collapsed;
+        }
+        self.states.insert(state, members);
         Ok(())
     }
 
     /// Set the shared collapsed state.
     pub fn set_collapsed(&mut self, region: u32, collapsed: bool) -> Result<(), MoveError> {
         let state = self.region(region)?.fold_state_id;
-        for tree in trees(&mut self.sides) {
-            walk_mut(tree, &mut |region| {
-                if region.fold_state_id == state {
-                    region.visibility.collapsed = collapsed;
-                }
-            });
+        let Cursor {
+            sides,
+            places,
+            states,
+            ..
+        } = self;
+        for id in &states[&state] {
+            let place = &places[id];
+            at_mut(tree_mut(sides, place.side), &place.path)
+                .visibility
+                .collapsed = collapsed;
         }
         Ok(())
     }
@@ -698,30 +719,6 @@ fn walk(regions: &[Region], visit: &mut impl FnMut(&Region)) {
     }
 }
 
-fn walk_mut(regions: &mut [Region], visit: &mut impl FnMut(&mut Region)) {
-    for region in regions {
-        visit(region);
-        if let Node::Fold { children, .. } = &mut region.node {
-            walk_mut(children, visit);
-        }
-    }
-}
-
-/// Each side's tree, as a one-region list holding its root.
-fn trees(sides: &mut Pairing<Source>) -> Vec<&mut [Region]> {
-    match sides {
-        Pairing::Both { lhs, rhs } => vec![
-            std::slice::from_mut(&mut lhs.root),
-            std::slice::from_mut(&mut rhs.root),
-        ],
-        Pairing::LeftOnly { lhs } => vec![std::slice::from_mut(&mut lhs.root)],
-        Pairing::RightOnly { rhs } => vec![std::slice::from_mut(&mut rhs.root)],
-    }
-}
-
-fn trees_ref(sides: &Pairing<Source>) -> Vec<&[Region]> {
-    sides.sides().into_iter().map(top).collect()
-}
 /// A side's tree, as a one-region list holding its root.
 fn top(source: &Source) -> &[Region] {
     std::slice::from_ref(&source.root)
