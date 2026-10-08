@@ -354,3 +354,23 @@ fn pprint_reads_a_file_or_stdin_without_a_frontend() {
         .code(2)
         .stderr(predicate::str::contains("incomplete diff stream"));
 }
+
+#[test]
+fn long_help_ends_with_a_guide_and_short_help_does_not() {
+    for (args, guide) in [
+        (&["--help"][..], "# Using diffr from an agent"),
+        (&["config", "--help"][..], "# Plugin Architecture"),
+    ] {
+        get_base_command()
+            .args(args)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(guide));
+        let short: Vec<_> = args.iter().map(|arg| arg.replace("--help", "-h")).collect();
+        get_base_command()
+            .args(&short)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(guide).not());
+    }
+}
