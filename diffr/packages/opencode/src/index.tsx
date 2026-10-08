@@ -5,6 +5,7 @@ import { useTerminalDimensions } from "@opentui/solid";
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { openComparison, type Comparison } from "@diffr/consumer/process";
 import { PointerInput } from "@diffr/consumer/pointer";
+import { terminalKey } from "@diffr/consumer/key";
 import type { Outcome } from "@diffr/consumer/frame";
 
 const tui: TuiPlugin = async (api, options) => {
@@ -111,11 +112,7 @@ const tui: TuiPlugin = async (api, options) => {
         else { setFull(false); restoreFocus(); }
         return;
       }
-      void outcome(props.current.pane.input({ press: {
-        key: event.shift && /^[a-z]$/.test(event.name) ? event.name.toUpperCase() : event.name,
-        ...(event.ctrl ? { ctrl: true } : {}), ...(event.shift ? { shift: true } : {}),
-        ...(event.meta || event.option ? { meta: true } : {}),
-      } }));
+      void outcome(props.current.pane.input({ press: terminalKey(event) }));
     };
     return <box ref={box} width="100%" height={rows() + 1} flexShrink={0} flexDirection="column"
       backgroundColor={api.theme.current.background} onSizeChange={() => setWidth(box.width)}
