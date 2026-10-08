@@ -127,6 +127,8 @@ export class ReviewFilesEditorInput extends Disposable {
   private readonly documents = new Map<string, RefCounted<IDocumentDiffItem>>();
   private current: readonly RefCounted<IDocumentDiffItem>[] = [];
   private loading: boolean;
+  private ready: ReadonlySet<string> = new Set();
+  private listed: ReadonlySet<string> | undefined;
 
   constructor(
     readonly entries: readonly ReviewFilesEditorEntry[],
@@ -149,11 +151,23 @@ export class ReviewFilesEditorInput extends Disposable {
   }
 
   setReadyFiles(paths: ReadonlySet<string>, loading: boolean): void {
+    this.ready = paths;
     this.loading = loading;
+    this.update();
+  }
+
+  /** List only `paths`, as a lens does; `undefined` lists every ready file. */
+  setListedFiles(paths: ReadonlySet<string> | undefined): void {
+    this.listed = paths;
+    this.update();
+  }
+
+  private update(): void {
     this.current = this.entries.flatMap((entry) => {
-      if (!paths.has(entry.file.path)) return [];
-      const document =
-        this.documents.get(entry.file.path) ?? this.createDocument(entry);
+      const path = entry.file.path;
+      if (!this.ready.has(path) || (this.listed && !this.listed.has(path)))
+        return [];
+      const document = this.documents.get(path) ?? this.createDocument(entry);
       return document ? [document] : [];
     });
     this.changes.fire();
@@ -302,6 +316,7 @@ export class ReviewFilesDiffView extends Disposable {
   private layoutDeferred = false;
   private sideBySide = true;
   viewedScope: "lens" | undefined;
+  private listedPaths: ReadonlySet<string> | undefined;
 
   constructor(
     private readonly container: HTMLElement,
@@ -558,13 +573,8 @@ export class ReviewFilesDiffView extends Disposable {
     this.settleHold.clear();
     this.pendingViewState = viewState;
     this.input = input;
-    this.changedFilesTree?.setFiles(
-      Array.from(
-        new Map(
-          input.entries.map((entry) => [entry.file.path, entry.file]),
-        ).values(),
-      ),
-    );
+    input.setListedFiles(this.listedPaths);
+    this.listFiles();
     const viewModel = await input.getViewModel();
     if (this._store.isDisposed) return;
     this.viewModel = viewModel;
@@ -664,6 +674,26 @@ export class ReviewFilesDiffView extends Disposable {
     this.showStreamStatus();
   }
 
+  /** List only `paths` in the tree and summary, as a lens does; `undefined` lists every file. */
+  listOnly(paths: ReadonlySet<string> | undefined): void {
+    this.listedPaths = paths;
+    this.input?.setListedFiles(paths);
+    this.listFiles();
+    this.renderSummary();
+  }
+
+  private listFiles(): void {
+    this.changedFilesTree?.setFiles(
+      Array.from(
+        new Map(
+          (this.input?.entries ?? [])
+            .filter((entry) => this.listedPaths?.has(entry.file.path) ?? true)
+            .map((entry) => [entry.file.path, entry.file]),
+        ).values(),
+      ),
+    );
+  }
+
   /** Coverage counts are independent of fold state. */
   fileCounts(path: string, counts: ReviewFileCounts): void {
     this.streamStats.set(path, {
@@ -694,9 +724,12 @@ export class ReviewFilesDiffView extends Disposable {
   private renderSummary(): void {
     if (this.fileTreeContainer || !this.input) return;
     const previousHeight = this.summary.offsetHeight;
-    const paths = new Set(
+    const all = new Set(
       (this.input?.entries ?? []).map((entry) => entry.file.path),
     );
+    const paths = this.listedPaths
+      ? new Set([...all].filter((path) => this.listedPaths!.has(path)))
+      : all;
     const complete = [...paths].every((path) => this.streamStats.has(path));
     const total = { added: 0, removed: 0 };
     const remaining = { added: 0, removed: 0 };
@@ -718,7 +751,9 @@ export class ReviewFilesDiffView extends Disposable {
       this.summary,
       $("span.review-files-editor-summary-files"),
     );
-    files.textContent = `${paths.size} files`;
+    files.textContent = this.listedPaths
+      ? `${paths.size} of ${all.size} files`
+      : `${paths.size} files`;
     if (complete) {
       append(this.summary, $("span")).textContent = "Remaining";
       const format = new Intl.NumberFormat("en", {

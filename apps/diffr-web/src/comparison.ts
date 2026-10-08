@@ -259,8 +259,9 @@ export class Comparison extends Disposable {
   }
 
   /**
-   * Show only a lens: its files open, every other file folded, and in a file it gives line ranges
-   * for, the folds that hold none of them closed. `undefined` puts everything back as it was.
+   * Show only a lens: its files listed and open, every other file folded and left out of the tree,
+   * and in a file it gives line ranges for, the folds that hold none of them closed. `undefined`
+   * puts everything back as it was.
    */
   showLens(lens: Lens | undefined): void {
     const session = this.session;
@@ -279,6 +280,12 @@ export class Comparison extends Disposable {
     this.lensFolds.clear();
     this.lensFiles.clear();
     this.lens = lens;
+
+    this.view?.listOnly(
+      lens
+        ? new Set(this.order.filter((path) => this.lensMember(path)))
+        : undefined,
+    );
 
     if (lens) {
       for (const path of this.order) this.applyLens(path);
