@@ -731,12 +731,6 @@ export function createReviewApi(
       return context.json(result);
     });
     app.post("/:id/navigator", async (context) => {
-      if (remoteCaller(context))
-        throw new ReviewInputError(
-          "Source windows are not available for a review on another machine.",
-          409,
-        );
-
       const input = readQuerySchemas.file
         .extend({
           side: z.enum(["base", "head"]).default("head"),
@@ -745,15 +739,19 @@ export function createReviewApi(
         })
         .parse(context.req.query());
 
+      const answer = await data.navigatorWorkspace(
+        readReview(context.req.param("id"), input.version),
+        {
+          ...input,
+          empty: input.empty === "true",
+          anchor: queryAnchor(input),
+        },
+      );
+
       return context.json(
-        await data.navigatorWorkspace(
-          readReview(context.req.param("id"), input.version),
-          {
-            ...input,
-            empty: input.empty === "true",
-            anchor: queryAnchor(input),
-          },
-        ),
+        remoteCaller(context) && input.empty === "true"
+          ? { workspacePath: answer.workspacePath, emptySide: true }
+          : answer,
       );
     });
     app.get("/:id/tree", async (context) => {

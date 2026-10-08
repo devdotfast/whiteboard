@@ -3,18 +3,21 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { openHome, openSettings } from "../harness.mjs";
+import { closeSourceWindow, openHome, openSettings } from "../harness.mjs";
 import {
   alias,
+  assertUriAnswers,
   closeDesktop,
   createRemoteReview,
   masterPid,
   onRemote,
   prepared,
+  recordNavigator,
   recordRequests,
   remote,
   remoteToken,
   runDir,
+  sourcePages,
 } from "./remote-host.mjs";
 import { removeHost } from "./remote-install.mjs";
 
@@ -76,6 +79,60 @@ async function freeze() {
   return () => onRemote(`kill -CONT ${serverPid}`);
 }
 
+const reviewCanvas = (ctx) =>
+  ctx.page.locator(".review-canvas-root [data-review-api]");
+
+/** Ask, docked in the side panel or floating, by the layout. */
+export const askPanel = (ctx) =>
+  ctx.page.locator(
+    '[role=complementary][aria-label="Ask"], [role=dialog][aria-label="Ask"]',
+  );
+
+/** Home's row for the review titled `title`. */
+export const sessionRow = (ctx, title) =>
+  ctx.page
+    .locator("main.review-home")
+    .getByRole("region", { name: "Sessions", exact: true })
+    .locator("tbody tr")
+    .filter({ hasText: title });
+
+/** Opens the review titled `title` from Home. */
+export async function openRemoteReview(ctx, title) {
+  await openHome(ctx);
+  await sessionRow(ctx, title).waitFor({ timeout: 60000 });
+  await sessionRow(ctx, title).getByTitle(title, { exact: true }).click();
+  await reviewCanvas(ctx).getByRole("heading", { name: title }).waitFor({
+    timeout: 60000,
+  });
+}
+
+/** Selects the document's sentence and opens Ask on it with ⌘L. */
+export async function askAboutReviewSentence(ctx) {
+  // The workbench's usage-data notice sits over the composer's Ask button.
+  for (const clear of await ctx.page
+    .locator(".notifications-toasts .codicon-notifications-clear")
+    .all())
+    await clear.click().catch(() => {});
+
+  const sentence = reviewCanvas(ctx).getByText("One now returns");
+
+  await sentence.waitFor();
+  await sentence.evaluate((element) => {
+    const range = document.createRange();
+
+    range.selectNodeContents(element);
+    document.getSelection().removeAllRanges();
+    document.getSelection().addRange(range);
+  });
+  await ctx.page
+    .getByRole("button", { name: "Ask OpenCode", exact: true })
+    .waitFor({ timeout: 30000 });
+  await ctx.page.keyboard.press("Meta+l");
+  await askPanel(ctx)
+    .getByRole("combobox", { name: "Question" })
+    .waitFor({ timeout: 30000 });
+}
+
 async function journey(ctx) {
   const { until } = ctx;
   const timings = {};
@@ -91,57 +148,17 @@ async function journey(ctx) {
       timeout,
     );
 
-  const canvas = () =>
-    ctx.page.locator(".review-canvas-root [data-review-api]");
+  const canvas = () => reviewCanvas(ctx);
 
-  // Docked in the side panel or floating, by the layout.
-  const panel = () =>
-    ctx.page.locator(
-      '[role=complementary][aria-label="Ask"], [role=dialog][aria-label="Ask"]',
-    );
+  const panel = () => askPanel(ctx);
 
   const composer = () => panel().getByRole("combobox", { name: "Question" });
 
-  const homeRow = () =>
-    ctx.page
-      .locator("main.review-home")
-      .getByRole("region", { name: "Sessions", exact: true })
-      .locator("tbody tr")
-      .filter({ hasText: title });
+  const homeRow = () => sessionRow(ctx, title);
 
-  async function openReview() {
-    await openHome(ctx);
-    await homeRow().waitFor({ timeout: 60000 });
-    await homeRow().getByTitle(title, { exact: true }).click();
-    await canvas().getByRole("heading", { name: title }).waitFor({
-      timeout: 60000,
-    });
-  }
+  const openReview = () => openRemoteReview(ctx, title);
 
-  /** Selects the document's sentence and opens Ask on it with ⌘L. */
-  async function askAboutSentence() {
-    // The workbench's usage-data notice sits over the composer's Ask button.
-    for (const clear of await ctx.page
-      .locator(".notifications-toasts .codicon-notifications-clear")
-      .all())
-      await clear.click().catch(() => {});
-
-    const sentence = canvas().getByText("One now returns");
-
-    await sentence.waitFor();
-    await sentence.evaluate((element) => {
-      const range = document.createRange();
-
-      range.selectNodeContents(element);
-      document.getSelection().removeAllRanges();
-      document.getSelection().addRange(range);
-    });
-    await ctx.page
-      .getByRole("button", { name: "Ask OpenCode", exact: true })
-      .waitFor({ timeout: 30000 });
-    await ctx.page.keyboard.press("Meta+l");
-    await composer().waitFor({ timeout: 30000 });
-  }
+  const askAboutSentence = () => askAboutReviewSentence(ctx);
 
   /** Resolves with the ms until the panel shows the answer. */
   async function send(text) {
@@ -210,6 +227,9 @@ async function journey(ctx) {
   // 3. The remote review, a sentence selected, ⌘L.
   const requests = await recordRequests(ctx.page, /\/ask\/[^/]+\/watch(\?|$)/);
   const recorders = [{ requests, origin: new URL(ctx.discovery.url).origin }];
+  const navigator = [];
+
+  await recordNavigator(ctx.page, navigator);
 
   await openReview();
   await askAboutSentence();
@@ -265,28 +285,36 @@ async function journey(ctx) {
     `5. OpenCode on ${alias} answered "You asked: …" ${timings.firstAnswer} ms after Ask`,
   );
 
-  // 6. A review on another machine has no Source window: the answer's f.ts is text that says so, and a click asks nothing.
-  const reference = panel().getByTitle(
-    "Source windows are not available for a review on another machine.",
+  // 6. The answer's f.ts is a link: it opens the host's file in a Source window.
+  const reference = panel()
+    .getByRole("link")
+    .filter({ hasText: /^f\.ts$/ });
+
+  const { serverId } = (await ctx.apiOk("/remote-hosts")).find(
+    (host) => host.alias === alias,
   );
+
+  const authority = `whiteboard+${serverId.toLowerCase()}`;
 
   await reference.waitFor();
-  assert.equal(await reference.innerText(), "f.ts");
-  assert.equal(
-    await reference.evaluate(
-      (element) =>
-        element.closest("a, button, [role=link], [role=button]") !== null,
-    ),
-    false,
-    "the f.ts reference is a link or a button",
-  );
-  assert.equal(await panel().getByRole("link", { name: "f.ts" }).count(), 0);
-
-  // Step 11 audits the whole run for the requests a click could send.
   await reference.click();
-  ctx.check(
-    "6. the answer's f.ts is text titled Source windows are not available…, not a link or button",
+
+  const source = await until(
+    () => sourcePages(ctx)[0],
+    "a Source window for the answer's f.ts",
+    60000,
   );
+
+  await until(
+    async () =>
+      (
+        await source.locator(".tabs-container .tab.active").innerText()
+      ).includes("f.ts"),
+    "f.ts in the Source window",
+    60000,
+  );
+  await closeSourceWindow(source);
+  ctx.check("6. the answer's f.ts link opened f.ts in a Source window");
 
   // 7. Ask spoke only to the local server, and no remote token reached the page.
   const asks = audit(recorders, remoteTokens);
@@ -365,17 +393,10 @@ async function journey(ctx) {
   );
   const allAsks = audit(recorders, remoteTokens);
 
-  assert.deepEqual(
-    recorders.flatMap(({ requests: recorded }) =>
-      [...recorded.values()].flatMap((r) =>
-        /\/(navigator|files)(\?|$)/.test(r.url ?? "") ? [r.url] : [],
-      ),
-    ),
-    [],
-    "navigator or files requests",
-  );
+  const answers = assertUriAnswers(navigator, authority);
+
   ctx.check(
-    `11. removing the host took the review out of Home; across both launches ${allAsks.length} Ask requests, all to the local server, none with a remote token, and no navigator or files request`,
+    `11. removing the host took the review out of Home; across both launches ${allAsks.length} Ask requests, all to the local server, none with a remote token, and ${answers} navigator answer(s), each with URIs only`,
   );
 }
 

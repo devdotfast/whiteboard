@@ -1180,6 +1180,47 @@ it("gives a remote caller Ask answers with no local-path fields and checkout-rel
   threads.close(threadId);
 });
 
+it("answers a remote caller's navigator with the host paths a local caller gets", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Remote navigator",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  const app = createReviewApi(local.store, local.data);
+
+  const open = async (
+    query: Record<string, string>,
+    headers: Record<string, string> = {},
+  ) => {
+    const response = await app.request(
+      `/${reviewId}/navigator?${new URLSearchParams(query)}`,
+      { method: "POST", headers },
+    );
+
+    expect(response.status).toBe(200);
+
+    return response.json();
+  };
+
+  const remote = { [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE };
+  const file = { version: "0", side: "base", file: source.file };
+  const answer = await open(file, remote);
+  const { folders } = JSON.parse(readFileSync(answer.workspacePath, "utf8"));
+  expect(answer).toEqual(await open(file));
+  expect(answer.filePath).toBe(path.join(folders[0].path, source.file));
+  expect(readFileSync(answer.filePath, "utf8")).toContain("value = 1");
+
+  const added = { ...file, file: "added.ts", empty: "true" };
+  expect(await open(added, remote)).toEqual({
+    workspacePath: answer.workspacePath,
+    emptySide: true,
+  });
+  expect((await open(added)).filePath).toEqual(expect.any(String));
+});
+
 it("opens a stable native workspace on the Review's pinned checkout at the selected version", async () => {
   const { reviewId } = await local.store.execute(
     command({

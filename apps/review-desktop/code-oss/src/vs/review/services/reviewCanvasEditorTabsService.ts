@@ -3,10 +3,15 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { VSBuffer } from "../../base/common/buffer.js";
 import { Event } from "../../base/common/event.js";
+import { Schemas } from "../../base/common/network.js";
 import { Disposable } from "../../base/common/lifecycle.js";
+import { basename, joinPath } from "../../base/common/resources.js";
 import { URI } from "../../base/common/uri.js";
 import type { ITextEditorOptions } from "../../platform/editor/common/editor.js";
+import { IEnvironmentService } from "../../platform/environment/common/environment.js";
+import { IFileService } from "../../platform/files/common/files.js";
 import { createDecorator, IInstantiationService } from "../../platform/instantiation/common/instantiation.js";
 import { ILogService } from "../../platform/log/common/log.js";
 import type { EditorInput } from "../../workbench/common/editor/editorInput.js";
@@ -19,10 +24,19 @@ import {
 	type ReviewCanvasEditorTarget,
 } from "../browser/parts/canvas/reviewCanvasEditorInput.js";
 
-import { reviewSourceQuery, type ReviewSourceSelection } from "../common/reviewProtocol.js";
+import { reviewSourceQuery, type ReviewRemoteNavigatorAnswer, type ReviewSourceSelection } from "../common/reviewProtocol.js";
 import { REVIEW_LANGUAGE_SOURCE_SCHEME } from "../common/reviewReadonlySource.js";
 import { sourceLocation, sourceSelectionIdentity, REVIEW_API_SOURCE_SCHEME } from "../common/reviewSourceView.js";
+import { IReviewApiCatalogService } from "./reviewApiCatalogService.js";
 import { IReviewDesktopConnectionService, reviewResponseError } from "./reviewDesktopConnectionService.js";
+
+type NavigatorAnswer = { workspacePath: string; filePath?: string } | ReviewRemoteNavigatorAnswer;
+
+function workspace(answer: NavigatorAnswer): { workspaceUri: URI; remote: { remoteAuthority?: string } } {
+	return "remoteAuthority" in answer
+		? { workspaceUri: URI.parse(answer.workspaceUri), remote: { remoteAuthority: answer.remoteAuthority } }
+		: { workspaceUri: URI.file(answer.workspacePath), remote: {} };
+}
 
 export const IReviewCanvasEditorTabsService = createDecorator<IReviewCanvasEditorTabsService>(
 	"reviewCanvasEditorTabsService",
@@ -33,7 +47,7 @@ export interface IReviewCanvasEditorTabsService {
 	inputFor(target: Extract<ReviewCanvasEditorTarget, { kind: "api" | "api-source" | "home" }>): ReviewCanvasEditorInput;
 	openApiReview(reviewId: string, title: string, active?: boolean): Promise<ReviewCanvasEditorInput>;
 	isActiveReview(reviewId: string): boolean;
-	openApiSource(selection: ReviewSourceSelection, title: string): Promise<void>;
+	openApiSource(selection: ReviewSourceSelection, title: string, live: boolean): Promise<void>;
 	openSourceEditor(editor: IUntypedEditorInput): Promise<boolean>;
 	openSourceReferences(resource: URI, position: { readonly lineNumber: number; readonly column: number }): Promise<boolean>;
 	openHome(active: boolean): Promise<ReviewCanvasEditorInput>;
@@ -59,6 +73,9 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		private readonly desktopConnection: IReviewDesktopConnectionService,
 		@IHostService private readonly host: IHostService,
 		@ILogService private readonly logService: ILogService,
+		@IFileService private readonly files: IFileService,
+		@IEnvironmentService private readonly environment: IEnvironmentService,
+		@IReviewApiCatalogService private readonly catalog: IReviewApiCatalogService,
 	) {
 		super();
 		this._register(
@@ -107,9 +124,10 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		return this.openSingleton({ kind: "welcome" }, active);
 	}
 
-	async openApiSource(selection: ReviewSourceSelection, title: string): Promise<void> {
+	async openApiSource(selection: ReviewSourceSelection, title: string, live: boolean): Promise<void> {
 		const result = await this.navigatorWorkspace(selection.reviewId, selection.kind === "version" ? { version: selection.version } : {});
-		await this.host.openWindow([{ workspaceUri: URI.file(result.workspacePath), label: title }], { forceNewWindow: true });
+		const { workspaceUri, remote } = workspace(result);
+		await this.host.openWindow([{ workspaceUri, label: title }], { forceNewWindow: true, ...remote, reviewSourceTitle: this.sourceTitle(selection.reviewId, live ? "live" : "head", title, remote) });
 	}
 
 	/** Hand source opens to the native workspace before Review creates an editor group. */
@@ -118,27 +136,28 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		const resources = diff ? [editor.original.resource, editor.modified.resource] : [isResourceEditorInput(editor) ? editor.resource : undefined];
 		if (!resources.every((resource): resource is URI => !!resource && [REVIEW_API_SOURCE_SCHEME, REVIEW_LANGUAGE_SOURCE_SCHEME].includes(resource.scheme))) return false;
 		const destinations = await Promise.all(resources.map(resource => this.sourceDestination(resource)));
+		const { workspaceUri, remote, reviewSourceTitle } = destinations[destinations.length - 1];
+		const selection = !diff ? (editor.options as ITextEditorOptions | undefined)?.selection : undefined;
 		await this.host.openWindow([
-			{ workspaceUri: destinations[destinations.length - 1].workspaceUri },
-			...destinations.map(({ filePath }) => {
-				const selection = !diff ? (editor.options as ITextEditorOptions | undefined)?.selection : undefined;
-				return { fileUri: URI.file(selection ? `${filePath}:${selection.startLineNumber}:${selection.startColumn ?? 1}` : filePath) };
-			}),
-		], { forceNewWindow: true, gotoLineMode: true, diffMode: diff });
+			{ workspaceUri },
+			...destinations.map(({ fileUri }) => ({ fileUri: selection ? fileUri.with({ path: `${fileUri.path}:${selection.startLineNumber}:${selection.startColumn ?? 1}` }) : fileUri })),
+		], { forceNewWindow: true, gotoLineMode: true, diffMode: diff, ...remote, reviewSourceTitle });
 		return true;
 	}
 
 	async openSourceReferences(resource: URI, position: { readonly lineNumber: number; readonly column: number }): Promise<boolean> {
 		if (![REVIEW_API_SOURCE_SCHEME, REVIEW_LANGUAGE_SOURCE_SCHEME].includes(resource.scheme)) return false;
-		const destination = await this.sourceDestination(resource);
-		await this.host.openWindow([{ workspaceUri: destination.workspaceUri }], {
+		const { workspaceUri, fileUri, remote, reviewSourceTitle } = await this.sourceDestination(resource);
+		await this.host.openWindow([{ workspaceUri }], {
 			forceNewWindow: true,
-			reviewReferencesToShow: { resource: URI.file(destination.filePath), lineNumber: position.lineNumber, column: position.column },
+			...remote,
+			reviewSourceTitle,
+			reviewReferencesToShow: { resource: fileUri, lineNumber: position.lineNumber, column: position.column },
 		});
 		return true;
 	}
 
-	private async sourceDestination(resource: URI): Promise<{ workspaceUri: URI; filePath: string }> {
+	private async sourceDestination(resource: URI) {
 		const target = sourceLocation(resource);
 		const local = resource.scheme === REVIEW_LANGUAGE_SOURCE_SCHEME;
 		const result = await this.navigatorWorkspace(target.view.reviewId, {
@@ -147,12 +166,30 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 			file: local ? undefined : target.file,
 			empty: new URLSearchParams(resource.query).has("empty") ? "true" : undefined,
 		});
-		const filePath = local ? resource.fsPath : result.filePath;
-		if (!filePath) throw new Error("The navigator did not resolve the source file.");
-		return { workspaceUri: URI.file(result.workspacePath), filePath };
+		const { workspaceUri, remote } = workspace(result);
+		const fileUri = "remoteAuthority" in result
+			? result.emptySide ? await this.emptyFile() : result.fileUri && URI.parse(result.fileUri)
+			: local ? URI.file(resource.fsPath) : result.filePath && URI.file(result.filePath);
+		if (!fileUri) throw new Error("The navigator did not resolve the source file.");
+		const input = this.inputs.get(`api:${target.view.reviewId}`);
+		const title = input?.target.kind === "api" ? input.target.title : basename(workspaceUri).replace(/\.code-workspace$/, "");
+		const side = target.side === "base" ? "base" : target.view.generation && !target.view.commit && !target.view.pins ? "live" : "head";
+		return { workspaceUri, fileUri, remote, reviewSourceTitle: this.sourceTitle(target.view.reviewId, side, title, remote) };
 	}
 
-	private async navigatorWorkspace(reviewId: string, values: Record<string, string | number | undefined>): Promise<{ workspacePath: string; filePath?: string }> {
+	/** A remote review's Source window also keeps its host's alias, for when main does not know it yet. */
+	private sourceTitle(reviewId: string, side: "live" | "base" | "head", title: string, remote: { remoteAuthority?: string }) {
+		const alias = remote.remoteAuthority && this.catalog.reviews.find(review => review.reviewId === reviewId)?.host;
+		return { side, title, ...(alias && { alias }) };
+	}
+
+	private async emptyFile(): Promise<URI> {
+		const resource = joinPath(this.environment.cacheHome, "source-empty", "empty");
+		await this.files.writeFile(resource, VSBuffer.fromString(""));
+		return resource.with({ scheme: Schemas.vscodeUserData });
+	}
+
+	private async navigatorWorkspace(reviewId: string, values: Record<string, string | number | undefined>): Promise<NavigatorAnswer> {
 		const { serverUrl, token } = await this.desktopConnection.getConnection();
 		const query = new URLSearchParams(Object.entries(values).filter(([key, value]) => key !== "reviewId" && value !== undefined).map(([key, value]) => [key, String(value)]));
 		const response = await fetch(`${serverUrl}/reviews-api/${encodeURIComponent(reviewId)}/navigator${query.size ? `?${query}` : ""}`, {

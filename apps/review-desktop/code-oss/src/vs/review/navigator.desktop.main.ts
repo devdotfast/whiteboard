@@ -49,18 +49,21 @@ import { CommandsRegistry, ICommandService } from '../platform/commands/common/c
 import { IEditorService } from '../workbench/services/editor/common/editorService.js';
 import { NativeExtensionService } from '../workbench/services/extensions/electron-browser/nativeExtensionService.js';
 import { IExtensionService } from '../workbench/services/extensions/common/extensions.js';
+import { ReviewExtensionGalleryManifestService, ReviewExtensionManagementServerService } from './services/remote/reviewRemoteWindowExtensionManagement.js';
+import { IExtensionManagementServerService } from '../workbench/services/extensionManagement/common/extensionManagement.js';
+import { IExtensionGalleryManifestService } from '../platform/extensionManagement/common/extensionGalleryManifest.js';
 import { IRemoteAuthorityResolverService, type ResolverResult } from '../platform/remote/common/remoteAuthorityResolver.js';
 import { IMainProcessService } from '../platform/ipc/common/mainProcessService.js';
 import { REVIEW_DESKTOP_CHANNEL } from './common/reviewDesktopBootstrap.js';
 import { isReviewRemoteAuthority } from './services/remote/reviewRemoteAuthority.js';
 import { reloadWhenOnline, reviewWindowAuthorityResolver, reviewWindowHosts } from './services/remote/reviewWindowAuthorityResolver.js';
+import { ReviewSourceWindowHostState } from './services/remote/reviewSourceWindowHostState.js';
 import { IHostService } from '../workbench/services/host/browser/host.js';
 import { DesktopMain } from '../workbench/electron-browser/desktop.main.js';
 import type { INativeWindowConfiguration } from '../platform/window/common/window.js';
 import type { WorkspaceService } from '../workbench/services/configuration/browser/configurationService.js';
-import { isReviewSourceTitle, reviewSourceWindowConfiguration, type ReviewSourceWindowConfiguration } from './services/configuration/reviewSourceWindowConfiguration.js';
+import { isReviewSourceTitle, REVIEW_SOURCE_TITLE_KEY, reviewSourceWindowConfiguration, type ReviewSourceWindowConfiguration } from './services/configuration/reviewSourceWindowConfiguration.js';
 
-const SOURCE_TITLE_KEY = 'review.source.title';
 let sourceWindow: ReviewSourceWindowConfiguration<WorkspaceService> | undefined;
 
 class NavigatorDesktopMain extends DesktopMain {
@@ -82,12 +85,13 @@ class NavigatorDefaults {
 		if (storage.get(key, StorageScope.PROFILE) === undefined) {
 			storage.store(key, false, StorageScope.PROFILE, StorageTarget.USER);
 		}
-		const title = storage.getObject(SOURCE_TITLE_KEY, StorageScope.WORKSPACE);
+		const title = storage.getObject(REVIEW_SOURCE_TITLE_KEY, StorageScope.WORKSPACE);
 		if (isReviewSourceTitle(title)) sourceWindow?.setTitle(title);
 	}
 }
 
 registerWorkbenchContribution2('review.navigator.defaults', NavigatorDefaults, WorkbenchPhase.BlockStartup);
+registerWorkbenchContribution2(ReviewSourceWindowHostState.ID, ReviewSourceWindowHostState, WorkbenchPhase.BlockRestore);
 
 class NavigatorExtensionService extends NativeExtensionService {
 	private readonly windowHosts = this._instantiationService.invokeFunction((accessor) => reviewWindowHosts(accessor.get(IMainProcessService).getChannel(REVIEW_DESKTOP_CHANNEL)));
@@ -111,11 +115,13 @@ class NavigatorExtensionService extends NativeExtensionService {
 }
 
 registerSingleton(IExtensionService, NavigatorExtensionService, InstantiationType.Eager);
+registerSingleton(IExtensionManagementServerService, ReviewExtensionManagementServerService, InstantiationType.Delayed);
+registerSingleton(IExtensionGalleryManifestService, ReviewExtensionGalleryManifestService, InstantiationType.Eager);
 
 CommandsRegistry.registerCommand('review.action.setSourceTitle', (accessor, title: unknown) => {
 	if (!isReviewSourceTitle(title)) return;
-	const value = { side: title.side, title: title.title };
-	accessor.get(IStorageService).store(SOURCE_TITLE_KEY, value, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+	const value = { side: title.side, title: title.title, ...(title.alias && { alias: title.alias }) };
+	accessor.get(IStorageService).store(REVIEW_SOURCE_TITLE_KEY, value, StorageScope.WORKSPACE, StorageTarget.MACHINE);
 	sourceWindow?.setTitle(value);
 });
 
