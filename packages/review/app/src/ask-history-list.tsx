@@ -4,6 +4,7 @@ import { type ReactElement, useEffect } from "react";
 import { logos, useAskAgents } from "./ask-agent-picker";
 import { resolveAskAnchor } from "./ask-anchor";
 import { AskDeleteButton } from "./ask-delete";
+import { useShowThreads } from "./ask-dock";
 import { useAskHistory } from "./ask-history";
 import { askPanelStyles } from "./ask-styles";
 import { controlStyles } from "./controls-styles";
@@ -64,11 +65,13 @@ export function AskOutdatedNote({
   );
 }
 
-/** The Ask panel's header button for its history. */
+/** The Ask panel's header button for its history: in Desktop, the
+ * sidebar's Threads tab. */
 export function AskHistoryButton({ view }: { view: AskView }): ReactElement {
   const openHistory = useOpenAskHistory();
+  const showThreads = useShowThreads();
   // One passage's conversations are a step away from all of them.
-  const allShown = view.type === "history" && !view.passage;
+  const allShown = !showThreads && view.type === "history" && !view.passage;
   const tooltip = useTooltip("Saved conversations");
 
   return (
@@ -78,33 +81,12 @@ export function AskHistoryButton({ view }: { view: AskView }): ReactElement {
       xstyle={allShown && styles.historyButtonOn}
       aria-label="Saved conversations"
       aria-pressed={allShown}
-      disabled={!openHistory || allShown}
-      onClick={openHistory}
+      disabled={!(showThreads ?? openHistory) || allShown}
+      onClick={showThreads ?? openHistory}
     >
       <HistoryIcon
         xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
       />
-    </IconButton>
-  );
-}
-
-/** The review toolbar's way back to saved conversations, where Ask runs. */
-export function AskHistoryControl(): ReactElement | null {
-  const session = useReviewSession();
-  const openHistory = useOpenAskHistory();
-  const agents = useAskAgents(openHistory ? session : null);
-  const tooltip = useTooltip("Saved conversations");
-
-  if (!openHistory || !agents) return null;
-
-  return (
-    <IconButton
-      ref={tooltip}
-      xstyle={shellStyles.topbarItem}
-      aria-label="Saved conversations"
-      onClick={openHistory}
-    >
-      <ChatIcon xstyle={controlStyles.chromeIcon} />
     </IconButton>
   );
 }
