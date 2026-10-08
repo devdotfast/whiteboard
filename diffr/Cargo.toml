@@ -14,6 +14,8 @@ rust-version = "1.99.0"
 
 include = [
         "/build.rs",
+        "/docs/agents.md",
+        "/docs/plugin.md",
         "/src/",
         "/wit/",
         "/plugins/",

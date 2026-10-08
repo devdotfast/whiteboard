@@ -17,6 +17,13 @@ use std::{
 /// the flag that was given rather than the whole group.
 const METADATA: [&str; 5] = ["name_only", "name_status", "stat", "numstat", "shortstat"];
 
+/// The examples after the options in `-h` and `--help`.
+macro_rules! examples {
+    () => {
+        "Examples:\n  diffr\n  diffr --cached\n  diffr main...HEAD -- src/\n  diffr --no-index -- before.rs after.rs\n  diffr main HEAD --format ndjson\n\nUnsupported Git flags are rejected; this is not a complete git diff implementation."
+    };
+}
+
 /// Structural diffs with Git-style comparison inputs
 #[derive(Parser)]
 #[command(
@@ -26,7 +33,9 @@ const METADATA: [&str; 5] = ["name_only", "name_status", "stat", "numstat", "sho
     group(ArgGroup::new("names").args(["name_only", "name_status"])),
     // A command name is a command only as the first argument.
     args_conflicts_with_subcommands = true,
-    after_help = "Examples:\n  diffr\n  diffr --cached\n  diffr main...HEAD -- src/\n  diffr --no-index -- before.rs after.rs\n  diffr main HEAD --format ndjson\n\nUnsupported Git flags are rejected; this is not a complete git diff implementation."
+    after_help = examples!(),
+    // `--help`, not `-h`, adds the agents guide.
+    after_long_help = concat!(examples!(), "\n\n", include_str!("../docs/agents.md"))
 )]
 struct Cli {
     #[command(subcommand)]
@@ -126,6 +135,8 @@ enum Command {
     /// Print saved NDJSON without a repository or terminal frontend
     Pprint(PprintArgs),
     /// Show, edit, or open the settings screen for diffr's configuration
+    // `--help`, not `-h`, adds the plugins guide.
+    #[command(after_long_help = include_str!("../docs/plugin.md"))]
     Config(ConfigArgs),
     #[command(
         hide = true,
