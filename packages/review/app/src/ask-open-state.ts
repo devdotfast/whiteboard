@@ -74,9 +74,9 @@ const handoffSchema = z.object({
   ),
 });
 
-/** Opens, minimized, the conversations this review took over as it was
- * created: an agent started outside any review, as first run's is, carries
- * on here without covering the whiteboard it draws. */
+/** Opens in the column, beside the whiteboard it draws, the conversations
+ * this review took over as it was created: an agent started outside any
+ * review, as first run's is, carries on here. */
 export async function openHandedOffAsks(
   store: ReviewPanelStore,
   fetchReview: (
@@ -90,15 +90,12 @@ export async function openHandedOffAsks(
   if (!response.ok) return;
 
   for (const thread of handoffSchema.parse(await response.json()).threads)
-    store.getState().openAskView(
-      {
-        type: "saved",
-        threadId: thread.id,
-        selection: thread.selection,
-        agent: thread.agent,
-      },
-      { minimized: true },
-    );
+    store.getState().openAskView({
+      type: "saved",
+      threadId: thread.id,
+      selection: thread.selection,
+      agent: thread.agent,
+    });
 }
 
 /** What to remember of an open Ask: a question asked becomes its

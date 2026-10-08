@@ -1337,7 +1337,7 @@ it("moves from setup to asking once an agent is installed", async () => {
   }
 });
 
-it("closes an agent that starts after its panel closed", async () => {
+it("keeps an agent that starts after its panel left the screen, unless the reader stopped it", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const session = testReviewSession();
   const answers: Record<string, (response: Response) => void> = {};
@@ -1359,7 +1359,10 @@ it("closes an agent that starts after its panel closed", async () => {
   const closes = (id: string) =>
     fetch.mock.calls.filter(([called]) => called === `/ask/${id}/close`).length;
 
-  const panel = async (savedThreadId?: string) => {
+  const panel = async (
+    savedThreadId?: string,
+    stopping = { current: false },
+  ) => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -1371,15 +1374,18 @@ it("closes an agent that starts after its panel closed", async () => {
             selection={selection}
             agent="claude"
             savedThreadId={savedThreadId}
+            stopping={stopping}
           />
         </ReviewSessionProvider>,
       ),
     );
 
-    return { container, root };
+    return { container, root, stopping };
   };
 
   try {
+    // Keep running, or something else taking the column: it runs on, in
+    // Threads.
     const asking = await panel();
     const textarea = asking.container.querySelector("textarea")!;
 
@@ -1387,11 +1393,13 @@ it("closes an agent that starts after its panel closed", async () => {
     await enter(textarea);
     await act(async () => asking.root.unmount());
     await act(async () => answers["/ask"]!(Response.json({ threadId: "new" })));
-    expect(closes("new")).toBe(1);
+    expect(closes("new")).toBe(0);
     asking.container.remove();
 
+    // Stop and close, before the thread had started.
     const opening = await panel("saved");
 
+    opening.stopping.current = true;
     await act(async () => opening.root.unmount());
     await act(async () =>
       answers["/ask/saved/open"]!(Response.json({ ok: true })),
