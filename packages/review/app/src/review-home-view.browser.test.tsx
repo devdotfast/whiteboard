@@ -3,6 +3,7 @@ import type {
   ReviewCanvasUi,
   ReviewGatewayHostState,
   ReviewMenuRequest,
+  ReviewRemoteHostActions,
 } from "@dev.fast/review-protocol";
 import { type ReactNode, act } from "react";
 import { type Root, createRoot } from "react-dom/client";
@@ -612,12 +613,12 @@ describe("ReviewHome", () => {
   });
 
   it.each([
-    ["offline", "offline"],
-    ["connecting", "connecting"],
-    ["not-installed", "not installed"],
+    ["offline", "offline", "devbox offline"],
+    ["connecting", "connecting", "Connecting to devbox…"],
+    ["not-installed", "not installed", "Whiteboard not installed on devbox"],
   ] as const)(
     "draws a %s host's review as unavailable, and opening it shows the host's detail",
-    async (hostState, words) => {
+    async (hostState, words, label) => {
       const review = remote("devbox", { hostState });
       const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
 
@@ -636,7 +637,7 @@ describe("ReviewHome", () => {
           <ReviewHome
             reviews={[review]}
             onOpen={onOpen}
-            hostStates={hostStates}
+            remoteHosts={hostsOf(hostStates)}
           />,
         ),
       );
@@ -650,20 +651,22 @@ describe("ReviewHome", () => {
       expect(row.hasAttribute("data-unavailable")).toBe(true);
       expect(row.textContent).toContain(words);
       expect(open.getAttribute("aria-disabled")).toBe("true");
-      expect(open.title).toBe(`devbox is ${words}`);
+      expect(open.title).toBe(label);
       await act(async () =>
         container
           .querySelector<HTMLButtonElement>("td:nth-child(2) > button")!
           .click(),
       );
       expect(onOpen).not.toHaveBeenCalled();
-      expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-        "devbox is offline: it did not answer within 3 seconds.",
+      await vi.waitFor(() =>
+        expect(
+          container.querySelector('[role="alert"]')?.textContent,
+        ).toContain("devbox is offline: it did not answer within 3 seconds."),
       );
     },
   );
 
-  it("says only the state while the host's detail loads or when it has none", async () => {
+  it("says the state and offers its next step while the host's detail loads or when it has none", async () => {
     const answer = Promise.withResolvers<ReviewGatewayHostState[]>();
     const review = remote("devbox", { hostState: "offline" });
 
@@ -672,7 +675,7 @@ describe("ReviewHome", () => {
         <ReviewHome
           reviews={[review]}
           onOpen={() => {}}
-          hostStates={() => answer.promise}
+          remoteHosts={hostsOf(() => answer.promise)}
         />,
       ),
     );
@@ -681,14 +684,14 @@ describe("ReviewHome", () => {
         .querySelector<HTMLButtonElement>("td:nth-child(2) > button")!
         .click(),
     );
-    expect(alert()).toBe("devbox is offline.");
+    expect(alert()).toBe("devbox offline.Retry");
     await act(async () =>
       answer.resolve([{ alias: "devbox", state: "offline" }]),
     );
-    expect(alert()).toBe("devbox is offline.");
+    expect(alert()).toBe("devbox offline.Retry");
   });
 
-  it("keeps the message of the last unavailable review opened, and drops it when the list changes", async () => {
+  it("keeps the message of the last unavailable review opened, and opens that review once its host is back", async () => {
     const answers = [
       Promise.withResolvers<ReviewGatewayHostState[]>(),
       Promise.withResolvers<ReviewGatewayHostState[]>(),
@@ -713,6 +716,9 @@ describe("ReviewHome", () => {
       }),
     ];
 
+    const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
+    const hosts = hostsOf(hostStates);
+
     const states = [
       { alias: "devbox", state: "offline" as const, detail: "devbox detail" },
       { alias: "other", state: "offline" as const, detail: "other detail" },
@@ -720,11 +726,7 @@ describe("ReviewHome", () => {
 
     await act(async () =>
       renderWithHost(
-        <ReviewHome
-          reviews={reviews}
-          onOpen={() => {}}
-          hostStates={hostStates}
-        />,
+        <ReviewHome reviews={reviews} onOpen={onOpen} remoteHosts={hosts} />,
       ),
     );
 
@@ -741,18 +743,31 @@ describe("ReviewHome", () => {
     await act(async () => open("Two"));
     await act(async () => answers[1]!.resolve(states));
     await act(async () => answers[0]!.resolve(states));
-    expect(alert()).toBe("other detail");
+    expect(alert()).toBe("other detailRetry");
+    const back = { ...reviews[1]!, hostState: "online" as const };
     await act(async () =>
       renderWithHost(
         <ReviewHome
-          reviews={[{ ...reviews[1]!, hostState: "online" }]}
-          onOpen={() => {}}
-          hostStates={hostStates}
+          reviews={[reviews[0]!, back]}
+          onOpen={onOpen}
+          remoteHosts={hosts}
         />,
       ),
     );
     expect(alert()).toBeUndefined();
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(back);
   });
+
+  function hostsOf(
+    states: () => Promise<ReviewGatewayHostState[]>,
+  ): ReviewRemoteHostActions {
+    return {
+      states,
+      retry: async () => {},
+      install: async () => {},
+      openSettings: async () => {},
+    };
+  }
 
   function alert() {
     return container.querySelector('[role="alert"]')?.textContent;

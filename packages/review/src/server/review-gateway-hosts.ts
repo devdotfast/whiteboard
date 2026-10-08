@@ -606,6 +606,7 @@ const ERROR_WORDS = new Map([
   ["ECONNREFUSED", "it refused the connection"],
   ["ECONNRESET", "it closed the connection"],
   ["UND_ERR_SOCKET", "it closed the connection"],
+  ["EPIPE", "it closed the connection"],
   ["ETIMEDOUT", "it did not answer"],
   ["UND_ERR_HEADERS_TIMEOUT", NO_ANSWER],
 ]);
@@ -623,5 +624,5 @@ export function errorCode(cause: unknown): string {
 export function errorText(cause: unknown): string {
   const code = errorCode(cause);
 
-  return ERROR_WORDS.get(code) ?? code;
+  return ERROR_WORDS.get(code) ?? `it failed (${code})`;
 }

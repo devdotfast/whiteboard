@@ -56,6 +56,8 @@ export * from "./contracts.js";
 
 export * from "./review-api-client.js";
 
+export * from "./review-host-status.js";
+
 export {
   type ByCommitEntry,
   type ReviewAgentTraceEvent,

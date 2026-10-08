@@ -7,6 +7,7 @@ import { useContext, useState } from "react";
 import { agentColor } from "./agent-colors";
 import { AuthoringActivityContext } from "./authoring-activity-context";
 import { surfaceOf } from "./authoring-cursor";
+import { ConnectionChip, ConnectionContext } from "./connection-chip";
 import {
   AuthoringCursorContext,
   LensCursorContext,
@@ -35,10 +36,13 @@ export function AuthoringActivityBadge({
   onLocate?(view: "review" | "diff"): void;
 }) {
   const activity = useContext(AuthoringActivityContext);
+  const lost = useContext(ConnectionContext) !== undefined;
 
   const tooltip = useTooltip<HTMLElement>(
     "Activity updates stopped. This does not mean the agent finished.",
   );
+
+  if (lost) return <ConnectionChip />;
 
   if (!activity) return null;
 

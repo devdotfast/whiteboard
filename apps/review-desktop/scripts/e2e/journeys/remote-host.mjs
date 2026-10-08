@@ -495,17 +495,13 @@ async function journey(ctx, page, until) {
   await tab(title).click();
   await canvas.getByRole("heading", { name: title }).waitFor();
   await page.evaluate(() => {
-    const seen = (window.__remoteHostBanner = []);
+    const seen = (window.__remoteHostChip = []);
 
     new MutationObserver(() => {
-      for (const status of document.querySelectorAll(
-        ".review-canvas-root [role=status]",
+      for (const chip of document.querySelectorAll(
+        ".review-canvas-root .connection-chip",
       ))
-        if (
-          status.textContent.startsWith("Connection lost") &&
-          !seen.includes(status.textContent)
-        )
-          seen.push(status.textContent);
+        if (!seen.includes(chip.textContent)) seen.push(chip.textContent);
     }).observe(document.body, {
       subtree: true,
       childList: true,
@@ -518,9 +514,16 @@ async function journey(ctx, page, until) {
   assert.ok(master, "no ssh master for the host");
   process.kill(master, "SIGKILL");
   await until(
-    () => page.evaluate(() => window.__remoteHostBanner.length > 0),
-    "the Connection lost banner",
+    () => page.evaluate(() => window.__remoteHostChip.length > 0),
+    "the disconnected chip",
     30000,
+  );
+  assert.equal(
+    await canvas
+      .locator("[role=status]")
+      .filter({ hasText: "Connection lost" })
+      .count(),
+    0,
   );
   await until(
     async () =>
@@ -529,12 +532,8 @@ async function journey(ctx, page, until) {
     60000,
   );
   await until(
-    async () =>
-      (await canvas
-        .locator("[role=status]")
-        .filter({ hasText: "Connection lost" })
-        .count()) === 0,
-    "the banner to clear",
+    async () => (await canvas.locator(".connection-chip").count()) === 0,
+    "the chip to clear",
   );
   await remoteApi("session_edit", {
     sessionId: reviewId,
@@ -546,7 +545,7 @@ async function journey(ctx, page, until) {
   await canvas.getByText("After the reconnect.").waitFor({ timeout: 30000 });
   assert.equal(await page.evaluate(() => performance.timeOrigin), timeOrigin);
   ctx.check(
-    `6. a killed ssh master showed "${await page.evaluate(() => window.__remoteHostBanner[0])}" and the review recovered in the same page`,
+    `6. a killed ssh master showed "${await page.evaluate(() => window.__remoteHostChip[0])}" in the top bar and the review recovered in the same page`,
   );
 
   // 7. A hung server: offline within 15 s, and a laptop review still opens at once.
@@ -587,8 +586,11 @@ async function journey(ctx, page, until) {
 
     section = settings.getByRole("region", { name: "Remote hosts" });
     await until(
-      async () => /incompatible/.test(await hostRow().innerText()),
-      "the Settings row to read incompatible",
+      async () =>
+        /runs Whiteboard .+; this Desktop runs/.test(
+          await hostRow().innerText(),
+        ),
+      "the Settings row to name both versions",
     );
     assert.match(
       await hostRow().locator("code").innerText(),
@@ -599,7 +601,7 @@ async function journey(ctx, page, until) {
     for (const text of [title, second]) {
       await row(text).waitFor();
       assert.equal(await row(text).getAttribute("data-unavailable"), "");
-      assert.match(await row(text).innerText(), /incompatible/);
+      assert.match(await row(text).innerText(), /needs an update/);
     }
 
     ctx.check(

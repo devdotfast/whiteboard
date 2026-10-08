@@ -5,21 +5,27 @@ import {
   type ReviewGatewayHostState,
   type ReviewRemoteAgent,
   type ReviewRemoteHostsSettings,
+  reviewHostStatus,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { CopyableText } from "./copy-text";
+import {
+  REMOTE_HOSTS,
+  STATES_EVERY_MS,
+  useSettingsReveal,
+} from "./remote-host-state";
 import { settingsStyles as styles } from "./settings-styles";
 import { tokens } from "./tokens.stylex";
-
-const STATES_EVERY_MS = 3000;
 
 const RETRIED = new Set<ReviewGatewayHostState["state"]>([
   "auth-failed",
   "incompatible",
   "not-installed",
+  "offline",
   "unreachable",
+  "duplicate",
   "unsupported",
 ]);
 
@@ -41,6 +47,8 @@ export function RemoteHostsSection({
   const [error, setError] = useState<string>();
   const [removing, setRemoving] = useState<string>();
   const [uninstall, setUninstall] = useState(false);
+  const section = useRef<HTMLElement>(null);
+  useSettingsReveal(REMOTE_HOSTS, section);
 
   useEffect(() => {
     void hosts
@@ -117,7 +125,11 @@ export function RemoteHostsSection({
   };
 
   return (
-    <section {...stylex.props(styles.section)} aria-label="Remote hosts">
+    <section
+      ref={section}
+      {...stylex.props(styles.section)}
+      aria-label="Remote hosts"
+    >
       <h2 {...stylex.props(styles.sectionLabel)}>Remote hosts</h2>
       {configured.map((name) => {
         const state = states?.find((host) => host.alias === name);
@@ -129,7 +141,12 @@ export function RemoteHostsSection({
               {states ? (
                 <Detail
                   failed={state !== undefined && RETRIED.has(state.state)}
-                  text={`${(state?.state ?? "connecting").replace("-", " ")}${state?.detail ? ` · ${state.detail}` : ""}`}
+                  text={
+                    state?.detail ??
+                    reviewHostStatus(
+                      state ?? { alias: name, state: "connecting" },
+                    ).status
+                  }
                 />
               ) : null}
               {state?.state === "online" ? (
@@ -166,22 +183,18 @@ export function RemoteHostsSection({
             </div>
             <div {...stylex.props(styles.rowControl, local.actions)}>
               {state?.declined ? (
-                <Button
-                  aria-label={`Install ${name}`}
-                  onClick={() =>
-                    void hosts.install(name).catch(() => undefined)
-                  }
-                >
-                  Install
-                </Button>
+                <HostStep
+                  label="Install"
+                  alias={name}
+                  run={() => hosts.install(name)}
+                />
               ) : null}
               {state && RETRIED.has(state.state) ? (
-                <Button
-                  aria-label={`Retry ${name}`}
-                  onClick={() => void hosts.retry(name).catch(() => undefined)}
-                >
-                  Retry
-                </Button>
+                <HostStep
+                  label="Retry"
+                  alias={name}
+                  run={() => hosts.retry(name)}
+                />
               ) : null}
               <Button
                 aria-label={`Remove ${name}`}
@@ -359,6 +372,43 @@ function RemoteHostAgents({
 }
 
 /** A row's detail line; a failure reads as an error and copies on click. */
+function HostStep({
+  label,
+  alias,
+  run,
+}: {
+  label: string;
+  alias: string;
+  run(): Promise<void>;
+}) {
+  const [pending, setPending] = useState(false);
+  const [failure, setFailure] = useState<string>();
+
+  return (
+    <>
+      {failure ? (
+        <span role="alert" {...stylex.props(styles.error)}>
+          {failure}
+        </span>
+      ) : null}
+      <Button
+        aria-label={`${label} ${alias}`}
+        aria-busy={pending || undefined}
+        disabled={pending}
+        onClick={() => {
+          setPending(true);
+          setFailure(undefined);
+          void run()
+            .catch((error: Error) => setFailure(error.message))
+            .finally(() => setPending(false));
+        }}
+      >
+        {label}
+      </Button>
+    </>
+  );
+}
+
 function Detail({
   text,
   failed,

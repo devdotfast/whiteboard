@@ -14,8 +14,9 @@ import type {
   ReviewCanvasInstallContent,
   ReviewCanvasOnboarding,
   ReviewCanvasSetupActions,
-  ReviewGatewayHostState,
+  ReviewRemoteHostActions,
 } from "@dev.fast/review-protocol";
+import { reviewHostStatus } from "@dev.fast/review-protocol";
 import { fuzzyMatches, fuzzySegments } from "@review/fuzzy-match";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -33,6 +34,11 @@ import { CopyableText } from "./copy-text";
 import { homeStyles } from "./home-styles";
 import { CanvasUiContext, useCanvasMenu } from "./host/canvas-ui";
 import { OptionMenu } from "./option-menu";
+import {
+  ACTION_WORDS,
+  useHostAction,
+  useRemoteHostState,
+} from "./remote-host-state";
 import { ArchiveIcon } from "./review-corner-action";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
@@ -48,7 +54,7 @@ interface ReviewHomeProps {
   // support them.
   onDismiss?(review: ReviewApiSummary): Promise<void>;
   onRestore?(review: ReviewApiSummary): Promise<void>;
-  hostStates?(): Promise<readonly ReviewGatewayHostState[]>;
+  remoteHosts?: ReviewRemoteHostActions;
   // Present only while the list is empty: Home then renders Welcome.
   install?: ReviewCanvasInstallContent;
   setupActions?: ReviewCanvasSetupActions;
@@ -103,7 +109,7 @@ export function ReviewHome({
   onDelete,
   onDismiss,
   onRestore,
-  hostStates,
+  remoteHosts,
   install,
   setupActions,
   onboarding,
@@ -121,33 +127,29 @@ export function ReviewHome({
   );
 
   const [deleteError, setDeleteError] = useState<string>();
-  const [hostMessage, setHostMessage] = useState<string>();
-  const hostMessageGeneration = useRef(0);
+  // The unavailable review last opened; it opens once its host is back.
+  const [waiting, setWaiting] = useState<ReviewApiSummary>();
 
   useEffect(() => {
-    hostMessageGeneration.current++;
-    setHostMessage(undefined);
+    if (!waiting) return;
+
+    const current = reviews.find(
+      (review) => review.reviewId === waiting.reviewId,
+    );
+
+    if (current && unavailable(current)) return setWaiting(current);
+    setWaiting(undefined);
+
+    if (current) onOpen(current);
   }, [reviews]);
 
   const open = useCallback(
-    async (review: ReviewApiSummary) => {
-      const generation = ++hostMessageGeneration.current;
-
-      if (!unavailable(review)) {
-        setHostMessage(undefined);
-        onOpen(review);
-
-        return;
-      }
-
-      setHostMessage(`${review.host} is ${hostStateWords(review)}.`);
-      const states = await hostStates?.().catch(() => undefined);
-      const detail = states?.find((host) => host.alias === review.host)?.detail;
-
-      if (detail && generation === hostMessageGeneration.current)
-        setHostMessage(detail);
+    (review: ReviewApiSummary) => {
+      if (unavailable(review)) return setWaiting(review);
+      setWaiting(undefined);
+      onOpen(review);
     },
-    [onOpen, hostStates],
+    [onOpen],
   );
 
   // Keep successful deletions hidden until the catalog acknowledges removal.
@@ -282,10 +284,12 @@ export function ReviewHome({
             </div>
           </div>
           {deleteError ? <p role="alert">{deleteError}</p> : null}
-          {hostMessage ? (
-            <p role="alert">
-              <CopyableText text={hostMessage} />
-            </p>
+          {waiting?.host && waiting.hostState ? (
+            <HostNotice
+              alias={waiting.host}
+              state={waiting.hostState}
+              hosts={remoteHosts}
+            />
           ) : null}
           {/* Keyed off the active list, not the whole result: a query that hits
               only dismissed reviews empties the main area, and the collapsed
@@ -620,7 +624,7 @@ function ReviewTable({
                       aria-disabled={unavailable(review) || undefined}
                       title={
                         unavailable(review)
-                          ? `${review.host} is ${hostStateWords(review)}`
+                          ? hostStatus(review).label
                           : reviewTitle(review)
                       }
                     >
@@ -637,7 +641,7 @@ function ReviewTable({
                         <RepositoryName review={review} />
                         {unavailable(review) ? (
                           <span {...stylex.props(styles.cardMetaNext)}>
-                            {hostStateWords(review)}
+                            {hostStatus(review).status}
                           </span>
                         ) : null}
                       </span>
@@ -1004,8 +1008,37 @@ function unavailable(review: ReviewApiSummary): boolean {
   return review.hostState !== undefined && review.hostState !== "online";
 }
 
-function hostStateWords(review: ReviewApiSummary): string {
-  return review.hostState?.replace("-", " ") ?? "";
+function hostStatus(review: ReviewApiSummary) {
+  return reviewHostStatus({
+    alias: review.host ?? "",
+    state: review.hostState ?? "online",
+  });
+}
+
+function HostNotice({
+  alias,
+  state,
+  hosts,
+}: {
+  alias: string;
+  state: NonNullable<ReviewApiSummary["hostState"]>;
+  hosts?: ReviewRemoteHostActions;
+}) {
+  const live = useRemoteHostState(hosts, alias, true);
+  const { run, pending, failure } = useHostAction(hosts, alias);
+  const status = reviewHostStatus(live ?? { alias, state });
+  const { action } = status;
+
+  return (
+    <p role="alert" {...stylex.props(styles.hostNotice)}>
+      <CopyableText text={failure ?? status.sentence} />
+      {action && hosts ? (
+        <Button disabled={pending} onClick={() => run(action)}>
+          {ACTION_WORDS[action]}
+        </Button>
+      ) : null}
+    </p>
+  );
 }
 
 function repositoryKey(review: ReviewApiSummary): string {
@@ -1586,6 +1619,12 @@ const styles = stylex.create({
   rowActions: {
     display: "flex",
     justifyContent: "center",
+  },
+  hostNotice: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: "12px",
   },
   unavailableRow: {
     opacity: 0.55,

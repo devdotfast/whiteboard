@@ -71,6 +71,7 @@ import type {
 	ReviewDocumentWidthChoice,
 	ReviewKeymapChoice,
 	ReviewReadyNotificationChoice,
+	ReviewRemoteHostActions,
 	ReviewRuntimeConfig,
 	ReviewSurfaceEvent,
 	ReviewTheme,
@@ -448,6 +449,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 						kind: "api",
 						reviewId,
 						...remoteEntry(this.apiCatalog.reviews.find((review) => review.reviewId === reviewId)),
+						remoteHosts: this.remoteHostActions(),
 						structuralDiffEnabled: this.currentStructuralDiffEnabled(),
 						softwareMapEnabled: this.currentSoftwareMapEnabled(),
 						documentWidth: this.currentDocumentWidth(),
@@ -553,7 +555,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 							this.reviewTelemetryService.capture("review_restored", { via: "home" });
 							return this.apiCatalog.attention(uuid, "restore");
 						},
-						hostStates: () => this.desktopConnection.readRemoteHosts(),
+						remoteHosts: this.remoteHostActions(),
 						openSourceTree: (uuid) => {
 							const api = this.apiCatalog.reviews.find((review) => review.reviewId === uuid);
 							if (api) {
@@ -618,6 +620,17 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			await this.render({ kind: "settings", settings: { ...settings, install } }, generation);
 			return;
 		}
+	}
+
+	private remoteHostActions(): ReviewRemoteHostActions {
+		return {
+			states: () => this.desktopConnection.readRemoteHosts(),
+			retry: (alias) => this.desktopConnection.retryRemoteHost(alias),
+			install: (alias) => this.desktopConnection.installRemoteHost(alias),
+			openSettings: async () => {
+				await this.tabsService.openSettings(true);
+			},
+		};
 	}
 
 	async refreshComparison(): Promise<void> {

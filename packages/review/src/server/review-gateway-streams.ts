@@ -6,6 +6,7 @@ import {
   type ReviewGatewayHostState,
   isJsonObject,
   parseJsonText,
+  reviewHostStatus,
 } from "@dev.fast/review-protocol";
 import { coverageModeSchema } from "@review/review-api/review-progress.js";
 import { z } from "zod";
@@ -58,7 +59,7 @@ export type Located =
   | undefined;
 
 export const downDetail = (down: ReviewGatewayHostState) =>
-  down.detail ?? `${down.alias} is ${down.state}.`;
+  reviewHostStatus(down).sentence;
 
 export const isSnapshotOf = (
   value: unknown,

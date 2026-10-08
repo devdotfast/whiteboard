@@ -247,9 +247,10 @@ export const shellStyles = stylex.create({
     },
   },
   // The scratchpad has no source tree or pins to set apart, so no rule.
+  // Shrinks before the action row scrolls, so its badges end in an ellipsis.
   topbarContext: {
     display: "flex",
-    flex: "0 0 auto",
+    flex: "0 1 auto",
     minWidth: 0,
     alignItems: "center",
     marginRight: "auto",
@@ -266,6 +267,7 @@ export const shellStyles = stylex.create({
   // the viewport: an open side panel narrows the column without resizing
   // the window. In a narrow column this ghost Button drops its label.
   openSourceTree: {
+    flexShrink: 0,
     justifyContent: { default: null, [narrowContent]: "center" },
     width: { default: null, [narrowContent]: tokens.chromeControlHeight },
     padding: { default: "0 10px", [narrowContent]: 0 },
