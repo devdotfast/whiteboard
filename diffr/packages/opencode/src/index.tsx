@@ -7,6 +7,7 @@ import { openComparison, type Comparison } from "@diffr/consumer/process";
 import { PointerInput } from "@diffr/consumer/pointer";
 import { terminalKey } from "@diffr/consumer/key";
 import type { Outcome } from "@diffr/consumer/frame";
+import type { Input } from "@diffr/consumer/protocol";
 
 const tui: TuiPlugin = async (api, options) => {
   const [comparison, setComparison] = createSignal<Comparison>();
@@ -71,6 +72,13 @@ const tui: TuiPlugin = async (api, options) => {
     const dimensions = useTerminalDimensions();
     const [width, setWidth] = createSignal(props.full ? dimensions().width : 37);
     const [revision, setRevision] = createSignal(0);
+    const refresh = () => setRevision(n => n + 1);
+    const dispatch = (input: Input) => {
+      const value = props.current.pane.input(input);
+      // Pane-local selection, help, and messages do not emit Viewer notifications.
+      refresh();
+      void outcome(value).catch(error).finally(refresh);
+    };
     const rows = () => Math.max(4, props.full ? dimensions().height - 1 : Math.floor(dimensions().height * 0.5));
     let box!: BoxRenderable;
     const pointer = new PointerInput();
@@ -79,7 +87,7 @@ const tui: TuiPlugin = async (api, options) => {
       return props.current.pane.frame({ columns: Math.max(1, width()), rows: rows() });
     });
     onMount(() => { view = box; box.focusable = true; box.focus(); });
-    onCleanup(props.current.pane.subscribe(() => setRevision(n => n + 1)));
+    onCleanup(props.current.pane.subscribe(refresh));
     onCleanup(() => { pointer.reset(); if (view === box) view = undefined; });
     const mouse = (event: MouseEvent) => {
       event.preventDefault(); event.stopPropagation();
@@ -93,6 +101,7 @@ const tui: TuiPlugin = async (api, options) => {
       }
       if (event.type === "scroll") {
         props.current.pane.scroll((event.scroll?.direction === "up" ? -1 : 1) * (event.scroll?.delta ?? 1), x);
+        refresh();
         return;
       }
       // Child text nodes emit out/over while a drag crosses rows; only a release ends it.
@@ -100,7 +109,7 @@ const tui: TuiPlugin = async (api, options) => {
       if (type !== "down" && type !== "drag" && type !== "up" && type !== "move") return;
       const next = pointer.read(frame(), { type, x, y, alt: event.modifiers.alt });
       if (next.hover !== undefined) props.current.pane.hover(next.hover);
-      if (next.input) void outcome(props.current.pane.input(next.input));
+      if (next.input) dispatch(next.input);
     };
     const key = (event: KeyEvent) => {
       event.preventDefault(); event.stopPropagation();
@@ -108,11 +117,12 @@ const tui: TuiPlugin = async (api, options) => {
       if (event.name === "f6") { toggle(); return; }
       if (event.name === "escape") {
         pointer.reset(); props.current.pane.blur();
+        refresh();
         if (props.full && !sidebar()) close();
         else { setFull(false); restoreFocus(); }
         return;
       }
-      void outcome(props.current.pane.input({ press: terminalKey(event) }));
+      dispatch({ press: terminalKey(event) });
     };
     return <box ref={box} width="100%" height={rows() + 1} flexShrink={0} flexDirection="column"
       backgroundColor={api.theme.current.background} onSizeChange={() => setWidth(box.width)}
