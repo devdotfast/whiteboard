@@ -61,6 +61,8 @@ async function focusAgent() {
 }
 async function outcome(value: Outcome) {
   if (value.close) { quit(); return; }
+  // Selection and help belong to Pane, whose subscription tracks the Viewer only.
+  paint();
   if (value.chat && !transferring) {
     transferring = true;
     try {
@@ -73,6 +75,7 @@ async function outcome(value: Outcome) {
   }
   if (value.copy) comparison.pane.copied(value.copy.what,
     renderer.copyToClipboardOSC52(value.copy.text) ? undefined : "Terminal clipboard unavailable");
+  paint();
 }
 root.onMouse = (event: MouseEvent) => {
   event.preventDefault(); event.stopPropagation();
@@ -80,7 +83,7 @@ root.onMouse = (event: MouseEvent) => {
   if (event.type === "down" && event.button !== 0) return;
   if (event.type === "down" && y < 0) { void api.zoom(self!, "toggle").catch(failed); return; }
   if (event.type === "scroll") {
-    comparison.pane.scroll((event.scroll?.direction === "up" ? -1 : 1) * (event.scroll?.delta ?? 1), x); return;
+    comparison.pane.scroll((event.scroll?.direction === "up" ? -1 : 1) * (event.scroll?.delta ?? 1), x); paint(); return;
   }
   const type = event.type === "drag-end" ? "up" : event.type;
   if (type !== "down" && type !== "drag" && type !== "up" && type !== "move") return;
@@ -92,7 +95,7 @@ renderer.keyInput.on("keypress", key => {
   if (key.eventType === "release") return;
   if (key.ctrl && key.name === "c") return quit();
   if (key.name === "f6") { void api.zoom(self!, "toggle").catch(failed); return; }
-  if (key.name === "escape") { comparison.pane.blur(); pointer.reset(); void focusAgent().catch(failed); return; }
+  if (key.name === "escape") { comparison.pane.blur(); pointer.reset(); paint(); void focusAgent().catch(failed); return; }
   void outcome(comparison.pane.input({ press: terminalKey(key) }));
 });
 const unsubscribe = comparison.pane.subscribe(paint);
