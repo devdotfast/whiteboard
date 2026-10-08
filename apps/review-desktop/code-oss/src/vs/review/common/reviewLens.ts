@@ -50,11 +50,22 @@ export function lensContextGaps(diff: IDocumentDiff, originalCount: number, modi
 			owner: left === originalStart ? 'head' : right === modifiedStart ? 'base' : 'both', change: gapChange(diff, originalStart, left, modifiedStart, right)
 		});
 	}
-	// Keep structural folds only when fully within the visible slice; no overlapping bands.
+	// Keep structural folds only when fully within the visible slice. A lens may
+	// clip a collapsed parent while leaving its child visible, so the provider
+	// supplies nested folds and we retain the outermost one that survives here.
 	const overlap = (a: IDocumentContextGap, b: IDocumentContextGap) =>
 		(a.originalCount > 0 && b.originalCount > 0 && a.originalStart < b.originalStart + b.originalCount && b.originalStart < a.originalStart + a.originalCount) ||
 		(a.modifiedCount > 0 && b.modifiedCount > 0 && a.modifiedStart < b.modifiedStart + b.modifiedCount && b.modifiedStart < a.modifiedStart + a.modifiedCount);
-	return [...gaps, ...(diff.contextGaps ?? []).filter(gap => !gaps.some(hidden => overlap(gap, hidden)))].sort((a, b) => a.originalStart - b.originalStart || a.modifiedStart - b.modifiedStart);
+	const candidates = (diff.contextGaps ?? []).filter(gap => !gaps.some(hidden => overlap(gap, hidden)))
+		.sort((a, b) => b.originalCount + b.modifiedCount - a.originalCount - a.modifiedCount);
+	const folds: IDocumentContextGap[] = [];
+	for (const gap of candidates) {
+		if (folds.some(outer => outer.collapsed !== false &&
+			gap.originalStart >= outer.originalStart && gap.originalStart + gap.originalCount <= outer.originalStart + outer.originalCount &&
+			gap.modifiedStart >= outer.modifiedStart && gap.modifiedStart + gap.modifiedCount <= outer.modifiedStart + outer.modifiedCount)) continue;
+		folds.push(gap);
+	}
+	return [...gaps, ...folds].sort((a, b) => a.originalStart - b.originalStart || a.modifiedStart - b.modifiedStart);
 }
 
 export function alignmentRows(diff: IDocumentDiff, originalCount: number, modifiedCount: number): (readonly [number | null, number | null])[] {

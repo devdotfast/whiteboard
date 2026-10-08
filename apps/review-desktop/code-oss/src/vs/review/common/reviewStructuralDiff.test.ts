@@ -191,6 +191,16 @@ test("every collapsed region becomes a labelled band: paired across sides, or on
 	assert.equal(structuralContextGaps(small, () => true)[0].label, "3 hidden lines");
 });
 
+test("lens projection can expose a collapsed child of a clipped parent", () => {
+	const nested = fold(2, [leaf(4, 4, 12)]);
+	const outer = fold(1, [leaf(3, 0, 4), nested, leaf(5, 12, 20)]);
+	const source = text(Array.from({ length: 20 }, (_, i) => `l${i}`), [outer]);
+	const diff: StructuralTextDiff = { type: "text", structural_changes: { base: [], head: [] }, stats, lhs: source, rhs: source };
+	const state = (id: number) => id === 1 || id === 2 ? true : undefined;
+	assert.deepEqual(structuralContextGaps(diff, id => state(id) === true, state).map(gap => gap.foldStateId), [1]);
+	assert.deepEqual(structuralContextGaps(diff, id => state(id) === true, state, true).map(gap => gap.foldStateId), [1, 2]);
+});
+
 test("a band's detail drops diffr's pseudocode marker line and keeps one-line labels empty", () => {
 	assert.equal(bandDetail("// pseudocode\nx = 1\n  y = 2"), "x = 1\n  y = 2");
 	assert.equal(bandDetail("# pseudocode\nreturn x"), "return x");

@@ -111,6 +111,16 @@ export class StructuralDiffProvider implements IDocumentDiffProvider {
 	constructor(private readonly session: StructuralDiffSession, private readonly pairs: ReadonlyMap<string, string>, private readonly unchanged: ReadonlySet<string>) {
 		this.onDidChange = Event.map(Event.filter(session.onDidChange, change => this.path !== undefined && change.files.has(this.path)), () => undefined);
 	}
+	/** A lens can expose a child of a collapsed outer scope, so include both until it clips the outer gap. */
+	contextGapsForLens(): IDocumentDiff['contextGaps'] {
+		const path = this.path;
+		const diff = path && this.session.getTextDiff(path);
+		return diff ? structuralContextGaps(diff,
+			(id) => this.session.isRegionCollapsed(path, id) === true,
+			(id) => this.session.isRegionCollapsed(path, id),
+			true,
+		).map(gap => ({ ...gap, foldControl: false, breadcrumbs: false })) : undefined;
+	}
 	async computeDiff(...[original, modified, _options, token]: Parameters<IDocumentDiffProvider["computeDiff"]>): Promise<IDocumentDiff> {
 		if (token.isCancellationRequested) throw new CancellationError();
 		const path = this.pairs.get(original.uri.with({ fragment: "" }).toString() + "\n" + modified.uri.with({ fragment: "" }).toString());

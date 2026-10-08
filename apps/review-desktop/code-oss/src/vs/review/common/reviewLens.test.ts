@@ -24,6 +24,16 @@ test('structural folds within the lens survive, overlapping folds do not', () =>
 	assert.ok(!gaps.includes(outside));
 });
 
+test('a clipped outer fold leaves its nested fold usable in a code peek', () => {
+	const parent = { originalStart: 1, modifiedStart: 1, originalCount: 20, modifiedCount: 20, foldStateId: 1, collapsed: true };
+	const child = { originalStart: 8, modifiedStart: 8, originalCount: 5, modifiedCount: 5, foldStateId: 2, collapsed: true };
+	const diff = { ...plain, contextGaps: [parent, child] };
+	const clipped = lensContextGaps(diff, 20, 20, [{ side: 'head', file: 'a.ts', fromLine: 9, toLine: 11 }]);
+	assert.deepEqual(clipped.filter(gap => gap.foldStateId).map(gap => gap.foldStateId), [2]);
+	const whole = lensContextGaps(diff, 20, 20, [{ side: 'head', file: 'a.ts', fromLine: 1, toLine: 20 }]);
+	assert.deepEqual(whole.filter(gap => gap.foldStateId).map(gap => gap.foldStateId), [1]);
+});
+
 test('viewed folds never hide an unread counterpart, and do not overlap structural folds', async () => {
 	const { viewedContextGaps } = await import('./reviewLens.js');
 	const range = (side: 'base' | 'head', fromLine: number, toLine: number) => ({ side, file: 'a.ts', fromLine, toLine });

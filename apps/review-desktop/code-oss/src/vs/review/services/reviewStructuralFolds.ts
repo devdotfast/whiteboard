@@ -7,7 +7,7 @@ import { Codicon } from "../../base/common/codicons.js";
 import { Disposable } from "../../base/common/lifecycle.js";
 import { autorun, observableValue, type IObservable } from "../../base/common/observable.js";
 import { ThemeIcon } from "../../base/common/themables.js";
-import { MouseTargetType, type ICodeEditor, type IOverlayWidget, type IOverlayWidgetPosition, type IEditorMouseEvent } from "../../editor/browser/editorBrowser.js";
+import { MouseTargetType, type ICodeEditor, type IOverlayWidget, type IOverlayWidgetPosition, type IPartialEditorMouseEvent } from "../../editor/browser/editorBrowser.js";
 import { EditorOption } from "../../editor/common/config/editorOptions.js";
 import { CursorColumns } from "../../editor/common/core/cursorColumns.js";
 import { Range } from "../../editor/common/core/range.js";
@@ -51,10 +51,11 @@ const PILL = Symbol("review-fold-pill");
 export class StructuralFoldControls extends Disposable {
 	private readonly decorations = this.editor.createDecorationsCollection();
 	private readonly foldables = new WeakMap<StructuralTextDiff, StructuralFoldable[]>();
+	private readonly sourceLineCounts = new WeakMap<StructuralTextDiff, number>();
 	private readonly rails = new ScopeRails(this.editor);
 	private hovered: FoldTarget | undefined;
 	private overChevronColumn = false;
-	private pressed: FoldTarget | undefined;
+	private pressed: { target: FoldTarget; x: number; y: number } | undefined;
 	private readonly viewedControls = new Map<number, ScopeViewedControl>();
 
 	constructor(
@@ -80,18 +81,26 @@ export class StructuralFoldControls extends Disposable {
 		this._register(editor.onMouseMove(e => {
 			this.hover(this.targetAt(e), this.inChevronColumn(e));
 		}));
-		this._register(editor.onMouseLeave(() => this.hover(undefined)));
+		// Monaco can report a mouse leave while crossing an overlay layer on
+		// the way from a scope header to its viewed control. Keep the scope if
+		// the pointer is still over this editor's code area.
+		this._register(editor.onMouseLeave(e => this.hover(this.targetAt({ event: e.event, target: null }))));
 		this._register(editor.onMouseDown(e => {
 			const target = e.event.leftButton ? this.targetAt(e) : undefined;
-			this.pressed = target?.rail || target?.control ? target : undefined;
+			this.pressed = target?.rail || target?.control ? {
+				target, x: e.event.browserEvent.clientX, y: e.event.browserEvent.clientY,
+			} : undefined;
 			if (this.pressed) { e.event.preventDefault(); }
 		}));
 		this._register(editor.onMouseUp(e => {
 			const pressed = this.pressed;
 			this.pressed = undefined;
+			if (!pressed) return;
 			const target = this.targetAt(e);
-			if (pressed && target?.foldable === pressed.foldable && target.rail === pressed.rail && target.control === pressed.control) {
-				this.toggle(pressed);
+			const dx = e.event.browserEvent.clientX - pressed.x;
+			const dy = e.event.browserEvent.clientY - pressed.y;
+			if (dx * dx + dy * dy <= 64 && target?.foldable.foldStateId === pressed.target.foldable.foldStateId) {
+				this.toggle(pressed.target);
 			}
 		}));
 		this._register(editor.onDidChangeModel(() => { this.hovered = undefined; this.render(); }));
@@ -132,7 +141,7 @@ export class StructuralFoldControls extends Disposable {
 		this.session.setRegionCollapsed(path, target.foldable.foldStateId, !target.collapsed);
 	}
 
-	private inChevronColumn(e: IEditorMouseEvent): boolean {
+	private inChevronColumn(e: IPartialEditorMouseEvent): boolean {
 		const node = this.editor.getDomNode();
 		if (!node) { return false; }
 		const bounds = node.getBoundingClientRect();
@@ -163,7 +172,15 @@ export class StructuralFoldControls extends Disposable {
 		const shared = hover?.path === path ? hover : undefined;
 		const target = shared?.target;
 		this.editor.getDomNode()?.classList.toggle(RAIL_CURSOR, !!target?.rail);
-		if (!model || !path || !diff) {
+		// A diff editor changes its model before its two code editors have both
+		// attached the new snapshots. Do not paint old scope line numbers on the
+		// temporary model in between.
+		let sourceLineCount = diff ? this.sourceLineCounts.get(diff) : undefined;
+		if (diff && sourceLineCount === undefined) {
+			sourceLineCount = (diff[this.side]?.text.match(/\n/g)?.length ?? 0) + 1;
+			this.sourceLineCounts.set(diff, sourceLineCount);
+		}
+		if (!model || !path || !diff || model.getLineCount() !== sourceLineCount) {
 			this.decorations.clear();
 			this.rails.hide();
 			for (const control of this.viewedControls.values()) control.hide();
@@ -172,6 +189,7 @@ export class StructuralFoldControls extends Disposable {
 		const decorations: IModelDeltaDecoration[] = [];
 		for (const range of this.viewed?.getViewedRanges(path) ?? []) {
 			if (range.side !== (this.side === 'rhs' ? 'head' : 'base')) continue;
+			if (range.fromLine < 1 || range.toLine > model.getLineCount()) continue;
 			decorations.push({
 				range: new Range(range.fromLine, 1, range.toLine, model.getLineMaxColumn(range.toLine)),
 				options: { description: 'review-scope-viewed', isWholeLine: true, inlineClassName: 'review-scope-viewed-ink', className: 'review-scope-viewed-tint', zIndex: 5 },
@@ -300,7 +318,7 @@ export class StructuralFoldControls extends Disposable {
 		};
 	}
 
-	private targetAt(e: IEditorMouseEvent): FoldTarget | undefined {
+	private targetAt(e: IPartialEditorMouseEvent): FoldTarget | undefined {
 		for (const control of this.viewedControls.values()) {
 			const viewed = control.targetOf(e.event.browserEvent.target as HTMLElement | null);
 			if (viewed) return { ...viewed, rail: false, control: false };
@@ -313,20 +331,39 @@ export class StructuralFoldControls extends Disposable {
 			const foldable = this.foldablesOf(diff).find(f => f.rail && f.foldStateId === Number(summary.getAttribute("data-summary-fold-state-id")));
 			if (foldable) return { foldable, rail: true, control: false, collapsed: true };
 		}
-		const position = e.target.position;
+		// Overlay layers can turn the blank space between code and the viewed
+		// control into UNKNOWN/OVERLAY_WIDGET with no position. Resolve the
+		// point without its DOM target so the same header or rail remains armed.
+		const direct = e.target;
+		const usable = direct?.type === MouseTargetType.CONTENT_TEXT || direct?.type === MouseTargetType.CONTENT_EMPTY
+			|| direct?.type === MouseTargetType.GUTTER_GLYPH_MARGIN || direct?.type === MouseTargetType.GUTTER_LINE_NUMBERS
+			|| direct?.type === MouseTargetType.GUTTER_LINE_DECORATIONS;
+		let hit = usable ? direct : this.editor.getTargetAtClientPoint(e.event.browserEvent.clientX, e.event.browserEvent.clientY);
+		if (!usable && (!hit || hit.type === MouseTargetType.OVERLAY_WIDGET || hit.type === MouseTargetType.UNKNOWN)) {
+			const node = this.editor.getDomNode();
+			const bounds = node?.getBoundingClientRect();
+			const { clientX, clientY } = e.event.browserEvent;
+			if (node && bounds && clientX >= bounds.left && clientX < bounds.right && clientY >= bounds.top && clientY < bounds.bottom) {
+				// Re-hit the same row in the text column: a viewed overlay can
+				// otherwise occlude Monaco's target for the space leading to it.
+				const x = bounds.left + (this.editor.getLayoutInfo().contentLeft + 16) * bounds.width / node.offsetWidth;
+				hit = this.editor.getTargetAtClientPoint(x, clientY);
+			}
+		}
+		const position = hit?.position;
 		const rail = this.rails.targetOf(e.event.browserEvent.target as HTMLElement | null);
 		if (rail) {
 			return { foldable: rail, rail: true, control: false, collapsed: this.isSummaryFolded(rail) };
 		}
-		if (!model || !path || !diff || !position) {
+		if (!model || !path || !diff || !hit || !position) {
 			return undefined;
 		}
 		const line = position.lineNumber - 1;
 		const foldables = this.foldablesOf(diff);
-		const content = e.target.type === MouseTargetType.CONTENT_TEXT || e.target.type === MouseTargetType.CONTENT_EMPTY;
-		const gutter = e.target.type === MouseTargetType.GUTTER_GLYPH_MARGIN
-			|| e.target.type === MouseTargetType.GUTTER_LINE_NUMBERS
-			|| e.target.type === MouseTargetType.GUTTER_LINE_DECORATIONS;
+		const content = hit?.type === MouseTargetType.CONTENT_TEXT || hit?.type === MouseTargetType.CONTENT_EMPTY;
+		const gutter = hit?.type === MouseTargetType.GUTTER_GLYPH_MARGIN
+			|| hit?.type === MouseTargetType.GUTTER_LINE_NUMBERS
+			|| hit?.type === MouseTargetType.GUTTER_LINE_DECORATIONS;
 		if (!content && !gutter) {
 			return undefined;
 		}
@@ -335,7 +372,7 @@ export class StructuralFoldControls extends Disposable {
 		// A folded scope's header: its chevron and its pill unfold it.
 		const folded = foldables.find(f => f.line === line && (this.isFolded(f) || this.isSummaryFolded(f)));
 		if (folded) {
-			const onPill = e.target.type === MouseTargetType.CONTENT_TEXT && e.target.detail.injectedText?.options.attachedData === PILL;
+			const onPill = e.target?.type === MouseTargetType.CONTENT_TEXT && e.target.detail.injectedText?.options.attachedData === PILL;
 			return { foldable: folded, rail: false, control: onChevron || onPill, collapsed: true };
 		}
 
@@ -343,8 +380,8 @@ export class StructuralFoldControls extends Disposable {
 		const railsHere = open
 			.filter(f => f.rail && f.rail.start <= line && line <= f.rail.end)
 			.sort((a, b) => (a.rail!.end - a.rail!.start) - (b.rail!.end - b.rail!.start));
-		if (content && e.target.mouseColumn - 1 < leadingWidth(model, position.lineNumber)) {
-			const column = e.target.mouseColumn - 1;
+		if (content && hit.mouseColumn - 1 < leadingWidth(model, position.lineNumber)) {
+			const column = hit.mouseColumn - 1;
 			const rail = railsHere.find(f => leadingWidth(model, f.line + 1) === column);
 			if (rail) {
 				return { foldable: rail, rail: true, control: false, collapsed: this.isSummaryFolded(rail) };

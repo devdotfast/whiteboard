@@ -10,6 +10,7 @@ import { Event } from '../../base/common/event.js';
 import { alignmentRows, lensContextGaps, viewedContextGaps } from '../common/reviewLens.js';
 import type { ReviewDiffLens, ReviewDiffProgress } from '../common/reviewProtocol.js';
 import type { ReviewFilesEditorEntry } from './reviewFilesDiffView.js';
+import { StructuralDiffProvider } from './reviewStructuralDiff.js';
 
 export function lensRanges(lens: ReviewDiffLens, entry: ReviewFilesEditorEntry): ReviewDiffLens['ranges'] {
 	return lens.ranges.filter(range => range.file === (range.side === 'base' ? entry.file.previousPath ?? entry.file.path : entry.file.path));
@@ -41,6 +42,9 @@ export function withLens(instantiation: IInstantiationService, entries: readonly
 				onDidChange: Event.any(provider.onDidChange, Event.debounce(relevantProgress, () => undefined, 16)),
 				async computeDiff(original, modified, options, token) {
 					let diff = await provider.computeDiff(original, modified, options, token);
+					if (lens && !lens.wholeFiles && provider instanceof StructuralDiffProvider) {
+						diff = { ...diff, contextGaps: provider.contextGapsForLens() };
+					}
 					const entry = entries.find(entry => entry.original?.toString() === original.uri.toString() || entry.modified?.toString() === modified.uri.toString());
 					if (!entry) return diff;
 					activeEntry = entry;

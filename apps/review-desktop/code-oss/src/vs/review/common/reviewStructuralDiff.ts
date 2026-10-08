@@ -280,6 +280,7 @@ export function bandDetail(label: string): string {
 function knownRegions(
 	root: StructuralRegion | undefined,
 	state: (foldStateId: number) => boolean | undefined,
+	includeNested = false,
 ): { region: StructuralRegion; collapsed: boolean }[] {
 	const result: { region: StructuralRegion; collapsed: boolean }[] = [];
 	const walk = (region: StructuralRegion) => {
@@ -288,7 +289,7 @@ function knownRegions(
 		const hides = end > start;
 		if (known === true) {
 			if (hides) result.push({ region, collapsed: true });
-			return;
+			if (!includeNested) return;
 		}
 		// Open, but a band by the wire's default: a reader revealed it, and the editor can fold it again.
 		if (known === false && hides && region.visibility?.collapsed === true) result.push({ region, collapsed: false });
@@ -311,6 +312,7 @@ export function structuralContextGaps(
 	diff: StructuralTextDiff,
 	isCollapsed: (foldStateId: number) => boolean,
 	state: (foldStateId: number) => boolean | undefined = (id) => (isCollapsed(id) ? true : undefined),
+	includeNested = false,
 ): StructuralGap[] {
 	const rows = structuralRows(diff);
 	const rowOfLeft = new Map<number, number>(), rowOfRight = new Map<number, number>();
@@ -330,8 +332,8 @@ export function structuralContextGaps(
 		for (let index = first; index <= last; index++) if (rows[index][other] !== null) count++;
 		return { start: before + 2, count };
 	};
-	const lhs = knownRegions(diff.lhs?.root, state);
-	const rhs = knownRegions(diff.rhs?.root, state);
+	const lhs = knownRegions(diff.lhs?.root, state, includeNested);
+	const rhs = knownRegions(diff.rhs?.root, state, includeNested);
 	const lhsLines = (diff.lhs?.text ?? "").replace(/\r\n/g, "\n").split("\n");
 	const rhsLines = (diff.rhs?.text ?? "").replace(/\r\n/g, "\n").split("\n");
 	// Leaves pair by alignment; folds pair by fold state, the only identity they share across sides.
@@ -408,7 +410,7 @@ export function structuralContextGaps(
 		inner.modifiedStart >= outer.modifiedStart && inner.modifiedStart + inner.modifiedCount <= outer.modifiedStart + outer.modifiedCount;
 	const redundant = (gap: StructuralGap, index: number) => gaps.some((other, at) =>
 		at !== index && other.collapsed && within(gap, other) && !(within(other, gap) && at > index));
-	const shown = gaps.filter((gap, index) => gap.owner === "both" || !gap.collapsed || !redundant(gap, index));
+	const shown = gaps.filter((gap, index) => includeNested || gap.owner === "both" || !gap.collapsed || !redundant(gap, index));
 	for (const gap of shown) if (!gap.label) {
 		const count = Math.max(gap.originalCount, gap.modifiedCount);
 		gap.label = `${count} hidden line${count === 1 ? "" : "s"}`;
