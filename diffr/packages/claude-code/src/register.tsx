@@ -6,8 +6,6 @@ import { parseDiffEvents } from "@diffr/viewer/protocol/events";
 import { splitArgs } from "./args";
 import { parsePost } from "./protocol";
 import { Pane } from "./frame";
-import { add, zero } from "@diffr/viewer/document/counts";
-import { lineCounts } from "@diffr/viewer/document/fileTree";
 
 const PANE = "diffr";
 /** The tool the model calls to open the pane: `mcp__<plugin>__<name>`. */
@@ -34,15 +32,32 @@ function toolArgs(input: Record<string, unknown>): string[] {
   return args;
 }
 
-/** What the model reads back: the comparison, how much changed, and any file diffr could not diff. */
+/** What the model reads back: the comparison and how many files changed, or why diffr named none. */
 function summary(args: string[], store: DiffStore): string {
   const snapshot = store.getSnapshot();
   const shown = `diffr${args.length ? ` ${args.join(" ")}` : ""}`;
   if (!snapshot.comparison) throw new Error(`${shown} failed: ${snapshot.errors.join("; ") || "it named no comparison"}`);
-  const counts = snapshot.files.reduce((sum, file) => (file ? add(sum, lineCounts(file).visible) : sum), zero);
   const files = snapshot.inventory.length;
-  const failed = snapshot.errors.length ? ` ${snapshot.errors.length} could not be shown: ${snapshot.errors.join("; ")}.` : "";
-  return `Opened ${shown} in a pane for the person: ${files} ${files === 1 ? "file" : "files"}, +${counts.added} −${counts.removed}.${failed}`;
+  return `Opened ${shown} in a pane for the person: ${files} changed ${files === 1 ? "file" : "files"}.`;
+}
+
+/**
+ * Settles once diffr has named the comparison, its first record and nearly immediate, or once its
+ * stream has ended without one. The open tool waits this long and no longer: a bad revision still
+ * comes back as an error, and the person reads on while the model carries on.
+ */
+function named(store: DiffStore, streamed: Promise<void>): Promise<void> {
+  return new Promise((resolve) => {
+    const stop = store.subscribe(() => {
+      if (store.getSnapshot().comparison) done();
+    });
+    const done = () => {
+      stop();
+      resolve();
+    };
+    if (store.getSnapshot().comparison) done();
+    void streamed.then(done);
+  });
 }
 
 type Child = ReturnType<EngineInterface["process"]["spawn"]>;
@@ -97,7 +112,7 @@ export function register(on: On, options: PluginOptions): void {
       description: "Open diffr's review pane for the person, showing a comparison they can read, fold, search and mark viewed. " +
         "Use it to show them changes you made or want them to review, rather than describing the diff. " +
         "args are diffr's own: revisions or paths, e.g. [\"HEAD~1\"], [\"main..HEAD\", \"--\", \"src\"], or [] for uncommitted changes. " +
-        "Replaces any diffr pane already open, and leaves the person's focus where it is. Returns once diffr has finished: the file and line counts.",
+        "Replaces any diffr pane already open, and leaves the person's focus where it is. Returns as soon as diffr has named the comparison, with how many files changed; the person reads on while you carry on.",
       inputSchema: {
         type: "object",
         properties: { args: { type: "array", items: { type: "string" }, description: "diffr's arguments, one per item" } },
@@ -134,7 +149,7 @@ export function register(on: On, options: PluginOptions): void {
     ({ pane, child } = started);
     // The person may be typing, so the pane opens without taking the keyboard.
     await $.ui.open({ id: PANE, title: ["diffr", ...args].join(" ") });
-    await started.streamed;
+    await named(started.store, started.streamed);
     try {
       return { result: summary(args, started.store) };
     } catch (error) {
