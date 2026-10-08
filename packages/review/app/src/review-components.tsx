@@ -32,7 +32,11 @@ import { AskCloseWarning } from "./ask-close";
 import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
 import { AskDock, InRightColumn, useAskPanelHost } from "./ask-dock";
 import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
-import { openHandedOffAsks, syncOpenAsks } from "./ask-open-state";
+import {
+  AskProjectContext,
+  openHandedOffAsks,
+  syncOpenAsks,
+} from "./ask-open-state";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
 import {
   AskThreadsWatchContext,
@@ -524,30 +528,19 @@ export function ReviewPanelHost() {
 }
 
 /**
- * The open Asks, in the side panel, the window or off the screen. Each
- * renders once, into an element of its own that moves between them, so
- * popping out, docking or hiding never restarts it.
+ * The threads on screen, in the column or the window. Each renders once,
+ * into an element of its own that moves between them, so popping out or
+ * docking never restarts it.
  */
 function AskHost() {
   const store = useReviewPanelStore();
   const session = useLatest(useReviewSession());
+  const config = session.current.config;
+  const projectId = useContext(AskProjectContext);
 
-  // Closing an Ask ends its agent; its canvas going, as for another tab,
-  // does not.
   useEffect(
-    () =>
-      syncOpenAsks(
-        store,
-        session.current.config,
-        (threadId) =>
-          void session.current
-            .fetch(`/ask/${threadId}/close`, {
-              method: "POST",
-              keepalive: true,
-            })
-            .catch(() => {}),
-      ),
-    [store, session],
+    () => syncOpenAsks(store, config, projectId),
+    [store, config, projectId],
   );
 
   useEffect(() => {
@@ -560,7 +553,7 @@ function AskHost() {
     useShallow((state) => state.asks.map((ask) => ask.key)),
   );
 
-  // Every open Ask follows its thread over this one stream.
+  // Every thread on screen follows its thread over this one stream.
   const watch = useAskThreadsWatch(useReviewSession());
 
   return (
@@ -574,6 +567,7 @@ function AskHost() {
 
 function OpenAsk({ askKey }: { askKey: number }) {
   const store = useReviewPanelStore();
+  const session = useReviewSession();
 
   const view = useReviewPanel(
     (state) => state.asks.find((ask) => ask.key === askKey)?.view,
@@ -595,35 +589,38 @@ function OpenAsk({ askKey }: { askKey: number }) {
     [store, askKey],
   );
 
+  const ask = useReviewPanel((state) =>
+    state.asks.find((candidate) => candidate.key === askKey),
+  );
+
   if (!view) return null;
-
-  const ask = () =>
-    store.getState().asks.find((candidate) => candidate.key === askKey);
-
-  // Closing stops the agent, even one whose thread is still starting.
-  const stop = () => {
-    stopping.current = true;
-    store.getState().closeAsk(askKey);
-  };
-
-  // While it works, closing asks first.
-  const close = () => {
-    if (ask()?.busy) setWarning(true);
-    else stop();
-  };
-
-  const busy = ask()?.busy ?? false;
 
   const hide = () => {
     setWarning(false);
     store.getState().hideAsk(askKey);
   };
 
+  // Closing stops the agent, even one whose thread is still starting.
+  const stop = () => {
+    const threadId = ask?.threadId;
+
+    stopping.current = true;
+    hide();
+
+    if (threadId)
+      void session
+        .fetch(`/ask/${threadId}/close`, { method: "POST", keepalive: true })
+        .catch(() => {});
+  };
+
+  // While the agent works, closing asks first.
+  const close = () => (ask?.busy ? setWarning(true) : stop());
+
   const closeWarning =
-    warning && busy ? (
+    warning && ask?.busy ? (
       <AskCloseWarning
         anchor={closeButton}
-        agentName={ask()?.presence.agentName ?? "The agent"}
+        agentName={ask.presence.agentName}
         onKeepRunning={hide}
         onClose={stop}
         onKeep={() => setWarning(false)}

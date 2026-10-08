@@ -141,7 +141,7 @@ export class ReviewSidebarPart extends Part {
 	/** Each board's project threads, as the server last sent them. */
 	private readonly threads = new Map<string, ReviewProjectThreads>();
 	/** The thread each board's Ask shows. */
-	private readonly askThreads = new Map<string, string | undefined>();
+	private readonly askThreads = new Map<string, readonly string[]>();
 	private readonly following = this._register(new MutableDisposable());
 	private remaining: HTMLElement | undefined;
 	private lenses: ReviewSidebarGroup | undefined;
@@ -341,11 +341,11 @@ export class ReviewSidebarPart extends Part {
 		this.render();
 	}
 
-	/** The thread the board's Ask shows, marked in Threads. The filter stays
-	 * what the reader picked. */
+	/** The threads the board's Ask shows, marked in Threads. The filter
+	 * stays what the reader picked. */
 	reportAsk(reviewId: string | undefined, state: ReviewAskState): void {
 		if (!reviewId) return;
-		this.askThreads.set(reviewId, state.threadId);
+		this.askThreads.set(reviewId, state.threadIds);
 		if (reviewId === this.reviewId) this.render();
 	}
 
@@ -524,7 +524,7 @@ export class ReviewSidebarPart extends Part {
 				list: this.threads.get(reviewId)?.threads ?? [],
 				...(this.threads.get(reviewId)?.project && { project: this.threads.get(reviewId)!.project }),
 				filter: this.threadsFilter,
-				...(this.askThreads.get(reviewId) && { open: this.askThreads.get(reviewId) }),
+				open: this.askThreads.get(reviewId) ?? [],
 			},
 			onFilterThreads: (filter) => this.setThreadsFilter(filter),
 			onOpenThread: (threadId) => this.emitSurfaceEvent({ event: "openAskThread", reviewId, threadId }),

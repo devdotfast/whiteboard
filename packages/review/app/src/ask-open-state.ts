@@ -1,8 +1,12 @@
 import { AgentSelectionSchema } from "@review/agent-selection";
 import { askAgentIds } from "@review/ask/thread-state";
+import { createContext } from "react";
 import { z } from "zod";
 
-import type { ReviewClientConfig } from "./host/review-client";
+import {
+  type ReviewClientConfig,
+  reviewPreferenceKey,
+} from "./host/review-client";
 import type { AskPanel, AskView } from "./review-panel-model";
 import type { AskRestore, ReviewPanelStore } from "./review-panel-store";
 import {
@@ -12,6 +16,9 @@ import {
 } from "./review-ui-state";
 
 const agentSchema = z.enum(askAgentIds);
+
+/** The board's project, whose boards share the threads on screen. */
+export const AskProjectContext = createContext<string | undefined>(undefined);
 
 const viewSchema = z.discriminatedUnion("type", [
   z.object({
@@ -42,25 +49,32 @@ const anchorSchema = z.object({
 
 const restoreSchema = z.object({
   asks: z.array(z.object({ key: z.number().int(), view: viewSchema })),
-  askDocked: z.number().int().nullable(),
+  askColumn: z.number().int().nullable(),
   askWindow: z.number().int().nullable(),
-  askPlace: z.enum(["docked", "window"]),
   askAnchor: anchorSchema.nullable(),
   askSize: z.object({ width: z.number(), height: z.number() }).nullable(),
 });
 
-function openAsksKey(config: ReviewClientConfig | null) {
-  return reviewUiStateKey(config, "window", "ask", "open");
+/** Threads stay on screen across the boards of one project, and per
+ * window; a board in no project keeps its own. */
+function openAsksKey(
+  config: ReviewClientConfig | null,
+  projectId: string | undefined,
+) {
+  return projectId === undefined
+    ? reviewUiStateKey(config, "window", "ask", "open")
+    : reviewPreferenceKey("ask", "project", projectId, "open");
 }
 
-/** The Asks open in this review when its canvas last went, by a switch to
- * another tab or a reload: they open again where they were, and a
- * conversation whose agent still runs carries on. */
+/** The threads on screen when a board of this project last went, by a
+ * switch to another tab or a reload: they show again where they were, and
+ * one whose agent still runs carries on. */
 export function readOpenAsks(
   config: ReviewClientConfig | null,
+  projectId: string | undefined,
 ): AskRestore | undefined {
   return restoreSchema.safeParse(
-    readReviewUiState("window", openAsksKey(config)),
+    readReviewUiState("window", openAsksKey(config, projectId)),
   ).data;
 }
 
@@ -117,42 +131,25 @@ function remembered({ key, view, threadId, presence }: AskPanel): {
     : { key, view };
 }
 
-/**
- * Keeps this review's open Asks in the window's storage as they change, and
- * ends the agent of each Ask that closes, or that another takes the place
- * of. An Ask that only goes with its canvas leaves its agent running.
- */
+/** Keeps the threads on screen in the window's storage as they change.
+ * Leaving the screen, or the canvas going, leaves a thread's agent
+ * running. */
 export function syncOpenAsks(
   store: ReviewPanelStore,
   config: ReviewClientConfig | null,
-  close: (threadId: string) => void,
+  projectId: string | undefined,
 ): () => void {
   return store.subscribe((state, previous) => {
     const unchanged = (
-      [
-        "asks",
-        "askDocked",
-        "askWindow",
-        "askPlace",
-        "askAnchor",
-        "askSize",
-      ] as const
+      ["asks", "askColumn", "askWindow", "askAnchor", "askSize"] as const
     ).every((field) => state[field] === previous[field]);
 
     if (unchanged) return;
 
-    for (const gone of previous.asks)
-      if (
-        gone.threadId &&
-        !state.asks.some((ask) => ask.threadId === gone.threadId)
-      )
-        close(gone.threadId);
-
-    writeReviewUiState("window", openAsksKey(config), {
+    writeReviewUiState("window", openAsksKey(config, projectId), {
       asks: state.asks.map(remembered),
-      askDocked: state.askDocked,
+      askColumn: state.askColumn,
       askWindow: state.askWindow,
-      askPlace: state.askPlace,
       askAnchor: state.askAnchor,
       askSize: state.askSize,
     } satisfies AskRestore);

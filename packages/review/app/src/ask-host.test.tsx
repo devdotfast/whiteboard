@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import { AskHistoryProvider } from "./ask-history";
-import { readOpenAsks } from "./ask-open-state";
+import { AskProjectContext, readOpenAsks } from "./ask-open-state";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewPanelHost } from "./review-components";
@@ -144,21 +144,25 @@ function askCanvas({
   document.body.append(container);
   let root = createRoot(container);
 
-  /** Mounts the canvas, with the Asks it last left open, as a tab switched
-   * back to or a reload does. */
-  const mount = () =>
+  /** Mounts a board's canvas, with the threads its project last left on
+   * screen, as a tab switched to or a reload does. */
+  const mount = (projectId = "payments") =>
     act(async () =>
       root.render(
         <ReviewSessionProvider session={session}>
           <ReviewDebugSettingsProvider>
-            <ReviewPanelProvider
-              restore={() => ({ asks: readOpenAsks(session.config) })}
-            >
-              <AskHistoryProvider>
-                <Probe />
-                <ReviewPanelHost />
-              </AskHistoryProvider>
-            </ReviewPanelProvider>
+            <AskProjectContext.Provider value={projectId}>
+              <ReviewPanelProvider
+                restore={() => ({
+                  asks: readOpenAsks(session.config, projectId),
+                })}
+              >
+                <AskHistoryProvider>
+                  <Probe />
+                  <ReviewPanelHost />
+                </AskHistoryProvider>
+              </ReviewPanelProvider>
+            </AskProjectContext.Provider>
           </ReviewDebugSettingsProvider>
         </ReviewSessionProvider>,
       ),
@@ -218,7 +222,7 @@ function askCanvas({
   };
 }
 
-it("asks before closing an Ask whose agent works, and keeps it running off the screen", async () => {
+it("asks before closing a working thread, and floats one that something replaces", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   await using canvas = askCanvas();
   const { streams, closed, askQuestion } = canvas;
@@ -232,34 +236,55 @@ it("asks before closing an Ask whose agent works, and keeps it running off the s
     streams.get("thread-1")!({ seq: 1, snapshot: running("thread-1") }),
   );
 
-  // Closing would stop the agent, so it asks first.
+  // Closing would stop the agent, so it asks first; kept running, it
+  // leaves the screen and its agent goes on.
   await act(async () => button(/^Close Ask$/)!.click());
-  expect(document.body.textContent).toContain("Stop Codex?");
-  expect(closed()).toEqual([]);
-
-  // Kept running, it leaves the screen and its agent goes on.
   await act(async () => button(/^Keep running$/)!.click());
   expect(document.querySelector("textarea")).toBeNull();
   expect(closed()).toEqual([]);
 
-  // Opening its thread again brings it back.
+  // A peek takes the column from a working thread, which floats.
+  await act(async () => store.getState().openAsk(selection));
+  await askQuestion("Why a new index?");
   await act(async () =>
-    store.getState().openAskView({
-      type: "saved",
-      threadId: "thread-1",
-      selection,
-      agent: "codex",
+    streams.get("thread-2")!({ seq: 1, snapshot: running("thread-2") }),
+  );
+  await act(async () =>
+    store.getState().openPeek({
+      kind: "peek",
+      content: { kind: "inline-code", text: "start();" },
     }),
   );
-  expect(document.querySelector("textarea")).not.toBeNull();
+
+  const floating = () =>
+    document.querySelector('[role="dialog"][aria-label="Ask"]');
+
+  expect(floating()).not.toBeNull();
 
   // Stopping it is a choice made twice.
-  await act(async () => button(/^Close Ask$/)!.click());
+  await act(async () =>
+    floating()!
+      .querySelector<HTMLButtonElement>('button[aria-label="Close Ask"]')!
+      .click(),
+  );
   await act(async () => button(/^Stop and close$/)!.click());
-  expect(closed()).toEqual(["/ask/thread-1/close"]);
+  expect(closed()).toEqual(["/ask/thread-2/close"]);
+  expect(floating()).toBeNull();
+
+  // Once its agent has answered, a thread closes at once.
+  await act(async () => store.getState().openAsk(selection));
+  await askQuestion("And the old one?");
+  await act(async () =>
+    streams.get("thread-3")!({
+      seq: 1,
+      snapshot: { ...running("thread-3"), status: "idle" },
+    }),
+  );
+  await act(async () => button(/^Close Ask$/)!.click());
+  expect(closed()).toEqual(["/ask/thread-2/close", "/ask/thread-3/close"]);
 });
 
-it("follows the threads of every open Ask over one connection", async () => {
+it("follows the threads on screen over one connection", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   await using canvas = askCanvas();
   const { streams, askQuestion } = canvas;
@@ -268,8 +293,8 @@ it("follows the threads of every open Ask over one connection", async () => {
   const store = canvas.store();
 
   // A browser opens only a few connections to a host: a stream for each
-  // Ask would soon leave none for the review's other requests.
-  for (const [index, question] of ["One?", "Two?", "Three?"].entries()) {
+  // thread would soon leave none for the review's other requests.
+  for (const [index, question] of ["One?", "Two?"].entries()) {
     await act(async () => store.getState().openAsk(selection));
     await askQuestion(question);
 
@@ -280,7 +305,25 @@ it("follows the threads of every open Ask over one connection", async () => {
     );
   }
 
-  expect(canvas.watching()).toEqual([["thread-1", "thread-2", "thread-3"]]);
+  expect(canvas.watching()).toEqual([["thread-1", "thread-2"]]);
+});
+
+it("keeps threads on screen across a project's boards, not another's", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await using canvas = askCanvas();
+
+  await canvas.mount("payments");
+  await act(async () => canvas.store().getState().openAsk(selection));
+  await canvas.askQuestion("Is this safe on replicas?");
+  await canvas.unmount();
+
+  await canvas.mount("search");
+  expect(document.querySelector('aside[aria-label="Ask"]')).toBeNull();
+  await canvas.unmount();
+
+  await canvas.mount("payments");
+  expect(document.querySelector('aside[aria-label="Ask"]')).not.toBeNull();
+  expect(canvas.closed()).toEqual([]);
 });
 
 it("leaves an agent working when its canvas goes, and carries on with it when the canvas comes back", async () => {

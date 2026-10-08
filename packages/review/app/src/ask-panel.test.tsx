@@ -338,8 +338,8 @@ it("lists saved conversations, reopens one, and deletes another once confirmed",
 
   function Probe() {
     view = useReviewPanel(
-      ({ asks, askDocked }) =>
-        asks.find((ask) => ask.key === askDocked)?.view ?? null,
+      ({ asks, askColumn }) =>
+        asks.find((ask) => ask.key === askColumn)?.view ?? null,
     );
 
     return null;
@@ -589,8 +589,8 @@ it("keeps the agent through new versions of the review, and says so when the con
 
   function Probe() {
     view = useReviewPanel(
-      ({ asks, askDocked }) =>
-        asks.find((ask) => ask.key === askDocked)?.view ?? null,
+      ({ asks, askColumn }) =>
+        asks.find((ask) => ask.key === askColumn)?.view ?? null,
     );
 
     return null;
@@ -1066,8 +1066,8 @@ it("offers a new conversation when one cannot be reopened: one lost before it wa
 
   function Probe() {
     view = useReviewPanel(
-      ({ asks, askDocked }) =>
-        asks.find((ask) => ask.key === askDocked)?.view ?? null,
+      ({ asks, askColumn }) =>
+        asks.find((ask) => ask.key === askColumn)?.view ?? null,
     );
 
     return null;

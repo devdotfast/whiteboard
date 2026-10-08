@@ -43,8 +43,8 @@ let asked = 0;
 
 function Probe() {
   view = useReviewPanel(
-    ({ asks, askDocked }) =>
-      asks.find((ask) => ask.key === askDocked)?.view ?? null,
+    ({ asks, askColumn }) =>
+      asks.find((ask) => ask.key === askColumn)?.view ?? null,
   );
   const history = useAskHistory();
   outdated = history?.outdated;
