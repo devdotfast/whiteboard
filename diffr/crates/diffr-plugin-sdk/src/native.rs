@@ -404,6 +404,65 @@ fn with_git<T>(call: impl FnOnce(&dyn GitHost) -> Result<T, String>) -> Result<T
     })
 }
 
+/// The host's outgoing HTTP, for a plugin that calls a service, as the
+/// summarizer calls a model. A linked plugin cannot wait on the host, so each
+/// call returns only once it is answered.
+pub trait HttpHost {
+    /// POST `body` to `url`: the response's status and body.
+    fn post(
+        &self,
+        url: &str,
+        headers: &[(&str, String)],
+        body: &str,
+        timeout_ms: u64,
+    ) -> Result<(u16, Vec<u8>), String>;
+    /// Wait, as between retries.
+    fn sleep(&self, duration: std::time::Duration);
+}
+
+thread_local! {
+    static HTTP: RefCell<Option<Box<dyn HttpHost>>> = const { RefCell::new(None) };
+}
+
+/// Answer the plugins' HTTP calls on this thread with `http` until the
+/// returned guard drops.
+pub fn set_http(http: Box<dyn HttpHost>) -> HttpGuard {
+    HTTP.with(|slot| *slot.borrow_mut() = Some(http));
+    HttpGuard(())
+}
+
+pub struct HttpGuard(());
+
+impl Drop for HttpGuard {
+    fn drop(&mut self) {
+        HTTP.with(|slot| *slot.borrow_mut() = None);
+    }
+}
+
+/// What a plugin calls, in place of `wasi:http`.
+pub mod http {
+    /// POST through the host; an error when the host has no HTTP.
+    pub fn post(
+        url: &str,
+        headers: &[(&str, String)],
+        body: &str,
+        timeout_ms: u64,
+    ) -> Result<(u16, Vec<u8>), String> {
+        super::HTTP.with(|slot| match slot.borrow().as_deref() {
+            Some(http) => http.post(url, headers, body, timeout_ms),
+            None => Err("this host makes no HTTP requests".to_owned()),
+        })
+    }
+
+    pub fn sleep(duration: std::time::Duration) {
+        super::HTTP.with(|slot| {
+            if let Some(http) = slot.borrow().as_deref() {
+                http.sleep(duration);
+            }
+        });
+    }
+}
+
 /// The export macros: a native host names each plugin's type itself.
 #[doc(hidden)]
 #[macro_export]

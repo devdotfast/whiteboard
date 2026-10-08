@@ -51,6 +51,9 @@ struct Request {
     /// Ask for highlight captures.
     #[serde(default)]
     syntax: bool,
+    /// Run the summarizer too, when it is enabled.
+    #[serde(default)]
+    summarize: bool,
 }
 
 /// A file as the classifier sees it: its manifest entry, with tags, and why
@@ -123,14 +126,45 @@ fn problem(error: &anyhow::Error) -> Problem {
     }
 }
 
+/// `config` with `overrides`, a JSON object, merged over it: a table into a
+/// table, anything else replaced.
+fn merged(config: Option<&str>, overrides: Option<&str>) -> anyhow::Result<Option<String>> {
+    fn merge(base: &mut toml::Table, over: toml::Table) {
+        for (key, value) in over {
+            match (base.get_mut(&key), value) {
+                (Some(toml::Value::Table(base)), toml::Value::Table(over)) => merge(base, over),
+                (_, value) => {
+                    base.insert(key, value);
+                }
+            }
+        }
+    }
+    let Some(overrides) = overrides else {
+        return Ok(config.map(str::to_owned));
+    };
+    let mut table: toml::Table = toml::from_str(config.unwrap_or_default())?;
+    let over: toml::Table = serde_json::from_str(overrides)?;
+    merge(&mut table, over);
+    Ok(Some(toml::to_string(&table)?))
+}
+
 #[wasm_bindgen]
 impl Differ {
     /// A differ for `config`, the text of a `config.toml`, or the bundled
-    /// defaults when it is absent.
+    /// defaults when it is absent. `overrides` is JSON merged over it, table
+    /// by table: the page's own settings, such as the summarizer's key.
     #[wasm_bindgen(constructor)]
-    pub fn new(config: Option<String>) -> Result<Differ, JsError> {
+    pub fn new(config: Option<String>, overrides: Option<String>) -> Result<Differ, JsError> {
         console_error_panic_hook::set_once();
-        Self::from_config(config.as_deref()).map_err(js_error)
+        merged(config.as_deref(), overrides.as_deref())
+            .and_then(|config| Self::from_config(config.as_deref()))
+            .map_err(js_error)
+    }
+
+    /// Whether the summarizer is enabled: the page then asks for each file's
+    /// summaries after showing it.
+    pub fn summarizes(&self) -> bool {
+        self.pipeline.summarizes()
     }
 
     /// The configuration's JSON Schema, with every setting's description
@@ -156,8 +190,10 @@ impl Differ {
 
     /// Diff one changed file. `request` is JSON:
     /// `{"status": "modified", "lhs": {"path", "oid", "mode", "text"}, "rhs": {...}}`,
-    /// with `lhs` absent for an added file and `rhs` for a deleted one, and
-    /// an optional `"syntax": true` for highlight captures. Returns JSON
+    /// with `lhs` absent for an added file and `rhs` for a deleted one, an
+    /// optional `"syntax": true` for highlight captures, and an optional
+    /// `"summarize": true` to run the summarizer, which blocks on the page's
+    /// requests to the model. Returns JSON
     /// `{"entry", "hidden"?, "event"}`: the file classified with its text,
     /// and its `file` record.
     pub fn diff(&self, request: &str) -> Result<String, JsError> {
@@ -212,11 +248,13 @@ impl Differ {
             .filter_map(|side| Some((side.oid.clone(), side.text.clone()?.into_bytes())))
             .collect();
         let classified = self.classify(&request, blobs)?;
+        let _http = diffr_plugin_sdk::native::set_http(Box::new(plugins::PageHttp));
         let outcome = match self.shaped(
             &classified,
             text(&request.lhs),
             text(&request.rhs),
             request.syntax,
+            request.summarize,
         ) {
             Ok(diff) => Outcome::Diff { diff },
             Err(error) => Outcome::Error {
@@ -254,6 +292,7 @@ impl Differ {
         before: &str,
         after: &str,
         syntax: bool,
+        summarize: bool,
     ) -> anyhow::Result<Diff> {
         let entry = &classified.entry;
         let sizes = (before.len() as u64, after.len() as u64);
@@ -296,7 +335,7 @@ impl Differ {
             },
         );
         plugins::ready(present(classified.hidden.as_deref(), diff, async |sides| {
-            self.pipeline.run(entry, sides)
+            self.pipeline.run(entry, sides, summarize)
         }))?
     }
 }
@@ -404,6 +443,54 @@ mod tests {
         assert!(response["hidden"].is_string(), "{response}");
         let diff = &response["event"]["diff"];
         assert_eq!(diff["stats"]["fallback"]["code"], "hidden", "{diff}");
+    }
+
+    #[test]
+    fn overrides_merge_into_the_config_table_by_table() {
+        let config = merged(
+            Some("[plugins.shape.bundled.summarize]\nmin_lines = 5\nprovider = \"openai\"\n"),
+            Some(r#"{"plugins": {"shape": {"bundled": {"summarize": {"enabled": true, "provider": "anthropic"}}}}}"#),
+        )
+        .unwrap()
+        .unwrap();
+        let table: toml::Table = toml::from_str(&config).unwrap();
+        let summarize = &table["plugins"]["shape"]["bundled"]["summarize"];
+        assert_eq!(summarize["min_lines"].as_integer(), Some(5));
+        assert_eq!(summarize["provider"].as_str(), Some("anthropic"));
+        assert_eq!(summarize["enabled"].as_bool(), Some(true));
+    }
+
+    #[test]
+    fn the_summarizer_runs_only_in_its_own_pass_and_asks_the_page() {
+        let differ = Differ::from_config(
+            merged(
+                None,
+                Some(r#"{"plugins": {"shape": {"bundled": {"summarize": {"enabled": true, "api_key": "key", "min_lines": 1}}}}}"#),
+            )
+            .unwrap()
+            .as_deref(),
+        )
+        .expect("the config loads");
+        assert!(differ.summarizes());
+        let body: String = (0..30).map(|i| format!("  const v{i} = {i};\n")).collect();
+        let request = |summarize: bool| {
+            json!({
+                "status": "added",
+                "rhs": {"path": "src/a.ts", "text": format!("export function f() {{\n{body}}}\n")},
+                "summarize": summarize,
+            })
+        };
+        let first = diff(&differ, request(false));
+        assert_eq!(first["event"]["diff"]["type"], "text", "{first}");
+        // Off the web there is no page, so the summarizer's request fails the file.
+        let summarized = diff(&differ, request(true));
+        let error = summarized["event"]["error"]["message"]
+            .as_str()
+            .unwrap_or_default();
+        assert!(
+            error.contains("no page to make HTTP requests"),
+            "{summarized}"
+        );
     }
 
     #[test]

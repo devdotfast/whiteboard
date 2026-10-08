@@ -8,6 +8,10 @@ use anyhow::anyhow;
 use diffr_plugin_sdk::prelude::*;
 use serde::Deserialize;
 use std::time::Duration;
+#[cfg(target_os = "wasi")]
+mod http;
+#[cfg(not(target_os = "wasi"))]
+#[path = "native_http.rs"]
 mod http;
 mod provider;
 pub use provider::{Details, Provider};
