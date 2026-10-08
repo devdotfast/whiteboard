@@ -2,6 +2,7 @@
 //! host walks the trees, positioning the cursor on each node before calling
 //! the plugin; the plugin reads and edits through it, and edits apply
 //! immediately.
+use crate::hash::DftHashMap;
 use crate::pairing::Pairing;
 use crate::protocol::{FileChange, Node, Region, Source, SourcePos, SourceRange, Span, Visibility};
 use std::collections::BTreeSet;
@@ -11,6 +12,14 @@ use std::collections::BTreeSet;
 pub enum Side {
     Lhs,
     Rhs,
+}
+
+/// A region's side, its parent fold, and its path from the side's root.
+#[derive(Clone)]
+struct Place {
+    side: Side,
+    parent: Option<u32>,
+    path: Vec<usize>,
 }
 
 /// One region as a plugin sees it: shallow, with its parent and its
@@ -79,13 +88,14 @@ pub enum MoveError {
 /// A file's trees, the next unused IDs, and where the current walk stands.
 pub struct Cursor {
     pub file: FileChange,
-    pub sides: Pairing<Source>,
+    sides: Pairing<Source>,
     /// The region the cursor is on: the one the current callback visits.
     pub id: u32,
     /// IDs from here up were made during the current walk, which skips them.
     limit: u32,
     next_region_id: u32,
     next_alignment_id: u32,
+    places: DftHashMap<u32, Place>,
 }
 
 impl Cursor {
@@ -106,6 +116,12 @@ impl Cursor {
                 }
             });
         }
+        let mut places = DftHashMap::default();
+        for (side, source) in [(Side::Lhs, sides.lhs()), (Side::Rhs, sides.rhs())] {
+            if let Some(source) = source {
+                place(top(source), 0, None, side, &[], &mut places);
+            }
+        }
         Ok(Self {
             file,
             sides,
@@ -113,7 +129,13 @@ impl Cursor {
             limit: next_region_id,
             next_region_id,
             next_alignment_id,
+            places,
         })
+    }
+
+    /// The edited sides, once the plugins are done.
+    pub fn into_sides(self) -> Pairing<Source> {
+        self.sides
     }
 
     /// Start a walk over the nodes that exist now, from the first region.
@@ -160,52 +182,22 @@ impl Cursor {
 
     /// One region and its immediate children.
     pub fn get(&self, id: u32) -> Result<RegionView, MoveError> {
-        fn find(
-            regions: &[Region],
-            parent: Option<u32>,
-            id: u32,
-            side: Side,
-        ) -> Option<RegionView> {
-            for region in regions {
-                if region.id == id {
-                    let children = match &region.node {
-                        Node::Leaf { .. } => vec![],
-                        Node::Fold { children, .. } => {
-                            children.iter().map(|child| child.id).collect()
-                        }
-                    };
-                    return Some(view(region, parent, side, children));
-                }
-                if let Node::Fold { children, .. } = &region.node {
-                    if let Some(node) = find(children, Some(region.id), id, side) {
-                        return Some(node);
-                    }
-                }
-            }
-            None
-        }
-        for (side, source) in [(Side::Lhs, self.sides.lhs()), (Side::Rhs, self.sides.rhs())] {
-            if let Some(node) = source.and_then(|source| find(top(source), None, id, side)) {
-                return Ok(node);
-            }
-        }
-        Err(MoveError::NoRegion(id))
+        let place = self.place(id)?;
+        let region = self.region(id)?;
+        let children = region.children().iter().map(|child| child.id).collect();
+        Ok(view(region, place.parent, place.side, children))
     }
 
     /// Original text covered by this region's whole-line range.
     pub fn text(&self, id: u32) -> Result<String, MoveError> {
-        for source in self.sides.sides() {
-            if let Some(region) = find(top(source), id) {
-                let range = region.range.lines();
-                return Ok(source
-                    .text
-                    .split_inclusive('\n')
-                    .skip(range.start as usize)
-                    .take(range.len())
-                    .collect());
-            }
-        }
-        Err(MoveError::NoRegion(id))
+        let range = self.region(id)?.range.lines();
+        Ok(self
+            .source_on(self.place(id)?.side)
+            .text
+            .split_inclusive('\n')
+            .skip(range.start as usize)
+            .take(range.len())
+            .collect())
     }
 
     /// Summary of visible collapsed rows and open-line runs beneath a node.
@@ -256,43 +248,36 @@ impl Cursor {
                 }
             }
         }
-        Ok(summarize(region_of(&self.sides, id)?))
+        Ok(summarize(self.region(id)?))
     }
 
     /// Resolve an ordered sibling sequence across sides. None means conflicting
     /// alignment; an empty sequence means all members are one-sided.
     pub fn matching_siblings(&self, ids: &[u32]) -> Result<Option<Vec<u32>>, MoveError> {
         check_regions(ids, Grouping::Join)?;
-        let own = self
-            .sides
-            .sides()
-            .into_iter()
-            .find(|s| find(top(s), ids[0]).is_some())
-            .ok_or(MoveError::NoRegion(ids[0]))?;
-        let nodes = ids
-            .iter()
-            .map(|id| find(top(own), *id).ok_or(MoveError::NoRegion(*id)))
-            .collect::<Result<Vec<_>, _>>()?;
-        let path = path_of(top(own), ids[0]).expect("the region was found above");
-        let siblings = if path.len() == 1 {
-            top(own)
-        } else {
-            let Node::Fold { children, .. } = &at(top(own), &path[..path.len() - 1]).node else {
-                unreachable!("a region's parent is a fold")
-            };
-            children
+        let first = self.place(ids[0])?;
+        let mut nodes = Vec::with_capacity(ids.len());
+        for &id in ids {
+            // Every region must sit on the first one's side.
+            if self.place(id)?.side != first.side {
+                return Err(MoveError::NoRegion(id));
+            }
+            nodes.push(self.region(id)?);
+        }
+        let siblings: Vec<_> = match first.parent {
+            Some(parent) => self
+                .region(parent)?
+                .children()
+                .iter()
+                .map(|region| region.id)
+                .collect(),
+            None => vec![ids[0]],
         };
-        let siblings: Vec<_> = siblings.iter().map(|region| region.id).collect();
         let start = siblings.iter().position(|id| *id == ids[0]).unwrap();
         if siblings.get(start..start + ids.len()) != Some(ids) {
             return Err(MoveError::NotSiblings(ids.to_vec()));
         }
-        let other = if self.sides.lhs().is_some_and(|s| std::ptr::eq(s, own)) {
-            self.sides.rhs()
-        } else {
-            self.sides.lhs()
-        };
-        let Some(other) = other else {
+        let Some(other) = side_of(&self.sides, first.side.other()) else {
             return Ok(Some(Vec::new()));
         };
         fn matches(a: &Region, b: &Region) -> bool {
@@ -358,20 +343,17 @@ impl Cursor {
     /// Whether this region contains changed bytes or an unpaired leaf on its own side.
     pub fn has_changes(&self, id: u32) -> Result<bool, MoveError> {
         let mut changes = false;
-        walk(
-            std::slice::from_ref(region_of(&self.sides, id)?),
-            &mut |region| {
-                if let Node::Leaf { pair, changed, .. } = &region.node {
-                    changes |= !changed.is_empty() || pair.is_none();
-                }
-            },
-        );
+        walk(std::slice::from_ref(self.region(id)?), &mut |region| {
+            if let Node::Leaf { pair, changed, .. } = &region.node {
+                changes |= !changed.is_empty() || pair.is_none();
+            }
+        });
         Ok(changes)
     }
 
     /// Opposite-side leaf with the same alignment; folds and unmatched leaves return None.
     pub fn paired_leaf(&self, id: u32) -> Result<Option<u32>, MoveError> {
-        Ok(match region_of(&self.sides, id)?.node {
+        Ok(match self.region(id)?.node {
             Node::Leaf { pair, .. } => pair,
             Node::Fold { .. } => None,
         })
@@ -379,7 +361,7 @@ impl Cursor {
 
     /// All regions sharing this region's collapse state, including itself.
     pub fn linked_regions(&self, id: u32) -> Result<Vec<u32>, MoveError> {
-        let state = region_of(&self.sides, id)?.fold_state_id;
+        let state = self.region(id)?.fold_state_id;
         let mut ids = Vec::new();
         for tree in trees_ref(&self.sides) {
             walk(tree, &mut |region| {
@@ -394,12 +376,9 @@ impl Cursor {
     /// No leaf in this subtree has an opposite-side match.
     pub fn is_one_sided(&self, id: u32) -> Result<bool, MoveError> {
         let mut paired = false;
-        walk(
-            std::slice::from_ref(region_of(&self.sides, id)?),
-            &mut |region| {
-                paired |= matches!(region.node, Node::Leaf { pair: Some(_), .. });
-            },
-        );
+        walk(std::slice::from_ref(self.region(id)?), &mut |region| {
+            paired |= matches!(region.node, Node::Leaf { pair: Some(_), .. });
+        });
         Ok(!paired)
     }
 
@@ -437,113 +416,62 @@ impl Cursor {
 
     /// Split a leaf and its paired leaf at a relative line offset. Returns the new tails.
     pub fn cut(&mut self, id: u32, offset: u32) -> Result<RegionIds, MoveError> {
-        let Cursor {
-            sides,
-            next_region_id,
-            next_alignment_id,
-            ..
-        } = self;
-        let Some((side, path)) = trees(sides)
-            .into_iter()
-            .enumerate()
-            .find_map(|(side, tree)| Some((side, path_of(tree, id)?)))
-        else {
-            return Err(MoveError::NoRegion(id));
+        let leaf = self.region(id)?;
+        let Node::Leaf { pair, .. } = leaf.node else {
+            return Err(MoveError::CutFold(id));
         };
-        let (alignment, len) = {
-            let leaf = at(trees(sides).swap_remove(side), &path);
-            let Some(alignment) = leaf.alignment_id() else {
-                return Err(MoveError::CutFold(id));
-            };
-            (alignment, leaf.range.lines().len() as u32)
-        };
+        let len = leaf.range.lines().len() as u32;
         if !(0 < offset && offset < len) {
             return Err(MoveError::CutOutside { id, offset, len });
         }
         // Validate both sides before allocating IDs or changing either tree.
-        let paths = trees_ref(sides)
-            .into_iter()
-            .enumerate()
-            .map(|(tree_side, tree)| {
-                let path = if tree_side == side {
-                    Some(path.clone())
-                } else {
-                    path_where(tree, &|region| region.alignment_id() == Some(alignment))
-                };
-                if let Some(path) = &path {
-                    if at(tree, path).range.lines().len() as u32 != len {
-                        return Err(MoveError::UnevenSides(id));
-                    }
-                }
-                Ok(path)
-            })
-            .collect::<Result<Vec<_>, MoveError>>()?;
-        let piece_alignment = *next_alignment_id;
-        *next_alignment_id += 1;
-        // Both tails' ids first, so each can name the other as its pair.
-        let piece_ids: Vec<Option<u32>> = paths
-            .iter()
-            .map(|path| {
-                path.as_ref().map(|_| {
-                    let id = *next_region_id;
-                    *next_region_id += 1;
-                    id
-                })
-            })
-            .collect();
-        let piece_state = piece_ids.iter().flatten().next().copied();
-        let has_lhs = sides.lhs().is_some();
-        let (mut lhs, mut rhs) = (None, None);
-        for (tree_side, (tree, path)) in trees(sides).into_iter().zip(paths).enumerate() {
-            let (Some(path), Some(piece_id), Some(piece_state)) =
-                (path, piece_ids[tree_side], piece_state)
-            else {
-                continue;
-            };
-            let partner =
-                piece_ids
-                    .iter()
-                    .enumerate()
-                    .find_map(|(other, id)| if other == tree_side { None } else { *id });
-            let (index, parent) = path.split_last().expect("a path is never empty");
-            let list = siblings(tree, parent);
-            if tree_side == 0 && has_lhs {
-                lhs = Some(piece_id);
-            } else {
-                rhs = Some(piece_id);
+        let mut cuts = vec![self.place(id)?.clone()];
+        if let Some(pair) = pair {
+            if self.region(pair)?.range.lines().len() as u32 != len {
+                return Err(MoveError::UnevenSides(id));
             }
-            let leaf = list.remove(*index);
-            let pieces = split(
-                leaf,
-                offset,
-                piece_id,
-                piece_alignment,
-                piece_state,
-                partner,
-            );
-            list.splice(*index..*index, pieces);
+            cuts.push(self.place(pair)?.clone());
+        }
+        // The lhs tail is numbered first, and its id is the tails' fold state.
+        cuts.sort_by_key(|place| place.side == Side::Rhs);
+        let piece_alignment = self.next_alignment_id;
+        self.next_alignment_id += 1;
+        let tails: Vec<u32> = (self.next_region_id..).take(cuts.len()).collect();
+        self.next_region_id += cuts.len() as u32;
+        let (mut lhs, mut rhs) = (None, None);
+        for (Place { side, parent, path }, &tail) in cuts.into_iter().zip(&tails) {
+            let partner = tails.iter().copied().find(|&other| other != tail);
+            let (&index, holder) = path.split_last().expect("a path is never empty");
+            let list = siblings(tree_mut(&mut self.sides, side), holder);
+            let leaf = list.remove(index);
+            let pieces = split(leaf, offset, tail, piece_alignment, tails[0], partner);
+            list.splice(index..index, pieces);
+            // The tail and every later sibling moved one index along.
+            place(list, index + 1, parent, side, holder, &mut self.places);
+            match side {
+                Side::Lhs => lhs = Some(tail),
+                Side::Rhs => rhs = Some(tail),
+            }
         }
         Ok(region_ids(lhs, rhs))
     }
 
     /// Wrap consecutive siblings on each side in new open, unlabelled folds.
     pub fn join(&mut self, ids: &[u32]) -> Result<RegionIds, MoveError> {
-        let Cursor {
-            sides,
-            next_region_id,
-            ..
-        } = self;
         check_regions(ids, Grouping::Join)?;
-        for id in ids {
-            region_of(sides, *id)?;
-        }
+        let located = ids
+            .iter()
+            .map(|id| self.place(*id))
+            .collect::<Result<Vec<_>, MoveError>>()?;
         // Compute and validate every sibling range before draining either side.
         let mut groups = Vec::new();
-        for tree in trees_ref(sides) {
-            let mut paths: Vec<Vec<usize>> =
-                ids.iter().filter_map(|id| path_of(tree, *id)).collect();
+        for side in [Side::Lhs, Side::Rhs] {
+            let mut paths: Vec<&Vec<usize>> = located
+                .iter()
+                .filter(|place| place.side == side)
+                .map(|place| &place.path)
+                .collect();
             if paths.is_empty() {
-                groups.push(None);
                 continue;
             }
             if paths.len() < 2 {
@@ -561,31 +489,29 @@ impl Cursor {
             if !adjacent {
                 return Err(MoveError::NotSiblings(ids.to_vec()));
             }
-            groups.push(Some((parent.to_vec(), first, paths.len())));
+            groups.push((side, parent.to_vec(), first, paths.len()));
         }
         let mut state = None;
-        let has_lhs = sides.lhs().is_some();
         let (mut lhs, mut rhs) = (None, None);
-        for (side, (tree, group)) in trees(sides).into_iter().zip(groups).enumerate() {
-            let Some((parent, first, count)) = group else {
-                continue;
-            };
+        for (side, parent, first, count) in groups {
+            let tree = tree_mut(&mut self.sides, side);
             // A joined fold sits in its parent's body.
-            let Node::Fold { indent, .. } = at(tree, &parent).node else {
+            let holder = at(tree, &parent);
+            let Node::Fold { indent, .. } = holder.node else {
                 unreachable!("a path descends through folds");
             };
+            let holder = holder.id;
             let list = siblings(tree, &parent);
             let children: Vec<Region> = list.drain(first..first + count).collect();
             let range = SourceRange {
                 start: children[0].range.start,
                 end: children[children.len() - 1].range.end,
             };
-            let id = *next_region_id;
-            *next_region_id += 1;
-            if side == 0 && has_lhs {
-                lhs = Some(id);
-            } else {
-                rhs = Some(id);
+            let id = self.next_region_id;
+            self.next_region_id += 1;
+            match side {
+                Side::Lhs => lhs = Some(id),
+                Side::Rhs => rhs = Some(id),
             }
             let fold_state_id = *state.get_or_insert(id);
             list.insert(
@@ -603,24 +529,25 @@ impl Cursor {
                     },
                 },
             );
+            // The new fold, its children, and every later sibling moved.
+            place(list, first, Some(holder), side, &parent, &mut self.places);
         }
         Ok(region_ids(lhs, rhs))
     }
 
     /// Merge the fold states of `ids` into the first's; all collapse if any was.
     pub fn link(&mut self, ids: &[u32]) -> Result<(), MoveError> {
-        let sides = &mut self.sides;
         check_regions(ids, Grouping::Link)?;
-        let state = region_of(sides, ids[0])?.fold_state_id;
+        let state = self.region(ids[0])?.fold_state_id;
         let mut collapsed = false;
         for &id in ids {
-            collapsed |= region_of(sides, id)?.visibility.collapsed;
+            collapsed |= self.region(id)?.visibility.collapsed;
         }
         let states = ids
             .iter()
-            .map(|id| Ok(region_of(sides, *id)?.fold_state_id))
+            .map(|id| Ok(self.region(*id)?.fold_state_id))
             .collect::<Result<BTreeSet<u32>, MoveError>>()?;
-        for tree in trees(sides) {
+        for tree in trees(&mut self.sides) {
             walk_mut(tree, &mut |region| {
                 if states.contains(&region.fold_state_id) {
                     region.fold_state_id = state;
@@ -633,7 +560,7 @@ impl Cursor {
 
     /// Set the shared collapsed state.
     pub fn set_collapsed(&mut self, region: u32, collapsed: bool) -> Result<(), MoveError> {
-        let state = region_of(&self.sides, region)?.fold_state_id;
+        let state = self.region(region)?.fold_state_id;
         for tree in trees(&mut self.sides) {
             walk_mut(tree, &mut |region| {
                 if region.fold_state_id == state {
@@ -646,8 +573,53 @@ impl Cursor {
 
     /// Set or clear a region's label.
     pub fn set_label(&mut self, region: u32, label: Option<String>) -> Result<(), MoveError> {
-        region_mut(&mut self.sides, region)?.visibility.label = label.unwrap_or_default();
+        self.region_mut(region)?.visibility.label = label.unwrap_or_default();
         Ok(())
+    }
+
+    fn place(&self, id: u32) -> Result<&Place, MoveError> {
+        self.places.get(&id).ok_or(MoveError::NoRegion(id))
+    }
+
+    /// The region with this `id`, on whichever side holds it.
+    fn region(&self, id: u32) -> Result<&Region, MoveError> {
+        let place = self.place(id)?;
+        Ok(at(top(self.source_on(place.side)), &place.path))
+    }
+
+    fn region_mut(&mut self, id: u32) -> Result<&mut Region, MoveError> {
+        let place = self.places.get(&id).ok_or(MoveError::NoRegion(id))?;
+        Ok(at_mut(tree_mut(&mut self.sides, place.side), &place.path))
+    }
+
+    fn source_on(&self, side: Side) -> &Source {
+        side_of(&self.sides, side).expect("an indexed region's side exists")
+    }
+}
+
+impl Side {
+    fn other(self) -> Self {
+        match self {
+            Self::Lhs => Self::Rhs,
+            Self::Rhs => Self::Lhs,
+        }
+    }
+}
+
+/// Index `regions[start..]` and everything beneath them: the children of
+/// `parent`, which sits at `prefix`.
+fn place(
+    regions: &[Region],
+    start: usize,
+    parent: Option<u32>,
+    side: Side,
+    prefix: &[usize],
+    places: &mut DftHashMap<u32, Place>,
+) {
+    for (index, region) in regions.iter().enumerate().skip(start) {
+        let path = [prefix, &[index]].concat();
+        place(region.children(), 0, Some(region.id), side, &path, places);
+        places.insert(region.id, Place { side, parent, path });
     }
 }
 
@@ -750,31 +722,19 @@ fn trees(sides: &mut Pairing<Source>) -> Vec<&mut [Region]> {
 fn trees_ref(sides: &Pairing<Source>) -> Vec<&[Region]> {
     sides.sides().into_iter().map(top).collect()
 }
-
 /// A side's tree, as a one-region list holding its root.
 fn top(source: &Source) -> &[Region] {
     std::slice::from_ref(&source.root)
 }
 
-/// Child indices from the root down to the first region `is` accepts.
-fn path_where(regions: &[Region], is: &impl Fn(&Region) -> bool) -> Option<Vec<usize>> {
-    for (index, region) in regions.iter().enumerate() {
-        if is(region) {
-            return Some(vec![index]);
-        }
-        if let Node::Fold { children, .. } = &region.node {
-            if let Some(mut path) = path_where(children, is) {
-                path.insert(0, index);
-                return Some(path);
-            }
-        }
-    }
-    None
-}
-
-/// Child indices from the root down to the region with this `id`.
-fn path_of(regions: &[Region], id: u32) -> Option<Vec<usize>> {
-    path_where(regions, &|region| region.id == id)
+/// A side's tree, as a one-region list holding its root.
+fn tree_mut(sides: &mut Pairing<Source>, side: Side) -> &mut [Region] {
+    let source = match (side, sides) {
+        (Side::Lhs, Pairing::Both { lhs, .. } | Pairing::LeftOnly { lhs }) => lhs,
+        (Side::Rhs, Pairing::Both { rhs, .. } | Pairing::RightOnly { rhs }) => rhs,
+        _ => unreachable!("an indexed region's side exists"),
+    };
+    std::slice::from_mut(&mut source.root)
 }
 
 /// The region at a path.
@@ -784,6 +744,17 @@ fn at<'a>(regions: &'a [Region], path: &[usize]) -> &'a Region {
         (true, _) => &regions[index],
         (false, Node::Fold { children, .. }) => at(children, rest),
         (false, Node::Leaf { .. }) => unreachable!("a path descends through folds"),
+    }
+}
+
+fn at_mut<'a>(regions: &'a mut [Region], path: &[usize]) -> &'a mut Region {
+    let (&index, rest) = path.split_first().expect("a path is never empty");
+    if rest.is_empty() {
+        return &mut regions[index];
+    }
+    match &mut regions[index].node {
+        Node::Fold { children, .. } => at_mut(children, rest),
+        Node::Leaf { .. } => unreachable!("a path descends through folds"),
     }
 }
 
@@ -799,47 +770,6 @@ fn siblings<'a>(regions: &'a mut [Region], parent: &[usize]) -> &'a mut Vec<Regi
     } else {
         siblings(children, rest)
     }
-}
-
-/// The region with this `id`, on whichever side holds it.
-fn region_of(sides: &Pairing<Source>, id: u32) -> Result<&Region, MoveError> {
-    trees_ref(sides)
-        .into_iter()
-        .find_map(|tree| find(tree, id))
-        .ok_or(MoveError::NoRegion(id))
-}
-
-fn region_mut(sides: &mut Pairing<Source>, id: u32) -> Result<&mut Region, MoveError> {
-    trees(sides)
-        .into_iter()
-        .find_map(|tree| find_mut(tree, id))
-        .ok_or(MoveError::NoRegion(id))
-}
-
-fn find(regions: &[Region], id: u32) -> Option<&Region> {
-    regions.iter().find_map(|region| {
-        if region.id == id {
-            return Some(region);
-        }
-        match &region.node {
-            Node::Fold { children, .. } => find(children, id),
-            Node::Leaf { .. } => None,
-        }
-    })
-}
-
-fn find_mut(regions: &mut [Region], id: u32) -> Option<&mut Region> {
-    for region in regions {
-        if region.id == id {
-            return Some(region);
-        }
-        if let Node::Fold { children, .. } = &mut region.node {
-            if let Some(found) = find_mut(children, id) {
-                return Some(found);
-            }
-        }
-    }
-    None
 }
 
 /// A leaf split at relative line `offset`. The first piece keeps the leaf's

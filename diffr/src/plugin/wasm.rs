@@ -528,7 +528,7 @@ impl Pipeline {
             mailbox.send(job).await.map_err(|_| trapped())?;
         }
         let cursor = result.await.map_err(|_| trapped())??;
-        Ok(cursor.sides)
+        Ok(cursor.into_sides())
     }
 
     /// Give the file to the least-loaded worker whose mailbox has room. When
