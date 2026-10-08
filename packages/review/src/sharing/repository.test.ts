@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -7,6 +8,8 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import {
   fetchPinnedRepository,
+  fetchSharedCommits,
+  forgetSharedCommits,
   repositoryReady,
   sharedGit,
 } from "./repository.js";
@@ -76,6 +79,117 @@ it("fetches both pinned histories independently and reads them after the sender 
   ).toContain("+export const answer = 2");
   await rm(checkout, { recursive: true });
   expect(await repositoryReady(checkout, pins)).toBe(false);
+});
+
+it("refuses a shared board's commit that isn't a full commit id, before running git", async () => {
+  const { root, remote, git, pins } = await remoteFixture();
+  const checkout = path.join(root, "recipient");
+
+  git("clone", "--quiet", remote, checkout);
+  const marker = path.join(root, "pwned");
+
+  // With no git to run, any git call would fail differently.
+  vi.stubEnv("PATH", path.join(root, "no-git"));
+
+  for (const commit of [
+    `--upload-pack=touch ${marker}`,
+    "+refs/heads/main:refs/heads/main",
+    "HEAD",
+    pins.head.slice(0, 12),
+  ])
+    await expect(
+      fetchSharedCommits(checkout, [pins.head, commit], "share-1"),
+    ).rejects.toThrow(/full commit id/);
+
+  expect(existsSync(marker)).toBe(false);
+});
+
+it("keeps a shared board's commits under refs, so gc can't prune them from the person's checkout", async () => {
+  const { root, remote, git, pins } = await remoteFixture();
+  const checkout = path.join(root, "recipient");
+
+  // The person's checkout has only the base; the board quotes the head too.
+  git("clone", "--quiet", "--no-checkout", remote, checkout);
+  execFileSync("git", [
+    "-C",
+    checkout,
+    "update-ref",
+    "-d",
+    "refs/remotes/origin/main",
+  ]);
+  execFileSync("git", [
+    "-C",
+    checkout,
+    "update-ref",
+    "refs/heads/main",
+    pins.base,
+  ]);
+  execFileSync("git", [
+    "-C",
+    checkout,
+    "reflog",
+    "expire",
+    "--expire=now",
+    "--all",
+  ]);
+  execFileSync("git", ["-C", checkout, "gc", "--quiet", "--prune=now"]);
+
+  await fetchSharedCommits(checkout, [pins.base, pins.head], "share-1");
+
+  // Only the head is fetched; the base was already here.
+  expect(
+    execFileSync(
+      "git",
+      [
+        "-C",
+        checkout,
+        "for-each-ref",
+        "--format=%(refname)",
+        "refs/review/shared/share-1",
+      ],
+      { encoding: "utf8" },
+    )
+      .trim()
+      .split("\n"),
+  ).toEqual(
+    [
+      `refs/review/shared/share-1/${pins.base}`,
+      `refs/review/shared/share-1/${pins.head}`,
+    ].sort(),
+  );
+
+  // Nothing else names them; gc keeps them anyway.
+  execFileSync("git", ["-C", checkout, "update-ref", "-d", "refs/heads/main"]);
+  execFileSync("git", [
+    "-C",
+    checkout,
+    "reflog",
+    "expire",
+    "--expire=now",
+    "--all",
+  ]);
+  execFileSync("git", ["-C", checkout, "gc", "--quiet", "--prune=now"]);
+
+  for (const commit of [pins.base, pins.head])
+    expect(() =>
+      execFileSync("git", [
+        "-C",
+        checkout,
+        "cat-file",
+        "-e",
+        `${commit}^{commit}`,
+      ]),
+    ).not.toThrow();
+
+  // Removing the share lets them go.
+  await forgetSharedCommits(checkout, "share-1");
+  expect(
+    execFileSync(
+      "git",
+      ["-C", checkout, "for-each-ref", "refs/review/shared/share-1"],
+      { encoding: "utf8" },
+    ),
+  ).toBe("");
 });
 
 it("rejects an unpushed commit even when the sender has its objects", async () => {

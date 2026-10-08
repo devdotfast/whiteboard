@@ -5,6 +5,7 @@ import {
   type Block,
   type BoardRef,
   boardLinks,
+  boardRepositoryId,
   elements,
   resourceReferences,
   selectionReferences,
@@ -73,7 +74,10 @@ export interface ApiDocumentData {
 const derivations = new VersionCache(
   (snapshot: Snapshot) => ({
     headings: apiHeadingIds(snapshot.document),
-    references: selectionReferences(snapshot.document, { tolerant: true }),
+    references: selectionReferences(snapshot.document, {
+      tolerant: true,
+      repositoryId: boardRepositoryId(snapshot),
+    }),
     resources: resourceReferences(snapshot.document),
   }),
   { capacity: 32, key: documentKey },
@@ -448,9 +452,10 @@ export const DocumentNode = memo(function DocumentNode({
 
   const stale =
     block.type !== "section" &&
-    selectionReferences([block], { tolerant: true }).some((reference) =>
-      data.snapshot.staleSources?.includes(reference.id),
-    );
+    selectionReferences([block], {
+      tolerant: true,
+      repositoryId: boardRepositoryId(data.snapshot),
+    }).some((reference) => data.snapshot.staleSources?.includes(reference.id));
 
   const prose = node.type === "markdown" || node.type === "trace_quote";
 

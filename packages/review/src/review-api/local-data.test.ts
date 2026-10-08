@@ -38,7 +38,7 @@ import {
   callAuthoringTool,
 } from "./agent-client.js";
 import { ReviewApiClient } from "./client.js";
-import { type Pins, elements } from "./document.js";
+import { type Pins, ReviewInputError, elements } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { openLocalReviewStore } from "./local-data.js";
 
@@ -3979,6 +3979,120 @@ it("quotes the first and last line of each anchor an edit adds", async () => {
       { anchor: "base/example.ts#L1", first: "export const value = 1;" },
     ],
   });
+});
+
+it("keeps a review's references at their commits when it becomes a plan", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Review",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  await insert(reviewId, {
+    type: "markdown",
+    markdown:
+      "[saved](whiteboard:source/head/example.ts#L2) was [one](whiteboard:source/base/example.ts#L1).",
+  });
+  await insert(reviewId, { type: "code_peek", source: rangeAnchor(source) });
+
+  const converted = await local.store.execute(
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "project", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  // Nothing moved, so nothing asks to be checked again.
+  expect(converted.warnings).toBeUndefined();
+
+  const plan = local.store.read(reviewId);
+
+  expect(plan.target).toMatchObject({ kind: "project" });
+  expect(plan.pins).toBeUndefined();
+  expect(plan.document).toMatchObject([
+    {
+      markdown: `[saved](whiteboard:source/${pins.head}/example.ts#L2) was [one](whiteboard:source/${pins.base}/example.ts#L1).`,
+    },
+    { pins: { repositoryId: pins.repositoryId, head: pins.head } },
+  ]);
+  // One new version; the review's own stays as it was.
+  expect(plan.version).toBe(3);
+  expect(local.store.read(reviewId, 2).pins).toEqual(pins);
+});
+
+it("warns that a worktree board's references lose its uncommitted lines when it becomes a plan", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Work in progress",
+      target: { kind: "worktree", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  await insert(reviewId, {
+    type: "markdown",
+    markdown: "[value](whiteboard:source/head/example.ts#L1)",
+  });
+
+  const converted = await local.store.execute(
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "project", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  expect(converted.warnings).toHaveLength(1);
+});
+
+it("describes a commit of a board's repository, and 404s one it lacks", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Plan",
+      target: { kind: "project", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  const app = createReviewApi(local.store, local.data);
+
+  const found = await app.request(
+    `/${reviewId}/commit/${pins.base.slice(0, 8)}`,
+  );
+
+  expect(found.status).toBe(200);
+  expect(await found.json()).toMatchObject({ commit: pins.base });
+  expect(
+    (await app.request(`/${reviewId}/commit/${"0".repeat(40)}`)).status,
+  ).toBe(404);
+});
+
+it("saves a commit link's commit in full, and refuses one the repository lacks", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Plan",
+      target: { kind: "project", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  await insert(reviewId, {
+    type: "markdown",
+    markdown: `[one](whiteboard:source/${pins.base.slice(0, 8)}/example.ts#L1)`,
+  });
+  expect(local.store.read(reviewId).document).toMatchObject([
+    { markdown: `[one](whiteboard:source/${pins.base}/example.ts#L1)` },
+  ]);
+
+  await expect(
+    insert(reviewId, {
+      type: "markdown",
+      markdown: "[gone](whiteboard:source/deadbeef0/example.ts#L1)",
+    }),
+  ).rejects.toBeInstanceOf(ReviewInputError);
 });
 
 it("starts Ask on a plan, which has no pins, in its repository's live checkout", async () => {

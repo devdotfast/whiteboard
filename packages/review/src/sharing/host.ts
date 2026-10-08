@@ -18,7 +18,11 @@ import { z } from "zod";
 
 import { readSharingAuth } from "./auth.js";
 import { ShareAuthError, ShareClient, SharePreflightError } from "./client.js";
-import { exportShare, validateShareSources } from "./export.js";
+import {
+  exportShare,
+  referenceCommits,
+  validateShareSources,
+} from "./export.js";
 import { SharedReviewStore, sharedReviewId } from "./import.js";
 import { readShareRepository, verifyShareRepository } from "./repository.js";
 
@@ -252,9 +256,12 @@ export function mountSharingPublisher(
       repository,
     });
 
+    const commits = referenceCommits(snapshot);
+
+    // The commits must be on GitHub for a recipient to fetch them.
     const verification =
-      root && snapshot.pins && repository
-        ? verifyRepository(root, snapshot.pins, repository).then(
+      root && (snapshot.pins || commits.length) && repository
+        ? verifyRepository(root, snapshot.pins, repository, commits).then(
             () => ({ ok: true as const }),
             (error: Error) => ({ ok: false as const, error }),
           )
