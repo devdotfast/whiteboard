@@ -420,7 +420,13 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		if (input.target.kind === "api") {
 			try {
 				const { reviewId } = input.target;
-				const [connection, assets] = await Promise.all([this.desktopConnection.getConnection(), this.loadAssets()]);
+				// The catalog names the board's project, whose boards share the
+				// threads on screen; a failed list only costs that.
+				const [connection, assets] = await Promise.all([
+					this.desktopConnection.getConnection(),
+					this.loadAssets(),
+					this.apiCatalog.initialize().catch(() => undefined),
+				]);
 				if (generation !== this.loadGeneration || token.isCancellationRequested) return;
 				this.renderedInput = input;
 				this.setCanvasState("active", reviewId);
@@ -434,6 +440,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 						reviewId,
 						...remoteEntry(...this.catalogEntry(reviewId)),
 						remoteHosts: this.remoteHostActions(),
+						projectId: this.apiCatalog.reviews.find((review) => review.reviewId === reviewId)?.project?.id,
 						softwareMapEnabled: this.currentSoftwareMapEnabled(),
 						documentWidth: this.currentDocumentWidth(),
 						setTitle: (title) => input.setApiTitle(title),

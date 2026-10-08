@@ -168,10 +168,10 @@ export function ThreadsSectionBody({
               <li key={thread.id}>
                 <button
                   type="button"
-                  aria-current={thread.id === threads.open || undefined}
+                  aria-current={threads.open?.includes(thread.id) || undefined}
                   {...stylex.props(
                     styles.row,
-                    thread.id === threads.open && styles.rowOpen,
+                    threads.open?.includes(thread.id) && styles.rowOpen,
                   )}
                   onClick={() => onOpenThread?.(thread.id)}
                 >

@@ -8,12 +8,13 @@ import {
   useRef,
 } from "react";
 import { createPortal } from "react-dom";
+import { useShallow } from "zustand/react/shallow";
 
 import { useAskHistory } from "./ask-history";
 import { useReviewDebugSettings } from "./debug-settings";
 import { useOptionalReviewSession } from "./host/review-session";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
-import { askDockedShown } from "./review-panel-store";
+import { askColumnShown } from "./review-panel-store";
 import { withClass } from "./stylex-props";
 import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
@@ -74,22 +75,27 @@ export function AskDesktopSync(): null {
 
   // The column shows while Ask is docked open or a peek is up.
   const docked = useReviewPanel(
-    (state) => askDockedShown(state) || state.active !== null,
+    (state) => askColumnShown(state) || state.active !== null,
   );
 
-  const threadId = useReviewPanel(
-    (state) =>
-      state.asks.find((ask) => ask.key === state.askDocked)?.threadId ??
-      undefined,
+  const threadIds = useReviewPanel(
+    useShallow((state) =>
+      [state.askColumn, state.askWindow].flatMap(
+        (key) => state.asks.find((ask) => ask.key === key)?.threadId ?? [],
+      ),
+    ),
   );
 
   const bridge = session?.bridge;
 
   useEffect(() => {
-    bridge?.reportAsk?.({ docked, ...(threadId && { threadId }) });
-  }, [bridge, docked, threadId]);
+    bridge?.reportAsk?.({ docked, threadIds });
+  }, [bridge, docked, threadIds]);
 
-  useEffect(() => () => bridge?.reportAsk?.({ docked: false }), [bridge]);
+  useEffect(
+    () => () => bridge?.reportAsk?.({ docked: false, threadIds: [] }),
+    [bridge],
+  );
 
   // A thread requested before the history listed it.
   const pending = useRef<string | null>(null);

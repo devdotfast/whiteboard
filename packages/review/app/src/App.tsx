@@ -88,7 +88,7 @@ import {
   useReviewPanelStore,
   useSuppressPanelMotionOnCanvasResume,
 } from "./review-panel";
-import { type ReviewDiffScope, askDockedShown } from "./review-panel-store";
+import { type ReviewDiffScope, askColumnShown } from "./review-panel-store";
 import { ReviewRootsProvider, useReviewContainer } from "./review-root-context";
 import { ReviewStackSelector } from "./review-stack-selector";
 import { offeredReviewViews, reviewViewLabel } from "./review-view-route";
@@ -310,7 +310,7 @@ function ReviewLayoutContent({
   const askBeside = !useAskPanelHost();
 
   const askDocked = useReviewPanel(
-    (state) => askBeside && askDockedShown(state),
+    (state) => askBeside && askColumnShown(state),
   );
 
   const panelMotion = useReviewPanel((state) => state.motion);

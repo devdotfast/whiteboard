@@ -121,7 +121,7 @@ export function AskDeleteThreadButton(): ReactElement | null {
       onDelete={() =>
         void history.forget(threadId).then((deleted) => {
           if (deleted && showThreads) {
-            if (askKey !== undefined) panels?.getState().closeAsk(askKey);
+            if (askKey !== undefined) panels?.getState().hideAsk(askKey);
             showThreads();
           } else if (deleted)
             panels
