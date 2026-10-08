@@ -220,7 +220,7 @@ fn config_migration_and_typed_batch_set() {
         let mut command = get_base_command();
         let mut child = command
             .env("XDG_CONFIG_HOME", dir.path())
-            .args(["config", "set", "--stdin", "--json"])
+            .args(["config", "set", "-", "--json"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()

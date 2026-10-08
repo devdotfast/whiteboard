@@ -170,17 +170,9 @@ enum ConfigCommand {
     },
     /// Write one key to the global configuration file
     Set {
-        #[arg(required_unless_present = "stdin", conflicts_with = "stdin")]
-        key: Option<String>,
-        #[arg(
-            requires = "key",
-            required_unless_present = "stdin",
-            conflicts_with = "stdin"
-        )]
+        /// A key, or - to read a typed partial configuration as JSON from stdin
+        key: String,
         value: Option<String>,
-        /// Read a typed partial configuration as JSON from stdin
-        #[arg(long)]
-        stdin: bool,
         /// Print a JSON result, including errors
         #[arg(long)]
         json: bool,
@@ -650,23 +642,22 @@ fn run_config(config: &ConfigArgs) -> Result<i32> {
                 )?;
             }
         }
-        Some(ConfigCommand::Set {
-            key,
-            value,
-            stdin,
-            json,
-        }) => {
+        Some(ConfigCommand::Set { key, value, json }) => {
+            match (key.as_str(), value) {
+                ("-", Some(_)) => return Err("config set - takes no VALUE".into()),
+                (key, None) if key != "-" => {
+                    return Err(format!("config set {key} needs a VALUE").into())
+                }
+                _ => {}
+            }
             let result = (|| -> Result<serde_json::Value> {
                 let path = config::global_path()?;
-                let changed = if *stdin {
-                    let patch: serde_json::Value = serde_json::from_reader(io::stdin().lock())?;
-                    config::store::patch(&path, &patch)?
-                } else {
-                    config::store::set(
-                        &path,
-                        key.as_deref().expect("clap requires key"),
-                        value.as_deref().expect("clap requires value"),
-                    )?
+                let changed = match value {
+                    None => {
+                        let patch: serde_json::Value = serde_json::from_reader(io::stdin().lock())?;
+                        config::store::patch(&path, &patch)?
+                    }
+                    Some(value) => config::store::set(&path, key, value)?,
                 };
                 Ok(serde_json::json!({ "changed": changed }))
             })();
