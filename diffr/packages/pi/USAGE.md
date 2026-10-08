@@ -10,7 +10,7 @@ This preserves Pi's native editor and transcript, with Diffr alongside them by d
 - F7 focuses or opens Diffr. Escape returns to chat; clicking the pane also focuses it.
 - F6 or the top bar toggles fullscreen. `/diffr-fullscreen` also opens or toggles it.
 - Drag source lines, then Enter to append their references and contents to the existing draft. Nothing is submitted.
-- `V` marks a file viewed, `z m` folds scopes, `z r` unfolds them, and `\\` toggles files.
+- `V` marks a file viewed, `zM` folds scopes, `zR` unfolds them, and `\\` toggles files.
 - `q` in the pane or `/diffr-close` closes it and restores the host layout.
 
 Below 100 terminal columns, Diffr uses the full screen; Escape closes it to recover chat.
