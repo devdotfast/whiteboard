@@ -5,7 +5,6 @@
 import type { DiffFile, TextDiff } from "../protocol/wire";
 import type { ViewerRow } from "./rows";
 import type { Snapshot } from "../protocol/store";
-import { snapshotLabel } from "./counts";
 import { diffOrder, sourceLines, type DiffLine, type DiffOrder } from "./regions";
 import { measureTextWidth } from "../terminal/text";
 
@@ -178,39 +177,30 @@ export function selectionLead(message: string, ranges: SelectedRange[], width: n
   return lead(`${name.slice(0, colon).split("/").at(-1)}${name.slice(colon)}`);
 }
 
-type Version = NonNullable<Snapshot["comparison"]>["lhs"];
-/** A version as a person names it to an agent, which can then find it. */
-function versionName(version: Version): string {
-  switch (version.type) {
-    case "working_tree":
-      return "the working tree";
-    case "index":
-      return "the git index (staged)";
-    case "revision":
-    case "path":
-      return snapshotLabel(version);
-    case "empty_tree":
-      return "the empty tree";
-  }
-}
-/** A fence longer than any run of backticks in `text`, so the text can't close it. */
-function fenceFor(text: string): string {
-  let fence = "```";
-  for (const run of text.matchAll(/`+/g)) if (run[0].length >= fence.length) fence = "`".repeat(run[0].length + 1);
-  return fence;
-}
 function sourcesOf(files: (DiffFile | undefined)[], range: SelectedRange) {
   const diff = files[range.fileIndex]?.diff;
   if (diff?.type !== "text") throw new Error(`File ${range.fileIndex} has no text to copy`);
-  return { old: diff.lhs ? sourceLines(diff.lhs.text) : [], new: diff.rhs ? sourceLines(diff.rhs.text) : [] };
+  return { old: diff.lhs ? sourceLines(diff.lhs.text) : [], new: diff.rhs ? sourceLines(diff.rhs.text) : [],
+    oldTerminated: diff.lhs?.text.endsWith("\n") ?? true, newTerminated: diff.rhs?.text.endsWith("\n") ?? true };
 }
 /** The selected lines as a unified diff, numbered from the diff's own order: a new hunk wherever lines between them are left out, as a fold leaves them. */
-function patch(range: SelectedRange, order: DiffOrder, sources: { old: string[]; new: string[] }): string {
-  const out = [`--- ${range.oldPath === undefined ? "/dev/null" : `a/${range.oldPath}`}`,
-    `+++ ${range.newPath === undefined ? "/dev/null" : `b/${range.newPath}`}`];
+function patch(range: SelectedRange, order: DiffOrder, sources: ReturnType<typeof sourcesOf>): string {
+  const oldPath = `a/${range.oldPath ?? range.newPath}`;
+  const newPath = `b/${range.newPath ?? range.oldPath}`;
+  const quote = (path: string) => /["\\\t\r\n]/.test(path) ? JSON.stringify(path) : path;
+  const out = [`diff --git ${quote(oldPath)} ${quote(newPath)}`, `--- ${range.oldPath === undefined ? "/dev/null" : quote(oldPath)}`,
+    `+++ ${range.newPath === undefined ? "/dev/null" : quote(newPath)}`];
   const indexOf = (line: DiffLine) => (line.old !== undefined ? order.oldAt.get(line.old) : order.newAt.get(line.new!))!;
   const hunks: number[][] = [];
-  for (const index of range.lines.map(indexOf)) {
+  // A one-column selection includes folded lines within that version's selected span.
+  const indices = range.side
+    ? (() => {
+      const [first, last] = span(range, range.side)!;
+      const at = range.side === "old" ? order.oldAt : order.newAt;
+      return Array.from({ length: last - first + 1 }, (_, i) => at.get(first + i)!);
+    })()
+    : range.lines.map(indexOf);
+  for (const index of indices) {
     const hunk = hunks.at(-1);
     if (hunk && hunk.at(-1) === index - 1) hunk.push(index);
     else hunks.push([index]);
@@ -227,39 +217,50 @@ function patch(range: SelectedRange, order: DiffOrder, sources: { old: string[];
     for (const line of lines) {
       const [before, after] = [line.old === undefined ? undefined : sources.old[line.old - 1]!,
         line.new === undefined ? undefined : sources.new[line.new - 1]!];
-      // diffr pairs a line only reformatted with its old self; a patch's unchanged line must match exactly.
-      if (before !== undefined && before === after) out.push(` ${after}`);
+      const emit = (prefix: string, text: string, side: "old" | "new") => {
+        out.push(`${prefix}${text}`);
+        if (line[side] === sources[side].length && !sources[`${side}Terminated`]) out.push("\\ No newline at end of file");
+      };
+      // A paired line can still differ in formatting or its final newline.
+      const sameEnding = (line.old === sources.old.length && !sources.oldTerminated)
+        === (line.new === sources.new.length && !sources.newTerminated);
+      if (before !== undefined && before === after && sameEnding) emit(" ", after, "new");
       else {
-        if (before !== undefined) out.push(`-${before}`);
-        if (after !== undefined) out.push(`+${after}`);
+        if (before !== undefined) emit("-", before, "old");
+        if (after !== undefined) emit("+", after, "new");
       }
     }
   }
-  return out.join("\n");
+  return out.join("\n") + "\n";
 }
-/**
- * A range as a reference an agent can read: its name and the versions it comes from, then the
- * selected rows as a patch, or a version's lines fenced as code when the drag kept to one column.
- */
+/** Preserve resolved revision IDs in full; mutable snapshots have no commit SHA. */
+function snapshotIdentity(snapshot: NonNullable<Snapshot["comparison"]>["lhs"]): string {
+  switch (snapshot.type) {
+    case "revision": return snapshot.rev;
+    case "index": return "index (staged)";
+    case "working_tree": return "working tree (uncommitted)";
+    case "path": return `path ${JSON.stringify(snapshot.path)}`;
+    case "empty_tree": return "empty tree";
+  }
+}
+/** Model context identifies both snapshots, then gives a Git patch; range names belong to UI anchors. */
 export function rangeReference(
   files: (DiffFile | undefined)[],
   comparison: NonNullable<Snapshot["comparison"]>,
   range: SelectedRange,
 ): string {
-  const sources = sourcesOf(files, range);
-  const name = rangeName(range);
-  if (range.side) {
-    const [first, last] = span(range, range.side)!;
-    const code = sources[range.side].slice(first - 1, last).join("\n");
-    const path = (range.side === "old" ? range.oldPath : range.newPath)!;
-    const language = /\.([^./]+)$/.exec(path)?.[1] ?? "";
-    const fence = fenceFor(code);
-    const version = versionName(range.side === "old" ? comparison.lhs : comparison.rhs);
-    return `${name} — ${range.side === "old" ? "L" : "R"} is ${version}\n${fence}${language}\n${code}\n${fence}`;
-  }
-  const body = patch(range, orderOf(textDiff(files, range.fileIndex)), sources);
-  const fence = fenceFor(body);
-  return `${name} — L is ${versionName(comparison.lhs)}, R is ${versionName(comparison.rhs)}\n${fence}diff\n${body}\n${fence}`;
+  const body = patch(range, orderOf(textDiff(files, range.fileIndex)), sourcesOf(files, range));
+  const { lhs, rhs } = files[range.fileIndex]!.file;
+  // These are blob IDs, distinct from the comparison's commit/tree IDs. The producer uses
+  // a null ID for unstored working-tree content, as Git does for raw working-tree diffs.
+  const oid = /^[0-9a-f]+$/i;
+  const old = lhs?.oid ?? "0".repeat(rhs?.oid.length ?? 40);
+  const neu = rhs?.oid ?? "0".repeat(lhs?.oid.length ?? 40);
+  const mode = lhs?.mode === rhs?.mode ? ` ${lhs!.mode}` : "";
+  const headers = oid.test(old) && oid.test(neu) ? `index ${old}..${neu}${mode}\n` : "";
+  const firstLine = body.indexOf("\n") + 1;
+  return `Base: ${snapshotIdentity(comparison.lhs)}\nHead: ${snapshotIdentity(comparison.rhs)}\n\n`
+    + body.slice(0, firstLine) + headers + body.slice(firstLine);
 }
 /** The selection as references an agent can read, one per file it touches. */
 export function agentReference(
@@ -268,7 +269,7 @@ export function agentReference(
   rows: ViewerRow[],
   selection: SourceSelection,
 ): string {
-  return selectedRanges(files, rows, selection).map((range) => rangeReference(files, comparison, range)).join("\n\n");
+  return selectedRanges(files, rows, selection).map((range) => rangeReference(files, comparison, range)).join("\n");
 }
 /**
  * The selected lines as source, for pasting into code: the new version's, or the old one's when

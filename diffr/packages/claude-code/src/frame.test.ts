@@ -106,8 +106,8 @@ test("a unified drag selects every row it crosses, removed and added; y copies t
   expect(raw.text).toBe("  for (const plugin of config.plugins) {\n    plugin.lines = Number(plugin.shape.lines);\n    plugin.enabled = true;");
   const forAgent = pane.input({ press: { key: "Y" } }).copy!;
   expect(forAgent.what).toBe("for agent");
-  expect(forAgent.text).toMatch(/^new\/migrate\.ts:L6-R8 — L is .+, R is .+\n```diff\n--- a\/old\/migrate\.ts\n\+\+\+ b\/new\/migrate\.ts\n@@ -6,3 \+6,3 @@\n /);
-  expect(forAgent.text).toContain("\n-    plugin.lines = Number(plugin.lines);\n+    plugin.lines = Number(plugin.shape.lines);\n     plugin.enabled = true;\n```");
+  expect(forAgent.text).toMatch(/^Base: .+\nHead: .+\n\ndiff --git a\/old\/migrate\.ts b\/new\/migrate\.ts\n--- a\/old\/migrate\.ts\n\+\+\+ b\/new\/migrate\.ts\n@@ -6,3 \+6,3 @@\n /);
+  expect(forAgent.text).toContain("\n-    plugin.lines = Number(plugin.lines);\n+    plugin.lines = Number(plugin.shape.lines);\n     plugin.enabled = true;\n");
   // The selection stays, so its bar holds the status line, and the message leads it.
   pane.copied("for agent");
   expect(screen(pane.frame(wide)).at(-1)!.trim()).toStartWith("Copied for agent");
@@ -143,12 +143,12 @@ test("in split, a drag kept to one column selects that version's lines; one that
   pane.input({ select: at("for (const plugin", "last") });
   pane.input({ select: { ...at("plugin.enabled", "last"), extend: true } });
   expect(litHalves("Number(plugin.shape.lines)")).toEqual(["right"]);
-  expect(pane.input({ press: { key: "Y" } }).copy!.text).toStartWith("new/migrate.ts:R6-8 — R is ");
+  expect(pane.input({ press: { key: "Y" } }).copy!.text).toContain("+    plugin.lines = Number(plugin.shape.lines);\n");
   // From the old side's line 7 across to the new side's line 8.
   pane.input({ select: at("Number(plugin.lines)", "first") });
   pane.input({ select: { ...at("plugin.enabled", "last"), extend: true } });
   expect(litHalves("Number(plugin.lines)")).toEqual(["left", "right"]);
-  expect(pane.input({ press: { key: "Y" } }).copy!.text).toStartWith("new/migrate.ts:L7-R8 — L is ");
+  expect(pane.input({ press: { key: "Y" } }).copy!.text).toContain("-    plugin.lines = Number(plugin.lines);\n+    plugin.lines = Number(plugin.shape.lines);\n");
 });
 
 test("while lines are selected the status line is a bright bar naming them, with a button and Enter to add them to the chat", async () => {
@@ -174,8 +174,8 @@ test("while lines are selected the status line is a bright bar naming them, with
   const chat = pane.input({ press: { key: "return" } }).chat!;
   expect(chat).toHaveLength(1);
   expect(chat[0]!.name).toBe("new/migrate.ts:L6-R8");
-  // What the model reads: the name, then the selected code fenced.
-  expect(chat[0]!.context).toStartWith(chat[0]!.name);
+  // The chip names the selection; the model receives the corresponding Git patch.
+  expect(chat[0]!.context).toContain("diff --git a/old/migrate.ts b/new/migrate.ts\n");
   expect(chat[0]!.context).toContain("for (const plugin");
   expect(chat[0]!.context).toContain("plugin.enabled");
   // Sent on, the selection is done with: the bar gives way to the status line, which says where it went.

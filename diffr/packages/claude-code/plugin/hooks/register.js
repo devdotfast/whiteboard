@@ -18386,40 +18386,36 @@ function selectionLead(message, ranges, width) {
   const colon = name.lastIndexOf(":");
   return lead(`${name.slice(0, colon).split("/").at(-1)}${name.slice(colon)}`);
 }
-function versionName(version2) {
-  switch (version2.type) {
-    case "working_tree":
-      return "the working tree";
-    case "index":
-      return "the git index (staged)";
-    case "revision":
-    case "path":
-      return snapshotLabel(version2);
-    case "empty_tree":
-      return "the empty tree";
-  }
-}
-function fenceFor(text) {
-  let fence = "```";
-  for (const run of text.matchAll(/`+/g))
-    if (run[0].length >= fence.length)
-      fence = "`".repeat(run[0].length + 1);
-  return fence;
-}
 function sourcesOf(files, range) {
   const diff2 = files[range.fileIndex]?.diff;
   if (diff2?.type !== "text")
     throw new Error(`File ${range.fileIndex} has no text to copy`);
-  return { old: diff2.lhs ? sourceLines(diff2.lhs.text) : [], new: diff2.rhs ? sourceLines(diff2.rhs.text) : [] };
+  return {
+    old: diff2.lhs ? sourceLines(diff2.lhs.text) : [],
+    new: diff2.rhs ? sourceLines(diff2.rhs.text) : [],
+    oldTerminated: diff2.lhs?.text.endsWith(`
+`) ?? true,
+    newTerminated: diff2.rhs?.text.endsWith(`
+`) ?? true
+  };
 }
 function patch(range, order, sources) {
+  const oldPath = `a/${range.oldPath ?? range.newPath}`;
+  const newPath = `b/${range.newPath ?? range.oldPath}`;
+  const quote = (path) => /["\\\t\r\n]/.test(path) ? JSON.stringify(path) : path;
   const out = [
-    `--- ${range.oldPath === undefined ? "/dev/null" : `a/${range.oldPath}`}`,
-    `+++ ${range.newPath === undefined ? "/dev/null" : `b/${range.newPath}`}`
+    `diff --git ${quote(oldPath)} ${quote(newPath)}`,
+    `--- ${range.oldPath === undefined ? "/dev/null" : quote(oldPath)}`,
+    `+++ ${range.newPath === undefined ? "/dev/null" : quote(newPath)}`
   ];
   const indexOf = (line) => line.old !== undefined ? order.oldAt.get(line.old) : order.newAt.get(line.new);
   const hunks = [];
-  for (const index of range.lines.map(indexOf)) {
+  const indices = range.side ? (() => {
+    const [first, last] = span2(range, range.side);
+    const at = range.side === "old" ? order.oldAt : order.newAt;
+    return Array.from({ length: last - first + 1 }, (_, i) => at.get(first + i));
+  })() : range.lines.map(indexOf);
+  for (const index of indices) {
     const hunk = hunks.at(-1);
     if (hunk && hunk.at(-1) === index - 1)
       hunk.push(index);
@@ -18439,45 +18435,58 @@ function patch(range, order, sources) {
         line.old === undefined ? undefined : sources.old[line.old - 1],
         line.new === undefined ? undefined : sources.new[line.new - 1]
       ];
-      if (before !== undefined && before === after)
-        out.push(` ${after}`);
+      const emit = (prefix, text, side2) => {
+        out.push(`${prefix}${text}`);
+        if (line[side2] === sources[side2].length && !sources[`${side2}Terminated`])
+          out.push("\\ No newline at end of file");
+      };
+      const sameEnding = (line.old === sources.old.length && !sources.oldTerminated) === (line.new === sources.new.length && !sources.newTerminated);
+      if (before !== undefined && before === after && sameEnding)
+        emit(" ", after, "new");
       else {
         if (before !== undefined)
-          out.push(`-${before}`);
+          emit("-", before, "old");
         if (after !== undefined)
-          out.push(`+${after}`);
+          emit("+", after, "new");
       }
     }
   }
   return out.join(`
-`);
+`) + `
+`;
+}
+function snapshotIdentity(snapshot3) {
+  switch (snapshot3.type) {
+    case "revision":
+      return snapshot3.rev;
+    case "index":
+      return "index (staged)";
+    case "working_tree":
+      return "working tree (uncommitted)";
+    case "path":
+      return `path ${JSON.stringify(snapshot3.path)}`;
+    case "empty_tree":
+      return "empty tree";
+  }
 }
 function rangeReference(files, comparison, range) {
-  const sources = sourcesOf(files, range);
-  const name = rangeName(range);
-  if (range.side) {
-    const [first, last] = span2(range, range.side);
-    const code = sources[range.side].slice(first - 1, last).join(`
-`);
-    const path = range.side === "old" ? range.oldPath : range.newPath;
-    const language = /\.([^./]+)$/.exec(path)?.[1] ?? "";
-    const fence2 = fenceFor(code);
-    const version2 = versionName(range.side === "old" ? comparison.lhs : comparison.rhs);
-    return `${name} — ${range.side === "old" ? "L" : "R"} is ${version2}
-${fence2}${language}
-${code}
-${fence2}`;
-  }
-  const body = patch(range, orderOf(textDiff(files, range.fileIndex)), sources);
-  const fence = fenceFor(body);
-  return `${name} — L is ${versionName(comparison.lhs)}, R is ${versionName(comparison.rhs)}
-${fence}diff
-${body}
-${fence}`;
+  const body = patch(range, orderOf(textDiff(files, range.fileIndex)), sourcesOf(files, range));
+  const { lhs, rhs } = files[range.fileIndex].file;
+  const oid = /^[0-9a-f]+$/i;
+  const old = lhs?.oid ?? "0".repeat(rhs?.oid.length ?? 40);
+  const neu = rhs?.oid ?? "0".repeat(lhs?.oid.length ?? 40);
+  const mode = lhs?.mode === rhs?.mode ? ` ${lhs.mode}` : "";
+  const headers = oid.test(old) && oid.test(neu) ? `index ${old}..${neu}${mode}
+` : "";
+  const firstLine = body.indexOf(`
+`) + 1;
+  return `Base: ${snapshotIdentity(comparison.lhs)}
+Head: ${snapshotIdentity(comparison.rhs)}
+
+` + body.slice(0, firstLine) + headers + body.slice(firstLine);
 }
 function agentReference(files, comparison, rows, selection) {
   return selectedRanges(files, rows, selection).map((range) => rangeReference(files, comparison, range)).join(`
-
 `);
 }
 function copySelection(files, rows, selection) {

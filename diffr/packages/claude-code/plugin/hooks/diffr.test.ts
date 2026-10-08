@@ -81,7 +81,7 @@ test("/diffr streams diffr into a pane where a click opens a file and keys switc
     await ui.key({ key: "Y", in: "diff-0" });
     expect(copied.at(-1)?.surface).toBe(surface);
     // The new file's first two lines, added in place of the old two: a patch of just the added lines.
-    expect(copied.at(-1)?.text).toMatch(/^src\/greet\.ts:R1-2 — L is \w+, R is \w+\n```diff\n--- a\/src\/greet\.ts\n\+\+\+ b\/src\/greet\.ts\n@@ -2,0 \+1,2 @@\n\+export function greet\(name: string, punctuation = "!"\) \{\n\+  return "hello " \+ name \+ punctuation;\n```$/);
+    expect(copied.at(-1)?.text).toMatch(/^Base: [a-f0-9]{40}\nHead: [a-f0-9]{40}\n\ndiff --git a\/src\/greet\.ts b\/src\/greet\.ts\nindex [a-f0-9]{40}\.\.[a-f0-9]{40} 100644\n--- a\/src\/greet\.ts\n\+\+\+ b\/src\/greet\.ts\n@@ -2,0 \+1,2 @@\n\+export function greet\(name: string, punctuation = "!"\) \{\n\+  return "hello " \+ name \+ punctuation;\n$/);
     // The lines stay selected, so the message leads the selection bar.
     expect((await lines(ui, "diff-1")).at(-1)!.trim()).toStartWith("Copied for agent");
 
@@ -227,7 +227,7 @@ test("Enter on a selection puts a chip naming it in the prompt box, and the prom
   await $.prompt.submit({ text: "why the default? src/greet.ts:R1-2" } as never);
   expect(submitted).toHaveLength(1);
   expect(submitted[0]!.context).toHaveLength(1);
-  expect(submitted[0]!.context![0]).toMatch(/calls them src\/greet\.ts:R1-2\.\nsrc\/greet\.ts:R1-2 — L is \w+, R is \w+\n```diff\n[^]*\n\+export function greet\(name: string, punctuation = "!"\)/);
+  expect(submitted[0]!.context![0]).toMatch(/calls them src\/greet\.ts:R1-2\.\nBase: [a-f0-9]{40}\nHead: [a-f0-9]{40}\n\ndiff --git a\/src\/greet\.ts b\/src\/greet\.ts\n[^]*\n\+export function greet\(name: string, punctuation = "!"\)/);
   // Sent once: the next prompt carries nothing of it.
   await $.prompt.submit({ text: "and src/greet.ts:R1-2 again" } as never);
   expect(submitted[1]!.context ?? []).toHaveLength(0);

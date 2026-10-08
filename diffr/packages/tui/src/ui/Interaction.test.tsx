@@ -312,7 +312,7 @@ test("while lines are selected the status line is a bright bar naming them; its 
     const clipboard = spyOn(t.renderer, "copyToClipboardOSC52").mockReturnValue(true);
     await act(async () => { await t.mockMouse.click(status().indexOf("Copy for agent"), y); await t.renderOnce(); });
     expect(clipboard).toHaveBeenCalledTimes(1);
-    expect(clipboard.mock.calls[0]![0]).toStartWith("demo.ts:L1-3 — L is the git index (staged)\n```ts\nstart();");
+    expect(clipboard.mock.calls[0]![0]).toContain("@@ -1,2 +1 @@\n start();\n-send(\"old\");\n");
     clipboard.mockRestore();
     await t.waitFor(() => status().trim().startsWith("Copied for agent · demo.ts:L1-3"));
     // A lone escape is only recognised once the parser's escape-sequence timeout passes.
