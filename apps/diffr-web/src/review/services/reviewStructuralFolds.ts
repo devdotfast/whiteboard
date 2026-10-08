@@ -569,7 +569,11 @@ export class StructuralFoldControls extends Disposable {
         };
       }
     }
-    const header = open.find((f) => f.chevron && f.line === line);
+    // A scope without a rail (a statement) is a target only from its chevron; elsewhere on its
+    // line the pointer reads the innermost body around it, as diffr's TUI does.
+    const header = open.find(
+      (f) => f.chevron && f.line === line && (f.rail || onChevron),
+    );
     if (header) {
       return {
         foldable: header,
