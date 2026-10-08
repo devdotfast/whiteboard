@@ -215,18 +215,10 @@ export async function startGateway(
 ) {
   const home = options.home ?? path.join(root, "local");
   const local = await openReviewProfile(home, { manageWorkspaces: true });
-  await local.store.ensureScratchpad();
 
   const desktop = new Hono().route(
     "/reviews-api",
-    createReviewApi(
-      local.store,
-      local.data,
-      undefined,
-      undefined,
-      undefined,
-      () => true,
-    ),
+    createReviewApi(local.store, local.data, undefined, undefined, undefined),
   );
 
   const logged: string[] = [];

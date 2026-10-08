@@ -32,7 +32,14 @@ async function fixture() {
   cleanup.push(() => local.data.close());
 
   const { reviewId } = await local.store.execute({
-    operation: { type: "create", kind: "scratchpad", title: "Whiteboard" },
+    operation: {
+      type: "create",
+      title: "Whiteboard",
+      target: {
+        kind: "project",
+        repositoryId: local.store.registerRepository(root).id,
+      },
+    },
   });
 
   await local.store.execute({
@@ -222,8 +229,11 @@ it("retains image and trace resources on a document without source pins", async 
   const { reviewId } = await resources.store.execute({
     operation: {
       type: "create",
-      kind: "scratchpad",
       title: "Document with attachments",
+      target: {
+        kind: "project",
+        repositoryId: resources.store.registerRepository(local.root).id,
+      },
     },
   });
 

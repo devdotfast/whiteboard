@@ -563,12 +563,6 @@ export interface ReviewCanvasSettingsContent {
   ): Promise<ReviewReadyNotificationChoice>;
   softwareMapEnabled: boolean;
   setSoftwareMapEnabled(enabled: boolean): Promise<boolean>;
-  // Not a workbench setting: the review server reads it, so it lives in the
-  // server preferences file. Off by default. Turning it on shows the pad and
-  // tells connected agents over MCP that they can draw on it; turning it off
-  // hides the pad.
-  scratchpadEnabled: boolean;
-  setScratchpadEnabled(enabled: boolean): Promise<boolean>;
   // Shared CLI configuration, read when its disclosure opens.
   diffrConfig: ReviewDiffrConfigActions;
   reloadWindow(): Promise<void>;
@@ -1522,13 +1516,9 @@ const revealArgsSchema = z
 
 export const REVIEW_DISCORD_URL = "https://discord.gg/wYvd2cpMQg";
 
-/** The one scratchpad's fixed review id. */
-export const SCRATCHPAD_REVIEW_ID = "scratchpad";
-
 const apiReviewIdSchema = z.union([
   z.uuid(),
   z.string().regex(/^shared-[a-f0-9]{64}$/),
-  z.literal(SCRATCHPAD_REVIEW_ID),
 ]);
 
 export const ReviewVerbRequestSchema = z.discriminatedUnion("name", [

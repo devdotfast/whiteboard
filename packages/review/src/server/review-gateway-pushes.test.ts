@@ -255,11 +255,6 @@ it("refuses every push from a remote but capabilities, focus and opening one of 
       "openReview",
     ],
     [
-      "pad",
-      { name: "openApiReview", args: { reviewId: "scratchpad", title: "P" } },
-      "scratchpad",
-    ],
-    [
       "shared",
       { name: "openApiReview", args: { reviewId: shared, title: "S" } },
       shared,

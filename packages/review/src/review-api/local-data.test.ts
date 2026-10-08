@@ -4000,7 +4000,6 @@ it("starts Ask on a plan, which has no pins, in its repository's live checkout",
     undefined,
     undefined,
     undefined,
-    undefined,
     { threads, agents: async () => [] },
   );
 

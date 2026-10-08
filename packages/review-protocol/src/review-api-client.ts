@@ -7,10 +7,6 @@ export interface ReviewApiSummary {
   reviewId: string;
   version: number;
   title: string;
-  /** Absent for a review. The one scratchpad has no pins or lifecycle. */
-  kind?: "scratchpad";
-  /** What is on the scratchpad, for its Home card; absent for a review. */
-  contents?: { blocks: number; diagrams: number };
   /** Absent for a document whose references all carry their own pins. */
   pins?: {
     repositoryId: string;
@@ -59,16 +55,6 @@ export interface ReviewApiSummary {
     reason?: string;
     pending?: true;
   };
-}
-
-/**
- * The sessions Home lists, the scratchpad aside. With none, Home is the
- * Welcome rail, so the host fetches install status exactly when this is empty.
- */
-export function homeSessions(
-  reviews: readonly ReviewApiSummary[],
-): ReviewApiSummary[] {
-  return reviews.filter((review) => review.kind !== "scratchpad");
 }
 
 export type ReviewStreamSnapshot<Snapshot extends object = JsonObject> =

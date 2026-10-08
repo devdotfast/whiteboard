@@ -35,8 +35,6 @@ function settings(): ReviewCanvasSettingsContent {
     setReadyNotification: async (choice) => choice,
     softwareMapEnabled: false,
     setSoftwareMapEnabled: async (enabled) => enabled,
-    scratchpadEnabled: false,
-    setScratchpadEnabled: async (enabled) => enabled,
     diffrConfig: {
       read: unexpected,
       set: unexpected,

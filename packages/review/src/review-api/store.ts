@@ -1,13 +1,12 @@
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import type { JsonValue } from "@dev.fast/json";
 import { gitCommonDirSync, resolveRepoContextSync } from "@dev.fast/local-vcs";
-import {
-  type ReviewApiSummary,
-  SCRATCHPAD_REVIEW_ID,
-} from "@dev.fast/review-protocol";
+import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import { sourceAnchors } from "@review/lens-selection.js";
 import {
   liftFileLenses,
@@ -59,25 +58,15 @@ import {
 } from "./document.js";
 import { pullRequestKey, pullRequestUrl, setPullRequest } from "./origin.js";
 import { upgradeStore } from "./store-migrations.js";
-import { initializeReviewStoreSchema } from "./store-schema.js";
+import {
+  BOARD_REPOSITORY_ID_SQL,
+  initializeReviewStoreSchema,
+} from "./store-schema.js";
 
 const reviewId = z.string().min(1);
 
 /** The key older hosts read and write. */
 const statsKey = (pins: Pins) => JSON.stringify([pins, "structural"]);
-
-/** There is one scratchpad. Its id is fixed so a skill can name it. */
-export const SCRATCHPAD_ID = SCRATCHPAD_REVIEW_ID;
-
-const DIAGRAM_TYPES = new Set([
-  "sequence",
-  "flow_diagram",
-  "call_stack_diff",
-  "database_lens",
-  "software_map",
-]);
-
-export const SCRATCHPAD_TITLE = "Scratchpad";
 
 const activityId = z
   .string()
@@ -121,8 +110,6 @@ export const commandSchema = z.strictObject({
         .describe(
           "Default true: return the existing review for pullRequestUrl. false creates a separate review.",
         ),
-      /** The one scratchpad: no target, no pins; every reference names its own. */
-      kind: z.literal("scratchpad").optional(),
     }),
     z.strictObject({
       type: z.literal("set_target"),
@@ -168,11 +155,6 @@ export interface SnapshotOrigin {
   /** The legacy review revision this version was imported from. */
   revision?: string;
 }
-
-/** A board version's repository in SQL over `versions.snapshot`, as
- * `boardRepositoryId` reads it: its target's, else its pins'. */
-const BOARD_REPOSITORY_ID_SQL =
-  "CASE WHEN json_valid(versions.snapshot) THEN COALESCE(json_extract(versions.snapshot,'$.target.repositoryId'),json_extract(versions.snapshot,'$.pins.repositoryId')) END";
 
 /**
  * The project of a registered checkout, made on first use. Checkouts of one
@@ -243,8 +225,6 @@ export interface Snapshot {
   reviewId: string;
   version: number;
   title: string;
-  /** Absent for a review. The scratchpad has no pins, target or lifecycle. */
-  kind?: "scratchpad";
   /** The default pins for references that name none. A document whose
    * references all carry their own pins has neither pins nor target. */
   pins?: Pins;
@@ -564,15 +544,6 @@ export class ReviewStore {
       this.catalogListeners.delete(listener);
     };
   }
-  /** For a host whose listing changed without the store: a preference flip. */
-  invalidateCatalog(): void {
-    for (const listener of this.catalogListeners)
-      try {
-        listener();
-      } catch {
-        // A disconnected viewer must not block other catalog subscribers.
-      }
-  }
   subscribe(listener: (result: Result) => void) {
     this.listeners.add(listener);
 
@@ -589,12 +560,26 @@ export class ReviewStore {
     // WAL plus a busy timeout: another host on the same home waits instead of failing.
     this.db = new DatabaseSync(databasePath, { timeout: 5000 });
     initializeReviewStoreSchema(this.db);
+    // Each upgrade reads a quoted file once, before its write lock and in it.
+    const files = new Map<string, string | undefined>();
+
     upgradeStore({
       db: this.db,
       prepareCheckouts: () => this.checkouts.prepare(),
       repositories: () => this.repositories(),
+      repositoryPath: (repositoryId) => this.repositoryPath(repositoryId),
+      repositoryName: (repositoryId) => this.repositoryName(repositoryId),
+      fileAtCommit: (repositoryId, commit, file) => {
+        const key = JSON.stringify([repositoryId, commit, file]);
+
+        if (!files.has(key))
+          files.set(key, this.fileAtCommit(repositoryId, commit, file));
+
+        return files.get(key);
+      },
       projectOfRepository: (repositoryId) =>
         this.projectOfRepository(repositoryId),
+      fallbackProject: () => this.fallbackProject(),
       firstRepositoryProject: () => this.firstRepositoryProject(),
     });
     this.activity = new ReviewActivity(this.db, (id) =>
@@ -682,6 +667,37 @@ export class ReviewStore {
       .get(id)!;
 
     return { id, name: String(name) };
+  }
+
+  /** Undefined when the file can't be read. */
+  private fileAtCommit(
+    repositoryId: string,
+    commit: string,
+    file: string,
+  ): string | undefined {
+    try {
+      return this.checkouts.fileAt(
+        this.repositoryPath(repositoryId),
+        commit,
+        file,
+      );
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** A checkout's name as its project labels it, else its folder. */
+  private repositoryName(repositoryId: string): string {
+    try {
+      const root = this.repositoryPath(repositoryId);
+
+      return (
+        this.repositoryGroup(root)?.label.split("/").at(-1) ??
+        path.basename(root)
+      );
+    } catch {
+      return "another repository";
+    }
   }
 
   /** A board's project. */
@@ -1114,14 +1130,24 @@ export class ReviewStore {
     }
   }
 
-  /** Reviews of the tutorial earlier versions shipped, for their removal. */
-  legacyTutorialIds(): string[] {
-    return this.db
+  /** Deletes the tutorial earlier versions shipped. Like any board, each
+   * goes to Trash first, then is deleted from there. */
+  async removeLegacyTutorials(): Promise<void> {
+    const tutorials = this.db
       .prepare(
         `SELECT reviews.id FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version WHERE json_extract(versions.snapshot,'$.origin.tutorial') = 1`,
       )
       .all()
       .map((row) => String(row.id));
+
+    for (const reviewId of tutorials) {
+      if (!this.trashTime(reviewId))
+        await this.execute({
+          operation: { type: "lifecycle", reviewId, state: "trash" },
+        });
+
+      await this.execute({ operation: { type: "delete", reviewId } });
+    }
   }
 
   list(): ReviewApiSummary[] {
@@ -1193,9 +1219,6 @@ export class ReviewStore {
           working: this.activity.isWorking(summary.reviewId),
         };
 
-        if (summary.kind === "scratchpad")
-          listed.contents = this.scratchpadContents();
-
         return listed;
       });
 
@@ -1225,34 +1248,6 @@ export class ReviewStore {
     }));
   }
 
-  /** What the pad holds, for its Home card: blocks, and the diagrams among them. */
-  private scratchpadContents(): NonNullable<ReviewApiSummary["contents"]> {
-    const blocks = elements(this.read(SCRATCHPAD_ID).document).filter(
-      (element) => !isUnit(element),
-    );
-
-    return {
-      blocks: blocks.length,
-      diagrams: blocks.filter((block) => DIAGRAM_TYPES.has(block.type)).length,
-    };
-  }
-  /** The one scratchpad, made on first use. A host that loses the race to
-   * another on the same home finds it made. */
-  async ensureScratchpad(): Promise<void> {
-    if (this.has(SCRATCHPAD_ID)) return;
-
-    try {
-      await this.execute({
-        operation: {
-          type: "create",
-          title: SCRATCHPAD_TITLE,
-          kind: "scratchpad",
-        },
-      });
-    } catch (error) {
-      if (!this.has(SCRATCHPAD_ID)) throw error;
-    }
-  }
   history(id: string) {
     return this.db
       .prepare(
@@ -1306,26 +1301,7 @@ export class ReviewStore {
       )
         this.assertWritable(op.reviewId);
 
-      // The scratchpad is edited and restored like a review, and nothing else.
-      if (
-        op.type !== "create" &&
-        op.type !== "edit" &&
-        op.type !== "lens_edit" &&
-        op.type !== "restore" &&
-        this.read(op.reviewId).kind === "scratchpad"
-      )
-        throw new ReviewInputError(
-          "The scratchpad has no lifecycle, title or pins of its own.",
-          409,
-        );
-
-      if (op.type === "create" && op.kind === "scratchpad") {
-        if (op.target)
-          throw new ReviewInputError("A scratchpad has no target of its own.");
-
-        if (this.has(SCRATCHPAD_ID))
-          throw new ReviewInputError("The scratchpad already exists.", 409);
-      } else if (op.type === "create") {
+      if (op.type === "create") {
         if (!op.target && !op.pullRequestUrl)
           throw new ReviewInputError("Supply a target or a pullRequestUrl.");
 
@@ -1441,12 +1417,7 @@ export class ReviewStore {
         return result;
       }
 
-      const id =
-        op.type !== "create"
-          ? op.reviewId
-          : op.kind === "scratchpad"
-            ? SCRATCHPAD_ID
-            : randomUUID();
+      const id = op.type === "create" ? randomUUID() : op.reviewId;
 
       const previous = op.type === "create" ? undefined : this.read(id);
 
@@ -1455,7 +1426,7 @@ export class ReviewStore {
           ? createdSnapshot(
               id,
               op,
-              resolvedTarget,
+              resolvedTarget!,
               fromPullRequest &&
                 (fromPullRequest.title ||
                   `PR #${op.pullRequestUrl!.split("/").at(-1)}`),
@@ -1555,12 +1526,6 @@ export class ReviewStore {
           delete snapshot.lastEdit;
           break;
         case "lens_edit": {
-          if (snapshot.kind === "scratchpad")
-            throw new ReviewInputError(
-              "The scratchpad has no changes of its own to lens.",
-              409,
-            );
-
           const lenses = snapshot.lenses ?? [];
           const lens = applyLensEdit(lenses, op.edit, () => `lens-${++nextId}`);
 
@@ -1586,8 +1551,6 @@ export class ReviewStore {
             snapshot.document,
             op.edit,
             (prefix) => `${prefix}-${++nextId}`,
-            // The scratchpad is a running log: the newest thought goes on top.
-            { placement: snapshot.kind === "scratchpad" ? "first" : "last" },
           );
 
           snapshot.lastEdit = summarizeEdit(
@@ -1722,7 +1685,7 @@ export class ReviewStore {
   ): Promise<ResolvedPullRequest> | undefined {
     const op = command.operation;
 
-    if (op.type !== "create" || op.kind || op.target || !op.pullRequestUrl)
+    if (op.type !== "create" || op.target || !op.pullRequestUrl)
       return undefined;
 
     if (!this.providers.resolvePullRequest)
@@ -2061,23 +2024,13 @@ function namedCommits(target: ReviewTarget) {
  * is kept so stored JSON reads as it always has. */
 function createdSnapshot(
   id: string,
-  op: { title?: string; kind?: "scratchpad" },
-  resolved: { target: ReviewTarget; pins?: Pins } | undefined,
+  op: { title?: string },
+  resolved: { target: ReviewTarget; pins?: Pins },
   defaultTitle?: string,
 ): Snapshot {
   const title = op.title ?? defaultTitle;
 
   if (!title) throw new ReviewInputError("Supply a title.");
-
-  if (!resolved)
-    return {
-      reviewId: id,
-      version: 0,
-      title,
-      kind: op.kind,
-      document: [],
-      createdAt: "",
-    };
 
   const snapshot: Snapshot = {
     reviewId: id,

@@ -15,10 +15,7 @@ import { commandSchema } from "./store.js";
 /** The host publishes its input schemas, except where agents write less than
  * the host accepts (publishedEditSchema, publishedLensEditSchema) or name a
  * checkout by path (pathTargetSchema); adapters validate nothing. */
-export function authoringTools(
-  scratchpadAvailable = false,
-  traceEnabled = false,
-) {
+export function authoringTools(traceEnabled = false) {
   const id = z.string().min(1);
   const review = { reviewId: id };
 
@@ -36,13 +33,13 @@ export function authoringTools(
 
   const descriptions = {
     create:
-      'Create a review of saved working files, immutable commits or a GitHub PR. Revisions are resolved on acceptance. A worktree target reviews the saved files in its checkout, uncommitted ones included and untracked ones left out (git add -N a new file to include it), against base: the branch to compare against, by default the default branch of the repository. The diff starts at the merge base of base and HEAD, which follows rebases. Omitted commits base means source at head with no diff; supply the parent to review introduced changes. For a branch stacked on another, pass the branch below it as base; Desktop links reviews into a stack through their bases. For a GitHub PR, pullRequestUrl alone is enough: target and title become optional, and the host fetches the PR into a registered checkout of its repository and pins the current PR head and GitHub diff base, titled from the PR. When the existing review for that PR is in Trash, creation reports its ID; restore it with review_lifecycle state:"active" before continuing. When an active review for that PR exists, it is returned instead, reporting whether its head moved and whether an agent is working on it; update it in place, move its target with review_set_target, or create a separate review with reuseExisting. kind:"scratchpad" names the one scratchpad, which the host creates itself. The result carries review, the review as review_list shows it: its target with resolved commits, origin (its PR), repositoryName and repositoryPath, so no follow-up read is needed before diffing. When Desktop is available the review opens there and the result reports opened, softwareMapEnabled and environmentIssues, as review_open does; set open:false to author in the background without taking over Desktop.',
+      'Create a review of saved working files, immutable commits or a GitHub PR. Revisions are resolved on acceptance. A worktree target reviews the saved files in its checkout, uncommitted ones included and untracked ones left out (git add -N a new file to include it), against base: the branch to compare against, by default the default branch of the repository. The diff starts at the merge base of base and HEAD, which follows rebases. Omitted commits base means source at head with no diff; supply the parent to review introduced changes. For a branch stacked on another, pass the branch below it as base; Desktop links reviews into a stack through their bases. For a GitHub PR, pullRequestUrl alone is enough: target and title become optional, and the host fetches the PR into a registered checkout of its repository and pins the current PR head and GitHub diff base, titled from the PR. When the existing review for that PR is in Trash, creation reports its ID; restore it with review_lifecycle state:"active" before continuing. When an active review for that PR exists, it is returned instead, reporting whether its head moved and whether an agent is working on it; update it in place, move its target with review_set_target, or create a separate review with reuseExisting. The result carries review, the review as review_list shows it: its target with resolved commits, origin (its PR), repositoryName and repositoryPath, so no follow-up read is needed before diffing. When Desktop is available the review opens there and the result reports opened, softwareMapEnabled and environmentIssues, as review_open does; set open:false to author in the background without taking over Desktop.',
     set_target:
       "Move the review to a new target, such as the commits after a rebase or amend, preserving the document and component IDs. Revisions are resolved on acceptance. Returns warnings for retained source ranges in files the new commits changed, to verify, and resources that no longer match; fix them with review_edit. Earlier versions keep their source. Omitted pullRequestUrl keeps the PR within the same repository; changing repositories clears it. Supply a URL to replace it or null to detach.",
     edit: [
-      "Edit one document component. content is one component, named by its type; each type's fields are in the Components section of session_get_instructions (authoring or scratchpad).",
+      "Edit one document component. content is one component, named by its type; each type's fields are in the Components section of session_get_instructions.",
       "Anchors are head/path#L10-L20 or base/path#L7, or diff/path#L84-R90 for a range across sides, with repository-relative paths and 1-based inclusive lines. pins {repositoryId, head, base?} say which commits anchors quote: a step, frame, attachment or operation without pins uses its block's, and a block without them the review's.",
-      "insert adds content: parentId nests it, afterId places it, and omitted placement appends (on the scratchpad, it lands at the top). update patches a component's own fields; null removes an optional one. A section's children and a diagram's units change through their own IDs; a call stack's frames change by replacing the call stack. move and remove take a targetId; removing a flow_node removes its edges.",
+      "insert adds content: parentId nests it, afterId places it, and omitted placement appends. update patches a component's own fields; null removes an optional one. A section's children and a diagram's units change through their own IDs; a call stack's frames change by replacing the call stack. move and remove take a targetId; removing a flow_node removes its edges.",
       "The host assigns short durable IDs. The result names the edited component and, for an insert or replace, its first-level children, and quotes the first and last line of each anchor the edit added or changed (the first 20; unquotedAnchors counts the rest): check they are the lines you meant. Accepted edits save at once.",
       "While a reader may be watching, write small and often: one paragraph per edit. Insert a new diagram whole. Change one already drawn a unit at a time (a flow_node, flow_edge or step, with parentId naming the diagram), and link each added flow_node to a node already drawn.",
     ].join("\n"),
@@ -92,9 +89,6 @@ export function authoringTools(
       'Read Whiteboard\'s guidance before creating or editing a review. The default topic gives the authoring workflow; "file-lenses" covers Diff-view file lenses.' +
         (traceEnabled
           ? ' Call review_get_instructions({topic:"trace-archaeology"}) for why code exists, what an agent was thinking, or whether an agent solved this before.'
-          : "") +
-        (scratchpadAvailable
-          ? ' When the user asks in conversation to be shown how code works or wants a diagram, without asking for a review, draw it on the scratchpad rather than answering only in chat: call review_get_instructions({topic:"scratchpad"}) first. A request for a review or to use Whiteboard means authoring a review with the default topic.'
           : ""),
       instructionsQuerySchema.partial(),
       "GET",
@@ -198,7 +192,7 @@ export function authoringTools(
     ),
     tool(
       "register_repository",
-      "Register a local Git or jj repository and return its id, for pins on scratchpad blocks. session_create and session_set_target take the checkout's path instead.",
+      "Register a local Git or jj repository and return its id, for pins on blocks. session_create and session_set_target take the checkout's path instead.",
       z.strictObject({ path: id }),
       "POST",
       "/repositories",
