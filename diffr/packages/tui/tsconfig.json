@@ -10,6 +10,6 @@
     "noEmit": true,
     "types": ["bun", "react"]
   },
-  "include": ["packages/**/*.ts", "packages/**/*.tsx", "test/**/*.ts", "test/**/*.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "test/**/*.tsx"],
   "exclude": ["test/fixtures"]
 }

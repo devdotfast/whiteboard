@@ -41,7 +41,7 @@ fn install(root: &Path, with_cli: bool) -> Result<()> {
     );
     run(
         Command::new(&bun)
-            .current_dir(root.join("tui"))
+            .current_dir(root.join("packages/tui"))
             .args(["install", "--frozen-lockfile"]),
         "Installing TUI dependencies",
     )?;
@@ -51,7 +51,7 @@ fn install(root: &Path, with_cli: bool) -> Result<()> {
     std::fs::create_dir_all(artifact.parent().unwrap())?;
     run(
         Command::new(&bun)
-            .current_dir(root.join("tui"))
+            .current_dir(root.join("packages/tui"))
             .args([
                 "build",
                 "--compile",
@@ -61,7 +61,7 @@ fn install(root: &Path, with_cli: bool) -> Result<()> {
                 } else {
                     "process.env.OPENTUI_LIBC=\"glibc\""
                 },
-                "packages/hunk/src/main.tsx",
+                "src/main.tsx",
                 "--outfile",
             ])
             .arg(&artifact),
