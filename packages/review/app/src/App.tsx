@@ -75,6 +75,7 @@ import {
   ReviewFindProvider,
   useReviewFindRegistration,
 } from "./review-find";
+import { scrollToReviewBlock } from "./review-heading-scroll";
 import { useReviewLenses } from "./review-lenses";
 import {
   useReviewPanel,
@@ -475,13 +476,34 @@ function ReviewLayoutContent({
   // Subscribe before the canvas signals ready so a reveal immediately after
   // mounting cannot outrun the listener.
   useLayoutEffect(() => {
-    return session.surface.subscribe((event) => {
+    let stopReveal: (() => void) | undefined;
+
+    const unsubscribe = session.surface.subscribe((event) => {
+      if (event.event === "revealBlock") {
+        stopReveal?.();
+        panelStore.getState().showView("review");
+        stopReveal = revealWhenDrawn(() =>
+          scrollToReviewBlock(
+            event.blockId,
+            articleRef.current,
+            scrollRegionRef.current,
+          ),
+        );
+
+        return;
+      }
+
       if (event.event !== "showReviewView") return;
       const { availableViews, showView } = panelStore.getState();
 
       if (availableViews.includes(event.view)) showView(event.view);
     });
-  }, [panelStore, session.surface]);
+
+    return () => {
+      stopReveal?.();
+      unsubscribe();
+    };
+  }, [panelStore, session.surface, articleRef, scrollRegionRef]);
 
   const activeSoftwareMapSource = useMemo(
     () =>
@@ -1274,3 +1296,20 @@ const mapViewStyles = stylex.create({
     boxShadow: "none",
   },
 });
+
+/** Tries each frame until `scroll` succeeds, as once the document shows the
+ * block. Gives up after 5s, since the block may not exist in this version. */
+function revealWhenDrawn(scroll: () => boolean): () => void {
+  const deadline = Date.now() + 5000;
+  let frame = 0;
+
+  const attempt = () => {
+    if (scroll()) return;
+
+    if (Date.now() < deadline) frame = requestAnimationFrame(attempt);
+  };
+
+  attempt();
+
+  return () => cancelAnimationFrame(frame);
+}
