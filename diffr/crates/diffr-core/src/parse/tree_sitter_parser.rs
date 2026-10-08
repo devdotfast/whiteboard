@@ -2147,7 +2147,7 @@ mod tests {
     #[test]
     fn tsx_import_type_arrays_parse_without_errors() {
         let params = Params::default();
-        let config = params.language(guess::Language::TypeScriptTsx);
+        let config = params.language(guess::Language::TypeScriptTsx).unwrap();
         for source in [
             "interface Props { entries?: import('./types').Entry[]; }",
             "type Entries = import('./types').Entry[][];",
@@ -2177,7 +2177,7 @@ mod tests {
     fn test_parse() {
         let arena = Arena::new();
         let params = Params::default();
-        let css_config = params.language(guess::Language::Css);
+        let css_config = params.language(guess::Language::Css).unwrap();
         parse(&arena, ".foo {}", css_config, false).unwrap();
     }
 
@@ -2185,7 +2185,7 @@ mod tests {
     fn test_parse_empty_file() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess::Language::EmacsLisp);
+        let config = params.language(guess::Language::EmacsLisp).unwrap();
         let res = parse(&arena, "", config, false).unwrap();
 
         let expected: Vec<&Syntax> = vec![];
@@ -2198,7 +2198,7 @@ mod tests {
     fn test_subtrees() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess::Language::Html);
+        let config = params.language(guess::Language::Html).unwrap();
         let res = parse(&arena, "<style>.a { color: red; }</style>", config, false).unwrap();
 
         match res[0] {

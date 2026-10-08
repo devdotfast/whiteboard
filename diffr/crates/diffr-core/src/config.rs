@@ -26,7 +26,7 @@ use crate::options::DiffOptions;
 use crate::parse::{guess_language::Language, tree_sitter_parser};
 use crate::plugin::config::PluginsConfig;
 use crate::plugin::queries::{self, Queries};
-use query::AnnotationQuery;
+use query::{AnnotationQuery, QuerySource};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -128,7 +128,7 @@ impl Default for ThemeConfig {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConfigError(pub(crate) String);
 impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -138,7 +138,9 @@ impl std::fmt::Display for ConfigError {
 impl std::error::Error for ConfigError {}
 
 pub struct Params {
-    languages: DftHashMap<Language, OnceLock<Arc<LanguageParams>>>,
+    languages: DftHashMap<Language, OnceLock<Result<Arc<LanguageParams>, ConfigError>>>,
+    sources: DftHashMap<Language, Vec<QuerySource>>,
+    plugin_order: Vec<String>,
     pub diff: DiffConfig,
 }
 
@@ -147,10 +149,13 @@ pub struct LanguageParams {
     /// The fold and context queries of every enabled plugin, concatenated.
     pub(crate) query: AnnotationQuery,
     sub_languages: OnceLock<
-        Vec<(
-            &'static tree_sitter_parser::TreeSitterSubLanguage,
-            Arc<LanguageParams>,
-        )>,
+        Result<
+            Vec<(
+                &'static tree_sitter_parser::TreeSitterSubLanguage,
+                Arc<LanguageParams>,
+            )>,
+            ConfigError,
+        >,
     >,
 }
 
@@ -161,7 +166,11 @@ impl LanguageParams {
         &'static tree_sitter_parser::TreeSitterSubLanguage,
         Arc<LanguageParams>,
     )] {
-        self.sub_languages.get().expect("resolved sub-languages")
+        self.sub_languages
+            .get()
+            .expect("resolved sub-languages")
+            .as_ref()
+            .expect("valid sub-languages")
     }
 }
 
@@ -266,27 +275,34 @@ impl Config {
     /// Compile with `queries`, the enabled plugins' query files in
     /// `plugins.shape.order`.
     pub fn compile_queries(&self, queries: Vec<(String, Queries)>) -> Result<Params, ConfigError> {
-        let mut languages: DftHashMap<_, _> = Language::iter()
+        let params = self.prepare_queries(queries)?;
+        for &language in params.sources.keys() {
+            params.compiled_language(language)?;
+        }
+        Ok(params)
+    }
+
+    /// Assemble query sources now, compiling each language on first use. Hosts
+    /// using this path report query errors with the file that needs them.
+    pub fn prepare(&self) -> Result<Params, ConfigError> {
+        self.prepare_queries(self.plugins.shape.queries()?)
+    }
+
+    fn prepare_queries(&self, queries: Vec<(String, Queries)>) -> Result<Params, ConfigError> {
+        let languages: DftHashMap<_, _> = Language::iter()
             .map(|language| (language, OnceLock::new()))
             .collect();
+        let mut by_language = DftHashMap::default();
         for (name, sources) in queries::assemble(&queries)? {
             let language = Language::iter()
                 .find(|language| format!("{language:?}").to_lowercase() == name)
                 .ok_or_else(|| ConfigError(format!("unknown language: {name}")))?;
-            let parser = tree_sitter_parser::from_language(language);
-            let query = AnnotationQuery::compile(&parser.language, &sources)?;
-            check_tags(&query, &self.plugins.shape.order)?;
-            languages.insert(
-                language,
-                OnceLock::from(Arc::new(LanguageParams {
-                    parser,
-                    query,
-                    sub_languages: OnceLock::new(),
-                })),
-            );
+            by_language.insert(language, sources);
         }
         Ok(Params {
             languages,
+            sources: by_language,
+            plugin_order: self.plugins.shape.order.clone(),
             diff: self.diff,
         })
     }
@@ -314,26 +330,49 @@ fn check_tags(query: &AnnotationQuery, order: &[String]) -> Result<(), ConfigErr
 }
 
 impl Params {
-    pub fn language(&self, language: Language) -> &Arc<LanguageParams> {
-        let config = self.languages[&language].get_or_init(|| {
-            // Languages without annotation rules still support structural diffing.
-            // Keep their grammars lazy, as in the existing parser registry.
-            let parser = tree_sitter_parser::from_language(language);
-            Arc::new(LanguageParams {
-                parser,
-                query: AnnotationQuery::compile(&parser.language, &[]).expect("an empty query"),
-                sub_languages: OnceLock::new(),
+    fn compiled_language(&self, language: Language) -> Result<&Arc<LanguageParams>, ConfigError> {
+        self.languages[&language]
+            .get_or_init(|| {
+                // Languages without annotation rules still support structural diffing.
+                // Keep their grammars lazy, as in the existing parser registry.
+                let parser = tree_sitter_parser::from_language(language);
+                let sources = self
+                    .sources
+                    .get(&language)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]);
+                let query = AnnotationQuery::compile(&parser.language, sources)?;
+                check_tags(&query, &self.plugin_order)?;
+                Ok(Arc::new(LanguageParams {
+                    parser,
+                    query,
+                    sub_languages: OnceLock::new(),
+                }))
             })
-        });
-        config.sub_languages.get_or_init(|| {
-            config
-                .parser
-                .sub_languages
-                .iter()
-                .map(|sub| (sub, Arc::clone(self.language(sub.parse_as))))
-                .collect()
-        });
+            .as_ref()
+            .map_err(Clone::clone)
+    }
+
+    /// Resolve this language and its embedded languages once. Prepared configs
+    /// can report query errors here; both successes and failures are cached.
+    pub fn language(&self, language: Language) -> Result<&Arc<LanguageParams>, ConfigError> {
+        let config = self.compiled_language(language)?;
         config
+            .sub_languages
+            .get_or_init(|| {
+                config
+                    .parser
+                    .sub_languages
+                    .iter()
+                    .map(|sub| {
+                        self.language(sub.parse_as)
+                            .map(|params| (sub, Arc::clone(params)))
+                    })
+                    .collect()
+            })
+            .as_ref()
+            .map_err(Clone::clone)?;
+        Ok(config)
     }
 }
 
@@ -350,6 +389,30 @@ impl Default for Params {
 mod tests {
     use super::*;
     use crate::summary::DiffResult;
+
+    #[test]
+    fn prepared_queries_fail_only_when_their_language_is_used() {
+        let queries = vec![(
+            "removed-runs".to_owned(),
+            vec![crate::plugin::queries::PluginQuery {
+                language: "rust".into(),
+                name: "broken-rust.scm".into(),
+                text: "(not_a_rust_node) @fold".into(),
+            }],
+        )];
+        let config = Config::default();
+        assert!(config.compile_queries(queries.clone()).is_err());
+        let params = config.prepare_queries(queries).unwrap();
+        assert!(
+            DiffResult::try_from_sources_with_params("a.py", "x = 1", "x = 2", &params).is_ok()
+        );
+        for _ in 0..2 {
+            let error =
+                DiffResult::try_from_sources_with_params("a.rs", "fn a() {}", "fn b() {}", &params)
+                    .unwrap_err();
+            assert!(error.to_string().contains("broken-rust.scm"));
+        }
+    }
 
     #[test]
     fn diff_limits_default_and_layer_from_the_file() {

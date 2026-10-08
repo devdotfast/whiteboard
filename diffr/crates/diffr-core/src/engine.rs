@@ -84,7 +84,7 @@ impl DiffResult {
         lhs: &str,
         rhs: &str,
         params: &Params,
-    ) -> Result<Self, QueryConflict> {
+    ) -> anyhow::Result<Self> {
         Self::from_sources_with_options(path, lhs, rhs, params, &DiffOptions::default())
     }
 
@@ -94,7 +94,7 @@ impl DiffResult {
         rhs: &str,
         params: &Params,
         options: &DiffOptions,
-    ) -> Result<Self, QueryConflict> {
+    ) -> anyhow::Result<Self> {
         diff_file_content(params, path, lhs, rhs, options, &[])
     }
 }
@@ -105,11 +105,13 @@ pub fn diff_file_content(
     rhs_src: &str,
     diff_options: &DiffOptions,
     overrides: &[(LanguageOverride, Vec<glob::Pattern>)],
-) -> Result<DiffResult, QueryConflict> {
+) -> anyhow::Result<DiffResult> {
     // A deleted file's language comes from what it was.
     let guess_src = if rhs_src.is_empty() { lhs_src } else { rhs_src };
     let language = guess(Path::new(display_path), guess_src, overrides);
-    let lang_config = language.map(|lang| (lang, params.language(lang)));
+    let lang_config = language
+        .map(|lang| params.language(lang).map(|params| (lang, params)))
+        .transpose()?;
 
     // Highlights come from the same parse as the folds, so a side that
     // parsed has them whether or not the match runs.
@@ -264,7 +266,8 @@ pub fn diff_file_content(
                                 path: display_path.to_owned(),
                                 side,
                                 conflict,
-                            });
+                            }
+                            .into());
                         }
                         Err(tsp::ToSyntaxError::ExceededParseErrorLimit(
                             tsp::ExceededParseErrorLimit {

@@ -165,7 +165,9 @@ fn run_debug(mode: Mode, params: &Params) {
             let language = guess(path, &src, &language_overrides);
             match language {
                 Some(lang) => {
-                    let ts_lang = params.language(lang);
+                    let ts_lang = params
+                        .language(lang)
+                        .expect("debug configuration was compiled");
                     let arena = Arena::new();
                     let ast = conflict_or_die(tsp::parse(&arena, &src, ts_lang, ignore_comments));
                     init_all_info(&ast, &[]);
@@ -188,7 +190,9 @@ fn run_debug(mode: Mode, params: &Params) {
             let language = guess(path, &src, &language_overrides);
             match language {
                 Some(lang) => {
-                    let ts_lang = params.language(lang);
+                    let ts_lang = params
+                        .language(lang)
+                        .expect("debug configuration was compiled");
                     let arena = Arena::new();
                     let ast = conflict_or_die(tsp::parse(&arena, &src, ts_lang, ignore_comments));
                     init_all_info(&ast, &[]);

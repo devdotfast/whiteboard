@@ -137,3 +137,7 @@ toml = "0.8"
 [features]
 # Constructors and helpers the diffr package's tests build on.
 test-support = []
+
+[[example]]
+name = "initialization"
+path = "src/initialization_example.rs"
