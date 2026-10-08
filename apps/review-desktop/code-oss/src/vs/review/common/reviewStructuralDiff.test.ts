@@ -351,8 +351,8 @@ test("base-owned unchanged fold projects both ranges and retains its toggle iden
 	const l = base.children[0]; const r = head.children[0];
 	if (l.kind !== "leaf" || r.kind !== "leaf") throw new Error("Expected leaves");
 	l.changed = [{ line: 0, start_column: 0, end_column: 1 }]; r.changed = [{ line: 0, start_column: 0, end_column: 1 }];
-	diff.structural_changes = { base: [[0, 1]], head: [[0, 1]] };
-	assert.equal(structuralContextGaps(diff, id => id === 26)[0].change, "modified");
+	const changed: StructuralTextDiff = { ...diff, structural_changes: { base: [[0, 1]], head: [[0, 1]] } };
+	assert.equal(structuralContextGaps(changed, id => id === 26)[0].change, "modified");
 });
 
 /** The function from diffr's TypeScript context plugin: a scope over the whole construct, holding header, body, closer. */

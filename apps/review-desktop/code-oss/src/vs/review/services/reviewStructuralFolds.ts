@@ -12,7 +12,7 @@ import { EditorOption } from "../../editor/common/config/editorOptions.js";
 import { CursorColumns } from "../../editor/common/core/cursorColumns.js";
 import { Range } from "../../editor/common/core/range.js";
 import { InjectedTextCursorStops, type IModelDeltaDecoration, type ITextModel } from "../../editor/common/model.js";
-import { bandDetail, structuralFoldables, type StructuralFoldable, type StructuralTextDiff } from "../common/reviewStructuralDiff.js";
+import { bandDetail, structuralFoldables, structuralLineCount, type StructuralFoldable, type StructuralTextDiff } from "../common/reviewStructuralDiff.js";
 import type { UnchangedRegion } from "../../editor/browser/widget/diffEditor/diffEditorViewModel.js";
 import type { StructuralDiffSession } from "./reviewStructuralDiffSession.js";
 import type { ScopeViewedControl } from "./reviewStructuralViewedControl.js";
@@ -52,11 +52,9 @@ const PILL = Symbol("review-fold-pill");
  */
 export class StructuralFoldControls extends Disposable {
 	private readonly decorations = this.editor.createDecorationsCollection();
-	private readonly foldables = new WeakMap<StructuralTextDiff, StructuralFoldable[]>();
-	private readonly sourceLineCounts = new WeakMap<StructuralTextDiff, number>();
 	private readonly rails = new ScopeRails(this.editor);
 	private hovered: FoldTarget | undefined;
-	private view: { model: ITextModel; target: FoldTarget | undefined; visibleScopes: readonly StructuralFoldable[]; controls: readonly ViewedCandidate[] } | undefined;
+	private view: { model: ITextModel; folded: ReadonlySet<string>; target: FoldTarget | undefined; visibleScopes: readonly StructuralFoldable[]; controls: readonly ViewedCandidate[] } | undefined;
 	private overChevronColumn = false;
 	private pressed: { target: FoldTarget; x: number; y: number } | undefined;
 	private readonly viewedControls = new Map<number, ScopeViewedControl>();
@@ -178,12 +176,7 @@ export class StructuralFoldControls extends Disposable {
 		// A diff editor changes its model before its two code editors have both
 		// attached the new snapshots. Do not paint old scope line numbers on the
 		// temporary model in between.
-		let sourceLineCount = diff ? this.sourceLineCounts.get(diff) : undefined;
-		if (diff && sourceLineCount === undefined) {
-			sourceLineCount = (diff[this.side]?.text.match(/\n/g)?.length ?? 0) + 1;
-			this.sourceLineCounts.set(diff, sourceLineCount);
-		}
-		if (!model || !path || !diff || model.getLineCount() !== sourceLineCount) {
+		if (!model || !path || !diff || model.getLineCount() !== structuralLineCount(diff[this.side])) {
 			this.view = undefined;
 			this.decorations.clear();
 			this.rails.hide();
@@ -232,7 +225,7 @@ export class StructuralFoldControls extends Disposable {
 			if (!active && completed.some(outer => outer.line < scope.line && outer.rail!.end >= scope.rail!.end)) continue;
 			controls.push({ active, progress, target: { foldable: scope, collapsed: this.isFolded(scope, folded), rail: false, control: false } });
 		}
-		this.view = { model, target, visibleScopes, controls };
+		this.view = { model, folded, target, visibleScopes, controls };
 		this.layoutViewport();
 	}
 
@@ -386,7 +379,7 @@ export class StructuralFoldControls extends Disposable {
 		const onChevron = this.inChevronColumn(e);
 
 		// A folded scope's header: its chevron and its pill unfold it.
-		const foldedHeaders = this.foldedHeaders();
+		const foldedHeaders = this.view?.folded ?? this.foldedHeaders();
 		const folded = foldables.find(f => f.line === line && (this.isFolded(f, foldedHeaders) || this.isSummaryFolded(f)));
 		if (folded) {
 			const onPill = e.target?.type === MouseTargetType.CONTENT_TEXT && e.target.detail.injectedText?.options.attachedData === PILL;
@@ -414,13 +407,8 @@ export class StructuralFoldControls extends Disposable {
 		return railsHere[0] ? { foldable: railsHere[0], rail: false, control: false, collapsed: false } : undefined;
 	}
 
-	private foldablesOf(diff: StructuralTextDiff): StructuralFoldable[] {
-		let foldables = this.foldables.get(diff);
-		if (!foldables) {
-			foldables = structuralFoldables(diff[this.side]);
-			this.foldables.set(diff, foldables);
-		}
-		return foldables;
+	private foldablesOf(diff: StructuralTextDiff): readonly StructuralFoldable[] {
+		return structuralFoldables(diff[this.side]);
 	}
 
 	private isCollapsed(path: string, foldable: StructuralFoldable): boolean {
@@ -485,8 +473,9 @@ class ScopeRails implements IOverlayWidget {
 			// behind a band, which Monaco maps back onto the header itself.
 			const top = Math.max(0, this.editor.getBottomForLineNumber(foldable.line + 1) - scrollTop);
 			const bottom = Math.min(layout.height, this.editor.getTopForLineNumber(foldable.rail!.end + 1) - scrollTop);
+			if (bottom <= top) { continue; }
 			const left = Math.round(leadingWidth(model, foldable.line + 1) * spaceWidth) - scrollLeft;
-			if (bottom <= top || !Number.isFinite(left) || left < 0 || left >= layout.contentWidth) { continue; }
+			if (!Number.isFinite(left) || left < 0 || left >= layout.contentWidth) { continue; }
 			let segment = this.segments.get(foldable);
 			if (!segment) {
 				segment = this.node.ownerDocument.createElement("div");
@@ -500,8 +489,9 @@ class ScopeRails implements IOverlayWidget {
 			segment.style.height = `${bottom - top}px`;
 			segments.push(segment);
 		}
+		const kept = new Set(segments);
 		for (const [foldable, segment] of this.segments) {
-			if (!segments.includes(segment)) { this.segments.delete(foldable); }
+			if (!kept.has(segment)) { this.segments.delete(foldable); }
 		}
 		// Keep the hovered element attached while its paint changes.
 		if (segments.length !== this.node.children.length || segments.some((segment, i) => this.node.children[i] !== segment)) {

@@ -102,12 +102,12 @@ test('structural editor models retain diffr bytes across a live file save', asyn
 		} } as StructuralEvent;
 		yield complete;
 	} });
-	const models = new Map<string, { uri: ReturnType<typeof URI.parse>; value: string; getValue(): string; getLinesContent(): string[] }>();
+	const models = new Map<string, { uri: ReturnType<typeof URI.parse>; value: string; getValue(): string; getLinesContent(): string[]; getVersionId(): number }>();
 	let snapshotProvider: { provideTextContent(uri: ReturnType<typeof URI.parse>): Promise<unknown> | null } | undefined;
 	const modelService = {
 		getModel: (uri: ReturnType<typeof URI.parse>) => models.get(uri.toString()) ?? null,
 		createModel: (value: string, _language: unknown, uri: ReturnType<typeof URI.parse>) => {
-			const model = { uri, value, getValue() { return this.value; }, getLinesContent() { return this.value.split('\n'); } };
+			const model = { uri, value, getValue() { return this.value; }, getLinesContent() { return this.value.split('\n'); }, getVersionId() { return 1; } };
 			models.set(uri.toString(), model);
 			return model;
 		},

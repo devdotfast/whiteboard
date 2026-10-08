@@ -24,7 +24,7 @@ export class StructuralViewedState extends Disposable {
 	private readonly states = new Map<string, string>();
 	private pending = false;
 	private requestedFold: { path: string; id: number; viewed: boolean } | undefined;
-	private memo: { files: Map<string, ReviewDiffProgressFile>; values: Map<string, ReturnType<typeof structuralViewedProgress>> } | undefined;
+	private memo: { files: Map<string, ReviewDiffProgressFile>; values: Map<string, ReturnType<typeof structuralViewedProgress>>; ranges: Map<string, ReturnType<typeof structuralViewedRanges>> } | undefined;
 
 	constructor(
 		private readonly session: StructuralDiffSession,
@@ -60,11 +60,14 @@ export class StructuralViewedState extends Disposable {
 	}
 
 	getViewedRanges(path: string) {
-		return structuralViewedRanges(this.getScopes(path), this.current().files.get(path));
+		const { files, ranges } = this.current();
+		let value = ranges.get(path);
+		if (!value) ranges.set(path, value = structuralViewedRanges(this.getScopes(path), files.get(path)));
+		return value;
 	}
 
 	private current() {
-		return this.memo ??= { files: new Map(this.progress()?.files.map(file => [file.path, file])), values: new Map() };
+		return this.memo ??= { files: new Map(this.progress()?.files.map(file => [file.path, file])), values: new Map(), ranges: new Map() };
 	}
 
 	async toggle(path: string, id: number): Promise<void> {

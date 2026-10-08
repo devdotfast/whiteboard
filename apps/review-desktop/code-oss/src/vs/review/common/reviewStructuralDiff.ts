@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { structuralRows } from "./reviewProtocol.js";
-export { structuralRows } from "./reviewProtocol.js";
+import { WeakCachedFunction } from "../../base/common/cache.js";
+import { structuralRows as wireRows } from "./reviewProtocol.js";
 
 import { structuralChangeCounts } from "./reviewProtocol.js";
 import type {
@@ -62,13 +62,29 @@ export function structuralFilePath(file: StructuralPairing<StructuralFileRef>): 
 	return file.rhs?.path ?? file.lhs!.path;
 }
 
+// Wire results are never mutated.
+export const cached = <K extends object, V>(compute: (key: K) => V) => {
+	const cache = new WeakCachedFunction(compute);
+	return (key: K): V => cache.get(key);
+};
+
+export const structuralRows = cached((diff: StructuralTextDiff) => wireRows(diff));
+
+export const structuralText = cached((source: StructuralSource) => source.text.replace(/\r\n/g, "\n"));
+
+const sourceLines = cached((source: StructuralSource) => structuralText(source).split("\n"));
+
+export function structuralLineCount(source: StructuralSource | undefined): number {
+	return source ? sourceLines(source).length : 1;
+}
+
 /** The 0-based, half-open line span a region touches. An end at column 0 does not touch its end line. */
 export function regionLines(region: StructuralRegion): { start: number; end: number } {
 	return { start: region.start.line, end: region.end.column === 0 ? region.end.line : region.end.line + 1 };
 }
 
 /** Preserve the context plugin's scope boundaries for lens projection. */
-export function structuralContextScopes(diff: StructuralTextDiff) {
+export const structuralContextScopes = cached((diff: StructuralTextDiff) => {
 	const scopes = (source: StructuralSource | undefined) => {
 		const result: [number, number][] = [];
 		const visit = (region: StructuralRegion) => {
@@ -83,7 +99,7 @@ export function structuralContextScopes(diff: StructuralTextDiff) {
 		return result;
 	};
 	return { original: scopes(diff.lhs), modified: scopes(diff.rhs) };
-}
+});
 
 /**
  * The zero-based lines a fold hides when it folds into its header line, as
@@ -124,8 +140,12 @@ export interface StructuralFoldable {
  * same body. Then a fold gets it before a leaf, and an outer region before an
  * inner one.
  */
-export function structuralFoldables(source: StructuralSource | undefined): StructuralFoldable[] {
-	const lines = source ? source.text.replace(/\r\n/g, "\n").split("\n") : [];
+export function structuralFoldables(source: StructuralSource | undefined): readonly StructuralFoldable[] {
+	return source ? sourceFoldables(source) : [];
+}
+
+const sourceFoldables = cached((source: StructuralSource): StructuralFoldable[] => {
+	const lines = sourceLines(source);
 	const found: { foldable: Omit<StructuralFoldable, "chevron">; rank: [number, number, number] }[] = [];
 	const visit = (region: StructuralRegion) => {
 		const { start, end } = regionLines(region);
@@ -152,7 +172,7 @@ export function structuralFoldables(source: StructuralSource | undefined): Struc
 		if (region.kind === "fold") region.children.forEach(visit);
 	};
 	// The file header folds the root.
-	if (source?.root.kind === "fold") source.root.children.forEach(visit);
+	if (source.root.kind === "fold") source.root.children.forEach(visit);
 	const holder = new Map<number, (typeof found)[number]>();
 	for (const entry of found) {
 		const held = holder.get(entry.foldable.line);
@@ -160,7 +180,7 @@ export function structuralFoldables(source: StructuralSource | undefined): Struc
 		if (!b || (a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) > 0) holder.set(entry.foldable.line, entry);
 	}
 	return found.map(entry => ({ ...entry.foldable, chevron: holder.get(entry.foldable.line) === entry }));
-}
+});
 
 function structuralLeaves(root: StructuralRegion): StructuralLeaf[] {
 	const leaves: StructuralLeaf[] = [];
@@ -188,10 +208,10 @@ export function utf16Column(text: string, byteColumn: number): number {
  * Whole-line tint follows diffr’s structural coverage, matching change counts.
  * Changed token spans supply the stronger tint within those lines.
  */
-export function structuralHighlights(diff: StructuralTextDiff) {
+export const structuralHighlights = cached((diff: StructuralTextDiff) => {
 	function side(source: StructuralSource | undefined, ranges: readonly (readonly [number, number])[]) {
 		if (!source) return { spans: [], lines: [] };
-		const lines = source.text.replace(/\r\n/g, "\n").split("\n");
+		const lines = sourceLines(source);
 		const changedLines: number[] = [];
 		for (const [start, end] of ranges) {
 			for (let line = start; line < end; line++) changedLines.push(line + 1);
@@ -235,7 +255,7 @@ export function structuralHighlights(diff: StructuralTextDiff) {
 		originalLines: original.lines,
 		modifiedLines: modified.lines,
 	};
-}
+});
 
 /** Tags are `<plugin>:<name>`; several plugins capture docstrings, each under its own prefix. */
 const isDocstring = (region: StructuralRegion) => region.tags?.some((tag) => tag.slice(tag.lastIndexOf(":") + 1) === "docstring") === true;
@@ -334,8 +354,8 @@ export function structuralContextGaps(
 	};
 	const lhs = knownRegions(diff.lhs?.root, state, includeNested);
 	const rhs = knownRegions(diff.rhs?.root, state, includeNested);
-	const lhsLines = (diff.lhs?.text ?? "").replace(/\r\n/g, "\n").split("\n");
-	const rhsLines = (diff.rhs?.text ?? "").replace(/\r\n/g, "\n").split("\n");
+	const lhsLines = diff.lhs ? sourceLines(diff.lhs) : [];
+	const rhsLines = diff.rhs ? sourceLines(diff.rhs) : [];
 	// Leaves pair by alignment; folds pair by fold state, the only identity they share across sides.
 	const usedRhs = new Set<StructuralRegion>();
 	const pairs = (left: StructuralRegion, right: StructuralRegion) => {
@@ -397,9 +417,13 @@ export function structuralContextGaps(
 		if (left !== null && right === null) removedLines.add(left + 1);
 		if (right !== null && left === null) addedLines.add(right + 1);
 	}
+	const touches = (lines: Set<number>, start: number, count: number) => {
+		for (let line = start; line < start + count; line++) if (lines.has(line)) return true;
+		return false;
+	};
 	for (const gap of gaps) {
-		const removed = [...removedLines].some(line => line >= gap.originalStart && line < gap.originalStart + gap.originalCount);
-		const added = [...addedLines].some(line => line >= gap.modifiedStart && line < gap.modifiedStart + gap.modifiedCount);
+		const removed = touches(removedLines, gap.originalStart, gap.originalCount);
+		const added = touches(addedLines, gap.modifiedStart, gap.modifiedCount);
 		gap.change = removed && added ? "modified" : removed ? "removed" : added ? "inserted" : "unchanged";
 	}
 	gaps.sort((a, b) => (a.modifiedStart - b.modifiedStart) || (a.originalStart - b.originalStart));

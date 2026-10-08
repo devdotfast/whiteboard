@@ -26,7 +26,11 @@ import {
 	structuralContextScopes,
 	structuralRows,
 	structuralHighlights,
+	structuralText,
+	cached,
 	type StructuralGap,
+	type StructuralSource,
+	type StructuralTextDiff,
 } from "../common/reviewStructuralDiff.js";
 import type { ITextModel } from "../../editor/common/model.js";
 import type { ReviewFilesEditorEntry } from "./reviewFilesDiffView.js";
@@ -106,6 +110,47 @@ export function createStructuralDiffEditors(
 
 let structuralViewId = 0;
 
+const checkedSnapshots = new WeakMap<ITextModel, { source: StructuralSource | undefined; version: number }>();
+
+function matchesSnapshot(model: ITextModel, source: StructuralSource | undefined): boolean {
+	const checked = checkedSnapshots.get(model);
+	if (checked && checked.source === source && checked.version === model.getVersionId()) return true;
+	if (model.getLinesContent().join("\n") !== (source ? structuralText(source) : "")) return false;
+	checkedSnapshots.set(model, { source, version: model.getVersionId() });
+	return true;
+}
+
+const lineChanges = cached((diff: StructuralTextDiff) => {
+	// Changed-ness comes from the wire: a one-sided row, or a paired row whose line carries a changed span.
+	const highlights = structuralHighlights(diff);
+	const changedLeft = new Set(highlights.originalLines), changedRight = new Set(highlights.modifiedLines);
+	const changes: DetailedLineRangeMapping[] = [];
+	let l = 0,
+		r = 0;
+	let start: [number, number] | undefined;
+	const flush = () => {
+		if (start)
+			changes.push(
+				new DetailedLineRangeMapping(
+					new LineRange(start[0] + 1, l + 1),
+					new LineRange(start[1] + 1, r + 1),
+					undefined,
+				),
+			);
+		start = undefined;
+	};
+	for (const [a, b] of structuralRows(diff)) {
+		const changed = a === null || b === null || changedLeft.has(a + 1) || changedRight.has(b + 1);
+		if (changed) start ??= [l, r];
+		else flush();
+		if (a !== null) l = a + 1;
+		if (b !== null) r = b + 1;
+	}
+	flush();
+	const text = (source: StructuralSource | undefined) => source ? structuralText(source) : "";
+	return { changes, identical: text(diff.lhs) === text(diff.rhs) };
+});
+
 /** Adapts session snapshots and fold state to Monaco's diff interface. */
 export class StructuralDiffProvider implements IDocumentDiffProvider {
 	private path: string | undefined;
@@ -136,49 +181,18 @@ export class StructuralDiffProvider implements IDocumentDiffProvider {
 		}
 		const diff = path === undefined ? undefined : this.session.getTextDiff(path);
 		if (!diff) throw new Error("diffr did not supply a result for this file.");
-		const left = (diff.lhs?.text ?? "").replace(/\r\n/g, "\n");
-		const right = (diff.rhs?.text ?? "").replace(/\r\n/g, "\n");
-		if (
-			original.getLinesContent().join("\n") !== left ||
-			modified.getLinesContent().join("\n") !== right
-		) {
+		if (!matchesSnapshot(original, diff.lhs) || !matchesSnapshot(modified, diff.rhs)) {
 			throw new Error(
 				"diffr sources differ from Whiteboard's editor snapshots; reload the session.",
 			);
 		}
-		const rows = structuralRows(diff);
-		// Changed-ness comes from the wire: a one-sided row, or a paired row whose line carries a changed span.
-		const highlights = structuralHighlights(diff);
-		const changedLeft = new Set(highlights.originalLines), changedRight = new Set(highlights.modifiedLines);
-		const changes: DetailedLineRangeMapping[] = [];
-		let l = 0,
-			r = 0;
-		let start: [number, number] | undefined;
-		const flush = () => {
-			if (start)
-				changes.push(
-					new DetailedLineRangeMapping(
-						new LineRange(start[0] + 1, l + 1),
-						new LineRange(start[1] + 1, r + 1),
-						undefined,
-					),
-				);
-			start = undefined;
-		};
-		for (const [a, b] of rows) {
-			const changed = a === null || b === null || changedLeft.has(a + 1) || changedRight.has(b + 1);
-			if (changed) start ??= [l, r];
-			else flush();
-			if (a !== null) l = a + 1;
-			if (b !== null) r = b + 1;
-		}
-		flush();
+		const { changes, identical } = lineChanges(diff);
 		return {
 			changes,
 			moves: [],
-			identical: left === right,
+			identical,
 			quitEarly: false,
-			sourceLineAlignment: rows,
+			sourceLineAlignment: structuralRows(diff),
 			contextScopes: structuralContextScopes(diff),
 			// Every collapsed region is hidden, labelled by the wire, as a band or on its header line.
 			// StructuralFoldControls draws the fold controls.
@@ -187,7 +201,7 @@ export class StructuralDiffProvider implements IDocumentDiffProvider {
 				(id) => this.session.isRegionCollapsed(path!, id) === true,
 				(id) => this.session.isRegionCollapsed(path!, id),
 			).map(gap => ({ ...gap, foldControl: false, breadcrumbs: false })),
-			changeHighlights: highlights,
+			changeHighlights: structuralHighlights(diff),
 		};
 	}
 }
