@@ -149,7 +149,7 @@ test("reads the remote hosts' states from the Desktop server, and refuses a malf
 	const service = serviceWith();
 	t.after(() => service.dispose());
 	const requests: string[] = [];
-	let answer: unknown = [{ alias: "devbox", serverId: "s1", state: "online" }, { alias: "box2", state: "not-installed", detail: "Install it.", installCommand: "npm install -g @dev.fast/whiteboard@0.1.6" }];
+	let answer: unknown = [{ alias: "devbox", serverId: "s1", state: "online" }, { alias: "box2", state: "not-installed", detail: "Install it.", installCommand: "npm install -g @dev.fast/whiteboard@0.1.6", declined: true }];
 	mockFetch(t, async (input, init) => {
 		requests.push(`${String(input)} ${new Headers(init?.headers).get("x-review-token")}`);
 		return Response.json(answer);
@@ -157,6 +157,6 @@ test("reads the remote hosts' states from the Desktop server, and refuses a malf
 
 	assert.deepEqual(await service.readRemoteHosts(), answer);
 	assert.deepEqual(requests, ["http://127.0.0.1:5000/remote-hosts token"]);
-	for (answer of [[{ alias: "devbox", state: "asleep" }], [{ alias: "devbox", state: "incompatible", installCommand: 7 }]])
+	for (answer of [[{ alias: "devbox", state: "asleep" }], [{ alias: "devbox", state: "incompatible", installCommand: 7 }], [{ alias: "devbox", state: "not-installed", declined: "yes" }]])
 		await assert.rejects(service.readRemoteHosts(), /remote hosts/);
 });

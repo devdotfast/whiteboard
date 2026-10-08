@@ -43,7 +43,7 @@ prints a JSON summary on stdout, one entry per journey, `ok | failed | skipped`.
 ## Phases
 
 Phase 1 runs offline, after a one-time network fetch of the curated VSIX cache
-that `lsp-python` triggers. Phase 2 (`lsp-go`, `lsp-rust`, `remote-host`, `remote-lsp`)
+that `lsp-python` triggers. Phase 2 (`lsp-go`, `lsp-rust`, `remote-host`, `remote-lsp`, `remote-install`)
 downloads toolchains or a container image and runs only with
 `REVIEW_E2E_NETWORK=1` or when named with `--journey`. A journey that exports
 `manual = true` (`remote-lsp-rust`, `remote-lsp-swift`, `remote-lsp-csharp`,
@@ -251,3 +251,66 @@ node apps/review-desktop/scripts/e2e/run.mjs --runtime "$REVIEW_E2E_RUNTIME" --j
 The base images stay in Docker after `down`; remove them with `docker rmi`
 when done (`rust:1.98-bookworm`, `swift:6.4-noble`,
 `mcr.microsoft.com/dotnet/sdk:10.0-noble`).
+
+## The remote-install journey
+
+`remote-install` proves that Desktop installs itself on a remote: it brings up
+containers with nothing of Whiteboard on them, adds each one in Settings,
+answers the install question in the window, and checks each host over SSH.
+Like `remote-host`, it needs Docker, runs in development mode only, and
+removes its run with `down --all` when it ends.
+
+| Container | `up` flags | What it proves |
+|---|---|---|
+| `fresh` | `--platform linux/amd64 --node none` | The first install, x64 target: the question, each step in Settings, `online`, and a review written there with `~/.local/bin/whiteboard` listed in Home. Later: the next version, Connect for an agent, and removal with "Also remove Whiteboard". |
+| `node` | `--node 24` | The host's own Node runs Whiteboard; no `~/.dev/whiteboard-remote/node`. Later: a server the user started at the old version makes the newer Desktop `incompatible`, and keeps running. |
+| `sealed` | `--sealed --node none` | No route out: Node and the package are uploaded, npm goes through Desktop's relay. |
+| `old` | `--image debian:11 --node none` | glibc 2.31: `unsupported`, no question, nothing written in the home. |
+| `arm` | `--platform linux/arm64 --node none` | The ARM64 target. |
+| `fresh2` | `--platform linux/amd64 --node none` | The ssh master killed during the package step: the reconnect finishes the install, with no `.part` left. |
+| `deny` | `--node none` | "Don't install": `not-installed` with the npm command, nothing written, and no second question after Retry. |
+
+On an Apple-silicon Mac the containers without `--platform` are ARM64 too,
+and `fresh` and `fresh2` run under emulation; elsewhere, swap the two
+`--platform` values if the emulated one is too slow.
+
+For "the next version" the journey raises the patch version in
+`packages/review/package.json`, which the Desktop's server reports and its
+development pack carries, restarts the Desktop, and writes the file back when
+it ends. Do not run it while you edit that file. Run it under a trap that also
+restores the file, in case the runner is killed:
+
+```sh
+R="node apps/review-desktop/scripts/e2e/remote/remote.mjs"
+export WB_TEST_RUN=e2e-$$
+trap '$R down --all; $R verify-clean; git checkout -- packages/review/package.json' EXIT
+DEV_FAST_REVIEW_DESKTOP_BACKGROUND=1 node apps/review-desktop/scripts/e2e/run.mjs --runtime "$REVIEW_E2E_RUNTIME" --journey remote-install
+```
+
+The connect step installs Claude Code from npm on `fresh`, and needs GitHub
+there for its plugin, so the journey needs the network throughout. It
+prints the time from **Install** to `online` for each host in its checks.
+
+### On AWS
+
+With `REVIEW_E2E_REMOTE_HOSTS`, a comma-separated list of host names in the
+`WB_TEST_RUN` run, the journey uses hosts you brought up with `aws-up` and
+did not touch: for each one it checks that nothing of Whiteboard is there,
+adds it, answers Install, waits for `online`, and lists a review written
+there in Home, reporting the time from Install to `online`. It runs no
+container step and never removes the run. `aws-up` keeps at most two
+instances at a time, so run the sealed host on its own:
+
+```sh
+R="node apps/review-desktop/scripts/e2e/remote/remote.mjs"
+export WB_TEST_RUN=aws-$$
+trap '$R down --all; $R verify-clean' EXIT
+$R aws-up a --arch x64
+$R aws-up b --arch arm64
+REVIEW_E2E_REMOTE_HOSTS=a,b DEV_FAST_REVIEW_DESKTOP_BACKGROUND=1 \
+  node apps/review-desktop/scripts/e2e/run.mjs --runtime "$REVIEW_E2E_RUNTIME" --journey remote-install
+$R down a; $R down b
+$R aws-up c --sealed
+REVIEW_E2E_REMOTE_HOSTS=c DEV_FAST_REVIEW_DESKTOP_BACKGROUND=1 \
+  node apps/review-desktop/scripts/e2e/run.mjs --runtime "$REVIEW_E2E_RUNTIME" --journey remote-install
+```

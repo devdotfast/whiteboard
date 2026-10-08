@@ -6,9 +6,19 @@
 import { readdir, rm } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { join } from "node:path";
-import type { ReviewGatewayHost, ReviewGatewayHostState } from "../../common/reviewProtocol.js";
-import { REVIEW_REMOTE_TIMEOUTS, ReviewRemoteHost, runSsh, systemClock, type ReviewRemoteClock, type ReviewRemoteHostOptions, type SpawnSsh } from "./reviewRemoteHost.js";
+import type { ReviewGatewayHost, ReviewGatewayHostState, ReviewRemoteAgent, ReviewRemoteAgentResult } from "../../common/reviewProtocol.js";
+import {
+	REVIEW_REMOTE_TIMEOUTS,
+	ReviewRemoteHost,
+	runSsh,
+	systemClock,
+	type ReviewRemoteClock,
+	type ReviewRemoteHostOptions,
+	type ReviewRemoteInstallFlow,
+	type SpawnSsh,
+} from "./reviewRemoteHost.js";
 import type { ReviewSshAskpass, SshPromptRequest } from "./reviewSshAskpass.js";
+import { uninstallRemote } from "./reviewRemoteUninstall.js";
 import {
 	prepareSshControlDirectory,
 	reviewSshInstancePrefix,
@@ -38,6 +48,7 @@ export interface ReviewRemoteHostsOptions {
 	log(message: string): void;
 	readonly clock?: ReviewRemoteClock;
 	readonly timeouts?: ReviewRemoteHostOptions["timeouts"];
+	readonly install?: ReviewRemoteInstallFlow;
 }
 
 export function freeLoopbackPort(): Promise<number> {
@@ -55,6 +66,8 @@ export class ReviewRemoteHosts {
 	private readonly clock: ReviewRemoteClock;
 	private readonly hosts = new Map<string, ReviewRemoteHost>();
 	private readonly closing = new Map<ReviewRemoteHost, Promise<void>>();
+	private readonly uninstalling = new Map<string, Promise<void>>();
+	private readonly removed = new Set<string>();
 	private readonly refused = new Map<string, ReviewGatewayHost>();
 	private order: string[] = [];
 	private prepared: Promise<ReviewSshAskpass> | undefined;
@@ -63,9 +76,33 @@ export class ReviewRemoteHosts {
 	private sentAny = false;
 	private disposed = false;
 	private disposing: Promise<void> | undefined;
+	private readonly agentsRead = new Set<string>();
+
+	private readonly flow: ReviewRemoteInstallFlow | undefined;
 
 	constructor(private readonly options: ReviewRemoteHostsOptions) {
 		this.clock = options.clock ?? systemClock;
+		const flow = options.install;
+		let asking: Promise<unknown> = Promise.resolve();
+		const questions = new Map<string, { answer: Promise<boolean | undefined>; abort: AbortController }>();
+		this.flow = flow && {
+			...flow,
+			confirm: (request) => {
+				const open = questions.get(request.alias);
+				if (open) return open.answer;
+				const abort = new AbortController();
+				const answer = asking
+					.then(() => (abort.signal.aborted ? undefined : flow.confirm({ ...request, signal: abort.signal })))
+					.finally(() => questions.get(request.alias)?.abort === abort && questions.delete(request.alias));
+				asking = answer.catch(() => undefined);
+				questions.set(request.alias, { answer, abort });
+				return answer;
+			},
+			cancel: (alias) => {
+				questions.get(alias)?.abort.abort();
+				questions.delete(alias);
+			},
+		};
 	}
 
 	update(enabled: boolean, aliases: readonly string[]): void {
@@ -79,7 +116,9 @@ export class ReviewRemoteHosts {
 		}
 		this.order = wanted;
 		this.refused.clear();
+		for (const alias of this.removed) if (!wanted.includes(alias)) this.removed.delete(alias);
 		for (const alias of wanted) {
+			if (this.removed.has(alias)) continue;
 			const valid = validateSshAlias(alias);
 			if (!valid.ok) {
 				this.refused.set(alias, { alias, problem: { state: "unreachable", detail: `The SSH alias ${JSON.stringify(alias)} ${valid.reason}.` } });
@@ -87,7 +126,9 @@ export class ReviewRemoteHosts {
 			}
 			const existing = this.hosts.get(alias);
 			if (existing) {
-				if (existing.state.problem && existing.state.problem.state !== "unreachable") existing.retry();
+				if (existing.quiesced) {
+					if (!this.uninstalling.has(alias)) existing.unquiesce();
+				} else if (existing.state.problem && existing.state.problem.state !== "unreachable") existing.retry();
 				continue;
 			}
 			const host = this.createHost(alias);
@@ -101,7 +142,59 @@ export class ReviewRemoteHosts {
 	}
 
 	retry(alias: string): void {
+		const host = this.hosts.get(alias);
+		if (host?.quiesced && !this.uninstalling.has(alias)) host.unquiesce();
+		else host?.retry();
+	}
+
+	async install(alias: string): Promise<void> {
+		await this.options.install?.consent.set(alias, "allow");
 		this.hosts.get(alias)?.retry();
+	}
+
+	detectAgents(alias: string): Promise<ReviewRemoteAgent[] | undefined> {
+		return this.hosts.get(alias)?.detectAgents() ?? Promise.resolve(undefined);
+	}
+
+	connectAgents(alias: string, ids: readonly unknown[]): Promise<ReviewRemoteAgentResult[]> {
+		const host = this.hosts.get(alias);
+		if (!host) return Promise.reject(new Error(`${alias} is not a remote host in Settings.`));
+		return host.connectAgents(ids);
+	}
+
+	uninstall(alias: string): Promise<void> {
+		const running = this.uninstalling.get(alias);
+		if (running) return running;
+		const done = this.uninstallOnce(alias).finally(() => this.uninstalling.delete(alias));
+		this.uninstalling.set(alias, done);
+		return done;
+	}
+
+	private async uninstallOnce(alias: string): Promise<void> {
+		const valid = validateSshAlias(alias);
+		if (!valid.ok) throw new Error(`The SSH alias ${JSON.stringify(alias)} ${valid.reason}.`);
+		const host = this.hosts.get(alias);
+		host?.quiesce();
+		try {
+			const env = { ...(await this.options.environment()), ...(await this.askpass()).env(alias) };
+			await uninstallRemote({ session: reviewSshSession(alias, this.options.controlDirectory, this.options.instance), spawn: this.options.spawn, env });
+		} catch (error) {
+			this.options.log(`${alias}: Whiteboard was not removed; the host waits for the setting.`);
+			throw error;
+		}
+		await this.options.install?.consent.forget(alias, host?.serverId);
+		if (host && this.hosts.get(alias) === host) {
+			this.hosts.delete(alias);
+			this.removed.add(alias);
+			this.publish();
+		}
+		if (!host) return;
+		let closed = this.closing.get(host);
+		if (!closed) {
+			closed = host.dispose().finally(() => this.closing.delete(host));
+			this.closing.set(host, closed);
+		}
+		await closed;
 	}
 
 	reattach(alias: string): void {
@@ -121,9 +214,9 @@ export class ReviewRemoteHosts {
 		return (this.disposing ??= (async () => {
 			this.disposed = true;
 			this.cancelSend?.();
-			const hosts = [...this.hosts.values(), ...this.closing.keys()];
+			const hosts = [...this.hosts.values()];
 			this.hosts.clear();
-			await Promise.all(hosts.map((host) => host.dispose()));
+			await Promise.all([...hosts.map((host) => host.dispose()), ...this.closing.values()]);
 			(await this.prepared?.catch(() => undefined))?.dispose();
 		})());
 	}
@@ -145,6 +238,8 @@ export class ReviewRemoteHosts {
 			log: this.options.log,
 			clock: this.clock,
 			timeouts: this.options.timeouts,
+			install: this.flow,
+			firstAttach: (key) => !this.agentsRead.has(key) && !!this.agentsRead.add(key),
 		});
 	}
 
@@ -202,7 +297,7 @@ export class ReviewRemoteHosts {
 			this.cancelSend = undefined;
 			this.lastSent = this.clock.now();
 			this.sentAny = true;
-			this.options.send(this.order.map((alias) => this.refused.get(alias) ?? this.hosts.get(alias)!.state));
+			this.options.send(this.order.flatMap((alias) => this.refused.get(alias) ?? this.hosts.get(alias)?.state ?? []));
 		});
 	}
 }

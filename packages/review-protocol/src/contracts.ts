@@ -604,11 +604,48 @@ export interface ReviewRemoteHostsSettings {
   states(): Promise<ReviewGatewayHostState[]>;
   set(aliases: string[]): Promise<string[]>;
   retry(alias: string): Promise<void>;
+  install(alias: string): Promise<void>;
+  agents(alias: string): Promise<ReviewRemoteAgent[] | null>;
+  connectAgents(
+    alias: string,
+    agents: ReviewRemoteAgentId[],
+  ): Promise<ReviewRemoteAgentResult[]>;
+  uninstall(alias: string): Promise<void>;
 }
+
+export const REVIEW_REMOTE_WRAPPER_MARK =
+  "# Written by Whiteboard Desktop, which replaces it with each install.";
 
 export const REVIEW_REMOTE_ATTACH_BEGIN = "WHITEBOARD-REMOTE-BEGIN";
 
 export const REVIEW_REMOTE_ATTACH_END = "WHITEBOARD-REMOTE-END";
+
+export const REVIEW_REMOTE_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+
+export const REVIEW_REMOTE_INSTALL_LOCK = "install.lock";
+
+export const REVIEW_REMOTE_LOCK_STALE_SECONDS = 15 * 60;
+
+export const REVIEW_REMOTE_AGENT_IDS = [
+  "claude",
+  "codex",
+  "opencode",
+  "pi",
+] as const satisfies readonly ReviewCliInstallTarget[];
+
+export type ReviewRemoteAgentId = (typeof REVIEW_REMOTE_AGENT_IDS)[number];
+
+export interface ReviewRemoteAgent {
+  id: ReviewRemoteAgentId;
+  connected: boolean;
+  manual?: true;
+}
+
+export interface ReviewRemoteAgentResult {
+  id: ReviewRemoteAgentId;
+  connected: boolean;
+  output: string;
+}
 
 /** Workspace attachment identity is independent of the displayed source generation. */
 export interface ReviewLanguageEnvironment {
@@ -883,6 +920,15 @@ export interface ReviewServerHealthWithToken extends ReviewServerHealth {
   commit: string | null;
 }
 
+export const REVIEW_REMOTE_INSTALL_STEPS = [
+  "preparing",
+  "waiting-for-lock",
+  "node",
+  "package",
+  "verifying",
+  "done",
+] as const;
+
 export const ReviewGatewayHostSchema = z.strictObject({
   alias: requiredString,
   endpoint: z
@@ -890,8 +936,23 @@ export const ReviewGatewayHostSchema = z.strictObject({
     .optional(),
   problem: z
     .strictObject({
-      state: z.enum(["unreachable", "not-installed", "auth-failed"]),
+      state: z.enum([
+        "unreachable",
+        "not-installed",
+        "auth-failed",
+        "unsupported",
+        "incompatible",
+      ]),
       detail: stringAllowEmpty,
+    })
+    .optional(),
+  declined: z.literal(true).optional(),
+  asking: requiredString.optional(),
+  installFailure: stringAllowEmpty.optional(),
+  installing: z
+    .strictObject({
+      step: z.enum(REVIEW_REMOTE_INSTALL_STEPS),
+      detail: stringAllowEmpty.optional(),
     })
     .optional(),
   languageFeatures: z.boolean().optional(),
@@ -920,12 +981,15 @@ export interface ReviewGatewayHostState {
     | "duplicate"
     | "unreachable"
     | "not-installed"
-    | "auth-failed";
+    | "auth-failed"
+    | "unsupported"
+    | "installing";
   detail?: string;
   installCommand?: string;
   languageFeatures?: boolean;
   languageFeaturesDetail?: string;
   languageGroups?: ReviewGatewayHost["languageGroups"];
+  declined?: true;
 }
 
 export const ReviewRepositoryIdentitySchema = z.strictObject({
@@ -1036,6 +1100,19 @@ export const ReviewCliInstallTargetSchema = z.enum(
 export type ReviewCliInstallTarget = z.infer<
   typeof ReviewCliInstallTargetSchema
 >;
+
+export const REVIEW_CLI_INSTALL_TARGET_LABELS: Record<
+  ReviewCliInstallTarget,
+  string
+> = {
+  claude: "Claude Code",
+  codex: "Codex",
+  cursor: "Cursor",
+  opencode: "OpenCode",
+  pi: "Pi",
+  omp: "oh-my-pi",
+  copilot: "Copilot CLI",
+};
 
 export const ReviewCliInstallStampSchema = z.object({
   consent: z.enum(["granted", "declined", "skipped"], {

@@ -571,6 +571,10 @@ async function journey(ctx, page, until) {
   settings = await openSettings(ctx);
   section = settings.getByRole("region", { name: "Remote hosts" });
   await section.getByRole("button", { name: `Remove ${alias}` }).click();
+  await section
+    .getByRole("group", { name: `Remove ${alias}` })
+    .getByRole("button", { name: "Remove host" })
+    .click();
   await until(async () => (await hostRow().count()) === 0, "the row to go");
   await openHome(ctx);
   await row("Laptop order").waitFor();

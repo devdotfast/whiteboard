@@ -6,6 +6,7 @@ import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 import {
+  REVIEW_CLI_INSTALL_TARGET_LABELS,
   REVIEW_REMOTE_ATTACH_BEGIN,
   REVIEW_REMOTE_ATTACH_END,
 } from "@dev.fast/review-protocol";
@@ -46,6 +47,12 @@ import {
   windowsInstallerCommand,
 } from "./cli-install";
 import { cliRuntimeInfo, describeCliRuntime } from "./cli-runtime-info";
+import {
+  AGENT_CONNECT_TARGETS,
+  type AgentConnectTarget,
+  connectAgents,
+  detectAgents,
+} from "./connect-agents";
 import { connectPrompts } from "./connect-prompts";
 import {
   ReviewInstanceUnavailableError,
@@ -574,6 +581,10 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       .option(
         "--groups <groups>",
         "comma-separated optional extension groups the Desktop has enabled, such as go",
+      )
+      .option(
+        "--replace",
+        "stop a running server of another version that the CLI or Desktop started, and start this one",
       ),
     "plain",
   ).action(async (_options, command: Command) => {
@@ -581,6 +592,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       stateDir?: string;
       json?: boolean;
       groups?: string;
+      replace?: boolean;
     }>();
 
     const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
@@ -594,6 +606,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         stateDir,
         env,
         groups: options.groups?.split(",").map((group) => group.trim()),
+        replace: options.replace,
       });
     } catch (error) {
       if (!options.json) throw error;
@@ -664,6 +677,103 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
             .join(""),
     );
     state.exitCode = result.failed.length > 0 ? 1 : 0;
+  });
+
+  configureJsonOutput(
+    remote
+      .command("uninstall")
+      .description(
+        "Remove what Whiteboard Desktop installed on this host, stopping a server it started",
+      )
+      .addOption(
+        new Option(
+          "--keep-reviews",
+          "leave the saved reviews in place",
+        ).conflicts("deleteReviews"),
+      )
+      .addOption(
+        new Option("--delete-reviews", "also delete the saved reviews"),
+      )
+      .option(
+        "--state-dir <path>",
+        "directory for saved reviews and server discovery",
+      ),
+    "plain",
+  ).action(async (_options, command: Command) => {
+    const options = command.optsWithGlobals<{
+      stateDir?: string;
+      json?: boolean;
+      keepReviews?: boolean;
+      deleteReviews?: boolean;
+    }>();
+
+    const stateDir = reviewServerStateDir(authoringEnv(options.stateDir));
+    const { remoteUninstall } = await import("./remote-uninstall.js");
+
+    let deleteReviews = options.deleteReviews
+      ? true
+      : options.keepReviews
+        ? false
+        : undefined;
+
+    if (deleteReviews === undefined && !options.json && input.stdin?.isTTY) {
+      const prompt = createInterface({
+        input: input.stdin,
+        output: input.stderr,
+      });
+
+      try {
+        deleteReviews = /^y(es)?$/i.test(
+          (
+            await prompt.question(
+              `Also delete the saved reviews in ${stateDir}? [y/N] `,
+            )
+          ).trim(),
+        );
+      } finally {
+        prompt.close();
+      }
+    }
+
+    const result =
+      deleteReviews === undefined
+        ? {
+            event: "remote.uninstall" as const,
+            ok: false as const,
+            reason:
+              "Say what happens to the saved reviews: pass --keep-reviews or --delete-reviews.",
+          }
+        : await remoteUninstall({
+            home: env.HOME ?? "",
+            env,
+            stateDir,
+            deleteReviews,
+          });
+
+    if (!result.ok) {
+      if (!options.json) throw new Error(result.reason);
+      input.stdout.write(`${JSON.stringify(result)}\n`);
+      state.exitCode = 1;
+
+      return;
+    }
+
+    input.stdout.write(
+      options.json
+        ? `${JSON.stringify(result)}\n`
+        : [
+            ...(result.stoppedServer
+              ? [
+                  `Stopped the Whiteboard server (process ${result.stoppedServer.pid}).`,
+                ]
+              : []),
+            ...result.removed.map((removed) => `Removed ${removed}`),
+            result.keptReviews
+              ? `Saved reviews kept in ${stateDir}`
+              : "Saved reviews deleted.",
+            "",
+          ].join("\n"),
+    );
   });
 
   async function writeServerStatus(
@@ -891,53 +1001,125 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
           "copilot",
           "all",
         ]),
+      )
+      .addOption(
+        new Option(
+          "--detect",
+          "list the agents on this machine and whether each is connected; changes nothing",
+        ).conflicts("yes"),
+      )
+      .option(
+        "--yes",
+        "run the commands the prompt gives, without an agent: claude, codex, opencode or pi",
       ),
     "plain",
   );
 
-  connect.action(async (targets: string[], options: { json?: boolean }) => {
-    const selected = parseTargets(targets);
+  connect.action(
+    async (
+      targets: string[],
+      options: { json?: boolean; detect?: boolean; yes?: boolean },
+    ) => {
+      const output = {
+        json: options.json,
+        stdout: input.stdout,
+        stderr: input.stderr,
+      };
 
-    const { homeDir, devHome } = scope;
+      if (options.detect) {
+        const agents = await detectAgents({ homeDir: scope.homeDir, env });
 
-    const prompts = connectPrompts({
-      legacyPaths: await scanLegacySkills(homeDir),
-      hasShim:
-        (await isOwnedShim(pathShimPath(homeDir))) ||
-        (await windowsInstallerCommand(
-          findReviewPackageRoot(import.meta.url),
+        if (options.json) {
+          emitJsonEvent(output, { event: "connect.detect", agents });
+
+          return;
+        }
+
+        humanStream(output).write(
+          agents.length
+            ? `${agents.map((agent) => `${agent.name}: ${agent.connected ? "connected" : "not connected"}${agent.manual ? " (its command is not on PATH)" : ""}`).join("\n")}\n`
+            : "No agents found.\n",
+        );
+
+        return;
+      }
+
+      if (options.yes) {
+        const agents = parseTargets(targets);
+
+        if (
+          targets.length === 0 ||
+          !agents.every((target): target is AgentConnectTarget =>
+            AGENT_CONNECT_TARGETS.some((known) => known === target),
+          )
+        )
+          throw new Error(
+            "connect --yes takes one or more of claude, codex, opencode or pi.",
+          );
+
+        const results = await connectAgents({
+          agents,
+          homeDir: scope.homeDir,
           env,
-        )) !== undefined,
-      traceEnabled: await traceMachineEnabled({ homeDir, env }),
-      fffBinaryPath: path.join(homeDir, ".local", "bin", "fff-mcp"),
-      fffCorpusRoot: path.join(devHome, "trace-search"),
-    });
+        });
 
-    const output = {
-      json: options.json,
-      stdout: input.stdout,
-      stderr: input.stderr,
-    };
+        state.exitCode = results.every((result) => result.connected) ? 0 : 1;
 
-    if (options.json) {
-      emitJsonEvent(output, {
-        event: "connect",
-        prompts: Object.fromEntries(
-          selected.map((target) => [target, prompts[target]]),
-        ),
+        if (options.json) {
+          emitJsonEvent(output, { event: "connect.run", agents: results });
+
+          return;
+        }
+
+        humanStream(output).write(
+          results
+            .map(
+              (result) =>
+                `${result.output}${result.name}: ${result.connected ? "connected" : "not connected"}\n`,
+            )
+            .join(""),
+        );
+
+        return;
+      }
+
+      const selected = parseTargets(targets);
+
+      const { homeDir, devHome } = scope;
+
+      const prompts = connectPrompts({
+        legacyPaths: await scanLegacySkills(homeDir),
+        hasShim:
+          (await isOwnedShim(pathShimPath(homeDir))) ||
+          (await windowsInstallerCommand(
+            findReviewPackageRoot(import.meta.url),
+            env,
+          )) !== undefined,
+        traceEnabled: await traceMachineEnabled({ homeDir, env }),
+        fffBinaryPath: path.join(homeDir, ".local", "bin", "fff-mcp"),
+        fffCorpusRoot: path.join(devHome, "trace-search"),
       });
 
-      return;
-    }
+      if (options.json) {
+        emitJsonEvent(output, {
+          event: "connect",
+          prompts: Object.fromEntries(
+            selected.map((target) => [target, prompts[target]]),
+          ),
+        });
 
-    const sections = selected.map((target) =>
-      selected.length > 1
-        ? `## ${TARGET_LABELS[target]}\n\n${prompts[target]}`
-        : prompts[target],
-    );
+        return;
+      }
 
-    humanStream(output).write(`${sections.join("\n\n")}\n`);
-  });
+      const sections = selected.map((target) =>
+        selected.length > 1
+          ? `## ${REVIEW_CLI_INSTALL_TARGET_LABELS[target]}\n\n${prompts[target]}`
+          : prompts[target],
+      );
+
+      humanStream(output).write(`${sections.join("\n\n")}\n`);
+    },
+  );
 
   const migrate = configureOutput(
     program.command("migrate", { hidden: true }),
@@ -1365,16 +1547,6 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     await attemptTelemetry(() => telemetry.shutdown(1_000));
   }
 }
-
-const TARGET_LABELS: Record<InstallTarget, string> = {
-  claude: "Claude Code",
-  codex: "Codex",
-  cursor: "Cursor",
-  opencode: "OpenCode",
-  pi: "Pi",
-  omp: "oh-my-pi",
-  copilot: "Copilot CLI",
-};
 
 function parseTargets(targets: readonly string[]): InstallTarget[] {
   if (targets.length === 0 || targets.includes("all")) {
