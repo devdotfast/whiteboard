@@ -15185,9 +15185,19 @@ function foldHeaders(folds, leaves, collapsed, paired) {
 }
 
 // ../viewer/src/terminal/spans.ts
-function appendRenderSpan(target, span2) {
+function sameStyle(a, b) {
+  const left = a, right = b;
+  for (const key in left)
+    if (key !== "text" && left[key] !== right[key])
+      return false;
+  for (const key in right)
+    if (key !== "text" && left[key] !== right[key])
+      return false;
+  return true;
+}
+function appendSpan(target, span2) {
   const previous = target.at(-1);
-  if (previous && previous.guide === span2.guide && previous.brace === span2.brace && previous.fg === span2.fg && previous.bg === span2.bg && previous.transformFg === span2.transformFg) {
+  if (previous && sameStyle(previous, span2)) {
     previous.text += span2.text;
   } else {
     target.push(span2);
@@ -15206,7 +15216,7 @@ function mergeCrossSpanGraphemes(spans) {
     }
     const source2 = spans[sourceIndex];
     if (source2) {
-      appendRenderSpan(normalized, { ...source2, text: cluster });
+      appendSpan(normalized, { ...source2, text: cluster });
     }
     cursor += cluster.length;
   }
@@ -15229,7 +15239,7 @@ function sliceSpansWindow(spans, offset, width) {
     }
     const spanWidth = measureSanitizedTextWidth(span2.text);
     if (spanWidth === 0) {
-      appendRenderSpan(sliced, { ...span2 });
+      appendSpan(sliced, { ...span2 });
       continue;
     }
     if (remainingOffset >= spanWidth) {
@@ -15237,7 +15247,7 @@ function sliceSpansWindow(spans, offset, width) {
       continue;
     }
     if (remainingOffset === 0 && spanWidth <= remaining) {
-      appendRenderSpan(sliced, { ...span2 });
+      appendSpan(sliced, { ...span2 });
       remaining -= spanWidth;
       usedWidth += spanWidth;
       continue;
@@ -15251,7 +15261,7 @@ function sliceSpansWindow(spans, offset, width) {
       ...span2,
       text: visible.text
     };
-    appendRenderSpan(sliced, nextSpan);
+    appendSpan(sliced, nextSpan);
     remaining -= visible.width;
     usedWidth += visible.width;
   }
@@ -15286,7 +15296,7 @@ function wrapSpans(spans, width) {
     const simpleSpanWidth = simpleSpanWidths[spanIndex] ?? null;
     const spanWidth = simpleSpanWidth ?? measureSanitizedTextWidth(span2.text);
     if (spanWidth === 0) {
-      appendRenderSpan(current, { ...span2 });
+      appendSpan(current, { ...span2 });
       continue;
     }
     if (spanWidth > width * SINGLE_PASS_WRAP_LINE_THRESHOLD || simpleSpanWidth === null || width === 1 && !isPrintableAsciiText(span2.text)) {
@@ -15297,7 +15307,7 @@ function wrapSpans(spans, width) {
           remaining = width;
         }
         if (chunk.text.length > 0) {
-          appendRenderSpan(current, { ...span2, text: chunk.text });
+          appendSpan(current, { ...span2, text: chunk.text });
         }
         remaining -= chunk.width;
       }
@@ -15334,7 +15344,7 @@ function wrapSpans(spans, width) {
         ...span2,
         text: visible.text
       };
-      appendRenderSpan(current, nextSpan);
+      appendSpan(current, nextSpan);
       offset += visible.width;
       remaining -= visible.width;
     }
