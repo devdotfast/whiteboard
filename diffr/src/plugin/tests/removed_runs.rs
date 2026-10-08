@@ -190,6 +190,7 @@ fn removed_runs_skip_paired_leaves_and_collapsed_ancestors() {
         ]),
         rhs: source(vec![paired_rhs]),
     };
+    name_pairs(&mut sides);
     run(
         "removed-runs",
         json!({"min_lines": 5}),
@@ -248,6 +249,7 @@ fn removed_runs_stay_open_under_a_paired_function() {
         lhs: source(vec![rewritten, removed]),
         rhs: source(vec![removed_leaf(6, 3, 0, 10, &[])]),
     };
+    name_pairs(&mut sides);
     run(
         "removed-runs",
         json!({"min_lines": 5}),

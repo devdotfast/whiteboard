@@ -299,6 +299,7 @@ fn a_fold_whose_matched_partner_holds_changes_stays_open() {
             ],
         ),
     };
+    name_pairs(&mut sides);
     let (file, _) = project("a.py", "", "");
     run("context", json!({"lines": 1}), &file, &mut sides);
     let collapsed = |source: &Source| {

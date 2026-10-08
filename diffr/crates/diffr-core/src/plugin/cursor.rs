@@ -357,36 +357,24 @@ impl Cursor {
 
     /// Whether this region contains changed bytes or an unpaired leaf on its own side.
     pub fn has_changes(&self, id: u32) -> Result<bool, MoveError> {
-        let target = region_of(&self.sides, id)?;
-        let alignments = self.opposite_alignments(id);
         let mut changes = false;
-        walk(std::slice::from_ref(target), &mut |region| {
-            if let Node::Leaf {
-                alignment_id,
-                changed,
-                ..
-            } = &region.node
-            {
-                changes |= !changed.is_empty() || !alignments.contains(alignment_id);
-            }
-        });
+        walk(
+            std::slice::from_ref(region_of(&self.sides, id)?),
+            &mut |region| {
+                if let Node::Leaf { pair, changed, .. } = &region.node {
+                    changes |= !changed.is_empty() || pair.is_none();
+                }
+            },
+        );
         Ok(changes)
     }
 
     /// Opposite-side leaf with the same alignment; folds and unmatched leaves return None.
     pub fn paired_leaf(&self, id: u32) -> Result<Option<u32>, MoveError> {
-        let Some(alignment) = region_of(&self.sides, id)?.alignment_id() else {
-            return Ok(None);
-        };
-        let mut paired = None;
-        if let Some(other) = self.opposite(id) {
-            walk(top(other), &mut |region| {
-                if region.alignment_id() == Some(alignment) {
-                    paired = Some(region.id);
-                }
-            });
-        }
-        Ok(paired)
+        Ok(match region_of(&self.sides, id)?.node {
+            Node::Leaf { pair, .. } => pair,
+            Node::Fold { .. } => None,
+        })
     }
 
     /// All regions sharing this region's collapse state, including itself.
@@ -405,14 +393,13 @@ impl Cursor {
 
     /// No leaf in this subtree has an opposite-side match.
     pub fn is_one_sided(&self, id: u32) -> Result<bool, MoveError> {
-        let target = region_of(&self.sides, id)?;
-        let alignments = self.opposite_alignments(id);
         let mut paired = false;
-        walk(std::slice::from_ref(target), &mut |region| {
-            paired |= region
-                .alignment_id()
-                .is_some_and(|id| alignments.contains(&id));
-        });
+        walk(
+            std::slice::from_ref(region_of(&self.sides, id)?),
+            &mut |region| {
+                paired |= matches!(region.node, Node::Leaf { pair: Some(_), .. });
+            },
+        );
         Ok(!paired)
     }
 
@@ -661,26 +648,6 @@ impl Cursor {
     pub fn set_label(&mut self, region: u32, label: Option<String>) -> Result<(), MoveError> {
         region_mut(&mut self.sides, region)?.visibility.label = label.unwrap_or_default();
         Ok(())
-    }
-
-    /// The side not holding `id`, if the file has one.
-    fn opposite(&self, id: u32) -> Option<&Source> {
-        if self.sides.lhs().is_some_and(|s| find(top(s), id).is_some()) {
-            self.sides.rhs()
-        } else {
-            self.sides.lhs()
-        }
-    }
-
-    /// Every leaf alignment on the side not holding `id`.
-    fn opposite_alignments(&self, id: u32) -> BTreeSet<u32> {
-        let mut alignments = BTreeSet::new();
-        if let Some(other) = self.opposite(id) {
-            walk(top(other), &mut |region| {
-                alignments.extend(region.alignment_id());
-            });
-        }
-        alignments
     }
 }
 
@@ -967,4 +934,4 @@ fn region_ids(lhs: Option<u32>, rhs: Option<u32>) -> RegionIds {
 mod mutations;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

@@ -1,6 +1,5 @@
 //! What a diff looks like once the plugins have shaped it: the changed
 //! lines that stay visible.
-use crate::hash::DftHashSet;
 use crate::pairing::Pairing;
 use crate::protocol::{Diff, LineRange, Node, Region, Source, StructuralChanges, Visibility};
 
@@ -48,19 +47,8 @@ struct ChangeCoverage {
 }
 
 fn change_coverage(sides: &Pairing<Source>) -> ChangeCoverage {
-    fn alignments(regions: &[Region], out: &mut DftHashSet<u32>) {
-        for region in regions {
-            match &region.node {
-                Node::Leaf { alignment_id, .. } => {
-                    out.insert(*alignment_id);
-                }
-                Node::Fold { children, .. } => alignments(children, out),
-            }
-        }
-    }
     fn collect(
         regions: &[Region],
-        other: &DftHashSet<u32>,
         hidden: bool,
         all: &mut Vec<LineRange>,
         visible: &mut Vec<LineRange>,
@@ -68,13 +56,9 @@ fn change_coverage(sides: &Pairing<Source>) -> ChangeCoverage {
         for region in regions {
             let hidden = hidden || region.visibility.collapsed;
             match &region.node {
-                Node::Leaf {
-                    alignment_id,
-                    changed,
-                    ..
-                } => {
+                Node::Leaf { pair, changed, .. } => {
                     let start = all.len();
-                    if other.contains(alignment_id) {
+                    if pair.is_some() {
                         all.extend(changed.iter().map(|span| [span.line, span.line + 1]));
                     } else {
                         let lines = region.range.lines();
@@ -84,20 +68,15 @@ fn change_coverage(sides: &Pairing<Source>) -> ChangeCoverage {
                         visible.extend_from_slice(&all[start..]);
                     }
                 }
-                Node::Fold { children, .. } => collect(children, other, hidden, all, visible),
+                Node::Fold { children, .. } => collect(children, hidden, all, visible),
             }
         }
     }
-    fn side(source: Option<&Source>, other: Option<&Source>) -> (Vec<LineRange>, Vec<LineRange>) {
-        let mut paired = DftHashSet::default();
-        if let Some(other) = other {
-            alignments(std::slice::from_ref(&other.root), &mut paired);
-        }
+    fn side(source: Option<&Source>) -> (Vec<LineRange>, Vec<LineRange>) {
         let (mut all, mut visible) = (Vec::new(), Vec::new());
         if let Some(source) = source {
             collect(
                 std::slice::from_ref(&source.root),
-                &paired,
                 false,
                 &mut all,
                 &mut visible,
@@ -110,8 +89,8 @@ fn change_coverage(sides: &Pairing<Source>) -> ChangeCoverage {
         Pairing::LeftOnly { lhs } => (Some(lhs), None),
         Pairing::RightOnly { rhs } => (None, Some(rhs)),
     };
-    let (base, visible_base) = side(lhs, rhs);
-    let (head, visible_head) = side(rhs, lhs);
+    let (base, visible_base) = side(lhs);
+    let (head, visible_head) = side(rhs);
     ChangeCoverage {
         all: StructuralChanges { base, head },
         initially_visible: StructuralChanges {
@@ -143,6 +122,7 @@ fn coalesce(mut ranges: Vec<LineRange>) -> Vec<LineRange> {
 #[cfg(test)]
 mod visible_tests {
     use super::*;
+    use crate::plugin::cursor::tests::name_pairs;
     use crate::protocol::{SourcePos, SourceRange, Span};
 
     fn test_root(regions: Vec<Region>) -> Region {
@@ -243,7 +223,9 @@ mod visible_tests {
             leaf(9, 9, (3, 4), &[], false),
             leaf(10, 8, (4, 7), &[4, 5], true),
         ]);
-        let coverage = change_coverage(&Pairing::Both { lhs, rhs });
+        let mut sides = Pairing::Both { lhs, rhs };
+        name_pairs(&mut sides);
+        let coverage = change_coverage(&sides);
         assert_eq!(coverage.all.head, vec![[0, 2], [4, 15]]);
         assert_eq!(coverage.all.base, vec![[0, 1], [4, 7]]);
         let counts = coverage.initially_visible.counts();
@@ -266,6 +248,7 @@ mod visible_tests {
             )],
         )]);
         let mut sides = Pairing::Both { lhs, rhs };
+        name_pairs(&mut sides);
         let hidden = change_coverage(&sides);
         assert_eq!(hidden.all.head, vec![[0, 1], [2, 3]]);
         assert!(hidden.all.base.is_empty()); // Added tokens do not imply removed tokens.
