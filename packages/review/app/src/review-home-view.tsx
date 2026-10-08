@@ -9,11 +9,12 @@ import {
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { textStyles } from "@canvas/ui/text";
-import type {
-  ReviewApiSummary,
-  ReviewCanvasInstallContent,
-  ReviewCanvasOnboarding,
-  ReviewCanvasSetupActions,
+import {
+  type ReviewApiSummary,
+  type ReviewCanvasInstallContent,
+  type ReviewCanvasOnboarding,
+  type ReviewCanvasSetupActions,
+  homeSessions,
 } from "@dev.fast/review-protocol";
 import { fuzzyMatches, fuzzySegments } from "@review/fuzzy-match";
 import * as stylex from "@stylexjs/stylex";
@@ -194,10 +195,7 @@ export function ReviewHome({
   // their chronological order and their lifecycle. The filter still finds it.
   const scratchpad = reviews.find((review) => review.kind === "scratchpad");
 
-  const listed = useMemo(
-    () => reviews.filter((review) => review.kind !== "scratchpad"),
-    [reviews],
-  );
+  const listed = useMemo(() => homeSessions(reviews), [reviews]);
 
   const scratchpadShown =
     scratchpad !== undefined && matchesQuery(scratchpad, needle);

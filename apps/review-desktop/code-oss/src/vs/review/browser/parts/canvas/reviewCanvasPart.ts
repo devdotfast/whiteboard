@@ -54,7 +54,7 @@ import {
 	REVIEW_STRUCTURAL_DIFF_SETTING,
 	REVIEW_TELEMETRY_SETTING,
 } from "../../../common/reviewConfigurationDefaults.js";
-import { resolveReviewSourceView, reviewSourceAnchor, type ReviewSourceView, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
+import { homeSessions, resolveReviewSourceView, reviewSourceAnchor, type ReviewSourceView, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
 import type {
 	ReviewCanvasBridge,
 	ReviewCanvasContent,
@@ -510,7 +510,9 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			const renderHome = async () => {
 				const seq = ++renderSeq;
 				const reviews = this.apiCatalog.reviews;
-				const isEmpty = reviews.length === 0;
+				// Home shows Welcome when no session is listed; the scratchpad
+				// is not one, so the rail still gets install status beside it.
+				const isEmpty = homeSessions(reviews).length === 0;
 				// Only the Welcome rail needs install status; the list must
 				// render without waiting on it. One fetch serves both the
 				// install card and the onboarding rail.
@@ -952,9 +954,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			installed: !status.cli || status.shim.installed,
 			tutorialChecked: steps.filter((step) => checked.has(step)).length,
 			tutorialTotal: steps.length,
-			// Drafts are filtered out of this list and the tutorial never
-			// joins it, so this counts only a real published review.
-			published: this.apiCatalog.reviews.length > 0,
+			// Drafts are filtered out of this list, the tutorial never joins
+			// it and the scratchpad is set aside, so this counts only a real
+			// published review.
+			published: homeSessions(this.apiCatalog.reviews).length > 0,
 		};
 	}
 

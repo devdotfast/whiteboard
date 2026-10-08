@@ -47,6 +47,16 @@ export interface ReviewApiSummary {
   working?: boolean;
 }
 
+/**
+ * The sessions Home lists, the scratchpad aside. With none, Home is the
+ * Welcome rail, so the host fetches install status exactly when this is empty.
+ */
+export function homeSessions(
+  reviews: readonly ReviewApiSummary[],
+): ReviewApiSummary[] {
+  return reviews.filter((review) => review.kind !== "scratchpad");
+}
+
 export interface ReviewSourceEntry {
   path: string;
   kind: "file" | "directory";
