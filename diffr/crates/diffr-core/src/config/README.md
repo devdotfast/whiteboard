@@ -58,7 +58,8 @@ folds as one region over the hull of the run. A `@fold.open` without
 `@fold.close` applies only to a match with a single `@fold`.
 
 `#set! tag "<plugin>:<name>"` supplies metadata for one plugin. The prefix
-must name a bundled or configured plugin; `compile()` rejects any other tag. Dots
+must name a bundled or configured plugin; any other tag fails each file in
+that language with a `query_error`. Dots
 in the name have no special meaning. Rules selecting the same node and range
 accumulate sorted, unique tags, whichever files they came from. A node whose
 rules select different ranges is a query conflict: the file is not diffed, and

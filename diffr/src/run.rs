@@ -1,7 +1,7 @@
 //! Diff a comparison and write the record stream. Files are classified
 //! first, then diffed on worker threads and written as each finishes.
 use crate::config::Params;
-use crate::engine::QueryConflict;
+use crate::engine::DiffError;
 use crate::git::{self, FileError};
 use crate::options::DiffOptions;
 use crate::plugin::{Classifier, MutationFailed, Pipeline};
@@ -250,8 +250,11 @@ fn project(file: &git::File, shared: &Shared) -> anyhow::Result<Diff> {
 fn wire_error(error: &anyhow::Error) -> Problem {
     let code = if let Some(kind) = error.downcast_ref::<FileError>() {
         kind.code()
-    } else if error.downcast_ref::<QueryConflict>().is_some() {
-        "query_conflict"
+    } else if let Some(error) = error.downcast_ref::<DiffError>() {
+        match error {
+            DiffError::Query(_) => "query_error",
+            DiffError::Conflict(_) => "query_conflict",
+        }
     } else if error.downcast_ref::<MutationFailed>().is_some() {
         "mutation_failed"
     } else {
