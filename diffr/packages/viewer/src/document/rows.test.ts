@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { createTestDiffFile, fold, leaf, line, withIdenticalLines, root } from "./fixture";
-import type { Region, Span } from "./wire";
+import { createTestDiffFile, fold, leaf, line, withIdenticalLines, root } from "../protocol/fixture";
+import type { Region, Span } from "../protocol/wire";
 import { captureColor, lineSpans, rowsForFile } from "./rows";
-import { dark, light } from "./theme";
+import { dark, light } from "../theme/themes";
 import { pairedIds } from "./regions";
-import { measureRows, visibleRows } from "./geometry";
+import { measureRows, visibleRows } from "../viewport/geometry";
 import { copySelection } from "./selection";
 test("split zips leaves on their alignment ids, unified groups old before new", () => {
   const file = createTestDiffFile();

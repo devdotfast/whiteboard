@@ -41,7 +41,7 @@ fn install(root: &Path, with_cli: bool) -> Result<()> {
     );
     run(
         Command::new(&bun)
-            .current_dir(root.join("packages/tui"))
+            .current_dir(root.join("packages"))
             .args(["install", "--frozen-lockfile"]),
         "Installing TUI dependencies",
     )?;

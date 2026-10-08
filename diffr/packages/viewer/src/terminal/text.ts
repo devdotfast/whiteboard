@@ -1,6 +1,6 @@
 import { eastAsianWidth } from "get-east-asian-width";
 import stringWidth from "string-width";
-import { sanitizeTerminalLine } from "../../lib/terminalText";
+import { sanitizeTerminalLine } from "./sanitize";
 
 const printableAsciiRegex = /^[\u0020-\u007E]*$/;
 

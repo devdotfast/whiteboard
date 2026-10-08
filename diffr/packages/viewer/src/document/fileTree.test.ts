@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { buildFileTree, flattenFileTree, parentDirectories, lineCounts } from "./fileTree";
-import { createTestDiffFile } from "./fixture";
+import { createTestDiffFile } from "../protocol/fixture";
 test("tree shares directories, retains file identities, and folds subtrees", () => {
   const files = ["src/ui/App.tsx", "README.md", "src/core.rs", "test/ui/App.tsx"].map(path => {
     const file = createTestDiffFile();
