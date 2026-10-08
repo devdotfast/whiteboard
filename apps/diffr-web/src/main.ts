@@ -122,7 +122,7 @@ const settings: SettingsHost = {
 };
 
 // Only where the browser offers its agent the page's tools, which bring their own decoder.
-if (navigator.modelContext)
+if (document.modelContext ?? navigator.modelContext)
   void import("./agent.js").then(({ registerAgentTools }) =>
     registerAgentTools({
       comparison: () => comparison,

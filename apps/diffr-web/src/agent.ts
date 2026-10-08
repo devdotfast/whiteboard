@@ -1,5 +1,5 @@
 /**
- * The page's tools for an agent in the reader's browser, through WebMCP (`navigator.modelContext`):
+ * The page's tools for an agent in the reader's browser, through WebMCP (`document.modelContext`):
  * read the comparison, move around it, group it into lenses, and write plugins that fold what
  * diffr's own leave open. main.ts loads this only where the browser has WebMCP.
  */
@@ -38,12 +38,19 @@ interface RegisteredTool {
 }
 
 interface ModelContext {
+  /** Chrome's, and the current draft's. */
+  registerTool?(tool: RegisteredTool): Promise<void> | void;
+  /** Earlier drafts', which the current one dropped. */
   provideContext?(context: { tools: RegisteredTool[] }): void;
-  registerTool?(tool: RegisteredTool): void;
 }
 
 declare global {
+  interface Document {
+    modelContext?: ModelContext;
+  }
+
   interface Navigator {
+    /** Where Chrome first put it, kept for a while as an alias. */
     modelContext?: ModelContext;
   }
 }
@@ -523,7 +530,7 @@ const answer = (text: string, isError = false): ToolResult => ({
 
 /** Offer the tools to the browser's agent. */
 export function registerAgentTools(host: AgentHost): void {
-  const context = navigator.modelContext;
+  const context = document.modelContext ?? navigator.modelContext;
 
   if (!context) return;
   // zod/mini says only "Invalid input" until given its messages.
@@ -557,6 +564,14 @@ export function registerAgentTools(host: AgentHost): void {
     }),
   );
 
-  if (context.provideContext) context.provideContext({ tools: registered });
-  else for (const tool of registered) context.registerTool?.(tool);
+  if (!context.registerTool) {
+    context.provideContext?.({ tools: registered });
+
+    return;
+  }
+
+  for (const tool of registered)
+    Promise.resolve(context.registerTool(tool)).catch((error: Error) =>
+      console.error(`WebMCP refused the tool ${tool.name}: ${error.message}`),
+    );
 }
