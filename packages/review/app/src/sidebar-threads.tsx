@@ -8,7 +8,7 @@ import type { ReactElement } from "react";
 
 import { AGENT_LOGOS } from "./agent-logos";
 import { BoardIcon } from "./board-icons";
-import { elevation, fontSize, fontWeight, radius } from "./scale.stylex";
+import { elevation, fontSize, fontWeight, motion, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 /** Whether a thread belongs to the board: it started on it, or edited it. */
@@ -176,9 +176,7 @@ export function ThreadsSectionBody({
                   onClick={() => onOpenThread?.(thread.id)}
                 >
                   <span {...stylex.props(styles.line)}>
-                    <span {...stylex.props(styles.mark)}>
-                      {Logo ? <Logo xstyle={styles.logo} /> : null}
-                    </span>
+                    <ThreadMark thread={thread} Logo={Logo} />
                     <span {...stylex.props(styles.agent)}>
                       {thread.agentName}
                     </span>
@@ -198,7 +196,12 @@ export function ThreadsSectionBody({
                       {age(thread.updatedAt)}
                     </span>
                   </span>
-                  <span {...stylex.props(styles.opening)}>
+                  <span
+                    {...stylex.props(
+                      styles.opening,
+                      thread.unread && styles.openingUnread,
+                    )}
+                  >
                     “{thread.opening}”
                   </span>
                   <span {...stylex.props(styles.line, styles.relation)}>
@@ -224,6 +227,73 @@ export function ThreadsSectionBody({
   );
 }
 
+/** Whether a thread's agent is answering now. */
+export function threadAnswering(thread: ReviewProjectThread): boolean {
+  return thread.status === "running" || thread.status === "starting";
+}
+
+/** A row's leading mark: the spinner while its agent answers; else the
+ * agent's logo, with an amber dot when it needs you or a blue one when it
+ * finished a turn you have not seen. */
+function ThreadMark({
+  thread,
+  Logo,
+}: {
+  thread: ReviewProjectThread;
+  Logo: ((props: { xstyle?: stylex.StyleXStyles }) => ReactElement) | undefined;
+}): ReactElement {
+  if (threadAnswering(thread))
+    return (
+      <span {...stylex.props(styles.mark)}>
+        <ThreadSpinner />
+      </span>
+    );
+
+  const dot =
+    thread.status === "waiting"
+      ? styles.dotWaiting
+      : thread.unread
+        ? styles.dotUnread
+        : null;
+
+  return (
+    <span {...stylex.props(styles.mark)}>
+      {Logo ? <Logo xstyle={styles.logo} /> : null}
+      {dot ? (
+        <span
+          role="img"
+          aria-label={
+            thread.status === "waiting"
+              ? "Needs you"
+              : "Answered since you looked"
+          }
+          {...stylex.props(styles.dot, dot)}
+        />
+      ) : null}
+    </span>
+  );
+}
+
+/** A marker arc turning on a faint track: an agent is answering. */
+export function ThreadSpinner(): ReactElement {
+  return (
+    <svg
+      role="img"
+      aria-label="Answering"
+      width="11"
+      height="11"
+      viewBox="0 0 11 11"
+      {...stylex.props(styles.spinner)}
+    >
+      <circle cx="5.5" cy="5.5" r="3.75" {...stylex.props(styles.track)} />
+      <path
+        d="M5.5 1.75 A3.75 3.75 0 0 1 9.25 5.5"
+        {...stylex.props(styles.arc)}
+      />
+    </svg>
+  );
+}
+
 function PinIcon(): ReactElement {
   return (
     <svg
@@ -237,6 +307,10 @@ function PinIcon(): ReactElement {
     </svg>
   );
 }
+
+const reducedMotion = "@media (prefers-reduced-motion: reduce)";
+
+const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
 
 const styles = stylex.create({
   scope: {
@@ -338,6 +412,7 @@ const styles = stylex.create({
     minWidth: 0,
   },
   mark: {
+    position: "relative",
     display: "flex",
     flexShrink: 0,
     alignItems: "center",
@@ -346,6 +421,34 @@ const styles = stylex.create({
     height: "10px",
   },
   logo: { width: "10px", height: "10px" },
+  dot: {
+    position: "absolute",
+    top: "-3px",
+    right: "-3px",
+    boxSizing: "border-box",
+    width: "6px",
+    height: "6px",
+    borderWidth: "1.5px",
+    borderStyle: "solid",
+    borderColor: tokens.tray,
+    borderRadius: radius.round,
+  },
+  dotUnread: { backgroundColor: tokens.accent },
+  dotWaiting: { backgroundColor: tokens.changeModified },
+  spinner: {
+    flexShrink: 0,
+    animationName: { default: spin, [reducedMotion]: "none" },
+    animationDuration: motion.spin,
+    animationIterationCount: "infinite",
+    animationTimingFunction: "linear",
+  },
+  track: { fill: "none", stroke: tokens.ruleSoft, strokeWidth: 1.4 },
+  arc: {
+    fill: "none",
+    stroke: tokens.accent,
+    strokeLinecap: "round",
+    strokeWidth: 1.4,
+  },
   agent: {
     flexShrink: 0,
     color: tokens.ink,
@@ -372,6 +475,7 @@ const styles = stylex.create({
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
+  openingUnread: { fontWeight: fontWeight.medium },
   relation: { gap: "5px" },
   relationText: {
     overflow: "hidden",

@@ -1879,8 +1879,51 @@ body
 }
 
 /* A thread in the project waits on the reader. */
-.monaco-workbench .review-sidebar-tab-badge.review-sidebar-tab-badge-waiting {
+/* The Threads tab: amber needs the reader, blue is an answer unseen, and
+   while an agent answers a spinner takes the dot's place. */
+.monaco-workbench .review-sidebar-tab-badge-threads[data-mark="waiting"] {
   background-color: var(--vscode-charts-yellow);
+}
+
+.monaco-workbench .review-sidebar-tab-badge-threads[data-mark="answering"] {
+  top: 2px;
+  right: 3px;
+  width: 11px;
+  height: 11px;
+  border: 0;
+  background-color: var(--vscode-sideBar-background, var(--vscode-editorGroupHeader-tabsBackground));
+}
+
+.monaco-workbench .review-sidebar-tab-spinner {
+  display: none;
+}
+
+.monaco-workbench .review-sidebar-tab-badge-threads[data-mark="answering"] .review-sidebar-tab-spinner {
+  display: block;
+  animation: review-sidebar-tab-spin 0.8s linear infinite;
+}
+
+.monaco-workbench .review-sidebar-tab-spinner-track {
+  fill: none;
+  stroke: var(--vscode-editorWidget-border, var(--vscode-disabledForeground));
+  stroke-width: 1.4;
+}
+
+.monaco-workbench .review-sidebar-tab-spinner-arc {
+  fill: none;
+  stroke: var(--vscode-charts-blue);
+  stroke-linecap: round;
+  stroke-width: 1.4;
+}
+
+@keyframes review-sidebar-tab-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .monaco-workbench .review-sidebar-tab-badge-threads[data-mark="answering"] .review-sidebar-tab-spinner {
+    animation: none;
+  }
 }
 
 /* The right column; its divider matches the sidebar's border. */

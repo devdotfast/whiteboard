@@ -226,6 +226,17 @@ export const STORE_UPGRADES: readonly StoreUpgrade[] = [
   },
   {
     version: 8,
+    name: "ask-thread-viewed",
+    // A thread keeps when it was last seen; one saved before has none.
+    run: ({ db }) => {
+      const columns = columnsOf(db, "ask_conversations");
+
+      if (columns.size > 0 && !columns.has("viewed_at"))
+        db.exec("ALTER TABLE ask_conversations ADD COLUMN viewed_at TEXT");
+    },
+  },
+  {
+    version: 9,
     name: "ask-permissions",
     // Auto mode keeps what an Ask thread may do without asking; threads
     // saved before it lack the column.

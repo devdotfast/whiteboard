@@ -1403,6 +1403,9 @@ export function createReviewApi(
 
       assertWritable(reviewId);
 
+      // Asked on screen: seen from the start.
+      store.askHistory.markViewed(id, createdAt);
+
       const thread = ask.threads.open({
         id,
         reviewId,
@@ -1445,9 +1448,9 @@ export function createReviewApi(
     const projectThreads = (reviewId: string): ReviewProjectThreads => {
       const entries = store.askHistory.listAll();
 
-      const edited = store.boardsChangedByThreads(
-        entries.map((entry) => entry.id),
-      );
+      const ids = entries.map((entry) => entry.id);
+      const edited = store.boardsChangedByThreads(ids);
+      const viewed = store.askHistory.viewedAt(ids);
 
       const boards = new Map<string, ReviewThreadBoard>();
 
@@ -1472,6 +1475,15 @@ export function createReviewApi(
         threads: entries.map((entry) => {
           const anchor = entry.anchor ?? { board: reviewId };
           const status = ask.threads.get(entry.id)?.status;
+          const viewedAt = viewed.get(entry.id);
+
+          // A turn finished since the reviewer last saw the thread.
+          const unread =
+            status !== "starting" &&
+            status !== "running" &&
+            status !== "waiting" &&
+            viewedAt !== undefined &&
+            entry.updatedAt > viewedAt;
 
           return {
             id: entry.id,
@@ -1486,6 +1498,7 @@ export function createReviewApi(
               entry.selection.target.kind === "text" &&
               entry.selection.target.anchor !== undefined,
             ...(status && { status }),
+            ...(unread && { unread }),
             updatedAt: entry.updatedAt,
             anchor: {
               board: board(anchor.board),
@@ -1827,6 +1840,16 @@ export function createReviewApi(
         return context.json({ ok: true });
       },
     );
+
+    app.post("/:id/ask/:threadId/viewed", (context) => {
+      const threadId = context.req.param("threadId");
+
+      if (!ask.threads.get(threadId) && !store.askHistory.get(threadId))
+        throw new ReviewInputError("This conversation was not found.", 404);
+      store.askHistory.markViewed(threadId);
+
+      return context.json({ ok: true });
+    });
 
     // Closing an Ask ends its agent; the conversation stays saved. A tab
     // switched away from or a reload leaves it running, to come back to.
