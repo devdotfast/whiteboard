@@ -1,5 +1,5 @@
 {
   "name": "@diffr/packages",
   "private": true,
-  "workspaces": ["viewer", "tui"]
+  "workspaces": ["viewer", "tui", "claude-code"]
 }

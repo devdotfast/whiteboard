@@ -5,6 +5,15 @@
     "": {
       "name": "@diffr/packages",
     },
+    "claude-code": {
+      "name": "@diffr/claude-code",
+      "devDependencies": {
+        "@diffr/viewer": "workspace:*",
+        "@types/bun": "1.3.14",
+        "typescript": "5.9.3",
+        "zod": "4.1.12",
+      },
+    },
     "tui": {
       "name": "@diffr/tui",
       "dependencies": {
@@ -34,6 +43,8 @@
     },
   },
   "packages": {
+    "@diffr/claude-code": ["@diffr/claude-code@workspace:claude-code"],
+
     "@diffr/tui": ["@diffr/tui@workspace:tui"],
 
     "@diffr/viewer": ["@diffr/viewer@workspace:viewer"],

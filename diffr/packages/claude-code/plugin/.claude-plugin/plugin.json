@@ -1,0 +1,14 @@
+{
+  "name": "diffr",
+  "version": "0.1.0",
+  "description": "Review diffs with diffr in a pane",
+  "author": { "name": "dev.fast" },
+  "userConfig": {
+    "diffr": {
+      "type": "string",
+      "title": "diffr binary",
+      "description": "Name on PATH or absolute path",
+      "default": "diffr"
+    }
+  }
+}
