@@ -61,13 +61,15 @@ export class ScopeViewedControl extends Disposable implements IOverlayWidget {
     return this.node;
   }
   getPosition(): IOverlayWidgetPosition {
+    return { preference: this.place() };
+  }
+  /** At the right of the code area, on the scope's header line. */
+  private place(): { top: number; left: number } {
     const layout = this.editor.getLayoutInfo();
     return {
-      preference: {
-        top: this.top,
-        left:
-          layout.contentLeft + layout.contentWidth - this.node.offsetWidth - 12,
-      },
+      top: this.top,
+      left:
+        layout.contentLeft + layout.contentWidth - this.node.offsetWidth - 12,
     };
   }
   targetOf(element: HTMLElement | null): FoldTarget | undefined {
@@ -115,6 +117,11 @@ export class ScopeViewedControl extends Disposable implements IOverlayWidget {
       this.editor.addOverlayWidget(this);
     }
     this.editor.layoutOverlayWidget(this);
+    // The editor places overlay widgets when it next renders, which a hover alone may not cause
+    // for a while; until then a new control would sit in the editor's top left corner.
+    const { top, left } = this.place();
+    this.node.style.top = `${top}px`;
+    this.node.style.left = `${left}px`;
   }
 
   hide(): void {
