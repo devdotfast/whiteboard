@@ -238,7 +238,7 @@ it("lists the board's threads, the project's, or every project's", async () => {
   const mount = (filter: ReviewThreadsFilter) =>
     props({
       section: "threads",
-      threads: { list, project: "app", filter, open: "edits-pr" },
+      threads: { list, project: "app", filter, open: ["edits-pr"] },
       onOpenThread,
     });
 

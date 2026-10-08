@@ -90,8 +90,9 @@ export interface AskPanel {
   view: AskView;
   /** The conversation it shows, once it has one. */
   threadId: string | null;
-  /** Its agent is working: closing it stops the agent, so it asks first,
-   * and a new question leaves it running off the screen. */
+  /** Its agent is answering or waiting on the reviewer: closing it stops
+   * the agent, so it asks first, and what replaces it floats it in the
+   * window. */
   busy: boolean;
   presence: AskPresence;
 }
@@ -99,12 +100,8 @@ export interface AskPanel {
 /** What an open Ask says about itself as its conversation goes. */
 export type AskReport = Pick<AskPanel, "threadId" | "busy" | "presence">;
 
-/** Where Ask shows: in the side panel, or in a window over the canvas that
- * stays above peeks, fullscreen diagrams and every view. One Ask at most
- * shows in each; the others are off the screen. */
-export type AskPlace = "docked" | "window";
-
-/** How an Ask shows now: in the side panel or in the window. */
+/** How a thread shows: in the column, or in the window over the board that
+ * stays above peeks, fullscreen diagrams and every view. */
 export type AskShown = "panel" | "window";
 
 /** Where the window floats: a corner of the canvas beside any docked

@@ -31,7 +31,7 @@ import {
 import { retainedTrace } from "./api-trace";
 import { App } from "./App";
 import type { RenderedReviewDocument } from "./App";
-import { readOpenAsks } from "./ask-open-state";
+import { AskProjectContext, readOpenAsks } from "./ask-open-state";
 import { AuthoringActivityContext } from "./authoring-activity-context";
 import {
   type AuthoringCursor,
@@ -551,74 +551,76 @@ export function ApiCanvas({
       <CanvasQueryProvider client={client} reviewId={content.reviewId}>
         <SharingContext.Provider value={sharing}>
           <ReviewSessionProvider session={session}>
-            <ReviewPanelProvider
-              restore={() => ({
-                asks: readOpenAsks(session.config),
-                ...readReviewNavigationRestore(session.config, {
-                  softwareMapEnabled:
-                    content.softwareMapEnabled === true && data.maps.size > 0,
-                  hasChangeRange:
-                    (data.snapshot.pins?.base ?? "") !==
-                    (data.snapshot.pins?.head ?? ""),
-                  version: data.snapshot.version,
-                  commits: data.commits,
-                }),
-              })}
-            >
-              <BoardCommitsContext.Provider value={boardCommits}>
-                <DocumentData.Provider value={data}>
-                  <ReviewLensesProvider
-                    client={client}
-                    snapshot={data.snapshot}
-                    coverageRevision={coverageRevision}
-                  >
-                    {error && (
-                      <p {...stylex.props(styles.error)} role="status">
-                        {error}
-                      </p>
-                    )}
-                    {trashBanner}
-                    <ConnectionContext.Provider value={connection}>
-                      <AuthoringActivityContext.Provider
-                        value={version === undefined ? activity : undefined}
-                      >
-                        <DrawQueueProvider
-                          cursor={version === undefined ? cursor : undefined}
+            <AskProjectContext.Provider value={content.projectId}>
+              <ReviewPanelProvider
+                restore={() => ({
+                  asks: readOpenAsks(session.config, content.projectId),
+                  ...readReviewNavigationRestore(session.config, {
+                    softwareMapEnabled:
+                      content.softwareMapEnabled === true && data.maps.size > 0,
+                    hasChangeRange:
+                      (data.snapshot.pins?.base ?? "") !==
+                      (data.snapshot.pins?.head ?? ""),
+                    version: data.snapshot.version,
+                    commits: data.commits,
+                  }),
+                })}
+              >
+                <BoardCommitsContext.Provider value={boardCommits}>
+                  <DocumentData.Provider value={data}>
+                    <ReviewLensesProvider
+                      client={client}
+                      snapshot={data.snapshot}
+                      coverageRevision={coverageRevision}
+                    >
+                      {error && (
+                        <p {...stylex.props(styles.error)} role="status">
+                          {error}
+                        </p>
+                      )}
+                      {trashBanner}
+                      <ConnectionContext.Provider value={connection}>
+                        <AuthoringActivityContext.Provider
+                          value={version === undefined ? activity : undefined}
                         >
                           <DrawQueueProvider
-                            scope="lenses"
-                            cursor={
-                              version === undefined ? lensCursor : undefined
-                            }
+                            cursor={version === undefined ? cursor : undefined}
                           >
-                            <DisplayedReviewVersionContext.Provider
-                              value={data.snapshot.version}
+                            <DrawQueueProvider
+                              scope="lenses"
+                              cursor={
+                                version === undefined ? lensCursor : undefined
+                              }
                             >
-                              <MapEnabled.Provider
-                                value={content.softwareMapEnabled === true}
+                              <DisplayedReviewVersionContext.Provider
+                                value={data.snapshot.version}
                               >
-                                <SaveMarkdown.Provider value={saveMarkdown}>
-                                  <div {...stylex.props(styles.canvasFrame)}>
-                                    <CanvasDocument
-                                      data={data}
-                                      findHost={findHost}
-                                      softwareMapEnabled={
-                                        content.softwareMapEnabled === true
-                                      }
-                                      documentWidth={content.documentWidth}
-                                    />
-                                  </div>
-                                </SaveMarkdown.Provider>
-                              </MapEnabled.Provider>
-                            </DisplayedReviewVersionContext.Provider>
+                                <MapEnabled.Provider
+                                  value={content.softwareMapEnabled === true}
+                                >
+                                  <SaveMarkdown.Provider value={saveMarkdown}>
+                                    <div {...stylex.props(styles.canvasFrame)}>
+                                      <CanvasDocument
+                                        data={data}
+                                        findHost={findHost}
+                                        softwareMapEnabled={
+                                          content.softwareMapEnabled === true
+                                        }
+                                        documentWidth={content.documentWidth}
+                                      />
+                                    </div>
+                                  </SaveMarkdown.Provider>
+                                </MapEnabled.Provider>
+                              </DisplayedReviewVersionContext.Provider>
+                            </DrawQueueProvider>
                           </DrawQueueProvider>
-                        </DrawQueueProvider>
-                      </AuthoringActivityContext.Provider>
-                    </ConnectionContext.Provider>
-                  </ReviewLensesProvider>
-                </DocumentData.Provider>
-              </BoardCommitsContext.Provider>
-            </ReviewPanelProvider>
+                        </AuthoringActivityContext.Provider>
+                      </ConnectionContext.Provider>
+                    </ReviewLensesProvider>
+                  </DocumentData.Provider>
+                </BoardCommitsContext.Provider>
+              </ReviewPanelProvider>
+            </AskProjectContext.Provider>
           </ReviewSessionProvider>
         </SharingContext.Provider>
       </CanvasQueryProvider>

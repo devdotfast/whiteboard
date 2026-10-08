@@ -116,8 +116,8 @@ export function AskPanelContent({
   /** Set when the reader stops this Ask. A thread that starts after the
    * panel left the screen keeps running unless this is set. */
   stopping?: RefObject<boolean>;
-  /** Who answers and whether they are working: closing a working thread
-   * warns. */
+  /** Who answers and whether they are working: what replaces a working
+   * thread floats it, and closing it warns. */
   onReport?: (report: AskReport) => void;
 }): ReactElement {
   const session = useReviewSession();
