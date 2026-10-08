@@ -155,6 +155,15 @@ fn benchmarks(c: &mut Criterion) {
     }
     engine.finish();
 
+    // From configuration to the first diffed file: what a run pays before its first result.
+    let first = &FILES[0];
+    c.bench_function("startup/one_file", |b| {
+        b.iter(|| {
+            let params = default.compile().expect("queries compile");
+            black_box(project_file(black_box(first), &params))
+        })
+    });
+
     // Keep the same default-query trees. Clone outside the timed routine because
     // plugins mutate their input; reusing shaped output would benchmark a no-op.
     let params = default.compile().expect("queries compile");
