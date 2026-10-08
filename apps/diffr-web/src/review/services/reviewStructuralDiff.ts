@@ -217,12 +217,15 @@ function attachStructuralEditors(
     const store = new DisposableStore();
     watched.set(editor, store);
     const pathOf = () => {
-      const model = editor.getModel();
-      return model
+      // Inner editors change models before the diff editor publishes its new pair.
+      // Resolve the models being rendered, not the previous file's pair.
+      const original = editor.getOriginalEditor().getModel();
+      const modified = editor.getModifiedEditor().getModel();
+      return original && modified
         ? pairs.get(
-            model.original.uri.with({ fragment: "" }).toString() +
+            original.uri.with({ fragment: "" }).toString() +
               "\n" +
-              model.modified.uri.with({ fragment: "" }).toString(),
+              modified.uri.with({ fragment: "" }).toString(),
           )
         : undefined;
     };
