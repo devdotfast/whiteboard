@@ -51,12 +51,6 @@ export interface UnifiedLineCell {
   body?: number[];
   spans: RenderSpan[];
 }
-
-/** The scope the pointer is on. Armed when it points at the scope's rail or chevron, which fold it. */
-export interface ScopeFocus {
-  id: number;
-  armed: boolean;
-}
 export interface ViewerRow {
   key: string;
   fileIndex: number;
