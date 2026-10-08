@@ -4,7 +4,7 @@ import { collapsedFolds, defaultCollapsed, flatten, foldHeaders, foldIds, foldTi
 import { rowsForFile } from "./rows";
 import { dark } from "../theme/themes";
 import type { Region } from "../protocol/wire";
-import { foldBackground } from "../theme/palette";
+import { foldBackground } from "./rows";
 test("a fold covers its body, so collapsing it hides every line it holds", () => {
   const file = createFoldedDiffFile();
   if (file.diff.type !== "text") throw new Error();
