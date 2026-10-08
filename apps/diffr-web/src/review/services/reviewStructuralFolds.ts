@@ -516,8 +516,40 @@ export class StructuralFoldControls extends Disposable {
     if (!model || !path || !diff || !position) {
       return undefined;
     }
-    const line = position.lineNumber - 1;
     const foldables = this.foldablesOf(diff);
+    // A deleted row in the unified view is a view zone after the modified line above it. Inside
+    // a body it reads the innermost body around its gap, as a body line does.
+    const element = e.event.browserEvent.target as HTMLElement | null;
+    if (
+      (e.target.type === MouseTargetType.CONTENT_VIEW_ZONE ||
+        e.target.type === MouseTargetType.GUTTER_VIEW_ZONE) &&
+      element?.closest?.(
+        ".line-delete-selectable, .inline-original-margin-view-zone, .inline-deleted-margin-view-zone",
+      )
+    ) {
+      // The zone follows this 1-based line, so it is the 0-based line below the gap.
+      const below = e.target.detail.afterLineNumber;
+      const around = foldables
+        .filter(
+          (f) =>
+            f.rail &&
+            !this.isCollapsed(path, f) &&
+            f.rail.start <= below &&
+            below <= f.rail.end,
+        )
+        .sort(
+          (a, b) => a.rail!.end - a.rail!.start - (b.rail!.end - b.rail!.start),
+        );
+      return around[0]
+        ? {
+            foldable: around[0],
+            rail: false,
+            control: false,
+            collapsed: false,
+          }
+        : undefined;
+    }
+    const line = position.lineNumber - 1;
     const content =
       e.target.type === MouseTargetType.CONTENT_TEXT ||
       e.target.type === MouseTargetType.CONTENT_EMPTY;
