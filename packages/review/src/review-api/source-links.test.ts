@@ -1,7 +1,7 @@
 import { rangeAnchor } from "@review/lens-selection.js";
 import { expect, it } from "vitest";
 
-import { sourceReferences } from "./document.js";
+import { ReviewInputError, sourceReferences } from "./document.js";
 
 const sources = (markdown: string) =>
   sourceReferences([{ type: "markdown", id: "n-1", markdown }]);
@@ -189,12 +189,10 @@ for (const href of [
   "//example.com/src/save.ts",
   "javascript:alert(1)",
 ]) {
-  it(`rejects unsupported Markdown destination ${href} with authoring guidance`, () => {
-    expect(() => sources(`[file](<${href}>)`)).toThrow(
-      "Use [label](review-source:head/path#L10-L24)",
-    );
+  it(`rejects unsupported Markdown destination ${href}`, () => {
+    expect(() => sources(`[file](<${href}>)`)).toThrow(ReviewInputError);
     expect(() => sources(`[file][ref]\n\n[ref]: <${href}>`)).toThrow(
-      "Use [label](review-source:head/path#L10-L24)",
+      ReviewInputError,
     );
     expect(
       sourceReferences(

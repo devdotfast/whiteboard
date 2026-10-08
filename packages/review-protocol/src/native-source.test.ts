@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import {
   copyFile,
-  mkdir,
+  cp,
   mkdtemp,
   readFile,
   rm,
@@ -23,6 +23,24 @@ const generatorPath = fileURLToPath(
 const bundlerPath = fileURLToPath(
   new URL("../scripts/bundle-native-runtime.mjs", import.meta.url),
 );
+
+const packageRoot = fileURLToPath(new URL("..", import.meta.url));
+
+/** Copies the protocol's sources, and the ones it inlines, to `sourceRoot`. */
+async function copySources(sourceRoot: string) {
+  await cp(path.join(packageRoot, "src"), sourceRoot, { recursive: true });
+
+  for (const name of ["runtime-value.ts", "json.ts"])
+    await copyFile(
+      path.join(packageRoot, "..", "json", "src", name),
+      path.join(sourceRoot, name),
+    );
+
+  await copyFile(
+    path.join(packageRoot, "..", "trace-protocol", "src", "contracts.ts"),
+    path.join(sourceRoot, "trace-contracts.ts"),
+  );
+}
 
 const temporaryDirectories: string[] = [];
 
@@ -71,37 +89,8 @@ describe("native Review Protocol source generation", () => {
     );
 
     temporaryDirectories.push(directory);
-    const packageRoot = fileURLToPath(new URL("..", import.meta.url));
     const sourceRoot = path.join(directory, "src");
-    await mkdir(sourceRoot, { recursive: true });
-
-    for (const name of [
-      "structural-diff.ts",
-      "source-alignment.ts",
-      "contracts.ts",
-      "review-host-status.ts",
-      "code-peek-diff.ts",
-      "review-api-client.ts",
-      "index.ts",
-      "bug-report.ts",
-    ]) {
-      await copyFile(
-        path.join(packageRoot, "src", name),
-        path.join(sourceRoot, name),
-      );
-    }
-
-    for (const name of ["runtime-value.ts", "json.ts"]) {
-      await copyFile(
-        path.join(packageRoot, "..", "json", "src", name),
-        path.join(sourceRoot, name),
-      );
-    }
-
-    await copyFile(
-      path.join(packageRoot, "..", "trace-protocol", "src", "contracts.ts"),
-      path.join(sourceRoot, "trace-contracts.ts"),
-    );
+    await copySources(sourceRoot);
 
     // Reformat index.ts: one named import per line, different order, the
     // re-exports moved to the bottom of the file, and the `contracts.js`
@@ -161,15 +150,7 @@ describe("native Review Protocol source generation", () => {
 
     temporaryDirectories.push(directory);
     const sourceRoot = path.join(directory, "src");
-    await mkdir(sourceRoot, { recursive: true });
-    await writeFile(path.join(sourceRoot, "structural-diff.ts"), "");
-    await writeFile(path.join(sourceRoot, "source-alignment.ts"), "");
-    await writeFile(path.join(sourceRoot, "runtime-value.ts"), "");
-    await writeFile(path.join(sourceRoot, "json.ts"), "");
-    await writeFile(path.join(sourceRoot, "trace-contracts.ts"), "");
-    await writeFile(path.join(sourceRoot, "review-host-status.ts"), "");
-    await writeFile(path.join(sourceRoot, "code-peek-diff.ts"), "");
-    await writeFile(path.join(sourceRoot, "review-api-client.ts"), "");
+    await copySources(sourceRoot);
     await writeFile(
       path.join(sourceRoot, "contracts.ts"),
       [
