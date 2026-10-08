@@ -180,14 +180,14 @@ fn wasm_artifact(output: &[u8], package_id: &Value) -> Result<PathBuf> {
 
 /// Build diffr-core for `wasm32-unknown-unknown`, the target a browser runs.
 ///
-/// tree-sitter ships the C library its parser needs there, and
-/// tree-sitter-language the headers grammars compile against; grammar crates
-/// that do not add those headers get them from `CFLAGS`. Grammars generated
-/// for tree-sitter 0.26 also compile tree-sitter-language's copy of that
-/// library, which is now a stub that fails on purpose, so its `wasm-src`
-/// points at empty files instead. `crates/diffr-core/wasm` fills what a few
-/// scanners use beyond it. macOS's `ar` writes no index a wasm linker
-/// reads, so the archives are made with rustup's `llvm-ar`.
+/// tree-sitter-language ships the libc headers tree-sitter and the grammars
+/// compile against there; grammar crates that do not add them get them from
+/// `CFLAGS`. Its libc sources (`wasm-src`) are a scanner heap for
+/// tree-sitter's own wasm runtime, so they are replaced by
+/// `crates/diffr-core/wasm/src`, with `malloc` and friends from Rust (see
+/// diffr-core's `wasm_libc.rs`). `crates/diffr-core/wasm` also fills what a
+/// few scanners use beyond those headers. macOS's `ar` writes no index a
+/// wasm linker reads, so the archives are made with rustup's `llvm-ar`.
 fn build_core_wasm(root: &Path) -> Result<()> {
     wasm_cargo(
         root,
@@ -223,17 +223,27 @@ fn wasm_cargo(root: &Path, args: &[&str]) -> Result<()> {
     .parent()
     .context("tree-sitter-language directory")?
     .join("wasm/include");
-    let empty = root.join("target/wasm-core/empty-libc");
-    std::fs::create_dir_all(&empty)?;
-    for file in ["stdio.c", "stdlib.c", "string.c"] {
-        std::fs::write(empty.join(file), "")?;
-    }
     let compat = root.join("crates/diffr-core/wasm");
+    let libc = compat.join("src");
+    // Grammar build scripts rerun when CFLAGS change, not when a header they
+    // include does, so the shims' hash is part of the flags.
+    let mut hasher = std::hash::DefaultHasher::new();
+    for file in [
+        "compat.h",
+        "include/sys/types.h",
+        "include/wchar.h",
+        "src/stdio.c",
+        "src/stdlib.c",
+        "src/string.c",
+    ] {
+        std::hash::Hash::hash(&std::fs::read(compat.join(file))?, &mut hasher);
+    }
     let cflags = format!(
-        "-I{} -I{} -include {}",
+        "-I{} -I{} -include {} -DDIFFR_WASM_COMPAT={:x}",
         headers.display(),
         compat.join("include").display(),
-        compat.join("compat.h").display()
+        compat.join("compat.h").display(),
+        std::hash::Hasher::finish(&hasher)
     );
     run(
         cargo()
@@ -247,11 +257,29 @@ fn wasm_cargo(root: &Path, args: &[&str]) -> Result<()> {
             .arg("--config")
             .arg(format!(
                 "target.{target}.tree-sitter-language.wasm-src={:?}",
-                empty.display().to_string()
+                libc.display().to_string()
             ))
             .env("AR_wasm32_unknown_unknown", llvm_ar()?)
             .env("CFLAGS_wasm32_unknown_unknown", cflags),
         "Running cargo for wasm32-unknown-unknown (needs `rustup target add wasm32-unknown-unknown` and clang)",
+    )
+}
+
+/// Build diffr-web for the browser and generate its bindings into `out_dir`
+/// (by default `target/diffr-web`), where a page imports them. Needs
+/// `cargo install wasm-bindgen-cli` at the crate's wasm-bindgen version.
+fn build_web(root: &Path, out_dir: &Path) -> Result<()> {
+    wasm_cargo(
+        root,
+        &["build", "--locked", "--release", "--package", "diffr-web"],
+    )?;
+    run(
+        Command::new("wasm-bindgen")
+            .current_dir(root)
+            .args(["--target", "web", "--out-dir"])
+            .arg(out_dir)
+            .arg("target/wasm32-unknown-unknown/release/diffr_web.wasm"),
+        "Running wasm-bindgen (install it with `cargo install wasm-bindgen-cli --version 0.2.129`)",
     )
 }
 
@@ -288,6 +316,18 @@ fn main() -> Result<()> {
         "install-tui" => install(root, false),
         "build-plugins" => build_plugins(root),
         "build-core-wasm" => build_core_wasm(root),
+        "build-web" => {
+            let out_dir = match std::env::args().nth(2).as_deref() {
+                Some("--out-dir") => PathBuf::from(
+                    std::env::args()
+                        .nth(3)
+                        .context("--out-dir needs a directory")?,
+                ),
+                Some(other) => bail!("unexpected argument {other}"),
+                None => root.join("target/diffr-web"),
+            };
+            build_web(root, &out_dir)
+        }
         "wasm" => {
             let args: Vec<String> = std::env::args().skip(2).collect();
             wasm_cargo(root, &args.iter().map(String::as_str).collect::<Vec<_>>())
@@ -310,7 +350,7 @@ fn main() -> Result<()> {
             anyhow::ensure!(status.success(), "plugin tests failed");
             Ok(())
         }
-        _ => bail!("usage: cargo xtask <install|install-tui|build-plugins|build-core-wasm|wasm|test-plugins>"),
+        _ => bail!("usage: cargo xtask <install|install-tui|build-plugins|build-core-wasm|build-web [--out-dir DIR]|wasm|test-plugins>"),
     }
 }
 

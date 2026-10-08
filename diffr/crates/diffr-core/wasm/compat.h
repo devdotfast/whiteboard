@@ -58,6 +58,15 @@ static inline char *diffr_strncpy(char *dst, const char *src, __SIZE_TYPE__ n) {
     return dst;
 }
 #define strncpy diffr_strncpy
+/* tree-sitter-language's assert.h defines __assert_fail in every file that
+ * includes it, which links as duplicates. Take its place with a static one. */
+#define TREE_SITTER_WASM_ASSERT_H_
+#ifdef NDEBUG
+#define assert(e) ((void)0)
+#else
+static inline __attribute__((noreturn)) void diffr_assert_fail(void) { __builtin_trap(); }
+#define assert(expression) ((expression) ? (void)0 : diffr_assert_fail())
+#endif
 /* The vendored scanners: a scanner that gives up traps. */
 static inline __attribute__((noreturn)) void diffr_exit(int status) {
     (void)status;
