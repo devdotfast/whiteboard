@@ -1,0 +1,18 @@
+[package]
+workspace = "../../../workspace"
+publish = false
+name = "diffr-plugin-removed-runs"
+description = "The removed-runs plugin: collapse the middle of long removed stretches."
+version = "0.1.1"
+edition = "2021"
+rust-version = "1.85.0"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+diffr-plugin-sdk = { path = "../../../../crates/diffr-plugin-sdk", version = "0.1.1" }
+serde = { version = "1.0", features = ["derive"] }
+
+serde_json = "1.0"

@@ -1,0 +1,30 @@
+{
+  "repo": "cli/cli",
+  "pr_number": 11038,
+  "pr_title": "fix: get token for active user instead of blank if possible",
+  "pr_url": "https://github.com/cli/cli/pull/11038",
+  "language": "Go",
+  "status": "modified",
+  "base_branch_sha": "d9d0e14e853a06c8d77ff85d84360cc5049ac286",
+  "comparison_base_sha": "d9d0e14e853a06c8d77ff85d84360cc5049ac286",
+  "head_sha": "0180c7fce4e30b7adc883ac0d235f3ee08f23409",
+  "merged_at": "2025-06-27T12:27:36Z",
+  "comparison": "PR merge-base to head",
+  "sources": {
+    "lhs": {
+      "file": "before.go",
+      "path": "internal/config/config.go",
+      "commit": "d9d0e14e853a06c8d77ff85d84360cc5049ac286",
+      "git_blob_sha": "003a0ca171e9297c7b28b1bf057ef0956336025a",
+      "sha256": "2f541aba10c19a3c85b2e5fc05ff96dd05dbd6261c0908ebfdc457099b338a07"
+    },
+    "rhs": {
+      "file": "after.go",
+      "path": "internal/config/config.go",
+      "commit": "0180c7fce4e30b7adc883ac0d235f3ee08f23409",
+      "git_blob_sha": "47d9403b0e851af04d8e06c3e7dab98ae2cc0a3a",
+      "sha256": "bd33aff9000ab2eb74c33116a19de508156613be018e36b8cee854f482a5d92c"
+    }
+  },
+  "visibility": "public"
+}

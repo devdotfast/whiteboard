@@ -1,0 +1,20 @@
+{
+  "folds": [
+    {
+      "regions": {
+        "Added": {
+          "start": {
+            "line": 5,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 8,
+            "byte_column": 26
+          }
+        }
+      },
+      "placeholder": "Skip missing items and enqueue the rest."
+    }
+  ],
+  "context": []
+}

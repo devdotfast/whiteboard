@@ -1,0 +1,45 @@
+{
+  "summary": "Diff parser fix with a multi-statement paired replacement and enclosing function context. The neutral placeholder describes both versions; changed code remains present underneath it. The return object and closing function brace are additional context outside the U3 patch.",
+  "expected_text": {
+    "folds/0/lhs": "import { readFile } from \"node:fs/promises\";\nimport path from \"node:path\";\n\nimport {\n  detectLocalVcs,\n  diff as readLocalVcsDiff,\n  diffFileSummaries as readLocalVcsDiffFileSummaries,\n} from \"@dev.fast/local-vcs\";\nimport { jsonString, parseJsonText } from \"@dev.fast/review-protocol\";",
+    "folds/0/rhs": "import { readFile } from \"node:fs/promises\";\nimport path from \"node:path\";\n\nimport {\n  detectLocalVcs,\n  diff as readLocalVcsDiff,\n  diffFileSummaries as readLocalVcsDiffFileSummaries,\n} from \"@dev.fast/local-vcs\";\nimport { jsonString, parseJsonText } from \"@dev.fast/review-protocol\";",
+    "folds/1/lhs": "  for (const line of lines) {\n    const parsedOldPath = parseGitFileLine(line, \"--- \");\n    const parsedNewPath = parseGitFileLine(line, \"+++ \");\n    if (parsedOldPath !== undefined) oldPath = parsedOldPath;\n    if (parsedNewPath !== undefined) newPath = parsedNewPath;\n    if (line.startsWith(\"rename from \")) {\n      renameFrom = unquoteGitPath(line.slice(\"rename from \".length).trim());\n    }\n    if (line.startsWith(\"rename to \")) {\n      renameTo = unquoteGitPath(line.slice(\"rename to \".length).trim());\n    }\n    if (line.startsWith(\"+\") && !line.startsWith(\"+++ \")) additions += 1;\n    if (line.startsWith(\"-\") && !line.startsWith(\"--- \")) deletions += 1;\n  }",
+    "folds/1/rhs": "  for (const line of lines) {\n    if (line.startsWith(\"@@\")) {\n      inHunk = true;\n      continue;\n    }\n    if (!inHunk) {\n      const parsedOldPath = parseGitFileLine(line, \"--- \");\n      const parsedNewPath = parseGitFileLine(line, \"+++ \");\n      if (parsedOldPath !== undefined) oldPath = parsedOldPath;\n      if (parsedNewPath !== undefined) newPath = parsedNewPath;\n      if (line.startsWith(\"rename from \")) {\n        renameFrom = unquoteGitPath(line.slice(\"rename from \".length).trim());\n      }\n      if (line.startsWith(\"rename to \")) {\n        renameTo = unquoteGitPath(line.slice(\"rename to \".length).trim());\n      }\n      continue;\n    }\n    if (line.startsWith(\"+\")) additions += 1;\n    else if (line.startsWith(\"-\")) deletions += 1;\n  }",
+    "context/0/lhs": "function parseReviewDiffFile(section: string): ReviewDiffFile | null {",
+    "context/0/rhs": "function parseReviewDiffFile(section: string): ReviewDiffFile | null {",
+    "context/1/lhs": "}",
+    "context/1/rhs": "}"
+  },
+  "keep_visible": {
+    "lhs": [
+      {
+        "range": {
+          "start": {
+            "line": 274,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 274,
+            "byte_column": 1
+          }
+        },
+        "text": "}"
+      }
+    ],
+    "rhs": [
+      {
+        "range": {
+          "start": {
+            "line": 282,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 282,
+            "byte_column": 1
+          }
+        },
+        "text": "}"
+      }
+    ]
+  }
+}

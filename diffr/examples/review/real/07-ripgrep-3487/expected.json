@@ -1,0 +1,81 @@
+{
+  "folds": [
+    {
+      "regions": {
+        "Paired": {
+          "lhs": {
+            "start": {
+              "line": 88,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 88,
+              "byte_column": 72
+            }
+          },
+          "rhs": {
+            "start": {
+              "line": 90,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 93,
+              "byte_column": 9
+            }
+          }
+        }
+      },
+      "placeholder": "Handle indexing mode."
+    }
+  ],
+  "context": [
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 76,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 76,
+            "byte_column": 79
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 77,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 77,
+            "byte_column": 79
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 101,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 101,
+            "byte_column": 1
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 106,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 106,
+            "byte_column": 1
+          }
+        }
+      }
+    }
+  ]
+}

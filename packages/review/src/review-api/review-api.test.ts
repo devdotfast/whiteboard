@@ -2298,6 +2298,57 @@ it("preserves unchanged partial file coverage across pins and rejects stale writ
   ).toEqual([]);
 });
 
+it("counts readable files when the comparison includes a non-UTF-8 fixture", async () => {
+  const { reviewProgress } = await import("./review-progress.js");
+  const { reviewId } = await create();
+  const data = new LocalReviewData(store);
+  vi.spyOn(data, "resolveSource").mockImplementation(async (snapshot) => ({
+    snapshot,
+    pins: snapshot.pins!,
+  }));
+  vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
+    const fixture = {
+      rhs: { path: "fixture.bin", oid: "fixture", mode: "100644" },
+    };
+
+    const readable = { rhs: { path: "a.ts", oid: "source", mode: "100644" } };
+
+    yield {
+      type: "start",
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
+      lhs: { type: "revision", rev: pins.base },
+      rhs: { type: "revision", rev: pins.head },
+      files: [
+        { file: fixture, status: "added" },
+        { file: readable, status: "added" },
+      ],
+    };
+    yield {
+      type: "file",
+      file: fixture,
+      error: { code: "not_utf8", message: "fixture.bin is not valid UTF-8" },
+    };
+    yield {
+      type: "file",
+      file: readable,
+      diff: {
+        type: "text",
+        rhs: structuralSource("source"),
+        structural_changes: { base: [], head: [[0, 1]] },
+        stats: {
+          textual: { added: 1, removed: 0 },
+          visible: { added: 1, removed: 0 },
+        },
+      },
+    };
+    yield { type: "complete", succeeded: 1, failed: 1 };
+  });
+
+  const progress = await reviewProgress(store, data, store.read(reviewId));
+  expect(progress.files.map((file) => file.path)).toEqual(["a.ts"]);
+  expect(progress.files[0].changed.head).toEqual([[0, 1]]);
+});
+
 it("still reports structural read failures", async () => {
   const { reviewProgress } = await import("./review-progress.js");
   const { reviewId } = await create();

@@ -1,0 +1,28 @@
+{
+  "summary": "A deleted legacy compatibility block becomes a base-only fold. The replacement hostname expression stays visible on head. Show the enclosing function and outer try/import context, without inventing an opposite range for the deleted block.",
+  "expected_text": {
+    "folds/0/lhs": "        # Strip port numbers from netloc. This weird `if...encode`` dance is\n        # used for Python 3.2, which doesn't support unicode literals.\n        splitstr = b\":\"\n        if isinstance(url, str):\n            splitstr = splitstr.decode(\"ascii\")\n        host = ri.netloc.split(splitstr)[0]",
+    "context/0/lhs": "def get_netrc_auth(url, raise_errors=False):",
+    "context/0/rhs": "def get_netrc_auth(url, raise_errors=False):",
+    "context/1/lhs": "    try:\n        from netrc import NetrcParseError, netrc",
+    "context/1/rhs": "    try:\n        from netrc import NetrcParseError, netrc"
+  },
+  "keep_visible": {
+    "rhs": [
+      {
+        "range": {
+          "start": {
+            "line": 238,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 238,
+            "byte_column": 26
+          }
+        },
+        "text": "        host = ri.hostname"
+      }
+    ],
+    "lhs": []
+  }
+}

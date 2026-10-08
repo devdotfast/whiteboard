@@ -1,0 +1,37 @@
+name: Diffr Coverage
+
+on:
+  pull_request:
+    paths:
+      - "diffr/**"
+  push:
+    paths:
+      - "diffr/**"
+  workflow_dispatch:
+
+jobs:
+  coverage:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: diffr
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Rust
+        run: rustup toolchain install stable --component llvm-tools-preview --target wasm32-wasip2
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@ff869c26e4a7acc3087d9d6c1163a80d3957bca7 # cargo-llvm-cov
+
+      # WASI guests cannot use the host LLVM coverage runtime.
+      - name: Build WASM plugins
+        run: cargo +stable xtask build-plugins
+
+      - name: Generate code coverage
+        run: cargo +stable llvm-cov --all-features --workspace --lcov --output-path lcov.info
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5
+        with:
+          files: diffr/lcov.info
+          fail_ci_if_error: false

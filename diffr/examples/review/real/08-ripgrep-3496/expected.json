@@ -1,0 +1,216 @@
+{
+  "folds": [
+    {
+      "regions": {
+        "Paired": {
+          "lhs": {
+            "start": {
+              "line": 0,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 23,
+              "byte_column": 2
+            }
+          },
+          "rhs": {
+            "start": {
+              "line": 0,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 23,
+              "byte_column": 2
+            }
+          }
+        }
+      },
+      "placeholder": "Imports"
+    },
+    {
+      "regions": {
+        "Added": {
+          "start": {
+            "line": 2438,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 2454,
+            "byte_column": 53
+          }
+        }
+      },
+      "placeholder": "Assert that max-depth traversal skips unreachable ignore files."
+    }
+  ],
+  "context": [
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 1183,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1183,
+            "byte_column": 24
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 1185,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1185,
+            "byte_column": 24
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 1187,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1187,
+            "byte_column": 59
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 1189,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1189,
+            "byte_column": 59
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 2186,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 2186,
+            "byte_column": 11
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 2193,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 2193,
+            "byte_column": 11
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 1253,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1254,
+            "byte_column": 1
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 1260,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1261,
+            "byte_column": 1
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 2711,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 2711,
+            "byte_column": 1
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 2739,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 2739,
+            "byte_column": 1
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 1115,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1115,
+            "byte_column": 17
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 1116,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1116,
+            "byte_column": 17
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 1123,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1123,
+            "byte_column": 1
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 1125,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1125,
+            "byte_column": 1
+          }
+        }
+      }
+    }
+  ]
+}

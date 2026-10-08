@@ -1,0 +1,69 @@
+{
+  "summary": "One match arm changes from a single expression to a braced block. Pair those regions despite different syntax shapes; leave adjacent match arms visible. The unchanged run signature is extra context. This pairing is a manual target, not a claim that Difftastic already identifies a match-arm node.",
+  "expected_text": {
+    "folds/0/lhs": "        Mode::Index(_) => anyhow::bail!(\"indexing not yet implemented\"),",
+    "folds/0/rhs": "        Mode::Index(_) => {\n            index::write(&args)?;\n            return Ok(ExitCode::from(0));\n        }",
+    "context/0/lhs": "fn run(result: crate::flags::ParseResult<HiArgs>) -> anyhow::Result<ExitCode> {",
+    "context/0/rhs": "fn run(result: crate::flags::ParseResult<HiArgs>) -> anyhow::Result<ExitCode> {",
+    "context/1/lhs": "}",
+    "context/1/rhs": "}"
+  },
+  "keep_visible": {
+    "lhs": [
+      {
+        "range": {
+          "start": {
+            "line": 89,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 89,
+            "byte_column": 60
+          }
+        },
+        "text": "        Mode::Files if args.threads() == 1 => files(&args)?,"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 101,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 101,
+            "byte_column": 1
+          }
+        },
+        "text": "}"
+      }
+    ],
+    "rhs": [
+      {
+        "range": {
+          "start": {
+            "line": 94,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 94,
+            "byte_column": 60
+          }
+        },
+        "text": "        Mode::Files if args.threads() == 1 => files(&args)?,"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 106,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 106,
+            "byte_column": 1
+          }
+        },
+        "text": "}"
+      }
+    ]
+  }
+}

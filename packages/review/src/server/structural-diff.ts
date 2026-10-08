@@ -108,8 +108,9 @@ export async function* structuralDiff(
 
       // Bound individual records, not the entire streamed comparison: a
       // directory move can legitimately contain thousands of small files.
-      if (Buffer.byteLength(line) > 64 * 1024 * 1024)
-        throw new Error("Structural diff record exceeded 64 MiB.");
+      // Generated parsers in diffr can exceed 64 MiB after JSON encoding.
+      if (Buffer.byteLength(line) > 96 * 1024 * 1024)
+        throw new Error("Structural diff record exceeded 96 MiB.");
 
       if (!line.trim()) continue;
       const event = decodeStructuralDiffEvent(line);
