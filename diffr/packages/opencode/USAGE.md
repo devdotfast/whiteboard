@@ -43,3 +43,17 @@ Plugin tuple options select a binary, arguments, or a saved test recording:
 ```
 
 Set `input` instead to an NDJSON recording for local UI testing.
+
+## Model tool
+
+Also load `/absolute/path/to/diffr/packages/opencode/src/server.ts` in the `plugin`
+array in `opencode.json`. The model can then call `diffr_open({args: [...]})` through
+OpenCode's native tool API; no separate MCP process is required.
+
+The server sends a public TUI command event. Only a terminal showing the same
+session in the same directory can claim it. A private, temporary Unix socket
+returns success after a valid comparison starts, or returns the producer error.
+The tool does not navigate to another session, take keyboard focus, or submit a draft.
+A missing terminal times out after 20 seconds. Cancellation stops an in-progress open.
+This bridge requires the server and TUI on the same machine (macOS/Linux); remote
+`opencode attach` and Windows need a different reply transport.

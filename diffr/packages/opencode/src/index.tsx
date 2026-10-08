@@ -4,6 +4,8 @@ import type { BoxRenderable, KeyEvent, MouseEvent, Renderable } from "@opentui/c
 import { useTerminalDimensions } from "@opentui/solid";
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { openComparison, type Comparison } from "@diffr/consumer/process";
+import { opened } from "@diffr/consumer/open-tool";
+import { receiveOpen, type OpenRequest } from "./bridge";
 import { PointerInput } from "@diffr/consumer/pointer";
 import { terminalKey } from "@diffr/consumer/key";
 import type { Outcome } from "@diffr/consumer/frame";
@@ -15,6 +17,7 @@ const tui: TuiPlugin = async (api, options) => {
   const [sidebar, setSidebar] = createSignal(false);
   const [session, setSession] = createSignal<string>();
   let generation = 0;
+  let captureFocus = true;
   let previousFocus: Renderable | null = null;
   let view: BoxRenderable | undefined;
   const currentSession = () => api.route.current.name === "session" && "params" in api.route.current
@@ -28,7 +31,7 @@ const tui: TuiPlugin = async (api, options) => {
     restoreFocus();
   };
   const error = (value: unknown) => api.ui.toast({ variant: "error", message: `Diffr: ${value instanceof Error ? value.message : value}` });
-  const toggle = () => setFull(value => !value);
+  const toggle = () => { captureFocus = true; setFull(value => !value); };
   const outcome = async (value: Outcome) => {
     const current = comparison();
     if (!current) return;
@@ -48,24 +51,29 @@ const tui: TuiPlugin = async (api, options) => {
       current.pane.copied(value.copy.what, copied ? undefined : "Terminal clipboard unavailable");
     }
   };
-  async function open(fullscreen = false) {
+  async function open(fullscreen = false, request?: OpenRequest, signal?: AbortSignal): Promise<string> {
+    if (request && request.sessionID !== currentSession()) throw new Error("Return to the session that requested Diffr.");
     close();
     const id = generation;
     try {
       if (!currentSession()) {
         const result = await api.client.session.create({}, { throwOnError: true });
-        if (id !== generation) return;
+        if (id !== generation) throw new Error("Diffr open was replaced or closed.");
         api.route.navigate("session", { sessionID: result.data!.id });
       }
       setSession(currentSession());
+      captureFocus = !request;
       previousFocus = api.renderer.currentFocusedRenderable;
       const config = options as { input?: string; binary?: string; args?: string[] } | undefined;
       const next = await openComparison({ cwd: api.state.path.directory, input: config?.input,
-        binary: config?.binary, args: config?.args });
-      if (id !== generation) { next.dispose(); return; }
+        binary: config?.binary, args: request?.args ?? config?.args });
+      if (id !== generation || (request && request.sessionID !== currentSession())) { next.dispose(); throw new Error("Diffr session changed during open."); }
       setFull(fullscreen);
       setComparison(next);
-    } catch (cause) { error(cause); }
+      const result = await opened(next, signal);
+      if (id !== generation || currentSession() !== session()) throw new Error("Diffr session changed during open.");
+      return result;
+    } catch (cause) { if (id === generation) close(); throw cause; }
   }
 
   function View(props: { full: boolean; current: Comparison }) {
@@ -86,7 +94,7 @@ const tui: TuiPlugin = async (api, options) => {
       revision();
       return props.current.pane.frame({ columns: Math.max(1, width()), rows: rows() });
     });
-    onMount(() => { view = box; box.focusable = true; box.focus(); });
+    onMount(() => { view = box; box.focusable = true; if (captureFocus) box.focus(); });
     onCleanup(props.current.pane.subscribe(refresh));
     onCleanup(() => { pointer.reset(); if (view === box) view = undefined; });
     const mouse = (event: MouseEvent) => {
@@ -149,12 +157,16 @@ const tui: TuiPlugin = async (api, options) => {
     app: () => <Overlay />,
   } });
   api.keymap.registerLayer({ commands: [
-    { name: "diffr.open", namespace: "palette", title: "Open Diffr beside chat", slashName: "diffr", run: () => open() },
-    { name: "diffr.fullscreen", namespace: "palette", title: "Toggle Diffr fullscreen", slashName: "diffr-fullscreen", run: () => comparison() ? toggle() : open(true) },
+    { name: "diffr.open", namespace: "palette", title: "Open Diffr beside chat", slashName: "diffr", run: () => { void open().catch(error); } },
+    { name: "diffr.fullscreen", namespace: "palette", title: "Toggle Diffr fullscreen", slashName: "diffr-fullscreen", run: () => { if (comparison()) toggle(); else void open(true).catch(error); } },
     { name: "diffr.focus", namespace: "palette", title: "Focus Diffr", slashName: "diffr-focus", run: () => view?.focus() },
     { name: "diffr.close", namespace: "palette", title: "Close Diffr", slashName: "diffr-close", run: close },
   ] });
-  api.lifecycle.onDispose(close);
+  const stop = api.event.on("tui.command.execute", event => {
+    void receiveOpen(event.properties.command, api.state.path.directory, currentSession,
+      (request, signal) => open(false, request, signal), api.lifecycle.signal).catch(error);
+  });
+  api.lifecycle.onDispose(() => { stop(); close(); });
 };
 
 export default { id: "diffr", tui };
