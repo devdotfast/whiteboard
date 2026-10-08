@@ -1,0 +1,23 @@
+{
+  "name": "@diffr/viewer",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.test.json",
+    "test": "bun test src"
+  },
+  "dependencies": {
+    "get-east-asian-width": "1.4.0",
+    "smol-toml": "1.4.2",
+    "string-width": "8.1.0",
+    "zod": "4.1.12"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.10",
+    "typescript": "5.9.3"
+  }
+}

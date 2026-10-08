@@ -1,0 +1,5 @@
+{
+  "name": "@diffr/packages",
+  "private": true,
+  "workspaces": ["viewer", "tui"]
+}

@@ -12,31 +12,31 @@ import {
   useTerminalDimensions,
 } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
-import { buildFileTree, flattenFileTree, parentDirectories, lineCounts } from "../diffr/fileTree";
+import { buildFileTree, flattenFileTree, parentDirectories, lineCounts } from "@diffr/viewer/document/fileTree";
 import { matchesKey } from "./lib/keys";
 import { resizeSidebarWidth } from "./lib/sidebar";
 import { CodeRowView } from "./diff/CodeRowView";
-import type { ScopeFocus } from "./diff/diffRowModel";
+import type { ScopeFocus } from "@diffr/viewer/document/rows";
 import {
   rowsForFile,
   type Layout,
   type ViewerRow,
-} from "../diffr/rows";
-import type { Palette } from "../diffr/palette";
+} from "@diffr/viewer/document/rows";
+import type { Palette } from "@diffr/viewer/theme/palette";
 import type { ThemeSet } from "../diffr/theme";
-import { measureRows, visibleRows, positionAt, positionTop, rowFold, type ViewPosition } from "../diffr/geometry";
+import { measureRows, visibleRows, positionAt, positionTop, rowFold, type ViewPosition } from "@diffr/viewer/viewport/geometry";
 import {
   copySelection,
   selectionBounds,
   type SourceSelection,
-} from "../diffr/selection";
-import { filePath, fileVisibility, type DiffFile, type TextDiff } from "../diffr/wire";
-import { defaultCollapsed, foldIds, gapIds, nestedIds, sourceLines } from "../diffr/regions";
-import { placeholderRows } from "../diffr/rows";
-import { add, blockBar, comparisonLabel, zero, type LineCounts } from "../diffr/counts";
-import type { DiffStore } from "../diffr/store";
-import { sanitizeTerminalLine } from "../lib/terminalText";
-import { measureTextWidth, sliceTextByWidth } from "./lib/text";
+} from "@diffr/viewer/document/selection";
+import { filePath, fileVisibility, type DiffFile, type TextDiff } from "@diffr/viewer/protocol/wire";
+import { defaultCollapsed, foldIds, gapIds, nestedIds, sourceLines } from "@diffr/viewer/document/regions";
+import { placeholderRows } from "@diffr/viewer/document/rows";
+import { add, blockBar, comparisonLabel, zero, type LineCounts } from "@diffr/viewer/document/counts";
+import type { DiffStore } from "@diffr/viewer/protocol/store";
+import { sanitizeTerminalLine } from "@diffr/viewer/terminal/sanitize";
+import { measureTextWidth, sliceTextByWidth } from "@diffr/viewer/terminal/text";
 const fit = (text: string, width: number) =>
   sliceTextByWidth(text, 0, width).text;
 export function App({

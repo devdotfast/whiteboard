@@ -1,6 +1,6 @@
 /** Change counts for the headers. The numbers are diffr's `stats`, shown verbatim: folding
  * changes what is on screen, never the count. */
-import type { LineCounts } from "./wire";
+import type { LineCounts } from "../protocol/wire";
 export type { LineCounts };
 export const zero: LineCounts = { added: 0, removed: 0 };
 export const add = (a: LineCounts, b: LineCounts): LineCounts => ({ added: a.added + b.added, removed: a.removed + b.removed });

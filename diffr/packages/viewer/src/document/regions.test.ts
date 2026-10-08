@@ -1,43 +1,10 @@
 import { expect, test } from "bun:test";
-import { createTestDiffFile, fold, leaf, line, root } from "./fixture";
+import { createBundledDiffFile, createFoldedDiffFile, createTestDiffFile, fold, leaf, line, root } from "../protocol/fixture";
 import { collapsedFolds, defaultCollapsed, flatten, foldHeaders, foldIds, foldTint, gapIds, hiddenLines, pairedIds } from "./regions";
 import { rowsForFile } from "./rows";
-import { dark } from "./theme";
-import type { DiffFile, Region } from "./wire";
-import { foldBackground } from "./palette";
-/** Rust-style body folds: each covers its body alone, so the lines that open and close a
- * construct are leaves around it, like VS Code's rows. */
-export function createFoldedDiffFile(): DiffFile {
-  const file = createTestDiffFile();
-  const lines = [
-    "fn outer() {",      // 0
-    "    inner(|| {",    // 1
-    "        a();",      // 2
-    "        b();",      // 3
-    "    });",           // 4
-    "    // trailing",   // 5
-    "    // comment",    // 6
-    "}",                 // 7
-  ];
-  const text = lines.join("\n") + "\n";
-  // ids: 10 outer body (lines 1-6), 11 closure body (2-3), 12 comment (5-6); leaves tile the file.
-  const regions = (changed: boolean): Region[] => [
-    leaf(1, 0, 1),
-    fold(10, [1, 0], [7, 0], [
-      leaf(7, 1, 2),
-      fold(11, [2, 0], [4, 0], [leaf(2, 2, 3), leaf(3, 3, 4, changed ? [line(3, 8, 12)] : [])]),
-      leaf(4, 4, 5),
-      // A whole-node fold ending at end of line covers its last line too.
-      fold(12, [5, 4], [6, 14], [leaf(5, 5, 7)], "Comment", ["summarize:docstring"]),
-    ]),
-    leaf(6, 7, 8),
-  ];
-  if (file.diff.type !== "text") throw new Error("fixture is not a text diff");
-  file.diff.lhs = { text, syntax: [], root: root(regions(false))};
-  file.diff.rhs = { text, syntax: [], root: root(regions(true))};
-  file.diff.stats = { textual: { added: 1, removed: 0 }, visible: { added: 1, removed: 0 } };
-  return file;
-}
+import { dark } from "../theme/themes";
+import type { Region } from "../protocol/wire";
+import { foldBackground } from "../theme/palette";
 test("a fold covers its body, so collapsing it hides every line it holds", () => {
   const file = createFoldedDiffFile();
   if (file.diff.type !== "text") throw new Error();
@@ -183,29 +150,6 @@ test("regions sharing a fold_state_id collapse and expand as one bundle", () => 
   expect(rows.map((r) => r.right!.lineNumber)).toEqual([undefined, 3, undefined, 5]);
 });
 
-/**
- * The shape diffr emits for a new, summarized function (src/tags/mod.rs, crates/diffr-core/src/protocol/project.rs
- * `syntax_spans`): a one-line docstring region tagged `summarize:docstring`, collapsed
- * with an empty label, sharing fold state 4 with the collapsed function fold after it, right side only.
- */
-export function createBundledDiffFile(): DiffFile {
-  const file = createTestDiffFile();
-  if (file.diff.type !== "text") throw new Error("fixture is not a text diff");
-  const text = [
-    "];", // 0
-    "/// The built-in rule for a path.", // 1
-    "pub(crate) fn from_path(path: &str) -> Option<&str> {", // 2
-    "    None", // 3
-    "}", // 4
-  ].join("\n") + "\n";
-  const docstring: Region = {
-    ...leaf(38, 1, 2), fold_state_id: 4, tags: ["summarize:docstring"], visibility: { collapsed: true, label: "" },
-  };
-  const body = fold(4, [3, 0], [4, 0], [leaf(5, 3, 4)], "look up path\nreturn None", ["summarize:function"], true);
-  file.diff.rhs = { text, syntax: [], root: root([leaf(3, 0, 1), docstring, leaf(7, 2, 3), body, leaf(6, 4, 5)])};
-  file.diff.lhs = undefined;
-  return file;
-}
 test("a collapsed docstring leaf bundled with its function renders as a bare ⋯ row", () => {
   const file = createBundledDiffFile();
   if (file.diff.type !== "text") throw new Error("fixture is not a text diff");

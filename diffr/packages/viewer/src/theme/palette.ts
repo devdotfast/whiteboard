@@ -1,5 +1,5 @@
 /** The painter's palette from a parsed Helix theme, and diffr's theme config. No Node or Bun APIs. */
-import type { FoldTint } from "./regions";
+import type { FoldTint } from "../document/regions";
 export interface Style {
   fg?: string;
   bg?: string;
@@ -154,7 +154,7 @@ export function paletteFromHelix(theme: HelixTheme): Palette {
     syntax: (capture) => scopeFg(theme, capture),
   };
 }
-/** Bundled Helix themes under packages/tui/themes; the two defaults are aliases. */
+/** Bundled Helix themes under packages/viewer/themes; the two defaults are aliases. */
 export const bundledThemes: Record<string, string> = {
   "default-dark": "onedark",
   "default-light": "onelight",

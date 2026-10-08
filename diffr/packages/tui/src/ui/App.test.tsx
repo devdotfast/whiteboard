@@ -4,11 +4,10 @@ import { act, Profiler } from "react";
 import { TextRenderable, type BaseRenderable } from "@opentui/core";
 
 import { App } from "./App";
-import { DiffStore } from "../diffr/store";
-import { createTestDiffFile, leaf, line, manifestEntry, startFor, withIdenticalLines, root } from "../diffr/fixture";
-import type { DiffEvent, DiffFile } from "../diffr/wire";
-import { createBundledDiffFile, createFoldedDiffFile } from "../diffr/regions.test";
-import { loadBundledTheme } from "../diffr/theme";
+import { DiffStore } from "@diffr/viewer/protocol/store";
+import { createBundledDiffFile, createFoldedDiffFile, createTestDiffFile, leaf, line, manifestEntry, startFor, withIdenticalLines, root } from "@diffr/viewer/protocol/fixture";
+import type { DiffEvent, DiffFile } from "@diffr/viewer/protocol/wire";
+import { loadBundledTheme } from "@diffr/viewer/theme/themes";
 const themes = { initial: loadBundledTheme("default-dark"), dark: loadBundledTheme("default-dark"), light: loadBundledTheme("default-light") };
 // Wait for the stream batch to be published inside React's act boundary.
 async function accept(store: DiffStore, ...events: DiffEvent[]) {

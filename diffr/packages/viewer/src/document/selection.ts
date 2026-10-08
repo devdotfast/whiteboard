@@ -1,5 +1,5 @@
 /** Copy original source lines from one side, excluding gutters, padding, and wrapped duplicates. */
-import type { DiffFile } from "./wire";
+import type { DiffFile } from "../protocol/wire";
 import type { ViewerRow } from "./rows";
 export interface SourceSelection {
   anchor: string;
