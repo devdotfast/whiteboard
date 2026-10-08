@@ -5,6 +5,7 @@
 import "vs/base/browser/ui/codicons/codiconStyles.js";
 import "./fonts.css";
 import "./styles.css";
+import "./editorFont.js";
 import { Comparison } from "./comparison.js";
 import { Engine, onEngineChange } from "./engine/engine.js";
 import { parseTarget, setToken, targetPath, token } from "./github.js";
