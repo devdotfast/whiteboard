@@ -1,6 +1,6 @@
 /** Change counts for the headers. The numbers are diffr's `stats`, shown verbatim: folding
  * changes what is on screen, never the count. */
-import type { LineCounts } from "../protocol/wire";
+import type { ComparisonEnd, LineCounts } from "../protocol/wire";
 export type { LineCounts };
 export const zero: LineCounts = { added: 0, removed: 0 };
 export const add = (a: LineCounts, b: LineCounts): LineCounts => ({ added: a.added + b.added, removed: a.removed + b.removed });
@@ -22,13 +22,7 @@ export function blockBar(counts: LineCounts, blocks = 5): ("added" | "removed" |
     ...Array.from({ length: blocks - green - red }, () => "neutral" as const),
   ];
 }
-export type Snapshot =
-  | { type: "revision"; rev: string }
-  | { type: "index" }
-  | { type: "working_tree" }
-  | { type: "empty_tree" }
-  | { type: "path"; path: string };
-export function snapshotLabel(snapshot: Snapshot): string {
+export function snapshotLabel(snapshot: ComparisonEnd): string {
   switch (snapshot.type) {
     case "revision":
       return /^[0-9a-f]{40}$/.test(snapshot.rev) ? snapshot.rev.slice(0, 7) : snapshot.rev;
@@ -42,4 +36,4 @@ export function snapshotLabel(snapshot: Snapshot): string {
       return snapshot.path;
   }
 }
-export const comparisonLabel = (lhs: Snapshot, rhs: Snapshot) => `${snapshotLabel(lhs)}…${snapshotLabel(rhs)}`;
+export const comparisonLabel = (lhs: ComparisonEnd, rhs: ComparisonEnd) => `${snapshotLabel(lhs)}…${snapshotLabel(rhs)}`;
