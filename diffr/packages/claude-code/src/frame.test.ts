@@ -134,3 +134,20 @@ test("the pointer on the header's viewed box puts what a click does beside it", 
   pane.input({ press: { key: "V" } });
   expect(header()).toMatch(/Unmark viewed · V +\[✓\] *$/);
 });
+
+test("/ searches from the status line, q included as text; Enter lands on a match and paints it", async () => {
+  const { pane } = await load(scopes);
+  const type = (...keys: string[]) => keys.forEach((key) => pane.input({ press: { key } }));
+  pane.frame(narrow);
+  type("/", "q", "u", "a");
+  expect(screen(pane.frame(narrow)).at(-1)).toStartWith("/qua▏ · ");
+  type("backspace", "backspace", "backspace", "p", "l", "u", "g", "i", "n", "return");
+  const status = screen(pane.frame(narrow)).at(-1)!;
+  expect(status).toMatch(/^\/plugin · match 1 of \d+ in 1 files · n\/N/);
+  const theme = loadBundledTheme("default-dark");
+  const frame = pane.frame(narrow);
+  const solid = frame.lines.flatMap((line) => line.segments).filter(([, , bg]) => frame.colors[bg] === theme.searchCurrent);
+  expect(solid.map(([text]) => text.toLowerCase())).toContain("plugin");
+  type("n");
+  expect(screen(pane.frame(narrow)).at(-1)).toMatch(/^\/plugin · match 2 of/);
+});

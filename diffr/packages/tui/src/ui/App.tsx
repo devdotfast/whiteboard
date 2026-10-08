@@ -15,7 +15,7 @@ import { TextAttributes, type KeyEvent } from "@opentui/core";
 import { buildFileTree, flattenFileTree, lineCounts, parentDirectories } from "@diffr/viewer/document/fileTree";
 import { matchesKey } from "./lib/keys";
 import { resizeSidebarWidth } from "./lib/sidebar";
-import { CodeRowView } from "./diff/CodeRowView";
+import { CodeRowView, styled } from "./diff/CodeRowView";
 import type { ThemeSet } from "../diffr/theme";
 import {
   agentReference,
@@ -30,7 +30,7 @@ import { visibleRows } from "@diffr/viewer/viewport/geometry";
 import { sanitizeTerminalLine } from "@diffr/viewer/terminal/sanitize";
 import { measureTextWidth, sliceTextByWidth } from "@diffr/viewer/terminal/text";
 import { Viewer, type KeyPress } from "@diffr/viewer/viewer";
-import { viewedBox, viewedHint } from "@diffr/viewer/viewport/cell";
+import { litRuns, viewedBox, viewedHint } from "@diffr/viewer/viewport/cell";
 const fit = (text: string, width: number) =>
   sliceTextByWidth(text, 0, width).text;
 /** Shifted letters become capitals; cmd counts as meta. */
@@ -78,6 +78,10 @@ export function App({
   // The file's mark in the tree and on its header while it has no diff.
   const statusGlyph = (index: number) => failures[index] || snapshot.complete ? "!" : loadingGlyph;
   const progress = viewer.viewedFiles();
+  // While typing, the status line is the prompt; after a search, it leads with where the search stands.
+  const found = viewer.searchState();
+  const searched = !found || "prompt" in found ? ""
+    : `/${found.pattern} · ${found.total ? `match ${found.at} of ${found.total} in ${found.files} files · n/N` : "no matches"} · `;
   const tree = useMemo(() => buildFileTree(inventory), [inventory]);
   const fileOrder = useMemo(() => flattenFileTree(tree, new Set()).flatMap(({node}) =>
     node.fileIndex === undefined ? [] : [node.fileIndex]), [tree]);
@@ -101,10 +105,10 @@ export function App({
   };
   useKeyboard((key) => {
     // Viewer first, so a pending z chord takes any key.
-    const press = keyPress(key), chord = viewer.chording;
+    const press = keyPress(key), chord = viewer.chording, typing = viewer.prompting;
     if (viewer.press(press)) {
-      // s and c reshape the rows, so drop the selection, unless they finish a z chord.
-      if (!chord && !press.ctrl && !press.meta && (press.key === "s" || press.key === "c")) setSelection(null);
+      // s and c reshape the rows, so drop the selection, unless they finish a z chord or go into the prompt.
+      if (!chord && !typing && !press.ctrl && !press.meta && (press.key === "s" || press.key === "c")) setSelection(null);
       return;
     }
     // Hunk's chord matcher handles raw control bytes and Kitty events alike.
@@ -174,13 +178,16 @@ export function App({
     const directory = fit(`${glyph} ${path.slice(0, path.lastIndexOf("/") + 1)}`, pathWidth);
     const directoryWidth = measureTextWidth(directory);
     const name = fit(path.slice(path.lastIndexOf("/") + 1), Math.max(0, pathWidth - directoryWidth));
+    const lit = viewer.highlight(fileIndex, `${fileIndex}:header`, "right");
     return <box key={key} height={1} width={contentWidth} flexDirection="row"
       backgroundColor={theme.fileHeader}
       onMouseUp={() => { if (loaded) viewer.toggleFile(fileIndex); }}>
       <text width={1} fg={viewed ? theme.muted : theme.accent} selectable={false}>▌</text>
-      <text width={directoryWidth} fg={viewed ? theme.muted : theme.fileHeaderDir} selectable={false}>{directory}</text>
-      <text width={Math.max(0, pathWidth - directoryWidth)} fg={viewed ? theme.muted : loaded ? theme.fg : theme.fileHeaderDir}
-        attributes={viewed ? TextAttributes.NONE : TextAttributes.BOLD} selectable={false}>{name}</text>
+      <text width={directoryWidth} selectable={false}
+        content={styled(litRuns(directory, viewed ? theme.muted : theme.fileHeaderDir, theme.fileHeader, lit, theme))} />
+      <text width={Math.max(0, pathWidth - directoryWidth)} selectable={false}
+        content={styled(litRuns(name, viewed ? theme.muted : loaded ? theme.fg : theme.fileHeaderDir, theme.fileHeader, lit, theme),
+          viewed ? TextAttributes.NONE : TextAttributes.BOLD)} />
       {tally.length > 0 && <>
         <text fg={theme.addedText} selectable={false}>{tally[0]}</text>
         <text fg={theme.removedText} selectable={false}>{tally[1]}</text>
@@ -248,6 +255,7 @@ export function App({
             onHover={focus => viewer.setHover(focus ? { file: row.fileIndex, ...focus } : null)}
             onFold={(id, recursive) => viewer.setFold(row.fileIndex, id, "toggle", recursive)}
             read={viewer.isViewed(row.fileIndex) === true}
+            litOf={(side) => viewer.highlight(row.fileIndex, row.key, side)}
           />,
         );
     }
@@ -454,9 +462,10 @@ export function App({
           </text>
         ))}
       </box>}
-      <text height={1} fg={theme.muted} selectable={false}>
-        {fit(
-          `${snapshot.loaded}/${inventory.length} files · ${progress.viewed}/${progress.total} viewed ${snapshot.complete ? "" : "loading…"} ${snapshot.errors.length ? `${snapshot.errors.length} errors` : ""}  [/] hunks · za fold · V viewed · i breakdown · drag selects lines · y copy · Y for agent · q quit ${message}`,
+      <text height={1} fg={found && "prompt" in found ? theme.fg : theme.muted} selectable={false}>
+        {fit(found && "prompt" in found
+          ? `/${found.prompt}▏ · ${found.count} matches · ⏎ go · esc cancel`
+          : `${searched}${snapshot.loaded}/${inventory.length} files · ${progress.viewed}/${progress.total} viewed ${snapshot.complete ? "" : "loading…"} ${snapshot.errors.length ? `${snapshot.errors.length} errors` : ""}  [/] hunks · / search · za fold · V viewed · i breakdown · drag selects lines · y copy · Y for agent · q quit ${message}`,
           width,
         )}
       </text>

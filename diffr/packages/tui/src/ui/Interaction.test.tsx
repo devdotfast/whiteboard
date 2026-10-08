@@ -209,3 +209,27 @@ test("V or the header's box marks a file viewed: it closes, and its header, the 
     expect(frame()).toContain('send("new")');
   } finally { await act(async () => { t.renderer.destroy(); }); }
 });
+test("/ types into the status line, Enter lands on the match in a folded gap and paints it, n moves on", async () => {
+  const store = new DiffStore(), file = createGuideDiffFile();
+  store.accept(startFor([file])); store.accept(file); store.accept({type:"complete", succeeded:1, failed:0});
+  const t = await testRender(<App store={store} themes={themes} onQuit={() => {}} />, {width:170, height:9});
+  const frame = () => t.captureCharFrame();
+  const status = () => frame().split("\n").at(-2) ?? "";
+  const press = async (...keys: string[]) => { for (const key of keys) await act(async () => { t.mockInput.pressKey(key); await t.renderOnce(); }); };
+  try {
+    await act(async () => { await t.renderOnce(); });
+    expect(frame()).not.toContain("keep();");
+    await press("/", "k", "e", "e", "p");
+    expect(status()).toContain("/keep▏ · 2 matches");
+    await press("RETURN");
+    expect(status()).toContain("/keep · match 1 of 2 in 1 files");
+    expect(frame()).toContain("keep();");
+    const current = rgbToHex(t.captureSpans().lines.flatMap(l => l.spans).find(s => s.text.includes("keep"))!.bg).toLowerCase();
+    expect(current).toBe(dark.searchCurrent.toLowerCase());
+    await press("n");
+    expect(status()).toContain("match 2 of 2");
+    // While typing, q is text, not quit.
+    await press("/", "q");
+    expect(status()).toContain("/q▏");
+  } finally { await act(async () => { t.renderer.destroy(); }); }
+});

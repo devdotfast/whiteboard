@@ -6,13 +6,13 @@ import { measureTextWidth } from "@diffr/viewer/terminal/text";
 import type { DiffStore } from "@diffr/viewer/protocol/store";
 import type { Palette } from "@diffr/viewer/theme/palette";
 import { Viewer, type Hover, type KeyPress, type Size } from "@diffr/viewer/viewer";
-import { viewedBox, viewedHint } from "@diffr/viewer/viewport/cell";
+import { litRuns, viewedBox, viewedHint } from "@diffr/viewer/viewport/cell";
 import { agentReference, copySelection, selectionBounds, type SourceSelection } from "@diffr/viewer/document/selection";
 import { Colors, fit, LineBuilder, paintCell } from "./paint";
 import type { Action, Frame, Input, Line } from "./protocol";
 
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-const HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ files · q close";
+const HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · / search, n/N matches · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ files · q close";
 
 /** What an input asks of the hooks module beyond a redraw. */
 export interface Outcome {
@@ -93,6 +93,11 @@ export class Pane {
   }
 
   private press(key: KeyPress): Outcome {
+    // While the search prompt is open, every key is text for it, q included.
+    if (this.viewer.prompting) {
+      this.viewer.press(key);
+      return {};
+    }
     const plain = !key.ctrl && !key.meta;
     if (plain && key.key === "q") return { close: true };
     this.message = plain && key.key === "?" ? HELP : "";
@@ -212,10 +217,13 @@ export class Pane {
       const glyph = shown ? (viewer.isClosed(fileIndex, file) ? "▸" : "▾") : statusGlyph(fileIndex);
       const directory = fit(`${glyph} ${path.slice(0, path.lastIndexOf("/") + 1)}`, pathWidth);
       const name = fit(path.slice(path.lastIndexOf("/") + 1), Math.max(0, pathWidth - measureTextWidth(directory)));
-      line.text("▌", viewed ? theme.muted : theme.accent, theme.fileHeader)
-        .text(directory, viewed ? theme.muted : theme.fileHeaderDir, theme.fileHeader)
-        .text(name, viewed ? theme.muted : shown ? theme.fg : theme.fileHeaderDir, theme.fileHeader, !viewed)
-        .fill(start + 1 + pathWidth, theme.fileHeader);
+      const lit = viewer.highlight(fileIndex, `${fileIndex}:header`, "right");
+      line.text("▌", viewed ? theme.muted : theme.accent, theme.fileHeader);
+      for (const run of litRuns(directory, viewed ? theme.muted : theme.fileHeaderDir, theme.fileHeader, lit, theme))
+        line.text(run.text, run.fg, run.bg);
+      for (const run of litRuns(name, viewed ? theme.muted : shown ? theme.fg : theme.fileHeaderDir, theme.fileHeader, lit, theme))
+        line.text(run.text, run.fg, run.bg, !viewed);
+      line.fill(start + 1 + pathWidth, theme.fileHeader);
       if (tally.length) line.text(tally[0]!, theme.addedText, theme.fileHeader).text(tally[1]!, theme.removedText, theme.fileHeader);
       if (hint) line.text(" ", theme.fg, theme.fileHeader).text(hint, theme.bg, theme.accent);
       if (state !== undefined) {
@@ -261,15 +269,15 @@ export class Pane {
               const side = row.cell.newLineNumber === undefined ? "left" : "right";
               this.cellsAt.set(y + 1, { key: row.key, side: () => side });
               paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true,
-                { ...paint, selected: selected === side });
+                { ...paint, selected: selected === side, search: viewer.highlight(row.fileIndex, row.key, side) });
             } else {
               paintCell(line, row.left!, measured.left[visualLine] ?? [], geometry.leftWidth, false,
-                { ...paint, selected: selected === "left" });
+                { ...paint, selected: selected === "left", search: viewer.highlight(row.fileIndex, row.key, "left") });
               const divider = line.width;
               this.cellsAt.set(y + 1, { key: row.key, side: (x) => x < divider ? "left" : "right" });
               line.text("│", theme.muted, theme.bg);
               paintCell(line, row.right!, measured.right[visualLine] ?? [], geometry.rightWidth, false,
-                { ...paint, selected: selected === "right" });
+                { ...paint, selected: selected === "right", search: viewer.highlight(row.fileIndex, row.key, "right") });
             }
           });
       }
@@ -309,8 +317,16 @@ export class Pane {
     const errors = snapshot.errors.length ? `${snapshot.errors.length} errors  ` : "";
     const read = viewer.viewedFiles();
     // A message leads, so a narrow pane cuts the key hints rather than what just happened.
-    status.text(fit(`${this.message ? `${this.message} · ` : ""}${snapshot.loaded}/${inventory.length} files · ${read.viewed}/${read.total} viewed ${snapshot.complete ? "" : "loading… "}${errors}` +
-      ` [/] hunks · click ▾ or za fold · V viewed · drag selects · y/Y copy · h/l pan · ? keys`, size.columns), theme.muted);
+    // While typing, the status line is the prompt; after a search, it leads with where the search stands.
+    const found = viewer.searchState();
+    if (found && "prompt" in found)
+      status.text(fit(`/${found.prompt}▏ · ${found.count} matches · ⏎ go · ctrl-c cancel`, size.columns), theme.fg);
+    else {
+      const searched = !found ? ""
+        : `/${found.pattern} · ${found.total ? `match ${found.at} of ${found.total} in ${found.files} files · n/N` : "no matches"} · `;
+      status.text(fit(`${this.message ? `${this.message} · ` : ""}${searched}${snapshot.loaded}/${inventory.length} files · ${read.viewed}/${read.total} viewed ${snapshot.complete ? "" : "loading… "}${errors}` +
+        ` [/] hunks · / search · click ▾ or za fold · V viewed · drag selects · y/Y copy · h/l pan · ? keys`, size.columns), theme.muted);
+    }
     lines.push(status.line(size.columns));
     return { colors: colors.list, fg: colors.of(theme.fg), lines, hover };
   }

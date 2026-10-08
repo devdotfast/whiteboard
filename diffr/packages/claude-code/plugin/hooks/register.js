@@ -126,6 +126,8 @@ function paletteFromHelix(theme) {
     modification: mix(bg, delta, 0.12),
     readAddition: mix(bg, plus, 0.06),
     readDeletion: mix(bg, minus, 0.06),
+    searchMatch: mix(bg, delta, 0.3),
+    searchCurrent: delta,
     addWord: mix(bg, plus, 0.28),
     deleteWord: mix(bg, minus, 0.28),
     addedText: plus,
@@ -15111,6 +15113,21 @@ function gapIds(diff2) {
   });
   return [...gaps];
 }
+function hidingIds(diff2, side, line, collapsed) {
+  const { leaves, folds } = flatten(diff2);
+  const ids = new Set;
+  for (const fold of folds[side]) {
+    const inline = fold.syntax && !fold.label.includes(`
+`);
+    const last = inline ? Math.max(fold.lastHidden, fold.syntax.end.line) : fold.lastHidden;
+    if (collapsed.has(fold.foldStateId) && fold.startLine <= line && line <= last)
+      ids.add(fold.foldStateId);
+  }
+  for (const leaf of leaves[side])
+    if (collapsed.has(leaf.foldStateId) && leaf.startLine <= line && line < leaf.endLine)
+      ids.add(leaf.foldStateId);
+  return [...ids];
+}
 function hiddenLines(folds, collapsed) {
   const hidden = new Set;
   for (const fold of folds) {
@@ -15162,6 +15179,19 @@ function foldHeaders(folds, leaves, collapsed, paired) {
     });
   }
   return headers;
+}
+
+// ../viewer/src/document/search.ts
+var caseSensitive = (pattern) => pattern !== pattern.toLowerCase();
+function occurrences(text, pattern) {
+  if (!pattern)
+    return [];
+  const exact = caseSensitive(pattern);
+  const haystack = exact ? text : text.toLowerCase(), needle = exact ? pattern : pattern.toLowerCase();
+  const ranges = [];
+  for (let at = haystack.indexOf(needle);at >= 0; at = haystack.indexOf(needle, at + needle.length))
+    ranges.push([at, at + needle.length]);
+  return ranges;
 }
 
 // ../viewer/src/terminal/spans.ts
@@ -15799,6 +15829,10 @@ class Viewer {
   collapsed = new Map;
   pendingZ = false;
   viewed = new Set;
+  prompt = null;
+  search = null;
+  promptCount;
+  openRows = new WeakMap;
   rowCache = new WeakMap;
   revision = 0;
   measured;
@@ -15983,6 +16017,129 @@ class Viewer {
     this.setClosed(index, !state);
     this.reshape();
   }
+  get prompting() {
+    return this.prompt !== null;
+  }
+  searchState() {
+    if (this.prompt !== null) {
+      const snapshot2 = this.snapshot;
+      if (this.promptCount?.pattern !== this.prompt || this.promptCount.snapshot !== snapshot2)
+        this.promptCount = { pattern: this.prompt, snapshot: snapshot2, count: this.findMatches(this.prompt).length };
+      return { prompt: this.prompt, count: this.promptCount.count };
+    }
+    if (!this.search)
+      return;
+    const { pattern, matches, at } = this.search;
+    return { pattern, at: at + 1, total: matches.length, files: new Set(matches.map((match) => match.fileIndex)).size };
+  }
+  highlight(fileIndex, key, side) {
+    const pattern = this.prompt ?? this.search?.pattern;
+    if (!pattern)
+      return;
+    const on = this.prompt === null && this.search ? this.search.matches[this.search.at] : undefined;
+    return { pattern, current: !!on && on.fileIndex === fileIndex && on.key === key && on.side === side };
+  }
+  allOpenRows(index, file2, layout) {
+    let cached2 = this.openRows.get(file2);
+    if (cached2?.layout !== layout) {
+      cached2 = { layout, rows: rowsForFile(file2, index, layout, this.theme, new Set) };
+      this.openRows.set(file2, cached2);
+    }
+    return cached2.rows;
+  }
+  findMatches(pattern) {
+    const { files, inventory } = this.snapshot;
+    const layout = this.current().layout;
+    const matches = [];
+    for (const index of this.fileOrder(this.snapshot)) {
+      for (const _ of occurrences(filePath(inventory[index].file), pattern))
+        matches.push({ fileIndex: index, key: `${index}:header`, side: "right" });
+      const file2 = files[index];
+      if (!file2)
+        continue;
+      for (const row of this.allOpenRows(index, file2, layout)) {
+        const cells = row.cell ? [[row.cell.newLineNumber === undefined ? "left" : "right", row.cell, row.cell.newLineNumber ?? row.cell.oldLineNumber]] : [["left", row.left, row.left?.lineNumber], ["right", row.right, row.right?.lineNumber]];
+        for (const [side, cell, line] of cells) {
+          if (!cell || line === undefined)
+            continue;
+          for (const _ of occurrences(cell.spans.map((span2) => span2.text).join(""), pattern))
+            matches.push({ fileIndex: index, key: row.key, side, line });
+        }
+      }
+    }
+    return matches;
+  }
+  placeOf(order, layout, fileIndex, key, side, line) {
+    const file2 = this.snapshot.files[fileIndex];
+    const rows = file2 ? this.allOpenRows(fileIndex, file2, layout) : [];
+    const lineOf = (row2) => side === "left" ? row2.left?.lineNumber ?? row2.cell?.oldLineNumber : row2.right?.lineNumber ?? row2.cell?.newLineNumber;
+    let row = rows.findIndex((r) => r.key === key);
+    if (row < 0 && line !== undefined)
+      row = rows.findIndex((r) => (lineOf(r) ?? -1) >= line);
+    return order.indexOf(fileIndex) * 1e7 + Math.max(0, row);
+  }
+  commitSearch(pattern) {
+    this.prompt = null;
+    if (!pattern)
+      return this.emit();
+    const snapshot2 = this.snapshot, matches = this.findMatches(pattern);
+    this.search = { pattern, matches, at: -1, snapshot: snapshot2 };
+    if (!matches.length)
+      return this.emit();
+    const at = this.current(), top = positionAt(at.geometry, at.top);
+    const order = this.fileOrder(snapshot2);
+    const from = top ? this.placeOf(order, at.layout, top.fileIndex, top.key, top.side, top.line) : 0;
+    const next = matches.findIndex((match) => this.placeOf(order, at.layout, match.fileIndex, match.key, match.side, match.line) >= from);
+    this.search.at = next < 0 ? 0 : next;
+    this.goTo(matches[this.search.at]);
+  }
+  stepMatch(direction) {
+    const search = this.search;
+    if (!search)
+      return;
+    if (search.snapshot !== this.snapshot) {
+      const on = search.matches[search.at];
+      search.matches = this.findMatches(search.pattern);
+      search.snapshot = this.snapshot;
+      search.at = on ? search.matches.findIndex((m) => m.fileIndex === on.fileIndex && m.key === on.key && m.side === on.side) : -1;
+    }
+    const total = search.matches.length;
+    if (!total)
+      return this.emit();
+    search.at = (search.at + direction + total) % total;
+    this.goTo(search.matches[search.at]);
+  }
+  goTo(match) {
+    const file2 = this.snapshot.files[match.fileIndex];
+    if (file2 && match.line !== undefined) {
+      if (this.isClosed(match.fileIndex, file2))
+        this.closed.set(match.fileIndex, false);
+      if (file2.diff.type === "text") {
+        const hiding = hidingIds(file2.diff, match.side === "left" ? 0 : 1, match.line - 1, this.foldsOf(match.fileIndex, file2.diff));
+        if (hiding.length)
+          this.setFolds(match.fileIndex, file2.diff, hiding, false);
+      }
+    }
+    this.position = { key: match.key, fileIndex: match.fileIndex, offset: 0, side: match.side, line: match.line };
+    this.reshape();
+  }
+  type(key) {
+    const name = key.key, prompt = this.prompt;
+    if (name === "return" || name === "enter")
+      return this.commitSearch(prompt);
+    if (name === "escape" || key.ctrl && (name === "c" || name === "g"))
+      this.prompt = null;
+    else if (name === "backspace")
+      this.prompt = prompt ? prompt.slice(0, -1) : null;
+    else if (!key.ctrl && !key.meta) {
+      const text = name === "space" ? " " : name;
+      if ([...text].length !== 1)
+        return;
+      this.prompt = prompt + text;
+    } else
+      return;
+    this.emit();
+  }
   setFolds(fileIndex, diff2, ids, collapse) {
     const next = new Set(this.foldsOf(fileIndex, diff2));
     const close = collapse === "toggle" ? !next.has(ids[0]) : collapse;
@@ -16084,6 +16241,10 @@ class Viewer {
     const at = this.current();
     const page = at.size.rows, half = Math.max(1, Math.floor(at.size.rows / 2));
     const name = key.key;
+    if (this.prompt !== null) {
+      this.type(key);
+      return true;
+    }
     if (this.pendingZ) {
       this.pendingZ = false;
       if (!key.ctrl && !key.meta && name.length === 1 && "aocAOCRMjk".includes(name))
@@ -16183,6 +16344,16 @@ class Viewer {
         if (at.currentFile >= 0)
           this.toggleViewedFile(at.currentFile);
         break;
+      case "/":
+        this.prompt = "";
+        this.emit();
+        break;
+      case "n":
+        this.stepMatch(1);
+        break;
+      case "N":
+        this.stepMatch(-1);
+        break;
       default:
         return false;
     }
@@ -16191,6 +16362,39 @@ class Viewer {
 }
 
 // ../viewer/src/viewport/cell.ts
+function lightMatches(spans, lit, theme) {
+  const ranges = occurrences(spans.map((span2) => span2.text).join(""), lit.pattern);
+  if (!ranges.length)
+    return spans;
+  const result = [];
+  let offset = 0;
+  for (const span2 of spans) {
+    const end = offset + span2.text.length;
+    let cut = offset;
+    for (const [from, to] of ranges) {
+      if (to <= cut || from >= end)
+        continue;
+      const start = Math.max(from, cut), stop = Math.min(to, end);
+      if (start > cut)
+        result.push({ ...span2, text: span2.text.slice(cut - offset, start - offset) });
+      result.push({
+        ...span2,
+        text: span2.text.slice(start - offset, stop - offset),
+        bg: lit.current ? theme.searchCurrent : theme.searchMatch,
+        fg: lit.current ? theme.bg : span2.fg
+      });
+      cut = stop;
+    }
+    if (cut < end)
+      result.push({ ...span2, text: span2.text.slice(cut - offset) });
+    offset = end;
+  }
+  return result;
+}
+function litRuns(text, fg, bg, lit, theme) {
+  const spans = lit ? lightMatches([{ text, fg, bg }], lit, theme) : [{ text, fg, bg }];
+  return spans.map((span2) => ({ text: span2.text, fg: span2.fg ?? fg, bg: span2.bg ?? bg }));
+}
 var viewedBox = (viewed) => viewed ? "[✓]" : "[ ]";
 var viewedHint = (viewed) => ` ${viewed ? "Unmark viewed" : "Mark as viewed"} · V `;
 function chevron(fold) {
@@ -16198,13 +16402,15 @@ function chevron(fold) {
     return " ";
   return fold.collapsed ? "▸" : "▾";
 }
-function planCell(value, spans, width, unified, { theme, geometry, visualLine, focus, selected = false, read = false }) {
+function planCell(value, spans, width, unified, { theme, geometry, visualLine, focus, selected = false, read = false, search }) {
   const fold = value.fold;
   const washed = focus?.armed && value.body?.includes(focus.id);
   const changed = value.kind === "addition" || value.kind === "deletion";
   const bg = selected ? theme.highlight : value.kind === "addition" ? read ? theme.readAddition : theme.addition : value.kind === "deletion" ? read ? theme.readDeletion : theme.deletion : washed ? theme.focusWash : theme.bg;
   if (read && changed)
     spans = spans.map((span2) => ({ ...span2, fg: theme.muted, bg: undefined }));
+  if (search)
+    spans = lightMatches(spans, search, theme);
   const digits = geometry.gutter - 4;
   const number4 = (n) => `${visualLine ? "" : n ?? ""}`.padStart(digits);
   const numbers = unified ? ` ${number4(value.oldLineNumber)} ${number4(value.newLineNumber)} ` : ` ${number4("lineNumber" in value ? value.lineNumber : undefined)} `;
@@ -16430,7 +16636,7 @@ function paintCell(line, value, spans, width, unified, { fileIndex, ...options }
 
 // src/frame.ts
 var SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-var HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ files · q close";
+var HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · / search, n/N matches · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ files · q close";
 var SPLIT_COLUMNS = 180;
 var TREE_MIN_COLUMNS = 120;
 
@@ -16498,6 +16704,10 @@ class Pane {
       this.viewer.toggleLayout();
   }
   press(key) {
+    if (this.viewer.prompting) {
+      this.viewer.press(key);
+      return {};
+    }
     const plain = !key.ctrl && !key.meta;
     if (plain && key.key === "q")
       return { close: true };
@@ -16598,7 +16808,13 @@ class Pane {
       const glyph = shown ? viewer.isClosed(fileIndex, file2) ? "▸" : "▾" : statusGlyph(fileIndex);
       const directory = fit(`${glyph} ${path.slice(0, path.lastIndexOf("/") + 1)}`, pathWidth);
       const name = fit(path.slice(path.lastIndexOf("/") + 1), Math.max(0, pathWidth - measureTextWidth(directory)));
-      line.text("▌", viewed ? theme.muted : theme.accent, theme.fileHeader).text(directory, viewed ? theme.muted : theme.fileHeaderDir, theme.fileHeader).text(name, viewed ? theme.muted : shown ? theme.fg : theme.fileHeaderDir, theme.fileHeader, !viewed).fill(start + 1 + pathWidth, theme.fileHeader);
+      const lit = viewer.highlight(fileIndex, `${fileIndex}:header`, "right");
+      line.text("▌", viewed ? theme.muted : theme.accent, theme.fileHeader);
+      for (const run of litRuns(directory, viewed ? theme.muted : theme.fileHeaderDir, theme.fileHeader, lit, theme))
+        line.text(run.text, run.fg, run.bg);
+      for (const run of litRuns(name, viewed ? theme.muted : shown ? theme.fg : theme.fileHeaderDir, theme.fileHeader, lit, theme))
+        line.text(run.text, run.fg, run.bg, !viewed);
+      line.fill(start + 1 + pathWidth, theme.fileHeader);
       if (tally.length)
         line.text(tally[0], theme.addedText, theme.fileHeader).text(tally[1], theme.removedText, theme.fileHeader);
       if (hint)
@@ -16642,13 +16858,13 @@ class Pane {
             if (row.cell) {
               const side = row.cell.newLineNumber === undefined ? "left" : "right";
               this.cellsAt.set(y + 1, { key: row.key, side: () => side });
-              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, { ...paint, selected: selected === side });
+              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, { ...paint, selected: selected === side, search: viewer.highlight(row.fileIndex, row.key, side) });
             } else {
-              paintCell(line, row.left, measured.left[visualLine] ?? [], geometry.leftWidth, false, { ...paint, selected: selected === "left" });
+              paintCell(line, row.left, measured.left[visualLine] ?? [], geometry.leftWidth, false, { ...paint, selected: selected === "left", search: viewer.highlight(row.fileIndex, row.key, "left") });
               const divider = line.width;
               this.cellsAt.set(y + 1, { key: row.key, side: (x) => x < divider ? "left" : "right" });
               line.text("│", theme.muted, theme.bg);
-              paintCell(line, row.right, measured.right[visualLine] ?? [], geometry.rightWidth, false, { ...paint, selected: selected === "right" });
+              paintCell(line, row.right, measured.right[visualLine] ?? [], geometry.rightWidth, false, { ...paint, selected: selected === "right", search: viewer.highlight(row.fileIndex, row.key, "right") });
             }
           });
       }
@@ -16681,7 +16897,13 @@ class Pane {
     const status = new LineBuilder(colors, theme.bg);
     const errors3 = snapshot2.errors.length ? `${snapshot2.errors.length} errors  ` : "";
     const read = viewer.viewedFiles();
-    status.text(fit(`${this.message ? `${this.message} · ` : ""}${snapshot2.loaded}/${inventory.length} files · ${read.viewed}/${read.total} viewed ${snapshot2.complete ? "" : "loading… "}${errors3}` + ` [/] hunks · click ▾ or za fold · V viewed · drag selects · y/Y copy · h/l pan · ? keys`, size.columns), theme.muted);
+    const found = viewer.searchState();
+    if (found && "prompt" in found)
+      status.text(fit(`/${found.prompt}▏ · ${found.count} matches · ⏎ go · ctrl-c cancel`, size.columns), theme.fg);
+    else {
+      const searched = !found ? "" : `/${found.pattern} · ${found.total ? `match ${found.at} of ${found.total} in ${found.files} files · n/N` : "no matches"} · `;
+      status.text(fit(`${this.message ? `${this.message} · ` : ""}${searched}${snapshot2.loaded}/${inventory.length} files · ${read.viewed}/${read.total} viewed ${snapshot2.complete ? "" : "loading… "}${errors3}` + ` [/] hunks · / search · click ▾ or za fold · V viewed · drag selects · y/Y copy · h/l pan · ? keys`, size.columns), theme.muted);
+    }
     lines.push(status.line(size.columns));
     return { colors: colors.list, fg: colors.of(theme.fg), lines, hover: hover2 };
   }
