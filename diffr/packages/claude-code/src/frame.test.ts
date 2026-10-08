@@ -97,3 +97,55 @@ test("a scope's viewed box marks it and folds it; the file header's box and V ma
   expect(header(pane.frame(wide))).toContain("[ ]");
   expect(screen(pane.frame(wide)).at(-1)).toContain("0/1 viewed");
 });
+
+test("a drag across code lines selects them on one side; y copies them and Y copies a reference for an agent", async () => {
+  const { pane } = await load(scopes);
+  const at = (frame: Frame, content: string) => {
+    const y = screen(frame).findIndex((line) => line.includes(content));
+    // The second occurrence is the head side of the split.
+    return { y, x: screen(frame)[y]!.lastIndexOf(content) };
+  };
+  const start = at(pane.frame(wide), "for (const plugin");
+  pane.input({ select: start });
+  const end = at(pane.frame(wide), "plugin.enabled");
+  pane.input({ select: { ...end, extend: true } });
+  // A selection keeps to one side: the head's lines in the drag light up, the deleted line between them doesn't.
+  const highlight = loadBundledTheme("default-dark").highlight;
+  const frame = pane.frame(wide);
+  const lit = (content: string) => frame.lines[screen(frame).findIndex((line) => line.includes(content))]!
+    .segments.some(([, , bg]) => frame.colors[bg] === highlight);
+  expect(["for (const plugin", "Number(plugin.shape.lines)", "plugin.enabled"].map(lit)).toEqual([true, true, true]);
+  expect(lit("Number(plugin.lines)")).toBe(false);
+  const raw = pane.input({ press: { key: "y" } }).copy!;
+  expect(raw.what).toBe("source lines");
+  expect(raw.text.split("\n")[0]).toContain("for (const plugin");
+  expect(raw.text).toContain("plugin.enabled");
+  const forAgent = pane.input({ press: { key: "Y" } }).copy!;
+  expect(forAgent.what).toBe("for agent");
+  expect(forAgent.text).toMatch(/^\S+:\d+-\d+( at .+| in the git index \(staged\))?\n```/);
+  expect(forAgent.text).toContain(raw.text);
+  pane.copied("for agent");
+  expect(screen(pane.frame(wide)).at(-1)).toStartWith("Copied for agent");
+  pane.copied("for agent", "no-clipboard");
+  expect(screen(pane.frame(wide)).at(-1)).toStartWith("Not copied: no-clipboard");
+});
+
+test("y with nothing selected says how to select, and copies nothing", async () => {
+  const { pane } = await load(scopes);
+  pane.frame(wide);
+  expect(pane.input({ press: { key: "y" } })).toEqual({});
+  expect(screen(pane.frame(wide)).at(-1)).toStartWith("Drag across lines to select them first");
+});
+
+test("the pointer on a viewed box puts what a click does beside it", async () => {
+  const { pane } = await load(scopes);
+  const fold = cellAction(pane.frame(wide), "for (const plugin", "▾");
+  if (!("fold" in fold)) throw new Error("Expected the scope's chevron");
+  pane.hover({ file: fold.file, id: fold.fold, armed: false, box: true });
+  const scope = screen(pane.frame(wide)).find((line) => line.includes("for (const plugin"))!;
+  expect(scope).toMatch(/Mark as viewed · v +\[ \] *$/);
+  pane.hover({ file: 0, header: true });
+  expect(screen(pane.frame(wide)).find((line) => line.includes("▌"))).toMatch(/Mark as viewed · V +\[ \] *$/);
+  pane.input({ press: { key: "V" } });
+  expect(screen(pane.frame(wide)).find((line) => line.includes("▌"))).toMatch(/Unmark viewed · V +\[✓\] *$/);
+});

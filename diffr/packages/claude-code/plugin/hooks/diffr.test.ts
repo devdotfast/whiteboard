@@ -22,6 +22,11 @@ test("/diffr streams diffr into a pane where a click opens a file and keys switc
       isStdoutTruncated: false, isStderrTruncated: false } };
   });
   on("ui.open", async () => ({ value: { isPlaced: true } }));
+  const copied: { text: string; surface?: string }[] = [];
+  on("ui.copy", async ($, e) => {
+    copied.push({ text: e.text, surface: e.surface });
+    return { value: { isCopied: true } };
+  });
   on("process.spawn", async function* ($, e) {
     argv = e.argv;
     // Cut mid-record, as a pipe delivers it.
@@ -68,13 +73,15 @@ test("/diffr streams diffr into a pane where a click opens a file and keys switc
     await ui.post({ instance, inputs: [[1, { press: { key: "s" } }], [2, { press: { key: "s" } }]] }, { in: "diff-0" });
     expect((await lines(ui, "diff-0"))[0]).toContain("unified");
 
-    // Dragging the code pans it.
-    const code = shown.findIndex((line) => line.includes("export function greet"));
-    await ui.pointer({ type: "down", x: 40, y: code, button: "left", in: "diff-0" });
-    await ui.pointer({ type: "move", x: 30, y: code, button: "left", in: "diff-0" });
-    await ui.pointer({ type: "up", x: 30, y: code, button: "left", in: "diff-0" });
-    expect((await lines(ui, "diff-0"))[code]).not.toContain("export function");
-    await ui.key({ key: "H", in: "diff-0" });
+    // Dragging across code selects it, and Y copies it to the surface's clipboard for an agent.
+    const head = (await lines(ui, "diff-0")).findIndex((line) => line.includes("punctuation = "));
+    await ui.pointer({ type: "down", x: 10, y: head, button: "left", in: "diff-0" });
+    await ui.pointer({ type: "move", x: 10, y: head + 1, button: "left", in: "diff-0" });
+    await ui.pointer({ type: "up", x: 10, y: head + 1, button: "left", in: "diff-0" });
+    await ui.key({ key: "Y", in: "diff-0" });
+    expect(copied.at(-1)?.surface).toBe(surface);
+    expect(copied.at(-1)?.text).toMatch(/^src\/greet\.ts:1-2 at \w+\n```ts\nexport function greet\(name: string, punctuation = "!"\) \{\n  return "hello " \+ name \+ punctuation;\n```$/);
+    expect((await lines(ui, "diff-1")).at(-1)).toStartWith("Copied for agent");
 
     // Close the file again for the next surface.
     await ui.pointer({ type: "down", x: 6, y: load - 1, button: "left", in: "diff-0" });

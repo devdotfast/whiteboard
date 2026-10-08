@@ -197,6 +197,19 @@ test("v marks the scope under the pointer and V the file: boxes, counts, the tre
     await act(async () => { await t.mockMouse.moveTo(frame().split("\n")[y].indexOf("fn handle") + 2, y); await t.renderOnce(); });
     await t.waitFor(() => lineWith("fn handle").includes("[ ]"));
     expect(lineWith("fn handle")).toContain("+2 −2 [ ]");
+    // On the box itself, a hint says what a click does, and the box stays where it was.
+    const box = lineWith("fn handle").lastIndexOf("[ ]");
+    await act(async () => { await t.mockMouse.moveTo(box + 1, y); await t.renderOnce(); });
+    await t.waitFor(() => lineWith("fn handle").includes("Mark as viewed · v"));
+    expect(lineWith("fn handle").lastIndexOf("[ ]")).toBe(box);
+    const header = frame().split("\n").findIndex(l => l.includes("demo.ts") && l.includes("[ ]"));
+    const headerBox = frame().split("\n")[header].lastIndexOf("[ ]");
+    await act(async () => { await t.mockMouse.moveTo(headerBox + 1, header); await t.renderOnce(); });
+    await t.waitFor(() => lineWith("demo.ts").includes("Mark as viewed · V"));
+    expect(frame().split("\n")[header].lastIndexOf("[ ]")).toBe(headerBox);
+    // Back on the scope, so v marks it.
+    await act(async () => { await t.mockMouse.moveTo(frame().split("\n")[y].indexOf("fn handle") + 2, y); await t.renderOnce(); });
+    await t.waitFor(() => !frame().includes("Mark as viewed"));
     await press("v");
     await t.waitFor(() => frame().includes("1/1 viewed"));
     expect(lineWith("fn handle")).toContain("✓");
@@ -204,8 +217,8 @@ test("v marks the scope under the pointer and V the file: boxes, counts, the tre
     expect(lineWith("demo.ts")).toContain("[✓]");
     expect(lineWith("demo.ts")).not.toContain("+2");
     // A click on the file header's box unmarks the file and brings its counts back.
-    const header = frame().split("\n").findIndex(l => l.includes("demo.ts") && l.includes("[✓]"));
-    await act(async () => { await t.mockMouse.click(frame().split("\n")[header].indexOf("[✓]") + 1, header); await t.renderOnce(); });
+    const viewedHeader = frame().split("\n").findIndex(l => l.includes("demo.ts") && l.includes("[✓]"));
+    await act(async () => { await t.mockMouse.click(frame().split("\n")[viewedHeader].indexOf("[✓]") + 1, viewedHeader); await t.renderOnce(); });
     await t.waitFor(() => frame().includes("0/1 viewed"));
     expect(lineWith("demo.ts")).toContain("+2 −2 [ ]");
   } finally { await act(async () => { t.renderer.destroy(); }); }

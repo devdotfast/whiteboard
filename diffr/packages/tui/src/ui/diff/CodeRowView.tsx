@@ -82,7 +82,11 @@ export const CodeRowView = memo(function CodeRowView({
           event.stopPropagation();
           onFold(id, event.modifiers.alt);
         }}
-        onMouseMove={(event) => { onExtend(); onHover(targetAt(plan.hovers, column(event))); }}
+        onMouseMove={(event) => {
+          onExtend();
+          const boxed = mark(event);
+          onHover(boxed !== undefined ? { id: boxed, armed: false, box: true } : targetAt(plan.hovers, column(event)));
+        }}
         onMouseOut={() => onHover(undefined)}
       >
         <text width={width} height={1} content={styled(plan.runs)} selectable={false} />

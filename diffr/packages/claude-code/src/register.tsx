@@ -90,7 +90,7 @@ export function register(on: On, options: PluginOptions): void {
     return (
       <Box flexDirection="column" width={columns}>
         {bands.map((lines, i) => (
-          <Client key={`diff-${i}`} module="./view.js" props={{ ...frame, lines, acks: Object.fromEntries(acks) }}
+          <Client key={`diff-${i}`} module="./view.js" props={{ ...frame, lines, offset: i * BAND, acks: Object.fromEntries(acks) }}
             width={columns} height={lines.length} />
         ))}
       </Box>
@@ -104,9 +104,14 @@ export function register(on: On, options: PluginOptions): void {
     for (const [seq, input] of post.inputs) {
       if (seq <= (acks.get(post.instance) ?? 0)) continue;
       acks.set(post.instance, seq);
-      if (pane.input(input)) {
+      const outcome = pane.input(input);
+      if (outcome.close) {
         await $.ui.close({ id: PANE });
         return {};
+      }
+      if (outcome.copy) {
+        const copied = await $.ui.copy({ text: outcome.copy.text, surface: e.surface });
+        pane.copied(outcome.copy.what, copied.isCopied ? undefined : copied.reason);
       }
     }
     // Redraw every band, not just the one that posted.

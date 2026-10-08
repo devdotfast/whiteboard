@@ -16,7 +16,7 @@ var __export = (target, all) => {
 // src/view.tsx
 var locals = new WeakMap;
 var at = (targets, x) => targets?.find(([from, to]) => x >= from && x < to)?.[2];
-var same = (a, b) => a === b || a !== null && b !== null && a.file === b.file && a.id === b.id && a.armed === b.armed;
+var same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 var DiffView = (props, surface) => {
   const frame = props;
   const { Box, Text } = surface.elements;
@@ -38,19 +38,15 @@ var DiffView = (props, surface) => {
   };
   surface.onPointer((event) => {
     const line2 = frame.lines[event.y];
+    const y = (frame.offset ?? 0) + event.y;
     if (event.type === "down" && event.button === "left") {
       const act = at(line2?.hits, event.x);
       if (act)
         send(event.alt ? { act, alt: true } : { act });
       else
-        state.dragFrom = event.x;
-    } else if (event.type === "move" && event.button === "left" && state.dragFrom !== undefined) {
-      const columns = state.dragFrom - event.x;
-      state.dragFrom = event.x;
-      if (columns)
-        send({ pan: columns });
-    } else if (event.type === "up") {
-      state.dragFrom = undefined;
+        send({ select: { x: event.x, y } });
+    } else if (event.type === "move" && event.button === "left") {
+      send({ select: { x: event.x, y, extend: true } });
     } else if (event.type === "move" && !event.button || event.type === "leave") {
       const hover = event.type === "leave" ? null : at(line2?.hovers, event.x) ?? null;
       if (!same(hover, frame.hover))

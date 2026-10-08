@@ -16,12 +16,21 @@ export interface Size {
   rows: number;
 }
 
-/** `armed`: a click would fold or open the scope. */
-export interface Hover {
+/** The pointer on a scope. `armed`: a click would fold or open it. `box`: it is on the scope's viewed box. */
+export interface ScopeHover {
   file: number;
   id: number;
   armed: boolean;
+  box?: true;
 }
+
+/** The pointer on a file header's viewed box. */
+export interface HeaderHover {
+  file: number;
+  header: true;
+}
+
+export type Hover = ScopeHover | HeaderHover;
 
 /** A key as frontends report it; a shifted letter arrives as its capital. */
 export interface KeyPress {
@@ -189,7 +198,7 @@ export class Viewer {
     const thumbHeight = Math.max(1, Math.floor((viewportHeight * viewportHeight) / Math.max(viewportHeight, geometry.height)));
     const thumbTop = maxScroll ? Math.round((top / maxScroll) * (viewportHeight - thumbHeight)) : 0;
     const topFold = viewport[0] && rowFold(viewport[0].row);
-    const scope = this.hover ? { file: this.hover.file, id: this.hover.id }
+    const scope = this.hover && "id" in this.hover ? { file: this.hover.file, id: this.hover.id }
       : topFold && { file: viewport[0]!.row.fileIndex, id: topFold.id };
     return { size, snapshot, theme: this.theme, layout, wrap: this.wrap, horizontal: this.horizontal, hover: this.hover,
       rows, geometry, top, maxScroll, viewport, currentFile, sticky, thumb: { top: thumbTop, height: thumbHeight }, scope };
@@ -273,7 +282,9 @@ export class Viewer {
     const diff = this.textDiff(index);
     const boxed = !!fold && scope?.file === index && scope.id === fold.id && !!diff
       && (side === 1 || !this.scopeLinesOf(diff, fold.id)[1].size);
-    return { read, foldViewed, box: boxed ? this.scopeProgress(index, fold!.id) : undefined };
+    const hover = this.hover;
+    const hint = boxed && !!hover && "id" in hover && !!hover.box && hover.file === index && hover.id === fold!.id;
+    return { read, foldViewed, box: boxed ? this.scopeProgress(index, fold!.id) : undefined, hint };
   }
 
   /** Lays out again at the last size, so commands use the current geometry. */
@@ -411,7 +422,7 @@ export class Viewer {
   }
 
   setHover(hover: Hover | null) {
-    if (hover?.file === this.hover?.file && hover?.id === this.hover?.id && hover?.armed === this.hover?.armed) return;
+    if (JSON.stringify(hover) === JSON.stringify(this.hover)) return;
     this.hover = hover;
     this.emit();
   }

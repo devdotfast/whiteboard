@@ -14446,7 +14446,10 @@ var action = exports_external.union([
   exports_external.strictObject({ scrub: exports_external.number().int() }),
   exports_external.strictObject({ layout: exports_external.literal(true) })
 ]);
-var hover = exports_external.strictObject({ file: exports_external.number().int(), id: exports_external.number().int(), armed: exports_external.boolean() });
+var hover = exports_external.union([
+  exports_external.strictObject({ file: exports_external.number().int(), id: exports_external.number().int(), armed: exports_external.boolean(), box: exports_external.literal(true).optional() }),
+  exports_external.strictObject({ file: exports_external.number().int(), header: exports_external.literal(true) })
+]);
 var keyPress = exports_external.object({
   key: exports_external.string(),
   ctrl: exports_external.literal(true).optional(),
@@ -14456,7 +14459,7 @@ var keyPress = exports_external.object({
 var input = exports_external.union([
   exports_external.strictObject({ act: action, alt: exports_external.literal(true).optional() }),
   exports_external.strictObject({ press: keyPress }),
-  exports_external.strictObject({ pan: exports_external.number().int() })
+  exports_external.strictObject({ select: exports_external.strictObject({ x: exports_external.number().int(), y: exports_external.number().int(), extend: exports_external.literal(true).optional() }) })
 ]);
 var post = exports_external.strictObject({
   instance: exports_external.string(),
@@ -15994,7 +15997,7 @@ class Viewer {
     const thumbHeight = Math.max(1, Math.floor(viewportHeight * viewportHeight / Math.max(viewportHeight, geometry.height)));
     const thumbTop = maxScroll ? Math.round(top / maxScroll * (viewportHeight - thumbHeight)) : 0;
     const topFold = viewport[0] && rowFold(viewport[0].row);
-    const scope = this.hover ? { file: this.hover.file, id: this.hover.id } : topFold && { file: viewport[0].row.fileIndex, id: topFold.id };
+    const scope = this.hover && "id" in this.hover ? { file: this.hover.file, id: this.hover.id } : topFold && { file: viewport[0].row.fileIndex, id: topFold.id };
     return {
       size,
       snapshot: snapshot2,
@@ -16081,7 +16084,9 @@ class Viewer {
     const foldViewed = !!fold?.collapsed && this.scopeProgress(index, fold.id)?.state === "viewed";
     const diff2 = this.textDiff(index);
     const boxed = !!fold && scope?.file === index && scope.id === fold.id && !!diff2 && (side === 1 || !this.scopeLinesOf(diff2, fold.id)[1].size);
-    return { read, foldViewed, box: boxed ? this.scopeProgress(index, fold.id) : undefined };
+    const hover2 = this.hover;
+    const hint = boxed && !!hover2 && "id" in hover2 && !!hover2.box && hover2.file === index && hover2.id === fold.id;
+    return { read, foldViewed, box: boxed ? this.scopeProgress(index, fold.id) : undefined, hint };
   }
   current() {
     if (!this.size)
@@ -16206,7 +16211,7 @@ class Viewer {
     this.emit();
   }
   setHover(hover2) {
-    if (hover2?.file === this.hover?.file && hover2?.id === this.hover?.id && hover2?.armed === this.hover?.armed)
+    if (JSON.stringify(hover2) === JSON.stringify(this.hover))
       return;
     this.hover = hover2;
     this.emit();
@@ -16333,6 +16338,7 @@ class Viewer {
 
 // ../viewer/src/viewport/cell.ts
 var viewedBox = (progress) => progress.state === "viewed" ? "[✓]" : progress.state === "partial" ? "[-]" : "[ ]";
+var viewedHint = (progress, key) => ` ${progress.state === "viewed" ? "Unmark viewed" : "Mark as viewed"} · ${key} `;
 function clip(runs, width) {
   const result = [];
   let room = width;
@@ -16378,10 +16384,11 @@ function planCell(value, spans, width, unified, { theme, geometry, visualLine, f
       parts.push([`+${remaining.added}`, theme.addedText]);
     if (remaining.removed)
       parts.push([`−${remaining.removed}`, theme.removedText]);
-    parts.push([viewedBox(marks.box), state === "unread" ? theme.fg : theme.accent]);
     for (const [text, fg] of parts)
       suffix.push({ text: " ", fg, bg }, { text, fg, bg });
-    suffix.push({ text: " ", fg: theme.fg, bg });
+    if (marks.hint)
+      suffix.push({ text: " ", fg: theme.fg, bg }, { text: viewedHint(marks.box, "v"), fg: theme.bg, bg: theme.accent });
+    suffix.push({ text: " ", fg: theme.fg, bg }, { text: viewedBox(marks.box), fg: state === "unread" ? theme.fg : theme.accent, bg }, { text: " ", fg: theme.fg, bg });
   }
   const suffixWidth = suffix.reduce((n, run) => n + measureTextWidth(run.text), 0);
   const limit = Math.max(0, width - suffixWidth);
@@ -16439,6 +16446,87 @@ function planCell(value, spans, width, unified, { theme, geometry, visualLine, f
     hovers.push([0, width, { id: value.scope, armed: false }]);
   const boxes = suffix.length && fold ? [[limit, width, fold.id]] : [];
   return { bg, runs: fitted, hits, hovers, marks: boxes };
+}
+
+// ../viewer/src/document/selection.ts
+function selectionBounds(rows, selection) {
+  if (!selection)
+    return [-1, -1];
+  const a = rows.findIndex((r) => r.key === selection.anchor), b = rows.findIndex((r) => r.key === selection.end);
+  return a < 0 || b < 0 ? [-1, -1] : [Math.min(a, b), Math.max(a, b)];
+}
+var lineNumber = (row, side) => side === "left" ? row.left?.lineNumber ?? row.cell?.oldLineNumber : row.right?.lineNumber ?? row.cell?.newLineNumber;
+function whereToFind(version2) {
+  switch (version2.type) {
+    case "working_tree":
+      return "";
+    case "index":
+      return " in the git index (staged)";
+    case "revision":
+    case "path":
+      return ` at ${snapshotLabel(version2)}`;
+    case "empty_tree":
+      throw new Error("The empty tree has no source to copy");
+  }
+}
+function agentReference(files, comparison, rows, selection) {
+  const [a, b] = selectionBounds(rows, selection);
+  const ranges = new Map;
+  for (const row of rows.slice(a < 0 ? rows.length : a, b + 1)) {
+    const n = lineNumber(row, selection.side);
+    if (n === undefined)
+      continue;
+    const range = ranges.get(row.fileIndex);
+    ranges.set(row.fileIndex, range ? [Math.min(range[0], n), Math.max(range[1], n)] : [n, n]);
+  }
+  const left = selection.side === "left";
+  return [...ranges].map(([fileIndex, [start, end]]) => {
+    const file2 = files[fileIndex];
+    const source2 = file2?.diff.type === "text" ? left ? file2.diff.lhs : file2.diff.rhs : undefined;
+    const path = left ? file2?.file.lhs?.path : file2?.file.rhs?.path;
+    if (!source2 || path === undefined)
+      throw new Error(`File ${fileIndex} has no ${selection.side} source to copy`);
+    const code = sourceLines(source2.text).slice(start - 1, end).join(`
+`);
+    const fence = "`".repeat(Math.max(3, ...[...code.matchAll(/`+/g)].map((run) => run[0].length + 1)));
+    const language = /\.([^./]+)$/.exec(path)?.[1] ?? "";
+    const lines = start === end ? `${start}` : `${start}-${end}`;
+    const where = whereToFind(left ? comparison.lhs : comparison.rhs);
+    return `${path}:${lines}${where}
+${fence}${language}
+${code}
+${fence}`;
+  }).join(`
+
+`);
+}
+function copySelection(files, rows, selection) {
+  const [a, b] = selectionBounds(rows, selection), seen = new Set, result = [];
+  const sources = new Map;
+  for (const row of rows.slice(a < 0 ? rows.length : a, b + 1)) {
+    const n = lineNumber(row, selection.side);
+    if (n === undefined)
+      continue;
+    const key = `${row.fileIndex}:${n}`;
+    if (seen.has(key))
+      continue;
+    seen.add(key);
+    const diff2 = files[row.fileIndex]?.diff;
+    if (!diff2 || diff2.type !== "text")
+      continue;
+    const source2 = selection.side === "left" ? diff2.lhs : diff2.rhs;
+    if (!source2)
+      continue;
+    let lines = sources.get(row.fileIndex);
+    if (!lines) {
+      lines = source2.text.split(`
+`);
+      sources.set(row.fileIndex, lines);
+    }
+    result.push(lines[n - 1]);
+  }
+  return result.join(`
+`);
 }
 
 // src/paint.ts
@@ -16528,13 +16616,15 @@ function paintCell(line, value, spans, width, unified, { fileIndex, ...options }
     line.hit(start + from, start + to, { viewed: id, file: fileIndex });
   for (const [from, to, id] of plan.hits)
     line.hit(start + from, start + to, { fold: id, file: fileIndex });
+  for (const [from, to, id] of plan.marks)
+    line.hover(start + from, start + to, { file: fileIndex, id, armed: false, box: true });
   for (const [from, to, focus] of plan.hovers)
     line.hover(start + from, start + to, { file: fileIndex, ...focus });
 }
 
 // src/frame.ts
 var SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-var HELP = "j/k scroll · h/l pan (H/L faster, or drag) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · v scope viewed · V file viewed · c context · s layout · w wrap · t theme · \\ files · q close";
+var HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · v scope viewed · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ files · q close";
 var SPLIT_COLUMNS = 180;
 var TREE_MIN_COLUMNS = 120;
 
@@ -16547,6 +16637,9 @@ class Pane {
   closedDirectories = new Set;
   treeScroll = 0;
   treeFollows;
+  selection = null;
+  selecting = false;
+  cellsAt = new Map;
   constructor(store, theme) {
     this.store = store;
     this.viewer = new Viewer(store, theme, SPLIT_COLUMNS);
@@ -16560,14 +16653,26 @@ class Pane {
   input(input2) {
     if ("act" in input2)
       this.act(input2.act, input2.alt === true);
-    else if ("pan" in input2)
-      this.viewer.pan(input2.pan);
+    else if ("select" in input2)
+      this.select(input2.select);
     else
       return this.press(input2.press);
-    return false;
+    return {};
+  }
+  copied(what, refusal) {
+    this.message = refusal ? `Not copied: ${refusal}` : `Copied ${what}`;
+  }
+  select({ x, y, extend: extend2 }) {
+    const cell = this.cellsAt.get(y);
+    if (!extend2) {
+      this.selecting = !!cell;
+      this.selection = cell ? { anchor: cell.key, end: cell.key, side: cell.side(x) } : null;
+    } else if (this.selecting && this.selection && cell)
+      this.selection = { ...this.selection, end: cell.key };
   }
   act(action2, recursive) {
     this.message = "";
+    this.selecting = false;
     if ("fold" in action2)
       this.viewer.setFold(action2.file, action2.fold, "toggle", recursive);
     else if ("viewed" in action2)
@@ -16591,15 +16696,36 @@ class Pane {
   press(key) {
     const plain = !key.ctrl && !key.meta;
     if (plain && key.key === "q")
-      return true;
+      return { close: true };
     this.message = plain && key.key === "?" ? HELP : "";
-    if (plain && key.key === "\\") {
-      if (!this.size)
-        throw new Error("The pane has not been drawn yet");
+    if (!this.size)
+      throw new Error("The pane has not been drawn yet");
+    if (plain && (key.key === "y" || key.key === "Y"))
+      return this.copy(key.key === "Y");
+    if (plain && key.key === "\\")
       this.showTree = !(this.showTree ?? this.size.columns >= TREE_MIN_COLUMNS);
-    } else
+    else {
+      const chord = this.viewer.chording;
       this.viewer.press(key);
-    return false;
+      if (!chord && plain && (key.key === "s" || key.key === "c"))
+        this.selection = null;
+    }
+    return {};
+  }
+  copy(forAgent) {
+    if (!this.selection) {
+      this.message = "Drag across lines to select them first";
+      return {};
+    }
+    const { snapshot: snapshot2, rows } = this.viewer.lay(this.layoutSize(this.size));
+    if (!snapshot2.comparison)
+      throw new Error("A selection exists before diffr named the comparison");
+    const text = forAgent ? agentReference(snapshot2.files, snapshot2.comparison, rows, this.selection) : copySelection(snapshot2.files, rows, this.selection);
+    if (!text) {
+      this.message = "The selection holds no source lines";
+      return {};
+    }
+    return { copy: { text, what: forAgent ? "for agent" : "source lines" } };
   }
   scroll(by, wheelColumn) {
     if (wheelColumn === undefined)
@@ -16618,12 +16744,15 @@ class Pane {
   bodyRows(size) {
     return Math.max(1, size.rows - 2);
   }
+  layoutSize(size) {
+    return { columns: Math.max(10, size.columns - this.sidebar(size) - 1), rows: this.bodyRows(size) };
+  }
   frame(size) {
     this.size = size;
     const viewer = this.viewer;
     const sidebar = this.sidebar(size);
-    const contentWidth = Math.max(10, size.columns - sidebar - 1);
-    const at = viewer.lay({ columns: contentWidth, rows: this.bodyRows(size) });
+    const contentWidth = this.layoutSize(size).columns;
+    const at = viewer.lay(this.layoutSize(size));
     const { snapshot: snapshot2, theme, hover: hover2, horizontal, layout, geometry, top, viewport, currentFile, sticky, thumb, scope } = at;
     const viewportHeight = at.size.rows;
     const { inventory, files, failures } = snapshot2;
@@ -16664,7 +16793,8 @@ class Pane {
       const left = progress?.remaining ?? count;
       const tally = shown && !viewed ? [` +${left.added}`, ` −${left.removed}`] : [];
       const box = progress ? ` ${viewedBox(progress)}` : "";
-      const statsWidth = shown ? measureTextWidth(tally.join("") + box) + 1 : 0;
+      const hint = progress && hover2 && "header" in hover2 && hover2.file === fileIndex ? viewedHint(progress, "V") : "";
+      const statsWidth = shown ? measureTextWidth(tally.join("") + (hint && ` ${hint}`) + box) + 1 : 0;
       const pathWidth = Math.max(1, contentWidth - statsWidth - 1);
       const glyph = shown ? viewer.isClosed(fileIndex, file2) ? "▸" : "▾" : statusGlyph(fileIndex);
       const directory = fit(`${glyph} ${path.slice(0, path.lastIndexOf("/") + 1)}`, pathWidth);
@@ -16672,13 +16802,23 @@ class Pane {
       line.text("▌", viewed ? theme.muted : theme.accent, theme.fileHeader).text(directory, viewed ? theme.muted : theme.fileHeaderDir, theme.fileHeader).text(name, viewed ? theme.muted : shown ? theme.fg : theme.fileHeaderDir, theme.fileHeader, !viewed).fill(start + 1 + pathWidth, theme.fileHeader);
       if (tally.length)
         line.text(tally[0], theme.addedText, theme.fileHeader).text(tally[1], theme.removedText, theme.fileHeader);
+      if (hint)
+        line.text(" ", theme.fg, theme.fileHeader).text(hint, theme.bg, theme.accent);
       if (progress) {
         line.hit(line.width, line.width + measureTextWidth(box), { viewedFile: fileIndex });
+        line.hover(line.width, line.width + measureTextWidth(box), { file: fileIndex, header: true });
         line.text(box, progress.state === "unread" ? theme.fg : theme.accent, theme.fileHeader);
       }
       line.fill(start + contentWidth, theme.fileHeader);
       if (shown)
         line.hit(start, start + contentWidth, { file: fileIndex });
+    };
+    this.cellsAt.clear();
+    const rowIndex = new Map(at.rows.map((row, index) => [row.key, index]));
+    const [selectionStart, selectionEnd] = selectionBounds(at.rows, this.selection);
+    const selectedSide = (key) => {
+      const index = rowIndex.get(key);
+      return index >= selectionStart && index <= selectionEnd ? this.selection.side : undefined;
     };
     const body = [];
     for (const measured of viewport) {
@@ -16696,16 +16836,21 @@ class Pane {
             line.fill(start + contentWidth, theme.bg);
           });
         else
-          body.push((line) => {
-            const focus = hover2?.file === row.fileIndex ? hover2 : undefined;
+          body.push((line, y) => {
+            const focus = hover2?.file === row.fileIndex && "id" in hover2 ? hover2 : undefined;
             const paint = { theme, geometry, fileIndex: row.fileIndex, visualLine, focus };
+            const selected = selectedSide(row.key);
             if (row.cell) {
-              const marks = viewer.cellMarks(row.fileIndex, row.cell, row.cell.newLineNumber === undefined ? 0 : 1, scope);
-              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, { ...paint, marks });
+              const side = row.cell.newLineNumber === undefined ? "left" : "right";
+              this.cellsAt.set(y + 1, { key: row.key, side: () => side });
+              const marks = viewer.cellMarks(row.fileIndex, row.cell, side === "left" ? 0 : 1, scope);
+              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, { ...paint, marks, selected: selected === side });
             } else {
-              paintCell(line, row.left, measured.left[visualLine] ?? [], geometry.leftWidth, false, { ...paint, marks: viewer.cellMarks(row.fileIndex, row.left, 0, scope) });
+              paintCell(line, row.left, measured.left[visualLine] ?? [], geometry.leftWidth, false, { ...paint, marks: viewer.cellMarks(row.fileIndex, row.left, 0, scope), selected: selected === "left" });
+              const divider = line.width;
+              this.cellsAt.set(y + 1, { key: row.key, side: (x) => x < divider ? "left" : "right" });
               line.text("│", theme.muted, theme.bg);
-              paintCell(line, row.right, measured.right[visualLine] ?? [], geometry.rightWidth, false, { ...paint, marks: viewer.cellMarks(row.fileIndex, row.right, 1, scope) });
+              paintCell(line, row.right, measured.right[visualLine] ?? [], geometry.rightWidth, false, { ...paint, marks: viewer.cellMarks(row.fileIndex, row.right, 1, scope), selected: selected === "right" });
             }
           });
       }
@@ -16729,7 +16874,7 @@ class Pane {
         }
         line.fill(sidebar - 1).text("│", theme.muted);
       }
-      body[y]?.(line);
+      body[y]?.(line, y);
       line.fill(sidebar + contentWidth);
       const onThumb = y >= thumb.top && y < thumb.top + thumb.height;
       line.hit(line.width, line.width + 1, { scrub: y }).text(" ", theme.muted, onThumb ? theme.muted : theme.bg);
@@ -16738,7 +16883,7 @@ class Pane {
     const status = new LineBuilder(colors, theme.bg);
     const errors3 = snapshot2.errors.length ? `${snapshot2.errors.length} errors  ` : "";
     const read = viewer.viewedFiles();
-    status.text(fit(`${snapshot2.loaded}/${inventory.length} files · ${read.viewed}/${read.total} viewed ${snapshot2.complete ? "" : "loading… "}${errors3}` + ` [/] hunks · click ▾ or za fold · v/V viewed · h/l or drag to pan · w wrap · ? keys ${this.message}`, size.columns), theme.muted);
+    status.text(fit(`${this.message ? `${this.message} · ` : ""}${snapshot2.loaded}/${inventory.length} files · ${read.viewed}/${read.total} viewed ${snapshot2.complete ? "" : "loading… "}${errors3}` + ` [/] hunks · click ▾ or za fold · v/V viewed · drag selects · y/Y copy · h/l pan · ? keys`, size.columns), theme.muted);
     lines.push(status.line(size.columns));
     return { colors: colors.list, fg: colors.of(theme.fg), lines, hover: hover2 };
   }
@@ -16830,7 +16975,7 @@ function register(on, options) {
     }, bands.map((lines, i) => /* @__PURE__ */ h(Client, {
       key: `diff-${i}`,
       module: "./view.js",
-      props: { ...frame, lines, acks: Object.fromEntries(acks) },
+      props: { ...frame, lines, offset: i * BAND, acks: Object.fromEntries(acks) },
       width: columns,
       height: lines.length
     })));
@@ -16845,9 +16990,14 @@ function register(on, options) {
       if (seq <= (acks.get(post2.instance) ?? 0))
         continue;
       acks.set(post2.instance, seq);
-      if (pane.input(input2)) {
+      const outcome = pane.input(input2);
+      if (outcome.close) {
         await $.ui.close({ id: PANE });
         return {};
+      }
+      if (outcome.copy) {
+        const copied = await $.ui.copy({ text: outcome.copy.text, surface: e.surface });
+        pane.copied(outcome.copy.what, copied.isCopied ? undefined : copied.reason);
       }
     }
     $.ui.invalidate("ui.render");

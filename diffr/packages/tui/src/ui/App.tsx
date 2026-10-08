@@ -30,7 +30,7 @@ import { visibleRows } from "@diffr/viewer/viewport/geometry";
 import { sanitizeTerminalLine } from "@diffr/viewer/terminal/sanitize";
 import { measureTextWidth, sliceTextByWidth } from "@diffr/viewer/terminal/text";
 import { Viewer, type KeyPress } from "@diffr/viewer/viewer";
-import { viewedBox } from "@diffr/viewer/viewport/cell";
+import { viewedBox, viewedHint } from "@diffr/viewer/viewport/cell";
 const fit = (text: string, width: number) =>
   sliceTextByWidth(text, 0, width).text;
 /** Shifted letters become capitals; cmd counts as meta. */
@@ -173,7 +173,9 @@ export function App({
     const left = progress?.remaining ?? count;
     const tally = loaded && !viewed ? [` +${left!.added}`, ` −${left!.removed}`] : [];
     const box = progress ? ` ${viewedBox(progress)}` : "";
-    const statsWidth = loaded ? measureTextWidth(tally.join("") + box) + 1 : 0;
+    // While the pointer is on the box, say what a click does beside it.
+    const hint = progress && hovered && "header" in hovered && hovered.file === fileIndex ? ` ${viewedHint(progress, "V")}` : "";
+    const statsWidth = loaded ? measureTextWidth(tally.join("") + hint + box) + 1 : 0;
     const pathWidth = Math.max(1, contentWidth - statsWidth - 1);
     const glyph = loaded ? (viewer.isClosed(fileIndex, file) ? "▸" : "▾") : statusGlyph(fileIndex);
     const directory = fit(`${glyph} ${path.slice(0, path.lastIndexOf("/") + 1)}`, pathWidth);
@@ -190,7 +192,13 @@ export function App({
         <text fg={theme.addedText} selectable={false}>{tally[0]}</text>
         <text fg={theme.removedText} selectable={false}>{tally[1]}</text>
       </>}
+      {hint && <>
+        <text selectable={false}> </text>
+        <text fg={theme.bg} bg={theme.accent} selectable={false}>{hint.slice(1)}</text>
+      </>}
       {progress && <text fg={progress.state === "unread" ? theme.fg : theme.accent} selectable={false}
+        onMouseMove={() => viewer.setHover({ file: fileIndex, header: true })}
+        onMouseOut={() => viewer.setHover(null)}
         onMouseUp={(event) => { event.stopPropagation(); viewer.toggleViewedFile(fileIndex); }}>{box}</text>}
       {loaded && <text selectable={false}> </text>}
     </box>;
@@ -243,7 +251,7 @@ export function App({
               if (dragging.current)
                 setSelection((s) => (s ? { ...s, end: row.key } : s));
             }}
-            focus={hovered?.file === row.fileIndex ? hovered : undefined}
+            focus={hovered?.file === row.fileIndex && "id" in hovered ? hovered : undefined}
             onHover={focus => viewer.setHover(focus ? { file: row.fileIndex, ...focus } : null)}
             onFold={(id, recursive) => viewer.setFold(row.fileIndex, id, "toggle", recursive)}
             marksOf={(value, side) => viewer.cellMarks(row.fileIndex, value, side === "left" ? 0 : 1, scope)}

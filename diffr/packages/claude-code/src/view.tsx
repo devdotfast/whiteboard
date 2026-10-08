@@ -9,8 +9,6 @@ interface Local {
   seq: number;
   /** Inputs the hooks module has not acknowledged yet. */
   pending: [number, Input][];
-  /** The last drag column while panning. */
-  dragFrom?: number;
 }
 
 /** Keyed by surface, which outlives redraws, so inputs between redraws are not lost. */
@@ -19,8 +17,7 @@ const locals = new WeakMap<ClientSurface<unknown>, Local>();
 const at = <T,>(targets: Target<T>[] | undefined, x: number) =>
   targets?.find(([from, to]) => x >= from && x < to)?.[2];
 
-const same = (a: Hover | null, b: Hover | null) =>
-  a === b || (a !== null && b !== null && a.file === b.file && a.id === b.id && a.armed === b.armed);
+const same = (a: Hover | null, b: Hover | null) => JSON.stringify(a) === JSON.stringify(b);
 
 const DiffView: ClientModule = (props, surface) => {
   const frame = props as unknown as Frame;
@@ -43,17 +40,14 @@ const DiffView: ClientModule = (props, surface) => {
   // Listeners are set on every draw so they always read the frame on screen.
   surface.onPointer((event) => {
     const line = frame.lines[event.y];
+    // Lines past this band's own reach the hooks module by their place in the whole frame.
+    const y = (frame.offset ?? 0) + event.y;
     if (event.type === "down" && event.button === "left") {
       const act = at(line?.hits, event.x);
       if (act) send(event.alt ? { act, alt: true } : { act });
-      else state.dragFrom = event.x;
-    } else if (event.type === "move" && event.button === "left" && state.dragFrom !== undefined) {
-      // Dragging left pans right.
-      const columns = state.dragFrom - event.x;
-      state.dragFrom = event.x;
-      if (columns) send({ pan: columns });
-    } else if (event.type === "up") {
-      state.dragFrom = undefined;
+      else send({ select: { x: event.x, y } });
+    } else if (event.type === "move" && event.button === "left") {
+      send({ select: { x: event.x, y, extend: true } });
     } else if ((event.type === "move" && !event.button) || event.type === "leave") {
       const hover = event.type === "leave" ? null : (at(line?.hovers, event.x) ?? null);
       if (!same(hover, frame.hover)) send(undefined, hover);

@@ -6,12 +6,20 @@ import { measureTextWidth } from "@diffr/viewer/terminal/text";
 import type { DiffStore } from "@diffr/viewer/protocol/store";
 import type { Palette } from "@diffr/viewer/theme/palette";
 import { Viewer, type Hover, type KeyPress, type Size } from "@diffr/viewer/viewer";
-import { viewedBox } from "@diffr/viewer/viewport/cell";
+import { viewedBox, viewedHint } from "@diffr/viewer/viewport/cell";
+import { agentReference, copySelection, selectionBounds, type SourceSelection } from "@diffr/viewer/document/selection";
 import { Colors, fit, LineBuilder, paintCell } from "./paint";
 import type { Action, Frame, Input, Line } from "./protocol";
 
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-const HELP = "j/k scroll · h/l pan (H/L faster, or drag) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · v scope viewed · V file viewed · c context · s layout · w wrap · t theme · \\ files · q close";
+const HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · v scope viewed · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ files · q close";
+
+/** What an input asks of the hooks module beyond a redraw. */
+export interface Outcome {
+  close?: true;
+  /** Text for the clipboard, and what it is, for the message saying how the copy went. */
+  copy?: { text: string; what: string };
+}
 
 /** Split only with about 80 code columns a side. */
 const SPLIT_COLUMNS = 180;
@@ -28,6 +36,11 @@ export class Pane {
   private treeScroll = 0;
   /** The tree re-follows only when the current file changes, so scrolling the tree sticks. */
   private treeFollows: number | undefined;
+  private selection: SourceSelection | null = null;
+  /** A press on code started the selection, so a drag moves its end; a click on anything else stops that. */
+  private selecting = false;
+  /** The code row on each frame line of the last frame, and which side a column falls on. */
+  private readonly cellsAt = new Map<number, { key: string; side: (x: number) => SourceSelection["side"] }>();
 
   constructor(private readonly store: DiffStore, theme: Palette) {
     this.viewer = new Viewer(store, theme, SPLIT_COLUMNS);
@@ -41,17 +54,32 @@ export class Pane {
     this.viewer.setHover(hover);
   }
 
-  /** Returns true when the input closes the pane. */
-  input(input: Input): boolean {
+  /** What an input asks of the hooks module beyond a redraw: to close the pane, or to copy text. */
+  input(input: Input): Outcome {
     if ("act" in input) this.act(input.act, input.alt === true);
-    else if ("pan" in input) this.viewer.pan(input.pan);
+    else if ("select" in input) this.select(input.select);
     else return this.press(input.press);
-    return false;
+    return {};
+  }
+
+  /** Says how a copy the pane asked for went; `refusal` is the clipboard's reason when it did not. */
+  copied(what: string, refusal?: string) {
+    this.message = refusal ? `Not copied: ${refusal}` : `Copied ${what}`;
+  }
+
+  /** A press on a code line starts a selection on its side; a drag moves the selection's end. */
+  private select({ x, y, extend }: { x: number; y: number; extend?: true }) {
+    const cell = this.cellsAt.get(y);
+    if (!extend) {
+      this.selecting = !!cell;
+      this.selection = cell ? { anchor: cell.key, end: cell.key, side: cell.side(x) } : null;
+    } else if (this.selecting && this.selection && cell) this.selection = { ...this.selection, end: cell.key };
   }
 
   /** `recursive`: an Alt-click. */
   private act(action: Action, recursive: boolean) {
     this.message = "";
+    this.selecting = false;
     if ("fold" in action) this.viewer.setFold(action.file, action.fold, "toggle", recursive);
     else if ("viewed" in action) this.viewer.toggleViewedScope(action.file, action.viewed);
     else if ("viewedFile" in action) this.viewer.toggleViewedFile(action.viewedFile);
@@ -65,15 +93,37 @@ export class Pane {
     else this.viewer.toggleLayout();
   }
 
-  private press(key: KeyPress): boolean {
+  private press(key: KeyPress): Outcome {
     const plain = !key.ctrl && !key.meta;
-    if (plain && key.key === "q") return true;
+    if (plain && key.key === "q") return { close: true };
     this.message = plain && key.key === "?" ? HELP : "";
-    if (plain && key.key === "\\") {
-      if (!this.size) throw new Error("The pane has not been drawn yet");
-      this.showTree = !(this.showTree ?? this.size.columns >= TREE_MIN_COLUMNS);
-    } else this.viewer.press(key);
-    return false;
+    if (!this.size) throw new Error("The pane has not been drawn yet");
+    if (plain && (key.key === "y" || key.key === "Y")) return this.copy(key.key === "Y");
+    if (plain && key.key === "\\") this.showTree = !(this.showTree ?? this.size.columns >= TREE_MIN_COLUMNS);
+    else {
+      // s and c reshape the rows, so the selection's rows are gone; a finished z chord is not one of them.
+      const chord = this.viewer.chording;
+      this.viewer.press(key);
+      if (!chord && plain && (key.key === "s" || key.key === "c")) this.selection = null;
+    }
+    return {};
+  }
+
+  /** `y` copies the selected lines as they are; `Y` as a reference an agent can read. */
+  private copy(forAgent: boolean): Outcome {
+    if (!this.selection) {
+      this.message = "Drag across lines to select them first";
+      return {};
+    }
+    const { snapshot, rows } = this.viewer.lay(this.layoutSize(this.size!));
+    if (!snapshot.comparison) throw new Error("A selection exists before diffr named the comparison");
+    const text = forAgent ? agentReference(snapshot.files, snapshot.comparison, rows, this.selection)
+      : copySelection(snapshot.files, rows, this.selection);
+    if (!text) {
+      this.message = "The selection holds no source lines";
+      return {};
+    }
+    return { copy: { text, what: forAgent ? "for agent" : "source lines" } };
   }
 
   /** `wheelColumn` is undefined for the pane's scroll keys. */
@@ -96,13 +146,18 @@ export class Pane {
     return Math.max(1, size.rows - 2);
   }
 
+  /** The diff column the viewer lays out: the tree and the scrollbar's last column are not in it. */
+  private layoutSize(size: Size): Size {
+    // The scrollbar takes the last column.
+    return { columns: Math.max(10, size.columns - this.sidebar(size) - 1), rows: this.bodyRows(size) };
+  }
+
   frame(size: Size): Frame {
     this.size = size;
     const viewer = this.viewer;
     const sidebar = this.sidebar(size);
-    // The scrollbar takes the last column.
-    const contentWidth = Math.max(10, size.columns - sidebar - 1);
-    const at = viewer.lay({ columns: contentWidth, rows: this.bodyRows(size) });
+    const contentWidth = this.layoutSize(size).columns;
+    const at = viewer.lay(this.layoutSize(size));
     const { snapshot, theme, hover, horizontal, layout, geometry, top, viewport, currentFile, sticky, thumb, scope } = at;
     const viewportHeight = at.size.rows;
     const { inventory, files, failures } = snapshot;
@@ -156,7 +211,9 @@ export class Pane {
       const left = progress?.remaining ?? count;
       const tally = shown && !viewed ? [` +${left!.added}`, ` −${left!.removed}`] : [];
       const box = progress ? ` ${viewedBox(progress)}` : "";
-      const statsWidth = shown ? measureTextWidth(tally.join("") + box) + 1 : 0;
+      // While the pointer is on the box, say what a click does beside it.
+      const hint = progress && hover && "header" in hover && hover.file === fileIndex ? viewedHint(progress, "V") : "";
+      const statsWidth = shown ? measureTextWidth(tally.join("") + (hint && ` ${hint}`) + box) + 1 : 0;
       const pathWidth = Math.max(1, contentWidth - statsWidth - 1);
       const glyph = shown ? (viewer.isClosed(fileIndex, file) ? "▸" : "▾") : statusGlyph(fileIndex);
       const directory = fit(`${glyph} ${path.slice(0, path.lastIndexOf("/") + 1)}`, pathWidth);
@@ -166,17 +223,27 @@ export class Pane {
         .text(name, viewed ? theme.muted : shown ? theme.fg : theme.fileHeaderDir, theme.fileHeader, !viewed)
         .fill(start + 1 + pathWidth, theme.fileHeader);
       if (tally.length) line.text(tally[0]!, theme.addedText, theme.fileHeader).text(tally[1]!, theme.removedText, theme.fileHeader);
+      if (hint) line.text(" ", theme.fg, theme.fileHeader).text(hint, theme.bg, theme.accent);
       if (progress) {
         // Hits are matched first to last, so the box goes ahead of the header that opens the file.
         line.hit(line.width, line.width + measureTextWidth(box), { viewedFile: fileIndex });
+        line.hover(line.width, line.width + measureTextWidth(box), { file: fileIndex, header: true });
         line.text(box, progress.state === "unread" ? theme.fg : theme.accent, theme.fileHeader);
       }
       line.fill(start + contentWidth, theme.fileHeader);
       if (shown) line.hit(start, start + contentWidth, { file: fileIndex });
     };
 
-    // Deferred, so each paints after the tree's columns.
-    const body: ((line: LineBuilder) => void)[] = [];
+    // Where each code row sits, so a press or drag on a frame line finds its row and side.
+    this.cellsAt.clear();
+    const rowIndex = new Map(at.rows.map((row, index) => [row.key, index]));
+    const [selectionStart, selectionEnd] = selectionBounds(at.rows, this.selection);
+    const selectedSide = (key: string) => {
+      const index = rowIndex.get(key)!;
+      return index >= selectionStart && index <= selectionEnd ? this.selection!.side : undefined;
+    };
+    // Deferred, so each paints after the tree's columns. `y` is the line's place in the body.
+    const body: ((line: LineBuilder, y: number) => void)[] = [];
     for (const measured of viewport) {
       const row = measured.row;
       for (let visualLine = Math.max(0, top - measured.top);
@@ -192,18 +259,24 @@ export class Pane {
             line.fill(start + contentWidth, theme.bg);
           });
         else
-          body.push((line) => {
-            const focus = hover?.file === row.fileIndex ? hover : undefined;
+          body.push((line, y) => {
+            const focus = hover?.file === row.fileIndex && "id" in hover ? hover : undefined;
             const paint = { theme, geometry, fileIndex: row.fileIndex, visualLine, focus };
+            const selected = selectedSide(row.key);
             if (row.cell) {
-              const marks = viewer.cellMarks(row.fileIndex, row.cell, row.cell.newLineNumber === undefined ? 0 : 1, scope);
-              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, { ...paint, marks });
+              const side = row.cell.newLineNumber === undefined ? "left" : "right";
+              this.cellsAt.set(y + 1, { key: row.key, side: () => side });
+              const marks = viewer.cellMarks(row.fileIndex, row.cell, side === "left" ? 0 : 1, scope);
+              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true,
+                { ...paint, marks, selected: selected === side });
             } else {
               paintCell(line, row.left!, measured.left[visualLine] ?? [], geometry.leftWidth, false,
-                { ...paint, marks: viewer.cellMarks(row.fileIndex, row.left!, 0, scope) });
+                { ...paint, marks: viewer.cellMarks(row.fileIndex, row.left!, 0, scope), selected: selected === "left" });
+              const divider = line.width;
+              this.cellsAt.set(y + 1, { key: row.key, side: (x) => x < divider ? "left" : "right" });
               line.text("│", theme.muted, theme.bg);
               paintCell(line, row.right!, measured.right[visualLine] ?? [], geometry.rightWidth, false,
-                { ...paint, marks: viewer.cellMarks(row.fileIndex, row.right!, 1, scope) });
+                { ...paint, marks: viewer.cellMarks(row.fileIndex, row.right!, 1, scope), selected: selected === "right" });
             }
           });
       }
@@ -232,7 +305,7 @@ export class Pane {
         }
         line.fill(sidebar - 1).text("│", theme.muted);
       }
-      body[y]?.(line);
+      body[y]?.(line, y);
       line.fill(sidebar + contentWidth);
       const onThumb = y >= thumb.top && y < thumb.top + thumb.height;
       line.hit(line.width, line.width + 1, { scrub: y }).text(" ", theme.muted, onThumb ? theme.muted : theme.bg);
@@ -242,8 +315,9 @@ export class Pane {
     const status = new LineBuilder(colors, theme.bg);
     const errors = snapshot.errors.length ? `${snapshot.errors.length} errors  ` : "";
     const read = viewer.viewedFiles();
-    status.text(fit(`${snapshot.loaded}/${inventory.length} files · ${read.viewed}/${read.total} viewed ${snapshot.complete ? "" : "loading… "}${errors}` +
-      ` [/] hunks · click ▾ or za fold · v/V viewed · h/l or drag to pan · w wrap · ? keys ${this.message}`, size.columns), theme.muted);
+    // A message leads, so a narrow pane cuts the key hints rather than what just happened.
+    status.text(fit(`${this.message ? `${this.message} · ` : ""}${snapshot.loaded}/${inventory.length} files · ${read.viewed}/${read.total} viewed ${snapshot.complete ? "" : "loading… "}${errors}` +
+      ` [/] hunks · click ▾ or za fold · v/V viewed · drag selects · y/Y copy · h/l pan · ? keys`, size.columns), theme.muted);
     lines.push(status.line(size.columns));
     return { colors: colors.list, fg: colors.of(theme.fg), lines, hover };
   }

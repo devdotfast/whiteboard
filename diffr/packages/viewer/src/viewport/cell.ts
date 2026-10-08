@@ -10,6 +10,8 @@ import type { Palette } from "../theme/palette";
 export interface ScopeFocus {
   id: number;
   armed: boolean;
+  /** On the scope's viewed box rather than its code. */
+  box?: true;
 }
 
 /** What viewed marks change on a cell; `Viewer.cellMarks` works them out. */
@@ -20,11 +22,17 @@ export interface CellMarks {
   foldViewed: boolean;
   /** On the current scope's header line: what's left in the scope, and its box. */
   box?: Progress;
+  /** The pointer is on the box: say what a click does beside it. */
+  hint?: boolean;
 }
 
 /** One cell wide in every terminal: unread, partly viewed, viewed. */
 export const viewedBox = (progress: Progress) =>
   progress.state === "viewed" ? "[✓]" : progress.state === "partial" ? "[-]" : "[ ]";
+
+/** What a click on a viewed box does, and the key that does the same; shown beside the box. */
+export const viewedHint = (progress: Progress, key: "v" | "V") =>
+  ` ${progress.state === "viewed" ? "Unmark viewed" : "Mark as viewed"} · ${key} `;
 
 /** Runs cut to `width` cells. */
 function clip(runs: PaintRun[], width: number): PaintRun[] {
@@ -110,9 +118,11 @@ export function planCell(
     const parts: [string, string][] = [];
     if (remaining.added) parts.push([`+${remaining.added}`, theme.addedText]);
     if (remaining.removed) parts.push([`−${remaining.removed}`, theme.removedText]);
-    parts.push([viewedBox(marks.box), state === "unread" ? theme.fg : theme.accent]);
     for (const [text, fg] of parts) suffix.push({ text: " ", fg, bg }, { text, fg, bg });
-    suffix.push({ text: " ", fg: theme.fg, bg });
+    // The hint goes before the box, so the box stays under the pointer.
+    if (marks.hint) suffix.push({ text: " ", fg: theme.fg, bg }, { text: viewedHint(marks.box, "v"), fg: theme.bg, bg: theme.accent });
+    suffix.push({ text: " ", fg: theme.fg, bg },
+      { text: viewedBox(marks.box), fg: state === "unread" ? theme.fg : theme.accent, bg }, { text: " ", fg: theme.fg, bg });
   }
   const suffixWidth = suffix.reduce((n, run) => n + measureTextWidth(run.text), 0);
   const limit = Math.max(0, width - suffixWidth);

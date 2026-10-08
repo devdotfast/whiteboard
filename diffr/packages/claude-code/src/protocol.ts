@@ -23,7 +23,10 @@ const action = z.union([
 ]);
 export type Action = z.infer<typeof action>;
 
-const hover: z.ZodType<Hover> = z.strictObject({ file: z.number().int(), id: z.number().int(), armed: z.boolean() });
+const hover: z.ZodType<Hover> = z.union([
+  z.strictObject({ file: z.number().int(), id: z.number().int(), armed: z.boolean(), box: z.literal(true).optional() }),
+  z.strictObject({ file: z.number().int(), header: z.literal(true) }),
+]);
 
 /** Claude Code's own key event; fields it may add later are dropped. */
 const keyPress: z.ZodType<KeyPress> = z.object({
@@ -36,8 +39,8 @@ const keyPress: z.ZodType<KeyPress> = z.object({
 const input = z.union([
   z.strictObject({ act: action, alt: z.literal(true).optional() }),
   z.strictObject({ press: keyPress }),
-  /** Columns dragged; positive pans right. */
-  z.strictObject({ pan: z.number().int() }),
+  /** A left press (or, with `extend`, a drag) at a pane cell: `y` counts from the frame's first line. */
+  z.strictObject({ select: z.strictObject({ x: z.number().int(), y: z.number().int(), extend: z.literal(true).optional() }) }),
 ]);
 export type Input = z.infer<typeof input>;
 
@@ -66,6 +69,8 @@ export interface Line {
 export interface Frame {
   /** The last handled seq per view instance, so it stops resending. */
   acks?: Record<string, number>;
+  /** Where this view's `lines` start in the whole frame: each band of lines is its own view. */
+  offset?: number;
   colors: string[];
   fg: number;
   lines: Line[];
