@@ -295,7 +295,8 @@ function knownRegions(
 		if (known === false && hides && region.visibility?.collapsed === true) result.push({ region, collapsed: false });
 		if (region.kind === "fold") for (const child of region.children) walk(child);
 	};
-	if (root) walk(root);
+	// The file header renders the root; the editor renders its children.
+	if (root?.kind === "fold") root.children.forEach(walk);
 	return result;
 }
 

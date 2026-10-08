@@ -11,7 +11,7 @@ import { Orientation, SplitView } from "../../base/browser/ui/splitview/splitvie
 import { disposableTimeout } from "../../base/common/async.js";
 import { Emitter, Event } from "../../base/common/event.js";
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from "../../base/common/lifecycle.js";
-import { autorun } from "../../base/common/observable.js";
+import { autorun, observableValue } from "../../base/common/observable.js";
 import { isEqual } from "../../base/common/resources.js";
 import { URI } from "../../base/common/uri.js";
 import { ElementSizeObserver } from "../../editor/browser/config/elementSizeObserver.js";
@@ -38,6 +38,7 @@ import { type ReviewDiffFileWire } from "../common/reviewProtocol.js";
 import { binarySizeLabel, isBinaryCounts, type ReviewFileCounts } from "../common/reviewStructuralDiff.js";
 import type { ReviewDiffLayoutSetting } from "./reviewDiffLayout.js";
 import { reviewMultiDiffLabelUris, ReviewMultiDiffUIElementFactory } from "./reviewMultiDiff.js";
+import type { StructuralDiffSession } from "./reviewStructuralDiffSession.js";
 
 const FILE_TREE_MINIMUM_WIDTH = 180;
 const DIFF_MINIMUM_WIDTH = 320;
@@ -75,7 +76,7 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 	constructor(
 		source: URI,
 		readonly entries: readonly ReviewFilesEditorEntry[],
-		readonly structural: boolean = false,
+		structural: StructuralDiffSession | undefined,
 		lens: boolean = false,
 		@ITextModelService textModelService: ITextModelService,
 		@ITextResourceConfigurationService
@@ -85,17 +86,22 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 		multiDiffSourceResolverService: IMultiDiffSourceResolverService,
 		@ITextFileService textFileService: ITextFileService,
 	) {
-		const items = entries.map(
-				(entry) =>
-					new MultiDiffEditorItem(
-						entry.original,
-						entry.modified,
-						entry.goToFileResource,
-						undefined,
-						undefined,
-						reviewMultiDiffLabelUris(entry.file),
-					// Every hidden line comes from the one fold model: diffr's regions, never the diff editor's own unchanged-region hiding.
-					// Every collapsed region diffr sends is a hidden-region band; the editor's own folding stays off.
+		const items = new Map<ReviewFilesEditorEntry, MultiDiffEditorItem>();
+		// Wait for streamed roots before binding their collapse state.
+		const itemFor = (entry: ReviewFilesEditorEntry) => {
+			let item = items.get(entry);
+			if (!item) {
+				item = new MultiDiffEditorItem(
+					entry.original,
+					entry.modified,
+					entry.goToFileResource,
+					structural && entry.file.status !== "unchanged" && structural.getFileResult(entry.file.path)?.diff?.type !== "binary"
+						? structural.fileCollapse(entry.file.path)
+						: observableValue("collapsed", false),
+					undefined,
+					undefined,
+					reviewMultiDiffLabelUris(entry.file),
+					// Use diffr's child folds; the file header controls the root.
 					(structural || lens)
 						? {
 							...REVIEW_FILES_DIFF_EDITOR_OPTIONS,
@@ -116,11 +122,14 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 							experimental: { useTrueInlineView: false },
 						}
 						: { ...REVIEW_FILES_DIFF_EDITOR_OPTIONS, hideOriginalLineNumbers: entry.file.status === "added" || entry.file.status === "unchanged" },
-					),
-		);
+				);
+				items.set(entry, item);
+			}
+			return item;
+		};
 		const changes = new Emitter<void>();
 		let current: readonly MultiDiffEditorItem[] = [];
-		let loading = items.length > 0;
+		let loading = entries.length > 0;
 		const streamSource = {
 			isLoading: { get value() { return loading; }, onDidChange: changes.event },
 			resources: {
@@ -133,7 +142,7 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 		super(
 			source,
 			"Files",
-			structural ? undefined : items,
+			structural ? undefined : entries.map(itemFor),
 			true,
 			textModelService,
 			textResourceConfigurationService,
@@ -150,7 +159,7 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 		);
 		this._register(changes);
 		this.updateResources = (paths, pending) => {
-			loading = pending; current = items.filter((_, index) => paths.has(entries[index].file.path));
+			loading = pending; current = entries.filter(entry => paths.has(entry.file.path)).map(itemFor);
 			changes.fire();
 		};
 	}
@@ -199,7 +208,6 @@ export class ReviewFilesDiffView extends Disposable {
 	private readonly summaryTooltip: ReviewTooltip;
 	/** Files the stream says start hidden, with the reason shown in their header. */
 	private readonly hiddenFiles = new Map<string, string>();
-	private readonly hiddenApplied = new Set<string>();
 	private pendingPath: string | undefined;
 	private pendingSectionId: string | undefined;
 	private pendingSource: ReviewDiffLens["ranges"][number] | undefined;
@@ -405,7 +413,6 @@ export class ReviewFilesDiffView extends Disposable {
 					this.initializedDocumentItems.add(item);
 					item.collapsed.set(this.documentCollapsed, undefined);
 				}
-				this.applyHiddenFiles(items);
 				this.applyViewedFiles();
 				const entry = this.input?.entries.find(
 					(e) => e.file.path === this.pendingPath,
@@ -500,36 +507,10 @@ export class ReviewFilesDiffView extends Disposable {
 		if (wasHidden) this.layout();
 	}
 
-	/** A file the stream says starts collapsed, and why: its record's `visibility`. */
+	/** The root's default-collapse reason, displayed on its file header. */
 	hideFile(path: string, label: string): void {
 		this.hiddenFiles.set(path, label);
 		this.headerFactory.refreshHeaders();
-		if (this.viewModel) this.applyHiddenFiles(this.viewModel.items.get());
-	}
-
-	/** GitHub's shape for a hidden file: the header stays, the body waits for a click. */
-	private applyHiddenFiles(
-		items: readonly {
-			originalUri: URI | undefined;
-			modifiedUri: URI | undefined;
-			collapsed: { set(value: boolean, tx: undefined): void };
-		}[],
-	): void {
-		for (const entry of this.input?.entries ?? []) {
-			if (
-				!this.hiddenFiles.has(entry.file.path) ||
-				this.hiddenApplied.has(entry.file.path)
-			)
-				continue;
-			const item = items.find(
-				(item) =>
-					sameResource(item.originalUri, entry.original) &&
-					sameResource(item.modifiedUri, entry.modified),
-			);
-			if (!item) continue;
-			item.collapsed.set(true, undefined);
-			this.hiddenApplied.add(entry.file.path);
-		}
 	}
 
 	private readonly collapsedSections = new Set<string>();

@@ -9,6 +9,7 @@ import { IDiffEditorOptions } from '../../../common/config/editorOptions.js';
 import { ITextModel } from '../../../common/model.js';
 import { ContextKeyValue } from '../../../../platform/contextkey/common/contextkey.js';
 import { URI } from '../../../../base/common/uri.js';
+import { ISettableObservable } from '../../../../base/common/observable.js';
 
 export interface IMultiDiffEditorModel {
 	readonly documents: IValueWithChangeEvent<readonly RefCounted<IDocumentDiffItem>[] | 'loading'>;
@@ -16,6 +17,7 @@ export interface IMultiDiffEditorModel {
 }
 
 export interface IDocumentDiffItem {
+	readonly collapsed: ISettableObservable<boolean>;
 	/**
 	 * undefined if the file was created.
 	 */

@@ -35,6 +35,25 @@ function text(lines: string[], regions: StructuralRegion[]) {
 }
 const stats = { textual: { added: 0, removed: 0 }, visible: { added: 0, removed: 0 } };
 
+test("file roots never create editor bands; reopening a file retains child folds", () => {
+	const child = leaf(1, 0, 2, { visibility: { collapsed: true, label: "Nested fold" } });
+	const source = { text: "a\nb\nc\n", root: { ...fold(1000, [child, leaf(2, 2, 3)]), visibility: { collapsed: true, label: "Vendored file" } } };
+	for (const sides of [{ lhs: source, rhs: source }, { lhs: source }, { rhs: source }]) {
+		const diff: StructuralTextDiff = { type: "text", stats, structural_changes: { base: [], head: [] }, ...sides };
+		for (const rootCollapsed of [true, false]) {
+			const state = (id: number) => id === 1000 ? rootCollapsed : id === 1;
+			for (const includeNested of [true, false]) {
+				const bands = structuralContextGaps(diff, state, state, includeNested);
+				assert.deepEqual(bands.map(band => band.foldStateId), [1]);
+				assert.equal(bands[0].label, "Nested fold");
+			}
+		}
+	}
+	// A root can also be a leaf (including a whole added or removed file).
+	const diff: StructuralTextDiff = { type: "text", stats, structural_changes: { base: [], head: [] }, rhs: { text: "a\nb\n", root: child } };
+	assert.deepEqual(structuralContextGaps(diff, () => true), []);
+});
+
 test("paired collapse removes hidden height without leaving padding for hidden anchors", () => {
 	const rows: [number | null, number | null][] = [
 		[0, 0],

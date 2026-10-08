@@ -10,7 +10,7 @@ import { Codicon } from '../../../../../../base/common/codicons.js';
 import { Event } from '../../../../../../base/common/event.js';
 import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../../../../base/common/lifecycle.js';
 import { MarshalledId } from '../../../../../../base/common/marshallingIds.js';
-import { autorun, constObservable, IObservable, isObservable } from '../../../../../../base/common/observable.js';
+import { observableValue, autorun, constObservable, IObservable, isObservable } from '../../../../../../base/common/observable.js';
 import { ThemeIcon } from '../../../../../../base/common/themables.js';
 import { URI } from '../../../../../../base/common/uri.js';
 import { localize } from '../../../../../../nls.js';
@@ -125,7 +125,8 @@ export class ChatMultiDiffContentPart extends Disposable implements IChatContent
 				resources.map(resource => new MultiDiffEditorItem(
 					resource.originalUri,
 					resource.modifiedUri,
-					resource.goToFileUri
+					resource.goToFileUri,
+					observableValue('collapsed', false),
 				)),
 				false
 			);

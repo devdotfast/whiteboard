@@ -5,7 +5,7 @@
 
 import { ValueWithChangeEvent } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
-import { observableFromEvent, ValueWithChangeEventFromObservable, waitForState } from '../../../../base/common/observable.js';
+import { observableValue, observableFromEvent, ValueWithChangeEventFromObservable, waitForState } from '../../../../base/common/observable.js';
 import { basename } from '../../../../base/common/path.js';
 import { URI, UriComponents } from '../../../../base/common/uri.js';
 import { IMultiDiffEditorOptions } from '../../../../editor/browser/widget/multiDiffEditor/multiDiffEditorWidgetImpl.js';
@@ -153,7 +153,7 @@ export class ScmHistoryItemResolver implements IMultiDiffSourceResolver {
 					? `${basename(change.modifiedUri.fsPath)} (${historyItemDisplayId ?? historyItemId})`
 					: undefined;
 
-				return new MultiDiffEditorItem(change.originalUri, change.modifiedUri, change.modifiedUri, goToFileEditorTitle);
+				return new MultiDiffEditorItem(change.originalUri, change.modifiedUri, change.modifiedUri, observableValue('collapsed', false), goToFileEditorTitle);
 			})
 		);
 
@@ -173,7 +173,7 @@ class ScmResolvedMultiDiffSource implements IResolvedMultiDiffSource {
 	) {
 		this._resources = observableFromEvent<MultiDiffEditorItem[]>(
 			this._group.onDidChangeResources,
-			() => /** @description resources */ this._group.resources.map(e => new MultiDiffEditorItem(e.multiDiffEditorOriginalUri, e.multiDiffEditorModifiedUri, e.sourceUri))
+			() => /** @description resources */ this._group.resources.map(e => new MultiDiffEditorItem(e.multiDiffEditorOriginalUri, e.multiDiffEditorModifiedUri, e.sourceUri, observableValue('collapsed', false)))
 		);
 		this.resources = new ValueWithChangeEventFromObservable(this._resources);
 		this.contextKeys = {

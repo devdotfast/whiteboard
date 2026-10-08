@@ -13,6 +13,7 @@ import { FontInfo } from '../../../../../editor/common/config/fontInfo.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import type { ContextKeyValue } from '../../../../../platform/contextkey/common/contextkey.js';
 import { MultiDiffEditorItem } from '../../../multiDiffEditor/browser/multiDiffSourceResolverService.js';
+import { observableValue } from '../../../../../base/common/observable.js';
 import { DiffElementCellViewModelBase, DiffElementPlaceholderViewModel, IDiffElementViewModelBase, NotebookDocumentMetadataViewModel, SideBySideDiffElementViewModel, SingleSideDiffElementViewModel } from './diffElementViewModel.js';
 import { NotebookDiffEditorEventDispatcher } from './eventDispatcher.js';
 import { INotebookDiffViewModel, INotebookDiffViewModelUpdateEvent, NOTEBOOK_DIFF_ITEM_DIFF_STATE, NOTEBOOK_DIFF_ITEM_KIND } from './notebookDiffEditorBrowser.js';
@@ -466,7 +467,7 @@ export abstract class NotebookMultiDiffEditorItem extends MultiDiffEditorItem {
 		public kind: 'Cell' | 'Metadata' | 'Output',
 		contextKeys?: Record<string, ContextKeyValue>,
 	) {
-		super(originalUri, modifiedUri, goToFileUri, undefined, contextKeys);
+		super(originalUri, modifiedUri, goToFileUri, observableValue('collapsed', false), undefined, contextKeys);
 	}
 }
 

@@ -7,6 +7,7 @@ import { BugIndicatingError } from '../../../../base/common/errors.js';
 import { IValueWithChangeEvent } from '../../../../base/common/event.js';
 import { IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { URI } from '../../../../base/common/uri.js';
+import { ISettableObservable } from '../../../../base/common/observable.js';
 import { IDiffEditorOptions } from '../../../../editor/common/config/editorOptions.js';
 import { ContextKeyValue } from '../../../../platform/contextkey/common/contextkey.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
@@ -39,6 +40,7 @@ export class MultiDiffEditorItem {
 		readonly originalUri: URI | undefined,
 		readonly modifiedUri: URI | undefined,
 		readonly goToFileUri: URI | undefined,
+		readonly collapsed: ISettableObservable<boolean>,
 		readonly goToFileEditorTitle?: string | undefined,
 		readonly contextKeys?: Record<string, ContextKeyValue>,
 		readonly labelUris?: {

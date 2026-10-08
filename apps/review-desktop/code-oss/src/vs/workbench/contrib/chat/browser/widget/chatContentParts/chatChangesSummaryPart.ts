@@ -11,7 +11,7 @@ import { IAction } from '../../../../../../base/common/actions.js';
 import { Codicon } from '../../../../../../base/common/codicons.js';
 import { Iterable } from '../../../../../../base/common/iterator.js';
 import { combinedDisposable, Disposable, DisposableStore, IDisposable, toDisposable } from '../../../../../../base/common/lifecycle.js';
-import { autorun, IObservable } from '../../../../../../base/common/observable.js';
+import { observableValue, autorun, IObservable } from '../../../../../../base/common/observable.js';
 import { isEqual } from '../../../../../../base/common/resources.js';
 import { ThemeIcon } from '../../../../../../base/common/themables.js';
 import { URI } from '../../../../../../base/common/uri.js';
@@ -252,6 +252,7 @@ export class ChatCheckpointFileChangesSummaryContentPart extends Disposable impl
 						resource.originalUri,
 						resource.modifiedUri,
 						undefined,
+						observableValue('collapsed', false),
 					);
 				}),
 				false

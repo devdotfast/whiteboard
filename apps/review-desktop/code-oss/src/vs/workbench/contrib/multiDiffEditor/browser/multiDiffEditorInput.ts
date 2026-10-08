@@ -48,6 +48,7 @@ export class MultiDiffEditorInput extends EditorInput implements ILanguageSuppor
 					resource.original.resource,
 					resource.modified.resource,
 					resource.goToFileResource,
+					observableValue('collapsed', false),
 				);
 			}),
 			input.isTransient ?? false
@@ -63,6 +64,7 @@ export class MultiDiffEditorInput extends EditorInput implements ILanguageSuppor
 				resource.originalUri ? URI.parse(resource.originalUri) : undefined,
 				resource.modifiedUri ? URI.parse(resource.modifiedUri) : undefined,
 				resource.goToFileUri ? URI.parse(resource.goToFileUri) : undefined,
+				observableValue('collapsed', false),
 				undefined,
 				undefined,
 				resource.labelUris ? {
@@ -245,6 +247,7 @@ export class MultiDiffEditorInput extends EditorInput implements ILanguageSuppor
 				modified: modified?.object.textEditorModel,
 				labelUris: r.labelUris,
 				label: r.label,
+				collapsed: r.collapsed,
 				contextKeys: r.contextKeys,
 				get options() {
 					return {

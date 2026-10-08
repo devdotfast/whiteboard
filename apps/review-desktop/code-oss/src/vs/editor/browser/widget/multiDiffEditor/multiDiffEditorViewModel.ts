@@ -127,7 +127,7 @@ export class DocumentDiffItemViewModel extends Disposable {
 		return this.diffEditorViewModelRef.object;
 	}
 	public readonly waitForInitialDiffOr1s: ObservablePromise<void>;
-	public readonly collapsed = observableValue<boolean>(this, false);
+	public readonly collapsed;
 
 	public readonly lastTemplateData = observableValue<{ contentHeight: number; selections: Selection[] | undefined }>(
 		this,
@@ -168,6 +168,7 @@ export class DocumentDiffItemViewModel extends Disposable {
 		}));
 
 		this._documentDiffItemRef = this._register(documentDiffItem.createNewRef(this));
+		this.collapsed = this.documentDiffItem.collapsed;
 
 		function updateOptions(options: IDiffEditorOptions): IDiffEditorOptions {
 			return {

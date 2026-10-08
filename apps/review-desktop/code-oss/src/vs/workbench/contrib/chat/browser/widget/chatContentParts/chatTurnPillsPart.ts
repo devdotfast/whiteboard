@@ -8,7 +8,7 @@ import { $ } from '../../../../../../base/browser/dom.js';
 import { IAction, toAction } from '../../../../../../base/common/actions.js';
 import { Codicon } from '../../../../../../base/common/codicons.js';
 import { combinedDisposable, Disposable, IDisposable } from '../../../../../../base/common/lifecycle.js';
-import { autorun, constObservable, derived, derivedOpts, IObservable } from '../../../../../../base/common/observable.js';
+import { observableValue, autorun, constObservable, derived, derivedOpts, IObservable } from '../../../../../../base/common/observable.js';
 import { basename, getComparisonKey, isEqual } from '../../../../../../base/common/resources.js';
 import { ThemeIcon } from '../../../../../../base/common/themables.js';
 import { URI } from '../../../../../../base/common/uri.js';
@@ -251,7 +251,7 @@ export class ChatTurnPillsContentPart extends Disposable implements IChatContent
 			MultiDiffEditorInput,
 			source,
 			localize('chatTurnPills.changes.title', "Turn File Changes"),
-			diffs.map(diff => new MultiDiffEditorItem(diff.originalURI, diff.modifiedURI, undefined)),
+			diffs.map(diff => new MultiDiffEditorItem(diff.originalURI, diff.modifiedURI, undefined, observableValue('collapsed', false))),
 			false,
 		);
 		this._editorService.openEditor(input);

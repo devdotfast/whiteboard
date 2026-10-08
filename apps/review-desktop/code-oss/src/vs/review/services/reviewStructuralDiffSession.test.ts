@@ -2,11 +2,35 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { StructuralDiffSession } from './reviewStructuralDiffSession.js';
 import { STRUCTURAL_WIRE_VERSION, type StructuralEvent } from '../common/reviewStructuralDiff.js';
+import { autorun } from '../../base/common/observable.js';
 
 const file = { rhs: { path: 'a.ts', oid: 'abc', mode: '100644' } };
 const start: StructuralEvent = { type: 'start', version: STRUCTURAL_WIRE_VERSION, lhs: { type: 'empty_tree' }, rhs: { type: 'revision', rev: 'head' }, files: [{ file, status: 'added' }] };
 const result: StructuralEvent = { type: 'file', file, diff: { type: 'text', structural_changes: { base: [], head: [[0, 1]] }, rhs: { text: 'a', root: { kind: 'leaf', id: 1, fold_state_id: 2, alignment_id: 1, start: { line: 0, column: 0 }, end: { line: 0, column: 1 }, visibility: { collapsed: true } } }, stats: { textual: { added: 1, removed: 0 }, visible: { added: 0, removed: 0 } } } };
 const complete: StructuralEvent = { type: 'complete', succeeded: 1, failed: 0 };
+
+test('file headers and structural roots share collapse state across views', async () => {
+	const session = new StructuralDiffSession({ async *streamComparison() { yield start; yield result; yield complete; } });
+	try {
+		await session.start();
+		const header = session.fileCollapse('a.ts');
+		const secondView = session.fileCollapse('a.ts');
+		const rendered: boolean[] = [];
+		const subscription = autorun(reader => { rendered.push(secondView.read(reader)); });
+		try {
+			assert.equal(header.get(), true);
+			header.set(false, undefined);
+			assert.equal(session.isRegionCollapsed('a.ts', 2), false);
+			// Headers must update before the session's batched notification.
+			session.setRegionCollapsed('a.ts', 2, true);
+			assert.equal(header.get(), true);
+			secondView.set(false, undefined);
+			assert.equal(header.get(), false);
+			assert.deepEqual(rendered, [true, false, true, false]);
+			assert.throws(() => session.fileCollapse('missing.ts'), /Missing root collapse state/);
+		} finally { subscription.dispose(); }
+	} finally { session.dispose(); }
+});
 
 test('file results supply root visibility and summary labels before comparison completion', async () => {
 	let release!: () => void;

@@ -325,7 +325,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 			// The input owns the text-model references its view model resolves, so
 			// this handle disposes it alongside the view.
 			const input = store.add(instantiation.createInstance(ReviewFilesEditorInput, sourceUri, selected,
-				structuralEnabled, !!lens || !!this.spec.onToggleViewed));
+				structuralEnabled ? session : undefined, !!lens || !!this.spec.onToggleViewed));
 			const view = store.add(
 				instantiation.createInstance(
 					ReviewFilesDiffView,
