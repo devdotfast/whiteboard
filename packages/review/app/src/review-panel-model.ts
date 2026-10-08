@@ -75,13 +75,11 @@ export type AskView =
       passage?: AskPassage;
     };
 
-/** What the pill says about a conversation it stands in for. */
+/** Who answers in an Ask. */
 export interface AskPresence {
   /** Absent for the list of conversations, which has no one agent. */
   agent?: AskAgentId;
   agentName: string;
-  status: string;
-  tone: "quiet" | "waiting" | "failed";
 }
 
 /** One open Ask: a conversation with a local agent about a selection, or
@@ -93,7 +91,7 @@ export interface AskPanel {
   /** The conversation it shows, once it has one. */
   threadId: string | null;
   /** Its agent is working: closing it stops the agent, so it asks first,
-   * and a new question opens beside it rather than in its place. */
+   * and a new question leaves it running off the screen. */
   busy: boolean;
   presence: AskPresence;
 }
@@ -103,18 +101,16 @@ export type AskReport = Pick<AskPanel, "threadId" | "busy" | "presence">;
 
 /** Where Ask shows: in the side panel, or in a window over the canvas that
  * stays above peeks, fullscreen diagrams and every view. One Ask at most
- * shows in each; the others are pills. */
+ * shows in each; the others are off the screen. */
 export type AskPlace = "docked" | "window";
 
-/** How an Ask shows now: in the side panel, in the window, or as a pill
- * that says what its agent is doing. A docked Ask that a peek or a
- * fullscreen diagram covers shows as a pill. */
-export type AskShown = "panel" | "window" | "pill";
+/** How an Ask shows now: in the side panel or in the window. */
+export type AskShown = "panel" | "window";
 
-/** Where Ask floats, shared by its window and its pill: a corner of the
- * canvas beside any docked panel, and how far the same corner of the window
- * or pill is from it. Keeping to a corner, Ask moves aside as a panel docks
- * and follows the canvas as it resizes. */
+/** Where the window floats: a corner of the canvas beside any docked
+ * panel, and how far the same corner of the window is from it. Keeping to
+ * a corner, it moves aside as a panel docks and follows the canvas as it
+ * resizes. */
 export interface AskAnchor {
   x: "left" | "right";
   y: "top" | "bottom";

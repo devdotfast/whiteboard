@@ -37,7 +37,7 @@ import {
   useAskThreadsWatch,
   useLatest,
 } from "./ask-thread-stream";
-import { AskPills, AskSlot, AskWindow } from "./ask-window";
+import { AskSlot, AskWindow } from "./ask-window";
 import { AuthoredCodeSurface } from "./authored-code-surface";
 import { SourceCodePeek } from "./CodePeek";
 import { controlStyles } from "./controls-styles";
@@ -48,13 +48,7 @@ import {
   useOptionalReviewSession,
   useReviewSession,
 } from "./host/review-session";
-import {
-  CloseIcon,
-  DisclosureChevron,
-  MapPinIcon,
-  MinusIcon,
-  PopOutIcon,
-} from "./icons";
+import { CloseIcon, DisclosureChevron, MapPinIcon, PopOutIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
 import { chevronMarker, documentMarker } from "./markers.stylex";
 import { useReviewActions } from "./review-context";
@@ -73,7 +67,7 @@ import type {
   ReviewPeekContent,
   SourcePeekAnchor,
 } from "./review-panel-model";
-import { askPills, askShown } from "./review-panel-store";
+import { askShown } from "./review-panel-store";
 import { useReviewRoots } from "./review-root-context";
 import type { ReviewSectionSummary } from "./review-section-summary";
 import { useReviewUiState } from "./review-ui-state";
@@ -515,9 +509,9 @@ export function ReviewPanelHost() {
 }
 
 /**
- * The open Asks, each in the side panel, the window or a pill. Each renders
- * once, into an element of its own that moves between them, so popping
- * out, docking or minimizing never restarts it.
+ * The open Asks, in the side panel, the window or off the screen. Each
+ * renders once, into an element of its own that moves between them, so
+ * popping out, docking or hiding never restarts it.
  */
 function AskHost() {
   const store = useReviewPanelStore();
@@ -551,7 +545,6 @@ function AskHost() {
     useShallow((state) => state.asks.map((ask) => ask.key)),
   );
 
-  const pills = useReviewPanel(useShallow(askPills));
   // Every open Ask follows its thread over this one stream.
   const watch = useAskThreadsWatch(useReviewSession());
 
@@ -560,7 +553,6 @@ function AskHost() {
       {keys.map((key) => (
         <OpenAsk key={key} askKey={key} />
       ))}
-      {pills.length ? <AskPills asks={pills} /> : null}
     </AskThreadsWatchContext.Provider>
   );
 }
@@ -574,42 +566,50 @@ function OpenAsk({ askKey }: { askKey: number }) {
 
   const shown = useReviewPanel((state) => askShown(state, askKey));
   const popOutTooltip = useTooltip("Pop out");
-  const minimizeTooltip = useTooltip("Minimize");
   const [node] = useState(() => document.createElement("div"));
   const [header, setHeader] = useState<HTMLDivElement | null>(null);
   const checkoutGone = useReviewDiffFiles().status === "unavailable";
   const deleted = Boolean(useReviewSession().review?.trashedAt);
   const [warning, setWarning] = useState(false);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const stopping = useRef(false);
 
   const report = useCallback(
     (report: AskReport) => store.getState().reportAsk(askKey, report),
     [store, askKey],
   );
 
-  if (!view || !shown) return null;
+  if (!view) return null;
 
   const ask = () =>
     store.getState().asks.find((candidate) => candidate.key === askKey);
 
-  // Closing stops the agent: while it works, ask first.
+  // Closing stops the agent, even one whose thread is still starting.
+  const stop = () => {
+    stopping.current = true;
+    store.getState().closeAsk(askKey);
+  };
+
+  // While it works, closing asks first.
   const close = () => {
     if (ask()?.busy) setWarning(true);
-    else store.getState().closeAsk(askKey);
+    else stop();
   };
 
   const busy = ask()?.busy ?? false;
 
+  const hide = () => {
+    setWarning(false);
+    store.getState().hideAsk(askKey);
+  };
+
   const closeWarning =
-    warning && busy && shown !== "pill" ? (
+    warning && busy ? (
       <AskCloseWarning
         anchor={closeButton}
         agentName={ask()?.presence.agentName ?? "The agent"}
-        onMinimize={() => {
-          setWarning(false);
-          store.getState().minimizeAsk(askKey);
-        }}
-        onClose={() => store.getState().closeAsk(askKey)}
+        onKeepRunning={hide}
+        onClose={stop}
         onKeep={() => setWarning(false)}
       />
     ) : null;
@@ -640,6 +640,7 @@ function OpenAsk({ askKey }: { askKey: number }) {
               savedThreadId={view.type === "saved" ? view.threadId : undefined}
               onReport={report}
               header={header}
+              stopping={stopping}
             />
           ),
           node,
@@ -668,16 +669,6 @@ function OpenAsk({ askKey }: { askKey: number }) {
                     xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
                   />
                 </IconButton>
-                <IconButton
-                  ref={minimizeTooltip}
-                  size="large"
-                  aria-label="Minimize Ask"
-                  onClick={() => store.getState().minimizeAsk(askKey)}
-                >
-                  <MinusIcon
-                    xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
-                  />
-                </IconButton>
               </>
             }
           >
@@ -691,6 +682,7 @@ function OpenAsk({ askKey }: { askKey: number }) {
             titleAccessory={
               <div ref={setHeader} {...stylex.props(panelStyles.title)} />
             }
+            onHide={hide}
             onClose={close}
             closeRef={closeButton}
           >

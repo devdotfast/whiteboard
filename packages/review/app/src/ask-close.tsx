@@ -9,25 +9,25 @@ import { surfaceStyles } from "./ui/surface";
 import { useAnchoredPopover } from "./use-anchored-popover";
 
 /** Asked from the close button of an Ask whose agent is working: closing
- * stops it, and minimizing keeps it going out of the way. */
+ * stops it, and keeping it running hides it, still in the Threads tab. */
 export function AskCloseWarning({
   anchor,
   agentName,
-  onMinimize,
+  onKeepRunning,
   onClose,
   onKeep,
 }: {
   /** The close button it hangs from. */
   anchor: RefObject<HTMLElement | null>;
   agentName: string;
-  onMinimize: () => void;
+  onKeepRunning: () => void;
   onClose: () => void;
   onKeep: () => void;
 }): ReactElement {
   const popover = useAnchoredPopover(true, anchor);
-  const minimize = useRef<HTMLButtonElement>(null);
+  const keepRunning = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => minimize.current?.focus(), []);
+  useEffect(() => keepRunning.current?.focus(), []);
 
   // A press anywhere else keeps the Ask; the close button asks again.
   useEffect(() => {
@@ -66,14 +66,14 @@ export function AskCloseWarning({
     >
       <p {...stylex.props(styles.title)}>Stop {agentName}?</p>
       <p {...stylex.props(styles.text)}>
-        {agentName} is still running. Minimize to keep running.
+        {agentName} is still running. Keep it running to find it in Threads.
       </p>
       <span {...stylex.props(styles.actions)}>
         <Button variant="ghost" onClick={onClose}>
           Stop and close
         </Button>
-        <Button ref={minimize} variant="primary" onClick={onMinimize}>
-          Minimize
+        <Button ref={keepRunning} variant="primary" onClick={onKeepRunning}>
+          Keep running
         </Button>
       </span>
     </div>

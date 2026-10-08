@@ -30,11 +30,7 @@ const selection = {
   target: { kind: "text", quote: "start();" },
 } as const;
 
-const presence = {
-  agentName: "Claude Code",
-  status: "",
-  tone: "quiet",
-} as const;
+const presence = { agentName: "Claude Code" } as const;
 
 /** The key of the Ask shown in that place. */
 function shownAt(store: ReviewPanelStore, place: "docked" | "window") {
@@ -48,21 +44,21 @@ function working(store: ReviewPanelStore, key: number, threadId = "thread") {
 }
 
 describe("Ask", () => {
-  it("shrinks to a pill under a peek or a diagram, and comes back after", () => {
+  it("hides under a peek or a diagram, and comes back after", () => {
     const store = createReviewPanelStore();
     store.getState().openAsk(selection);
     const key = shownAt(store, "docked")!;
     expect(askShown(store.getState(), key)).toBe("panel");
 
     store.getState().openPeek({ kind: "peek", anchor, content });
-    expect(askShown(store.getState(), key)).toBe("pill");
+    expect(askShown(store.getState(), key)).toBeNull();
     store.getState().close();
     expect(askShown(store.getState(), key)).toBe("panel");
 
     store
       .getState()
       .openOverlayTour({ tourId: "flow", kind: "sequence" }, "step-1");
-    expect(askShown(store.getState(), key)).toBe("pill");
+    expect(askShown(store.getState(), key)).toBeNull();
     store.getState().closeOverlayTour();
     expect(askShown(store.getState(), key)).toBe("panel");
   });
@@ -75,25 +71,26 @@ describe("Ask", () => {
     expect(askShown(store.getState(), shownAt(store, "docked")!)).toBe("panel");
   });
 
-  it("opens its window from the pill, and docks in place of a peek", () => {
+  it("pops out, hides, and docks in place of a peek", () => {
     const store = createReviewPanelStore();
     store.getState().openAsk(selection);
     const key = shownAt(store, "docked")!;
     store.getState().openPeek({ kind: "peek", anchor, content });
 
-    store.getState().restoreAsk(key);
+    store.getState().popOutAsk(key);
     expect(askShown(store.getState(), key)).toBe("window");
     expect(store.getState().active).toMatchObject({ kind: "peek" });
 
-    store.getState().minimizeAsk(key);
-    expect(askShown(store.getState(), key)).toBe("pill");
+    store.getState().hideAsk(key);
+    expect(askShown(store.getState(), key)).toBeNull();
+    expect(store.getState().asks).toHaveLength(1);
 
     store.getState().dockAsk(key);
     expect(askShown(store.getState(), key)).toBe("panel");
     expect(store.getState().active).toBeNull();
   });
 
-  it("asks in place of an idle Ask, and beside one whose agent is working", () => {
+  it("asks in place of an idle Ask, and leaves a working one running off the screen", () => {
     const store = createReviewPanelStore();
     store.getState().openAsk(selection);
     const idle = shownAt(store, "docked")!;
@@ -107,44 +104,11 @@ describe("Ask", () => {
     store.getState().openAsk(selection);
     const second = shownAt(store, "docked")!;
     expect(second).not.toBe(first);
-    expect(askShown(store.getState(), first)).toBe("pill");
-    expect(askShown(store.getState(), second)).toBe("panel");
-
-    // From the pill, the working one opens in the window beside the dock.
-    store.getState().restoreAsk(first);
-    expect(askShown(store.getState(), first)).toBe("window");
+    expect(askShown(store.getState(), first)).toBeNull();
     expect(askShown(store.getState(), second)).toBe("panel");
 
     store.getState().closeAsk(second);
     expect(store.getState().asks.map((ask) => ask.key)).toEqual([first]);
-    expect(askShown(store.getState(), first)).toBe("window");
-  });
-
-  it("shows one Ask docked and one in the window; another there minimizes it", () => {
-    const store = createReviewPanelStore();
-    store.getState().openAsk(selection);
-    const first = shownAt(store, "docked")!;
-    working(store, first, "first");
-    store.getState().openAsk(selection);
-    const second = shownAt(store, "docked")!;
-    working(store, second, "second");
-    store.getState().openAsk(selection);
-    const third = shownAt(store, "docked")!;
-
-    store.getState().popOutAsk(third);
-    store.getState().dockAsk(first);
-    expect(askShown(store.getState(), first)).toBe("panel");
-    expect(askShown(store.getState(), third)).toBe("window");
-    expect(askShown(store.getState(), second)).toBe("pill");
-
-    store.getState().restoreAsk(second);
-    expect(askShown(store.getState(), second)).toBe("window");
-    expect(askShown(store.getState(), third)).toBe("pill");
-
-    store.getState().dockAsk(third);
-    expect(askShown(store.getState(), third)).toBe("panel");
-    expect(askShown(store.getState(), first)).toBe("pill");
-    expect(askShown(store.getState(), second)).toBe("window");
   });
 
   it("brings an open conversation forward rather than opening it twice", () => {
@@ -160,7 +124,7 @@ describe("Ask", () => {
     store.getState().openAskView(saved);
     const key = shownAt(store, "docked")!;
     working(store, key, "first");
-    store.getState().minimizeAsk(key);
+    store.getState().hideAsk(key);
 
     store.getState().openAskView({ type: "history" });
     store.getState().openAskView(saved);
