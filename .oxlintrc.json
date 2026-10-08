@@ -24,6 +24,8 @@
     "**/dist/**",
     "**/.vite/**",
     "apps/review-desktop/code-oss/**",
+    "apps/diffr-web/src/standalone/**",
+    "apps/diffr-web/src/review/**",
     "diffr/**",
     ".agent/**",
     ".agents/**",

@@ -1,0 +1,303 @@
+/* The page around Review Desktop's diff view: a header, the landing form, dialogs and panels. Colors
+   come from the theme's --vscode-* variables, so the page follows Whiteboard Dark and Light. */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--vscode-editor-background, #0c0f15);
+}
+
+body {
+  overflow: hidden;
+}
+
+@media (prefers-color-scheme: light) {
+  html,
+  body {
+    background: var(--vscode-editor-background, #ffffff);
+  }
+}
+
+.app {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  color: var(--vscode-foreground);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+}
+
+/* Whiteboard's syntax roles (extensions/review-themes), painted from diffr's highlights. */
+.app {
+  --syntax-comment: #778090;
+  --syntax-keyword: #5b7cff;
+  --syntax-type: #6fc3e6;
+  --syntax-function: #b7c4ff;
+  --syntax-variable: #eef0f4;
+  --syntax-string: #d9a85c;
+  --syntax-number: #d48fd6;
+  --syntax-operator: #9199a8;
+}
+
+.app.vs {
+  --syntax-comment: #6b7382;
+  --syntax-keyword: #2b55e6;
+  --syntax-type: #0c6e8e;
+  --syntax-function: #1f3f99;
+  --syntax-variable: #15181e;
+  --syntax-string: #8a5a1c;
+  --syntax-number: #8b3f8a;
+  --syntax-operator: #5d6472;
+}
+
+.monaco-editor .diffr-syntax-comment {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+.monaco-editor .diffr-syntax-keyword {
+  color: var(--syntax-keyword);
+}
+.monaco-editor .diffr-syntax-type {
+  color: var(--syntax-type);
+}
+.monaco-editor .diffr-syntax-function {
+  color: var(--syntax-function);
+}
+.monaco-editor .diffr-syntax-variable {
+  color: var(--syntax-variable);
+}
+.monaco-editor .diffr-syntax-string {
+  color: var(--syntax-string);
+}
+.monaco-editor .diffr-syntax-number {
+  color: var(--syntax-number);
+}
+.monaco-editor .diffr-syntax-constant {
+  color: var(--syntax-number);
+  font-weight: bold;
+}
+.monaco-editor .diffr-syntax-operator {
+  color: var(--syntax-operator);
+}
+.monaco-editor .diffr-syntax-heading {
+  color: var(--syntax-keyword);
+  font-weight: bold;
+}
+
+.app-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 35px;
+  padding: 0 8px 0 14px;
+  background: var(--vscode-sideBar-background);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  min-width: 0;
+}
+
+.app-wordmark {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  text-decoration: none;
+}
+
+.app-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vscode-descriptionForeground);
+  text-decoration: none;
+}
+
+.app-title[href]:hover {
+  color: var(--vscode-foreground);
+}
+
+.app-error {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+.app-spacer {
+  flex: 1;
+}
+
+.app-icon-button {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vscode-icon-foreground);
+  cursor: pointer;
+}
+
+.app-icon-button:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-foreground);
+}
+
+.app-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.app-comparison {
+  position: absolute;
+  inset: 0;
+}
+
+.app-overflow {
+  position: fixed;
+  inset: 0 auto auto 0;
+  z-index: 50;
+}
+
+.app-landing {
+  max-width: 520px;
+  margin: 18vh auto 0;
+  padding: 0 16px;
+}
+
+.app-landing h1 {
+  margin: 0 0 6px;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.app-landing p {
+  margin: 0 0 20px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.app-landing input,
+.app-dialog input,
+.app-dialog textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 6px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-foreground);
+  font: inherit;
+  outline: none;
+}
+
+.app-landing input:focus,
+.app-dialog input:focus,
+.app-dialog textarea:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.app-landing .app-landing-error {
+  margin-top: 8px;
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+.app-dialog {
+  width: min(560px, calc(100vw - 32px));
+  padding: 18px;
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 10px;
+  background: var(--vscode-editorWidget-background);
+  color: var(--vscode-foreground);
+  box-shadow: 0 12px 40px var(--vscode-widget-shadow);
+}
+
+.app-dialog::backdrop {
+  background: rgb(0 0 0 / 0.4);
+}
+
+.app-dialog h2 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.app-dialog p {
+  margin: 0 0 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.app-dialog textarea {
+  height: 280px;
+  resize: vertical;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.app-dialog .app-dialog-status {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+
+.app-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.app-button {
+  padding: 5px 12px;
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  font: inherit;
+  cursor: pointer;
+}
+
+.app-button.primary {
+  border-color: var(--vscode-focusBorder);
+  background: var(--vscode-focusBorder);
+  color: #fff;
+}
+
+.app-panels {
+  position: fixed;
+  left: 10px;
+  bottom: 10px;
+  z-index: 40;
+  width: 240px;
+  padding: 4px 10px 8px;
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 8px;
+  background: var(--vscode-editorWidget-background);
+  box-shadow: 0 6px 24px var(--vscode-widget-shadow);
+  font-size: 12px;
+}
+
+.app-panels h2 {
+  margin: 8px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--vscode-descriptionForeground);
+}
+
+.app-panel-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  line-height: 20px;
+}
+
+.app-panel-row > :last-child {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}

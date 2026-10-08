@@ -43,6 +43,40 @@ importers:
         specifier: 'catalog:'
         version: 4.6.5
 
+  apps/diffr-web:
+    dependencies:
+      '@dev.fast/diffr':
+        specifier: workspace:*
+        version: link:../../diffr/diffr-ts
+      '@dev.fast/review-protocol':
+        specifier: workspace:*
+        version: link:../../packages/review-protocol
+    devDependencies:
+      '@types/trusted-types':
+        specifier: 2.0.7
+        version: 2.0.7
+      '@types/wicg-file-system-access':
+        specifier: 2023.10.7
+        version: 2023.10.7
+      '@vscode/codicons':
+        specifier: 0.0.46-21
+        version: 0.0.46-21
+      '@vscode/diff':
+        specifier: 0.0.2-7
+        version: 0.0.2-7
+      '@vscode/tree-sitter-wasm':
+        specifier: 0.3.1
+        version: 0.3.1
+      '@webgpu/types':
+        specifier: 0.1.66
+        version: 0.1.66
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vite:
+        specifier: 8.0.16
+        version: 8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0)
+
   apps/review-desktop:
     dependencies:
       '@dev.fast/review-protocol':
@@ -1416,8 +1450,14 @@ packages:
   '@types/semver@7.7.1':
     resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
 
+  '@types/trusted-types@2.0.7':
+    resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
+
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
+
+  '@types/wicg-file-system-access@2023.10.7':
+    resolution: {integrity: sha512-g49ijasEJvCd7ifmAY2D0wdEtt1xRjBbA33PJTiv8mKBr7DoMsPeISoJ8oQOTopSRi+FBWPpPW5ouDj2QPKtGA==}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
@@ -1591,6 +1631,18 @@ packages:
 
   '@vitest/utils@4.1.11':
     resolution: {integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==}
+
+  '@vscode/codicons@0.0.46-21':
+    resolution: {integrity: sha512-HmSK8We0/P3epjr6Bpty8/6gs3N9TrLCU1KdL6CUmyOPvkdhZs+8BfBIX4DdxzrsOjz6zTrFp7LI3OMWcZtRqA==}
+
+  '@vscode/diff@0.0.2-7':
+    resolution: {integrity: sha512-zGPIPeUAmQs79u7g6FTLmhlXFIocUTtuHYmCV5lRZf6vlDk7SWEOpBlYY6SsShC3TB/lm2KxXMj9tP32YOPrhg==}
+
+  '@vscode/tree-sitter-wasm@0.3.1':
+    resolution: {integrity: sha512-RJFoomET6FajjG511fmQxeBQfU6M24a0aFZPqpid+ttIxanWf1VGytBG0UmsGjt07qmIPJS8U31D+aecuCucsQ==}
+
+  '@webgpu/types@0.1.66':
+    resolution: {integrity: sha512-YA2hLrwLpDsRueNDXIMqN9NTzD6bCDkuXbOSe0heS+f8YE8usA6Gbv1prj81pzVHrbaAma7zObnIC+I6/sXJgA==}
 
   '@xyflow/react@12.10.2':
     resolution: {integrity: sha512-CgIi6HwlcHXwlkTpr0fxLv/0sRVNZ8IdwKLzzeCscaYBwpvfcH1QFOCeaTCuEn1FQEs/B8CjnTSjhs8udgmBgQ==}
@@ -4006,7 +4058,11 @@ snapshots:
 
   '@types/semver@7.7.1': {}
 
+  '@types/trusted-types@2.0.7': {}
+
   '@types/unist@3.0.3': {}
+
+  '@types/wicg-file-system-access@2023.10.7': {}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     optional: true
@@ -4143,6 +4199,14 @@ snapshots:
       '@vitest/pretty-format': 4.1.11
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
+
+  '@vscode/codicons@0.0.46-21': {}
+
+  '@vscode/diff@0.0.2-7': {}
+
+  '@vscode/tree-sitter-wasm@0.3.1': {}
+
+  '@webgpu/types@0.1.66': {}
 
   '@xyflow/react@12.10.2(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
     dependencies:
