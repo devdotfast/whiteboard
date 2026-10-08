@@ -10,8 +10,8 @@ are their layout APIs and how a selection reaches the native prompt.
 
 | Host | Default display | Full screen | Draft handoff | Main constraint |
 | --- | --- | --- | --- | --- |
-| Pi 0.99.1 | Native transcript/editor beside Diffr | Replace the layout root temporarily | `ctx.ui.pasteToEditor` | Requires Pi fullscreen mode; reading its prior layout and focus uses a guarded compatibility shim |
-| OpenCode 1.18.32 | Native session sidebar | Supported top-level overlay slot | `client.tui.appendPrompt` | Sidebar is fixed at 42 columns; about 37 remain for code |
+| Pi 0.99.1 / 1.1.0 | Public floating panel at the right | Public fullscreen overlay | `ctx.ui.pasteToEditor` | Panel covers chat; true transcript resizing needs an upstream API. Fullscreen runtime enables mouse input. |
+| OpenCode 2.0.25 | Native resizable session panel | Host-managed fullscreen | Public focused `TextareaRenderable.insertText` | V2 required; local server/TUI; no high-level draft API |
 | Herdr 0.7.5 | Real terminal split beside the agent | Zoom the same pane | `pane.send_input`, text only | Requires a detected, idle agent that handles bracketed paste |
 
 Each consumer supports mouse source selection, adding selected ranges and code to an
@@ -29,7 +29,7 @@ The five review layers are:
    handling, and a shared comparison subprocess owner. Claude keeps thin reexports.
 2. `@diffr/pi`: layout lifecycle, input translation, draft insertion, and a launcher
    that chooses Pi's fullscreen renderer.
-3. `@diffr/opencode`: Solid text rendering, sidebar and overlay slots, focus handling,
+3. `@diffr/opencode`: Solid text rendering, the native session panel, focus handling,
    and session-bound draft insertion.
 4. `@diffr/herdr`: plugin manifest, terminal renderer, local socket client, zoom/focus,
    and checks on the original draft recipient.
@@ -37,29 +37,45 @@ The five review layers are:
 
 ## Research decisions
 
-Pi's extension API exposes the real editor, arbitrary TUI components, and viewport
-layout composition. Its public layout setter lacks a corresponding getter and focus
-getter. The adapter therefore isolates the small compatibility access, checks the
-shape before mounting, and restores only a root it still owns. Regular scrolling
-mode cannot provide the same mouse-driven split interaction. See the official
+Pi uses the public `ctx.ui.custom()` overlay lifecycle and `OverlayHandle` focus
+controls. The earlier prototype read private layout and focus fields; that code is
+removed. Public overlays support floating and fullscreen review, but do not resize
+the native transcript into a left column. A true split needs an upstream mount API
+or an external terminal split. See the official
 [extension documentation](https://pi.dev/docs/latest/extensions),
 [TUI documentation](https://pi.dev/docs/latest/tui), and
-[TUI implementation](https://github.com/earendil-works/pi/blob/main/packages/tui/src/tui.ts).
-The installed 0.99.1 declarations and implementation were checked directly.
+[upstream layout request](https://github.com/earendil-works/pi/issues/9238).
+Public types were checked through 1.1.0; no supported native split mount API was found.
+The system Pi installation was upgraded from 0.99.1 to 1.1.0 for smoke testing.
 
-OpenCode's installed release uses the v1 TUI plugin module, not the newer v2 plugin
-examples. Its supported `sidebar_content` and `app` slots preserve the native chat
-and keep the prompt mounted during fullscreen review. A custom route would unmount
-the prompt and introduce an avoidable delivery race. The sidebar width is a host
-constraint; an adjustable split needs an upstream layout API. See the pinned
-[plugin specification](https://github.com/anomalyco/opencode/blob/v1.18.32/packages/opencode/specs/tui-plugins.md),
-[public types](https://github.com/anomalyco/opencode/blob/v1.18.32/packages/plugin/src/tui.ts),
-and [sidebar implementation](https://github.com/anomalyco/opencode/blob/v1.18.32/packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx).
+Pi and OpenCode register `diffr_open` through their native extension tool APIs.
+These are model-callable tools, not standalone MCP servers. Pi calls the shared
+comparison owner in process. OpenCode's server emits the namespaced `diffr.open`
+plugin RPC event; its terminal plugin claims a private reply socket only when
+its visible session and canonical directory match. One terminal can claim each
+request. The server reports the terminal's acknowledgement or error, with a bounded
+timeout. This OpenCode transport supports local macOS/Linux, not a remote server
+or Windows. Herdr's model-tool decision remains separate.
 
-OpenCode ships OpenTUI 0.4.5 with Solid, while Diffr's standalone TUI uses OpenTUI
-0.5.6 with React. The adapter renders shared frame data through the host's JSX text
-spans. Passing locally constructed styled-text objects across that boundary failed
-in the real run; avoiding renderer object identity assumptions fixes it.
+OpenCode v1.18.32 has a fixed 42-column session sidebar. A larger overlay covers
+the transcript, which the user rejected. **V2.0.25 ships the required native
+`session.panel` API.** Its host owns a draggable divider, defaults to half the
+available width, and preserves mounted review content across fullscreen changes.
+At 80 available columns or fewer, it forces fullscreen. See the official
+[session-panel API](https://opencode.ai/v2/docs/build/plugins/cli/#session-panels),
+[pinned host layout](https://github.com/anomalyco/opencode/blob/v2.0.25/packages/tui/src/component/session-frame.tsx),
+and [v1 sidebar](https://github.com/anomalyco/opencode/blob/v1.18.32/packages/tui/src/routes/session/sidebar.tsx).
+
+V2 has no public draft-insertion helper. The adapter captures the native focused
+OpenTUI `TextareaRenderable`, then uses its public `gotoBufferEnd` and `insertText`
+methods. No private fields or render-tree lookup are used. Transfers reject another
+session or a destroyed/missing editor. Fullscreen transfer hides the panel and
+focuses the unchanged native composer; reopening preserves review state. This
+lower-level editor boundary needs retesting on host upgrades.
+
+OpenCode uses Solid with OpenTUI 0.5.8; the standalone Diffr TUI uses React with
+0.5.6. Each renderer remains isolated. The adapter renders shared frame segments
+using the host's text elements, without passing renderer-specific styled objects.
 
 Herdr already exposes split and zoomed plugin panes and provides the originating
 pane context plus a local socket. Its text-only `pane.send_input` honors bracketed
@@ -72,39 +88,44 @@ before sending, and supplies no submission keys. See the pinned
 
 ## Verification
 
-Computer use was available and permitted for Ghostty. Tests ran in a dedicated tab,
-with temporary host configuration and no provider credentials. No model prompts were
-submitted. The Claude agent's tab and the user's other terminal tab were preserved.
+Computer use is available and authorized for Ghostty. Tests use dedicated tabs,
+temporary configuration, recorded diffs, and a local mock model provider. Model
+prompts and tool calls stay on the local machine; user sessions are not submitted.
 
 | Check | Evidence |
 | --- | --- |
-| Pi split + fullscreen | Real shared pane beside native Pi editor; F6 toggled fullscreen; F7 refocused the pane |
-| Pi selected source | Drag and Enter inserted an unsent native paste block with the selected reference and code |
-| Pi navigation | Scope fold, viewed mark, dedicated files screen, and restoration of chat layout exercised |
-| OpenCode rendering | Real syntax-colored frame rendered through host text spans; narrow status bar remained visible |
-| OpenCode selected source | Cross-row drag produced `new/migrate.ts:L5-R9` and its patch in the native unsent draft |
-| OpenCode layout/state | Fullscreen overlay, viewed toggle, and `zM` scope fold exercised while preserving the draft |
-| Herdr handoff | Real split beside an offline Pi agent; selection became an unsent 14-line paste block and focus returned to the same idle agent |
-| Herdr layout/state | Zoom/unzoom, scope folding, and a `1/1 viewed` mark exercised |
+| Pi public API | 0.99.1: model open, draft focus, F7/F6/Escape, folds, viewed marks, files, close; 1.1.0: production extension model open, draft focus, fullscreen, folding/viewed input, and Escape back to the draft |
+| OpenCode 2.0.25 | Model called the actual registered tool; a valid comparison was acknowledged; native half-width split, fullscreen, folds, viewed marks, files, and preserved draft exercised in Ghostty |
+| Selection to draft | Pi normalized-pointer integration test and OpenCode real-renderer mouse/Enter integration test append selected code to an existing draft without submission |
+| Current computer-use mouse | Dragging produced no visible source selection in Ghostty; native mouse selection, divider dragging, and mouse Add to chat remain unverified for the current adapters |
+| Earlier Herdr run | Real split beside an offline Pi agent; selected code became an unsent 14-line paste block; zoom, folds, and viewed marks exercised |
 | Live producer | Installed Diffr 0.1.16 compared two files with syntax NDJSON: one file, no errors, a 24-row frame |
-| Automated tests | Shared viewer, standalone TUI, Claude pane and plugin, consumer lifecycle/input, Pi keys, and Herdr socket/recipient tests passed |
-| Compilation | Viewer, TUI, Claude, consumer, Pi, OpenCode, and Herdr typechecks passed; Pi and Claude bundles built |
 
-The tests found and fixed conflicting Pi shortcuts, cross-renderer styled-text
-objects, OpenCode drag termination when crossing child rows, narrow pane height,
-relative recording paths, and subprocess errors hidden by incomplete-stream errors.
-Shifted terminal symbols use the actual typed character, so Kitty's base-key names
-do not turn `?` into `/`.
+OpenCode's five behavioral tests cover matching-session delivery, rejection of a
+hidden session, single-terminal claims, errors, cancellation, and real OpenTUI
+selection/draft/fullscreen behavior. Pi tests cover tool dispatch, draft preservation,
+public overlay cleanup, and key release handling. The OpenCode renderer test runs
+with the Solid preload through `bun run test` in CI.
+
+All seven package typechecks, 150 regression tests, and the additional OpenCode
+renderer test passed. Pi and Claude bundles built; the checked-in Claude plugin
+bundles were unchanged. Frozen workspace installation passed.
+
+The v2 runtime was installed and tested in isolation. A system Homebrew upgrade
+was blocked by outdated macOS Command Line Tools; the original v1 command was
+restored. No macOS toolchain changes were made.
 
 ## Remaining release work
 
 These are source-workspace integrations with usage instructions in each package's
 `USAGE.md`. They are ready for review as draft PRs, not published extension releases.
 
-- **Pi compatibility:** smoke-test the current upstream release and other extensions
-  that replace the layout root; pursue a public getter or supported sidebar API.
-- **OpenCode layout:** decide whether the fixed native sidebar is sufficient. A wider
-  adjustable split requires upstream support or a maintained host modification.
+- **Pi layout:** obtain a supported sidebar API or use an external terminal split
+  to meet the no-overlap requirement; test nested overlays.
+- **Current UI validation:** complete real mouse selection, Add to chat, and native
+  divider dragging once computer-use pointer delivery is working.
+- **OpenCode compatibility:** test narrow terminals and additional host versions;
+  prefer an upstream draft API when one becomes available.
 - **Herdr recipient coverage:** repeat the draft test with each additional agent.
   Only Pi was exercised end to end; readiness detection and bracketed-paste handling
   vary by agent. The socket's check and send are separate requests.
@@ -116,6 +137,6 @@ These are source-workspace integrations with usage instructions in each package'
 
 For planning, allow roughly 1–2 additional engineering days for publishing and a
 small host-version smoke-test matrix, plus 1–3 days to broaden Herdr recipient
-coverage. An adjustable OpenCode split is an upstream-dependent effort; a prototype
-may take 2–5 days, with maintenance cost depending on the API agreed with the host.
+coverage. A true Pi split remains dependent on an upstream API or an external split design;
+its estimate needs that decision. OpenCode v2 already provides its required split.
 These are estimates for the remaining work, not claims of verified compatibility.

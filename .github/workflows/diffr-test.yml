@@ -227,7 +227,9 @@ jobs:
           bun test src
           bun run build
       - working-directory: diffr/packages/opencode
-        run: bun run typecheck
+        run: |
+          bun run typecheck
+          bun run test
       - working-directory: diffr/packages/herdr
         run: |
           bun run typecheck
