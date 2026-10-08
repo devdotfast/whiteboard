@@ -124,7 +124,7 @@ impl Pipeline {
         let host = (cursor.into_host() as Box<dyn std::any::Any>)
             .downcast::<Host>()
             .expect("the cursor's host is the engine's");
-        Ok(host.0.sides)
+        Ok(host.0.into_sides())
     }
 }
 
