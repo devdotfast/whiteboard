@@ -119,10 +119,11 @@ impl Summarize {
                 http::sleep(Duration::from_millis(250 * (1 << attempt.min(6)))).await;
             }
         };
-        let pseudocode = provider
-            .text(&text)
-            .ok_or_else(|| failed("no text in the response".to_owned()))?
-            .trim();
+        let pseudocode = unfenced(
+            provider
+                .text(&text)
+                .ok_or_else(|| failed("no text in the response".to_owned()))?,
+        );
         Ok((!pseudocode.is_empty()).then(|| pseudocode.to_owned()))
     }
 }
@@ -219,14 +220,68 @@ impl GuestPlugin for Summarize {
             cursor.set_label(data.id, Some(&pseudocode))?;
             return Ok(false);
         };
-        let docstring_text = cursor.text(docstring)?;
-        let first = docstring_text
-            .lines()
-            .next()
-            .ok_or_else(|| format!("empty docstring region {docstring}"))?
-            .trim();
-        cursor.set_label(data.id, Some(&format!("{first}\n{pseudocode}")))?;
+        let label = match lead(&cursor.text(docstring)?) {
+            Some(lead) => format!("{lead}\n{pseudocode}"),
+            None => pseudocode,
+        };
+        cursor.set_label(data.id, Some(&label))?;
         Ok(false)
+    }
+}
+
+/// The model's answer without the code fence models wrap it in despite the
+/// prompt, which says the fences only delimit its examples.
+fn unfenced(text: &str) -> &str {
+    let mut text = text.trim();
+    while let (Some(open), Some(close)) = (text.find('\n'), text.rfind('\n')) {
+        if open >= close || !text.starts_with("```") || text[close..].trim() != "```" {
+            break;
+        }
+        text = text[open + 1..close].trim_matches(['\n', '\r']).trim_end();
+    }
+    text
+}
+
+/// The docstring's first line with words in it, which stands for the whole
+/// docstring while it is folded. A comment opened on a line of its own, as
+/// `/**` or `"""`, keeps that opener in front of it.
+fn lead(docstring: &str) -> Option<String> {
+    let mut lines = docstring.lines().map(str::trim);
+    let first = lines.next()?;
+    if first.chars().any(char::is_alphanumeric) {
+        return Some(first.to_owned());
+    }
+    let words = lines
+        .map(|line| line.trim_start_matches('*').trim())
+        .find(|line| line.chars().any(char::is_alphanumeric))?;
+    Some(format!("{first} {words}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{lead, unfenced};
+
+    #[test]
+    fn fenced_answers_lose_their_fences_and_keep_their_indentation() {
+        assert_eq!(unfenced("```pseudo\nif a\n  b\n```"), "if a\n  b");
+        assert_eq!(unfenced("```\nif a\n  b\n```\n"), "if a\n  b");
+        assert_eq!(unfenced("if a\n  b"), "if a\n  b");
+        // Fences inside the answer are its own.
+        assert_eq!(unfenced("a\n```\nb\n```"), "a\n```\nb\n```");
+    }
+
+    #[test]
+    fn a_docstring_opened_on_its_own_line_is_led_by_its_first_words() {
+        assert_eq!(lead("/// Sums.\n/// More.").as_deref(), Some("/// Sums."));
+        assert_eq!(
+            lead("/**\n * The requests to its model.\n */").as_deref(),
+            Some("/** The requests to its model.")
+        );
+        assert_eq!(
+            lead("\"\"\"\n    Parse it.\n    \"\"\"").as_deref(),
+            Some("\"\"\" Parse it.")
+        );
+        assert_eq!(lead("/**\n */"), None);
     }
 }
 

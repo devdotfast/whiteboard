@@ -732,3 +732,31 @@ body {
   border: 2px solid var(--vscode-editor-findMatchBorder, transparent);
   box-sizing: border-box;
 }
+
+/*
+ * A summary stands in for the code it folds, so it reads like code: the editor's own colour, upright,
+ * with an accent rule that marks it as written by a model. Click it for the code.
+ */
+.app
+  .monaco-editor
+  .diff-hidden-lines.summary-fold
+  .detail
+  pre.diff-hidden-lines-detail {
+  color: color-mix(
+    in srgb,
+    var(--vscode-editor-foreground) 85%,
+    transparent
+  ) !important;
+  font-style: normal;
+  padding-left: 10px;
+  border-left: 2px solid
+    color-mix(in srgb, var(--vscode-textLink-foreground) 60%, transparent);
+}
+
+.app
+  .monaco-editor
+  .diff-hidden-lines.summary-fold
+  .detail:hover
+  pre.diff-hidden-lines-detail {
+  border-left-color: var(--vscode-textLink-foreground);
+}
