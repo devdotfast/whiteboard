@@ -57,6 +57,7 @@ import {
   summarizeEdit,
 } from "./document.js";
 import { pullRequestKey, pullRequestUrl, setPullRequest } from "./origin.js";
+import { upgradeStore } from "./store-migrations.js";
 import { initializeReviewStoreSchema } from "./store-schema.js";
 
 const reviewId = z.string().min(1);
@@ -518,6 +519,7 @@ export class ReviewStore {
     // WAL plus a busy timeout: another host on the same home waits instead of failing.
     this.db = new DatabaseSync(databasePath, { timeout: 5000 });
     initializeReviewStoreSchema(this.db);
+    upgradeStore({ db: this.db });
     this.activity = new ReviewActivity(this.db, (id) =>
       this.assertWritable(id),
     );

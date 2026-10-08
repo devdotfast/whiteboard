@@ -701,7 +701,7 @@ export class SharedReviewStore {
 
     if (repositoryId) {
       await this.local?.data.forgetRepository(repositoryId);
-      this.local?.store.unregisterRepository(repositoryId);
+      await this.local?.store.unregisterRepository(repositoryId);
     }
 
     await rm(this.repositoryRoot(id), { recursive: true, force: true });

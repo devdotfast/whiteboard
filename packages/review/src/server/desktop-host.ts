@@ -197,9 +197,12 @@ function requiredPositiveInteger(
 
 if (process.env.DEV_FAST_REVIEW_DESKTOP_HOST_AUTOSTART !== "0") {
   void runDesktopHost().catch((error) => {
+    // Exit now: a host that couldn't start (a store that couldn't be
+    // upgraded) must not linger with timers alive, or Desktop waits out its
+    // ready timeout instead of reporting why.
     process.stderr.write(
       `${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
+      () => process.exit(1),
     );
-    process.exitCode = 1;
   });
 }
