@@ -38,6 +38,8 @@ export class StructuralFoldHover {
 	} | undefined>("structuralFoldHover", undefined);
 }
 
+type ViewedCandidate = { readonly active: boolean; readonly target: FoldTarget; readonly progress: ReturnType<StructuralViewedState['get']> };
+
 const CHEVRON = "review-fold-chevron";
 const RAIL_CURSOR = "review-fold-rail";
 /** Marks the text after a folded header, so that a click on it unfolds the scope. */
@@ -54,6 +56,7 @@ export class StructuralFoldControls extends Disposable {
 	private readonly sourceLineCounts = new WeakMap<StructuralTextDiff, number>();
 	private readonly rails = new ScopeRails(this.editor);
 	private hovered: FoldTarget | undefined;
+	private view: { model: ITextModel; target: FoldTarget | undefined; visibleScopes: readonly StructuralFoldable[]; controls: readonly ViewedCandidate[] } | undefined;
 	private overChevronColumn = false;
 	private pressed: { target: FoldTarget; x: number; y: number } | undefined;
 	private readonly viewedControls = new Map<number, ScopeViewedControl>();
@@ -104,11 +107,11 @@ export class StructuralFoldControls extends Disposable {
 			}
 		}));
 		this._register(editor.onDidChangeModel(() => { this.hovered = undefined; this.render(); }));
-		// Folding changes which lines show, and so the rail's length.
-		this._register(editor.onDidContentSizeChange(() => this.render()));
-		this._register(editor.onDidScrollChange(() => this.render()));
-		this._register(editor.onDidLayoutChange(() => this.render()));
-		this._register(editor.onDidChangeViewZones(() => this.render()));
+		// These move lines without changing scope state.
+		this._register(editor.onDidContentSizeChange(() => this.layoutViewport()));
+		this._register(editor.onDidScrollChange(() => this.layoutViewport()));
+		this._register(editor.onDidLayoutChange(() => this.layoutViewport()));
+		this._register(editor.onDidChangeViewZones(() => this.layoutViewport()));
 		this._register(editor.onDidChangeConfiguration(() => this.render()));
 		// The pills follow what the editor hides, not the fold state.
 		this._register(autorun(reader => {
@@ -181,12 +184,14 @@ export class StructuralFoldControls extends Disposable {
 			this.sourceLineCounts.set(diff, sourceLineCount);
 		}
 		if (!model || !path || !diff || model.getLineCount() !== sourceLineCount) {
+			this.view = undefined;
 			this.decorations.clear();
 			this.rails.hide();
 			for (const control of this.viewedControls.values()) control.hide();
 			return;
 		}
 		const decorations: IModelDeltaDecoration[] = [];
+		const folded = this.foldedHeaders();
 		for (const range of this.viewed?.getViewedRanges(path) ?? []) {
 			if (range.side !== (this.side === 'rhs' ? 'head' : 'base')) continue;
 			if (range.fromLine < 1 || range.toLine > model.getLineCount()) continue;
@@ -199,7 +204,7 @@ export class StructuralFoldControls extends Disposable {
 			// A function and its doc comment can share one fold state. Every
 			// member participates in hover, rather than only the first match.
 			const active = target?.foldable.foldStateId === foldable.foldStateId;
-			if (this.isFolded(foldable)) {
+			if (this.isFolded(foldable, folded)) {
 				decorations.push(...this.folded(model, foldable, active));
 			} else if (active) {
 				decorations.push(...this.lit(model, { ...target!, foldable, collapsed: this.isSummaryFolded(foldable) }));
@@ -209,13 +214,12 @@ export class StructuralFoldControls extends Disposable {
 		}
 		const hidden = this.regions.get().map(region => this.side === "rhs" ? region.getHiddenModifiedRange(undefined) : region.getHiddenOriginalRange(undefined));
 		const visibleScopes = this.foldablesOf(diff).filter(foldable => foldable.rail
-			&& !this.isFolded(foldable)
+			&& !this.isFolded(foldable, folded)
 			&& !hidden.some(range => range.contains(foldable.line + 1)));
-		this.rails.show(model, visibleScopes, target);
 		this.decorations.set(decorations);
 		// Completed scopes remain discoverable after the pointer leaves. Only
 		// visible headers get widgets, so folded descendants never float over code.
-		const wanted = new Map<number, { target: FoldTarget; progress: ReturnType<StructuralViewedState['get']> }>();
+		const controls: ViewedCandidate[] = [];
 		const completed = this.foldablesOf(diff).filter(scope => scope.rail && this.viewed?.get(path, scope.foldStateId).state === 'viewed');
 		for (const scope of this.foldablesOf(diff)) {
 			if (!scope.rail || hidden.some(range => range.contains(scope.line + 1))) continue;
@@ -226,11 +230,23 @@ export class StructuralFoldControls extends Disposable {
 			// A viewed function already accounts for its viewed return/body folds.
 			// Keep their actions on hover, but don't stack persistent completion badges.
 			if (!active && completed.some(outer => outer.line < scope.line && outer.rail!.end >= scope.rail!.end)) continue;
-			const top = this.editor.getTopForLineNumber(scope.line + 1) - this.editor.getScrollTop();
-			if (top < 0 || top >= this.editor.getLayoutInfo().height) continue;
-			if (active || !wanted.has(scope.line)) wanted.set(scope.line, {
-				target: { foldable: scope, collapsed: this.isFolded(scope), rail: false, control: false }, progress,
-			});
+			controls.push({ active, progress, target: { foldable: scope, collapsed: this.isFolded(scope, folded), rail: false, control: false } });
+		}
+		this.view = { model, target, visibleScopes, controls };
+		this.layoutViewport();
+	}
+
+	private layoutViewport(): void {
+		const view = this.view;
+		if (!view) return;
+		this.rails.show(view.model, view.visibleScopes, view.target);
+		const height = this.editor.getLayoutInfo().height;
+		const wanted = new Map<number, ViewedCandidate>();
+		for (const entry of view.controls) {
+			const line = entry.target.foldable.line;
+			const top = this.editor.getTopForLineNumber(line + 1) - this.editor.getScrollTop();
+			if (top < 0 || top >= height) continue;
+			if (entry.active || !wanted.has(line)) wanted.set(line, entry);
 		}
 		for (const [line, control] of this.viewedControls) {
 			if (!wanted.has(line)) { control.dispose(); this.viewedControls.delete(line); }
@@ -370,7 +386,8 @@ export class StructuralFoldControls extends Disposable {
 		const onChevron = this.inChevronColumn(e);
 
 		// A folded scope's header: its chevron and its pill unfold it.
-		const folded = foldables.find(f => f.line === line && (this.isFolded(f) || this.isSummaryFolded(f)));
+		const foldedHeaders = this.foldedHeaders();
+		const folded = foldables.find(f => f.line === line && (this.isFolded(f, foldedHeaders) || this.isSummaryFolded(f)));
 		if (folded) {
 			const onPill = e.target?.type === MouseTargetType.CONTENT_TEXT && e.target.detail.injectedText?.options.attachedData === PILL;
 			return { foldable: folded, rail: false, control: onChevron || onPill, collapsed: true };
@@ -418,12 +435,18 @@ export class StructuralFoldControls extends Disposable {
 	}
 
 	/** Whether the editor hides the scope's body with no band, so the header shows the fold. */
-	private isFolded(foldable: StructuralFoldable): boolean {
-		return !!foldable.inline && this.regions.get().some(region => {
-			if (region.band || region.foldStateId !== foldable.foldStateId) { return false; }
+	private isFolded(foldable: StructuralFoldable, folded: ReadonlySet<string>): boolean {
+		return !!foldable.inline && folded.has(`${foldable.foldStateId}:${foldable.line}`);
+	}
+
+	private foldedHeaders(): Set<string> {
+		const result = new Set<string>();
+		for (const region of this.regions.get()) {
+			if (region.band) { continue; }
 			const hidden = this.side === "rhs" ? region.getHiddenModifiedRange(undefined) : region.getHiddenOriginalRange(undefined);
-			return hidden.startLineNumber === foldable.line + 2 && !hidden.isEmpty;
-		});
+			if (!hidden.isEmpty) { result.add(`${region.foldStateId}:${hidden.startLineNumber - 2}`); }
+		}
+		return result;
 	}
 }
 

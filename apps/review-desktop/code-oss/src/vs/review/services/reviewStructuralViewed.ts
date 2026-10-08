@@ -7,7 +7,7 @@ import type { ScopeViewedControl } from './reviewStructuralViewedControl.js';
 import type { FoldTarget } from './reviewStructuralFolds.js';
 import { Emitter, type Event } from '../../base/common/event.js';
 import { Disposable } from '../../base/common/lifecycle.js';
-import type { ReviewDiffProgress, ReviewDiffViewSpec } from '../common/reviewProtocol.js';
+import type { ReviewDiffProgress, ReviewDiffProgressFile, ReviewDiffViewSpec } from '../common/reviewProtocol.js';
 import { structuralViewedProgress, structuralViewedRanges, structuralViewedScopes } from '../common/reviewStructuralViewed.js';
 import type { ReviewFilesEditorEntry } from './reviewFilesDiffView.js';
 import type { StructuralDiffSession } from './reviewStructuralDiffSession.js';
@@ -24,6 +24,7 @@ export class StructuralViewedState extends Disposable {
 	private readonly states = new Map<string, string>();
 	private pending = false;
 	private requestedFold: { path: string; id: number; viewed: boolean } | undefined;
+	private memo: { files: Map<string, ReviewDiffProgressFile>; values: Map<string, ReturnType<typeof structuralViewedProgress>> } | undefined;
 
 	constructor(
 		private readonly session: StructuralDiffSession,
@@ -34,8 +35,9 @@ export class StructuralViewedState extends Disposable {
 		readonly createControl: (editor: ICodeEditor, onToggle: (target: FoldTarget) => void) => ScopeViewedControl,
 	) {
 		super();
-		this._register(onProgress(() => this.sync()));
-		this._register(session.onDidChange(() => this.sync()));
+		const reset = () => { this.memo = undefined; this.sync(); };
+		this._register(onProgress(reset));
+		this._register(session.onDidChange(reset));
 		this.sync();
 	}
 
@@ -50,11 +52,19 @@ export class StructuralViewedState extends Disposable {
 	}
 
 	get(path: string, id: number) {
-		return structuralViewedProgress(this.getScopes(path)?.get(id) ?? [], this.progress()?.files.find(f => f.path === path));
+		const { files, values } = this.current();
+		const key = `${path}:${id}`;
+		let value = values.get(key);
+		if (!value) values.set(key, value = structuralViewedProgress(this.getScopes(path)?.get(id) ?? [], files.get(path)));
+		return value;
 	}
 
 	getViewedRanges(path: string) {
-		return structuralViewedRanges(this.getScopes(path), this.progress()?.files.find(f => f.path === path));
+		return structuralViewedRanges(this.getScopes(path), this.current().files.get(path));
+	}
+
+	private current() {
+		return this.memo ??= { files: new Map(this.progress()?.files.map(file => [file.path, file])), values: new Map() };
 	}
 
 	async toggle(path: string, id: number): Promise<void> {
@@ -78,7 +88,7 @@ export class StructuralViewedState extends Disposable {
 		initializedScopes.set(this.session, initialized);
 		for (const entry of this.entries) {
 			const path = entry.file.path;
-			if (!this.progress()?.files.some(f => f.path === path)) continue;
+			if (!this.current().files.has(path)) continue;
 			const scopes = this.getScopes(path);
 			const viewed = [...scopes ?? []].filter(([id]) => this.get(path, id).state === 'viewed');
 			for (const [id, ranges] of scopes ?? []) {
