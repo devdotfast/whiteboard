@@ -5,6 +5,7 @@
     "viewer",
     "tui",
     "claude-code",
-    "consumer"
+    "consumer",
+    "pi"
   ]
 }
