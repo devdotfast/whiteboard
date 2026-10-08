@@ -7,8 +7,8 @@ const server: Plugin = async ({ client }) => ({
     diffr_open: tool({
       description: openDescription,
       args: { args: tool.schema.array(tool.schema.string()).optional() },
-      execute: async ({ args }, ctx) => requestOpen(command => client.tui.executeCommand({
-        body: { command }, query: { directory: ctx.directory }, throwOnError: true,
+      execute: async ({ args }, ctx) => requestOpen(command => client.tui.publish({
+        body: { type: "tui.command.execute", properties: { command } }, query: { directory: ctx.directory }, throwOnError: true,
       }), { sessionID: ctx.sessionID, directory: ctx.directory, args: args ?? [] }, ctx.abort),
     }),
   },

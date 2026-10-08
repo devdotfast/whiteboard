@@ -75,7 +75,7 @@ export async function requestOpen(publish: (command: string) => Promise<unknown>
 /** Ignore other sessions and directories; do not navigate or steal the user's focus. */
 export async function receiveOpen(command: string, directory: string, session: () => string | undefined,
   open: (request: OpenRequest, signal: AbortSignal) => Promise<string>, lifetime: AbortSignal): Promise<void> {
-  if (!command.startsWith(prefix) || lifetime.aborted) return;
+  if (typeof command !== "string" || !command.startsWith(prefix) || lifetime.aborted) return;
   let invitation: Invitation;
   try { invitation = JSON.parse(command.slice(prefix.length)); } catch { return; }
   if (!invitation || typeof invitation.socket !== "string" || !/^\/tmp\/diffr-oc-[A-Za-z0-9]+\/open\.sock$/.test(invitation.socket)
