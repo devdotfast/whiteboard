@@ -288,5 +288,9 @@ test("a kitty-protocol terminal names the base key of a shifted symbol, but the 
     await send("\x1b[47u");
     await send("\x1b[57:40;2u");
     await t.waitFor(() => status().includes("/(▏"));
+    // ⌘P, which kitty sends as p with the super modifier (8, so 9), opens the file picker.
+    await send("\x1b[27u");
+    await send("\x1b[112;9u");
+    await t.waitFor(() => frame().includes("changed files"));
   } finally { await act(async () => { t.renderer.destroy(); }); }
 });

@@ -291,7 +291,7 @@ export function App({
       ["Change breakdown  i", () => setShowBreakdown(true)],
       ["Folds: click ▾ · za zo zc · zM zR", () => setMessage("Click the chevron or ⋯ · za toggle, zo open, zc close the top fold (zA zO zC recursive) · zM/zR fold/unfold all · zj/zk next/previous fold")],
       ["Search: / · n N", () => setMessage("/ searches paths and code · n/N next/previous match")],
-      ["Go to a file  Ctrl-P", () => viewer.press({ key: "p", ctrl: true })],
+      ["Go to a file  Ctrl-P / ⌘P", () => viewer.press({ key: "p", ctrl: true })],
       ["Mark the file viewed  V", () => viewer.toggleViewedFile(currentFile)],
       ["Copy for an agent  Y", copyForAgent]],
   };

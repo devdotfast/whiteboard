@@ -61,3 +61,9 @@ test("viewed files sink below the rest of the matches", () => {
   press({ key: "p", ctrl: true }, "s");
   expect(viewer.pickerState()!.picks.at(-1)!.path).toBe("src/model/store.ts");
 });
+
+test("⌘P opens the picker too, where the terminal passes Cmd through", () => {
+  const { viewer, press } = open(files());
+  press({ key: "p", meta: true });
+  expect(viewer.picking).toBe(true);
+});

@@ -17996,6 +17996,11 @@ class Viewer {
         this.foldCommand(name);
       return true;
     }
+    if ((key.meta || key.ctrl) && name === "p") {
+      this.picker = { query: "", cursor: 0 };
+      this.emit();
+      return true;
+    }
     if (key.meta)
       return false;
     if (key.ctrl) {
@@ -18007,10 +18012,7 @@ class Viewer {
         this.move(page);
       else if (name === "b")
         this.move(-page);
-      else if (name === "p") {
-        this.picker = { query: "", cursor: 0 };
-        this.emit();
-      } else
+      else
         return false;
       return true;
     }
@@ -18357,7 +18359,7 @@ var KEYS = [
   ["zM zR · zj zk", "fold all, unfold all; next, previous fold"],
   ["c", "show or hide unchanged context"],
   ["/ · n N", "search; next, previous match"],
-  ["ctrl-p", "go to a changed file"],
+  ["ctrl-p · ⌘P", "go to a changed file"],
   ["\\ · ⌘B · ☰ files", "the file tree"],
   ["V · a header's box", "mark a file viewed"],
   ["drag · y · Y", "select lines; copy them; copy them for an agent"],

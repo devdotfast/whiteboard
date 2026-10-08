@@ -23,7 +23,7 @@ const KEYS: [string, string][] = [
   ["zM zR · zj zk", "fold all, unfold all; next, previous fold"],
   ["c", "show or hide unchanged context"],
   ["/ · n N", "search; next, previous match"],
-  ["ctrl-p", "go to a changed file"],
+  ["ctrl-p · ⌘P", "go to a changed file"],
   ["\\ · ⌘B · ☰ files", "the file tree"],
   ["V · a header's box", "mark a file viewed"],
   ["drag · y · Y", "select lines; copy them; copy them for an agent"],

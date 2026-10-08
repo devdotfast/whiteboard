@@ -600,16 +600,18 @@ export class Viewer {
       if (!key.ctrl && !key.meta && name.length === 1 && "aocAOCRMjk".includes(name)) this.foldCommand(name);
       return true;
     }
+    // ⌘P, as in VS Code, where the terminal passes Cmd through; Ctrl-P everywhere else.
+    if ((key.meta || key.ctrl) && name === "p") {
+      this.picker = { query: "", cursor: 0 };
+      this.emit();
+      return true;
+    }
     if (key.meta) return false;
     if (key.ctrl) {
       if (name === "d") this.move(half);
       else if (name === "u") this.move(-half);
       else if (name === "f") this.move(page);
       else if (name === "b") this.move(-page);
-      else if (name === "p") {
-        this.picker = { query: "", cursor: 0 };
-        this.emit();
-      }
       else return false;
       return true;
     }
