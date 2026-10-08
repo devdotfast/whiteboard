@@ -17132,7 +17132,10 @@ function rowsForFile(file2, fileIndex, layout, theme, collapsed = new Set) {
   };
   let pendingOld = [], pendingNew = [];
   const flush = () => {
-    rows.push(...pendingOld, ...pendingNew);
+    for (const row of pendingOld)
+      rows.push(row);
+    for (const row of pendingNew)
+      rows.push(row);
     pendingOld = [];
     pendingNew = [];
   };
@@ -17585,7 +17588,8 @@ class Viewer {
       const last = all2.at(-1);
       if (last && !last.key.endsWith(":header") && last.label !== "")
         all2.push({ key: `${last.fileIndex}:end`, fileIndex: last.fileIndex, label: "" });
-      all2.push(...fileRows);
+      for (const row of fileRows)
+        all2.push(row);
     }
     for (const [i, error46] of snapshot3.errors.entries())
       all2.push({ key: `error:${i}`, fileIndex: -1, label: error46 });

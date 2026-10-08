@@ -221,3 +221,16 @@ test("binary and one-sided files render without a second side", () => {
   const rows = rowsForFile(added, 0, "split", dark).filter((r) => r.left);
   expect(rows.map((r) => [r.left!.kind, r.right!.lineNumber])).toEqual([["empty", 1]]);
 });
+
+test("a file of a million added lines lays out, as a vendored parser does", () => {
+  // Past the stack's limit on arguments, were the rows ever spread into one call.
+  const count = 1_000_000;
+  const file = createTestDiffFile();
+  if (file.diff.type !== "text") throw new Error("fixture is not a text diff");
+  file.diff.lhs = { text: "", syntax: [], root: root([]) };
+  file.diff.rhs = { text: Array.from({ length: count }, (_, i) => `line ${i}`).join("\n"), syntax: [],
+    root: root([leaf(1, 0, count, Array.from({ length: count }, (_, i) => line(i, 0, 4)))], 1001) };
+  for (const layout of ["unified", "split"] as const)
+    expect(rowsForFile(file, 0, layout, dark).filter((r) => r.cell?.kind === "addition" || r.right?.kind === "addition")).toHaveLength(count);
+  // A million rows in each of two layouts takes seconds.
+}, 30_000);

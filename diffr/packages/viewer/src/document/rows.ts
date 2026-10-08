@@ -287,7 +287,8 @@ export function rowsForFile(
   };
   let pendingOld: ViewerRow[] = [], pendingNew: ViewerRow[] = [];
   const flush = () => {
-    rows.push(...pendingOld, ...pendingNew);
+    for (const row of pendingOld) rows.push(row);
+    for (const row of pendingNew) rows.push(row);
     pendingOld = [];
     pendingNew = [];
   };
