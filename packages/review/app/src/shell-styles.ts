@@ -246,8 +246,6 @@ export const shellStyles = stylex.create({
       [inTopbarActions()]: "anchors-visible",
     },
   },
-  // The scratchpad has no source tree or pins to set apart, so no rule.
-  // Shrinks before the action row scrolls, so its badges end in an ellipsis.
   topbarContext: {
     display: "flex",
     flex: "0 1 auto",

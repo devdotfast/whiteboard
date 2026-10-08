@@ -29,17 +29,9 @@ import { type ToolFailure, toolFailure } from "./tool-failure.js";
 const RELOAD_TOOLS =
   "Whiteboard is running now, but this session listed Whiteboard's tools before it started, so you may see only session_get_instructions. Before authoring, reload the `whiteboard` MCP server's tools (reconnect it in your agent, or start a new agent session). If you can already see tools such as session_create, carry on.";
 
-function mcpAuthoringGuidance(context: {
-  scratchpadAvailable: boolean;
-  traceEnabled: boolean;
-}): string {
+function mcpAuthoringGuidance(context: { traceEnabled: boolean }): string {
   return [
     "Whiteboard explains code in documents the user reads in Whiteboard Desktop. Call session_get_instructions before creating or editing a Whiteboard and follow it. Read session_capabilities before authoring; session_create opens the new review in Desktop when it is available, so call session_open only for an existing review, and generate software maps only when softwareMapEnabled is true. When the user asks for a Whiteboard or to use Whiteboard (for example to review a branch, a change or a pull request, or to explain a system in Whiteboard), author a Whiteboard with the default topic.",
-    ...(context.scratchpadAvailable
-      ? [
-          'When the user asks in conversation to be shown how code works or wants a diagram, without asking for a Whiteboard, call session_capabilities; if it reports scratchpadEnabled and desktopAvailable, draw on the Whiteboard scratchpad rather than answering only in chat, starting with session_get_instructions({topic:"scratchpad"}).',
-        ]
-      : []),
     ...(context.traceEnabled
       ? [
           'For why code exists, what an agent was thinking, or whether an agent solved something before, call session_get_instructions({topic:"trace-archaeology"}).',
@@ -66,7 +58,7 @@ export async function serveReviewMcp(
   environmentAgent?: ReviewSessionAgent,
 ) {
   const instructionsTool = {
-    ...authoringTools(false, traceEnabled).find(
+    ...authoringTools(traceEnabled).find(
       (tool) => tool.name === "review_get_instructions",
     )!,
     name: "session_get_instructions",
@@ -135,7 +127,7 @@ export async function serveReviewMcp(
           // guidance on the discovery tool instead, including before Desktop starts.
           description:
             name === instructionsTool.name
-              ? `${mcpAuthoringGuidance({ scratchpadAvailable: true, traceEnabled })}\n\n${description}`
+              ? `${mcpAuthoringGuidance({ traceEnabled })}\n\n${description}`
               : description,
           inputSchema,
         }),

@@ -3,6 +3,13 @@ import { DatabaseSync } from "node:sqlite";
 
 import { CheckoutGroups } from "./checkout-groups.js";
 
+import type { ReadAtCommit } from "./foreign-references.js";
+import {
+  planFromScratchpad,
+  readScratchpadQuotes,
+} from "./scratchpad-plan-upgrade.js";
+import { hasTable } from "./store-schema.js";
+
 // A store's one-time upgrades, in order. PRAGMA user_version holds the last
 // one a store has run, so each runs once per store and a later launch runs
 // none; a new store runs them all on its first open.
@@ -18,8 +25,15 @@ export interface StoreUpgradeContext {
   /** Groups the registered checkouts, reading their git metadata. */
   prepareCheckouts(): void;
   repositories(): { id: string }[];
+  repositoryPath(repositoryId: string): string;
+  /** A checkout's name as its project labels it, else its folder. */
+  repositoryName(repositoryId: string): string;
+  /** Undefined when the file can't be read; each file is read once. */
+  fileAtCommit: ReadAtCommit;
   /** A checkout's project, made on first use. */
   projectOfRepository(repositoryId: string): string;
+  /** The project of the board opened last, else firstRepositoryProject's. */
+  fallbackProject(): string;
   /** The first checkout's project, else one with no repository. */
   firstRepositoryProject(): string;
 }
@@ -154,6 +168,12 @@ export const STORE_UPGRADES: readonly StoreUpgrade[] = [
   },
   {
     version: 4,
+    name: "scratchpad-plan",
+    beforeLock: readScratchpadQuotes,
+    run: planFromScratchpad,
+  },
+  {
+    version: 5,
     name: "ask-permissions",
     // Auto mode keeps what an Ask thread may do without asking; threads
     // saved before it lack the column.

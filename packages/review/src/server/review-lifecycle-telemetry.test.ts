@@ -35,7 +35,6 @@ describe("reviewLifecycleTelemetry", () => {
 
     const created = {
       reviewId: "r1",
-      kind: "review" as const,
       blocks: 0,
       via: "mcp" as const,
       agentKind: "claude" as const,
@@ -53,12 +52,12 @@ describe("reviewLifecycleTelemetry", () => {
     expect(events).toEqual([
       [
         "review_review_created",
-        { kind: "review", blocks: 0, via: "mcp", agent_kind: "claude" },
+        { blocks: 0, via: "mcp", agent_kind: "claude" },
         { reviewUuid: "r1" },
       ],
       [
         "review_review_created",
-        { kind: "review", blocks: 0, via: "other" },
+        { blocks: 0, via: "other" },
         { reviewUuid: "r2" },
       ],
     ]);
@@ -69,14 +68,12 @@ describe("reviewLifecycleTelemetry", () => {
 
     hooks.onReviewCreated?.({
       reviewId: "agent",
-      kind: "review",
       blocks: 0,
       via: "api",
       agentKind: "codex",
     });
     hooks.onReviewCreated?.({
       reviewId: "human",
-      kind: "review",
       blocks: 0,
       via: "other",
     });

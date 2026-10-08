@@ -13,14 +13,13 @@ import { devReviewHome } from "@review/review-home-paths";
  */
 export async function removeLegacyTutorial(input: {
   store: ReviewStore;
-  data: LocalReviewData;
+  data: Pick<LocalReviewData, "forgetRepository">;
   root?: string;
 }): Promise<void> {
   const tutorialRoot = input.root ?? path.join(devReviewHome(), "tutorial");
 
   try {
-    for (const reviewId of input.store.legacyTutorialIds())
-      await input.store.execute({ operation: { type: "delete", reviewId } });
+    await input.store.removeLegacyTutorials();
 
     for (const repository of input.store.repositories()) {
       const relative = path.relative(tutorialRoot, repository.path);

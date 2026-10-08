@@ -135,7 +135,6 @@ export const SETTING_NAME = [
   "telemetry_enabled",
   "keymap",
   "software_map_enabled",
-  "scratchpad_enabled",
   "diffr_config",
   "theme",
   "ctrl_tab",
@@ -147,12 +146,8 @@ export const SETTING_NAME = [
 
 export const REVIEW_OPENED_VIA = ["home", "cli", "other"] as const;
 
-/** Where a review's source comes from: its target's kind, or the one scratchpad. */
-export const SESSION_SOURCE_KIND = [
-  "worktree",
-  "commits",
-  "scratchpad",
-] as const;
+/** Where a review's source comes from: its target's kind. */
+export const SESSION_SOURCE_KIND = ["worktree", "commits", "project"] as const;
 
 /**
  * The authoring agent a review session is attributed to. This is the one
@@ -558,7 +553,6 @@ export const UI_TELEMETRY_EVENTS = {
     event: "review_diff_opened",
     properties: { kind: DIFF_OPENED_KIND, via: DIFF_OPENED_VIA },
   },
-  scratchpad_opened: { event: "review_scratchpad_opened", properties: {} },
   discord_clicked: {
     event: "review_discord_clicked",
     properties: { via: DISCORD_VIA },

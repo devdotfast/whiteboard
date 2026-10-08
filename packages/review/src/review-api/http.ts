@@ -52,11 +52,7 @@ import type { AskRecord } from "./ask-history.js";
 import { authoringTools } from "./authoring-tools.js";
 import { documentText } from "./document-text.js";
 import { ReviewInputError } from "./document.js";
-import {
-  instructionsQuerySchema,
-  renderInstructions,
-  scratchpadAvailable,
-} from "./instructions.js";
+import { instructionsQuerySchema, renderInstructions } from "./instructions.js";
 import type { LocalReviewData } from "./local-data.js";
 import { registerOnboardingRoutes } from "./onboarding.js";
 import {
@@ -78,7 +74,6 @@ import {
 } from "./review-progress.js";
 import {
   type ReviewStore,
-  SCRATCHPAD_ID,
   type Snapshot,
   commandSchema,
   inspectSnapshot,
@@ -142,12 +137,7 @@ const askDecisionSchema = z.strictObject({
 export interface AuthoringCapabilities {
   desktopAvailable: boolean;
   softwareMapEnabled: boolean;
-  /** Off, the host neither makes nor lists the scratchpad, and refuses its id. */
-  scratchpadEnabled: boolean;
 }
-
-const SCRATCHPAD_DISABLED =
-  "The scratchpad is off. Turn it on in Whiteboard Desktop Settings.";
 
 /**
  * What the host reports about reviews, for telemetry. `onReviewCreated` fires
@@ -156,7 +146,6 @@ const SCRATCHPAD_DISABLED =
 export interface ReviewApiHooks {
   onReviewCreated?: (event: {
     reviewId: string;
-    kind: "review" | "scratchpad";
     blocks: number;
     via: ReviewRequestVia;
     agentKind?: ReviewSessionAgent;
@@ -174,14 +163,11 @@ export function createReviewApi(
   }) => Promise<{ softwareMapEnabled: boolean }>,
   shared?: SharedReviewStore,
   capabilities: () =>
-    | Omit<AuthoringCapabilities, "scratchpadEnabled">
-    | Promise<Omit<AuthoringCapabilities, "scratchpadEnabled">> = () => ({
+    | AuthoringCapabilities
+    | Promise<AuthoringCapabilities> = () => ({
     desktopAvailable: Boolean(open),
     softwareMapEnabled: false,
   }),
-  // Synchronous because the catalog is read inside watch callbacks. The host
-  // keeps it current from its preferences file.
-  scratchpadEnabled: () => boolean = () => false,
   // Read per request: capture can change from outside this server.
   traceEnabled: () => Promise<boolean> = async () => false,
   /** Which server this is, for whiteboard_status. */
@@ -252,23 +238,7 @@ export function createReviewApi(
     operation: z.object({ reviewId: z.string().optional() }),
   });
 
-  // The host that can show the scratchpad keeps it: Desktop, while the
-  // preference is on. Headless servers never make one, and a pad made earlier
-  // stays in the store while it is off.
-  const ensureScratchpad = async (id?: string) => {
-    if (open && scratchpadEnabled() && (!id || id === SCRATCHPAD_ID))
-      await store.ensureScratchpad();
-  };
-
-  const refuseDisabledScratchpad = (id?: string) => {
-    if (id === SCRATCHPAD_ID && !scratchpadEnabled())
-      throw new ReviewInputError(SCRATCHPAD_DISABLED, 409);
-  };
-
   const sharedGuard: MiddlewareHandler = async (context, next) => {
-    refuseDisabledScratchpad(context.req.param("id"));
-    await ensureScratchpad(context.req.param("id"));
-
     const id = context.req.param("id");
 
     if (!id || !isShared(id)) return next();
@@ -300,40 +270,20 @@ export function createReviewApi(
     return snapshot;
   };
 
-  const catalog = () => {
-    const local = store.list();
+  const catalog = () => [...store.list(), ...(shared?.list() ?? [])];
 
-    return [
-      ...(scratchpadEnabled()
-        ? local
-        : local.filter((summary) => summary.kind !== "scratchpad")),
-      ...(shared?.list() ?? []),
-    ];
-  };
-
-  app.get("/", async (context) => {
-    await ensureScratchpad();
-
-    return context.json(catalog());
-  });
+  app.get("/", (context) => context.json(catalog()));
 
   // Server-owned state only: asking the Desktop canvas would let a stalled
   // renderer block tool listing and the first instructions call.
   const instructionContext = async () => ({
-    desktopAvailable: Boolean(open),
-    scratchpadEnabled: scratchpadEnabled(),
     traceEnabled: await traceEnabled(),
   });
 
   app.get("/authoring", async (context) => {
     const instructions = await instructionContext();
 
-    return context.json(
-      authoringTools(
-        scratchpadAvailable(instructions),
-        instructions.traceEnabled,
-      ),
-    );
+    return context.json(authoringTools(instructions.traceEnabled));
   });
   app.get("/instructions", async (context) => {
     const { topic } = instructionsQuerySchema.parse(context.req.query());
@@ -464,10 +414,7 @@ export function createReviewApi(
   );
 
   app.get("/capabilities", async (context) =>
-    context.json({
-      ...(await capabilities()),
-      scratchpadEnabled: scratchpadEnabled(),
-    }),
+    context.json(await capabilities()),
   );
 
   app.get("/:id/activity", (context) => {
@@ -1778,17 +1725,6 @@ export function createReviewApi(
 
     const command = sharedCommandSchema.safeParse(input);
 
-    if (command.success) {
-      refuseDisabledScratchpad(command.data.operation.reviewId);
-      await ensureScratchpad(command.data.operation.reviewId);
-    }
-
-    if (
-      input.operation.type === "create" &&
-      input.operation.kind === "scratchpad"
-    )
-      refuseDisabledScratchpad(SCRATCHPAD_ID);
-
     if (
       command.success &&
       command.data.operation.reviewId?.startsWith("shared-")
@@ -1883,7 +1819,6 @@ export function createReviewApi(
     if (result.created !== false)
       hooks.onReviewCreated?.({
         reviewId: result.reviewId,
-        kind: input.operation.kind === "scratchpad" ? "scratchpad" : "review",
         blocks: store.read(result.reviewId).document.length,
         ...reviewRequestOrigin(context.req.raw.headers),
       });

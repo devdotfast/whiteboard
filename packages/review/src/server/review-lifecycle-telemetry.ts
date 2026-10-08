@@ -34,12 +34,12 @@ export function reviewLifecycleTelemetry(
     );
 
   return {
-    onReviewCreated: ({ reviewId, kind, blocks, via, agentKind }) => {
+    onReviewCreated: ({ reviewId, blocks, via, agentKind }) => {
       if (reported.has(reviewId)) return;
       reported.add(reviewId);
 
       if (via === "api" || via === "mcp") authoring.set(reviewId, agentKind);
-      const properties: PostHogCaptureProperties = { kind, blocks, via };
+      const properties: PostHogCaptureProperties = { blocks, via };
 
       if (agentKind) properties.agent_kind = agentKind;
       capture("review_review_created", properties, reviewId);

@@ -26,10 +26,6 @@ const inOpenDocumentLink = () =>
 
 const afterProseItem = () => `${inProse()}:is(li + *)`;
 
-// The scratchpad has no title, so its opening heading sits at the top.
-const scratchpadOpening = () =>
-  `${inDocument()}:is([data-kind="scratchpad"] > [data-review-node-id]:first-child *):first-child`;
-
 const narrow = "@media (max-width: 720px)";
 
 const compact = "@container review-content (max-width: 1080px)";
@@ -143,7 +139,6 @@ export const documentStyles = stylex.create({
   h1: {
     width: { default: null, [inDocument()]: proseColumn },
     margin: { default: null, [inDocument()]: "28px auto 18px" },
-    marginTop: { default: null, [scratchpadOpening()]: 0 },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h1 },
@@ -160,7 +155,6 @@ export const documentStyles = stylex.create({
     width: { default: null, [inDocumentBlock()]: proseColumn },
     maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
     margin: { default: null, [inDocument()]: "40px auto 12px" },
-    marginTop: { default: null, [scratchpadOpening()]: 0 },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h2 },
@@ -172,7 +166,6 @@ export const documentStyles = stylex.create({
     width: { default: null, [inDocumentBlock()]: proseColumn },
     maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
     margin: { default: null, [inDocument()]: "30px auto 10px" },
-    marginTop: { default: null, [scratchpadOpening()]: 0 },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h3 },
@@ -266,7 +259,8 @@ export const documentStyles = stylex.create({
     margin: { default: null, [inDocument()]: "24px auto" },
     borderCollapse: { default: null, [inDocument()]: "collapse" },
     color: { default: null, [inDocument()]: tokens.ink },
-    fontFamily: { default: null, [inDocument()]: tokens.fontMono },
+    // The board's prose face; code chips in cells keep their own.
+    fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: fontSize.ui },
     lineHeight: { default: null, [inDocument()]: 1.55 },
     tableLayout: { default: null, [inDocument()]: "fixed" },

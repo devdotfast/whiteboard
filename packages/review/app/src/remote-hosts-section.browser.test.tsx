@@ -63,8 +63,6 @@ async function render(hosts: ReviewRemoteHostsSettings) {
     chooseOpenFilesInApplication: reject,
     softwareMapEnabled: false,
     setSoftwareMapEnabled: reject,
-    scratchpadEnabled: false,
-    setScratchpadEnabled: reject,
     diffrConfig: {
       read: reject,
       set: reject,

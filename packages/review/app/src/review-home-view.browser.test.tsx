@@ -171,7 +171,6 @@ describe("Home interactions", () => {
       summary("Alpha", { createdAt: "2026-09-01T00:00:00Z" }),
       summary("Read", read),
       summary("Old", { ...read, createdAt: "2026-09-01T00:00:00Z" }),
-      summary("Scratchpad", { kind: "scratchpad" }),
     ];
 
     await render(reviews);

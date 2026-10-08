@@ -5,7 +5,7 @@ export class ReviewCompletionTracker {
 
 	update(reviews: readonly ReviewApiSummary[]): ReviewApiSummary[] {
 		const finished = reviews.filter(review =>
-			this.working.has(review.reviewId) && review.working === false && !review.trashedAt && review.kind !== "scratchpad",
+			this.working.has(review.reviewId) && review.working === false && !review.trashedAt,
 		);
 		this.working = new Set(reviews.filter(review => review.working).map(review => review.reviewId));
 		return finished;

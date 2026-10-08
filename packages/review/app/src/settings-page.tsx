@@ -112,10 +112,6 @@ export function SettingsPage({
     settings.softwareMapEnabled,
   );
 
-  const [scratchpadEnabled, setScratchpadEnabled] = useState(
-    settings.scratchpadEnabled,
-  );
-
   const [installStatus, setInstallStatus] = useState<
     ReviewCliInstallStatus | undefined
   >(settings.install?.status);
@@ -349,24 +345,6 @@ export function SettingsPage({
                     void run(
                       () => settings.setSoftwareMapEnabled(enabled),
                       setSoftwareMapEnabled,
-                    );
-                  }}
-                />
-              </label>
-            </Row>
-            <Row
-              label="Scratchpad"
-              description="Show the experimental scratchpad on Home. Agents draw on it through Whiteboard's MCP tools."
-            >
-              <label {...stylex.props(styles.toggle)}>
-                <Checkbox
-                  aria-label="Scratchpad"
-                  checked={scratchpadEnabled}
-                  onChange={(event) => {
-                    const enabled = event.target.checked;
-                    void run(
-                      () => settings.setScratchpadEnabled(enabled),
-                      setScratchpadEnabled,
                     );
                   }}
                 />

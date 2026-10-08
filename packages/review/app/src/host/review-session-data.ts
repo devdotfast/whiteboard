@@ -7,8 +7,6 @@ import type {
 
 export interface ReviewSessionData {
   trashedAt?: string | null;
-  /** Absent for a review. The scratchpad hides review-only chrome. */
-  kind?: "scratchpad";
   host?: string;
   hostState?: ReviewApiSummary["hostState"];
   hosts?: ReviewRemoteHostActions;
