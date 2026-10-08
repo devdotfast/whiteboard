@@ -76,12 +76,15 @@ it("orders duplicate editors with MDX and wraps navigation", async () => {
       "::highlight(review-find-match)",
     ).backgroundColor,
   ).toBe("rgb(10, 20, 30)");
-  expect(
-    getComputedStyle(
-      container.querySelector("article")!,
-      "::highlight(review-find-match-active)",
-    ).backgroundColor,
-  ).toBe("rgb(40, 50, 60)");
+  // The active match is highlighted on the next frame.
+  await vi.waitFor(() => {
+    expect(
+      getComputedStyle(
+        container.querySelector("article")!,
+        "::highlight(review-find-match-active)",
+      ).backgroundColor,
+    ).toBe("rgb(40, 50, 60)");
+  });
   // The shell is the widget's containing block.
   expect(
     container.querySelector(".review-find-widget")?.parentElement,
