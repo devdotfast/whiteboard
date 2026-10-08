@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "target": "es2023", "lib": ["es2023"], "types": ["bun"],
+    "module": "esnext", "moduleResolution": "bundler", "strict": true,
+    "skipLibCheck": true, "noEmit": true
+  },
+  "include": ["src"]
+}

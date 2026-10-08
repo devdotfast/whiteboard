@@ -14408,7 +14408,7 @@ async function* parseDiffEvents(texts) {
     throw new Error("Incomplete diffr stream");
 }
 
-// src/args.ts
+// ../consumer/src/args.ts
 function splitArgs(text) {
   const args = [];
   let current = "", quote, started = false;
@@ -14437,8 +14437,7 @@ function splitArgs(text) {
     args.push(current);
   return args;
 }
-
-// src/protocol.ts
+// ../consumer/src/protocol.ts
 var action = exports_external.union([
   exports_external.strictObject({ fold: exports_external.number().int(), file: exports_external.number().int() }),
   exports_external.strictObject({ viewedFile: exports_external.number().int() }),
@@ -14467,6 +14466,8 @@ var input = exports_external.union([
   exports_external.strictObject({ press: keyPress }),
   exports_external.strictObject({ select: exports_external.strictObject({ x: exports_external.number().int(), y: exports_external.number().int(), extend: exports_external.literal(true).optional() }) })
 ]);
+
+// src/protocol.ts
 var post = exports_external.strictObject({
   instance: exports_external.string(),
   inputs: exports_external.array(exports_external.tuple([exports_external.number().int(), input])),
@@ -18488,7 +18489,7 @@ function copySelection(files, rows, selection) {
 `);
 }
 
-// src/paint.ts
+// ../consumer/src/paint.ts
 var fit = (text, width) => sliceTextByWidth(text, 0, width).text;
 
 class Colors {
@@ -18577,7 +18578,7 @@ function paintCell(line, value, spans, width, unified, { fileIndex, ...options }
     line.hover(start + from, start + to, { file: fileIndex, ...focus });
 }
 
-// src/frame.ts
+// ../consumer/src/frame.ts
 var SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
 var KEYS = [
   ["j k · d u · space b", "scroll a line, half a page, a page"],
@@ -19033,7 +19034,6 @@ class Pane {
     return { colors: colors.list, fg: colors.of(theme.fg), lines, hover: hover2 };
   }
 }
-
 // src/register.tsx
 var PANE = "diffr";
 var TOOL = "mcp__diffr__open";
@@ -19046,14 +19046,14 @@ async function loadTheme($, binary) {
   return config2.path ? paletteFromHelix(parseHelixTheme(await $.fs.read(config2.path), config2.path)) : loadBundledTheme(config2.name);
 }
 function toolArgs(input2) {
-  const args = input2.args ?? [];
-  if (!Array.isArray(args) || !args.every((arg) => typeof arg === "string"))
+  const args2 = input2.args ?? [];
+  if (!Array.isArray(args2) || !args2.every((arg) => typeof arg === "string"))
     throw new Error("args must be a list of strings: revisions or paths, as diffr takes them");
-  return args;
+  return args2;
 }
-function summary(args, store) {
+function summary(args2, store) {
   const snapshot3 = store.getSnapshot();
-  const shown = `diffr${args.length ? ` ${args.join(" ")}` : ""}`;
+  const shown = `diffr${args2.length ? ` ${args2.join(" ")}` : ""}`;
   if (!snapshot3.comparison)
     throw new Error(`${shown} failed: ${snapshot3.errors.join("; ") || "it named no comparison"}`);
   const files = snapshot3.inventory.length;
@@ -19074,13 +19074,13 @@ function named(store, streamed) {
     streamed.then(done);
   });
 }
-async function startDiffr($, binary, previous, args) {
+async function startDiffr($, binary, previous, args2) {
   const theme = await loadTheme($, binary);
   previous?.return({ code: null, signal: null });
   const store = new DiffStore;
   const pane = new Pane(store, theme);
   pane.subscribe(() => $.ui.invalidate("ui.render"));
-  const child = $.process.spawn({ argv: [binary, "--format", "ndjson", "--syntax", ...args] });
+  const child = $.process.spawn({ argv: [binary, "--format", "ndjson", "--syntax", ...args2] });
   return { pane, child, store, streamed: pump(store, child) };
 }
 async function pump(store, child) {
@@ -19137,31 +19137,31 @@ function register(on, options) {
     return next(e);
   });
   on("command.run", { command: "diffr" }, async ($, e) => {
-    const args = splitArgs(e.args);
+    const args2 = splitArgs(e.args);
     let started;
     try {
-      started = await startDiffr($, binary, child, args);
+      started = await startDiffr($, binary, child, args2);
     } catch (error46) {
       return { text: `diffr could not start: ${error46 instanceof Error ? error46.message : String(error46)}` };
     }
     ({ pane, child } = started);
-    await $.ui.open({ id: PANE, title: ["diffr", ...args].join(" "), focus: true, columns: Math.floor(e.presentation.columns * 0.6) });
+    await $.ui.open({ id: PANE, title: ["diffr", ...args2].join(" "), focus: true, columns: Math.floor(e.presentation.columns * 0.6) });
     return { text: `Opened diffr ${e.args} in a pane.`.replace("  ", " ") };
   });
   on("tool.call", { tool: TOOL }, async ($, e) => {
     const refuse = (error46) => ({ deny: error46 instanceof Error ? error46.message : String(error46) });
-    let args, started;
+    let args2, started;
     try {
-      args = toolArgs(e);
-      started = await startDiffr($, binary, child, args);
+      args2 = toolArgs(e);
+      started = await startDiffr($, binary, child, args2);
     } catch (error46) {
       return refuse(error46);
     }
     ({ pane, child } = started);
-    await $.ui.open({ id: PANE, title: ["diffr", ...args].join(" ") });
+    await $.ui.open({ id: PANE, title: ["diffr", ...args2].join(" ") });
     await named(started.store, started.streamed);
     try {
-      return { result: summary(args, started.store) };
+      return { result: summary(args2, started.store) };
     } catch (error46) {
       return refuse(error46);
     }
@@ -19182,15 +19182,15 @@ function register(on, options) {
       pane.blur();
     focused = e.props.isFocused;
     const columns = e.props.bodyColumns, rows = e.props.scroll.bodyRows;
-    const frame = pane.frame({ columns, rows });
-    const bands = Array.from({ length: Math.ceil(frame.lines.length / BAND) }, (_, i) => frame.lines.slice(i * BAND, (i + 1) * BAND));
+    const frame2 = pane.frame({ columns, rows });
+    const bands = Array.from({ length: Math.ceil(frame2.lines.length / BAND) }, (_, i) => frame2.lines.slice(i * BAND, (i + 1) * BAND));
     return /* @__PURE__ */ h(Box, {
       flexDirection: "column",
       width: columns
     }, bands.map((lines, i) => /* @__PURE__ */ h(Client, {
       key: `diff-${i}`,
       module: "./view.js",
-      props: { ...frame, lines, offset: i * BAND, acks: Object.fromEntries(acks) },
+      props: { ...frame2, lines, offset: i * BAND, acks: Object.fromEntries(acks) },
       width: columns,
       height: lines.length
     })));

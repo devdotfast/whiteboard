@@ -1,5 +1,10 @@
 {
   "name": "@diffr/packages",
   "private": true,
-  "workspaces": ["viewer", "tui", "claude-code"]
+  "workspaces": [
+    "viewer",
+    "tui",
+    "claude-code",
+    "consumer"
+  ]
 }
