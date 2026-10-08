@@ -2,7 +2,7 @@
 
 Requires OpenCode **2.0.25**. V2 provides the native `session.panel` extension API:
 chat and Diffr occupy separate columns, with a draggable divider and a host-owned
-fullscreen mode. V1's fixed 42-column sidebar cannot provide this layout.
+fullscreen mode. OpenCode 1.x is unsupported; there is no sidebar or overlay fallback.
 
 Run `bun install` from `diffr/packages`. Add the package directory to `plugins` in
 `opencode.json` (the server tool) and `cli.json` (the terminal UI):
@@ -56,5 +56,6 @@ are not supported by the reply socket transport.
 ## Validation
 
 `bun run typecheck` and `bun run test` cover socket routing and real OpenTUI
-mouse-selection → draft insertion, including fullscreen return and preserved draft
+multi-row, cross-side selection in both directions across redraws → draft insertion,
+including fullscreen return and preserved draft
 text. Ghostty testing uses OpenCode 2.0.25 and an isolated local model provider.
