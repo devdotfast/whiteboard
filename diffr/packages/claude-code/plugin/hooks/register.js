@@ -150,9 +150,6 @@ function themeConfig(show) {
     throw new Error("diffr config show did not include a theme section");
   return { name: theme.name, path: theme.path ?? null };
 }
-function foldBackground(theme, tint) {
-  return tint === "inserted" ? theme.addition : tint === "removed" ? theme.deletion : tint === "modified" ? theme.modification : theme.bg;
-}
 
 // ../node_modules/.bun/smol-toml@1.4.2/node_modules/smol-toml/dist/error.js
 /*!
@@ -15346,6 +15343,9 @@ function wrapSpans(spans, width) {
 }
 
 // ../viewer/src/document/rows.ts
+function foldBackground(theme, tint) {
+  return tint === "inserted" ? theme.addition : tint === "removed" ? theme.deletion : tint === "modified" ? theme.modification : theme.bg;
+}
 function captureColor(capture, theme) {
   return theme.syntax(capture) ?? theme.fg;
 }

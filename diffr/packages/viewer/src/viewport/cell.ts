@@ -1,9 +1,9 @@
 /** Plans a code cell's coloured runs and its click and hover targets; frontends draw them. */
 import type { Geometry } from "./geometry";
-import type { RenderSpan, SplitLineCell, UnifiedLineCell } from "../document/rows";
+import { foldBackground, type RenderSpan, type SplitLineCell, type UnifiedLineCell } from "../document/rows";
 import { measureTextWidth } from "../terminal/text";
 import type { RowFold } from "../document/regions";
-import { foldBackground, type Palette } from "../theme/palette";
+import type { Palette } from "../theme/palette";
 
 /** The scope the pointer is on. Armed when it points at the scope's rail or chevron, which fold it. */
 export interface ScopeFocus {
