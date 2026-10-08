@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  formatTerminalPath,
-  sanitizeTerminalSpans,
-  sanitizeTerminalText,
-} from "./sanitize";
+import { sanitizeTerminalLine, sanitizeTerminalSpans } from "./sanitize";
 
 const OSC52_CLIPBOARD = "\x1b]52;c;SGVsbG8=\x07";
 const OSC_ST = "\x1b]8;;https://example.test\x1b\\";
@@ -26,7 +22,7 @@ function expectNoUnsafeTerminalControls(text: string) {
   expect(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/.test(text)).toBe(false);
 }
 
-describe("sanitizeTerminalText", () => {
+describe("sanitize", () => {
   test("removes terminal control strings without dropping surrounding text", () => {
     const input = [
       "before",
@@ -43,7 +39,7 @@ describe("sanitizeTerminalText", () => {
       "after",
     ].join("");
 
-    const output = sanitizeTerminalText(input);
+    const output = sanitizeTerminalLine(input);
 
     expect(output).toContain("before");
     expect(output).toContain("after");
@@ -51,74 +47,11 @@ describe("sanitizeTerminalText", () => {
   });
 
   test("neutralizes visual spoofing controls", () => {
-    const output = sanitizeTerminalText("safe\rOVERWRITE\bhidden\x1b");
+    const output = sanitizeTerminalLine("safe\rOVERWRITE\bhidden\x1b");
 
     expect(output).toContain("safe");
     expect(output).toContain("OVERWRITE");
     expect(output).toContain("hidden");
-    expectNoUnsafeTerminalControls(output);
-  });
-
-  test("preserves ordinary multiline text and tabs when allowed", () => {
-    expect(sanitizeTerminalText("alpha\n\tbeta")).toBe("alpha\n\tbeta");
-  });
-
-  test("can preserve ANSI SGR styling while removing unsafe controls", () => {
-    const output = sanitizeTerminalText(
-      `plain\x1b[1;34mblue\x1b[m${OSC52_CLIPBOARD}${CSI_CLEAR_SCREEN}\x1b[2Kdone`,
-      { preserveAnsiStyle: true },
-    );
-
-    expect(output).toBe("plain\x1b[1;34mblue\x1b[mdone");
-  });
-
-  test("does not preserve non-SGR CSI sequences as ANSI styling", () => {
-    const output = sanitizeTerminalText("safe\x1b[2J\x1b[H\x1b[?25ltext", {
-      preserveAnsiStyle: true,
-    });
-
-    expect(output).toBe("safetext");
-  });
-
-  test("removes crafted style placeholder delimiters before restoring ANSI styling", () => {
-    const output = sanitizeTerminalText(
-      "safe\u{f0000}0\u{f0001}\x1b[31mred\x1b[m",
-      {
-        preserveAnsiStyle: true,
-      },
-    );
-
-    expect(output).toBe("safe0\x1b[31mred\x1b[m");
-  });
-
-  test("restores dense ANSI styling in linear time", () => {
-    // `hunk pager` receives whole `git log --graph --color=always` streams from hosts like
-    // LazyGit: a few megabytes carrying ~170k SGR sequences. Restoring styles one at a time
-    // rescanned the entire document per sequence, so this input pegged a core for minutes and
-    // grew to gigabytes. Assert both the styled output and a wall-clock budget that only
-    // quadratic restoration can exceed.
-    const commitCount = 5_000;
-    const input = Array.from(
-      { length: commitCount },
-      (_, index) =>
-        `\x1b[33m* commit ${index}\x1b[m \x1b[1;36m(\x1b[1;32mHEAD\x1b[1;36m)\x1b[m\n` +
-        `\x1b[32m| Author: someone\x1b[m\n`,
-    ).join("");
-    const sequenceCount = input.match(/\x1b\[[0-9;:]*m/g)?.length ?? 0;
-    expect(sequenceCount).toBeGreaterThan(25_000);
-
-    const startedAt = performance.now();
-    const output = sanitizeTerminalText(input, { preserveAnsiStyle: true });
-    const elapsedMs = performance.now() - startedAt;
-
-    expect(output).toBe(input);
-    expect(elapsedMs).toBeLessThan(2_000);
-  });
-
-  test("renders path controls as visible escapes without confusing literal backslashes", () => {
-    const output = formatTerminalPath("dir/literal\\t-tab\tline\nescape\x1b");
-
-    expect(output).toBe("dir/literal\\\\t-tab\\tline\\nescape\\x1b");
     expectNoUnsafeTerminalControls(output);
   });
 
