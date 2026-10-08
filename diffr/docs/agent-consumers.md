@@ -21,7 +21,11 @@ changes preserve review state. Reopening a comparison resets that state.
 
 Claude's native named prompt chips are host-specific. Pi uses its native paste block;
 OpenCode receives text in its native draft; Herdr pastes into the target agent. All use
-the same references, version labels, and selected source/patch content as Claude.
+the same model context: full base/head revision IDs (or explicit staged, working-tree,
+path, or empty-tree identities), followed by a standard Git patch with blob IDs when
+available and numbered selected hunks. L/R range names remain UI labels and Claude
+anchors; they are not the model-facing format. A null blob ID denotes unstored
+working-tree content, not a commit SHA.
 
 The five review layers are:
 
@@ -101,7 +105,7 @@ prompts and tool calls stay on the local machine; user sessions are not submitte
 | Pi lifecycle | Real second-extension overlay remained visible and focused when Diffr closed beneath it; closing the second overlay restored chat; starting a new Pi session removed the previous review |
 | Computer-use pointer delivery | Initial synthetic presses used the terminal's previous pointer position; positioning the pointer before the tested drag/click resolved Pi selection. OpenCode real mouse selection, Add to chat, and divider dragging remain unverified |
 | Earlier Herdr run | Real split beside an offline Pi agent; selected code became an unsent 14-line paste block; zoom, folds, and viewed marks exercised |
-| Live producer | Production Pi invoked installed Diffr on two real changed Git files; model tool acknowledged both; the files screen navigated to the second file; mouse selection and Add to chat inserted the correct working-tree reference and code into the unsent draft |
+| Live producer | Production Pi invoked installed Diffr on two real changed Git files; model tool acknowledged both; the files screen navigated to the second file; mouse selection and Add to chat inserted the correct patch into the unsent draft; a HEAD comparison preserved the full base commit SHA and identified the working tree explicitly |
 
 OpenCode's five behavioral tests cover matching-session delivery, rejection of a
 hidden session, single-terminal claims, errors, cancellation, and real OpenTUI
@@ -109,9 +113,9 @@ selection/draft/fullscreen behavior. Pi tests cover tool dispatch, draft preserv
 public overlay cleanup (including another extension above it), and key release handling. The OpenCode renderer test runs
 with the Solid preload through `bun run test` in CI.
 
-All seven package typechecks, 151 regression tests, and the additional OpenCode
+All seven package typechecks, 153 regression tests, and the additional OpenCode
 renderer test passed. Pi and Claude bundles built; the checked-in Claude plugin
-bundles were unchanged. Frozen workspace installation passed.
+bundle was rebuilt for the patch format. Frozen workspace installation passed.
 
 The v2 runtime was installed and tested in isolation. A system Homebrew upgrade
 was blocked by outdated macOS Command Line Tools; the original v1 command was
