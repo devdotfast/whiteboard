@@ -15733,91 +15733,6 @@ function withGuides(spans, guides, theme) {
   return result;
 }
 
-// ../viewer/src/terminal/window.ts
-function findFirstRowWithBottomAfter(rowBounds, top) {
-  let low = 0;
-  let high = rowBounds.length - 1;
-  let result = rowBounds.length;
-  while (low <= high) {
-    const mid = low + high >>> 1;
-    const rowBoundsEntry = rowBounds[mid];
-    if (rowBoundsEntry.top + rowBoundsEntry.height > top) {
-      result = mid;
-      high = mid - 1;
-    } else {
-      low = mid + 1;
-    }
-  }
-  return result;
-}
-function findLastRowWithTopBefore(rowBounds, bottom) {
-  let low = 0;
-  let high = rowBounds.length - 1;
-  let result = -1;
-  while (low <= high) {
-    const mid = low + high >>> 1;
-    const rowBoundsEntry = rowBounds[mid];
-    if (rowBoundsEntry.top < bottom) {
-      result = mid;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-  return result;
-}
-function rowOverlapsVisibleRange(rowBounds, minVisibleTop, maxVisibleBottom) {
-  if (rowBounds.height <= 0) {
-    return false;
-  }
-  const rowBottom = rowBounds.top + rowBounds.height;
-  return rowBottom > minVisibleTop && rowBounds.top < maxVisibleBottom;
-}
-function resolveVisibleRowIndexWindow({
-  bodyHeight,
-  rowBounds,
-  visibleBodyBounds
-}) {
-  const minVisibleTop = Math.max(0, visibleBodyBounds.top);
-  const maxVisibleBottom = Math.min(bodyHeight, visibleBodyBounds.top + Math.max(0, visibleBodyBounds.height));
-  let firstVisibleIndex = findFirstRowWithBottomAfter(rowBounds, minVisibleTop);
-  while (firstVisibleIndex < rowBounds.length && !rowOverlapsVisibleRange(rowBounds[firstVisibleIndex], minVisibleTop, maxVisibleBottom)) {
-    firstVisibleIndex += 1;
-  }
-  let lastVisibleIndex = findLastRowWithTopBefore(rowBounds, maxVisibleBottom);
-  while (lastVisibleIndex >= 0 && !rowOverlapsVisibleRange(rowBounds[lastVisibleIndex], minVisibleTop, maxVisibleBottom)) {
-    lastVisibleIndex -= 1;
-  }
-  if (firstVisibleIndex >= rowBounds.length) {
-    firstVisibleIndex = -1;
-  }
-  if (firstVisibleIndex < 0 || lastVisibleIndex < 0 || firstVisibleIndex > lastVisibleIndex) {
-    const topSpacerHeight = Math.min(bodyHeight, minVisibleTop);
-    return {
-      bottomSpacerHeight: Math.max(0, bodyHeight - topSpacerHeight),
-      endIndex: 0,
-      startIndex: 0,
-      topSpacerHeight
-    };
-  }
-  let startIndex = firstVisibleIndex;
-  while (startIndex > 0 && rowBounds[startIndex - 1]?.height === 0) {
-    startIndex -= 1;
-  }
-  let endIndex = lastVisibleIndex + 1;
-  while (endIndex < rowBounds.length && rowBounds[endIndex]?.height === 0) {
-    endIndex += 1;
-  }
-  const startRowBounds = rowBounds[startIndex];
-  const endRowBounds = rowBounds[endIndex - 1];
-  return {
-    topSpacerHeight: startRowBounds.top,
-    startIndex,
-    endIndex,
-    bottomSpacerHeight: Math.max(0, bodyHeight - (endRowBounds.top + endRowBounds.height))
-  };
-}
-
 // ../viewer/src/viewport/geometry.ts
 function measureRows(rows, width, wrap, horizontalOffset, maxLine) {
   const digits = String(maxLine).length;
@@ -15842,12 +15757,19 @@ function measureRows(rows, width, wrap, horizontalOffset, maxLine) {
   return { rows: measured, height: top, leftWidth, rightWidth, gutter, unifiedGutter };
 }
 function visibleRows(geometry, top, height) {
-  const window = resolveVisibleRowIndexWindow({
-    bodyHeight: geometry.height,
-    rowBounds: geometry.rows,
-    visibleBodyBounds: { top, height }
-  });
-  return geometry.rows.slice(window.startIndex, window.endIndex);
+  const rows = geometry.rows, bottom = top + Math.max(0, height);
+  let start = 0, end = rows.length;
+  while (start < end) {
+    const mid = start + end >>> 1;
+    if (rows[mid].top + rows[mid].height > top)
+      end = mid;
+    else
+      start = mid + 1;
+  }
+  end = start;
+  while (end < rows.length && rows[end].top < bottom)
+    end++;
+  return rows.slice(start, end);
 }
 function sourceLine(row, side) {
   return side === "right" ? row.right?.lineNumber ?? row.cell?.newLineNumber : row.left?.lineNumber ?? row.cell?.oldLineNumber;
