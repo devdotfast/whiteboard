@@ -73,4 +73,66 @@ static inline __attribute__((noreturn)) void diffr_exit(int status) {
     __builtin_trap();
 }
 #define exit diffr_exit
+/* A grammar's generated lexer is one function: a loop around a switch with a
+ * branch per state. LLVM's WebAssembly backend checks every loop for
+ * irreducible control flow by working out which blocks reach which, which
+ * takes memory in the square of the function's blocks: tens of gigabytes
+ * for the largest grammars (tree-sitter-fortran, tree-sitter-julia), past a
+ * CI runner's. So the loop moves out: the generated function takes one step
+ * and says where to go next, and a small driver advances the lexer and
+ * calls it again. tree-sitter's macros are replaced with ones that return
+ * instead of jumping back; the rest of the generated code is unchanged. */
+#if __has_include("tree_sitter/parser.h")
+#include "tree_sitter/parser.h"
+static bool diffr_lex_result, diffr_lex_skip;
+static TSStateId diffr_lex_next;
+static __attribute__((noinline)) bool diffr_lex_step(TSLexer *lexer, TSStateId state);
+static __attribute__((noinline)) bool diffr_lex_keywords_step(TSLexer *lexer, TSStateId state);
+static inline bool diffr_lex(bool (*step)(TSLexer *, TSStateId), TSLexer *lexer, TSStateId state) {
+    diffr_lex_result = false;
+    while (step(lexer, state)) {
+        lexer->advance(lexer, diffr_lex_skip);
+        state = diffr_lex_next;
+    }
+    return diffr_lex_result;
+}
+/* Unused, and so not compiled, outside a grammar's parser.c. */
+static bool ts_lex(TSLexer *lexer, TSStateId state) { return diffr_lex(diffr_lex_step, lexer, state); }
+static bool ts_lex_keywords(TSLexer *lexer, TSStateId state) {
+    return diffr_lex(diffr_lex_keywords_step, lexer, state);
+}
+/* parser.c defines these by their names with arguments, and refers to them without. */
+#define ts_lex(lexer, state) diffr_lex_step(lexer, state)
+#define ts_lex_keywords(lexer, state) diffr_lex_keywords_step(lexer, state)
+#undef START_LEXER
+#define START_LEXER()                          \
+    bool result = diffr_lex_result;            \
+    __attribute__((unused)) bool skip = false; \
+    __attribute__((unused)) bool eof = lexer->eof(lexer); \
+    int32_t lookahead = lexer->lookahead;
+#define DIFFR_LEX_NEXT(state_value, skipping) \
+    {                                          \
+        diffr_lex_result = result;             \
+        diffr_lex_skip = skipping;             \
+        diffr_lex_next = state_value;          \
+        return true;                           \
+    }
+#undef ADVANCE
+#define ADVANCE(state_value) DIFFR_LEX_NEXT(state_value, false)
+#undef SKIP
+#define SKIP(state_value) DIFFR_LEX_NEXT(state_value, true)
+#undef ADVANCE_MAP
+#define ADVANCE_MAP(...)                                               \
+    {                                                                  \
+        static const uint16_t map[] = {__VA_ARGS__};                   \
+        for (uint32_t i = 0; i < sizeof(map) / sizeof(map[0]); i += 2) \
+            if (map[i] == lookahead) ADVANCE(map[i + 1]);              \
+    }
+#undef END_STATE
+#define END_STATE()                \
+    {                              \
+        diffr_lex_result = result; \
+        return false;              \
+    }
+#endif
 #endif
