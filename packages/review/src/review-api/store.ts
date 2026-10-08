@@ -39,6 +39,7 @@ import {
 import {
   type Applied,
   type Block,
+  type BoardLinkRef,
   type EditSummary,
   type Element,
   type FileLineRange,
@@ -49,6 +50,7 @@ import {
   anchorPins,
   applyEdit,
   assignFreshIds,
+  boardLinks,
   checkReferences,
   documentAdvice,
   documentSchema,
@@ -1084,8 +1086,8 @@ export class ReviewStore {
       "versions",
     ])
       this.db.prepare(`DELETE FROM ${table} WHERE review_id=?`).run(id);
-    // Its children move up to top level, and its dependencies go, by the
-    // schema's foreign keys.
+    // Its children move up to top level, its dependencies and the links
+    // on it go, by the schema's foreign keys.
     this.db.prepare("DELETE FROM reviews WHERE id=?").run(id);
     this.liveSources.delete(id);
   }
@@ -1692,6 +1694,9 @@ export class ReviewStore {
       // Check cross-references here; do not reparse the whole stored document.
       checkReferences(snapshot.document);
 
+      // A restore may bring back links to deleted boards, so skip the check.
+      if (op.type !== "restore") this.checkBoardLinks(snapshot, previous);
+
       if (
         snapshot.pins &&
         (!previous ||
@@ -1769,6 +1774,7 @@ export class ReviewStore {
               "INSERT INTO versions(review_id,version,snapshot) VALUES(?,?,?)",
             )
             .run(id, snapshot.version, JSON.stringify(snapshot));
+          this.indexBoardLinks(id, snapshot.document);
 
           if (op.type === "create" && op.parentId)
             this.setParent(id, op.parentId);
@@ -2105,6 +2111,109 @@ export class ReviewStore {
     );
 
     for (const dependency of unique) insert.run(id, dependency);
+  }
+  /** New links must point at a board and block that exist. Saved links are
+   * not rechecked, since their target may have been deleted. */
+  private checkBoardLinks(snapshot: Snapshot, previous?: Snapshot) {
+    const key = ({ to }: BoardLinkRef) => `${to.board}#${to.block ?? ""}`;
+
+    const kept = new Set(
+      boardLinks(snapshot.reviewId, previous?.document ?? []).map(key),
+    );
+
+    for (const link of boardLinks(snapshot.reviewId, snapshot.document)) {
+      if (kept.has(key(link))) continue;
+      const { from, to } = link;
+
+      const document =
+        to.board === snapshot.reviewId
+          ? snapshot.document
+          : this.has(to.board)
+            ? this.read(to.board).document
+            : undefined;
+
+      if (!document)
+        throw new ReviewInputError(
+          `Block ${from.block} links to board ${to.board}, which does not exist. Link a board by its sessionId from session_list.`,
+        );
+
+      if (
+        to.block !== undefined &&
+        !elements(document).some((element) => element.id === to.block)
+      )
+        throw new ReviewInputError(
+          `Block ${from.block} links to block ${to.block}, which is not on board ${to.board}. Read the board with session_get for its block ids.`,
+        );
+    }
+  }
+  /** Rebuilds the board_links rows for one board. */
+  private indexBoardLinks(id: string, document: Block[]) {
+    this.db.prepare("DELETE FROM board_links WHERE from_review=?").run(id);
+
+    const insert = this.db.prepare(
+      "INSERT INTO board_links(from_review,from_block,to_review,to_block) VALUES(?,?,?,?)",
+    );
+
+    for (const { from, to } of boardLinks(id, document))
+      insert.run(from.board, from.block, to.board, to.block ?? null);
+  }
+  /** A version's outgoing links and the board's current backlinks. */
+  links(id: string, version?: number) {
+    const titles = new Map<string, Snapshot | undefined>();
+
+    const board = (reviewId: string) => {
+      if (!titles.has(reviewId))
+        titles.set(
+          reviewId,
+          this.has(reviewId) ? this.read(reviewId) : undefined,
+        );
+
+      return titles.get(reviewId);
+    };
+
+    const outgoing = boardLinks(id, this.read(id, version).document).map(
+      ({ from, to }) => {
+        const target = board(to.board);
+
+        return {
+          from,
+          to,
+          ...(target && {
+            title: target.title,
+            ...(target.origin?.pullRequestNumber && {
+              pullRequestNumber: target.origin.pullRequestNumber,
+            }),
+            updatedAt: target.createdAt,
+          }),
+        };
+      },
+    );
+
+    const backlinks = this.db
+      .prepare(
+        "SELECT DISTINCT from_review,from_block,to_block FROM board_links WHERE to_review=? AND from_review<>? ORDER BY from_review",
+      )
+      .all(id, id)
+      .map((row) => {
+        const from = board(String(row.from_review));
+
+        return {
+          from: {
+            board: String(row.from_review),
+            block: String(row.from_block),
+          },
+          to:
+            row.to_block === null
+              ? { board: id }
+              : { board: id, block: String(row.to_block) },
+          title: from?.title ?? "",
+          ...(from?.origin?.pullRequestNumber && {
+            pullRequestNumber: from.origin.pullRequestNumber,
+          }),
+        };
+      });
+
+    return { outgoing, backlinks };
   }
   /** Resolve a target-less PR create before it queues, when it will need it. */
   private startPullRequest(
