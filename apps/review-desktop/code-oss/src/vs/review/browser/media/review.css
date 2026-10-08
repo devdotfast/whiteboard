@@ -257,48 +257,33 @@
 /* ---------------------------------------------------------------------------
    The file-tree toggle
 
-   The button takes a slot beside a board and none on Home. The tab strip
-   pads itself by the cluster's width (`--review-chrome-left-width`), so
-   the tabs shift once when the slot opens or closes. Only opacity and
-   transform animate, so the shift is not animated.
+   Always in its slot, so the controls never shift; on Home, which has no
+   sidebar, it is disabled.
    --------------------------------------------------------------------------- */
 
 .monaco-workbench .review-titlebar-file-tree-toggle {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* No slot on Home, so the arrows take its place. */
-  width: 0;
+  width: 22px;
   height: 22px;
-  margin-left: 4px;
-  overflow: hidden;
+  margin-left: 12px;
   border-radius: 5px;
   flex-shrink: 0;
   color: var(--vscode-icon-foreground);
-  /* Nothing to toggle until a board tab is active. */
-  opacity: 0;
-  transform: scale(0.8);
-  pointer-events: none;
+  cursor: pointer;
   /* The cluster around it drags the window; this button must not. */
   -webkit-app-region: no-drag;
 }
 
-.monaco-workbench.review-explorer-available .review-titlebar-file-tree-toggle {
-  width: 22px;
-  margin-left: 12px;
-  opacity: 1;
-  transform: none;
-  pointer-events: auto;
-  cursor: pointer;
+/* Nothing to toggle until a board tab is active. */
+.monaco-workbench:not(.review-explorer-available) .review-titlebar-file-tree-toggle {
+  pointer-events: none;
+  cursor: default;
 }
 
-/* Reduced motion gets a straight cut: `monaco-enable-motion` is absent then,
-   because accessibility/browser/accessibilityService.ts toggles it from
-   `workbench.reduceMotion`. */
-.monaco-workbench.monaco-enable-motion .review-titlebar-file-tree-toggle {
-  transition:
-    opacity 120ms ease,
-    transform 120ms ease;
+.monaco-workbench:not(.review-explorer-available) .review-sidebar-toggle-icon {
+  stroke: var(--vscode-disabledForeground);
 }
 
 .monaco-workbench .review-titlebar-file-tree-toggle:hover {
@@ -308,6 +293,59 @@
 .monaco-workbench .review-titlebar-file-tree-toggle:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: -1px;
+}
+
+/* Home, after back and forward; lit while Home shows. */
+.monaco-workbench .review-titlebar-home {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.monaco-workbench .review-titlebar-home > svg {
+  fill: none;
+  stroke: var(--vscode-descriptionForeground);
+  stroke-width: 1.15;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.monaco-workbench .review-titlebar-home:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.monaco-workbench .review-titlebar-home:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.monaco-workbench.review-home-active .review-titlebar-home {
+  background-color: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.monaco-workbench.review-home-active .review-titlebar-home > svg {
+  stroke: var(--vscode-foreground);
+}
+
+/* With no sidebar under them, the controls share the row with the board
+   tabs; a rule parts them. */
+.monaco-workbench .review-titlebar-divider {
+  display: none;
+  flex-shrink: 0;
+  width: 1px;
+  height: 16px;
+  margin-left: 8px;
+  background-color: var(--review-tab-separator, var(--vscode-panel-border));
+}
+
+.monaco-workbench:not(.review-explorer-visible) .review-titlebar-divider {
+  display: block;
 }
 
 /* A rounded window with a narrow left panel, filled while the sidebar is
@@ -586,9 +624,9 @@ body
   padding: 2px 0;
 }
 
-/* Home carries no close button, but `sizing-fit` still stretches it to a fixed
-   120px. That leaves ~30px of dead space on each side of the home icon and the
-   name, which reads as an off-center label. The pill hugs them instead. */
+/* Home stays open as an editor, so back and forward pass through it, but it
+   is a window control (the house after the arrows), not a tab: the strip
+   holds only boards. Home is the one sticky editor. */
 body
   .monaco-workbench.review-workbench
   .part.editor
@@ -597,40 +635,7 @@ body
   > .title
   .tabs-container
   > .tab.sticky {
-  width: fit-content;
-}
-
-/* Home is the one sticky tab, so it is always the last one before the review
-   tabs. A rule after it separates the two groups. `redrawTabBorders` draws that
-   rule as an inline border-right, which the flat rule above removes, so the
-   pseudo-element below draws it instead. */
-body
-  .monaco-workbench.review-workbench
-  .part.editor
-  > .content
-  .editor-group-container
-  > .title
-  .tabs-container
-  > .tab.sticky:not(:last-child) {
-  margin-right: 8px;
-}
-
-body
-  .monaco-workbench.review-workbench
-  .part.editor
-  > .content
-  .editor-group-container
-  > .title
-  .tabs-container
-  > .tab.sticky:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  right: -7px;
-  top: 4px;
-  bottom: 4px;
-  width: 1px;
-  pointer-events: none;
-  background-color: var(--review-tab-separator);
+  display: none;
 }
 
 .monaco-workbench
@@ -691,7 +696,7 @@ body
   -webkit-app-region: no-drag;
 }
 
-/* Equal space on each side of the arrows.
+/* The space around the arrows.
 
    `CodeWindow.updateWindowControls` moves the traffic lights itself: it calls
    `setWindowButtonPosition({ x: floor((REVIEW_CHROME_HEIGHT - buttonHeight) / 2) + 1 })`.
@@ -700,14 +705,13 @@ body
    number moves.
 
    The arrow glyph carries 2px of side bearing inside its box, so the back arrow
-   starts drawing 19px after the last light. On the other side the tab strip
-   adds 6px of its own (`.review-chrome-inset`), so 8px here lands the Home tab
-   19px after the forward arrow draws. */
+   starts drawing 19px after the last light. The house follows the forward
+   arrow as closely. */
 .monaco-workbench
   .part.titlebar.review-chrome-overlay
   .review-titlebar-navigation {
   margin-left: 6px;
-  margin-right: 8px;
+  margin-right: 4px;
 }
 
 /* Without no-drag the full-size .titlebar-drag-region takes the clicks and the

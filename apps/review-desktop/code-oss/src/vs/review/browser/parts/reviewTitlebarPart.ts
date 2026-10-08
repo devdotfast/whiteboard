@@ -159,14 +159,17 @@ export class ReviewTitlebarPart extends Part implements ITitlebarPart {
 			getDefaultHoverDelegate('mouse'),
 		));
 		append(navigationContainer, navigationControl.element);
+		this.createHomeButton();
+		// Between the controls and the board tabs when they share the row.
+		append(this.leftContent, $('div.review-titlebar-divider'));
 
 		this.updateStyles();
 		return this.element;
 	}
 
 	/**
-	 * The sidebar toggle, left of the navigation arrows. CSS hides it on Home
-	 * and picks which icon shows, so this part needs no sidebar state.
+	 * The sidebar toggle, left of the navigation arrows. CSS disables it on
+	 * Home and picks which icon shows, so this part needs no sidebar state.
 	 */
 	private createFileTreeToggle(): void {
 		const toggle = append(this.leftContent, $('div.review-titlebar-file-tree-toggle', {
@@ -198,6 +201,39 @@ export class ReviewTitlebarPart extends Part implements ITitlebarPart {
 		const run = () => void this.commandService.executeCommand('review.toggleFileTree');
 		this._register(addDisposableListener(toggle, 'click', run));
 		this._register(addDisposableListener(toggle, 'keydown', event => {
+			const keyboardEvent = new StandardKeyboardEvent(event);
+			if (keyboardEvent.equals(KeyCode.Enter) || keyboardEvent.equals(KeyCode.Space)) {
+				keyboardEvent.preventDefault();
+				keyboardEvent.stopPropagation();
+				run();
+			}
+		}));
+	}
+
+	/** Home, after back and forward: lit while Home shows. */
+	private createHomeButton(): void {
+		const label = localize('review.openHome.tooltip', "Home");
+		const button = append(this.leftContent, $('div.review-titlebar-home', {
+			role: 'button',
+			tabindex: '0',
+			title: label,
+			'aria-label': label,
+		}));
+
+		const namespace = 'http://www.w3.org/2000/svg';
+		const icon = button.ownerDocument.createElementNS(namespace, 'svg');
+		icon.setAttribute('width', '15');
+		icon.setAttribute('height', '15');
+		icon.setAttribute('viewBox', '0 0 14 14');
+		icon.setAttribute('aria-hidden', 'true');
+		const house = button.ownerDocument.createElementNS(namespace, 'path');
+		house.setAttribute('d', 'M2.25 6.75 L7 2.75 L11.75 6.75 M3.5 5.75 V11.25 H10.5 V5.75');
+		icon.appendChild(house);
+		button.appendChild(icon);
+
+		const run = () => void this.commandService.executeCommand('review.openHome');
+		this._register(addDisposableListener(button, 'click', run));
+		this._register(addDisposableListener(button, 'keydown', event => {
 			const keyboardEvent = new StandardKeyboardEvent(event);
 			if (keyboardEvent.equals(KeyCode.Enter) || keyboardEvent.equals(KeyCode.Space)) {
 				keyboardEvent.preventDefault();
