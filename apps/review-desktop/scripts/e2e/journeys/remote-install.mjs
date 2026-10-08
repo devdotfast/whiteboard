@@ -477,7 +477,8 @@ async function targetOf(host, version) {
 }
 
 async function steps(ctx, until, watch, timings, manifestPath) {
-  const version = JSON.parse(await readFile(manifestPath, "utf8")).version;
+  // A dev Desktop stamps its checkout's state onto packages/review/package.json's version.
+  const { version } = await ctx.apiOk("/health");
 
   // 1. fresh: the question, its steps in Settings, online, and a review made there with the installed CLI listed in Home.
   const fresh = alias("fresh");
@@ -772,12 +773,13 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   const oldFreshServer = await freshServer();
 
   // 7. The next version: Desktop's server reports what packages/review/package.json says, and its pack carries it.
-  const next = version.replace(/\d+$/, (patch) => String(Number(patch) + 1));
   const manifest = await readFile(manifestPath, "utf8");
+  const current = JSON.parse(manifest).version;
+  const bumped = current.replace(/\d+$/, (patch) => String(Number(patch) + 1));
 
   await writeFile(
     manifestPath,
-    manifest.replace(`"version": "${version}"`, `"version": "${next}"`),
+    manifest.replace(`"version": "${current}"`, `"version": "${bumped}"`),
   );
   const sshBefore = (await desktopSsh()).map(([pid]) => pid);
   const restarted = Date.now();
@@ -791,7 +793,9 @@ async function steps(ctx, until, watch, timings, manifestPath) {
     30_000,
   );
 
-  assert.equal((await ctx.apiOk("/health")).version, next);
+  const { version: next } = await ctx.apiOk("/health");
+
+  assert.ok(next === bumped || next.startsWith(`${bumped}+dev.`), next);
 
   const upgraded = await until(
     () =>
@@ -819,7 +823,7 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   assert.notEqual(newFreshServer.serverPid, oldFreshServer.serverPid);
   assert.match(
     await onRemote(fresh, `cat /proc/${newFreshServer.serverPid}/cmdline | tr '\\0' ' '`),
-    new RegExp(`/versions/${next.replaceAll(".", "\\.")}/`),
+    new RegExp(`/versions/${next.replace(/[.+]/g, "\\$&")}/`),
   );
   await homeRow(ctx, title);
   ctx.check(

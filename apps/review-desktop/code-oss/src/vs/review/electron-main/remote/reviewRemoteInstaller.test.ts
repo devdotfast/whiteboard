@@ -378,6 +378,8 @@ test("shellQuote survives quotes and refuses control characters", async () => {
 test("versions order as semver", () => {
 	const sorted = ["0.1.10", "0.1.7", "0.1.7-preview.20261003.10", "0.1.6", "0.1.7-preview.20261003.2", "0.2.0-preview.1"].sort(compareVersions);
 	assert.deepEqual(sorted, ["0.1.6", "0.1.7-preview.20261003.2", "0.1.7-preview.20261003.10", "0.1.7", "0.1.10", "0.2.0-preview.1"]);
+	assert.equal(compareVersions("0.2.0+dev.0123456789ab", "0.2.0"), 0);
+	assert.ok(compareVersions("0.2.1+dev.0123456789ab", "0.2.0") > 0);
 });
 
 test("a lock taken over between the stealer's two reads is left to its new holder", async (t) => {

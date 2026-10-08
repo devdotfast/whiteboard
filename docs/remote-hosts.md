@@ -63,7 +63,10 @@ its Node when run.
 - **A machine Whiteboard cannot run on** shows `unsupported`, with the
   reason, such as "This host runs glibc 2.31; Whiteboard needs 2.34 or
   newer." Desktop writes nothing on it.
-- **A machine without Desktop's version** gets a question in Desktop's
+- **A machine with another Whiteboard version**, installed by Desktop or on
+  its `PATH`, gets Desktop's version without a question, as VS Code updates
+  its server.
+- **A machine without any Whiteboard** gets a question in Desktop's
   window: "Install Whiteboard on `<alias>`?", with the space it takes. Desktop
   asks once per host and remembers the answer until you remove Whiteboard
   from that host.
@@ -134,7 +137,7 @@ not have its version:
 
 | Value | What Desktop does |
 |---|---|
-| `ask` (the default) | Asks once per host. |
+| `ask` (the default) | Asks once per host, unless the host already has a Whiteboard version. |
 | `always` | Installs without asking. |
 | `never` | Never installs. It uses the `whiteboard` you installed on the host's `PATH`, and shows `not-installed` with the command when there is none. |
 

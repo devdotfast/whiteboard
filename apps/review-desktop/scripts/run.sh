@@ -78,6 +78,17 @@ if [[ -z "$PACKAGED_ROOT" ]]; then
   node "$APP_DIR/scripts/copy-canvas.mjs"
   export DEV_FAST_REVIEW_SERVER_ENTRY="$REVIEW_SERVER"
   export DEV_FAST_REVIEW_TOOLING_ROOT="$MONOREPO_ROOT"
+  # Semver build metadata: a remote host replaces a server whose state differs.
+  DEV_STATE="$(
+    cd "$MONOREPO_ROOT"
+    {
+      git rev-parse HEAD
+      git status --porcelain=v1 --untracked-files=all
+      git diff HEAD --binary
+    } | git hash-object --stdin
+  )"
+  DEV_FAST_REVIEW_DEV_VERSION="$(node -p "require('$REVIEW_PACKAGE/package.json').version")+dev.${DEV_STATE:0:12}"
+  export DEV_FAST_REVIEW_DEV_VERSION
 fi
 
 CODE_ARGS=(

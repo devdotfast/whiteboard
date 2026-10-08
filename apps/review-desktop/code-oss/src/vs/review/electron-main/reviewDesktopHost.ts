@@ -314,6 +314,7 @@ export class ReviewDesktopHost extends Disposable {
     const artifactsOptions = {
       pin,
       checkout: isBuilt ? undefined : join(appRoot, "..", "..", ".."),
+      devVersion: isBuilt ? undefined : process.env.DEV_FAST_REVIEW_DEV_VERSION,
       cacheDirectory,
     };
     return {
