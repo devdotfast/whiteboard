@@ -2108,6 +2108,41 @@ describe("snapshot authoring", () => {
     });
   });
 
+  it("links boards to existing boards and blocks, and indexes the links both ways", async () => {
+    const plan = await create();
+
+    const { targetId: section } = await edit(plan.reviewId, {
+      type: "insert",
+      content: { type: "markdown", markdown: "## API" },
+    });
+
+    const pr = await create();
+
+    const link = (markdown: string) =>
+      edit(pr.reviewId, {
+        type: "insert",
+        content: { type: "markdown", markdown },
+      });
+
+    await expect(
+      link("[gone](whiteboard:board/11111111-1111-4111-8111-111111111111)"),
+    ).rejects.toBeInstanceOf(ReviewInputError);
+    await expect(
+      link(`[gone](whiteboard:board/${plan.reviewId}#block-99)`),
+    ).rejects.toBeInstanceOf(ReviewInputError);
+
+    const { targetId: from } = await link(
+      `See [the plan](whiteboard:board/${plan.reviewId}) and [its API](whiteboard:board/${plan.reviewId}#${section}).`,
+    );
+
+    const linkFrom = { board: pr.reviewId, block: from! };
+
+    expect(store.links(plan.reviewId).backlinks).toMatchObject([
+      { from: linkFrom, to: { board: plan.reviewId } },
+      { from: linkFrom, to: { board: plan.reviewId, block: section } },
+    ]);
+  });
+
   it("serializes edits through async validation and preserves different-field patches", async () => {
     const { reviewId } = await create();
 

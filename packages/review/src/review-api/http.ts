@@ -1678,6 +1678,17 @@ export function createReviewApi(
     return context.json({ layers });
   });
 
+  app.get("/:id/links", (context) => {
+    const id = context.req.param("id");
+
+    if (isShared(id)) return context.json({ outgoing: [], backlinks: [] });
+
+    const { version } = readQuerySchemas.get
+      .pick({ version: true })
+      .parse({ version: context.req.query("version") });
+
+    return context.json(store.links(id, version));
+  });
   app.get("/:id/place", (context) => {
     const id = context.req.param("id");
 

@@ -1609,6 +1609,8 @@ export const ReviewVerbRequestSchema = z.discriminatedUnion("name", [
     args: z.strictObject({
       reviewUuid: apiReviewIdSchema,
       active: z.boolean(),
+      /** Block to scroll to after opening. */
+      blockId: requiredString.optional(),
     }),
   }),
   z.strictObject({
@@ -1695,6 +1697,12 @@ export const ReviewSurfaceEventSchema = z.discriminatedUnion("event", [
   z.strictObject({
     event: z.literal("showReviewView"),
     view: reviewViewSchema,
+  }),
+  /** Show one block of a board, once that board is on screen. */
+  z.strictObject({
+    event: z.literal("revealBlock"),
+    reviewId: requiredString,
+    blockId: requiredString,
   }),
 ]);
 

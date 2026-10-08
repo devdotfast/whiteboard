@@ -235,6 +235,48 @@ export function respellEditLinks(edit: Edit): Edit {
   return rewriteMarkdown(edit, respellLinks);
 }
 
+/** Names a block from outside its board. Block ids are unique only within a board. */
+export type BlockRef = { board: string; block: string };
+
+export type BoardRef = BlockRef | { board: string; block?: undefined };
+
+/** Parses whiteboard:board/<id> or whiteboard:board/<id>#<blockId>. */
+export function boardLink(href: string): BoardRef | undefined {
+  const match = /^whiteboard:board\/([^#/]+)(?:#(.+))?$/.exec(href);
+
+  if (!match) return undefined;
+
+  try {
+    const board = decodeURIComponent(match[1]!);
+
+    return match[2] === undefined
+      ? { board }
+      : { board, block: decodeURIComponent(match[2]) };
+  } catch {
+    return undefined;
+  }
+}
+
+/** A link from a block to a board or one of its blocks. */
+export interface BoardLinkRef {
+  from: BlockRef;
+  to: BoardRef;
+}
+
+/** Every board link in a document. Malformed links are skipped; writes reject them. */
+export function boardLinks(board: string, document: Block[]): BoardLinkRef[] {
+  return elements(document).flatMap((element) =>
+    element.type === "markdown"
+      ? [...markdownNodes(parseMarkdown(element.markdown))].flatMap((node) => {
+          const to =
+            node.type === "link" ? boardLink(node.url ?? "") : undefined;
+
+          return to ? [{ from: { board, block: element.id! }, to }] : [];
+        })
+      : [],
+  );
+}
+
 /** Inline trace quotes keep paragraph/list layout while using retained resources. */
 export function traceQuoteLink(
   href: string,
@@ -343,10 +385,18 @@ function documentReferences(
             // Trace links are checked by resourceReferences.
             if (href.startsWith("whiteboard:trace/")) return [];
 
+            // Board links are checked against the store on write.
+            if (href.startsWith("whiteboard:board/"))
+              return boardLink(href)
+                ? []
+                : reject(
+                    `Use whiteboard:board/<sessionId> or whiteboard:board/<sessionId>#<blockId> to link a board, in block ${element.id}.`,
+                  );
+
             if (/^(?:https?:\/\/|mailto:|#)/i.test(href)) return [];
 
             return reject(
-              `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](whiteboard:source/head/path#L10-L24) or whiteboard:source/base/path#L10-L24 for repository files, or whiteboard:source/diff/path#L84-R90 across sides, with a repository-relative path and verified line numbers. External links must use https://, http://, or mailto:; document anchors use #heading.`,
+              `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](whiteboard:source/head/path#L10-L24) or whiteboard:source/base/path#L10-L24 for repository files, or whiteboard:source/diff/path#L84-R90 across sides, with a repository-relative path and verified line numbers. Link another board as whiteboard:board/<sessionId>, or one of its blocks as whiteboard:board/<sessionId>#<blockId>. External links must use https://, http://, or mailto:; document anchors use #heading.`,
             );
           }
 

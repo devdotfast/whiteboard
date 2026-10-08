@@ -7,7 +7,31 @@ export function scrollToReviewHeading(
   const heading = article?.querySelector<HTMLElement>(`#${cssIdentifier(id)}`);
 
   if (!article || !heading) return;
+  scrollToReviewElement(heading, article, scrollRegion);
+}
 
+/** Scrolls to a rendered block. Returns false while it isn't rendered or
+ * its document is hidden, as in the Diff view. */
+export function scrollToReviewBlock(
+  blockId: string,
+  article: HTMLElement | null,
+  scrollRegion: HTMLElement | null,
+): boolean {
+  const block = article?.querySelector<HTMLElement>(
+    `[data-review-node-id="${blockId.replace(/["\\]/g, "\\$&")}"]`,
+  );
+
+  if (!article || !block || article.closest("[hidden]")) return false;
+  scrollToReviewElement(block, article, scrollRegion);
+
+  return true;
+}
+
+function scrollToReviewElement(
+  heading: HTMLElement,
+  article: HTMLElement,
+  scrollRegion: HTMLElement | null,
+): void {
   // Headings inside a collapsed section have no scroll position until
   // the section expands, so expand first and scroll on the next frame.
   // The jump is instant, like the tour feed's reveal: scroll-synced
