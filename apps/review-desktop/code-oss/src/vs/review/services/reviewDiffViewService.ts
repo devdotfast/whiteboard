@@ -336,6 +336,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 					this.overflowWidgetsDomNode,
 					this.diffLayout,
 					this.spec.fileTreeContainer, this.spec.onToggleViewed, this.spec.onToggleSection, this.spec.document,
+					this.spec.openFile !== false,
 				),
 			);
 			this.view = view;

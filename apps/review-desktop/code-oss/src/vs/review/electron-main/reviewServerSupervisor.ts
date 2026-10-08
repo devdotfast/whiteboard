@@ -21,6 +21,7 @@ import {
   type ReviewServerAnnouncement,
   resolveReviewServerEntry,
 } from "../common/reviewDesktopBootstrap.js";
+import type { ReviewGatewayHost } from "../common/reviewProtocol.js";
 import {
   REVIEW_SERVER_RESTART_DELAYS,
   REVIEW_SERVER_STARTUP_TIMEOUT_MS,
@@ -37,6 +38,7 @@ export interface IReviewServerProcess extends IDisposable {
   readonly onStderr: Event<string>;
   readonly onExit: Event<{ readonly code: number; readonly signal: string }>;
   readonly onCrash: Event<{ readonly code: number; readonly reason: string }>;
+  readonly onMessage: Event<unknown>;
   start(configuration: {
     readonly type: string;
     readonly name: string;
@@ -86,6 +88,7 @@ export interface ReviewServerSupervisorOptions {
   readonly onServerTerminated?: (detail: ReviewServerTermination) => void;
   /** Called every time a server, first or restarted, announces its endpoint. */
   readonly onServerReady?: () => void;
+  readonly onRemoteHostRestarted?: (alias: string) => void;
 }
 
 export function createReviewServerEnvironment(options: {
@@ -213,6 +216,8 @@ export class ReviewServerSupervisor extends Disposable {
   private restartCount = 0;
   private stopping = false;
   private telemetryEnabled: boolean;
+  private readyProcess: IReviewServerProcess | undefined;
+  private remoteHosts: ReviewGatewayHost[] | undefined;
 
   /**
    * Credentials are minted once and reused for the life of the application, so
@@ -244,6 +249,11 @@ export class ReviewServerSupervisor extends Disposable {
   setTelemetryEnabled(enabled: boolean): void {
     this.telemetryEnabled = enabled;
     this.serverProcess?.postMessage({ type: "telemetry-setting", enabled });
+  }
+
+  setRemoteHosts(hosts: ReviewGatewayHost[]): void {
+    this.remoteHosts = hosts;
+    this.readyProcess?.postMessage({ type: "remote-hosts", hosts });
   }
 
   stageRustAnalyzer(): void {
@@ -330,6 +340,9 @@ export class ReviewServerSupervisor extends Disposable {
           appSessionId: this.appSessionId,
         };
         ready = true;
+        this.readyProcess = serverProcess;
+        if (this.remoteHosts)
+          serverProcess.postMessage({ type: "remote-hosts", hosts: this.remoteHosts });
         this.readyTimer.cancel();
         this.port = Number(new URL(connection.url).port);
         this.restartCount = 0;
@@ -340,6 +353,13 @@ export class ReviewServerSupervisor extends Disposable {
           void this.connected.complete(connection);
         }
         this.options.onServerReady?.();
+      }),
+    );
+    this.processListeners.add(
+      serverProcess.onMessage((message) => {
+        const { type, alias } = (message ?? {}) as { type?: unknown; alias?: unknown };
+        if (type === "remote-host-restarted" && typeof alias === "string")
+          this.options.onRemoteHostRestarted?.(alias);
       }),
     );
     this.processListeners.add(
@@ -356,6 +376,7 @@ export class ReviewServerSupervisor extends Disposable {
         `[Review Desktop] server host terminated: ${detail.reason}`,
       );
       this.serverProcess = undefined;
+      if (this.readyProcess === serverProcess) this.readyProcess = undefined;
       this.processListeners.dispose();
       if (this.stopping) return;
       if (died) this.options.onServerTerminated?.(detail);

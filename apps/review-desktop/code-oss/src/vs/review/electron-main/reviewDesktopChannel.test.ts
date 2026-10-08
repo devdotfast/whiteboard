@@ -6,6 +6,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { REVIEW_SSH_ANSWER_CALL, REVIEW_SSH_PROMPT_EVENT, type ReviewSshPromptEvent } from "../common/reviewSshPrompt.js";
+import { ReviewSshPromptRelay } from "./remote/reviewSshPromptRelay.js";
 import { ReviewDesktopChannel } from "./reviewDesktopChannel.js";
 
 const review = "0199a3f2-7c1e-7d4a-9b2f-3e5d6c7b8a90";
@@ -44,4 +46,17 @@ test("matches a review by the storage segment the host names its directory with"
 	await channel.call("", "closeSourceWindows", ["shared:abc"]);
 
 	assert.deepEqual(closed, ["shared"]);
+});
+
+test("relays ssh prompts to the window and takes its answer", async () => {
+	const relay = new ReviewSshPromptRelay();
+	const channel = new ReviewDesktopChannel({} as never, { getWindows: () => [] } as never, () => false, relay);
+	const events: ReviewSshPromptEvent[] = [];
+	channel.listen<ReviewSshPromptEvent>("", REVIEW_SSH_PROMPT_EVENT)((event) => events.push(event));
+
+	const answer = relay.prompt({ alias: "wb-test-a", text: "dev@127.0.0.1's password: ", kind: "secret" });
+	await channel.call("", REVIEW_SSH_ANSWER_CALL, { id: events[0].id, answer: "hunter2" });
+
+	assert.equal(await answer, "hunter2");
+	relay.dispose();
 });
