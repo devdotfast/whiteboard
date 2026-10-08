@@ -262,7 +262,7 @@ it("reads, resolves and retires a reference at its own pins in another repositor
   ).not.toContain("lib.ts");
 
   // The reference keeps its repository registered until it is gone.
-  local.store.unregisterRepository(own.repositoryId);
+  await local.store.unregisterRepository(own.repositoryId);
   expect(local.store.repositoryPath(own.repositoryId)).toBe(
     realpathSync(other),
   );
