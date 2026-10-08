@@ -73,6 +73,8 @@ export class Viewer {
   private readonly collapsed = new Map<number, ReadonlySet<number>>();
   /** Vim's z prefix: the next key names the fold command. */
   private pendingZ = false;
+  /** Vim's `]` or `[`: a `c` next goes to the next or previous change. */
+  private pendingBracket: "]" | "[" | null = null;
   /** Files marked viewed, for the viewer's lifetime only. */
   private readonly viewed = new Set<number>();
   /** The `/` prompt while it's being typed; null otherwise. */
@@ -122,9 +124,9 @@ export class Viewer {
     return this.store.getSnapshot();
   }
 
-  /** A `z` was pressed: the next key names a fold command. */
+  /** A `z`, `]` or `[` was pressed: the next key finishes the command. */
   get chording(): boolean {
-    return this.pendingZ;
+    return this.pendingZ || this.pendingBracket !== null;
   }
 
   isClosed(index: number, file: DiffFile) {
@@ -600,6 +602,12 @@ export class Viewer {
       if (!key.ctrl && !key.meta && name.length === 1 && "aocAOCRMjk".includes(name)) this.foldCommand(name);
       return true;
     }
+    if (this.pendingBracket) {
+      const bracket = this.pendingBracket;
+      this.pendingBracket = null;
+      if (!key.ctrl && !key.meta && name === "c") this.navigateHunk(bracket === "]" ? 1 : -1);
+      return true;
+    }
     // ⌘P, as in VS Code, where the terminal passes Cmd through; Ctrl-P everywhere else.
     if ((key.meta || key.ctrl) && name === "p") {
       this.picker = { query: "", cursor: 0 };
@@ -629,8 +637,7 @@ export class Viewer {
       case "L": this.pan(16); break;
       case "left": case "h": this.pan(key.shift ? -16 : -4); break;
       case "H": this.pan(-16); break;
-      case "]": this.navigateHunk(1); break;
-      case "[": this.navigateHunk(-1); break;
+      case "]": case "[": this.pendingBracket = name; break;
       case "s": this.toggleLayout(); break;
       case "w": this.toggleWrap(); break;
       case "c": this.toggleContext(); break;

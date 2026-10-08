@@ -17503,6 +17503,7 @@ class Viewer {
   closed = new Map;
   collapsed = new Map;
   pendingZ = false;
+  pendingBracket = null;
   viewed = new Set;
   prompt = null;
   search = null;
@@ -17540,7 +17541,7 @@ class Viewer {
     return this.store.getSnapshot();
   }
   get chording() {
-    return this.pendingZ;
+    return this.pendingZ || this.pendingBracket !== null;
   }
   isClosed(index, file2) {
     return this.closed.get(index) ?? fileVisibility(file2).collapsed;
@@ -17996,6 +17997,13 @@ class Viewer {
         this.foldCommand(name);
       return true;
     }
+    if (this.pendingBracket) {
+      const bracket = this.pendingBracket;
+      this.pendingBracket = null;
+      if (!key.ctrl && !key.meta && name === "c")
+        this.navigateHunk(bracket === "]" ? 1 : -1);
+      return true;
+    }
     if ((key.meta || key.ctrl) && name === "p") {
       this.picker = { query: "", cursor: 0 };
       this.emit();
@@ -18066,10 +18074,8 @@ class Viewer {
         this.pan(-16);
         break;
       case "]":
-        this.navigateHunk(1);
-        break;
       case "[":
-        this.navigateHunk(-1);
+        this.pendingBracket = name;
         break;
       case "s":
         this.toggleLayout();
@@ -18354,7 +18360,7 @@ var KEYS = [
   ["j k · d u · space b", "scroll a line, half a page, a page"],
   ["g G", "first file, last line"],
   ["h l · H L", "pan sideways, faster"],
-  ["[ ]", "previous, next change"],
+  ["[c ]c", "previous, next change"],
   ["za zo zc · zA zO zC", "toggle, open, close the top fold; deep"],
   ["zM zR · zj zk", "fold all, unfold all; next, previous fold"],
   ["c", "show or hide unchanged context"],
@@ -18750,7 +18756,7 @@ class Pane {
       const name = inventory[currentFile] ? filePath(inventory[currentFile].file).split("/").at(-1) : undefined;
       const where = name === undefined ? "" : `${name} · file ${order.indexOf(currentFile) + 1} of ${order.length} · ${at.maxScroll ? Math.round(top / at.maxScroll * 100) : 100}% · `;
       const loading = snapshot3.complete ? "" : `${snapshot3.loaded}/${inventory.length} loaded… `;
-      const keys = this.filesView ? " j/k move · ⏎ open · \\ or ⌘B back" : " [ and ] prev/next change · / search · ctrl-p files · \\ or ⌘B tree · V viewed · drag selects · y/Y copy";
+      const keys = this.filesView ? " j/k move · ⏎ open · \\ or ⌘B back" : " h/l pan · / search · ctrl-p files · \\ or ⌘B tree · V viewed · drag selects · y/Y copy";
       const room = size.columns - measureTextWidth(KEYS_BUTTON);
       const text = `${this.message ? `${this.message} · ` : ""}${searched}${this.filesView ? "" : where}${read.viewed}/${read.total} viewed ${loading}${errors3}${keys}`;
       status.text(measureTextWidth(text) > room ? `${fit(text, room - 1)}…` : text, theme.muted).fill(room);
