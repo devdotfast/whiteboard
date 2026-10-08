@@ -156,6 +156,11 @@ export const curatedExtensionConfigurationDefaults = {
 	// import Sublime Text settings. It has no setting to turn that off.
 } as const;
 
+/** Every Source window is read-only; see `reviewSourceWindowConfiguration`. */
+export const reviewSourceWindowDefaults = {
+	'files.readonlyInclude': { '**/*': true },
+} as const;
+
 export const reviewAgentsWindowDefaultOverrides = {
 	'window.title': reviewConfigurationDefaults['window.title'],
 	'workbench.navigationControl.enabled': reviewConfigurationDefaults['workbench.navigationControl.enabled'],

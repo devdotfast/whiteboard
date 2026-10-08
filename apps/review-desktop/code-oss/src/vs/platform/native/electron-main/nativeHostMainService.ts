@@ -313,6 +313,10 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 					args: [URI.revive(references.resource).toString(), references.lineNumber, references.column],
 				});
 			}
+			const sourceTitle = options.reviewSourceTitle;
+			if (sourceTitle && windows.length === 1) {
+				windows[0].sendWhenReady('vscode:runAction', CancellationToken.None, { id: 'review.action.setSourceTitle', from: 'review', args: [sourceTitle] });
+			}
 		}
 	}
 

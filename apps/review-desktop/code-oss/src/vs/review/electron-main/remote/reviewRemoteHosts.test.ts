@@ -14,7 +14,7 @@ import test from "node:test";
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
 import { attachOutput, detectOutput, FAKE_SERVER_ID, fakeClock, fakeSsh, until, type FakeRemote } from "./test/fakeSsh.js";
 import type { ReviewRemoteInstallFlow } from "./reviewRemoteHost.js";
-import { ReviewRemoteHosts } from "./reviewRemoteHosts.js";
+import { closeRemoteHostWindows, remoteHostState, ReviewRemoteHosts, type ReviewRemoteHostsOptions } from "./reviewRemoteHosts.js";
 import { openRemoteInstallConsent } from "./reviewRemoteInstallConsent.js";
 import type { SshPromptRequest } from "./reviewSshAskpass.js";
 import { reviewSshInstancePrefix } from "./reviewSshCommand.js";
@@ -34,6 +34,7 @@ async function managerFor(
 	answer?: string,
 	before?: (directory: string) => Promise<void>,
 	install?: ReviewRemoteInstallFlow,
+	removed?: ReviewRemoteHostsOptions["removed"],
 ) {
 	const port = await healthServer(t);
 	const directory = await mkdtemp(join(tmpdir(), "wb-hosts-"));
@@ -59,6 +60,7 @@ async function managerFor(
 		clock,
 		timeouts: { poll: 1 },
 		install,
+		removed,
 	});
 	t.after(async () => {
 		await manager.dispose();
@@ -108,6 +110,49 @@ test("removing a host from the setting closes its connection", async (t) => {
 	await until(() => !ssh.master("wb-test-a")!.alive);
 	assert.equal(ssh.of("wb-test-a", "exit").length, 1);
 	assert.ok(ssh.master("wb-test-b")!.alive);
+});
+
+test("removing a machine's last alias closes the windows bound to it, and no other window", async (t) => {
+	const closed: string[] = [];
+	const windows = [`whiteboard+${FAKE_SERVER_ID}`, "whiteboard+wb-test-b-server", "ssh-remote+x", undefined].map((remoteAuthority) => ({
+		remoteAuthority,
+		close: () => closed.push(String(remoteAuthority)),
+	}));
+	const b = { attach: { code: 0, stdout: attachOutput(41234, "remote-token", { serverId: "wb-test-b-server" }) } };
+	const { manager, sentUntil } = await managerFor(t, { "wb-test-a": {}, "wb-test-a2": {}, "wb-test-b": b }, undefined, undefined, undefined, (serverId) =>
+		closeRemoteHostWindows({ getWindows: () => windows }, serverId),
+	);
+
+	manager.update(true, ["wb-test-a", "wb-test-a2", "wb-test-b"]);
+	await sentUntil((hosts) => hosts.length === 3 && hosts.every((h) => h.endpoint));
+	manager.update(true, ["wb-test-a", "wb-test-b"]);
+	assert.deepEqual(closed, []);
+	manager.update(true, ["wb-test-b"]);
+	assert.deepEqual(closed, [`whiteboard+${FAKE_SERVER_ID}`]);
+});
+
+test("a window waiting on a machine sees its alias and state, or connecting while an alias has not reported its id", () => {
+	assert.deepEqual(remoteHostState("s1", [
+		{ alias: "copy", serverId: "s1", state: "duplicate" },
+		{ alias: "devbox", serverId: "s1", state: "online" },
+	]), { alias: "devbox", state: "online" });
+	assert.deepEqual(remoteHostState("s1", [{ alias: "devbox", serverId: "s1", state: "offline" }]), { alias: "devbox", state: "offline" });
+	assert.deepEqual(remoteHostState("s1", [{ alias: "new", state: "connecting" }]), { state: "connecting" });
+	assert.equal(remoteHostState("s1", [{ alias: "gone", state: "unreachable" }, { alias: "other", serverId: "s2", state: "connecting" }]), undefined);
+});
+
+test("a machine whose entry lost its id while unreachable is known through its alias until that alias leaves the setting", async (t) => {
+	const { manager, sentUntil } = await managerFor(t, { "wb-test-a": {} });
+	manager.update(true, ["wb-test-a"]);
+	await sentUntil((hosts) => byAlias(hosts, "wb-test-a")?.endpoint !== undefined);
+
+	const unreachable = [{ alias: "wb-test-a", state: "unreachable" as const }];
+	assert.deepEqual(manager.hostState(FAKE_SERVER_ID, unreachable), { alias: "wb-test-a", state: "unreachable" });
+	assert.deepEqual(manager.hostState(FAKE_SERVER_ID, []), { alias: "wb-test-a", state: "connecting" });
+	assert.equal(manager.hostState("other-machine", unreachable), undefined);
+
+	manager.update(true, []);
+	assert.equal(manager.hostState(FAKE_SERVER_ID, unreachable), undefined);
 });
 
 test("an alias added again while its old host closes starts only after the old master exited", async (t) => {
