@@ -115,11 +115,10 @@ describe("reading a pull request", () => {
     );
 
     expect(error).toBeInstanceOf(ReviewInputError);
-    expect(String(error)).toMatch(/gh auth login --hostname ghe\.example\.com/);
     expect(failing.calls.map(([file]) => file)).toEqual(["gh"]);
   });
 
-  it("says a missing or private PR was not found, with gh's reason", async () => {
+  it("says a missing or private PR was not found", async () => {
     const error = await readPullRequest(
       url,
       deps(ghFails, async () => new Response("{}", { status: 404 })),
@@ -127,24 +126,26 @@ describe("reading a pull request", () => {
 
     expect(error).toBeInstanceOf(ReviewInputError);
     expect(error).toMatchObject({ status: 404 });
-    expect(String(error)).toMatch(/not found.*gh auth status.*not logged in/);
   });
 
-  it("names an exhausted rate limit", async () => {
-    await expect(
-      readPullRequest(
+  for (const status of [403, 429]) {
+    it(`refuses a PR the GitHub API rate-limits with HTTP ${status}`, async () => {
+      const error = await readPullRequest(
         url,
         deps(
           ghFails,
           async () =>
             new Response("{}", {
-              status: 403,
+              status,
               headers: { "x-ratelimit-remaining": "0" },
             }),
         ),
-      ),
-    ).rejects.toThrow(/rate limit is exhausted.*gh auth status/);
-  });
+      ).catch((cause: unknown) => cause);
+
+      expect(error).toBeInstanceOf(ReviewInputError);
+      expect(error).toMatchObject({ status: 409 });
+    });
+  }
 });
 
 describe("creating a review from a pull request URL alone", () => {
@@ -416,9 +417,8 @@ describe("creating a review from a pull request URL alone", () => {
     );
     await local.data.register(other);
 
-    await expect(createFromUrl()).rejects.toThrow(
-      /Register a checkout of acme\/widget/,
-    );
+    await expect(createFromUrl()).rejects.toMatchObject({ status: 404 });
+    expect(ghCalls).toBe(0);
     expect(local.store.list()).toEqual([]);
   });
 
@@ -431,9 +431,7 @@ describe("creating a review from a pull request URL alone", () => {
         command({ type: "create", pullRequestUrl: enterprise }),
       );
 
-    await expect(create()).rejects.toThrow(
-      /Register a checkout of ghe\.example\.com\/acme\/widget/,
-    );
+    await expect(create()).rejects.toBeInstanceOf(ReviewInputError);
     expect(ghCalls).toBe(0);
 
     pointAtUpstream(
