@@ -1,5 +1,6 @@
 import type { CancellationToken } from "../../base/common/cancellation.js";
-import { Disposable, DisposableStore, RefCountedDisposable, toDisposable, type IDisposable, type IReference } from "../../base/common/lifecycle.js";
+import { Disposable, DisposableMap, DisposableStore, RefCountedDisposable, toDisposable, type IDisposable, type IReference } from "../../base/common/lifecycle.js";
+import { disposableTimeout } from "../../base/common/async.js";
 import { URI } from "../../base/common/uri.js";
 import { Position } from "../../editor/common/core/position.js";
 import type { Hover, LocationLink } from "../../editor/common/languages.js";
@@ -25,6 +26,9 @@ import { withCurrentLocalContext } from "./reviewLocalRequest.js";
 import { acquireReviewLanguageRoot } from "./reviewLocalWorkspace.js";
 import { ReviewLanguageEnvironmentRequests } from "./reviewLanguageEnvironmentRequests.js";
 import { watchAttachedReviewModels, withRetainedSource } from "./reviewSourceModelLifecycle.js";
+
+const WARM_DELAY_MS = 400;
+const RELEASE_DELAY_MS = 15_000;
 
 interface LocalSource {
 	identity: string;
@@ -68,9 +72,19 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 			if ([...this.roots.keys()].some(root => event.affects(URI.parse(root)))) this.generation++;
 		}));
 		// Diff models include off-screen files; only attached editors warm native models.
+		// The delays keep a fast scroll from loading projects in the language server.
+		const pending = this._register(new DisposableMap<ITextModel>());
+		const later = (model: ITextModel, delay: number, run: () => void) =>
+			pending.set(model, disposableTimeout(() => { pending.deleteAndDispose(model); run(); }, delay));
 		this._register(watchAttachedReviewModels(modelService, [REVIEW_API_SOURCE_SCHEME, REVIEW_LANGUAGE_SOURCE_SCHEME],
-			model => { void this.localSource(model, true); },
-			model => this.releaseSource(model)));
+			model => {
+				if (this.sources.has(model)) pending.deleteAndDispose(model);
+				else later(model, WARM_DELAY_MS, () => void this.localSource(model, true));
+			},
+			(model, disposing) => {
+				if (!disposing && this.sources.has(model)) later(model, RELEASE_DELAY_MS, () => this.releaseSource(model));
+				else { pending.deleteAndDispose(model); this.releaseSource(model); }
+			}));
 		for (const scheme of [REVIEW_API_SOURCE_SCHEME, REVIEW_LANGUAGE_SOURCE_SCHEME]) {
 			const selector = { scheme, exclusive: true };
 			this._register(languages.hoverProvider.register(selector, { provideHover: (model, position, token) => this.hover(model, position, token) }));

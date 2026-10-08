@@ -7,12 +7,12 @@ export function watchAttachedReviewModels(
 	models: Pick<IModelService, "onModelAdded" | "getModels">,
 	schemes: readonly string[],
 	attached: (model: ITextModel) => void,
-	detached: (model: ITextModel) => void,
+	detached: (model: ITextModel, disposing: boolean) => void,
 ): IDisposable {
 	const store = new DisposableStore();
 	const active = new Set<ITextModel>();
 	store.add(toDisposable(() => {
-		for (const model of active) detached(model);
+		for (const model of active) detached(model, true);
 		active.clear();
 	}));
 	const watch = (model: ITextModel) => {
@@ -21,11 +21,12 @@ export function watchAttachedReviewModels(
 		const update = () => {
 			if (model.isAttachedToEditor()) {
 				if (!active.has(model)) { active.add(model); attached(model); }
-			} else if (active.delete(model)) detached(model);
+			} else if (active.delete(model)) detached(model, false);
 		};
 		owned.add(model.onDidChangeAttached(update));
 		owned.add(model.onWillDispose(() => {
-			if (active.delete(model)) detached(model);
+			active.delete(model);
+			detached(model, true);
 			store.delete(owned);
 			owned.dispose();
 		}));

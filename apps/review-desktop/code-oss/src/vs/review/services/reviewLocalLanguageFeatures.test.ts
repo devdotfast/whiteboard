@@ -157,6 +157,7 @@ test("detaching during an in-flight definition keeps its captured source until m
 });
 
 test("hundreds of unattached pinned models allocate no native source models; detaching releases the visible model", async (t) => {
+	t.mock.timers.enable({ apis: ["setTimeout"] });
 	const setupResult = setup(Array.from({ length: 800 }, () => model()));
 	t.after(() => setupResult.service.dispose());
 	const acquired = source(setupResult.local);
@@ -169,6 +170,7 @@ test("hundreds of unattached pinned models allocate no native source models; det
 	await internal.localSource(setupResult.sourceModel, true);
 	assert.equal(acquireCount, 1);
 	setupResult.sourceModel.setAttached(false);
+	t.mock.timers.runAll();
 	await acquired.waitDisposed();
 	assert.equal(acquired.isDisposed(), true);
 });
