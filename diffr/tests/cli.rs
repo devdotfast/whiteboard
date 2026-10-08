@@ -247,6 +247,27 @@ fn config_migration_and_typed_batch_set() {
 }
 
 #[test]
+fn diffr_config_dir_takes_the_place_of_xdg_config_home() {
+    let work = tempfile::tempdir().unwrap();
+    let own = work.path().join("own");
+    let xdg = work.path().join("xdg");
+    let output = get_base_command()
+        .env("DIFFR_CONFIG_DIR", &own)
+        .env("XDG_CONFIG_HOME", &xdg)
+        .args(["config", "set", "diff.byte_limit", "1234"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let written = std::fs::read_to_string(own.join("config.toml")).unwrap();
+    assert!(written.contains("byte_limit = 1234"), "{written}");
+    assert!(!xdg.exists());
+}
+
+#[test]
 fn pprint_reads_a_file_or_stdin_without_a_frontend() {
     let work = tempfile::tempdir().unwrap();
     let config = work.path().join("config/diffr");
