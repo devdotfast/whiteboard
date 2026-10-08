@@ -1,0 +1,30 @@
+{
+  "repo": "BurntSushi/ripgrep",
+  "pr_number": 3487,
+  "pr_title": "Add initial scaffolding for ripgrep indexing",
+  "pr_url": "https://github.com/BurntSushi/ripgrep/pull/3487",
+  "language": "Rust",
+  "status": "modified",
+  "base_branch_sha": "59e318f5ace48db54f37bb67c152535bc17fa153",
+  "comparison_base_sha": "59e318f5ace48db54f37bb67c152535bc17fa153",
+  "head_sha": "b6f2d1ca68e0bd0eee00b820c299b844ec6eb6fa",
+  "merged_at": "2026-07-22T15:51:56Z",
+  "comparison": "PR merge-base to head",
+  "sources": {
+    "lhs": {
+      "file": "before.rs",
+      "path": "crates/core/main.rs",
+      "commit": "59e318f5ace48db54f37bb67c152535bc17fa153",
+      "git_blob_sha": "ac17bfa6e2652dadefe14c5b475ae2bb50ad71cb",
+      "sha256": "a68ef702d5efc23cba354a075415c300e519cc3b9a3e1eeb85337a8e8da633d9"
+    },
+    "rhs": {
+      "file": "after.rs",
+      "path": "crates/core/main.rs",
+      "commit": "b6f2d1ca68e0bd0eee00b820c299b844ec6eb6fa",
+      "git_blob_sha": "f5fef53bac955344a41ef68d236a53a23796e886",
+      "sha256": "21c10c3b35114543b90f38f27fd9102703a099bd504db950e1f10d2739b1444c"
+    }
+  },
+  "visibility": "public"
+}

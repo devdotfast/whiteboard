@@ -1,0 +1,108 @@
+{
+  "folds": [
+    {
+      "regions": {
+        "Paired": {
+          "lhs": {
+            "start": {
+              "line": 0,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 53,
+              "byte_column": 30
+            }
+          },
+          "rhs": {
+            "start": {
+              "line": 0,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 54,
+              "byte_column": 30
+            }
+          }
+        }
+      },
+      "placeholder": "Imports"
+    },
+    {
+      "regions": {
+        "Paired": {
+          "lhs": {
+            "start": {
+              "line": 722,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 723,
+              "byte_column": 60
+            }
+          },
+          "rhs": {
+            "start": {
+              "line": 723,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 726,
+              "byte_column": 37
+            }
+          }
+        }
+      },
+      "placeholder": "Extract host and port from SERVER_NAME."
+    }
+  ],
+  "context": [
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 108,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 108,
+            "byte_column": 17
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 109,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 109,
+            "byte_column": 17
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 631,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 638,
+            "byte_column": 14
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 632,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 639,
+            "byte_column": 14
+          }
+        }
+      }
+    }
+  ]
+}

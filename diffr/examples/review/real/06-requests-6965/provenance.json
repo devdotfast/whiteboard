@@ -1,0 +1,30 @@
+{
+  "repo": "psf/requests",
+  "pr_number": 6965,
+  "pr_title": "Only use hostname to do netrc lookup instead of netloc",
+  "pr_url": "https://github.com/psf/requests/pull/6965",
+  "language": "Python",
+  "status": "modified",
+  "base_branch_sha": "7341690e842a23cf18ded0abd9229765fa88c4e2",
+  "comparison_base_sha": "7341690e842a23cf18ded0abd9229765fa88c4e2",
+  "head_sha": "57acb7c26d809cf864ec439b8bcd6364702022d5",
+  "merged_at": "2025-06-04T15:39:25Z",
+  "comparison": "PR merge-base to head",
+  "sources": {
+    "lhs": {
+      "file": "before.py",
+      "path": "src/requests/utils.py",
+      "commit": "7341690e842a23cf18ded0abd9229765fa88c4e2",
+      "git_blob_sha": "699683e5d95b091185025354b683fb753855965c",
+      "sha256": "81456aebcc40479a6344c4d3d0845e1a7474b1be6d4e6d51a83b6fe274a30312"
+    },
+    "rhs": {
+      "file": "after.py",
+      "path": "src/requests/utils.py",
+      "commit": "57acb7c26d809cf864ec439b8bcd6364702022d5",
+      "git_blob_sha": "8a307ca8a090f4fc55ef32809338042e4c667fd8",
+      "sha256": "0bb8547d40a06946e8bc7845cee17e80c72123c08ae8f4343f5929baeb4c81a1"
+    }
+  },
+  "visibility": "public"
+}

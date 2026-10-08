@@ -1,0 +1,108 @@
+{
+  "folds": [
+    {
+      "regions": {
+        "Paired": {
+          "lhs": {
+            "start": {
+              "line": 0,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 8,
+              "byte_column": 70
+            }
+          },
+          "rhs": {
+            "start": {
+              "line": 0,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 8,
+              "byte_column": 70
+            }
+          }
+        }
+      },
+      "placeholder": "Imports"
+    },
+    {
+      "regions": {
+        "Paired": {
+          "lhs": {
+            "start": {
+              "line": 238,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 251,
+              "byte_column": 3
+            }
+          },
+          "rhs": {
+            "start": {
+              "line": 239,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 259,
+              "byte_column": 3
+            }
+          }
+        }
+      },
+      "placeholder": "Parse file metadata and count changed lines."
+    }
+  ],
+  "context": [
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 228,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 228,
+            "byte_column": 70
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 228,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 228,
+            "byte_column": 70
+          }
+        }
+      }
+    },
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 274,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 274,
+            "byte_column": 1
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 282,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 282,
+            "byte_column": 1
+          }
+        }
+      }
+    }
+  ]
+}

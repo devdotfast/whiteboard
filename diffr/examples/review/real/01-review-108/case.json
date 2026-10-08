@@ -1,0 +1,41 @@
+{
+  "summary": "Multiline import groups remain paired while one large context object is split. Preserve the complete enclosing function signature as extra context; do not pair a whole old interface with two new interfaces automatically.",
+  "expected_text": {
+    "folds/0/lhs": "import {\n  type JsonValue,\n  type ReviewCommentAgentActivity,\n  type ReviewCommentThreadRecord,\n  ReviewDocumentVersionSchema,\n  type ReviewDocumentVersionWire,\n  type ReviewLocalCommentThread,\n  isJsonObject,\n  jsonObject,\n  jsonString,\n  parseZod,\n} from \"@dev.fast/review-protocol\";\nimport {\n  type ReactNode,\n  createContext,\n  useCallback,\n  useContext,\n  useEffect,\n  useMemo,\n  useRef,\n  useState,\n} from \"react\";\n\nimport type { AnchorRef } from \"../../src/authoring\";\nimport type { SourceLineComment } from \"../../src/source-code-types\";\nimport type { CreateReviewCommentInput, ThreadTarget } from \"../../src/types\";\nimport { useComments } from \"./comments-context\";\nimport { useReviewSession } from \"./host/review-session\";\nimport {\n  buildAnchorTextTarget,\n  buildCodeTarget,\n  projectCodeTarget,\n  resolvedCodeSurface,\n} from \"./target-fingerprint\";\nimport {\n  type ReviewSessionCommits,\n  anchorTargetRecords,\n  buildThreadTargetIndex,\n  exactTargetRecords,\n  targetAppearsInAnchor,\n} from \"./thread-target-index\";\nimport { useResolvedBaseRef, useResolvedHeadRef } from \"./thread-target-model\";\nimport { captureUiEvent, reviewAppTelemetryHeaders } from \"./ui-telemetry\";",
+    "folds/0/rhs": "import {\n  type JsonValue,\n  type ReviewCommentAgentActivity,\n  type ReviewCommentThreadRecord,\n  ReviewDocumentVersionSchema,\n  type ReviewDocumentVersionWire,\n  type ReviewLocalCommentThread,\n  isJsonObject,\n  jsonObject,\n  jsonString,\n  parseZod,\n} from \"@dev.fast/review-protocol\";\nimport {\n  type ReactNode,\n  createContext,\n  useCallback,\n  useContext,\n  useEffect,\n  useMemo,\n  useRef,\n  useState,\n} from \"react\";\n\nimport type { AnchorRef } from \"../../src/authoring\";\nimport type { SourceLineComment } from \"../../src/source-code-types\";\nimport type { CreateReviewCommentInput, ThreadTarget } from \"../../src/types\";\nimport { useComments } from \"./comments-context\";\nimport { useReviewSession } from \"./host/review-session\";\nimport {\n  buildAnchorTextTarget,\n  buildCodeTarget,\n  projectCodeTarget,\n  resolvedCodeSurface,\n} from \"./target-fingerprint\";\nimport {\n  type ReviewSessionCommits,\n  anchorTargetRecords,\n  buildThreadTargetIndex,\n  exactTargetRecords,\n  targetAppearsInAnchor,\n} from \"./thread-target-index\";\nimport { useResolvedBaseRef, useResolvedHeadRef } from \"./thread-target-model\";\nimport { captureUiEvent, reviewAppTelemetryHeaders } from \"./ui-telemetry\";",
+    "context/0/lhs": "function ReviewCoordinator({\n  documentRoute,\n  softwareMapEnabled,\n  openTraceSession,\n  children,\n}: {\n  documentRoute?: string;\n  softwareMapEnabled: boolean;\n  openTraceSession?: (input: {\n    sessionId: string;\n    trace?: string;\n    eventIndex?: number;\n  }) => void;\n  children: ReactNode;\n}) {",
+    "context/0/rhs": "function ReviewCoordinator({\n  documentRoute,\n  softwareMapEnabled,\n  openTraceSession,\n  children,\n}: {\n  documentRoute?: string;\n  softwareMapEnabled: boolean;\n  openTraceSession?: (input: {\n    sessionId: string;\n    trace?: string;\n    eventIndex?: number;\n  }) => void;\n  children: ReactNode;\n}) {"
+  },
+  "keep_visible": {
+    "lhs": [
+      {
+        "range": {
+          "start": {
+            "line": 663,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 666,
+            "byte_column": 1
+          }
+        },
+        "text": "  return (\n    <ReviewContext.Provider value={value}>{children}</ReviewContext.Provider>\n  );\n}"
+      }
+    ],
+    "rhs": [
+      {
+        "range": {
+          "start": {
+            "line": 685,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 692,
+            "byte_column": 1
+          }
+        },
+        "text": "  return (\n    <ReviewActionsContext.Provider value={actions}>\n      <ReviewStateContext.Provider value={state}>\n        {children}\n      </ReviewStateContext.Provider>\n    </ReviewActionsContext.Provider>\n  );\n}"
+      }
+    ]
+  }
+}

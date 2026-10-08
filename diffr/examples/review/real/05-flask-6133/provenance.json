@@ -1,0 +1,30 @@
+{
+  "repo": "pallets/flask",
+  "pr_number": 6133,
+  "pr_title": "add `app.query` route decorator",
+  "pr_url": "https://github.com/pallets/flask/pull/6133",
+  "language": "Python",
+  "status": "modified",
+  "base_branch_sha": "3596b1ab61cea85edb8970e83ff61daa073facf8",
+  "comparison_base_sha": "3596b1ab61cea85edb8970e83ff61daa073facf8",
+  "head_sha": "89992954ec71b594b1b911f98977cdc8ad46a057",
+  "merged_at": "2026-08-11T20:19:14Z",
+  "comparison": "PR merge-base to head",
+  "sources": {
+    "lhs": {
+      "file": "before.py",
+      "path": "src/flask/sansio/scaffold.py",
+      "commit": "3596b1ab61cea85edb8970e83ff61daa073facf8",
+      "git_blob_sha": "a04c38adc6a9ded4b1a9e04eb7fa819203cda63c",
+      "sha256": "8038161a341fab058ac50676422997c7220e6d04ad9b692fc28dddcbe3dc3519"
+    },
+    "rhs": {
+      "file": "after.py",
+      "path": "src/flask/sansio/scaffold.py",
+      "commit": "89992954ec71b594b1b911f98977cdc8ad46a057",
+      "git_blob_sha": "fbe9c661ad4ea4016a3fca63814b29f9c16e7453",
+      "sha256": "d6578d2b5f06d227482e4110f8b750d04c8d94c9525c8857f9183f727ee2858b"
+    }
+  },
+  "visibility": "public"
+}

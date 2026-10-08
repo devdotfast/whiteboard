@@ -53,6 +53,8 @@ The product is named Whiteboard, but package names and directories still use
 - `packages/agent-plugins/` contains the plugins and skills for supported
   coding agents.
 - `packages/local-vcs/` contains local version-control helpers.
+- `diffr/` contains the Rust diff engine, CLI, terminal UI, and the
+  `@dev.fast/diffr` TypeScript protocol package under `diffr-ts/`.
 
 The files under `apps/review-desktop/code-oss/` include upstream contribution
 and security documents. Those files apply to Microsoft's VS Code project; this
@@ -65,6 +67,11 @@ Run the full check suite before you open a pull request:
 ```sh
 pnpm run ci
 ```
+
+Diffr has separate Rust and release checks. From `diffr/`, run
+`cargo test --locked` and `cargo fmt --all -- --check`. The monorepo's Diffr Test
+workflow runs these on supported targets and checks the TypeScript contract
+against the binary.
 
 DOM-facing tests run in Chromium through Vitest Browser Mode. Install the
 browser once, then run the headless suite or watch mode:

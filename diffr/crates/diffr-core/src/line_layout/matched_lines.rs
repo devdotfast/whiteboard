@@ -1,0 +1,739 @@
+//! Pair up the lines of both sides from the matched positions.
+
+use std::cmp::Ordering;
+
+use line_numbers::LineNumber;
+
+use crate::hash::DftHashSet;
+use crate::parse::syntax::{MatchKind, MatchedPos};
+
+pub(crate) fn all_matched_lines_filled(
+    lhs_mps: &[MatchedPos],
+    rhs_mps: &[MatchedPos],
+    lhs_lines: &[&str],
+    rhs_lines: &[&str],
+) -> Vec<(Option<LineNumber>, Option<LineNumber>)> {
+    let matched_lines = add_ends(&all_matched_lines(lhs_mps, rhs_mps), lhs_lines, rhs_lines);
+
+    compact_gaps(&ensure_contiguous(&match_preceding_blanks(
+        &matched_lines,
+        lhs_lines,
+        rhs_lines,
+    )))
+}
+
+/// Extend `matched_lines` to include the leading and trailing lines
+/// in the file.
+///
+/// This is useful when the file contains blank lines at the beginning
+/// or end. Those lines won't have MatchedPos values associated with
+/// them, but we still want to match them up.
+fn add_ends(
+    matched_lines: &[(Option<LineNumber>, Option<LineNumber>)],
+    lhs_lines: &[&str],
+    rhs_lines: &[&str],
+) -> Vec<(Option<LineNumber>, Option<LineNumber>)> {
+    let mut lhs_min = None;
+    let mut rhs_min = None;
+    for (lhs_line, rhs_line) in matched_lines {
+        if lhs_min.is_none() && lhs_line.is_some() {
+            lhs_min = *lhs_line;
+        }
+        if rhs_min.is_none() && rhs_line.is_some() {
+            rhs_min = *rhs_line;
+        }
+
+        if lhs_min.is_some() && rhs_min.is_some() {
+            break;
+        }
+    }
+
+    let mut lhs_max = None;
+    let mut rhs_max = None;
+    for (lhs_line, rhs_line) in matched_lines.iter().rev() {
+        if lhs_max.is_none() && lhs_line.is_some() {
+            lhs_max = *lhs_line;
+        }
+        if rhs_max.is_none() && rhs_line.is_some() {
+            rhs_max = *rhs_line;
+        }
+
+        if lhs_max.is_some() && rhs_max.is_some() {
+            break;
+        }
+    }
+
+    let mut res = vec![];
+
+    if let (Some(lhs_min), Some(rhs_min)) = (lhs_min, rhs_min) {
+        let mut lhs_line: LineNumber = 0.into();
+        let mut rhs_line: LineNumber = 0.into();
+        while lhs_line < lhs_min && rhs_line < rhs_min {
+            res.push((Some(lhs_line), Some(rhs_line)));
+            lhs_line = (lhs_line.0 + 1).into();
+            rhs_line = (rhs_line.0 + 1).into();
+        }
+        while lhs_line < lhs_min {
+            res.push((Some(lhs_line), None));
+            lhs_line = (lhs_line.0 + 1).into();
+        }
+        while rhs_line < rhs_min {
+            res.push((None, Some(rhs_line)));
+            rhs_line = (rhs_line.0 + 1).into();
+        }
+    }
+
+    res.extend_from_slice(matched_lines);
+
+    if let (Some(lhs_max), Some(rhs_max)) = (lhs_max, rhs_max) {
+        let mut lhs_line: LineNumber = (lhs_max.0 + 1).into();
+        let mut rhs_line: LineNumber = (rhs_max.0 + 1).into();
+
+        while (lhs_line.0 as usize) < lhs_lines.len() && (rhs_line.0 as usize) < rhs_lines.len() {
+            res.push((Some(lhs_line), Some(rhs_line)));
+            lhs_line = (lhs_line.0 + 1).into();
+            rhs_line = (rhs_line.0 + 1).into();
+        }
+        while (lhs_line.0 as usize) < lhs_lines.len() {
+            res.push((Some(lhs_line), None));
+            lhs_line = (lhs_line.0 + 1).into();
+        }
+        while (rhs_line.0 as usize) < rhs_lines.len() {
+            res.push((None, Some(rhs_line)));
+            rhs_line = (rhs_line.0 + 1).into();
+        }
+    }
+
+    res
+}
+
+fn all_matched_lines(
+    lhs_mps: &[MatchedPos],
+    rhs_mps: &[MatchedPos],
+) -> Vec<(Option<LineNumber>, Option<LineNumber>)> {
+    let lhs_matched_lines = matched_lines_from_unchanged(lhs_mps);
+    let rhs_lines = all_lines(rhs_mps);
+
+    let lines = merge_in_opposite_lines(&lhs_matched_lines, &rhs_lines);
+
+    let lhs_lines = all_lines(lhs_mps);
+    flip_tuples(&merge_in_opposite_lines(&flip_tuples(&lines), &lhs_lines))
+}
+
+fn all_lines(mps: &[MatchedPos]) -> Vec<LineNumber> {
+    let mut lines = DftHashSet::default();
+    for mp in mps {
+        lines.insert(mp.pos.line);
+    }
+    let mut line_nums: Vec<LineNumber> = lines.into_iter().collect();
+    line_nums.sort_unstable();
+    line_nums
+}
+
+fn matched_lines_from_unchanged(
+    mps: &[MatchedPos],
+) -> Vec<(Option<LineNumber>, Option<LineNumber>)> {
+    let mut highest_line = None;
+    let mut highest_opposite_line = None;
+
+    let mut res: Vec<(Option<LineNumber>, Option<LineNumber>)> = vec![];
+    for mp in mps {
+        let opposite_line = match &mp.kind {
+            MatchKind::UnchangedToken { opposite_pos, .. }
+            | MatchKind::UnchangedPartOfNovelItem { opposite_pos, .. } => {
+                if let Some(highest_opposite_side) = highest_opposite_line {
+                    opposite_pos
+                        .iter()
+                        .map(|p| p.line)
+                        .find(|l| *l > highest_opposite_side)
+                } else {
+                    opposite_pos.first().map(|p| p.line)
+                }
+            }
+            MatchKind::Novel { .. } | MatchKind::NovelWord { .. } | MatchKind::Ignored { .. } => {
+                None
+            }
+        };
+
+        let should_insert = match highest_line {
+            Some(highest_this_side) => mp.pos.line > highest_this_side,
+            None => true,
+        };
+
+        if should_insert && opposite_line.is_some() {
+            res.push((Some(mp.pos.line), opposite_line));
+
+            highest_line = Some(mp.pos.line);
+            if opposite_line.is_some() {
+                highest_opposite_line = opposite_line;
+            }
+        }
+    }
+
+    res
+}
+
+fn merge_in_opposite_lines(
+    matched_lines: &[(Option<LineNumber>, Option<LineNumber>)],
+    novel_opposite_lines: &[LineNumber],
+) -> Vec<(Option<LineNumber>, Option<LineNumber>)> {
+    let mut res: Vec<(Option<LineNumber>, Option<LineNumber>)> = vec![];
+
+    let mut i = 0;
+    for (line, opposite_line) in matched_lines {
+        if let Some(opposite_line) = opposite_line {
+            while let Some(novel_opposite_line) = novel_opposite_lines.get(i) {
+                match novel_opposite_line.cmp(opposite_line) {
+                    Ordering::Less => res.push((None, Some(*novel_opposite_line))),
+                    Ordering::Equal => (),
+                    Ordering::Greater => {
+                        break;
+                    }
+                }
+                i += 1;
+            }
+        }
+        res.push((*line, *opposite_line));
+    }
+
+    while let Some(novel_opposite_line) = novel_opposite_lines.get(i) {
+        res.push((None, Some(*novel_opposite_line)));
+        i += 1;
+    }
+
+    res
+}
+
+/// If the lines immediately before `current` are blank on both sides,
+/// return the line numbers of those blank lines.
+fn match_blanks_between(
+    current: (LineNumber, LineNumber),
+    prev: (LineNumber, LineNumber),
+    lhs_lines: &[&str],
+    rhs_lines: &[&str],
+) -> Vec<(Option<LineNumber>, Option<LineNumber>)> {
+    let (mut current_lhs, mut current_rhs) = current;
+    if current_lhs.0 == 0 || current_rhs.0 == 0 {
+        return vec![];
+    }
+
+    current_lhs = (current_lhs.0 - 1).into();
+    current_rhs = (current_rhs.0 - 1).into();
+
+    let mut res = vec![];
+    while current_lhs > prev.0 && current_rhs > prev.1 {
+        if lhs_lines[current_lhs.as_usize()] == "" && rhs_lines[current_rhs.as_usize()] == "" {
+            res.push((Some(current_lhs), Some(current_rhs)));
+
+            current_lhs = (current_lhs.0 - 1).into();
+            current_rhs = (current_rhs.0 - 1).into();
+        } else {
+            break;
+        }
+    }
+
+    res.reverse();
+    res
+}
+
+fn match_blanks_before(
+    current: (LineNumber, LineNumber),
+    lhs_lines: &[&str],
+    rhs_lines: &[&str],
+) -> Vec<(Option<LineNumber>, Option<LineNumber>)> {
+    let (mut current_lhs, mut current_rhs) = current;
+    if current_lhs.0 == 0 || current_rhs.0 == 0 {
+        return vec![];
+    }
+
+    current_lhs = (current_lhs.0 - 1).into();
+    current_rhs = (current_rhs.0 - 1).into();
+
+    let mut res = vec![];
+    loop {
+        if lhs_lines[current_lhs.as_usize()] == "" && rhs_lines[current_rhs.as_usize()] == "" {
+            res.push((Some(current_lhs), Some(current_rhs)));
+
+            if current_lhs.0 == 0 || current_rhs.0 == 0 {
+                break;
+            }
+
+            current_lhs = (current_lhs.0 - 1).into();
+            current_rhs = (current_rhs.0 - 1).into();
+        } else {
+            break;
+        }
+    }
+
+    res.reverse();
+    res
+}
+
+/// For every line number pair, if there are blank lines preceding the
+/// pair, add those blank lines to the vec.
+///
+/// This substantially improves alignment, leading to more readable
+/// diffs.
+///
+/// We don't need to match blank lines following each pair. After
+/// matching up all the matching lines, we just display the remaining
+/// lines side-by-side regardless of content (see
+/// `ensure_contiguous`). If there are blank lines immediately
+/// following the pair, they will get aligned by this.
+fn match_preceding_blanks(
+    line_nums: &[(Option<LineNumber>, Option<LineNumber>)],
+    lhs_lines: &[&str],
+    rhs_lines: &[&str],
+) -> Vec<(Option<LineNumber>, Option<LineNumber>)> {
+    let mut prev_lhs = None;
+    let mut prev_rhs = None;
+
+    let mut res: Vec<(Option<LineNumber>, Option<LineNumber>)> = vec![];
+    for (lhs_line_num, rhs_line_num) in line_nums {
+        match (lhs_line_num, rhs_line_num, prev_lhs, prev_rhs) {
+            (Some(lhs_line_num), Some(rhs_line_num), None, None) => {
+                // The first pair.
+                res.append(&mut match_blanks_before(
+                    (*lhs_line_num, *rhs_line_num),
+                    lhs_lines,
+                    rhs_lines,
+                ));
+            }
+            (Some(lhs_line_num), Some(rhs_line_num), Some(prev_lhs), Some(prev_rhs)) => {
+                // Later pairs.
+                res.append(&mut match_blanks_between(
+                    (*lhs_line_num, *rhs_line_num),
+                    (prev_lhs, prev_rhs),
+                    lhs_lines,
+                    rhs_lines,
+                ));
+            }
+            _ => {}
+        }
+
+        res.push((*lhs_line_num, *rhs_line_num));
+
+        if lhs_line_num.is_some() {
+            prev_lhs = *lhs_line_num;
+        }
+        if rhs_line_num.is_some() {
+            prev_rhs = *rhs_line_num;
+        }
+    }
+
+    res
+}
+
+pub(crate) fn flip_tuple<Tx: Copy, Ty: Copy>(pair: (Tx, Ty)) -> (Ty, Tx) {
+    let (x, y) = pair;
+    (y, x)
+}
+
+pub(crate) fn flip_tuples<Tx: Copy, Ty: Copy>(items: &[(Tx, Ty)]) -> Vec<(Ty, Tx)> {
+    items.iter().copied().map(flip_tuple).collect()
+}
+
+/// Ensure that we don't miss any intermediate values.
+///
+/// Before:
+///
+/// ```text
+/// 1 11
+/// 3 14
+/// 4 --
+/// ```
+///
+/// After:
+///
+/// ```text
+/// 1 10
+/// 2 12 (choosing to align even though content doesn't match)
+/// - 13 (fix uneven gap)
+/// 3 14
+/// 4 -- (preserve outer gaps)
+/// ```
+fn ensure_contiguous(
+    lines: &[(Option<LineNumber>, Option<LineNumber>)],
+) -> Vec<(Option<LineNumber>, Option<LineNumber>)> {
+    let mut res: Vec<(Option<LineNumber>, Option<LineNumber>)> = vec![];
+
+    let mut lhs_min: Option<LineNumber> = None;
+    let mut rhs_min: Option<LineNumber> = None;
+
+    for (lhs_line, rhs_line) in lines {
+        if let Some(lhs_line) = lhs_line {
+            if let Some(lhs_prev_min) = lhs_min {
+                if lhs_prev_min.0 + 1 != lhs_line.0 {
+                    res.extend((lhs_prev_min.0 + 1..lhs_line.0).map(|l| (Some(l.into()), None)));
+                }
+            }
+            lhs_min = Some(*lhs_line);
+        }
+        if let Some(rhs_line) = rhs_line {
+            if let Some(rhs_prev_min) = rhs_min {
+                if rhs_prev_min.0 + 1 != rhs_line.0 {
+                    res.extend((rhs_prev_min.0 + 1..rhs_line.0).map(|r| (None, Some(r.into()))));
+                }
+            }
+            rhs_min = Some(*rhs_line);
+        }
+        res.push((*lhs_line, *rhs_line));
+    }
+
+    res
+}
+
+/// Before:
+///
+/// 10 --
+/// 11 --
+/// -- 20
+/// 12 21
+///
+/// After:
+///
+/// 10 20
+/// 11 --
+/// 12 21
+///
+/// The returned vec will contain no (None, None) pairs.
+fn compact_gaps(
+    items: &[(Option<LineNumber>, Option<LineNumber>)],
+) -> Vec<(Option<LineNumber>, Option<LineNumber>)> {
+    let mut res: Vec<(Option<LineNumber>, Option<LineNumber>)> = vec![];
+    // A vec of the most recent single-sided lines, e.g.
+    //
+    // 10 --
+    // 11 --
+    //
+    // All items must be Some on the same side.
+    let mut unpaired_lines: Vec<(Option<LineNumber>, Option<LineNumber>)> = vec![];
+
+    for (lhs_line, rhs_line) in items {
+        match (lhs_line, rhs_line) {
+            (Some(lhs_line), None) => {
+                match unpaired_lines.first() {
+                    Some((None, Some(rhs_line))) => {
+                        // We've found a line that can be compacted.
+                        res.push((Some(*lhs_line), Some(*rhs_line)));
+                        unpaired_lines.remove(0);
+                    }
+                    _ => {
+                        unpaired_lines.push((Some(*lhs_line), None));
+                    }
+                }
+            }
+            (None, Some(rhs_line)) => {
+                match unpaired_lines.first() {
+                    Some((Some(lhs_line), None)) => {
+                        // We've found a line that can be compacted.
+                        res.push((Some(*lhs_line), Some(*rhs_line)));
+                        unpaired_lines.remove(0);
+                    }
+                    _ => {
+                        unpaired_lines.push((None, Some(*rhs_line)));
+                    }
+                }
+            }
+            _ => {
+                res.extend(unpaired_lines);
+                unpaired_lines = vec![];
+                res.push((*lhs_line, *rhs_line));
+            }
+        }
+    }
+
+    res.extend(unpaired_lines);
+    res
+}
+
+#[cfg(test)]
+mod tests {
+    use line_numbers::SingleLineSpan;
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::syntax::TokenKind;
+
+    #[test]
+    fn test_all_matched_lines() {
+        let matched_pos = SingleLineSpan {
+            line: 1.into(),
+            start_col: 2,
+            end_col: 3,
+        };
+        let lhs_mps = [
+            MatchedPos {
+                kind: MatchKind::Novel {
+                    highlight: TokenKind::Delimiter,
+                },
+                pos: SingleLineSpan {
+                    line: 0.into(),
+                    start_col: 1,
+                    end_col: 2,
+                },
+            },
+            MatchedPos {
+                kind: MatchKind::UnchangedToken {
+                    highlight: TokenKind::Delimiter,
+                    self_pos: vec![matched_pos],
+                    opposite_pos: vec![matched_pos],
+                },
+                pos: matched_pos,
+            },
+        ];
+        let rhs_mps = [MatchedPos {
+            kind: MatchKind::UnchangedToken {
+                highlight: TokenKind::Delimiter,
+                self_pos: vec![matched_pos],
+                opposite_pos: vec![matched_pos],
+            },
+            pos: matched_pos,
+        }];
+
+        assert_eq!(
+            all_matched_lines(&lhs_mps, &rhs_mps),
+            vec![(Some(0.into()), None), (Some(1.into()), Some(1.into()))]
+        );
+    }
+
+    #[test]
+    fn test_matched_lines_novel_on_same_line() {
+        let matched_pos = SingleLineSpan {
+            line: 1.into(),
+            start_col: 2,
+            end_col: 3,
+        };
+        let mps = [
+            MatchedPos {
+                kind: MatchKind::Novel {
+                    highlight: TokenKind::Delimiter,
+                },
+                pos: SingleLineSpan {
+                    line: 1.into(),
+                    start_col: 1,
+                    end_col: 2,
+                },
+            },
+            MatchedPos {
+                kind: MatchKind::UnchangedToken {
+                    highlight: TokenKind::Delimiter,
+                    self_pos: vec![matched_pos],
+                    opposite_pos: vec![matched_pos],
+                },
+                pos: matched_pos,
+            },
+        ];
+
+        assert_eq!(
+            matched_lines_from_unchanged(&mps),
+            vec![(Some(1.into()), Some(1.into()))]
+        );
+    }
+
+    #[test]
+    fn test_all_lines() {
+        let mps = [
+            MatchedPos {
+                kind: MatchKind::UnchangedPartOfNovelItem {
+                    highlight: TokenKind::Delimiter,
+                    self_pos: SingleLineSpan {
+                        line: 0.into(),
+                        start_col: 2,
+                        end_col: 3,
+                    },
+                    opposite_pos: vec![SingleLineSpan {
+                        line: 0.into(),
+                        start_col: 2,
+                        end_col: 3,
+                    }],
+                },
+                pos: SingleLineSpan {
+                    line: 0.into(),
+                    start_col: 2,
+                    end_col: 3,
+                },
+            },
+            MatchedPos {
+                kind: MatchKind::UnchangedToken {
+                    highlight: TokenKind::Delimiter,
+                    self_pos: vec![SingleLineSpan {
+                        line: 1.into(),
+                        start_col: 2,
+                        end_col: 3,
+                    }],
+                    opposite_pos: vec![SingleLineSpan {
+                        line: 1.into(),
+                        start_col: 2,
+                        end_col: 3,
+                    }],
+                },
+                pos: SingleLineSpan {
+                    line: 1.into(),
+                    start_col: 2,
+                    end_col: 3,
+                },
+            },
+            MatchedPos {
+                kind: MatchKind::Novel {
+                    highlight: TokenKind::Delimiter,
+                },
+                pos: SingleLineSpan {
+                    line: 2.into(),
+                    start_col: 1,
+                    end_col: 2,
+                },
+            },
+        ];
+
+        assert_eq!(all_lines(&mps), vec![0.into(), 1.into(), 2.into()]);
+    }
+
+    #[test]
+    fn test_merge_in_opposite_lines() {
+        let matched_lines = [(Some(1.into()), Some(1.into()))];
+        let novel_lines = [0.into(), 3.into()];
+
+        assert_eq!(
+            merge_in_opposite_lines(&matched_lines, &novel_lines),
+            vec![
+                (None, Some(0.into())),
+                (Some(1.into()), Some(1.into())),
+                (None, Some(3.into()))
+            ]
+        );
+    }
+
+    #[test]
+    fn test_compact_gaps() {
+        let res = compact_gaps(&[
+            (Some(0.into()), None),
+            (None, Some(0.into())),
+            (Some(1.into()), Some(1.into())),
+        ]);
+        assert_eq!(
+            res,
+            vec![
+                (Some(0.into()), Some(0.into())),
+                (Some(1.into()), Some(1.into())),
+            ]
+        )
+    }
+
+    #[test]
+    fn test_compact_gaps_with_larger_gap() {
+        let res = compact_gaps(&[
+            (Some(0.into()), None),
+            (Some(1.into()), None),
+            (None, Some(0.into())),
+            (None, Some(1.into())),
+        ]);
+        assert_eq!(
+            res,
+            vec![
+                (Some(0.into()), Some(0.into())),
+                (Some(1.into()), Some(1.into())),
+            ]
+        )
+    }
+
+    #[test]
+    fn test_match_preceding_blanks() {
+        let lhs_lines = vec!["x", "", "", "y"];
+        let rhs_lines = vec!["x", "extra", "", "", "y"];
+
+        let res = match_preceding_blanks(
+            &[
+                (Some(0.into()), Some(0.into())),
+                (Some(3.into()), Some(4.into())),
+            ],
+            &lhs_lines,
+            &rhs_lines,
+        );
+        assert_eq!(
+            res,
+            vec![
+                (Some(0.into()), Some(0.into())),
+                (Some(1.into()), Some(2.into())),
+                (Some(2.into()), Some(3.into())),
+                (Some(3.into()), Some(4.into())),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_match_preceding_blanks_first_pair() {
+        let lhs_lines = vec!["", "", "y"];
+        let rhs_lines = vec!["extra", "", "", "y"];
+
+        let res =
+            match_preceding_blanks(&[(Some(2.into()), Some(3.into()))], &lhs_lines, &rhs_lines);
+        assert_eq!(
+            res,
+            vec![
+                (Some(0.into()), Some(1.into())),
+                (Some(1.into()), Some(2.into())),
+                (Some(2.into()), Some(3.into())),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_match_blanks_between() {
+        let lhs_lines = vec!["x", "", "", "y"];
+        let rhs_lines = vec!["x", "extra", "", "", "y"];
+
+        let res = match_blanks_between(
+            (3.into(), 4.into()),
+            (0.into(), 0.into()),
+            &lhs_lines,
+            &rhs_lines,
+        );
+        assert_eq!(
+            res,
+            vec![
+                (Some(1.into()), Some(2.into())),
+                (Some(2.into()), Some(3.into()))
+            ]
+        );
+    }
+
+    #[test]
+    fn test_matched_lines_blank_at_ends() {
+        let lhs_lines = vec!["", "foo", ""];
+        let rhs_lines = vec!["", "foo", ""];
+
+        let matched_pos = SingleLineSpan {
+            line: 1.into(),
+            start_col: 2,
+            end_col: 3,
+        };
+        let lhs_mps = [MatchedPos {
+            kind: MatchKind::UnchangedToken {
+                highlight: TokenKind::Delimiter,
+                self_pos: vec![matched_pos],
+                opposite_pos: vec![matched_pos],
+            },
+            pos: matched_pos,
+        }];
+        let rhs_mps = [MatchedPos {
+            kind: MatchKind::UnchangedToken {
+                highlight: TokenKind::Delimiter,
+                self_pos: vec![matched_pos],
+                opposite_pos: vec![matched_pos],
+            },
+            pos: matched_pos,
+        }];
+
+        let res = all_matched_lines_filled(&lhs_mps, &rhs_mps, &lhs_lines, &rhs_lines);
+
+        assert_eq!(
+            res,
+            vec![
+                (Some(0.into()), Some(0.into())),
+                (Some(1.into()), Some(1.into())),
+                (Some(2.into()), Some(2.into()))
+            ]
+        );
+    }
+}

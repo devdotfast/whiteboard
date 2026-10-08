@@ -1,0 +1,47 @@
+; inherits: builtin:core/queries/ruby/folds.scm
+((array "[" @fold.open . (_) @fold.indent "]" @fold.close) @fold (#set! tag "context:body"))
+((begin_block "{" @fold.open . (_) @fold.indent "}" @fold.close) @fold (#set! tag "context:body"))
+((block "{" @fold.open . (_) @fold.indent "}" @fold.close) @fold (#set! tag "context:body"))
+((end_block "{" @fold.open . (_) @fold.indent "}" @fold.close) @fold (#set! tag "context:body"))
+((hash "{" @fold.open . (_) @fold.indent "}" @fold.close) @fold (#set! tag "context:body"))
+([
+  (assignment)
+  (begin)
+  (call)
+  (case)
+  (class)
+  (conditional)
+  (ensure)
+  (for)
+  (heredoc_body)
+  (if)
+  (lambda)
+  (method)
+  (module)
+  (pair)
+  (rescue)
+  (singleton_method)
+  (string)
+  (when)
+  (while)
+  (yield)
+] @fold (#set! tag "context:scope"))
+((if) @fold (#set! tag "context:branches"))
+([
+  (ensure)
+  (rescue)
+  (when)
+] @fold (#set! tag "context:clause"))
+
+((body_statement . (_) @fold.indent) @fold (#set! tag "context:body"))
+((then . (_) @fold.indent) @fold (#set! tag "context:body"))
+((do . (_) @fold.indent) @fold (#set! tag "context:body"))
+
+([
+  (case)
+  (begin)
+] @fold (#set! tag "context:branches"))
+
+((else "else" @fold.open . (_) @fold.indent) @fold (#set! tag "context:body"))
+((elsif "elsif" @fold.open . (_) @fold.indent) @fold (#set! tag "context:body"))
+

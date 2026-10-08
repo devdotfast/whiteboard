@@ -1,0 +1,43 @@
+diff --git a/before.py b/after.py
+index 7585dda61..620358695 100644
+--- a/before.py
++++ b/after.py
+@@ -12,6 +12,7 @@ from inspect import iscoroutinefunction
+ from itertools import chain
+ from types import TracebackType
+ from urllib.parse import quote as _url_quote
++from urllib.parse import urlsplit
+ 
+ import click
+ from werkzeug.datastructures import Headers
+@@ -721,7 +722,9 @@ class Flask(App):
+         sn_host = sn_port = None
+ 
+         if server_name:
+-            sn_host, _, sn_port = server_name.partition(":")
++            server_url = urlsplit(f"//{server_name}")
++            sn_host = server_url.hostname
++            sn_port = server_url.port
+ 
+         if not host:
+             if sn_host:
+@@ -731,8 +734,8 @@ class Flask(App):
+ 
+         if port or port == 0:
+             port = int(port)
+-        elif sn_port:
+-            port = int(sn_port)
++        elif sn_port is not None:
++            port = sn_port
+         else:
+             port = 5000
+ 
+@@ -745,7 +748,7 @@ class Flask(App):
+         from werkzeug.serving import run_simple
+ 
+         try:
+-            run_simple(t.cast(str, host), port, self, **options)
++            run_simple(host, port, self, **options)
+         finally:
+             # reset the first request information if the development server
+             # reset normally.  This makes it possible to restart the server

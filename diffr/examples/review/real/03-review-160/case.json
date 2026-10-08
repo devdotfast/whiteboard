@@ -1,0 +1,50 @@
+{
+  "summary": "A genuinely new file: head-only multiline imports and a supplied replacement for the export function body. Keep the multiline signature visible. No extra context is emitted because the whole file is added.",
+  "expected_text": {
+    "folds/0/rhs": "import { spawn } from \"node:child_process\";\nimport {\n  closeSync,\n  mkdirSync,\n  openSync,\n  readFileSync,\n  renameSync,\n  rmSync,\n  writeFileSync,\n} from \"node:fs\";\nimport path from \"node:path\";\n\nimport {\n  type JsonObject,\n  type JsonValue,\n  jsonArray,\n  jsonObject,\n  parseJsonText,\n} from \"@dev.fast/review-protocol\";",
+    "folds/1/rhs": "  mkdirSync(input.root, { recursive: true });\n  const destination = path.join(input.root, `${input.sessionId}.jsonl`);\n  const staging = `${destination}.tmp-${process.pid}`;\n  const raw = await runOpenCodeExport(input.sessionId, `${staging}.json`);\n  if (raw === null) return null;\n  const exported = jsonObject(parseJsonText(raw));\n  const info = jsonObject(exported?.info);\n  if (!exported || !info) {\n    throw new Error(\n      `opencode export ${input.sessionId} returned no session info.`,\n    );\n  }\n  const messages = jsonArray(exported.messages);\n  if (!messages) {\n    throw new Error(\n      `opencode export ${input.sessionId} returned no message list.`,\n    );\n  }\n  const header: JsonObject = {\n    type: OPENCODE_SESSION_RECORD,\n    ...pick(info, [\"id\", \"parentID\", \"directory\", \"title\", \"version\", \"time\"]),\n  };\n  const lines = [\n    JSON.stringify(header),\n    ...messages.map((message) => JSON.stringify(traceMessageRecord(message))),\n  ];\n  writeFileSync(staging, `${lines.join(\"\\n\")}\\n`, \"utf8\");\n  renameSync(staging, destination);"
+  },
+  "keep_visible": {
+    "rhs": [
+      {
+        "range": {
+          "start": {
+            "line": 35,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 38,
+            "byte_column": 28
+          }
+        },
+        "text": "export async function exportOpenCodeTrace(input: {\n  sessionId: string;\n  root: string;\n}): Promise<string | null> {"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 67,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 67,
+            "byte_column": 21
+          }
+        },
+        "text": "  return destination;"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 67,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 68,
+            "byte_column": 1
+          }
+        },
+        "text": "  return destination;\n}"
+      }
+    ]
+  }
+}

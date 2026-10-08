@@ -34,10 +34,13 @@ const platformPackage = path.dirname(
 );
 
 async function stageDiffr(runtime) {
-  for (const directory of [diffrPackage, platformPackage])
+  for (const [name, directory] of [
+    ["diffr", diffrPackage],
+    [`diffr-${process.platform}-${process.arch}`, platformPackage],
+  ])
     await cp(
       directory,
-      path.join(runtime, "node_modules/@dev.fast", path.basename(directory)),
+      path.join(runtime, "node_modules/@dev.fast", name),
       { recursive: true, dereference: true },
     );
 }

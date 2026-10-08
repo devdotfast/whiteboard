@@ -1,0 +1,30 @@
+{
+  "repo": "devdotfast/review",
+  "pr_number": 160,
+  "pr_title": "feat(trace): capture OpenCode sessions",
+  "pr_url": "https://github.com/devdotfast/review/pull/160",
+  "language": "TypeScript",
+  "status": "added",
+  "base_branch_sha": "de485ab6b296b6839cc96fecc543faa80d0288b5",
+  "comparison_base_sha": "de485ab6b296b6839cc96fecc543faa80d0288b5",
+  "head_sha": "3b88ac733f826578f300c3f0259cf4e475a8e7bf",
+  "merged_at": "2026-09-05T05:37:16Z",
+  "comparison": "PR merge-base to head",
+  "sources": {
+    "lhs": {
+      "file": "before.ts",
+      "path": null,
+      "commit": "de485ab6b296b6839cc96fecc543faa80d0288b5",
+      "git_blob_sha": null,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "rhs": {
+      "file": "after.ts",
+      "path": "packages/progressive-review/src/opencode-trace-export.ts",
+      "commit": "3b88ac733f826578f300c3f0259cf4e475a8e7bf",
+      "git_blob_sha": "3ee93bf3b7e6fc629949de4626db41a9ae63a019",
+      "sha256": "7e7fdbdd98761cbab9d1a18f15d06b267e50eabfe533db823682e0f4105dbb14"
+    }
+  },
+  "visibility": "private"
+}

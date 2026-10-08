@@ -1,0 +1,184 @@
+{
+  "summary": "Production changes inside an iterator plus a new regression test. Paired use groups, an added test-body fold with its attribute/signature retained, and file-level context for both the iterator and the distant test module. One annotation model covers both regions.",
+  "expected_text": {
+    "folds/0/lhs": "use std::{\n    cmp::Ordering,\n    ffi::OsStr,\n    fs::{self, FileType, Metadata},\n    io,\n    path::{Path, PathBuf},\n    sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering},\n    sync::{Arc, OnceLock},\n};\n\nuse {\n    crossbeam_deque::{Stealer, Worker as Deque},\n    same_file::Handle,\n    walkdir::WalkDir,\n};\n\nuse crate::{\n    Error, PartialErrorBuilder,\n    dir::{Ignore, IgnoreBuilder},\n    gitignore::GitignoreBuilder,\n    incremental::{IncrementalIgnore, IncrementalIgnoreOptions},\n    overrides::Override,\n    types::Types,\n};",
+    "folds/0/rhs": "use std::{\n    cmp::Ordering,\n    ffi::OsStr,\n    fs::{self, FileType, Metadata},\n    io,\n    path::{Path, PathBuf},\n    sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering},\n    sync::{Arc, OnceLock},\n};\n\nuse {\n    crossbeam_deque::{Stealer, Worker as Deque},\n    same_file::Handle,\n    walkdir::WalkDir,\n};\n\nuse crate::{\n    Error, PartialErrorBuilder,\n    dir::{Ignore, IgnoreBuilder},\n    gitignore::GitignoreBuilder,\n    incremental::{IncrementalIgnore, IncrementalIgnoreOptions},\n    overrides::Override,\n    types::Types,\n};",
+    "folds/1/rhs": "        let td = tmpdir();\n        let leaf = td.path().join(\"leaf\");\n        mkdirp(&leaf);\n        wfile(leaf.join(\".ignore\"), \"{invalid\\n\");\n\n        let mut builder = WalkBuilder::new(td.path());\n        builder.max_depth(Some(1));\n        let entry = builder\n            .build()\n            .find_map(|result| {\n                let entry = result.unwrap();\n                (entry.path() == leaf).then_some(entry)\n            })\n            .unwrap();\n\n        assert!(entry.error().is_none());\n        assert_paths(td.path(), &builder, &[\"leaf\"]);",
+    "context/0/lhs": "impl Iterator for Walk {",
+    "context/0/rhs": "impl Iterator for Walk {",
+    "context/1/lhs": "    fn next(&mut self) -> Option<Result<DirEntry, Error>> {",
+    "context/1/rhs": "    fn next(&mut self) -> Option<Result<DirEntry, Error>> {",
+    "context/2/lhs": "mod tests {",
+    "context/2/rhs": "mod tests {",
+    "context/3/lhs": "    }\n}",
+    "context/3/rhs": "    }\n}",
+    "context/4/lhs": "}",
+    "context/4/rhs": "}",
+    "context/5/lhs": "pub struct Walk {",
+    "context/5/rhs": "pub struct Walk {",
+    "context/6/lhs": "}",
+    "context/6/rhs": "}"
+  },
+  "keep_visible": {
+    "rhs": [
+      {
+        "range": {
+          "start": {
+            "line": 2436,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 2437,
+            "byte_column": 59
+          }
+        },
+        "text": "    #[test]\n    fn max_depth_does_not_load_unreachable_ignore_files() {"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 1260,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1261,
+            "byte_column": 1
+          }
+        },
+        "text": "    }\n}"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 2739,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 2739,
+            "byte_column": 1
+          }
+        },
+        "text": "}"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 1245,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1245,
+            "byte_column": 41
+          }
+        },
+        "text": "                    return Some(Ok(ent));"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 2455,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 2455,
+            "byte_column": 5
+          }
+        },
+        "text": "    }"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 1116,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1116,
+            "byte_column": 17
+          }
+        },
+        "text": "pub struct Walk {"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 1125,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1125,
+            "byte_column": 1
+          }
+        },
+        "text": "}"
+      }
+    ],
+    "lhs": [
+      {
+        "range": {
+          "start": {
+            "line": 1253,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1254,
+            "byte_column": 1
+          }
+        },
+        "text": "    }\n}"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 2711,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 2711,
+            "byte_column": 1
+          }
+        },
+        "text": "}"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 1238,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1238,
+            "byte_column": 41
+          }
+        },
+        "text": "                    return Some(Ok(ent));"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 1115,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1115,
+            "byte_column": 17
+          }
+        },
+        "text": "pub struct Walk {"
+      },
+      {
+        "range": {
+          "start": {
+            "line": 1123,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 1123,
+            "byte_column": 1
+          }
+        },
+        "text": "}"
+      }
+    ]
+  }
+}

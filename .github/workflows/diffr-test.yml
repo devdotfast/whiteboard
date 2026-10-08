@@ -1,0 +1,206 @@
+on:
+  push:
+    paths:
+      - "diffr/**"
+  pull_request:
+    paths:
+      - "diffr/**"
+  workflow_dispatch:
+
+name: Diffr Test
+
+jobs:
+  build:
+    name: Test ${{ matrix.job.target }}
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          # Operating systems available: https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners#standard-github-hosted-runners-for-public-repositories
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04 }
+          - { target: x86_64-pc-windows-msvc, os: windows-latest }
+          - { target: aarch64-pc-windows-msvc, os: windows-11-arm }
+
+          # Wasmtime needs native memfd support unavailable under QEMU user emulation.
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm }
+
+          # mac-14 is an M1 ARM device.
+          - { target: aarch64-apple-darwin, os: macos-14 }
+          - { target: x86_64-apple-darwin, os: macos-14, use-cross: true }
+
+          - { target: x86_64-unknown-linux-musl, os: ubuntu-22.04, use-cross: true }
+    defaults:
+      run:
+        working-directory: diffr
+    env:
+      BUILD_CMD: cargo
+
+    steps:
+    - name: Checkout source code
+      # v4.2.2
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@1.99.0
+      with:
+        targets: ${{ matrix.job.target }}, wasm32-wasip2
+
+    - name: Install cross
+      if: matrix.job.use-cross
+      uses: taiki-e/install-action@1329c298aa20c3257846c9b2e0e55967df3e3c37 # v2
+      with:
+        tool: cross@0.2.5
+
+    - name: Overwrite build command env variable
+      if: matrix.job.use-cross
+      shell: bash
+      run: echo "BUILD_CMD=cross" >> $GITHUB_ENV
+
+    - name: Test
+      shell: bash
+      run: $BUILD_CMD test --target ${{ matrix.job.target }}
+
+  crate_packages:
+    name: Verify crates.io packages
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: diffr
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@1.99.0
+      # Build extracted archives together, with their internal dependencies
+      # staged locally instead of requiring them to be published already.
+      - run: cargo package --locked -p diffr-grammars -p diffr-core -p diffr-cli
+
+  test_wasm_plugins:
+    name: Test WASM component plugins
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: diffr
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          # The tests build every bundled plugin as a component.
+          targets: wasm32-wasip2
+      # Rebuild the components and test external loading and async HTTP.
+      # The target matrix above exercises the embedded components.
+      - run: cargo xtask test-plugins
+
+  test_mime_db:
+    name: Test with MIME database
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: diffr
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          targets: wasm32-wasip2
+      # This runs tests that rely on the MIME database being present.
+      - run: cargo test -- --ignored
+
+  test_linux_latest_stable:
+    name: Test Linux (latest stable Rust)
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: diffr
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+      - run: cargo +stable test
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: diffr
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - run: cargo fmt --all -- --check
+      - run: cargo fmt --manifest-path plugins/workspace/Cargo.toml --all -- --check
+
+  actionlint:
+    name: Actionlint
+    runs-on: ubuntu-22.04
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.25.0"
+          cache: false
+      - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck=
+
+  typo-check:
+    name: Typo Check
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: diffr
+    timeout-minutes: 10
+    env:
+      FORCE_COLOR: 1
+      TYPOS_VERSION: v1.38.1
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Download typos
+        run: curl -LsSf https://github.com/crate-ci/typos/releases/download/$TYPOS_VERSION/typos-$TYPOS_VERSION-x86_64-unknown-linux-musl.tar.gz | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
+      - name: Check for typos
+        run: typos
+
+  test_typescript:
+    name: Test @dev.fast/diffr
+    permissions:
+      contents: read
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: diffr
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.10
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - working-directory: .
+        run: pnpm install --frozen-lockfile
+      - run: cargo build --locked
+      - working-directory: diffr/diffr-ts
+        run: |
+          pnpm typecheck
+          pnpm build
+          bun test
+
+  whiteboard_integration:
+    name: Whiteboard integration with diffr
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @dev.fast/whiteboard test:integration:diffr

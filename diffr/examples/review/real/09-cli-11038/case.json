@@ -1,0 +1,45 @@
+{
+  "summary": "A paired fallback block grows nested branches and explanatory comments. Tabs count as one byte, not display-width columns. Preserve the receiver-method signature as extra context and the existing return statement outside the fold.",
+  "expected_text": {
+    "folds/0/lhs": "import (\n\t\"errors\"\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"slices\"\n\n\t\"github.com/cli/cli/v2/internal/gh\"\n\t\"github.com/cli/cli/v2/internal/keyring\"\n\to \"github.com/cli/cli/v2/pkg/option\"\n\tghauth \"github.com/cli/go-gh/v2/pkg/auth\"\n\tghConfig \"github.com/cli/go-gh/v2/pkg/config\"\n)",
+    "folds/0/rhs": "import (\n\t\"errors\"\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"slices\"\n\n\t\"github.com/cli/cli/v2/internal/gh\"\n\t\"github.com/cli/cli/v2/internal/keyring\"\n\to \"github.com/cli/cli/v2/pkg/option\"\n\tghauth \"github.com/cli/go-gh/v2/pkg/auth\"\n\tghConfig \"github.com/cli/go-gh/v2/pkg/config\"\n)",
+    "folds/1/lhs": "\tif token == \"\" {\n\t\tvar err error\n\t\ttoken, err = c.TokenFromKeyring(hostname)\n\t\tif err == nil {\n\t\t\tsource = \"keyring\"\n\t\t}\n\t}",
+    "folds/1/rhs": "\tif token == \"\" {\n\t\tvar user string\n\t\tvar err error\n\t\tif user, err = c.ActiveUser(hostname); err == nil {\n\t\t\ttoken, err = c.TokenFromKeyringForUser(hostname, user)\n\t\t}\n\t\tif err != nil {\n\t\t\t// We should generally be able to find a token for the active user,\n\t\t\t// but in some cases such as if the keyring was set up in a very old\n\t\t\t// version of the CLI, it may only have a unkeyed token, so fallback\n\t\t\t// to it.\n\t\t\ttoken, err = c.TokenFromKeyring(hostname)\n\t\t}\n\t\tif err == nil {\n\t\t\tsource = \"keyring\"\n\t\t}\n\t}",
+    "context/0/lhs": "func (c *AuthConfig) ActiveToken(hostname string) (string, string) {",
+    "context/0/rhs": "func (c *AuthConfig) ActiveToken(hostname string) (string, string) {",
+    "context/1/lhs": "}",
+    "context/1/rhs": "}"
+  },
+  "keep_visible": {
+    "lhs": [
+      {
+        "range": {
+          "start": {
+            "line": 243,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 243,
+            "byte_column": 1
+          }
+        },
+        "text": "}"
+      }
+    ],
+    "rhs": [
+      {
+        "range": {
+          "start": {
+            "line": 253,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 253,
+            "byte_column": 1
+          }
+        },
+        "text": "}"
+      }
+    ]
+  }
+}

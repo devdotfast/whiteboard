@@ -1,0 +1,35 @@
+{
+  "folds": [
+    {
+      "regions": {
+        "Added": {
+          "start": {
+            "line": 0,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 18,
+            "byte_column": 35
+          }
+        }
+      },
+      "placeholder": "Imports"
+    },
+    {
+      "regions": {
+        "Added": {
+          "start": {
+            "line": 39,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 66,
+            "byte_column": 35
+          }
+        }
+      },
+      "placeholder": "Export the session, validate its records, and atomically write the trace."
+    }
+  ],
+  "context": []
+}

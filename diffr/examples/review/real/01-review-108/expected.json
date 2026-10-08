@@ -1,0 +1,57 @@
+{
+  "folds": [
+    {
+      "regions": {
+        "Paired": {
+          "lhs": {
+            "start": {
+              "line": 0,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 42,
+              "byte_column": 75
+            }
+          },
+          "rhs": {
+            "start": {
+              "line": 0,
+              "byte_column": 0
+            },
+            "end": {
+              "line": 42,
+              "byte_column": 75
+            }
+          }
+        }
+      },
+      "placeholder": "Imports"
+    }
+  ],
+  "context": [
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 225,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 239,
+            "byte_column": 4
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 231,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 245,
+            "byte_column": 4
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+[build]
+target = "wasm32-wasip2"
+target-dir = "../target/wasm-plugins"

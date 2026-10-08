@@ -1,0 +1,45 @@
+{
+  "folds": [
+    {
+      "regions": {
+        "Added": {
+          "start": {
+            "line": 304,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 307,
+            "byte_column": 11
+          }
+        }
+      },
+      "placeholder": "Register a QUERY route."
+    }
+  ],
+  "context": [
+    {
+      "Paired": {
+        "lhs": {
+          "start": {
+            "line": 51,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 51,
+            "byte_column": 15
+          }
+        },
+        "rhs": {
+          "start": {
+            "line": 51,
+            "byte_column": 0
+          },
+          "end": {
+            "line": 51,
+            "byte_column": 15
+          }
+        }
+      }
+    }
+  ]
+}
