@@ -4,6 +4,7 @@ import type { ViewerRow } from "./rows";
 import type { Snapshot } from "../protocol/store";
 import { snapshotLabel } from "./counts";
 import { sourceLines } from "./regions";
+import { measureTextWidth } from "../terminal/text";
 export interface SourceSelection {
   anchor: string;
   end: string;
@@ -72,6 +73,18 @@ export function selectedRanges(
 /** `src/cli.rs:14-19`, as a range is named in prose. */
 export function rangeName(range: SelectedRange): string {
   return `${range.path}:${range.start === range.end ? range.start : `${range.start}-${range.end}`}`;
+}
+/**
+ * What the selection bar leads with: a message, then the selected range and how many lines it
+ * holds, in `width` cells. A path too long for them gives way to its file's name.
+ */
+export function selectionLead(message: string, ranges: SelectedRange[], width: number): string {
+  const count = ranges.reduce((sum, range) => sum + range.end - range.start + 1, 0);
+  const lead = (what: string) => ` ${message ? `${message} · ` : ""}${what} · ${count} ${count === 1 ? "line" : "lines"} `;
+  if (ranges.length !== 1) return lead(`${ranges.length} files`);
+  const [range] = ranges as [SelectedRange];
+  const whole = lead(rangeName(range));
+  return measureTextWidth(whole) <= width ? whole : lead(rangeName({ ...range, path: range.path.split("/").at(-1)! }));
 }
 /**
  * A range as a reference an agent can read: its name and, unless it is the file on disk, the

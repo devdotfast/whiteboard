@@ -18183,7 +18183,7 @@ function pickerLines(state, width, height, theme, counts, viewed, closeHint) {
     runs.push({ text: " ".repeat(Math.max(0, width - used - rightWidth)), fg: rowBg, bg: rowBg }, ...right);
     lines.push({ runs: exactly(runs, width, rowBg), pick: pick2.fileIndex });
   }
-  const hint = `⏎ open · ↑↓ or ctrl-n/p move · ${closeHint} `;
+  const hint = `enter open · ↑↓ or ctrl-n/p move · ${closeHint} `;
   const typed = [
     { text: "› ", fg: theme.accent, bg },
     { text: state.query, fg: theme.fg, bg },
@@ -18239,6 +18239,15 @@ function selectedRanges(files, rows, selection) {
 }
 function rangeName(range) {
   return `${range.path}:${range.start === range.end ? range.start : `${range.start}-${range.end}`}`;
+}
+function selectionLead(message, ranges, width) {
+  const count = ranges.reduce((sum, range2) => sum + range2.end - range2.start + 1, 0);
+  const lead = (what) => ` ${message ? `${message} · ` : ""}${what} · ${count} ${count === 1 ? "line" : "lines"} `;
+  if (ranges.length !== 1)
+    return lead(`${ranges.length} files`);
+  const [range] = ranges;
+  const whole = lead(rangeName(range));
+  return measureTextWidth(whole) <= width ? whole : lead(rangeName({ ...range, path: range.path.split("/").at(-1) }));
 }
 function rangeReference(files, comparison, range) {
   const file2 = files[range.fileIndex];
@@ -18397,13 +18406,13 @@ var KEYS = [
   ["\\ · ⌘B · ☰ files", "the file tree"],
   ["V · a header's box", "mark a file viewed"],
   ["drag · y · Y", "select lines; copy them; copy them for an agent"],
-  ["⏎ · ⌘L", "add the selected lines to the chat"],
+  ["enter · ⌘L", "add the selected lines to the chat"],
   ["s · w · t", "split or unified; wrap; theme"],
   ["?", "this list"],
   ["q", "close the pane"]
 ];
 var KEYS_BUTTON = " ? keys ";
-var CHAT_BUTTON = " ⏎ Add to chat ";
+var CHAT_BUTTON = " Add to chat · enter ";
 var SPLIT_COLUMNS = 180;
 var TREE_MIN_COLUMNS = 120;
 
@@ -18815,12 +18824,10 @@ class Pane {
     const found = viewer.searchState();
     const selected = this.selection && !this.filesView && !this.helpView ? selectedRanges(files, at.rows, this.selection) : [];
     if (found && "prompt" in found)
-      status.text(fit(`/${found.prompt}▏ · ${found.count} matches · ⏎ go · ctrl-c cancel`, size.columns), theme.fg);
+      status.text(fit(`/${found.prompt}▏ · ${found.count} matches · enter go · ctrl-c cancel`, size.columns), theme.fg);
     else if (selected.length) {
-      const count = selected.reduce((sum, range) => sum + range.end - range.start + 1, 0);
-      const what = selected.length === 1 ? rangeName(selected[0]) : `${selected.length} files`;
       const button2 = measureTextWidth(CHAT_BUTTON);
-      const lead = fit(` ${this.message ? `${this.message} · ` : ""}${what} · ${count} ${count === 1 ? "line" : "lines"} `, Math.max(0, size.columns - button2));
+      const lead = fit(selectionLead(this.message, selected, size.columns - button2), Math.max(0, size.columns - button2));
       status.text(lead, theme.bg, theme.accent, true);
       const from = measureTextWidth(lead);
       status.hit(from, from + button2, { chat: true }).text(CHAT_BUTTON, theme.accent, theme.bg, true);
@@ -18834,7 +18841,7 @@ class Pane {
       const name = inventory[currentFile] ? filePath(inventory[currentFile].file).split("/").at(-1) : undefined;
       const where = name === undefined ? "" : `${name} · file ${order.indexOf(currentFile) + 1} of ${order.length} · ${at.maxScroll ? Math.round(top / at.maxScroll * 100) : 100}% · `;
       const loading = snapshot3.complete ? "" : `${snapshot3.loaded}/${inventory.length} loaded… `;
-      const keys = this.filesView ? " j/k move · ⏎ open · \\ or ⌘B back" : " h/l pan · / search · ctrl-p files · \\ or ⌘B tree · V viewed · drag selects · y/Y copy";
+      const keys = this.filesView ? " j/k move · enter open · \\ or ⌘B back" : " h/l pan · / search · ctrl-p files · \\ or ⌘B tree · V viewed · drag selects · y/Y copy";
       const room = size.columns - measureTextWidth(KEYS_BUTTON);
       const text = `${this.message ? `${this.message} · ` : ""}${searched}${this.filesView ? "" : where}${read.viewed}/${read.total} viewed ${loading}${errors3}${keys}`;
       status.text(measureTextWidth(text) > room ? `${fit(text, room - 1)}…` : text, theme.muted).fill(room);

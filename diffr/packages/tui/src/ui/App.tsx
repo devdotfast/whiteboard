@@ -20,8 +20,8 @@ import type { ThemeSet } from "../diffr/theme";
 import {
   agentReference,
   copySelection,
-  rangeName,
   selectedRanges,
+  selectionLead,
   selectionBounds,
   type SourceSelection,
 } from "@diffr/viewer/document/selection";
@@ -494,12 +494,10 @@ export function App({
         ))}
       </box>}
       {found && "prompt" in found
-        ? <text height={1} fg={theme.fg} selectable={false}>{fit(`/${found.prompt}▏ · ${found.count} matches · ⏎ go · esc cancel`, width)}</text>
+        ? <text height={1} fg={theme.fg} selectable={false}>{fit(`/${found.prompt}▏ · ${found.count} matches · enter go · esc cancel`, width)}</text>
         : selected.length ? (() => {
           // The selection bar, bright so it catches the eye: what is selected, then the button that copies it for an agent.
-          const count = selected.reduce((sum, range) => sum + range.end - range.start + 1, 0);
-          const what = selected.length === 1 ? rangeName(selected[0]!) : `${selected.length} files`;
-          const lead = fit(` ${message ? `${message} · ` : ""}${what} · ${count} ${count === 1 ? "line" : "lines"} `,
+          const lead = fit(selectionLead(message, selected, width - measureTextWidth(AGENT_BUTTON)),
             Math.max(0, width - measureTextWidth(AGENT_BUTTON)));
           const room = width - measureTextWidth(lead) - measureTextWidth(AGENT_BUTTON);
           const hints = " esc clear";

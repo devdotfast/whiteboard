@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createTestDiffFile } from "../protocol/fixture";
 import { rowsForFile } from "./rows";
-import { agentReference, type SourceSelection } from "./selection";
+import { agentReference, type SourceSelection, selectionLead } from "./selection";
 import { dark } from "../theme/themes";
 import type { DiffFile } from "../protocol/wire";
 
@@ -47,4 +47,11 @@ test("the fence outgrows any run of backticks in the code", () => {
   expect(agentReference([file], againstMain, rows, selection)).toBe(
     "demo.ts:3\n````ts\n```\n````",
   );
+});
+
+test("the selection bar names the range with its path, or just its file's name when the path won't fit", () => {
+  const range = { fileIndex: 0, path: "diffr/packages/claude-code/plugin/hooks/diffr.test.ts", side: "right" as const, start: 187, end: 193 };
+  expect(selectionLead("", [range], 80)).toBe(" diffr/packages/claude-code/plugin/hooks/diffr.test.ts:187-193 · 7 lines ");
+  expect(selectionLead("", [range], 40)).toBe(" diffr.test.ts:187-193 · 7 lines ");
+  expect(selectionLead("Copied for agent", [range, { ...range, fileIndex: 1, start: 1, end: 1 }], 80)).toBe(" Copied for agent · 2 files · 8 lines ");
 });

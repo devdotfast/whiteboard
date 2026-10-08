@@ -8,7 +8,7 @@ import type { Palette } from "@diffr/viewer/theme/palette";
 import { Viewer, type Hover, type KeyPress, type Size } from "@diffr/viewer/viewer";
 import { litRuns, viewedBox, viewedHint } from "@diffr/viewer/viewport/cell";
 import { pickerLines } from "@diffr/viewer/viewport/picker";
-import { agentReference, copySelection, rangeName, rangeReference, selectedRanges, selectionBounds, type SourceSelection } from "@diffr/viewer/document/selection";
+import { agentReference, copySelection, rangeName, rangeReference, selectedRanges, selectionBounds, selectionLead, type SourceSelection } from "@diffr/viewer/document/selection";
 import { Colors, fit, LineBuilder, paintCell } from "./paint";
 import type { Action, Frame, Input, Line } from "./protocol";
 
@@ -27,7 +27,7 @@ const KEYS: [string, string][] = [
   ["\\ · ⌘B · ☰ files", "the file tree"],
   ["V · a header's box", "mark a file viewed"],
   ["drag · y · Y", "select lines; copy them; copy them for an agent"],
-  ["⏎ · ⌘L", "add the selected lines to the chat"],
+  ["enter · ⌘L", "add the selected lines to the chat"],
   ["s · w · t", "split or unified; wrap; theme"],
   ["?", "this list"],
   ["q", "close the pane"],
@@ -35,7 +35,7 @@ const KEYS: [string, string][] = [
 /** Pinned to the status line's right end, so cut hints never cut the way to the list. */
 const KEYS_BUTTON = " ? keys ";
 /** On the selection bar, which takes the status line while lines are selected. */
-const CHAT_BUTTON = " ⏎ Add to chat ";
+const CHAT_BUTTON = " Add to chat · enter ";
 
 /** What an input asks of the hooks module beyond a redraw. */
 export interface Outcome {
@@ -510,14 +510,11 @@ export class Pane {
     const found = viewer.searchState();
     const selected = this.selection && !this.filesView && !this.helpView ? selectedRanges(files, at.rows, this.selection) : [];
     if (found && "prompt" in found)
-      status.text(fit(`/${found.prompt}▏ · ${found.count} matches · ⏎ go · ctrl-c cancel`, size.columns), theme.fg);
+      status.text(fit(`/${found.prompt}▏ · ${found.count} matches · enter go · ctrl-c cancel`, size.columns), theme.fg);
     else if (selected.length) {
       // The selection bar, bright so it catches the eye: what is selected, then the button that sends it to the chat.
-      const count = selected.reduce((sum, range) => sum + range.end - range.start + 1, 0);
-      const what = selected.length === 1 ? rangeName(selected[0]!) : `${selected.length} files`;
       const button = measureTextWidth(CHAT_BUTTON);
-      const lead = fit(` ${this.message ? `${this.message} · ` : ""}${what} · ${count} ${count === 1 ? "line" : "lines"} `,
-        Math.max(0, size.columns - button));
+      const lead = fit(selectionLead(this.message, selected, size.columns - button), Math.max(0, size.columns - button));
       status.text(lead, theme.bg, theme.accent, true);
       const from = measureTextWidth(lead);
       status.hit(from, from + button, { chat: true }).text(CHAT_BUTTON, theme.accent, theme.bg, true);
@@ -534,7 +531,7 @@ export class Pane {
       const where = name === undefined ? ""
         : `${name} · file ${order.indexOf(currentFile) + 1} of ${order.length} · ${at.maxScroll ? Math.round((top / at.maxScroll) * 100) : 100}% · `;
       const loading = snapshot.complete ? "" : `${snapshot.loaded}/${inventory.length} loaded… `;
-      const keys = this.filesView ? " j/k move · ⏎ open · \\ or ⌘B back"
+      const keys = this.filesView ? " j/k move · enter open · \\ or ⌘B back"
         : " h/l pan · / search · ctrl-p files · \\ or ⌘B tree · V viewed · drag selects · y/Y copy";
       // The hints give way first, cut with an ellipsis; ? keys stays at the right end, and a click on it shows them all.
       const room = size.columns - measureTextWidth(KEYS_BUTTON);

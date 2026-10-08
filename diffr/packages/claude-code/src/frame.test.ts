@@ -136,7 +136,7 @@ test("while lines are selected the status line is a bright bar naming them, with
   select();
   const bar = pane.frame(wide);
   const line = bar.lines.at(-1)!;
-  expect(text(line)).toMatch(/^ \S+\.ts:(\d+)-(\d+) · \d+ lines +⏎ Add to chat /);
+  expect(text(line)).toMatch(/^ \S+\.ts:(\d+)-(\d+) · \d+ lines +Add to chat · enter /);
   const [, from, to] = /:(\d+)-(\d+)/.exec(text(line))!;
   expect(text(line)).toContain(`${Number(to) - Number(from) + 1} lines`);
   expect(bar.colors[line.segments[0]![2]]).toBe(theme.accent);

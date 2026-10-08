@@ -79,7 +79,7 @@ export function pickerLines(state: PickerState, width: number, height: number, t
     runs.push({ text: " ".repeat(Math.max(0, width - used - rightWidth)), fg: rowBg, bg: rowBg }, ...right);
     lines.push({ runs: exactly(runs, width, rowBg), pick: pick.fileIndex });
   }
-  const hint = `⏎ open · ↑↓ or ctrl-n/p move · ${closeHint} `;
+  const hint = `enter open · ↑↓ or ctrl-n/p move · ${closeHint} `;
   const typed: PickerRun[] = [{ text: "› ", fg: theme.accent, bg }, { text: state.query, fg: theme.fg, bg },
     { text: " ", fg: theme.bg, bg: theme.fg }];
   const typedWidth = typed.reduce((n, run) => n + measureTextWidth(run.text), 0);
