@@ -151,3 +151,25 @@ test("/ searches from the status line, q included as text; Enter lands on a matc
   type("n");
   expect(screen(pane.frame(narrow)).at(-1)).toMatch(/^\/plugin · match 2 of/);
 });
+
+test("a narrow pane leads its status line with where the reader is, and swaps the diff for the tree on \\, ⌘B or the button", async () => {
+  const { pane } = await load(greet);
+  const body = () => screen(pane.frame(narrow)).slice(1, -1);
+  expect(screen(pane.frame(narrow)).at(-1)).toStartWith("greet.ts · file 1 of 2 · 0% · 0/2 viewed");
+  // No sidebar at this width: the code starts at the left edge.
+  expect(body()[0]).toStartWith("▌▾ src/greet.ts");
+  expect(cellAction(pane.frame(narrow), "☰ files", "☰")).toEqual({ files: true });
+  pane.input({ act: { files: true } });
+  expect(body().slice(0, 4).map((line) => line.trimEnd())).toEqual([
+    "  ▾ src", expect.stringMatching(/^▸     greet\.ts +\+2 −0$/), "  ▾ tests", expect.stringMatching(/^      greet\.test\.ts +\+1 −0$/)]);
+  expect(body().join("\n")).not.toContain("export function");
+  pane.input({ press: { key: "j" } });
+  pane.input({ press: { key: "j" } });
+  pane.input({ press: { key: "return" } });
+  expect(body()[0]).toStartWith("▌▸ tests/greet.test.ts");
+  expect(screen(pane.frame(narrow)).at(-1)).toStartWith("greet.test.ts · file 2 of 2 · 100%");
+  pane.input({ press: { key: "b", meta: true } });
+  expect(body()[0]!.trimEnd()).toBe("  ▾ src");
+  pane.input({ press: { key: "\\" } });
+  expect(body()[0]).toStartWith("▌▸ tests/greet.test.ts");
+});

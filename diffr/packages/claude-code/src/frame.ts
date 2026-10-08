@@ -12,7 +12,7 @@ import { Colors, fit, LineBuilder, paintCell } from "./paint";
 import type { Action, Frame, Input, Line } from "./protocol";
 
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-const HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · / search, n/N matches · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ files · q close";
+const HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · / search, n/N matches · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ or ⌘B files · q close";
 
 /** What an input asks of the hooks module beyond a redraw. */
 export interface Outcome {
@@ -41,6 +41,10 @@ export class Pane {
   private selecting = false;
   /** The code row on each frame line of the last frame, and which side a column falls on. */
   private readonly cellsAt = new Map<number, { key: string; side: (x: number) => SourceSelection["side"] }>();
+  /** A narrow pane showing the tree in place of the diff. */
+  private filesView = false;
+  /** The tree row the tree that took the pane is on. */
+  private treeCursor = 0;
 
   constructor(private readonly store: DiffStore, theme: Palette) {
     this.viewer = new Viewer(store, theme, SPLIT_COLUMNS);
@@ -83,12 +87,10 @@ export class Pane {
     if ("fold" in action) this.viewer.setFold(action.file, action.fold, "toggle", recursive);
     else if ("viewedFile" in action) this.viewer.toggleViewedFile(action.viewedFile);
     else if ("file" in action) this.viewer.toggleFile(action.file);
-    else if ("jump" in action) this.viewer.jump(action.jump);
-    else if ("dir" in action) {
-      if (this.closedDirectories.has(action.dir)) this.closedDirectories.delete(action.dir);
-      else this.closedDirectories.add(action.dir);
-    }
+    else if ("jump" in action) this.goToFile(action.jump);
+    else if ("dir" in action) this.toggleDirectory(action.dir);
     else if ("scrub" in action) this.viewer.scrub(action.scrub);
+    else if ("files" in action) this.toggleFiles();
     else this.viewer.toggleLayout();
   }
 
@@ -102,8 +104,15 @@ export class Pane {
     if (plain && key.key === "q") return { close: true };
     this.message = plain && key.key === "?" ? HELP : "";
     if (!this.size) throw new Error("The pane has not been drawn yet");
+    // ⌘B as in VS Code; \ for terminals that keep Cmd to themselves.
+    const files = (plain && key.key === "\\") || (key.meta && key.key === "b");
+    if (this.filesView) {
+      if (files) this.toggleFiles();
+      else this.pressFiles(key.key);
+      return {};
+    }
     if (plain && (key.key === "y" || key.key === "Y")) return this.copy(key.key === "Y");
-    if (plain && key.key === "\\") this.showTree = !(this.showTree ?? this.size.columns >= TREE_MIN_COLUMNS);
+    if (files) this.toggleFiles();
     else {
       // s and c reshape the rows, so the selection's rows are gone; a finished z chord is not one of them.
       const chord = this.viewer.chording;
@@ -111,6 +120,54 @@ export class Pane {
       if (!chord && plain && (key.key === "s" || key.key === "c")) this.selection = null;
     }
     return {};
+  }
+
+  /** Too narrow for a sidebar: the tree takes the whole pane instead. */
+  private narrow(size: Size) {
+    return size.columns < TREE_MIN_COLUMNS;
+  }
+
+  private treeRows() {
+    return flattenFileTree(buildFileTree(this.store.getSnapshot().inventory), this.closedDirectories);
+  }
+
+  /** The files key or button: in a narrow pane, swap the diff for the tree and back; otherwise show or hide the sidebar. */
+  private toggleFiles() {
+    if (!this.size) throw new Error("The pane has not been drawn yet");
+    if (!this.narrow(this.size)) {
+      this.showTree = !(this.showTree ?? true);
+      return;
+    }
+    this.filesView = !this.filesView;
+    if (this.filesView) {
+      // The tree opens on the file being read.
+      const { currentFile } = this.viewer.lay(this.layoutSize(this.size));
+      this.treeCursor = Math.max(0, this.treeRows().findIndex((row) => row.node.fileIndex === currentFile));
+    }
+  }
+
+  /** A key in the tree that took the pane: move, open a directory or go to a file. */
+  private pressFiles(name: string) {
+    const rows = this.treeRows();
+    if (name === "j" || name === "down") this.treeCursor = Math.min(rows.length - 1, this.treeCursor + 1);
+    else if (name === "k" || name === "up") this.treeCursor = Math.max(0, this.treeCursor - 1);
+    else if (name === "return" || name === "enter") {
+      const node = rows[this.treeCursor]?.node;
+      if (!node) return;
+      if (node.fileIndex === undefined) this.toggleDirectory(node.key);
+      else this.goToFile(node.fileIndex);
+    }
+  }
+
+  private toggleDirectory(key: string) {
+    if (this.closedDirectories.has(key)) this.closedDirectories.delete(key);
+    else this.closedDirectories.add(key);
+  }
+
+  /** Goes to a file from the tree; a tree that took the pane gives it back to the diff. */
+  private goToFile(index: number) {
+    this.viewer.jump(index);
+    this.filesView = false;
   }
 
   /** `y` copies the selected lines as they are; `Y` as a reference an agent can read. */
@@ -132,6 +189,8 @@ export class Pane {
 
   /** `wheelColumn` is undefined for the pane's scroll keys. */
   scroll(by: number, wheelColumn: number | undefined) {
+    // The tree that took the pane scrolls by moving its cursor.
+    if (this.filesView) return this.pressFiles(by < 0 ? "up" : "down");
     if (wheelColumn === undefined) return this.viewer.move(by);
     if (!this.size) throw new Error("The pane has not been drawn yet");
     if (wheelColumn >= this.sidebar(this.size)) return this.viewer.move(by * 3);
@@ -139,10 +198,9 @@ export class Pane {
     this.treeScroll = Math.max(0, Math.min(Math.max(0, treeRows.length - this.bodyRows(this.size)), this.treeScroll + by * 3));
   }
 
-  /** Includes the divider; 0 when hidden. */
+  /** Includes the divider; 0 when hidden, as it always is in a narrow pane. */
   private sidebar(size: Size) {
-    const show = this.showTree ?? size.columns >= TREE_MIN_COLUMNS;
-    return show && size.columns >= 60 ? Math.max(16, Math.min(28, size.columns - 40)) : 0;
+    return !this.narrow(size) && (this.showTree ?? true) ? Math.max(16, Math.min(28, size.columns - 40)) : 0;
   }
 
   /** The title bar and the status line take a row each. */
@@ -175,6 +233,10 @@ export class Pane {
     const title = new LineBuilder(colors, theme.chrome);
     const loaded = counts.filter((c) => c !== undefined);
     const visible = loaded.reduce((sum, c) => add(sum, c.visible), zero);
+    // The files button leads the title bar; it reads as pressed while the tree has the pane.
+    const button = " ☰ files ";
+    title.hit(0, measureTextWidth(button), { files: true })
+      .text(button, this.filesView ? theme.bg : theme.accent, this.filesView ? theme.accent : theme.chrome);
     title.text(` ${snapshot.comparison ? comparisonLabel(snapshot.comparison.lhs, snapshot.comparison.rhs) : "diffr"}`, theme.fg)
       .text(` · ${inventory.length} files · `, theme.muted)
       .text(`+${visible.added}`, theme.addedText).text(` −${visible.removed}`, theme.removedText)
@@ -287,7 +349,34 @@ export class Pane {
     if (!body.length)
       body.push((line) => line.text(snapshot.complete ? "No changed files" : `${spinner} Starting comparison…`, theme.muted, theme.bg));
 
-    for (let y = 0; y < viewportHeight; y++) {
+    // The tree that took the pane: full width, a cursor, each file's counts at the right edge.
+    if (this.filesView) {
+      this.treeCursor = Math.min(this.treeCursor, Math.max(0, treeRows.length - 1));
+      this.treeScroll = this.treeCursor < this.treeScroll ? this.treeCursor
+        : this.treeCursor >= this.treeScroll + viewportHeight ? this.treeCursor - viewportHeight + 1 : this.treeScroll;
+      for (let y = 0; y < viewportHeight; y++) {
+        const line = new LineBuilder(colors, theme.bg), index = this.treeScroll + y, entry = treeRows[index];
+        if (entry) {
+          const { node, depth } = entry, file = node.fileIndex;
+          const cursor = index === this.treeCursor, bg = cursor ? theme.highlight : theme.bg;
+          const read = file !== undefined && viewer.isViewed(file) === true;
+          const count = file === undefined || read ? undefined : counts[file]?.visible;
+          const tally = count ? [` +${count.added}`, ` −${count.removed} `] : [" "];
+          const label = "  ".repeat(depth) + (file === undefined ? (this.closedDirectories.has(node.key) ? "▸ " : "▾ ")
+            : `${files[file] ? treeMark(file) : statusGlyph(file)} `) + node.name;
+          const width = size.columns - 2 - measureTextWidth(tally.join(""));
+          line.text(cursor ? "▸ " : "  ", theme.accent, bg)
+            .text(fit(sanitizeTerminalLine(label), width), file === currentFile ? theme.accent : file === undefined || read ? theme.muted : theme.fg,
+              bg, file === currentFile)
+            .fill(2 + width, bg);
+          if (count) line.text(tally[0]!, theme.addedText, bg).text(tally[1]!, theme.removedText, bg);
+          line.fill(size.columns, bg);
+          line.hit(0, size.columns, file === undefined ? { dir: node.key } : { jump: file });
+        }
+        lines.push(line.line(size.columns));
+      }
+    }
+    for (let y = 0; y < (this.filesView ? 0 : viewportHeight); y++) {
       const line = new LineBuilder(colors, theme.bg);
       if (sidebar > 0) {
         const entry = treeRows[treeTop + y];
@@ -324,8 +413,17 @@ export class Pane {
     else {
       const searched = !found ? ""
         : `/${found.pattern} · ${found.total ? `match ${found.at} of ${found.total} in ${found.files} files · n/N` : "no matches"} · `;
-      status.text(fit(`${this.message ? `${this.message} · ` : ""}${searched}${snapshot.loaded}/${inventory.length} files · ${read.viewed}/${read.total} viewed ${snapshot.complete ? "" : "loading… "}${errors}` +
-        ` [/] hunks · / search · click ▾ or za fold · V viewed · drag selects · y/Y copy · h/l pan · ? keys`, size.columns), theme.muted);
+      // Where the reader is, as vim's status line says it: the file, which of how many, how far through.
+      const order = flattenFileTree(buildFileTree(inventory), new Set()).flatMap(({ node }) =>
+        node.fileIndex === undefined ? [] : [node.fileIndex]);
+      const name = inventory[currentFile] ? filePath(inventory[currentFile]!.file).split("/").at(-1) : undefined;
+      const where = name === undefined ? ""
+        : `${name} · file ${order.indexOf(currentFile) + 1} of ${order.length} · ${at.maxScroll ? Math.round((top / at.maxScroll) * 100) : 100}% · `;
+      const loading = snapshot.complete ? "" : `${snapshot.loaded}/${inventory.length} loaded… `;
+      const keys = this.filesView ? " j/k move · ⏎ open · \\ or ⌘B back"
+        : " [/] hunks · / search · \\ or ⌘B files · V viewed · drag selects · y/Y copy · ? keys";
+      status.text(fit(`${this.message ? `${this.message} · ` : ""}${searched}${this.filesView ? "" : where}${read.viewed}/${read.total} viewed ${loading}${errors}${keys}`,
+        size.columns), theme.muted);
     }
     lines.push(status.line(size.columns));
     return { colors: colors.list, fg: colors.of(theme.fg), lines, hover };

@@ -14445,7 +14445,8 @@ var action = exports_external.union([
   exports_external.strictObject({ jump: exports_external.number().int() }),
   exports_external.strictObject({ dir: exports_external.string() }),
   exports_external.strictObject({ scrub: exports_external.number().int() }),
-  exports_external.strictObject({ layout: exports_external.literal(true) })
+  exports_external.strictObject({ layout: exports_external.literal(true) }),
+  exports_external.strictObject({ files: exports_external.literal(true) })
 ]);
 var hover = exports_external.union([
   exports_external.strictObject({ file: exports_external.number().int(), id: exports_external.number().int(), armed: exports_external.boolean() }),
@@ -16636,7 +16637,7 @@ function paintCell(line, value, spans, width, unified, { fileIndex, ...options }
 
 // src/frame.ts
 var SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-var HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · / search, n/N matches · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ files · q close";
+var HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · / search, n/N matches · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ or ⌘B files · q close";
 var SPLIT_COLUMNS = 180;
 var TREE_MIN_COLUMNS = 120;
 
@@ -16652,6 +16653,8 @@ class Pane {
   selection = null;
   selecting = false;
   cellsAt = new Map;
+  filesView = false;
+  treeCursor = 0;
   constructor(store, theme) {
     this.store = store;
     this.viewer = new Viewer(store, theme, SPLIT_COLUMNS);
@@ -16692,14 +16695,13 @@ class Pane {
     else if ("file" in action2)
       this.viewer.toggleFile(action2.file);
     else if ("jump" in action2)
-      this.viewer.jump(action2.jump);
-    else if ("dir" in action2) {
-      if (this.closedDirectories.has(action2.dir))
-        this.closedDirectories.delete(action2.dir);
-      else
-        this.closedDirectories.add(action2.dir);
-    } else if ("scrub" in action2)
+      this.goToFile(action2.jump);
+    else if ("dir" in action2)
+      this.toggleDirectory(action2.dir);
+    else if ("scrub" in action2)
       this.viewer.scrub(action2.scrub);
+    else if ("files" in action2)
+      this.toggleFiles();
     else
       this.viewer.toggleLayout();
   }
@@ -16714,10 +16716,18 @@ class Pane {
     this.message = plain && key.key === "?" ? HELP : "";
     if (!this.size)
       throw new Error("The pane has not been drawn yet");
+    const files = plain && key.key === "\\" || key.meta && key.key === "b";
+    if (this.filesView) {
+      if (files)
+        this.toggleFiles();
+      else
+        this.pressFiles(key.key);
+      return {};
+    }
     if (plain && (key.key === "y" || key.key === "Y"))
       return this.copy(key.key === "Y");
-    if (plain && key.key === "\\")
-      this.showTree = !(this.showTree ?? this.size.columns >= TREE_MIN_COLUMNS);
+    if (files)
+      this.toggleFiles();
     else {
       const chord = this.viewer.chording;
       this.viewer.press(key);
@@ -16725,6 +16735,51 @@ class Pane {
         this.selection = null;
     }
     return {};
+  }
+  narrow(size) {
+    return size.columns < TREE_MIN_COLUMNS;
+  }
+  treeRows() {
+    return flattenFileTree(buildFileTree(this.store.getSnapshot().inventory), this.closedDirectories);
+  }
+  toggleFiles() {
+    if (!this.size)
+      throw new Error("The pane has not been drawn yet");
+    if (!this.narrow(this.size)) {
+      this.showTree = !(this.showTree ?? true);
+      return;
+    }
+    this.filesView = !this.filesView;
+    if (this.filesView) {
+      const { currentFile } = this.viewer.lay(this.layoutSize(this.size));
+      this.treeCursor = Math.max(0, this.treeRows().findIndex((row) => row.node.fileIndex === currentFile));
+    }
+  }
+  pressFiles(name) {
+    const rows = this.treeRows();
+    if (name === "j" || name === "down")
+      this.treeCursor = Math.min(rows.length - 1, this.treeCursor + 1);
+    else if (name === "k" || name === "up")
+      this.treeCursor = Math.max(0, this.treeCursor - 1);
+    else if (name === "return" || name === "enter") {
+      const node = rows[this.treeCursor]?.node;
+      if (!node)
+        return;
+      if (node.fileIndex === undefined)
+        this.toggleDirectory(node.key);
+      else
+        this.goToFile(node.fileIndex);
+    }
+  }
+  toggleDirectory(key) {
+    if (this.closedDirectories.has(key))
+      this.closedDirectories.delete(key);
+    else
+      this.closedDirectories.add(key);
+  }
+  goToFile(index) {
+    this.viewer.jump(index);
+    this.filesView = false;
   }
   copy(forAgent) {
     if (!this.selection) {
@@ -16742,6 +16797,8 @@ class Pane {
     return { copy: { text, what: forAgent ? "for agent" : "source lines" } };
   }
   scroll(by, wheelColumn) {
+    if (this.filesView)
+      return this.pressFiles(by < 0 ? "up" : "down");
     if (wheelColumn === undefined)
       return this.viewer.move(by);
     if (!this.size)
@@ -16752,8 +16809,7 @@ class Pane {
     this.treeScroll = Math.max(0, Math.min(Math.max(0, treeRows.length - this.bodyRows(this.size)), this.treeScroll + by * 3));
   }
   sidebar(size) {
-    const show = this.showTree ?? size.columns >= TREE_MIN_COLUMNS;
-    return show && size.columns >= 60 ? Math.max(16, Math.min(28, size.columns - 40)) : 0;
+    return !this.narrow(size) && (this.showTree ?? true) ? Math.max(16, Math.min(28, size.columns - 40)) : 0;
   }
   bodyRows(size) {
     return Math.max(1, size.rows - 2);
@@ -16778,6 +16834,8 @@ class Pane {
     const title = new LineBuilder(colors, theme.chrome);
     const loaded = counts.filter((c) => c !== undefined);
     const visible = loaded.reduce((sum, c) => add(sum, c.visible), zero);
+    const button = " ☰ files ";
+    title.hit(0, measureTextWidth(button), { files: true }).text(button, this.filesView ? theme.bg : theme.accent, this.filesView ? theme.accent : theme.chrome);
     title.text(` ${snapshot2.comparison ? comparisonLabel(snapshot2.comparison.lhs, snapshot2.comparison.rhs) : "diffr"}`, theme.fg).text(` · ${inventory.length} files · `, theme.muted).text(`+${visible.added}`, theme.addedText).text(` −${visible.removed}`, theme.removedText).text(snapshot2.complete ? " " : "… ", theme.muted);
     for (const block of blockBar(visible))
       title.text(block === "neutral" ? "□" : "■", block === "added" ? theme.addedText : block === "removed" ? theme.removedText : theme.muted);
@@ -16873,7 +16931,29 @@ class Pane {
       body.unshift((line) => fileHeader(line, currentFile));
     if (!body.length)
       body.push((line) => line.text(snapshot2.complete ? "No changed files" : `${spinner} Starting comparison…`, theme.muted, theme.bg));
-    for (let y = 0;y < viewportHeight; y++) {
+    if (this.filesView) {
+      this.treeCursor = Math.min(this.treeCursor, Math.max(0, treeRows.length - 1));
+      this.treeScroll = this.treeCursor < this.treeScroll ? this.treeCursor : this.treeCursor >= this.treeScroll + viewportHeight ? this.treeCursor - viewportHeight + 1 : this.treeScroll;
+      for (let y = 0;y < viewportHeight; y++) {
+        const line = new LineBuilder(colors, theme.bg), index = this.treeScroll + y, entry = treeRows[index];
+        if (entry) {
+          const { node, depth } = entry, file2 = node.fileIndex;
+          const cursor = index === this.treeCursor, bg = cursor ? theme.highlight : theme.bg;
+          const read2 = file2 !== undefined && viewer.isViewed(file2) === true;
+          const count = file2 === undefined || read2 ? undefined : counts[file2]?.visible;
+          const tally = count ? [` +${count.added}`, ` −${count.removed} `] : [" "];
+          const label = "  ".repeat(depth) + (file2 === undefined ? this.closedDirectories.has(node.key) ? "▸ " : "▾ " : `${files[file2] ? treeMark(file2) : statusGlyph(file2)} `) + node.name;
+          const width = size.columns - 2 - measureTextWidth(tally.join(""));
+          line.text(cursor ? "▸ " : "  ", theme.accent, bg).text(fit(sanitizeTerminalLine(label), width), file2 === currentFile ? theme.accent : file2 === undefined || read2 ? theme.muted : theme.fg, bg, file2 === currentFile).fill(2 + width, bg);
+          if (count)
+            line.text(tally[0], theme.addedText, bg).text(tally[1], theme.removedText, bg);
+          line.fill(size.columns, bg);
+          line.hit(0, size.columns, file2 === undefined ? { dir: node.key } : { jump: file2 });
+        }
+        lines.push(line.line(size.columns));
+      }
+    }
+    for (let y = 0;y < (this.filesView ? 0 : viewportHeight); y++) {
       const line = new LineBuilder(colors, theme.bg);
       if (sidebar > 0) {
         const entry = treeRows[treeTop + y];
@@ -16902,7 +16982,12 @@ class Pane {
       status.text(fit(`/${found.prompt}▏ · ${found.count} matches · ⏎ go · ctrl-c cancel`, size.columns), theme.fg);
     else {
       const searched = !found ? "" : `/${found.pattern} · ${found.total ? `match ${found.at} of ${found.total} in ${found.files} files · n/N` : "no matches"} · `;
-      status.text(fit(`${this.message ? `${this.message} · ` : ""}${searched}${snapshot2.loaded}/${inventory.length} files · ${read.viewed}/${read.total} viewed ${snapshot2.complete ? "" : "loading… "}${errors3}` + ` [/] hunks · / search · click ▾ or za fold · V viewed · drag selects · y/Y copy · h/l pan · ? keys`, size.columns), theme.muted);
+      const order = flattenFileTree(buildFileTree(inventory), new Set).flatMap(({ node }) => node.fileIndex === undefined ? [] : [node.fileIndex]);
+      const name = inventory[currentFile] ? filePath(inventory[currentFile].file).split("/").at(-1) : undefined;
+      const where = name === undefined ? "" : `${name} · file ${order.indexOf(currentFile) + 1} of ${order.length} · ${at.maxScroll ? Math.round(top / at.maxScroll * 100) : 100}% · `;
+      const loading = snapshot2.complete ? "" : `${snapshot2.loaded}/${inventory.length} loaded… `;
+      const keys = this.filesView ? " j/k move · ⏎ open · \\ or ⌘B back" : " [/] hunks · / search · \\ or ⌘B files · V viewed · drag selects · y/Y copy · ? keys";
+      status.text(fit(`${this.message ? `${this.message} · ` : ""}${searched}${this.filesView ? "" : where}${read.viewed}/${read.total} viewed ${loading}${errors3}${keys}`, size.columns), theme.muted);
     }
     lines.push(status.line(size.columns));
     return { colors: colors.list, fg: colors.of(theme.fg), lines, hover: hover2 };
