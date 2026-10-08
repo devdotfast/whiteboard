@@ -1,7 +1,8 @@
-import { parseKey } from "@earendil-works/pi-tui";
+import { isKeyRelease, parseKey } from "@earendil-works/pi-tui";
 import type { KeyPress } from "@diffr/viewer/viewer";
 
 export function paneKey(data: string): KeyPress | undefined {
+  if (isKeyRelease(data)) return;
   const parsed = parseKey(data);
   if (!parsed) return;
   const parts = parsed.split("+");

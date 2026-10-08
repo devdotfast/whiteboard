@@ -1,52 +1,49 @@
-import { HStack, isViewportTUI, type Component, type TUI, type ViewportTUI } from "@earendil-works/pi-tui";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { Component, OverlayHandle, TUI } from "@earendil-works/pi-tui";
 
-/**
- * Pi 0.99 exposes setLayoutRoot, but not a getter or a focus getter. Keep that
- * compatibility boundary here, and refuse to replace an unknown host layout.
- */
-type LayoutHost = ViewportTUI & { layoutRoot?: Component; focusedComponent?: Component | null };
-export function mountPane(tui: TUI, pane: Component) {
-  if (!isViewportTUI(tui)) throw new Error("Diffr needs Pi fullscreen mode. Start with diffr-pi, or pi --tui-mode fullscreen.");
-  const host = tui as LayoutHost;
-  const original = host.layoutRoot;
-  const focus = host.focusedComponent;
-  if (!original || typeof original.render !== "function" || focus === undefined)
-    throw new Error("This Pi version does not expose the layout needed for Diffr's split view.");
-  const split = new HStack([
-    { component: original, basis: 0, grow: 2, shrink: 1, minSize: 32, visible: size => size.width >= 100 },
-    { component: { render: () => Array.from({ length: tui.terminal.rows }, () => "│"), invalidate() {} },
-      basis: 1, grow: 0, shrink: 0, visible: size => size.width >= 100 },
-    { component: pane, basis: 0, grow: 3, shrink: 1, minSize: 20 },
-  ]);
-  let full = false;
-  let disposed = false;
-  let root: Component = split;
-  host.setLayoutRoot(root);
-  tui.setFocus(pane);
-  tui.requestRender();
+/** Public overlay lifecycle only: Pi keeps ownership of its chat layout and focus. */
+export function mountPane(ui: ExtensionContext["ui"], create: (tui: TUI, full: boolean) => Component,
+  initialFull: boolean, capture: boolean) {
+  let full = initialFull;
+  let handle: OverlayHandle | undefined;
+  let finish: (() => void) | undefined;
+  let closed = false;
+  let switching = false;
+  let completion: Promise<void> = Promise.resolve();
+  const show = (focus: boolean) => new Promise<void>((resolve, reject) => {
+    completion = ui.custom<void>((tui, _theme, _keys, done) => {
+      finish = () => done();
+      return create(tui, full);
+    }, { overlay: true,
+      overlayOptions: { width: full ? "100%" : "60%", minWidth: full ? 1 : 50,
+        maxHeight: full ? "100%" : "75%", anchor: "top-right", nonCapturing: !focus },
+      onHandle(next) {
+        handle = next;
+        if (closed) finish?.();
+        resolve();
+      },
+    });
+    void completion.catch(reject);
+  });
   return {
-    get fullscreen() { return full || tui.terminal.columns < 100; },
-    toggle() {
-      if (disposed) return;
-      full = !full;
-      root = full ? pane : split;
-      host.setLayoutRoot(root);
-      tui.setFocus(pane);
-      tui.requestRender();
-    },
-    focus() { if (!disposed) tui.setFocus(pane); },
+    ready: show(capture),
+    get fullscreen() { return full; },
+    focus() { if (!closed) { handle?.setHidden(false); handle?.focus(); } },
     focusChat() {
-      if (full) { full = false; root = split; host.setLayoutRoot(root); }
-      tui.setFocus(focus);
-      tui.requestRender();
+      if (full) handle?.setHidden(true);
+      handle?.unfocus();
     },
-    dispose() {
-      if (disposed) return;
-      disposed = true;
-      // Another extension may have taken ownership while ours was open.
-      if (host.layoutRoot === root) host.setLayoutRoot(original);
-      if (host.focusedComponent === pane) tui.setFocus(focus);
-      tui.requestRender();
+    async toggle() {
+      if (closed || switching) return;
+      switching = true;
+      try {
+        finish?.();
+        await completion;
+        if (closed) return;
+        full = !full;
+        await show(true);
+      } finally { switching = false; }
     },
+    dispose() { closed = true; finish?.(); },
   };
 }
