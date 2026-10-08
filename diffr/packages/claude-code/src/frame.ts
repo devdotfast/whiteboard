@@ -6,11 +6,12 @@ import { measureTextWidth } from "@diffr/viewer/terminal/text";
 import type { DiffStore } from "@diffr/viewer/protocol/store";
 import type { Palette } from "@diffr/viewer/theme/palette";
 import { Viewer, type Hover, type KeyPress, type Size } from "@diffr/viewer/viewer";
+import { viewedBox } from "@diffr/viewer/viewport/cell";
 import { Colors, fit, LineBuilder, paintCell } from "./paint";
 import type { Action, Frame, Input, Line } from "./protocol";
 
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-const HELP = "j/k scroll · h/l pan (H/L faster, or drag) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · c context · s layout · w wrap · t theme · \\ files · q close";
+const HELP = "j/k scroll · h/l pan (H/L faster, or drag) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · v scope viewed · V file viewed · c context · s layout · w wrap · t theme · \\ files · q close";
 
 /** Split only with about 80 code columns a side. */
 const SPLIT_COLUMNS = 180;
@@ -52,6 +53,8 @@ export class Pane {
   private act(action: Action, recursive: boolean) {
     this.message = "";
     if ("fold" in action) this.viewer.setFold(action.file, action.fold, "toggle", recursive);
+    else if ("viewed" in action) this.viewer.toggleViewedScope(action.file, action.viewed);
+    else if ("viewedFile" in action) this.viewer.toggleViewedFile(action.viewedFile);
     else if ("file" in action) this.viewer.toggleFile(action.file);
     else if ("jump" in action) this.viewer.jump(action.jump);
     else if ("dir" in action) {
@@ -100,12 +103,17 @@ export class Pane {
     // The scrollbar takes the last column.
     const contentWidth = Math.max(10, size.columns - sidebar - 1);
     const at = viewer.lay({ columns: contentWidth, rows: this.bodyRows(size) });
-    const { snapshot, theme, hover, horizontal, layout, geometry, top, viewport, currentFile, sticky, thumb } = at;
+    const { snapshot, theme, hover, horizontal, layout, geometry, top, viewport, currentFile, sticky, thumb, scope } = at;
     const viewportHeight = at.size.rows;
     const { inventory, files, failures } = snapshot;
     const colors = new Colors();
     const spinner = SPINNER[Math.floor(Date.now() / 80) % SPINNER.length]!;
     const statusGlyph = (index: number) => failures[index] || snapshot.complete ? "!" : spinner;
+    // A loaded file's mark in the tree: viewed, partly viewed, or blank.
+    const treeMark = (index: number) => {
+      const state = viewer.fileProgress(index)?.state;
+      return state === "viewed" ? "✓" : state === "partial" ? "-" : " ";
+    };
     const counts = files.map((file) => file && lineCounts(file));
 
     const title = new LineBuilder(colors, theme.chrome);
@@ -142,16 +150,27 @@ export class Pane {
       const path = sanitizeTerminalLine(filePath(inventory[fileIndex]!.file));
       const shown = !!file && !!count;
       const start = line.width;
-      const statsWidth = shown ? String(count.added).length + String(count.removed).length + 5 : 0;
+      const progress = shown ? viewer.fileProgress(fileIndex) : undefined;
+      const viewed = progress?.state === "viewed";
+      // What's left to read, then the viewed box. A viewed file has nothing left, so no counts.
+      const left = progress?.remaining ?? count;
+      const tally = shown && !viewed ? [` +${left!.added}`, ` −${left!.removed}`] : [];
+      const box = progress ? ` ${viewedBox(progress)}` : "";
+      const statsWidth = shown ? measureTextWidth(tally.join("") + box) + 1 : 0;
       const pathWidth = Math.max(1, contentWidth - statsWidth - 1);
       const glyph = shown ? (viewer.isClosed(fileIndex, file) ? "▸" : "▾") : statusGlyph(fileIndex);
       const directory = fit(`${glyph} ${path.slice(0, path.lastIndexOf("/") + 1)}`, pathWidth);
       const name = fit(path.slice(path.lastIndexOf("/") + 1), Math.max(0, pathWidth - measureTextWidth(directory)));
-      line.text("▌", theme.accent, theme.fileHeader).text(directory, theme.fileHeaderDir, theme.fileHeader)
-        .text(name, shown ? theme.fg : theme.fileHeaderDir, theme.fileHeader, true)
+      line.text("▌", viewed ? theme.muted : theme.accent, theme.fileHeader)
+        .text(directory, viewed ? theme.muted : theme.fileHeaderDir, theme.fileHeader)
+        .text(name, viewed ? theme.muted : shown ? theme.fg : theme.fileHeaderDir, theme.fileHeader, !viewed)
         .fill(start + 1 + pathWidth, theme.fileHeader);
-      if (shown)
-        line.text(` +${count.added}`, theme.addedText, theme.fileHeader).text(` −${count.removed} `, theme.removedText, theme.fileHeader);
+      if (tally.length) line.text(tally[0]!, theme.addedText, theme.fileHeader).text(tally[1]!, theme.removedText, theme.fileHeader);
+      if (progress) {
+        // Hits are matched first to last, so the box goes ahead of the header that opens the file.
+        line.hit(line.width, line.width + measureTextWidth(box), { viewedFile: fileIndex });
+        line.text(box, progress.state === "unread" ? theme.fg : theme.accent, theme.fileHeader);
+      }
       line.fill(start + contentWidth, theme.fileHeader);
       if (shown) line.hit(start, start + contentWidth, { file: fileIndex });
     };
@@ -176,11 +195,15 @@ export class Pane {
           body.push((line) => {
             const focus = hover?.file === row.fileIndex ? hover : undefined;
             const paint = { theme, geometry, fileIndex: row.fileIndex, visualLine, focus };
-            if (row.cell) paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, paint);
-            else {
-              paintCell(line, row.left!, measured.left[visualLine] ?? [], geometry.leftWidth, false, paint);
+            if (row.cell) {
+              const marks = viewer.cellMarks(row.fileIndex, row.cell, row.cell.newLineNumber === undefined ? 0 : 1, scope);
+              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, { ...paint, marks });
+            } else {
+              paintCell(line, row.left!, measured.left[visualLine] ?? [], geometry.leftWidth, false,
+                { ...paint, marks: viewer.cellMarks(row.fileIndex, row.left!, 0, scope) });
               line.text("│", theme.muted, theme.bg);
-              paintCell(line, row.right!, measured.right[visualLine] ?? [], geometry.rightWidth, false, paint);
+              paintCell(line, row.right!, measured.right[visualLine] ?? [], geometry.rightWidth, false,
+                { ...paint, marks: viewer.cellMarks(row.fileIndex, row.right!, 1, scope) });
             }
           });
       }
@@ -199,9 +222,10 @@ export class Pane {
           const current = node.fileIndex === currentFile;
           const label = "  ".repeat(depth) + (node.fileIndex === undefined
             ? (this.closedDirectories.has(node.key) ? "▸ " : "▾ ")
-            : `▤ ${files[node.fileIndex] ? " " : statusGlyph(node.fileIndex)} `) + node.name;
+            : `▤ ${files[node.fileIndex] ? treeMark(node.fileIndex) : statusGlyph(node.fileIndex)} `) + node.name;
+          const read = node.fileIndex !== undefined && viewer.fileProgress(node.fileIndex)?.state === "viewed";
           line.text(fit(sanitizeTerminalLine(label), sidebar - 1),
-            current ? theme.accent : node.fileIndex === undefined ? theme.muted : theme.fg,
+            current ? theme.accent : node.fileIndex === undefined || read ? theme.muted : theme.fg,
             current ? theme.highlight : theme.bg);
           line.fill(sidebar - 1, current ? theme.highlight : theme.bg);
           line.hit(0, sidebar - 1, node.fileIndex === undefined ? { dir: node.key } : { jump: node.fileIndex });
@@ -217,8 +241,9 @@ export class Pane {
 
     const status = new LineBuilder(colors, theme.bg);
     const errors = snapshot.errors.length ? `${snapshot.errors.length} errors  ` : "";
-    status.text(fit(`${snapshot.loaded}/${inventory.length} files ${snapshot.complete ? "" : "loading… "}${errors}` +
-      ` [/] hunks · click ▾ or za fold · h/l or drag to pan · w wrap · ? keys ${this.message}`, size.columns), theme.muted);
+    const read = viewer.viewedFiles();
+    status.text(fit(`${snapshot.loaded}/${inventory.length} files · ${read.viewed}/${read.total} viewed ${snapshot.complete ? "" : "loading… "}${errors}` +
+      ` [/] hunks · click ▾ or za fold · v/V viewed · h/l or drag to pan · w wrap · ? keys ${this.message}`, size.columns), theme.muted);
     lines.push(status.line(size.columns));
     return { colors: colors.list, fg: colors.of(theme.fg), lines, hover };
   }

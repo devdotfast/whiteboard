@@ -104,6 +104,22 @@ export function createGuideDiffFile(): DiffFile {
   }
   return file;
 }
+/**
+ * The guide file with a second change: `fn handle`'s own line, inside its scope 20 but outside
+ * the `if` scope 30, so marking the `if` viewed leaves `handle` partly read.
+ */
+export function createNestedChangesDiffFile(): DiffFile {
+  const file = createGuideDiffFile();
+  if (file.diff.type !== "text") throw new Error("The fixture is a text diff");
+  for (const source of [file.diff.lhs!, file.diff.rhs!]) {
+    const visit = (regions: Region[]) => regions.forEach((region) => {
+      if (region.kind === "leaf" && region.alignment_id === 2) region.changed = [line(1, 4, 10)];
+      visit(region.children);
+    });
+    visit(source.root.children);
+  }
+  return file;
+}
 /** Rust-style body folds: each covers its body alone, so the lines that open and close a
  * construct are leaves around it, like VS Code's rows. */
 export function createFoldedDiffFile(): DiffFile {

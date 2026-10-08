@@ -1,7 +1,9 @@
 /** Viewer state and keys shared by the TUI and the Claude Code pane. */
 import { buildFileTree, flattenFileTree } from "./document/fileTree";
-import { defaultCollapsed, foldIds, gapIds, nestedIds, sourceLines } from "./document/regions";
-import { placeholderRows, rowsForFile, type Layout, type ViewerRow } from "./document/rows";
+import { defaultCollapsed, foldIds, gapIds, nestedIds, scopeLines, sourceLines, type Side, type SideLines } from "./document/regions";
+import { ViewedLines, type Progress } from "./document/viewed";
+import type { CellMarks } from "./viewport/cell";
+import { placeholderRows, rowsForFile, type Layout, type SplitLineCell, type UnifiedLineCell, type ViewerRow } from "./document/rows";
 import type { DiffStore, Snapshot } from "./protocol/store";
 import { filePath, fileVisibility, type DiffFile, type TextDiff } from "./protocol/wire";
 import { measureRows, positionAt, positionTop, rowFold, visibleRows, type Geometry, type MeasuredRow, type ViewPosition } from "./viewport/geometry";
@@ -48,6 +50,14 @@ export interface Laid {
   sticky: boolean;
   /** In viewport rows. */
   thumb: { top: number; height: number };
+  /** The scope `v` marks: the one under the pointer, else the fold whose header is the top row. */
+  scope: Scope | undefined;
+}
+
+export interface Scope {
+  file: number;
+  /** Fold-state id. */
+  id: number;
 }
 
 export class Viewer {
@@ -62,6 +72,8 @@ export class Viewer {
   private readonly collapsed = new Map<number, ReadonlySet<number>>();
   /** Vim's z prefix: the next key names the fold command. */
   private pendingZ = false;
+  private readonly viewed = new ViewedLines();
+  private readonly scopes = new WeakMap<TextDiff, Map<number, SideLines>>();
   private readonly rowCache = new WeakMap<DiffFile, { key: string; rows: ViewerRow[] }>();
   /** Bumped when rows change; keys the geometry cache. */
   private revision = 0;
@@ -176,8 +188,92 @@ export class Viewer {
     const sticky = !!viewport.length && !viewport[0]!.row.key.endsWith(":header");
     const thumbHeight = Math.max(1, Math.floor((viewportHeight * viewportHeight) / Math.max(viewportHeight, geometry.height)));
     const thumbTop = maxScroll ? Math.round((top / maxScroll) * (viewportHeight - thumbHeight)) : 0;
+    const topFold = viewport[0] && rowFold(viewport[0].row);
+    const scope = this.hover ? { file: this.hover.file, id: this.hover.id }
+      : topFold && { file: viewport[0]!.row.fileIndex, id: topFold.id };
     return { size, snapshot, theme: this.theme, layout, wrap: this.wrap, horizontal: this.horizontal, hover: this.hover,
-      rows, geometry, top, maxScroll, viewport, currentFile, sticky, thumb: { top: thumbTop, height: thumbHeight } };
+      rows, geometry, top, maxScroll, viewport, currentFile, sticky, thumb: { top: thumbTop, height: thumbHeight }, scope };
+  }
+
+  private textDiff(index: number): TextDiff | undefined {
+    const diff = this.snapshot.files[index]?.diff;
+    return diff?.type === "text" ? diff : undefined;
+  }
+
+  private scopeLinesOf(diff: TextDiff, id: number): SideLines {
+    let byId = this.scopes.get(diff);
+    if (!byId) {
+      byId = new Map();
+      this.scopes.set(diff, byId);
+    }
+    let lines = byId.get(id);
+    if (!lines) {
+      lines = scopeLines(diff, id);
+      byId.set(id, lines);
+    }
+    return lines;
+  }
+
+  /** What's left to read in a file; undefined when it has nothing to read. */
+  fileProgress(index: number): Progress | undefined {
+    const diff = this.textDiff(index);
+    return diff && this.viewed.progress(index, diff);
+  }
+
+  /** What's left to read in a scope; undefined when it holds no change. */
+  scopeProgress(index: number, id: number): Progress | undefined {
+    const diff = this.textDiff(index);
+    return diff && this.viewed.progress(index, diff, this.scopeLinesOf(diff, id));
+  }
+
+  /** Of the files with anything to read, how many are viewed. */
+  viewedFiles(): { viewed: number; total: number } {
+    let viewed = 0, total = 0;
+    this.snapshot.files.forEach((_, index) => {
+      const progress = this.fileProgress(index);
+      if (!progress) return;
+      total++;
+      if (progress.state === "viewed") viewed++;
+    });
+    return { viewed, total };
+  }
+
+  /** Marks a scope viewed and folds it, or unmarks it and opens it. A scope with no change has nothing to mark. */
+  toggleViewedScope(index: number, id: number) {
+    const diff = this.textDiff(index);
+    if (!diff) throw new Error(`File ${index} has no scopes`);
+    const lines = this.scopeLinesOf(diff, id), progress = this.viewed.progress(index, diff, lines);
+    if (!progress) return;
+    const viewed = progress.state !== "viewed";
+    this.viewed.mark(index, diff, viewed, lines);
+    this.setFolds(index, diff, [id], viewed);
+    this.reshape();
+  }
+
+  /** Marks a file viewed and closes it, or unmarks it and opens it. */
+  toggleViewedFile(index: number) {
+    const diff = this.textDiff(index);
+    const progress = diff && this.viewed.progress(index, diff);
+    if (!diff || !progress) return;
+    const viewed = progress.state !== "viewed";
+    this.viewed.mark(index, diff, viewed);
+    this.setClosed(index, viewed);
+    this.reshape();
+  }
+
+  /** What viewed marks change on a cell of file `index`, whose line comes from `side`. */
+  cellMarks(index: number, value: SplitLineCell | UnifiedLineCell, side: Side, scope: Scope | undefined): CellMarks {
+    const line = "lineNumber" in value ? value.lineNumber
+      : side ? (value as UnifiedLineCell).newLineNumber : (value as UnifiedLineCell).oldLineNumber;
+    const changed = value.kind === "addition" || value.kind === "deletion";
+    const read = changed && line !== undefined && this.viewed.isRead(index, side, line - 1);
+    const fold = value.fold;
+    const foldViewed = !!fold?.collapsed && this.scopeProgress(index, fold.id)?.state === "viewed";
+    // The box goes on one side of a split: the head's, unless the scope is only on the base.
+    const diff = this.textDiff(index);
+    const boxed = !!fold && scope?.file === index && scope.id === fold.id && !!diff
+      && (side === 1 || !this.scopeLinesOf(diff, fold.id)[1].size);
+    return { read, foldViewed, box: boxed ? this.scopeProgress(index, fold!.id) : undefined };
   }
 
   /** Lays out again at the last size, so commands use the current geometry. */
@@ -212,12 +308,16 @@ export class Viewer {
   toggleFile(index: number) {
     const file = this.snapshot.files[index];
     if (!file) return;
+    this.setClosed(index, !this.isClosed(index, file));
+    this.reshape();
+  }
+
+  private setClosed(index: number, closed: boolean) {
     const at = this.current();
     // Toggling the file being read moves to its header; the rows above it stay put.
     const header = at.geometry.rows.find((r) => r.row.key === `${index}:header`)!;
     if (header.top < at.top) this.position = { key: header.row.key, fileIndex: index, offset: 0, side: "right" };
-    this.closed.set(index, !this.isClosed(index, file));
-    this.reshape();
+    this.closed.set(index, closed);
   }
 
   /** "toggle" reads the first id's state, so quick repeated clicks alternate. */
@@ -363,6 +463,8 @@ export class Viewer {
       case "t": this.toggleTheme(); break;
       case "z": this.pendingZ = true; break;
       case "return": case "enter": this.toggleTopFile(); break;
+      case "v": if (at.scope) this.toggleViewedScope(at.scope.file, at.scope.id); break;
+      case "V": if (at.currentFile >= 0) this.toggleViewedFile(at.currentFile); break;
       default: return false;
     }
     return true;

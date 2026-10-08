@@ -3,7 +3,7 @@ import type { DiffFile, Span, SyntaxSpan } from "../protocol/wire";
 import { filePath } from "../protocol/wire";
 import { sliceSpansWindow } from "../terminal/spans";
 import { measureTextWidth } from "../terminal/text";
-import { byteColumn, collapsedFolds, flatten, foldHeaders, foldTint, hiddenLines, pairedIds, sourceLines, type Fold, type FoldTint, type Leaf, type RowFold, type Side } from "./regions";
+import { byteColumn, changedLines, collapsedFolds, flatten, foldHeaders, foldTint, hiddenLines, pairedIds, sourceLines, type Fold, type FoldTint, type Leaf, type RowFold, type Side } from "./regions";
 import type { Palette } from "../theme/palette";
 export type Layout = "split" | "unified";
 export interface RenderSpan {
@@ -225,9 +225,8 @@ export function rowsForFile(
   // fold no plugin labelled still reads `{ ⋯ 3 lines }` rather than a bare `{ ⋯ }`.
   const labelOf = (region: Leaf | Fold) => region.label
     || lineCount("lastHidden" in region ? region.lastHidden - region.startLine + 1 : region.endLine - region.startLine);
-  const alignments = leaves.map(side => new Set(side.map(leaf => leaf.alignmentId)));
-  const isChanged = (leaf: Leaf, line: number) =>
-    leaf.changed.has(line) || !alignments[leaf.side ? 0 : 1].has(leaf.alignmentId);
+  const changed = changedLines(leaves);
+  const isChanged = (leaf: Leaf, line: number) => changed[leaf.side].has(line);
   // A paired leaf is changed when its counterpart has change spans.
   const spanned = new Set(leaves.flat().filter(leaf => leaf.changed.size).map(leaf => leaf.alignmentId));
   // A collapsed paired region that hides a change is modified, and counts its side's changed lines.

@@ -4,7 +4,7 @@ import {rgbToHex} from "@opentui/core";
 import {testRender} from "@opentui/react/test-utils";
 import {App} from "./App";
 import {DiffStore} from "@diffr/viewer/protocol/store";
-import {createGuideDiffFile, createTestDiffFile, startFor, withIdenticalLines} from "@diffr/viewer/protocol/fixture";
+import {createGuideDiffFile, createNestedChangesDiffFile, createTestDiffFile, startFor, withIdenticalLines} from "@diffr/viewer/protocol/fixture";
 import { loadBundledTheme } from "@diffr/viewer/theme/themes";
 import type {DiffEvent, DiffFile} from "@diffr/viewer/protocol/wire";
 const dark = loadBundledTheme("default-dark"), light = loadBundledTheme("default-light");
@@ -179,5 +179,34 @@ test("closing a scrolled file and reopening it starts at its header and first so
     const lines = t.captureCharFrame().split("\n");
     expect(lines[2]).toContain("long.ts");
     expect(lines[3]).toContain("line 0");
+  } finally { await act(async () => { t.renderer.destroy(); }); }
+});
+test("v marks the scope under the pointer and V the file: boxes, counts, the tree and the status line follow", async () => {
+  const store = new DiffStore(), file = createNestedChangesDiffFile();
+  store.accept(startFor([file])); store.accept(file); store.accept({type:"complete", succeeded:1, failed:0});
+  const t = await testRender(<App store={store} themes={themes} onQuit={() => {}} />, {width:170, height:25});
+  const frame = () => t.captureCharFrame();
+  const lineWith = (text: string) => frame().split("\n").find(l => l.includes(text)) ?? "";
+  const press = async (key: string) => { await act(async () => { t.mockInput.pressKey(key); await t.renderOnce(); }); };
+  try {
+    await act(async () => { await t.renderOnce(); });
+    expect(lineWith("demo.ts")).toContain("+2 −2 [ ]");
+    expect(frame()).toContain("0/1 viewed");
+    // The pointer on `fn handle` makes it the current scope: its header line grows a box.
+    const y = frame().split("\n").findIndex(l => l.includes("fn handle"));
+    await act(async () => { await t.mockMouse.moveTo(frame().split("\n")[y].indexOf("fn handle") + 2, y); await t.renderOnce(); });
+    await t.waitFor(() => lineWith("fn handle").includes("[ ]"));
+    expect(lineWith("fn handle")).toContain("+2 −2 [ ]");
+    await press("v");
+    await t.waitFor(() => frame().includes("1/1 viewed"));
+    expect(lineWith("fn handle")).toContain("✓");
+    expect(frame()).not.toContain("open(true)");
+    expect(lineWith("demo.ts")).toContain("[✓]");
+    expect(lineWith("demo.ts")).not.toContain("+2");
+    // A click on the file header's box unmarks the file and brings its counts back.
+    const header = frame().split("\n").findIndex(l => l.includes("demo.ts") && l.includes("[✓]"));
+    await act(async () => { await t.mockMouse.click(frame().split("\n")[header].indexOf("[✓]") + 1, header); await t.renderOnce(); });
+    await t.waitFor(() => frame().includes("0/1 viewed"));
+    expect(lineWith("demo.ts")).toContain("+2 −2 [ ]");
   } finally { await act(async () => { t.renderer.destroy(); }); }
 });

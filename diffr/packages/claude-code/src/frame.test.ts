@@ -70,3 +70,30 @@ test("the file tree shows on wide panes, and backslash hides and shows it", asyn
   pane.input({ press: { key: "\\" } });
   expect(treeShown()).toBe(true);
 });
+
+test("a scope's viewed box marks it and folds it; the file header's box and V mark the whole file", async () => {
+  const { pane } = await load(scopes);
+  const header = (frame: Frame) => screen(frame).find((line) => line.includes("▌"))!;
+  expect(header(pane.frame(wide))).toContain("[ ]");
+  // The pointer on a scope makes it current: its header line ends in what's left and a box.
+  const fold = cellAction(pane.frame(wide), "for (const plugin", "▾");
+  if (!("fold" in fold)) throw new Error("Expected the scope's chevron");
+  pane.hover({ file: fold.file, id: fold.fold, armed: false });
+  const scope = screen(pane.frame(wide)).find((line) => line.includes("for (const plugin"))!;
+  expect(scope).toMatch(/\+\d+.* \[ \] *$/);
+  const box = cellAction(pane.frame(wide), "for (const plugin", "[ ]");
+  expect(box).toEqual({ viewed: fold.fold, file: fold.file });
+  pane.input({ act: box });
+  const marked = screen(pane.frame(wide));
+  expect(marked.some((line) => line.includes("plugin.enabled"))).toBe(false);
+  expect(marked.find((line) => line.includes("for (const plugin"))).toContain("✓");
+  expect(header(pane.frame(wide))).toMatch(/\[-\]|\[✓\]/);
+  pane.hover(null);
+  pane.input({ press: { key: "V" } });
+  expect(header(pane.frame(wide))).toContain("[✓]");
+  expect(screen(pane.frame(wide)).at(-1)).toContain("1/1 viewed");
+  expect(cellAction(pane.frame(wide), "▌", "[✓]")).toEqual({ viewedFile: 0 });
+  pane.input({ act: { viewedFile: 0 } });
+  expect(header(pane.frame(wide))).toContain("[ ]");
+  expect(screen(pane.frame(wide)).at(-1)).toContain("0/1 viewed");
+});

@@ -27,6 +27,9 @@ export interface Palette {
   addition: string;
   deletion: string;
   modification: string;
+  /** A viewed line's tints: halfway back to the background, so read code recedes. */
+  readAddition: string;
+  readDeletion: string;
   addWord: string;
   deleteWord: string;
   addedText: string;
@@ -141,6 +144,8 @@ export function paletteFromHelix(theme: HelixTheme): Palette {
     addition: mix(bg, plus, 0.12),
     deletion: mix(bg, minus, 0.12),
     modification: mix(bg, delta, 0.12),
+    readAddition: mix(bg, plus, 0.06),
+    readDeletion: mix(bg, minus, 0.06),
     addWord: mix(bg, plus, 0.28),
     deleteWord: mix(bg, minus, 0.28),
     addedText: plus,
