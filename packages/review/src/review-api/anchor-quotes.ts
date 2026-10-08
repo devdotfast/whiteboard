@@ -4,7 +4,12 @@ import {
   selectionKey,
 } from "@review/lens-selection.js";
 
-import { type Pins, anchorPins, selectionReferences } from "./document.js";
+import {
+  type Pins,
+  anchorPins,
+  boardRepositoryId,
+  selectionReferences,
+} from "./document.js";
 import type { Snapshot } from "./store.js";
 
 export interface AnchorQuote {
@@ -40,15 +45,17 @@ export async function anchorQuotes(
 
   const known = new Set(
     before
-      ? selectionReferences(before.document, { tolerant: true }).map(
-          ({ id, source }) => key(id, source),
-        )
+      ? selectionReferences(before.document, {
+          tolerant: true,
+          repositoryId: boardRepositoryId(before),
+        }).map(({ id, source }) => key(id, source))
       : [],
   );
 
-  const added = selectionReferences(after.document, { tolerant: true }).filter(
-    ({ id, source }) => !known.has(key(id, source)),
-  );
+  const added = selectionReferences(after.document, {
+    tolerant: true,
+    repositoryId: boardRepositoryId(after),
+  }).filter(({ id, source }) => !known.has(key(id, source)));
 
   const quotes = await Promise.all(
     added

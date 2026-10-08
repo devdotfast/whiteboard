@@ -9,6 +9,7 @@ import {
   type LocalVcsDiffFileSummary,
   type LocalVcsKind,
   LocalVcsToolsMissingError,
+  type VcsArg,
   createBlobBatchReader,
   detectLocalVcs,
   diffFileSummariesTrees,
@@ -67,6 +68,7 @@ import {
   type ReviewTarget,
   type SourcePins,
   anchorPins,
+  boardRepositoryId,
   elements,
   fileLineRangeSchema,
   pinnedRepositoryIds,
@@ -569,8 +571,14 @@ export class LocalReviewData {
   async unavailableAnchors(snapshot: Snapshot): Promise<string[]> {
     const missing = new Set<string>();
 
-    // Only Markdown needs parsing, so check the repositories first.
-    for (const repositoryId of pinnedRepositoryIds(snapshot.document))
+    // Only Markdown needs parsing, so check the repositories first. Its
+    // commit links read from the board's repository.
+    const repositoryIds = pinnedRepositoryIds(snapshot.document);
+    const boardRepository = boardRepositoryId(snapshot);
+
+    if (boardRepository) repositoryIds.add(boardRepository);
+
+    for (const repositoryId of repositoryIds)
       try {
         if (!existsSync(this.store.repositoryPath(repositoryId)))
           missing.add(repositoryId);
@@ -591,7 +599,10 @@ export class LocalReviewData {
 
   private readonly storedReferences = new VersionCache(
     (snapshot: Snapshot) =>
-      sourceReferences(snapshot.document, { tolerant: true }),
+      sourceReferences(snapshot.document, {
+        tolerant: true,
+        repositoryId: boardRepositoryId(snapshot),
+      }),
     { capacity: 512 },
   );
 
@@ -997,6 +1008,7 @@ export class LocalReviewData {
     // that no longer exist; the author decides how to update changed source.
     for (const reference of sourceReferences(snapshot.document, {
       tolerant: true,
+      repositoryId: boardRepositoryId(snapshot),
     })) {
       try {
         await this.quote(anchorPins(reference.source, pins), reference.source);
@@ -1324,6 +1336,74 @@ export class LocalReviewData {
     const [base, head] = await Promise.all([changed("base"), changed("head")]);
 
     return { base, head };
+  }
+  /** What a commit is, for a quote read at it: its subject, author and
+   * date, and how far behind the default branch's tip it is when both are
+   * known. */
+  async commitInfo(
+    repositoryId: string,
+    commit: string,
+  ): Promise<{
+    commit: string;
+    subject: string;
+    author: string;
+    authoredAt: string;
+    behind?: { count: number; branch: string };
+  }> {
+    const vcs = await this.vcs(repositoryId);
+
+    if (!vcs) throw unavailableCheckout();
+
+    const git = async (...args: VcsArg[]) =>
+      (await runVcs("git", ["-C", vcs.rootPath, ...args])).stdout.trim();
+
+    let line: string;
+
+    try {
+      line = await git("log", "-1", "--format=%H%x00%s%x00%an%x00%aI", {
+        rev: commit,
+      });
+    } catch {
+      throw new ReviewInputError("That commit is not in the repository.", 404);
+    }
+
+    const [full = commit, subject = "", author = "", authoredAt = ""] =
+      line.split("\0");
+
+    const branch = await vcs.defaultBranch().catch(() => null);
+
+    const behind = branch
+      ? await git("rev-list", "--count", { rev: `${full}..${branch.commit}` })
+          .then((count) => ({
+            count: Number(count),
+            branch: branch.ref.replace(/^origin\//, ""),
+          }))
+          .catch(() => undefined)
+      : undefined;
+
+    return {
+      commit: full,
+      subject,
+      author,
+      authoredAt,
+      ...(behind && { behind }),
+    };
+  }
+  /** The full commit a commit ID or its prefix names in the repository,
+   * or undefined when it names none. */
+  async resolveCommit(
+    repositoryId: string,
+    commit: string,
+  ): Promise<string | undefined> {
+    const vcs = await this.vcs(repositoryId);
+
+    if (!vcs) throw unavailableCheckout();
+    const resolved = await vcs.resolveRevision(commit);
+
+    // A branch or tag spelled in hex is not the commit it seems.
+    return resolved?.commit.startsWith(commit.toLowerCase())
+      ? resolved.commit
+      : undefined;
   }
   async validatePins(pins: Pins) {
     if (pins.worktreeRevision) {
@@ -1968,6 +2048,8 @@ export function openLocalReviewStore(
       sourcePins: (snapshot) => data.sourcePins(snapshot),
       unavailableAnchors: (snapshot) => data.unavailableAnchors(snapshot),
       validatePins: (pins) => data.validatePins(pins),
+      resolveCommit: (repositoryId, commit) =>
+        data.resolveCommit(repositoryId, commit),
       filesChangedBetween: (from, to) => data.filesChangedBetween(from, to),
       validateSource: (pins, source, options) =>
         data.validateSource(pins, source, options),

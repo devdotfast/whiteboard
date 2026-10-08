@@ -263,6 +263,7 @@ export class ReviewFilesDiffView extends Disposable {
 						// A binary is folded like a hidden file, with its size as the reason.
 						note: entry.file.status === "unchanged" ? (this.document ? undefined : "Unchanged") : this.isBinary(entry) ? this.binaryNote(entry.file.path) : this.hiddenFiles.get(entry.file.path),
 						noteTooltip: this.isBinary(entry) ? { label: "No text to show · binary files stay folded" } : undefined,
+						commit: document?.commit,
 							// A binary has no text to open.
 							onDidOpen: this.isBinary(entry) || !(document ? document.onDidOpen : openFile) ? undefined : () => {
 								if (document?.onDidOpen) { document.onDidOpen(); return; }
@@ -475,6 +476,8 @@ export class ReviewFilesDiffView extends Disposable {
 		this.input?.setReadyFiles(this.readyFiles, [...this.fileStates.values()].some(state => state === "Loading diff…"));
 		this.showStreamStatus();
 	}
+
+	refreshHeaders(): void { this.headerFactory.refreshHeaders(); }
 
 	/** Coverage counts are independent of fold state. */
 	fileCounts(path: string, counts: ReviewFileCounts): void {

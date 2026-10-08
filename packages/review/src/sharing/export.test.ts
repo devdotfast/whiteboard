@@ -14,7 +14,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { type ShareBundle, digestBytes, exportShare } from "./export.js";
 import { SharedReviewStore, validateShareBundle } from "./import.js";
-import { fetchPinnedRepository } from "./repository.js";
+import { fetchPinnedRepository, verifyShareRepository } from "./repository.js";
 
 const cleanup: Array<() => Promise<void>> = [];
 
@@ -143,11 +143,7 @@ async function importFixture(
   cleanup.push(() => recipient.data.close());
 
   const fetchRepository = vi.fn<typeof fetchPinnedRepository>(
-    (
-      target: string,
-      _url: string,
-      pins: Parameters<typeof fetchPinnedRepository>[2],
-    ) => fetchPinnedRepository(target, repo, pins),
+    (target, _url, ...rest) => fetchPinnedRepository(target, repo, ...rest),
   );
 
   const imported = new SharedReviewStore(
@@ -468,6 +464,158 @@ it("isolates corrupt cached shares at restart", async () => {
   restarted.connect(recipient.store, recipient.data);
   await restarted.load();
   expect(restarted.list().map((entry) => entry.reviewId)).toEqual([other]);
+});
+
+it("imports links read at other commits of the repository", async () => {
+  const { imported, id } = await importFixture(
+    async ({ repo, local, reviewId }) => {
+      const git = (...args: string[]) =>
+        execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
+
+      const { base } = local.store.read(reviewId).pins!;
+
+      // A commit outside the board's history, on a branch off its base.
+      git("checkout", "-q", "-b", "side", base);
+      await writeFile(path.join(repo, "side.ts"), "export const side = 1;\n");
+      git("add", "side.ts");
+      git("commit", "-qm", "side");
+      const side = git("rev-parse", "HEAD");
+      git("checkout", "-q", "feature/shared-head");
+
+      // deleted.ts is gone at head; side.ts exists only on the branch.
+      await local.store.execute({
+        operation: {
+          type: "edit",
+          reviewId,
+          edit: {
+            type: "insert",
+            content: {
+              type: "markdown",
+              markdown: `[gone](whiteboard:source/${base}/deleted.ts#L1) and [side](whiteboard:source/${side}/side.ts#L1)`,
+            },
+          },
+        },
+      });
+
+      return exportShare({ ...local, reviewId, repository });
+    },
+  );
+
+  await imported.prepare(id);
+  expect(imported.status(id).stage).toBe("ready");
+});
+
+it("shares a plan whose links quote commits, and fetches them for its recipient", async () => {
+  const { root, repo, local, reviewId: review } = await fixture();
+
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
+
+  // A commit on a branch the recipient's clone doesn't fetch.
+  git("checkout", "-q", "-b", "side");
+  await writeFile(path.join(repo, "side.ts"), "export const side = 1;\n");
+  git("add", "side.ts");
+  git("commit", "-qm", "side");
+  const side = git("rev-parse", "HEAD");
+  git("checkout", "-q", "feature/shared-head");
+
+  const { reviewId } = await local.store.execute({
+    operation: {
+      type: "create",
+      title: "Plan",
+      target: {
+        kind: "project",
+        repositoryId: local.store.read(review).pins!.repositoryId,
+      },
+    },
+  });
+
+  await local.store.execute({
+    operation: {
+      type: "edit",
+      reviewId,
+      edit: {
+        type: "insert",
+        content: {
+          type: "markdown",
+          markdown: `[side](whiteboard:source/${side}/side.ts#L1)`,
+        },
+      },
+    },
+  });
+
+  const bundle = await exportShare({ ...local, reviewId, repository });
+
+  const recipient = openLocalReviewStore(path.join(root, "recipient.db"));
+  cleanup.push(() => recipient.store.close());
+  cleanup.push(() => recipient.data.close());
+
+  // The recipient's clone has the default branch only.
+  const shared = new SharedReviewStore(
+    path.join(root, "shared"),
+    undefined,
+    async (clone) => {
+      await mkdir(clone, { recursive: true });
+      execFileSync("git", ["init", "-q", clone]);
+      execFileSync("git", ["-C", clone, "remote", "add", "origin", repo]);
+      execFileSync("git", [
+        "-C",
+        clone,
+        "fetch",
+        "-q",
+        "origin",
+        "feature/shared-head",
+      ]);
+      execFileSync("git", [
+        "-C",
+        clone,
+        "checkout",
+        "-q",
+        "--detach",
+        "FETCH_HEAD",
+      ]);
+    },
+  );
+
+  shared.connect(recipient.store, recipient.data);
+  const id = await shared.import("https://app.dev.fast", randomUUID(), bundle);
+
+  expect(shared.get(id).snapshot.target).toMatchObject({ kind: "project" });
+  expect(
+    execFileSync(
+      "git",
+      ["-C", shared.repositoryRoot(id), "cat-file", "-t", side],
+      { encoding: "utf8" },
+    ).trim(),
+  ).toBe("commit");
+});
+
+it("refuses to publish a link to a commit GitHub doesn't have", async () => {
+  const { root, repo } = await fixture();
+  const remote = path.join(root, "remote.git");
+  execFileSync("git", ["init", "-q", "--bare", remote]);
+  execFileSync("git", [
+    "-C",
+    repo,
+    "push",
+    "-q",
+    remote,
+    "feature/shared-head",
+  ]);
+
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
+
+  const pushed = git("rev-parse", "HEAD");
+  git("commit", "-q", "--allow-empty", "-m", "unpushed");
+  const unpushed = git("rev-parse", "HEAD");
+
+  await expect(
+    verifyShareRepository(repo, undefined, { cloneUrl: remote }, [pushed]),
+  ).resolves.toEqual({ cloneUrl: remote });
+  await expect(
+    verifyShareRepository(repo, undefined, { cloneUrl: remote }, [unpushed]),
+  ).rejects.toMatchObject({ status: 409 });
 });
 
 it("repairs a missing checkout and removes owned workspaces before reimport", async () => {

@@ -39,6 +39,7 @@ import {
   nextCursor,
 } from "./authoring-cursor";
 import { SaveMarkdown } from "./blocks";
+import { BoardCommitsContext } from "./board-commits";
 import { CanvasQueryProvider } from "./canvas-query";
 import { ConnectionContext, HostWaiting } from "./connection-chip";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
@@ -458,6 +459,13 @@ export function ApiCanvas({
     [client, content.reviewId, content.host, data],
   );
 
+  const pins = data?.snapshot.pins;
+
+  const boardCommits = useMemo(
+    () => (pins ? [pins.head, pins.base] : []),
+    [pins],
+  );
+
   const trashBanner = trashedAt && (
     <div role="status" {...stylex.props(styles.trashBanner)}>
       In Trash ·{" "}
@@ -557,57 +565,59 @@ export function ApiCanvas({
                 }),
               })}
             >
-              <DocumentData.Provider value={data}>
-                <ReviewLensesProvider
-                  client={client}
-                  snapshot={data.snapshot}
-                  coverageRevision={coverageRevision}
-                >
-                  {error && (
-                    <p {...stylex.props(styles.error)} role="status">
-                      {error}
-                    </p>
-                  )}
-                  {trashBanner}
-                  <ConnectionContext.Provider value={connection}>
-                    <AuthoringActivityContext.Provider
-                      value={version === undefined ? activity : undefined}
-                    >
-                      <DrawQueueProvider
-                        cursor={version === undefined ? cursor : undefined}
+              <BoardCommitsContext.Provider value={boardCommits}>
+                <DocumentData.Provider value={data}>
+                  <ReviewLensesProvider
+                    client={client}
+                    snapshot={data.snapshot}
+                    coverageRevision={coverageRevision}
+                  >
+                    {error && (
+                      <p {...stylex.props(styles.error)} role="status">
+                        {error}
+                      </p>
+                    )}
+                    {trashBanner}
+                    <ConnectionContext.Provider value={connection}>
+                      <AuthoringActivityContext.Provider
+                        value={version === undefined ? activity : undefined}
                       >
                         <DrawQueueProvider
-                          scope="lenses"
-                          cursor={
-                            version === undefined ? lensCursor : undefined
-                          }
+                          cursor={version === undefined ? cursor : undefined}
                         >
-                          <DisplayedReviewVersionContext.Provider
-                            value={data.snapshot.version}
+                          <DrawQueueProvider
+                            scope="lenses"
+                            cursor={
+                              version === undefined ? lensCursor : undefined
+                            }
                           >
-                            <MapEnabled.Provider
-                              value={content.softwareMapEnabled === true}
+                            <DisplayedReviewVersionContext.Provider
+                              value={data.snapshot.version}
                             >
-                              <SaveMarkdown.Provider value={saveMarkdown}>
-                                <div {...stylex.props(styles.canvasFrame)}>
-                                  <CanvasDocument
-                                    data={data}
-                                    findHost={findHost}
-                                    softwareMapEnabled={
-                                      content.softwareMapEnabled === true
-                                    }
-                                    documentWidth={content.documentWidth}
-                                  />
-                                </div>
-                              </SaveMarkdown.Provider>
-                            </MapEnabled.Provider>
-                          </DisplayedReviewVersionContext.Provider>
+                              <MapEnabled.Provider
+                                value={content.softwareMapEnabled === true}
+                              >
+                                <SaveMarkdown.Provider value={saveMarkdown}>
+                                  <div {...stylex.props(styles.canvasFrame)}>
+                                    <CanvasDocument
+                                      data={data}
+                                      findHost={findHost}
+                                      softwareMapEnabled={
+                                        content.softwareMapEnabled === true
+                                      }
+                                      documentWidth={content.documentWidth}
+                                    />
+                                  </div>
+                                </SaveMarkdown.Provider>
+                              </MapEnabled.Provider>
+                            </DisplayedReviewVersionContext.Provider>
+                          </DrawQueueProvider>
                         </DrawQueueProvider>
-                      </DrawQueueProvider>
-                    </AuthoringActivityContext.Provider>
-                  </ConnectionContext.Provider>
-                </ReviewLensesProvider>
-              </DocumentData.Provider>
+                      </AuthoringActivityContext.Provider>
+                    </ConnectionContext.Provider>
+                  </ReviewLensesProvider>
+                </DocumentData.Provider>
+              </BoardCommitsContext.Provider>
             </ReviewPanelProvider>
           </ReviewSessionProvider>
         </SharingContext.Provider>

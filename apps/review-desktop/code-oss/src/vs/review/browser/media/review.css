@@ -1045,6 +1045,35 @@ body
   display: none;
 }
 
+/* A quote read at a commit other than the board's names it: the commit
+   glyph and its short ID, quietly, at the header's end. */
+.review-multidiff-commit {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background-color: var(--vscode-editor-background);
+  color: var(--vscode-descriptionForeground);
+  font: 10px/1 var(--monaco-monospace-font);
+}
+
+.review-multidiff-commit > svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.1;
+  stroke-linecap: round;
+}
+
+.review-multidiff-commit[hidden] {
+  display: none;
+}
+
 .review-structural-label-inline {
   color: var(--vscode-editor-foldPlaceholderForeground);
   font-style: italic;
@@ -1170,7 +1199,7 @@ body
   background: var(--review-tooltip-bg);
   color: var(--review-tooltip-fg);
   box-shadow: var(--review-tooltip-shadow);
-  font: 11px/16px var(--review-chrome-font, "Geist Mono", ui-monospace, monospace);
+  font: 11px/16px var(--review-chrome-font);
 }
 .monaco-hover.workbench-hover.review-tooltip .hover-contents { padding: 4px 8px; }
 .review-tooltip-label,

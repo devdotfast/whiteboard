@@ -46,20 +46,25 @@ import {
   type Pins,
   ReviewInputError,
   type ReviewTarget,
+  type SourcePins,
   type WrittenComponent,
   anchorPins,
   applyEdit,
   assignFreshIds,
   boardLinks,
+  boardRepositoryId,
   checkReferences,
+  commitLinkCommits,
   documentAdvice,
   documentSchema,
   editSchema,
   elements,
   explicitPins,
   isUnit,
+  pinDocumentReferences,
   pinnedRepositoryIds,
   resourceReferences,
+  respellCommitLinks,
   respellDocumentLinks,
   respellEditLinks,
   reviewTargetSchema,
@@ -340,6 +345,11 @@ export interface ReviewProviders {
   /** Ids of references whose own pins no longer name a usable checkout. */
   unavailableAnchors?(snapshot: Snapshot): Promise<string[]>;
   validatePins(pins: Pins): Promise<void>;
+  /** The full commit a commit ID or its prefix names, if any. */
+  resolveCommit?(
+    repositoryId: string,
+    commit: string,
+  ): Promise<string | undefined>;
   /** The files each side's commit changed from one set of pins to another,
    * or undefined when they can't be diffed commit to commit. */
   filesChangedBetween?(
@@ -1552,6 +1562,8 @@ export class ReviewStore {
 
       let applied: Applied | undefined;
       let lensTarget: { targetId: string; type: "lens" } | undefined;
+      /** The head a worktree board read at, when it becomes a plan. */
+      let unpinnedWorktree: string | undefined;
 
       if (
         (op.type === "create" || op.type === "set_target") &&
@@ -1592,7 +1604,10 @@ export class ReviewStore {
       switch (op.type) {
         case "create":
           if (initial) {
-            snapshot.document = documentSchema.parse(initial.document);
+            snapshot.document = await this.resolveCommitLinks(
+              documentSchema.parse(initial.document),
+              snapshot,
+            );
             snapshot.origin = {
               ...snapshot.origin,
               ...structuredClone(initial.origin),
@@ -1619,6 +1634,24 @@ export class ReviewStore {
             await pullRequestTitle,
           );
           snapshot.staleSources = [];
+
+          // A board that loses its pins keeps each reference pointing where it
+          // did.
+          if (snapshot.pins && !resolvedTarget!.pins) {
+            const pinned = pinDocumentReferences(
+              snapshot.document,
+              snapshot.pins,
+            );
+
+            // A worktree quotes uncommitted lines its head commit lacks.
+            if (
+              snapshot.target?.kind === "worktree" &&
+              JSON.stringify(pinned) !== JSON.stringify(snapshot.document)
+            )
+              unpinnedWorktree = snapshot.pins.head;
+            snapshot.document = pinned;
+          }
+
           snapshot.target = resolvedTarget!.target;
 
           if (resolvedTarget!.pins) snapshot.pins = resolvedTarget!.pins;
@@ -1665,21 +1698,22 @@ export class ReviewStore {
             snapshot.document,
           );
 
-          snapshot.document = respellDocumentLinks(snapshot.document);
+          snapshot.document = await this.resolveCommitLinks(
+            respellDocumentLinks(snapshot.document),
+            snapshot,
+          );
 
           if (snapshot.staleSources?.length) {
             const oldSources = new Map(
-              sourceReferences(previous!.document).map((item) => [
-                item.id,
-                JSON.stringify(item.source),
-              ]),
+              sourceReferences(previous!.document, {
+                repositoryId: boardRepositoryId(previous!),
+              }).map((item) => [item.id, JSON.stringify(item.source)]),
             );
 
             const newSources = new Map(
-              sourceReferences(snapshot.document).map((item) => [
-                item.id,
-                JSON.stringify(item.source),
-              ]),
+              sourceReferences(snapshot.document, {
+                repositoryId: boardRepositoryId(snapshot),
+              }).map((item) => [item.id, JSON.stringify(item.source)]),
             );
 
             snapshot.staleSources = snapshot.staleSources.filter(
@@ -1727,6 +1761,11 @@ export class ReviewStore {
           op.type === "set_target",
         )),
       ];
+
+      if (unpinnedWorktree)
+        warnings.push(
+          `Its references now read at ${unpinnedWorktree.slice(0, 7)}, the checkout's last commit, which lacks any uncommitted lines they quoted. Check them.`,
+        );
 
       snapshot.version = previous ? previous.version + 1 : 0;
       snapshot.createdAt = new Date().toISOString();
@@ -2454,6 +2493,35 @@ export class ReviewStore {
       undefined
     );
   }
+  /** Saves each commit link's commit in full, resolved in the board's
+   * repository; one it does not have rejects the edit, as pins do. */
+  private async resolveCommitLinks(
+    document: Block[],
+    board: Pick<Snapshot, "target" | "pins">,
+  ): Promise<Block[]> {
+    const commits = commitLinkCommits(document);
+    const repositoryId = boardRepositoryId(board);
+
+    // Without a repository the links are rejected as references.
+    if (!commits.length || !repositoryId || !this.providers.resolveCommit)
+      return document;
+
+    const resolved = new Map<string, string>();
+
+    await Promise.all(
+      commits.map(async (commit) => {
+        const full = await this.providers.resolveCommit!(repositoryId, commit);
+
+        if (!full)
+          throw new ReviewInputError(
+            `Commit ${commit} is not in the board's repository. Fetch it first, or link a commit the repository has.`,
+          );
+        resolved.set(commit, full);
+      }),
+    );
+
+    return respellCommitLinks(document, resolved);
+  }
   private async validateExternal(
     snapshot: Snapshot,
     previous?: Snapshot,
@@ -2462,10 +2530,11 @@ export class ReviewStore {
     const warnings: string[] = [];
 
     const references = (
-      document: Block[],
+      board: Pick<Snapshot, "document" | "target" | "pins" | "lenses">,
       tolerant = false,
-      lenses: readonly Lens[] = [],
     ) => {
+      const { document, lenses = [] } = board;
+
       const sources = new Map<
         string,
         { source: FileLineRange; peek: boolean }
@@ -2479,7 +2548,10 @@ export class ReviewStore {
         sources.set(key, { source, peek: peek || (kept?.peek ?? false) });
       };
 
-      for (const { source, peek } of sourceReferences(document, { tolerant }))
+      for (const { source, peek } of sourceReferences(document, {
+        tolerant,
+        repositoryId: boardRepositoryId(board),
+      }))
         add(source, peek === true);
 
       // A lens range is a prose-like link: it must exist, not read as a peek.
@@ -2492,7 +2564,7 @@ export class ReviewStore {
       return { sources, resources };
     };
 
-    const current = references(snapshot.document, repin, snapshot.lenses);
+    const current = references(snapshot, repin);
 
     // Stored content is not re-validated: an edit may fix a link that the
     // current rules reject.
@@ -2509,11 +2581,7 @@ export class ReviewStore {
             .catch(() => undefined)
         : undefined;
 
-    const retained = references(
-      previous?.document ?? [],
-      true,
-      previous?.lenses,
-    );
+    const retained = references(previous ?? { document: [] }, true);
 
     // Independent reads of immutable commits: run them concurrently.
     const checks: Promise<void>[] = [];
@@ -2546,6 +2614,7 @@ export class ReviewStore {
               () => {
                 if (
                   repin &&
+                  !readsWhereItDid(source, previous?.pins) &&
                   (!changed || changed[source.side].has(source.file))
                 )
                   warnings.push(
@@ -2585,6 +2654,25 @@ export class ReviewStore {
 
     return warnings.sort();
   }
+}
+
+/** Whether a reference's own pins read the commit the board's previous
+ * pins did. */
+function readsWhereItDid(
+  source: { side: "base" | "head"; pins?: SourcePins },
+  previous: Pins | undefined,
+): boolean {
+  if (!source.pins || !previous) return false;
+
+  const commit =
+    source.side === "base"
+      ? (source.pins.base ?? source.pins.head)
+      : source.pins.head;
+
+  return (
+    source.pins.repositoryId === previous.repositoryId &&
+    (commit === previous.head || commit === previous.base)
+  );
 }
 
 /** Without a resolver, a commits target that names both commits pins them as

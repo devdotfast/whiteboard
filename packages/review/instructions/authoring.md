@@ -37,5 +37,5 @@ follow these first five steps in order, with no tool calls beyond what they need
 - use `session_activity_update` to provide regular status updates on your area of focus.
 - keep whiteboards short and sweet when possible (esp. for small changes.) feel free to omit sections.
 - when something (a phrase in the prose, diagram node, etc.) describes actual code in the codebase, always default to attaching/hyperlink code.
-- Link repository code as `[label](whiteboard:source/head/src/file.ts#L10-L24)`; use `base` for old code. Use repository-relative paths and verified line numbers.
+- Link repository code as `[label](whiteboard:source/head/src/file.ts#L10-L24)`; use `base` for old code. To quote any other commit of the board's repository, as a plan does, put the commit in place of `head`: `[label](whiteboard:source/<commit>/src/file.ts#L10-L24)`. Use repository-relative paths and verified line numbers.
 - Link another whiteboard inline as `[label](whiteboard:board/<sessionId>)`, or one of its blocks as `[label](whiteboard:board/<sessionId>#<blockId>)`, wherever the prose refers to it. The board and block must exist.

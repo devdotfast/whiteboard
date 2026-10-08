@@ -2,6 +2,7 @@ import { type JsonValue, isStringValue } from "@dev.fast/json";
 import {
   type Anchor,
   type LensSource,
+  commitLinkTarget,
   parseAnchor,
   selectionProblem,
   sourceAnchors,
@@ -342,7 +343,13 @@ function documentReferences(
   {
     tolerant = false,
     markdown = true,
-  }: { tolerant?: boolean; markdown?: boolean } = {},
+    repositoryId,
+  }: {
+    tolerant?: boolean;
+    markdown?: boolean;
+    /** The board's repository, which commit links read from. */
+    repositoryId?: string;
+  } = {},
 ): {
   id: string;
   source: LensSource;
@@ -396,7 +403,7 @@ function documentReferences(
             if (/^(?:https?:\/\/|mailto:|#)/i.test(href)) return [];
 
             return reject(
-              `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](whiteboard:source/head/path#L10-L24) or whiteboard:source/base/path#L10-L24 for repository files, or whiteboard:source/diff/path#L84-R90 across sides, with a repository-relative path and verified line numbers. Link another board as whiteboard:board/<sessionId>, or one of its blocks as whiteboard:board/<sessionId>#<blockId>. External links must use https://, http://, or mailto:; document anchors use #heading.`,
+              `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](whiteboard:source/head/path#L10-L24) or whiteboard:source/base/path#L10-L24 for repository files, whiteboard:source/diff/path#L84-R90 across sides, or whiteboard:source/<commit>/path#L10-L24 at a commit of the board's repository, with a repository-relative path and verified line numbers. Link another board as whiteboard:board/<sessionId>, or one of its blocks as whiteboard:board/<sessionId>#<blockId>. External links must use https://, http://, or mailto:; document anchors use #heading.`,
             );
           }
 
@@ -410,6 +417,22 @@ function documentReferences(
             return reject("Invalid URL encoding in source link.");
           }
 
+          // A commit of the board's repository: the commit is the link's pins.
+          const commit = commitLinkTarget(target);
+
+          if (commit)
+            return repositoryId
+              ? select(commit.anchor, {
+                  repositoryId,
+                  head: commit.commit,
+                }).map((source) => ({
+                  id: `${element.id}:${node.url}`,
+                  source,
+                }))
+              : reject(
+                  `A commit link names a commit of the board's repository, and this board has none, in block ${element.id}.`,
+                );
+
           // Links share the anchor grammar blocks use.
           const anchor = target.replace(/^(head|base|diff)\//i, (side) =>
             side.toLowerCase(),
@@ -417,7 +440,7 @@ function documentReferences(
 
           if (!parseAnchor(anchor))
             return reject(
-              "Use whiteboard:source/head/path#L10-L24 (or base, or diff/path#L84-R90 across sides) for a source link.",
+              "Use whiteboard:source/head/path#L10-L24 (or base, diff/path#L84-R90 across sides, or <commit>/path#L10-L24 at a commit of the board's repository) for a source link.",
             );
 
           return select(anchor, element.pins).map((source) => ({
@@ -529,10 +552,108 @@ function documentReferences(
 /** All authored attachments, including code peeks, select the aligned diff. */
 export const selectionReferences = documentReferences;
 
+const commitLinkDestination = linkDestination(
+  String.raw`whiteboard:source\/([0-9a-f]{7,40})\/`,
+);
+
+/** The commits a document's Markdown commit links name, as written. */
+export function commitLinkCommits(document: Block[]): string[] {
+  const commits = new Set<string>();
+
+  JSON.stringify(document, (key, value: JsonValue) => {
+    if (key === "markdown" && isStringValue(value))
+      for (const match of value.matchAll(commitLinkDestination))
+        commits.add(match[2]!);
+
+    return value;
+  });
+
+  return [...commits];
+}
+
+/** Rewrites the commits Markdown commit links name, as a short commit
+ * becomes the full one on save. */
+export function respellCommitLinks(
+  document: Block[],
+  commits: ReadonlyMap<string, string>,
+): Block[] {
+  return rewriteMarkdown(document, (markdown) =>
+    markdown.replace(
+      commitLinkDestination,
+      (link, before: string, commit: string) =>
+        `${before}whiteboard:source/${commits.get(commit) ?? commit}/`,
+    ),
+  );
+}
+
+/** Blocks that carry pins of their own for the references in them. */
+const pinnedBlockTypes = new Set([
+  "markdown",
+  "code_peek",
+  "sequence",
+  "flow_diagram",
+  "call_stack_diff",
+  "database_lens",
+]);
+
+const sideLinkDestination = linkDestination(
+  String.raw`whiteboard:source\/(head|base)\/`,
+);
+
+/**
+ * Makes every reference that reads at the document's pins carry them
+ * itself, for a board about to lose its pins: Markdown head/ and base/
+ * links become commit links, and a block whose references still lean on
+ * the document's pins (any anchor, or a diff/ link) takes them as its own.
+ * Nothing changes what it points at.
+ */
+export function pinDocumentReferences(document: Block[], pins: Pins): Block[] {
+  const own: SourcePins = {
+    repositoryId: pins.repositoryId,
+    base: pins.base,
+    head: pins.head,
+  };
+
+  const pinned = structuredClone(document);
+
+  for (const element of elements(pinned)) {
+    if (!pinnedBlockTypes.has(element.type)) continue;
+
+    // SAFETY: every pinned block type has optional source pins of its own.
+    const block = element as Block & { pins?: SourcePins };
+
+    if (block.pins) continue;
+
+    if (block.type === "markdown")
+      block.markdown = respellLinks(block.markdown).replace(
+        sideLinkDestination,
+        (_, before: string, side: string) =>
+          `${before}whiteboard:source/${side.toLowerCase() === "base" ? pins.base : pins.head}/`,
+      );
+
+    if (
+      documentReferences([block], { tolerant: true }).some(
+        (reference) => !reference.source.pins,
+      )
+    )
+      block.pins = own;
+  }
+
+  return pinned;
+}
+
+/** The repository a board's commit links read from: its target's. */
+export function boardRepositoryId(board: {
+  target?: { repositoryId: string };
+  pins?: { repositoryId: string };
+}): string | undefined {
+  return board.target?.repositoryId ?? board.pins?.repositoryId;
+}
+
 /** Per-side read coordinates for endpoint validation and retained source quotes. */
 export function sourceReferences(
   document: Block[],
-  options: { tolerant?: boolean } = {},
+  options: { tolerant?: boolean; repositoryId?: string } = {},
 ) {
   return selectionReferences(document, options).flatMap((ref) =>
     sourceAnchors(ref.source).map((source) => ({ ...ref, source })),
@@ -540,12 +661,16 @@ export function sourceReferences(
 }
 
 /** Includes lenses and maps without inline ranges. */
-export function hasCodeReferences(review: {
+/** Whether a board reads code at its own pins: a commit link or a block
+ * with pins of its own names its commits itself. */
+export function readsAtBoardPins(review: {
   document: Block[];
   lenses?: readonly Lens[];
 }): boolean {
   return Boolean(
-    sourceReferences(review.document).length ||
+    sourceReferences(review.document, { tolerant: true }).some(
+      (reference) => !reference.source.pins,
+    ) ||
     review.lenses?.length ||
     resourceReferences(review.document).some(
       (block) => block.type === "software_map",
