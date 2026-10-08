@@ -497,7 +497,9 @@ mod tests {
     fn test_shrink_unchanged_at_start() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess_language::Language::EmacsLisp);
+        let config = params
+            .language(guess_language::Language::EmacsLisp)
+            .unwrap();
 
         let lhs_nodes = parse(&arena, "unchanged A B", config, false).unwrap();
         let rhs_nodes = parse(&arena, "unchanged X", config, false).unwrap();
@@ -524,7 +526,9 @@ mod tests {
     fn test_shrink_unchanged_at_end() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess_language::Language::EmacsLisp);
+        let config = params
+            .language(guess_language::Language::EmacsLisp)
+            .unwrap();
 
         let lhs_nodes = parse(&arena, "A B unchanged", config, false).unwrap();
         let rhs_nodes = parse(&arena, "X unchanged", config, false).unwrap();
@@ -551,7 +555,9 @@ mod tests {
     fn test_shrink_unchanged_nested() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess_language::Language::EmacsLisp);
+        let config = params
+            .language(guess_language::Language::EmacsLisp)
+            .unwrap();
 
         let lhs_nodes = parse(
             &arena,
@@ -589,7 +595,9 @@ mod tests {
     fn test_split_unchanged_toplevel_at_start() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess_language::Language::EmacsLisp);
+        let config = params
+            .language(guess_language::Language::EmacsLisp)
+            .unwrap();
 
         // Make sure that the initial unchanged node exceeds TINY_TREE_THRESHOLD.
         let lhs_nodes = parse(
@@ -631,7 +639,9 @@ mod tests {
     fn test_split_unchanged_toplevel_at_end() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess_language::Language::EmacsLisp);
+        let config = params
+            .language(guess_language::Language::EmacsLisp)
+            .unwrap();
 
         let lhs_nodes = parse(
             &arena,
@@ -672,7 +682,9 @@ mod tests {
     fn test_split_preserves_outer_delimiters() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess_language::Language::EmacsLisp);
+        let config = params
+            .language(guess_language::Language::EmacsLisp)
+            .unwrap();
 
         let lhs_nodes = parse(&arena, "(A)", config, false).unwrap();
         let rhs_nodes = parse(&arena, "(B)", config, false).unwrap();
@@ -700,7 +712,9 @@ mod tests {
     fn test_split_unchanged_middle() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess_language::Language::EmacsLisp);
+        let config = params
+            .language(guess_language::Language::EmacsLisp)
+            .unwrap();
 
         let lhs_nodes = parse(
             &arena,
@@ -742,7 +756,9 @@ mod tests {
     fn test_split_unchanged_multiple() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess_language::Language::EmacsLisp);
+        let config = params
+            .language(guess_language::Language::EmacsLisp)
+            .unwrap();
 
         let lhs_nodes = parse(
             &arena,
@@ -771,7 +787,9 @@ mod tests {
     fn test_split_unchanged_outer_delimiter() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess_language::Language::EmacsLisp);
+        let config = params
+            .language(guess_language::Language::EmacsLisp)
+            .unwrap();
 
         let lhs_nodes = parse(
             &arena,
@@ -803,7 +821,9 @@ mod tests {
     fn test_split_mostly_unchanged_toplevel() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess_language::Language::EmacsLisp);
+        let config = params
+            .language(guess_language::Language::EmacsLisp)
+            .unwrap();
 
         let lhs_nodes = parse(
             &arena,
@@ -829,7 +849,9 @@ mod tests {
     fn test_count_common_unique() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess_language::Language::EmacsLisp);
+        let config = params
+            .language(guess_language::Language::EmacsLisp)
+            .unwrap();
 
         // There are two subtrees that are unique on both sides and
         // shared between the two sides here:
@@ -859,7 +881,9 @@ mod tests {
     fn test_similar_with_common_grandchildren() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess_language::Language::EmacsLisp);
+        let config = params
+            .language(guess_language::Language::EmacsLisp)
+            .unwrap();
 
         let lhs_nodes = parse(&arena, "((novel-lhs 1 2 3 4 5)) x", config, false).unwrap();
         let rhs_nodes = parse(&arena, "((novel-rhs 1 2 3 4 5)) y", config, false).unwrap();
@@ -874,7 +898,9 @@ mod tests {
     fn test_similar_ignore_delimiter() {
         let arena = Arena::new();
         let params = Params::default();
-        let config = params.language(guess_language::Language::EmacsLisp);
+        let config = params
+            .language(guess_language::Language::EmacsLisp)
+            .unwrap();
 
         let lhs_nodes = parse(&arena, "(novel-lhs 1 2 3 4 5) x", config, false).unwrap();
         let rhs_nodes = parse(&arena, "[novel-rhs 1 2 3 4 5] y", config, false).unwrap();

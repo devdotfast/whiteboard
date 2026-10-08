@@ -54,7 +54,7 @@ mod version;
 
 use diffr_core::{config, engine, pairing, parse, present, protocol, summary};
 
-use crate::config::Params;
+use crate::config::{ConfigError, Params};
 
 use crate::exit_codes::EXIT_BAD_ARGUMENTS;
 use crate::files::read_or_die;
@@ -165,7 +165,7 @@ fn run_debug(mode: Mode, params: &Params) {
             let language = guess(path, &src, &language_overrides);
             match language {
                 Some(lang) => {
-                    let ts_lang = params.language(lang);
+                    let ts_lang = query_or_die(params.language(lang));
                     let arena = Arena::new();
                     let ast = conflict_or_die(tsp::parse(&arena, &src, ts_lang, ignore_comments));
                     init_all_info(&ast, &[]);
@@ -188,7 +188,7 @@ fn run_debug(mode: Mode, params: &Params) {
             let language = guess(path, &src, &language_overrides);
             match language {
                 Some(lang) => {
-                    let ts_lang = params.language(lang);
+                    let ts_lang = query_or_die(params.language(lang));
                     let arena = Arena::new();
                     let ast = conflict_or_die(tsp::parse(&arena, &src, ts_lang, ignore_comments));
                     init_all_info(&ast, &[]);
@@ -225,6 +225,16 @@ fn run_debug(mode: Mode, params: &Params) {
 }
 
 /// The syntax dumps stop at a fold query conflict.
+fn query_or_die<T>(result: Result<T, ConfigError>) -> T {
+    match result {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(EXIT_BAD_ARGUMENTS);
+        }
+    }
+}
+
 fn conflict_or_die<T>(result: Result<T, Conflict>) -> T {
     match result {
         Ok(value) => value,

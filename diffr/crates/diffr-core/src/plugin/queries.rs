@@ -265,7 +265,10 @@ mod tests {
                 "missing bundled query for {language:?}"
             );
         }
-        config.compile().unwrap();
+        let params = config.compile().unwrap();
+        for language in Language::iter() {
+            params.language(language).unwrap();
+        }
     }
 
     #[test]

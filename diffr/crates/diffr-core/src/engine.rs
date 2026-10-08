@@ -1,7 +1,7 @@
 //! Shared source-to-domain diff computation, independent of CLI and transport.
 #[cfg(test)]
 use crate::config::body_params;
-use crate::config::Params;
+use crate::config::{ConfigError, Params};
 use crate::constants::Side;
 use crate::diff::changes::ChangeMap;
 use crate::diff::shortest_path::{mark_syntax, ExceededGraphLimit};
@@ -59,6 +59,37 @@ impl fmt::Display for QueryConflict {
 
 impl std::error::Error for QueryConflict {}
 
+/// Why a file was not diffed. The stream reports it as the file's error.
+#[derive(Debug)]
+pub enum DiffError {
+    /// The queries of the file's language do not compile.
+    Query(ConfigError),
+    Conflict(QueryConflict),
+}
+
+impl fmt::Display for DiffError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Query(error) => error.fmt(f),
+            Self::Conflict(conflict) => conflict.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for DiffError {}
+
+impl From<ConfigError> for DiffError {
+    fn from(error: ConfigError) -> Self {
+        Self::Query(error)
+    }
+}
+
+impl From<QueryConflict> for DiffError {
+    fn from(conflict: QueryConflict) -> Self {
+        Self::Conflict(conflict)
+    }
+}
+
 impl DiffResult {
     #[cfg(test)]
     pub(crate) fn from_sources(path: &str, lhs: &str, rhs: &str) -> Self {
@@ -84,7 +115,7 @@ impl DiffResult {
         lhs: &str,
         rhs: &str,
         params: &Params,
-    ) -> Result<Self, QueryConflict> {
+    ) -> Result<Self, DiffError> {
         Self::from_sources_with_options(path, lhs, rhs, params, &DiffOptions::default())
     }
 
@@ -94,7 +125,7 @@ impl DiffResult {
         rhs: &str,
         params: &Params,
         options: &DiffOptions,
-    ) -> Result<Self, QueryConflict> {
+    ) -> Result<Self, DiffError> {
         diff_file_content(params, path, lhs, rhs, options, &[])
     }
 }
@@ -105,11 +136,13 @@ pub fn diff_file_content(
     rhs_src: &str,
     diff_options: &DiffOptions,
     overrides: &[(LanguageOverride, Vec<glob::Pattern>)],
-) -> Result<DiffResult, QueryConflict> {
+) -> Result<DiffResult, DiffError> {
     // A deleted file's language comes from what it was.
     let guess_src = if rhs_src.is_empty() { lhs_src } else { rhs_src };
     let language = guess(Path::new(display_path), guess_src, overrides);
-    let lang_config = language.map(|lang| (lang, params.language(lang)));
+    let lang_config = language
+        .map(|lang| params.language(lang).map(|config| (lang, config)))
+        .transpose()?;
 
     // Highlights come from the same parse as the folds, so a side that
     // parsed has them whether or not the match runs.
@@ -264,7 +297,8 @@ pub fn diff_file_content(
                                 path: display_path.to_owned(),
                                 side,
                                 conflict,
-                            });
+                            }
+                            .into());
                         }
                         Err(tsp::ToSyntaxError::ExceededParseErrorLimit(
                             tsp::ExceededParseErrorLimit {
