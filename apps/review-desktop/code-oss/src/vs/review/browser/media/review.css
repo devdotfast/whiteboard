@@ -1292,8 +1292,10 @@ body
   cursor: pointer;
 }
 .review-workbench .monaco-editor .review-scope-rails {
+  position: absolute;
+  top: 0;
+  left: 0;
   z-index: 1;
-  overflow: hidden;
   pointer-events: none;
 }
 .review-workbench .monaco-editor .review-scope-rail {

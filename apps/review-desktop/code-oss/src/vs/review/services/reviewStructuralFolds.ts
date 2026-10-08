@@ -7,7 +7,8 @@ import { Codicon } from "../../base/common/codicons.js";
 import { Disposable } from "../../base/common/lifecycle.js";
 import { autorun, observableValue, type IObservable } from "../../base/common/observable.js";
 import { ThemeIcon } from "../../base/common/themables.js";
-import { MouseTargetType, type ICodeEditor, type IOverlayWidget, type IOverlayWidgetPosition, type IPartialEditorMouseEvent } from "../../editor/browser/editorBrowser.js";
+import { MouseTargetType, type ICodeEditor, type IPartialEditorMouseEvent } from "../../editor/browser/editorBrowser.js";
+import { PartFingerprint, PartFingerprints } from "../../editor/browser/view/viewPart.js";
 import { EditorOption } from "../../editor/common/config/editorOptions.js";
 import { CursorColumns } from "../../editor/common/core/cursorColumns.js";
 import { Range } from "../../editor/common/core/range.js";
@@ -108,10 +109,10 @@ export class StructuralFoldControls extends Disposable {
 		}));
 		this._register(editor.onDidChangeModel(() => { this.hovered = undefined; this.render(); }));
 		// These move lines without changing scope state.
-		this._register(editor.onDidContentSizeChange(() => this.layoutViewport()));
-		this._register(editor.onDidScrollChange(() => this.layoutViewport()));
-		this._register(editor.onDidLayoutChange(() => this.layoutViewport()));
+		this._register(editor.onDidContentSizeChange(e => { if (e.contentHeightChanged) this.layoutViewport(); }));
 		this._register(editor.onDidChangeViewZones(() => this.layoutViewport()));
+		this._register(editor.onDidScrollChange(() => { this.rails.offset(); this.placeControls(); }));
+		this._register(editor.onDidLayoutChange(() => this.placeControls()));
 		this._register(editor.onDidChangeConfiguration(() => this.render()));
 		// The pills follow what the editor hides, not the fold state.
 		this._register(autorun(reader => {
@@ -240,6 +241,12 @@ export class StructuralFoldControls extends Disposable {
 		const view = this.view;
 		if (!view) return;
 		this.rails.show(view.model, view.visibleScopes, view.target);
+		this.placeControls();
+	}
+
+	private placeControls(): void {
+		const view = this.view;
+		if (!view) return;
 		const height = this.editor.getLayoutInfo().height;
 		const wanted = new Map<number, ViewedCandidate>();
 		for (const entry of view.controls) {
@@ -450,43 +457,39 @@ export class StructuralFoldControls extends Disposable {
 	}
 }
 
-/** Scope rails share one clipped overlay, including the gaps occupied by view zones. */
-class ScopeRails implements IOverlayWidget {
-	readonly allowEditorOverflow = false;
+/** Scope rails scroll with the code, including the gaps occupied by view zones. */
+class ScopeRails {
 	private readonly node: HTMLElement;
 	private readonly targets = new WeakMap<Element, StructuralFoldable>();
 	private readonly segments = new Map<StructuralFoldable, HTMLElement>();
-	private added = false;
+	private delta = 0;
 
 	constructor(private readonly editor: ICodeEditor) {
 		this.node = editor.getContainerDomNode().ownerDocument.createElement("div");
 		this.node.className = "review-scope-rails";
+		// A press on a rail starts no selection.
+		PartFingerprints.write(this.node, PartFingerprint.ContentWidgets);
 	}
 
-	getId(): string { return "review.scopeRails"; }
-	getDomNode(): HTMLElement { return this.node; }
 	targetOf(element: HTMLElement | null): StructuralFoldable | undefined {
 		const rail = element?.closest?.(".review-scope-rail");
 		return rail ? this.targets.get(rail) : undefined;
 	}
 
-	getPosition(): IOverlayWidgetPosition { return { preference: { top: 0, left: this.editor.getLayoutInfo().contentLeft } }; }
-
 	show(model: ITextModel, foldables: readonly StructuralFoldable[], target: FoldTarget | undefined): void {
-		const layout = this.editor.getLayoutInfo();
-		const scrollTop = this.editor.getScrollTop();
-		const scrollLeft = this.editor.getScrollLeft();
+		// A model change builds a new view.
+		const content = this.editor.getDomNode()?.querySelector(":scope > .overflow-guard > .monaco-scrollable-element > .lines-content");
+		if (!content) { this.hide(); return; }
+		if (this.node.parentElement !== content) { content.append(this.node); }
 		const spaceWidth = this.editor.getOption(EditorOption.fontInfo).spaceWidth;
-		this.node.style.width = `${layout.contentWidth}px`;
-		this.node.style.height = `${layout.height}px`;
 		const segments: HTMLElement[] = [];
 		for (const foldable of foldables) {
 			// Start after the header, not at the first body line: it may be hidden
 			// behind a band, which Monaco maps back onto the header itself.
-			const top = Math.max(0, this.editor.getBottomForLineNumber(foldable.line + 1) - scrollTop);
-			const bottom = Math.min(layout.height, this.editor.getTopForLineNumber(foldable.rail!.end + 1) - scrollTop);
-			const left = Math.round(leadingWidth(model, foldable.line + 1) * spaceWidth) - scrollLeft;
-			if (bottom <= top || !Number.isFinite(left) || left < 0 || left >= layout.contentWidth) { continue; }
+			const top = this.editor.getBottomForLineNumber(foldable.line + 1);
+			const bottom = this.editor.getTopForLineNumber(foldable.rail!.end + 1);
+			const left = Math.round(leadingWidth(model, foldable.line + 1) * spaceWidth);
+			if (bottom <= top || !Number.isFinite(left)) { continue; }
 			let segment = this.segments.get(foldable);
 			if (!segment) {
 				segment = this.node.ownerDocument.createElement("div");
@@ -507,19 +510,19 @@ class ScopeRails implements IOverlayWidget {
 		if (segments.length !== this.node.children.length || segments.some((segment, i) => this.node.children[i] !== segment)) {
 			this.node.replaceChildren(...segments);
 		}
-		if (this.added) {
-			this.editor.layoutOverlayWidget(this);
-		} else {
-			this.added = true;
-			this.editor.addOverlayWidget(this);
-		}
+		this.offset();
+	}
+
+	/** Monaco shifts the code back past 500,000 pixels. */
+	offset(): void {
+		const delta = this.editor.getScrollTop() < 500_000 ? 0 : this.editor._getViewModel()?.viewLayout.getLinesViewportData().bigNumbersDelta ?? 0;
+		if (delta === this.delta) { return; }
+		this.delta = delta;
+		this.node.style.transform = delta ? `translateY(${-delta}px)` : "";
 	}
 
 	hide(): void {
-		if (this.added) {
-			this.added = false;
-			this.editor.removeOverlayWidget(this);
-		}
+		this.node.remove();
 	}
 }
 
