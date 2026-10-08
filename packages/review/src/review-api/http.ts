@@ -10,10 +10,13 @@ import {
   REVIEW_CLIENT_REMOTE,
   type ReviewApiSummary,
   type ReviewBoardPlace,
+  type ReviewProjectThreads,
   type ReviewRemoteLanguageEnvironment,
   type ReviewRemoteNavigatorAnswer,
   type ReviewStreamLine,
   type ReviewStructuralDiffEvent,
+  type ReviewThreadBoard,
+  boardIconKind,
 } from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
 import {
@@ -1437,10 +1440,94 @@ export function createReviewApi(
       return context.json({ threadId: thread.id });
     });
 
+    /** Every project's threads for the sidebar: who runs them, where they
+     * started and live, and which boards they changed. */
+    const projectThreads = (reviewId: string): ReviewProjectThreads => {
+      const entries = store.askHistory.listAll();
+
+      const edited = store.boardsChangedByThreads(
+        entries.map((entry) => entry.id),
+      );
+
+      const boards = new Map<string, ReviewThreadBoard>();
+
+      const board = (id: string) => {
+        let found = boards.get(id);
+
+        if (!found) {
+          found = store.has(id)
+            ? store.boardFace(id)
+            : { reviewId: id, title: "", icon: boardIconKind(undefined) };
+          boards.set(id, found);
+        }
+
+        return found;
+      };
+
+      const project = projectOf(reviewId);
+
+      return {
+        board: reviewId,
+        ...(project && { project }),
+        threads: entries.map((entry) => {
+          const anchor = entry.anchor ?? { board: reviewId };
+          const status = ask.threads.get(entry.id)?.status;
+
+          return {
+            id: entry.id,
+            ...(entry.projectId && { projectId: entry.projectId }),
+            ...(store.has(anchor.board) && {
+              place: store.boardPlace(anchor.board),
+            }),
+            agent: entry.agent,
+            agentName: askAgents[entry.agent].name,
+            opening: entry.question ?? entry.title,
+            pinned:
+              entry.selection.target.kind === "text" &&
+              entry.selection.target.anchor !== undefined,
+            ...(status && { status }),
+            updatedAt: entry.updatedAt,
+            anchor: {
+              board: board(anchor.board),
+              ...(anchor.block && { block: anchor.block }),
+            },
+            edited: edited.get(entry.id) ?? [],
+          };
+        }),
+      };
+    };
+
     app.get("/:id/ask/threads", (context) => {
       const reviewId = context.req.param("id");
 
       readReview(reviewId);
+
+      if (context.req.query("watch") !== undefined) {
+        // Sent again only when it reads differently.
+        let sent = "";
+
+        return watch(
+          () => {
+            const line = JSON.stringify(projectThreads(reviewId));
+
+            if (line === sent) return [];
+            sent = line;
+
+            return [line];
+          },
+          (notify) => {
+            const stops = [
+              store.askHistory.subscribe(notify),
+              ask.threads.subscribeStatus(notify),
+              // An edit, title or target of any board a thread may show; a
+              // deleted board may have been a thread's anchor.
+              store.subscribe(() => notify()),
+            ];
+
+            return () => stops.forEach((stop) => stop());
+          },
+        );
+      }
 
       return context.json({
         threads: store.askHistory.list(reviewId, projectOf(reviewId)),

@@ -245,7 +245,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		// Pass sidebar events on to the board this pane shows.
 		this._register(
 			this.sidebar.onDidEmitSurfaceEvent((event) => {
-				if ((event.event === "revealHeading" || event.event === "selectLens" || event.event === "markLens") && event.reviewId === this.apiContent?.reviewId) this.surfaceEvents.fire(event);
+				if ((event.event === "revealHeading" || event.event === "selectLens" || event.event === "markLens" || event.event === "openAskThread") && event.reviewId === this.apiContent?.reviewId) this.surfaceEvents.fire(event);
 				// The folded Lenses and Files headers open the board's Diff view.
 				if (event.event === "showReviewView" && event.reviewId === this.apiContent?.reviewId) this.surfaceEvents.fire(event);
 			}),
@@ -1249,6 +1249,8 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		| "sidebarShowsBoard"
 		| "onDidChangeSidebarShowsBoard"
 		| "sidebarLensList"
+		| "reportAsk"
+		| "showThreads"
 	> {
 		return {
 			subscribe: (listener) => this.surfaceEvents.event(listener),
@@ -1268,6 +1270,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			sidebarShowsBoard: () => this.sidebar.showsBoard(this.apiContent?.reviewId),
 			onDidChangeSidebarShowsBoard: (listener) => this.sidebar.onDidChangeBoard(listener),
 			sidebarLensList: () => this.sidebar.lensList(this.apiContent?.reviewId),
+			reportAsk: (state) => {
+				if (generation === this.loadGeneration) this.sidebar.reportAsk(this.apiContent?.reviewId, state);
+			},
+			showThreads: () => this.sidebar.showThreads(),
 			reportSidebarLenses: (lenses) => {
 				if (generation === this.loadGeneration) this.sidebar.reportLenses(this.apiContent?.reviewId, lenses);
 			},

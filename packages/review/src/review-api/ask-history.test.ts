@@ -470,6 +470,116 @@ it("anchors a conversation saved per review on that review", async () => {
   }
 });
 
+it("streams every project's threads with where each lives and the boards it changed, and follows new edits", async () => {
+  const checkout = path.join(mkdtempSync(path.join(tmpdir(), "ask-")), "repo");
+  execFileSync("git", ["init", "-q", checkout]);
+  const { id: repositoryId } = store.registerRepository(checkout);
+
+  const board = async (title: string, repository = repositoryId) =>
+    (
+      await store.execute(
+        command({
+          type: "create",
+          title,
+          target: { kind: "commits", ...pins, repositoryId: repository },
+        }),
+      )
+    ).reviewId;
+
+  const plan = await board("Plan");
+  const pr = await board("PR");
+  const other = path.join(path.dirname(checkout), "other");
+  execFileSync("git", ["init", "-q", other]);
+
+  const elsewhere = await board(
+    "Elsewhere",
+    store.registerRepository(other).id,
+  );
+
+  store.askHistory.save({
+    ...record(plan, "thread", "2026-09-01T10:00:00.000Z"),
+    projectId: store.projectOf(plan),
+  });
+  store.askHistory.save({
+    ...record(elsewhere, "away", "2026-09-02T10:00:00.000Z"),
+    projectId: store.projectOf(elsewhere),
+  });
+
+  const api = createReviewApi(
+    store,
+    {} as LocalReviewData,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      // No agent runs here; the stream only asks threads for their status.
+      threads: new AskThreads(async () => {
+        throw new Error("No agent in this test.");
+      }),
+      agents: async () => [],
+    },
+  );
+
+  const abort = new AbortController();
+
+  const response = await api.request(`/${pr}/ask/threads?watch`, {
+    signal: abort.signal,
+  });
+
+  const reader = response
+    .body!.pipeThrough(new TextDecoderStream())
+    .getReader();
+
+  const next = async () => {
+    let line = "";
+
+    while (!line.includes("\n")) line += (await reader.read()).value ?? "";
+
+    return JSON.parse(line);
+  };
+
+  expect(await next()).toMatchObject({
+    board: pr,
+    project: store.projectOf(pr),
+    threads: [
+      {
+        id: "away",
+        projectId: store.projectOf(elsewhere),
+        place: "other",
+      },
+      {
+        id: "thread",
+        projectId: store.projectOf(plan),
+        place: "repo",
+        anchor: { board: { reviewId: plan, title: "Plan" } },
+        edited: [],
+      },
+    ],
+  });
+
+  await store.execute(
+    command({
+      type: "edit",
+      reviewId: pr,
+      edit: { type: "insert", content: { type: "markdown", markdown: "Ok." } },
+    }),
+    undefined,
+    { threadId: "thread" },
+  );
+
+  expect(await next()).toMatchObject({
+    threads: [
+      { id: "away" },
+      { id: "thread", edited: [{ reviewId: pr, title: "PR" }] },
+    ],
+  });
+  abort.abort();
+  await reader.cancel().catch(() => {});
+});
+
 it("follows as many threads as a review has open over one watch", async () => {
   const { reviewId } = await store.execute(
     command({

@@ -92,6 +92,8 @@ const THREAD_COLUMNS = `ask_conversations.*, ${THREAD_PROJECT_SQL} AS project_id
  * on. No foreign key on the anchor: shared reviews are not in `reviews`.
  * So deleting a board removes its threads by hand (removeReview). */
 export class AskHistory {
+  private readonly listeners = new Set<() => void>();
+
   private externalWriteGuard?: (reviewId: string) => void;
   setExternalWriteGuard(guard: (reviewId: string) => void) {
     this.externalWriteGuard = guard;
@@ -128,6 +130,19 @@ export class AskHistory {
     db.exec(
       "CREATE TABLE IF NOT EXISTS ask_agent_model_offers(agent TEXT NOT NULL, model TEXT NOT NULL, offer TEXT NOT NULL, PRIMARY KEY(agent, model))",
     );
+  }
+
+  /** Calls back when a conversation is saved, renamed, used or deleted. */
+  subscribe(listener: () => void) {
+    this.listeners.add(listener);
+
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private changed() {
+    for (const listener of this.listeners) listener();
   }
 
   private assertWritable(reviewId: string) {
@@ -171,6 +186,7 @@ export class AskHistory {
         record.permissions === "bypass" ? 1 : 0,
         record.permissions ?? null,
       );
+    this.changed();
   }
 
   /** What the agent may do without asking when the conversation reopens. */
@@ -198,6 +214,7 @@ export class AskHistory {
     this.db
       .prepare("UPDATE ask_conversations SET entries=? WHERE id=?")
       .run(JSON.stringify(entries), id);
+    this.changed();
   }
 
   /** The agent's name for the conversation, which the list shows. */
@@ -206,6 +223,7 @@ export class AskHistory {
     this.db
       .prepare("UPDATE ask_conversations SET title=? WHERE id=?")
       .run(title.slice(0, 200), id);
+    this.changed();
   }
 
   saveOffer(agent: AskAgentId, offer: AskOffer) {
@@ -254,35 +272,56 @@ export class AskHistory {
     this.db
       .prepare("UPDATE ask_conversations SET updated_at=? WHERE id=?")
       .run(at, id);
+    this.changed();
   }
 
   /** Conversations in a board's project, or started on the board when it
    * has none. Newest first. */
-  list(board: string, projectId?: string): AskHistoryEntry[] {
+  list(board: string, projectId?: string) {
+    // The project's boards by their index on project_id, then their
+    // threads by ask_conversations_review.
+    return this.entries(
+      "anchor_board=? OR anchor_board IN (SELECT id FROM reviews WHERE project_id=? UNION ALL SELECT id FROM deleted_boards WHERE project_id=?)",
+      board,
+      projectId ?? null,
+      projectId ?? null,
+    );
+  }
+
+  /** Every project's conversations, newest first. */
+  listAll() {
+    return this.entries("1");
+  }
+
+  private entries(
+    where: string,
+    ...params: (string | null)[]
+  ): (AskHistoryEntry & { projectId?: string })[] {
+    // A transcript can be long: SQLite finds its first question, and the
+    // rest of it is left unread.
     return this.db
       .prepare(
-        // The project's boards by their index on project_id, then their
-        // threads by ask_conversations_review.
-        `SELECT ${THREAD_COLUMNS} FROM ask_conversations
-        WHERE anchor_board=? OR anchor_board IN (SELECT id FROM reviews WHERE project_id=? UNION ALL SELECT id FROM deleted_boards WHERE project_id=?)
-        ORDER BY updated_at DESC`,
+        `SELECT id, anchor_board, anchor_block, ${THREAD_PROJECT_SQL} AS project_id, agent, session_id, version, head, cwd, selection, title,
+          created_at, updated_at, NULL AS entries, bypass, permissions,
+          (SELECT json_extract(value,'$.text') FROM json_each(entries)
+            WHERE json_extract(value,'$.kind')='user' LIMIT 1) AS question
+        FROM ask_conversations WHERE ${where} ORDER BY updated_at DESC`,
       )
-      .all(board, projectId ?? null, projectId ?? null)
+      .all(...params)
       .map((row) => {
         const {
           anchor,
-          projectId: _projectId,
           sessionId: _sessionId,
           version: _version,
           cwd: _cwd,
-          entries,
+          entries: _entries,
           permissions: _permissions,
           ...entry
         } = rowSchema.parse(row);
 
-        const question = entries?.find((entry) => entry.kind === "user")?.text;
+        const question = z.string().nullable().parse(row.question) ?? "";
 
-        if (question?.trim()) entry.question = question;
+        if (question.trim()) entry.question = question;
 
         return { ...entry, anchor };
       });
@@ -300,10 +339,12 @@ export class AskHistory {
     this.db
       .prepare("DELETE FROM ask_conversations WHERE anchor_board=?")
       .run(reviewId);
+    this.changed();
   }
 
   delete(id: string) {
     this.assertThreadWritable(id);
     this.db.prepare("DELETE FROM ask_conversations WHERE id=?").run(id);
+    this.changed();
   }
 }

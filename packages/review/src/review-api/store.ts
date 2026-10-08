@@ -2381,30 +2381,123 @@ export class ReviewStore {
     return { outgoing, backlinks };
   }
   /** Boards edited by an Ask thread, most recent first. */
-  boardsChangedBy(
-    threadId: string,
-  ): { reviewId: string; title: string; icon: BoardIconKind }[] {
+  boardsChangedBy(threadId: string): {
+    reviewId: string;
+    title: string;
+    icon: BoardIconKind;
+    blockId?: string;
+  }[] {
     return this.db
       .prepare(
-        `SELECT edits.review_id, json_extract(current.snapshot,'$.title') AS title,
-          json_extract(current.snapshot,'$.target') AS target
+        `SELECT edits.review_id, MAX(edits.version) AS last
         FROM versions edits
         JOIN reviews ON reviews.id=edits.review_id
-        JOIN versions current ON current.review_id=reviews.id AND current.version=reviews.version
         WHERE edits.thread_id=?
         GROUP BY edits.review_id ORDER BY MAX(json_extract(edits.snapshot,'$.createdAt')) DESC`,
       )
       .all(threadId)
-      .map((row) => ({
-        reviewId: String(row.review_id),
-        title: String(row.title),
+      .map((row) => {
+        const board = this.read(String(row.review_id));
+
+        // The block its last edit there touched, if the board still has it.
+        const blockId = this.read(board.reviewId, Number(row.last)).lastEdit
+          ?.blockId;
+
+        return {
+          reviewId: board.reviewId,
+          title: board.title,
+          icon: boardIconKind(board.target),
+          ...(blockId &&
+            elements(board.document).some(
+              (element) => element.id === blockId,
+            ) && { blockId }),
+        };
+      });
+  }
+  /** The boards each thread changed, newest first, for many threads in one
+   * query. */
+  /** A board's title and icon, read without its document. */
+  /** Where a board lives, as Recent names it: its checkout's folder, else
+   * its project's name. */
+  boardPlace(reviewId: string): string {
+    const row = this.db
+      .prepare(
+        `SELECT repositories.path, projects.name FROM reviews
+        JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
+        LEFT JOIN repositories ON repositories.id=${BOARD_REPOSITORY_ID_SQL}
+        LEFT JOIN projects ON projects.id=reviews.project_id
+        WHERE reviews.id=?`,
+      )
+      .get(reviewId);
+
+    return (
+      (row?.path && path.basename(String(row.path))) ||
+      (row?.name ? String(row.name) : "")
+    );
+  }
+  boardFace(reviewId: string) {
+    const row = this.db
+      .prepare(
+        `SELECT json_extract(versions.snapshot,'$.title') AS title, json_extract(versions.snapshot,'$.target') AS target
+        FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
+        WHERE reviews.id=?`,
+      )
+      .get(reviewId)!;
+
+    return {
+      reviewId,
+      title: String(row.title),
+      icon: boardIconKind(
         // SAFETY: the target was validated when the version was saved.
-        icon: boardIconKind(
-          row.target
-            ? (JSON.parse(String(row.target)) as ReviewTarget)
-            : undefined,
-        ),
-      }));
+        row.target
+          ? (JSON.parse(String(row.target)) as ReviewTarget)
+          : undefined,
+      ),
+    };
+  }
+  boardsChangedByThreads(
+    threadIds: readonly string[],
+  ): Map<string, { reviewId: string; title: string; icon: BoardIconKind }[]> {
+    const changed = new Map<
+      string,
+      { reviewId: string; title: string; icon: BoardIconKind }[]
+    >();
+
+    if (!threadIds.length) return changed;
+
+    const rows = this.db
+      .prepare(
+        // The thread_id index finds the rows; rowid orders them by when
+        // they were saved without parsing them.
+        `SELECT thread_id AS thread, review_id
+        FROM versions
+        WHERE thread_id IN (${threadIds.map(() => "?").join(",")})
+        GROUP BY thread, review_id ORDER BY MAX(rowid) DESC`,
+      )
+      .all(...threadIds);
+
+    const boards = new Map<
+      string,
+      { reviewId: string; title: string; icon: BoardIconKind } | undefined
+    >();
+
+    for (const row of rows) {
+      const reviewId = String(row.review_id);
+
+      if (!boards.has(reviewId))
+        boards.set(
+          reviewId,
+          this.has(reviewId) ? this.boardFace(reviewId) : undefined,
+        );
+      const board = boards.get(reviewId);
+
+      if (!board) continue;
+      const thread = String(row.thread);
+
+      changed.set(thread, [...(changed.get(thread) ?? []), board]);
+    }
+
+    return changed;
   }
   /** Resolve a target-less PR create before it queues, when it will need it. */
   private startPullRequest(

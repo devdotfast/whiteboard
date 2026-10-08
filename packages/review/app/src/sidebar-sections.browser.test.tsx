@@ -1,6 +1,8 @@
 import type {
   ReviewApiSummary,
+  ReviewProjectThread,
   ReviewSidebarSectionProps,
+  ReviewThreadsFilter,
 } from "@dev.fast/review-protocol";
 import { act } from "react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -193,4 +195,76 @@ it("opens to the open board's parent, rolls a collapsed parent's changes up, and
     "Dangling links",
   ]);
   await again.dispose();
+});
+
+it("lists the board's threads, the project's, or every project's", async () => {
+  const ref = (reviewId: string, title: string) => ({
+    reviewId,
+    title,
+    icon: "board" as const,
+  });
+
+  const thread = (
+    id: string,
+    anchor: string,
+    edited: string[],
+    projectId = "app",
+  ): ReviewProjectThread => ({
+    id,
+    projectId,
+    agent: "claude",
+    agentName: "Claude Code",
+    opening: `Question ${id}`,
+    updatedAt: "2026-10-06T12:00:00Z",
+    anchor: { board: ref(anchor, `Board ${anchor}`), block: "b1" },
+    pinned: true,
+    edited: edited.map((board) => ref(board, `Board ${board}`)),
+  });
+
+  const list = [
+    thread("pinned", "pr", []),
+    { ...thread("edits-pr", "plan", ["pr"]), status: "waiting" as const },
+    thread("elsewhere", "plan", []),
+    thread("other-project", "notes", [], "notes"),
+  ];
+
+  const onOpenThread =
+    vi.fn<NonNullable<ReviewSidebarSectionProps["onOpenThread"]>>();
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  let handle: ReturnType<typeof mountReviewSidebarSection> | undefined;
+
+  const mount = (filter: ReviewThreadsFilter) =>
+    props({
+      section: "threads",
+      threads: { list, project: "app", filter, open: "edits-pr" },
+      onOpenThread,
+    });
+
+  await act(async () => {
+    handle = mountReviewSidebarSection(container, mount("board"));
+  });
+
+  const rows = () =>
+    [...container.querySelectorAll("li button")].map((row) => row.textContent);
+
+  // Started here, or started on the plan and edited this board.
+  await vi.waitFor(() => expect(rows()).toHaveLength(2));
+  expect(container.querySelector("[aria-current=true]")?.textContent).toContain(
+    "Question edits-pr",
+  );
+
+  await act(async () => handle!.update(mount("project")));
+  expect(rows()).toHaveLength(3);
+
+  await act(async () => handle!.update(mount("all")));
+  expect(rows()).toHaveLength(4);
+  expect(rows().at(-1)).toContain("Question other-project");
+
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>("li button")!.click(),
+  );
+  expect(onOpenThread).toHaveBeenCalledWith("pinned");
+  await act(async () => handle!.dispose());
 });

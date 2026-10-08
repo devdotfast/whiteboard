@@ -419,6 +419,15 @@ export interface ReviewCanvasBridge {
   onDidChangeSidebarShowsBoard?(listener: () => void): ReviewDisposable;
   /** The sidebar's lens list, where the agent's cursor is drawn. */
   sidebarLensList?(): HTMLElement | undefined;
+  /** The thread Ask shows. */
+  reportAsk?(state: ReviewAskState): void;
+  /** Opens the sidebar on its Threads tab. */
+  showThreads?(): void;
+}
+
+export interface ReviewAskState {
+  /** The saved thread on screen, docked or not. */
+  threadId?: string;
 }
 
 /** Changed lines over a lens or the whole diff, and how many are left. */
@@ -478,12 +487,53 @@ export interface ReviewSidebarState {
   };
 }
 
+/** A board a thread started on or edited. */
+export interface ReviewThreadBoard {
+  reviewId: string;
+  title: string;
+  icon: BoardIconKind;
+}
+
+/** A conversation, as the Threads tab lists it. */
+export interface ReviewProjectThread {
+  id: string;
+  /** The project it works in; absent for one on a shared board. */
+  projectId?: string;
+  /** Where it lives: its board's checkout folder, else its project's name. */
+  place?: string;
+  agent: string;
+  agentName: string;
+  /** The first question asked, else the agent's title for it. */
+  opening: string;
+  /** While its agent runs: "waiting" needs you. Absent once it stopped. */
+  status?: "starting" | "running" | "waiting" | "idle" | "failed";
+  updatedAt: string;
+  /** The board it started on, and the block it was about. */
+  anchor: { board: ReviewThreadBoard; block?: string };
+  /** Asked about an anchored passage. */
+  pinned: boolean;
+  /** The boards it changed, newest first. */
+  edited: ReviewThreadBoard[];
+}
+
+/** GET /:id/ask/threads?watch: every project's threads, newest first. */
+export interface ReviewProjectThreads {
+  board: string;
+  /** The board's project. */
+  project?: string;
+  threads: ReviewProjectThread[];
+}
+
+/** Which threads the Threads tab lists: those on this board (started on it,
+ * or that edited it), the board's project's, or every project's. */
+export type ReviewThreadsFilter = "board" | "project" | "all";
+
 /** Props for a section list that Desktop's sidebar mounts from the canvas
  * bundle. */
 export interface ReviewSidebarSectionProps {
   /** "remaining" is the Diff view's Remaining row, above the Lenses
    * header. */
-  section: "whiteboards" | "contents" | "lenses" | "remaining";
+  section: "whiteboards" | "contents" | "threads" | "lenses" | "remaining";
   connection: { serverUrl: string; token: string };
   /** The board in the active tab. */
   reviewId: string;
@@ -499,6 +549,16 @@ export interface ReviewSidebarSectionProps {
     project: { id: string; name: string } | null;
     boards: ReviewApiSummary[];
   };
+  /** Threads: every project's, the board's project, the filter, and the
+   * thread open in Ask. */
+  threads?: {
+    list: readonly ReviewProjectThread[];
+    project?: string;
+    filter: ReviewThreadsFilter;
+    open?: string;
+  };
+  onFilterThreads?(filter: ReviewThreadsFilter): void;
+  onOpenThread?(threadId: string): void;
   /** Lenses: the Diff view's, as its canvas reports them. */
   lenses?: ReviewSidebarLenses;
   /** Filter the diff to a lens, or clear the filter with null. */
@@ -1860,6 +1920,12 @@ export const ReviewSurfaceEventSchema = z.discriminatedUnion("event", [
     event: z.literal("markLens"),
     reviewId: requiredString,
     lensId: requiredString,
+  }),
+  /** Open a saved thread in Ask, from the sidebar's Threads. */
+  z.strictObject({
+    event: z.literal("openAskThread"),
+    reviewId: requiredString,
+    threadId: requiredString,
   }),
 ]);
 
