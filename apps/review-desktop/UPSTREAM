@@ -8,7 +8,8 @@ Serialization tag: code-oss-upstream-8a7abeba
 
 Review applies these focused VS Code changes without changing the source pin:
 
-- Electron 43.7.9 (Node 24.21.0), tracking upstream's Electron version:
+- Electron 43.7.9 (Node 24.21.0), ahead of upstream's 43.7.5; do not
+  downgrade to upstream's version when syncing:
   `4ae4d96052c5a986fe84974ed9d7b220234670b4`, `0d9ade07b6`, `d2fe6d3bf9`,
   plus the 42.10.0 authentication type update
   `28cf0a82a08a5f8e9288d19b4218ec1eb5ee46a6`. Linux dependency-list files
@@ -17,9 +18,10 @@ Review applies these focused VS Code changes without changing the source pin:
   after tier-up (electron/electron#54235, fixed in 43.7.6), which aborts the
   software map's libavoid router. Version, `cgmanifest.json` and
   `electron.txt` are for 43.7.9; `electron.txt` is verified against the
-  official `v43.7.9` `SHASUMS256.txt`. From `4ae4d960` Review takes the `enableWebSQL` removals,
-  the Linux window-controls title bar, and the file dialog default path
-  (Electron 43 otherwise opens dialogs in Downloads). It leaves out:
+  official `v43.7.9` `SHASUMS256.txt`. From `4ae4d960` Review takes the
+  `enableWebSQL` removals, the Linux window-controls title bar, and the file
+  dialog default path (Electron 43 otherwise opens dialogs in Downloads).
+  It leaves out:
   the `protocol.handle` migration (Electron 43 still supports the deprecated
   `register*Protocol`/`interceptFileProtocol` APIs, and upstream's change
   targets a protocol module refactored after the pin; port it when a major
