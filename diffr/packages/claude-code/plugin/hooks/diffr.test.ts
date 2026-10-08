@@ -150,3 +150,34 @@ test("the open tool comes back once diffr names the comparison, even while diffr
   ]);
   expect(called.result).toBe("Opened diffr main HEAD in a pane for the person: 2 changed files.");
 });
+
+test("leaving the pane, as Escape does, closes the search prompt and the picker", async ($, on) => {
+  on("process.run", async () => ({ value: { exitCode: 0, stdout: JSON.stringify({ theme: { name: "default-dark", path: null } }),
+    stderr: "", isStdoutTruncated: false, isStderrTruncated: false } }));
+  on("ui.open", async () => ({ value: { isPlaced: true } }));
+  on("process.spawn", async function* () {
+    yield { stream: "stdout", text: fixture };
+    return { value: { code: 0, signal: null } };
+  });
+  await $.command.run({ command: "diffr", args: "", presentation: { isFullscreen: true, columns: 150 } } as never);
+  const ui = await $.ui.mount({ ...PANE, surface: "terminal" } as never) as never as {
+    drawn: (scope: { in: string }) => Promise<unknown>;
+    key: (event: { key: string; ctrl?: true; in: string }) => Promise<void>;
+    redraw: (props: unknown) => Promise<void>;
+    unmount: () => Promise<void>;
+  };
+  const status = async () => (await lines(ui, "diff-1")).at(-1) ?? "";
+  for (let tries = 0; !(await lines(ui, "diff-0")).some((line) => line.includes("src/greet.ts")) && tries < 50; tries++)
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  await ui.key({ key: "/", in: "diff-0" });
+  await ui.key({ key: "g", in: "diff-0" });
+  expect(await status()).toStartWith("/g▏");
+  await ui.redraw({ ...PANE.props, isFocused: false });
+  expect(await status()).not.toContain("▏");
+  await ui.redraw({ ...PANE.props, isFocused: true });
+  await ui.key({ key: "p", ctrl: true, in: "diff-0" });
+  expect((await lines(ui, "diff-1")).join("\n")).toContain("changed files");
+  await ui.redraw({ ...PANE.props, isFocused: false });
+  expect((await lines(ui, "diff-1")).join("\n")).not.toContain("changed files");
+  await ui.unmount();
+});

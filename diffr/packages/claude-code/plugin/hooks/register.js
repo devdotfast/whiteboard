@@ -17695,6 +17695,15 @@ class Viewer {
     this.setClosed(index, !state);
     this.reshape();
   }
+  cancel() {
+    if (this.prompt === null && !this.picker && !this.pendingZ && !this.pendingBracket)
+      return;
+    this.prompt = null;
+    this.picker = null;
+    this.pendingZ = false;
+    this.pendingBracket = null;
+    this.emit();
+  }
   get picking() {
     return this.picker !== null;
   }
@@ -18411,6 +18420,11 @@ class Pane {
       return this.press(input2.press);
     return {};
   }
+  blur() {
+    this.viewer.cancel();
+    this.helpView = false;
+    this.filesView = false;
+  }
   copied(what, refusal) {
     this.message = refusal ? `Not copied: ${refusal}` : `Copied ${what}`;
   }
@@ -18840,6 +18854,7 @@ function register(on, options) {
     throw new Error(`The diffr option must be a string, not ${typeof binary}`);
   let pane;
   let child;
+  let focused = false;
   const acks = new Map;
   on("session.start", async ($, e, next) => {
     await $.command.register({
@@ -18900,6 +18915,9 @@ function register(on, options) {
       return /* @__PURE__ */ h(Text, {
         dimColor: true
       }, "Run /diffr to open a comparison.");
+    if (focused && !e.props.isFocused)
+      pane.blur();
+    focused = e.props.isFocused;
     const columns = e.props.bodyColumns, rows = e.props.scroll.bodyRows;
     const frame = pane.frame({ columns, rows });
     const bands = Array.from({ length: Math.ceil(frame.lines.length / BAND) }, (_, i) => frame.lines.slice(i * BAND, (i + 1) * BAND));

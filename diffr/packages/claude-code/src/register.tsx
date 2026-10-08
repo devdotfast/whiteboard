@@ -98,6 +98,8 @@ export function register(on: On, options: PluginOptions): void {
   if (typeof binary !== "string") throw new Error(`The diffr option must be a string, not ${typeof binary}`);
   let pane: Pane | undefined;
   let child: Child | undefined;
+  /** Whether the pane had the keyboard when it was last drawn. */
+  let focused = false;
   /** The last handled seq per view instance (see `Post`). */
   const acks = new Map<string, number>();
 
@@ -164,6 +166,9 @@ export function register(on: On, options: PluginOptions): void {
     }
     const { Box, Text, Client } = $.ui.resolve(e);
     if (!pane) return <Text dimColor>Run /diffr to open a comparison.</Text>;
+    // Escape takes the keyboard from the pane without reaching it; a click elsewhere does too.
+    if (focused && !e.props.isFocused) pane.blur();
+    focused = e.props.isFocused;
     const columns = e.props.bodyColumns, rows = e.props.scroll.bodyRows;
     const frame = pane.frame({ columns, rows });
     const bands = Array.from({ length: Math.ceil(frame.lines.length / BAND) }, (_, i) =>

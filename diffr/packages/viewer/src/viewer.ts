@@ -280,6 +280,16 @@ export class Viewer {
     this.reshape();
   }
 
+  /** Leaving the view, as Escape does: closes the prompt without searching, the picker, and a half-typed chord. */
+  cancel() {
+    if (this.prompt === null && !this.picker && !this.pendingZ && !this.pendingBracket) return;
+    this.prompt = null;
+    this.picker = null;
+    this.pendingZ = false;
+    this.pendingBracket = null;
+    this.emit();
+  }
+
   /** The Ctrl-P picker is open: every key goes to it. */
   get picking(): boolean {
     return this.picker !== null;

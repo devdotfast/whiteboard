@@ -88,6 +88,16 @@ export class Pane {
     return {};
   }
 
+  /**
+   * The pane lost the keyboard. Escape never reaches it, only takes the focus away, so this is
+   * where Escape closes whatever was open: the search prompt, the picker, the key list, the tree.
+   */
+  blur() {
+    this.viewer.cancel();
+    this.helpView = false;
+    this.filesView = false;
+  }
+
   /** Says how a copy the pane asked for went; `refusal` is the clipboard's reason when it did not. */
   copied(what: string, refusal?: string) {
     this.message = refusal ? `Not copied: ${refusal}` : `Copied ${what}`;
