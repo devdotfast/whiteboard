@@ -105,10 +105,8 @@ export class ReviewMultiDiffUIElementFactory implements IWorkbenchUIElementFacto
     const counts = document.createElement("span");
     counts.className = "review-diff-group-counts";
     const countsTooltip = new ReviewTooltip(this.hoverService, counts);
-    const viewed = new ReviewViewedCheckbox(
-      this.hoverService,
-      element.ownerDocument,
-      () => current?.onToggleSection?.(),
+    const viewed = new ReviewViewedCheckbox(element.ownerDocument, () =>
+      current?.onToggleSection?.(),
     );
     const refresh = () => {
       const entry = (current =
@@ -229,10 +227,8 @@ export class ReviewMultiDiffUIElementFactory implements IWorkbenchUIElementFacto
     open.label = "Open file";
     open.element.classList.add("review-multidiff-open");
     const countsTooltip = new ReviewTooltip(this.hoverService, counts);
-    const viewed = new ReviewViewedCheckbox(
-      this.hoverService,
-      ownerDocument,
-      () => current?.onToggleViewed?.(),
+    const viewed = new ReviewViewedCheckbox(ownerDocument, () =>
+      current?.onToggleViewed?.(),
     );
     element.append(viewed.element);
     let current: ReviewMultiDiffHeaderEntry | undefined;

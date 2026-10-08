@@ -160,21 +160,13 @@ export const REVIEW_COUNTS_PENDING_TOOLTIP: ReviewTooltipContent = {
  */
 export class ReviewViewedCheckbox extends Disposable {
   readonly element: HTMLButtonElement;
-  private readonly tooltip: ReviewTooltip;
 
-  constructor(
-    hoverService: ReviewTooltipHoverService,
-    ownerDocument: Document,
-    onToggle: () => void,
-  ) {
+  constructor(ownerDocument: Document, onToggle: () => void) {
     super();
     this.element = ownerDocument.createElement("button");
     this.element.type = "button";
     this.element.className = "review-viewed-check";
     this.element.setAttribute("role", "checkbox");
-    this.tooltip = this._register(
-      new ReviewTooltip(hoverService, this.element),
-    );
     this._register(
       addDisposableListener(this.element, "click", (event) => {
         event.stopPropagation();
@@ -200,18 +192,5 @@ export class ReviewViewedCheckbox extends Disposable {
     );
     this.element.classList.toggle("is-empty", empty);
     this.element.disabled = empty;
-    this.tooltip.content = empty
-      ? undefined
-      : { label: reviewViewedTooltip(state) };
   }
-}
-
-export function reviewViewedTooltip(
-  state: ReviewDiffProgressState | undefined,
-): string {
-  return state === "viewed"
-    ? "Click to mark as unviewed"
-    : state === "partial"
-      ? "Click to mark all as viewed"
-      : "Click to mark as viewed";
 }

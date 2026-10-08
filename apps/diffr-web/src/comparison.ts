@@ -8,7 +8,6 @@ import { Disposable, DisposableStore } from "vs/base/common/lifecycle.js";
 import type { IObservable } from "vs/base/common/observable.js";
 import { URI } from "vs/base/common/uri.js";
 import { ICodeEditorService } from "vs/editor/browser/services/codeEditorService.js";
-import { IHoverService } from "vs/platform/hover/browser/hover.js";
 import type { IInstantiationService } from "vs/platform/instantiation/common/instantiation.js";
 
 import type { Classified, Engine, FileRequest } from "./engine/engine.js";
@@ -293,10 +292,6 @@ export class Comparison extends Disposable {
       new ViewedProgress(targetPath(this.target)),
     ));
 
-    const hover = this.instantiation.invokeFunction((accessor) =>
-      accessor.get(IHoverService),
-    );
-
     const viewedState = store.add(
       new StructuralViewedState(
         session,
@@ -304,7 +299,7 @@ export class Comparison extends Disposable {
         () => viewed.progress,
         viewed.onDidChange,
         (ranges, isViewed) => viewed.setViewed(ranges, isViewed),
-        (editor, onToggle) => new ScopeViewedControl(editor, hover, onToggle),
+        (editor, onToggle) => new ScopeViewedControl(editor, onToggle),
       ),
     );
 

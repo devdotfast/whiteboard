@@ -5,7 +5,6 @@ import type {
   IOverlayWidgetPosition,
 } from "vs/editor/browser/editorBrowser.js";
 import { EditorOption } from "vs/editor/common/config/editorOptions.js";
-import type { IHoverService } from "vs/platform/hover/browser/hover.js";
 
 import { ReviewViewedCheckbox } from "../browser/reviewTooltip.js";
 import type { FoldTarget } from "./reviewStructuralFolds.js";
@@ -27,7 +26,6 @@ export class ScopeViewedControl extends Disposable implements IOverlayWidget {
 
   constructor(
     private readonly editor: ICodeEditor,
-    hoverService: IHoverService,
     onToggle: (target: FoldTarget) => void,
   ) {
     super();
@@ -41,7 +39,7 @@ export class ScopeViewedControl extends Disposable implements IOverlayWidget {
     this.status = document.createElement("span");
     this.status.className = "review-scope-viewed-status";
     this.check = this._register(
-      new ReviewViewedCheckbox(hoverService, document, () => {
+      new ReviewViewedCheckbox(document, () => {
         if (this.target) onToggle(this.target);
       }),
     );
