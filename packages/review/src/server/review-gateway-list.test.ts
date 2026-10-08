@@ -82,7 +82,10 @@ it("offers language features and Source windows only for an online host whose De
   expect(merged.map((review) => [review.host, review.available])).toEqual([
     ["a", { sourceWindows: true, languageFeatures: true }],
     ["b", { sourceWindows: false, languageFeatures: false }],
-    ["c", { sourceWindows: false, languageFeatures: false }],
+    [
+      "c",
+      { sourceWindows: false, languageFeatures: false, reason: "c offline." },
+    ],
   ]);
 });
 
@@ -206,4 +209,49 @@ it("keeps an id with the machine that lists it first", () => {
 
   expect(summary(merged)).toEqual([["mine", undefined, undefined]]);
   expect(conflicts).toEqual([`a:${shared.reviewId}`]);
+});
+
+it("says why Source windows are off: the host's sentence while it is down, else the language features detail", () => {
+  const merged = mergeLists(
+    "structural",
+    [],
+    source(
+      [
+        { alias: "a", serverId: "A", state: "online", languageFeatures: true },
+        {
+          alias: "b",
+          serverId: "B",
+          state: "online",
+          languageFeatures: false,
+          languageFeaturesDetail: "The Whiteboard on b has no VS Code server.",
+        },
+        { alias: "c", serverId: "C", state: "offline", languageFeatures: true },
+        {
+          alias: "d",
+          serverId: "D",
+          state: "auth-failed",
+          detail: "Permission denied.",
+        },
+        { alias: "e", serverId: "E", state: "online", detail: "stale" },
+      ],
+      {
+        A: [entry("on a")],
+        B: [entry("on b")],
+        C: [entry("on c")],
+        D: [entry("on d")],
+        E: [entry("on e")],
+      },
+      ["A", "B"],
+    ),
+  );
+
+  expect(
+    merged.map((review) => [review.host, review.available?.reason]),
+  ).toEqual([
+    ["a", undefined],
+    ["b", "The Whiteboard on b has no VS Code server."],
+    ["c", "c offline."],
+    ["d", "Permission denied."],
+    ["e", "e offline."],
+  ]);
 });

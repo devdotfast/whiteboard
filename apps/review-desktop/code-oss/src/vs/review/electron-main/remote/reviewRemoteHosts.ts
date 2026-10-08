@@ -58,11 +58,14 @@ export function remoteHostState(
 	serverId: string,
 	states: readonly ReviewGatewayHostState[],
 	configured?: string,
-): { alias?: string; state: ReviewGatewayHostState["state"] } | undefined {
+): ({ alias?: string } & Pick<ReviewGatewayHostState, "state" | "detail">) | undefined {
 	const own = states.filter((state) => state.serverId === serverId);
 	const best = own.find((state) => state.state === "online") ?? own.find((state) => state.state === "connecting") ?? own[0];
-	if (best) return { alias: best.alias, state: best.state };
-	if (configured) return { alias: configured, state: states.find((state) => state.alias === configured)?.state ?? "connecting" };
+	if (best) return { alias: best.alias, state: best.state, ...(best.detail && { detail: best.detail }) };
+	if (configured) {
+		const entry = states.find((state) => state.alias === configured);
+		return { alias: configured, state: entry?.state ?? "connecting", ...(entry?.detail && { detail: entry.detail }) };
+	}
 	return states.some((state) => state.serverId === undefined && state.state === "connecting") ? { state: "connecting" } : undefined;
 }
 

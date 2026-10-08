@@ -1,6 +1,7 @@
 import type { LoadedAgentTrace } from "@canvas/use-agent-trace";
 import type {
   ReviewApiSummary,
+  ReviewRemoteHostActions,
   ReviewStackLayer,
 } from "@dev.fast/review-protocol";
 
@@ -8,6 +9,8 @@ export interface ReviewSessionData {
   /** Absent for a review. The scratchpad hides review-only chrome. */
   kind?: "scratchpad";
   host?: string;
+  hostState?: ReviewApiSummary["hostState"];
+  hosts?: ReviewRemoteHostActions;
   available?: ReviewApiSummary["available"];
   /** Absent for a document whose references all carry their own pins. */
   pins?: { base: string; head: string };

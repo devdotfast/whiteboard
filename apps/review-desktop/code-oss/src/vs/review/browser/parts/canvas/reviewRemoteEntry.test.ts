@@ -15,6 +15,8 @@ test("a review a remote opened before its list entry arrived takes the host once
 	const updated = withRemoteEntry(mounted, entry("wb-a"));
 	assert.deepEqual(updated, { kind: "api", reviewId: "r1", host: "wb-a", available });
 	assert.equal(withRemoteEntry(updated!, entry("wb-a")), undefined);
+
+	assert.deepEqual(withRemoteEntry(updated!, { ...entry("wb-a"), hostState: "offline" }), { ...updated, hostState: "offline" });
 });
 
 test("a laptop review's entry changes nothing", () => {

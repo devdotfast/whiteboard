@@ -32,6 +32,7 @@ import {
 
 import { canvasQueryKeys } from "./canvas-query";
 import { useReviewSession } from "./host/review-session";
+import { checkoutUnavailable } from "./missing-checkout-banner";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import { captureUiEvent } from "./ui-telemetry";
 
@@ -183,7 +184,7 @@ export function ReviewLensesProvider({
 
   // The latest outcome wins: a later read clears a failed mark.
   const error = snapshot.sourceUnavailable
-    ? "Local checkout unavailable."
+    ? checkoutUnavailable(session.review?.host)
     : markViewed.error && markViewed.submittedAt > read.dataUpdatedAt
       ? String(markViewed.error)
       : read.error

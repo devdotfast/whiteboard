@@ -461,7 +461,9 @@ async function journey(ctx, page, until) {
     'button[aria-label="Share review"], button[aria-label="Shared review"], [aria-label="Session views"] button[aria-label="Trace"]',
   );
 
-  const sourceTree = canvas.locator('button[aria-label="Source tree ↗"]');
+  const sourceTree = canvas.locator(
+    'button[aria-label="Source tree ↗"]:not([disabled])',
+  );
 
   await until(
     async () =>

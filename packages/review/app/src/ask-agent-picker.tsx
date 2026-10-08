@@ -37,6 +37,7 @@ import { textStyles } from "./ui/text";
 import { fieldStyles } from "./ui/text-field";
 import { useAnchoredPopover } from "./use-anchored-popover";
 import { useDismissOnOutside } from "./use-dismiss-on-outside";
+import { useTooltip } from "./use-tooltip";
 
 const agentsSchema = z.object({
   agents: z.array(
@@ -63,26 +64,37 @@ export const logos: Record<
 // request under way, which the toolbar and the panel share.
 const knownAgents = new WeakMap<ReviewSession, AskAgent[] | null>();
 
-const askingAgents = new WeakMap<ReviewSession, Promise<AskAgent[] | null>>();
+// Undefined: the host could not say now.
+const askingAgents = new WeakMap<
+  ReviewSession,
+  Promise<AskAgent[] | null | undefined>
+>();
 
-function askAgentsOf(session: ReviewSession): Promise<AskAgent[] | null> {
+function askAgentsOf(
+  session: ReviewSession,
+): Promise<AskAgent[] | null | undefined> {
   let request = askingAgents.get(session);
 
   if (!request) {
     request = session
       .fetch("/ask/agents")
-      .then(async (response) =>
-        response.ok ? agentsSchema.parse(await response.json()).agents : null,
-      )
-      // A check that fails keeps the last answer; a host without Ask refuses
-      // the request instead.
-      .catch(() => knownAgents.get(session) ?? null)
-      .then((agents) => {
-        knownAgents.set(session, agents);
-        askingAgents.delete(session);
+      .then(async (response) => {
+        // A host without Ask refuses the request; one that is down fails it.
+        if (response.status >= 500) throw new Error(response.statusText);
 
-        return agents;
-      });
+        return response.ok
+          ? agentsSchema.parse(await response.json()).agents
+          : null;
+      })
+      .then(
+        (agents) => {
+          knownAgents.set(session, agents);
+
+          return agents;
+        },
+        () => knownAgents.get(session),
+      )
+      .finally(() => askingAgents.delete(session));
     askingAgents.set(session, request);
   }
 
@@ -90,8 +102,9 @@ function askAgentsOf(session: ReviewSession): Promise<AskAgent[] | null> {
 }
 
 /** Which local agents can answer, or null where this host has no Ask. Asked
- * again each time Ask opens and each time the review comes back into focus,
- * so an agent installed during the review shows up. */
+ * again each time Ask opens, each time the review comes back into focus and
+ * each time its host changes state, so an agent installed during the review
+ * shows up. A host that cannot answer now keeps the last answer. */
 export function useAskAgents(session: ReviewSession | null): AskAgent[] | null {
   const [agents, setAgents] = useState<AskAgent[] | null>(() =>
     session ? (knownAgents.get(session) ?? null) : null,
@@ -103,7 +116,7 @@ export function useAskAgents(session: ReviewSession | null): AskAgent[] | null {
 
     const refresh = () => {
       void askAgentsOf(session).then((value) => {
-        if (current) setAgents(value);
+        if (current && value !== undefined) setAgents(value);
       });
     };
 
@@ -393,25 +406,32 @@ export function AskAgentPicker({
   agents,
   agent,
   locked,
+  unavailable,
   onPick,
 }: {
   agents: AskAgent[] | null;
   agent: AskAgentId | undefined;
   locked: boolean;
+  unavailable?: string;
   onPick: (agent: AskAgentId) => void;
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const dismiss = useMenuClose(setOpen, trigger);
+  const hint = useTooltip<HTMLSpanElement>(unavailable ?? "");
   const chosen = agents?.find((candidate) => candidate.id === agent);
 
   if (
     locked ||
+    unavailable !== undefined ||
     agents?.filter((candidate) => candidate.available).length === 1
   ) {
     return (
-      <span {...stylex.props(styles.inline)}>
+      <span
+        ref={unavailable === undefined ? undefined : hint}
+        {...stylex.props(styles.inline)}
+      >
         {agent ? logos[agent]({}) : null}
         <span>{chosen?.name ?? agent ?? "Agent"}</span>
       </span>

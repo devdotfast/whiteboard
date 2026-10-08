@@ -295,12 +295,21 @@ function ReviewLayoutContent({
   // The scratchpad is a document and nothing else: no source tree to browse,
   // nothing to share, nothing to dismiss.
   const scratchpad = session.review?.kind === "scratchpad";
-  const sourceWindows = session.review?.available?.sourceWindows !== false;
+  const available = session.review?.available;
+  // A remote review keeps Source tree, disabled with the reason.
+  const sourceWindows = available?.sourceWindows !== false;
+  const sourceTreeShown = sourceWindows || !!session.review?.host;
   useEffect(() => {
     if (scratchpad) captureUiEvent(session, "scratchpad_opened");
   }, [scratchpad, session]);
   const discordTooltip = useTooltip("Join our Discord community");
-  const sourceTreeTooltip = useTooltip("Open full read-only source");
+
+  const sourceTreeTooltip = useTooltip(
+    sourceWindows
+      ? "Open full read-only source"
+      : (available?.reason ?? "Source windows are unavailable."),
+  );
+
   const panelStore = useReviewPanelStore();
   useSuppressPanelMotionOnCanvasResume(appRef);
   const activePanel = useReviewPanel((state) => state.active);
@@ -608,20 +617,21 @@ function ReviewLayoutContent({
                   shellStyles.topbarContext,
                 )}
               >
-                {!scratchpad && sourceWindows && (
+                {!scratchpad && sourceTreeShown && (
                   <Button
                     variant="ghost"
                     xstyle={shellStyles.openSourceTree}
                     aria-label="Source tree ↗"
+                    disabled={!sourceWindows}
                     ref={sourceTreeTooltip}
                     onClick={() => {
                       captureUiEvent(session, "source_tree_opened", {
                         via: "topbar",
                       });
-                      session.surface.post({
-                        name: "openSourceTree",
-                        args: {},
-                      });
+                      // The desktop already showed why it failed.
+                      session.surface
+                        .post({ name: "openSourceTree", args: {} })
+                        .catch(() => undefined);
                     }}
                   >
                     <span {...stylex.props(shellStyles.openSourceTreeLabel)}>

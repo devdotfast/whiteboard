@@ -48,6 +48,7 @@ import {
   createReviewSession,
   useReviewSession,
 } from "./host/review-session";
+import { checkoutUnavailable } from "./missing-checkout-banner";
 import { ReviewDocumentBoundary } from "./review-document-boundary";
 import { reportReviewDocumentRenderError } from "./review-document-error-report";
 import type { ReviewFindHost } from "./review-find";
@@ -318,6 +319,8 @@ export function ApiCanvas({
       review: {
         kind: snapshot.kind,
         host: content.host,
+        hostState: content.hostState,
+        hosts: content.remoteHosts,
         available: content.available,
         pins: snapshot.pins
           ? { base: snapshot.pins.base, head: snapshot.pins.head }
@@ -354,6 +357,8 @@ export function ApiCanvas({
     client,
     content.reviewId,
     content.host,
+    content.hostState,
+    content.remoteHosts,
     content.available,
     data,
     version,
@@ -543,6 +548,7 @@ const CanvasDocument = memo(function CanvasDocument({
   softwareMapEnabled: boolean;
   documentWidth?: ReviewDocumentWidthChoice;
 }) {
+  const host = useReviewSession().review?.host;
   const snapshot = data.snapshot;
 
   const document: RenderedReviewDocument = {
@@ -580,7 +586,7 @@ const CanvasDocument = memo(function CanvasDocument({
       // Commits views hide, as for a review whose base is its head.
       range={{
         sourceUnavailable: snapshot.sourceUnavailable
-          ? "Local checkout unavailable."
+          ? checkoutUnavailable(host)
           : undefined,
         baseRef: snapshot.pins?.base ?? "",
         headRef: snapshot.pins?.head ?? "",
