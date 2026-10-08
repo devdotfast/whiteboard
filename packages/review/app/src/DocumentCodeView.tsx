@@ -16,6 +16,7 @@ import { useReviewSession } from "./host/review-session";
 import { useReviewFindRegistration } from "./review-find";
 import { emitReviewInteraction } from "./review-interaction-event";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
+import { useOptionalReviewPanel } from "./review-panel";
 import { tokens } from "./tokens.stylex";
 
 const LINE_HEIGHT = 20;
@@ -59,6 +60,11 @@ export function DocumentCodeView({
   lenses?: ReviewLensView;
 }) {
   const session = useReviewSession();
+
+  const documentVisible = useOptionalReviewPanel(
+    (state) => state.view === "review",
+  );
+
   const contextLenses = useReviewLenses();
   const lenses = lensesOverride ?? contextLenses;
   const markRef = useRef(contextLenses?.mark);
@@ -308,6 +314,10 @@ export function DocumentCodeView({
   useLayoutEffect(() => {
     handleRef.current?.setCollapsed(collapsed);
   }, [collapsed]);
+
+  useLayoutEffect(() => {
+    if (documentVisible) handleRef.current?.setCollapsed(collapsedRef.current);
+  }, [documentVisible]);
 
   useLayoutEffect(
     () => () => {

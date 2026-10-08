@@ -548,7 +548,8 @@ export class ReviewFilesDiffView extends Disposable {
 			if (previous === file.state) continue;
 			const item = this.itemFor(entry);
 			if (!item) continue;
-			if (file.state === 'viewed') item.collapsed.set(true, undefined);
+			// Embedded code starts open, even when its first progress snapshot is viewed.
+			if (file.state === 'viewed' && (!this.document || previous !== undefined)) item.collapsed.set(true, undefined);
 			else if (previous === 'viewed' || this.progress?.changedPaths?.includes(file.path)) item.collapsed.set(false, undefined);
 			this.viewedApplied.set(key, file.state);
 		}
