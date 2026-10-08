@@ -13,6 +13,7 @@ use crate::options::DiffOptions;
 use crate::pairing::Pairing;
 use crate::protocol::{self, project, Diff, FileChange, FileRef, FileStatus, Node, Region, Source};
 use serde_json::json;
+use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 
 /// A test side's root. Its id stays clear of the regions' ids and differs
@@ -20,6 +21,35 @@ use std::num::NonZeroUsize;
 pub(crate) fn test_root(regions: Vec<Region>) -> Region {
     let id = 1000 + regions.iter().map(|region| region.id).min().unwrap_or(0);
     Region::root(id, regions)
+}
+
+/// Set each leaf's `pair` from the fixture's alignment ids.
+pub(crate) fn name_pairs(sides: &mut Pairing<Source>) {
+    fn name(regions: &mut [Region], other: &BTreeMap<u32, u32>) {
+        for region in regions {
+            match &mut region.node {
+                Node::Leaf {
+                    alignment_id, pair, ..
+                } => *pair = other.get(alignment_id).copied(),
+                Node::Fold { children, .. } => name(children, other),
+            }
+        }
+    }
+    let Pairing::Both { lhs, rhs } = sides else {
+        return;
+    };
+    let ids = |source: &Source| {
+        let mut ids = BTreeMap::new();
+        walk(std::slice::from_ref(&source.root), &mut |region| {
+            if let Some(alignment) = region.alignment_id() {
+                ids.insert(alignment, region.id);
+            }
+        });
+        ids
+    };
+    let (lhs_ids, rhs_ids) = (ids(lhs), ids(rhs));
+    name(std::slice::from_mut(&mut lhs.root), &rhs_ids);
+    name(std::slice::from_mut(&mut rhs.root), &lhs_ids);
 }
 use std::path::Path;
 

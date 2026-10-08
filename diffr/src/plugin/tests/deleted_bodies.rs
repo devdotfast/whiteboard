@@ -80,6 +80,7 @@ fn deleted_bodies_skip_folds_with_paired_content() {
         lhs: source(vec![rewritten, removed]),
         rhs: source(vec![leaf(5, 0, 0, 20)]),
     };
+    name_pairs(&mut sides);
     run(
         "deleted-bodies",
         json!({"min_lines": 3}),
@@ -113,6 +114,7 @@ fn a_matched_function_whose_lines_all_went_away_is_a_removal() {
         lhs: source(vec![moved, kept]),
         rhs: source(vec![kept_rhs, moved_rhs]),
     };
+    name_pairs(&mut sides);
     run(
         "deleted-bodies",
         json!({"min_lines": 3}),

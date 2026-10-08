@@ -1,3 +1,4 @@
+use super::tests::name_pairs;
 use super::*;
 use crate::protocol::Span;
 use crate::protocol::{FileRef, FileStatus};
@@ -96,14 +97,12 @@ fn entry() -> FileChange {
 }
 
 fn both(lhs: Vec<Region>, rhs: Vec<Region>) -> Cursor {
-    Cursor::new(
-        entry(),
-        Pairing::Both {
-            lhs: source(100, lhs),
-            rhs: source(101, rhs),
-        },
-    )
-    .expect("a region")
+    let mut sides = Pairing::Both {
+        lhs: source(100, lhs),
+        rhs: source(101, rhs),
+    };
+    name_pairs(&mut sides);
+    Cursor::new(entry(), sides).expect("a region")
 }
 
 type Shape = (u32, Option<u32>, u32, u32, u32, bool, String);

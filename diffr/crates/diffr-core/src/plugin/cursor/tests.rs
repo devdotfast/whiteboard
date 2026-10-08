@@ -1,4 +1,5 @@
 use super::*;
+use crate::hash::DftHashMap;
 use crate::protocol::{FileRef, FileStatus};
 
 /// A test side's root. Its id stays clear of the regions' ids and differs
@@ -6,6 +7,35 @@ use crate::protocol::{FileRef, FileStatus};
 pub(crate) fn test_root(regions: Vec<Region>) -> Region {
     let id = 1000 + regions.iter().map(|region| region.id).min().unwrap_or(0);
     Region::root(id, regions)
+}
+
+/// Set each leaf's `pair` from the fixture's alignment ids.
+pub(crate) fn name_pairs(sides: &mut Pairing<Source>) {
+    fn name(regions: &mut [Region], other: &DftHashMap<u32, u32>) {
+        for region in regions {
+            match &mut region.node {
+                Node::Leaf {
+                    alignment_id, pair, ..
+                } => *pair = other.get(alignment_id).copied(),
+                Node::Fold { children, .. } => name(children, other),
+            }
+        }
+    }
+    let Pairing::Both { lhs, rhs } = sides else {
+        return;
+    };
+    let ids = |source: &Source| {
+        let mut ids = DftHashMap::default();
+        walk(top(source), &mut |region| {
+            if let Some(alignment) = region.alignment_id() {
+                ids.insert(alignment, region.id);
+            }
+        });
+        ids
+    };
+    let (lhs_ids, rhs_ids) = (ids(lhs), ids(rhs));
+    name(std::slice::from_mut(&mut lhs.root), &rhs_ids);
+    name(std::slice::from_mut(&mut rhs.root), &lhs_ids);
 }
 
 fn data(view: RegionView) -> RegionView {
@@ -37,7 +67,8 @@ fn first(ids: &RegionIds) -> u32 {
 }
 
 /// A cursor over `sides`, with a manifest entry naming the same sides.
-fn cursor(sides: Pairing<Source>) -> Cursor {
+fn cursor(mut sides: Pairing<Source>) -> Cursor {
+    name_pairs(&mut sides);
     let file = match &sides {
         Pairing::Both { .. } => Pairing::Both {
             lhs: file_ref(),
