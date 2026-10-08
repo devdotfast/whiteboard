@@ -140,6 +140,13 @@ export interface ReviewSourcePins {
   readonly base?: string;
 }
 
+/** The commit a quote is read at, as its file header names it: the short
+ * ID, and on hover what the commit is. */
+export interface ReviewCodeCommit {
+  label: string;
+  tooltip?: { label: string; detail?: string };
+}
+
 export interface ReviewInlineEditorSpec {
   progress?: ReviewDiffProgress;
   onSetViewed?: ReviewDiffViewSpec["onSetViewed"];
@@ -150,6 +157,8 @@ export interface ReviewInlineEditorSpec {
   side: ReviewDiffSide;
   /** Read at these pins instead of the review's. */
   pins?: ReviewSourcePins;
+  /** The commit to name in the file header: one other than the board's. */
+  commit?: ReviewCodeCommit;
   ranges: readonly ReviewInlineEditorRange[];
   /** Original authored selections, before display ranges are merged. */
   countRanges?: readonly ReviewInlineEditorRange[];
@@ -182,6 +191,8 @@ export interface ReviewInlineFindSpec {
 
 export interface ReviewInlineEditorHandle extends ReviewDisposable {
   setProgress?(progress: ReviewDiffProgress): void;
+  /** Updates the commit's name, as when its description loads. */
+  setCommit?(commit: ReviewCodeCommit | undefined): void;
   readonly height: number;
   setActive(active: boolean): void;
   setCollapsed(collapsed: boolean): void;
@@ -261,6 +272,8 @@ export interface ReviewDiffViewSpec {
     onDidFocus?: () => void;
     onDidOpen?: () => void;
     onDidShowHover?: () => void;
+    /** The commit its code is read at, when not the board's own. */
+    commit?: ReviewCodeCommit;
   };
   container: HTMLElement;
   fileTreeContainer?: HTMLElement;

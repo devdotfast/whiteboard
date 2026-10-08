@@ -28,6 +28,9 @@ import { textIncludesQuote } from "@review/evidence.js";
 import { lensSchema } from "@review/review-api/diff-lenses.js";
 import { ReviewInputError } from "@review/review-api/document.js";
 import {
+  type FileLineRange,
+  type Pins,
+  anchorPins,
   checkReferences,
   documentSchema,
   pinsSchema,
@@ -52,11 +55,16 @@ import { z } from "zod";
 import {
   type ShareBundle,
   digestBytes,
+  referenceCommits,
   validateShareSources,
 } from "./export.js";
 import {
+  COMMIT_ID,
+  assertCommitIds,
   cloneSharedRepository,
   fetchPinnedRepository,
+  fetchSharedCommits,
+  forgetSharedCommits,
   repositoryReady,
   sharedGit,
 } from "./repository.js";
@@ -67,8 +75,8 @@ export const sharedSnapshotSchema = z.strictObject({
   title: z.string().min(1),
   pins: pinsSchema
     .extend({
-      base: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
-      head: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
+      base: z.string().regex(COMMIT_ID),
+      head: z.string().regex(COMMIT_ID),
     })
     .optional(),
   document: documentSchema,
@@ -91,7 +99,7 @@ const count = z.number().int().nonnegative();
 const counts = z.strictObject({ additions: count, deletions: count });
 
 const mapSchema = z.strictObject({
-  commit: z.string(),
+  commit: z.string().regex(COMMIT_ID),
   side: z.enum(["base", "head"]),
   elements: z.array(normalizedSoftwareElementSchema),
   relationships: z.array(normalizedSoftwareRelationshipSchema),
@@ -167,6 +175,8 @@ export function validateShareBundle(bundle: ShareBundle) {
     throw new Error("Shared snapshot does not match its manifest.");
   checkReferences(snapshot.document);
   validateShareSources(snapshot);
+  // Every commit it quotes reaches git as an argument.
+  assertCommitIds(referenceCommits(snapshot));
 
   if (snapshot.pins && !manifest.repository)
     throw new Error("Shared source pins require a repository.");
@@ -383,10 +393,12 @@ export class SharedReviewStore {
       throw new ReviewInputError("Repository service is unavailable.", 409);
     const root = this.repositoryRoot(id);
 
+    const commits = referenceCommits(saved.snapshot);
+
     try {
       this.setStatus(id, "fetching");
 
-      if (!(await repositoryReady(root, saved.snapshot.pins))) {
+      if (!(await repositoryReady(root, saved.snapshot.pins, commits))) {
         const prior = this.repositories.get(id);
         await local.data.workspaces.remove(id);
 
@@ -396,11 +408,13 @@ export class SharedReviewStore {
           root,
           saved.manifest.repository!.cloneUrl,
           saved.snapshot.pins,
+          false,
+          commits,
         );
         await sharedGit(root, [
           "checkout",
           "--detach",
-          saved.snapshot.pins.head,
+          { commit: saved.snapshot.pins.head },
         ]);
       }
 
@@ -415,16 +429,7 @@ export class SharedReviewStore {
       this.setStatus(id, "validating");
       await local.data.validatePins(pins);
 
-      const references = sourceReferences(saved.snapshot.document).map(
-        (item) => item.source,
-      );
-
-      for (const map of Object.values(saved.presentation.maps))
-        for (const element of map.elements)
-          for (const range of element.sourceRanges ?? [])
-            references.push({ ...range, side: map.side });
-
-      await local.data.validateSources(pins, references);
+      await this.validateReferences(saved, repository.id, pins);
       await local.data.workspaces.open(id, pins);
 
       if (
@@ -451,10 +456,46 @@ export class SharedReviewStore {
     }
   }
 
+  /** Reads each of a shared board's references at its own commits, in the
+   * checkout of its repository. */
+  private async validateReferences(
+    saved: ReturnType<typeof validateShareBundle>,
+    repositoryId: string,
+    pins?: Pins,
+  ) {
+    const references = new Map<
+      string,
+      { pins: Pins; ranges: FileLineRange[] }
+    >();
+
+    const add = (at: Pins, range: FileLineRange) => {
+      const key = JSON.stringify([at.base, at.head]);
+      const group = references.get(key) ?? { pins: at, ranges: [] };
+
+      group.ranges.push(range);
+      references.set(key, group);
+    };
+
+    for (const { source } of sourceReferences(saved.snapshot.document, {
+      repositoryId,
+    }))
+      add({ ...anchorPins(source, pins), repositoryId }, source);
+
+    if (pins)
+      for (const map of Object.values(saved.presentation.maps))
+        for (const element of map.elements)
+          for (const range of element.sourceRanges ?? [])
+            add(pins, { ...range, side: map.side });
+
+    for (const group of references.values())
+      await this.local!.data.validateSources(group.pins, group.ranges);
+  }
+
   /** Files an unpinned board under a local checkout of its repository,
    * else a managed clone. */
   private async prepareUnpinned(id: string, cloneUrl: string | undefined) {
     const local = this.local;
+    const saved = this.validated.get(id)!;
 
     if (!cloneUrl || !local) {
       this.setStatus(id, "ready");
@@ -484,6 +525,16 @@ export class SharedReviewStore {
         repositoryId = (await local.data.register(root)).id;
       }
 
+      // A plan's commit links read at commits the checkout may not have.
+      const checkout = local.store.repositoryPath(repositoryId);
+
+      await fetchSharedCommits(
+        checkout,
+        referenceCommits(saved.snapshot, repositoryId),
+        id,
+      );
+      this.setStatus(id, "validating");
+      await this.validateReferences(saved, repositoryId);
       this.repositories.set(id, repositoryId);
       await writeFile(
         path.join(this.root, id, "repository.json"),
@@ -508,7 +559,11 @@ export class SharedReviewStore {
     if (
       !saved ||
       (saved.snapshot.pins &&
-        !(await repositoryReady(this.repositoryRoot(id), saved.snapshot.pins)))
+        !(await repositoryReady(
+          this.repositoryRoot(id),
+          saved.snapshot.pins,
+          referenceCommits(saved.snapshot),
+        )))
     ) {
       this.setStatus(
         id,
@@ -596,6 +651,7 @@ export class SharedReviewStore {
         (await repositoryReady(
           this.repositoryRoot(id),
           validated.snapshot.pins,
+          referenceCommits(validated.snapshot),
         ))
       ) {
         const repository = await this.local.data.register(
@@ -768,6 +824,13 @@ export class SharedReviewStore {
     const repositoryId = this.repositories.get(id);
 
     if (repositoryId) {
+      const checkout = this.local?.store.repositoryPath(repositoryId);
+
+      // The commits kept for its links go with it.
+      if (checkout)
+        await forgetSharedCommits(checkout, id).catch((error) =>
+          console.error(`Could not drop the refs kept for share ${id}:`, error),
+        );
       await this.local?.data.forgetRepository(repositoryId);
       await this.local?.store.unregisterRepository(repositoryId);
     }

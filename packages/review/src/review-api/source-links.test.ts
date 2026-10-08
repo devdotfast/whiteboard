@@ -216,3 +216,24 @@ it("reads whiteboard:source/ links and retired review-source: links alike", () =
     sources("[save](whiteboard:source/head/src/save.ts#L2-L4)")[0]!.source,
   ).toEqual(sources("[save](review-source:head/src/save.ts#L2-L4)")[0]!.source);
 });
+
+it("reads a commit link at that commit of the board's repository", () => {
+  const sha = "0123456789abcdef0123456789abcdef01234567";
+  const markdown = `[old save](whiteboard:source/${sha}/src/save.ts#L3-L9)`;
+
+  expect(
+    sourceReferences([{ type: "markdown", id: "n-1", markdown }], {
+      repositoryId: "repo",
+    }).map((item) => item.source),
+  ).toEqual([
+    {
+      side: "head",
+      file: "src/save.ts",
+      fromLine: 3,
+      toLine: 9,
+      pins: { repositoryId: "repo", head: sha },
+    },
+  ]);
+  // A board with no repository has no commit to read.
+  expect(() => sources(markdown)).toThrow(Error);
+});

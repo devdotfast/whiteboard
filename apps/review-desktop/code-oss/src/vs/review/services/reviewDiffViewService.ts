@@ -124,19 +124,22 @@ export class ReviewDiffViewService extends Disposable {
 		const lifetime = new DisposableStore();
 		const heightChanged = lifetime.add(new Emitter<number>());
 		let height = 400;
+		const embed: NonNullable<ReviewDiffViewSpec["document"]> = {
+			heightMode: spec.heightMode,
+			onDidChangeHeight: value => { height = value; heightChanged.fire(value); },
+			onDidFocus: spec.onDidFocus, onDidOpen: spec.onDidOpen, onDidShowHover: spec.onDidShowHover,
+			commit: spec.commit,
+		};
 		const view = this.create({
 			container: spec.container, lens, progress: spec.progress,
 			onSetViewed: spec.onSetViewed,
-			document: {
-				heightMode: spec.heightMode,
-				onDidChangeHeight: value => { height = value; heightChanged.fire(value); },
-				onDidFocus: spec.onDidFocus, onDidOpen: spec.onDidOpen, onDidShowHover: spec.onDidShowHover,
-			},
+			document: embed,
 		}, source) as DiffViewController;
 		lifetime.add(view);
 		return {
 			get height() { return height; },
 			setProgress: progress => view.setProgress(progress),
+			setCommit: commit => { embed.commit = commit; view.refreshHeaders(); },
 			onDidChangeHeight: heightChanged.event,
 			onDidError: view.onDidError,
 			setActive: active => spec.container.classList.toggle("review-document-code-active", active),
@@ -233,6 +236,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 		this.askMarks ??= this._register(this.instantiationService.createInstance(ReviewAskMarks, this.spec.container));
 		this.askMarks.set(marks, mount);
 	}
+	refreshHeaders(): void { this.view?.refreshHeaders(); }
 
 	constructor(
 		private readonly spec: ReviewDiffViewSpec,

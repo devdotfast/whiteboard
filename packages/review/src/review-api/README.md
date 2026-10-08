@@ -148,7 +148,9 @@ retrying.
 ## Validation and remaining work
 
 Markdown source links use `[label](whiteboard:source/head/src/save.ts#L10-L24)`
-(or `base`, or `#L10` for one line). Paths are repository-relative and URL-encoded
+(or `base`, or `#L10` for one line), or `whiteboard:source/<commit>/src/save.ts#L10-L24`
+to quote any commit of the board's own repository; a short commit is saved in full,
+and one the repository lacks rejects the edit. Paths are repository-relative and URL-encoded
 where needed. Inline and reference-style links open the existing native side peek.
 The same Markdown parser feeds the host's source checks and the renderer, so code
 examples and unused definitions do not become source requests. Invalid paths or
