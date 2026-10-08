@@ -23,7 +23,7 @@ description = "The model name sent to the provider. Unset uses the provider's de
 
 [options.model."x-default-by"]
 key = "provider"
-values = { gemini = "gemini-3.8-flash", openai = "gpt-6-luna", anthropic = "claude-haiku-4-5" }
+values = { gemini = "gemini-3.8-flash", openai = "gpt-6-luna", anthropic = "claude-haiku-5-5" }
 
 [options.min_lines]
 type = "integer"
