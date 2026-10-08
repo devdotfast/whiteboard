@@ -13,6 +13,7 @@ const boardsSchema = z.object({
       reviewId: z.string(),
       title: z.string(),
       icon: z.enum(["board", "code"]).optional().catch(undefined),
+      blockId: z.string().optional(),
     }),
   ),
 });
@@ -57,7 +58,9 @@ export function AskChangedBoards({
       aria-label="Boards this conversation changed"
       {...stylex.props(styles.list)}
     >
-      <span>Changed</span>
+      <span>
+        Edited {boards.length} {boards.length === 1 ? "board" : "boards"}
+      </span>
       {boards.map((board) => (
         <button
           key={board.reviewId}
@@ -69,6 +72,7 @@ export function AskChangedBoards({
               args: {
                 reviewUuid: board.reviewId,
                 active: !(event.metaKey || event.ctrlKey || event.shiftKey),
+                ...(board.blockId && { blockId: board.blockId }),
               },
             })
           }

@@ -19,6 +19,7 @@ import { LensProgress, LensRows } from "./lens-list";
 import type { ReviewTocEntry } from "./review-document-headings";
 import { readReviewUiState, writeReviewUiState } from "./review-ui-state";
 import { fontSize, fontWeight, radius } from "./scale.stylex";
+import { ThreadsSectionBody } from "./sidebar-threads";
 import { tokens } from "./tokens.stylex";
 import { TooltipHostContext } from "./use-tooltip";
 import { cappedTree, showsChanged, whiteboardTree } from "./whiteboard-tree";
@@ -388,6 +389,8 @@ function SectionBody(props: ReviewSidebarSectionProps): ReactElement | null {
         />
       </div>
     ) : null;
+
+  if (props.section === "threads") return <ThreadsSectionBody {...props} />;
 
   if (props.section === "contents")
     return (

@@ -10,7 +10,7 @@ import {
   useShowOpenThread,
 } from "./ask-delete";
 import { AskHistoryProvider, useAskHistory } from "./ask-history";
-import { AskHistoryControl, AskHistoryList } from "./ask-history-list";
+import { AskHistoryList } from "./ask-history-list";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewSessionProvider } from "./host/review-session";
@@ -1669,7 +1669,6 @@ it("keeps Ask while its host cannot list agents, and lets an agent be picked aga
           }}
         >
           <ReviewPanelProvider>
-            <AskHistoryControl />
             <AskPanelContent selection={selection} header={header} />
           </ReviewPanelProvider>
         </ReviewSessionProvider>,
@@ -1684,7 +1683,6 @@ it("keeps Ask while its host cannot list agents, and lets an agent be picked aga
     await render();
     expect(picker()).toBeNull();
     expect(header.textContent).toBe("Claude Code");
-    expect(buttonNamed(container, "Saved conversations")).not.toBeNull();
 
     hostState = "online";
     await render();

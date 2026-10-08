@@ -7,7 +7,8 @@ import { $, addDisposableListener } from "../../../../base/browser/dom.js";
 import { renderIcon } from "../../../../base/browser/ui/iconLabel/iconLabels.js";
 import { Codicon } from "../../../../base/common/codicons.js";
 import { Emitter, Event } from "../../../../base/common/event.js";
-import { Disposable, type IDisposable } from "../../../../base/common/lifecycle.js";
+import { timeout } from "../../../../base/common/async.js";
+import { Disposable, type IDisposable, MutableDisposable, toDisposable } from "../../../../base/common/lifecycle.js";
 import { localize } from "../../../../nls.js";
 import { IInstantiationService, createDecorator } from "../../../../platform/instantiation/common/instantiation.js";
 import { IHoverService } from "../../../../platform/hover/browser/hover.js";
@@ -20,12 +21,16 @@ import { IEditorService } from "../../../../workbench/services/editor/common/edi
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import { REVIEW_CHROME_HEIGHT } from "../../../common/reviewChrome.js";
 import type {
+	ReviewAskState,
+	ReviewProjectThreads,
+	ReviewThreadsFilter,
 	ReviewSidebarLenses,
 	ReviewSidebarSectionHandle,
 	ReviewSidebarSectionProps,
 	ReviewSidebarState,
 	ReviewSurfaceEvent,
 } from "../../../common/reviewProtocol.js";
+import { ReviewApiClient } from "../../../common/reviewProtocol.js";
 import { IReviewApiCatalogService } from "../../../services/reviewApiCatalogService.js";
 import { IReviewCanvasEditorTabsService } from "../../../services/reviewCanvasEditorTabsService.js";
 import { IReviewDesktopConnectionService } from "../../../services/reviewDesktopConnectionService.js";
@@ -42,7 +47,7 @@ function boardOf(input: EditorInput | undefined): string | undefined {
 
 /** The panes, picked one at a time by the tab icons under the window
  * controls. */
-type ReviewSidebarPaneId = "whiteboards" | "changes";
+type ReviewSidebarPaneId = "whiteboards" | "threads" | "changes";
 
 /** A collapsible group inside the Changes pane. */
 interface ReviewSidebarGroup {
@@ -75,14 +80,23 @@ const REVIEW_SIDEBAR_TAB_ICONS: Record<ReviewSidebarPaneId, ReviewSidebarIcon> =
 		{ tag: "rect", attrs: { x: "2.5", y: "5", width: "9", height: "8", rx: "1.5" } },
 		{ tag: "path", attrs: { d: "M5 5 V4 Q5 2.5 6.5 2.5 H12 Q13.5 2.5 13.5 4 V9.5 Q13.5 11 12 11 H11.5" } },
 	],
+	threads: [{ tag: "path", attrs: { d: "M4 3 H12 Q13.5 3 13.5 4.5 V9.5 Q13.5 11 12 11 H7.5 L4.5 13.5 V11 H4 Q2.5 11 2.5 9.5 V4.5 Q2.5 3 4 3 Z" } }],
 	changes: [{ tag: "path", attrs: { d: "M8 1.75 V10.25 M3.75 6 H12.25 M3.75 13 H12.25" } }],
 };
 
 const REVIEW_SIDEBAR_PANES: readonly { id: ReviewSidebarPaneId; title: string }[] = [
 	{ id: "whiteboards", title: localize("review.sidebar.whiteboards", "Whiteboards") },
+	{ id: "threads", title: localize("review.sidebar.threads", "Threads") },
 	{ id: "changes", title: localize("review.sidebar.changes", "Changes") },
 ];
 
+/** Whether Threads lists this board's threads or the project's, per window. */
+const REVIEW_SIDEBAR_THREADS_FILTER_KEY = "review.sidebar.threadsFilter";
+
+/** The stored Threads filter; This board when none was picked. */
+function threadsFilterOf(stored: string | undefined): ReviewThreadsFilter {
+	return stored === "project" || stored === "all" ? stored : "board";
+}
 
 function svgIcon(icon: ReviewSidebarIcon, size: number): SVGSVGElement {
 	const namespace = "http://www.w3.org/2000/svg";
@@ -122,6 +136,13 @@ export class ReviewSidebarPart extends Part {
 	private contentsCount: HTMLElement | undefined;
 	private whiteboardsBody: HTMLElement | undefined;
 	private whiteboardsCount: HTMLElement | undefined;
+	private threadsBody: HTMLElement | undefined;
+	private threadsFilter: ReviewThreadsFilter;
+	/** Each board's project threads, as the server last sent them. */
+	private readonly threads = new Map<string, ReviewProjectThreads>();
+	/** The thread each board's Ask shows. */
+	private readonly askThreads = new Map<string, string | undefined>();
+	private readonly following = this._register(new MutableDisposable());
 	private remaining: HTMLElement | undefined;
 	private lenses: ReviewSidebarGroup | undefined;
 	private files: ReviewSidebarGroup | undefined;
@@ -146,7 +167,7 @@ export class ReviewSidebarPart extends Part {
 	constructor(
 		private readonly emitSurfaceEvent: (event: ReviewSurfaceEvent) => void,
 		@IThemeService themeService: IThemeService,
-		@IStorageService storage: IStorageService,
+		@IStorageService private readonly storage: IStorageService,
 		@IWorkbenchLayoutService layoutService: IWorkbenchLayoutService,
 		@IReviewDesktopConnectionService private readonly connection: IReviewDesktopConnectionService,
 		@IReviewCanvasEditorTabsService private readonly tabs: IReviewCanvasEditorTabsService,
@@ -155,6 +176,7 @@ export class ReviewSidebarPart extends Part {
 		@IHoverService private readonly hoverService: IHoverService,
 	) {
 		super(Parts.REVIEW_SIDEBAR_PART, { hasTitle: false, borderWidth: () => 0 }, themeService, storage, layoutService);
+		this.threadsFilter = threadsFilterOf(storage.get(REVIEW_SIDEBAR_THREADS_FILTER_KEY, StorageScope.WORKSPACE));
 		// Whiteboards lists the catalog Home already keeps current.
 		this._register(catalog.onDidChange(() => this.render()));
 		void catalog.initialize().catch((error) => logService.warn("[Whiteboard] Sidebar catalog failed:", error));
@@ -179,6 +201,7 @@ export class ReviewSidebarPart extends Part {
 			tab.type = "button";
 			tab.append(svgIcon(REVIEW_SIDEBAR_TAB_ICONS[id], 16));
 			if (id === "whiteboards") tab.append($("span.review-sidebar-tab-badge"));
+			if (id === "threads") tab.append($("span.review-sidebar-tab-badge.review-sidebar-tab-badge-waiting"));
 			tabRow.appendChild(tab);
 			const element = $(`.review-sidebar-pane.review-sidebar-pane-${id}`, { role: "tabpanel" });
 			panes.appendChild(element);
@@ -208,6 +231,11 @@ export class ReviewSidebarPart extends Part {
 		this.contentsBody = $(".review-sidebar-stack-body");
 		stack.appendChild(this.contentsBody);
 		whiteboards.appendChild(stack);
+
+		const threads = this.pane("threads");
+		header(threads, localize("review.sidebar.threads", "Threads"));
+		this.threadsBody = $(".review-sidebar-pane-body");
+		threads.appendChild(this.threadsBody);
 
 		const changes = this.pane("changes");
 		const changesHeader = header(changes, localize("review.sidebar.changes", "Changes"));
@@ -259,7 +287,7 @@ export class ReviewSidebarPart extends Part {
 
 	/** A click on a tab: it holds until the view changes. Changes fills from
 	 * the Diff view, so outside it the tab opens that view. */
-	private pick(id: ReviewSidebarPaneId): void {
+	pick(id: ReviewSidebarPaneId): void {
 		if (id === "changes" && this.state.view !== "diff") {
 			if (this.reviewId) this.emitSurfaceEvent({ event: "showReviewView", view: "diff", reviewId: this.reviewId });
 			return;
@@ -292,6 +320,7 @@ export class ReviewSidebarPart extends Part {
 		// canvas reports, rather than blanking it, but none of its Contents:
 		// a heading there would belong to the last board.
 		this.state = (reviewId && this.states.get(reviewId)) || { ...this.state, contents: [], activeHeading: undefined };
+		this.follow(reviewId);
 		this.showFileTrees();
 		this.render();
 		this._onDidChangeBoard.fire();
@@ -310,6 +339,54 @@ export class ReviewSidebarPart extends Part {
 		if (reviewId !== this.reviewId) return;
 		this.state = state;
 		this.render();
+	}
+
+	/** The thread the board's Ask shows, marked in Threads. The filter stays
+	 * what the reader picked. */
+	reportAsk(reviewId: string | undefined, state: ReviewAskState): void {
+		if (!reviewId) return;
+		this.askThreads.set(reviewId, state.threadId);
+		if (reviewId === this.reviewId) this.render();
+	}
+
+	private setThreadsFilter(filter: ReviewThreadsFilter): void {
+		this.threadsFilter = filter;
+		this.storage.store(REVIEW_SIDEBAR_THREADS_FILTER_KEY, filter, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+		this.render();
+	}
+
+	/** Follows the board's project threads while the sidebar shows it. */
+	private follow(reviewId: string | undefined): void {
+		this.following.clear();
+		if (!reviewId) return;
+		const abort = new AbortController();
+		this.following.value = toDisposable(() => abort.abort());
+		const accept = (update: ReviewProjectThreads) => {
+			this.threads.set(reviewId, update);
+			if (reviewId === this.reviewId) this.render();
+		};
+		void (async () => {
+			while (!abort.signal.aborted) {
+				try {
+					const client = new ReviewApiClient(await this.connection.getConnection());
+					const response = await client.response(`/${encodeURIComponent(reviewId)}/ask/threads?watch`, { signal: abort.signal });
+					const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+					let pending = "";
+					for (let read = await reader.read(); !read.done; read = await reader.read()) {
+						pending += read.value;
+						for (let end = pending.indexOf("\n"); end !== -1; end = pending.indexOf("\n")) {
+							// SAFETY: the server sends ReviewProjectThreads lines on this route.
+							accept(JSON.parse(pending.slice(0, end)) as ReviewProjectThreads);
+							pending = pending.slice(end + 1);
+						}
+					}
+				} catch (error) {
+					if (abort.signal.aborted) return;
+					this.logService.warn("[Whiteboard] Sidebar threads disconnected:", error);
+				}
+				await timeout(2000);
+			}
+		})();
 	}
 
 	/** What the board's Diff view reports for Lenses. */
@@ -408,6 +485,10 @@ export class ReviewSidebarPart extends Part {
 		// The blue dot: another board in the project changed since last viewed.
 		const badge = this.panes.find((pane) => pane.id === "whiteboards")?.tab.querySelector(".review-sidebar-tab-badge");
 		if (badge instanceof HTMLElement) badge.hidden = !project?.boards.some((board) => board.changed && board.reviewId !== reviewId);
+		// The amber dot: a thread in the project waits on the reader.
+		const waiting = this.panes.find((pane) => pane.id === "threads")?.tab.querySelector(".review-sidebar-tab-badge");
+		const threads = reviewId ? this.threads.get(reviewId) : undefined;
+		if (waiting instanceof HTMLElement) waiting.hidden = !threads?.threads.some((thread) => thread.status === "waiting" && thread.projectId === threads.project);
 
 		this.rendering = this.rendering
 			.then(() => this.mountSections())
@@ -439,11 +520,20 @@ export class ReviewSidebarPart extends Part {
 			onSelectLens: (lensId) => this.emitSurfaceEvent({ event: "selectLens", reviewId, lensId }),
 			onMarkLens: (lensId) => this.emitSurfaceEvent({ event: "markLens", reviewId, lensId }),
 			setupTooltip: this.setupTooltip,
+			threads: {
+				list: this.threads.get(reviewId)?.threads ?? [],
+				...(this.threads.get(reviewId)?.project && { project: this.threads.get(reviewId)!.project }),
+				filter: this.threadsFilter,
+				...(this.askThreads.get(reviewId) && { open: this.askThreads.get(reviewId) }),
+			},
+			onFilterThreads: (filter) => this.setThreadsFilter(filter),
+			onOpenThread: (threadId) => this.emitSurfaceEvent({ event: "openAskThread", reviewId, threadId }),
 		};
 
 		const mounts: [ReviewSidebarSectionProps["section"], HTMLElement | undefined][] = [
 			["contents", this.contentsBody],
 			["whiteboards", this.whiteboardsBody],
+			["threads", this.threadsBody],
 			["remaining", this.remaining],
 			["lenses", this.lenses?.body],
 		];
@@ -502,6 +592,12 @@ export interface IReviewSidebarPartsService {
 
 	/** A board's canvas reports its headings and the view on screen. */
 	report(reviewId: string | undefined, state: ReviewSidebarState): void;
+
+	/** A board's canvas reports the thread its Ask shows. */
+	reportAsk(reviewId: string | undefined, state: ReviewAskState): void;
+
+	/** Shows the sidebar on its Threads tab. */
+	showThreads(): void;
 
 	/** Scroll requests from the sidebar for the board on screen. */
 	readonly onDidEmitSurfaceEvent: Event<ReviewSurfaceEvent>;
@@ -587,6 +683,15 @@ export class ReviewSidebarParts extends Disposable implements IReviewSidebarPart
 
 	reportLenses(reviewId: string | undefined, lenses: ReviewSidebarLenses): void {
 		this.part.reportLenses(reviewId, lenses);
+	}
+
+	reportAsk(reviewId: string | undefined, state: ReviewAskState): void {
+		this.part.reportAsk(reviewId, state);
+	}
+
+	showThreads(): void {
+		this.show();
+		this.part.pick("threads");
 	}
 
 	/** Whether the board's Files and Lenses are on screen here; a hidden

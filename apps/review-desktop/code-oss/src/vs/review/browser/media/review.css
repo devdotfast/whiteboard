@@ -1878,6 +1878,11 @@ body
   display: none;
 }
 
+/* A thread in the project waits on the reader. */
+.monaco-workbench .review-sidebar-tab-badge.review-sidebar-tab-badge-waiting {
+  background-color: var(--vscode-charts-yellow);
+}
+
 /* A board tab draws the canvas's icon for its board (set as a mask by the
    board tabs contribution) in the codicon's slot. */
 .monaco-workbench .tab .monaco-icon-label.review-board-icon::before {
