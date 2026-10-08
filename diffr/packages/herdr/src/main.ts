@@ -1,6 +1,7 @@
 import { BoxRenderable, createCliRenderer, RGBA, StyledText, TextAttributes, TextRenderable, type MouseEvent } from "@opentui/core";
 import { openComparison } from "@diffr/consumer/process";
 import { PointerInput } from "@diffr/consumer/pointer";
+import { terminalKey } from "@diffr/consumer/key";
 import type { Frame } from "@diffr/consumer/protocol";
 import type { Outcome } from "@diffr/consumer/frame";
 import { bindTarget, addToDraft, herdr, type DraftTarget } from "./target";
@@ -92,11 +93,7 @@ renderer.keyInput.on("keypress", key => {
   if (key.ctrl && key.name === "c") return quit();
   if (key.name === "f6") { void api.zoom(self!, "toggle").catch(failed); return; }
   if (key.name === "escape") { comparison.pane.blur(); pointer.reset(); void focusAgent().catch(failed); return; }
-  void outcome(comparison.pane.input({ press: {
-    key: key.shift && /^[a-z]$/.test(key.name) ? key.name.toUpperCase() : key.name,
-    ...(key.ctrl ? { ctrl: true } : {}), ...(key.shift ? { shift: true } : {}),
-    ...(key.meta || key.option ? { meta: true } : {}),
-  } }));
+  void outcome(comparison.pane.input({ press: terminalKey(key) }));
 });
 const unsubscribe = comparison.pane.subscribe(paint);
 renderer.on("resize", paint);
