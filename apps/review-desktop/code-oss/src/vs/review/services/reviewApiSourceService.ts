@@ -287,7 +287,7 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 			const current = spec.pins ? reviewSourceAnchor(view(), spec.pins) : reviewSourceComparison(view());
 			const lens: ReviewDiffLens = {
 				id: "document:" + JSON.stringify([spec.path, spec.ranges, spec.pins]), title: spec.path,
-				reviewId: current.reviewId, version: current.version, exact: true,
+				reviewId: current.reviewId, version: current.version,
 				ranges: spec.ranges.map(range => ({ file: spec.path, side: range.side ?? spec.side, fromLine: range.startLine, toLine: range.endLine })),
 			};
 			return { lens, source: makeSource(() => current) };
