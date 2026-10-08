@@ -32,6 +32,16 @@ applyTheme(root);
 
 const header = root.appendChild(element("header", "app-header"));
 
+const status = root.appendChild(element("div", "app-status"));
+
+status.hidden = true;
+
+status.setAttribute("role", "status");
+
+const statusMessage = status.appendChild(element("span", "app-status-message"));
+
+const retry = status.appendChild(actionButton("Retry", route));
+
 const body = root.appendChild(element("main", "app-body"));
 
 const overflow = root.appendChild(element("div", "monaco-editor app-overflow"));
@@ -117,7 +127,21 @@ function route(): void {
 }
 
 function renderHeader(): void {
+  const focusedButton = Array.from(header.querySelectorAll("button")).findIndex(
+    (button) => button === document.activeElement,
+  );
+
   header.replaceChildren();
+  const error = comparison?.error;
+
+  const loading =
+    comparison && !comparison.preview && !comparison.change && !error;
+
+  status.hidden = !error && !loading;
+  status.classList.toggle("is-error", !!error);
+  status.setAttribute("role", error ? "alert" : "status");
+  statusMessage.textContent = error ?? (loading ? "Loading comparison…" : "");
+  retry.hidden = !error;
   const home = header.appendChild(element("a", "app-wordmark", "diffr"));
   home.href = "/";
   home.title = "Open another pull request";
@@ -141,14 +165,33 @@ function renderHeader(): void {
       title.rel = "noopener";
       title.title = `Open on GitHub · ${targetPath(comparison.target).slice(1)}`;
     }
-
-    if (comparison.error)
-      header.appendChild(element("span", "app-error", comparison.error));
   }
 
   header.appendChild(element("span", "app-spacer"));
 
   if (comparison) {
+    for (const [panel, icon, label] of [
+      ["stats", "graph", "Diff stats (F2)"],
+      ["engine", "dashboard", "Engine stats (F3)"],
+    ] as const) {
+      const button = iconButton(icon, label, () => togglePanel(panel));
+      button.setAttribute("aria-pressed", String(panels.isOpen(panel)));
+      header.appendChild(button);
+    }
+
+    header.appendChild(
+      iconButton("layout-sidebar-left", "Toggle file tree (⌘/Ctrl+B)", () =>
+        comparison?.toggleFileTree(),
+      ),
+    );
+
+    const wrap = iconButton("word-wrap", "Toggle word wrap (W)", () => {
+      wordWrap.set(!wordWrap.get(), undefined);
+      renderHeader();
+    });
+
+    wrap.setAttribute("aria-pressed", String(wordWrap.get()));
+    header.appendChild(wrap);
     const split = layout.get() === "split";
     header.appendChild(
       iconButton(
@@ -171,6 +214,16 @@ function renderHeader(): void {
       openToken,
     ),
   );
+
+  if (focusedButton >= 0) {
+    const button = header.querySelectorAll("button").item(focusedButton);
+    button?.focus({ preventScroll: true });
+  }
+}
+
+function togglePanel(panel: "stats" | "engine"): void {
+  panels.toggle(panel);
+  renderHeader();
 }
 
 function renderLanding(): void {
@@ -331,7 +384,7 @@ function command(event: KeyboardEvent): (() => void) | undefined {
       : event.key;
 
   if (key === "F2" || key === "F3")
-    return () => panels.toggle(key === "F2" ? "stats" : "engine");
+    return () => togglePanel(key === "F2" ? "stats" : "engine");
 
   if (!comparison) return undefined;
   const current = comparison;
@@ -349,6 +402,14 @@ function command(event: KeyboardEvent): (() => void) | undefined {
       target.closest("input, dialog, .find-widget")) ||
     (target instanceof HTMLTextAreaElement &&
       !target.classList.contains("inputarea"))
+  )
+    return undefined;
+
+  // Space activates a focused control. The diff scrolling shortcut must not steal that action.
+  if (
+    key === " " &&
+    target instanceof Element &&
+    target.closest("button, a[href], [role=checkbox], [role=button]")
   )
     return undefined;
 
@@ -373,9 +434,15 @@ function command(event: KeyboardEvent): (() => void) | undefined {
     ["]", () => current.goToChange("next")],
     ["[", () => current.goToChange("previous")],
     ["s", () => void layout.toggle().then(renderHeader)],
-    ["w", () => wordWrap.set(!wordWrap.get(), undefined)],
+    [
+      "w",
+      () => {
+        wordWrap.set(!wordWrap.get(), undefined);
+        renderHeader();
+      },
+    ],
     ["c", () => current.toggleContextGaps()],
-    ["i", () => panels.toggle("stats")],
+    ["i", () => togglePanel("stats")],
     ["\\", () => current.toggleFileTree()],
     ["j", () => current.scroll(LINE)],
     ["k", () => current.scroll(-LINE)],

@@ -661,17 +661,25 @@ export class ReviewFilesDiffView extends Disposable {
   }
 
   private renderSummary(): void {
-    if (this.fileTreeContainer) return;
+    if (this.fileTreeContainer || !this.input) return;
+    const previousHeight = this.summary.offsetHeight;
     const paths = new Set(
       (this.input?.entries ?? []).map((entry) => entry.file.path),
     );
     const complete = [...paths].every((path) => this.streamStats.has(path));
     const total = { added: 0, removed: 0 };
+    const remaining = { added: 0, removed: 0 };
+    const progressByPath = new Map(
+      this.progress?.files.map((file) => [file.path, file]),
+    );
     for (const path of paths) {
       const counts = this.lineCounts(path);
       if (counts) {
         total.added += counts.added;
         total.removed += counts.removed;
+        const progress = progressByPath.get(path);
+        remaining.added += progress?.remaining.additions ?? counts.added;
+        remaining.removed += progress?.remaining.deletions ?? counts.removed;
       }
     }
     this.summary.replaceChildren();
@@ -681,6 +689,7 @@ export class ReviewFilesDiffView extends Disposable {
     );
     files.textContent = `${paths.size} files`;
     if (complete) {
+      append(this.summary, $("span")).textContent = "Remaining";
       const format = new Intl.NumberFormat("en", {
         notation: "compact",
         maximumFractionDigits: 1,
@@ -688,18 +697,37 @@ export class ReviewFilesDiffView extends Disposable {
       append(
         this.summary,
         $("span.review-files-editor-summary-added"),
-      ).textContent = `+${format.format(total.added).toLowerCase()}`;
+      ).textContent = `+${format.format(remaining.added).toLowerCase()}`;
       append(
         this.summary,
         $("span.review-files-editor-summary-removed"),
-      ).textContent = `−${format.format(total.removed).toLowerCase()}`;
+      ).textContent = `−${format.format(remaining.removed).toLowerCase()}`;
+      const size = total.added + total.removed;
+      const viewed = Math.max(0, size - remaining.added - remaining.removed);
+      const percent = size ? Math.round((viewed * 100) / size) : 100;
+      const progress = append(
+        this.summary,
+        $("span.review-files-editor-summary-progress"),
+      );
+      progress.setAttribute("role", "progressbar");
+      progress.setAttribute("aria-label", "Changed lines viewed");
+      progress.setAttribute("aria-valuemin", "0");
+      progress.setAttribute("aria-valuemax", "100");
+      progress.setAttribute("aria-valuenow", String(percent));
+      progress.setAttribute(
+        "aria-valuetext",
+        `${viewed} of ${size} changed lines viewed`,
+      );
+      progress.style.setProperty("--viewed-progress", `${percent}%`);
+      progress.textContent = `${percent}%`;
     } else append(this.summary, $("span")).textContent = "Counting changes…";
     this.summaryTooltip.content = complete
       ? reviewChangesTooltip(total.added, total.removed)
       : REVIEW_COUNTS_PENDING_TOOLTIP;
     const wasHidden = this.summary.hidden;
     this.summary.hidden = false;
-    if (wasHidden) this.layout();
+    if (wasHidden || previousHeight !== this.summary.offsetHeight)
+      this.layout();
   }
 
   /** A file the stream says starts collapsed, and why: its record's `visibility`. */
@@ -763,6 +791,7 @@ export class ReviewFilesDiffView extends Disposable {
     }
 
     this.changedFilesTree?.setProgressFiles(progress.files);
+    this.renderSummary();
     this.headerFactory.refreshHeaders();
     this.applyViewedFiles();
   }

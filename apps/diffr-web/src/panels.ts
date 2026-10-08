@@ -28,6 +28,10 @@ export class Panels {
     this.render();
   }
 
+  isOpen(panel: Panel): boolean {
+    return this.open.has(panel);
+  }
+
   toggle(panel: Panel): void {
     if (this.open.has(panel)) this.open.delete(panel);
     else this.open.add(panel);

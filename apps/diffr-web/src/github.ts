@@ -215,6 +215,16 @@ export async function loadChange(
   target: Target,
   onPreview?: (preview: Preview) => void,
 ): Promise<Change> {
+  if (
+    import.meta.env.DEV &&
+    new URLSearchParams(location.search).has("ui-fixture")
+  ) {
+    const data = await (await fetch("/__ui-fixture.json")).json();
+    onPreview?.(data.change);
+
+    return data.change;
+  }
+
   const repo = `/repos/${target.owner}/${target.repo}`;
 
   if (target.kind === "pull") {
@@ -322,6 +332,15 @@ export async function fileText(
   sha: string,
   path: string,
 ): Promise<string> {
+  if (
+    import.meta.env.DEV &&
+    new URLSearchParams(location.search).has("ui-fixture")
+  ) {
+    const data = await (await fetch("/__ui-fixture.json")).json();
+
+    return data.texts[sha][path];
+  }
+
   const auth = token();
 
   const response = auth

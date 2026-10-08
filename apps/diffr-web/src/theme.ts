@@ -4,19 +4,31 @@ import { StandaloneServices } from "./standalone/browser/standaloneServices.js";
 import type { StandaloneThemeService } from "./standalone/browser/standaloneThemeService.js";
 /**
  * Whiteboard Dark and Light, Review Desktop's themes, following the system's choice. The colors are
- * read from the desktop's theme files; syntax is painted by class (styles.css), not by token rules,
- * since diffr supplies the highlights.
+ * read from the desktop's theme files; diffr’s captures use their syntax token rules.
  */
 import { IStandaloneThemeService } from "./standalone/common/standaloneTheme.js";
 
-/** The theme files carry line comments. */
-const colors = (source: string): Record<string, string> =>
-  // SAFETY: both files are Review Desktop's color themes, whose `colors` maps ids to colors.
-  (
-    JSON.parse(source.replace(/^\s*\/\/.*$/gm, "")) as {
-      colors: Record<string, string>;
-    }
-  ).colors;
+/** The bundled TextMate scopes also work as Monaco token theme rules. */
+function themeData(source: string) {
+  // SAFETY: both bundled theme files define colors and scoped TextMate token settings.
+  const theme = JSON.parse(source.replace(/^\s*\/\/.*$/gm, "")) as {
+    colors: Record<string, string>;
+    tokenColors: {
+      scope: string | string[];
+      settings: { foreground?: string; fontStyle?: string };
+    }[];
+  };
+
+  return {
+    colors: theme.colors,
+    rules: theme.tokenColors.flatMap(({ scope, settings }) =>
+      (Array.isArray(scope) ? scope : [scope]).map((token) => ({
+        token,
+        ...settings,
+      })),
+    ),
+  };
+}
 
 export function applyTheme(root: HTMLElement): void {
   // SAFETY: StandaloneServices registers StandaloneThemeService for this id; its
@@ -25,22 +37,29 @@ export function applyTheme(root: HTMLElement): void {
     IStandaloneThemeService,
   ) as StandaloneThemeService;
 
+  const darkTheme = themeData(dark);
+  const lightTheme = themeData(light);
   themes.defineTheme("whiteboard-dark", {
     base: "vs-dark",
     inherit: true,
-    rules: [],
-    colors: colors(dark),
+    ...darkTheme,
   });
   themes.defineTheme("whiteboard-light", {
     base: "vs",
     inherit: true,
-    rules: [],
-    colors: colors(light),
+    ...lightTheme,
   });
   themes.registerEditorContainer(root);
   const query = matchMedia("(prefers-color-scheme: dark)");
 
   const apply = () => {
+    // Standalone Monaco only emits registered editor colors; the page also uses workbench colors.
+    for (const [id, color] of Object.entries(
+      (query.matches ? darkTheme : lightTheme).colors,
+    )) {
+      root.style.setProperty(`--vscode-${id.replaceAll(".", "-")}`, color);
+    }
+
     themes.setTheme(query.matches ? "whiteboard-dark" : "whiteboard-light");
     root.classList.toggle("vs-dark", query.matches);
     root.classList.toggle("vs", !query.matches);

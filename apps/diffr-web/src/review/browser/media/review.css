@@ -1649,3 +1649,27 @@ body
 .review-workbench .monaco-editor .review-fold-pill.is-viewed:not(.is-target) {
   opacity: 0.65;
 }
+
+.review-files-editor-summary {
+  flex-wrap: wrap;
+}
+.review-files-editor-summary-files {
+  flex-basis: 100%;
+}
+.review-files-editor-summary-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.review-files-editor-summary-progress::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--vscode-focusBorder) var(--viewed-progress),
+    var(--vscode-editorWidget-border) 0
+  );
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 0);
+}
