@@ -218,7 +218,7 @@ function askCanvas({
   };
 }
 
-it("asks before closing an Ask whose agent works, and keeps it going minimized beside a new one", async () => {
+it("asks before closing an Ask whose agent works, and keeps it running off the screen", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   await using canvas = askCanvas();
   const { streams, closed, askQuestion } = canvas;
@@ -237,50 +237,26 @@ it("asks before closing an Ask whose agent works, and keeps it going minimized b
   expect(document.body.textContent).toContain("Stop Codex?");
   expect(closed()).toEqual([]);
 
-  // Minimized, the agent keeps going, and the pill says so.
-  await act(async () => button(/^Minimize$/)!.click());
-  expect(button(/^Open Ask: Codex, Answering/)).not.toBeNull();
+  // Kept running, it leaves the screen and its agent goes on.
+  await act(async () => button(/^Keep running$/)!.click());
   expect(document.querySelector("textarea")).toBeNull();
   expect(closed()).toEqual([]);
 
-  // A new question opens beside it.
-  await act(async () => store.getState().openAsk(selection));
-  await askQuestion("Why a new index?");
+  // Opening its thread again brings it back.
   await act(async () =>
-    streams.get("thread-2")!({ seq: 1, snapshot: running("thread-2") }),
-  );
-  expect(button(/^Open Ask: Codex, Answering/)).not.toBeNull();
-
-  // The first comes back in the window, beside the docked second.
-  await act(async () => button(/^Open Ask: Codex, Answering/)!.click());
-  expect(
-    document.querySelector('[role="dialog"][aria-label="Ask"]'),
-  ).not.toBeNull();
-  expect(document.querySelector('aside[aria-label="Ask"]')).not.toBeNull();
-
-  // Stopping it is a choice made twice.
-  const windowClose = () =>
-    document.querySelector<HTMLButtonElement>(
-      '[role="dialog"][aria-label="Ask"] button[aria-label="Close Ask"]',
-    )!;
-
-  await act(async () => windowClose().click());
-  await act(async () => button(/^Stop and close$/)!.click());
-  expect(closed()).toEqual(["/ask/thread-1/close"]);
-  expect(
-    document.querySelector('[role="dialog"][aria-label="Ask"]'),
-  ).toBeNull();
-
-  // Once its agent has answered, an Ask closes at once.
-  await act(async () =>
-    streams.get("thread-2")!({
-      seq: 2,
-      snapshot: { ...running("thread-2"), status: "idle" },
+    store.getState().openAskView({
+      type: "saved",
+      threadId: "thread-1",
+      selection,
+      agent: "codex",
     }),
   );
+  expect(document.querySelector("textarea")).not.toBeNull();
+
+  // Stopping it is a choice made twice.
   await act(async () => button(/^Close Ask$/)!.click());
-  expect(closed()).toEqual(["/ask/thread-1/close", "/ask/thread-2/close"]);
-  expect(document.querySelector("textarea")).toBeNull();
+  await act(async () => button(/^Stop and close$/)!.click());
+  expect(closed()).toEqual(["/ask/thread-1/close"]);
 });
 
 it("follows the threads of every open Ask over one connection", async () => {
@@ -302,61 +278,9 @@ it("follows the threads of every open Ask over one connection", async () => {
     await act(async () =>
       streams.get(threadId)!({ seq: 1, snapshot: running(threadId) }),
     );
-    await act(async () => button(/^Minimize Ask$/)!.click());
   }
 
   expect(canvas.watching()).toEqual([["thread-1", "thread-2", "thread-3"]]);
-});
-
-it("folds two or more minimized Asks into one pill that lists them", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  await using canvas = askCanvas();
-  const { streams, askQuestion } = canvas;
-
-  await canvas.mount();
-  const store = canvas.store();
-
-  const minimize = async (question: string, threadId: string) => {
-    await act(async () => store.getState().openAsk(selection));
-    await askQuestion(question);
-    await act(async () =>
-      streams.get(threadId)!({ seq: 1, snapshot: running(threadId) }),
-    );
-    await act(async () => button(/^Minimize Ask$/)!.click());
-  };
-
-  const pills = () =>
-    document.querySelectorAll('button[aria-label^="Open Ask: "]');
-
-  // One keeps a pill of its own, which says what it asked about.
-  await minimize("One?", "thread-1");
-  expect(pills()).toHaveLength(1);
-  expect(pills()[0]!.textContent).toContain(
-    "\u201cThe index is created concurrently.\u201d",
-  );
-
-  // The second folds both into one, which says how many are answering:
-  // pills of their own wouldn't tell them apart.
-  await minimize("Two?", "thread-2");
-  expect(pills()).toHaveLength(0);
-
-  const folded = button(/minimized Asks$/)!;
-
-  expect(folded.textContent).toContain("2 Asks");
-  expect(folded.textContent).toContain("2 answering");
-
-  // It lists each, with what it asked about; a row opens that Ask.
-  await act(async () => folded.click());
-  expect(pills()).toHaveLength(2);
-  expect(pills()[0]!.textContent).toContain(
-    "\u201cThe index is created concurrently.\u201d",
-  );
-
-  await act(async () => (pills()[0] as HTMLButtonElement).click());
-  expect(document.querySelector("textarea")).not.toBeNull();
-  // One minimized again: its own pill, and no list.
-  expect(button(/minimized Asks$/)).toBeNull();
-  expect(pills()).toHaveLength(1);
 });
 
 it("leaves an agent working when its canvas goes, and carries on with it when the canvas comes back", async () => {

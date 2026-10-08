@@ -4,44 +4,29 @@ import {
   type ReactElement,
   type ReactNode,
   type Ref,
-  type RefObject,
-  useCallback,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
 
-import { logos } from "./ask-agent-picker";
 import { controlStyles } from "./controls-styles";
 import { useReviewDebugSettings } from "./debug-settings";
-import { ChatIcon, CloseIcon, DockIcon, GripIcon, MinusIcon } from "./icons";
+import { CloseIcon, DockIcon, GripIcon, MinusIcon } from "./icons";
 import { appMarker } from "./markers.stylex";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
-import type {
-  AskAnchor,
-  AskPanel,
-  AskPresence,
-  AskSize,
-  AskView,
-} from "./review-panel-model";
+import type { AskAnchor, AskSize } from "./review-panel-model";
 import { useReviewContainer } from "./review-root-context";
-import { elevation, fontSize, motion, radius } from "./scale.stylex";
 import { panelStyles } from "./side-panel-styles";
 import { withClass } from "./stylex-props";
 import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { IconButton } from "./ui/button";
-import { Chip } from "./ui/chip";
-import { menuStyles } from "./ui/menu";
 import { surfaceStyles } from "./ui/surface";
 import { textStyles } from "./ui/text";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
 import { useTooltip } from "./use-tooltip";
 
-export type { AskPresence };
-
-// Clear of the canvas's edges and of what is docked beside the pill.
+// Clear of the canvas's edges and of what is docked beside it.
 const GAP = 24;
 
 // As wide as the docked panel opens.
@@ -52,22 +37,6 @@ const WINDOW_HEIGHT = 600;
 const MIN_WIDTH = 360;
 
 const MIN_HEIGHT = 320;
-
-// How close to the canvas's edges a dragged pill may go.
-const PILL_EDGE = 8;
-
-// Between the pills, and between them and the window.
-const PILL_GAP = 8;
-
-// A press on the pill that moves less than this is a click.
-const DRAG_THRESHOLD = 4;
-
-// From two minimized Asks, which pills of their own wouldn't tell apart,
-// they fold into one pill that lists them.
-const FOLD_AT = 2;
-
-// The folded pill's height, which the list above it leaves room for.
-const PILL_HEIGHT = 34;
 
 // Bottom right, beside any docked panel.
 const DEFAULT_ANCHOR: AskAnchor = {
@@ -142,14 +111,17 @@ export function AskWindow({
   askKey,
   actions,
   titleAccessory,
+  onHide,
   onClose,
   closeRef,
   children,
 }: {
   askKey: number;
-  /** The conversation's own buttons, before dock, minimize and close. */
+  /** The conversation's own buttons, before dock, hide and close. */
   actions: ReactNode;
   titleAccessory?: ReactNode;
+  /** Hides the window; the agent runs on, and Threads lists it. */
+  onHide: () => void;
   onClose: () => void;
   closeRef?: Ref<HTMLButtonElement>;
   children: ReactNode;
@@ -159,7 +131,7 @@ export function AskWindow({
   const size = useReviewPanel((state) => state.askSize);
   const canvas = useAskCanvas();
   const dockTooltip = useTooltip("Dock in the side panel");
-  const minimizeTooltip = useTooltip("Minimize");
+  const hideTooltip = useTooltip("Hide · keeps running");
 
   const [live, setLive] = useState<{
     frame: Frame;
@@ -306,10 +278,10 @@ export function AskWindow({
               />
             </IconButton>
             <IconButton
-              ref={minimizeTooltip}
+              ref={hideTooltip}
               size="large"
-              aria-label="Minimize Ask"
-              onClick={() => store.getState().minimizeAsk(askKey)}
+              aria-label="Hide Ask"
+              onClick={onHide}
             >
               <MinusIcon
                 xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
@@ -337,361 +309,6 @@ export function AskWindow({
         ))}
       </div>
     </AskLayer>
-  );
-}
-
-/** The Asks minimized or covered: who is answering and how it is going,
- * in the window's corner, or beside the window while one is open. Drag
- * them anywhere; a press that barely moves opens that Ask. From two on,
- * they fold into one pill, which opens a list of them. */
-export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
-  const store = useReviewPanelStore();
-  const anchor = useReviewPanel((state) => state.askAnchor) ?? DEFAULT_ANCHOR;
-  const size = useReviewPanel((state) => state.askSize);
-  const windowOpen = useReviewPanel((state) => state.askWindow !== null);
-  const canvas = useAskCanvas();
-  const tray = useRef<HTMLDivElement>(null);
-  const [live, setLive] = useState<Frame | null>(null);
-
-  const press = useRef<{
-    x: number;
-    y: number;
-    from: Frame;
-    moved: boolean;
-  } | null>(null);
-
-  // The click that ends a drag drops the pills; it does not open an Ask.
-  const dropped = useRef(false);
-
-  const folded = asks.length >= FOLD_AT;
-  const [listed, setListed] = useState(false);
-  const listOpen = folded && listed;
-  const closeList = useCallback(() => setListed(false), []);
-
-  // Close, Esc or a press elsewhere closes the list.
-  useDismissOnOutside(tray, listOpen, closeList);
-
-  const measured = useElementSize(tray);
-
-  const frame =
-    live ??
-    (measured
-      ? windowOpen
-        ? besideWindow(
-            windowFrame(anchor, size, canvas),
-            measured,
-            anchor,
-            canvas,
-          )
-        : placeAt(anchor, measured, canvas, PILL_EDGE)
-      : null);
-
-  // Beside the window they follow it; dragging the window moves them.
-  const startPress = (event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0 || windowOpen || !tray.current) return;
-    const rect = tray.current.getBoundingClientRect();
-
-    event.currentTarget.setPointerCapture(event.pointerId);
-    press.current = {
-      x: event.clientX,
-      y: event.clientY,
-      from: {
-        left: rect.left - canvas.left,
-        top: rect.top - canvas.top,
-        width: rect.width,
-        height: rect.height,
-      },
-      moved: false,
-    };
-  };
-
-  const movePress = (event: PointerEvent<HTMLButtonElement>) => {
-    const current = press.current;
-
-    if (!current) return;
-    const dx = event.clientX - current.x;
-    const dy = event.clientY - current.y;
-
-    if (!current.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
-    const { from } = current;
-
-    current.moved = true;
-    setLive({
-      ...from,
-      left: clamp(
-        from.left + dx,
-        PILL_EDGE,
-        canvas.width - from.width - PILL_EDGE,
-      ),
-      top: clamp(
-        from.top + dy,
-        PILL_EDGE,
-        canvas.height - from.height - PILL_EDGE,
-      ),
-    });
-  };
-
-  const endPress = () => {
-    const current = press.current;
-
-    press.current = null;
-
-    if (!current?.moved || !live) return;
-    dropped.current = true;
-    store.getState().placeAsk(anchorOf(live, canvas));
-    setLive(null);
-  };
-
-  /** What every pill does with a press: drag the pills, or open. */
-  const pressHandlers = (open: () => void) => ({
-    onPointerDown: startPress,
-    onPointerMove: movePress,
-    onPointerUp: endPress,
-    onPointerCancel: () => {
-      press.current = null;
-      setLive(null);
-    },
-    onClick: () => {
-      if (dropped.current) {
-        dropped.current = false;
-
-        return;
-      }
-
-      open();
-    },
-  });
-
-  const needsYou = asks.filter((ask) => ask.presence.tone === "waiting").length;
-
-  const answering = asks.filter(
-    (ask) => ask.busy && ask.presence.tone === "quiet",
-  ).length;
-
-  const foldedPill = (
-    <button
-      type="button"
-      {...stylex.props(
-        surfaceStyles.popover,
-        styles.pill,
-        needsYou > 0 && styles.pillWaiting,
-        live && styles.pillLifted,
-        windowOpen && styles.pillFixed,
-      )}
-      aria-label={`${listOpen ? "Close" : "Open"} the list of ${asks.length} minimized Asks`}
-      aria-expanded={listOpen}
-      {...pressHandlers(() => setListed(!listOpen))}
-    >
-      <ChatIcon xstyle={[styles.logo, styles.askGlyph]} />
-      <span {...stylex.props(styles.name)}>{asks.length} Asks</span>
-      {needsYou ? (
-        <span {...stylex.props(styles.status, styles.statusWaiting)}>
-          {needsYou} needs you
-        </span>
-      ) : answering ? (
-        <span {...stylex.props(styles.status)}>{answering} answering</span>
-      ) : null}
-      <Chip
-        variant="pill"
-        size="large"
-        xstyle={[styles.open, needsYou > 0 && !listOpen && styles.openWaiting]}
-      >
-        {listOpen ? "Close" : needsYou ? "Review" : "Open"}
-      </Chip>
-    </button>
-  );
-
-  const list = listOpen ? (
-    <AskList
-      below={anchor.y === "top" && !windowOpen}
-      asks={asks}
-      answering={answering}
-      maxHeight={canvas.height - PILL_EDGE * 2 - PILL_GAP - PILL_HEIGHT}
-      onOpen={(key) => {
-        setListed(false);
-        store.getState().restoreAsk(key);
-      }}
-    />
-  ) : null;
-
-  return (
-    <AskLayer>
-      <div
-        ref={tray}
-        {...stylex.props(
-          styles.tray,
-          anchor.x === "left" && !windowOpen && styles.trayStart,
-        )}
-        style={
-          frame && canvas.measured
-            ? { left: frame.left, top: frame.top }
-            : { visibility: "hidden" }
-        }
-      >
-        {folded ? (
-          // The list opens away from the canvas's edge the pill keeps to.
-          anchor.y === "top" && !windowOpen ? (
-            <>
-              {foldedPill}
-              {list}
-            </>
-          ) : (
-            <>
-              {list}
-              {foldedPill}
-            </>
-          )
-        ) : (
-          asks.map(({ key, presence, view }) => {
-            const waiting = presence.tone === "waiting";
-            const asked = passage(view);
-
-            return (
-              <button
-                key={key}
-                type="button"
-                {...stylex.props(
-                  surfaceStyles.popover,
-                  styles.pill,
-                  waiting && styles.pillWaiting,
-                  live && styles.pillLifted,
-                  windowOpen && styles.pillFixed,
-                )}
-                aria-label={`Open Ask: ${presence.agentName}, ${presence.status}`}
-                {...pressHandlers(() => store.getState().restoreAsk(key))}
-              >
-                <PresenceLogo presence={presence} />
-                {/* The logo says which agent; what it was asked says which
-                    Ask. */}
-                {asked ? (
-                  <span {...stylex.props(styles.passage, styles.pillPassage)}>
-                    {asked}
-                  </span>
-                ) : (
-                  <span {...stylex.props(styles.name)}>
-                    {presence.agentName}
-                  </span>
-                )}
-                <PresenceStatus presence={presence} />
-                <Chip
-                  variant="pill"
-                  size="large"
-                  xstyle={[styles.open, waiting && styles.openWaiting]}
-                >
-                  {waiting ? "Review" : "Open"}
-                </Chip>
-              </button>
-            );
-          })
-        )}
-      </div>
-    </AskLayer>
-  );
-}
-
-/** The agent's logo, or Ask's own for the list of conversations. */
-function PresenceLogo({ presence }: { presence: AskPresence }) {
-  return presence.agent ? (
-    logos[presence.agent]({ xstyle: styles.logo })
-  ) : (
-    <ChatIcon xstyle={[styles.logo, styles.askGlyph]} />
-  );
-}
-
-function PresenceStatus({ presence }: { presence: AskPresence }) {
-  return (
-    <span
-      {...stylex.props(
-        styles.status,
-        presence.tone === "waiting" && styles.statusWaiting,
-        presence.tone === "failed" && styles.statusFailed,
-      )}
-    >
-      {presence.status}
-    </span>
-  );
-}
-
-/** What an Ask asked about, to tell apart Asks with the same agent. */
-function passage(view: AskView): string | null {
-  if (view.type === "history") return null;
-  const { target, title } = view.selection;
-
-  return target.kind === "text"
-    ? `\u201c${target.quote.replace(/\s+/g, " ").trim()}\u201d`
-    : title;
-}
-
-/** Every minimized Ask, those waiting on the reviewer first, then the
- * newest. A row opens its Ask. */
-function AskList({
-  below,
-  asks,
-  answering,
-  maxHeight,
-  onOpen,
-}: {
-  /** It opens under the pill, which keeps to the canvas's top. */
-  below: boolean;
-  asks: AskPanel[];
-  answering: number;
-  maxHeight: number;
-  onOpen: (key: number) => void;
-}) {
-  const ordered = [...asks].sort(
-    (a, b) =>
-      Number(b.presence.tone === "waiting") -
-        Number(a.presence.tone === "waiting") || b.key - a.key,
-  );
-
-  return (
-    <div
-      role="group"
-      aria-label="Minimized Asks"
-      {...stylex.props(
-        surfaceStyles.popover,
-        styles.list,
-        below && styles.listBelow,
-      )}
-      style={{ maxHeight }}
-    >
-      <div {...stylex.props(menuStyles.label, styles.listHeader)}>
-        <span {...stylex.props(textStyles.eyebrow)}>
-          Minimized · {asks.length}
-        </span>
-        {answering ? (
-          <span {...stylex.props(styles.listCount, textStyles.count)}>
-            {answering} answering
-          </span>
-        ) : null}
-      </div>
-      {ordered.map(({ key, presence, view }) => {
-        const asked = passage(view);
-
-        return (
-          <button
-            key={key}
-            type="button"
-            {...stylex.props(menuStyles.item, styles.row)}
-            aria-label={`Open Ask: ${presence.agentName}, ${presence.status}`}
-            onClick={() => onOpen(key)}
-          >
-            <span {...stylex.props(styles.rowLogo)}>
-              <PresenceLogo presence={presence} />
-            </span>
-            <span {...stylex.props(styles.rowText)}>
-              <span {...stylex.props(styles.rowLine)}>
-                <span {...stylex.props(styles.name)}>{presence.agentName}</span>
-                <PresenceStatus presence={presence} />
-              </span>
-              {asked ? (
-                <span {...stylex.props(styles.passage)}>{asked}</span>
-              ) : null}
-            </span>
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
@@ -735,52 +352,8 @@ function windowFrame(
   return placeAt(anchor, { width, height }, canvas, GAP);
 }
 
-/** Where pills of this size go beside the window, clear of any docked
- * panel: on its inner side or its outer one, level with its anchored edge;
- * where neither has room, above or below it, at its anchored side. */
-function besideWindow(
-  window: Frame,
-  size: { width: number; height: number },
-  anchor: AskAnchor,
-  canvas: AskCanvas,
-): Frame {
-  const freeWidth = canvas.width - canvas.right;
-  const freeHeight = canvas.height - canvas.bottom;
-  const before = window.left - PILL_GAP - size.width;
-  const after = window.left + window.width + PILL_GAP;
-  const fitsBefore = before >= PILL_EDGE;
-  const fitsAfter = after + size.width <= freeWidth - PILL_EDGE;
-  let left: number;
-  let top: number;
-
-  if (fitsBefore || fitsAfter) {
-    left = fitsBefore && (anchor.x === "right" || !fitsAfter) ? before : after;
-    top =
-      anchor.y === "bottom"
-        ? window.top + window.height - size.height
-        : window.top;
-  } else {
-    const above = window.top - PILL_GAP - size.height;
-    const below = window.top + window.height + PILL_GAP;
-    const fitsAbove = above >= PILL_EDGE;
-    const fitsBelow = below + size.height <= freeHeight - PILL_EDGE;
-
-    left =
-      anchor.x === "right"
-        ? window.left + window.width - size.width
-        : window.left;
-    top = fitsBelow && (anchor.y === "top" || !fitsAbove) ? below : above;
-  }
-
-  return {
-    left: clamp(left, PILL_EDGE, canvas.width - size.width - PILL_EDGE),
-    top: clamp(top, PILL_EDGE, canvas.height - size.height - PILL_EDGE),
-    ...size,
-  };
-}
-
-/** Where a window or pill of this size goes for the anchor, kept `edge`
- * inside the canvas. */
+/** Where a window of this size goes for the anchor, kept `edge` inside
+ * the canvas. */
 function placeAt(
   anchor: AskAnchor,
   size: { width: number; height: number },
@@ -824,46 +397,6 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(value, max));
 }
 
-/** An element's size, once laid out and as it changes. */
-function useElementSize(
-  element: RefObject<HTMLElement | null>,
-): { width: number; height: number } | null {
-  const [size, setSize] = useState<{ width: number; height: number } | null>(
-    null,
-  );
-
-  const measure = useCallback(() => {
-    const node = element.current;
-
-    if (!node) return;
-    setSize((current) =>
-      current?.width === node.offsetWidth &&
-      current.height === node.offsetHeight
-        ? current
-        : { width: node.offsetWidth, height: node.offsetHeight },
-    );
-  }, [element]);
-
-  // After each render, before it paints: a render that resizes the box,
-  // as opening the list does, moves it in the same frame. An observer's
-  // change lands a frame late, the box painted where it was.
-  useLayoutEffect(measure);
-
-  // What resizes it otherwise, such as its text wrapping anew.
-  useLayoutEffect(() => {
-    const node = element.current;
-
-    if (!node) return;
-    const observer = new ResizeObserver(measure);
-
-    observer.observe(node);
-
-    return () => observer.disconnect();
-  }, [element, measure]);
-
-  return size;
-}
-
 /** Above the canvas and its fullscreen diagrams, which portal to the canvas
  * root outside the app: the theme comes along, as it does for them. */
 function AskLayer({ children }: { children: ReactNode }): ReactElement {
@@ -903,8 +436,8 @@ interface AskCanvas {
  * The canvas Ask floats over, and how much of its right and bottom edges is
  * taken: by the side panel or a fullscreen diagram's tour docked on the
  * right, or by the side panel as a bottom sheet on a narrow canvas. Both are
- * side panels. The canvas root contains its layout, so the window and the
- * pill are fixed to it, not to the viewport.
+ * side panels. The canvas root contains its layout, so the window is fixed
+ * to it, not to the viewport.
  */
 function useAskCanvas(): AskCanvas {
   const store = useReviewPanelStore();
@@ -920,7 +453,7 @@ function useAskCanvas(): AskCanvas {
     measured: false,
   }));
 
-  // Measured before the first paint, so a window or pill never shows where an
+  // Measured before the first paint, so the window never shows where an
   // unmeasured canvas would put it.
   useLayoutEffect(() => {
     const root = container ?? document.documentElement;
@@ -1002,19 +535,6 @@ function useAskCanvas(): AskCanvas {
   return canvas;
 }
 
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
-
-// The list rises out of the pill it opens from.
-const listIn = stylex.keyframes({
-  from: { opacity: 0, transform: "translateY(6px) scale(0.98)" },
-  to: { opacity: 1, transform: "none" },
-});
-
-const listInBelow = stylex.keyframes({
-  from: { opacity: 0, transform: "translateY(-6px) scale(0.98)" },
-  to: { opacity: 1, transform: "none" },
-});
-
 const styles = stylex.create({
   // One above the fullscreen diagrams.
   layer: {
@@ -1064,155 +584,6 @@ const styles = stylex.create({
     flexDirection: "column",
     minHeight: 0,
     overflow: "hidden",
-  },
-  // Right-aligned, as the corner it starts in.
-  tray: {
-    position: "fixed",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-end",
-    gap: `${PILL_GAP}px`,
-    maxWidth: `calc(100% - ${GAP * 2}px)`,
-  },
-  trayStart: {
-    alignItems: "flex-start",
-  },
-  pill: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    maxWidth: "100%",
-    padding: "6px 6px 6px 12px",
-    borderRadius: radius.pill,
-    fontFamily: tokens.chromeFont,
-    cursor: "pointer",
-    touchAction: "none",
-    userSelect: "none",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
-  },
-  // Beside the window, it moves with the window.
-  pillFixed: {
-    cursor: "pointer",
-  },
-  // While it is dragged, it lifts to the window's shadow.
-  pillLifted: {
-    boxShadow: elevation.dialog,
-    cursor: "grabbing",
-  },
-  pillWaiting: {
-    borderColor: tokens.changeModified,
-    boxShadow: `${elevation.popover}, 0 0 0 4px ${tokens.warningWash}`,
-  },
-  logo: {
-    width: "14px",
-    height: "14px",
-  },
-  askGlyph: {
-    color: tokens.inkMuted,
-  },
-  name: {
-    flex: "0 0 auto",
-    color: tokens.ink,
-    fontSize: fontSize.body,
-    lineHeight: "16px",
-    whiteSpace: "nowrap",
-  },
-  status: {
-    minWidth: 0,
-    overflow: "hidden",
-    color: tokens.inkMuted,
-    fontSize: fontSize.body,
-    lineHeight: "16px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  statusWaiting: {
-    color: tokens.changeModified,
-  },
-  statusFailed: {
-    color: tokens.changeRemoved,
-  },
-  open: {
-    color: tokens.ink,
-  },
-  openWaiting: {
-    backgroundColor: tokens.changeModified,
-    color: tokens.onWarning,
-  },
-  // Laid out as a menu; scrolls once taller than the canvas has room for.
-  list: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "2px",
-    width: "300px",
-    maxWidth: "100%",
-    padding: "4px",
-    overflowY: "auto",
-    overscrollBehavior: "contain",
-    transformOrigin: "bottom right",
-    animationName: { default: listIn, [reducedMotion]: "none" },
-    animationDuration: {
-      default: motion.fast,
-      [reducedMotion]: motion.instant,
-    },
-    animationTimingFunction: "ease-out",
-  },
-  listBelow: {
-    transformOrigin: "top right",
-    animationName: { default: listInBelow, [reducedMotion]: "none" },
-  },
-  listHeader: {
-    display: "flex",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: "8px",
-  },
-  listCount: {
-    color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
-    fontSize: fontSize.small,
-    whiteSpace: "nowrap",
-  },
-  // A menu item with the passage under the agent.
-  row: {
-    gap: "10px",
-    padding: "6px 8px",
-  },
-  rowLogo: {
-    display: "flex",
-    flex: "0 0 16px",
-    alignItems: "center",
-    justifyContent: "center",
-    height: "16px",
-  },
-  rowText: {
-    display: "flex",
-    flex: "1 1 0",
-    flexDirection: "column",
-    gap: "1px",
-    minWidth: 0,
-  },
-  rowLine: {
-    display: "flex",
-    alignItems: "baseline",
-    gap: "8px",
-    minWidth: 0,
-  },
-  passage: {
-    minWidth: 0,
-    overflow: "hidden",
-    color: tokens.inkMuted,
-    fontFamily: tokens.fontSerif,
-    fontSize: fontSize.ui,
-    lineHeight: "17px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  pillPassage: {
-    flex: "0 1 auto",
-    maxWidth: "260px",
-    color: tokens.ink,
   },
 });
 
