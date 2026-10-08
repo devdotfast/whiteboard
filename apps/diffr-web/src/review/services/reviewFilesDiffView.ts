@@ -32,7 +32,11 @@ import {
 import { isEqual } from "vs/base/common/resources.js";
 import { URI } from "vs/base/common/uri.js";
 import { ElementSizeObserver } from "vs/editor/browser/config/elementSizeObserver.js";
-import type { IDiffEditor } from "vs/editor/browser/editorBrowser.js";
+import {
+  type ICodeEditor,
+  type IDiffEditor,
+  isDiffEditor,
+} from "vs/editor/browser/editorBrowser.js";
 import { RefCounted } from "vs/editor/browser/widget/diffEditor/utils.js";
 import type { IDocumentDiffItem } from "vs/editor/browser/widget/multiDiffEditor/model.js";
 import { MultiDiffEditorViewModel } from "vs/editor/browser/widget/multiDiffEditor/multiDiffEditorViewModel.js";
@@ -41,7 +45,10 @@ import {
   type RevealOptions,
 } from "vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidget.js";
 import type { IMultiDiffEditorViewState } from "vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidgetImpl.js";
-import { IDiffEditorOptions } from "vs/editor/common/config/editorOptions.js";
+import {
+  EditorOption,
+  IDiffEditorOptions,
+} from "vs/editor/common/config/editorOptions.js";
 import { Range } from "vs/editor/common/core/range.js";
 import { ILanguageService } from "vs/editor/common/languages/language.js";
 import { PLAINTEXT_LANGUAGE_ID } from "vs/editor/common/languages/modesRegistry.js";
@@ -170,6 +177,12 @@ export class ReviewFilesEditorInput extends Disposable {
     const text = (side: "lhs" | "rhs") =>
       diff.type === "text" ? (diff[side]?.text ?? "") : "";
     const wordWrap = this.wordWrap;
+    // Line numbers sit right-aligned against the split's sash; one spare column keeps the longest
+    // clear of it.
+    const longest = Math.max(
+      text("lhs").split("\n").length,
+      text("rhs").split("\n").length,
+    );
     // Every hidden line comes from the one fold model: diffr's regions,
     // never the diff editor's own unchanged-region hiding.
     const options = {
@@ -182,6 +195,10 @@ export class ReviewFilesEditorInput extends Disposable {
         contextLineCount: 0,
       },
       folding: false,
+      lineNumbersMinChars: Math.max(
+        REVIEW_FILES_DIFF_EDITOR_OPTIONS.lineNumbersMinChars,
+        String(longest).length + 1,
+      ),
       // Structural rails use one geometry through code, folds and deleted rows.
       guides: { indentation: false, bracketPairs: false },
       // Fold controls follow the line numbers, with breathing room before code.
@@ -272,6 +289,7 @@ export class ReviewFilesDiffView extends Disposable {
   private readonly hiddenFiles = new Map<string, string>();
   private readonly hiddenApplied = new Set<string>();
   private pendingPath: string | undefined;
+  private pendingOpen = false;
   private pendingSectionId: string | undefined;
   private pendingSource: ReviewDiffLens["ranges"][number] | undefined;
   private progress: ReviewDiffProgress | undefined;
@@ -282,6 +300,7 @@ export class ReviewFilesDiffView extends Disposable {
   private readonly streamStatus: HTMLElement;
   private offscreen = false;
   private layoutDeferred = false;
+  private sideBySide = true;
   viewedScope: "lens" | undefined;
 
   constructor(
@@ -411,8 +430,10 @@ export class ReviewFilesDiffView extends Disposable {
     );
     // The widget's own switch, not the per-item option refresh: it pins the
     // width heuristic off, so the chosen layout is what renders at any width.
-    const applyLayout = () =>
-      this.widget.setRenderSideBySide(layout.get() === "split");
+    const applyLayout = () => {
+      this.sideBySide = layout.get() === "split";
+      this.widget.setRenderSideBySide(this.sideBySide);
+    };
     this._register(layout.onDidChange(applyLayout));
     applyLayout();
     if (document) {
@@ -583,6 +604,7 @@ export class ReviewFilesDiffView extends Disposable {
             item.collapsed.set(this.documentCollapsed, undefined);
           }
         this.applyHiddenFiles(items);
+        this.applyFileFolds();
         this.applyViewedFiles();
         const entry = this.input?.entries.find(
           (e) => e.file.path === this.pendingPath,
@@ -602,7 +624,11 @@ export class ReviewFilesDiffView extends Disposable {
           if (!this._store.isDisposed) {
             if (this.pendingSource)
               this.revealSource(this.pendingSource, this.pendingSectionId);
-            else this.reveal(entry);
+            else {
+              if (this.pendingOpen)
+                this.itemFor(entry)?.collapsed.set(false, undefined);
+              this.reveal(entry);
+            }
           }
         });
       }),
@@ -767,6 +793,29 @@ export class ReviewFilesDiffView extends Disposable {
     }
   }
 
+  /** Files to fold or unfold once they join the list. */
+  private readonly fileFolds = new Map<string, boolean>();
+
+  /** Fold or unfold a file's body, as its header's chevron does, now or once it is listed. */
+  setFileCollapsed(path: string, collapsed: boolean): void {
+    this.fileFolds.set(path, collapsed);
+    this.applyFileFolds();
+  }
+
+  private applyFileFolds(): void {
+    for (const [path, collapsed] of this.fileFolds) {
+      const entry = this.input?.entries.find(
+        (entry) => entry.file.path === path,
+      );
+      const item = entry && this.itemFor(entry);
+      if (!item) continue;
+      // After a hidden file's own fold, which waits for the same item.
+      this.hiddenApplied.add(path);
+      item.collapsed.set(collapsed, undefined);
+      this.fileFolds.delete(path);
+    }
+  }
+
   private readonly collapsedSections = new Set<string>();
   private readonly sectionViewed = new Map<string, string>();
   private entryProgress(entry: ReviewFilesEditorEntry) {
@@ -859,14 +908,94 @@ export class ReviewFilesDiffView extends Disposable {
     this.pendingSource = undefined;
   }
 
-  /** Scroll to a file, or to it once its diff has loaded. */
-  revealFile(path: string): void {
+  /** Scroll to a file, or to it once its diff has loaded; `open` also unfolds a folded file. */
+  revealFile(path: string, open = false): void {
     this.settleHold.clear();
     const entry = this.input?.entries.find((entry) => entry.file.path === path);
     if (!entry) return;
     this.pendingPath = this.fileStates.has(path) ? path : undefined;
+    this.pendingOpen = open;
     this.showStreamStatus();
-    if (!this.pendingPath) this.reveal(entry);
+    if (this.pendingPath) return;
+    if (open) this.itemFor(entry)?.collapsed.set(false, undefined);
+    this.reveal(entry);
+  }
+
+  /**
+   * Scroll so one side's `line` (1-based) of a diffed file sits a third of the way down the list,
+   * opening the file if it is folded. Its folds are the session's; open them first.
+   */
+  revealLine(path: string, side: "original" | "modified", line: number): void {
+    this.settleHold.clear();
+    const entry = this.input?.entries.find((entry) => entry.file.path === path);
+    if (!entry || !this.readyFiles.has(path)) return;
+    this.itemFor(entry)?.collapsed.set(false, undefined);
+    this.widget.reveal(entry, { highlight: false });
+    // The file renders, and its folds open, over the next frames.
+    this.settle(() => {
+      const offset = this.lineOffset(entry, side, line);
+      if (offset === undefined) return;
+      const delta = offset - this.diffContainer.clientHeight / 3;
+      if (Math.abs(delta) > 1)
+        this.widget.setScrollTop(this.widget.getScrollTop() + delta);
+    });
+  }
+
+  /** The editor that shows one side of a file, while the file is rendered. */
+  codeEditor(
+    path: string,
+    side: "original" | "modified",
+  ): ICodeEditor | undefined {
+    const entry = this.input?.entries.find((entry) => entry.file.path === path);
+    const diffEditor =
+      entry?.modified &&
+      this.widget.tryGetCodeEditor(entry.modified)?.diffEditor;
+    if (!isDiffEditor(diffEditor)) return undefined;
+    // Unified, the base side's lines are drawn inside the head side's editor.
+    return side === "original" && this.sideBySide
+      ? diffEditor.getOriginalEditor()
+      : diffEditor.getModifiedEditor();
+  }
+
+  /** Pixels from the top of the list to one side's line, as it is laid out now. */
+  private lineOffset(
+    entry: ReviewFilesEditorEntry,
+    side: "original" | "modified",
+    line: number,
+  ): number | undefined {
+    const diffEditor =
+      entry.modified &&
+      this.widget.tryGetCodeEditor(entry.modified)?.diffEditor;
+    const editor = this.codeEditor(entry.file.path, side);
+    const node = editor?.getDomNode();
+    if (!isDiffEditor(diffEditor) || !editor || !node) return undefined;
+    let top: number | undefined;
+    if (side === "original" && !this.sideBySide) {
+      // A removed line sits in the block drawn above its change's head lines; any other base line
+      // is shifted by the changes before it.
+      const lineHeight = editor.getOption(EditorOption.lineHeight);
+      let shift = 0;
+      for (const change of diffEditor.getDiffComputationResult()?.changes2 ??
+        []) {
+        if (line < change.original.startLineNumber) break;
+        if (line < change.original.endLineNumberExclusive) {
+          top =
+            editor.getTopForLineNumber(change.modified.startLineNumber) -
+            (change.original.endLineNumberExclusive - line) * lineHeight;
+          break;
+        }
+        shift =
+          change.modified.endLineNumberExclusive -
+          change.original.endLineNumberExclusive;
+      }
+      top ??= editor.getTopForLineNumber(line + shift);
+    } else top = editor.getTopForLineNumber(line);
+    return (
+      node.getBoundingClientRect().top -
+      this.diffContainer.getBoundingClientRect().top +
+      top -
+      editor.getScrollTop()
+    );
   }
 
   /** The file at the top of the list, among those diffed. */
@@ -1082,8 +1211,12 @@ export class ReviewFilesDiffView extends Disposable {
         sameResource(entry.modified, resource.modified),
     );
     if (index === -1) return;
-    // Passive editor updates must not move a sidebar the reader scrolled independently.
-    this.changedFilesTree?.setActiveFile(input.entries[index].file.path, false);
+    // The tree follows the diff from file to file, but leaves a sidebar the reader scrolled alone
+    // while the same file stays on top.
+    this.changedFilesTree?.setActiveFile(
+      input.entries[index].file.path,
+      "follow",
+    );
   }
 }
 function sameResource(left: URI | undefined, right: URI | undefined): boolean {

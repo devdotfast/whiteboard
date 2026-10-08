@@ -51,6 +51,9 @@ importers:
       '@dev.fast/review-protocol':
         specifier: workspace:*
         version: link:../../packages/review-protocol
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
     devDependencies:
       '@types/trusted-types':
         specifier: 2.0.7

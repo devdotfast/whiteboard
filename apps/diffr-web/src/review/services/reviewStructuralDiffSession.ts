@@ -120,6 +120,34 @@ export class StructuralDiffSession extends Disposable {
     this.notify(path, this.complete);
   }
 
+  /**
+   * A later pass over a file's same text, as the summarizer's: its regions' labels and default
+   * folds change. A fold the reader has moved keeps the reader's state.
+   */
+  updateFileDiff(path: string, diff: StructuralTextDiff): void {
+    const result = this.results.get(path);
+    const previous = result?.diff;
+    if (this.disposed || !result || previous?.type !== "text") return;
+    const defaults = (source: StructuralTextDiff) => {
+      const states = new Map<number, boolean>();
+      const visit = (region: StructuralRegion) => {
+        states.set(region.fold_state_id, region.visibility?.collapsed === true);
+        if (region.kind === "fold") region.children.forEach(visit);
+      };
+      for (const side of [source.lhs, source.rhs]) if (side) visit(side.root);
+      return states;
+    };
+    const before = defaults(previous);
+    for (const [id, collapsed] of defaults(diff)) {
+      const key = `${path}:${id}`;
+      const current = this.folds.get(key);
+      if (current === undefined || current === before.get(id))
+        this.folds.set(key, collapsed);
+    }
+    this.results.set(path, { ...result, diff });
+    this.notify(path);
+  }
+
   /** The comparison could not be loaded at all. */
   fail(error: string): void {
     this.error = error;

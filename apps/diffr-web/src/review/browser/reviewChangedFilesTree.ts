@@ -394,10 +394,17 @@ export class ReviewChangedFilesTree extends Disposable {
     if (element) this.tree.rerender(element);
   }
 
-  setActiveFile(path: string | undefined, reveal = true): void {
-    if (!reveal && this.activePath === path) return;
+  /**
+   * Select `path`. `"follow"` scrolls the tree only when the active file changes, so a reader who
+   * scrolled the tree away keeps their place until the diff moves on to another file.
+   */
+  setActiveFile(
+    path: string | undefined,
+    reveal: boolean | "follow" = true,
+  ): void {
+    if (reveal !== true && this.activePath === path) return;
     this.activePath = path;
-    this.syncSelection(path, reveal);
+    this.syncSelection(path, reveal !== false);
   }
 
   layout(height: number, width: number): void {

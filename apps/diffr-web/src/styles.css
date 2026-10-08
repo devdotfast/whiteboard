@@ -269,3 +269,460 @@ body {
   font-family: "Geist Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
+
+/* ⌘P: VS Code's Quick Open, centred at the top of the diff. */
+.app-quick-open {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 60;
+  width: min(600px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  padding: 6px;
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 8px;
+  background: var(
+    --vscode-quickInput-background,
+    var(--vscode-editorWidget-background)
+  );
+  box-shadow: 0 8px 28px var(--vscode-widget-shadow);
+}
+
+.app-quick-open input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-focusBorder);
+  border-radius: 5px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground, var(--vscode-foreground));
+  font: inherit;
+  outline: none;
+}
+
+.app-quick-open ul {
+  max-height: min(440px, 60vh);
+  margin: 6px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.app-quick-open li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.app-quick-open li[aria-selected="true"] {
+  background: var(
+    --vscode-quickInputList-focusBackground,
+    var(--vscode-list-activeSelectionBackground)
+  );
+  color: var(
+    --vscode-quickInputList-focusForeground,
+    var(--vscode-list-activeSelectionForeground)
+  );
+}
+
+.app-quick-open li:not([aria-selected="true"]):hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.app-quick-open mark {
+  background: none;
+  color: var(--vscode-list-highlightForeground, var(--vscode-focusBorder));
+  font-weight: 600;
+}
+
+.app-quick-open-icon {
+  flex: none;
+}
+
+.app-quick-open-icon.is-added {
+  color: var(--vscode-gitDecoration-addedResourceForeground);
+}
+
+.app-quick-open-icon.is-deleted {
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+.app-quick-open-icon.is-modified {
+  color: var(--vscode-gitDecoration-modifiedResourceForeground);
+}
+
+.app-quick-open-icon.is-renamed,
+.app-quick-open-icon.is-copied {
+  color: var(--vscode-gitDecoration-renamedResourceForeground);
+}
+
+.app-quick-open-name {
+  flex: none;
+}
+
+.app-quick-open-folder,
+.app-quick-open-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.app-quick-open-note {
+  flex: none;
+  margin-left: auto;
+}
+
+.app-quick-open li.app-quick-open-empty {
+  color: var(--vscode-descriptionForeground);
+  cursor: default;
+}
+
+/* ⌘F: VS Code's find widget, at the top right of the diff, searching every file. */
+.app-find {
+  position: absolute;
+  top: 6px;
+  right: 22px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 6px;
+  background: var(--vscode-editorWidget-background);
+  box-shadow: 0 4px 16px var(--vscode-widget-shadow);
+}
+
+.app-find[hidden] {
+  display: none;
+}
+
+.app-find-field {
+  display: flex;
+  align-items: center;
+  width: min(300px, 50vw);
+  border: 1px solid
+    var(--vscode-input-border, var(--vscode-editorWidget-border));
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+}
+
+.app-find-field:focus-within {
+  border-color: var(--vscode-focusBorder);
+}
+
+.app-find.no-results .app-find-field {
+  border-color: var(
+    --vscode-inputValidation-errorBorder,
+    var(--vscode-errorForeground)
+  );
+}
+
+.app-find input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-input-foreground, var(--vscode-foreground));
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.app-find-toggle,
+.app-find-button {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-icon-foreground);
+  cursor: pointer;
+}
+
+.app-find-toggle:hover,
+.app-find-button:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.app-find-toggle[aria-pressed="true"] {
+  border-color: var(
+    --vscode-inputOption-activeBorder,
+    var(--vscode-focusBorder)
+  );
+  background: var(--vscode-inputOption-activeBackground);
+  color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+}
+
+.app-find-count {
+  min-width: 70px;
+  padding: 0 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.app-find.no-results .app-find-count {
+  color: var(--vscode-errorForeground);
+}
+
+/* Settings and the first visit's walk through them. */
+.app-settings-dialog {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+
+.app-settings-dialog[open] {
+  display: flex;
+}
+
+.app-settings {
+  min-height: 0;
+  margin: 0 -18px;
+  padding: 0 18px;
+  overflow-y: auto;
+}
+
+.app-settings section {
+  padding: 12px 0;
+  border-top: 1px solid var(--vscode-panel-border);
+}
+
+.app-settings section:first-child {
+  border-top: 0;
+}
+
+.app-settings h3,
+.app-onboarding h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.app-onboarding h3 {
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.app-settings p,
+.app-settings section > :is(span, a, code) {
+  color: var(--vscode-descriptionForeground);
+}
+
+.app-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0 0;
+}
+
+.app-field-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-field-hint {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.app-dialog select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 6px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-foreground);
+  font: inherit;
+}
+
+.app-dialog a {
+  color: var(--vscode-textLink-foreground);
+}
+
+.app-dialog code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--vscode-textCodeBlock-background, rgb(127 127 127 / 0.15));
+  font-size: 12px;
+}
+
+.app-settings textarea {
+  height: 180px;
+  margin-top: 10px;
+}
+
+.app-config-reference {
+  margin-top: 10px;
+}
+
+.app-config-reference summary {
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.app-config-reference dl {
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.app-config-reference dt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  margin-top: 10px;
+}
+
+.app-config-reference dd {
+  margin: 2px 0 0 12px;
+  color: var(--vscode-descriptionForeground);
+  line-height: 1.45;
+}
+
+.app-config-type,
+.app-config-default {
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.app-config-default {
+  display: block;
+  margin-top: 2px;
+}
+
+/* Lenses an agent made for this comparison (lenses.ts). */
+.app-lens-bar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 5px 14px;
+  background: var(--vscode-sideBar-background);
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.app-lens-bar[hidden] {
+  display: none;
+}
+
+.app-lens-label {
+  color: var(--vscode-descriptionForeground);
+  margin-right: 4px;
+}
+
+.app-lens {
+  font: inherit;
+  color: var(--vscode-foreground);
+  background: transparent;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 11px;
+  padding: 1px 10px;
+  cursor: pointer;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-lens:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.app-lens[aria-pressed="true"] {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border-color: var(--vscode-button-background);
+}
+
+.app-lens-clear {
+  margin-left: auto;
+  color: var(--vscode-icon-foreground);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  padding: 3px;
+  cursor: pointer;
+}
+
+.app-lens-clear:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+/* Agent plugins, in the settings (pluginsSection.ts). */
+.app-plugin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.app-plugin,
+.app-plugin-empty {
+  padding: 8px 0;
+  border-top: 1px solid var(--vscode-panel-border);
+}
+
+.app-plugin-empty {
+  color: var(--vscode-descriptionForeground);
+}
+
+.app-plugin-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-plugin-head input {
+  flex: none;
+  width: auto;
+  margin: 0;
+}
+
+.app-plugin p {
+  margin: 4px 0;
+  color: var(--vscode-descriptionForeground);
+}
+
+.app-plugin pre {
+  max-height: 200px;
+  overflow: auto;
+  padding: 8px;
+  background: var(--vscode-textCodeBlock-background);
+  font-size: 12px;
+}
+
+/* Find in all files (find.ts): the editor's own find styles, which the page does not load. */
+.app .monaco-editor .findMatch {
+  background-color: var(
+    --vscode-editor-findMatchHighlightBackground,
+    rgba(234, 92, 0, 0.33)
+  );
+}
+
+.app .monaco-editor .currentFindMatch {
+  background-color: var(
+    --vscode-editor-findMatchBackground,
+    rgba(234, 92, 0, 0.6)
+  );
+  border: 2px solid var(--vscode-editor-findMatchBorder, transparent);
+  box-sizing: border-box;
+}

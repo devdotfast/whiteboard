@@ -115,6 +115,33 @@ export class Panels {
 
     if (work.failed) rows.push(["Failed", number(work.failed)]);
 
+    if (work.summarizing || work.summarized)
+      rows.push([
+        "Summarized",
+        work.summarizing
+          ? `${number(work.summarized)} · ${number(work.summarizing)} waiting`
+          : number(work.summarized),
+        "Files whose long new bodies the model has summarized; they arrive after the file shows",
+      ]);
+
+    if (work.summaryErrors.length)
+      rows.push([
+        "Summaries failed",
+        number(work.summaryErrors.length),
+        work.summaryErrors
+          .map(({ path, message }) => `${path}: ${message}`)
+          .join("\n"),
+      ]);
+
+    if (work.pluginErrors.length)
+      rows.push([
+        "Plugin errors",
+        number(work.pluginErrors.length),
+        work.pluginErrors
+          .map(({ path, message }) => `${path}: ${message}`)
+          .join("\n"),
+      ]);
+
     return rows;
   }
 
@@ -127,7 +154,7 @@ export class Panels {
       [
         "Workers",
         `${stats.workers} of ${stats.maxWorkers}`,
-        "Workers grow while files queue and shrink after ten idle seconds",
+        "Workers grow while files queue and all stop after three idle seconds",
       ],
       ["Engine download", stats.bytes ? megabytes(stats.bytes) : "…"],
       ["Engine compiled", at(stats.compiled)],

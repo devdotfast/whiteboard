@@ -1,9 +1,11 @@
+import { agentPlugins } from "../settings.js";
 /**
  * The page's handle on diffr: the wasm module is fetched and compiled once, then handed to a pool
  * of workers, so files diff in parallel without each worker paying for its own compile. The pool
  * starts at one and grows while work queues, a worker at a time: each spends a second or two
  * compiling diffr's queries, and workers starting together slow each other several times over.
- * All but one go after ten idle seconds, since wasm memory never shrinks.
+ * Every worker goes after a few idle seconds, since wasm memory never shrinks: the compiled module
+ * stays, so the next file's worker starts in tens of milliseconds.
  */
 // Gzipped by the build (vite.config.ts): static hosts cap a file at 25 MiB, and the engine is larger.
 import wasmUrl from "../wasm/diffr_web_bg.wasm.gz?url";
@@ -29,6 +31,8 @@ export interface Diffed {
   classified: Classified;
   event: FileEvent;
   ms: number;
+  /** Agent plugins that threw on the file, and why. */
+  pluginErrors: string[];
 }
 
 /** What the engine panel shows. */
@@ -53,7 +57,7 @@ const MAX_WORKERS = Math.max(
   Math.min(8, (navigator.hardwareConcurrency || 4) - 1),
 );
 
-const IDLE_MS = 10_000;
+const IDLE_MS = 3_000;
 
 /** Past this, a worker is replaced once its queue drains. */
 const MEMORY_LIMIT = 1024 * 1024 * 1024;
@@ -131,6 +135,8 @@ interface Slot {
   busy: number;
   retire: boolean;
   ready: boolean;
+  /** It waits on a model for summaries, so it takes nothing else meanwhile. */
+  summarizing: boolean;
 }
 
 /** A pool of diffr workers, all with one configuration. */
@@ -146,8 +152,21 @@ export class Engine {
   readonly notices: Promise<string[]>;
   private resolveNotices!: (notices: string[]) => void;
   private rejectNotices!: (error: Error) => void;
+  /** Whether the summarizer is on, once a worker has read the configuration. */
+  summarizes = false;
 
-  constructor(private readonly config: string | undefined) {
+  /**
+   * `config` is the reader's config.toml; `overrides`, JSON merged over it, the page's own settings
+   * (the summarizer's key and model).
+   */
+  constructor(
+    private readonly config: string | undefined,
+    private readonly overrides?: string,
+    /** The agent's enabled plugins, by default as saved. */
+    private readonly plugins = agentPlugins()
+      .filter((plugin) => plugin.enabled)
+      .map(({ name, code }) => ({ name, code })),
+  ) {
     this.notices = new Promise((resolve, reject) => {
       this.resolveNotices = resolve;
       this.rejectNotices = reject;
@@ -164,6 +183,7 @@ export class Engine {
       busy: 0,
       retire: false,
       ready: false,
+      summarizing: false,
     };
 
     stats.workers++;
@@ -172,6 +192,8 @@ export class Engine {
         slot.worker.postMessage({
           module,
           config: this.config,
+          overrides: this.overrides,
+          plugins: this.plugins,
         } satisfies Request),
       (error: Error) => this.fail(error),
     );
@@ -188,8 +210,11 @@ export class Engine {
     if ("ready" in data) {
       slot.ready = true;
       stats.ready ??= data.ready;
+      this.summarizes = data.summarizes;
       this.resolveNotices(data.notices);
       this.dispatch();
+
+      if (!slot.busy && !this.queue.length) this.scheduleIdle();
       changed();
 
       return;
@@ -203,6 +228,7 @@ export class Engine {
 
     slot.busy--;
     stats.busy--;
+    slot.summarizing &&= slot.busy > 0;
     stats.memory = Math.max(stats.memory, data.memory);
 
     if (data.memory > MEMORY_LIMIT) slot.retire = true;
@@ -238,8 +264,9 @@ export class Engine {
   private scheduleIdle(): void {
     clearTimeout(this.idle);
     this.idle = setTimeout(() => {
-      for (const slot of this.slots.splice(1)) {
-        if (slot.busy) this.slots.push(slot);
+      for (const slot of this.slots.splice(0)) {
+        // A worker still starting holds no file yet, but may be the one that reports notices.
+        if (slot.busy || !slot.ready) this.slots.push(slot);
         else {
           slot.worker.terminate();
           stats.workers--;
@@ -251,31 +278,48 @@ export class Engine {
   }
 
   /**
-   * Queued jobs to ready workers, two each so none waits on the page between jobs. When every
-   * ready worker is full and none is starting, another starts. A retiring worker takes nothing
-   * new, so it drains and goes.
+   * Queued jobs to ready workers, two each so none waits on the page between jobs. A summary
+   * waits on a model, so it takes an idle worker to itself, and one worker is always left for
+   * diffs. When a job finds no worker and none is starting, another starts. A retiring worker
+   * takes nothing new, so it drains and goes.
    */
   private dispatch(): void {
-    while (this.queue.length) {
-      const slot = this.slots.find(
-        (slot) => slot.ready && !slot.retire && slot.busy < 2,
-      );
+    const summarizers = Math.max(1, MAX_WORKERS - 1);
+
+    for (let index = 0; index < this.queue.length; ) {
+      const job = this.queue[index]!;
+      const summary = "diff" in job && !!job.summarize;
+
+      const slot =
+        summary &&
+        this.slots.filter((slot) => slot.summarizing).length >= summarizers
+          ? undefined
+          : this.slots.find(
+              (slot) =>
+                slot.ready &&
+                !slot.retire &&
+                !slot.summarizing &&
+                (summary ? slot.busy === 0 : slot.busy < 2),
+            );
 
       if (!slot) {
-        if (
-          this.slots.every((slot) => slot.ready) &&
-          this.slots.length < MAX_WORKERS
-        )
-          this.slots.push(this.spawn());
-
-        return;
+        index++;
+        continue;
       }
 
-      const job = this.queue.shift()!;
+      this.queue.splice(index, 1);
       slot.busy++;
       stats.busy++;
+      slot.summarizing = summary;
       slot.worker.postMessage(job);
     }
+
+    if (
+      this.queue.length &&
+      this.slots.every((slot) => slot.ready) &&
+      this.slots.length < MAX_WORKERS
+    )
+      this.slots.push(this.spawn());
   }
 
   private send<T extends Response>(
@@ -294,22 +338,29 @@ export class Engine {
     });
   }
 
-  /** Diff one file. Resolves with its classification, its record and the time it took. */
-  async diff(file: FileRequest): Promise<Diffed> {
+  /**
+   * Diff one file. Resolves with its classification, its record and the time it took. `summarize`
+   * runs the summarizer too, which waits on its model; it goes after other work.
+   */
+  async diff(file: FileRequest, summarize = false): Promise<Diffed> {
     const response = await this.send<Extract<Response, { event: FileEvent }>>(
       (id) => ({
         id,
-        diff: JSON.stringify({ ...file, syntax: true }),
+        diff: JSON.stringify({ ...file, syntax: true, summarize }),
+        summarize,
       }),
     );
 
-    stats.diffed++;
-    stats.diffMs += response.ms;
+    if (!summarize) {
+      stats.diffed++;
+      stats.diffMs += response.ms;
+    }
 
     return {
       classified: response.classified,
       event: response.event,
       ms: response.ms,
+      pluginErrors: response.pluginErrors,
     };
   }
 
@@ -325,6 +376,15 @@ export class Engine {
     );
 
     return response.previews;
+  }
+
+  /** The configuration's JSON Schema: every setting, its description and its default. */
+  async schema(): Promise<string> {
+    const response = await this.send<Extract<Response, { schema: string }>>(
+      (id) => ({ id, schema: true }),
+    );
+
+    return response.schema;
   }
 
   dispose(): void {
