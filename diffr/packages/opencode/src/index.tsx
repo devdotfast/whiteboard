@@ -31,6 +31,8 @@ const tui: TuiPlugin = async (api, options) => {
     restoreFocus();
   };
   const error = (value: unknown) => api.ui.toast({ variant: "error", message: `Diffr: ${value instanceof Error ? value.message : value}` });
+  // The command palette restores its own focus after run() returns.
+  const focusPane = () => { setTimeout(() => view?.focus(), 0); };
   const toggle = () => { captureFocus = true; setFull(value => !value); };
   const outcome = async (value: Outcome) => {
     const current = comparison();
@@ -158,8 +160,8 @@ const tui: TuiPlugin = async (api, options) => {
   } });
   api.keymap.registerLayer({ commands: [
     { name: "diffr.open", namespace: "palette", title: "Open Diffr beside chat", slashName: "diffr", run: () => { void open().catch(error); } },
-    { name: "diffr.fullscreen", namespace: "palette", title: "Toggle Diffr fullscreen", slashName: "diffr-fullscreen", run: () => { if (comparison()) toggle(); else void open(true).catch(error); } },
-    { name: "diffr.focus", namespace: "palette", title: "Focus Diffr", slashName: "diffr-focus", run: () => view?.focus() },
+    { name: "diffr.fullscreen", namespace: "palette", title: "Toggle Diffr fullscreen", slashName: "diffr-fullscreen", run: () => { if (comparison()) { toggle(); focusPane(); } else void open(true).catch(error); } },
+    { name: "diffr.focus", namespace: "palette", title: "Focus Diffr", slashName: "diffr-focus", run: focusPane },
     { name: "diffr.close", namespace: "palette", title: "Close Diffr", slashName: "diffr-close", run: close },
   ] });
   const stop = api.event.on("tui.command.execute", event => {
