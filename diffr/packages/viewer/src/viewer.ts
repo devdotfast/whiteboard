@@ -352,7 +352,9 @@ export class Viewer {
       case "g": case "home": this.scrollTo(0); break;
       case "G": case "end": this.scrollTo(at.maxScroll); break;
       case "right": case "l": this.pan(key.shift ? 16 : 4); break;
+      case "L": this.pan(16); break;
       case "left": case "h": this.pan(key.shift ? -16 : -4); break;
+      case "H": this.pan(-16); break;
       case "]": this.navigateHunk(1); break;
       case "[": this.navigateHunk(-1); break;
       case "s": this.toggleLayout(); break;
