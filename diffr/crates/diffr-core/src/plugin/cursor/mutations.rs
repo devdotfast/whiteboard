@@ -25,6 +25,7 @@ fn leaf(id: u32, alignment: u32, start: u32, end: u32, changed: &[u32]) -> Regio
         visibility: Visibility::default(),
         node: Node::Leaf {
             alignment_id: alignment,
+            pair: None,
             changed: changed
                 .iter()
                 .map(|&line| Span {

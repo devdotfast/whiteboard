@@ -71,6 +71,7 @@ fn change_coverage(sides: &Pairing<Source>) -> ChangeCoverage {
                 Node::Leaf {
                     alignment_id,
                     changed,
+                    ..
                 } => {
                     let start = all.len();
                     if other.contains(alignment_id) {
@@ -174,6 +175,7 @@ mod visible_tests {
             },
             node: Node::Leaf {
                 alignment_id: alignment,
+                pair: None,
                 changed: changed
                     .iter()
                     .map(|&line| Span {

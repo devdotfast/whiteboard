@@ -305,6 +305,10 @@ pub enum Node {
         /// line, and they come in the same order on both sides. A leaf on
         /// one side only has a value no leaf on the other side carries.
         alignment_id: u32,
+        /// The `id` of the leaf on the other side with the same
+        /// `alignment_id`; absent when this leaf is added or deleted.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pair: Option<u32>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         changed: Vec<Span>,
     },
@@ -423,6 +427,7 @@ mod tests {
             visibility: Visibility::default(),
             node: Node::Leaf {
                 alignment_id: index,
+                pair: None,
                 changed,
             },
         }

@@ -67,6 +67,7 @@ fn leaf(id: u32, alignment: u32, start: u32, end: u32) -> Region {
         visibility: Visibility::default(),
         node: Node::Leaf {
             alignment_id: alignment,
+            pair: None,
             changed: vec![],
         },
     }

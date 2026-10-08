@@ -364,6 +364,7 @@ impl Cursor {
             if let Node::Leaf {
                 alignment_id,
                 changed,
+                ..
             } = &region.node
             {
                 changes |= !changed.is_empty() || !alignments.contains(alignment_id);
@@ -492,23 +493,47 @@ impl Cursor {
             .collect::<Result<Vec<_>, MoveError>>()?;
         let piece_alignment = *next_alignment_id;
         *next_alignment_id += 1;
-        let mut state = None;
+        // Both tails' ids first, so each can name the other as its pair.
+        let piece_ids: Vec<Option<u32>> = paths
+            .iter()
+            .map(|path| {
+                path.as_ref().map(|_| {
+                    let id = *next_region_id;
+                    *next_region_id += 1;
+                    id
+                })
+            })
+            .collect();
+        let piece_state = piece_ids.iter().flatten().next().copied();
         let has_lhs = sides.lhs().is_some();
         let (mut lhs, mut rhs) = (None, None);
         for (tree_side, (tree, path)) in trees(sides).into_iter().zip(paths).enumerate() {
-            let Some(path) = path else { continue };
+            let (Some(path), Some(piece_id), Some(piece_state)) =
+                (path, piece_ids[tree_side], piece_state)
+            else {
+                continue;
+            };
+            let partner =
+                piece_ids
+                    .iter()
+                    .enumerate()
+                    .find_map(|(other, id)| if other == tree_side { None } else { *id });
             let (index, parent) = path.split_last().expect("a path is never empty");
             let list = siblings(tree, parent);
-            let piece_id = *next_region_id;
-            *next_region_id += 1;
             if tree_side == 0 && has_lhs {
                 lhs = Some(piece_id);
             } else {
                 rhs = Some(piece_id);
             }
-            let piece_state = *state.get_or_insert(piece_id);
             let leaf = list.remove(*index);
-            let pieces = split(leaf, offset, piece_id, piece_alignment, piece_state);
+            let pieces = split(
+                leaf,
+                offset,
+                piece_id,
+                piece_alignment,
+                piece_state,
+                partner,
+            );
             list.splice(*index..*index, pieces);
         }
         Ok(region_ids(lhs, rhs))
@@ -673,6 +698,7 @@ fn view(region: &Region, parent: Option<u32>, side: Side, children: Vec<u32>) ->
             Node::Leaf {
                 alignment_id,
                 changed,
+                ..
             } => Kind::Leaf {
                 alignment_id: *alignment_id,
                 changed: changed.clone(),
@@ -849,17 +875,30 @@ fn find_mut(regions: &mut [Region], id: u32) -> Option<&mut Region> {
     None
 }
 
-/// A leaf split at relative line `offset`. The second piece takes `id`,
-/// `alignment_id` and `fold_state_id`.
-fn split(leaf: Region, offset: u32, id: u32, alignment_id: u32, fold_state_id: u32) -> [Region; 2] {
-    let Node::Leaf { changed, .. } = &leaf.node else {
+/// A leaf split at relative line `offset`. The first piece keeps the leaf's
+/// identity and pair; the second takes `id`, `alignment_id`,
+/// `fold_state_id` and `pair`, the other side's new tail.
+fn split(
+    leaf: Region,
+    offset: u32,
+    id: u32,
+    alignment_id: u32,
+    fold_state_id: u32,
+    pair: Option<u32>,
+) -> [Region; 2] {
+    let Node::Leaf {
+        changed,
+        pair: head_pair,
+        ..
+    } = &leaf.node
+    else {
         unreachable!("only leaves are cut");
     };
     let boundary = SourcePos {
         line: leaf.range.start.line + offset,
         column: 0,
     };
-    let piece = |range: SourceRange, id: u32, alignment_id: u32, fold_state_id: u32| {
+    let piece = |range: SourceRange, id: u32, alignment_id: u32, fold_state_id: u32, pair| {
         let lines = range.lines();
         Region {
             id,
@@ -869,6 +908,7 @@ fn split(leaf: Region, offset: u32, id: u32, alignment_id: u32, fold_state_id: u
             visibility: leaf.visibility.clone(),
             node: Node::Leaf {
                 alignment_id,
+                pair,
                 changed: changed
                     .iter()
                     .copied()
@@ -885,6 +925,7 @@ fn split(leaf: Region, offset: u32, id: u32, alignment_id: u32, fold_state_id: u
         leaf.id,
         leaf.alignment_id().expect("a leaf"),
         leaf.fold_state_id,
+        *head_pair,
     );
     let tail = piece(
         SourceRange {
@@ -894,6 +935,7 @@ fn split(leaf: Region, offset: u32, id: u32, alignment_id: u32, fold_state_id: u
         id,
         alignment_id,
         fold_state_id,
+        pair,
     );
     [head, tail]
 }
