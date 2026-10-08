@@ -8,7 +8,7 @@ import type { Palette } from "@diffr/viewer/theme/palette";
 import { Viewer, type Hover, type KeyPress, type Size } from "@diffr/viewer/viewer";
 import { litRuns, viewedBox, viewedHint } from "@diffr/viewer/viewport/cell";
 import { pickerLines } from "@diffr/viewer/viewport/picker";
-import { agentReference, copySelection, selectionBounds, type SourceSelection } from "@diffr/viewer/document/selection";
+import { agentReference, copySelection, rangeName, rangeReference, selectedRanges, selectionBounds, type SourceSelection } from "@diffr/viewer/document/selection";
 import { Colors, fit, LineBuilder, paintCell } from "./paint";
 import type { Action, Frame, Input, Line } from "./protocol";
 
@@ -27,18 +27,23 @@ const KEYS: [string, string][] = [
   ["\\ · ⌘B · ☰ files", "the file tree"],
   ["V · a header's box", "mark a file viewed"],
   ["drag · y · Y", "select lines; copy them; copy them for an agent"],
+  ["⏎ · ⌘L", "add the selected lines to the chat"],
   ["s · w · t", "split or unified; wrap; theme"],
   ["?", "this list"],
   ["q", "close the pane"],
 ];
 /** Pinned to the status line's right end, so cut hints never cut the way to the list. */
 const KEYS_BUTTON = " ? keys ";
+/** On the selection bar, which takes the status line while lines are selected. */
+const CHAT_BUTTON = " ⏎ Add to chat ";
 
 /** What an input asks of the hooks module beyond a redraw. */
 export interface Outcome {
   close?: true;
   /** Text for the clipboard, and what it is, for the message saying how the copy went. */
   copy?: { text: string; what: string };
+  /** Selected ranges for the prompt box: each by its name, with the code the model reads when the prompt is sent. */
+  chat?: { name: string; context: string }[];
 }
 
 /** Split only with about 80 code columns a side. */
@@ -68,7 +73,7 @@ export class Pane {
   /** The tree row the tree that took the pane is on. */
   private treeCursor = 0;
 
-  constructor(private readonly store: DiffStore, theme: Palette) {
+  constructor(private readonly store: DiffStore, readonly theme: Palette) {
     this.viewer = new Viewer(store, theme, SPLIT_COLUMNS);
   }
 
@@ -82,6 +87,7 @@ export class Pane {
 
   /** What an input asks of the hooks module beyond a redraw: to close the pane, or to copy text. */
   input(input: Input): Outcome {
+    if ("act" in input && "chat" in input.act) return this.chat();
     if ("act" in input) this.act(input.act, input.alt === true);
     else if ("select" in input) this.select(input.select);
     else return this.press(input.press);
@@ -94,6 +100,7 @@ export class Pane {
    */
   blur() {
     this.viewer.cancel();
+    this.selection = null;
     this.helpView = false;
     this.filesView = false;
   }
@@ -101,6 +108,11 @@ export class Pane {
   /** Says how a copy the pane asked for went; `refusal` is the clipboard's reason when it did not. */
   copied(what: string, refusal?: string) {
     this.message = refusal ? `Not copied: ${refusal}` : `Copied ${what}`;
+  }
+
+  /** Says how putting ranges in the prompt box went; `refusal` is why the box did not take them. */
+  chatted(names: string[], refusal?: string) {
+    this.message = refusal ? `Not added to the chat: ${refusal}` : `Added ${names.join(", ")} to the chat · esc to type`;
   }
 
   /** A press on a code line starts a selection on its side; a drag moves the selection's end. */
@@ -125,7 +137,8 @@ export class Pane {
     else if ("files" in action) this.toggleFiles();
     else if ("pick" in action) this.viewer.pickFile(action.pick);
     else if ("help" in action) this.helpView = !this.helpView;
-    else this.viewer.toggleLayout();
+    else if ("layout" in action) this.viewer.toggleLayout();
+    else throw new Error(`The pane does not act on ${JSON.stringify(action)} here`);
   }
 
   private press(key: KeyPress): Outcome {
@@ -155,6 +168,9 @@ export class Pane {
       return {};
     }
     if (plain && (key.key === "y" || key.key === "Y")) return this.copy(key.key === "Y");
+    // ⌘L as in Cursor; Enter while the selection bar offers it.
+    if (this.selection && ((plain && (key.key === "return" || key.key === "enter")) || (key.meta && key.key === "l")))
+      return this.chat();
     if (files) this.toggleFiles();
     else {
       // s and c reshape the rows, so the selection's rows are gone; a finished z chord is not one of them.
@@ -228,6 +244,25 @@ export class Pane {
       return {};
     }
     return { copy: { text, what: forAgent ? "for agent" : "source lines" } };
+  }
+
+  /** The selected ranges, for the prompt box; the selection is done with once they are on their way. */
+  private chat(): Outcome {
+    if (!this.selection) {
+      this.message = "Drag across lines to select them first";
+      return {};
+    }
+    const { snapshot, rows } = this.viewer.lay(this.layoutSize(this.size!));
+    const { comparison } = snapshot;
+    if (!comparison) throw new Error("A selection exists before diffr named the comparison");
+    const ranges = selectedRanges(snapshot.files, rows, this.selection);
+    if (!ranges.length) {
+      this.message = "The selection holds no source lines";
+      return {};
+    }
+    this.selection = null;
+    this.selecting = false;
+    return { chat: ranges.map((range) => ({ name: rangeName(range), context: rangeReference(snapshot.files, comparison, range) })) };
   }
 
   /** `wheelColumn` is undefined for the pane's scroll keys. */
@@ -473,9 +508,23 @@ export class Pane {
     // A message leads, so a narrow pane cuts the key hints rather than what just happened.
     // While typing, the status line is the prompt; after a search, it leads with where the search stands.
     const found = viewer.searchState();
+    const selected = this.selection && !this.filesView && !this.helpView ? selectedRanges(files, at.rows, this.selection) : [];
     if (found && "prompt" in found)
       status.text(fit(`/${found.prompt}▏ · ${found.count} matches · ⏎ go · ctrl-c cancel`, size.columns), theme.fg);
-    else {
+    else if (selected.length) {
+      // The selection bar, bright so it catches the eye: what is selected, then the button that sends it to the chat.
+      const count = selected.reduce((sum, range) => sum + range.end - range.start + 1, 0);
+      const what = selected.length === 1 ? rangeName(selected[0]!) : `${selected.length} files`;
+      const button = measureTextWidth(CHAT_BUTTON);
+      const lead = fit(` ${this.message ? `${this.message} · ` : ""}${what} · ${count} ${count === 1 ? "line" : "lines"} `,
+        Math.max(0, size.columns - button));
+      status.text(lead, theme.bg, theme.accent, true);
+      const from = measureTextWidth(lead);
+      status.hit(from, from + button, { chat: true }).text(CHAT_BUTTON, theme.accent, theme.bg, true);
+      const room = size.columns - from - button;
+      const hints = " y copy · Y copy for agent · esc clear";
+      if (room > 0) status.text(measureTextWidth(hints) > room ? `${fit(hints, room - 1)}…` : hints, theme.bg, theme.accent).fill(size.columns, theme.accent);
+    } else {
       const searched = !found ? ""
         : `/${found.pattern} · ${found.total ? `match ${found.at} of ${found.total} in ${found.files} files · n/N` : "no matches"} · `;
       // Where the reader is, as vim's status line says it: the file, which of how many, how far through.

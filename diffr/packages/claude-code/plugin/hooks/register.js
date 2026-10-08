@@ -14449,7 +14449,8 @@ var action = exports_external.union([
   exports_external.strictObject({ layout: exports_external.literal(true) }),
   exports_external.strictObject({ help: exports_external.literal(true) }),
   exports_external.strictObject({ pick: exports_external.number().int() }),
-  exports_external.strictObject({ files: exports_external.literal(true) })
+  exports_external.strictObject({ files: exports_external.literal(true) }),
+  exports_external.strictObject({ chat: exports_external.literal(true) })
 ]);
 var hover = exports_external.union([
   exports_external.strictObject({ file: exports_external.number().int(), id: exports_external.number().int(), armed: exports_external.boolean() }),
@@ -18218,7 +18219,7 @@ function whereToFind(version2) {
       throw new Error("The empty tree has no source to copy");
   }
 }
-function agentReference(files, comparison, rows, selection) {
+function selectedRanges(files, rows, selection) {
   const [a, b] = selectionBounds(rows, selection);
   const ranges = new Map;
   for (const row of rows.slice(a < 0 ? rows.length : a, b + 1)) {
@@ -18228,24 +18229,38 @@ function agentReference(files, comparison, rows, selection) {
     const range = ranges.get(row.fileIndex);
     ranges.set(row.fileIndex, range ? [Math.min(range[0], n), Math.max(range[1], n)] : [n, n]);
   }
-  const left = selection.side === "left";
   return [...ranges].map(([fileIndex, [start, end]]) => {
     const file2 = files[fileIndex];
-    const source2 = file2?.diff.type === "text" ? left ? file2.diff.lhs : file2.diff.rhs : undefined;
-    const path = left ? file2?.file.lhs?.path : file2?.file.rhs?.path;
-    if (!source2 || path === undefined)
-      throw new Error(`File ${fileIndex} has no ${selection.side} source to copy`);
-    const code = sourceLines(source2.text).slice(start - 1, end).join(`
+    const path = selection.side === "left" ? file2?.file.lhs?.path : file2?.file.rhs?.path;
+    if (path === undefined)
+      throw new Error(`File ${fileIndex} has no ${selection.side} side to select`);
+    return { fileIndex, path, side: selection.side, start, end };
+  });
+}
+function rangeName(range) {
+  return `${range.path}:${range.start === range.end ? range.start : `${range.start}-${range.end}`}`;
+}
+function rangeReference(files, comparison, range) {
+  const file2 = files[range.fileIndex];
+  const left = range.side === "left";
+  const source2 = file2?.diff.type === "text" ? left ? file2.diff.lhs : file2.diff.rhs : undefined;
+  if (!source2)
+    throw new Error(`File ${range.fileIndex} has no ${range.side} source to copy`);
+  const code = sourceLines(source2.text).slice(range.start - 1, range.end).join(`
 `);
-    const fence = "`".repeat(Math.max(3, ...[...code.matchAll(/`+/g)].map((run) => run[0].length + 1)));
-    const language = /\.([^./]+)$/.exec(path)?.[1] ?? "";
-    const lines = start === end ? `${start}` : `${start}-${end}`;
-    const where = whereToFind(left ? comparison.lhs : comparison.rhs);
-    return `${path}:${lines}${where}
+  let fence = "```";
+  for (const run of code.matchAll(/`+/g))
+    if (run[0].length >= fence.length)
+      fence = "`".repeat(run[0].length + 1);
+  const language = /\.([^./]+)$/.exec(range.path)?.[1] ?? "";
+  const where = whereToFind(left ? comparison.lhs : comparison.rhs);
+  return `${rangeName(range)}${where}
 ${fence}${language}
 ${code}
 ${fence}`;
-  }).join(`
+}
+function agentReference(files, comparison, rows, selection) {
+  return selectedRanges(files, rows, selection).map((range) => rangeReference(files, comparison, range)).join(`
 
 `);
 }
@@ -18382,16 +18397,19 @@ var KEYS = [
   ["\\ · ⌘B · ☰ files", "the file tree"],
   ["V · a header's box", "mark a file viewed"],
   ["drag · y · Y", "select lines; copy them; copy them for an agent"],
+  ["⏎ · ⌘L", "add the selected lines to the chat"],
   ["s · w · t", "split or unified; wrap; theme"],
   ["?", "this list"],
   ["q", "close the pane"]
 ];
 var KEYS_BUTTON = " ? keys ";
+var CHAT_BUTTON = " ⏎ Add to chat ";
 var SPLIT_COLUMNS = 180;
 var TREE_MIN_COLUMNS = 120;
 
 class Pane {
   store;
+  theme;
   viewer;
   message = "";
   size;
@@ -18407,6 +18425,7 @@ class Pane {
   treeCursor = 0;
   constructor(store, theme) {
     this.store = store;
+    this.theme = theme;
     this.viewer = new Viewer(store, theme, SPLIT_COLUMNS);
   }
   subscribe(listener) {
@@ -18416,6 +18435,8 @@ class Pane {
     this.viewer.setHover(hover2);
   }
   input(input2) {
+    if ("act" in input2 && "chat" in input2.act)
+      return this.chat();
     if ("act" in input2)
       this.act(input2.act, input2.alt === true);
     else if ("select" in input2)
@@ -18426,11 +18447,15 @@ class Pane {
   }
   blur() {
     this.viewer.cancel();
+    this.selection = null;
     this.helpView = false;
     this.filesView = false;
   }
   copied(what, refusal) {
     this.message = refusal ? `Not copied: ${refusal}` : `Copied ${what}`;
+  }
+  chatted(names, refusal) {
+    this.message = refusal ? `Not added to the chat: ${refusal}` : `Added ${names.join(", ")} to the chat · esc to type`;
   }
   select({ x, y, extend: extend2 }) {
     const cell = this.cellsAt.get(y);
@@ -18461,8 +18486,10 @@ class Pane {
       this.viewer.pickFile(action2.pick);
     else if ("help" in action2)
       this.helpView = !this.helpView;
-    else
+    else if ("layout" in action2)
       this.viewer.toggleLayout();
+    else
+      throw new Error(`The pane does not act on ${JSON.stringify(action2)} here`);
   }
   press(key) {
     if (this.viewer.prompting || this.viewer.picking) {
@@ -18493,6 +18520,8 @@ class Pane {
     }
     if (plain && (key.key === "y" || key.key === "Y"))
       return this.copy(key.key === "Y");
+    if (this.selection && (plain && (key.key === "return" || key.key === "enter") || key.meta && key.key === "l"))
+      return this.chat();
     if (files)
       this.toggleFiles();
     else {
@@ -18562,6 +18591,24 @@ class Pane {
       return {};
     }
     return { copy: { text, what: forAgent ? "for agent" : "source lines" } };
+  }
+  chat() {
+    if (!this.selection) {
+      this.message = "Drag across lines to select them first";
+      return {};
+    }
+    const { snapshot: snapshot3, rows } = this.viewer.lay(this.layoutSize(this.size));
+    const { comparison } = snapshot3;
+    if (!comparison)
+      throw new Error("A selection exists before diffr named the comparison");
+    const ranges = selectedRanges(snapshot3.files, rows, this.selection);
+    if (!ranges.length) {
+      this.message = "The selection holds no source lines";
+      return {};
+    }
+    this.selection = null;
+    this.selecting = false;
+    return { chat: ranges.map((range) => ({ name: rangeName(range), context: rangeReference(snapshot3.files, comparison, range) })) };
   }
   scroll(by, wheelColumn) {
     if (this.filesView)
@@ -18679,17 +18726,17 @@ class Pane {
           body.push((line, y) => {
             const focus = hover2?.file === row.fileIndex && "id" in hover2 ? hover2 : undefined;
             const paint = { theme, geometry, fileIndex: row.fileIndex, visualLine, focus, read: viewer.isViewed(row.fileIndex) === true };
-            const selected = selectedSide(row.key);
+            const selected2 = selectedSide(row.key);
             if (row.cell) {
               const side = row.cell.newLineNumber === undefined ? "left" : "right";
               this.cellsAt.set(y + 1, { key: row.key, side: () => side });
-              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, { ...paint, selected: selected === side });
+              paintCell(line, row.cell, measured.cell[visualLine] ?? [], geometry.leftWidth + geometry.rightWidth + 1, true, { ...paint, selected: selected2 === side });
             } else {
-              paintCell(line, row.left, measured.left[visualLine] ?? [], geometry.leftWidth, false, { ...paint, selected: selected === "left" });
+              paintCell(line, row.left, measured.left[visualLine] ?? [], geometry.leftWidth, false, { ...paint, selected: selected2 === "left" });
               const divider = line.width;
               this.cellsAt.set(y + 1, { key: row.key, side: (x) => x < divider ? "left" : "right" });
               line.text("│", theme.muted, theme.bg);
-              paintCell(line, row.right, measured.right[visualLine] ?? [], geometry.rightWidth, false, { ...paint, selected: selected === "right" });
+              paintCell(line, row.right, measured.right[visualLine] ?? [], geometry.rightWidth, false, { ...paint, selected: selected2 === "right" });
             }
           });
       }
@@ -18766,9 +18813,22 @@ class Pane {
     const errors3 = snapshot3.errors.length ? `${snapshot3.errors.length} errors  ` : "";
     const read = viewer.viewedFiles();
     const found = viewer.searchState();
+    const selected = this.selection && !this.filesView && !this.helpView ? selectedRanges(files, at.rows, this.selection) : [];
     if (found && "prompt" in found)
       status.text(fit(`/${found.prompt}▏ · ${found.count} matches · ⏎ go · ctrl-c cancel`, size.columns), theme.fg);
-    else {
+    else if (selected.length) {
+      const count = selected.reduce((sum, range) => sum + range.end - range.start + 1, 0);
+      const what = selected.length === 1 ? rangeName(selected[0]) : `${selected.length} files`;
+      const button2 = measureTextWidth(CHAT_BUTTON);
+      const lead = fit(` ${this.message ? `${this.message} · ` : ""}${what} · ${count} ${count === 1 ? "line" : "lines"} `, Math.max(0, size.columns - button2));
+      status.text(lead, theme.bg, theme.accent, true);
+      const from = measureTextWidth(lead);
+      status.hit(from, from + button2, { chat: true }).text(CHAT_BUTTON, theme.accent, theme.bg, true);
+      const room = size.columns - from - button2;
+      const hints = " y copy · Y copy for agent · esc clear";
+      if (room > 0)
+        status.text(measureTextWidth(hints) > room ? `${fit(hints, room - 1)}…` : hints, theme.bg, theme.accent).fill(size.columns, theme.accent);
+    } else {
       const searched = !found ? "" : `/${found.pattern} · ${found.total ? `match ${found.at} of ${found.total} in ${found.files} files · n/N` : "no matches"} · `;
       const order = flattenFileTree(buildFileTree(inventory), new Set).flatMap(({ node }) => node.fileIndex === undefined ? [] : [node.fileIndex]);
       const name = inventory[currentFile] ? filePath(inventory[currentFile].file).split("/").at(-1) : undefined;
@@ -18852,6 +18912,15 @@ async function pump(store, child) {
 ${stderr}` : error46);
   }
 }
+function chipRuns(text, names, theme) {
+  return names.flatMap((name) => occurrencesOf(text, name).map((start) => ({ start, end: start + name.length, color: theme.bg, backgroundColor: theme.accent, bold: true })));
+}
+function occurrencesOf(text, name) {
+  const starts = [];
+  for (let at = text.indexOf(name);at >= 0; at = text.indexOf(name, at + name.length))
+    starts.push(at);
+  return starts;
+}
 function register(on, options) {
   const binary = options.diffr;
   if (typeof binary !== "string")
@@ -18859,6 +18928,7 @@ function register(on, options) {
   let pane;
   let child;
   let focused = false;
+  const chips = new Map;
   const acks = new Map;
   on("session.start", async ($, e, next) => {
     await $.command.register({
@@ -18955,9 +19025,34 @@ function register(on, options) {
         const copied = await $.ui.copy({ text: outcome.copy.text, surface: e.surface });
         pane.copied(outcome.copy.what, copied.isCopied ? undefined : copied.reason);
       }
+      if (outcome.chat) {
+        const names = outcome.chat.map((chip) => chip.name);
+        const text = `${names.join(" ")} `;
+        const filled = await $.prompt.fill({ text, mode: "insert", decorations: chipRuns(text, names, pane.theme) });
+        if (filled.isFilled)
+          for (const chip of outcome.chat)
+            chips.set(chip.name, chip.context);
+        pane.chatted(names, filled.isFilled ? undefined : filled.refusal === "dialog" ? "a dialog holds the keys" : filled.refusal === "no_composer" ? "this session has no prompt box" : "a hook kept it out");
+      }
     }
     $.ui.invalidate("ui.render");
     return {};
+  });
+  on("prompt.edit", async ($, e, next) => {
+    const box = await next(e);
+    if (!chips.size || !pane)
+      return box;
+    return { ...box, decorations: [...box.decorations ?? [], ...chipRuns(box.text, [...chips.keys()], pane.theme)] };
+  });
+  on("prompt.submit", async ($, e, next) => {
+    if (!chips.size)
+      return next(e);
+    const named2 = [...chips].filter(([name]) => e.text.includes(name));
+    chips.clear();
+    if (!named2.length)
+      return next(e);
+    return next({ ...e, context: [...e.context ?? [], ...named2.map(([name, code]) => `The person selected these lines in diffr's review pane; their prompt calls them ${name}.
+${code}`)] });
   });
   on("ui.scroll", { requestId: "diffr" }, async ($, e) => {
     if (!pane)

@@ -24,6 +24,8 @@ const action = z.union([
   z.strictObject({ pick: z.number().int() }),
   /** The title bar's files button: the tree, as a sidebar or in place of the diff. */
   z.strictObject({ files: z.literal(true) }),
+  /** The selection bar's Add to chat button. */
+  z.strictObject({ chat: z.literal(true) }),
 ]);
 export type Action = z.infer<typeof action>;
 

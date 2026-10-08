@@ -81,7 +81,8 @@ test("/diffr streams diffr into a pane where a click opens a file and keys switc
     await ui.key({ key: "Y", in: "diff-0" });
     expect(copied.at(-1)?.surface).toBe(surface);
     expect(copied.at(-1)?.text).toMatch(/^src\/greet\.ts:1-2 at \w+\n```ts\nexport function greet\(name: string, punctuation = "!"\) \{\n  return "hello " \+ name \+ punctuation;\n```$/);
-    expect((await lines(ui, "diff-1")).at(-1)).toStartWith("Copied for agent");
+    // The lines stay selected, so the message leads the selection bar.
+    expect((await lines(ui, "diff-1")).at(-1)!.trim()).toStartWith("Copied for agent");
 
     // Close the file again for the next surface.
     await ui.pointer({ type: "down", x: 6, y: load - 1, button: "left", in: "diff-0" });
@@ -179,5 +180,55 @@ test("leaving the pane, as Escape does, closes the search prompt and the picker"
   expect((await lines(ui, "diff-1")).join("\n")).toContain("changed files");
   await ui.redraw({ ...PANE.props, isFocused: false });
   expect((await lines(ui, "diff-1")).join("\n")).not.toContain("changed files");
+  await ui.unmount();
+});
+
+test("Enter on a selection puts a chip naming it in the prompt box, and the prompt that names it carries its code", async ($, on) => {
+  on("process.run", async () => ({ value: { exitCode: 0, stdout: JSON.stringify({ theme: { name: "default-dark", path: null } }),
+    stderr: "", isStdoutTruncated: false, isStderrTruncated: false } }));
+  on("ui.open", async () => ({ value: { isPlaced: true } }));
+  on("process.spawn", async function* () {
+    yield { stream: "stdout", text: fixture };
+    return { value: { code: 0, signal: null } };
+  });
+  let draft = "";
+  on("prompt.fill", async ($, e) => {
+    draft = e.mode === "insert" ? `${draft}${e.text}` : e.text;
+    return { isFilled: true };
+  });
+  const submitted: { text: string; context?: readonly string[] }[] = [];
+  on("prompt.submit", async ($, e) => {
+    submitted.push({ text: e.text, context: e.context });
+    return { text: e.text, context: e.context };
+  });
+  await $.command.run({ command: "diffr", args: "", presentation: { isFullscreen: true, columns: 150 } } as never);
+  const ui = await $.ui.mount({ ...PANE, surface: "terminal" } as never) as never as {
+    drawn: (scope: { in: string }) => Promise<unknown>;
+    pointer: (event: { type: "down" | "move" | "up"; x: number; y: number; button: "left"; in: string }) => Promise<void>;
+    key: (event: { key: string; in: string }) => Promise<void>;
+    unmount: () => Promise<void>;
+  };
+  let shown = await lines(ui, "diff-0");
+  for (let tries = 0; !shown.some((line) => line.includes("Load diff")) && tries < 50; tries++) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    shown = await lines(ui, "diff-0");
+  }
+  await ui.pointer({ type: "down", x: 6, y: shown.findIndex((line) => line.includes("Load diff")), button: "left", in: "diff-0" });
+  const head = (await lines(ui, "diff-0")).findIndex((line) => line.includes("punctuation = "));
+  await ui.pointer({ type: "down", x: 10, y: head, button: "left", in: "diff-0" });
+  await ui.pointer({ type: "move", x: 10, y: head + 1, button: "left", in: "diff-0" });
+  await ui.pointer({ type: "up", x: 10, y: head + 1, button: "left", in: "diff-0" });
+  expect((await lines(ui, "diff-1")).at(-1)).toContain("src/greet.ts:1-2 · 2 lines");
+  await ui.key({ key: "return", in: "diff-0" });
+  expect(draft).toBe("src/greet.ts:1-2 ");
+  expect((await lines(ui, "diff-1")).at(-1)).toStartWith("Added src/greet.ts:1-2 to the chat · esc to type");
+
+  await $.prompt.submit({ text: "why the default? src/greet.ts:1-2" } as never);
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.context).toHaveLength(1);
+  expect(submitted[0]!.context![0]).toMatch(/calls them src\/greet\.ts:1-2\.\nsrc\/greet\.ts:1-2 at \w+\n```ts\nexport function greet\(name: string, punctuation = "!"\)/);
+  // Sent once: the next prompt carries nothing of it.
+  await $.prompt.submit({ text: "and src/greet.ts:1-2 again" } as never);
+  expect(submitted[1]!.context ?? []).toHaveLength(0);
   await ui.unmount();
 });

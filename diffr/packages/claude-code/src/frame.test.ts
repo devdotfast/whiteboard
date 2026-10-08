@@ -114,9 +114,54 @@ test("a drag across code lines selects them on one side; y copies them and Y cop
   expect(forAgent.text).toMatch(/^\S+:\d+-\d+( at .+| in the git index \(staged\))?\n```/);
   expect(forAgent.text).toContain(raw.text);
   pane.copied("for agent");
-  expect(screen(pane.frame(wide)).at(-1)).toStartWith("Copied for agent");
+  // The selection stays, so its bar holds the status line, and the message leads it.
+  expect(screen(pane.frame(wide)).at(-1)!.trim()).toStartWith("Copied for agent");
   pane.copied("for agent", "no-clipboard");
-  expect(screen(pane.frame(wide)).at(-1)).toStartWith("Not copied: no-clipboard");
+  expect(screen(pane.frame(wide)).at(-1)!.trim()).toStartWith("Not copied: no-clipboard");
+});
+
+test("while lines are selected the status line is a bright bar naming them, with a button and Enter to add them to the chat", async () => {
+  const { pane } = await load(scopes);
+  const theme = loadBundledTheme("default-dark");
+  const at = (frame: Frame, content: string) => {
+    const y = screen(frame).findIndex((line) => line.includes(content));
+    return { y, x: screen(frame)[y]!.lastIndexOf(content) };
+  };
+  const select = () => {
+    pane.input({ select: at(pane.frame(wide), "for (const plugin") });
+    pane.input({ select: { ...at(pane.frame(wide), "plugin.enabled"), extend: true } });
+  };
+  const status = () => pane.frame(wide).lines.at(-1)!;
+  expect(text(status())).not.toContain("Add to chat");
+  select();
+  const bar = pane.frame(wide);
+  const line = bar.lines.at(-1)!;
+  expect(text(line)).toMatch(/^ \S+\.ts:(\d+)-(\d+) · \d+ lines +⏎ Add to chat /);
+  const [, from, to] = /:(\d+)-(\d+)/.exec(text(line))!;
+  expect(text(line)).toContain(`${Number(to) - Number(from) + 1} lines`);
+  expect(bar.colors[line.segments[0]![2]]).toBe(theme.accent);
+  expect(target(bar, (act) => "chat" in act)).toEqual({ chat: true });
+
+  const chat = pane.input({ press: { key: "return" } }).chat!;
+  expect(chat).toHaveLength(1);
+  expect(chat[0]!.name).toMatch(/^\S+\.ts:\d+-\d+$/);
+  // What the model reads: the name, then the selected code fenced.
+  expect(chat[0]!.context).toStartWith(chat[0]!.name);
+  expect(chat[0]!.context).toContain("for (const plugin");
+  expect(chat[0]!.context).toContain("plugin.enabled");
+  // Sent on, the selection is done with: the bar gives way to the status line, which says where it went.
+  pane.chatted([chat[0]!.name]);
+  expect(text(status())).toStartWith(`Added ${chat[0]!.name} to the chat · esc to type`);
+
+  select();
+  expect(pane.input({ act: { chat: true } }).chat).toEqual(chat);
+  select();
+  expect(pane.input({ press: { key: "l", meta: true } }).chat).toEqual(chat);
+  // Leaving the pane, as Escape does, drops the selection.
+  select();
+  pane.blur();
+  expect(text(status())).not.toContain("Add to chat");
+  expect(pane.input({ press: { key: "return" } }).chat).toBeUndefined();
 });
 
 test("y with nothing selected says how to select, and copies nothing", async () => {

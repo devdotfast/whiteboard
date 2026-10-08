@@ -1,4 +1,4 @@
-import type { EngineInterface, On, PluginOptions } from "claude-code";
+import type { EngineInterface, On, PluginOptions, PromptDecoration } from "claude-code";
 import { paletteFromHelix, themeConfig, type Palette } from "@diffr/viewer/theme/palette";
 import { loadBundledTheme, parseHelixTheme } from "@diffr/viewer/theme/themes";
 import { DiffStore } from "@diffr/viewer/protocol/store";
@@ -92,6 +92,18 @@ async function pump(store: DiffStore, child: Child) {
   }
 }
 
+/** A chip for each place `text` names a range: the selection bar's colours, so the two read as one thing. */
+function chipRuns(text: string, names: string[], theme: Palette): PromptDecoration[] {
+  return names.flatMap((name) => occurrencesOf(text, name).map((start) =>
+    ({ start, end: start + name.length, color: theme.bg, backgroundColor: theme.accent, bold: true })));
+}
+
+function occurrencesOf(text: string, name: string): number[] {
+  const starts: number[] = [];
+  for (let at = text.indexOf(name); at >= 0; at = text.indexOf(name, at + name.length)) starts.push(at);
+  return starts;
+}
+
 // Must stay a function declaration: Claude Code finds `register` in the source.
 export function register(on: On, options: PluginOptions): void {
   const binary = options.diffr;
@@ -100,6 +112,11 @@ export function register(on: On, options: PluginOptions): void {
   let child: Child | undefined;
   /** Whether the pane had the keyboard when it was last drawn. */
   let focused = false;
+  /**
+   * Ranges added to the prompt box, by the name the draft shows them as, with the code the model
+   * reads beside the prompt that names them. Sending a prompt spends them all.
+   */
+  const chips = new Map<string, string>();
   /** The last handled seq per view instance (see `Post`). */
   const acks = new Map<string, number>();
 
@@ -199,10 +216,35 @@ export function register(on: On, options: PluginOptions): void {
         const copied = await $.ui.copy({ text: outcome.copy.text, surface: e.surface });
         pane.copied(outcome.copy.what, copied.isCopied ? undefined : copied.reason);
       }
+      if (outcome.chat) {
+        const names = outcome.chat.map((chip) => chip.name);
+        const text = `${names.join(" ")} `;
+        const filled = await $.prompt.fill({ text, mode: "insert", decorations: chipRuns(text, names, pane.theme) });
+        if (filled.isFilled) for (const chip of outcome.chat) chips.set(chip.name, chip.context);
+        pane.chatted(names, filled.isFilled ? undefined : filled.refusal === "dialog" ? "a dialog holds the keys"
+          : filled.refusal === "no_composer" ? "this session has no prompt box" : "a hook kept it out");
+      }
     }
     // Redraw every band, not just the one that posted.
     $.ui.invalidate("ui.render");
     return {};
+  });
+
+  // An edit repaints the draft without the chips' colours, so paint them again on every one.
+  on("prompt.edit", async ($, e, next) => {
+    const box = await next(e);
+    if (!chips.size || !pane) return box;
+    return { ...box, decorations: [...(box.decorations ?? []), ...chipRuns(box.text, [...chips.keys()], pane.theme)] };
+  });
+
+  // The model reads the code of each chip the prompt still names; a chip deleted from the draft is dropped.
+  on("prompt.submit", async ($, e, next) => {
+    if (!chips.size) return next(e);
+    const named = [...chips].filter(([name]) => e.text.includes(name));
+    chips.clear();
+    if (!named.length) return next(e);
+    return next({ ...e, context: [...(e.context ?? []), ...named.map(([name, code]) =>
+      `The person selected these lines in diffr's review pane; their prompt calls them ${name}.\n${code}`)] });
   });
 
   // The frame fills the pane, so the engine never scrolls it; scroll the viewer instead.
