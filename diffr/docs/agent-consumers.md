@@ -99,27 +99,28 @@ prompts and tool calls stay on the local machine; user sessions are not submitte
 | Check | Evidence |
 | --- | --- |
 | Pi public API | 1.1.0 production bundle: actual model tool, preserved editor focus, mouse selection and Enter to existing draft in floating/fullscreen views, F7/F6/Escape, folds/unfolds, dedicated files screen and navigation, viewed marks across layout changes, close/reopen with draft preserved; earlier 0.99.1 smoke coverage retained |
-| OpenCode 2.0.25 | Model called the actual registered tool; a valid comparison was acknowledged; native half-width split, fullscreen, folds, viewed marks, files, and preserved draft exercised in Ghostty |
-| Selection to draft | Pi normalized-pointer integration test and OpenCode real-renderer mouse/Enter integration test append selected code to an existing draft without submission |
+| OpenCode 2.0.25 | Model called the actual registered tool; a valid comparison was acknowledged; native half-width split, fullscreen, folds, viewed marks, files, and preserved draft exercised in Ghostty; whole-loop drag in unified view and reverse cross-side drag in fullscreen split view both appended complete patches without submission |
+| Selection to draft | Pi and real OpenTUI tests cover multi-row, cross-side selection in both directions with redraws between mouse events; both append complete patches to an existing draft without submission |
 | Pi mouse Add to chat | Real Ghostty drag and button click appended code without submission: draft preservation checked with an input-tracing wrapper; the unmodified production bundle repeated the button flow on a live working-tree change |
 | Pi lifecycle | Real second-extension overlay remained visible and focused when Diffr closed beneath it; closing the second overlay restored chat; starting a new Pi session removed the previous review |
-| Computer-use pointer delivery | Initial synthetic presses used the terminal's previous pointer position; positioning the pointer before the tested drag/click resolved Pi selection. OpenCode real mouse selection, Add to chat, and divider dragging remain unverified |
+| Computer-use pointer delivery | Initial synthetic presses used the terminal's previous pointer position; positioning the pointer before the tested drag/click resolved Pi selection. OpenCode real multi-row mouse selection and Enter transfer now pass; Add to chat button and divider dragging remain unverified |
 | Earlier Herdr run | Real split beside an offline Pi agent; selected code became an unsent 14-line paste block; zoom, folds, and viewed marks exercised |
 | Live producer | Production Pi invoked installed Diffr on two real changed Git files; model tool acknowledged both; the files screen navigated to the second file; mouse selection and Add to chat inserted the correct patch into the unsent draft; a HEAD comparison preserved the full base commit SHA and identified the working tree explicitly |
 
-OpenCode's five behavioral tests cover matching-session delivery, rejection of a
+OpenCode's six behavioral tests cover matching-session delivery, rejection of a
 hidden session, single-terminal claims, errors, cancellation, and real OpenTUI
 selection/draft/fullscreen behavior. Pi tests cover tool dispatch, draft preservation,
 public overlay cleanup (including another extension above it), and key release handling. The OpenCode renderer test runs
 with the Solid preload through `bun run test` in CI.
 
-All seven package typechecks, 153 regression tests, and the additional OpenCode
-renderer test passed. Pi and Claude bundles built; the checked-in Claude plugin
+All seven package typechecks, 154 regression tests, and the two OpenCode
+renderer tests passed. Pi and Claude bundles built; the checked-in Claude plugin
 bundle was rebuilt for the patch format. Frozen workspace installation passed.
 
 The v2 runtime was installed and tested in isolation. A system Homebrew upgrade
 was blocked by outdated macOS Command Line Tools; the original v1 command was
-restored. No macOS toolchain changes were made.
+restored. No macOS toolchain changes were made. OpenCode 1.x is unsupported; the
+obsolete v1 QA launcher/configuration was removed, and no v1 fallback remains.
 
 ## Remaining release work
 
@@ -128,7 +129,7 @@ These are source-workspace integrations with usage instructions in each package'
 
 - **Pi layout:** obtain a supported sidebar API or use an external terminal split
   to meet the no-overlap requirement.
-- **OpenCode UI validation:** complete real mouse selection, Add to chat, and native
+- **OpenCode UI validation:** complete the Add to chat button and native
   divider dragging using the corrected computer-use pointer positioning.
 - **OpenCode compatibility:** test narrow terminals and additional host versions;
   prefer an upstream draft API when one becomes available.
