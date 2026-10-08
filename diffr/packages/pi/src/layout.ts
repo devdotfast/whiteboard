@@ -23,7 +23,8 @@ export function mountPane(ui: ExtensionContext["ui"], create: (tui: TUI, full: b
         resolve();
       },
     });
-    void completion.catch(reject);
+    // Pi skips onHandle when done() runs before the component mounts.
+    void completion.then(resolve, reject);
   });
   return {
     ready: show(capture),
@@ -37,6 +38,9 @@ export function mountPane(ui: ExtensionContext["ui"], create: (tui: TUI, full: b
       if (closed || switching) return;
       switching = true;
       try {
+        // Let Pi finish dispatching the current mouse event before it removes its target.
+        await Promise.resolve();
+        if (closed) return;
         finish?.();
         await completion;
         if (closed) return;

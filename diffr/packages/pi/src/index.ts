@@ -58,32 +58,32 @@ export default function diffr(pi: ExtensionAPI) {
       layout = mountPane(ctx.ui, (terminal, fullscreen) => {
         repaint = () => terminal.requestRender();
         const component: Component = {
-        render(width) {
-          frame = current.pane.frame({ columns: width, rows: Math.max(1, Math.floor(terminal.terminal.rows * (fullscreen ? 1 : 0.75)) - 1) });
-          const label = ` ${fullscreen ? "Floating panel" : "Full screen"} · F6  |  esc chat · q close`;
-          return [fit(label, width).padEnd(width), ...ansiLines(frame)];
-        },
-        invalidate() {},
-        handleInput(data) {
-          const key = paneKey(data);
-          if (!key) return;
-          if (key.key === "escape") return focusChat();
-          if (key.key === "f6") { void layout.toggle().catch(report); return; }
-          void outcome(current.pane.input({ press: key }));
-        },
-        handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
-          if ((event.type === "press" || event.type === "drag") && event.button !== "left") return;
-          if (event.y === 0 && event.type === "press") { void layout.toggle().catch(report); return { handled: true, focus: true }; }
-          if (!frame) return;
-          if (event.type === "wheel") { current.pane.scroll(event.wheelDelta ?? 0, event.x); return { handled: true, render: true }; }
-          const type = event.type === "press" ? "down" : event.type === "release" ? "up" : event.type === "click" ? undefined : event.type;
-          if (!type) return { handled: true };
-          const next = pointer.read(frame, { type, x: event.x, y: event.y - 1, alt: event.alt });
-          if (next.hover !== undefined) current.pane.hover(next.hover);
-          if (next.input) void outcome(current.pane.input(next.input));
-          return { handled: true, capture: type === "down", focus: type === "down", render: true };
-        },
-      };
+          render(width) {
+            frame = current.pane.frame({ columns: width, rows: Math.max(1, Math.floor(terminal.terminal.rows * (fullscreen ? 1 : 0.75)) - 1) });
+            const label = ` ${fullscreen ? "Floating panel" : "Full screen"} · F6  |  esc chat · q close`;
+            return [fit(label, width).padEnd(width), ...ansiLines(frame)];
+          },
+          invalidate() {},
+          handleInput(data) {
+            const key = paneKey(data);
+            if (!key) return;
+            if (key.key === "escape") return focusChat();
+            if (key.key === "f6") { void layout.toggle().catch(report); return; }
+            void outcome(current.pane.input({ press: key }));
+          },
+          handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
+            if ((event.type === "press" || event.type === "drag") && event.button !== "left") return;
+            if (event.y === 0 && event.type === "press") { void layout.toggle().catch(report); return { handled: true, focus: true }; }
+            if (!frame) return;
+            if (event.type === "wheel") { current.pane.scroll(event.wheelDelta ?? 0, event.x); return { handled: true, render: true }; }
+            const type = event.type === "press" ? "down" : event.type === "release" ? "up" : event.type === "click" ? undefined : event.type;
+            if (!type) return { handled: true };
+            const next = pointer.read(frame, { type, x: event.x, y: event.y - 1, alt: event.alt });
+            if (next.hover !== undefined) current.pane.hover(next.hover);
+            if (next.input) void outcome(current.pane.input(next.input));
+            return { handled: true, capture: type === "down", focus: type === "down", render: true };
+          },
+        };
         return component;
       }, full, capture);
       const unsubscribe = current.pane.subscribe(repaint);

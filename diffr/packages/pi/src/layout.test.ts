@@ -9,10 +9,10 @@ function host() {
     mounts.push(entry);
     return new Promise<void>(resolve => {
       factory({}, {}, {}, () => { entry.closed = true; resolve(); });
-      queueMicrotask(() => options.onHandle({
+      queueMicrotask(() => { if (entry.closed) return; options.onHandle({
         setHidden: (value: boolean) => { entry.hidden = value; },
         focus: () => { entry.focused = true; }, unfocus: () => { entry.focused = false; },
-      }));
+      }); });
     });
   } } as unknown as ExtensionContext["ui"];
   return { ui, mounts };
