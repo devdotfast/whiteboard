@@ -94,20 +94,22 @@ prompts and tool calls stay on the local machine; user sessions are not submitte
 
 | Check | Evidence |
 | --- | --- |
-| Pi public API | 0.99.1: model open, draft focus, F7/F6/Escape, folds, viewed marks, files, close; 1.1.0: production extension model open, draft focus, fullscreen, folding/viewed input, and Escape back to the draft |
+| Pi public API | 1.1.0 production bundle: actual model tool, preserved editor focus, mouse selection and Enter to existing draft in floating/fullscreen views, F7/F6/Escape, folds/unfolds, dedicated files screen and navigation, viewed marks across layout changes, close/reopen with draft preserved; earlier 0.99.1 smoke coverage retained |
 | OpenCode 2.0.25 | Model called the actual registered tool; a valid comparison was acknowledged; native half-width split, fullscreen, folds, viewed marks, files, and preserved draft exercised in Ghostty |
 | Selection to draft | Pi normalized-pointer integration test and OpenCode real-renderer mouse/Enter integration test append selected code to an existing draft without submission |
-| Current computer-use mouse | Dragging produced no visible source selection in Ghostty; native mouse selection, divider dragging, and mouse Add to chat remain unverified for the current adapters |
+| Pi mouse Add to chat | Real Ghostty drag and button click appended code without submission: draft preservation checked with an input-tracing wrapper; the unmodified production bundle repeated the button flow on a live working-tree change |
+| Pi lifecycle | Real second-extension overlay remained visible and focused when Diffr closed beneath it; closing the second overlay restored chat; starting a new Pi session removed the previous review |
+| Computer-use pointer delivery | Initial synthetic presses used the terminal's previous pointer position; positioning the pointer before the tested drag/click resolved Pi selection. OpenCode real mouse selection, Add to chat, and divider dragging remain unverified |
 | Earlier Herdr run | Real split beside an offline Pi agent; selected code became an unsent 14-line paste block; zoom, folds, and viewed marks exercised |
-| Live producer | Installed Diffr 0.1.16 compared two files with syntax NDJSON: one file, no errors, a 24-row frame |
+| Live producer | Production Pi invoked installed Diffr on two real changed Git files; model tool acknowledged both; the files screen navigated to the second file; mouse selection and Add to chat inserted the correct working-tree reference and code into the unsent draft |
 
 OpenCode's five behavioral tests cover matching-session delivery, rejection of a
 hidden session, single-terminal claims, errors, cancellation, and real OpenTUI
 selection/draft/fullscreen behavior. Pi tests cover tool dispatch, draft preservation,
-public overlay cleanup, and key release handling. The OpenCode renderer test runs
+public overlay cleanup (including another extension above it), and key release handling. The OpenCode renderer test runs
 with the Solid preload through `bun run test` in CI.
 
-All seven package typechecks, 150 regression tests, and the additional OpenCode
+All seven package typechecks, 151 regression tests, and the additional OpenCode
 renderer test passed. Pi and Claude bundles built; the checked-in Claude plugin
 bundles were unchanged. Frozen workspace installation passed.
 
@@ -121,9 +123,9 @@ These are source-workspace integrations with usage instructions in each package'
 `USAGE.md`. They are ready for review as draft PRs, not published extension releases.
 
 - **Pi layout:** obtain a supported sidebar API or use an external terminal split
-  to meet the no-overlap requirement; test nested overlays.
-- **Current UI validation:** complete real mouse selection, Add to chat, and native
-  divider dragging once computer-use pointer delivery is working.
+  to meet the no-overlap requirement.
+- **OpenCode UI validation:** complete real mouse selection, Add to chat, and native
+  divider dragging using the corrected computer-use pointer positioning.
 - **OpenCode compatibility:** test narrow terminals and additional host versions;
   prefer an upstream draft API when one becomes available.
 - **Herdr recipient coverage:** repeat the draft test with each additional agent.
