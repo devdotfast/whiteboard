@@ -14,7 +14,7 @@ def check(archive_path, version):
         root = Path(directory)
         with tarfile.open(archive_path) as archive:
             assert set(archive.getnames()) == {
-                f"diffr{exe}", "LICENSE", "NOTICE", "tui/LICENSE", "tui/themes/LICENSE",
+                f"diffr{exe}", "LICENSE", "NOTICE", "packages/tui/LICENSE", "packages/tui/themes/LICENSE",
             }
             archive.extractall(root, filter="data")
         env = {"PATH": "", "HOME": str(root), "XDG_CONFIG_HOME": str(root / "config")}
