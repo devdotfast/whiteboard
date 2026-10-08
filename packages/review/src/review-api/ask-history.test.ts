@@ -703,3 +703,110 @@ it("deleting a board ends its Ask threads and blocks reopening while saved histo
     threads.closeAll();
   }
 });
+
+it("marks a thread unread once a turn ends after the reviewer last saw it", async () => {
+  const { reviewId } = await store.execute(
+    command({
+      type: "create",
+      title: "Payments",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  const api = createReviewApi(
+    store,
+    {} as LocalReviewData,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      threads: new AskThreads(async () => {
+        throw new Error("No agent in this test.");
+      }),
+      agents: async () => [],
+    },
+  );
+
+  const unread = async () => {
+    const abort = new AbortController();
+
+    const response = await api.request(`/${reviewId}/ask/threads?watch`, {
+      signal: abort.signal,
+    });
+
+    const reader = response
+      .body!.pipeThrough(new TextDecoderStream())
+      .getReader();
+
+    let line = "";
+
+    while (!line.includes("\n")) line += (await reader.read()).value ?? "";
+    abort.abort();
+    await reader.cancel().catch(() => {});
+
+    return JSON.parse(line).threads.map(
+      (thread: { id: string; unread?: boolean }) => [
+        thread.id,
+        !!thread.unread,
+      ],
+    );
+  };
+
+  store.askHistory.save(record(reviewId, "seen", "2026-09-01T10:00:00.000Z"));
+  store.askHistory.save(record(reviewId, "older", "2026-09-01T09:00:00.000Z"));
+  store.askHistory.markViewed("seen", "2026-09-01T09:30:00.000Z");
+
+  // A turn ended after it was seen; a thread never tracked is read.
+  expect(await unread()).toEqual([
+    ["seen", true],
+    ["older", false],
+  ]);
+
+  const viewed = await api.request(`/${reviewId}/ask/seen/viewed`, {
+    method: "POST",
+  });
+
+  expect(viewed.status).toBe(200);
+  expect(await unread()).toEqual([
+    ["seen", false],
+    ["older", false],
+  ]);
+});
+
+it("keeps when a thread was seen through its saves, and seeing it moves nothing", async () => {
+  const { reviewId } = await store.execute(
+    command({
+      type: "create",
+      title: "Payments",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  const history = store.askHistory;
+
+  history.save(record(reviewId, "older", "2026-09-01T09:00:00.000Z"));
+  history.save(record(reviewId, "newer", "2026-09-01T10:00:00.000Z"));
+  history.markViewed("older", "2026-09-01T11:00:00.000Z");
+
+  // Seeing it is not using it: it keeps its place and when it was used.
+  expect(history.list(reviewId).map(({ id }) => id)).toEqual([
+    "newer",
+    "older",
+  ]);
+  expect(history.get("older")?.updatedAt).toBe("2026-09-01T09:00:00.000Z");
+
+  // The agent's session changes and the thread is saved again.
+  history.save({
+    ...record(reviewId, "older", "2026-09-01T09:00:00.000Z"),
+    sessionId: "another-session",
+  });
+  expect(history.viewedAt(["older", "newer"])).toEqual(
+    new Map([["older", "2026-09-01T11:00:00.000Z"]]),
+  );
+
+  history.delete("older");
+  expect(history.viewedAt(["older"])).toEqual(new Map());
+});

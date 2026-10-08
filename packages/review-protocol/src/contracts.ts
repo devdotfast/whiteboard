@@ -511,6 +511,8 @@ export interface ReviewProjectThread {
   opening: string;
   /** While its agent runs: "waiting" needs you. Absent once it stopped. */
   status?: "starting" | "running" | "waiting" | "idle" | "failed";
+  /** Its agent finished a turn since the reviewer last saw it. */
+  unread?: boolean;
   updatedAt: string;
   /** The board it started on, and the block it was about. */
   anchor: { board: ReviewThreadBoard; block?: string };
