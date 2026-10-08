@@ -26,6 +26,7 @@ import {
 	structuralContextScopes,
 	structuralRows,
 	structuralHighlights,
+	type StructuralGap,
 } from "../common/reviewStructuralDiff.js";
 import type { ReviewFilesEditorEntry } from "./reviewFilesDiffView.js";
 import { StructuralFoldControls, StructuralFoldHover } from "./reviewStructuralFolds.js";
@@ -223,10 +224,10 @@ function attachStructuralEditors(
 				const path = pathOf();
 				const regions = widget.unchangedRegions!.read(reader);
 				if (!path || !session.getTextDiff(path)) return;
-				const gaps = structuralContextGaps(session.getTextDiff(path)!, (id) => session.isRegionCollapsed(path, id) === true, (id) => session.isRegionCollapsed(path, id));
+				let gaps: StructuralGap[] | undefined;
 				const next = new Set<UnchangedRegion>();
 				const gapOf = (region: UnchangedRegion) =>
-					gaps.find((g) => g.originalStart === region.originalLineNumber && g.modifiedStart === region.modifiedLineNumber && g.foldStateId === region.foldStateId);
+					(gaps ??= structuralContextGaps(session.getTextDiff(path)!, (id) => session.isRegionCollapsed(path, id) === true, (id) => session.isRegionCollapsed(path, id))).find((g) => g.originalStart === region.originalLineNumber && g.modifiedStart === region.modifiedLineNumber && g.foldStateId === region.foldStateId);
 				for (const region of regions) {
 					const shown = region.visibleLineCountTop.read(reader) + region.visibleLineCountBottom.read(reader);
 					const fullyShown = shown >= region.lineCount;

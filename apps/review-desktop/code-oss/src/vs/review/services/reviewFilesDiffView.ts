@@ -1,4 +1,4 @@
-import type { ReviewDiffProgress, ReviewDiffLens, ReviewDiffViewSpec } from "../common/reviewProtocol.js";
+import type { ReviewDiffProgress, ReviewDiffProgressFile, ReviewDiffLens, ReviewDiffViewSpec } from "../common/reviewProtocol.js";
 import { Range } from "../../editor/common/core/range.js";
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) dev.fast. All rights reserved.
@@ -204,6 +204,7 @@ export class ReviewFilesDiffView extends Disposable {
 	private pendingSectionId: string | undefined;
 	private pendingSource: ReviewDiffLens["ranges"][number] | undefined;
 	private progress: ReviewDiffProgress | undefined;
+	private progressFiles = new Map<string, ReviewDiffProgressFile>();
 	private documentCollapsed = false;
 	private readonly initializedDocumentItems = new WeakSet<object>();
 	private readonly viewedApplied = new Map<string, string>();
@@ -534,7 +535,7 @@ export class ReviewFilesDiffView extends Disposable {
 	private readonly collapsedSections = new Set<string>();
 	private readonly sectionViewed = new Map<string, string>();
 	private entryProgress(entry: ReviewFilesEditorEntry) {
-		return (entry.sectionId ? this.progress?.sections?.find(section => section.id === entry.sectionId)?.files : this.progress?.files)?.find(file => file.path === entry.file.path);
+		return this.progressFiles.get(`${entry.sectionId ?? ''}:${entry.file.path}`);
 	}
 	private progressTooltip(entry: ReviewFilesEditorEntry): ReviewTooltipContent | undefined {
 		const file = this.entryProgress(entry);
@@ -542,6 +543,10 @@ export class ReviewFilesDiffView extends Disposable {
 	}
 	setProgress(progress: ReviewDiffProgress): void {
 		this.progress = progress;
+		this.progressFiles = new Map([
+			...progress.files.map(file => [`:${file.path}`, file] as const),
+			...(progress.sections ?? []).flatMap(section => (section.files ?? []).map(file => [`${section.id}:${file.path}`, file] as const)),
+		]);
 		for (const section of progress.sections ?? []) {
 			const previous = this.sectionViewed.get(section.id);
 			if (section.state === 'viewed' && previous !== 'viewed') this.collapsedSections.add(section.id);
