@@ -93,9 +93,6 @@ export function planCell(
     hits.push([chevronColumn, chevronColumn + 1, fold.id]);
     hovers.push([chevronColumn, chevronColumn + 1, { id: fold.id, armed: true }]);
   }
-  // A collapsed fold's row, or a line of its label, opens it.
-  const opens = fold?.collapsed ? fold.id : value.labelOf;
-  if (opens !== undefined) hits.push([codeColumn, width, opens]);
   let column = codeColumn;
   for (const span of painted) {
     const rail = span.guide !== undefined && span.guide === focus?.id;
@@ -114,7 +111,12 @@ export function planCell(
     column += cells;
   }
   if (column < width) runs.push({ text: " ".repeat(width - column), fg: theme.fg, bg });
-  if (opens !== undefined) hovers.push([codeColumn, width, { id: opens, armed: true }]);
+  // A collapsed fold's row, or a line of its label, opens it.
+  const opens = fold?.collapsed ? fold.id : value.labelOf;
+  if (opens !== undefined) {
+    hits.push([codeColumn, width, opens]);
+    hovers.push([codeColumn, width, { id: opens, armed: true }]);
+  }
   if (value.scope !== undefined) hovers.push([0, width, { id: value.scope, armed: false }]);
   return { bg, runs, hits, hovers };
 }
