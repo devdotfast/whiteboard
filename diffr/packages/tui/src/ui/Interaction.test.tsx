@@ -233,3 +233,23 @@ test("/ types into the status line, Enter lands on the match in a folded gap and
     expect(status()).toContain("/q▏");
   } finally { await act(async () => { t.renderer.destroy(); }); }
 });
+test("Ctrl-P opens a picker over the diff; typing narrows it and Enter goes to the file", async () => {
+  const store = new DiffStore();
+  const files = ["src/model/store.ts", "src/protocol/wire.ts", "docs/notes.md"].map(name => path(withIdenticalLines(createTestDiffFile(), 30), name));
+  store.accept(startFor(files)); files.forEach(file => store.accept(file)); store.accept({type:"complete", succeeded:3, failed:0});
+  const t = await testRender(<App store={store} themes={themes} onQuit={() => {}} />, {width:150, height:20});
+  const frame = () => t.captureCharFrame();
+  try {
+    await act(async () => { await t.renderOnce(); });
+    await act(async () => { t.mockInput.pressKey("p", {ctrl: true}); await t.renderOnce(); });
+    expect(frame()).toContain("3 of 3 changed files");
+    for (const key of ["w", "i", "r"]) await act(async () => { t.mockInput.pressKey(key); await t.renderOnce(); });
+    expect(frame()).toContain("1 of 3 changed files");
+    expect(frame()).toMatch(/▸ src\/protocol\/wire\.ts +\+2 −1/);
+    expect(frame()).toContain("› wir");
+    await act(async () => { t.mockInput.pressKey("RETURN"); await t.renderOnce(); });
+    expect(frame()).not.toContain("changed files");
+    // The chosen file's header is the top row, under the menu and summary lines.
+    expect(frame().split("\n")[2]).toContain("src/protocol/wire.ts");
+  } finally { await act(async () => { t.renderer.destroy(); }); }
+});

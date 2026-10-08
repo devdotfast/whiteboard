@@ -173,3 +173,26 @@ test("a narrow pane leads its status line with where the reader is, and swaps th
   pane.input({ press: { key: "\\" } });
   expect(body()[0]).toStartWith("▌▸ tests/greet.test.ts");
 });
+
+test("Ctrl-P draws a picker over the bottom of the pane; a click on a file goes there and closes it", async () => {
+  const { pane } = await load(greet);
+  pane.frame(narrow);
+  pane.input({ press: { key: "p", ctrl: true } });
+  let shown = screen(pane.frame(narrow));
+  expect(shown.some((line) => line.trimEnd().endsWith("2 of 2 changed files"))).toBe(true);
+  // q is text for the picker, not a way to close the pane.
+  expect(pane.input({ press: { key: "q" } })).toEqual({});
+  pane.input({ press: { key: "backspace" } });
+  for (const key of ["t", "e", "s", "t"]) pane.input({ press: { key } });
+  shown = screen(pane.frame(narrow));
+  expect(shown.some((line) => line.trimEnd().endsWith("1 of 2 changed files"))).toBe(true);
+  // The picker sits at the bottom, below the file's own header in the diff.
+  const frame = pane.frame(narrow);
+  const y = screen(frame).findLastIndex((line) => line.includes("tests/greet.test.ts"));
+  const act = frame.lines[y]!.hits!.find(([from, to]) => 5 >= from && 5 < to)![2];
+  expect(act).toEqual({ pick: 1 });
+  pane.input({ act });
+  shown = screen(pane.frame(narrow));
+  expect(shown.some((line) => line.includes("changed files"))).toBe(false);
+  expect(shown[1]).toStartWith("▌▾ tests/greet.test.ts");
+});

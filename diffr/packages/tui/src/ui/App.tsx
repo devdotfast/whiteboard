@@ -31,6 +31,7 @@ import { sanitizeTerminalLine } from "@diffr/viewer/terminal/sanitize";
 import { measureTextWidth, sliceTextByWidth } from "@diffr/viewer/terminal/text";
 import { Viewer, type KeyPress } from "@diffr/viewer/viewer";
 import { litRuns, viewedBox, viewedHint } from "@diffr/viewer/viewport/cell";
+import { pickerLines } from "@diffr/viewer/viewport/picker";
 const fit = (text: string, width: number) =>
   sliceTextByWidth(text, 0, width).text;
 /** Shifted letters become capitals; cmd counts as meta. */
@@ -450,6 +451,17 @@ export function App({
             ...(note ? [<text key={`${title}:f`} height={1} fg={theme.muted} selectable={false}>{fit(`   ${note}`, boxWidth)}</text>] : []),
           ])}
           <text height={1} fg={theme.muted} selectable={false}>{fit(" esc close", boxWidth)}</text>
+        </box>;
+      })()}
+      {(() => {
+        // The Ctrl-P picker: up to ten lines over the bottom of the diff, just above the status line.
+        const picker = viewer.pickerState();
+        if (!picker) return null;
+        const drawn = pickerLines(picker, width, Math.min(10, viewportHeight), theme,
+          (index) => counts[index]?.visible, (index) => viewer.isViewed(index) === true, "esc close");
+        return <box position="absolute" bottom={1} left={0} width={width} height={drawn.length} flexDirection="column" zIndex={10}>
+          {drawn.map(({ runs, pick }, i) => <text key={i} height={1} width={width} selectable={false} content={styled(runs)}
+            onMouseUp={() => { if (pick !== undefined) viewer.pickFile(pick); }} />)}
         </box>;
       })()}
       {menu && <box position="absolute" top={1} left={0} width={38}

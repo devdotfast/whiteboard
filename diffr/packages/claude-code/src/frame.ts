@@ -7,6 +7,7 @@ import type { DiffStore } from "@diffr/viewer/protocol/store";
 import type { Palette } from "@diffr/viewer/theme/palette";
 import { Viewer, type Hover, type KeyPress, type Size } from "@diffr/viewer/viewer";
 import { litRuns, viewedBox, viewedHint } from "@diffr/viewer/viewport/cell";
+import { pickerLines } from "@diffr/viewer/viewport/picker";
 import { agentReference, copySelection, selectionBounds, type SourceSelection } from "@diffr/viewer/document/selection";
 import { Colors, fit, LineBuilder, paintCell } from "./paint";
 import type { Action, Frame, Input, Line } from "./protocol";
@@ -91,12 +92,13 @@ export class Pane {
     else if ("dir" in action) this.toggleDirectory(action.dir);
     else if ("scrub" in action) this.viewer.scrub(action.scrub);
     else if ("files" in action) this.toggleFiles();
+    else if ("pick" in action) this.viewer.pickFile(action.pick);
     else this.viewer.toggleLayout();
   }
 
   private press(key: KeyPress): Outcome {
-    // While the search prompt is open, every key is text for it, q included.
-    if (this.viewer.prompting) {
+    // While the search prompt or the picker is open, every key is text for it, q included.
+    if (this.viewer.prompting || this.viewer.picking) {
       this.viewer.press(key);
       return {};
     }
@@ -402,6 +404,18 @@ export class Pane {
       lines.push(line.line(size.columns));
     }
 
+    // The Ctrl-P picker takes the bottom of the body, up to ten lines, over whatever was there.
+    const picker = viewer.pickerState();
+    if (picker) {
+      const drawn = pickerLines(picker, size.columns, Math.min(10, viewportHeight), theme,
+        (index) => counts[index]?.visible, (index) => viewer.isViewed(index) === true, "ctrl-c close");
+      lines.splice(lines.length - drawn.length, drawn.length, ...drawn.map(({ runs, pick }) => {
+        const line = new LineBuilder(colors, theme.chrome);
+        if (pick !== undefined) line.hit(0, size.columns, { pick });
+        for (const run of runs) line.text(run.text, run.fg, run.bg, run.bold);
+        return line.line(size.columns);
+      }));
+    }
     const status = new LineBuilder(colors, theme.bg);
     const errors = snapshot.errors.length ? `${snapshot.errors.length} errors  ` : "";
     const read = viewer.viewedFiles();
