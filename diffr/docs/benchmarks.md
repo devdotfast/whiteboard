@@ -33,6 +33,7 @@ Use the same machine, toolchain, Cargo profile, target, allocator, and `RUSTFLAG
 | `init/queries/no_context` | Same, with context disabled | Same |
 | `engine/pr998/default` | Parse, structural diff, syntax highlighting, project trees, run enabled shape plugins, dispose results | Query compilation, component compilation/instantiation, fixture loading, preflight validation |
 | `engine/pr998/no_context` | Same, with context and its contributed queries disabled | Same |
+| `startup/one_file` | Compile default queries, then parse, diff and project the first fixture | Shape plugins |
 | `shape/pr998/context` | Run only context on fresh default-query trees, including worker dispatch and result disposal | Parsing, diffing, projection, query compilation, component loading, cloning inputs |
 
 The no-context run changes both query input and output semantics. Its difference from default is not a clean measurement of only the context visitor. The shape benchmark isolates that visitor on the same precomputed trees; other shaping plugins have not run on those trees. These timings are not additive.
