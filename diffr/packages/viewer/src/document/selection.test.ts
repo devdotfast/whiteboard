@@ -143,3 +143,22 @@ test("a line diffr pairs as only reformatted is removed and added in the patch, 
   const selection = drag(rows, [unifiedNew(1), "right"], [unifiedNew(1), "right"]);
   expect(agentReference([file], againstMain, rows, selection)).toEndWith("@@ -1 +1 @@\n-  call();\n+    call();\n```");
 });
+
+test("a hunk's place on a side it has no lines on is counted from the whole diff, lines folded away included", () => {
+  // old: a, x, y   new: a, c   x and y are removed and folded away; c is added after them.
+  const file = createTestDiffFile();
+  if (file.diff.type !== "text") throw new Error("The fixture is a text diff");
+  const removed = leaf(2, 1, 3);
+  removed.visibility = { collapsed: true, label: "2 removed lines" };
+  file.diff.lhs = { text: "a\nx\ny", syntax: [], root: root([leaf(1, 0, 1), removed]) };
+  file.diff.rhs = { text: "a\nc", syntax: [], root: root([leaf(1, 0, 1), leaf(3, 1, 2)], 1001) };
+  const rows = rowsForFile(file, 0, "unified", dark, new Set([2]));
+  expect(rows.some((row) => row.cell?.oldLineNumber === 2)).toBe(false);
+  const reference = agentReference([file], againstMain, rows, drag(rows, [unifiedNew(1), "right"], [unifiedNew(2), "right"]));
+  // c goes after old line 3, not after the last old line on screen.
+  expect(reference).toContain("@@ -1 +1 @@\n a\n@@ -3,0 +2 @@\n+c\n```");
+  // With the fold open, the same lines and the removed ones between them make one hunk.
+  const open = rowsForFile(file, 0, "unified", dark);
+  expect(agentReference([file], againstMain, open, drag(open, [unifiedNew(1), "right"], [unifiedNew(2), "right"])))
+    .toContain("@@ -1,3 +1,2 @@\n a\n-x\n-y\n+c\n```");
+});

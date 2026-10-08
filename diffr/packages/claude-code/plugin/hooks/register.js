@@ -15072,6 +15072,75 @@ function flatten(diff2) {
   const rhs = diff2.rhs ? flattenSide(diff2.rhs, 1) : { leaves: [], folds: [] };
   return { leaves: [lhs.leaves, rhs.leaves], folds: [lhs.folds, rhs.folds] };
 }
+function zipLeaves(leaves, visit) {
+  const rightIndex = new Map(leaves[1].map((leaf, index) => [leaf.alignmentId, index]));
+  let cursor = 0;
+  const flushRight = (until) => {
+    for (;cursor < until; cursor++)
+      visit(null, leaves[1][cursor]);
+  };
+  for (const left of leaves[0]) {
+    const partner = rightIndex.get(left.alignmentId);
+    if (partner === undefined) {
+      visit(left, null);
+      continue;
+    }
+    flushRight(partner);
+    visit(left, leaves[1][partner]);
+    cursor = partner + 1;
+  }
+  flushRight(leaves[1].length);
+}
+function changedLine(leaves) {
+  const alignments = leaves.map((side) => new Set(side.map((leaf) => leaf.alignmentId)));
+  return (leaf, line) => leaf.changed.has(line) || !alignments[leaf.side ? 0 : 1].has(leaf.alignmentId);
+}
+function diffOrder(diff2) {
+  const { leaves } = flatten(diff2);
+  const isChanged = changedLine(leaves);
+  const order = { lines: [], oldAt: new Map, newAt: new Map, oldBefore: [], newBefore: [] };
+  let pendingOld = [], pendingNew = [];
+  let olds = 0, news = 0;
+  const push = (line) => {
+    const index = order.lines.length;
+    order.lines.push(line);
+    order.oldBefore.push(olds);
+    order.newBefore.push(news);
+    if (line.old !== undefined) {
+      order.oldAt.set(line.old, index);
+      olds++;
+    }
+    if (line.new !== undefined) {
+      order.newAt.set(line.new, index);
+      news++;
+    }
+  };
+  const flush = () => {
+    for (const line of pendingOld)
+      push(line);
+    for (const line of pendingNew)
+      push(line);
+    pendingOld = [];
+    pendingNew = [];
+  };
+  zipLeaves(leaves, (left, right) => {
+    const leftLines = left ? left.endLine - left.startLine : 0, rightLines = right ? right.endLine - right.startLine : 0;
+    for (let i = 0;i < Math.max(leftLines, rightLines); i++) {
+      const l = i < leftLines ? left.startLine + i : null, r = i < rightLines ? right.startLine + i : null;
+      if (l !== null && r !== null && !isChanged(left, l) && !isChanged(right, r)) {
+        flush();
+        push({ old: l + 1, new: r + 1 });
+        continue;
+      }
+      if (l !== null)
+        pendingOld.push({ old: l + 1 });
+      if (r !== null)
+        pendingNew.push({ new: r + 1 });
+    }
+  });
+  flush();
+  return order;
+}
 function defaultCollapsed(diff2) {
   const ids = new Set;
   const { leaves, folds } = flatten(diff2);
@@ -17071,8 +17140,7 @@ function rowsForFile(file2, fileIndex, layout, theme, collapsed = new Set) {
   };
   const tintOf = (region2) => foldTint(region2.id, region2.side, paired[region2.side]);
   const labelOf = (region2) => region2.label || lineCount("lastHidden" in region2 ? region2.lastHidden - region2.startLine + 1 : region2.endLine - region2.startLine);
-  const alignments = leaves.map((side) => new Set(side.map((leaf) => leaf.alignmentId)));
-  const isChanged = (leaf, line) => leaf.changed.has(line) || !alignments[leaf.side ? 0 : 1].has(leaf.alignmentId);
+  const isChanged = changedLine(leaves);
   const spanned = new Set(leaves.flat().filter((leaf) => leaf.changed.size).map((leaf) => leaf.alignmentId));
   const collapsedTint = (region2) => {
     const tint = tintOf(region2);
@@ -17260,23 +17328,7 @@ function rowsForFile(file2, fileIndex, layout, theme, collapsed = new Set) {
     for (let i = 0;i < Math.max(leftLines, rightLines); i++)
       emit(i < leftLines ? left.startLine + i : null, i < rightLines ? right.startLine + i : null, left, right);
   };
-  const rightIndex = new Map(leaves[1].map((leaf, index) => [leaf.alignmentId, index]));
-  let cursor = 0;
-  const flushRight = (until) => {
-    for (;cursor < until; cursor++)
-      leafRows(null, leaves[1][cursor]);
-  };
-  for (const left of leaves[0]) {
-    const partner = rightIndex.get(left.alignmentId);
-    if (partner === undefined) {
-      leafRows(left, null);
-      continue;
-    }
-    flushRight(partner);
-    leafRows(left, leaves[1][partner]);
-    cursor = partner + 1;
-  }
-  flushRight(leaves[1].length);
+  zipLeaves(leaves, leafRows);
   flush();
   return markHunks(rows);
 }
@@ -18229,93 +18281,74 @@ function selectionCover(rows, selection) {
     };
   };
 }
+var orders = new WeakMap;
+function orderOf(diff2) {
+  let order = orders.get(diff2);
+  if (!order) {
+    order = diffOrder(diff2);
+    orders.set(diff2, order);
+  }
+  return order;
+}
+var textDiff = (files, fileIndex) => {
+  const diff2 = files[fileIndex]?.diff;
+  if (diff2?.type !== "text")
+    throw new Error(`File ${fileIndex} has no text to select`);
+  return diff2;
+};
 function selectedRanges(files, rows, selection) {
   const [a, b] = selectionBounds(rows, selection);
   if (a < 0)
     return [];
   const cover = selectionCover(rows, selection);
-  const oneColumn = selection.anchorSide === selection.endSide && !rows[a].cell ? selection.anchorSide : undefined;
+  const oneColumn = selection.anchorSide === selection.endSide && !rows[a].cell ? selection.anchorSide === "left" ? "old" : "new" : undefined;
+  const touched = new Map;
+  for (let index = a;index <= b; index++) {
+    const row = rows[index], covered = cover(index);
+    if (!covered)
+      continue;
+    const old = row.cell ? row.cell.oldLineNumber : covered.left ? row.left?.lineNumber : undefined;
+    const neu = row.cell ? row.cell.newLineNumber : covered.right ? row.right?.lineNumber : undefined;
+    if (old === undefined && neu === undefined)
+      continue;
+    let numbers = touched.get(row.fileIndex);
+    if (!numbers)
+      touched.set(row.fileIndex, numbers = { old: new Set, new: new Set });
+    if (old !== undefined)
+      numbers.old.add(old);
+    if (neu !== undefined)
+      numbers.new.add(neu);
+  }
   const ranges = [];
-  let range;
-  let at = { old: 0, new: 0 };
-  let pendingOld = [], pendingNew = [];
-  const push = (line) => {
-    range.lines.push(line);
-    range.before.push({ ...at });
-  };
-  const flush = () => {
-    for (const line of [...pendingOld, ...pendingNew]) {
-      push(line);
-      at = { old: line.old ?? at.old, new: line.new ?? at.new };
+  for (const [fileIndex, numbers] of touched) {
+    let lines;
+    if (oneColumn)
+      lines = [...numbers[oneColumn]].sort((x, y) => x - y).map((n) => oneColumn === "old" ? { old: n } : { new: n });
+    else {
+      const order = orderOf(textDiff(files, fileIndex));
+      const at = (map2, n) => {
+        const index = map2.get(n);
+        if (index === undefined)
+          throw new Error(`Line ${n} of file ${fileIndex} is missing from its diff's order`);
+        return index;
+      };
+      const indices = new Set([...[...numbers.old].map((n) => at(order.oldAt, n)), ...[...numbers.new].map((n) => at(order.newAt, n))]);
+      lines = [...indices].sort((x, y) => x - y).map((index) => order.lines[index]);
     }
-    pendingOld = [];
-    pendingNew = [];
-  };
-  let start = a;
-  while (start > 0 && rows[start - 1].fileIndex === rows[a].fileIndex)
-    start--;
-  let file2 = rows[start].fileIndex;
-  for (let index = start;index <= b; index++) {
-    const row = rows[index];
-    if (index === a || row.fileIndex !== file2) {
-      if (range)
-        flush();
-      if (row.fileIndex !== file2)
-        at = { old: 0, new: 0 };
-      file2 = row.fileIndex;
-      if (index >= a) {
-        const file3 = files[row.fileIndex];
-        range = {
-          fileIndex: row.fileIndex,
-          oldPath: file3?.file.lhs?.path,
-          newPath: file3?.file.rhs?.path,
-          start: {},
-          end: {},
-          side: oneColumn && (oneColumn === "left" ? "old" : "new"),
-          lines: [],
-          before: []
-        };
-        ranges.push(range);
-      }
-    }
-    const old = row.cell ? row.cell.oldLineNumber : row.left?.foldLabel ? undefined : row.left?.lineNumber;
-    const neu = row.cell ? row.cell.newLineNumber : row.right?.foldLabel ? undefined : row.right?.lineNumber;
-    const covered = index >= a ? cover(index) : undefined;
-    if (!covered || !range || range.fileIndex !== row.fileIndex) {
-      at = { old: old ?? at.old, new: neu ?? at.new };
+    if (!lines.length)
       continue;
-    }
-    const unchanged = !row.cell && old !== undefined && neu !== undefined && row.left.kind === "context" && row.right.kind === "context";
-    const [l, r] = unchanged && !range.side ? [old, neu] : [covered.left ? old : undefined, covered.right ? neu : undefined];
-    if (range.side) {
-      const line = range.side === "old" ? l : r;
-      if (line !== undefined)
-        push(range.side === "old" ? { old: line } : { new: line });
-      continue;
-    }
-    if (row.cell || unchanged) {
-      flush();
-      if (l === undefined && r === undefined)
-        continue;
-      push({ ...l !== undefined && { old: l }, ...r !== undefined && { new: r } });
-      at = { old: l ?? at.old, new: r ?? at.new };
-      continue;
-    }
-    if (l !== undefined)
-      pendingOld.push({ old: l });
-    if (r !== undefined)
-      pendingNew.push({ new: r });
-    if (l === undefined && r === undefined)
-      flush();
+    const file2 = files[fileIndex];
+    ranges.push({
+      fileIndex,
+      oldPath: file2?.file.lhs?.path,
+      newPath: file2?.file.rhs?.path,
+      start: lines[0],
+      end: lines.at(-1),
+      side: oneColumn,
+      lines
+    });
   }
-  flush();
-  for (const each of ranges) {
-    if (!each.lines.length)
-      continue;
-    each.start = each.lines[0];
-    each.end = each.lines.at(-1);
-  }
-  return ranges.filter((each) => each.lines.length);
+  return ranges;
 }
 function span2(range, side) {
   const numbers = range.lines.flatMap((line) => line[side] ?? []);
@@ -18378,40 +18411,29 @@ function sourcesOf(files, range) {
     throw new Error(`File ${range.fileIndex} has no text to copy`);
   return { old: diff2.lhs ? sourceLines(diff2.lhs.text) : [], new: diff2.rhs ? sourceLines(diff2.rhs.text) : [] };
 }
-function hunkHeader(lines, next) {
-  const side = (key) => {
-    const numbers = lines.flatMap((line) => line[key] ?? []);
-    const start = numbers[0] ?? next[key] - 1;
-    return numbers.length === 1 ? `${start}` : `${start},${numbers.length}`;
-  };
-  return `@@ -${side("old")} +${side("new")} @@`;
-}
-function patch(range, sources) {
+function patch(range, order, sources) {
   const out = [
     `--- ${range.oldPath === undefined ? "/dev/null" : `a/${range.oldPath}`}`,
     `+++ ${range.newPath === undefined ? "/dev/null" : `b/${range.newPath}`}`
   ];
+  const indexOf = (line) => line.old !== undefined ? order.oldAt.get(line.old) : order.newAt.get(line.new);
   const hunks = [];
-  let next = { old: 0, new: 0 };
-  range.lines.forEach((line, i) => {
-    const continues = hunks.length && (line.old === undefined || line.old === next.old) && (line.new === undefined || line.new === next.new);
-    if (!continues) {
-      const before = range.before[i];
-      next = {
-        old: line.old ?? before.old + (line.new - before.new),
-        new: line.new ?? before.new + (line.old - before.old)
-      };
-      hunks.push({ lines: [], next: { ...next } });
-    }
-    hunks.at(-1).lines.push(line);
-    if (line.old !== undefined)
-      next.old = line.old + 1;
-    if (line.new !== undefined)
-      next.new = line.new + 1;
-  });
+  for (const index of range.lines.map(indexOf)) {
+    const hunk = hunks.at(-1);
+    if (hunk && hunk.at(-1) === index - 1)
+      hunk.push(index);
+    else
+      hunks.push([index]);
+  }
   for (const hunk of hunks) {
-    out.push(hunkHeader(hunk.lines, hunk.next));
-    for (const line of hunk.lines) {
+    const lines = hunk.map((index) => order.lines[index]);
+    const side = (key) => {
+      const numbers = lines.flatMap((line) => line[key] ?? []);
+      const start = numbers[0] ?? (key === "old" ? order.oldBefore : order.newBefore)[hunk[0]];
+      return numbers.length === 1 ? `${start}` : `${start},${numbers.length}`;
+    };
+    out.push(`@@ -${side("old")} +${side("new")} @@`);
+    for (const line of lines) {
       const [before, after] = [
         line.old === undefined ? undefined : sources.old[line.old - 1],
         line.new === undefined ? undefined : sources.new[line.new - 1]
@@ -18445,7 +18467,7 @@ ${fence2}${language}
 ${code}
 ${fence2}`;
   }
-  const body = patch(range, sources);
+  const body = patch(range, orderOf(textDiff(files, range.fileIndex)), sources);
   const fence = fenceFor(body);
   return `${name} — L is ${versionName(comparison.lhs)}, R is ${versionName(comparison.rhs)}
 ${fence}diff

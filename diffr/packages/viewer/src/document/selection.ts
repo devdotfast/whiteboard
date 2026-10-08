@@ -2,11 +2,11 @@
  * What a drag across a diff selects, positioned as GitLab positions a diff comment: by each line's
  * old and new numbers, so one selection can hold removed, added and unchanged lines.
  */
-import type { DiffFile } from "../protocol/wire";
+import type { DiffFile, TextDiff } from "../protocol/wire";
 import type { ViewerRow } from "./rows";
 import type { Snapshot } from "../protocol/store";
 import { snapshotLabel } from "./counts";
-import { sourceLines } from "./regions";
+import { diffOrder, sourceLines, type DiffLine, type DiffOrder } from "./regions";
 import { measureTextWidth } from "../terminal/text";
 
 export type Side = "left" | "right";
@@ -54,11 +54,7 @@ export function selectionCover(rows: ViewerRow[], selection: SourceSelection | n
   };
 }
 
-/** One line of a file's diff, as GitLab positions it: removed lines have only `old`, added only `new`, unchanged both. */
-export interface DiffLine {
-  old?: number;
-  new?: number;
-}
+export type { DiffLine };
 /** One file's part of a selection. */
 export interface SelectedRange {
   fileIndex: number;
@@ -72,12 +68,28 @@ export interface SelectedRange {
    * to `end`, folded lines included. Otherwise the selection is the diff's rows themselves.
    */
   side?: "old" | "new";
-  /** The lines the selection shows, in diff order; a folded stretch is a gap in their numbers. */
+  /** The selected lines, in diff order (see `diffOrder`); a folded stretch is a gap between them. */
   lines: DiffLine[];
-  /** For each line, the last old and new numbers before it in the file, for a hunk that has none of its own. */
-  before: { old: number; new: number }[];
 }
-/** Each file's part of the selection. */
+/** Each diff's order, worked out once: the selection bar asks for it every frame. */
+const orders = new WeakMap<TextDiff, DiffOrder>();
+function orderOf(diff: TextDiff): DiffOrder {
+  let order = orders.get(diff);
+  if (!order) {
+    order = diffOrder(diff);
+    orders.set(diff, order);
+  }
+  return order;
+}
+const textDiff = (files: (DiffFile | undefined)[], fileIndex: number): TextDiff => {
+  const diff = files[fileIndex]?.diff;
+  if (diff?.type !== "text") throw new Error(`File ${fileIndex} has no text to select`);
+  return diff;
+};
+/**
+ * Each file's part of the selection: the lines its covered cells show, put in the diff's own
+ * order. An unchanged line is one line on both sides, whichever half of it the drag covered.
+ */
 export function selectedRanges(
   files: (DiffFile | undefined)[],
   rows: ViewerRow[],
@@ -86,75 +98,40 @@ export function selectedRanges(
   const [a, b] = selectionBounds(rows, selection);
   if (a < 0) return [];
   const cover = selectionCover(rows, selection);
-  const oneColumn = selection.anchorSide === selection.endSide && !rows[a]!.cell ? selection.anchorSide : undefined;
+  const oneColumn = selection.anchorSide === selection.endSide && !rows[a]!.cell
+    ? (selection.anchorSide === "left" ? "old" : "new") : undefined;
+  const touched = new Map<number, { old: Set<number>; new: Set<number> }>();
+  for (let index = a; index <= b; index++) {
+    const row = rows[index]!, covered = cover(index);
+    if (!covered) continue;
+    const old = row.cell ? row.cell.oldLineNumber : covered.left ? row.left?.lineNumber : undefined;
+    const neu = row.cell ? row.cell.newLineNumber : covered.right ? row.right?.lineNumber : undefined;
+    if (old === undefined && neu === undefined) continue;
+    let numbers = touched.get(row.fileIndex);
+    if (!numbers) touched.set(row.fileIndex, numbers = { old: new Set(), new: new Set() });
+    if (old !== undefined) numbers.old.add(old);
+    if (neu !== undefined) numbers.new.add(neu);
+  }
   const ranges: SelectedRange[] = [];
-  let range: SelectedRange | undefined;
-  // Where the file stands before each line: rows above the selection count too.
-  let at = { old: 0, new: 0 };
-  let pendingOld: DiffLine[] = [], pendingNew: DiffLine[] = [];
-  const push = (line: DiffLine) => {
-    range!.lines.push(line);
-    range!.before.push({ ...at });
-  };
-  // In split, a run of changed rows pairs removed lines with added ones; a patch lists the removed first.
-  const flush = () => {
-    for (const line of [...pendingOld, ...pendingNew]) {
-      push(line);
-      at = { old: line.old ?? at.old, new: line.new ?? at.new };
+  for (const [fileIndex, numbers] of touched) {
+    let lines: DiffLine[];
+    if (oneColumn) lines = [...numbers[oneColumn]].sort((x, y) => x - y).map((n) => (oneColumn === "old" ? { old: n } : { new: n }));
+    else {
+      const order = orderOf(textDiff(files, fileIndex));
+      const at = (map: Map<number, number>, n: number) => {
+        const index = map.get(n);
+        if (index === undefined) throw new Error(`Line ${n} of file ${fileIndex} is missing from its diff's order`);
+        return index;
+      };
+      const indices = new Set([...[...numbers.old].map((n) => at(order.oldAt, n)), ...[...numbers.new].map((n) => at(order.newAt, n))]);
+      lines = [...indices].sort((x, y) => x - y).map((index) => order.lines[index]!);
     }
-    pendingOld = [];
-    pendingNew = [];
-  };
-  let start = a;
-  while (start > 0 && rows[start - 1]!.fileIndex === rows[a]!.fileIndex) start--;
-  let file = rows[start]!.fileIndex;
-  for (let index = start; index <= b; index++) {
-    const row = rows[index]!;
-    if (index === a || row.fileIndex !== file) {
-      if (range) flush();
-      if (row.fileIndex !== file) at = { old: 0, new: 0 };
-      file = row.fileIndex;
-      if (index >= a) {
-        const file = files[row.fileIndex];
-        range = { fileIndex: row.fileIndex, oldPath: file?.file.lhs?.path, newPath: file?.file.rhs?.path,
-          start: {}, end: {}, side: oneColumn && (oneColumn === "left" ? "old" : "new"), lines: [], before: [] };
-        ranges.push(range);
-      }
-    }
-    const old = row.cell ? row.cell.oldLineNumber : row.left?.foldLabel ? undefined : row.left?.lineNumber;
-    const neu = row.cell ? row.cell.newLineNumber : row.right?.foldLabel ? undefined : row.right?.lineNumber;
-    const covered = index >= a ? cover(index) : undefined;
-    if (!covered || !range || range.fileIndex !== row.fileIndex) {
-      at = { old: old ?? at.old, new: neu ?? at.new };
-      continue;
-    }
-    // An unchanged split row is one line, old and new: either half takes it whole.
-    const unchanged = !row.cell && old !== undefined && neu !== undefined && row.left!.kind === "context" && row.right!.kind === "context";
-    const [l, r] = unchanged && !range.side ? [old, neu] : [covered.left ? old : undefined, covered.right ? neu : undefined];
-    if (range.side) {
-      const line = range.side === "old" ? l : r;
-      if (line !== undefined) push(range.side === "old" ? { old: line } : { new: line });
-      continue;
-    }
-    if (row.cell || unchanged) {
-      // A unified row, already in diff order, or an unchanged split row.
-      flush();
-      if (l === undefined && r === undefined) continue;
-      push({ ...(l !== undefined && { old: l }), ...(r !== undefined && { new: r }) });
-      at = { old: l ?? at.old, new: r ?? at.new };
-      continue;
-    }
-    if (l !== undefined) pendingOld.push({ old: l });
-    if (r !== undefined) pendingNew.push({ new: r });
-    if (l === undefined && r === undefined) flush();
+    if (!lines.length) continue;
+    const file = files[fileIndex];
+    ranges.push({ fileIndex, oldPath: file?.file.lhs?.path, newPath: file?.file.rhs?.path,
+      start: lines[0]!, end: lines.at(-1)!, side: oneColumn, lines });
   }
-  flush();
-  for (const each of ranges) {
-    if (!each.lines.length) continue;
-    each.start = each.lines[0]!;
-    each.end = each.lines.at(-1)!;
-  }
-  return ranges.filter((each) => each.lines.length);
+  return ranges;
 }
 
 /** The lines a range spans on one side, first to last. */
@@ -227,40 +204,27 @@ function sourcesOf(files: (DiffFile | undefined)[], range: SelectedRange) {
   if (diff?.type !== "text") throw new Error(`File ${range.fileIndex} has no text to copy`);
   return { old: diff.lhs ? sourceLines(diff.lhs.text) : [], new: diff.rhs ? sourceLines(diff.rhs.text) : [] };
 }
-/** `@@ -13,2 +13,3 @@`, as git writes it: a count of 1 left out, a side with no lines at the line before them. */
-function hunkHeader(lines: DiffLine[], next: { old: number; new: number }) {
-  const side = (key: "old" | "new") => {
-    const numbers = lines.flatMap((line) => line[key] ?? []);
-    const start = numbers[0] ?? next[key] - 1;
-    return numbers.length === 1 ? `${start}` : `${start},${numbers.length}`;
-  };
-  return `@@ -${side("old")} +${side("new")} @@`;
-}
-/** The selected rows as a unified diff: a new hunk wherever a fold left a gap in the numbers. */
-function patch(range: SelectedRange, sources: { old: string[]; new: string[] }): string {
+/** The selected lines as a unified diff, numbered from the diff's own order: a new hunk wherever lines between them are left out, as a fold leaves them. */
+function patch(range: SelectedRange, order: DiffOrder, sources: { old: string[]; new: string[] }): string {
   const out = [`--- ${range.oldPath === undefined ? "/dev/null" : `a/${range.oldPath}`}`,
     `+++ ${range.newPath === undefined ? "/dev/null" : `b/${range.newPath}`}`];
-  const hunks: { lines: DiffLine[]; next: { old: number; new: number } }[] = [];
-  // The line numbers the open hunk's next line has on each side, whether it has that side or not.
-  let next = { old: 0, new: 0 };
-  range.lines.forEach((line, i) => {
-    const continues = hunks.length && (line.old === undefined || line.old === next.old) && (line.new === undefined || line.new === next.new);
-    if (!continues) {
-      // Where a side the line lacks stands, taking lines folded away since `before` as unchanged, as a context gap is.
-      const before = range.before[i]!;
-      next = {
-        old: line.old ?? before.old + (line.new! - before.new),
-        new: line.new ?? before.new + (line.old! - before.old),
-      };
-      hunks.push({ lines: [], next: { ...next } });
-    }
-    hunks.at(-1)!.lines.push(line);
-    if (line.old !== undefined) next.old = line.old + 1;
-    if (line.new !== undefined) next.new = line.new + 1;
-  });
+  const indexOf = (line: DiffLine) => (line.old !== undefined ? order.oldAt.get(line.old) : order.newAt.get(line.new!))!;
+  const hunks: number[][] = [];
+  for (const index of range.lines.map(indexOf)) {
+    const hunk = hunks.at(-1);
+    if (hunk && hunk.at(-1) === index - 1) hunk.push(index);
+    else hunks.push([index]);
+  }
   for (const hunk of hunks) {
-    out.push(hunkHeader(hunk.lines, hunk.next));
-    for (const line of hunk.lines) {
+    const lines = hunk.map((index) => order.lines[index]!);
+    // As git writes it: a count of 1 left out, and a side with no lines at the line before them.
+    const side = (key: "old" | "new") => {
+      const numbers = lines.flatMap((line) => line[key] ?? []);
+      const start = numbers[0] ?? (key === "old" ? order.oldBefore : order.newBefore)[hunk[0]!]!;
+      return numbers.length === 1 ? `${start}` : `${start},${numbers.length}`;
+    };
+    out.push(`@@ -${side("old")} +${side("new")} @@`);
+    for (const line of lines) {
       const [before, after] = [line.old === undefined ? undefined : sources.old[line.old - 1]!,
         line.new === undefined ? undefined : sources.new[line.new - 1]!];
       // diffr pairs a line only reformatted with its old self; a patch's unchanged line must match exactly.
@@ -293,7 +257,7 @@ export function rangeReference(
     const version = versionName(range.side === "old" ? comparison.lhs : comparison.rhs);
     return `${name} — ${range.side === "old" ? "L" : "R"} is ${version}\n${fence}${language}\n${code}\n${fence}`;
   }
-  const body = patch(range, sources);
+  const body = patch(range, orderOf(textDiff(files, range.fileIndex)), sources);
   const fence = fenceFor(body);
   return `${name} — L is ${versionName(comparison.lhs)}, R is ${versionName(comparison.rhs)}\n${fence}diff\n${body}\n${fence}`;
 }
