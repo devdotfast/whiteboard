@@ -1,0 +1,359 @@
+import { AgentSelectionSchema } from "@review/agent-selection.js";
+import { z } from "zod";
+
+// The canvas imports this module, so it stays free of Node APIs.
+export const askAgentIds = [
+  "claude",
+  "codex",
+  "cursor",
+  "opencode",
+  "pi",
+] as const;
+
+export type AskAgentId = (typeof askAgentIds)[number];
+
+const permissionOptionSchema = z.object({
+  optionId: z.string(),
+  name: z.string(),
+  kind: z.enum(["allow_once", "allow_always", "reject_once", "reject_always"]),
+});
+
+/** What a question carries besides its text, as the thread shows it. An
+ * image shows by name: its bytes go to the agent, not into the thread. */
+const askAttachmentSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("file"), path: z.string() }),
+  z.object({ kind: z.literal("image"), name: z.string() }),
+]);
+
+export type AskAttachment = z.infer<typeof askAttachmentSchema>;
+
+export const askEntrySchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("user"),
+    id: z.string(),
+    text: z.string(),
+    /** When it was asked, in epoch milliseconds; unknown for a replayed one. */
+    at: z.number().optional(),
+    attachments: z.array(askAttachmentSchema).optional(),
+  }),
+  z.object({ kind: z.literal("agent"), id: z.string(), text: z.string() }),
+  z.object({
+    kind: z.literal("tool"),
+    id: z.string(),
+    title: z.string(),
+    toolKind: z.string(),
+    status: z.enum(["pending", "in_progress", "completed", "failed"]),
+    /** The command it ran, or the file it opened. */
+    input: z.string().optional(),
+    /** The agent's own note on why, when it gives one. */
+    summary: z.string().optional(),
+    /** What came back, shortened. */
+    output: z.string().optional(),
+  }),
+  z.object({
+    kind: z.literal("permission"),
+    id: z.string(),
+    title: z.string(),
+    toolKind: z.string(),
+    /** The command it would run, or the file it would open, when the title
+     * does not say. */
+    input: z.string().optional(),
+    options: z.array(permissionOptionSchema),
+    /** The chosen option, `cancelled`, or absent while the user decides. */
+    outcome: z.string().optional(),
+    /** Refused by Whiteboard's read-only policy, not by the user. */
+    automatic: z.boolean().optional(),
+  }),
+  /** An aside apart from the answer, which it is not part of: an agent's
+   * warning about its own setup, or where the reviewer stopped it. */
+  z.object({
+    kind: z.literal("notice"),
+    id: z.string(),
+    severity: z.string(),
+    title: z.string(),
+    description: z.string().optional(),
+  }),
+]);
+
+/** One of the agent's settings: its choices, and the one in use. */
+export const askSelectSchema = z.object({
+  current: z.string(),
+  options: z.array(
+    z.object({
+      value: z.string(),
+      name: z.string(),
+      description: z.string().optional(),
+    }),
+  ),
+});
+
+export type AskSelect = z.infer<typeof askSelectSchema>;
+
+/** The settings a reviewer can pick: the model, and how hard it thinks. */
+export const askChoiceKinds = ["model", "effort"] as const;
+
+export type AskChoiceKind = (typeof askChoiceKinds)[number];
+
+/** What the agent offers of each, when it offers it. */
+export const askChoicesSchema = z.object({
+  model: askSelectSchema.optional(),
+  effort: askSelectSchema.optional(),
+});
+
+export type AskChoices = z.infer<typeof askChoicesSchema>;
+
+/** The values picked, before the agent says what it offers. */
+export const askPicksSchema = z.strictObject({
+  model: z.string().min(1).max(200).optional(),
+  effort: z.string().min(1).max(200).optional(),
+});
+
+export type AskPicks = z.infer<typeof askPicksSchema>;
+
+/** A slash command the agent takes, its skills among them. */
+export const askCommandSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  /** What it takes after its name, when it takes anything. */
+  hint: z.string().optional(),
+});
+
+export type AskCommand = z.infer<typeof askCommandSchema>;
+
+/** What a question to the agent may carry besides text and file links. */
+export const askAcceptsSchema = z.object({ image: z.boolean() });
+
+export type AskAccepts = z.infer<typeof askAcceptsSchema>;
+
+/** What an agent offers before anything is asked of it, as it last said. */
+export const askOfferSchema = z.object({
+  choices: askChoicesSchema,
+  commands: z.array(askCommandSchema).optional(),
+  accepts: askAcceptsSchema.optional(),
+});
+
+export type AskOffer = z.infer<typeof askOfferSchema>;
+
+/** The images a question can carry, as agents take them. */
+export const askImageTypes = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+] as const;
+
+/** An image's base64 bytes: up to 5 MB of image. */
+const IMAGE_DATA_MAX = 7_000_000;
+
+/** A question as the reviewer asks it: its text, the checkout files it
+ * mentions, and any images. */
+export const askQuestionSchema = z.strictObject({
+  text: z.string().trim().min(1).max(8_000),
+  /** Paths relative to the checkout's root. */
+  mentions: z.array(z.string().min(1).max(400)).max(20).optional(),
+  images: z
+    .array(
+      z.strictObject({
+        name: z.string().min(1).max(200),
+        mimeType: z.enum(askImageTypes),
+        data: z.string().min(1).max(IMAGE_DATA_MAX),
+      }),
+    )
+    .max(4)
+    .optional(),
+});
+
+export type AskQuestion = z.infer<typeof askQuestionSchema>;
+
+/** How full the agent's context window is, and what the session cost. */
+export const askUsageSchema = z.object({
+  used: z.number(),
+  size: z.number(),
+  cost: z.object({ amount: z.number(), currency: z.string() }).optional(),
+});
+
+export type AskUsage = z.infer<typeof askUsageSchema>;
+
+const statusSchema = z.enum([
+  "starting",
+  "running",
+  "waiting",
+  "idle",
+  "failed",
+]);
+
+/** Everything the Ask panel renders. A watcher gets it whole once, then
+ * follows it through `AskChange`s. */
+export const askThreadStateSchema = z.object({
+  id: z.string(),
+  agent: z.enum(askAgentIds),
+  agentName: z.string(),
+  status: statusSchema,
+  error: z.string().optional(),
+  /** The agent's login lapsed: the command that signs in again. */
+  signIn: z.string().optional(),
+  /** The mode that keeps the agent from changing files was accepted. */
+  readOnly: z.boolean(),
+  /** The agent edits and runs commands without asking. */
+  bypass: z.boolean(),
+  head: z.string(),
+  /** The checkout the agent works in. */
+  cwd: z.string(),
+  /** Absent until the agent says, or when it offers no choice. */
+  choices: askChoicesSchema.optional(),
+  /** Absent until the agent says, or when it takes none. */
+  commands: z.array(askCommandSchema).optional(),
+  accepts: askAcceptsSchema.optional(),
+  usage: askUsageSchema.optional(),
+  /** What the agent calls the conversation. */
+  title: z.string().optional(),
+  selection: z.object({ title: z.string(), quote: z.string().optional() }),
+  entries: z.array(askEntrySchema),
+});
+
+export type AskEntry = z.infer<typeof askEntrySchema>;
+
+export type AskThreadState = z.infer<typeof askThreadStateSchema>;
+
+/** One change to a thread. Answer text arrives as `append`, so a streamed
+ * token costs its own length, not the thread's. */
+export const askChangeSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("set"),
+    status: statusSchema.optional(),
+    readOnly: z.boolean().optional(),
+    bypass: z.boolean().optional(),
+    choices: askChoicesSchema.optional(),
+    commands: z.array(askCommandSchema).optional(),
+    accepts: askAcceptsSchema.optional(),
+    usage: askUsageSchema.optional(),
+    title: z.string().optional(),
+    /** `null` clears the error; absent leaves it. */
+    error: z.string().nullable().optional(),
+    /** `null` clears it; absent leaves it. */
+    signIn: z.string().nullable().optional(),
+  }),
+  z.object({ type: z.literal("add"), entry: askEntrySchema }),
+  /** Replaces the entry with the same id and kind. */
+  z.object({ type: z.literal("entry"), entry: askEntrySchema }),
+  z.object({ type: z.literal("append"), id: z.string(), text: z.string() }),
+  /** Drops what a failed turn left, before it is asked again. */
+  z.object({ type: z.literal("remove"), ids: z.array(z.string()) }),
+]);
+
+export type AskChange = z.infer<typeof askChangeSchema>;
+
+/** A line of the watch stream. A snapshot can come at any point and resets
+ * the watcher; each change carries the next `seq` after the one before it. */
+export const askUpdateSchema = z.union([
+  z.object({
+    seq: z.number().int().nonnegative(),
+    snapshot: askThreadStateSchema,
+  }),
+  z.object({ seq: z.number().int().positive(), change: askChangeSchema }),
+]);
+
+export type AskUpdate = z.infer<typeof askUpdateSchema>;
+
+/** One line of a watch of several threads: a thread's update, or that it
+ * has ended. */
+export const askWatchLineSchema = z.union([
+  z.object({ threadId: z.string(), update: askUpdateSchema }),
+  z.object({ threadId: z.string(), ended: z.literal(true) }),
+]);
+
+export type AskWatchLine = z.infer<typeof askWatchLineSchema>;
+
+/** The server and the panel both advance a thread with this, so they agree. */
+export function applyAskChange(
+  state: AskThreadState,
+  change: AskChange,
+): AskThreadState {
+  switch (change.type) {
+    case "set": {
+      const { error: _error, signIn: _signIn, ...rest } = state;
+
+      const next: AskThreadState = {
+        ...rest,
+        status: change.status ?? state.status,
+        readOnly: change.readOnly ?? state.readOnly,
+        bypass: change.bypass ?? state.bypass,
+      };
+
+      const choices = change.choices ?? state.choices;
+
+      if (choices) next.choices = choices;
+      const commands = change.commands ?? state.commands;
+
+      if (commands) next.commands = commands;
+      const accepts = change.accepts ?? state.accepts;
+
+      if (accepts) next.accepts = accepts;
+      const usage = change.usage ?? state.usage;
+
+      if (usage) next.usage = usage;
+      const title = change.title ?? state.title;
+
+      if (title) next.title = title;
+
+      // Absent keeps the error, null clears it, a message replaces it.
+      const error = change.error === undefined ? state.error : change.error;
+
+      if (error) next.error = error;
+
+      const signIn = change.signIn === undefined ? state.signIn : change.signIn;
+
+      if (signIn) next.signIn = signIn;
+
+      return next;
+    }
+
+    case "add":
+      return { ...state, entries: [...state.entries, change.entry] };
+    case "entry":
+      return {
+        ...state,
+        entries: state.entries.map((entry) =>
+          entry.id === change.entry.id && entry.kind === change.entry.kind
+            ? change.entry
+            : entry,
+        ),
+      };
+    case "remove": {
+      const ids = new Set(change.ids);
+
+      return {
+        ...state,
+        entries: state.entries.filter((entry) => !ids.has(entry.id)),
+      };
+    }
+
+    case "append":
+      return {
+        ...state,
+        entries: state.entries.map((entry) =>
+          entry.kind === "agent" && entry.id === change.id
+            ? { ...entry, text: entry.text + change.text }
+            : entry,
+        ),
+      };
+  }
+}
+
+/** A saved conversation, as the history list shows it. The transcript stays
+ * with the agent; Whiteboard keeps what it needs to find and reopen it. */
+export const askHistoryEntrySchema = z.object({
+  id: z.string(),
+  agent: z.enum(askAgentIds),
+  /** What the agent calls it, else the first question. */
+  title: z.string(),
+  /** The first saved user question, independent of the agent's title. */
+  question: z.string().optional(),
+  selection: AgentSelectionSchema,
+  /** The commit the agent read. */
+  head: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type AskHistoryEntry = z.infer<typeof askHistoryEntrySchema>;
