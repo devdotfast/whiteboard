@@ -13,7 +13,8 @@ const readFontInfo = FontMeasurements.readFontInfo.bind(FontMeasurements);
 FontMeasurements.readFontInfo = (targetWindow, bareFontInfo) => {
   const info = readFontInfo(targetWindow, bareFontInfo);
 
-  if (info.isMonospace || !info.fontFamily.startsWith('"Geist Mono"')) return info;
+  if (info.isMonospace || !info.fontFamily.startsWith('"Geist Mono"'))
+    return info;
 
   return new FontInfo({ ...info, isMonospace: true }, info.isTrusted);
 };

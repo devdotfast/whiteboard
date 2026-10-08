@@ -56,17 +56,24 @@ function dropRawEngine(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [gzipEngine(), dropRawEngine(), {
-    name: "production-headers",
-    apply: "build",
-    generateBundle() {
-      this.emitFile({
-        type: "asset",
-        fileName: "_headers",
-        source: readFileSync(new URL("public/_headers", import.meta.url), "utf8"),
-      });
+  plugins: [
+    gzipEngine(),
+    dropRawEngine(),
+    {
+      name: "production-headers",
+      apply: "build",
+      generateBundle() {
+        this.emitFile({
+          type: "asset",
+          fileName: "_headers",
+          source: readFileSync(
+            new URL("public/_headers", import.meta.url),
+            "utf8",
+          ),
+        });
+      },
     },
-  }],
+  ],
   resolve: {
     alias: [
       { find: /^vs\//, replacement: `${vs}/` },
@@ -76,5 +83,9 @@ export default defineConfig({
   server: { fs: { allow: [fileURLToPath(new URL("../..", import.meta.url))] } },
   worker: { format: "es", plugins: () => [dropRawEngine()] },
   // Keep local UI fixtures available in dev without publishing them.
-  build: { target: "es2024", chunkSizeWarningLimit: 4096, copyPublicDir: false },
+  build: {
+    target: "es2024",
+    chunkSizeWarningLimit: 4096,
+    copyPublicDir: false,
+  },
 });
