@@ -10,7 +10,14 @@ import { URI } from "vs/base/common/uri.js";
 import { ICodeEditorService } from "vs/editor/browser/services/codeEditorService.js";
 import type { IInstantiationService } from "vs/platform/instantiation/common/instantiation.js";
 
-import type { Classified, Engine, FileRequest } from "./engine/engine.js";
+import { cache, cacheKey, cached } from "./cache.js";
+import type {
+  Classified,
+  Diffed,
+  Engine,
+  FileEvent,
+  FileRequest,
+} from "./engine/engine.js";
 import { foldIds, gapIds } from "./folds.js";
 import {
   type Change,
@@ -61,6 +68,8 @@ export interface Work {
   fetching: number;
   diffing: number;
   diffed: number;
+  /** Of those, the files whose results this browser had kept (cache.ts). */
+  cached: number;
   hidden: number;
   failed: number;
   /** Total diffr time, and the file that took longest. */
@@ -90,6 +99,7 @@ export class Comparison extends Disposable {
     fetching: 0,
     diffing: 0,
     diffed: 0,
+    cached: 0,
     hidden: 0,
     failed: 0,
     diffMs: 0,
@@ -606,6 +616,25 @@ export class Comparison extends Disposable {
     this.pump();
   }
 
+  /** Names a file's result in the cache (cache.ts): the commits, the file, and the engine's build and configuration. */
+  private async cacheKey(
+    file: File,
+    kind: "diff" | "summary",
+  ): Promise<string> {
+    const { changed } = file;
+
+    return cacheKey([
+      await this.engine.fingerprint,
+      targetPath(this.target),
+      this.change!.base,
+      this.change!.head,
+      changed.status,
+      changed.previousPath,
+      changed.path,
+      kind,
+    ]);
+  }
+
   /** What diffr is told about a file: its sides, with their text once fetched. */
   private request(
     file: File,
@@ -691,31 +720,54 @@ export class Comparison extends Disposable {
     this.changed.fire();
 
     try {
-      const [lhs, rhs] = await Promise.all([
-        changed.status === "added"
-          ? undefined
-          : fileText(
-              this.target,
-              change.base,
-              changed.previousPath ?? changed.path,
-            ),
-        changed.status === "deleted"
-          ? undefined
-          : fileText(this.target, change.head, changed.path),
-      ]);
+      const key = await this.cacheKey(file, "diff");
+      const hit = await cached<Omit<Diffed, "ms">>(key);
+
+      if (this._store.isDisposed) return;
+
+      const text =
+        hit?.event.diff?.type === "text"
+          ? { lhs: hit.event.diff.lhs?.text, rhs: hit.event.diff.rhs?.text }
+          : undefined;
+
+      const [lhs, rhs] = hit
+        ? [text?.lhs, text?.rhs]
+        : await Promise.all([
+            changed.status === "added"
+              ? undefined
+              : fileText(
+                  this.target,
+                  change.base,
+                  changed.previousPath ?? changed.path,
+                ),
+            changed.status === "deleted"
+              ? undefined
+              : fileText(this.target, change.head, changed.path),
+          ]);
 
       if (this._store.isDisposed) return;
       this.work.fetching--;
       this.work.diffing++;
       file.state = "diffing";
       this.changed.fire();
-      const diffed = await this.engine.diff(this.request(file, { lhs, rhs }));
+
+      const diffed = hit
+        ? { ...hit, ms: 0 }
+        : await this.engine.diff(this.request(file, { lhs, rhs }));
 
       if (this._store.isDisposed) return;
       this.work.diffing--;
       this.work.diffMs += diffed.ms;
 
-      if (!this.work.slowest || diffed.ms > this.work.slowest.ms)
+      if (hit) this.work.cached++;
+      else if (diffed.event.diff)
+        void cache(key, {
+          classified: diffed.classified,
+          event: diffed.event,
+          pluginErrors: diffed.pluginErrors,
+        } satisfies Omit<Diffed, "ms">);
+
+      if (!hit && (!this.work.slowest || diffed.ms > this.work.slowest.ms))
         this.work.slowest = { path: changed.path, ms: diffed.ms };
       const event = diffed.event;
 
@@ -797,13 +849,19 @@ export class Comparison extends Disposable {
     this.changed.fire();
 
     try {
-      const { event } = await this.engine.diff(this.request(file, text), true);
+      const key = await this.cacheKey(file, "summary");
+      const hit = await cached<FileEvent>(key);
+
+      const event =
+        hit ?? (await this.engine.diff(this.request(file, text), true)).event;
 
       if (this._store.isDisposed) return;
 
       if (event.diff?.type === "text") {
         this.session?.updateFileDiff(path, event.diff);
         this.work.summarized++;
+
+        if (!hit) void cache(key, event);
       } else if (event.error)
         this.work.summaryErrors.push({ path, message: event.error.message });
     } catch (error) {

@@ -1,4 +1,6 @@
 /** The diff stats (F2) and engine (F3) panels: a card over the foot of the file tree. */
+import { cacheUsage } from "./cache.js";
+import { megabytes } from "./cacheSection.js";
 import type { Comparison } from "./comparison.js";
 import { engineStats } from "./engine/engine.js";
 import { readSetting, writeSetting } from "./settings.js";
@@ -11,8 +13,6 @@ type Row = [label: string, value: string, tooltip?: string];
 const number = (n: number) => n.toLocaleString("en");
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)}s`;
-
-const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(0)} MB`;
 
 export class Panels {
   readonly element: HTMLElement;
@@ -96,6 +96,13 @@ export class Panels {
         "Files near the screen go first; hidden files last",
       ],
     ];
+
+    if (work.cached)
+      rows.push([
+        "From cache",
+        number(work.cached),
+        "Files this browser had diffed before, shown without fetching or diffing them again",
+      ]);
 
     if (work.hidden)
       rows.push([
@@ -182,6 +189,12 @@ export class Panels {
       "Memory",
       stats.memory ? megabytes(stats.memory) : "…",
       "The largest wasm memory a worker holds; it never shrinks",
+    ]);
+    const cache = cacheUsage();
+    rows.push([
+      "Cache",
+      `${number(cache.entries)} · ${megabytes(cache.bytes)}`,
+      "Results kept in this browser; clear them in Settings",
     ]);
 
     return rows;

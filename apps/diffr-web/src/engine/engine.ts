@@ -1,3 +1,4 @@
+import { cacheKey } from "../cache.js";
 import { agentPlugins } from "../settings.js";
 /**
  * The page's handle on diffr: the wasm module is fetched and compiled once, then handed to a pool
@@ -110,9 +111,24 @@ async function unpacked(
 
 let compiled: Promise<WebAssembly.Module> | undefined;
 
+let resolveBuild!: (build: string) => void;
+
+/** Names the engine's build: its URL, which the build hashes, and what the server says of its bytes. */
+const build = new Promise<string>((resolve) => (resolveBuild = resolve));
+
 function module(): Promise<WebAssembly.Module> {
   return (compiled ??= (async () => {
-    const response = await fetch(wasmUrl);
+    const response = await fetch(wasmUrl).catch((error: Error) => {
+      resolveBuild(wasmUrl);
+      throw error;
+    });
+
+    resolveBuild(
+      [
+        wasmUrl,
+        response.headers.get("etag") ?? response.headers.get("last-modified"),
+      ].join(" "),
+    );
 
     if (!response.ok)
       throw new Error(`The diffr engine failed to load (${response.status}).`);
@@ -154,6 +170,8 @@ export class Engine {
   private rejectNotices!: (error: Error) => void;
   /** Whether the summarizer is on, once a worker has read the configuration. */
   summarizes = false;
+  /** Names the build and everything it was given, so its results can be kept (cache.ts). */
+  readonly fingerprint: Promise<string>;
 
   /**
    * `config` is the reader's config.toml; `overrides`, JSON merged over it, the page's own settings
@@ -173,6 +191,9 @@ export class Engine {
     });
     this.notices.catch(() => {});
     this.slots.push(this.spawn());
+    this.fingerprint = build.then((build) =>
+      cacheKey([build, config, overrides, this.plugins]),
+    );
   }
 
   private spawn(): Slot {

@@ -8,6 +8,8 @@ import { observableValue } from "vs/base/common/observable.js";
 import "./fonts.css";
 import "./styles.css";
 import "./editorFont.js";
+import { loadCacheUsage, onCacheChange } from "./cache.js";
+import { cacheSection } from "./cacheSection.js";
 import { Comparison } from "./comparison.js";
 import { Engine, onEngineChange } from "./engine/engine.js";
 import { FindBar } from "./find.js";
@@ -90,6 +92,10 @@ body.appendChild(find.element);
 
 onEngineChange(() => panels.update());
 
+onCacheChange(() => panels.update());
+
+loadCacheUsage();
+
 function iconButton(
   icon: string,
   tooltip: string,
@@ -117,8 +123,10 @@ const settings: SettingsHost = {
     route();
   },
   reload: () => route(),
-  sections: (parent) =>
-    agentPluginsSection(parent, (next) => settings.replaceEngine(next)),
+  sections: (parent) => {
+    cacheSection(parent);
+    agentPluginsSection(parent, (next) => settings.replaceEngine(next));
+  },
 };
 
 // Only where the browser offers its agent the page's tools, which bring their own decoder.
