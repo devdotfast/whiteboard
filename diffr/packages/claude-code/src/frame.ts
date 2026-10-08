@@ -13,7 +13,26 @@ import { Colors, fit, LineBuilder, paintCell } from "./paint";
 import type { Action, Frame, Input, Line } from "./protocol";
 
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-const HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · / search, n/N matches · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ or ⌘B files · q close";
+/** The key list `?` shows in place of the diff: keys, then what they do. */
+const KEYS: [string, string][] = [
+  ["j k · d u · space b", "scroll a line, half a page, a page"],
+  ["g G", "first file, last line"],
+  ["h l · H L", "pan sideways, faster"],
+  ["[ ]", "previous, next change"],
+  ["za zo zc · zA zO zC", "toggle, open, close the top fold; deep"],
+  ["zM zR · zj zk", "fold all, unfold all; next, previous fold"],
+  ["c", "show or hide unchanged context"],
+  ["/ · n N", "search; next, previous match"],
+  ["ctrl-p", "go to a changed file"],
+  ["\\ · ⌘B · ☰ files", "the file tree"],
+  ["V · a header's box", "mark a file viewed"],
+  ["drag · y · Y", "select lines; copy them; copy them for an agent"],
+  ["s · w · t", "split or unified; wrap; theme"],
+  ["?", "this list"],
+  ["q", "close the pane"],
+];
+/** Pinned to the status line's right end, so cut hints never cut the way to the list. */
+const KEYS_BUTTON = " ? keys ";
 
 /** What an input asks of the hooks module beyond a redraw. */
 export interface Outcome {
@@ -42,6 +61,8 @@ export class Pane {
   private selecting = false;
   /** The code row on each frame line of the last frame, and which side a column falls on. */
   private readonly cellsAt = new Map<number, { key: string; side: (x: number) => SourceSelection["side"] }>();
+  /** The key list, shown in place of the diff. */
+  private helpView = false;
   /** A narrow pane showing the tree in place of the diff. */
   private filesView = false;
   /** The tree row the tree that took the pane is on. */
@@ -93,6 +114,7 @@ export class Pane {
     else if ("scrub" in action) this.viewer.scrub(action.scrub);
     else if ("files" in action) this.toggleFiles();
     else if ("pick" in action) this.viewer.pickFile(action.pick);
+    else if ("help" in action) this.helpView = !this.helpView;
     else this.viewer.toggleLayout();
   }
 
@@ -104,7 +126,16 @@ export class Pane {
     }
     const plain = !key.ctrl && !key.meta;
     if (plain && key.key === "q") return { close: true };
-    this.message = plain && key.key === "?" ? HELP : "";
+    this.message = "";
+    // The key list closes on any key but q, which closes the pane.
+    if (this.helpView) {
+      this.helpView = false;
+      return {};
+    }
+    if (plain && key.key === "?") {
+      this.helpView = true;
+      return {};
+    }
     if (!this.size) throw new Error("The pane has not been drawn yet");
     // ⌘B as in VS Code; \ for terminals that keep Cmd to themselves.
     const files = (plain && key.key === "\\") || (key.meta && key.key === "b");
@@ -351,8 +382,18 @@ export class Pane {
     if (!body.length)
       body.push((line) => line.text(snapshot.complete ? "No changed files" : `${spinner} Starting comparison…`, theme.muted, theme.bg));
 
+    // The key list, in place of the diff; a click anywhere on it closes it.
+    if (this.helpView) {
+      const keyWidth = Math.max(...KEYS.map(([keys]) => measureTextWidth(keys))) + 4;
+      for (let y = 0; y < viewportHeight; y++) {
+        const line = new LineBuilder(colors, theme.bg), entry = KEYS[y];
+        line.hit(0, size.columns, { help: true });
+        if (entry) line.text(`  ${entry[0]}`, theme.accent).fill(keyWidth).text(entry[1], theme.fg);
+        lines.push(line.line(size.columns));
+      }
+    }
     // The tree that took the pane: full width, a cursor, each file's counts at the right edge.
-    if (this.filesView) {
+    else if (this.filesView) {
       this.treeCursor = Math.min(this.treeCursor, Math.max(0, treeRows.length - 1));
       this.treeScroll = this.treeCursor < this.treeScroll ? this.treeCursor
         : this.treeCursor >= this.treeScroll + viewportHeight ? this.treeCursor - viewportHeight + 1 : this.treeScroll;
@@ -378,7 +419,7 @@ export class Pane {
         lines.push(line.line(size.columns));
       }
     }
-    for (let y = 0; y < (this.filesView ? 0 : viewportHeight); y++) {
+    for (let y = 0; y < (this.filesView || this.helpView ? 0 : viewportHeight); y++) {
       const line = new LineBuilder(colors, theme.bg);
       if (sidebar > 0) {
         const entry = treeRows[treeTop + y];
@@ -435,9 +476,12 @@ export class Pane {
         : `${name} · file ${order.indexOf(currentFile) + 1} of ${order.length} · ${at.maxScroll ? Math.round((top / at.maxScroll) * 100) : 100}% · `;
       const loading = snapshot.complete ? "" : `${snapshot.loaded}/${inventory.length} loaded… `;
       const keys = this.filesView ? " j/k move · ⏎ open · \\ or ⌘B back"
-        : " [/] hunks · / search · \\ or ⌘B files · V viewed · drag selects · y/Y copy · ? keys";
-      status.text(fit(`${this.message ? `${this.message} · ` : ""}${searched}${this.filesView ? "" : where}${read.viewed}/${read.total} viewed ${loading}${errors}${keys}`,
-        size.columns), theme.muted);
+        : " [/] hunks · / search · ctrl-p files · \\ or ⌘B tree · V viewed · drag selects · y/Y copy";
+      // The hints give way first, cut with an ellipsis; ? keys stays at the right end, and a click on it shows them all.
+      const room = size.columns - measureTextWidth(KEYS_BUTTON);
+      const text = `${this.message ? `${this.message} · ` : ""}${searched}${this.filesView ? "" : where}${read.viewed}/${read.total} viewed ${loading}${errors}${keys}`;
+      status.text(measureTextWidth(text) > room ? `${fit(text, room - 1)}…` : text, theme.muted).fill(room);
+      status.hit(room, size.columns, { help: true }).text(KEYS_BUTTON, this.helpView ? theme.bg : theme.accent, this.helpView ? theme.accent : theme.bg);
     }
     lines.push(status.line(size.columns));
     return { colors: colors.list, fg: colors.of(theme.fg), lines, hover };

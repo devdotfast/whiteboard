@@ -253,3 +253,40 @@ test("Ctrl-P opens a picker over the diff; typing narrows it and Enter goes to t
     expect(frame().split("\n")[2]).toContain("src/protocol/wire.ts");
   } finally { await act(async () => { t.renderer.destroy(); }); }
 });
+test("the status line keeps ? keys at its right end; a click on it, or ?, opens the Help menu with the new keys", async () => {
+  const store = new DiffStore(), file = createTestDiffFile();
+  store.accept(startFor([file])); store.accept(file); store.accept({type:"complete", succeeded:1, failed:0});
+  const t = await testRender(<App store={store} themes={themes} onQuit={() => {}} />, {width:100, height:20});
+  const frame = () => t.captureCharFrame();
+  const status = () => frame().split("\n").at(-2) ?? "";
+  try {
+    await act(async () => { await t.renderOnce(); });
+    expect(status()).toMatch(/… \? keys $/);
+    const y = frame().split("\n").length - 2;
+    await act(async () => { await t.mockMouse.click(status().lastIndexOf("?"), y); await t.renderOnce(); });
+    await t.waitFor(() => frame().includes("Go to a file  Ctrl-P"));
+    await act(async () => { t.mockInput.pressKey("?"); await t.renderOnce(); });
+    await t.waitFor(() => !frame().includes("Go to a file  Ctrl-P"));
+    await act(async () => { t.mockInput.pressKey("?"); await t.renderOnce(); });
+    await t.waitFor(() => frame().includes("Copy for an agent  Y"));
+  } finally { await act(async () => { t.renderer.destroy(); }); }
+});
+test("a kitty-protocol terminal names the base key of a shifted symbol, but the TUI acts on what was typed", async () => {
+  const store = new DiffStore(), file = createTestDiffFile();
+  store.accept(startFor([file])); store.accept(file); store.accept({type:"complete", succeeded:1, failed:0});
+  const t = await testRender(<App store={store} themes={themes} onQuit={() => {}} />, {width:100, height:20, kittyKeyboard: true});
+  const frame = () => t.captureCharFrame();
+  const status = () => frame().split("\n").at(-2) ?? "";
+  // CSI key:shifted;modifiers u, as kitty sends shift+/ for ? and shift+9 for (.
+  const send = async (sequence: string) => { await act(async () => { t.renderer.stdin.emit("data", Buffer.from(sequence)); await t.renderOnce(); }); };
+  try {
+    await act(async () => { await t.renderOnce(); });
+    await send("\x1b[47:63;2u");
+    await t.waitFor(() => frame().includes("Go to a file  Ctrl-P"));
+    expect(status()).not.toContain("/▏");
+    await send("\x1b[27u");
+    await send("\x1b[47u");
+    await send("\x1b[57:40;2u");
+    await t.waitFor(() => status().includes("/(▏"));
+  } finally { await act(async () => { t.renderer.destroy(); }); }
+});

@@ -14446,6 +14446,7 @@ var action = exports_external.union([
   exports_external.strictObject({ dir: exports_external.string() }),
   exports_external.strictObject({ scrub: exports_external.number().int() }),
   exports_external.strictObject({ layout: exports_external.literal(true) }),
+  exports_external.strictObject({ help: exports_external.literal(true) }),
   exports_external.strictObject({ pick: exports_external.number().int() }),
   exports_external.strictObject({ files: exports_external.literal(true) })
 ]);
@@ -18325,7 +18326,24 @@ function paintCell(line, value, spans, width, unified, { fileIndex, ...options }
 
 // src/frame.ts
 var SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-var HELP = "j/k scroll · h/l pan (H/L faster) · d/u half page · g/G ends · [/] changes · za zo zc fold (zA zO zC deep) · zM/zR all · / search, n/N matches · V file viewed · drag selects · y copy · Y for agent · c context · s layout · w wrap · t theme · \\ or ⌘B files · q close";
+var KEYS = [
+  ["j k · d u · space b", "scroll a line, half a page, a page"],
+  ["g G", "first file, last line"],
+  ["h l · H L", "pan sideways, faster"],
+  ["[ ]", "previous, next change"],
+  ["za zo zc · zA zO zC", "toggle, open, close the top fold; deep"],
+  ["zM zR · zj zk", "fold all, unfold all; next, previous fold"],
+  ["c", "show or hide unchanged context"],
+  ["/ · n N", "search; next, previous match"],
+  ["ctrl-p", "go to a changed file"],
+  ["\\ · ⌘B · ☰ files", "the file tree"],
+  ["V · a header's box", "mark a file viewed"],
+  ["drag · y · Y", "select lines; copy them; copy them for an agent"],
+  ["s · w · t", "split or unified; wrap; theme"],
+  ["?", "this list"],
+  ["q", "close the pane"]
+];
+var KEYS_BUTTON = " ? keys ";
 var SPLIT_COLUMNS = 180;
 var TREE_MIN_COLUMNS = 120;
 
@@ -18341,6 +18359,7 @@ class Pane {
   selection = null;
   selecting = false;
   cellsAt = new Map;
+  helpView = false;
   filesView = false;
   treeCursor = 0;
   constructor(store, theme) {
@@ -18392,6 +18411,8 @@ class Pane {
       this.toggleFiles();
     else if ("pick" in action2)
       this.viewer.pickFile(action2.pick);
+    else if ("help" in action2)
+      this.helpView = !this.helpView;
     else
       this.viewer.toggleLayout();
   }
@@ -18403,7 +18424,15 @@ class Pane {
     const plain = !key.ctrl && !key.meta;
     if (plain && key.key === "q")
       return { close: true };
-    this.message = plain && key.key === "?" ? HELP : "";
+    this.message = "";
+    if (this.helpView) {
+      this.helpView = false;
+      return {};
+    }
+    if (plain && key.key === "?") {
+      this.helpView = true;
+      return {};
+    }
     if (!this.size)
       throw new Error("The pane has not been drawn yet");
     const files = plain && key.key === "\\" || key.meta && key.key === "b";
@@ -18621,7 +18650,16 @@ class Pane {
       body.unshift((line) => fileHeader(line, currentFile));
     if (!body.length)
       body.push((line) => line.text(snapshot3.complete ? "No changed files" : `${spinner} Starting comparison…`, theme.muted, theme.bg));
-    if (this.filesView) {
+    if (this.helpView) {
+      const keyWidth = Math.max(...KEYS.map(([keys]) => measureTextWidth(keys))) + 4;
+      for (let y = 0;y < viewportHeight; y++) {
+        const line = new LineBuilder(colors, theme.bg), entry = KEYS[y];
+        line.hit(0, size.columns, { help: true });
+        if (entry)
+          line.text(`  ${entry[0]}`, theme.accent).fill(keyWidth).text(entry[1], theme.fg);
+        lines.push(line.line(size.columns));
+      }
+    } else if (this.filesView) {
       this.treeCursor = Math.min(this.treeCursor, Math.max(0, treeRows.length - 1));
       this.treeScroll = this.treeCursor < this.treeScroll ? this.treeCursor : this.treeCursor >= this.treeScroll + viewportHeight ? this.treeCursor - viewportHeight + 1 : this.treeScroll;
       for (let y = 0;y < viewportHeight; y++) {
@@ -18643,7 +18681,7 @@ class Pane {
         lines.push(line.line(size.columns));
       }
     }
-    for (let y = 0;y < (this.filesView ? 0 : viewportHeight); y++) {
+    for (let y = 0;y < (this.filesView || this.helpView ? 0 : viewportHeight); y++) {
       const line = new LineBuilder(colors, theme.bg);
       if (sidebar > 0) {
         const entry = treeRows[treeTop + y];
@@ -18688,8 +18726,11 @@ class Pane {
       const name = inventory[currentFile] ? filePath(inventory[currentFile].file).split("/").at(-1) : undefined;
       const where = name === undefined ? "" : `${name} · file ${order.indexOf(currentFile) + 1} of ${order.length} · ${at.maxScroll ? Math.round(top / at.maxScroll * 100) : 100}% · `;
       const loading = snapshot3.complete ? "" : `${snapshot3.loaded}/${inventory.length} loaded… `;
-      const keys = this.filesView ? " j/k move · ⏎ open · \\ or ⌘B back" : " [/] hunks · / search · \\ or ⌘B files · V viewed · drag selects · y/Y copy · ? keys";
-      status.text(fit(`${this.message ? `${this.message} · ` : ""}${searched}${this.filesView ? "" : where}${read.viewed}/${read.total} viewed ${loading}${errors3}${keys}`, size.columns), theme.muted);
+      const keys = this.filesView ? " j/k move · ⏎ open · \\ or ⌘B back" : " [/] hunks · / search · ctrl-p files · \\ or ⌘B tree · V viewed · drag selects · y/Y copy";
+      const room = size.columns - measureTextWidth(KEYS_BUTTON);
+      const text = `${this.message ? `${this.message} · ` : ""}${searched}${this.filesView ? "" : where}${read.viewed}/${read.total} viewed ${loading}${errors3}${keys}`;
+      status.text(measureTextWidth(text) > room ? `${fit(text, room - 1)}…` : text, theme.muted).fill(room);
+      status.hit(room, size.columns, { help: true }).text(KEYS_BUTTON, this.helpView ? theme.bg : theme.accent, this.helpView ? theme.accent : theme.bg);
     }
     lines.push(status.line(size.columns));
     return { colors: colors.list, fg: colors.of(theme.fg), lines, hover: hover2 };

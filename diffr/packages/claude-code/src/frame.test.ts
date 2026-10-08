@@ -196,3 +196,22 @@ test("Ctrl-P draws a picker over the bottom of the pane; a click on a file goes 
   expect(shown.some((line) => line.includes("changed files"))).toBe(false);
   expect(shown[1]).toStartWith("▌▾ tests/greet.test.ts");
 });
+
+test("hints too long for the status line end in an ellipsis before ? keys, which shows every key in place of the diff", async () => {
+  const { pane } = await load(greet);
+  const status = () => screen(pane.frame(narrow)).at(-1)!;
+  expect(status()).toMatch(/… \? keys $/);
+  const y = screen(pane.frame(narrow)).length - 1;
+  const hit = pane.frame(narrow).lines[y]!.hits!.find(([from, to]) => narrow.columns - 3 >= from && narrow.columns - 3 < to)!;
+  expect(hit[2]).toEqual({ help: true });
+  pane.input({ act: { help: true } });
+  const body = screen(pane.frame(narrow)).slice(1, -1).join("\n");
+  expect(body).toContain("ctrl-p");
+  expect(body).toContain("go to a changed file");
+  expect(body).not.toContain("export function");
+  // Any key but q closes the list; ? opens it again.
+  pane.input({ press: { key: "j" } });
+  expect(screen(pane.frame(narrow)).slice(1, -1).join("\n")).toContain("export function");
+  pane.input({ press: { key: "?" } });
+  expect(screen(pane.frame(narrow)).slice(1, -1).join("\n")).toContain("go to a changed file");
+});

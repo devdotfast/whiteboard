@@ -32,13 +32,23 @@ import { measureTextWidth, sliceTextByWidth } from "@diffr/viewer/terminal/text"
 import { Viewer, type KeyPress } from "@diffr/viewer/viewer";
 import { litRuns, viewedBox, viewedHint } from "@diffr/viewer/viewport/cell";
 import { pickerLines } from "@diffr/viewer/viewport/picker";
+/** Pinned to the status line's right end, so cut hints never cut the way to the key list. */
+const KEYS_BUTTON = " ? keys ";
 const fit = (text: string, width: number) =>
   sliceTextByWidth(text, 0, width).text;
-/** Shifted letters become capitals; cmd counts as meta. */
-const keyPress = (key: KeyEvent): KeyPress => ({
-  key: key.shift && /^[a-z]$/.test(key.name) ? key.name.toUpperCase() : key.name,
-  ctrl: key.ctrl, shift: key.shift, meta: key.meta || key.super === true,
-});
+/**
+ * A printable key is the character it types: kitty-protocol terminals name the base key ("/"
+ * for "?", "9" for "("), and only the sequence carries what was typed. Other keys keep their
+ * name, a shifted letter as its capital; cmd counts as meta.
+ */
+const keyPress = (key: KeyEvent): KeyPress => {
+  const modified = key.ctrl || key.meta || key.super === true;
+  const typed = !modified && key.sequence !== " " && /^[^\x00-\x1f\x7f]$/u.test(key.sequence) ? key.sequence : undefined;
+  return {
+    key: typed ?? (key.shift && /^[a-z]$/.test(key.name) ? key.name.toUpperCase() : key.name),
+    ctrl: key.ctrl, shift: key.shift, meta: key.meta || key.super === true,
+  };
+};
 export function App({
   store,
   onQuit,
@@ -121,6 +131,7 @@ export function App({
     else if (key.name === "y") { if (key.shift) copyForAgent(); else copy(); }
     else if (key.name === "escape") { setSelection(null); setMenu(null); setShowBreakdown(false); }
     else if (key.name === "i") setShowBreakdown((v) => !v);
+    else if (press.key === "?") setMenu((m) => (m === "Help" ? null : "Help"));
   });
   const [selectionStart, selectionEnd] = useMemo(
     () => selectionBounds(rows, selection),
@@ -279,7 +290,11 @@ export function App({
       ["Full page: Ctrl-F / Ctrl-B", () => setMessage("Ctrl-F: page down · Ctrl-B: page up")],
       ["Drag to select · y to copy", () => setMessage("Drag source lines; y copies original source")],
       ["Change breakdown  i", () => setShowBreakdown(true)],
-      ["Folds: click ▾ · za zo zc · zM zR", () => setMessage("Click the chevron or ⋯ · za toggle, zo open, zc close the top fold (zA zO zC recursive) · zM/zR fold/unfold all · zj/zk next/previous fold")]],
+      ["Folds: click ▾ · za zo zc · zM zR", () => setMessage("Click the chevron or ⋯ · za toggle, zo open, zc close the top fold (zA zO zC recursive) · zM/zR fold/unfold all · zj/zk next/previous fold")],
+      ["Search: / · n N", () => setMessage("/ searches paths and code · n/N next/previous match")],
+      ["Go to a file  Ctrl-P", () => viewer.press({ key: "p", ctrl: true })],
+      ["Mark the file viewed  V", () => viewer.toggleViewedFile(currentFile)],
+      ["Copy for an agent  Y", copyForAgent]],
   };
   return (
     <box
@@ -474,13 +489,18 @@ export function App({
           </text>
         ))}
       </box>}
-      <text height={1} fg={found && "prompt" in found ? theme.fg : theme.muted} selectable={false}>
-        {fit(found && "prompt" in found
-          ? `/${found.prompt}▏ · ${found.count} matches · ⏎ go · esc cancel`
-          : `${searched}${snapshot.loaded}/${inventory.length} files · ${progress.viewed}/${progress.total} viewed ${snapshot.complete ? "" : "loading…"} ${snapshot.errors.length ? `${snapshot.errors.length} errors` : ""}  [/] hunks · / search · za fold · V viewed · i breakdown · drag selects lines · y copy · Y for agent · q quit ${message}`,
-          width,
-        )}
-      </text>
+      {found && "prompt" in found
+        ? <text height={1} fg={theme.fg} selectable={false}>{fit(`/${found.prompt}▏ · ${found.count} matches · ⏎ go · esc cancel`, width)}</text>
+        : (() => {
+          // The hints give way first, cut with an ellipsis; ? keys stays at the right end and opens the Help menu.
+          const room = Math.max(1, width - measureTextWidth(KEYS_BUTTON));
+          const text = `${message ? `${message} · ` : ""}${searched}${snapshot.loaded}/${inventory.length} files · ${progress.viewed}/${progress.total} viewed ${snapshot.complete ? "" : "loading…"} ${snapshot.errors.length ? `${snapshot.errors.length} errors` : ""}  [/] hunks · / search · ctrl-p files · ⌘B tree · V viewed · drag selects lines · y/Y copy · q quit`;
+          return <box height={1} width={width} flexDirection="row">
+            <text width={room} fg={theme.muted} selectable={false}>{measureTextWidth(text) > room ? `${fit(text, room - 1)}…` : text}</text>
+            <text fg={menu === "Help" ? theme.bg : theme.accent} bg={menu === "Help" ? theme.accent : theme.bg} selectable={false}
+              onMouseUp={() => setMenu((m) => (m === "Help" ? null : "Help"))}>{KEYS_BUTTON}</text>
+          </box>;
+        })()}
     </box>
   );
 }

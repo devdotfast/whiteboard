@@ -18,6 +18,8 @@ const action = z.union([
   /** A scrollbar row. */
   z.strictObject({ scrub: z.number().int() }),
   z.strictObject({ layout: z.literal(true) }),
+  /** The status line's ? keys, or any click on the key list: show or hide the list. */
+  z.strictObject({ help: z.literal(true) }),
   /** A file in the Ctrl-P picker. */
   z.strictObject({ pick: z.number().int() }),
   /** The title bar's files button: the tree, as a sidebar or in place of the diff. */
