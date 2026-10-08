@@ -502,7 +502,7 @@ export function App({
           const lead = fit(` ${message ? `${message} · ` : ""}${what} · ${count} ${count === 1 ? "line" : "lines"} `,
             Math.max(0, width - measureTextWidth(AGENT_BUTTON)));
           const room = width - measureTextWidth(lead) - measureTextWidth(AGENT_BUTTON);
-          const hints = " y copy · esc clear";
+          const hints = " esc clear";
           return <box height={1} width={width} flexDirection="row" backgroundColor={theme.accent}>
             <text width={measureTextWidth(lead)} fg={theme.bg} bg={theme.accent} attributes={TextAttributes.BOLD} selectable={false}>{lead}</text>
             <text width={measureTextWidth(AGENT_BUTTON)} fg={theme.accent} bg={theme.bg} attributes={TextAttributes.BOLD} selectable={false}

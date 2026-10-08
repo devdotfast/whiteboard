@@ -305,7 +305,7 @@ test("while lines are selected the status line is a bright bar naming them; its 
     expect(status()).not.toContain("Copy for agent");
     await act(async () => { await t.mockMouse.drag(40, 3, 40, 6); });
     await t.waitFor(() => status().includes("Copy for agent"));
-    expect(status()).toStartWith(" demo.ts:1-3 · 3 lines  Y Copy for agent  y copy · esc clear");
+    expect(status()).toStartWith(" demo.ts:1-3 · 3 lines  Y Copy for agent  esc clear");
     const y = t.captureCharFrame().split("\n").length - 2;
     const bar = t.captureSpans().lines[y]!.spans;
     expect(rgbToHex(bar[0]!.bg).toLowerCase()).toBe(dark.accent.toLowerCase());

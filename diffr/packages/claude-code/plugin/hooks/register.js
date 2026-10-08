@@ -18825,7 +18825,7 @@ class Pane {
       const from = measureTextWidth(lead);
       status.hit(from, from + button2, { chat: true }).text(CHAT_BUTTON, theme.accent, theme.bg, true);
       const room = size.columns - from - button2;
-      const hints = " y copy · Y copy for agent · esc clear";
+      const hints = " esc clear";
       if (room > 0)
         status.text(measureTextWidth(hints) > room ? `${fit(hints, room - 1)}…` : hints, theme.bg, theme.accent).fill(size.columns, theme.accent);
     } else {
