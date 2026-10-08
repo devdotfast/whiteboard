@@ -491,7 +491,14 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			this.homeView = homeViewFromOptions(options) ?? this.homeView;
 			this.renderedInput = input;
 			this.setCanvasState("home");
-			await this.apiCatalog.initialize();
+			try {
+				await this.apiCatalog.initialize();
+			} catch (error) {
+				// A server that couldn't start, in its own words: a failed
+				// upgrade names the copy to go back to.
+				if (generation === this.loadGeneration) await this.renderError(error, generation);
+				return;
+			}
 			let emptyStateVisible = false;
 			/* The empty-list render suspends on the install fetch below, while
 			   the list render has no await at all. The sequence number keeps a

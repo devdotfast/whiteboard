@@ -68,12 +68,9 @@ export class ReviewActivity {
     private readonly db: DatabaseSync,
     private readonly assertReview?: (reviewId: string) => void,
   ) {
-    // Presences replace the per-scope leases; both last minutes, so the old
-    // table is dropped rather than migrated.
     db.exec(`CREATE TABLE IF NOT EXISTS authoring_presences(
       activity_id TEXT PRIMARY KEY, review_id TEXT NOT NULL, slot INTEGER NOT NULL,
-      started_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, focus TEXT, surface TEXT);
-      DROP TABLE IF EXISTS authoring_sessions;`);
+      started_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, focus TEXT, surface TEXT);`);
 
     for (const row of db
       .prepare(

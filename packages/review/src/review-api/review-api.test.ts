@@ -21,12 +21,16 @@ import { documentText } from "./document-text.js";
 import { ReviewInputError } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { LocalReviewData } from "./local-data";
+import { STORE_UPGRADES } from "./store-migrations.js";
 import {
   type ReviewProviders,
   ReviewStore,
   SCRATCHPAD_ID,
   inspectSnapshot,
 } from "./store.js";
+
+const upgradeVersion = (name: string) =>
+  STORE_UPGRADES.find((step) => step.name === name)!.version;
 
 const pins = { repositoryId: "repo", base: "base-commit", head: "head-commit" };
 
@@ -430,6 +434,8 @@ describe("snapshot authoring", () => {
     db.prepare(
       "UPDATE review_attention SET dismissed_at=? WHERE review_id=?",
     ).run("2020-01-01T00:00:00Z", reviewId);
+    // A store from before Trash has not run the step.
+    db.exec(`PRAGMA user_version=${upgradeVersion("archive-to-trash") - 1}`);
     db.close();
     const before = Date.now();
     store = new ReviewStore(database, providers);
