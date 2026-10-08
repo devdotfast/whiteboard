@@ -3,11 +3,11 @@
 //! names of custom tags.
 
 /// The tag that makes a file diff as text.
-pub(crate) const GENERATED: &str = "generated";
+pub const GENERATED: &str = "generated";
 
 /// A tag name: lowercase letters, digits, `-` and `_`, starting with a letter
 /// or digit.
-pub(crate) fn is_tag(tag: &str) -> bool {
+pub fn is_tag(tag: &str) -> bool {
     tag.chars()
         .next()
         .is_some_and(|first| first.is_ascii_lowercase() || first.is_ascii_digit())

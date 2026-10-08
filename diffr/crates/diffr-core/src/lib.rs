@@ -54,6 +54,7 @@ pub mod plugin;
 pub mod present;
 pub mod protocol;
 pub mod summary;
+pub mod tags;
 mod words;
 
 #[macro_use]
