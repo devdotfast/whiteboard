@@ -96,6 +96,52 @@ test("Paper folds stay under the mouse, pair both sides, accent guides, and surv
     expect(frame()).toContain("open(true)");
   } finally { await act(async () => { t.renderer.destroy(); }); }
 });
+test("a closed fold's chevron lights up under the pointer, from the chevron or its label", async () => {
+  const store = new DiffStore(), file = createGuideDiffFile();
+  store.accept(startFor([file])); store.accept(file); store.accept({type:"complete", succeeded:1, failed:0});
+  const t = await testRender(<App store={store} themes={themes} onQuit={() => {}} />, {width:170, height:25});
+  const frame = () => t.captureCharFrame();
+  try {
+    await act(async () => { await t.renderOnce(); });
+    const y = frame().split("\n").findIndex(l => l.includes("if event.open")), x = frame().split("\n")[y].indexOf("▾");
+    await act(async () => { await t.mockMouse.click(x, y); await t.renderOnce(); });
+    await act(async () => { await t.mockMouse.moveTo(3, 0); await t.renderOnce(); });
+    const chevron = () => rgbToHex(t.captureSpans().lines[y].spans.find(s => s.text.includes("▸"))!.fg);
+    expect(frame().split("\n")[y][x]).toBe("▸");
+    const resting = chevron();
+    await act(async () => { await t.mockMouse.moveTo(x, y); await t.renderOnce(); });
+    await t.waitFor(() => chevron() !== resting);
+    await act(async () => { await t.mockMouse.moveTo(3, 0); await t.renderOnce(); });
+    await t.waitFor(() => chevron() === resting);
+    await act(async () => { await t.mockMouse.moveTo(frame().split("\n")[y].indexOf("⋯"), y); await t.renderOnce(); });
+    await t.waitFor(() => chevron() !== resting);
+    expect(chevron()).not.toBe(resting);
+  } finally { await act(async () => { t.renderer.destroy(); }); }
+});
+test("a closed scope's pseudocode stands beside its rail: pointing at it arms the scope, and a click opens it", async () => {
+  const store = new DiffStore(), file = createGuideDiffFile();
+  if (file.diff.type !== "text") throw new Error();
+  // `fn other()` arrives closed; give its body a summary of two lines.
+  for (const source of [file.diff.lhs!, file.diff.rhs!])
+    source.root.children[1]!.children[3]!.visibility = {collapsed: true, label: "call one\ncall two"};
+  store.accept(startFor([file])); store.accept(file); store.accept({type:"complete", succeeded:1, failed:0});
+  const t = await testRender(<App store={store} themes={themes} onQuit={() => {}} />, {width:170, height:25});
+  const lines = () => t.captureCharFrame().split("\n");
+  try {
+    await act(async () => { await t.renderOnce(); });
+    // The closed fold's chevron is on the opener.
+    const header = lines().findIndex(l => l.includes("fn other() {"));
+    expect(lines()[header].slice(0, 40)).toContain("▸");
+    const y = lines().findIndex(l => l.includes("call one"));
+    expect(lines()[y]).not.toContain("┃");
+    await act(async () => { await t.mockMouse.moveTo(lines()[y].indexOf("call one") + 2, y); await t.renderOnce(); });
+    await t.waitFor(() => lines()[y].includes("┃") && lines()[y + 1].includes("┃"));
+    expect(lines()[y]).toContain("┃");
+    await act(async () => { await t.mockMouse.click(lines()[y].indexOf("call one") + 2, y); await t.renderOnce(); });
+    await t.waitForFrame(f => f.includes("one();"));
+    expect(t.captureCharFrame()).not.toContain("call one");
+  } finally { await act(async () => { t.renderer.destroy(); }); }
+});
 test("pointing at a rail arms that scope, even an outer one, and clicking the rail folds it", async () => {
   const store = new DiffStore(), file = createGuideDiffFile();
   store.accept(startFor([file])); store.accept(file); store.accept({type:"complete", succeeded:1, failed:0});
