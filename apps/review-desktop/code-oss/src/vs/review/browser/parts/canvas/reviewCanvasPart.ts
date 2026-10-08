@@ -58,7 +58,7 @@ import {
 	REVIEW_SOFTWARE_MAP_SETTING,
 	REVIEW_TELEMETRY_SETTING,
 } from "../../../common/reviewConfigurationDefaults.js";
-import { homeSessions, resolveReviewSourceView, reviewSourceAnchor, type ReviewSourceView, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
+import { resolveReviewSourceView, reviewSourceAnchor, type ReviewSourceView, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
 import type {
 	ReviewCanvasBridge,
 	ReviewCanvasContent,
@@ -88,7 +88,6 @@ import type {
 } from "../../../common/reviewProtocol.js";
 import {
 	parseReviewVerbRequest,
-	SCRATCHPAD_REVIEW_ID,
 	REVIEW_CANVAS_RESUME_EVENT,
 } from "../../../common/reviewProtocol.js";
 import { IReviewVerbsService } from "../../../contrib/verbs/reviewVerbs.js";
@@ -384,7 +383,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		this.restoreEmbeddedSelection(options);
 		try {
 			await this.desktopConnection.initialize();
-			if (input.target.kind === "api" && input.target.reviewId !== SCRATCHPAD_REVIEW_ID) {
+			if (input.target.kind === "api") {
 				const { reviewId } = input.target;
 				await this.apiCatalog.initialize();
 				if (generation !== this.loadGeneration || token.isCancellationRequested) return;
@@ -559,11 +558,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			const renderHome = async () => {
 				const seq = ++renderSeq;
 				const reviews = this.apiCatalog.reviews;
-				// Home shows Welcome when no session is listed; the scratchpad
-				// is not one, so the rail still gets install status beside it.
-				const isEmpty = homeSessions(reviews).length === 0;
+				// Home shows Welcome when no session is listed.
+				const isEmpty = reviews.length === 0;
 				// Small catalogs can show setup progress on Home.
-				const installStatus = homeSessions(reviews).length < 5 ? await this.resolveInstallStatus() : undefined;
+				const installStatus = reviews.length < 5 ? await this.resolveInstallStatus() : undefined;
 				if (seq !== renderSeq) return;
 				if (isEmpty && !emptyStateVisible) {
 					this.reviewTelemetryService.capture("home_empty_state_viewed");
@@ -895,13 +893,9 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	/**
 	 * Settings state and actions for the Settings page. Every value lives in
-	 * workbench configuration, apart from the scratchpad, which the review server
-	 * owns. Extensions reuse the existing quick pick.
+	 * workbench configuration. Extensions reuse the existing quick pick.
 	 */
 	private async resolveSettingsContent(): Promise<ReviewCanvasSettingsContent> {
-		// Settings must render even when the server preference cannot be read;
-		// the row then shows the default, off.
-		const scratchpadEnabled = await this.desktopConnection.readScratchpadEnabled().catch(() => false);
 		return {
 			telemetryEnabled: this.currentTelemetryEnabled(),
 			setTelemetryEnabled: async (enabled) => {
@@ -990,14 +984,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.configurationService.updateValue(REVIEW_SOFTWARE_MAP_SETTING, enabled, ConfigurationTarget.USER);
 				return this.currentSoftwareMapEnabled();
 			},
-			scratchpadEnabled,
-			setScratchpadEnabled: async (enabled) => {
-				this.reviewTelemetryService.capture("setting_changed", {
-					setting: "scratchpad_enabled",
-					enabled,
-				});
-				return this.desktopConnection.setScratchpadEnabled(enabled);
-			},
 			remoteHosts: reviewRemoteHostsSettings({
 				get: (key) => this.configurationService.getValue(key),
 				update: (key, value) => this.configurationService.updateValue(key, value, ConfigurationTarget.APPLICATION),
@@ -1080,9 +1066,9 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	private resolveOnboarding(status: ReviewCliInstallStatus): ReviewCanvasOnboarding {
 		return {
 			installed: !status.cli || status.shim.installed,
-			// Drafts are filtered out of this list and the scratchpad is set
-			// aside, so this counts only a real published review.
-			published: this.storageService.getBoolean(REVIEW_HAS_PUBLISHED_BOARD, StorageScope.APPLICATION, false) || homeSessions(this.apiCatalog.reviews).length > 0,
+			// Drafts are filtered out of this list, so this counts only a real
+			// published review.
+			published: this.storageService.getBoolean(REVIEW_HAS_PUBLISHED_BOARD, StorageScope.APPLICATION, false) || this.apiCatalog.reviews.length > 0,
 		};
 	}
 

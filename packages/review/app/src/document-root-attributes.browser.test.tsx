@@ -37,20 +37,6 @@ it.each([
     lens: false,
   },
   {
-    name: "scratchpad",
-    kind: "scratchpad" as const,
-    document: [markdown("a", "Body.\n")],
-    header: false,
-    lens: false,
-  },
-  {
-    name: "titled scratchpad",
-    kind: "scratchpad" as const,
-    document: [markdown("a", "# Notes\n\nBody.\n")],
-    header: true,
-    lens: false,
-  },
-  {
     name: "lens inside a section",
     document: [
       {
@@ -69,7 +55,6 @@ it.each([
     reviewId: "root-attributes",
     version: 0,
     title: "Fixture review",
-    kind: fixture.kind,
     pins: { repositoryId: "repo", base: "base", head: "head" },
     target: {
       kind: "commits",

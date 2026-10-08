@@ -283,16 +283,10 @@ function ReviewLayoutContent({
 }): ReactElement {
   const session = useReviewSession();
   const review = useReview();
-  // The scratchpad is a document and nothing else: no source tree to browse,
-  // nothing to share, nothing to dismiss.
-  const scratchpad = session.review?.kind === "scratchpad";
   const available = session.review?.available;
   // A remote review keeps Source tree, disabled with the reason.
   const sourceWindows = available?.sourceWindows !== false;
   const sourceTreeShown = sourceWindows || !!session.review?.host;
-  useEffect(() => {
-    if (scratchpad) captureUiEvent(session, "scratchpad_opened");
-  }, [scratchpad, session]);
   const discordTooltip = useTooltip("Join our Discord community");
 
   const sourceTreeTooltip = useTooltip(
@@ -440,7 +434,6 @@ function ReviewLayoutContent({
   useDiffFilePicker(diffFilePicker);
 
   const hasTraceSessions =
-    !scratchpad &&
     !session.review?.host &&
     ((session.review?.traces.size ?? 0) > 0 ||
       storedList.status !== "loaded" ||
@@ -589,7 +582,6 @@ function ReviewLayoutContent({
                 >
                   {view === "review" ? (
                     <ReviewSurfaceLabel
-                      label={scratchpad ? "Scratchpad" : "Whiteboard"}
                       hasContent={document.empty === false}
                       active={activeView === "review"}
                     />
@@ -630,7 +622,7 @@ function ReviewLayoutContent({
                 shellStyles.topbarContext,
               )}
             >
-              {!scratchpad && sourceTreeShown && (
+              {sourceTreeShown && (
                 <Button
                   variant="ghost"
                   xstyle={shellStyles.openSourceTree}
@@ -686,19 +678,15 @@ function ReviewLayoutContent({
             <BugReportControl />
             <ReviewBatonChip outcome={review.submissionOutcome} />
             <DiffLayoutControl />
-            {!scratchpad &&
-              !review.historicalRevision &&
-              !review.submissionOutcome && (
-                <div
-                  {...stylex.props(
-                    shellStyles.topbarItem,
-                    shellStyles.actionsDivider,
-                  )}
-                />
-              )}
-            {!scratchpad &&
-            !review.historicalRevision &&
-            !review.submissionOutcome ? (
+            {!review.historicalRevision && !review.submissionOutcome && (
+              <div
+                {...stylex.props(
+                  shellStyles.topbarItem,
+                  shellStyles.actionsDivider,
+                )}
+              />
+            )}
+            {!review.historicalRevision && !review.submissionOutcome ? (
               <ReviewCornerAction />
             ) : null}
           </div>
@@ -738,7 +726,6 @@ function ReviewLayoutContent({
                   documentMarker,
                   rightPanelOpen && documentStyles.articlePeekOpen,
                 )}
-                data-kind={scratchpad ? "scratchpad" : undefined}
               >
                 <ReviewDocumentBoundary
                   key={documentRevision}

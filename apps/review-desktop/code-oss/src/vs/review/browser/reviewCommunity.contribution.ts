@@ -38,7 +38,7 @@ export class ReviewCommunityContribution implements IWorkbenchContribution {
 			return; // the seeding reload would discard both the question and the answer
 		}
 		await catalogService.initialize();
-		if (catalogService.reviews.filter(review => review.kind !== 'scratchpad').length < 2) {
+		if (catalogService.reviews.length < 2) {
 			return;
 		}
 		telemetryService.capture('discord_dialog_shown');

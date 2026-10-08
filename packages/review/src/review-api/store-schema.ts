@@ -1,5 +1,17 @@
 import type { DatabaseSync } from "node:sqlite";
 
+/** A board version's repository in SQL over `versions.snapshot`, as
+ * `boardRepositoryId` reads it: its target's, else its pins'. */
+export const BOARD_REPOSITORY_ID_SQL =
+  "CASE WHEN json_valid(versions.snapshot) THEN COALESCE(json_extract(versions.snapshot,'$.target.repositoryId'),json_extract(versions.snapshot,'$.pins.repositoryId')) END";
+
+export const hasTable = (db: DatabaseSync, table: string) =>
+  Boolean(
+    db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")
+      .get(table),
+  );
+
 export function initializeReviewStoreSchema(db: DatabaseSync): void {
   db.exec(`
     PRAGMA journal_mode=WAL;

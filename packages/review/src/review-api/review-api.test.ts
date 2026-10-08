@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -23,12 +23,7 @@ import { ReviewInputError } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { LocalReviewData } from "./local-data";
 import { STORE_UPGRADES } from "./store-migrations.js";
-import {
-  type ReviewProviders,
-  ReviewStore,
-  SCRATCHPAD_ID,
-  inspectSnapshot,
-} from "./store.js";
+import { type ReviewProviders, ReviewStore, inspectSnapshot } from "./store.js";
 
 const upgradeVersion = (name: string) =>
   STORE_UPGRADES.find((step) => step.name === name)!.version;
@@ -1438,72 +1433,234 @@ describe("snapshot authoring", () => {
     ).rejects.toThrow(/base-side anchor needs base pins/);
   });
 
-  it("keeps one scratchpad: made on demand, drawn on at explicit pins only, outside the review lifecycle", async () => {
-    await store.ensureScratchpad();
-    await store.ensureScratchpad();
-    const pad = store.read(SCRATCHPAD_ID);
-    expect(pad).toMatchObject({ kind: "scratchpad", title: "Scratchpad" });
-    expect(pad.pins).toBeUndefined();
-    expect(pad.target).toBeUndefined();
-    expect(store.list()).toMatchObject([
-      { reviewId: SCRATCHPAD_ID, kind: "scratchpad" },
-    ]);
-    await expect(
-      store.execute(
-        request({ type: "create", title: "Another", kind: "scratchpad" }),
-      ),
-    ).rejects.toMatchObject({ status: 409 });
+  it("makes the old scratchpad a plan in the project of the repository it quotes most, or of the one opened last", async () => {
+    const checkout = path.join(directory, "checkout");
+    execFileSync("git", ["init", "-q", checkout]);
+    const { id: repositoryId } = store.registerRepository(checkout);
 
-    // Nothing to inherit: a reference must name its own pins.
-    await expect(
-      edit(SCRATCHPAD_ID, {
-        type: "insert",
-        content: { type: "code_peek", source: rangeAnchor(source) },
-      }),
-    ).rejects.toThrow(/document has no pins/);
-    const own = { repositoryId: "repo-b", head: "b".repeat(40) };
-    await edit(SCRATCHPAD_ID, {
-      type: "insert",
-      content: {
-        type: "code_peek",
-        source: rangeAnchor(source),
-        pins: own,
-      },
+    // Writes a store from before the scratchpad became a plan.
+    const projectId = store.projectOfRepository(repositoryId);
+
+    const oldPad = async (quoted?: string) => {
+      await store.close();
+      const db = new DatabaseSync(database);
+      db.exec(`PRAGMA user_version=${upgradeVersion("scratchpad-plan") - 1}`);
+      db.prepare(
+        "INSERT INTO reviews(id,version,next_id,project_id) VALUES('scratchpad',0,1,?)",
+      ).run(projectId);
+      db.prepare(
+        "INSERT INTO versions(review_id,version,snapshot) VALUES('scratchpad',0,?)",
+      ).run(
+        JSON.stringify({
+          reviewId: "scratchpad",
+          version: 0,
+          title: "Scratchpad",
+          kind: "scratchpad",
+          document: quoted
+            ? [
+                {
+                  type: "code_peek",
+                  id: "code_peek-1",
+                  source: rangeAnchor(source),
+                  pins: { repositoryId: quoted, head: "h".repeat(40) },
+                },
+              ]
+            : [{ type: "markdown", id: "markdown-1", markdown: "A note" }],
+          createdAt: "2026-09-01T00:00:00.000Z",
+        }),
+      );
+      db.close();
+      store = new ReviewStore(database, providers);
+
+      return store.list().find((board) => board.title === "Scratchpad")!;
+    };
+
+    const quoting = await oldPad(repositoryId);
+    expect(store.has("scratchpad")).toBe(false);
+    expect(quoting).toMatchObject({
+      target: { kind: "project", repositoryId },
+      project: { id: projectId },
     });
-    await edit(SCRATCHPAD_ID, {
-      type: "insert",
-      content: {
-        type: "markdown",
-        markdown: "[store](review-source:head/src/store.ts#L1)",
-        pins: own,
-      },
-    });
+    expect(quoting).not.toHaveProperty("kind");
+    expect(store.read(quoting.reviewId).document).toHaveLength(1);
 
-    const refused = [
-      { type: "lifecycle", state: "trash", reviewId: SCRATCHPAD_ID },
-      { type: "attention", reviewId: SCRATCHPAD_ID, action: "view" },
-      { type: "rename", reviewId: SCRATCHPAD_ID, title: "Notes" },
-      {
-        type: "set_target",
-        reviewId: SCRATCHPAD_ID,
-        target: { kind: "commits", ...pins },
-      },
-      {
-        type: "set_target",
-        reviewId: SCRATCHPAD_ID,
-        target: { kind: "commits", repositoryId: "repo", head: "h" },
-      },
-    ];
-
-    for (const operation of refused)
-      await expect(store.execute(request(operation))).rejects.toMatchObject({
-        status: 409,
-      });
-    expect(store.read(SCRATCHPAD_ID).version).toBe(2);
     await store.execute(
-      request({ type: "restore", reviewId: SCRATCHPAD_ID, version: 1 }),
+      request({
+        type: "lifecycle",
+        state: "trash",
+        reviewId: quoting.reviewId,
+      }),
     );
-    expect(store.read(SCRATCHPAD_ID).document).toHaveLength(1);
+    await store.execute(
+      request({ type: "delete", reviewId: quoting.reviewId }),
+    );
+    const plain = await oldPad();
+    expect(plain.target).toEqual({ kind: "project", repositoryId });
+  });
+
+  it("migrates every version of the old scratchpad onto a checkout that exists", async () => {
+    const live = path.join(directory, "live");
+    const gone = path.join(directory, "gone");
+    execFileSync("git", ["init", "-q", live]);
+    execFileSync("git", ["init", "-q", gone]);
+    const { id: liveId } = store.registerRepository(live);
+    const { id: goneId } = store.registerRepository(gone);
+    rmSync(gone, { recursive: true, force: true });
+
+    await store.close();
+    const db = new DatabaseSync(database);
+    db.exec(`PRAGMA user_version=${upgradeVersion("scratchpad-plan") - 1}`);
+    db.prepare(
+      "INSERT INTO reviews(id,version,next_id,project_id) VALUES('scratchpad',1,9,?)",
+    ).run(String(db.prepare("SELECT id FROM projects LIMIT 1").get()!.id));
+
+    for (const version of [0, 1])
+      db.prepare(
+        "INSERT INTO versions(review_id,version,snapshot) VALUES('scratchpad',?,?)",
+      ).run(
+        version,
+        JSON.stringify({
+          reviewId: "scratchpad",
+          version,
+          title: "Scratchpad",
+          kind: "scratchpad",
+          document: [
+            {
+              type: "code_peek",
+              id: "code_peek-1",
+              source: rangeAnchor(source),
+              pins: { repositoryId: goneId, head: "h".repeat(40) },
+            },
+          ],
+          createdAt: "2026-09-01T00:00:00.000Z",
+        }),
+      );
+    db.close();
+    store = new ReviewStore(database, providers);
+
+    const [pad] = store.list();
+
+    expect(pad!.target).toEqual({ kind: "project", repositoryId: liveId });
+    expect(store.read(pad!.reviewId, 0).document).toMatchObject([
+      { type: "code" },
+    ]);
+    expect(store.read(pad!.reviewId, 1).document).toMatchObject([
+      { type: "code" },
+    ]);
+  });
+
+  it("snapshots the old scratchpad's quotes of other repositories", async () => {
+    const git = (cwd: string, ...args: string[]) =>
+      execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
+
+    const repository = (name: string, file: string, text: string) => {
+      const root = path.join(directory, name);
+      execFileSync("git", ["init", "-q", root]);
+      mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+      writeFileSync(path.join(root, file), text);
+      git(root, "add", file);
+      git(
+        root,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "commit",
+        "-qm",
+        "first",
+      );
+
+      return { root, head: git(root, "rev-parse", "HEAD") };
+    };
+
+    const review = repository("review", "a.ts", "one\ntwo\nthree\n");
+
+    const diffr = repository(
+      "diffr",
+      "src/main.rs",
+      "fn a() {}\nfn main() {\n  run();\n}\n",
+    );
+
+    const own = {
+      repositoryId: store.registerRepository(review.root).id,
+      head: review.head,
+    };
+
+    const other = {
+      repositoryId: store.registerRepository(diffr.root).id,
+      head: diffr.head,
+    };
+
+    await store.close();
+    const db = new DatabaseSync(database);
+    db.exec(`PRAGMA user_version=${upgradeVersion("scratchpad-plan") - 1}`);
+    db.prepare(
+      "INSERT INTO reviews(id,version,next_id,project_id) SELECT 'scratchpad',0,9,id FROM projects LIMIT 1",
+    ).run();
+    db.prepare(
+      "INSERT INTO versions(review_id,version,snapshot) VALUES('scratchpad',0,?)",
+    ).run(
+      JSON.stringify({
+        reviewId: "scratchpad",
+        version: 0,
+        title: "Scratchpad",
+        kind: "scratchpad",
+        document: [
+          {
+            type: "code_peek",
+            id: "code_peek-1",
+            source: "head/a.ts#L1-L2",
+            pins: own,
+          },
+          {
+            type: "code_peek",
+            id: "code_peek-2",
+            source: "head/a.ts#L2-L3",
+            pins: own,
+          },
+          {
+            type: "markdown",
+            id: "markdown-3",
+            markdown: "diffr's [main](review-source:head/src/main.rs#L2-L4).",
+            pins: other,
+          },
+          {
+            type: "code_peek",
+            id: "code_peek-4",
+            source: "head/src/main.rs#L2-L4",
+            pins: other,
+          },
+        ],
+        createdAt: "2026-09-01T00:00:00.000Z",
+      }),
+    );
+    db.close();
+    store = new ReviewStore(database, providers);
+
+    const [pad] = store.list();
+    const [first, , markdown, snapshot] = store.read(pad!.reviewId).document;
+
+    expect(pad!.target).toEqual({
+      kind: "project",
+      repositoryId: own.repositoryId,
+    });
+    expect(first).toMatchObject({ type: "code_peek", pins: own });
+    // The link's text stays, then where it pointed.
+    expect(markdown).toMatchObject({
+      type: "markdown",
+      markdown: expect.stringMatching(
+        /^diffr's main \(`diffr · src\/main\.rs:2-4 @ [0-9a-f]{7}`\)\.$/,
+      ),
+    });
+    expect(snapshot).toMatchObject({
+      type: "code",
+      id: "code_peek-4",
+      language: "rust",
+      text: "fn main() {\n  run();\n}",
+    });
+    expect(JSON.stringify(store.read(pad!.reviewId, 0))).not.toContain(
+      other.repositoryId,
+    );
   });
 
   it("puts a plan in its repository's project, which the repository's worktrees share", async () => {
@@ -1695,37 +1852,6 @@ describe("snapshot authoring", () => {
       db.close();
       store = new ReviewStore(path.join(directory, "other.db"), providers);
     });
-  });
-
-  it("logs the scratchpad newest first while a review keeps appending", async () => {
-    await store.ensureScratchpad();
-    const note = (markdown: string) => ({ type: "markdown", markdown });
-
-    const order = (reviewId: string) =>
-      store
-        .read(reviewId)
-        .document.map((block) => "markdown" in block && block.markdown);
-
-    const first = await edit(SCRATCHPAD_ID, {
-      type: "insert",
-      content: note("first"),
-    });
-
-    await edit(SCRATCHPAD_ID, { type: "insert", content: note("second") });
-    expect(order(SCRATCHPAD_ID)).toEqual(["second", "first"]);
-
-    // An explicit anchor still wins: the block lands after it, not on top.
-    await edit(SCRATCHPAD_ID, {
-      type: "insert",
-      content: note("after first"),
-      afterId: first.targetId,
-    });
-    expect(order(SCRATCHPAD_ID)).toEqual(["second", "first", "after first"]);
-
-    const { reviewId } = await create();
-    await edit(reviewId, { type: "insert", content: note("first") });
-    await edit(reviewId, { type: "insert", content: note("second") });
-    expect(order(reviewId)).toEqual(["first", "second"]);
   });
 
   it("serializes edits through async validation and preserves different-field patches", async () => {
@@ -1937,7 +2063,7 @@ describe("create for a pull request", () => {
     expect(found.note).toContain("Writing the summary");
   });
 
-  it("leaves creates without a PR, other PRs and the scratchpad alone", async () => {
+  it("leaves creates without a PR and other PRs alone", async () => {
     const first = await createFor(undefined);
     const second = await createFor(undefined);
     const otherPr = await createFor(url);
@@ -1945,9 +2071,7 @@ describe("create for a pull request", () => {
 
     for (const result of [first, second, otherPr, samePrElsewhere])
       expect(result).toMatchObject({ created: true });
-    await store.ensureScratchpad();
-    expect(store.read(SCRATCHPAD_ID).kind).toBe("scratchpad");
-    expect(store.list()).toHaveLength(5);
+    expect(store.list()).toHaveLength(4);
   });
 
   it("takes the source and title from the PR when only its URL is given", async () => {
@@ -2026,12 +2150,6 @@ it("serves the experiment through the real desktop HTTP server and existing auth
   );
 
   const relay = new GlobalReviewDesktopVerbRelay();
-
-  // The scratchpad preference is off by default; this host has it on.
-  writeFileSync(
-    path.join(directory, "preferences.json"),
-    JSON.stringify({ scratchpadEnabled: true }),
-  );
 
   const server = createGlobalReviewServer({
     appPid: process.pid,
@@ -2146,22 +2264,14 @@ it("serves the experiment through the real desktop HTTP server and existing auth
 
     relay.close();
 
-    // Listing through the interactive host, with the preference on, also
-    // makes the one scratchpad.
     // SAFETY: review_list returns the catalog summaries the store lists.
     const listed = (await callAuthoringTool(
       client,
       tools.find((t) => t.name === "review_list")!,
       {},
-    )) as { reviewId: string; kind?: string }[];
+    )) as { reviewId: string }[];
 
-    const reviewsOnly = (entries: { kind?: string }[]) =>
-      entries.filter((entry) => entry.kind !== "scratchpad");
-
-    expect(reviewsOnly(listed)).toMatchObject([{ reviewId }]);
-    expect(listed).toContainEqual(
-      expect.objectContaining({ reviewId: SCRATCHPAD_ID, kind: "scratchpad" }),
-    );
+    expect(listed).toMatchObject([{ reviewId }]);
     await expect(
       callAuthoringTool(client, tools.find((t) => t.name === "review_edit")!, {
         reviewId,
@@ -2185,7 +2295,7 @@ it("serves the experiment through the real desktop HTTP server and existing auth
     const nextList = async () => {
       const line = (await catalog.next()).value;
 
-      return reviewsOnly(line?.kind === "list" ? line.reviews : []);
+      return line?.kind === "list" ? line.reviews : [];
     };
 
     expect(await nextList()).toMatchObject([{ reviewId, trashedAt: null }]);
@@ -3342,7 +3452,6 @@ it("reports a created review with the origin its headers claim", async () => {
     undefined,
     undefined,
     undefined,
-    undefined,
     { onReviewCreated: (event) => created.push(event) },
   );
 
@@ -3378,12 +3487,11 @@ it("reports a created review with the origin its headers claim", async () => {
   expect(created).toEqual([
     {
       reviewId: expect.any(String),
-      kind: "review",
       blocks: 0,
       via: "mcp",
       agentKind: "codex",
     },
-    { reviewId: expect.any(String), kind: "review", blocks: 0, via: "other" },
+    { reviewId: expect.any(String), blocks: 0, via: "other" },
   ]);
 });
 

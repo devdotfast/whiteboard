@@ -137,9 +137,6 @@ const command = (api: Api, operation: JsonObject) =>
     body: JSON.stringify({ operation }),
   });
 
-const withoutPad = (reviews: ReviewApiSummary[]) =>
-  reviews.filter((review) => review.kind !== "scratchpad");
-
 it("lists this machine's reviews, then each host's in the setting's order, with host, state and availability", async () => {
   const a = await startRemote(path.join(root, "a"));
   const b = await startRemote(path.join(root, "b"));
@@ -156,7 +153,7 @@ it("lists this machine's reviews, then each host's in the setting's order, with 
   await expect
     .poll(
       async () =>
-        withoutPad(await desktop.api<ReviewApiSummary[]>("")).map((review) => [
+        (await desktop.api<ReviewApiSummary[]>("")).map((review) => [
           review.title,
           review.host ?? null,
           review.hostState ?? null,
@@ -499,7 +496,7 @@ it("lists a host's last reviews as connecting, then offline, after a restart whi
   await expect
     .poll(
       async () =>
-        withoutPad(await second.api<ReviewApiSummary[]>("")).map((review) => [
+        (await second.api<ReviewApiSummary[]>("")).map((review) => [
           review.title,
           review.host,
           review.hostState,

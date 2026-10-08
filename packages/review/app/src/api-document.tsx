@@ -241,14 +241,11 @@ export function ApiDocument({
     [data.snapshot.document],
   );
 
-  // The scratchpad is a napkin, not a titled document: no heading, no
-  // updated-ago line, just the blocks.
-  const scratchpad = data.snapshot.kind === "scratchpad";
   const region = useEditingRegion(data.snapshot.document);
 
   return (
     <>
-      {!hasTitle && !scratchpad && (
+      {!hasTitle && (
         <ReviewDocumentTitle>{data.snapshot.title}</ReviewDocumentTitle>
       )}
       <DocumentBlocks

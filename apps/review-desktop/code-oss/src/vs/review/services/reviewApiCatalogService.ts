@@ -68,7 +68,7 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 			if (abort.signal.aborted) return;
 			const previous = this.reviews;
 			this.reviews = reviews;
-			if (reviews.some(review => review.kind !== "scratchpad")) {
+			if (reviews.length > 0) {
 				this.storage.store(REVIEW_HAS_PUBLISHED_BOARD, true, StorageScope.APPLICATION, StorageTarget.USER);
 			}
 			this.loaded = true;

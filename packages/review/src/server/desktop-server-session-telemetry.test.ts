@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { openLocalReviewStore } from "@review/review-api/local-data";
-import { ReviewStore, SCRATCHPAD_ID } from "@review/review-api/store";
+import { ReviewStore } from "@review/review-api/store";
 import { ReviewTelemetry } from "@review/review-telemetry";
 import { expect, it, vi } from "vitest";
 
@@ -77,10 +77,6 @@ it("derives source_kind and pr_provider from the stored review", async () => {
         ),
       ).pr_provider,
     ).toBe("azure_devops");
-    await store.ensureScratchpad();
-    expect(sessionStartedSource(store, SCRATCHPAD_ID)).toEqual({
-      source_kind: "scratchpad",
-    });
     expect(sessionStartedSource(store, randomUUID())).toEqual({});
     expect(sessionStartedSource(store, undefined)).toEqual({});
   } finally {
@@ -96,7 +92,16 @@ it("enriches session_started with source_kind on the global /telemetry/event rou
   const local = openLocalReviewStore(path.join(home, "review-api.db"));
   const token = "session-telemetry-test-token";
 
-  await local.store.ensureScratchpad();
+  const { reviewId } = await local.store.execute({
+    operation: {
+      type: "create",
+      title: "Plan",
+      target: {
+        kind: "project",
+        repositoryId: local.store.registerRepository(process.cwd()).id,
+      },
+    },
+  });
 
   const telemetry = ReviewTelemetry.fromEnv({
     ...process.env,
@@ -121,7 +126,7 @@ it("enriches session_started with source_kind on the global /telemetry/event rou
     await server.listen();
 
     const context = {
-      reviewUuid: SCRATCHPAD_ID,
+      reviewUuid: reviewId,
       presentationSessionId: randomUUID(),
     };
 
@@ -138,7 +143,7 @@ it("enriches session_started with source_kind on the global /telemetry/event rou
     expect(response.status).toBe(200);
     expect(captureUiEvent).toHaveBeenCalledWith(
       "review_session_started",
-      { source_kind: "scratchpad", remote: false },
+      { source_kind: "project", remote: false },
       context,
       expect.any(Number),
     );

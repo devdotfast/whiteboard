@@ -4,7 +4,6 @@ import {
   type ReviewApiSummary,
   type ReviewCanvasOnboarding,
   type ReviewRemoteHostActions,
-  homeSessions,
   reviewHostStatus,
 } from "@dev.fast/review-protocol";
 import { fuzzySegments } from "@review/fuzzy-match";
@@ -222,7 +221,7 @@ export function ReviewHome({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [localView, setLocalView] = useState<"active" | "trash">("active");
   const inTrash = (view ?? localView) === "trash";
-  const published = onboarding?.published || homeSessions(reviews).length > 0;
+  const published = onboarding?.published || reviews.length > 0;
   const [hasPublished, setHasPublished] = useState(published);
 
   if (published && !hasPublished) setHasPublished(true);
@@ -320,7 +319,7 @@ export function ReviewHome({
 
   const catalog = useMemo(
     () =>
-      homeSessions(reviews)
+      reviews
         .filter((r) => !deleted.has(r.reviewId))
         .map((r) =>
           read.has(r.reviewId) ? { ...r, viewedAt: read.get(r.reviewId)! } : r,

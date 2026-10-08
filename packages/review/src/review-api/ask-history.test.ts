@@ -197,7 +197,6 @@ it("serves a saved conversation without its agent or its checkout", async () => 
     undefined,
     undefined,
     undefined,
-    undefined,
     { threads: {} as AskThreads, agents: async () => [] },
   );
 
@@ -220,7 +219,6 @@ it("follows as many threads as a review has open over one watch", async () => {
   const api = createReviewApi(
     store,
     {} as LocalReviewData,
-    undefined,
     undefined,
     undefined,
     undefined,
@@ -291,7 +289,6 @@ it("deleting a board ends its Ask threads and blocks reopening while saved histo
   const api = createReviewApi(
     store,
     {} as LocalReviewData,
-    undefined,
     undefined,
     undefined,
     undefined,

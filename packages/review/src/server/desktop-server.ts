@@ -48,10 +48,6 @@ import {
   reviewLegacyDiscoveryPath,
 } from "@review/review-home-paths";
 import {
-  readScratchpadEnabled,
-  writeScratchpadEnabled,
-} from "@review/review-preferences";
-import {
   ReviewTelemetry,
   type ReviewTelemetryContext,
 } from "@review/review-telemetry";
@@ -176,10 +172,6 @@ export function createGlobalReviewServer(
   let closing = false;
   const cliPath = path.join(input.packageRoot, "dist", "cli.js");
 
-  // The scratchpad preference, read once at listen and kept current by the
-  // settings endpoint below: this server is the only writer while it runs.
-  let scratchpadEnabled = false;
-
   const discovery: ReviewDesktopDiscovery = {
     version: REVIEW_DESKTOP_DISCOVERY_VERSION,
     instanceId,
@@ -212,7 +204,6 @@ export function createGlobalReviewServer(
     relay,
     token,
     instanceId,
-    scratchpad: () => scratchpadEnabled,
     status: () => {
       const { key, channel, checkout, appVersion, cliVersion, instanceId } =
         discovery;
@@ -265,25 +256,6 @@ export function createGlobalReviewServer(
   app.all("/reviews-api", (context) => gateway.fetch(context.req.raw));
   app.all("/reviews-api/*", (context) => gateway.fetch(context.req.raw));
   app.get("/remote-hosts", () => serverJson(200, gateway.hosts()));
-  app.get("/preferences/scratchpad", () =>
-    serverJson(200, { enabled: scratchpadEnabled }),
-  );
-  app.put("/preferences/scratchpad", async (context) => {
-    const request = z
-      .object({ enabled: z.boolean() })
-      .safeParse(await readBoundedRequestJson(context.req.raw));
-
-    if (!request.success)
-      throw new ReviewServerError("enabled must be a boolean.", 400);
-
-    scratchpadEnabled = await writeScratchpadEnabled(request.data.enabled);
-
-    // Home watches the catalog; the pad appears or goes without a store write.
-    if (scratchpadEnabled) await reviewStore.ensureScratchpad();
-    reviewStore.invalidateCatalog();
-
-    return serverJson(200, { enabled: scratchpadEnabled });
-  });
   app.post("/app/focus", async () => {
     const result = await relay.dispatch({
       name: "focusWindow",
@@ -525,7 +497,6 @@ export function createGlobalReviewServer(
         store: reviewStore,
         data: input.reviewData,
       });
-      scratchpadEnabled = await readScratchpadEnabled();
       boundPort = await listen(httpServer, input.port);
       discovery.url = urlForBoundPort();
 
@@ -583,8 +554,7 @@ export function sessionStartedSource(
   try {
     const snapshot = reviewStore.read(reviewUuid);
 
-    const sourceKind =
-      snapshot.kind === "scratchpad" ? snapshot.kind : snapshot.target?.kind;
+    const sourceKind = snapshot.target?.kind;
 
     const pullRequestUrl = snapshot.origin?.pullRequestUrl;
 

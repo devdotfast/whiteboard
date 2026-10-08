@@ -64,7 +64,6 @@ export async function exportShare(input: {
   // Local-only fields stay home; the target names a local checkout.
   const {
     target,
-    kind: _kind,
     staleSources: _staleSources,
     sourceUnavailable: _sourceUnavailable,
     lastEdit: _lastEdit,

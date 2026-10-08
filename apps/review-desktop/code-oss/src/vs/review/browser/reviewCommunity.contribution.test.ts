@@ -13,7 +13,7 @@ import { DISMISSED_KEY, ReviewCommunityContribution } from './reviewCommunity.co
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-function setup(answer: Promise<IConfirmationResult>, reviews: Array<{ kind?: "scratchpad" }> = [{}, {}], dismissed = false) {
+function setup(answer: Promise<IConfirmationResult>, reviews: Array<object> = [{}, {}], dismissed = false) {
 	const catalog = { reviews, initialize: async () => { } };
 	const asked: IConfirmation[] = [];
 	const stored: Array<{ key: string; value: unknown }> = [];
@@ -56,7 +56,7 @@ for (const confirmed of [false, true]) {
 	});
 }
 
-for (const reviews of [[], [{}], [{}, { kind: "scratchpad" as const }]]) {
+for (const reviews of [[], [{}]]) {
 	test(`skips the invitation with fewer than two reviews: ${JSON.stringify(reviews)}`, async () => {
 		setFirstRunReloadPending(false);
 		const { asked, invite } = setup(Promise.resolve({ confirmed: false }), reviews);
