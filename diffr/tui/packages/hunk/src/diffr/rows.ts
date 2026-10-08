@@ -5,7 +5,7 @@ import type { RenderSpan, SplitLineCell, UnifiedLineCell } from "../ui/diff/diff
 import { sliceSpansWindow } from "../ui/diff/styledSpanLayout";
 import { measureTextWidth } from "../ui/lib/text";
 import { byteColumn, collapsedFolds, flatten, foldHeaders, foldTint, hiddenLines, pairedIds, sourceLines, type Fold, type FoldTint, type Leaf, type Side } from "./regions";
-import { foldBackground, loadBundledTheme, type Palette } from "./theme";
+import { foldBackground, type Palette } from "./palette";
 export { sourceLines };
 export type Layout = "split" | "unified";
 export interface ViewerRow {
@@ -21,10 +21,6 @@ export interface ViewerRow {
   right?: SplitLineCell;
   cell?: UnifiedLineCell;
 }
-export type { Palette } from "./theme";
-/** The bundled defaults, for tests and the settings screen. */
-export const dark: Palette = loadBundledTheme("default-dark");
-export const light: Palette = loadBundledTheme("default-light");
 /** Foreground for a tree-sitter capture: the theme's scope, its parents, else plain text. */
 export function captureColor(capture: string, theme: Palette): string {
   return theme.syntax(capture) ?? theme.fg;

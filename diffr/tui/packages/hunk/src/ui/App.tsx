@@ -22,7 +22,8 @@ import {
   type Layout,
   type ViewerRow,
 } from "../diffr/rows";
-import type { Palette, ThemeSet } from "../diffr/theme";
+import type { Palette } from "../diffr/palette";
+import type { ThemeSet } from "../diffr/theme";
 import { measureRows, visibleRows, positionAt, positionTop, rowFold, type ViewPosition } from "../diffr/geometry";
 import {
   copySelection,

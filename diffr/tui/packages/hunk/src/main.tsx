@@ -8,7 +8,8 @@ import { createRoot } from "@opentui/react";
 import { readDiffStream } from "./diffr/stream";
 import { DiffStore } from "./diffr/store";
 import { cliClient, flattenSchema, type Setting } from "./diffr/config";
-import { loadBundledTheme, loadThemeFile, themeConfig, themesFromConfig, type ThemeSet } from "./diffr/theme";
+import { loadBundledTheme, loadThemeFile, themesFromConfig, type ThemeSet } from "./diffr/theme";
+import { themeConfig } from "./diffr/palette";
 import { App } from "./ui/App";
 import { Settings } from "./ui/Settings";
 const args = process.argv.slice(2),

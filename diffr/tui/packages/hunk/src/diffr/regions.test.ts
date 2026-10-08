@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { createTestDiffFile, fold, leaf, line, root } from "./fixture";
 import { collapsedFolds, defaultCollapsed, flatten, foldHeaders, foldIds, foldTint, gapIds, hiddenLines, pairedIds } from "./regions";
-import { dark, rowsForFile } from "./rows";
+import { rowsForFile } from "./rows";
+import { dark } from "./theme";
 import type { DiffFile, Region } from "./wire";
-import { foldBackground } from "./theme";
+import { foldBackground } from "./palette";
 /** Rust-style body folds: each covers its body alone, so the lines that open and close a
  * construct are leaves around it, like VS Code's rows. */
 export function createFoldedDiffFile(): DiffFile {

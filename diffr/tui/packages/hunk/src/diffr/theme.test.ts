@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { bundledThemes, colorOf, foldBackground, loadBundledTheme, paletteFromHelix, parseHelixTheme, scopeStyle, themeConfig, themesFromConfig } from "./theme";
+import { bundledThemes, colorOf, foldBackground, paletteFromHelix, scopeStyle, themeConfig } from "./palette";
+import { loadBundledTheme, parseHelixTheme, themesFromConfig } from "./theme";
 const sample = `
 "keyword" = { fg = "red", modifiers = ["bold"] }
 "keyword.control" = { fg = "purple" }
