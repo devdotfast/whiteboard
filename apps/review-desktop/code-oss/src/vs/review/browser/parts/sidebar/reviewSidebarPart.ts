@@ -98,6 +98,30 @@ function threadsFilterOf(stored: string | undefined): ReviewThreadsFilter {
 	return stored === "project" || stored === "all" ? stored : "board";
 }
 
+/** The Threads tab's mark: a dot, or a spinner while an agent answers. */
+function threadsBadge(): HTMLElement {
+	const namespace = "http://www.w3.org/2000/svg";
+	const badge = $("span.review-sidebar-tab-badge.review-sidebar-tab-badge-threads");
+	const spinner = document.createElementNS(namespace, "svg");
+	spinner.setAttribute("width", "11");
+	spinner.setAttribute("height", "11");
+	spinner.setAttribute("viewBox", "0 0 11 11");
+	spinner.setAttribute("aria-hidden", "true");
+	spinner.classList.add("review-sidebar-tab-spinner");
+	const track = document.createElementNS(namespace, "circle");
+	track.setAttribute("cx", "5.5");
+	track.setAttribute("cy", "5.5");
+	track.setAttribute("r", "3.75");
+	track.classList.add("review-sidebar-tab-spinner-track");
+	const arc = document.createElementNS(namespace, "path");
+	arc.setAttribute("d", "M5.5 1.75 A3.75 3.75 0 0 1 9.25 5.5");
+	arc.classList.add("review-sidebar-tab-spinner-arc");
+	spinner.append(track, arc);
+	badge.append(spinner);
+	badge.hidden = true;
+	return badge;
+}
+
 function svgIcon(icon: ReviewSidebarIcon, size: number): SVGSVGElement {
 	const namespace = "http://www.w3.org/2000/svg";
 	const svg = document.createElementNS(namespace, "svg");
@@ -201,7 +225,7 @@ export class ReviewSidebarPart extends Part {
 			tab.type = "button";
 			tab.append(svgIcon(REVIEW_SIDEBAR_TAB_ICONS[id], 16));
 			if (id === "whiteboards") tab.append($("span.review-sidebar-tab-badge"));
-			if (id === "threads") tab.append($("span.review-sidebar-tab-badge.review-sidebar-tab-badge-waiting"));
+			if (id === "threads") tab.append(threadsBadge());
 			tabRow.appendChild(tab);
 			const element = $(`.review-sidebar-pane.review-sidebar-pane-${id}`, { role: "tabpanel" });
 			panes.appendChild(element);
@@ -485,10 +509,22 @@ export class ReviewSidebarPart extends Part {
 		// The blue dot: another board in the project changed since last viewed.
 		const badge = this.panes.find((pane) => pane.id === "whiteboards")?.tab.querySelector(".review-sidebar-tab-badge");
 		if (badge instanceof HTMLElement) badge.hidden = !project?.boards.some((board) => board.changed && board.reviewId !== reviewId);
-		// The amber dot: a thread in the project waits on the reader.
-		const waiting = this.panes.find((pane) => pane.id === "threads")?.tab.querySelector(".review-sidebar-tab-badge");
-		const threads = reviewId ? this.threads.get(reviewId) : undefined;
-		if (waiting instanceof HTMLElement) waiting.hidden = !threads?.threads.some((thread) => thread.status === "waiting" && thread.projectId === threads.project);
+		// One mark for the project's threads: amber when one needs the reader,
+		// else a spinner while one answers, else blue for an answer unseen.
+		const threadsBadge = this.panes.find((pane) => pane.id === "threads")?.tab.querySelector(".review-sidebar-tab-badge");
+		if (threadsBadge instanceof HTMLElement) {
+			const update = reviewId ? this.threads.get(reviewId) : undefined;
+			const threads = update?.threads.filter((thread) => thread.projectId === update.project) ?? [];
+			const mark = threads.some((thread) => thread.status === "waiting")
+				? "waiting"
+				: threads.some((thread) => thread.status === "running" || thread.status === "starting")
+					? "answering"
+					: threads.some((thread) => thread.unread)
+						? "unread"
+						: undefined;
+			threadsBadge.hidden = !mark;
+			threadsBadge.dataset.mark = mark ?? "";
+		}
 
 		this.rendering = this.rendering
 			.then(() => this.mountSections())

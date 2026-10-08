@@ -115,6 +115,7 @@ export class AskHistory {
       entries TEXT,
       bypass INTEGER NOT NULL DEFAULT 0,
       permissions TEXT,
+      viewed_at TEXT,
       UNIQUE(agent, session_id));`);
 
     db.exec(
@@ -167,8 +168,14 @@ export class AskHistory {
     this.assertWritable(record.anchor.board);
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO ask_conversations(id,anchor_board,anchor_block,agent,session_id,version,head,cwd,selection,title,created_at,updated_at,bypass,permissions)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        // Its columns, not the row: when it was last seen, and what the
+        // panel showed, stay.
+        `INSERT INTO ask_conversations(id,anchor_board,anchor_block,agent,session_id,version,head,cwd,selection,title,created_at,updated_at,bypass,permissions)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET anchor_board=excluded.anchor_board, anchor_block=excluded.anchor_block,
+          agent=excluded.agent, session_id=excluded.session_id, version=excluded.version, head=excluded.head,
+          cwd=excluded.cwd, selection=excluded.selection, title=excluded.title, created_at=excluded.created_at,
+          updated_at=excluded.updated_at, bypass=excluded.bypass, permissions=excluded.permissions`,
       )
       .run(
         record.id,
@@ -335,6 +342,32 @@ export class AskHistory {
     return row ? rowSchema.parse(row) : undefined;
   }
 
+  /** The reviewer saw the thread, on screen with the app focused. Only
+   * when it was seen changes: not its order, nor when it was used. */
+  markViewed(id: string, at = new Date().toISOString()) {
+    this.db
+      .prepare("UPDATE ask_conversations SET viewed_at=? WHERE id=?")
+      .run(at, id);
+    this.changed();
+  }
+
+  /** When each of these threads was last viewed, where it ever was.
+   * Threads from before views were kept have none, and none is unread. */
+  viewedAt(ids: readonly string[]): Map<string, string> {
+    const select = this.db.prepare(
+      "SELECT viewed_at FROM ask_conversations WHERE id=? AND viewed_at IS NOT NULL",
+    );
+
+    return new Map(
+      ids.flatMap((id) => {
+        const row = select.get(id);
+
+        return row ? [[id, String(row.viewed_at)] as const] : [];
+      }),
+    );
+  }
+
+  /** Forgets the threads that started on a board gone for good. */
   removeReview(reviewId: string) {
     this.db
       .prepare("DELETE FROM ask_conversations WHERE anchor_board=?")

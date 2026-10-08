@@ -43,6 +43,7 @@ import {
   useAskThreadsWatch,
   useLatest,
 } from "./ask-thread-stream";
+import { useMarkThreadViewed } from "./ask-viewed";
 import { AskSlot, AskWindow } from "./ask-window";
 import { AuthoredCodeSurface } from "./authored-code-surface";
 import { SourceCodePeek } from "./CodePeek";
@@ -592,6 +593,8 @@ function OpenAsk({ askKey }: { askKey: number }) {
   const ask = useReviewPanel((state) =>
     state.asks.find((candidate) => candidate.key === askKey),
   );
+
+  useMarkThreadViewed(ask?.threadId ?? null, shown !== null, ask?.busy);
 
   if (!view) return null;
 
