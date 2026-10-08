@@ -9,7 +9,7 @@ import type { Diffed, FileEvent } from "./engine/engine.js";
 /** What is kept: a file's diff, or its summarized record. */
 export type CachedResult = Omit<Diffed, "ms"> | FileEvent;
 
-const DB = "diffr-cache";
+const DB = "diffr-results";
 
 const ENTRIES = "entries";
 
