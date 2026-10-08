@@ -389,12 +389,22 @@ export function createReviewApi(
 
     const snapshot = store.read(id);
 
+    const pins = snapshot.pins
+      ? (await data.resolveSource(snapshot)).pins
+      : undefined;
+
+    const coverage = pins && data.coverageSnapshot(id, pins, input.mode);
+
+    const partial =
+      coverage && coverage.pending ? coverage.comparison : undefined;
+
     const progress = await reviewProgress(
       store,
       data,
       snapshot,
       context.req.raw.signal,
       input.mode,
+      partial,
     );
 
     const files = input.files.map((update) => {
@@ -427,6 +437,7 @@ export function createReviewApi(
         store.read(id, input.version),
         context.req.raw.signal,
         input.mode,
+        partial,
       ),
     );
   });

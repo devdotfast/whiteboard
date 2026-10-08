@@ -2871,7 +2871,7 @@ it("logs a provider failure and names its kind without returning its local detai
   }
 });
 
-it("makes a diagram step's selection usable before an unrelated file finishes counting", async () => {
+it("makes a streamed file selectable and markable before an unrelated file finishes counting", async () => {
   const { createReviewApi } = await import("./http.js");
   const { selectionKey } = await import("@review/lens-selection.js");
   const { reviewId } = await create();
@@ -2951,10 +2951,41 @@ it("makes a diagram step's selection usable before an unrelated file finishes co
       pending: true,
       sources: [],
     });
+    let marked: Response | undefined;
+
+    const marking = Promise.resolve(
+      api.request(`/${reviewId}/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          version: store.read(reviewId).version,
+          mode: "textual",
+          files: [
+            {
+              path: "a.ts",
+              fingerprint: partial.files[0].fingerprint,
+              sources: [{ side: "head", file: "a.ts", fromLine: 1, toLine: 1 }],
+            },
+          ],
+          viewed: true,
+        }),
+      }),
+    ).then((response) => {
+      marked = response;
+
+      return response;
+    });
+
+    await vi.waitFor(() => expect(marked).toBeDefined());
+    expect(marked!.status).toBe(200);
+    const markedProgress = await (await marking).json();
+    expect(markedProgress.complete).toBe(false);
+    expect(markedProgress.files[0].viewed.head).toEqual([[0, 1]]);
     release();
     await data.coverage(reviewId, pins, "textual");
     const complete = await (await api.request(route)).json();
     expect(complete.complete).toBe(true);
+    expect(complete.files[0].viewed.head).toEqual([[0, 1]]);
     expect(complete.lenses[0].pending).toBe(false);
     expect(
       complete.resolvedSelections[selectionKey(anchorSelection(refs[1]!))],
