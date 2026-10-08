@@ -32,6 +32,7 @@ use wasmtime::component::{
 use wasmtime::{Cache, CacheConfig, Config, Engine, Store};
 use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
+#[path = "wasm/output.rs"]
 mod output;
 
 /// The engine every component compiles with.
