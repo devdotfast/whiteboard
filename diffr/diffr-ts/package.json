@@ -43,7 +43,7 @@
     "@dev.fast/diffr-win32-x64": "0.1.16"
   },
   "devDependencies": {
-    "@types/bun": "1.3.10",
+    "@types/bun": "1.3.14",
     "typescript": "5.9.3",
     "zod": "4.6.5"
   },
