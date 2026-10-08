@@ -100,6 +100,15 @@ export class Panels {
         "Generated, vendored and lock files, folded until opened",
       ]);
 
+    const fallbacks = comparison.fallbacks;
+
+    if (fallbacks.length)
+      rows.push([
+        "Line diff",
+        number(fallbacks.length),
+        fallbacks.map(({ path, message }) => `${path}: ${message}`).join("\n"),
+      ]);
+
     if (work.failed) rows.push(["Failed", number(work.failed)]);
 
     return rows;

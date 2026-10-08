@@ -5,11 +5,14 @@
  */
 import { Emitter } from "vs/base/common/event.js";
 import { Disposable, DisposableStore } from "vs/base/common/lifecycle.js";
+import type { IObservable } from "vs/base/common/observable.js";
 import { URI } from "vs/base/common/uri.js";
+import { ICodeEditorService } from "vs/editor/browser/services/codeEditorService.js";
 import { IHoverService } from "vs/platform/hover/browser/hover.js";
 import type { IInstantiationService } from "vs/platform/instantiation/common/instantiation.js";
 
 import type { Classified, Engine, FileRequest } from "./engine/engine.js";
+import { foldIds, gapIds } from "./folds.js";
 import {
   type Change,
   type ChangedFile,
@@ -21,7 +24,10 @@ import {
 } from "./github.js";
 import type { ReviewDiffFileWire, StructuralLineCounts } from "./protocol.js";
 import { orderReviewDiffFiles } from "./review/common/reviewChangedFilesModel.js";
-import { reviewFileCounts } from "./review/common/reviewStructuralDiff.js";
+import {
+  type StructuralTextDiff,
+  reviewFileCounts,
+} from "./review/common/reviewStructuralDiff.js";
 import type { ReviewDiffLayoutSetting } from "./review/services/reviewDiffLayout.js";
 import {
   ReviewFilesDiffView,
@@ -30,6 +36,7 @@ import {
 } from "./review/services/reviewFilesDiffView.js";
 import { createStructuralDiffEditors } from "./review/services/reviewStructuralDiff.js";
 import { StructuralDiffSession } from "./review/services/reviewStructuralDiffSession.js";
+import { structuralFoldCommand } from "./review/services/reviewStructuralFolds.js";
 import { StructuralViewedState } from "./review/services/reviewStructuralViewed.js";
 import { ScopeViewedControl } from "./review/services/reviewStructuralViewedControl.js";
 import { ViewedProgress } from "./viewed.js";
@@ -93,6 +100,7 @@ export class Comparison extends Disposable {
     readonly target: Target,
     private readonly engine: Engine,
     private readonly layout: ReviewDiffLayoutSetting,
+    private readonly wordWrap: IObservable<boolean>,
     private readonly instantiation: IInstantiationService,
   ) {
     super();
@@ -137,8 +145,79 @@ export class Comparison extends Disposable {
     return { added, removed };
   }
 
+  /** Files diffr diffed line by line, its structural diff having failed, and why. */
+  get fallbacks(): { path: string; message: string }[] {
+    return this.order.flatMap((path) => {
+      const diff = this.session?.getFileResult(path)?.diff;
+      const fallback = diff?.type === "text" ? diff.stats.fallback : undefined;
+
+      return fallback ? [{ path, message: fallback.message }] : [];
+    });
+  }
+
   focus(): void {
     this.view?.focus();
+  }
+
+  goToChange(direction: "next" | "previous"): void {
+    this.view?.goToChange(direction);
+  }
+
+  scroll(to: number | "top" | "end"): void {
+    this.view?.scroll(to);
+  }
+
+  toggleFileTree(): void {
+    this.view?.toggleFileTree();
+  }
+
+  /** A fold command at the caret of the focused diff editor (`StructuralFoldControls.command`). */
+  foldCommand(command: string): void {
+    const editor = this.instantiation
+      .invokeFunction((accessor) => accessor.get(ICodeEditorService))
+      .getFocusedCodeEditor();
+
+    if (editor) structuralFoldCommand(editor, command);
+  }
+
+  /** Folds or unfolds everything diffr can fold, in every file. */
+  foldAll(collapsed: boolean): void {
+    this.setFolds(foldIds, collapsed);
+  }
+
+  /** Shows every context gap, or hides them all again once any is shown. */
+  toggleContextGaps(): void {
+    const session = this.session;
+
+    if (!session) return;
+
+    const shown = this.order.some((path) => {
+      const diff = session.getTextDiff(path);
+
+      return (
+        !!diff &&
+        gapIds(diff).some((id) => session.isRegionCollapsed(path, id) === false)
+      );
+    });
+
+    this.setFolds(gapIds, shown);
+  }
+
+  private setFolds(
+    ids: (diff: StructuralTextDiff) => number[],
+    collapsed: boolean,
+  ): void {
+    const session = this.session;
+
+    if (!session) return;
+
+    for (const path of this.order) {
+      const diff = session.getTextDiff(path);
+
+      if (diff)
+        for (const id of ids(diff))
+          session.setRegionCollapsed(path, id, collapsed);
+    }
   }
 
   private async load(): Promise<void> {
@@ -242,6 +321,7 @@ export class Comparison extends Disposable {
         ReviewFilesEditorInput,
         entries,
         session,
+        this.wordWrap,
       ),
     );
 

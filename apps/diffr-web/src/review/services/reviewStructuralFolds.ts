@@ -28,6 +28,7 @@ import {
   type ITextModel,
 } from "vs/editor/common/model.js";
 
+import { nestedIds } from "../../folds.js";
 import {
   bandDetail,
   structuralFoldables,
@@ -66,6 +67,16 @@ const RAIL_CURSOR = "review-fold-rail";
 /** Marks the text after a folded header, so that a click on it unfolds the scope. */
 const PILL = Symbol("review-fold-pill");
 
+const controls = new WeakMap<ICodeEditor, StructuralFoldControls>();
+
+/** Runs a fold command (see `StructuralFoldControls.command`) in a structural diff editor. */
+export function structuralFoldCommand(
+  editor: ICodeEditor,
+  command: string,
+): void {
+  controls.get(editor)?.command(command);
+}
+
 /**
  * Chevrons, rails and header-line folds for one side of a structural diff
  * editor. The pointer's scope shows its chevron, rail and braces. A click on
@@ -94,6 +105,8 @@ export class StructuralFoldControls extends Disposable {
     private readonly viewed?: StructuralViewedState,
   ) {
     super();
+    controls.set(editor, this);
+    this._register({ dispose: () => controls.delete(editor) });
     this._register({
       dispose: () => {
         for (const control of this.viewedControls.values()) control.dispose();
@@ -136,7 +149,7 @@ export class StructuralFoldControls extends Disposable {
           target.rail === pressed.rail &&
           target.control === pressed.control
         ) {
-          this.toggle(pressed);
+          this.toggle(pressed, e.event.altKey);
         }
       }),
     );
@@ -175,9 +188,63 @@ export class StructuralFoldControls extends Disposable {
     this.render();
   }
 
-  private toggle(target: FoldTarget): void {
+  /**
+   * The diffr TUI's fold commands, at the caret where the TUI takes its top row. `a` toggles, `o`
+   * opens and `c` closes the scope whose chevron is on the caret's line, else the innermost open
+   * scope around it; capitals take the folds inside too. `j` and `k` go to the next or previous
+   * chevron.
+   */
+  command(command: string): void {
     const path = this.path();
-    if (!path) {
+    const diff = path ? this.session.getTextDiff(path) : undefined;
+    const position = this.editor.getPosition();
+    if (!path || !diff || !position) {
+      return;
+    }
+    const line = position.lineNumber - 1;
+    const foldables = this.foldablesOf(diff).filter((f) => f.chevron);
+    if (command === "j" || command === "k") {
+      const lines = foldables.map((f) => f.line).sort((a, b) => a - b);
+      const next =
+        command === "j"
+          ? lines.find((l) => l > line)
+          : lines.findLast((l) => l < line);
+      if (next !== undefined) {
+        this.editor.setPosition({ lineNumber: next + 1, column: 1 });
+        this.editor.revealLineInCenterIfOutsideViewport(next + 1);
+      }
+      return;
+    }
+    const foldable =
+      foldables.find((f) => f.line === line) ??
+      foldables
+        .filter(
+          (f) =>
+            f.rail &&
+            !this.isCollapsed(path, f) &&
+            f.rail.start <= line &&
+            line <= f.rail.end,
+        )
+        .sort(
+          (a, b) => a.rail!.end - a.rail!.start - (b.rail!.end - b.rail!.start),
+        )[0];
+    const letter = command.toLowerCase();
+    if (!foldable || !"aoc".includes(letter)) {
+      return;
+    }
+    const collapse =
+      letter === "a" ? !this.isCollapsed(path, foldable) : letter === "c";
+    // A caret in hidden lines reveals them, so it waits on the header.
+    if (collapse) {
+      this.editor.setPosition({ lineNumber: foldable.line + 1, column: 1 });
+    }
+    this.setCollapsed(path, diff, foldable, collapse, command !== letter);
+  }
+
+  private toggle(target: FoldTarget, recursive: boolean): void {
+    const path = this.path();
+    const diff = path ? this.session.getTextDiff(path) : undefined;
+    if (!path || !diff) {
       return;
     }
     // A rail click puts the caret in the body, and a caret in hidden lines reveals them.
@@ -187,11 +254,27 @@ export class StructuralFoldControls extends Disposable {
         column: 1,
       });
     }
-    this.session.setRegionCollapsed(
+    this.setCollapsed(
       path,
-      target.foldable.foldStateId,
+      diff,
+      target.foldable,
       !target.collapsed,
+      recursive,
     );
+  }
+
+  /** Recursively, every fold inside takes the same state. */
+  private setCollapsed(
+    path: string,
+    diff: StructuralTextDiff,
+    foldable: StructuralFoldable,
+    collapsed: boolean,
+    recursive: boolean,
+  ): void {
+    const id = foldable.foldStateId;
+    for (const each of recursive ? [id, ...nestedIds(diff, id)] : [id]) {
+      this.session.setRegionCollapsed(path, each, collapsed);
+    }
   }
 
   private inChevronColumn(e: IEditorMouseEvent): boolean {

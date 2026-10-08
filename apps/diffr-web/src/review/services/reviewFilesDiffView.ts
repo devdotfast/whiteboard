@@ -24,7 +24,7 @@ import {
   MutableDisposable,
   toDisposable,
 } from "vs/base/common/lifecycle.js";
-import { autorun } from "vs/base/common/observable.js";
+import { autorun, type IObservable } from "vs/base/common/observable.js";
 import { isEqual } from "vs/base/common/resources.js";
 import { URI } from "vs/base/common/uri.js";
 import { ElementSizeObserver } from "vs/editor/browser/config/elementSizeObserver.js";
@@ -116,6 +116,8 @@ export class ReviewFilesEditorInput extends Disposable {
   constructor(
     readonly entries: readonly ReviewFilesEditorEntry[],
     private readonly session: StructuralDiffSession,
+    /** Whether long lines wrap, in every file. */
+    private readonly wordWrap: IObservable<boolean>,
     @IModelService private readonly modelService: IModelService,
     @ILanguageService private readonly languageService: ILanguageService,
     @IInstantiationService
@@ -159,29 +161,37 @@ export class ReviewFilesEditorInput extends Disposable {
       );
     const text = (side: "lhs" | "rhs") =>
       diff.type === "text" ? (diff[side]?.text ?? "") : "";
+    const wordWrap = this.wordWrap;
+    // Every hidden line comes from the one fold model: diffr's regions,
+    // never the diff editor's own unchanged-region hiding.
+    const options = {
+      ...REVIEW_FILES_DIFF_EDITOR_OPTIONS,
+      hideOriginalLineNumbers:
+        entry.file.status === "added" || entry.file.status === "unchanged",
+      hideUnchangedRegions: {
+        enabled: true,
+        minimumLineCount: 1,
+        contextLineCount: 0,
+      },
+      folding: false,
+      // Structural rails use one geometry through code, folds and deleted rows.
+      guides: { indentation: false, bracketPairs: false },
+      // Fold controls follow the line numbers, with breathing room before code.
+      lineDecorationsWidth: 24,
+      glyphMargin: true,
+      experimental: { useTrueInlineView: false },
+    } satisfies IDiffEditorOptions;
     const item: IDocumentDiffItem = {
       original: model(entry.original!, text("lhs")),
       modified: model(entry.modified!, text("rhs")),
       labelUris: reviewMultiDiffLabelUris(entry.file),
-      // Every hidden line comes from the one fold model: diffr's regions,
-      // never the diff editor's own unchanged-region hiding.
-      options: {
-        ...REVIEW_FILES_DIFF_EDITOR_OPTIONS,
-        hideOriginalLineNumbers:
-          entry.file.status === "added" || entry.file.status === "unchanged",
-        hideUnchangedRegions: {
-          enabled: true,
-          minimumLineCount: 1,
-          contextLineCount: 0,
-        },
-        folding: false,
-        // Structural rails use one geometry through code, folds and deleted rows.
-        guides: { indentation: false, bracketPairs: false },
-        // Fold controls follow the line numbers, with breathing room before code.
-        lineDecorationsWidth: 24,
-        glyphMargin: true,
-        experimental: { useTrueInlineView: false },
+      get options() {
+        return {
+          ...options,
+          wordWrap: wordWrap.get() ? ("on" as const) : ("off" as const),
+        };
       },
+      onOptionsDidChange: Event.fromObservableLight(wordWrap),
     };
     const document = RefCounted.createOfNonDisposable(item, store, this);
     this.documents.set(entry.file.path, document);
@@ -257,6 +267,7 @@ export class ReviewFilesDiffView extends Disposable {
   private pendingSource: ReviewDiffLens["ranges"][number] | undefined;
   private progress: ReviewDiffProgress | undefined;
   private documentCollapsed = false;
+  private fileTreeHidden = false;
   private readonly initializedDocumentItems = new WeakSet<object>();
   private readonly viewedApplied = new Map<string, string>();
   private readonly streamStatus: HTMLElement;
@@ -908,6 +919,30 @@ export class ReviewFilesDiffView extends Disposable {
     return this.widget.getActiveControl();
   }
 
+  /** The next or previous change, into the next file past the last. */
+  goToChange(direction: "next" | "previous"): void {
+    this.settleHold.clear();
+    if (direction === "next") this.widget.goToNextChange();
+    else this.widget.goToPreviousChange();
+  }
+
+  /** Scrolls by `delta` pixels, or to the top or the end. */
+  scroll(to: number | "top" | "end"): void {
+    this.settleHold.clear();
+    this.widget.setScrollTop(
+      to === "top"
+        ? 0
+        : to === "end"
+          ? this.widget.getContentHeight()
+          : this.widget.getScrollTop() + to,
+    );
+  }
+
+  toggleFileTree(): void {
+    this.fileTreeHidden = !this.fileTreeHidden;
+    this.layout();
+  }
+
   setCollapsed(collapsed: boolean): void {
     this.settleHold.clear();
     this.documentCollapsed = collapsed;
@@ -927,7 +962,9 @@ export class ReviewFilesDiffView extends Disposable {
     if (width <= 0 || height <= 0) return;
 
     const fileTreeVisible =
-      !this.fileTreeContainer && width >= FILE_TREE_COLLAPSE_WIDTH;
+      !this.fileTreeContainer &&
+      !this.fileTreeHidden &&
+      width >= FILE_TREE_COLLAPSE_WIDTH;
     if (
       !this.fileTreeContainer &&
       !this.document &&

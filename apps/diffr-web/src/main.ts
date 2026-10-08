@@ -3,6 +3,8 @@
  * `/owner/repo/compare/base...head`. Everything runs here; GitHub is the only server it talks to.
  */
 import "vs/base/browser/ui/codicons/codiconStyles.js";
+import { observableValue } from "vs/base/common/observable.js";
+
 import "./fonts.css";
 import "./styles.css";
 import "./editorFont.js";
@@ -18,6 +20,8 @@ import { applyTheme } from "./theme.js";
 const instantiation = StandaloneServices.initialize({});
 
 const layout = new ReviewDiffLayoutSetting();
+
+const wordWrap = observableValue("wordWrap", false);
 
 const root = document.getElementById("app")!;
 
@@ -97,6 +101,7 @@ function route(): void {
     target,
     currentEngine(),
     layout,
+    wordWrap,
     instantiation,
   ));
 
@@ -314,10 +319,93 @@ function openConfig(): void {
 
 window.addEventListener("popstate", route);
 
-window.addEventListener("keydown", (event: KeyboardEvent) => {
-  if (event.key !== "F2" && event.key !== "F3") return;
-  event.preventDefault();
-  panels.toggle(event.key === "F2" ? "stats" : "engine");
-});
+/** A `z` waiting for its fold command. */
+let chord = false;
+
+/** The diffr TUI's keys, besides its menus and panning, which the page has as clicks and scrolls. */
+function command(event: KeyboardEvent): (() => void) | undefined {
+  // A shifted letter, as some keyboards and input tools report it.
+  const key =
+    event.shiftKey && event.key.length === 1
+      ? event.key.toUpperCase()
+      : event.key;
+
+  if (key === "F2" || key === "F3")
+    return () => panels.toggle(key === "F2" ? "stats" : "engine");
+
+  if (!comparison) return undefined;
+  const current = comparison;
+
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && key === "b")
+    return () => current.toggleFileTree();
+
+  // Plain keys only, and never while typing. The editors are read only, so their input area types
+  // nothing.
+  if (event.metaKey || event.ctrlKey || event.altKey) return undefined;
+  const target = event.target;
+
+  if (
+    (target instanceof Element &&
+      target.closest("input, dialog, .find-widget")) ||
+    (target instanceof HTMLTextAreaElement &&
+      !target.classList.contains("inputarea"))
+  )
+    return undefined;
+
+  // Shift, for a capital, is pressed before the letter it shifts.
+  if (["Shift", "Alt", "Control", "Meta"].includes(key)) return undefined;
+
+  if (chord) {
+    chord = false;
+
+    if (key === "M" || key === "R") return () => current.foldAll(key === "M");
+
+    return "aocAOCjk".includes(key) && key.length === 1
+      ? () => current.foldCommand(key)
+      : undefined;
+  }
+
+  const viewport =
+    (document.querySelector(".app-comparison")?.clientHeight ?? 0) - 2 * LINE;
+
+  const keys = new Map<string, () => void>([
+    ["z", () => (chord = true)],
+    ["]", () => current.goToChange("next")],
+    ["[", () => current.goToChange("previous")],
+    ["s", () => void layout.toggle().then(renderHeader)],
+    ["w", () => wordWrap.set(!wordWrap.get(), undefined)],
+    ["c", () => current.toggleContextGaps()],
+    ["i", () => panels.toggle("stats")],
+    ["\\", () => current.toggleFileTree()],
+    ["j", () => current.scroll(LINE)],
+    ["k", () => current.scroll(-LINE)],
+    ["d", () => current.scroll(viewport / 2)],
+    ["u", () => current.scroll(-viewport / 2)],
+    ["f", () => current.scroll(viewport)],
+    [" ", () => current.scroll(event.shiftKey ? -viewport : viewport)],
+    ["b", () => current.scroll(-viewport)],
+    ["g", () => current.scroll("top")],
+    ["G", () => current.scroll("end")],
+  ]);
+
+  return keys.get(key);
+}
+
+/** One row of the diff, in pixels: the editor's 12px font at Monaco's line height. */
+const LINE = 18;
+
+// Capturing, so a read-only editor never answers a letter with its "cannot edit" note.
+window.addEventListener(
+  "keydown",
+  (event: KeyboardEvent) => {
+    const run = command(event);
+
+    if (!run) return;
+    event.preventDefault();
+    event.stopPropagation();
+    run();
+  },
+  true,
+);
 
 route();
