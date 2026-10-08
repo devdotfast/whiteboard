@@ -90,6 +90,10 @@ const REVIEW_FILES_DIFF_EDITOR_OPTIONS = {
   minimap: { enabled: false },
   scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
   renderIndicators: false,
+  // Each file's editor keeps an overview ruler where its hidden scrollbar would be; drawn alone,
+  // the caret's mark there reads as a stray blue dash beside the code.
+  hideCursorInOverviewRuler: true,
+  overviewRulerLanes: 0,
 } satisfies IDiffEditorOptions;
 
 export interface ReviewFilesEditorEntry {
