@@ -96,3 +96,40 @@ test("/diffr reports a diffr that cannot start", async ($, on) => {
   const ran = await $.command.run({ command: "diffr", args: "" } as never);
   expect(ran.text).toContain("diffr: command not found");
 });
+
+test("the open tool shows a comparison in the pane, without the keyboard, and says what it opened", async ($, on) => {
+  on("process.run", async () => ({ value: { exitCode: 0, stdout: JSON.stringify({ theme: { name: "default-dark", path: null } }),
+    stderr: "", isStdoutTruncated: false, isStderrTruncated: false } }));
+  const opened: unknown[] = [];
+  on("ui.open", async ($, e) => {
+    opened.push(e);
+    return { value: { isPlaced: true } };
+  });
+  let argv: readonly string[] = [];
+  on("process.spawn", async function* ($, e) {
+    argv = e.argv;
+    yield { stream: "stdout", text: fixture };
+    return { value: { code: 0, signal: null } };
+  });
+  const called = await $.tool.call({ tool: "mcp__diffr__open", args: ["main", "HEAD"] } as never) as { result?: string; deny?: string };
+  expect(called.deny).toBeUndefined();
+  expect(argv.slice(-2)).toEqual(["main", "HEAD"]);
+  expect(opened).toEqual([expect.objectContaining({ id: "diffr", title: "diffr main HEAD" })]);
+  expect((opened[0] as { focus?: true }).focus).toBeUndefined();
+  expect(called.result).toBe("Opened diffr main HEAD in a pane for the person: 2 files, +3 −0.");
+  const ui = await $.ui.mount({ plugin: "diffr", component: "Pane", requestId: "diffr", surface: "terminal",
+    props: { title: "diffr", isFocused: false, bodyColumns: 90, placement: "dock", scroll: { offset: 0, bodyRows: 24 }, view: {} } } as never) as never as {
+      drawn: (scope: { in: string }) => Promise<unknown>; unmount: () => Promise<void> };
+  const shown = await lines(ui, "diff-0");
+  expect(shown.some((line) => line.includes("▾ src/greet.ts"))).toBe(true);
+  expect(shown.some((line) => line.includes("export function greet"))).toBe(true);
+  await ui.unmount();
+});
+
+test("the open tool reports a diffr that cannot start as an error", async ($, on) => {
+  on("process.run", async () => ({ value: { exitCode: 127, stdout: "", stderr: "diffr: command not found",
+    isStdoutTruncated: false, isStderrTruncated: false } }));
+  const called = await $.tool.call({ tool: "mcp__diffr__open", args: [] } as never) as { result?: string; deny?: string };
+  expect(called.result).toBeUndefined();
+  expect(called.deny).toContain("diffr: command not found");
+});

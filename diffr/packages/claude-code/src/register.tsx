@@ -6,8 +6,12 @@ import { parseDiffEvents } from "@diffr/viewer/protocol/events";
 import { splitArgs } from "./args";
 import { parsePost } from "./protocol";
 import { Pane } from "./frame";
+import { add, zero } from "@diffr/viewer/document/counts";
+import { lineCounts } from "@diffr/viewer/document/fileTree";
 
 const PANE = "diffr";
+/** The tool the model calls to open the pane: `mcp__<plugin>__<name>`. */
+const TOOL = "mcp__diffr__open";
 /** Lines per view instance. Claude Code caps each instance's element tree, and one highlighted
  * line can take over a thousand characters. */
 const BAND = 16;
@@ -22,7 +26,42 @@ async function loadTheme($: EngineInterface, binary: string): Promise<Palette> {
     : loadBundledTheme(config.name);
 }
 
-async function pump(store: DiffStore, child: ReturnType<EngineInterface["process"]["spawn"]>) {
+/** The tool's arguments: diffr's own, as a list, so nothing needs shell quoting. */
+function toolArgs(input: Record<string, unknown>): string[] {
+  const args = input.args ?? [];
+  if (!Array.isArray(args) || !args.every((arg) => typeof arg === "string"))
+    throw new Error("args must be a list of strings: revisions or paths, as diffr takes them");
+  return args;
+}
+
+/** What the model reads back: the comparison, how much changed, and any file diffr could not diff. */
+function summary(args: string[], store: DiffStore): string {
+  const snapshot = store.getSnapshot();
+  const shown = `diffr${args.length ? ` ${args.join(" ")}` : ""}`;
+  if (!snapshot.comparison) throw new Error(`${shown} failed: ${snapshot.errors.join("; ") || "it named no comparison"}`);
+  const counts = snapshot.files.reduce((sum, file) => (file ? add(sum, lineCounts(file).visible) : sum), zero);
+  const files = snapshot.inventory.length;
+  const failed = snapshot.errors.length ? ` ${snapshot.errors.length} could not be shown: ${snapshot.errors.join("; ")}.` : "";
+  return `Opened ${shown} in a pane for the person: ${files} ${files === 1 ? "file" : "files"}, +${counts.added} −${counts.removed}.${failed}`;
+}
+
+type Child = ReturnType<EngineInterface["process"]["spawn"]>;
+
+/**
+ * Runs diffr on `args` for a new pane, stopping the one before: the pane, its child, its store, and
+ * a promise that settles when diffr's stream ends. Rejects when diffr's config can't be read.
+ */
+async function startDiffr($: EngineInterface, binary: string, previous: Child | undefined, args: string[]) {
+  const theme = await loadTheme($, binary);
+  void previous?.return({ code: null, signal: null });
+  const store = new DiffStore();
+  const pane = new Pane(store, theme);
+  pane.subscribe(() => $.ui.invalidate("ui.render"));
+  const child = $.process.spawn({ argv: [binary, "--format", "ndjson", "--syntax", ...args] });
+  return { pane, child, store, streamed: pump(store, child) };
+}
+
+async function pump(store: DiffStore, child: Child) {
   let stderr = "";
   // Chunks are decoded text, split at arbitrary points.
   async function* stdout() {
@@ -43,7 +82,7 @@ export function register(on: On, options: PluginOptions): void {
   const binary = options.diffr;
   if (typeof binary !== "string") throw new Error(`The diffr option must be a string, not ${typeof binary}`);
   let pane: Pane | undefined;
-  let child: ReturnType<EngineInterface["process"]["spawn"]> | undefined;
+  let child: Child | undefined;
   /** The last handled seq per view instance (see `Post`). */
   const acks = new Map<string, number>();
 
@@ -53,27 +92,54 @@ export function register(on: On, options: PluginOptions): void {
       description: "Review a diff with diffr",
       argumentHint: "[revisions or paths, as for diffr]",
     });
+    await $.tool.register({
+      name: "open",
+      description: "Open diffr's review pane for the person, showing a comparison they can read, fold, search and mark viewed. " +
+        "Use it to show them changes you made or want them to review, rather than describing the diff. " +
+        "args are diffr's own: revisions or paths, e.g. [\"HEAD~1\"], [\"main..HEAD\", \"--\", \"src\"], or [] for uncommitted changes. " +
+        "Replaces any diffr pane already open, and leaves the person's focus where it is. Returns once diffr has finished: the file and line counts.",
+      inputSchema: {
+        type: "object",
+        properties: { args: { type: "array", items: { type: "string" }, description: "diffr's arguments, one per item" } },
+      },
+      isDeferred: false,
+    });
     return next(e);
   });
 
   on("command.run", { command: "diffr" }, async ($, e) => {
     const args = splitArgs(e.args);
-    let theme: Palette;
+    let started: Awaited<ReturnType<typeof startDiffr>>;
     try {
-      theme = await loadTheme($, binary);
+      started = await startDiffr($, binary, child, args);
     } catch (error) {
       return { text: `diffr could not start: ${error instanceof Error ? error.message : String(error)}` };
     }
-    void child?.return({ code: null, signal: null });
-    const store = new DiffStore();
-    pane = new Pane(store, theme);
-    pane.subscribe(() => $.ui.invalidate("ui.render"));
-    child = $.process.spawn({ argv: [binary, "--format", "ndjson", "--syntax", ...args] });
-    void pump(store, child);
+    ({ pane, child } = started);
     // A pane width the user set overrides this.
-    await $.ui.open({ id: PANE, title: ["diffr", ...args].join(" "), focus: true,
-      columns: Math.floor(e.presentation.columns * 0.6) });
+    await $.ui.open({ id: PANE, title: ["diffr", ...args].join(" "), focus: true, columns: Math.floor(e.presentation.columns * 0.6) });
     return { text: `Opened diffr ${e.args} in a pane.`.replace("  ", " ") };
+  });
+
+  on("tool.call", { tool: TOOL }, async ($, e) => {
+    // A diffr that can't start, or names no comparison, is the call's answer: the model reads it as an error.
+    const refuse = (error: unknown) => ({ deny: error instanceof Error ? error.message : String(error) });
+    let args: string[], started: Awaited<ReturnType<typeof startDiffr>>;
+    try {
+      args = toolArgs(e);
+      started = await startDiffr($, binary, child, args);
+    } catch (error) {
+      return refuse(error);
+    }
+    ({ pane, child } = started);
+    // The person may be typing, so the pane opens without taking the keyboard.
+    await $.ui.open({ id: PANE, title: ["diffr", ...args].join(" ") });
+    await started.streamed;
+    try {
+      return { result: summary(args, started.store) };
+    } catch (error) {
+      return refuse(error);
+    }
   });
 
   on("ui.render", { component: "Pane", requestId: "diffr" }, async ($, e) => {

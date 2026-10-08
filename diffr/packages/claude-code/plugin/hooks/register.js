@@ -18739,6 +18739,7 @@ class Pane {
 
 // src/register.tsx
 var PANE = "diffr";
+var TOOL = "mcp__diffr__open";
 var BAND = 16;
 async function loadTheme($, binary) {
   const shown = await $.process.run([binary, "config", "show", "--json"]);
@@ -18746,6 +18747,31 @@ async function loadTheme($, binary) {
     throw new Error(shown.stderr || `${binary} config show exited with status ${shown.exitCode}`);
   const config2 = themeConfig(JSON.parse(shown.stdout));
   return config2.path ? paletteFromHelix(parseHelixTheme(await $.fs.read(config2.path), config2.path)) : loadBundledTheme(config2.name);
+}
+function toolArgs(input2) {
+  const args = input2.args ?? [];
+  if (!Array.isArray(args) || !args.every((arg) => typeof arg === "string"))
+    throw new Error("args must be a list of strings: revisions or paths, as diffr takes them");
+  return args;
+}
+function summary(args, store) {
+  const snapshot3 = store.getSnapshot();
+  const shown = `diffr${args.length ? ` ${args.join(" ")}` : ""}`;
+  if (!snapshot3.comparison)
+    throw new Error(`${shown} failed: ${snapshot3.errors.join("; ") || "it named no comparison"}`);
+  const counts = snapshot3.files.reduce((sum, file2) => file2 ? add(sum, lineCounts2(file2).visible) : sum, zero);
+  const files = snapshot3.inventory.length;
+  const failed = snapshot3.errors.length ? ` ${snapshot3.errors.length} could not be shown: ${snapshot3.errors.join("; ")}.` : "";
+  return `Opened ${shown} in a pane for the person: ${files} ${files === 1 ? "file" : "files"}, +${counts.added} −${counts.removed}.${failed}`;
+}
+async function startDiffr($, binary, previous, args) {
+  const theme = await loadTheme($, binary);
+  previous?.return({ code: null, signal: null });
+  const store = new DiffStore;
+  const pane = new Pane(store, theme);
+  pane.subscribe(() => $.ui.invalidate("ui.render"));
+  const child = $.process.spawn({ argv: [binary, "--format", "ndjson", "--syntax", ...args] });
+  return { pane, child, store, streamed: pump(store, child) };
 }
 async function pump(store, child) {
   let stderr = "";
@@ -18778,29 +18804,46 @@ function register(on, options) {
       description: "Review a diff with diffr",
       argumentHint: "[revisions or paths, as for diffr]"
     });
+    await $.tool.register({
+      name: "open",
+      description: "Open diffr's review pane for the person, showing a comparison they can read, fold, search and mark viewed. " + "Use it to show them changes you made or want them to review, rather than describing the diff. " + `args are diffr's own: revisions or paths, e.g. ["HEAD~1"], ["main..HEAD", "--", "src"], or [] for uncommitted changes. ` + "Replaces any diffr pane already open, and leaves the person's focus where it is. Returns once diffr has finished: the file and line counts.",
+      inputSchema: {
+        type: "object",
+        properties: { args: { type: "array", items: { type: "string" }, description: "diffr's arguments, one per item" } }
+      },
+      isDeferred: false
+    });
     return next(e);
   });
   on("command.run", { command: "diffr" }, async ($, e) => {
     const args = splitArgs(e.args);
-    let theme;
+    let started;
     try {
-      theme = await loadTheme($, binary);
+      started = await startDiffr($, binary, child, args);
     } catch (error46) {
       return { text: `diffr could not start: ${error46 instanceof Error ? error46.message : String(error46)}` };
     }
-    child?.return({ code: null, signal: null });
-    const store = new DiffStore;
-    pane = new Pane(store, theme);
-    pane.subscribe(() => $.ui.invalidate("ui.render"));
-    child = $.process.spawn({ argv: [binary, "--format", "ndjson", "--syntax", ...args] });
-    pump(store, child);
-    await $.ui.open({
-      id: PANE,
-      title: ["diffr", ...args].join(" "),
-      focus: true,
-      columns: Math.floor(e.presentation.columns * 0.6)
-    });
+    ({ pane, child } = started);
+    await $.ui.open({ id: PANE, title: ["diffr", ...args].join(" "), focus: true, columns: Math.floor(e.presentation.columns * 0.6) });
     return { text: `Opened diffr ${e.args} in a pane.`.replace("  ", " ") };
+  });
+  on("tool.call", { tool: TOOL }, async ($, e) => {
+    const refuse = (error46) => ({ deny: error46 instanceof Error ? error46.message : String(error46) });
+    let args, started;
+    try {
+      args = toolArgs(e);
+      started = await startDiffr($, binary, child, args);
+    } catch (error46) {
+      return refuse(error46);
+    }
+    ({ pane, child } = started);
+    await $.ui.open({ id: PANE, title: ["diffr", ...args].join(" ") });
+    await started.streamed;
+    try {
+      return { result: summary(args, started.store) };
+    } catch (error46) {
+      return refuse(error46);
+    }
   });
   on("ui.render", { component: "Pane", requestId: "diffr" }, async ($, e) => {
     if (e.surface !== "terminal" && e.surface !== "desktop") {
