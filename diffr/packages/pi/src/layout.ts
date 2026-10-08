@@ -6,28 +6,26 @@ export function mountPane(ui: ExtensionContext["ui"], create: (tui: TUI, full: b
   initialFull: boolean, capture: boolean) {
   let full = initialFull;
   let handle: OverlayHandle | undefined;
-  let finish: (() => void) | undefined;
   let closed = false;
   let switching = false;
-  let completion: Promise<void> = Promise.resolve();
   const show = (focus: boolean) => new Promise<void>((resolve, reject) => {
-    completion = ui.custom<void>((tui, _theme, _keys, done) => {
-      finish = () => done();
-      return create(tui, full);
-    }, { overlay: true,
+    // Pi's custom done() pops the top overlay, which may belong to another
+    // extension. The public handle removes this specific overlay instead.
+    // We own readiness separately; no caller waits for custom's result.
+    void ui.custom<void>((tui) => create(tui, full), { overlay: true,
       overlayOptions: { width: full ? "100%" : "60%", minWidth: full ? 1 : 50,
         maxHeight: full ? "100%" : "75%", anchor: "top-right", nonCapturing: !focus },
       onHandle(next) {
         handle = next;
-        if (closed) finish?.();
+        if (closed) { next.hide(); handle = undefined; }
         resolve();
       },
-    });
-    // Pi skips onHandle when done() runs before the component mounts.
-    void completion.then(resolve, reject);
+    }).catch(reject);
   });
+  const ready = show(capture);
+  const remove = () => { handle?.hide(); handle = undefined; };
   return {
-    ready: show(capture),
+    ready,
     get fullscreen() { return full; },
     focus() { if (!closed) { handle?.setHidden(false); handle?.focus(); } },
     focusChat() {
@@ -39,15 +37,13 @@ export function mountPane(ui: ExtensionContext["ui"], create: (tui: TUI, full: b
       switching = true;
       try {
         // Let Pi finish dispatching the current mouse event before it removes its target.
-        await Promise.resolve();
+        await ready;
         if (closed) return;
-        finish?.();
-        await completion;
-        if (closed) return;
+        remove();
         full = !full;
         await show(true);
       } finally { switching = false; }
     },
-    dispose() { closed = true; finish?.(); },
+    dispose() { closed = true; remove(); },
   };
 }

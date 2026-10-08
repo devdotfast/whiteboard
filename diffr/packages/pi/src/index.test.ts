@@ -16,7 +16,7 @@ function harness() {
       return new Promise<void>(resolve => {
         component = factory({ terminal: { columns: 120, rows: 40 }, requestRender() {} }, {}, {}, () => { closed++; resolve(); });
         captures.push(!options.overlayOptions.nonCapturing);
-        queueMicrotask(() => options.onHandle({ setHidden() {}, focus() {}, unfocus() {} }));
+        queueMicrotask(() => options.onHandle({ hide() { closed++; }, setHidden() {}, focus() {}, unfocus() {} }));
       });
     },
   } };

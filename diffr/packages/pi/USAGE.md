@@ -1,6 +1,6 @@
 # Diffr for Pi
 
-Tested with Pi 0.99.1. Use `diffr` on PATH and Pi's fullscreen terminal renderer for mouse input.
+Tested with Pi 0.99.1 and 1.1.0. Use `diffr` on PATH and Pi's fullscreen terminal renderer for mouse input.
 From `diffr/packages`, run `bun install`, then `bun run --cwd pi build`.
 Launch `pi/bin/diffr-pi.mjs` (or `pi --tui-mode fullscreen -e /absolute/path/to/pi/dist/index.js`).
 

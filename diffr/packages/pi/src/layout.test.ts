@@ -10,6 +10,7 @@ function host() {
     return new Promise<void>(resolve => {
       factory({}, {}, {}, () => { entry.closed = true; resolve(); });
       queueMicrotask(() => { if (entry.closed) return; options.onHandle({
+        hide: () => { entry.closed = true; },
         setHidden: (value: boolean) => { entry.hidden = value; },
         focus: () => { entry.focused = true; }, unfocus: () => { entry.focused = false; },
       }); });
@@ -36,6 +37,28 @@ test("model opens preserve focus; view switches dispose the previous overlay", a
   expect(mounts[1]!.hidden).toBe(false);
   pane.dispose();
   expect(mounts[1]!.closed).toBe(true);
+});
+
+test("closing beneath another extension leaves its overlay and focus intact", async () => {
+  const { ui, mounts } = host();
+  const pane = mountPane(ui, component, false, false);
+  await pane.ready;
+  // Match Pi's custom done(): it removes whichever overlay was opened last.
+  // Owned handles must avoid invoking that callback when closing a lower view.
+  let genericCloses = 0;
+  const original = ui.custom.bind(ui);
+  const nestedUi = { ...ui, custom: (factory: any, options: any) => original((tui, theme, keys) =>
+    factory(tui, theme, keys, () => { genericCloses++; mounts.at(-1)!.closed = true; }), options) } as typeof ui;
+  const lower = mountPane(nestedUi, component, false, false);
+  await lower.ready;
+  const upper = mountPane(ui, component, false, true);
+  await upper.ready;
+  lower.dispose();
+  expect(genericCloses).toBe(0);
+  expect(mounts[1]!.closed).toBe(true);
+  expect(mounts[2]!.closed).toBe(false);
+  expect(mounts[2]!.focused).toBe(true);
+  upper.dispose(); pane.dispose();
 });
 
 test("closing during mount or a view switch leaves no overlay behind", async () => {
