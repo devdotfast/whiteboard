@@ -5,7 +5,7 @@
 //! wire protocol, shaped by the plugins as the native diffr shapes it.
 //! Fetching the sources is the page's job.
 use diffr_core::config::{Config, Params};
-use diffr_core::engine::QueryConflict;
+use diffr_core::engine::DiffError;
 use diffr_core::options::DiffOptions;
 use diffr_core::pairing::Pairing;
 use diffr_core::plugin::MutationFailed;
@@ -107,8 +107,11 @@ fn entry(request: &Request) -> anyhow::Result<FileChange> {
 
 /// The wire record for an error, with the code of its typed cause.
 fn problem(error: &anyhow::Error) -> Problem {
-    let code = if error.downcast_ref::<QueryConflict>().is_some() {
-        "query_conflict"
+    let code = if let Some(error) = error.downcast_ref::<DiffError>() {
+        match error {
+            DiffError::Query(_) => "query_error",
+            DiffError::Conflict(_) => "query_conflict",
+        }
     } else if error.downcast_ref::<MutationFailed>().is_some() {
         "mutation_failed"
     } else {
