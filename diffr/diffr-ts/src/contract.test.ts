@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   STRUCTURAL_DIFF_WIRE_VERSION,
@@ -12,7 +13,7 @@ import { diffrBinary, repositoryRoot } from "./test-binary.js";
 
 // These tests run the debug binary. Its first run compiles the bundled plugins
 // into an empty wasmtime cache, which is slow on CI runners.
-setDefaultTimeout(30_000);
+vi.setConfig({ testTimeout: 30_000 });
 
 const dirs: string[] = [];
 function tempDir(prefix: string): string {
@@ -25,20 +26,23 @@ afterEach(() => {
 });
 
 function run(args: string[], cwd = repositoryRoot): StructuralDiffEvent[] {
-  const result = Bun.spawnSync([diffrBinary(), ...args], {
+  const result = spawnSync(diffrBinary(), args, {
     cwd,
+    encoding: "utf8",
     env: { ...process.env, XDG_CONFIG_HOME: tempDir("diffr-config-") },
   });
-  expect(result.exitCode, result.stderr.toString()).toBe(0);
-  const stdout = new TextDecoder().decode(result.stdout);
-  const lines = stdout.split("\n").filter((line) => line.length > 0);
+  expect(result.status, result.stderr).toBe(0);
+  const lines = result.stdout.split("\n").filter((line) => line.length > 0);
   expect(lines.length).toBeGreaterThan(0);
   return lines.map(decodeStructuralDiffEvent);
 }
 
 function git(cwd: string, ...args: string[]): void {
-  const result = Bun.spawnSync(["git", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", ...args], { cwd });
-  expect(result.exitCode).toBe(0);
+  const result = spawnSync("git", ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", ...args], {
+    cwd,
+    encoding: "utf8",
+  });
+  expect(result.status, result.stderr).toBe(0);
 }
 
 const pairs: [string, string][] = [
@@ -83,8 +87,8 @@ describe("every record the binary writes validates", () => {
   });
 });
 
-test("the terminal UI's committed v3 fixture still validates", async () => {
-  const text = await Bun.file(join(repositoryRoot, "tui/test/fixtures/comparison.ndjson")).text();
+test("the terminal UI's committed v3 fixture still validates", () => {
+  const text = readFileSync(join(repositoryRoot, "tui/test/fixtures/comparison.ndjson"), "utf8");
   const events = text.split("\n").filter((line) => line.length > 0).map(decodeStructuralDiffEvent);
   expect(events[0]).toMatchObject({ type: "start", version: STRUCTURAL_DIFF_WIRE_VERSION });
   expect(events.at(-1)).toMatchObject({ type: "complete", failed: 0 });

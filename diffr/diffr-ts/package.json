@@ -29,7 +29,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
+    "test": "vitest run --config vitest.config.ts",
     "prepack": "npm run build"
   },
   "peerDependencies": {
@@ -43,8 +43,9 @@
     "@dev.fast/diffr-win32-x64": "0.1.16"
   },
   "devDependencies": {
-    "@types/bun": "1.3.10",
+    "@types/node": "24.12.2",
     "typescript": "5.9.3",
+    "vitest": "4.1.11",
     "zod": "4.6.5"
   },
   "engines": {
