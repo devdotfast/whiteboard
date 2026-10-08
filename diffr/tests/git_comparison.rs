@@ -232,6 +232,23 @@ fn three_dot_uses_the_merge_base() {
 }
 
 #[test]
+fn a_command_name_after_the_first_argument_is_a_revision() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("repo");
+    let repo = gix::init(&root).unwrap();
+    fs::write(root.join("a.txt"), "base\n").unwrap();
+    commit(&repo, "base");
+    git(&root, &["branch", "config"]);
+    fs::write(root.join("a.txt"), "head\n").unwrap();
+    commit(&repo, "head");
+    let expected = git(&root, &["diff", "--name-status", "--merge-base", "config"]);
+    assert_eq!(
+        text(diffr(&root, &["--name-status", "--merge-base", "config"])),
+        expected
+    );
+}
+
+#[test]
 fn intent_to_add_is_only_a_worktree_addition() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("repo");

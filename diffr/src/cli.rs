@@ -4,10 +4,7 @@ use crate::git::{self, Comparison, FileParams, Operand, Result};
 use crate::options::DebugArgs;
 use crate::plugin::{Classifier, Pipeline};
 use crate::run;
-use clap::{
-    error::ErrorKind, parser::ValueSource, ArgGroup, ArgMatches, Args, CommandFactory,
-    FromArgMatches, Parser, Subcommand, ValueEnum,
-};
+use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use gix::Repository;
 use std::{
     ffi::OsString,
@@ -27,6 +24,8 @@ const METADATA: [&str; 5] = ["name_only", "name_status", "stat", "numstat", "sho
     version,
     group(ArgGroup::new("metadata").args(METADATA)),
     group(ArgGroup::new("names").args(["name_only", "name_status"])),
+    // A command name is a command only as the first argument.
+    args_conflicts_with_subcommands = true,
     after_help = "Examples:\n  diffr\n  diffr --cached\n  diffr main...HEAD -- src/\n  diffr --no-index -- before.rs after.rs\n  diffr main HEAD --format ndjson\n\nUnsupported Git flags are rejected; this is not a complete git diff implementation."
 )]
 struct Cli {
@@ -198,9 +197,7 @@ pub(crate) fn run(runtime: &tokio::runtime::Runtime) -> Result<i32> {
     // Git treats an argument before `--` as a revision even when a file shares
     // its name, so a bare trailing `--` still matters.
     let has_separator = frontend_args.iter().any(|arg| arg == "--");
-    let matches = Cli::command().get_matches();
-    reject_diff_arguments_before_subcommand(&matches);
-    let args = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
+    let args = Cli::parse();
     match &args.command {
         Some(Command::Pprint(args)) => return run_pprint(args),
         Some(Command::Config(config)) => return run_config(config),
@@ -270,29 +267,6 @@ pub(crate) fn run(runtime: &tokio::runtime::Runtime) -> Result<i32> {
     } else {
         i32::from(ended.files > 0 && args.exit_code)
     })
-}
-
-/// The top-level flags configure a diff; a subcommand given after one would
-/// silently drop it.
-fn reject_diff_arguments_before_subcommand(matches: &ArgMatches) {
-    let Some((name, _)) = matches.subcommand() else {
-        return;
-    };
-    let mut command = Cli::command();
-    // Formatting an `Arg` reads settings that only `build` fills in.
-    command.build();
-    let given = command
-        .get_arguments()
-        .find(|arg| matches.value_source(arg.get_id().as_str()) == Some(ValueSource::CommandLine))
-        .map(ToString::to_string);
-    if let Some(arg) = given {
-        command
-            .error(
-                ErrorKind::ArgumentConflict,
-                format!("the argument '{arg}' cannot be used with the '{name}' subcommand"),
-            )
-            .exit();
-    }
 }
 
 fn select(

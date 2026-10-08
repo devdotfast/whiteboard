@@ -136,18 +136,6 @@ fn invalid_flag_combinations_are_rejected_before_the_terminal_ui() {
 }
 
 #[test]
-fn diff_flags_before_a_subcommand_are_rejected() {
-    get_base_command()
-        .args(["--cached", "config", "show"])
-        .assert()
-        .failure()
-        .code(2)
-        .stderr(predicate::str::contains(
-            "the argument '--cached' cannot be used with the 'config' subcommand",
-        ));
-}
-
-#[test]
 fn a_malformed_override_is_a_clap_error() {
     debug_command()
         .args(["--override=*.c:Nope", "--list-languages"])
