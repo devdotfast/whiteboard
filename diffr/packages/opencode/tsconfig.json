@@ -1,4 +1,21 @@
 {
-  "compilerOptions": { "target": "ES2023", "module": "ESNext", "moduleResolution": "bundler", "jsx": "preserve", "jsxImportSource": "@opentui/solid", "strict": true, "skipLibCheck": true, "noEmit": true, "types": ["bun"] },
-  "include": ["src"]
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "jsxImportSource": "@opentui/solid",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": [
+      "bun"
+    ]
+  },
+  "include": [
+    "src",
+    "test",
+    "server.ts",
+    "tui.tsx"
+  ]
 }

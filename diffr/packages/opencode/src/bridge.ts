@@ -1,4 +1,4 @@
-/** The server tool and terminal plugin run in separate processes in OpenCode 1.x. */
+/** The server tool and terminal plugin run in separate processes in OpenCode. */
 import { createServer, createConnection, type Socket } from "node:net";
 import { mkdtemp, chmod, rm, realpath } from "node:fs/promises";
 import { randomUUID } from "node:crypto";

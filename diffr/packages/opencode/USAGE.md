@@ -1,59 +1,60 @@
 # Diffr for OpenCode
 
-Tested with OpenCode 1.18.32 (its v1 TUI plugin API). Install workspace dependencies
-with `bun install` from `diffr/packages`, then add an absolute source path to your
-OpenCode `tui.json` plugin array:
+Requires OpenCode **2.0.25**. V2 provides the native `session.panel` extension API:
+chat and Diffr occupy separate columns, with a draggable divider and a host-owned
+fullscreen mode. V1's fixed 42-column sidebar cannot provide this layout.
+
+Run `bun install` from `diffr/packages`. Add the package directory to `plugins` in
+`opencode.json` (the server tool) and `cli.json` (the terminal UI):
 
 ```json
 {
-  "plugin": ["/absolute/path/to/diffr/packages/opencode/src/index.tsx"]
+  "plugins": [{
+    "package": "/absolute/path/to/diffr/packages/opencode",
+    "options": { "binary": "/path/to/diffr", "args": ["HEAD~1", "HEAD"] }
+  }]
 }
 ```
 
-OpenCode compiles the Solid component using its own renderer. Do not bundle a second
-OpenTUI renderer into the host. The development versions match OpenCode 1.18.32.
+OpenCode resolves local `server.ts` and `tui.tsx` entrypoints. Package exports also
+provide the server and `./tui` entrypoints for package loading. The host compiles
+Solid JSX; do not bundle another OpenTUI renderer. Set `input` to an NDJSON recording
+instead of `binary`/`args` for local UI testing.
 
-- `/diffr` opens the working-tree comparison in the native session sidebar.
-- Click the pane or use `/diffr-focus` to focus its keyboard controls.
-- F6, the top bar, or `/diffr-fullscreen` toggles a full-screen overlay.
-- Drag source lines and press Enter to append their references and contents to the
-  existing native draft. This never submits the prompt.
-- `V` toggles viewed state, `zM` folds scopes, `zR` unfolds them, `\\` opens files.
-- Escape returns focus to chat. `q` or `/diffr-close` closes the comparison.
+- Open a chat session, then run `/diffr` or press F7.
+- Diffr takes half the available width by default. Drag the host divider to resize.
+- F6, the top bar, or `/diffr-fullscreen` switches between split and fullscreen.
+- Drag code and press Enter or click **Add to chat** to append it to the unsent draft.
+- `V` marks a file viewed; `zM` folds scopes; `zR` unfolds them; `\\` opens files.
+- Escape returns to chat. In fullscreen, it hides the panel. F7 restores the review.
+- `q` or `/diffr-close` disposes the comparison. Reopening then starts a new review.
 
-The supported sidebar is fixed at 42 terminal columns, with about 37 available to
-Diffr. Its comparison occupies half the terminal height to leave room for native
-sidebar content. Use `h`/`l` to pan, or full screen for wider code. When OpenCode hides
-the sidebar (including small terminals), Diffr falls back to the full-screen overlay.
-An adjustable chat/diff split needs additional host layout support.
+Folds and viewed marks survive presentation changes and hiding the fullscreen panel.
+At 80 available columns or fewer, OpenCode forces fullscreen. Add to chat then hides
+the review and focuses the existing draft, without submitting it.
 
-Comparisons are bound to the session that opened them. Draft transfer refuses a
-different session. Opening from the home screen creates an empty local session.
-Viewed marks and folds survive split/fullscreen changes and reset on reopening.
-
-Plugin tuple options select a binary, arguments, or a saved test recording:
-
-```json
-{
-  "plugin": [["/absolute/path/to/opencode/src/index.tsx", {
-    "binary": "/path/to/diffr",
-    "args": ["HEAD~1", "HEAD"]
-  }]]
-}
-```
-
-Set `input` instead to an NDJSON recording for local UI testing.
+V2 currently has no public draft helper. The adapter captures the focused native
+`TextareaRenderable` when opening and uses its public `gotoBufferEnd`/`insertText`
+methods. It does not read private host fields or search the render tree. Transfer
+refuses a destroyed editor or another session; if no editor was focused, focus the
+chat draft, close Diffr, and reopen it. This boundary needs retesting when upgrading
+the host. Opening from the home screen requests that the user first open a session.
 
 ## Model tool
 
-Also load `/absolute/path/to/diffr/packages/opencode/src/server.ts` in the `plugin`
-array in `opencode.json`. The model can then call `diffr_open({args: [...]})` through
-OpenCode's native tool API; no separate MCP process is required.
+The model calls `diffr_open({args: [...]})` through OpenCode's native tool API.
+No separate MCP process is required. The server emits a namespaced plugin RPC event;
+only a terminal showing the same session in the same canonical directory can claim
+its temporary private Unix reply socket. Success means a valid comparison started.
+Errors, cancellation, or a 20-second missing-terminal timeout reach the model.
 
-The server sends a public TUI command event. Only a terminal showing the same
-session in the same directory can claim it. A private, temporary Unix socket
-returns success after a valid comparison starts, or returns the producer error.
-The tool does not navigate to another session, take keyboard focus, or submit a draft.
-A missing terminal times out after 20 seconds. Cancellation stops an in-progress open.
-This bridge requires the server and TUI on the same machine (macOS/Linux); remote
-`opencode attach` and Windows need a different reply transport.
+In split mode, a model-triggered open returns keyboard focus to chat. A narrow
+terminal's forced fullscreen necessarily takes focus. This implementation requires
+the server and TUI on the same macOS/Linux machine; remote attachment and Windows
+are not supported by the reply socket transport.
+
+## Validation
+
+`bun run typecheck` and `bun run test` cover socket routing and real OpenTUI
+mouse-selection → draft insertion, including fullscreen return and preserved draft
+text. Ghostty testing uses OpenCode 2.0.25 and an isolated local model provider.
