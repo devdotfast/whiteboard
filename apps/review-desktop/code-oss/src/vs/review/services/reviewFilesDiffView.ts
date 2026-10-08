@@ -589,32 +589,6 @@ export class ReviewFilesDiffView extends Disposable {
 		if (!this.pendingPath) this.reveal(entry);
 	}
 
-	get viewportHeight(): number { return this.diffContainer.clientHeight; }
-
-	/**
-	 * Pixels from the reading line (the list's top edge) to the first line of
-	 * `source`, negative once scrolled past. Rendered files measure their
-	 * editor; the rest are placed by file order around the topmost file, a
-	 * million pixels per file, which keeps them sorted and on the right side.
-	 */
-	sourceOffset(source: ReviewDiffLens['ranges'][number]): number | undefined {
-		const entries = this.input?.entries ?? [];
-		const pathOf = (entry: (typeof entries)[number]) => source.side === 'base' ? entry.file.previousPath ?? entry.file.path : entry.file.path;
-		const index = entries.findIndex(entry => pathOf(entry) === source.file);
-		if (index < 0) return undefined;
-		const entry = entries[index]!;
-		const resource = source.side === 'base' ? entry.original : entry.modified;
-		const editor = resource && this.widget.tryGetCodeEditor(resource)?.editor;
-		const node = editor?.getDomNode();
-		if (editor && node) {
-			return node.getBoundingClientRect().top - this.diffContainer.getBoundingClientRect().top
-				+ editor.getTopForLineNumber(source.fromLine) - editor.getScrollTop();
-		}
-		const active = this.viewModel?.activeDiffItem.get();
-		const activeIndex = active ? entries.findIndex(e => sameResource(active.modifiedUri, e.modified) && sameResource(active.originalUri, e.original)) : 0;
-		return (index - Math.max(0, activeIndex)) * 1_000_000 + source.fromLine;
-	}
-
 	loadingFailed(message: string): void {
 		for (const [path, state] of this.fileStates)
 			if (state === "Loading diff…") this.fileLoaded(path, message);

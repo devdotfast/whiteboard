@@ -8,7 +8,7 @@ import { IDiffProviderFactoryService } from "../../editor/browser/widget/diffEdi
 import { alignmentRows } from "../common/reviewLens.js";
 import type { ReviewInlineEditorSpec, ReviewInlineEditorHandle, ReviewFindQuery } from "../common/reviewProtocol.js";
 import { reviewFileCounts } from "../common/reviewStructuralDiff.js";
-import type { ReviewDiffProgress, ReviewDiffViewport } from "../common/reviewProtocol.js";
+import type { ReviewDiffProgress } from "../common/reviewProtocol.js";
 import { lensRanges, withLens } from "./reviewLens.js";
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) dev.fast. All rights reserved.
@@ -241,9 +241,6 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 		this.pendingFileRestore = options?.restore ?? false;
 		if (!this.pendingFileRestore || !this.hasRestoredState) this.view?.revealFile(path);
 	}
-	private readonly _onDidScroll = this._register(new Emitter<ReviewDiffViewport>());
-	readonly onDidScroll = this._onDidScroll.event;
-	sourceOffset(source: ReviewDiffLens['ranges'][number]): number | undefined { return this.view?.sourceOffset(source); }
 	private viewStateKey: string | undefined;
 	private readonly saveState = this._register(new RunOnceScheduler(() => this.captureViewState(), 250));
 	private adoptedEditors: readonly ICodeEditor[] = [];
@@ -343,10 +340,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 			if (this.progress) view.setProgress(this.progress);
 			if (structuralEnabled) view.startLoading(selected);
 			store.add(view.onDidChangeActiveControl(() => this.bindActiveControl(view)));
-			store.add(view.onDidScroll(() => {
-				this._onDidScroll.fire({ height: view.viewportHeight });
-				this.saveState.schedule();
-			}));
+			store.add(view.onDidScroll(() => this.saveState.schedule()));
 			const itemKeys = selected.map(entry => JSON.stringify([entry.original?.toString(), entry.modified?.toString()]));
 			const savedState = this.viewStates.get(this.viewStateKey, itemKeys);
 			this.hasRestoredState = !!savedState;
