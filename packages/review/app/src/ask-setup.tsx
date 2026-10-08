@@ -24,6 +24,7 @@ export function AskSetup({
   selection: AgentSelection;
 }): ReactElement {
   const session = useReviewSession();
+  const host = session.review?.host;
   const { toast, showToast } = useToast(4_000);
 
   const copy = async () => {
@@ -47,7 +48,11 @@ export function AskSetup({
         <AskSelectionQuote selection={selection} />
         <EmptyState
           title="No agent is ready to answer"
-          message="Whiteboard runs a coding agent on your machine, against the pinned checkout. Install one and sign in to it once in a terminal; it shows up here when you come back."
+          message={
+            host
+              ? `Whiteboard runs a coding agent on ${host}, against the review's checkout there. Install one and sign in to it once over ssh; it shows up here when you come back.`
+              : "Whiteboard runs a coding agent on your machine, against the pinned checkout. Install one and sign in to it once in a terminal; it shows up here when you come back."
+          }
           xstyle={setupStyles.message}
         />
         <ul {...stylex.props(askPanelStyles.list)}>
@@ -61,7 +66,9 @@ export function AskSetup({
               </span>
               <span {...stylex.props(setupStyles.name)}>
                 <span>{candidate.name}</span>
-                <span {...stylex.props(setupStyles.status)}>Not installed</span>
+                <span {...stylex.props(setupStyles.status)}>
+                  {host ? `Not installed on ${host}` : "Not installed"}
+                </span>
               </span>
             </li>
           ))}
@@ -94,6 +101,8 @@ export function AskSignIn({
   command: string;
   onRetry: () => void;
 }): ReactElement {
+  const host = useReviewSession().review?.host;
+
   return (
     <section
       {...stylex.props(signInStyles.card)}
@@ -102,7 +111,7 @@ export function AskSignIn({
     >
       <p {...stylex.props(signInStyles.text)}>
         {agentName} is signed out. Sign in again in a terminal, then try again;
-        the question is still here.
+        the question is still here.{host ? ` Run it on ${host}.` : null}
       </p>
       <div {...stylex.props(signInStyles.command)}>
         <code {...stylex.props(signInStyles.code)}>$ {command}</code>

@@ -15,13 +15,13 @@ const usage = `usage: remote.mjs <command>
   up <name> [--platform linux/amd64|linux/arm64] [--image <image>] [--node 24|20|none]
             [--auth key|password] [--banner] [--shell bash|fish] [--jump <name>]
             [--sealed] [--delay-ms <n>] [--no-forwarding] [--port <n>]
-            [--toolchain rust|swift|dotnet]
+            [--toolchain rust|swift|dotnet] [--fake-agent]
   install <name> [--version <v>] [--runtime <remote runtime dir>]
   pack --out <file.tgz> [--version <v>] [--runtime <remote runtime dir>]
   ssh <name> -- <command...>
   forward <name> <remote port>
   pause <name> | resume <name> | logs <name>
-  aws-up <name> [--arch x64|arm64] [--sealed]
+  aws-up <name> [--arch x64|arm64] [--sealed] [--fake-agent]
   down <name> | down --all | down --every-run
   verify-clean
 
@@ -49,6 +49,7 @@ async function main(argv) {
       "no-forwarding": { type: "boolean" },
       port: { type: "string" },
       toolchain: { type: "string" },
+      "fake-agent": { type: "boolean" },
       version: { type: "string" },
       runtime: { type: "string" },
       out: { type: "string" },

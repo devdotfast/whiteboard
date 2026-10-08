@@ -18,6 +18,11 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { PassThrough } from "node:stream";
 
+import {
+  type ClientConnection,
+  agent,
+  methods,
+} from "@agentclientprotocol/sdk";
 import * as diffr from "@dev.fast/diffr";
 import {
   type JsonValue,
@@ -27,6 +32,7 @@ import {
   STRUCTURAL_DIFF_WIRE_VERSION,
   parseReviewDesktopVerbFrame,
 } from "@dev.fast/review-protocol";
+import type { AskAgentLauncher } from "@review/ask/agents.js";
 import { runReviewCli } from "@review/cli-runner.js";
 import {
   connectReviewApi,
@@ -57,7 +63,7 @@ import {
   reviewServerIsHealthy,
 } from "@review/server-discovery.js";
 import sharp from "sharp";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { z } from "zod";
 
 import { createGlobalReviewServer } from "./desktop-server.js";
@@ -71,6 +77,7 @@ beforeEach(async () => {
   root = await mkdtemp(path.join(tmpdir(), "review-headless-"));
   vi.stubEnv("DEV_REVIEW_HOME", root);
   vi.stubEnv("DEV_FAST_REVIEW_TELEMETRY_DISABLED", "1");
+  vi.stubEnv("SHELL", "");
 });
 
 afterEach(async () => {
@@ -82,6 +89,7 @@ afterEach(async () => {
 async function start(
   stateDir = path.join(root, "server"),
   softwareMapEnabled = false,
+  launchAskAgent?: AskAgentLauncher,
 ) {
   const controller = new AbortController();
   const ready = Promise.withResolvers<ReviewServerDiscovery>();
@@ -91,6 +99,7 @@ async function start(
     softwareMapEnabled,
     signal: controller.signal,
     onReady: ready.resolve,
+    launchAskAgent,
   });
 
   const stop = async () => {
@@ -1497,4 +1506,230 @@ it("gives a remote caller no paths from a failed structural diff", async () => {
   expect(await structuralDiffEvents(server.discovery, reviewId, true)).toEqual([
     { type: "error", message: REMOTE_STRUCTURAL_DIFF_ERROR },
   ]);
+});
+
+async function askCall(
+  server: Awaited<ReturnType<typeof start>>,
+  route: string,
+  body?: JsonValue,
+) {
+  return fetch(`${server.discovery.url}/reviews-api/${route}`, {
+    headers: {
+      "x-review-token": server.discovery.token,
+      "content-type": "application/json",
+    },
+    ...(body !== undefined && { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+async function executable(file: string, body: string) {
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+}
+
+async function askAgentsAndEnv() {
+  const launched = Promise.withResolvers<NodeJS.ProcessEnv | undefined>();
+  const started = Date.now();
+
+  const server = await start(
+    undefined,
+    false,
+    async (_agent, _cwd, options) => {
+      launched.resolve(options?.env);
+      throw new Error("No agent here.");
+    },
+  );
+
+  const startMs = Date.now() - started;
+  const { worktree } = await reviewsOfBothKinds(server.client);
+
+  const { agents } = await (
+    await askCall(server, `${worktree}/ask/agents`)
+  ).json();
+
+  await askCall(server, `${worktree}/ask`, {
+    agent: "claude",
+    question: { text: "Why?" },
+    selection: { target: { kind: "text", quote: "value" }, title: "value" },
+  });
+
+  return {
+    claude: agents.find((entry: { id: string }) => entry.id === "claude"),
+    env: await launched.promise,
+    startMs,
+  };
+}
+
+it("finds and launches Ask agents on the login shell's PATH, with its own node last", async () => {
+  const login = path.join(root, "login-bin");
+  await executable(path.join(login, "claude"), "exit 0");
+  await executable(
+    path.join(root, "shell"),
+    `echo Welcome\nprintf '\\nWHITEBOARD-PATH=%s\\n' '${login}'\necho Bye`,
+  );
+  vi.stubEnv("SHELL", path.join(root, "shell"));
+  vi.stubEnv("PATH", "/usr/bin:/bin");
+
+  const { claude, env } = await askAgentsAndEnv();
+
+  expect(claude).toMatchObject({ available: true });
+  expect(env?.PATH).toBe(
+    [login, "/usr/bin:/bin", path.dirname(process.execPath)].join(
+      path.delimiter,
+    ),
+  );
+});
+
+it("starts with its own PATH when the login shell hangs", async () => {
+  const bin = path.join(root, "bin");
+  await executable(path.join(bin, "claude"), "exit 0");
+  await executable(path.join(root, "shell"), "sleep 60");
+  vi.stubEnv("SHELL", path.join(root, "shell"));
+  vi.stubEnv("PATH", `${bin}:/usr/bin:/bin`);
+
+  const { claude, env, startMs } = await askAgentsAndEnv();
+
+  expect(startMs).toBeLessThan(8_000);
+  expect(claude).toMatchObject({ available: true });
+  expect(env?.PATH).toBe(
+    [bin, "/usr/bin:/bin", path.dirname(process.execPath)].join(path.delimiter),
+  );
+}, 20_000);
+
+it("opens an Ask thread in the review's checkout and closes it on stop", async () => {
+  const launched = Promise.withResolvers<void>();
+  let stopped = 0;
+
+  const fake = agent({ name: "fake" })
+    .onRequest(methods.agent.initialize, () => ({
+      protocolVersion: 1,
+      agentCapabilities: {},
+      authMethods: [],
+    }))
+    .onRequest(methods.agent.session.new, () => ({ sessionId: "session" }))
+    .onRequest(methods.agent.session.prompt, () => ({
+      stopReason: "end_turn" as const,
+    }));
+
+  const server = await start(undefined, false, async () => {
+    let connection: ClientConnection | undefined;
+    launched.resolve();
+
+    return {
+      connect: (client) => (connection = client.connect(fake)),
+      diagnostics: () => "",
+      stop: () => {
+        stopped++;
+        connection?.close();
+      },
+    };
+  });
+
+  const { root: checkout, worktree } = await reviewsOfBothKinds(server.client);
+
+  const opened = await askCall(server, `${worktree}/ask`, {
+    agent: "claude",
+    question: { text: "Why?" },
+    selection: { target: { kind: "text", quote: "value" }, title: "value" },
+  });
+
+  expect(opened.status).toBe(200);
+
+  const { threadId } = await opened.json();
+
+  const reader = (
+    await askCall(server, `${worktree}/ask/watch`, { threads: [threadId] })
+  )
+    .body!.pipeThrough(new TextDecoderStream())
+    .getReader();
+
+  const { value = "" } = await reader.read();
+  expect(JSON.parse(value.split("\n")[0]!).update.snapshot.cwd).toBe(checkout);
+
+  await launched.promise;
+  expect(stopped).toBe(0);
+  await server.stop();
+  expect(stopped).toBe(1);
+
+  while (!(await reader.read()).done);
+});
+
+it("closes an Ask thread ten minutes after its last watcher leaves and reopens it from history", async () => {
+  let launches = 0,
+    stopped = 0;
+
+  const fake = agent({ name: "fake" })
+    .onRequest(methods.agent.initialize, () => ({
+      protocolVersion: 1,
+      agentCapabilities: { loadSession: true },
+      authMethods: [],
+    }))
+    .onRequest(methods.agent.session.new, () => ({ sessionId: "session" }))
+    .onRequest(methods.agent.session.load, () => ({}))
+    .onRequest(methods.agent.session.prompt, () => ({
+      stopReason: "end_turn" as const,
+    }));
+
+  const server = await start(undefined, false, async () => {
+    let connection: ClientConnection | undefined;
+    launches++;
+
+    return {
+      connect: (client) => (connection = client.connect(fake)),
+      diagnostics: () => "",
+      stop: () => {
+        stopped++;
+        connection?.close();
+      },
+    };
+  });
+
+  const { worktree } = await reviewsOfBothKinds(server.client);
+
+  vi.useFakeTimers({
+    shouldAdvanceTime: true,
+    toFake: ["setInterval", "clearInterval", "Date"],
+  });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+
+  const { threadId } = await (
+    await askCall(server, `${worktree}/ask`, {
+      agent: "claude",
+      question: { text: "Why?" },
+      selection: { target: { kind: "text", quote: "value" }, title: "value" },
+    })
+  ).json();
+
+  const reader = (
+    await askCall(server, `${worktree}/ask/watch`, { threads: [threadId] })
+  )
+    .body!.pipeThrough(new TextDecoderStream())
+    .getReader();
+
+  let seen = "";
+
+  while (!seen.includes('"status":"idle"'))
+    seen += (await reader.read()).value ?? "";
+
+  await vi.advanceTimersByTimeAsync(60 * 60_000);
+  expect(stopped).toBe(0);
+
+  await reader.cancel();
+  await vi.waitFor(async () => {
+    await vi.advanceTimersByTimeAsync(11 * 60_000);
+    expect(stopped).toBe(1);
+  });
+
+  const { threads } = await (
+    await askCall(server, `${worktree}/ask/threads`)
+  ).json();
+
+  expect(threads).toMatchObject([{ id: threadId }]);
+
+  expect(
+    (await askCall(server, `${worktree}/ask/${threadId}/open`, {})).status,
+  ).toBe(200);
+  await vi.waitFor(() => expect(launches).toBe(2));
 });

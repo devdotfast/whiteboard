@@ -65,11 +65,28 @@ const FORWARDED_ROUTES: readonly (readonly [string, RegExp])[] = [
   ["POST", /^navigator$/],
   ["POST", /^copy-context$/],
   ["GET", /^language-context$/],
+  ["GET", /^ask\/agents$/],
+  ["GET", /^ask\/agents\/[^/]+\/offer$/],
+  ["GET", /^ask\/mentions$/],
+  ["GET", /^ask\/threads$/],
+  ["POST", /^ask\/watch$/],
+  ["GET", /^ask\/[^/]+$/],
+  ["POST", /^ask$/],
+  [
+    "POST",
+    /^ask\/[^/]+\/(open|prompt|permission|permissions|files|choice|retry|cancel|close)$/,
+  ],
+  ["DELETE", /^ask\/[^/]+$/],
 ];
 
-const LANGUAGE_CONTEXT_TIMEOUT_MS = 120_000;
+const SLOW_ROUTE_TIMEOUT_MS = 120_000;
 
-const PATH_ROUTES = new Set(["file", "language-context", "navigator"]);
+/** Routes that may wait on preparing a checkout or launching an agent. */
+const SLOW_ROUTES =
+  /^(language-context|ask|ask\/agents\/[^/]+\/offer|ask\/[^/]+\/(open|choice|permissions)|ask\/mentions)$/;
+
+const WHOLE_BODY_ROUTES =
+  /^(file|language-context|navigator|ask\/agents\/[^/]+\/offer|ask\/(?!watch$)[^/]+)$/;
 
 const PATH_FIELDS = new Set([
   "localPath",
@@ -131,7 +148,7 @@ export function createReviewGateway(input: {
   home: string;
   relay: ReviewDesktopVerbRelay;
   heartbeatMs?: number;
-  languageContextMs?: number;
+  slowRouteMs?: number;
   restarted?(alias: string): void;
   log?(message: string): void;
 }) {
@@ -328,10 +345,10 @@ export function createReviewGateway(input: {
     request.signal.addEventListener("abort", leave, { once: true });
 
     let timedOut = false;
-    const slow = options.route === "language-context";
+    const waits = SLOW_ROUTES.test(options.route ?? "");
 
-    const limit = slow
-      ? (input.languageContextMs ?? LANGUAGE_CONTEXT_TIMEOUT_MS)
+    const limit = waits
+      ? (input.slowRouteMs ?? SLOW_ROUTE_TIMEOUT_MS)
       : FIRST_BYTE_TIMEOUT_MS;
 
     const firstByte = setTimeout(() => {
@@ -357,11 +374,11 @@ export function createReviewGateway(input: {
 
       const reason = !timedOut
         ? errorText(error)
-        : slow
+        : waits
           ? `it did not answer within ${limit / 1_000} seconds`
           : NO_ANSWER;
 
-      if (!slow && !request.signal.aborted) hosts.failed(remote, reason);
+      if (!waits && !request.signal.aborted) hosts.failed(remote, reason);
 
       return answer(remote.alias, timedOut ? 504 : 502, {
         ok: false,
@@ -408,7 +425,7 @@ export function createReviewGateway(input: {
       status === 200 &&
       url.searchParams.get("full") === "true";
 
-    if (snapshot || (options.route && PATH_ROUTES.has(options.route))) {
+    if (snapshot || (options.route && WHOLE_BODY_ROUTES.test(options.route))) {
       let cut: string | undefined;
 
       const cutAfter = (ms: number, reason: string) =>
@@ -472,7 +489,7 @@ export function createReviewGateway(input: {
       }
 
       const unusable =
-        slow && status === 200
+        options.route === "language-context" && status === 200
           ? unusableLanguageContext(body, remote.serverId)
           : undefined;
 

@@ -18,12 +18,19 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  type ClientConnection,
+  agent,
+  methods,
+} from "@agentclientprotocol/sdk";
 import { setLocalVcsCommandObserver } from "@dev.fast/local-vcs";
 import {
   type JsonValue,
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
 } from "@dev.fast/review-protocol";
+import { type AskAgentLauncher, detectAskAgents } from "@review/ask/agents.js";
+import { AskThreads } from "@review/ask/threads.js";
 import { rangeAnchor } from "@review/lens-selection";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { Hono } from "hono";
@@ -1041,6 +1048,136 @@ it("gives a remote caller a fixed issue when a commit review's checkout fails", 
     issue:
       "The checkout for language features is not available on the remote machine.",
   });
+});
+
+it("gives a remote caller Ask answers with no local-path fields and checkout-relative mentions", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Ask",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  const { rootPath } = await local.data.agentCheckout(
+    local.store.read(reviewId),
+  );
+
+  const fake = agent({ name: "fake" })
+    .onRequest(methods.agent.initialize, () => ({
+      protocolVersion: 1,
+      agentCapabilities: { loadSession: true },
+      authMethods: [],
+    }))
+    .onRequest(methods.agent.session.new, () => ({ sessionId: "session" }))
+    .onRequest(methods.agent.session.load, () => ({}))
+    .onRequest(methods.agent.session.prompt, () => ({
+      stopReason: "end_turn" as const,
+    }));
+
+  const launch: AskAgentLauncher = async () => {
+    let connection: ClientConnection | undefined;
+
+    return {
+      connect: (client) => (connection = client.connect(fake)),
+      diagnostics: () => "",
+      stop: () => connection?.close(),
+    };
+  };
+
+  const threads = new AskThreads(launch);
+
+  const app = createReviewApi(
+    local.store,
+    local.data,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { threads, agents: () => detectAskAgents({}) },
+  );
+
+  const remote = { [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE };
+
+  const request = async (route: string, body?: JsonValue) => {
+    const response = await app.request(`/${reviewId}/${route}`, {
+      headers: { ...remote, "content-type": "application/json" },
+      ...(body !== undefined && {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    });
+
+    expect(response.status).toBe(200);
+
+    return response;
+  };
+
+  const read = async (route: string, body?: JsonValue) =>
+    (await request(route, body)).json();
+
+  const snapshot = async (threadId: string) => {
+    const reader = (await request("ask/watch", { threads: [threadId] }))
+      .body!.pipeThrough(new TextDecoderStream())
+      .getReader();
+
+    const { value = "" } = await reader.read();
+    await reader.cancel();
+
+    return JSON.parse(value.split("\n")[0]!).update.snapshot;
+  };
+
+  const noLocalPaths = (answer: JsonValue) => {
+    for (const key of [
+      "localPath",
+      "rootPath",
+      "workspacePath",
+      "filePath",
+      "localRoot",
+    ])
+      expect(JSON.stringify(answer)).not.toContain(`"${key}"`);
+  };
+
+  const agents = await read("ask/agents");
+  expect(agents.agents.length).toBeGreaterThan(0);
+  noLocalPaths(agents);
+
+  const { threadId } = await read("ask", {
+    agent: "claude",
+    question: { text: "Why?" },
+    selection: { target: { kind: "text", quote: "value" }, title: "value" },
+  });
+
+  const asked = await snapshot(threadId);
+  expect(asked.cwd).toBe(rootPath);
+  noLocalPaths(asked);
+
+  await vi.waitFor(async () =>
+    expect((await read("ask/threads")).threads).toHaveLength(1),
+  );
+  noLocalPaths(await read("ask/threads"));
+
+  for (const route of [
+    "ask/mentions?query=example",
+    `ask/mentions?query=example&thread=${threadId}`,
+  ]) {
+    const mentions = await read(route);
+    expect(mentions.paths).toContain(source.file);
+    expect(mentions.paths.every((file: string) => !file.startsWith("/"))).toBe(
+      true,
+    );
+    noLocalPaths(mentions);
+  }
+
+  threads.close(threadId);
+  await read(`ask/${threadId}/open`, {});
+  const reopened = await snapshot(threadId);
+  expect(reopened.cwd).toBe(rootPath);
+  noLocalPaths(reopened);
+  threads.close(threadId);
 });
 
 it("opens a stable native workspace on the Review's pinned checkout at the selected version", async () => {
