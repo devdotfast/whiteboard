@@ -1,5 +1,7 @@
 import {
   type JsonValue,
+  type ReviewGatewayHost,
+  ReviewGatewayHostSchema,
   isJsonObject,
   jsonBoolean,
   jsonProperty,
@@ -22,6 +24,7 @@ export function listenForDesktopHostShutdown(
   onShutdown: () => void,
   onTelemetrySetting?: (enabled: boolean) => void,
   onStageRustAnalyzer?: (path: string) => void,
+  onRemoteHosts?: (hosts: ReviewGatewayHost[]) => void,
 ): () => void {
   const handleMessage = (message: JsonValue) => {
     if (!isJsonObject(message)) return;
@@ -45,6 +48,16 @@ export function listenForDesktopHostShutdown(
       const path = jsonString(jsonProperty(message, "path"));
 
       if (path) onStageRustAnalyzer?.(path);
+
+      return;
+    }
+
+    if (type === "remote-hosts") {
+      const hosts = ReviewGatewayHostSchema.array().safeParse(
+        jsonProperty(message, "hosts"),
+      );
+
+      if (hosts.success) onRemoteHosts?.(hosts.data);
     }
   };
 

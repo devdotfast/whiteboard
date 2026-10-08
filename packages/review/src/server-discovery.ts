@@ -15,6 +15,8 @@ const discoverySchema = z.object({
   }),
   serverPid: z.number().int().positive(),
   token: z.string().min(1),
+  // Older servers wrote no startedBy; only a person ran those.
+  startedBy: z.enum(["user", "cli", "desktop"]).default("user"),
 });
 
 export type ReviewServerDiscovery = z.infer<typeof discoverySchema>;
@@ -76,7 +78,9 @@ export async function readReviewServerHealth(
         ok: z.literal(true),
         instanceId: z.string(),
         serverId: z.string().optional(),
+        serverPid: z.number().optional(),
         version: z.string().optional(),
+        commit: z.string().nullable().optional(),
       })
       .safeParse(await response.json());
 

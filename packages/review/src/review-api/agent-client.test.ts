@@ -1,14 +1,29 @@
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough, Readable, Writable } from "node:stream";
 
 import type { JsonObject } from "@dev.fast/json";
+import { REVIEW_DESKTOP_DISCOVERY_VERSION } from "@dev.fast/review-protocol";
 import { ListToolsResultSchema } from "@modelcontextprotocol/sdk/types.js";
-import { afterAll, afterEach, expect, it, vi } from "vitest";
+import { readReviewServerDiscovery } from "@review/server-discovery.js";
+import {
+  isolatedEnv,
+  sourceCli,
+  stopServersUnder,
+} from "@review/server/background-server-test-utils.js";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { z } from "zod";
 
 import { runReviewAgentCli } from "./agent-cli.js";
@@ -17,6 +32,7 @@ import { type AuthoringTool, callAuthoringTool } from "./agent-client.js";
 import { ReviewApiClient } from "./client.js";
 import { createReviewApi } from "./http.js";
 import { serveReviewMcp } from "./mcp.js";
+import { callPublicTool, publicTool } from "./public-tools.js";
 import { ReviewStore } from "./store.js";
 
 const store = new ReviewStore(":memory:", {
@@ -676,3 +692,144 @@ it("names the agent from the MCP handshake, falling back to the session environm
     connection.mockRestore();
   }
 });
+
+describe("with no Desktop running", () => {
+  let root: string;
+  let env: NodeJS.ProcessEnv;
+
+  const home = () => env.DEV_REVIEW_HOME!;
+
+  beforeEach(async () => {
+    root = await realpath(await mkdtemp(path.join(tmpdir(), "wb-connect-")));
+    env = isolatedEnv(root);
+  });
+
+  afterEach(async () => {
+    await stopServersUnder(root);
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("starts the default headless server for a tool call when no Desktop is installed", async () => {
+    const connected = await agentClient.connectReviewInstance(
+      env,
+      {},
+      { desktopInstalled: () => false, cli: sourceCli },
+    );
+
+    const tools = (
+      await connected.client.read<AuthoringTool[]>("/authoring")
+    ).map(publicTool);
+
+    const list = tools.find((tool) => tool.name === "session_list")!;
+
+    expect(await callPublicTool(connected.client, list, {})).toEqual(
+      expect.any(Array),
+    );
+    expect(connected.instance).toBeUndefined();
+    expect(await readReviewServerDiscovery(home())).toMatchObject({
+      startedBy: "cli",
+    });
+  }, 60_000);
+
+  it.each([
+    ["an explicit selection that is not running", "selected"],
+    ["a broken instance record", "broken"],
+    ["several running and none selected", "several"],
+  ] as const)(
+    "keeps the old diagnosis for %s, even with no Desktop installed",
+    async (_case, kind) => {
+      const desktops = await fakeDesktops(kind, env);
+
+      try {
+        const connect = (installed: boolean) =>
+          agentClient
+            .connectReviewInstance(
+              env,
+              {},
+              { desktopInstalled: () => installed, cli: sourceCli },
+            )
+            .then(
+              () => "connected",
+              (error: Error) => error.message,
+            );
+
+        const before = await connect(true);
+
+        expect(before).not.toBe("connected");
+        expect(await connect(false)).toBe(before);
+        expect(await readReviewServerDiscovery(home())).toBeNull();
+      } finally {
+        for (const server of desktops) server.close();
+      }
+    },
+    30_000,
+  );
+
+  it("fails as before when a Desktop is installed but not running", async () => {
+    await expect(
+      agentClient.connectReviewInstance(
+        env,
+        {},
+        { desktopInstalled: () => true, cli: sourceCli },
+      ),
+    ).rejects.toThrow(
+      "Whiteboard `stable` is not running. Start it with `whiteboard app launch`, or pick another instance with `whiteboard instances`. No Whiteboard is running. For headless authoring, select a running server with --state-dir or DEV_REVIEW_SERVER_DIR.",
+    );
+    expect(await readReviewServerDiscovery(home())).toBeNull();
+  });
+});
+
+async function fakeDesktops(
+  kind: "selected" | "broken" | "several",
+  env: NodeJS.ProcessEnv,
+) {
+  const instances = path.join(
+    env.DEV_REVIEW_HOME!,
+    "review-desktop",
+    "instances",
+  );
+
+  await mkdir(instances, { recursive: true });
+
+  if (kind === "selected") {
+    env.DEV_REVIEW_INSTANCE = "preview";
+
+    return [];
+  }
+
+  if (kind === "broken") {
+    await writeFile(path.join(instances, "stable.json"), "{");
+
+    return [];
+  }
+
+  return Promise.all(
+    ["preview", "dev-other-0123456789ab"].map(async (key) => {
+      const instanceId = randomUUID();
+
+      const server = createServer((_request, response) =>
+        response.end(
+          JSON.stringify({ ok: true, instanceId, desktopAttached: true }),
+        ),
+      ).listen(0, "127.0.0.1");
+
+      await once(server, "listening");
+      const { port } = z.object({ port: z.number() }).parse(server.address());
+      await writeFile(
+        path.join(instances, `${key}.json`),
+        JSON.stringify({
+          version: REVIEW_DESKTOP_DISCOVERY_VERSION,
+          instanceId,
+          url: `http://127.0.0.1:${port}`,
+          appPid: process.pid,
+          serverPid: process.pid,
+          token: "token",
+          startedAt: 1,
+          key,
+        }),
+      );
+
+      return server;
+    }),
+  );
+}
