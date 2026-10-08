@@ -1,6 +1,0 @@
----
-foo: [bar, foobar]
-hello:
-  - "world"
-  - 'item'
-  - other

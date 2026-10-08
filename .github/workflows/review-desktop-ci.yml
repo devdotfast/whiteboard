@@ -7,8 +7,6 @@ on:
       - reopened
       - synchronize
       - ready_for_review
-    paths-ignore:
-      - "diffr/**"
   workflow_dispatch:
 
 permissions:
@@ -159,7 +157,11 @@ jobs:
       - name: Test
         run: |
           node --test "scripts/**/*.test.mjs"
-          pnpm -r --filter '!@dev.fast/diffr' --no-sort --workspace-concurrency=3 --if-present test
+          pnpm -r --no-sort --workspace-concurrency=3 --if-present test
+
+      - name: Bundled diffr integration
+        run: |
+          pnpm --filter @dev.fast/whiteboard exec vitest run --config vitest.integration.config.ts
 
       - name: Upload browser test diagnostics
         if: failure()

@@ -1,6 +1,0 @@
-# diffr is implemented in Rust; keep GitHub's language stats honest.
-sample_files/** linguist-vendored
-vendored_parsers/** linguist-vendored
-
-# This snapshot is compared byte-for-byte and must not change on Windows checkout.
-tests/fixtures/context-contracts/tsx-diffr-config-section/* text eol=lf

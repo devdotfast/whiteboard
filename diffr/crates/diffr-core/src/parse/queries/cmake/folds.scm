@@ -1,5 +1,0 @@
-((bracket_comment)+ @fold . (_))
-((bracket_comment_close)+ @fold . (_))
-((bracket_comment_content)+ @fold . (_))
-((bracket_comment_open)+ @fold . (_))
-((line_comment)+ @fold . (_))

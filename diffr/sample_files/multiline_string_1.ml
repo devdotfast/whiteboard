@@ -1,6 +1,0 @@
-let x =
-  "
-foo
-
-bar
-"
