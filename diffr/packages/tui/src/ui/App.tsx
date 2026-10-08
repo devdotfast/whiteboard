@@ -16,7 +16,7 @@ import { buildFileTree, flattenFileTree, parentDirectories, lineCounts } from "@
 import { matchesKey } from "./lib/keys";
 import { resizeSidebarWidth } from "./lib/sidebar";
 import { CodeRowView } from "./diff/CodeRowView";
-import type { ScopeFocus } from "@diffr/viewer/document/rows";
+import type { ScopeFocus } from "@diffr/viewer/viewport/cell";
 import {
   rowsForFile,
   type Layout,
