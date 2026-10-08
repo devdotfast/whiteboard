@@ -217,6 +217,21 @@ jobs:
           bun test src
           bun run build
           git diff --exit-code -- plugin
+      - working-directory: diffr/packages/consumer
+        run: |
+          bun run typecheck
+          bun test src
+      - working-directory: diffr/packages/pi
+        run: |
+          bun run typecheck
+          bun test src
+          bun run build
+      - working-directory: diffr/packages/opencode
+        run: bun run typecheck
+      - working-directory: diffr/packages/herdr
+        run: |
+          bun run typecheck
+          bun test src
 
   whiteboard_integration:
     name: Whiteboard integration with diffr
