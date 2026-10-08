@@ -476,7 +476,7 @@ export class Pane {
         : `${name} · file ${order.indexOf(currentFile) + 1} of ${order.length} · ${at.maxScroll ? Math.round((top / at.maxScroll) * 100) : 100}% · `;
       const loading = snapshot.complete ? "" : `${snapshot.loaded}/${inventory.length} loaded… `;
       const keys = this.filesView ? " j/k move · ⏎ open · \\ or ⌘B back"
-        : " [/] hunks · / search · ctrl-p files · \\ or ⌘B tree · V viewed · drag selects · y/Y copy";
+        : " [ ] changes · / search · ctrl-p files · \\ or ⌘B tree · V viewed · drag selects · y/Y copy";
       // The hints give way first, cut with an ellipsis; ? keys stays at the right end, and a click on it shows them all.
       const room = size.columns - measureTextWidth(KEYS_BUTTON);
       const text = `${this.message ? `${this.message} · ` : ""}${searched}${this.filesView ? "" : where}${read.viewed}/${read.total} viewed ${loading}${errors}${keys}`;

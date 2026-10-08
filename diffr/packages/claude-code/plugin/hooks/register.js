@@ -18750,7 +18750,7 @@ class Pane {
       const name = inventory[currentFile] ? filePath(inventory[currentFile].file).split("/").at(-1) : undefined;
       const where = name === undefined ? "" : `${name} · file ${order.indexOf(currentFile) + 1} of ${order.length} · ${at.maxScroll ? Math.round(top / at.maxScroll * 100) : 100}% · `;
       const loading = snapshot3.complete ? "" : `${snapshot3.loaded}/${inventory.length} loaded… `;
-      const keys = this.filesView ? " j/k move · ⏎ open · \\ or ⌘B back" : " [/] hunks · / search · ctrl-p files · \\ or ⌘B tree · V viewed · drag selects · y/Y copy";
+      const keys = this.filesView ? " j/k move · ⏎ open · \\ or ⌘B back" : " [ ] changes · / search · ctrl-p files · \\ or ⌘B tree · V viewed · drag selects · y/Y copy";
       const room = size.columns - measureTextWidth(KEYS_BUTTON);
       const text = `${this.message ? `${this.message} · ` : ""}${searched}${this.filesView ? "" : where}${read.viewed}/${read.total} viewed ${loading}${errors3}${keys}`;
       status.text(measureTextWidth(text) > room ? `${fit(text, room - 1)}…` : text, theme.muted).fill(room);

@@ -493,7 +493,7 @@ export function App({
         : (() => {
           // The hints give way first, cut with an ellipsis; ? keys stays at the right end and opens the Help menu.
           const room = Math.max(1, width - measureTextWidth(KEYS_BUTTON));
-          const text = `${message ? `${message} · ` : ""}${searched}${snapshot.loaded}/${inventory.length} files · ${progress.viewed}/${progress.total} viewed ${snapshot.complete ? "" : "loading…"} ${snapshot.errors.length ? `${snapshot.errors.length} errors` : ""}  [/] hunks · / search · ctrl-p files · ⌘B tree · V viewed · drag selects lines · y/Y copy · q quit`;
+          const text = `${message ? `${message} · ` : ""}${searched}${snapshot.loaded}/${inventory.length} files · ${progress.viewed}/${progress.total} viewed ${snapshot.complete ? "" : "loading…"} ${snapshot.errors.length ? `${snapshot.errors.length} errors` : ""}  [ ] changes · / search · ctrl-p files · ⌘B tree · V viewed · drag selects lines · y/Y copy · q quit`;
           return <box height={1} width={width} flexDirection="row">
             <text width={room} fg={theme.muted} selectable={false}>{measureTextWidth(text) > room ? `${fit(text, room - 1)}…` : text}</text>
             <text fg={menu === "Help" ? theme.bg : theme.accent} bg={menu === "Help" ? theme.accent : theme.bg} selectable={false}
