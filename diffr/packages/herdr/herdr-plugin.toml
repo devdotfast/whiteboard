@@ -1,0 +1,18 @@
+id = "diffr"
+name = "Diffr"
+version = "0.1.0"
+min_herdr_version = "0.7.5"
+description = "Review diffs beside an agent and add selected code to its draft"
+platforms = ["macos", "linux"]
+
+[[panes]]
+id = "review"
+title = "Diffr"
+placement = "split"
+command = ["sh", "-c", 'exec bun "$HERDR_PLUGIN_ROOT/src/main.ts"']
+
+[[panes]]
+id = "fullscreen"
+title = "Diffr"
+placement = "zoomed"
+command = ["sh", "-c", 'exec bun "$HERDR_PLUGIN_ROOT/src/main.ts"']
