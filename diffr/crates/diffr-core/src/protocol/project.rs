@@ -239,6 +239,7 @@ fn regions(result: &DiffResult, lhs_src: &str, rhs_src: &str) -> (Region, Region
         [&mut lhs[..], &mut rhs[..]],
         lhs_links.into_iter().chain(rhs_links),
     );
+    name_partners(&mut lhs, &ids.partners);
     (
         Region::root(ids.fresh_id(), lhs),
         Region::root(ids.fresh_id(), rhs),
@@ -275,6 +276,16 @@ fn link(sides: [&mut [Region]; 2], links: impl IntoIterator<Item = (u32, u32)>) 
         walk(side, &mut |region| {
             region.fold_state_id = find(&merged, region.fold_state_id);
         });
+    }
+}
+
+/// Give each paired lhs leaf the `id` of its rhs partner.
+fn name_partners(regions: &mut [Region], partners: &DftHashMap<u32, u32>) {
+    for region in regions {
+        match &mut region.node {
+            Node::Leaf { pair, .. } => *pair = partners.get(&region.id).copied(),
+            Node::Fold { children, .. } => name_partners(children, partners),
+        }
     }
 }
 
@@ -385,6 +396,9 @@ struct Ids {
     /// The `(alignment_id, fold_state_id)` of every paired leaf numbered so
     /// far, by its `LeafKey`.
     leaves: DftHashMap<LeafKey, (u32, u32)>,
+    /// The rhs partner of each paired lhs leaf, by the lhs leaf's `id`: known
+    /// only once the rhs is numbered, after the lhs leaves are built.
+    partners: DftHashMap<u32, u32>,
     /// The `fold_state_id` of every fold numbered so far, by the fold of the
     /// syntax node it was built on.
     folds: DftHashMap<SyntaxId, u32>,
@@ -399,6 +413,7 @@ impl Ids {
             next_id: 1,
             next_alignment: 0,
             leaves: DftHashMap::default(),
+            partners: DftHashMap::default(),
             folds: DftHashMap::default(),
             aligned,
         }
@@ -416,18 +431,21 @@ impl Ids {
         alignment
     }
 
-    /// A leaf's `(id, alignment_id, fold_state_id)`.
-    fn leaf(&mut self, key: Option<LeafKey>) -> (u32, u32, u32) {
+    /// A leaf's `(id, alignment_id, fold_state_id, pair)`. The second of a
+    /// pair names the first, whose own `id` is its `fold_state_id`; the first
+    /// gets its `pair` from `partners` once both sides are built.
+    fn leaf(&mut self, key: Option<LeafKey>) -> (u32, u32, u32, Option<u32>) {
         let id = self.fresh_id();
         let Some(key) = key else {
-            return (id, self.fresh_alignment(), id);
+            return (id, self.fresh_alignment(), id, None);
         };
         if let Some(&(alignment, state)) = self.leaves.get(&key) {
-            return (id, alignment, state);
+            self.partners.insert(state, id);
+            return (id, alignment, state, Some(state));
         }
         let alignment = self.fresh_alignment();
         self.leaves.insert(key, (alignment, id));
-        (id, alignment, id)
+        (id, alignment, id, None)
     }
 
     /// A fold's `(id, fold_state_id)`. A fold whose opposite is already
@@ -655,7 +673,7 @@ fn leaf_region(
             }
         }
     }
-    let (id, alignment_id, fold_state_id) = ids.leaf(leaf.key);
+    let (id, alignment_id, fold_state_id, pair) = ids.leaf(leaf.key);
     Region {
         id,
         fold_state_id,
@@ -673,6 +691,7 @@ fn leaf_region(
         visibility: Visibility::default(),
         node: Node::Leaf {
             alignment_id,
+            pair,
             changed,
         },
     }
@@ -1229,6 +1248,16 @@ mod tests {
             alignments.into_iter().collect::<Vec<_>>(),
             (0..=*lhs_leaves.keys().chain(rhs_leaves.keys()).max().unwrap()).collect::<Vec<_>>()
         );
+        // `pair` names the partner leaf, and nothing for a one-sided leaf.
+        let pair = |leaf: &Region| match leaf.node {
+            Node::Leaf { pair, .. } => pair,
+            Node::Fold { .. } => unreachable!("leaves only"),
+        };
+        for (own, other) in [(&lhs_leaves, &rhs_leaves), (&rhs_leaves, &lhs_leaves)] {
+            for (id, leaf) in own {
+                assert_eq!(pair(leaf), other.get(id).map(|partner| partner.id));
+            }
+        }
         let mut paired = 0;
         for (id, lhs_leaf) in &lhs_leaves {
             if let Some(rhs_leaf) = rhs_leaves.get(id) {

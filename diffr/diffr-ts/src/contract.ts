@@ -272,7 +272,13 @@ export const StructuralRegionSchema: z.ZodType<StructuralRegion> = z.lazy(() =>
 );
 
 export type StructuralNode =
-  | { kind: "leaf"; alignment_id: number; changed?: StructuralSpan[] }
+  | {
+      kind: "leaf";
+      alignment_id: number;
+      /** The partner leaf's `id` on the other side; absent when added or deleted. */
+      pair?: number;
+      changed?: StructuralSpan[];
+    }
   | {
       kind: "fold";
       children: StructuralRegion[];
@@ -287,6 +293,7 @@ export const StructuralNodeSchema: z.ZodType<StructuralNode> = z.lazy(() =>
     z.object({
       kind: z.literal("leaf"),
       alignment_id: structuralU32,
+      pair: structuralU32.optional(),
       changed: z.array(StructuralSpanSchema).optional(),
     }),
     z.object({

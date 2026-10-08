@@ -45,6 +45,8 @@ export interface LeafRegion extends RegionBase {
   kind: "leaf";
   /** Same value on the other side: the leaf whose rows line up with this one, one-to-one. Keys the row zip. */
   alignment_id: number;
+  /** The partner leaf's `id` on the other side; absent when added or deleted. */
+  pair?: number;
 }
 export interface FoldRegion extends RegionBase {
   kind: "fold";
@@ -64,7 +66,7 @@ const regionBase = z.object({
 });
 const region: z.ZodType<Region> = z.lazy(() =>
   z.discriminatedUnion("kind", [
-    regionBase.extend({ kind: z.literal("leaf"), alignment_id: uint, changed: z.array(span).default([]) })
+    regionBase.extend({ kind: z.literal("leaf"), alignment_id: uint, pair: uint.optional(), changed: z.array(span).default([]) })
       .transform((leaf) => ({ ...leaf, children: [] as Region[] })),
     regionBase.extend({ kind: z.literal("fold"), children: z.array(region), indent: sourcePos,
       syntax: z.object({ start: sourcePos, end: sourcePos }).optional() })
