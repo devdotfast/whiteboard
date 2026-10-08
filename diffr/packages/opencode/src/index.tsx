@@ -5,7 +5,7 @@ import { TextareaRenderable } from "@opentui/core";
 import { Diffr } from "./rpc";
 import type { BoxRenderable, KeyEvent, MouseEvent } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/solid";
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show } from "solid-js";
 import { openComparison, type Comparison } from "@diffr/consumer/process";
 import { opened } from "@diffr/consumer/open-tool";
 import { receiveOpen, type OpenRequest } from "./bridge";
@@ -157,9 +157,10 @@ export default Plugin.define({ id: "diffr", async setup(api) {
       backgroundColor={api.theme.background.base} onSizeChange={() => setHeight(box.height)}
       onKeyDown={key} onMouse={mouse}>
       <text height={1} wrapMode="none">{props.panel.presentation === "fullscreen" ? "Split view" : "Full screen"} · F6 · esc chat</text>
-      <For each={frame().lines}>{line => <text height={1} flexShrink={0} wrapMode="none" selectable={false}>
-        <For each={line.segments}>{segment => <span style={{ fg: frame().colors[segment[1]], bg: frame().colors[segment[2]], bold: !!segment[3] }}>{segment[0]}</span>}</For>
-      </text>}</For>
+      {/* Keep row renderables alive while OpenTUI captures one during a drag. */}
+      <Index each={frame().lines}>{line => <text height={1} flexShrink={0} wrapMode="none" selectable={false}>
+        <For each={line().segments}>{segment => <span style={{ fg: frame().colors[segment[1]], bg: frame().colors[segment[2]], bold: !!segment[3] }}>{segment[0]}</span>}</For>
+      </text>}</Index>
     </box>;
   }
   api.ui.slot({ append: "session.panel", render: panel =>

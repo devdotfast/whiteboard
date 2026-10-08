@@ -7,7 +7,7 @@ import type { Context, KeymapCommand, PanelInput, SlotClaim } from "@opencode/pl
 import plugin from "../src/index";
 
 // Exercise real OpenTUI input dispatch and editor content, with only the host panel API replaced.
-test("native panel selection appends to the draft, returns from fullscreen, and restores review state", async () => {
+test.each(["unified", "split"] as const)("%s region drags survive redraws and append both sides to the draft", async layout => {
   const [visible, setVisible] = createSignal(false);
   const [fullscreen, setFullscreen] = createSignal(false);
   const [focused, setFocused] = createSignal(false);
@@ -58,21 +58,48 @@ test("native panel selection appends to the draft, returns from fullscreen, and 
     host.mockInput.pressKey("F6");
     await host.flush();
     expect(fullscreen()).toBe(true);
+    if (layout === "split") { host.mockInput.pressKey("s"); await host.flush(); }
     const rows = host.captureCharFrame().split("\n");
-    const selectedRow = rows.findIndex(row => row.includes('missing config in'));
-    expect(selectedRow).toBeGreaterThan(0);
-    await host.mockMouse.drag(45, selectedRow, 100, selectedRow);
+    const start = rows.findIndex(row => row.includes("for (const plugin"));
+    const middle = rows.findIndex(row => row.includes("Number(plugin.lines)"));
+    const end = rows.findIndex(row => row.includes("plugin.enabled"));
+    expect(start).toBeGreaterThan(0);
+    // Real drags span rendered frames. Keep the button down across redraws.
+    await host.mockMouse.pressDown(45, start);
+    await host.flush();
+    await host.mockMouse.emitMouseEvent("drag", 45, middle);
+    await host.flush();
+    await host.mockMouse.emitMouseEvent("drag", 100, end);
+    await host.flush();
+    await host.mockMouse.release(100, end);
     await host.flush();
     expect(host.captureCharFrame()).toContain("Add to chat");
     host.mockInput.pressEnter();
     await host.flush();
     expect(draft.plainText).toStartWith("KEEP THIS DRAFT\n");
-    expect(draft.plainText).toContain("missing config in");
+    expect(draft.plainText).toContain("-    plugin.lines = Number(plugin.lines);");
+    expect(draft.plainText).toContain("+    plugin.lines = Number(plugin.shape.lines);");
+    expect(draft.plainText).toContain("     plugin.enabled = true;");
     expect(visible()).toBe(false);
     expect(draft.focused).toBe(true);
     commands.get("diffr.open")!.run();
     await host.flush();
     expect(host.captureCharFrame()).toContain("Added");
+    // The same region dragged in reverse must produce the same patch, including both sides.
+    const firstDraft = draft.plainText;
+    const expected = firstDraft.slice("KEEP THIS DRAFT".length);
+    commands.get("diffr.focus")!.run();
+    await host.flush();
+    await host.mockMouse.pressDown(100, end);
+    await host.flush();
+    await host.mockMouse.emitMouseEvent("drag", 100, middle);
+    await host.flush();
+    await host.mockMouse.emitMouseEvent("drag", 45, start);
+    await host.flush();
+    await host.mockMouse.release(45, start);
+    host.mockInput.pressEnter();
+    await host.flush();
+    expect(draft.plainText.slice(firstDraft.length)).toBe(expected);
     expect(errors).toEqual([]);
   } finally { await cleanup?.(); host.renderer.destroy(); }
 }, 10000);
