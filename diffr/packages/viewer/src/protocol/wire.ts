@@ -124,6 +124,7 @@ export type Span = z.infer<typeof span>;
 export type SyntaxSpan = z.infer<typeof syntaxSpan>;
 export type Stats = z.infer<typeof stats>;
 export type LineCounts = z.infer<typeof lineCounts>;
+export type ComparisonEnd = z.infer<typeof snapshot>;
 export type DiffEvent = z.infer<typeof eventSchema>;
 export type FileEvent = Extract<DiffEvent, { type: "file" }>;
 /** A file record that carries a diff; failures are kept separately by the store. */

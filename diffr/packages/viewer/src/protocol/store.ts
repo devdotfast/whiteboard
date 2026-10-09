@@ -1,9 +1,8 @@
 /** Hold streamed files separately from presentation state and notify React in batches. */
-import { fileIdentity, filePath, type FileChange, type DiffEvent, type DiffFile } from "./wire";
-type StartEvent = Extract<DiffEvent, { type: "start" }>;
+import { fileIdentity, filePath, type ComparisonEnd, type FileChange, type DiffEvent, type DiffFile } from "./wire";
 export interface Snapshot {
   /** The two ends of the comparison, from the start event. */
-  comparison: { lhs: StartEvent["lhs"]; rhs: StartEvent["rhs"] } | null;
+  comparison: { lhs: ComparisonEnd; rhs: ComparisonEnd } | null;
   /** The manifest, in comparison order. `files` and `failures` are indexed like it. */
   inventory: FileChange[];
   /** Each manifest file's diff, once it arrives. */
