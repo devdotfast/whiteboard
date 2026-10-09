@@ -188,6 +188,15 @@ enum ConfigCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Choose the agents that get the diffr plugin and the summaries provider
+    Init {
+        /// Print the questions and the answers' schema, or apply ANSWERS
+        #[arg(long)]
+        json: bool,
+        /// Answers as JSON: a file, or - for stdin
+        #[arg(requires = "json")]
+        answers: Option<PathBuf>,
+    },
     /// Convert the v1 settings supported by Whiteboard to config version 2
     Migrate {
         #[arg(long)]
@@ -673,6 +682,9 @@ fn run_config(config: &ConfigArgs) -> Result<i32> {
                 Ok(serde_json::json!({ "changed": changed }))
             })();
             return config_result(&mut stdout, result, *json);
+        }
+        Some(ConfigCommand::Init { json, answers }) => {
+            return crate::init::run(*json, answers.as_deref())
         }
         Some(ConfigCommand::Migrate { json }) => {
             let result = config::global_path()
