@@ -20,6 +20,8 @@ import type { ThemeSet } from "../diffr/theme";
 import {
   agentReference,
   copySelection,
+  selectedRanges,
+  selectionLead,
   selectionBounds,
   type SourceSelection,
 } from "@diffr/viewer/document/selection";
@@ -34,6 +36,8 @@ import { litRuns, viewedBox, viewedHint } from "@diffr/viewer/viewport/cell";
 import { pickerLines } from "@diffr/viewer/viewport/picker";
 /** Pinned to the status line's right end, so cut hints never cut the way to the key list. */
 const KEYS_BUTTON = " ? keys ";
+/** On the selection bar, which takes the status line while lines are selected. */
+const AGENT_BUTTON = " Y Copy for agent ";
 const fit = (text: string, width: number) =>
   sliceTextByWidth(text, 0, width).text;
 /** Kitty reports the base key; use the typed sequence for printables. */
@@ -101,6 +105,7 @@ export function App({
       setMessage("Copied source lines");
     }
   };
+  const selected = useMemo(() => (selection ? selectedRanges(files, rows, selection) : []), [files, rows, selection]);
   const copyForAgent = () => {
     if (!selection) return;
     if (!snapshot.comparison) throw new Error("A selection exists before diffr named the comparison");
@@ -484,7 +489,21 @@ export function App({
         ))}
       </box>}
       {found && "prompt" in found
-        ? <text height={1} fg={theme.fg} selectable={false}>{fit(`/${found.prompt}▏ · ${found.count} matches · ⏎ go · esc cancel`, width)}</text>
+        ? <text height={1} fg={theme.fg} selectable={false}>{fit(`/${found.prompt}▏ · ${found.count} matches · enter go · esc cancel`, width)}</text>
+        : selected.length ? (() => {
+          // The selection bar, bright so it catches the eye: what is selected, then the button that copies it for an agent.
+          const lead = fit(selectionLead(message, selected, width - measureTextWidth(AGENT_BUTTON)),
+            Math.max(0, width - measureTextWidth(AGENT_BUTTON)));
+          const room = width - measureTextWidth(lead) - measureTextWidth(AGENT_BUTTON);
+          const hints = " esc clear";
+          return <box height={1} width={width} flexDirection="row" backgroundColor={theme.accent}>
+            <text width={measureTextWidth(lead)} fg={theme.bg} bg={theme.accent} attributes={TextAttributes.BOLD} selectable={false}>{lead}</text>
+            <text width={measureTextWidth(AGENT_BUTTON)} fg={theme.accent} bg={theme.bg} attributes={TextAttributes.BOLD} selectable={false}
+              onMouseUp={copyForAgent}>{AGENT_BUTTON}</text>
+            {room > 0 && <text width={room} fg={theme.bg} bg={theme.accent} selectable={false}>
+              {measureTextWidth(hints) > room ? `${fit(hints, room - 1)}…` : hints}</text>}
+          </box>;
+        })()
         : (() => {
           // The hints give way first, cut with an ellipsis; ? keys stays at the right end and opens the Help menu.
           const room = Math.max(1, width - measureTextWidth(KEYS_BUTTON));
