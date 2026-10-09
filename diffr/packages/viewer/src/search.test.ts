@@ -30,17 +30,31 @@ test("/ opens a prompt that takes every key, counts as it goes, and Enter lands 
   expect(viewer.prompting).toBe(false);
   expect(viewer.searchState()).toEqual({ pattern: "keep", at: 1, total: 2, files: 1 });
   expect(top().left?.lineNumber).toBe(7);
-  expect(viewer.highlight(0, top().key, "left")).toEqual({ pattern: "keep", current: true });
-  expect(viewer.highlight(0, top().key, "right")).toEqual({ pattern: "keep", current: false });
+  const litBg = (spans: { text: string; bg?: string }[]) => spans.filter((span) => span.text === "keep").map((span) => span.bg);
+  expect(litBg(top().left!.spans)).toEqual([dark.searchCurrent]);
+  expect(litBg(top().right!.spans)).toEqual([dark.searchMatch]);
+});
+
+test("of several matches on one line, only the one the view is on is solid, in a different hue from the rest", () => {
+  const { viewer, type, top } = open();
+  expect(dark.searchCurrent).not.toBe(dark.searchMatch);
+  type("/", "e", "v", "e", "n", "t", "return");
+  type("/", "e", "return");
+  const line = () => top().left!.spans;
+  while (!line().map((span) => span.text).join("").includes("if event.open")) type("n");
+  const lit = () => line().filter((span) => span.lit).map((span) => span.bg);
+  expect(lit()).toEqual([dark.searchCurrent, dark.searchMatch, dark.searchMatch]);
+  type("n");
+  expect(lit()).toEqual([dark.searchMatch, dark.searchCurrent, dark.searchMatch]);
 });
 
 test("n opens the fold hiding the next match, and N walks back, wrapping at either end", () => {
   const { viewer, type, top, shown } = open();
-  expect(shown().some((row) => row.right?.spans.some((span) => span.text.includes("two();")))).toBe(false);
+  expect(shown().some((row) => row.right?.spans.map((span) => span.text).join("").includes("two();"))).toBe(false);
   type("/", "t", "w", "o", "(", "return");
   expect(viewer.searchState()).toMatchObject({ at: 1, total: 2 });
   expect(top().right?.lineNumber).toBe(12);
-  expect(shown().some((row) => row.right?.spans.some((span) => span.text.includes("two();")))).toBe(true);
+  expect(shown().some((row) => row.right?.spans.map((span) => span.text).join("").includes("two();"))).toBe(true);
   type("n");
   expect(viewer.searchState()).toMatchObject({ at: 2 });
   type("n");

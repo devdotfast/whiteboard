@@ -60,3 +60,30 @@ test("viewed files sink below the rest of the matches", () => {
   press({ key: "p", ctrl: true }, "s");
   expect(viewer.pickerState()!.picks.at(-1)!.path).toBe("src/model/store.ts");
 });
+
+test("⌘P opens the picker too, where the terminal passes Cmd through", () => {
+  const { viewer, press } = open(files());
+  press({ key: "p", meta: true });
+  expect(viewer.picking).toBe(true);
+});
+
+test("]c and [c go to the next and previous change, as in vim; ] or [ with anything else does nothing", () => {
+  const changed = ["a.ts", "b.ts", "c.ts", "d.ts"].map((path) => {
+    const file = createTestDiffFile();
+    file.file.lhs!.path = file.file.rhs!.path = path;
+    return file;
+  });
+  const { viewer, press, topFile } = open(changed);
+  press("]", "c");
+  const first = topFile();
+  expect(first.hunkStart).toBe(true);
+  press("]", "c");
+  const second = topFile();
+  expect(second.hunkStart).toBe(true);
+  expect(second.key).not.toBe(first.key);
+  press("[", "c");
+  expect(topFile().key).toBe(first.key);
+  press("]", "j");
+  expect(topFile().key).toBe(first.key);
+  expect(viewer.chording).toBe(false);
+});
