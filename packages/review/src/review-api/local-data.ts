@@ -1409,6 +1409,7 @@ export class LocalReviewData {
     return {
       pending,
       comparison: entry.partial ?? {
+        counted: false,
         files: [],
         fileSources: new Map(),
         alignments: new Map(),
@@ -1496,16 +1497,21 @@ export class LocalReviewData {
   }
 
   changes(pins: Pins): Promise<LocalVcsDiffFileSummary[]>;
-  changes(pins: Pins, file: string): Promise<string>;
+  changes(pins: Pins, file: string, previousPath?: string): Promise<string>;
   changes(
     pins: Pins,
     file?: string,
+    previousPath?: string,
   ): Promise<LocalVcsDiffFileSummary[] | string>;
-  async changes(pins: Pins, file?: string) {
+  async changes(pins: Pins, file?: string, previousPath?: string) {
     if (file === undefined) return this.summaries(pins);
     checkRelativePath(file);
 
-    return this.rawPatch(pins, { paths: [file] });
+    if (previousPath) checkRelativePath(previousPath);
+
+    return this.rawPatch(pins, {
+      paths: previousPath ? [previousPath, file] : [file],
+    });
   }
   private async summaries(pins: Pins) {
     if (pins.worktreeRevision) {

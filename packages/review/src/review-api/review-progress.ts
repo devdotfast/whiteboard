@@ -81,6 +81,8 @@ export async function reviewProgress(
     ? (partial ?? (await data.coverage(snapshot.reviewId, pins, mode)))
     : { files: [], fileSources: new Map(), alignments: new Map() };
 
+  const counting = !!partial && !comparison.counted;
+
   signal.throwIfAborted();
 
   const documentKey = JSON.stringify(pins);
@@ -98,7 +100,10 @@ export async function reviewProgress(
     if (partial) {
       const state = data.coverageSnapshot(snapshot.reviewId, own, mode);
 
-      if (state.pending) return undefined;
+      if (state.pending)
+        return state.comparison.counted
+          ? Promise.resolve(state.comparison)
+          : undefined;
     }
 
     loading = data.coverage(snapshot.reviewId, own, mode);
@@ -162,7 +167,7 @@ export async function reviewProgress(
 
     // Context-only files are absent from the changed-file stream. Read both pins
     // and require equality rather than inventing correspondence for missing diffs.
-    if (!file && partial && !own) {
+    if (!file && counting && !own) {
       pendingSources.add(key);
 
       return [];
@@ -228,9 +233,9 @@ export async function reviewProgress(
         return {
           ...lens,
           ...resolved,
-          pending: !!partial,
+          pending: counting,
           unavailable:
-            partial || resolved.fileCount
+            counting || resolved.fileCount
               ? undefined
               : "No files match these targets",
         };
@@ -257,7 +262,7 @@ export async function reviewProgress(
     ),
   );
 
-  const uncategorized = partial
+  const uncategorized = counting
     ? []
     : uncategorizedSources(
         files,
@@ -283,15 +288,15 @@ export async function reviewProgress(
           )?.path ?? source.file,
       ),
     ).size,
-    pending: !!partial,
+    pending: counting,
     unavailable:
-      partial || uncategorized.length
+      counting || uncategorized.length
         ? undefined
         : "All changed lines are covered by lenses",
   });
 
   const progress: ReviewProgress = {
-    complete: !partial,
+    complete: !counting,
     files,
     referenceFiles,
     lenses,

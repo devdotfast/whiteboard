@@ -12,7 +12,11 @@ import { coverageProgress, coverageSources } from "@review/viewed-coverage.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ReviewApiClient } from "./client.js";
-import { foldedChanges } from "./comparison-coverage.js";
+import {
+  type ComparisonCoverage,
+  comparisonCoverage,
+  foldedChanges,
+} from "./comparison-coverage.js";
 import { UNCATEGORIZED_LENS_ID } from "./diff-lenses.js";
 import { createReviewApi } from "./http.js";
 import { LocalReviewData } from "./local-data.js";
@@ -247,7 +251,7 @@ const records: {
   { path: "docs/readme.md", diff: plainDiff(2) },
 ];
 
-async function progressApi() {
+async function progressApi(beforeFiles?: () => Promise<void>) {
   const run = <Operation>(operation: Operation) => store.execute({ operation });
 
   const { reviewId } = await run({
@@ -271,6 +275,26 @@ async function progressApi() {
     snapshot,
     pins: snapshot.pins!,
   }));
+  vi.spyOn(data, "changes").mockImplementation((async (
+    _pins: typeof pins,
+    file?: string,
+  ) =>
+    file
+      ? file === "src/api.rs"
+        ? "@@ -1 +1 @@\n-old\n+new\n@@ -2,0 +3,3 @@\n+test1\n+test2\n+test3\n"
+        : "@@ -1 +1 @@\n-old\n+new\n"
+      : records.map(({ path }) => ({
+          path,
+          status: "modified",
+          additions: path === "src/api.rs" ? 4 : 1,
+          deletions: 1,
+        }))) as typeof data.changes);
+  vi.spyOn(data, "file").mockImplementation(async (at, side, file) => ({
+    file,
+    side,
+    commit: at[side],
+    text: text(file === "src/api.rs" && side === "head" ? 6 : 2),
+  }));
   vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
     yield {
       type: "start",
@@ -282,6 +306,8 @@ async function progressApi() {
         status: "modified" as const,
       })),
     } satisfies StructuralDiffEvent;
+
+    await beforeFiles?.();
 
     for (const { path, diff } of records)
       yield { type: "file", file: ref(path), diff };
@@ -296,7 +322,7 @@ async function progressApi() {
       app.request(String(url).replace("http://review/reviews-api", ""), init),
   );
 
-  return { reviewId, client };
+  return { reviewId, client, data };
 }
 
 it("progress counts folded changes as done, overall, per lens and uncategorized", async () => {
@@ -352,6 +378,180 @@ it("progress counts folded changes as done, overall, per lens and uncategorized"
       viewed.lenses.find((lens) => lens.id === "lens-1")!.sources,
     ).state,
   ).toBe("viewed");
+});
+
+it("counts all changes before plugins finish and preserves viewed marks as folds arrive", async () => {
+  let release!: () => void;
+
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  const { reviewId, client, data } = await progressApi(() => gate);
+
+  try {
+    const initial = await vi.waitFor(async () => {
+      const progress = await client.read<ReviewProgress>(
+        `/${reviewId}/progress?wait=false`,
+      );
+
+      expect(progress.complete).toBe(true);
+
+      return progress;
+    });
+
+    expect(initial.lenses.every((lens) => !lens.pending)).toBe(true);
+    expect(coverageProgress(initial.files).remaining).toEqual({
+      additions: 7,
+      deletions: 4,
+    });
+
+    const uncategorized = initial.lenses.find(
+      (lens) => lens.id === UNCATEGORIZED_LENS_ID,
+    )!;
+
+    expect(
+      coverageProgress(initial.files, uncategorized.sources).remaining,
+    ).toEqual({ additions: 1, deletions: 1 });
+
+    const file = initial.files.find((file) => file.path === "docs/readme.md")!;
+
+    const marked = await client.post<ReviewProgress>(`/${reviewId}/progress`, {
+      mode: "structural",
+      version: store.read(reviewId).version,
+      viewed: true,
+      files: [
+        {
+          path: file.path,
+          fingerprint: file.fingerprint,
+          sources: uncategorized.sources,
+        },
+      ],
+    });
+
+    expect(coverageProgress(marked.files, uncategorized.sources).state).toBe(
+      "viewed",
+    );
+    release();
+    await data.coverage(reviewId, pins, "structural");
+    const final = await client.read<ReviewProgress>(`/${reviewId}/progress`);
+    expect(coverageProgress(final.files).total).toEqual({
+      additions: 7,
+      deletions: 4,
+    });
+    expect(coverageProgress(final.files).remaining).toEqual({
+      additions: 2,
+      deletions: 2,
+    });
+    expect(coverageProgress(final.files, uncategorized.sources).state).toBe(
+      "viewed",
+    );
+  } finally {
+    release();
+    data.close();
+  }
+});
+
+it("keeps Git's rename identity and counts when diffr emits separate deletion and addition records", async () => {
+  const data = new LocalReviewData(store);
+  vi.spyOn(data, "changes").mockImplementation((async (
+    _pins: typeof pins,
+    file?: string,
+  ) => {
+    if (!file)
+      return [
+        {
+          path: "new.ts",
+          previousPath: "old.ts",
+          status: "renamed",
+          additions: 1,
+          deletions: 1,
+        },
+      ];
+
+    return "@@ -2 +2 @@\n-old\n+new\n";
+  }) as typeof data.changes);
+  vi.spyOn(data, "file").mockImplementation(async (at, side, file) => ({
+    file,
+    side,
+    commit: at[side],
+    text: `context\n${side}\ncontext`,
+  }));
+  const deleted = { lhs: { path: "old.ts", oid: "base", mode: "100644" } };
+  const added = { rhs: { path: "new.ts", oid: "head", mode: "100644" } };
+  vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
+    yield {
+      type: "start",
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
+      lhs: { type: "revision", rev: pins.base },
+      rhs: { type: "revision", rev: pins.head },
+      files: [
+        { file: deleted, status: "deleted" },
+        { file: added, status: "added" },
+      ],
+    };
+    yield {
+      type: "file",
+      file: deleted,
+      diff: {
+        type: "text",
+        lhs: {
+          text: "context\nbase\ncontext",
+          root: root([leaf(1, 1, [0, 3])]),
+        },
+        structural_changes: { base: [[0, 3]], head: [] },
+        stats: {
+          textual: { added: 0, removed: 3 },
+          visible: { added: 0, removed: 3 },
+        },
+      },
+    };
+    yield {
+      type: "file",
+      file: added,
+      diff: hideFile({
+        type: "text",
+        rhs: {
+          text: "context\nhead\ncontext",
+          root: root([leaf(2, 2, [0, 3])]),
+        },
+        structural_changes: { base: [], head: [[0, 3]] },
+        stats: {
+          textual: { added: 3, removed: 0 },
+          visible: { added: 0, removed: 0 },
+        },
+      }),
+    };
+  });
+  const snapshots: ComparisonCoverage[] = [];
+
+  const final = await comparisonCoverage(
+    data,
+    "review",
+    pins,
+    "structural",
+    new AbortController().signal,
+    (snapshot) => snapshots.push(snapshot),
+  );
+
+  expect(final.files).toHaveLength(1);
+  expect(final.files[0]).toMatchObject({
+    path: "new.ts",
+    previousPath: "old.ts",
+  });
+  expect(coverageProgress(final.files).total).toEqual({
+    additions: 1,
+    deletions: 1,
+  });
+  expect(coverageProgress(final.files).remaining).toEqual({
+    additions: 0,
+    deletions: 1,
+  });
+  expect(coverageProgress(snapshots[0].files).remaining).toEqual({
+    additions: 1,
+    deletions: 1,
+  });
+  data.close();
 });
 
 function root(children: StructuralRegion[]): StructuralRegion {

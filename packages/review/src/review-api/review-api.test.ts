@@ -2067,6 +2067,17 @@ it("keeps reference coverage apart by pins: one path, changed under one comparis
   const { reviewProgress } = await import("./review-progress.js");
   const { reviewId } = await create();
   const data = new LocalReviewData(store);
+  vi.spyOn(data, "changes").mockImplementation((async (
+    at: typeof pins,
+    file?: string,
+  ) =>
+    file
+      ? "@@ -0,0 +1,3 @@\n+first\n+second\n+third\n"
+      : at.base === at.head
+        ? []
+        : [
+            { path: "a.ts", status: "modified", additions: 3, deletions: 0 },
+          ]) as typeof data.changes);
   const text = "first\nsecond\nthird";
   const changed = { ...pins, base: "other-base", head: "other-head" };
   const same = { repositoryId: pins.repositoryId, head: "other-head" };
@@ -2171,6 +2182,15 @@ it("preserves unchanged partial file coverage across pins and rejects stale writ
   const { reviewProgress } = await import("./review-progress.js");
   const { reviewId } = await create();
   const data = new LocalReviewData(store);
+  vi.spyOn(data, "changes").mockImplementation((async (
+    _pins: typeof pins,
+    file?: string,
+  ) =>
+    file
+      ? "@@ -2 +2 @@\n-old\n+second\n"
+      : [
+          { path: "a.ts", status: "modified", additions: 1, deletions: 1 },
+        ]) as typeof data.changes);
   let head = "first\nsecond\ncontext";
   let base = "first\nold\ncontext";
   vi.spyOn(data, "resolveSource").mockImplementation(async (snapshot) => ({
@@ -2302,6 +2322,21 @@ it("counts readable files when the comparison includes a non-UTF-8 fixture", asy
   const { reviewProgress } = await import("./review-progress.js");
   const { reviewId } = await create();
   const data = new LocalReviewData(store);
+  vi.spyOn(data, "changes").mockImplementation((async (
+    _pins: typeof pins,
+    file?: string,
+  ) =>
+    file
+      ? "@@ -0,0 +1 @@\n+source\n"
+      : [
+          { path: "a.ts", status: "added", additions: 1, deletions: 0 },
+        ]) as typeof data.changes);
+  vi.spyOn(data, "file").mockImplementation(async (at, side, file) => ({
+    file,
+    side,
+    commit: at[side],
+    text: "source",
+  }));
   vi.spyOn(data, "resolveSource").mockImplementation(async (snapshot) => ({
     snapshot,
     pins: snapshot.pins!,
@@ -2353,6 +2388,7 @@ it("still reports structural read failures", async () => {
   const { reviewProgress } = await import("./review-progress.js");
   const { reviewId } = await create();
   const data = new LocalReviewData(store);
+  vi.spyOn(data, "changes").mockResolvedValue([]);
   vi.spyOn(data, "resolveSource").mockImplementation(async (snapshot) => ({
     snapshot,
     pins: snapshot.pins!,
@@ -2461,8 +2497,8 @@ it("textual coverage uses Git ranges without launching diffr", async () => {
 
   expect(structuralCatalog[0].diffStats).toEqual({
     fileCount: 1,
-    additions: 0,
-    deletions: 0,
+    additions: 1,
+    deletions: 1,
   });
 
   const structuralProgress = await (
@@ -2470,6 +2506,10 @@ it("textual coverage uses Git ranges without launching diffr", async () => {
   ).json();
 
   expect(coverageProgress(structuralProgress.files).total).toEqual({
+    additions: 1,
+    deletions: 1,
+  });
+  expect(coverageProgress(structuralProgress.files).remaining).toEqual({
     additions: 0,
     deletions: 0,
   });
@@ -2495,6 +2535,21 @@ it("resolves file lenses to whole changed files, preserves empty groups, and sha
       targets: [{ kind: "files", patterns }],
     });
   const data = new LocalReviewData(store);
+  vi.spyOn(data, "changes").mockImplementation((async (
+    _pins: typeof pins,
+    file?: string,
+  ) =>
+    file
+      ? "@@ -1 +1 @@\n-base\n+head\n"
+      : [
+          {
+            path: "guide/intro.md",
+            previousPath: "docs/old.md",
+            status: "renamed",
+            additions: 1,
+            deletions: 1,
+          },
+        ]) as typeof data.changes);
   vi.spyOn(data, "resolveSource").mockImplementation(async (snapshot) => ({
     snapshot,
     pins: snapshot.pins!,
@@ -2615,6 +2670,15 @@ it("validates range lens evidence and scopes progress and Uncategorized to disti
     },
   });
   const data = new LocalReviewData(store);
+  vi.spyOn(data, "changes").mockImplementation((async (
+    _pins: typeof pins,
+    file?: string,
+  ) =>
+    file
+      ? "@@ -1,3 +1,3 @@\n-base1\n-base2\n-base3\n+head1\n+head2\n+head3\n"
+      : [
+          { path: "src/a.ts", status: "modified", additions: 3, deletions: 3 },
+        ]) as typeof data.changes);
   vi.spyOn(data, "resolveSource").mockImplementation(async (snapshot) => ({
     snapshot,
     pins: snapshot.pins!,
@@ -2740,6 +2804,21 @@ it("returns coverage and lenses after initial files without requesting summary e
   const { reviewProgress } = await import("./review-progress.js");
   const { reviewId } = await create();
   const data = new LocalReviewData(store);
+  vi.spyOn(data, "changes").mockImplementation((async (
+    _pins: typeof pins,
+    file?: string,
+  ) =>
+    file
+      ? "@@ -0,0 +1 @@\n+added\n"
+      : [
+          { path: "a.ts", status: "added", additions: 1, deletions: 0 },
+        ]) as typeof data.changes);
+  vi.spyOn(data, "file").mockImplementation(async (at, side, file) => ({
+    file,
+    side,
+    commit: at[side],
+    text: "added",
+  }));
   vi.spyOn(data, "resolveSource").mockImplementation(async (snapshot) => ({
     snapshot,
     pins: snapshot.pins!,
@@ -3031,6 +3110,7 @@ it("Home reads persisted counts without scheduling comparisons, and changed pins
 it("shares pending comparison work even when more than 32 reviews are opened", async () => {
   const { reviewId } = await create();
   const data = new LocalReviewData(store);
+  vi.spyOn(data, "changes").mockResolvedValue([]);
   let release!: () => void;
 
   const gate = new Promise<void>((resolve) => {

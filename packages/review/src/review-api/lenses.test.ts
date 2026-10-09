@@ -303,6 +303,28 @@ it("reports the changed lines no lens selects after each lens write", async () =
   const api = changed("src/api.ts", "one\ntwo"),
     readme = changed("docs/readme.md", "intro");
 
+  vi.spyOn(data, "changes").mockImplementation((async (
+    _pins: typeof pins,
+    file?: string,
+  ) =>
+    file
+      ? file === "src/api.ts"
+        ? "@@ -1,2 +1,2 @@\n-one\n-two\n+one\n+two\n"
+        : "@@ -1 +1 @@\n-intro\n+intro\n"
+      : [
+          {
+            path: "src/api.ts",
+            status: "modified",
+            additions: 2,
+            deletions: 2,
+          },
+          {
+            path: "docs/readme.md",
+            status: "modified",
+            additions: 1,
+            deletions: 1,
+          },
+        ]) as typeof data.changes);
   vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
     yield {
       type: "start",

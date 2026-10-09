@@ -29,6 +29,8 @@ const hash = (parts: (string | null)[]) =>
   createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 
 export interface ComparisonCoverage {
+  /** All Git changes are counted, even if folding is still loading. */
+  counted?: boolean;
   files: CoverageFile[];
   fileSources: Map<string, FileLineRange[]>;
   alignments: Map<string, readonly AlignmentRow[]>;
@@ -42,201 +44,220 @@ export async function comparisonCoverage(
   mode: CoverageMode,
   signal: AbortSignal,
   publish?: (coverage: ComparisonCoverage) => void,
-) {
+): Promise<ComparisonCoverage> {
   const fileSources = new Map<string, FileLineRange[]>();
   const alignments = new Map<string, readonly AlignmentRow[]>();
 
   const files: CoverageFile[] = [];
 
-  if (mode === "textual") {
-    for (const file of await data.changes(pins)) {
-      signal.throwIfAborted();
-      const patch = await data.changes(pins, file.path);
-      const changed = emptyCoverage();
+  for (const file of await data.changes(pins)) {
+    signal.throwIfAborted();
+    const patch = await data.changes(pins, file.path, file.previousPath);
+    const changed = emptyCoverage();
 
-      for (const hunk of parseUnifiedPatch(file.path, patch))
-        for (const line of hunk.lines) {
-          if (line.kind === "add")
-            changed.head.push([line.newLine! - 1, line.newLine!]);
+    for (const hunk of parseUnifiedPatch(file.path, patch))
+      for (const line of hunk.lines) {
+        if (line.kind === "add")
+          changed.head.push([line.newLine! - 1, line.newLine!]);
 
-          if (line.kind === "remove")
-            changed.base.push([line.oldLine! - 1, line.oldLine!]);
-        }
+        if (line.kind === "remove")
+          changed.base.push([line.oldLine! - 1, line.oldLine!]);
+      }
 
-      changed.base = unionIntervals(changed.base);
-      changed.head = unionIntervals(changed.head);
+    changed.base = unionIntervals(changed.base);
+    changed.head = unionIntervals(changed.head);
 
-      const [base, head] = await Promise.all([
-        file.status === "added"
-          ? null
-          : data
-              .file(pins, "base", file.previousPath ?? file.path)
-              .then((value) => value.text)
-              .catch(() => null),
-        file.status === "deleted"
-          ? null
-          : data
-              .file(pins, "head", file.path)
-              .then((value) => value.text)
-              .catch(() => null),
-      ]);
+    const [base, head] = await Promise.all([
+      file.status === "added"
+        ? null
+        : data
+            .file(pins, "base", file.previousPath ?? file.path)
+            .then((value) => value.text)
+            .catch(() => null),
+      file.status === "deleted"
+        ? null
+        : data
+            .file(pins, "head", file.path)
+            .then((value) => value.text)
+            .catch(() => null),
+    ]);
 
-      alignments.set(
+    alignments.set(
+      file.path,
+      textualRows(
         file.path,
-        textualRows(
-          file.path,
-          patch,
-          base === null ? 0 : base.split("\n").length,
-          head === null ? 0 : head.split("\n").length,
-        ),
-      );
+        patch,
+        base === null ? 0 : base.split("\n").length,
+        head === null ? 0 : head.split("\n").length,
+      ),
+    );
 
-      const readable =
-        (file.status === "added" || base !== null) &&
-        (file.status === "deleted" || head !== null);
+    const readable =
+      (file.status === "added" || base !== null) &&
+      (file.status === "deleted" || head !== null);
 
-      const fingerprint = hash([
-        pins.repositoryId,
-        base,
-        head,
-        ...(readable ? [] : [pins.base, pins.head, patch]),
-      ]);
+    const fingerprint = hash([
+      pins.repositoryId,
+      base,
+      head,
+      ...(readable ? [] : [pins.base, pins.head, patch]),
+    ]);
 
-      fileSources.set(file.path, [
-        ...(base !== null
-          ? [
-              {
-                side: "base" as const,
-                file: file.previousPath ?? file.path,
-                fromLine: 1,
-                toLine: base.split("\n").length,
-              },
-            ]
-          : []),
-        ...(head !== null
-          ? [
-              {
-                side: "head" as const,
-                file: file.path,
-                fromLine: 1,
-                toLine: head.split("\n").length,
-              },
-            ]
-          : []),
-      ]);
-      files.push({
-        path: file.path,
-        previousPath: file.previousPath,
-        fingerprint,
-        changed,
-        viewed: emptyCoverage(),
-      });
+    fileSources.set(file.path, [
+      ...(base !== null
+        ? [
+            {
+              side: "base" as const,
+              file: file.previousPath ?? file.path,
+              fromLine: 1,
+              toLine: base.split("\n").length,
+            },
+          ]
+        : []),
+      ...(head !== null
+        ? [
+            {
+              side: "head" as const,
+              file: file.path,
+              fromLine: 1,
+              toLine: head.split("\n").length,
+            },
+          ]
+        : []),
+    ]);
+    files.push({
+      path: file.path,
+      previousPath: file.previousPath,
+      fingerprint,
+      changed,
+      viewed: emptyCoverage(),
+    });
+
+    if (mode === "textual")
       publish?.({
         files: [...files],
         fileSources: new Map(fileSources),
         alignments: new Map(alignments),
       });
-    }
-  } else {
-    const remaining = new Set<string>();
-
-    for await (const event of data.structuralChanges({
-      reviewId,
-      pins,
-      signal,
-    })) {
-      if (event.type === "start") {
-        for (const entry of event.files)
-          remaining.add((entry.file.rhs ?? entry.file.lhs)!.path);
-
-        if (!remaining.size) break;
-        continue;
-      }
-
-      if (event.type === "complete" && (event.failed || event.aborted))
-        throw new Error(
-          event.aborted?.message ?? "Structural coverage is incomplete.",
-        );
-
-      if (event.type !== "file") continue;
-
-      const path = (event.file.rhs ?? event.file.lhs)!.path;
-
-      if (!remaining.delete(path))
-        throw new Error(`Unexpected structural result: ${path}`);
-
-      if (event.error) {
-        // Neither kind has line ranges to count. Keep the rest of the review
-        // available when a repository contains non-UTF-8 fixtures or links.
-        if (
-          event.error.code !== "unsupported_file_type" &&
-          event.error.code !== "not_utf8"
-        )
-          throw new Error(`Cannot count ${path}: ${event.error.message}`);
-
-        if (!remaining.size) break;
-        continue;
-      }
-
-      const diff = event.diff;
-
-      const previousPath =
-        event.file.lhs?.path !== path ? event.file.lhs?.path : undefined;
-
-      const base = diff.type === "text" ? (diff.lhs?.text ?? null) : null;
-      const head = diff.type === "text" ? (diff.rhs?.text ?? null) : null;
-
-      const fingerprint = hash([
-        pins.repositoryId,
-        base,
-        head,
-        ...(diff.type === "binary"
-          ? [event.file.lhs?.oid ?? null, event.file.rhs?.oid ?? null]
-          : []),
-      ]);
-
-      const sources: FileLineRange[] = [];
-
-      if (base !== null)
-        sources.push({
-          side: "base",
-          file: event.file.lhs!.path,
-          fromLine: 1,
-          toLine: base.split("\n").length,
-        });
-
-      if (head !== null)
-        sources.push({
-          side: "head",
-          file: path,
-          fromLine: 1,
-          toLine: head.split("\n").length,
-        });
-      fileSources.set(path, sources);
-
-      if (diff.type === "text") alignments.set(path, structuralRows(diff));
-      files.push({
-        path,
-        previousPath,
-        fingerprint,
-        changed:
-          diff.type === "text" ? diff.structural_changes : emptyCoverage(),
-        folded: foldedChanges(diff),
-        viewed: emptyCoverage(),
-      });
-      publish?.({
-        files: [...files],
-        fileSources: new Map(fileSources),
-        alignments: new Map(alignments),
-      });
-
-      if (!remaining.size) break;
-    }
-
-    if (remaining.size) throw new Error("Structural coverage is incomplete.");
   }
 
-  return { files, fileSources, alignments };
+  const coverage: ComparisonCoverage = {
+    files,
+    fileSources,
+    alignments,
+    counted: true,
+  };
+
+  if (mode === "textual") return coverage;
+
+  // Keep Git's totals and file identities while structural results add folding.
+  const publishCurrent = () =>
+    publish?.({ ...coverage, files: [...coverage.files] });
+
+  publishCurrent();
+
+  const baseFiles = new Map(
+    coverage.files.map((file, index) => [
+      file.previousPath ?? file.path,
+      index,
+    ]),
+  );
+
+  const headFiles = new Map(
+    coverage.files.map((file, index) => [file.path, index]),
+  );
+
+  const remaining = new Set<string>();
+
+  for await (const event of data.structuralChanges({
+    reviewId,
+    pins,
+    signal,
+  })) {
+    if (event.type === "start") {
+      for (const entry of event.files)
+        remaining.add((entry.file.rhs ?? entry.file.lhs)!.path);
+
+      if (!remaining.size) break;
+      continue;
+    }
+
+    if (event.type === "complete" && (event.failed || event.aborted))
+      throw new Error(
+        event.aborted?.message ?? "Structural coverage is incomplete.",
+      );
+
+    if (event.type !== "file") continue;
+
+    const path = (event.file.rhs ?? event.file.lhs)!.path;
+
+    if (!remaining.delete(path))
+      throw new Error(`Unexpected structural result: ${path}`);
+
+    if (event.error) {
+      if (
+        event.error.code !== "unsupported_file_type" &&
+        event.error.code !== "not_utf8"
+      )
+        throw new Error(`Cannot count ${path}: ${event.error.message}`);
+    } else if (event.diff.type === "text") {
+      const diff = event.diff;
+      const folded = foldedChanges(diff);
+
+      // Match each side separately: diffr can split a Git rename into two files.
+      for (const side of ["base", "head"] as const) {
+        const source = side === "base" ? event.file.lhs : event.file.rhs;
+
+        const index =
+          source && (side === "base" ? baseFiles : headFiles).get(source.path);
+
+        if (index === undefined) continue;
+        const file = coverage.files[index];
+
+        const visible = subtractIntervals(
+          diff.structural_changes[side],
+          folded[side],
+        );
+
+        coverage.files[index] = {
+          ...file,
+          folded: {
+            ...(file.folded ?? emptyCoverage()),
+            [side]: subtractIntervals(file.changed[side], visible),
+          },
+        };
+      }
+
+      const baseIndex = event.file.lhs && baseFiles.get(event.file.lhs.path);
+      const headIndex = event.file.rhs && headFiles.get(event.file.rhs.path);
+      const index = headIndex ?? baseIndex;
+
+      if (index !== undefined) {
+        const sources =
+          coverage.fileSources.get(coverage.files[index].path) ?? [];
+
+        if (
+          sources.every(
+            (source) =>
+              source.file ===
+              (source.side === "base" ? event.file.lhs : event.file.rhs)?.path,
+          )
+        )
+          coverage.alignments = new Map(coverage.alignments).set(
+            coverage.files[index].path,
+            structuralRows(diff),
+          );
+      }
+
+      publishCurrent();
+    }
+
+    if (!remaining.size) break;
+  }
+
+  if (remaining.size) throw new Error("Structural coverage is incomplete.");
+
+  return coverage;
 }
 
 /**
