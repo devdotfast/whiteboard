@@ -14,6 +14,7 @@ export interface RenderSpan {
   brace?: number;
   fg?: string;
   bg?: string;
+  lit?: boolean;
 }
 
 export interface SplitLineCell {

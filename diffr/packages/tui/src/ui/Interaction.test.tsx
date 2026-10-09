@@ -184,3 +184,26 @@ test("V or the header's box marks a file viewed: it closes, and its header, the 
     expect(frame()).toContain('send("new")');
   } finally { await act(async () => { t.renderer.destroy(); }); }
 });
+test("a kitty-protocol terminal names the base key of a shifted symbol, but the TUI acts on what was typed", async () => {
+  const store = new DiffStore(), file = createTestDiffFile();
+  store.accept(startFor([file])); store.accept(file); store.accept({type:"complete", succeeded:1, failed:0});
+  const t = await testRender(<App store={store} themes={themes} onQuit={() => {}} />, {width:100, height:20, kittyKeyboard: true});
+  const frame = () => t.captureCharFrame();
+  const status = () => frame().split("\n").at(-2) ?? "";
+  // CSI key:shifted;modifiers u, as kitty sends shift+/ for ? and shift+9 for (.
+  const send = async (sequence: string) => { await act(async () => { t.renderer.stdin.emit("data", Buffer.from(sequence)); await t.renderOnce(); }); };
+  try {
+    await act(async () => { await t.renderOnce(); });
+    await send("\x1b[47:63;2u");
+    await t.waitFor(() => frame().includes("Go to a file  Ctrl-P"));
+    expect(status()).not.toContain("/▏");
+    await send("\x1b[27u");
+    await send("\x1b[47u");
+    await send("\x1b[57:40;2u");
+    await t.waitFor(() => status().includes("/(▏"));
+    // ⌘P, which kitty sends as p with the super modifier (8, so 9), opens the file picker.
+    await send("\x1b[27u");
+    await send("\x1b[112;9u");
+    await t.waitFor(() => frame().includes("changed files"));
+  } finally { await act(async () => { t.renderer.destroy(); }); }
+});

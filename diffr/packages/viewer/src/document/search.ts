@@ -5,6 +5,7 @@ export interface Match {
   key: string;
   side: "left" | "right";
   line?: number;
+  nth: number;
 }
 
 /** Vim's smartcase: a capital in the pattern makes it match case. */
