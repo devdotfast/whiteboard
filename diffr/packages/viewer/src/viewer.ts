@@ -1,6 +1,7 @@
 import { buildFileTree, flattenFileTree } from "./document/fileTree";
 import { defaultCollapsed, foldIds, gapIds, hidingIds, nestedIds, sourceLines } from "./document/regions";
 import { occurrences, type Match } from "./document/search";
+import { rankFiles, type Pick } from "./document/pick";
 import { placeholderRows, rowsForFile, type Layout, type SplitLineCell, type UnifiedLineCell, type ViewerRow } from "./document/rows";
 import type { DiffStore, Snapshot } from "./protocol/store";
 import { filePath, fileVisibility, type DiffFile, type TextDiff } from "./protocol/wire";
@@ -68,7 +69,7 @@ export class Viewer {
   private prompt: string | null = null;
   private search: { pattern: string; matches: Match[]; at: number; snapshot: Snapshot } | null = null;
   private promptCount: { pattern: string; snapshot: Snapshot; count: number } | undefined;
-  /** Each file's rows with every fold open, in the layout they were built for: what search reads. */
+  private picker: { query: string; cursor: number } | null = null;
   private readonly openRows = new WeakMap<DiffFile, { layout: Layout; rows: ViewerRow[] }>();
   private readonly rowCache = new WeakMap<DiffFile, { key: string; rows: ViewerRow[] }>();
   /** Bumped when rows change; keys the geometry cache. */
@@ -257,7 +258,46 @@ export class Viewer {
     this.reshape();
   }
 
-  /** The `/` prompt is open: every key goes to it. */
+  /** The Ctrl-P picker is open: every key goes to it. */
+  get picking(): boolean {
+    return this.picker !== null;
+  }
+
+  pickerState(): { query: string; cursor: number; picks: Pick[]; total: number } | undefined {
+    if (!this.picker) return undefined;
+    const { inventory } = this.snapshot;
+    const picks = rankFiles(inventory, this.fileOrder(this.snapshot), this.picker.query, (index) => this.isViewed(index) === true);
+    return { query: this.picker.query, cursor: Math.min(this.picker.cursor, Math.max(0, picks.length - 1)), picks, total: inventory.length };
+  }
+
+  pickFile(index: number) {
+    this.picker = null;
+    const file = this.snapshot.files[index];
+    if (file && this.isClosed(index, file)) {
+      this.closed.set(index, false);
+      this.revision++;
+    }
+    this.jump(index);
+  }
+
+  private typePicker(key: KeyPress) {
+    const picker = this.picker!, name = key.key;
+    if (name === "escape" || (key.ctrl && (name === "c" || name === "g"))) this.picker = null;
+    else if (name === "return" || name === "enter") {
+      const state = this.pickerState()!, pick = state.picks[state.cursor];
+      if (pick) return this.pickFile(pick.fileIndex);
+      this.picker = null;
+    } else if (name === "up" || (key.ctrl && name === "p")) picker.cursor = Math.max(0, picker.cursor - 1);
+    else if (name === "down" || (key.ctrl && name === "n")) picker.cursor += 1;
+    else if (name === "backspace") this.picker = { query: picker.query.slice(0, -1), cursor: 0 };
+    else if (!key.ctrl && !key.meta) {
+      const text = name === "space" ? " " : name;
+      if ([...text].length !== 1) return;
+      this.picker = { query: picker.query + text, cursor: 0 };
+    } else return;
+    this.emit();
+  }
+
   get prompting(): boolean {
     return this.prompt !== null;
   }
@@ -487,6 +527,10 @@ export class Viewer {
     const at = this.current();
     const page = at.size.rows, half = Math.max(1, Math.floor(at.size.rows / 2));
     const name = key.key;
+    if (this.picker) {
+      this.typePicker(key);
+      return true;
+    }
     if (this.prompt !== null) {
       this.type(key);
       return true;
@@ -502,6 +546,10 @@ export class Viewer {
       else if (name === "u") this.move(-half);
       else if (name === "f") this.move(page);
       else if (name === "b") this.move(-page);
+      else if (name === "p") {
+        this.picker = { query: "", cursor: 0 };
+        this.emit();
+      }
       else return false;
       return true;
     }
