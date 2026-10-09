@@ -1,6 +1,4 @@
-/** Measure once per layout change, then window measured rows using Hunk's binary search. */
 import { sliceSpansWindow, wrapSpans } from "../terminal/spans";
-import { resolveVisibleRowIndexWindow } from "../terminal/window";
 import type { RenderSpan, ViewerRow } from "../document/rows";
 export interface MeasuredRow {
   row: ViewerRow;
@@ -54,12 +52,16 @@ export function measureRows(
   return { rows: measured, height: top, leftWidth, rightWidth, gutter, unifiedGutter };
 }
 export function visibleRows(geometry: Geometry, top: number, height: number) {
-  const window = resolveVisibleRowIndexWindow({
-    bodyHeight: geometry.height,
-    rowBounds: geometry.rows,
-    visibleBodyBounds: { top, height },
-  });
-  return geometry.rows.slice(window.startIndex, window.endIndex);
+  const rows = geometry.rows, bottom = top + Math.max(0, height);
+  let start = 0, end = rows.length;
+  while (start < end) {
+    const mid = (start + end) >>> 1;
+    if (rows[mid]!.top + rows[mid]!.height > top) end = mid;
+    else start = mid + 1;
+  }
+  end = start;
+  while (end < rows.length && rows[end]!.top < bottom) end++;
+  return rows.slice(start, end);
 }
 
 /** The source line a row shows on one side. */
