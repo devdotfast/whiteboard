@@ -139,7 +139,7 @@ impl Method {
         let parts: Vec<_> = exe.components().map(|part| part.as_os_str()).collect();
         if parts.iter().any(|part| *part == "node_modules") {
             return Err(format!(
-                "{} came with another app; upgrade or remove that app instead",
+                "{} is likely managed by Whiteboard; skipping automatic deletion for safety (remove via Whiteboard app instead)",
                 exe.display()
             )
             .into());
