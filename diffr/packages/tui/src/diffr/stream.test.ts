@@ -86,7 +86,7 @@ test("results arrive in any order", async () => {
 test("a stream recorded from diffr parses, with manifest tags and each record's visibility", async () => {
   // Recorded with `diffr <base> <head> --format ndjson --syntax --jobs 1` from a repository with
   // one source file and one test file; the test file is hidden by the hide-files plugin.
-  const bytes = await Bun.file(new URL("../../../../test/fixtures/comparison.ndjson", import.meta.url)).bytes();
+  const bytes = await Bun.file(new URL("../../test/fixtures/comparison.ndjson", import.meta.url)).bytes();
   async function* chunks() {
     yield bytes;
   }
