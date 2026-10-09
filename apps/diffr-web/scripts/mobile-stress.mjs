@@ -200,6 +200,11 @@ try {
       await page.waitForTimeout(iteration % 2 ? 30 : 200);
       assert.equal(await page.locator(":popover-open").count(), 1);
 
+      if (name === "Display settings")
+        await page
+          .getByLabel("Line numbers", { exact: true })
+          .setChecked(iteration % 2 === 1);
+
       if (name === "Display settings" && iteration % 3 === 0) {
         await page.getByLabel("Word wrap", { exact: true }).check();
         await page.waitForTimeout(50);
@@ -360,6 +365,20 @@ try {
 
     const collapse = await inViewport(
       page.locator('.modified .app-touch-fold[aria-expanded="true"]'),
+    );
+
+    assert.ok(
+      await collapse.evaluate((button) => {
+        const code = button
+          .closest(".monaco-editor")
+          .querySelector(".monaco-scrollable-element");
+
+        return (
+          button.getBoundingClientRect().right <=
+          code.getBoundingClientRect().left
+        );
+      }),
+      "fold touch targets must stay outside code with line numbers on or off",
     );
 
     await collapse.tap();

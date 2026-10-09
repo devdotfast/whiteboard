@@ -1063,6 +1063,8 @@ class TouchFoldButtons implements IOverlayWidget {
       return;
     }
     const layout = this.editor.getLayoutInfo();
+    // Hiding line numbers narrows the gutter; touch targets must not cover code.
+    const width = Math.min(44, layout.contentLeft);
     const lineHeight = this.editor.getOption(EditorOption.lineHeight);
     const visible = new Set<number>();
     for (const foldable of foldables) {
@@ -1086,7 +1088,7 @@ class TouchFoldButtons implements IOverlayWidget {
       );
       button.setAttribute("aria-expanded", String(!folded));
       button.style.top = `${top}px`;
-      button.style.width = "44px";
+      button.style.width = `${width}px`;
       button.style.height = `${lineHeight}px`;
       button.onclick = (event) => {
         event.stopPropagation();
@@ -1099,7 +1101,7 @@ class TouchFoldButtons implements IOverlayWidget {
         this.buttons.delete(line);
       }
     this.node.style.height = `${layout.height}px`;
-    this.node.style.width = "44px";
+    this.node.style.width = `${width}px`;
     this.node.style.display = "";
     if (this.added) this.editor.layoutOverlayWidget(this);
     else {
