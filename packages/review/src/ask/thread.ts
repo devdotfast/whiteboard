@@ -74,8 +74,8 @@ const piGreetingSchema = z.object({
 
 const cursorTodosSchema = z.object({ todos: z.unknown() }).loose();
 
-/** The steering extension Claude's and Codex's adapters take: a follow-up
- * joins the turn under way rather than waiting for it to end. */
+/** The steering extension Claude's adapter takes: a follow-up joins the
+ * turn under way rather than waiting for it to end. */
 const STEER_METHOD = "_session/steering";
 
 /** How an agent says, in its `initialize` response, that it takes steering. */
@@ -388,9 +388,7 @@ export class AskThread {
         )
         .catch(() => undefined);
 
-      // Codex's adapter takes no such fallback: as the turn ends, it starts
-      // a turn of its own, whose answer streams in all the same.
-      if (outcome === "injected" || outcome === "startedNewTurn") return;
+      if (outcome === "injected") return;
       this.emit({ type: "remove", ids: [id] });
     }
 
@@ -642,7 +640,9 @@ export class AskThread {
       clientInfo: { name: "whiteboard", title: "Whiteboard", version: "1" },
     });
 
-    this.steerable = steeringSchema.safeParse(initialized._meta).success;
+    this.steerable =
+      askAgents[this.start.agent].steers === true &&
+      steeringSchema.safeParse(initialized._meta).success;
     this.emit({
       type: "set",
       accepts: {

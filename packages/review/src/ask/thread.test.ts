@@ -1642,51 +1642,64 @@ it("gives a follow-up asked while it answers to the turn under way, when the age
   thread.close();
 });
 
-it("keeps a follow-up asked while it answers until the turn ends, when the agent takes none", async () => {
-  const prompts: string[] = [];
-  let finish = () => {};
+it.each([
+  ["the agent takes none", "claude" as const, false],
+  // Codex's adapter starts a turn of its own for a follow-up that comes as
+  // the turn ends, which Whiteboard would not see end.
+  ["the agent is Codex", "codex" as const, true],
+])(
+  "keeps a follow-up asked while it answers until the turn ends, when %s",
+  async (_case, agentId, steering) => {
+    const prompts: string[] = [];
+    let finish = () => {};
 
-  const { launch } = fakeAgent(async (client, prompt) => {
-    prompts.push(prompt);
+    const { launch, steered } = fakeAgent(
+      async (client, prompt) => {
+        prompts.push(prompt);
 
-    if (prompts.length > 1) {
-      await say(client, "The runner too.");
+        if (prompts.length > 1) {
+          await say(client, "The runner too.");
 
-      return;
-    }
+          return;
+        }
 
-    const finished = new Promise<void>((resolve) => (finish = resolve));
+        const finished = new Promise<void>((resolve) => (finish = resolve));
 
-    await say(client, "Yes.");
-    await finished;
-  });
+        await say(client, "Yes.");
+        await finished;
+      },
+      undefined,
+      { steering },
+    );
 
-  const thread = openThread(launch);
+    const thread = openThread(launch, undefined, { agent: agentId });
 
-  await until(thread, (state) => state.entries.at(-1)?.kind === "agent");
-  await thread.ask({ text: "And the runner?" });
-  expect(thread.read().queued).toEqual([
-    { id: expect.any(String), text: "And the runner?" },
-  ]);
-  expect(
-    thread.read().entries.filter((entry) => entry.kind === "user"),
-  ).toHaveLength(1);
-  finish();
+    await until(thread, (state) => state.entries.at(-1)?.kind === "agent");
+    await thread.ask({ text: "And the runner?" });
+    expect(thread.read().queued).toEqual([
+      { id: expect.any(String), text: "And the runner?" },
+    ]);
+    expect(
+      thread.read().entries.filter((entry) => entry.kind === "user"),
+    ).toHaveLength(1);
+    finish();
 
-  const done = await until(
-    thread,
-    (state) => state.status === "idle" && prompts.length === 2,
-  );
+    const done = await until(
+      thread,
+      (state) => state.status === "idle" && prompts.length === 2,
+    );
 
-  expect(prompts[1]).toBe("And the runner?");
-  expect(done.queued).toBeUndefined();
-  expect(
-    done.entries.map((entry) =>
-      entry.kind === "user" || entry.kind === "agent" ? entry.text : "",
-    ),
-  ).toEqual(["Is this safe?", "Yes.", "And the runner?", "The runner too."]);
-  thread.close();
-});
+    expect(prompts[1]).toBe("And the runner?");
+    expect(done.queued).toBeUndefined();
+    expect(
+      done.entries.map((entry) =>
+        entry.kind === "user" || entry.kind === "agent" ? entry.text : "",
+      ),
+    ).toEqual(["Is this safe?", "Yes.", "And the runner?", "The runner too."]);
+    expect(steered).toEqual([]);
+    thread.close();
+  },
+);
 
 it("drops the follow-ups waiting on a turn the reviewer stops", async () => {
   const prompts: string[] = [];
