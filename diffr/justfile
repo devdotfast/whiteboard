@@ -5,11 +5,12 @@ default:
 release:
     #!/bin/bash
 
-    set -ex
+    set -euo pipefail
 
-    VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages | .[] | select(.name == "difftastic") | .version')
-    git tag $VERSION
-    git push origin $VERSION
+    test -z "$(git status --porcelain)" || { echo "Commit changes before releasing." >&2; exit 1; }
+    VERSION=$(cargo metadata --locked --format-version=1 --no-deps | jq -er '.packages | .[] | select(.name == "diffr-cli") | .version')
+    git tag "diffr/$VERSION"
+    git push origin "refs/tags/diffr/$VERSION"
 
 # Run perf stat on baseline test files and save results.
 perf:

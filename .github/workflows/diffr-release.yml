@@ -3,7 +3,7 @@ name: Diffr Release
 on:
   push:
     tags:
-      - "diffr-*"
+      - "diffr/[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
 
 permissions:
@@ -49,7 +49,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: |
           version=$(cargo metadata --no-deps --format-version 1 | "$PYTHON" -c 'import json, sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "diffr-cli"), end="")')
-          if [ -n "$RELEASE_TAG" ] && [ "$RELEASE_TAG" != "diffr-$version" ]; then
+          if [ -n "$RELEASE_TAG" ] && [ "$RELEASE_TAG" != "diffr/$version" ]; then
             echo "Tag $RELEASE_TAG does not match Cargo version $version" >&2
             exit 1
           fi
@@ -156,9 +156,59 @@ jobs:
           HOMEBREW: ${{ needs.homebrew.result }}
         run: test "$BUILD" = success && test "$PREPARE" = success && test "$HOMEBREW" = success
 
-  publish:
+  approve:
+    name: Approve diffr release
     if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: packaging
+    environment: review-release-approval
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - run: echo "Diffr release approved"
+
+  crates:
+    name: Verify and publish Cargo packages
+    needs: [packaging, approve]
+    # Manual runs validate packages without entering the publishing approval gate.
+    if: >-
+      always() && needs.packaging.result == 'success' &&
+      (needs.approve.result == 'success' ||
+       (github.event_name == 'workflow_dispatch' && needs.approve.result == 'skipped'))
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: diffr
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - name: Verify crates without publishing
+        run: cargo publish --locked --dry-run -p diffr-grammars -p diffr-core -p diffr-cli
+      - name: Publish crates in dependency order
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test -n "$CARGO_REGISTRY_TOKEN" || { echo 'CARGO_REGISTRY_TOKEN secret is missing.' >&2; exit 1; }
+          version="${RELEASE_TAG#diffr/}"
+          for crate in diffr-grammars diffr-core diffr-cli; do
+            # A rerun can resume after one of the dependencies was published.
+            status=$(curl --silent --show-error --retry 3 --max-time 60 \
+              --user-agent 'diffr-release (https://github.com/devdotfast/whiteboard)' \
+              --output "$RUNNER_TEMP/crate-version.json" --write-out '%{http_code}' \
+              "https://crates.io/api/v1/crates/$crate/$version")
+            case "$status" in
+              200) echo "$crate@$version is already published" ;;
+              404) cargo publish --locked -p "$crate" ;;
+              *) echo "Could not check $crate@$version: HTTP $status" >&2; exit 1 ;;
+            esac
+          done
+
+  publish:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [packaging, crates]
     permissions:
       contents: write
     runs-on: ubuntu-22.04
@@ -177,7 +227,10 @@ jobs:
           gh release edit "$RELEASE_TAG" --draft=false --latest=false
 
   npm:
-    needs: publish
+    needs: [packaging, crates, publish]
+    if: >-
+      always() && needs.packaging.result == 'success' && needs.crates.result == 'success' &&
+      (needs.publish.result == 'success' || github.event_name == 'workflow_dispatch')
     defaults:
       run:
         working-directory: diffr
@@ -199,25 +252,33 @@ jobs:
         with:
           name: release
           path: diffr/dist
+      - name: Stage and verify npm packages
+        run: |
+          VERSION=$(node -p "require('./diffr-ts/package.json').version")
+          python3 scripts/release.py npm --version "$VERSION" --dist dist --output npm
+          for package in npm/*/ diffr-ts/; do
+            npm pack "./$package" --dry-run
+          done
       - name: Publish platform packages, then @dev.fast/diffr
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         env:
           VERSION: ${{ github.ref_name }}
           # Unset once npm trusted publishing is configured for every package.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          VERSION="${VERSION#diffr-}"
-          python3 scripts/release.py npm --version "$VERSION" --dist dist --output npm
+          VERSION="${VERSION#diffr/}"
           for package in npm/*/ diffr-ts/; do
             name=$(node -p "require('./${package}package.json').name")
             if npm view "$name@$VERSION" version >/dev/null 2>&1; then
               echo "$name@$VERSION is already published"
             else
-              npm publish "$package" --provenance --access public
+              npm publish "./$package" --provenance --access public
             fi
           done
 
   npm-smoke:
     needs: npm
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     strategy:
       fail-fast: false
       matrix:
@@ -234,7 +295,7 @@ jobs:
         env:
           VERSION: ${{ github.ref_name }}
         run: |
-          VERSION="${VERSION#diffr-}"
+          VERSION="${VERSION#diffr/}"
           cd "$RUNNER_TEMP"
           npm init -y >/dev/null
           for _ in 1 2 3 4 5 6; do

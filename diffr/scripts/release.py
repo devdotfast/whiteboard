@@ -78,7 +78,7 @@ def formula(version, output):
     (output / "SHA256SUMS").write_text("".join(
         f"{checksum}  {name}\n" for name, checksum in checksums.items()
     ))
-    url = f"https://github.com/devdotfast/whiteboard/releases/download/diffr-{version}/diffr-{version}"
+    url = f"https://github.com/devdotfast/whiteboard/releases/download/diffr%2F{version}/diffr-{version}"
     (output / "diffr.rb").write_text(f'''class Diffr < Formula
   desc "Structural diffs with an interactive terminal frontend"
   homepage "https://github.com/devdotfast/whiteboard/tree/main/diffr"
