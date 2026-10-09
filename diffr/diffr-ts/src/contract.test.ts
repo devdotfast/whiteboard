@@ -88,7 +88,7 @@ describe("every record the binary writes validates", () => {
 });
 
 test("the terminal UI's committed v3 fixture still validates", () => {
-  const text = readFileSync(join(repositoryRoot, "tui/test/fixtures/comparison.ndjson"), "utf8");
+  const text = readFileSync(join(repositoryRoot, "packages/tui/test/fixtures/comparison.ndjson"), "utf8");
   const events = text.split("\n").filter((line) => line.length > 0).map(decodeStructuralDiffEvent);
   expect(events[0]).toMatchObject({ type: "start", version: STRUCTURAL_DIFF_WIRE_VERSION });
   expect(events.at(-1)).toMatchObject({ type: "complete", failed: 0 });
