@@ -1,4 +1,3 @@
-// Plans terminal-cell slicing and wrapping for styled diff spans.
 import { sanitizeTerminalSpans } from "./sanitize";
 import {
   isPrintableAsciiText,
@@ -8,19 +7,22 @@ import {
   textClusters,
   wrapSanitizedTextByWidth,
 } from "./text";
-import type { RenderSpan } from "../document/rows";
+interface StyledSpan {
+  text: string;
+}
+
+/** Spans whose every field but `text` matches join into one; a missing field equals undefined. */
+function sameStyle(a: StyledSpan, b: StyledSpan) {
+  const left = a as unknown as Record<string, unknown>, right = b as unknown as Record<string, unknown>;
+  for (const key in left) if (key !== "text" && left[key] !== right[key]) return false;
+  for (const key in right) if (key !== "text" && left[key] !== right[key]) return false;
+  return true;
+}
 
 /** Append a styled span while preserving color-run coalescing. */
-function appendRenderSpan(target: RenderSpan[], span: RenderSpan) {
+function appendSpan<S extends StyledSpan>(target: S[], span: S) {
   const previous = target.at(-1);
-  if (
-    previous &&
-    previous.guide === span.guide &&
-    previous.brace === span.brace &&
-    previous.fg === span.fg &&
-    previous.bg === span.bg &&
-    previous.transformFg === span.transformFg
-  ) {
+  if (previous && sameStyle(previous, span)) {
     previous.text += span.text;
   } else {
     target.push(span);
@@ -42,7 +44,7 @@ function boundaryScalar(text: string, first: boolean) {
 }
 
 /** Return whether a styled-span boundary may divide one grapheme cluster. */
-function spansMaySplitGrapheme(spans: RenderSpan[]) {
+function spansMaySplitGrapheme(spans: StyledSpan[]) {
   for (let index = 1; index < spans.length; index += 1) {
     const left = boundaryScalar(spans[index - 1]?.text ?? "", false);
     const right = boundaryScalar(spans[index]?.text ?? "", true);
@@ -57,8 +59,8 @@ function spansMaySplitGrapheme(spans: RenderSpan[]) {
 }
 
 /** Merge indivisible graphemes while preserving the style where each cluster starts. */
-function mergeCrossSpanGraphemes(spans: RenderSpan[]) {
-  const normalized: RenderSpan[] = [];
+function mergeCrossSpanGraphemes<S extends StyledSpan>(spans: S[]) {
+  const normalized: S[] = [];
   const text = spans.map((span) => span.text).join("");
   let sourceIndex = 0;
   let sourceEnd = spans[0]?.text.length ?? 0;
@@ -71,7 +73,7 @@ function mergeCrossSpanGraphemes(spans: RenderSpan[]) {
     }
     const source = spans[sourceIndex];
     if (source) {
-      appendRenderSpan(normalized, { ...source, text: cluster });
+      appendSpan(normalized, { ...source, text: cluster });
     }
     cursor += cluster.length;
   }
@@ -79,24 +81,24 @@ function mergeCrossSpanGraphemes(spans: RenderSpan[]) {
 }
 
 /** Merge only indivisible graphemes that may cross styled-span boundaries. */
-function preserveCrossSpanGraphemes(spans: RenderSpan[]) {
+function preserveCrossSpanGraphemes<S extends StyledSpan>(spans: S[]) {
   return spansMaySplitGrapheme(spans) ? mergeCrossSpanGraphemes(spans) : spans;
 }
 
 /** Slice styled spans to one visible window while preserving color runs. */
-export function sliceSpansWindow(
-  spans: RenderSpan[],
+export function sliceSpansWindow<S extends StyledSpan>(
+  spans: S[],
   offset: number,
   width: number,
 ) {
   if (width <= 0) {
     return {
-      spans: [] as RenderSpan[],
+      spans: [] as S[],
       usedWidth: 0,
     };
   }
 
-  const sliced: RenderSpan[] = [];
+  const sliced: S[] = [];
   let remainingOffset = Math.max(0, offset);
   let remaining = width;
   let usedWidth = 0;
@@ -108,7 +110,7 @@ export function sliceSpansWindow(
 
     const spanWidth = measureSanitizedTextWidth(span.text);
     if (spanWidth === 0) {
-      appendRenderSpan(sliced, { ...span });
+      appendSpan(sliced, { ...span });
       continue;
     }
 
@@ -119,8 +121,8 @@ export function sliceSpansWindow(
 
     if (remainingOffset === 0 && spanWidth <= remaining) {
       // Preserve the full safe span without re-slicing its graphemes. Clone before coalescing so
-      // appendRenderSpan can never mutate the caller-owned highlighted span object.
-      appendRenderSpan(sliced, { ...span });
+      // appendSpan can never mutate the caller-owned highlighted span object.
+      appendSpan(sliced, { ...span });
       remaining -= spanWidth;
       usedWidth += spanWidth;
       continue;
@@ -142,7 +144,7 @@ export function sliceSpansWindow(
       text: visible.text,
     };
 
-    appendRenderSpan(sliced, nextSpan);
+    appendSpan(sliced, nextSpan);
 
     remaining -= visible.width;
     usedWidth += visible.width;
@@ -160,12 +162,12 @@ export function sliceSpansWindow(
 const SINGLE_PASS_WRAP_LINE_THRESHOLD = 8;
 
 /** Wrap styled spans into visual lines while preserving color runs across splits. */
-export function wrapSpans(spans: RenderSpan[], width: number) {
+export function wrapSpans<S extends StyledSpan>(spans: S[], width: number) {
   if (width <= 0) {
-    return [[]] as RenderSpan[][];
+    return [[]] as S[][];
   }
 
-  const lines: RenderSpan[][] = [[]];
+  const lines: S[][] = [[]];
   let current = lines[0]!;
   let remaining = width;
   const safeSpans = sanitizeTerminalSpans(spans);
@@ -189,7 +191,7 @@ export function wrapSpans(spans: RenderSpan[], width: number) {
     const simpleSpanWidth = simpleSpanWidths[spanIndex] ?? null;
     const spanWidth = simpleSpanWidth ?? measureSanitizedTextWidth(span.text);
     if (spanWidth === 0) {
-      appendRenderSpan(current, { ...span });
+      appendSpan(current, { ...span });
       continue;
     }
 
@@ -210,7 +212,7 @@ export function wrapSpans(spans: RenderSpan[], width: number) {
           remaining = width;
         }
         if (chunk.text.length > 0) {
-          appendRenderSpan(current, { ...span, text: chunk.text });
+          appendSpan(current, { ...span, text: chunk.text });
         }
         remaining -= chunk.width;
       }
@@ -253,7 +255,7 @@ export function wrapSpans(spans: RenderSpan[], width: number) {
         ...span,
         text: visible.text,
       };
-      appendRenderSpan(current, nextSpan);
+      appendSpan(current, nextSpan);
 
       offset += visible.width;
       remaining -= visible.width;
@@ -265,7 +267,7 @@ export function wrapSpans(spans: RenderSpan[], width: number) {
 
 /** Count wrapped visual lines without allocating the styled line arrays used by rendering. */
 export function measureWrappedSpansLineCount(
-  spans: RenderSpan[],
+  spans: StyledSpan[],
   width: number,
 ) {
   if (width <= 0) {
