@@ -1,7 +1,7 @@
 [package]
 name = "diffr-plugin-sdk"
 description = "The Rust SDK for diffr WebAssembly plugins."
-version = "0.1.1"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.85.0"
 license = "MIT"
