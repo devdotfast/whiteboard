@@ -66,9 +66,18 @@ function tokenInput(): HTMLInputElement {
 }
 
 function tokenHint(): DocumentFragment {
-  return rich(
-    `For private repositories or higher GitHub API limits, create a [fine-grained token](${GITHUB_TOKEN_URL}) with read access to Contents and Pull requests for the repositories you want to review. Your token is stored in this browser and sent only to GitHub.`,
+  const hint = rich(
+    ` Create a [fine-grained token](${GITHUB_TOKEN_URL}) with read access to Contents and Pull requests for the repositories you want to review. A token also lets you review private repositories you can access.`,
   );
+  hint.prepend(
+    element(
+      "strong",
+      undefined,
+      "Your token is stored in this browser and sent only to GitHub.",
+    ),
+  );
+
+  return hint;
 }
 
 interface SummaryControls {
@@ -150,7 +159,7 @@ export function openOnboarding(host: SettingsHost): void {
         element(
           "p",
           undefined,
-          "Review GitHub pull requests in your browser. Public repositories work without a token. You can add one later in Settings.",
+          "Without a token, GitHub limits you to just 60 API requests per hour, shared by everyone on your IP address. A token raises your account’s limit to 5,000 requests per hour. Loading a single pull request can take several requests.",
         ),
       );
       const input = tokenInput();
