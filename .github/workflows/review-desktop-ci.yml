@@ -151,15 +151,16 @@ jobs:
         run: pnpm --filter @dev.fast/whiteboard check:tutorial
 
       # The build already built workspace dependencies and typechecked Code OSS.
+      # Diffr Test checks diffr's packages, with the Bun and Claude Code types they need.
       - name: Typecheck
         run: |
-          pnpm -r --filter '!@dev.fast/review-desktop' --workspace-concurrency=1 --if-present typecheck
+          pnpm -r --filter '!@dev.fast/review-desktop' --filter '!./diffr/**' --workspace-concurrency=1 --if-present typecheck
 
       # Typecheck prepared the shared tutorial assets before concurrent pretests.
       - name: Test
         run: |
           node --test "scripts/**/*.test.mjs"
-          pnpm -r --filter '!@dev.fast/diffr' --no-sort --workspace-concurrency=3 --if-present test
+          pnpm -r --filter '!./diffr/**' --no-sort --workspace-concurrency=3 --if-present test
 
       - name: Upload browser test diagnostics
         if: failure()
