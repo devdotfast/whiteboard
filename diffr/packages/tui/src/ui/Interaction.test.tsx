@@ -3,10 +3,10 @@ import {act} from "react";
 import {rgbToHex} from "@opentui/core";
 import {testRender} from "@opentui/react/test-utils";
 import {App} from "./App";
-import {DiffStore} from "../diffr/store";
-import {createGuideDiffFile, createTestDiffFile, startFor, withIdenticalLines} from "../diffr/fixture";
-import {loadBundledTheme} from "../diffr/theme";
-import type {DiffEvent, DiffFile} from "../diffr/wire";
+import {DiffStore} from "@diffr/viewer/protocol/store";
+import {createGuideDiffFile, createTestDiffFile, startFor, withIdenticalLines} from "@diffr/viewer/protocol/fixture";
+import { loadBundledTheme } from "@diffr/viewer/theme/themes";
+import type {DiffEvent, DiffFile} from "@diffr/viewer/protocol/wire";
 const dark = loadBundledTheme("default-dark"), light = loadBundledTheme("default-light");
 const themes = {initial: dark, dark, light};
 async function publish(store: DiffStore, ...events: DiffEvent[]) {

@@ -1,8 +1,7 @@
 /** Measure once per layout change, then window measured rows using Hunk's binary search. */
-import { sliceSpansWindow, wrapSpans } from "../ui/diff/styledSpanLayout";
-import { resolveVisibleRowIndexWindow } from "../ui/diff/rowWindowing";
-import type { RenderSpan } from "../ui/diff/diffRowModel";
-import type { ViewerRow } from "./rows";
+import { sliceSpansWindow, wrapSpans } from "../terminal/spans";
+import { resolveVisibleRowIndexWindow } from "../terminal/window";
+import type { RenderSpan, ViewerRow } from "../document/rows";
 export interface MeasuredRow {
   row: ViewerRow;
   top: number;

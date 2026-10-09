@@ -1,5 +1,5 @@
-import { parseDiffEvents } from "./events";
-import type { DiffEvent } from "./wire";
+import { parseDiffEvents } from "@diffr/viewer/protocol/events";
+import type { DiffEvent } from "@diffr/viewer/protocol/wire";
 export async function* readDiffStream(
   chunks: AsyncIterable<Uint8Array>,
 ): AsyncGenerator<DiffEvent> {

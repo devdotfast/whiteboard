@@ -3,6 +3,8 @@ packages:
   - "packages/agent-plugins/pi"
   - "packages/review/app"
   - "diffr/diffr-ts"
+  - "diffr/packages/viewer"
+  - "diffr/packages/tui"
   - "apps/*"
 
 catalog:

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readDiffStream } from "./stream";
-import { createTestDiffFile, fold, leaf, root } from "./fixture";
-import { fileVisibility, type FileChange } from "./wire";
+import { createTestDiffFile, fold, leaf, root } from "@diffr/viewer/protocol/fixture";
+import { fileVisibility, type FileChange } from "@diffr/viewer/protocol/wire";
 const manifest = (file: ReturnType<typeof createTestDiffFile>): FileChange =>
   ({ file: file.file, status: "modified", tags: [] });
 const start = {

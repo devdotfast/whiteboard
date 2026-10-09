@@ -1,4 +1,4 @@
-import { filePath, type DiffFile, type FileChange } from "./wire";
+import { filePath, type DiffFile, type FileChange } from "../protocol/wire";
 
 export interface TreeNode {
   key: string;

@@ -1,7 +1,7 @@
-import {expect, test} from "bun:test";
-import {createGuideDiffFile, createTestDiffFile, leaf, line, root} from "./fixture";
+import { expect, test } from "vitest";
+import {createGuideDiffFile, createTestDiffFile, leaf, line, root} from "../protocol/fixture";
 import {rowsForFile} from "./rows";
-import {dark} from "./theme";
+import { dark } from "../theme/themes";
 import {byteColumn, defaultCollapsed} from "./regions";
 const sourceText = (cell: {spans: {text: string}[]} | undefined) => cell?.spans.map(s => s.text).join("");
 test("Paper: enclosing guides cross blank lines and indented gap bands; syntax folds join opener and closer", () => {
