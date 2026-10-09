@@ -55,8 +55,12 @@ try {
     route.fulfill({ json: fixture() }),
   );
   await page.goto(`${base}/fixture/mobile/pull/1?ui-fixture`);
-  await page.getByRole("button", { name: "Skip", exact: true }).click();
-  await page.getByRole("button", { name: "Skip", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Continue without token", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Start reviewing", exact: true })
+    .click();
   await page
     .locator(".summary-fold pre:visible")
     .first()

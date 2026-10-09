@@ -65,9 +65,9 @@ export function setSummaries(value: Summaries | undefined): void {
 }
 
 /** The page's settings as diffr configuration, merged over the reader's config.toml. */
-export function configOverrides(): string | undefined {
-  const summary = summaries();
-
+export function configOverrides(
+  summary: Summaries | null = summaries() ?? null,
+): string | undefined {
   if (!summary) return undefined;
 
   return JSON.stringify({

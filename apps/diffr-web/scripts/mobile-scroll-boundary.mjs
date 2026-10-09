@@ -55,8 +55,12 @@ try {
     await page.goto(
       `${process.env.DIFFR_TEST_URL ?? "http://127.0.0.1:4181"}/fixture/mobile/pull/1?ui-fixture`,
     );
-    await page.getByRole("button", { name: "Skip", exact: true }).click();
-    await page.getByRole("button", { name: "Skip", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Continue without token", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Start reviewing", exact: true })
+      .click();
     await page
       .locator(".modified .view-line")
       .first()

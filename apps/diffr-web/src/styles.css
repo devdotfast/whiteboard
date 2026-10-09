@@ -520,6 +520,14 @@ body {
   letter-spacing: 0.04em;
 }
 
+.app-onboarding > div:focus {
+  outline: none;
+}
+
+.app-onboarding-dialog .app-dialog-actions {
+  flex-wrap: wrap;
+}
+
 .app-settings p,
 .app-settings section > :is(span, a, code) {
   color: var(--vscode-descriptionForeground);

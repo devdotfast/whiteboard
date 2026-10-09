@@ -39,10 +39,11 @@ function tryEngine(
   overrides: string | undefined,
   status: HTMLElement,
   onReady: () => void,
-): void {
+): Promise<void> {
   const candidate = new Engine(config, overrides);
   status.textContent = "Checking…";
-  candidate.notices.then(
+
+  return candidate.notices.then(
     () => {
       onReady();
       host.replaceEngine(candidate);
@@ -66,7 +67,7 @@ function tokenInput(): HTMLInputElement {
 
 function tokenHint(): DocumentFragment {
   return rich(
-    `For private repositories, and 5,000 requests an hour instead of 60. A [fine-grained token](${GITHUB_TOKEN_URL}) with read access to contents and pull requests is enough. It stays in this browser and is sent only to GitHub.`,
+    `For private repositories or higher GitHub API limits, create a [fine-grained token](${GITHUB_TOKEN_URL}) with read access to Contents and Pull requests for the repositories you want to review. Your token is stored in this browser and sent only to GitHub.`,
   );
 }
 
@@ -101,12 +102,17 @@ function summaryFields(parent: HTMLElement): SummaryControls {
     key.placeholder = details.placeholder;
     keyHint.replaceChildren(
       rich(
-        `Leave it empty to turn summaries off. [Get a ${details.title} key](${details.keys}). It stays in this browser and is sent only to ${details.title}.`,
+        `Optional. Leave blank to keep AI summaries off. [Create an API key](${details.keys}). Your key is stored in this browser and sent only to ${details.title}.`,
       ),
     );
   };
 
-  provider.addEventListener("change", update);
+  provider.addEventListener("change", () => {
+    // Credentials and model names belong to a specific provider.
+    key.value = "";
+    model.value = "";
+    update();
+  });
   update();
   field(parent, "Provider", provider);
   field(parent, "API key", key, keyHint);
@@ -114,7 +120,7 @@ function summaryFields(parent: HTMLElement): SummaryControls {
     parent,
     "Model",
     model,
-    "Optional. A small, fast model reads best: summaries are written for every long new function.",
+    "Optional. Leave blank to use the default model for this provider.",
   );
 
   return {
@@ -130,106 +136,139 @@ function summaryFields(parent: HTMLElement): SummaryControls {
   };
 }
 
-/** A first visit: the GitHub token, then the summarizer's key. Either can be skipped. */
+/** Optional first-visit setup. Both credentials can also be added in Settings. */
 export function openOnboarding(host: SettingsHost): void {
-  const finish = () => writeSetting("onboarded", "1");
-
   dialog(
     host.root,
     "Welcome to diffr",
     (node, actions) => {
-      // Closing it any way counts: the page does not ask again.
-      node.addEventListener("close", finish);
+      node.addEventListener("close", () => writeSetting("onboarded", "1"));
       const content = node.appendChild(element("div", "app-onboarding"));
-
-      const step = (
-        title: string,
-        build: (content: HTMLElement) => void,
-        buttons: HTMLButtonElement[],
-      ) => {
-        content.replaceChildren(element("h3", undefined, title));
-        build(content);
-        actions.replaceChildren(...buttons);
-        content.querySelector<HTMLElement>("input, select")?.focus();
-      };
-
-      const summariesStep = () => {
-        let controls: SummaryControls;
-        const status = element("p", "app-dialog-status");
-
-        step(
-          "2 of 2 · Summaries",
-          (content) => {
-            content.appendChild(
-              element(
-                "p",
-                undefined,
-                "diffr can fold long new functions and tests behind short pseudocode, written by a model you choose. It needs that provider's API key.",
-              ),
-            );
-            controls = summaryFields(content);
-            content.appendChild(status);
-          },
-          [
-            actionButton("Skip", () => node.close()),
-            actionButton(
-              "Finish",
-              () => {
-                const value = controls.read();
-
-                if (!value) {
-                  node.close();
-
-                  return;
-                }
-
-                setSummaries(value);
-                tryEngine(
-                  host,
-                  readSetting("config"),
-                  configOverrides(),
-                  status,
-                  () => node.close(),
-                );
-              },
-              true,
-            ),
-          ],
-        );
-      };
-
-      const input = tokenInput();
-
-      step(
-        "1 of 2 · GitHub",
-        (content) => {
-          content.appendChild(
-            element(
-              "p",
-              undefined,
-              "diffr reads pull requests from GitHub and diffs them here, in your browser. Public repositories work without a token.",
-            ),
-          );
-          field(content, "GitHub token", input, tokenHint());
-        },
-        [
-          actionButton("Skip", summariesStep),
-          actionButton(
-            "Continue",
-            () => {
-              const value = input.value.trim();
-
-              if (value !== (token() ?? "")) {
-                setToken(value || null);
-                host.reload();
-              }
-
-              summariesStep();
-            },
-            true,
-          ),
-        ],
+      const github = element("div");
+      github.append(
+        element("h3", undefined, "1 of 2 · GitHub access"),
+        element(
+          "p",
+          undefined,
+          "Review GitHub pull requests in your browser. Public repositories work without a token. You can add one later in Settings.",
+        ),
       );
+      const input = tokenInput();
+      field(github, "GitHub token (optional)", input, tokenHint());
+
+      const summary = element("div");
+      summary.append(
+        element("h3", undefined, "2 of 2 · AI summaries"),
+        element(
+          "p",
+          undefined,
+          "Add short AI summaries to long functions and tests. Reviewing diffs and folding code work without them.",
+        ),
+        element(
+          "p",
+          "app-field-hint",
+          "Summaries send code to your selected provider. API usage may be billed by that provider. You can set this up later in Settings.",
+        ),
+      );
+      const controls = summaryFields(summary);
+      const status = summary.appendChild(element("p", "app-dialog-status"));
+      status.setAttribute("role", "status");
+      let busy = false;
+      node.addEventListener("cancel", (event) => {
+        if (busy) event.preventDefault();
+      });
+
+      const show = (step: HTMLElement, buttons: HTMLButtonElement[]) => {
+        content.replaceChildren(step);
+        actions.replaceChildren(...buttons);
+        // Focus the step rather than opening the mobile keyboard for an optional key.
+        step.tabIndex = -1;
+        step.setAttribute("autofocus", "");
+        step.focus();
+      };
+
+      const next = actionButton(
+        "Continue without token",
+        () => {
+          const value = input.value.trim() || null;
+
+          if (value !== token()) {
+            setToken(value);
+            host.reload();
+          }
+
+          showSummaries();
+        },
+        true,
+      );
+
+      input.addEventListener("input", () => {
+        next.textContent = input.value.trim()
+          ? "Save token and continue"
+          : "Continue without token";
+      });
+      next.textContent = input.value.trim()
+        ? "Save token and continue"
+        : "Continue without token";
+
+      const back = actionButton("Back", () => show(github, [next]));
+      const skip = actionButton("Not now", () => node.close());
+
+      const start = actionButton(
+        "Start reviewing",
+        () => {
+          const value = controls.read();
+
+          if (!value) {
+            node.close();
+
+            return;
+          }
+
+          busy = true;
+
+          const fields = [
+            ...summary.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+              "input, select",
+            ),
+          ];
+
+          for (const control of [...fields, back, skip, start])
+            control.disabled = true;
+          void tryEngine(
+            host,
+            readSetting("config"),
+            configOverrides(value),
+            status,
+            () => {
+              setSummaries(value);
+              node.close();
+            },
+          ).finally(() => {
+            busy = false;
+
+            for (const control of [...fields, back, skip, start])
+              control.disabled = false;
+          });
+        },
+        true,
+      );
+
+      const updateSummaryActions = () => {
+        const enabled = !!controls.read();
+        start.textContent = enabled ? "Enable summaries" : "Start reviewing";
+        skip.hidden = !enabled;
+      };
+
+      summary.addEventListener("input", updateSummaryActions);
+      summary.addEventListener("change", updateSummaryActions);
+
+      const showSummaries = () => {
+        updateSummaryActions();
+        show(summary, [back, skip, start]);
+      };
+
+      show(github, [next]);
     },
     "app-onboarding-dialog",
   );
@@ -311,14 +350,7 @@ hide_deleted = false`;
               return;
             }
 
-            const overrides = (() => {
-              const saved = summaries();
-              setSummaries(summaryValue);
-              const value = configOverrides();
-              setSummaries(saved);
-
-              return value;
-            })();
+            const overrides = configOverrides(summaryValue ?? null);
 
             // Tried in its own engine first, so a broken file leaves the page as it was.
             tryEngine(host, configValue, overrides, status, () => {

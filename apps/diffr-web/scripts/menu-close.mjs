@@ -23,8 +23,12 @@ for (const [name, engine] of [
     data.change.files = data.change.files.slice(0, 1);
     await p.route("**/__ui-fixture.json", (r) => r.fulfill({ json: data }));
     await p.goto(`${base}/fixture/mobile/pull/1?ui-fixture`);
-    await p.getByRole("button", { name: "Skip", exact: true }).click();
-    await p.getByRole("button", { name: "Skip", exact: true }).click();
+    await p
+      .getByRole("button", { name: "Continue without token", exact: true })
+      .click();
+    await p
+      .getByRole("button", { name: "Start reviewing", exact: true })
+      .click();
     await p.locator(".modified .view-line").first().waitFor({ timeout: 60000 });
     await p.waitForTimeout(1500);
 
@@ -80,8 +84,12 @@ for (const [name, engine] of [
       await route.fulfill({ json: data });
     });
     await loading.goto(`${base}/fixture/mobile/pull/1?ui-fixture`);
-    await loading.getByRole("button", { name: "Skip", exact: true }).click();
-    await loading.getByRole("button", { name: "Skip", exact: true }).click();
+    await loading
+      .getByRole("button", { name: "Continue without token", exact: true })
+      .click();
+    await loading
+      .getByRole("button", { name: "Start reviewing", exact: true })
+      .click();
 
     const trigger = loading.getByRole("button", {
       name: "Display settings",
