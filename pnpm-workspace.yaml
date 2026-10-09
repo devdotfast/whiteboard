@@ -6,6 +6,7 @@ packages:
   - "diffr/packages/viewer"
   - "diffr/packages/consumer"
   - "diffr/packages/claude-code"
+  - "diffr/packages/pi"
   - "diffr/packages/tui"
   - "apps/*"
 
@@ -63,3 +64,5 @@ ignoredOptionalDependencies:
 
 allowBuilds:
   esbuild: true
+  "@google/genai": false
+  protobufjs: false
