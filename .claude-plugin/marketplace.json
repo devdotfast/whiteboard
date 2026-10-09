@@ -6,6 +6,11 @@
       "name": "whiteboard",
       "source": "./packages/agent-plugins/claude",
       "description": "Connect your agent to dev.fast Whiteboard"
+    },
+    {
+      "name": "diffr",
+      "source": "./diffr/packages/claude-code/plugin",
+      "description": "Review diffs with diffr in a pane"
     }
   ]
 }
