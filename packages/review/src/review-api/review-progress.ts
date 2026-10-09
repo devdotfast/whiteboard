@@ -79,9 +79,14 @@ export async function reviewProgress(
   // each resolve against the comparison their own pins name.
   const comparison: ComparisonCoverage = pins
     ? (partial ?? (await data.coverage(snapshot.reviewId, pins, mode)))
-    : { files: [], fileSources: new Map(), alignments: new Map() };
+    : {
+        counted: true,
+        files: [],
+        fileSources: new Map(),
+        alignments: new Map(),
+      };
 
-  const counting = !!partial && !comparison.counted;
+  const counting = !comparison.counted;
 
   signal.throwIfAborted();
 

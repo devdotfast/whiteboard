@@ -30,7 +30,7 @@ const hash = (parts: (string | null)[]) =>
 
 export interface ComparisonCoverage {
   /** All Git changes are counted, even if folding is still loading. */
-  counted?: boolean;
+  counted: boolean;
   files: CoverageFile[];
   fileSources: Map<string, FileLineRange[]>;
   alignments: Map<string, readonly AlignmentRow[]>;
@@ -135,6 +135,7 @@ export async function comparisonCoverage(
 
     if (mode === "textual")
       publish?.({
+        counted: false,
         files: [...files],
         fileSources: new Map(fileSources),
         alignments: new Map(alignments),
