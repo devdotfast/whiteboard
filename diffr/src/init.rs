@@ -123,7 +123,7 @@ impl State {
     fn agents(&self) -> Result<Vec<Agent>> {
         let mut agents = Vec::new();
         for agent in Agent::ALL {
-            if self.record.agents.contains(&agent) || agent.detected()? {
+            if self.record.agents.contains(&agent) || agent.detected() {
                 agents.push(agent);
             }
         }
@@ -220,7 +220,7 @@ fn questions(state: &State) -> Result<Value> {
     let mut agents = Vec::new();
     for agent in Agent::ALL {
         agents.push(
-            json!({ "value": agent.id(), "label": agent.title(), "detected": agent.detected()? }),
+            json!({ "value": agent.id(), "label": agent.title(), "detected": agent.detected() }),
         );
     }
     let providers: Vec<Value> = state
@@ -368,7 +368,7 @@ fn prompt(state: &State) -> Result<i32> {
         .initial_values(state.agents()?)
         .required(false);
     for agent in Agent::ALL {
-        let hint = if agent.detected()? { "found" } else { "" };
+        let hint = if agent.detected() { "found" } else { "" };
         agents = agents.item(agent, agent.title(), hint);
     }
     let agents = agents.interact()?;

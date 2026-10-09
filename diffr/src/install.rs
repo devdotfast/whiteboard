@@ -40,11 +40,10 @@ impl Agent {
         }
     }
 
-    pub(crate) fn detected(self) -> Result<bool> {
-        let home = home()?;
-        Ok(match self {
-            Agent::ClaudeCode => home.join(".claude").is_dir(),
-        })
+    pub(crate) fn detected(self) -> bool {
+        match self {
+            Agent::ClaudeCode => claude_path().is_some(),
+        }
     }
 
     /// `step` hears what each slow command is about to do.
@@ -243,8 +242,24 @@ pub(crate) fn home() -> Result<PathBuf> {
     Ok(dirs::home_dir().ok_or("no home directory for this user")?)
 }
 
+/// Where `claude` is on PATH, found the way `Command::new("claude")` finds it.
+fn claude_path() -> Option<PathBuf> {
+    let name = format!("claude{}", std::env::consts::EXE_SUFFIX);
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .map(|dir| dir.join(&name))
+        .find(|path| path.is_file())
+}
+
 fn claude(args: &[&str]) -> Result<Vec<u8>> {
-    host(Command::new("claude").args(args))
+    let Some(path) = claude_path() else {
+        return Err(
+            "Claude Code's `claude` command is not on your PATH. Install Claude Code \
+             (https://code.claude.com/docs/en/setup), or open a new terminal if you just did, \
+             then run `diffr config init` again."
+                .into(),
+        );
+    };
+    host(Command::new(path).args(args))
 }
 
 /// Run a host command. Its output is kept, so prompts and `--json` stay
