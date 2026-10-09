@@ -61,6 +61,17 @@ jobs:
       with:
         targets: ${{ matrix.job.target }}, wasm32-wasip2
 
+    - name: Restore Rust build cache
+      if: matrix.job.target == 'x86_64-unknown-linux-gnu'
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      with:
+        key: ${{ matrix.job.target }}-${{ matrix.job.os }}
+        workspaces: |
+          diffr -> target
+          diffr/plugins/workspace -> ../../target/wasm-plugins
+          diffr/plugins/workspace -> ../../target/concurrent-guest-probe
+        cache-workspace-crates: true
+
     - name: Install cross
       if: matrix.job.use-cross
       uses: taiki-e/install-action@1329c298aa20c3257846c9b2e0e55967df3e3c37 # v2
@@ -151,6 +162,13 @@ jobs:
         with:
           # The tests build every bundled plugin as a component.
           targets: wasm32-wasip2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: |
+            diffr -> target
+            diffr/plugins/workspace -> ../../target/wasm-plugins
+            diffr/plugins/workspace -> ../../target/concurrent-guest-probe
+          cache-workspace-crates: true
       # Rebuild the components and test external loading and async HTTP.
       # The target matrix above exercises the embedded components.
       - run: cargo xtask test-plugins
@@ -169,6 +187,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.99.0
         with:
           targets: wasm32-wasip2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: diffr -> target
+          cache-workspace-crates: true
       # This runs tests that rely on the MIME database being present.
       - run: cargo test -- --ignored
 
@@ -257,6 +279,10 @@ jobs:
           node-version: 24
           cache: pnpm
       - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: diffr -> target
+          cache-workspace-crates: true
       - working-directory: .
         run: pnpm install --frozen-lockfile
       - run: cargo build --locked
