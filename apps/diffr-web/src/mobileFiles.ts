@@ -167,12 +167,10 @@ export class MobileFiles extends Disposable {
     if (!this.sheet.open || this.closing) return;
     this.closing = true;
     this.sheet.classList.add("is-closing");
-    // Safari removes a closed dialog from the top layer before discrete CSS transitions finish.
-    // Keep it modal until its exit finishes, including when navigation dismisses the sheet.
+    // Keep the dialog modal until Safari finishes its exit animation.
     const animations = this.sheet.getAnimations({ subtree: true });
 
     const finish = () => {
-      if (!this.closing) return;
       this.closing = false;
       this.sheet.close();
       this.sheet.classList.remove("is-closing");

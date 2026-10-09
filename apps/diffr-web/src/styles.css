@@ -1437,7 +1437,6 @@ body {
   }
 }
 
-/* Summary bands keep their code-like line layout, but long lines remain readable by panning. */
 .app .monaco-editor .diff-hidden-lines .detail pre.diff-hidden-lines-detail {
   overflow-x: auto;
   text-overflow: clip;
@@ -1445,7 +1444,6 @@ body {
   user-select: text;
   -webkit-user-select: text;
 }
-/* File headers and editor overlays must not cover the shared scroll controls. */
 .app .multiDiffEditor > div > .monaco-scrollable-element > .scrollbar {
   z-index: 2000;
 }

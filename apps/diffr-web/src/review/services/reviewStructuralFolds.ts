@@ -513,7 +513,6 @@ export class StructuralFoldControls extends Disposable {
     );
     const visibleScopes = this.foldablesOf(diff).filter(
       (foldable) =>
-        foldable.rail &&
         intersectsViewport(foldable) &&
         !this.isFolded(foldable) &&
         !hidden.some((range) => range.contains(foldable.line + 1)),
@@ -528,7 +527,6 @@ export class StructuralFoldControls extends Disposable {
     >();
     const completed = this.foldablesOf(diff).filter(
       (scope) =>
-        scope.rail &&
         intersectsViewport(scope) &&
         this.viewed?.get(path, scope.foldStateId).state === "viewed",
     );
@@ -1063,7 +1061,6 @@ class TouchFoldButtons implements IOverlayWidget {
       return;
     }
     const layout = this.editor.getLayoutInfo();
-    // Hiding line numbers narrows the gutter; touch targets must not cover code.
     const width = Math.min(44, layout.contentLeft);
     const lineHeight = this.editor.getOption(EditorOption.lineHeight);
     const visible = new Set<number>();
