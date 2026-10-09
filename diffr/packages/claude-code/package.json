@@ -5,15 +5,15 @@
   "type": "module",
   "scripts": {
     "build": "node build.ts",
-    "test": "vitest run src && claude plugin test plugin",
+    "test": "claude plugin test plugin",
     "typecheck": "tsc --noEmit -p ."
   },
   "devDependencies": {
     "@diffr/viewer": "workspace:*",
     "typescript": "5.9.3",
     "zod": "4.6.5",
+    "@diffr/consumer": "workspace:*",
     "@types/node": "24.12.2",
-    "vitest": "4.1.11",
     "esbuild": "0.28.1"
   }
 }

@@ -4,6 +4,7 @@ packages:
   - "packages/review/app"
   - "diffr/diffr-ts"
   - "diffr/packages/viewer"
+  - "diffr/packages/consumer"
   - "diffr/packages/claude-code"
   - "diffr/packages/tui"
   - "apps/*"

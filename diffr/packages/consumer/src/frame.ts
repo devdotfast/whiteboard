@@ -13,7 +13,6 @@ import { Colors, fit, LineBuilder, paintCell } from "./paint";
 import type { Action, Frame, Input, Line } from "./protocol";
 
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-/** The key list `?` shows in place of the diff: keys, then what they do. */
 const KEYS: [string, string][] = [
   ["j k · d u · space b", "scroll a line, half a page, a page"],
   ["g G", "first file, last line"],
@@ -37,12 +36,9 @@ const KEYS_BUTTON = " ? keys ";
 /** On the selection bar, which takes the status line while lines are selected. */
 const CHAT_BUTTON = " Add to chat · enter ";
 
-/** What an input asks of the hooks module beyond a redraw. */
 export interface Outcome {
   close?: true;
-  /** Text for the clipboard, and what it is, for the message saying how the copy went. */
   copy?: { text: string; what: string };
-  /** Selected ranges for the prompt box: each by its name, with the code the model reads when the prompt is sent. */
   chat?: { name: string; context: string }[];
 }
 
@@ -55,7 +51,6 @@ export class Pane {
   private readonly viewer: Viewer;
   private message = "";
   private size: Size | undefined;
-  /** Undefined until toggled: then the width decides. */
   private showTree: boolean | undefined;
   private readonly closedDirectories = new Set<string>();
   private treeScroll = 0;
@@ -64,13 +59,9 @@ export class Pane {
   private selection: SourceSelection | null = null;
   /** A press on code started the selection, so a drag moves its end; a click on anything else stops that. */
   private selecting = false;
-  /** The code row on each frame line of the last frame, and which side a column falls on. */
   private readonly cellsAt = new Map<number, { key: string; side: (x: number) => Side }>();
-  /** The key list, shown in place of the diff. */
   private helpView = false;
-  /** A narrow pane showing the tree in place of the diff. */
   private filesView = false;
-  /** The tree row the tree that took the pane is on. */
   private treeCursor = 0;
 
   constructor(private readonly store: DiffStore, readonly theme: Palette) {
@@ -85,7 +76,6 @@ export class Pane {
     this.viewer.setHover(hover);
   }
 
-  /** What an input asks of the hooks module beyond a redraw: to close the pane, or to copy text. */
   input(input: Input): Outcome {
     if ("act" in input && "chat" in input.act) return this.chat();
     if ("act" in input) this.act(input.act, input.alt === true);
@@ -94,10 +84,7 @@ export class Pane {
     return {};
   }
 
-  /**
-   * The pane lost the keyboard. Escape never reaches it, only takes the focus away, so this is
-   * where Escape closes whatever was open: the search prompt, the picker, the key list, the tree.
-   */
+  /** Hosts take Escape to blur the pane, so blur closes what Escape would. */
   blur() {
     this.viewer.cancel();
     this.selection = null;
@@ -105,17 +92,14 @@ export class Pane {
     this.filesView = false;
   }
 
-  /** Says how a copy the pane asked for went; `refusal` is the clipboard's reason when it did not. */
   copied(what: string, refusal?: string) {
     this.message = refusal ? `Not copied: ${refusal}` : `Copied ${what}`;
   }
 
-  /** Says how putting ranges in the prompt box went; `refusal` is why the box did not take them. */
   chatted(names: string[], refusal?: string) {
     this.message = refusal ? `Not added to the chat: ${refusal}` : `Added ${names.join(", ")} to the chat`;
   }
 
-  /** A press on a code line starts a selection on its side; a drag moves the selection's end. */
   private select({ x, y, extend }: { x: number; y: number; extend?: true }) {
     const cell = this.cellsAt.get(y);
     if (!extend) {
@@ -124,7 +108,6 @@ export class Pane {
     } else if (this.selecting && this.selection && cell) this.selection = { ...this.selection, end: cell.key, endSide: cell.side(x) };
   }
 
-  /** `recursive`: an Alt-click. */
   private act(action: Action, recursive: boolean) {
     this.message = "";
     this.selecting = false;
@@ -181,7 +164,6 @@ export class Pane {
     return {};
   }
 
-  /** Too narrow for a sidebar: the tree takes the whole pane instead. */
   private narrow(size: Size) {
     return size.columns < TREE_MIN_COLUMNS;
   }
@@ -190,7 +172,6 @@ export class Pane {
     return flattenFileTree(buildFileTree(this.store.getSnapshot().inventory), this.closedDirectories);
   }
 
-  /** The files key or button: in a narrow pane, swap the diff for the tree and back; otherwise show or hide the sidebar. */
   private toggleFiles() {
     if (!this.size) throw new Error("The pane has not been drawn yet");
     if (!this.narrow(this.size)) {
@@ -199,13 +180,11 @@ export class Pane {
     }
     this.filesView = !this.filesView;
     if (this.filesView) {
-      // The tree opens on the file being read.
       const { currentFile } = this.viewer.lay(this.layoutSize(this.size));
       this.treeCursor = Math.max(0, this.treeRows().findIndex((row) => row.node.fileIndex === currentFile));
     }
   }
 
-  /** A key in the tree that took the pane: move, open a directory or go to a file. */
   private pressFiles(name: string) {
     const rows = this.treeRows();
     if (name === "j" || name === "down") this.treeCursor = Math.min(rows.length - 1, this.treeCursor + 1);
@@ -223,7 +202,6 @@ export class Pane {
     else this.closedDirectories.add(key);
   }
 
-  /** Goes to a file from the tree; a tree that took the pane gives it back to the diff. */
   private goToFile(index: number) {
     this.viewer.jump(index);
     this.filesView = false;
@@ -246,7 +224,6 @@ export class Pane {
     return { copy: { text, what: forAgent ? "for agent" : "source lines" } };
   }
 
-  /** The selected ranges, for the prompt box; the selection is done with once they are on their way. */
   private chat(): Outcome {
     if (!this.selection) {
       this.message = "Drag across lines to select them first";
@@ -265,9 +242,7 @@ export class Pane {
     return { chat: ranges.map((range) => ({ name: rangeName(range), context: rangeReference(snapshot.files, comparison, range) })) };
   }
 
-  /** `wheelColumn` is undefined for the pane's scroll keys. */
   scroll(by: number, wheelColumn: number | undefined) {
-    // The tree that took the pane scrolls by moving its cursor.
     if (this.filesView) return this.pressFiles(by < 0 ? "up" : "down");
     if (wheelColumn === undefined) return this.viewer.move(by);
     if (!this.size) throw new Error("The pane has not been drawn yet");
@@ -276,19 +251,15 @@ export class Pane {
     this.treeScroll = Math.max(0, Math.min(Math.max(0, treeRows.length - this.bodyRows(this.size)), this.treeScroll + by * 3));
   }
 
-  /** Includes the divider; 0 when hidden, as it always is in a narrow pane. */
   private sidebar(size: Size) {
     return !this.narrow(size) && (this.showTree ?? true) ? Math.max(16, Math.min(28, size.columns - 40)) : 0;
   }
 
-  /** The title bar and the status line take a row each. */
   private bodyRows(size: Size) {
     return Math.max(1, size.rows - 2);
   }
 
-  /** The diff column the viewer lays out: the tree and the scrollbar's last column are not in it. */
   private layoutSize(size: Size): Size {
-    // The scrollbar takes the last column.
     return { columns: Math.max(10, size.columns - this.sidebar(size) - 1), rows: this.bodyRows(size) };
   }
 
@@ -304,14 +275,12 @@ export class Pane {
     const colors = new Colors();
     const spinner = SPINNER[Math.floor(Date.now() / 80) % SPINNER.length]!;
     const statusGlyph = (index: number) => failures[index] || snapshot.complete ? "!" : spinner;
-    // A loaded file's mark in the tree: viewed, or blank.
     const treeMark = (index: number) => (viewer.isViewed(index) ? "✓" : " ");
     const counts = files.map((file) => file && lineCounts(file));
 
     const title = new LineBuilder(colors, theme.chrome);
     const loaded = counts.filter((c) => c !== undefined);
     const visible = loaded.reduce((sum, c) => add(sum, c.visible), zero);
-    // The files button leads the title bar; it reads as pressed while the tree has the pane.
     const button = " ☰ files ";
     title.hit(0, measureTextWidth(button), { files: true })
       .text(button, this.filesView ? theme.bg : theme.accent, this.filesView ? theme.accent : theme.chrome);
@@ -321,13 +290,11 @@ export class Pane {
       .text(snapshot.complete ? " " : "… ", theme.muted);
     for (const block of blockBar(visible))
       title.text(block === "neutral" ? "□" : "■", block === "added" ? theme.addedText : block === "removed" ? theme.removedText : theme.muted);
-    // Cut the comparison, not the badge.
     const badge = `${horizontal ? `  ⇠ col ${horizontal + 1}` : ""}  ${layout} [s] `;
     title.cut(size.columns - measureTextWidth(badge)).fill(size.columns - measureTextWidth(badge), theme.chrome);
     title.hit(title.width, title.width + measureTextWidth(badge), { layout: true }).text(badge, theme.accent);
     const lines: Line[] = [title.line(size.columns)];
 
-    // On a new current file, open its directories and scroll the tree to it.
     const currentPath = inventory[currentFile];
     if (currentPath && this.treeFollows !== currentFile)
       parentDirectories(currentPath).forEach((path) => this.closedDirectories.delete(path));
@@ -339,18 +306,14 @@ export class Pane {
     this.treeFollows = currentFile;
     const treeTop = Math.min(this.treeScroll, Math.max(0, treeRows.length - viewportHeight));
 
-    // A file header is the diff's one band: an accent edge, then the directory dimmed so the
-    // file name carries the row.
     const fileHeader = (line: LineBuilder, fileIndex: number) => {
       const file = files[fileIndex], count = counts[fileIndex]?.visible;
       const path = sanitizeTerminalLine(filePath(inventory[fileIndex]!.file));
       const shown = !!file && !!count;
       const start = line.width;
       const state = shown ? viewer.isViewed(fileIndex) : undefined, viewed = state === true;
-      // The counts, then the viewed box. A viewed file is read, so its counts go.
       const tally = shown && !viewed ? [` +${count.added}`, ` −${count.removed}`] : [];
       const box = state === undefined ? "" : ` ${viewedBox(state)}`;
-      // While the pointer is on the box, say what a click does beside it.
       const hint = state !== undefined && hover && "header" in hover && hover.file === fileIndex ? viewedHint(state) : "";
       const statsWidth = shown ? measureTextWidth(tally.join("") + (hint && ` ${hint}`) + box) + 1 : 0;
       const pathWidth = Math.max(1, contentWidth - statsWidth - 1);
@@ -376,7 +339,6 @@ export class Pane {
       if (shown) line.hit(start, start + contentWidth, { file: fileIndex });
     };
 
-    // Where each code row sits, so a press or drag on a frame line finds its row and side.
     this.cellsAt.clear();
     const rowIndex = new Map(at.rows.map((row, index) => [row.key, index]));
     const cover = selectionCover(at.rows, this.selection);
@@ -423,7 +385,6 @@ export class Pane {
     if (!body.length)
       body.push((line) => line.text(snapshot.complete ? "No changed files" : `${spinner} Starting comparison…`, theme.muted, theme.bg));
 
-    // The key list, in place of the diff; a click anywhere on it closes it.
     if (this.helpView) {
       const keyWidth = Math.max(...KEYS.map(([keys]) => measureTextWidth(keys))) + 4;
       for (let y = 0; y < viewportHeight; y++) {
@@ -433,7 +394,6 @@ export class Pane {
         lines.push(line.line(size.columns));
       }
     }
-    // The tree that took the pane: full width, a cursor, each file's counts at the right edge.
     else if (this.filesView) {
       this.treeCursor = Math.min(this.treeCursor, Math.max(0, treeRows.length - 1));
       this.treeScroll = this.treeCursor < this.treeScroll ? this.treeCursor
@@ -486,7 +446,6 @@ export class Pane {
       lines.push(line.line(size.columns));
     }
 
-    // The Ctrl-P picker takes the bottom of the body, up to ten lines, over whatever was there.
     const picker = viewer.pickerState();
     if (picker) {
       const drawn = pickerLines(picker, size.columns, Math.min(10, viewportHeight), theme,
@@ -502,13 +461,11 @@ export class Pane {
     const errors = snapshot.errors.length ? `${snapshot.errors.length} errors  ` : "";
     const read = viewer.viewedFiles();
     // A message leads, so a narrow pane cuts the key hints rather than what just happened.
-    // While typing, the status line is the prompt; after a search, it leads with where the search stands.
     const found = viewer.searchState();
     const selected = this.selection && !this.filesView && !this.helpView ? selectedRanges(files, at.rows, this.selection) : [];
     if (found && "prompt" in found)
       status.text(fit(`/${found.prompt}▏ · ${found.count} matches · enter go · ctrl-c cancel`, size.columns), theme.fg);
     else if (selected.length) {
-      // The selection bar, bright so it catches the eye: what is selected, then the button that sends it to the chat.
       const button = measureTextWidth(CHAT_BUTTON);
       const lead = fit(selectionLead(this.message, selected, size.columns - button), Math.max(0, size.columns - button));
       status.text(lead, theme.bg, theme.accent, true);
@@ -520,7 +477,6 @@ export class Pane {
     } else {
       const searched = !found ? ""
         : `/${found.pattern} · ${found.total ? `match ${found.at} of ${found.total} in ${found.files} files · n/N` : "no matches"} · `;
-      // Where the reader is, as vim's status line says it: the file, which of how many, how far through.
       const order = flattenFileTree(buildFileTree(inventory), new Set()).flatMap(({ node }) =>
         node.fileIndex === undefined ? [] : [node.fileIndex]);
       const name = inventory[currentFile] ? filePath(inventory[currentFile]!.file).split("/").at(-1) : undefined;
@@ -529,7 +485,6 @@ export class Pane {
       const loading = snapshot.complete ? "" : `${snapshot.loaded}/${inventory.length} loaded… `;
       const keys = this.filesView ? " j/k move · enter open · \\ or ⌘B back"
         : " h/l pan · / search · ctrl-p files · \\ or ⌘B tree · V viewed · drag selects · y/Y copy";
-      // The hints give way first, cut with an ellipsis; ? keys stays at the right end, and a click on it shows them all.
       const room = size.columns - measureTextWidth(KEYS_BUTTON);
       const text = `${this.message ? `${this.message} · ` : ""}${searched}${this.filesView ? "" : where}${read.viewed}/${read.total} viewed ${loading}${errors}${keys}`;
       status.text(measureTextWidth(text) > room ? `${fit(text, room - 1)}…` : text, theme.muted).fill(room);

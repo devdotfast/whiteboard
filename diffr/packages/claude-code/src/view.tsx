@@ -1,7 +1,8 @@
 import type { ClientModule, ClientSurface, JsonValue, RenderElement } from "claude-code";
 import type { Target } from "@diffr/viewer/viewport/cell";
 import type { Hover } from "@diffr/viewer/viewer";
-import type { Frame, Input, Line, Post } from "./protocol";
+import type { Input, Line } from "@diffr/consumer/protocol";
+import type { Frame, Post } from "./protocol";
 
 interface Local {
   instance: string;
