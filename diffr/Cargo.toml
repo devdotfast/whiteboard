@@ -14,6 +14,8 @@ rust-version = "1.99.0"
 
 include = [
         "/build.rs",
+        "/docs/agents.md",
+        "/docs/plugin.md",
         "/src/",
         "/wit/",
         "/plugins/",
@@ -50,6 +52,8 @@ wasmtime-wasi = { version = "49.0.2", default-features = false, features = ["p2"
 # The byte buffer a guest's output stream is handed, wasmtime-wasi's own.
 bytes = "1.12"
 wasmtime-wasi-http = { version = "49.0.2", default-features = false, features = ["p2", "p3", "default-send-request"] }
+cliclack = "0.5.6"
+dirs = "5"
 
 
 [target.'cfg(not(any(windows, target_os = "illumos", target_os = "freebsd")))'.dependencies]

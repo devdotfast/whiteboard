@@ -175,9 +175,12 @@ impl LanguageParams {
     }
 }
 
-/// The user's global file: `$XDG_CONFIG_HOME/diffr/config.toml`, falling
-/// back to `~/.config/diffr/config.toml`.
+/// The user's global file: `$DIFFR_CONFIG_DIR/config.toml`, else
+/// `$XDG_CONFIG_HOME/diffr/config.toml`, else `~/.config/diffr/config.toml`.
 pub fn global_path() -> Result<PathBuf, ConfigError> {
+    if let Some(dir) = std::env::var_os("DIFFR_CONFIG_DIR").filter(|dir| !dir.is_empty()) {
+        return Ok(PathBuf::from(dir).join("config.toml"));
+    }
     let dir = match std::env::var_os("XDG_CONFIG_HOME") {
         Some(dir) if !dir.is_empty() => PathBuf::from(dir),
         _ => dirs::home_dir()
