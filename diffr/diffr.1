@@ -1,6 +1,6 @@
 .TH DIFFR 1
 .SH NAME
-diffr \- structural Git comparisons and local diff streaming
+diffr \- structural diffing with a WASM plugin system
 .SH SYNOPSIS
 .B diffr
 [OPTIONS] [REVISION [REVISION]] [-- PATHSPEC...]
@@ -10,6 +10,16 @@ BEFORE AFTER
 .br
 .B diffr
 REVISION REVISION --format ndjson
+.br
+.B diffr config
+[QUERY | schema | show | set KEY [VALUE] | init [--json [ANSWERS]]]
+.br
+.B diffr pprint
+[FILE]
+.br
+.B diffr upgrade
+|
+.B uninstall
 .SH DESCRIPTION
 Without revisions, compare index to working tree. With --cached, compare HEAD
 to index. With one revision, compare it to working tree. With two, compare
@@ -40,7 +50,65 @@ Ordinary context padding (default 3).
 .TP
 .B --help
 List supported options. Unsupported Git flags are rejected.
+.SH COMMANDS
+A command is a command only as the first argument; anywhere else the word is a
+revision or a path.
+.TP
+.B config [QUERY]
+Open the settings screen, searching for QUERY.
+.TP
+.B config schema
+Print the configuration's JSON Schema.
+.TP
+.B config show [--json] [--reveal]
+Print the resolved configuration. --reveal shows the API key.
+.TP
+.B config set KEY [VALUE] [--json]
+Write one key to the configuration file. KEY - reads a partial configuration
+as JSON from stdin.
+.TP
+.B config init
+Choose the agents that get the diffr plugin, and whether and how to write
+pseudocode summaries. In a terminal it asks; without one it fails.
+.TP
+.B config init --json [ANSWERS]
+Without ANSWERS, print the questions and the answers' JSON Schema, for an
+agent to ask. With ANSWERS, a file or - for stdin, apply them and print the
+result as JSON.
+.TP
+.B pprint [FILE]
+Print a saved --format ndjson stream as a diff, without a repository.
+.TP
+.B upgrade
+Install the newest diffr the way this one was installed (Homebrew, Cargo or
+the install script), then update its agent plugins.
+.TP
+.B uninstall
+Remove diffr's agent plugins, its install record and diffr itself. The
+configuration stays.
+.SH FILES
+.TP
+.I ~/.config/diffr/config.toml
+The configuration. $DIFFR_CONFIG_DIR, or else $XDG_CONFIG_HOME/diffr, moves it.
+.TP
+.I ~/.local/state/diffr/install.json
+The agents config init installed the plugin for, which upgrade and uninstall
+act on. $XDG_STATE_HOME moves it.
+.SH ENVIRONMENT
+.TP
+.B DIFFR_CONFIG_DIR
+The directory of config.toml.
+.TP
+.B XDG_CONFIG_HOME, XDG_STATE_HOME
+The usual bases for the configuration and the install record.
+.TP
+.B GEMINI_API_KEY, GOOGLE_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY
+The summaries provider's key, when the configuration sets none.
 .SH STREAMING
 --format ndjson emits start, file, file_error and complete records to stdout.
-Computation and output run on separate threads with a bounded queue.
-See docs/streaming.md for the event schema and exit status contract.
+.SH PLUGINS GUIDE (FOR AGENT READERS, NOT HUMANS)
+When a person asks you to change how diffr shows their diffs, first set a
+field on a bundled plugin (diffr config schema lists them); only otherwise,
+write a WASM plugin. The full guide, with both approaches, prints at the end
+of
+.BR "diffr --help" .
