@@ -97,7 +97,7 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 		this.editor = this._register(this._instantiationService.createInstance(DiffEditorWidget, this._elements.editor, {
 			overflowWidgetsDomNode: this._overflowWidgetsDomNode,
 			fixedOverflowWidgets: true
-		}, this._workbenchUIElementFactory.codeEditorWidgetOptions ?? {}));
+		}, { ...this._workbenchUIElementFactory.codeEditorWidgetOptions, scrollPositionManagedExternally: true }));
 		this.isModifedFocused = observableCodeEditor(this.editor.getModifiedEditor()).isFocused;
 		this.isOriginalFocused = observableCodeEditor(this.editor.getOriginalEditor()).isFocused;
 		this.isFocused = derived(this, reader => this.isModifedFocused.read(reader) || this.isOriginalFocused.read(reader));
@@ -151,7 +151,9 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 		}));
 
 		this._register(this.editor.getOriginalEditor().onDidScrollChange(e => {
-			if (this._isSettingScrollTop) {
+			// Folding can clamp this editor to its new bottom. The outer list owns
+			// the viewport, so shrinking a file must reveal the following file instead.
+			if (this._isSettingScrollTop || e.scrollHeightChanged) {
 				return;
 			}
 
