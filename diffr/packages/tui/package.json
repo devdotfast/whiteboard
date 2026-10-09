@@ -4,9 +4,9 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "start": "bun run packages/hunk/src/main.tsx",
+    "start": "bun run src/main.tsx",
     "typecheck": "tsc --noEmit",
-    "test": "bun test packages"
+    "test": "bun test src"
   },
   "dependencies": {
     "@opentui/core": "0.5.6",
