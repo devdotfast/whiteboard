@@ -4,7 +4,7 @@
 use crate::config::{self, Config};
 use crate::git::Result;
 use crate::install::{Agent, Record};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::{
     fs,
@@ -12,21 +12,58 @@ use std::{
     path::Path,
 };
 
-// TODO(sid): how the person sets the summaries key without the agent.
-const KEY_INSTRUCTIONS: &str = "TODO";
+const KEY_INSTRUCTIONS: &str = "To enable pseudocode summarization, we need:
+1. An API Key from a supported provider (OpenAI, Anthropic, or Gemini-API compatible)
+2. This API key can also be sourced from the environment
+3. Otherwise, if that's not convenient, you can grab an API key and provide it to your agent (securely).
+";
 
 /// The summarizer's options in `config schema`.
 const SUMMARIZE_SCHEMA: &str =
     "/properties/plugins/properties/shape/properties/bundled/properties/summarize/properties";
 const SUMMARIZE: &str = "plugins.shape.bundled.summarize";
-const OFF: &str = "off";
+
+const AGENTS_QUESTION: &str = "Which agents would you like to install the diffr plugin for?";
+const SUMMARIES_QUESTION: &str = "Would you like pseudocode summaries of code?";
+const PROVIDER_QUESTION: &str =
+    "What AI provider would you like to use for summarization?";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Answers {
     agents: Vec<Agent>,
-    /// A provider, or `off`.
-    summaries: String,
+    /// Left out, summaries stay as they are.
+    #[serde(default)]
+    summaries: Option<Summaries>,
+}
+
+/// `"off"`, or `{"provider": "<id>"}`.
+#[derive(Deserialize, Serialize)]
+#[serde(untagged)]
+enum Summaries {
+    Off(Off),
+    On(On),
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum Off {
+    Off,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct On {
+    provider: String,
+}
+
+impl Summaries {
+    fn provider(&self) -> Option<&str> {
+        match self {
+            Summaries::Off(_) => None,
+            Summaries::On(on) => Some(&on.provider),
+        }
+    }
 }
 
 /// What the questions need: the current answers and the providers.
@@ -94,25 +131,29 @@ impl State {
         Ok(agents)
     }
 
-    fn summaries(&self) -> String {
-        let on = self
-            .config
+    fn on(&self) -> bool {
+        self.config
             .plugins
             .shape
             .enabled()
-            .any(|(name, _)| name == "bundled.summarize");
-        if on {
-            self.summarize()["provider"]
-                .as_str()
-                .expect("provider is a string")
-                .to_owned()
-        } else {
-            self.providers
-                .iter()
-                .map(|(id, _, _)| id)
-                .find(|id| self.has_key(id))
-                .map_or_else(|| OFF.to_owned(), Clone::clone)
+            .any(|(name, _)| name == "bundled.summarize")
+    }
+
+    /// The saved provider when summaries are on; otherwise the first with a
+    /// key, or the saved one.
+    fn provider(&self) -> String {
+        let saved = self.summarize()["provider"]
+            .as_str()
+            .expect("provider is a string");
+        if self.on() {
+            return saved.to_owned();
         }
+        self.providers
+            .iter()
+            .map(|(id, _, _)| id.as_str())
+            .find(|id| self.has_key(id))
+            .unwrap_or(saved)
+            .to_owned()
     }
 
     fn variables(&self, provider: &str) -> &[String] {
@@ -167,7 +208,7 @@ pub(crate) fn run(json: bool, answers: Option<&Path>) -> Result<i32> {
         (false, _) => {
             if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
                 return Err(
-                    "diffr config init needs a terminal; diffr config init --json prints its questions"
+                    "diffr config init is designed for interactive (human) use via terminals; agents and other headless clients should use diffr config init --json"
                         .into(),
                 );
             }
@@ -184,12 +225,11 @@ fn questions(state: &State) -> Result<Value> {
             json!({ "value": agent.id(), "label": agent.title(), "detected": agent.detected()? }),
         );
     }
-    let mut providers: Vec<Value> = state
+    let providers: Vec<Value> = state
         .providers
         .iter()
         .map(|(id, title, _)| json!({ "value": id, "label": title, "has_key": state.has_key(id) }))
         .collect();
-    providers.push(json!({ "value": OFF, "label": "Off" }));
     let ids = |options: &[Value]| -> Vec<Value> {
         options
             .iter()
@@ -200,27 +240,46 @@ fn questions(state: &State) -> Result<Value> {
         "questions": [
             {
                 "id": "agents",
-                "question": "Which agents should get the diffr plugin?",
+                "question": AGENTS_QUESTION,
                 "multi_select": true,
                 "options": agents,
                 "default": state.agents()?.iter().map(|agent| agent.id()).collect::<Vec<_>>(),
             },
             {
                 "id": "summaries",
-                "question": "Which provider should write summaries?",
+                "question": SUMMARIES_QUESTION,
                 "multi_select": false,
+                "optional": true,
+                "options": [{ "value": true, "label": "Yes" }, { "value": false, "label": "No" }],
+                "default": state.on(),
+            },
+            {
+                "id": "provider",
+                "question": PROVIDER_QUESTION,
+                "multi_select": false,
+                "ask_if": { "summaries": true },
                 "options": providers,
-                "default": state.summaries(),
+                "default": state.provider(),
             },
         ],
         "schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "type": "object",
-            "required": ["agents", "summaries"],
+            "required": ["agents"],
             "additionalProperties": false,
             "properties": {
                 "agents": { "type": "array", "uniqueItems": true, "items": { "enum": ids(&agents) } },
-                "summaries": { "enum": ids(&providers) },
+                "summaries": {
+                    "oneOf": [
+                        { "const": "off" },
+                        {
+                            "type": "object",
+                            "required": ["provider"],
+                            "additionalProperties": false,
+                            "properties": { "provider": { "enum": ids(&providers) } },
+                        },
+                    ],
+                },
             },
         },
         "key_instructions": KEY_INSTRUCTIONS,
@@ -242,23 +301,22 @@ fn read_answers(path: &Path) -> Result<Answers> {
 /// changes.
 fn apply(state: &State, answers: &Answers, key: Option<String>) -> Result<()> {
     let mut summarize = Map::new();
-    if answers.summaries == OFF {
-        summarize.insert("enabled".into(), false.into());
-    } else {
-        if !state
-            .providers
-            .iter()
-            .any(|(id, _, _)| *id == answers.summaries)
-        {
-            return Err(format!("no summaries provider named '{}'", answers.summaries).into());
+    match &answers.summaries {
+        None => {}
+        Some(Summaries::Off(_)) => {
+            summarize.insert("enabled".into(), false.into());
         }
-        summarize.insert("enabled".into(), true.into());
-        summarize.insert("provider".into(), answers.summaries.clone().into());
-        if let Some(key) = key {
-            summarize.insert("api_key".into(), key.into());
+        Some(Summaries::On(On { provider })) => {
+            if !state.providers.iter().any(|(id, _, _)| id == provider) {
+                return Err(format!("no supported AI provider named '{provider}'").into());
+            }
+            summarize.insert("enabled".into(), true.into());
+            summarize.insert("provider".into(), provider.clone().into());
+            if let Some(key) = key {
+                summarize.insert("api_key".into(), key.into());
+            }
         }
     }
-    let patch = json!({ "plugins": { "shape": { "bundled": { "summarize": summarize } } } });
 
     let mut record = Record::load()?;
     for agent in Agent::ALL {
@@ -275,16 +333,20 @@ fn apply(state: &State, answers: &Answers, key: Option<String>) -> Result<()> {
         }
         record.save()?;
     }
-    config::store::patch(&config::global_path()?, &patch)?;
+    if !summarize.is_empty() {
+        let patch = json!({ "plugins": { "shape": { "bundled": { "summarize": summarize } } } });
+        config::store::patch(&config::global_path()?, &patch)?;
+    }
     Ok(())
 }
 
 fn outcome(state: &State, answers: &Answers) -> Value {
-    let key = (answers.summaries != OFF).then(|| {
+    let provider = answers.summaries.as_ref().and_then(Summaries::provider);
+    let key = provider.map(|provider| {
         json!({
-            "present": state.has_key(&answers.summaries),
+            "present": state.has_key(provider),
             "config_key": format!("{SUMMARIZE}.api_key"),
-            "variables": state.variables(&answers.summaries),
+            "variables": state.variables(provider),
             "instructions": KEY_INSTRUCTIONS,
         })
     });
@@ -297,7 +359,7 @@ fn outcome(state: &State, answers: &Answers) -> Value {
 
 fn prompt(state: &State) -> Result<()> {
     cliclack::intro("diffr")?;
-    let mut agents = cliclack::multiselect("Which agents should get the diffr plugin?")
+    let mut agents = cliclack::multiselect(AGENTS_QUESTION)
         .initial_values(state.agents()?)
         .required(false);
     for agent in Agent::ALL {
@@ -306,28 +368,44 @@ fn prompt(state: &State) -> Result<()> {
     }
     let agents = agents.interact()?;
 
-    let mut summaries =
-        cliclack::select("Which provider should write summaries?").initial_value(state.summaries());
-    for (id, title, _) in &state.providers {
-        let hint = if state.has_key(id) { "key found" } else { "" };
-        summaries = summaries.item(id.clone(), title, hint);
-    }
-    let summaries = summaries.item(OFF.to_owned(), "Off", "").interact()?;
-
-    let key = if summaries != OFF && !state.has_key(&summaries) {
-        let key = cliclack::password(format!(
-            "API key (or leave blank and set {})",
-            state.variables(&summaries).join(" or ")
-        ))
-        .mask('▪')
-        .allow_empty()
+    let on = cliclack::confirm(SUMMARIES_QUESTION)
+        .initial_value(state.on())
         .interact()?;
-        (!key.is_empty()).then_some(key)
+    let (summaries, key) = if on {
+        let mut providers = cliclack::select(PROVIDER_QUESTION).initial_value(state.provider());
+        for (id, title, _) in &state.providers {
+            let hint = if state.has_key(id) {
+                "envvar detected"
+            } else {
+                ""
+            };
+            providers = providers.item(id.clone(), title, hint);
+        }
+        let provider = providers.interact()?;
+        // A key in the environment or the config is enough; otherwise one is required.
+        let key = if state.has_key(&provider) {
+            None
+        } else {
+            let (_, title, _) = state
+                .providers
+                .iter()
+                .find(|(id, _, _)| *id == provider)
+                .expect("the provider is in the schema");
+            Some(
+                cliclack::password(format!("{title} API key"))
+                    .mask('▪')
+                    .interact()?,
+            )
+        };
+        (Summaries::On(On { provider }), key)
     } else {
-        None
+        (Summaries::Off(Off::Off), None)
     };
 
-    let answers = Answers { agents, summaries };
+    let answers = Answers {
+        agents,
+        summaries: Some(summaries),
+    };
     let spinner = cliclack::spinner();
     spinner.start("Saving");
     match apply(state, &answers, key) {
@@ -337,6 +415,6 @@ fn prompt(state: &State) -> Result<()> {
             return Err(error);
         }
     }
-    cliclack::outro("diffr is ready")?;
+    cliclack::outro("diffr is ready to use! Hope you enjoy some beautiful diffs")?;
     Ok(())
 }
