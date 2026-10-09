@@ -386,7 +386,7 @@ it("mounts eagerly when IntersectionObserver is unavailable", () => {
   expect(created).toHaveLength(1);
 });
 
-it("emits neutral hover and navigation interactions without remounting", () => {
+it("emits a neutral hover interaction without remounting", () => {
   let disposed = 0;
 
   const session = testReviewSession(
@@ -443,14 +443,10 @@ it("emits neutral hover and navigation interactions without remounting", () => {
     );
   });
   expect(created).toHaveLength(1);
-  const { onDidNavigate, onDidShowHover } = created[0]!;
-  act(() => {
-    onDidShowHover?.();
-    onDidNavigate?.();
-  });
+  const { onDidShowHover } = created[0]!;
+  act(() => onDidShowHover?.());
   expect(interactions).toEqual([
     { kind: "inline-hover", path: "src/example.ts" },
-    { kind: "inline-navigation", path: "src/example.ts" },
   ]);
   expect(created).toHaveLength(1);
   expect(disposed).toBe(0);

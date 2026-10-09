@@ -2,10 +2,10 @@ import { z } from "zod";
 
 export const REVIEW_INTERACTION_EVENT = "review-interaction";
 
-const ReviewInteractionDetailSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("inline-hover"), path: z.string() }),
-  z.object({ kind: z.literal("inline-navigation"), path: z.string() }),
-]);
+const ReviewInteractionDetailSchema = z.object({
+  kind: z.literal("inline-hover"),
+  path: z.string(),
+});
 
 export type ReviewInteractionDetail = z.infer<
   typeof ReviewInteractionDetailSchema

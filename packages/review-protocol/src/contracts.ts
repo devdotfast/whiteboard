@@ -153,7 +153,6 @@ export interface ReviewInlineEditorSpec {
   active: boolean;
   onDidFocus?: () => void;
   onDidOpen?: () => void;
-  onDidNavigate?: () => void;
   onDidShowHover?: () => void;
 }
 
@@ -254,6 +253,7 @@ export interface ReviewDiffViewSpec {
     onDidChangeHeight(height: number): void;
     onDidFocus?: () => void;
     onDidOpen?: () => void;
+    onDidShowHover?: () => void;
   };
   container: HTMLElement;
   fileTreeContainer?: HTMLElement;

@@ -155,14 +155,7 @@ export function TutorialExperienceProvider({
 
       if (!detail) return;
 
-      if (
-        (activeStep.completion === "inline-hover" &&
-          detail.kind === "inline-hover") ||
-        (activeStep.completion === "inline-navigation" &&
-          detail.kind === "inline-navigation")
-      ) {
-        completeStep(activeStep);
-      }
+      if (activeStep.completion === "inline-hover") completeStep(activeStep);
     };
 
     root.addEventListener("click", onClick, true);
