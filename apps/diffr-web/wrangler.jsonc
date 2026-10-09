@@ -11,7 +11,6 @@
   "preview_urls": true,
   "routes": [
     { "pattern": "diffsthatgetyoustiff.com", "custom_domain": true },
-    { "pattern": "diffs.fast", "custom_domain": true },
     { "pattern": "diffr.fast", "custom_domain": true },
   ],
 }
