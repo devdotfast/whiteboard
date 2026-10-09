@@ -4,7 +4,7 @@ import { filePath } from "../protocol/wire";
 import { sliceSpansWindow } from "../terminal/spans";
 import { measureTextWidth } from "../terminal/text";
 import { byteColumn, collapsedFolds, flatten, foldHeaders, foldTint, hiddenLines, pairedIds, sourceLines, type Fold, type FoldTint, type Leaf, type RowFold, type Side } from "./regions";
-import { foldBackground, type Palette } from "../theme/palette";
+import type { Palette } from "../theme/palette";
 export { sourceLines };
 export type Layout = "split" | "unified";
 export interface RenderSpan {
@@ -62,6 +62,11 @@ export interface ViewerRow {
   left?: SplitLineCell;
   right?: SplitLineCell;
   cell?: UnifiedLineCell;
+}
+/** Paired folds sit on the code's own background; only one-sided folds carry a change tint. */
+export function foldBackground(theme: Palette, tint: FoldTint) {
+  return tint === "inserted" ? theme.addition : tint === "removed" ? theme.deletion
+    : tint === "modified" ? theme.modification : theme.bg;
 }
 /** Foreground for a tree-sitter capture: the theme's scope, its parents, else plain text. */
 export function captureColor(capture: string, theme: Palette): string {
