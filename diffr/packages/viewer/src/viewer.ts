@@ -1,6 +1,7 @@
 import { buildFileTree, flattenFileTree } from "./document/fileTree";
-import { defaultCollapsed, foldIds, gapIds, nestedIds, sourceLines } from "./document/regions";
-import { placeholderRows, rowsForFile, type Layout, type ViewerRow } from "./document/rows";
+import { defaultCollapsed, foldIds, gapIds, hidingIds, nestedIds, sourceLines } from "./document/regions";
+import { occurrences, type Match } from "./document/search";
+import { placeholderRows, rowsForFile, type Layout, type SplitLineCell, type UnifiedLineCell, type ViewerRow } from "./document/rows";
 import type { DiffStore, Snapshot } from "./protocol/store";
 import { filePath, fileVisibility, type DiffFile, type TextDiff } from "./protocol/wire";
 import { measureRows, positionAt, positionTop, rowFold, visibleRows, type Geometry, type MeasuredRow, type ViewPosition } from "./viewport/geometry";
@@ -64,6 +65,11 @@ export class Viewer {
   private pendingZ = false;
   /** Files marked viewed, for the viewer's lifetime only. */
   private readonly viewed = new Set<number>();
+  private prompt: string | null = null;
+  private search: { pattern: string; matches: Match[]; at: number; snapshot: Snapshot } | null = null;
+  private promptCount: { pattern: string; snapshot: Snapshot; count: number } | undefined;
+  /** Each file's rows with every fold open, in the layout they were built for: what search reads. */
+  private readonly openRows = new WeakMap<DiffFile, { layout: Layout; rows: ViewerRow[] }>();
   private readonly rowCache = new WeakMap<DiffFile, { key: string; rows: ViewerRow[] }>();
   /** Bumped when rows change; keys the geometry cache. */
   private revision = 0;
@@ -251,6 +257,131 @@ export class Viewer {
     this.reshape();
   }
 
+  /** The `/` prompt is open: every key goes to it. */
+  get prompting(): boolean {
+    return this.prompt !== null;
+  }
+
+  searchState(): { prompt: string; count: number } | { pattern: string; at: number; total: number; files: number } | undefined {
+    if (this.prompt !== null) {
+      const snapshot = this.snapshot;
+      if (this.promptCount?.pattern !== this.prompt || this.promptCount.snapshot !== snapshot)
+        this.promptCount = { pattern: this.prompt, snapshot, count: this.findMatches(this.prompt).length };
+      return { prompt: this.prompt, count: this.promptCount.count };
+    }
+    if (!this.search) return undefined;
+    const { pattern, matches, at } = this.search;
+    return { pattern, at: at + 1, total: matches.length, files: new Set(matches.map((match) => match.fileIndex)).size };
+  }
+
+  /** The pattern to light on one side of a row: the one being typed, else the last search's; `current` on the match the view is on. */
+  highlight(fileIndex: number, key: string, side: "left" | "right"): { pattern: string; current: boolean } | undefined {
+    const pattern = this.prompt ?? this.search?.pattern;
+    if (!pattern) return undefined;
+    const on = this.prompt === null && this.search ? this.search.matches[this.search.at] : undefined;
+    return { pattern, current: !!on && on.fileIndex === fileIndex && on.key === key && on.side === side };
+  }
+
+  private allOpenRows(index: number, file: DiffFile, layout: Layout): ViewerRow[] {
+    let cached = this.openRows.get(file);
+    if (cached?.layout !== layout) {
+      cached = { layout, rows: rowsForFile(file, index, layout, this.theme, new Set()) };
+      this.openRows.set(file, cached);
+    }
+    return cached.rows;
+  }
+
+  private findMatches(pattern: string): Match[] {
+    const { files, inventory } = this.snapshot;
+    const layout = this.current().layout;
+    const matches: Match[] = [];
+    for (const index of this.fileOrder(this.snapshot)) {
+      for (const _ of occurrences(filePath(inventory[index]!.file), pattern))
+        matches.push({ fileIndex: index, key: `${index}:header`, side: "right" });
+      const file = files[index];
+      if (!file) continue;
+      for (const row of this.allOpenRows(index, file, layout)) {
+        const cells: ["left" | "right", SplitLineCell | UnifiedLineCell | undefined, number | undefined][] = row.cell
+          ? [[row.cell.newLineNumber === undefined ? "left" : "right", row.cell, row.cell.newLineNumber ?? row.cell.oldLineNumber]]
+          : [["left", row.left, row.left?.lineNumber], ["right", row.right, row.right?.lineNumber]];
+        for (const [side, cell, line] of cells) {
+          if (!cell || line === undefined) continue;
+          for (const _ of occurrences(cell.spans.map((span) => span.text).join(""), pattern))
+            matches.push({ fileIndex: index, key: row.key, side, line });
+        }
+      }
+    }
+    return matches;
+  }
+
+  private placeOf(order: number[], layout: Layout, fileIndex: number, key: string, side: "left" | "right", line?: number): number {
+    const file = this.snapshot.files[fileIndex];
+    const rows = file ? this.allOpenRows(fileIndex, file, layout) : [];
+    const lineOf = (row: ViewerRow) => side === "left" ? row.left?.lineNumber ?? row.cell?.oldLineNumber
+      : row.right?.lineNumber ?? row.cell?.newLineNumber;
+    let row = rows.findIndex((r) => r.key === key);
+    // A row that only exists folded, such as a collapsed fold's own row, sits where its line does.
+    if (row < 0 && line !== undefined) row = rows.findIndex((r) => (lineOf(r) ?? -1) >= line);
+    // No file has ten million rows, so a file's place times that leaves room for all of its rows.
+    return order.indexOf(fileIndex) * 1e7 + Math.max(0, row);
+  }
+
+  private commitSearch(pattern: string) {
+    this.prompt = null;
+    if (!pattern) return this.emit();
+    const snapshot = this.snapshot, matches = this.findMatches(pattern);
+    this.search = { pattern, matches, at: -1, snapshot };
+    if (!matches.length) return this.emit();
+    const at = this.current(), top = positionAt(at.geometry, at.top);
+    const order = this.fileOrder(snapshot);
+    const from = top ? this.placeOf(order, at.layout, top.fileIndex, top.key, top.side, top.line) : 0;
+    const next = matches.findIndex((match) => this.placeOf(order, at.layout, match.fileIndex, match.key, match.side, match.line) >= from);
+    this.search.at = next < 0 ? 0 : next;
+    this.goTo(matches[this.search.at]!);
+  }
+
+  /** Also searches files that streamed in since the search. */
+  private stepMatch(direction: 1 | -1) {
+    const search = this.search;
+    if (!search) return;
+    if (search.snapshot !== this.snapshot) {
+      const on = search.matches[search.at];
+      search.matches = this.findMatches(search.pattern);
+      search.snapshot = this.snapshot;
+      search.at = on ? search.matches.findIndex((m) => m.fileIndex === on.fileIndex && m.key === on.key && m.side === on.side) : -1;
+    }
+    const total = search.matches.length;
+    if (!total) return this.emit();
+    search.at = (search.at + direction + total) % total;
+    this.goTo(search.matches[search.at]!);
+  }
+
+  private goTo(match: Match) {
+    const file = this.snapshot.files[match.fileIndex];
+    if (file && match.line !== undefined) {
+      if (this.isClosed(match.fileIndex, file)) this.closed.set(match.fileIndex, false);
+      if (file.diff.type === "text") {
+        const hiding = hidingIds(file.diff, match.side === "left" ? 0 : 1, match.line - 1, this.foldsOf(match.fileIndex, file.diff));
+        if (hiding.length) this.setFolds(match.fileIndex, file.diff, hiding, false);
+      }
+    }
+    this.position = { key: match.key, fileIndex: match.fileIndex, offset: 0, side: match.side, line: match.line };
+    this.reshape();
+  }
+
+  private type(key: KeyPress) {
+    const name = key.key, prompt = this.prompt!;
+    if (name === "return" || name === "enter") return this.commitSearch(prompt);
+    if (name === "escape" || (key.ctrl && (name === "c" || name === "g"))) this.prompt = null;
+    else if (name === "backspace") this.prompt = prompt ? prompt.slice(0, -1) : null;
+    else if (!key.ctrl && !key.meta) {
+      const text = name === "space" ? " " : name;
+      if ([...text].length !== 1) return;
+      this.prompt = prompt + text;
+    } else return;
+    this.emit();
+  }
+
   /** "toggle" reads the first id's state, so quick repeated clicks alternate. */
   private setFolds(fileIndex: number, diff: TextDiff, ids: number[], collapse: boolean | "toggle") {
     const next = new Set(this.foldsOf(fileIndex, diff));
@@ -356,6 +487,10 @@ export class Viewer {
     const at = this.current();
     const page = at.size.rows, half = Math.max(1, Math.floor(at.size.rows / 2));
     const name = key.key;
+    if (this.prompt !== null) {
+      this.type(key);
+      return true;
+    }
     if (this.pendingZ) {
       this.pendingZ = false;
       if (!key.ctrl && !key.meta && name.length === 1 && "aocAOCRMjk".includes(name)) this.foldCommand(name);
@@ -393,6 +528,9 @@ export class Viewer {
       case "z": this.pendingZ = true; break;
       case "return": case "enter": this.toggleTopFile(); break;
       case "V": if (at.currentFile >= 0) this.toggleViewedFile(at.currentFile); break;
+      case "/": this.prompt = ""; this.emit(); break;
+      case "n": this.stepMatch(1); break;
+      case "N": this.stepMatch(-1); break;
       default: return false;
     }
     return true;
