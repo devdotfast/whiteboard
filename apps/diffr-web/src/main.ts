@@ -53,6 +53,8 @@ const setTheme = applyTheme(root);
 
 const header = root.appendChild(element("header", "app-header"));
 
+let headerUpdatePending = false;
+
 const status = root.appendChild(element("div", "app-status"));
 
 status.hidden = true;
@@ -203,7 +205,13 @@ function renderHeader(): void {
   mobileFiles.update();
 
   // Streaming file results must not tear down the menu the reader is using.
-  if (header.querySelector(":popover-open")) return;
+  if (header.querySelector(":popover-open")) {
+    headerUpdatePending = true;
+
+    return;
+  }
+
+  headerUpdatePending = false;
 
   const focusedButton = Array.from(header.querySelectorAll("button")).findIndex(
     (button) => button === document.activeElement,
@@ -399,7 +407,11 @@ function quickMenu(icon: string, label: string) {
       void Promise.allSettled(
         panel.getAnimations().map((animation) => animation.finished),
       ).then(() => {
-        if (panel.isConnected && !panel.matches(":popover-open"))
+        if (
+          headerUpdatePending &&
+          panel.isConnected &&
+          !panel.matches(":popover-open")
+        )
           renderHeader();
       });
   });
