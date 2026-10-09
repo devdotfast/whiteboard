@@ -1,6 +1,6 @@
 /** Flatten diffr's per-side region trees; collapsed state belongs to the viewer. */
-import type { FoldRegion, Region, Source, Span, TextDiff } from "./wire";
-import { measureTextWidth } from "../ui/lib/text";
+import type { FoldRegion, Region, Source, Span, TextDiff } from "../protocol/wire";
+import { measureTextWidth } from "../terminal/text";
 export type Side = 0 | 1;
 /** A leaf tiles its side; the same alignmentId on the other side is the leaf its rows line up with. */
 export interface Leaf {

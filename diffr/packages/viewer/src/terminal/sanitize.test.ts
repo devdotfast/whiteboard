@@ -1,9 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   formatTerminalPath,
   sanitizeTerminalSpans,
   sanitizeTerminalText,
-} from "./terminalText";
+} from "./sanitize";
 
 const OSC52_CLIPBOARD = "\x1b]52;c;SGVsbG8=\x07";
 const OSC_ST = "\x1b]8;;https://example.test\x1b\\";

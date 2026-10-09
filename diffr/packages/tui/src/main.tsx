@@ -6,10 +6,11 @@ import { spawn } from "node:child_process";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { readDiffStream } from "./diffr/stream";
-import { DiffStore } from "./diffr/store";
+import { DiffStore } from "@diffr/viewer/protocol/store";
 import { cliClient, flattenSchema, type Setting } from "./diffr/config";
-import { loadBundledTheme, loadThemeFile, themesFromConfig, type ThemeSet } from "./diffr/theme";
-import { themeConfig } from "./diffr/palette";
+import { loadThemeFile, themesFromConfig, type ThemeSet } from "./diffr/theme";
+import { loadBundledTheme } from "@diffr/viewer/theme/themes";
+import { themeConfig } from "@diffr/viewer/theme/palette";
 import { App } from "./ui/App";
 import { Settings } from "./ui/Settings";
 const args = process.argv.slice(2),
