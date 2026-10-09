@@ -358,7 +358,10 @@ fn pprint_reads_a_file_or_stdin_without_a_frontend() {
 #[test]
 fn long_help_ends_with_a_guide_and_short_help_does_not() {
     for (args, guide) in [
-        (&["--help"][..], "Plugins Guide (for agent readers, not humans):"),
+        (
+            &["--help"][..],
+            "Plugins Guide (for agent readers, not humans):",
+        ),
         (&["config", "--help"][..], "# Plugin Architecture"),
     ] {
         get_base_command()
@@ -427,7 +430,7 @@ fn config_init_installs_the_chosen_plugins_and_asks_again_with_them() {
     let dir = tempfile::tempdir().unwrap();
     let output = config_init(
         dir.path(),
-        Some(r#"{"agents":["claude-code"],"summaries":"openai"}"#),
+        Some(r#"{"agents":["claude-code"],"summaries":{"provider":"openai"}}"#),
         false,
     );
     assert!(
@@ -450,7 +453,8 @@ fn config_init_installs_the_chosen_plugins_and_asks_again_with_them() {
         questions["questions"][0]["default"],
         serde_json::json!(["claude-code"])
     );
-    assert_eq!(questions["questions"][1]["default"], "openai");
+    assert_eq!(questions["questions"][1]["default"], true);
+    assert_eq!(questions["questions"][2]["default"], "openai");
 
     let output = config_init(
         dir.path(),
@@ -464,11 +468,33 @@ fn config_init_installs_the_chosen_plugins_and_asks_again_with_them() {
 
 #[cfg(unix)]
 #[test]
+fn config_init_without_a_summaries_answer_keeps_the_summaries_choice() {
+    let dir = tempfile::tempdir().unwrap();
+    let output = config_init(
+        dir.path(),
+        Some(r#"{"agents":[],"summaries":{"provider":"openai"}}"#),
+        false,
+    );
+    assert!(output.status.success());
+    let output = config_init(dir.path(), Some(r#"{"agents":[]}"#), false);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let questions: serde_json::Value =
+        serde_json::from_slice(&config_init(dir.path(), None, false).stdout).unwrap();
+    assert_eq!(questions["questions"][1]["default"], true);
+    assert_eq!(questions["questions"][2]["default"], "openai");
+}
+
+#[cfg(unix)]
+#[test]
 fn config_init_stops_at_a_failed_plugin_install_and_keeps_the_config() {
     let dir = tempfile::tempdir().unwrap();
     let output = config_init(
         dir.path(),
-        Some(r#"{"agents":["claude-code"],"summaries":"openai"}"#),
+        Some(r#"{"agents":["claude-code"],"summaries":{"provider":"openai"}}"#),
         true,
     );
     assert_eq!(output.status.code(), Some(2));
@@ -497,7 +523,7 @@ fn uninstall_removes_plugins_binaries_and_record_and_keeps_the_config() {
     let dir = tempfile::tempdir().unwrap();
     let output = config_init(
         dir.path(),
-        Some(r#"{"agents":["claude-code"],"summaries":"openai"}"#),
+        Some(r#"{"agents":["claude-code"],"summaries":{"provider":"openai"}}"#),
         false,
     );
     assert!(output.status.success());
