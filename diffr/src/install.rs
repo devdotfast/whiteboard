@@ -40,9 +40,21 @@ impl Agent {
         }
     }
 
-    pub(crate) fn detected(self) -> bool {
+    /// The agents whose command is on PATH, which are the ones `config init`
+    /// can install the plugin for.
+    pub(crate) fn found() -> Vec<Agent> {
+        Agent::ALL
+            .into_iter()
+            .filter(|agent| match agent {
+                Agent::ClaudeCode => claude_path().is_some(),
+            })
+            .collect()
+    }
+
+    /// Why `config init` skips this agent: its command is not on PATH.
+    pub(crate) fn missing(self) -> &'static str {
         match self {
-            Agent::ClaudeCode => claude_path().is_some(),
+            Agent::ClaudeCode => CLAUDE_MISSING,
         }
     }
 
@@ -242,6 +254,10 @@ pub(crate) fn home() -> Result<PathBuf> {
     Ok(dirs::home_dir().ok_or("no home directory for this user")?)
 }
 
+const CLAUDE_MISSING: &str = "Claude Code's `claude` command is not on your PATH. Install \
+     Claude Code (https://code.claude.com/docs/en/setup), or open a new terminal if you just \
+     did, then run `diffr config init`.";
+
 /// Where `claude` is on PATH, found the way `Command::new("claude")` finds it.
 fn claude_path() -> Option<PathBuf> {
     let name = format!("claude{}", std::env::consts::EXE_SUFFIX);
@@ -252,12 +268,7 @@ fn claude_path() -> Option<PathBuf> {
 
 fn claude(args: &[&str]) -> Result<Vec<u8>> {
     let Some(path) = claude_path() else {
-        return Err(
-            "Claude Code's `claude` command is not on your PATH. Install Claude Code \
-             (https://code.claude.com/docs/en/setup), or open a new terminal if you just did, \
-             then run `diffr config init` again."
-                .into(),
-        );
+        return Err(CLAUDE_MISSING.into());
     };
     host(Command::new(path).args(args))
 }

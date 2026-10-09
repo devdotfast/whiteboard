@@ -67,7 +67,8 @@ impl Summaries {
 
 /// What the questions need: the current answers and the providers.
 struct State {
-    record: Record,
+    /// The agents whose command is on PATH: the only ones offered.
+    found: Vec<Agent>,
     config: Config,
     /// Each provider's id, title and key variables, from the schema.
     providers: Vec<(String, String, Vec<String>)>,
@@ -110,7 +111,7 @@ impl State {
             })
             .collect();
         Ok(Self {
-            record: Record::load()?,
+            found: Agent::found(),
             config: Config::load()?,
             providers,
         })
@@ -118,16 +119,6 @@ impl State {
 
     fn summarize(&self) -> &Map<String, Value> {
         &self.config.plugins.shape.entries["bundled.summarize"].options
-    }
-
-    fn agents(&self) -> Result<Vec<Agent>> {
-        let mut agents = Vec::new();
-        for agent in Agent::ALL {
-            if self.record.agents.contains(&agent) || agent.detected() {
-                agents.push(agent);
-            }
-        }
-        Ok(agents)
     }
 
     fn on(&self) -> bool {
@@ -217,12 +208,11 @@ pub(crate) fn run(json: bool, answers: Option<&Path>) -> Result<i32> {
 }
 
 fn questions(state: &State) -> Result<Value> {
-    let mut agents = Vec::new();
-    for agent in Agent::ALL {
-        agents.push(
-            json!({ "value": agent.id(), "label": agent.title(), "detected": agent.detected() }),
-        );
-    }
+    let agents: Vec<Value> = state
+        .found
+        .iter()
+        .map(|agent| json!({ "value": agent.id(), "label": agent.title() }))
+        .collect();
     let providers: Vec<Value> = state
         .providers
         .iter()
@@ -241,7 +231,7 @@ fn questions(state: &State) -> Result<Value> {
                 "question": AGENTS_QUESTION,
                 "multi_select": true,
                 "options": agents,
-                "default": state.agents()?.iter().map(|agent| agent.id()).collect::<Vec<_>>(),
+                "default": state.found.iter().map(|agent| agent.id()).collect::<Vec<_>>(),
             },
             {
                 "id": "summaries",
@@ -322,8 +312,17 @@ fn apply(
         }
     }
 
+    if let Some(agent) = answers
+        .agents
+        .iter()
+        .find(|agent| !state.found.contains(agent))
+    {
+        return Err(agent.missing().into());
+    }
+    // An agent whose command is gone keeps its record: there is nothing to
+    // remove the plugin with.
     let mut record = Record::load()?;
-    for agent in Agent::ALL {
+    for &agent in &state.found {
         let chosen = answers.agents.contains(&agent);
         let installed = record.agents.contains(&agent);
         if chosen {
@@ -364,14 +363,26 @@ fn outcome(state: &State, answers: &Answers) -> Value {
 
 fn prompt(state: &State) -> Result<i32> {
     cliclack::intro("diffr")?;
-    let mut agents = cliclack::multiselect(AGENTS_QUESTION)
-        .initial_values(state.agents()?)
-        .required(false);
     for agent in Agent::ALL {
-        let hint = if agent.detected() { "found" } else { "" };
-        agents = agents.item(agent, agent.title(), hint);
+        if !state.found.contains(&agent) {
+            cliclack::log::info(format!(
+                "Skipping the {} plugin. {}",
+                agent.title(),
+                agent.missing()
+            ))?;
+        }
     }
-    let agents = agents.interact()?;
+    let agents = if state.found.is_empty() {
+        Vec::new()
+    } else {
+        let mut agents = cliclack::multiselect(AGENTS_QUESTION)
+            .initial_values(state.found.clone())
+            .required(false);
+        for &agent in &state.found {
+            agents = agents.item(agent, agent.title(), "");
+        }
+        agents.interact()?
+    };
 
     let on = cliclack::confirm(SUMMARIES_QUESTION)
         .initial_value(state.on())

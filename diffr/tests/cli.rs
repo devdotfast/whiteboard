@@ -378,21 +378,39 @@ fn long_help_ends_with_a_guide_and_short_help_does_not() {
     }
 }
 
-/// `config init --json` against a stand-in `claude` that logs its arguments
-/// and fails `plugin install` when `FAIL` is set.
+/// The stand-in `claude` that `config_init` puts on PATH, if any.
 #[cfg(unix)]
-fn config_init(dir: &std::path::Path, answers: Option<&str>, fail: bool) -> std::process::Output {
+#[derive(Clone, Copy, PartialEq)]
+enum Claude {
+    Works,
+    FailsInstall,
+    Missing,
+}
+
+/// `config init --json` against a stand-in `claude` that logs its arguments.
+#[cfg(unix)]
+fn config_init(
+    dir: &std::path::Path,
+    answers: Option<&str>,
+    stand_in: Claude,
+) -> std::process::Output {
     use std::os::unix::fs::PermissionsExt;
     let bin = dir.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
     std::fs::create_dir_all(dir.join("home/.claude")).unwrap();
     let claude = bin.join("claude");
-    std::fs::write(
+    if stand_in == Claude::Missing {
+        if claude.exists() {
+            std::fs::remove_file(&claude).unwrap();
+        }
+    } else {
+        std::fs::write(
         &claude,
         "#!/bin/sh\necho \"$*\" >> \"$LOG\"\ncase \"$*\" in\n  \"plugin marketplace list --json\") echo '[]' ;;\n  \"plugin install\"*) if [ -n \"$FAIL\" ]; then exit 1; fi ;;\nesac\n",
     )
     .unwrap();
-    std::fs::set_permissions(&claude, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(&claude, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
     let mut command = get_base_command();
     command
         .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
@@ -408,7 +426,7 @@ fn config_init(dir: &std::path::Path, answers: Option<&str>, fail: bool) -> std:
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    if fail {
+    if stand_in == Claude::FailsInstall {
         command.env("FAIL", "1");
     }
     if answers.is_some() {
@@ -431,7 +449,7 @@ fn config_init_installs_the_chosen_plugins_and_asks_again_with_them() {
     let output = config_init(
         dir.path(),
         Some(r#"{"agents":["claude-code"],"summaries":{"provider":"openai"}}"#),
-        false,
+        Claude::Works,
     );
     assert!(
         output.status.success(),
@@ -448,7 +466,7 @@ fn config_init_installs_the_chosen_plugins_and_asks_again_with_them() {
     );
 
     let questions: serde_json::Value =
-        serde_json::from_slice(&config_init(dir.path(), None, false).stdout).unwrap();
+        serde_json::from_slice(&config_init(dir.path(), None, Claude::Works).stdout).unwrap();
     assert_eq!(
         questions["questions"][0]["default"],
         serde_json::json!(["claude-code"])
@@ -459,7 +477,7 @@ fn config_init_installs_the_chosen_plugins_and_asks_again_with_them() {
     let output = config_init(
         dir.path(),
         Some(r#"{"agents":[],"summaries":"off"}"#),
-        false,
+        Claude::Works,
     );
     assert!(output.status.success());
     let log = std::fs::read_to_string(dir.path().join("log")).unwrap();
@@ -473,17 +491,17 @@ fn config_init_without_a_summaries_answer_keeps_the_summaries_choice() {
     let output = config_init(
         dir.path(),
         Some(r#"{"agents":[],"summaries":{"provider":"openai"}}"#),
-        false,
+        Claude::Works,
     );
     assert!(output.status.success());
-    let output = config_init(dir.path(), Some(r#"{"agents":[]}"#), false);
+    let output = config_init(dir.path(), Some(r#"{"agents":[]}"#), Claude::Works);
     assert!(
         output.status.success(),
         "{}",
         String::from_utf8_lossy(&output.stdout)
     );
     let questions: serde_json::Value =
-        serde_json::from_slice(&config_init(dir.path(), None, false).stdout).unwrap();
+        serde_json::from_slice(&config_init(dir.path(), None, Claude::Works).stdout).unwrap();
     assert_eq!(questions["questions"][1]["default"], true);
     assert_eq!(questions["questions"][2]["default"], "openai");
 }
@@ -495,7 +513,7 @@ fn config_init_stops_at_a_failed_plugin_install_and_keeps_the_config() {
     let output = config_init(
         dir.path(),
         Some(r#"{"agents":["claude-code"],"summaries":{"provider":"openai"}}"#),
-        true,
+        Claude::FailsInstall,
     );
     assert_eq!(output.status.code(), Some(2));
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
@@ -504,6 +522,48 @@ fn config_init_stops_at_a_failed_plugin_install_and_keeps_the_config() {
         .unwrap()
         .contains("plugin install diffr@devfast"));
     assert!(!dir.path().join("config/diffr/config.toml").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn config_init_skips_claude_code_when_claude_is_not_on_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let output = config_init(
+        dir.path(),
+        Some(r#"{"agents":["claude-code"]}"#),
+        Claude::Works,
+    );
+    assert!(output.status.success());
+
+    let questions: serde_json::Value =
+        serde_json::from_slice(&config_init(dir.path(), None, Claude::Missing).stdout).unwrap();
+    assert_eq!(questions["questions"][0]["options"], serde_json::json!([]));
+    assert_eq!(questions["questions"][0]["default"], serde_json::json!([]));
+
+    let output = config_init(
+        dir.path(),
+        Some(r#"{"agents":[],"summaries":"off"}"#),
+        Claude::Missing,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let log = std::fs::read_to_string(dir.path().join("log")).unwrap();
+    assert!(!log.contains("plugin uninstall"), "{log}");
+
+    let output = config_init(
+        dir.path(),
+        Some(r#"{"agents":["claude-code"]}"#),
+        Claude::Missing,
+    );
+    assert_eq!(output.status.code(), Some(2));
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(result["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("not on your PATH"));
 }
 
 #[test]
@@ -524,7 +584,7 @@ fn uninstall_removes_plugins_binaries_and_record_and_keeps_the_config() {
     let output = config_init(
         dir.path(),
         Some(r#"{"agents":["claude-code"],"summaries":{"provider":"openai"}}"#),
-        false,
+        Claude::Works,
     );
     assert!(output.status.success());
     let bin = dir.path().join("installed");
@@ -563,7 +623,7 @@ fn installed_at(dir: &std::path::Path, at: &str, args: &[&str]) -> (std::process
     let output = config_init(
         dir,
         Some(r#"{"agents":["claude-code"],"summaries":"off"}"#),
-        false,
+        Claude::Works,
     );
     assert!(output.status.success());
     let brew = dir.join("bin/brew");
