@@ -301,6 +301,11 @@ jobs:
         run: |
           pnpm build
           git diff --exit-code -- plugin
+      - working-directory: diffr/packages/pi
+        run: |
+          pnpm typecheck
+          pnpm test
+          pnpm build
       - working-directory: diffr/packages/tui
         run: |
           pnpm typecheck
