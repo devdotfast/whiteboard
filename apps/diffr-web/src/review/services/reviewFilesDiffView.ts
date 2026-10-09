@@ -2,7 +2,6 @@ import {
   $,
   addDisposableListener,
   append,
-  Dimension,
   getWindow,
   scheduleAtNextAnimationFrame,
 } from "vs/base/browser/dom.js";
@@ -10,14 +9,14 @@ import {
   Orientation,
   SplitView,
 } from "vs/base/browser/ui/splitview/splitview.js";
+import { disposableTimeout } from "vs/base/common/async.js";
+import { Emitter, Event } from "vs/base/common/event.js";
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) dev.fast. All rights reserved.
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import "../browser/media/review.css";
-import { disposableTimeout } from "vs/base/common/async.js";
-import { Emitter, Event } from "vs/base/common/event.js";
 import {
   Disposable,
   DisposableStore,
@@ -56,6 +55,8 @@ import { IModelService } from "vs/editor/common/services/model.js";
 import { IHoverService } from "vs/platform/hover/browser/hover.js";
 import { IInstantiationService } from "vs/platform/instantiation/common/instantiation.js";
 
+import { showLineNumbers } from "../../display.js";
+import { mobileViewport, NativeDiffScroll } from "../../nativeDiffScroll.js";
 import type {
   ReviewDiffProgress,
   ReviewDiffLens,
@@ -83,17 +84,18 @@ import {
 import type { StructuralDiffSession } from "./reviewStructuralDiffSession.js";
 
 const FILE_TREE_MINIMUM_WIDTH = 180;
-const DIFF_MINIMUM_WIDTH = 320;
-const FILE_TREE_COLLAPSE_WIDTH = FILE_TREE_MINIMUM_WIDTH + DIFF_MINIMUM_WIDTH;
+const DIFF_MINIMUM_WIDTH = 0;
+const FILE_TREE_COLLAPSE_WIDTH = 760;
 const REVIEW_FILES_DIFF_EDITOR_OPTIONS = {
   hideUnchangedRegions: { enabled: true },
   originalEditable: false,
   readOnly: true,
+  domReadOnly: true,
+  renderLineHighlight: "none",
+  cursorBlinking: "solid",
   glyphMargin: false,
   lineNumbersMinChars: 3,
-  // A peek or diff on the page is read until it is clicked into; the current
-  // line highlight belongs to the cursor, not to the first revealed line.
-  renderLineHighlightOnlyWhenFocus: true,
+
   // Review Desktop's editor defaults (reviewConfigurationDefaults.ts), which
   // the page has no configuration service to supply.
   fontFamily: '"Geist Mono", Menlo, Monaco, "Courier New", monospace',
@@ -228,10 +230,28 @@ export class ReviewFilesEditorInput extends Disposable {
       get options() {
         return {
           ...options,
+          lineNumbers: showLineNumbers.get()
+            ? ("on" as const)
+            : ("off" as const),
+          hideOriginalLineNumbers:
+            mobileViewport.matches || options.hideOriginalLineNumbers,
+          glyphMargin: !mobileViewport.matches && options.glyphMargin,
+          lineNumbersMinChars: mobileViewport.matches
+            ? Math.max(3, String(longest).length)
+            : options.lineNumbersMinChars,
+          lineHeight: mobileViewport.matches ? 24 : 0,
+          fontSize: mobileViewport.matches ? 12 : options.fontSize,
+          lineDecorationsWidth: mobileViewport.matches
+            ? 24
+            : options.lineDecorationsWidth,
           wordWrap: wordWrap.get() ? ("on" as const) : ("off" as const),
         };
       },
-      onOptionsDidChange: Event.fromObservableLight(wordWrap),
+      onOptionsDidChange: Event.any(
+        Event.fromObservableLight(wordWrap),
+        Event.fromObservableLight(showLineNumbers),
+        Event.fromDOMEventEmitter(mobileViewport, "change"),
+      ),
     };
     const document = RefCounted.createOfNonDisposable(item, store, this);
     this.documents.set(entry.file.path, document);
@@ -435,21 +455,30 @@ export class ReviewFilesDiffView extends Disposable {
     if (document) factory.bottomScrollPadding = 0;
     this.headerFactory = factory;
 
+    const nativeScroll = this._register(new NativeDiffScroll(diffContainer));
+
     this.widget = this._register(
       this.reviewInstantiationService.createInstance(
         MultiDiffEditorWidget,
-        diffContainer,
+        nativeScroll.viewport,
         factory,
         undefined,
       ),
     );
+    nativeScroll.attach(this.widget);
     // The widget's own switch, not the per-item option refresh: it pins the
     // width heuristic off, so the chosen layout is what renders at any width.
     const applyLayout = () => {
-      this.sideBySide = layout.get() === "split";
+      this.sideBySide = !mobileViewport.matches && layout.get() === "split";
       this.widget.setRenderSideBySide(this.sideBySide);
     };
     this._register(layout.onDidChange(applyLayout));
+    mobileViewport.addEventListener("change", applyLayout);
+    this._register(
+      toDisposable(() =>
+        mobileViewport.removeEventListener("change", applyLayout),
+      ),
+    );
     applyLayout();
     if (document) {
       this._register(
@@ -527,7 +556,7 @@ export class ReviewFilesDiffView extends Disposable {
         element: diffContainer,
         layout: (width, _offset, height) => {
           diffContainer.style.width = `${width}px`;
-          this.widget.layout(new Dimension(width, height ?? 0));
+          nativeScroll.layout(width, height ?? 0);
         },
         maximumSize: Number.POSITIVE_INFINITY,
         minimumSize: DIFF_MINIMUM_WIDTH,

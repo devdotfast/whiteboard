@@ -1,5 +1,6 @@
 import dark from "../../review-desktop/code-oss/extensions/review-themes/themes/review-dark.json?raw";
 import light from "../../review-desktop/code-oss/extensions/review-themes/themes/review-light.json?raw";
+import { readSetting, writeSetting } from "./settings.js";
 import { StandaloneServices } from "./standalone/browser/standaloneServices.js";
 import type { StandaloneThemeService } from "./standalone/browser/standaloneThemeService.js";
 /**
@@ -30,7 +31,9 @@ function themeData(source: string) {
   };
 }
 
-export function applyTheme(root: HTMLElement): void {
+export function applyTheme(
+  root: HTMLElement,
+): (mode: "auto" | "light" | "dark") => void {
   // SAFETY: StandaloneServices registers StandaloneThemeService for this id; its
   // container registration is on the implementation only.
   const themes = StandaloneServices.get(
@@ -52,19 +55,29 @@ export function applyTheme(root: HTMLElement): void {
   themes.registerEditorContainer(root);
   const query = matchMedia("(prefers-color-scheme: dark)");
 
+  let mode = readSetting("theme") ?? "auto";
+
   const apply = () => {
+    const isDark = mode === "dark" || (mode === "auto" && query.matches);
+
     // Standalone Monaco only emits registered editor colors; the page also uses workbench colors.
     for (const [id, color] of Object.entries(
-      (query.matches ? darkTheme : lightTheme).colors,
+      (isDark ? darkTheme : lightTheme).colors,
     )) {
       root.style.setProperty(`--vscode-${id.replaceAll(".", "-")}`, color);
     }
 
-    themes.setTheme(query.matches ? "whiteboard-dark" : "whiteboard-light");
-    root.classList.toggle("vs-dark", query.matches);
-    root.classList.toggle("vs", !query.matches);
+    themes.setTheme(isDark ? "whiteboard-dark" : "whiteboard-light");
+    root.classList.toggle("vs-dark", isDark);
+    root.classList.toggle("vs", !isDark);
   };
 
   query.addEventListener("change", apply);
   apply();
+
+  return (next) => {
+    mode = next;
+    writeSetting("theme", next);
+    apply();
+  };
 }

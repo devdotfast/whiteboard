@@ -195,9 +195,14 @@ export class Comparison extends Disposable {
     status: ChangedFile["status"];
     hidden?: string;
     diffed: boolean;
+    additions: number;
+    deletions: number;
+    binary: boolean;
   }[] {
     return this.order.map((path) => {
       const file = this.files.get(path)!;
+      const diff = this.session?.getFileResult(path)?.diff;
+      const counts = diff ? reviewFileCounts(diff) : undefined;
 
       return {
         path,
@@ -205,6 +210,15 @@ export class Comparison extends Disposable {
         status: file.changed.status,
         hidden: file.classified?.hidden,
         diffed: file.state === "done",
+        additions:
+          counts && !("binary" in counts)
+            ? counts.added
+            : file.changed.additions,
+        deletions:
+          counts && !("binary" in counts)
+            ? counts.removed
+            : file.changed.deletions,
+        binary: diff?.type === "binary",
       };
     });
   }
@@ -437,6 +451,15 @@ export class Comparison extends Disposable {
   }
 
   /** Folds or unfolds everything diffr can fold, in every file. */
+  filesCollapsed = false;
+
+  toggleAllFiles(): void {
+    this.filesCollapsed = !this.filesCollapsed;
+
+    for (const path of this.order)
+      this.view?.setFileCollapsed(path, this.filesCollapsed);
+  }
+
   foldAll(collapsed: boolean): void {
     this.setFolds(foldIds, collapsed);
   }

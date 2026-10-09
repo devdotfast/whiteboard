@@ -3,7 +3,7 @@
  * `/owner/repo/compare/base...head`. Everything runs here; GitHub is the only server it talks to.
  */
 import "vs/base/browser/ui/codicons/codiconStyles.js";
-import { observableValue } from "vs/base/common/observable.js";
+import { derived, observableValue } from "vs/base/common/observable.js";
 
 import "./fonts.css";
 import "./styles.css";
@@ -11,10 +11,13 @@ import "./editorFont.js";
 import { loadCacheUsage, onCacheChange } from "./cache.js";
 import { cacheSection } from "./cacheSection.js";
 import { Comparison } from "./comparison.js";
+import { mobileWordWrap, showLineNumbers } from "./display.js";
 import { Engine, onEngineChange } from "./engine/engine.js";
 import { FindBar } from "./find.js";
 import { parseTarget, targetPath } from "./github.js";
 import { renderLensBar } from "./lenses.js";
+import { MobileFiles } from "./mobileFiles.js";
+import { mobileViewport } from "./nativeDiffScroll.js";
 import { Panels } from "./panels.js";
 import { agentPluginsSection } from "./pluginsSection.js";
 import { quickOpen } from "./quickOpen.js";
@@ -35,12 +38,18 @@ const layout = new ReviewDiffLayoutSetting();
 
 const wordWrap = observableValue("wordWrap", false);
 
+const narrow = observableValue("narrow", mobileViewport.matches);
+
+const effectiveWordWrap = derived((reader) =>
+  narrow.read(reader) ? mobileWordWrap.read(reader) : wordWrap.read(reader),
+);
+
 const root = document.getElementById("app")!;
 
 // Review Desktop's stylesheet is scoped to its workbench; the theme's variables to Monaco components.
 root.className = "app monaco-workbench review-workbench monaco-component";
 
-applyTheme(root);
+const setTheme = applyTheme(root);
 
 const header = root.appendChild(element("header", "app-header"));
 
@@ -81,6 +90,10 @@ const overflow = root.appendChild(element("div", "monaco-editor app-overflow"));
 let engine: Engine | undefined;
 
 let comparison: Comparison | undefined;
+
+const mobileFiles = new MobileFiles(() => comparison);
+
+root.appendChild(mobileFiles.element);
 
 const panels = new Panels(() => comparison);
 
@@ -168,7 +181,7 @@ function route(): void {
     target,
     currentEngine(),
     layout,
-    wordWrap,
+    effectiveWordWrap,
     instantiation,
   ));
 
@@ -186,6 +199,8 @@ function route(): void {
 }
 
 function renderHeader(): void {
+  mobileFiles.update();
+
   const focusedButton = Array.from(header.querySelectorAll("button")).findIndex(
     (button) => button === document.activeElement,
   );
@@ -219,6 +234,20 @@ function renderHeader(): void {
   });
 
   if (comparison) {
+    if (mobileViewport.matches) {
+      const files = iconButton("list-tree", "Open file tree", () =>
+        mobileFiles.toggle(),
+      );
+
+      files.classList.add("app-header-files");
+      files.setAttribute("aria-haspopup", "dialog");
+      files.setAttribute(
+        "aria-expanded",
+        String(!!document.querySelector(".app-mobile-files[open]")),
+      );
+      header.appendChild(files);
+    }
+
     const title = header.appendChild(
       element(
         "a",
@@ -237,7 +266,7 @@ function renderHeader(): void {
 
   header.appendChild(element("span", "app-spacer"));
 
-  if (comparison) {
+  if (comparison && !mobileViewport.matches) {
     for (const [panel, icon, label] of [
       ["stats", "graph", "Diff stats (F2)"],
       ["engine", "dashboard", "Engine stats (F3)"],
@@ -272,18 +301,99 @@ function renderHeader(): void {
     );
   }
 
-  header.appendChild(
-    iconButton(
-      "settings-gear",
-      "Settings: GitHub token, summaries, diffr",
-      () => openSettings(settings),
-    ),
-  );
+  if (comparison && mobileViewport.matches) {
+    const quick = element("div", "app-header-quick");
+
+    const fold = iconButton(
+      comparison.filesCollapsed ? "expand-all" : "collapse-all",
+      comparison.filesCollapsed ? "Expand all files" : "Collapse all files",
+      () => {
+        comparison?.toggleAllFiles();
+        renderHeader();
+      },
+    );
+
+    fold.setAttribute("aria-pressed", String(comparison.filesCollapsed));
+    const theme = quickMenu("color-mode", "Theme settings");
+
+    for (const mode of ["auto", "light", "dark"] as const) {
+      const button = actionButton(mode[0].toUpperCase() + mode.slice(1), () => {
+        setTheme(mode);
+
+        for (const child of theme.panel.querySelectorAll("button"))
+          child.setAttribute("aria-pressed", String(child === button));
+      });
+
+      button.setAttribute(
+        "aria-pressed",
+        String((readSetting("theme") ?? "auto") === mode),
+      );
+      theme.panel.append(button);
+    }
+
+    const display = quickMenu("settings-gear", "Display settings");
+
+    for (const [label, value] of [
+      ["Word wrap", mobileWordWrap],
+      ["Line numbers", showLineNumbers],
+    ] as const) {
+      const row = element("label", "app-quick-setting");
+      const input = element("input");
+      input.type = "checkbox";
+      input.checked = value.get();
+      input.addEventListener("change", () =>
+        value.set(input.checked, undefined),
+      );
+      row.append(element("span", undefined, label), input);
+      display.panel.append(row);
+    }
+
+    display.panel.append(
+      actionButton("All settings…", () => {
+        display.panel.hidePopover();
+        openSettings(settings);
+      }),
+    );
+    quick.append(
+      fold,
+      theme.button,
+      theme.panel,
+      display.button,
+      display.panel,
+    );
+    header.append(quick);
+  } else {
+    header.appendChild(
+      iconButton(
+        "settings-gear",
+        "Settings: GitHub token, summaries, diffr",
+        () => openSettings(settings),
+      ),
+    );
+  }
 
   if (focusedButton >= 0) {
     const button = header.querySelectorAll("button").item(focusedButton);
     button?.focus({ preventScroll: true });
   }
+}
+
+function quickMenu(icon: string, label: string) {
+  const panel = element("div", "app-header-popover");
+  panel.popover = "auto";
+  panel.setAttribute("aria-label", label);
+  const button = iconButton(icon, label, () => panel.togglePopover());
+  button.setAttribute("aria-expanded", "false");
+  button.setAttribute("aria-haspopup", "dialog");
+  panel.setAttribute("role", "dialog");
+  panel.addEventListener("toggle", () =>
+    button.setAttribute(
+      "aria-expanded",
+      String(panel.matches(":popover-open")),
+    ),
+  );
+
+  return { button, panel };
 }
 
 function togglePanel(panel: "stats" | "engine"): void {
@@ -325,6 +435,11 @@ function navigate(path: string): void {
 
 window.addEventListener("popstate", route);
 
+mobileViewport.addEventListener("change", () => {
+  narrow.set(mobileViewport.matches, undefined);
+  renderHeader();
+});
+
 /** A `z` waiting for its fold command. */
 let chord = false;
 
@@ -343,7 +458,11 @@ function command(event: KeyboardEvent): (() => void) | undefined {
   const current = comparison;
 
   if ((event.metaKey || event.ctrlKey) && !event.altKey) {
-    if (key === "b") return () => current.toggleFileTree();
+    if (key === "b")
+      return () =>
+        mobileViewport.matches
+          ? mobileFiles.toggle()
+          : current.toggleFileTree();
 
     // The browser's own find sees only the lines on screen; print has nothing to print.
     if (key === "f") return () => find.show();
