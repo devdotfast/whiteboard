@@ -30,6 +30,7 @@ import { visibleRows } from "@diffr/viewer/viewport/geometry";
 import { sanitizeTerminalLine } from "@diffr/viewer/terminal/sanitize";
 import { measureTextWidth, sliceTextByWidth } from "@diffr/viewer/terminal/text";
 import { Viewer, type KeyPress } from "@diffr/viewer/viewer";
+import { viewedBox, viewedHint } from "@diffr/viewer/viewport/cell";
 const fit = (text: string, width: number) =>
   sliceTextByWidth(text, 0, width).text;
 /** Shifted letters become capitals; cmd counts as meta. */
@@ -76,6 +77,7 @@ export function App({
   const { inventory, files, failures } = snapshot;
   // The file's mark in the tree and on its header while it has no diff.
   const statusGlyph = (index: number) => failures[index] || snapshot.complete ? "!" : loadingGlyph;
+  const progress = viewer.viewedFiles();
   const tree = useMemo(() => buildFileTree(inventory), [inventory]);
   const fileOrder = useMemo(() => flattenFileTree(tree, new Set()).flatMap(({node}) =>
     node.fileIndex === undefined ? [] : [node.fileIndex]), [tree]);
@@ -160,7 +162,13 @@ export function App({
     const file = files[fileIndex], count = counts[fileIndex]?.visible;
     const path = sanitizeTerminalLine(filePath(inventory[fileIndex].file));
     const loaded = !!file && !!count;
-    const statsWidth = loaded ? String(count.added).length + String(count.removed).length + 5 : 0;
+    const state = loaded ? viewer.isViewed(fileIndex) : undefined, viewed = state === true;
+    // The counts, then the viewed box. A viewed file is read, so its counts go.
+    const tally = loaded && !viewed ? [` +${count.added}`, ` −${count.removed}`] : [];
+    const box = state === undefined ? "" : ` ${viewedBox(state)}`;
+    // While the pointer is on the box, say what a click does beside it.
+    const hint = state !== undefined && hovered && "header" in hovered && hovered.file === fileIndex ? ` ${viewedHint(state)}` : "";
+    const statsWidth = loaded ? measureTextWidth(tally.join("") + hint + box) + 1 : 0;
     const pathWidth = Math.max(1, contentWidth - statsWidth - 1);
     const glyph = loaded ? (viewer.isClosed(fileIndex, file) ? "▸" : "▾") : statusGlyph(fileIndex);
     const directory = fit(`${glyph} ${path.slice(0, path.lastIndexOf("/") + 1)}`, pathWidth);
@@ -169,14 +177,23 @@ export function App({
     return <box key={key} height={1} width={contentWidth} flexDirection="row"
       backgroundColor={theme.fileHeader}
       onMouseUp={() => { if (loaded) viewer.toggleFile(fileIndex); }}>
-      <text width={1} fg={theme.accent} selectable={false}>▌</text>
-      <text width={directoryWidth} fg={theme.fileHeaderDir} selectable={false}>{directory}</text>
-      <text width={Math.max(0, pathWidth - directoryWidth)} fg={loaded ? theme.fg : theme.fileHeaderDir}
-        attributes={TextAttributes.BOLD} selectable={false}>{name}</text>
-      {loaded && <>
-        <text fg={theme.addedText} selectable={false}>{` +${count.added}`}</text>
-        <text fg={theme.removedText} selectable={false}>{` −${count.removed} `}</text>
+      <text width={1} fg={viewed ? theme.muted : theme.accent} selectable={false}>▌</text>
+      <text width={directoryWidth} fg={viewed ? theme.muted : theme.fileHeaderDir} selectable={false}>{directory}</text>
+      <text width={Math.max(0, pathWidth - directoryWidth)} fg={viewed ? theme.muted : loaded ? theme.fg : theme.fileHeaderDir}
+        attributes={viewed ? TextAttributes.NONE : TextAttributes.BOLD} selectable={false}>{name}</text>
+      {tally.length > 0 && <>
+        <text fg={theme.addedText} selectable={false}>{tally[0]}</text>
+        <text fg={theme.removedText} selectable={false}>{tally[1]}</text>
       </>}
+      {hint && <>
+        <text selectable={false}> </text>
+        <text fg={theme.bg} bg={theme.accent} selectable={false}>{hint.slice(1)}</text>
+      </>}
+      {state !== undefined && <text fg={viewed ? theme.accent : theme.fg} selectable={false}
+        onMouseMove={() => viewer.setHover({ file: fileIndex, header: true })}
+        onMouseOut={() => viewer.setHover(null)}
+        onMouseUp={(event) => { event.stopPropagation(); viewer.toggleViewedFile(fileIndex); }}>{box}</text>}
+      {loaded && <text selectable={false}> </text>}
     </box>;
   };
   const rendered = [];
@@ -227,9 +244,10 @@ export function App({
               if (dragging.current)
                 setSelection((s) => (s ? { ...s, end: row.key } : s));
             }}
-            focus={hovered?.file === row.fileIndex ? hovered : undefined}
+            focus={hovered?.file === row.fileIndex && "id" in hovered ? hovered : undefined}
             onHover={focus => viewer.setHover(focus ? { file: row.fileIndex, ...focus } : null)}
             onFold={(id, recursive) => viewer.setFold(row.fileIndex, id, "toggle", recursive)}
+            read={viewer.isViewed(row.fileIndex) === true}
           />,
         );
     }
@@ -329,7 +347,8 @@ export function App({
           }}>
             {treeRows.slice(sidebarStart, sidebarStart + viewportHeight).map(({node, depth}) => (
               <text key={node.key} height={1} width={sidebar - 1}
-                fg={node.fileIndex === currentFile ? theme.accent : node.fileIndex === undefined ? theme.muted : theme.fg}
+                fg={node.fileIndex === currentFile ? theme.accent : node.fileIndex === undefined
+                  || viewer.isViewed(node.fileIndex) ? theme.muted : theme.fg}
                 bg={node.fileIndex === currentFile ? theme.highlight : theme.bg}
                 selectable={false}
                 onMouseUp={() => {
@@ -344,7 +363,7 @@ export function App({
                 }}>
                 {fit(sanitizeTerminalLine("  ".repeat(depth) + (node.fileIndex === undefined
                   ? (closedDirectories.has(node.key) ? "▸ " : "▾ ")
-                  : `▤ ${files[node.fileIndex] ? " " : statusGlyph(node.fileIndex)} `) + node.name), sidebar - 1)}
+                  : `▤ ${files[node.fileIndex] ? (viewer.isViewed(node.fileIndex) ? "✓" : " ") : statusGlyph(node.fileIndex)} `) + node.name), sidebar - 1)}
               </text>
             ))}
           </box>
@@ -437,7 +456,7 @@ export function App({
       </box>}
       <text height={1} fg={theme.muted} selectable={false}>
         {fit(
-          `${snapshot.loaded}/${inventory.length} files ${snapshot.complete ? "" : "loading…"} ${snapshot.errors.length ? `${snapshot.errors.length} errors` : ""}  [/] hunks · za fold · i breakdown · drag selects lines · y copy · Y for agent · q quit ${message}`,
+          `${snapshot.loaded}/${inventory.length} files · ${progress.viewed}/${progress.total} viewed ${snapshot.complete ? "" : "loading…"} ${snapshot.errors.length ? `${snapshot.errors.length} errors` : ""}  [/] hunks · za fold · V viewed · i breakdown · drag selects lines · y copy · Y for agent · q quit ${message}`,
           width,
         )}
       </text>

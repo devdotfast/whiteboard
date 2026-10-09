@@ -157,3 +157,30 @@ test("closing a scrolled file and reopening it starts at its header and first so
     expect(lines[3]).toContain("line 0");
   } finally { await act(async () => { t.renderer.destroy(); }); }
 });
+test("V or the header's box marks a file viewed: it closes, and its header, the tree and the status line say so", async () => {
+  const store = new DiffStore(), file = createTestDiffFile();
+  store.accept(startFor([file])); store.accept(file); store.accept({type:"complete", succeeded:1, failed:0});
+  const t = await testRender(<App store={store} themes={themes} onQuit={() => {}} />, {width:170, height:25});
+  const frame = () => t.captureCharFrame();
+  const lines = () => frame().split("\n");
+  const header = () => lines().find(l => l.includes("│▌")) ?? "";
+  try {
+    await act(async () => { await t.renderOnce(); });
+    expect(header()).toContain("+2 −1 [ ]");
+    expect(frame()).toContain("0/1 viewed");
+    const y = lines().findIndex(l => l.includes("│▌")), box = lines()[y].lastIndexOf("[ ]");
+    await act(async () => { await t.mockMouse.moveTo(box + 1, y); await t.renderOnce(); });
+    await t.waitFor(() => header().includes("Mark as viewed · V"));
+    expect(header().lastIndexOf("[ ]")).toBe(box);
+    await act(async () => { await t.mockMouse.click(box + 1, y); await t.renderOnce(); });
+    await t.waitFor(() => frame().includes("1/1 viewed"));
+    expect(header()).toContain("[✓]");
+    expect(header()).not.toContain("+2");
+    expect(frame()).not.toContain('send("new")');
+    expect(header()).toContain("▤ ✓ demo.ts");
+    await act(async () => { await t.mockMouse.moveTo(1, 0); t.mockInput.pressKey("V"); await t.renderOnce(); });
+    await t.waitFor(() => frame().includes("0/1 viewed"));
+    expect(header()).toContain("+2 −1 [ ]");
+    expect(frame()).toContain('send("new")');
+  } finally { await act(async () => { t.renderer.destroy(); }); }
+});

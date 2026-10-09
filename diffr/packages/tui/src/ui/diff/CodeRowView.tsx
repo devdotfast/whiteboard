@@ -27,6 +27,7 @@ export const CodeRowView = memo(function CodeRowView({
   onFold,
   focus,
   onHover,
+  read,
 }: {
   measured: MeasuredRow;
   visualLine: number;
@@ -38,6 +39,7 @@ export const CodeRowView = memo(function CodeRowView({
   focus?: ScopeFocus;
   onHover: (focus: ScopeFocus | undefined) => void;
   onFold: (id: number, recursive: boolean) => void;
+  read: boolean;
 }) {
   const row = measured.row;
   function cell(
@@ -47,7 +49,7 @@ export const CodeRowView = memo(function CodeRowView({
     side: "left" | "right",
     unified = false,
   ) {
-    const plan = planCell(value, spans, width, unified, { theme, geometry, visualLine, focus, selected: selectedSide === side });
+    const plan = planCell(value, spans, width, unified, { theme, geometry, visualLine, focus, selected: selectedSide === side, read });
     const column = (event: MouseEvent) => event.x - (event.currentTarget?.x ?? 0);
     // Pressing a fold target doesn't start a selection.
     const fold = (event: MouseEvent) => targetAt(plan.hits, column(event));
