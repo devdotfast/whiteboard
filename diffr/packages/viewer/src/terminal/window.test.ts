@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test";
-import { resolveVisibleRowIndexWindow as window } from "./rowWindowing";
+import { expect, test } from "vitest";
+import { resolveVisibleRowIndexWindow as window } from "./window";
 test("window keeps wrapped rows intersecting either edge and replaces skipped height", () => {
   expect(
     window({

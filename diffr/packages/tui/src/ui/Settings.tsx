@@ -11,8 +11,8 @@ import {
   type ConfigClient,
   type Setting,
 } from "../diffr/config";
-import { dark } from "../diffr/theme";
-import { sliceTextByWidth } from "./lib/text";
+import { dark } from "@diffr/viewer/theme/themes";
+import { sliceTextByWidth } from "@diffr/viewer/terminal/text";
 
 const fit = (text: string, width: number) => sliceTextByWidth(text, 0, Math.max(0, width)).text;
 const pad = (text: string, width: number) => fit(text, width).padEnd(Math.max(0, width));

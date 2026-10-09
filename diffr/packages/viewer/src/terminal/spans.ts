@@ -1,5 +1,5 @@
 // Plans terminal-cell slicing and wrapping for styled diff spans.
-import { sanitizeTerminalSpans } from "../../lib/terminalText";
+import { sanitizeTerminalSpans } from "./sanitize";
 import {
   isPrintableAsciiText,
   measureSanitizedTextWidth,
@@ -7,8 +7,8 @@ import {
   sliceSanitizedTextByWidth,
   textClusters,
   wrapSanitizedTextByWidth,
-} from "../lib/text";
-import type { RenderSpan } from "./diffRowModel";
+} from "./text";
+import type { RenderSpan } from "../document/rows";
 
 /** Append a styled span while preserving color-run coalescing. */
 function appendRenderSpan(target: RenderSpan[], span: RenderSpan) {

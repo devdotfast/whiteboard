@@ -1,0 +1,24 @@
+{
+  "name": "@diffr/viewer",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "get-east-asian-width": "1.4.0",
+    "smol-toml": "1.9.0",
+    "string-width": "8.1.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@types/node": "24.12.2",
+    "vitest": "4.1.11"
+  }
+}

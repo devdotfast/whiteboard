@@ -1,5 +1,5 @@
 /** The painter's palette from a parsed Helix theme, and diffr's theme config. No Node or Bun APIs. */
-import type { FoldTint } from "./regions";
+import type { FoldTint } from "../document/regions";
 export interface Style {
   fg?: string;
   bg?: string;
@@ -154,7 +154,6 @@ export function paletteFromHelix(theme: HelixTheme): Palette {
     syntax: (capture) => scopeFg(theme, capture),
   };
 }
-/** Bundled Helix themes under packages/tui/themes; the two defaults are aliases. */
 export const bundledThemes: Record<string, string> = {
   "default-dark": "onedark",
   "default-light": "onelight",
@@ -163,7 +162,6 @@ export const bundledThemes: Record<string, string> = {
   gruvbox: "gruvbox",
   solarized_light: "solarized_light",
 };
-/** The theme section of `diffr config show --json`. */
 export function themeConfig(show: unknown): { name: string; path: string | null } {
   const theme = (show as { theme?: { name?: unknown; path?: unknown } }).theme;
   if (!theme || typeof theme.name !== "string" || (theme.path !== null && theme.path !== undefined && typeof theme.path !== "string"))

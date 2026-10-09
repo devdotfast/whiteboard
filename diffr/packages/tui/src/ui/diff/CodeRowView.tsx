@@ -1,16 +1,11 @@
 /** Paint measured Hunk-style code cells; source identity and viewport geometry stay outside React. */
 import { memo } from "react";
 import { StyledText, parseColor, type MouseEvent } from "@opentui/core";
-import type {
-  RenderSpan,
-  ScopeFocus,
-  SplitLineCell,
-  UnifiedLineCell,
-} from "./diffRowModel";
-import type { Geometry, MeasuredRow } from "../../diffr/geometry";
-import { foldBackground, type Palette } from "../../diffr/palette";
-import type { RowFold } from "../../diffr/regions";
-import { measureTextWidth } from "../lib/text";
+import type { RenderSpan, ScopeFocus, SplitLineCell, UnifiedLineCell } from "@diffr/viewer/document/rows";
+import type { Geometry, MeasuredRow } from "@diffr/viewer/viewport/geometry";
+import { foldBackground, type Palette } from "@diffr/viewer/theme/palette";
+import type { RowFold } from "@diffr/viewer/document/regions";
+import { measureTextWidth } from "@diffr/viewer/terminal/text";
 const colors = new Map<string, ReturnType<typeof parseColor>>();
 function color(value: string) {
   let c = colors.get(value);

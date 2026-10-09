@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { blockBar, comparisonLabel } from "./counts";
 test("the block bar splits five blocks by share and keeps a block for any non-zero side", () => {
   expect(blockBar({ added: 0, removed: 0 })).toEqual(["neutral", "neutral", "neutral", "neutral", "neutral"]);

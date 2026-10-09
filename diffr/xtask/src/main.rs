@@ -40,10 +40,10 @@ fn install(root: &Path, with_cli: bool) -> Result<()> {
         "Bun --version failed; check your Bun installation"
     );
     run(
-        Command::new(&bun)
-            .current_dir(root.join("packages/tui"))
-            .args(["install", "--frozen-lockfile"]),
-        "Installing TUI dependencies",
+        Command::new(if cfg!(windows) { "pnpm.cmd" } else { "pnpm" })
+            .current_dir(root.parent().unwrap())
+            .args(["--filter", "@diffr/tui...", "install", "--frozen-lockfile"]),
+        "Installing TUI dependencies with pnpm",
     )?;
     let artifact = root
         .join("target/tui")

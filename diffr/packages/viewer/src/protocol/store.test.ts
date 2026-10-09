@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { DiffStore } from "./store";
 import { createTestDiffFile, startFor } from "./fixture";
 
@@ -40,6 +40,6 @@ test("an unsubscribed viewer is not notified by a pending batch", async () => {
   const unsubscribe = store.subscribe(() => calls++);
   store.fail("stopped");
   unsubscribe();
-  await Bun.sleep(30);
+  await new Promise(resolve => setTimeout(resolve, 30));
   expect(calls).toBe(0);
 });
