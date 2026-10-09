@@ -8,6 +8,7 @@ packages:
   - "diffr/packages/claude-code"
   - "diffr/packages/pi"
   - "diffr/packages/tui"
+  - "diffr/packages/herdr"
   - "diffr/packages/opencode"
   - "apps/*"
 
