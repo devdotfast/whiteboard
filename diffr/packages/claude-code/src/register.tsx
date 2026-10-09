@@ -31,7 +31,8 @@ async function checkVersion($: EngineInterface, binary: string): Promise<void> {
   try {
     shown = await $.process.run([binary, "--version"]);
   } catch (error) {
-    throw new Error(`${binary} could not run (${error instanceof Error ? error.message : String(error)}); install diffr with: ${INSTALL}`);
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`${binary} could not run (${reason}). If diffr is installed, run \`diffr config init\` in a terminal so this plugin finds it; otherwise install diffr with: ${INSTALL}`);
   }
   if (shown.exitCode !== 0) throw new Error(shown.stderr || `${binary} --version exited with status ${shown.exitCode}`);
   const match = /^diffr (\d+)\.(\d+)\.(\d+)/.exec(shown.stdout);

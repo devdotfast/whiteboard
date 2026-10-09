@@ -438,6 +438,7 @@ fn prompt(state: &State) -> Result<i32> {
         // The spinner shows the error, so it is not printed again.
         (Err(error), Some((spinner, _))) => {
             spinner.error(&error);
+            cliclack::outro_cancel("Setup stopped. Run `diffr config init` to try again")?;
             return Ok(2);
         }
         (Err(error), None) => return Err(error),

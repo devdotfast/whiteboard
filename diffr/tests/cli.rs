@@ -406,7 +406,7 @@ fn config_init(
     } else {
         std::fs::write(
         &claude,
-        "#!/bin/sh\necho \"$*\" >> \"$LOG\"\ncase \"$*\" in\n  \"plugin marketplace list --json\") echo '[]' ;;\n  \"plugin install\"*) if [ -n \"$FAIL\" ]; then exit 1; fi ;;\nesac\n",
+        "#!/bin/sh\necho \"$*\" >> \"$LOG\"\ncase \"$*\" in\n  \"plugin marketplace list --json\") echo '[]' ;;\n  \"plugin install\"*) if [ -n \"$FAIL\" ]; then exit 1; fi ;;\n  \"plugin configure\"*) cat >> \"$LOG\"; echo >> \"$LOG\" ;;\nesac\n",
     )
     .unwrap();
         std::fs::set_permissions(&claude, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -458,6 +458,17 @@ fn config_init_installs_the_chosen_plugins_and_asks_again_with_them() {
     );
     let log = std::fs::read_to_string(dir.path().join("log")).unwrap();
     assert!(log.contains("plugin install diffr@devfast"), "{log}");
+    // The plugin runs this diffr by its path, whatever Claude Code's PATH is.
+    let binary = assert_cmd::cargo::cargo_bin("diffr")
+        .canonicalize()
+        .unwrap();
+    let pinned = serde_json::json!({ "diffr": binary }).to_string();
+    assert!(
+        log.contains(&format!(
+            "plugin configure diffr@devfast --values-stdin\n{pinned}"
+        )),
+        "{log}"
+    );
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["key"]["present"], false);
     assert_eq!(

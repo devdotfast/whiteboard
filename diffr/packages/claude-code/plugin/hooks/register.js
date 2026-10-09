@@ -21148,7 +21148,7 @@ function ansiRegex({ onlyFirst = false } = {}) {
   return new RegExp(pattern, onlyFirst ? void 0 : "g");
 }
 
-// ../viewer/node_modules/strip-ansi/index.js
+// ../../../node_modules/strip-ansi/index.js
 var regex = ansiRegex();
 function stripAnsi(string4) {
   if (typeof string4 !== "string") {
@@ -25250,7 +25250,8 @@ async function checkVersion($, binary) {
   try {
     shown = await $.process.run([binary, "--version"]);
   } catch (error62) {
-    throw new Error(`${binary} could not run (${error62 instanceof Error ? error62.message : String(error62)}); install diffr with: ${INSTALL}`);
+    const reason = error62 instanceof Error ? error62.message : String(error62);
+    throw new Error(`${binary} could not run (${reason}). If diffr is installed, run \`diffr config init\` in a terminal so this plugin finds it; otherwise install diffr with: ${INSTALL}`);
   }
   if (shown.exitCode !== 0) throw new Error(shown.stderr || `${binary} --version exited with status ${shown.exitCode}`);
   const match = /^diffr (\d+)\.(\d+)\.(\d+)/.exec(shown.stdout);

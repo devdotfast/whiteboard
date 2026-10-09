@@ -6,7 +6,9 @@
 # Install diffr: curl -fsSL https://install.dev.fast/diffr | sh
 #
 # Download the newest diffr release (or DIFFR_VERSION) for this machine,
-# puts diffr in DIFFR_INSTALL_DIR (default ~/.local/bin), then runs `diffr config init`
+# puts diffr in DIFFR_INSTALL_DIR (default ~/.local/bin), then runs `diffr config init`,
+# again on every run, so running this again repairs or changes the setup
+# (unless DIFFR_SKIP_SETUP is set, as `diffr upgrade` does)
 set -eu
 
 REPO=devdotfast/whiteboard
@@ -89,7 +91,8 @@ case ":$PATH:" in
 *":$dir:"*) ;;
 *)
 	rc= line="export PATH=\"$dir:\$PATH\""
-	case "${SHELL##*/}" in
+	shell=${SHELL:-}
+	case "${shell##*/}" in
 	zsh) rc=${ZDOTDIR:-$HOME}/.zshrc ;;
 	bash) if [ "$(uname -s)" = Darwin ]; then rc=$HOME/.bash_profile; else rc=$HOME/.bashrc; fi ;;
 	fish) rc=${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish line="fish_add_path $dir" ;;
@@ -105,12 +108,12 @@ case ":$PATH:" in
 		printf '\n# diffr\n%s\n' "$line" >>"$rc"
 		echo "Added $dir to your PATH in $rc; it applies in new shells"
 		;;
-	*) echo "next, add diffr's install path ($dir) to your PATH" ;;
+	*) echo "next, add diffr's install path to your PATH, for example with: $line" ;;
 	esac
 	;;
 esac
 
-[ -n "$first" ] || exit 0
+[ -z "${DIFFR_SKIP_SETUP:-}" ] || exit 0
 
 if terminal; then
 	exec "$dir/diffr" config init </dev/tty
