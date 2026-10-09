@@ -18,6 +18,7 @@ import { resizeSidebarWidth } from "./lib/sidebar";
 import { CodeRowView } from "./diff/CodeRowView";
 import type { ThemeSet } from "../diffr/theme";
 import {
+  agentReference,
   copySelection,
   selectionBounds,
   type SourceSelection,
@@ -87,6 +88,15 @@ export function App({
       setMessage("Copied source lines");
     }
   };
+  const copyForAgent = () => {
+    if (!selection) return;
+    if (!snapshot.comparison) throw new Error("A selection exists before diffr named the comparison");
+    const text = agentReference(files, snapshot.comparison, rows, selection);
+    if (text) {
+      renderer.copyToClipboardOSC52(text);
+      setMessage("Copied for agent");
+    }
+  };
   useKeyboard((key) => {
     // Viewer first, so a pending z chord takes any key.
     const press = keyPress(key), chord = viewer.chording;
@@ -101,7 +111,7 @@ export function App({
     else if ((key.name === "b" && (key.super || key.meta)) || is("\\")) {
       key.preventDefault(); setShowSidebar(v => !v);
     }
-    else if (key.name === "y") copy();
+    else if (key.name === "y") { if (key.shift) copyForAgent(); else copy(); }
     else if (key.name === "escape") { setSelection(null); setMenu(null); setShowBreakdown(false); }
     else if (key.name === "i") setShowBreakdown((v) => !v);
   });
@@ -427,7 +437,7 @@ export function App({
       </box>}
       <text height={1} fg={theme.muted} selectable={false}>
         {fit(
-          `${snapshot.loaded}/${inventory.length} files ${snapshot.complete ? "" : "loading…"} ${snapshot.errors.length ? `${snapshot.errors.length} errors` : ""}  [/] hunks · za fold · i breakdown · drag selects lines · y copy · q quit ${message}`,
+          `${snapshot.loaded}/${inventory.length} files ${snapshot.complete ? "" : "loading…"} ${snapshot.errors.length ? `${snapshot.errors.length} errors` : ""}  [/] hunks · za fold · i breakdown · drag selects lines · y copy · Y for agent · q quit ${message}`,
           width,
         )}
       </text>
