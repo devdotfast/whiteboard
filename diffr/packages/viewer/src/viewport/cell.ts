@@ -1,6 +1,6 @@
 import type { Geometry } from "./geometry";
 import { foldBackground, type RenderSpan, type SplitLineCell, type UnifiedLineCell } from "../document/rows";
-import { measureTextWidth } from "../terminal/text";
+import { measureTextWidth, sliceTextByWidth } from "../terminal/text";
 import type { RowFold } from "../document/regions";
 import { occurrences } from "../document/search";
 import type { Palette } from "../theme/palette";
@@ -147,6 +147,17 @@ export function planCell(
     column += cells;
   }
   if (column < width) runs.push({ text: " ".repeat(width - column), fg: theme.fg, bg });
+  // A terminal glyph is a narrow target. Include the blank cell beside either
+  // edge of a rail or chevron, without taking source text or line numbers away
+  // from selection. Exact targets win when neighboring scopes are close.
+  const text = runs.map(run => run.text).join("");
+  const padding = hits.map(([from, to, id]): Target<number> => [
+    from > 0 && sliceTextByWidth(text, from - 1, 1).text === " " ? from - 1 : from,
+    to < width && sliceTextByWidth(text, to, 1).text === " " ? to + 1 : to,
+    id,
+  ]);
+  hits.push(...padding);
+  hovers.push(...padding.map(([from, to, id]): Target<ScopeFocus> => [from, to, { id, armed: true }]));
   // A collapsed fold's row, or a line of its label, opens it.
   const opens = fold?.collapsed ? fold.id : value.labelOf;
   if (opens !== undefined) {
