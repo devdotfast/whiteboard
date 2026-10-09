@@ -154,7 +154,7 @@ export function paletteFromHelix(theme: HelixTheme): Palette {
     syntax: (capture) => scopeFg(theme, capture),
   };
 }
-/** Bundled Helix themes under tui/themes; the two defaults are aliases. */
+/** Bundled Helix themes under packages/tui/themes; the two defaults are aliases. */
 export const bundledThemes: Record<string, string> = {
   "default-dark": "onedark",
   "default-light": "onelight",
