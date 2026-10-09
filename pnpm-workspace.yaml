@@ -3,6 +3,9 @@ packages:
   - "packages/agent-plugins/pi"
   - "packages/review/app"
   - "diffr/diffr-ts"
+  - "diffr/packages/viewer"
+  - "diffr/packages/claude-code"
+  - "diffr/packages/tui"
   - "apps/*"
 
 catalog:

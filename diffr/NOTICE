@@ -5,14 +5,14 @@ difftastic
   Copyright (c) 2021-2025 Wilfred Hughes. MIT License (see LICENSE).
   diffr forked difftastic at commit 274d0a8f5 (2026-09-08).
 
-hunk (terminal frontend under tui/)
+hunk (terminal frontend under packages/tui/ and packages/viewer/)
   https://github.com/modem-dev/hunk
-  Copyright (c) Modem Labs Inc. MIT License (see tui/LICENSE).
+  Copyright (c) Modem Labs Inc. MIT License (see packages/tui/LICENSE).
   Import details in TUI_UPSTREAM.md.
 
-Helix editor themes (tui/themes/)
+Helix editor themes (packages/viewer/themes/)
   https://github.com/helix-editor/helix/tree/master/runtime/themes
-  Mozilla Public License 2.0 (see tui/themes/LICENSE).
+  Mozilla Public License 2.0 (see packages/viewer/themes/LICENSE).
 
 GitHub Linguist language data (plugins/classify/rust/src/linguist/)
   https://github.com/github-linguist/linguist

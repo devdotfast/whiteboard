@@ -1,7 +1,7 @@
 {
 	"nameShort": "Whiteboard",
 	"nameLong": "/dev/fast Whiteboard",
-	"reviewVersion": "0.2.3",
+	"reviewVersion": "0.2.4",
 	"applicationName": "review",
 	"dataFolderName": ".dev-fast-review",
 	"sharedDataFolderName": ".dev-fast-review-shared",

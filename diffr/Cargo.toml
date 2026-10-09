@@ -4,7 +4,7 @@ description = "Structural diffs with a streaming API and interactive terminal fr
 repository = "https://github.com/devdotfast/whiteboard"
 homepage = "https://github.com/devdotfast/whiteboard/tree/main/diffr"
 license = "MIT"
-version = "0.1.17"
+version = "0.1.19"
 authors = ["dev.fast"]
 keywords = ["diff", "syntax"]
 categories = ["development-tools", "command-line-utilities", "parser-implementations"]
@@ -14,6 +14,8 @@ rust-version = "1.99.0"
 
 include = [
         "/build.rs",
+        "/docs/agents.md",
+        "/docs/plugin.md",
         "/src/",
         "/wit/",
         "/plugins/",
@@ -26,7 +28,7 @@ include = [
 ]
 
 [dependencies]
-diffr-core = { path = "crates/diffr-core", version = "0.1.17" }
+diffr-core = { path = "crates/diffr-core", version = "0.1.19" }
 gix = { version = "0.88", default-features = false, features = ["parallel", "revision", "status", "blob-diff", "attributes", "sha1"] }
 clap = { version = "4.0.0", features = ["cargo", "derive", "env", "wrap_help", "string"] }
 typed-arena = "2.0.2"
@@ -50,6 +52,8 @@ wasmtime-wasi = { version = "49.0.2", default-features = false, features = ["p2"
 # The byte buffer a guest's output stream is handed, wasmtime-wasi's own.
 bytes = "1.12"
 wasmtime-wasi-http = { version = "49.0.2", default-features = false, features = ["p2", "p3", "default-send-request"] }
+cliclack = "0.5.6"
+dirs = "5"
 
 
 [target.'cfg(not(any(windows, target_os = "illumos", target_os = "freebsd")))'.dependencies]

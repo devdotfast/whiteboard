@@ -52,6 +52,11 @@ interface AskAgentSpec {
    * read-only mode and settings, when the reviewer bypasses permissions.
    * Whiteboard also allows whatever it still asks. */
   bypass?: AskAgentBypass;
+  /** A follow-up asked while it answers joins that turn, when it says it
+   * takes one. Only for an adapter that leaves a follow-up arriving as the
+   * turn ends to Whiteboard: Codex's starts a turn of its own instead,
+   * which Whiteboard does not see end, so its follow-ups wait their turn. */
+  steers?: boolean;
 }
 
 interface AskAgentMcp {
@@ -81,6 +86,7 @@ export const askAgents: Record<AskAgentId, AskAgentSpec> = {
       executableEnv: "CLAUDE_CODE_EXECUTABLE",
     },
     signIn: "claude auth login",
+    steers: true,
     // Plan mode would end each answer asking to leave it, and it blocks the
     // Whiteboard tools that edit the review. Claude instead runs in its
     // default mode without its file tools, and without bypass, so commands

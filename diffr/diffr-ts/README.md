@@ -21,7 +21,7 @@ Keep these files in sync:
 |---|---|
 | `crates/diffr-core/src/protocol/mod.rs`, `crates/diffr-core/src/pairing.rs`, `diffr-ts/src/contract.ts` | Contract tests against the binary; Rust version check |
 | `docs/streaming.md` | Review against the wire format |
-| `tui/packages/hunk/src/diffr/wire.ts` (v3 only) | TUI fixture tests |
+| `packages/viewer/src/protocol/wire.ts` (v3 only) | TUI fixture tests |
 | `../packages/review-protocol/package.json` and `../packages/review/package.json` | Exact package version pins |
 
 ## Release

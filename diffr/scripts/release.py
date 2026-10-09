@@ -35,7 +35,7 @@ def pack(version, target, install, output):
             binaries = ("diffr", "diffr-tui") if artifact == "diffr" else ("diffr",)
             for name in binaries:
                 archive.add(install / "bin" / f"{name}{exe}", arcname=f"{name}{exe}")
-            for name in ("LICENSE", "NOTICE", "tui/LICENSE", "tui/themes/LICENSE"):
+            for name in ("LICENSE", "NOTICE", "packages/tui/LICENSE", "packages/viewer/themes/LICENSE"):
                 archive.add(ROOT / name, arcname=name)
 
 
@@ -111,8 +111,8 @@ def formula(version, output):
     bin.install "diffr", "diffr-tui"
     doc.install "NOTICE"
     (pkgshare/"licenses").install "LICENSE"
-    (pkgshare/"licenses/tui").install "tui/LICENSE"
-    (pkgshare/"licenses/themes").install "tui/themes/LICENSE"
+    (pkgshare/"licenses/tui").install "packages/tui/LICENSE"
+    (pkgshare/"licenses/themes").install "packages/viewer/themes/LICENSE"
   end
 
   test do

@@ -12,7 +12,7 @@ license = "MIT"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-diffr-plugin-sdk = { path = "../../../crates/diffr-plugin-sdk", version = "0.1.1" }
+diffr-plugin-sdk = { path = "../../../crates/diffr-plugin-sdk", version = "0.3.0" }
 # Only the Unicode tables the patterns use: \d \s \w \b and (?i).
 regex = { version = "1.10.4", default-features = false, features = ["std", "perf", "unicode-perl", "unicode-case"] }
 serde = { version = "1.0", features = ["derive"] }

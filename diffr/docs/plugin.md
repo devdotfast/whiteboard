@@ -11,7 +11,14 @@ For example, the following are all implemented as plugins:
 
 ## Architecture
 
-When you run `diffr ${commit_range_exp}`, the following happens:
+At its core, diffr runs a structural diff using an AST/AST matching algorithm. This is, by nature, quite CPU intensive. See [difftastic's docs](https://difftastic.wilfred.me.uk/diffing.html) for more reading.
+
+It has two extension points:
+
+1. `Classification`: before structural diffing, it runs checks similar to Github's to detect if code belongs to a generated file, so it can be hidden. This system is extensible so other types of annoying files can also be hidden away (churn on AI-generated unit tests).
+2. `Shaping`: after structural diffing, it can annotate the two sides of the AST via tree-sitter queries. This gives matched 'folds' across old/new sides of a file. Then, the `shaping` logic can, for example, "fold" regions of code and replace them with pseudocode, or collapse repetitive / annoying changes (e.g. AI-generated comments or docs changes).
+
+In more detail, when you run `diffr ${commit_range_exp}`, the following happens:
 
 1. Commits loaded from git
 2. Plugins (explained in more detail later) load. There are two types of plugins: classifier + shape.
@@ -85,11 +92,11 @@ A shape plugin implements the generated `GuestPlugin` trait; it will be reminisc
 ```rust
 use diffr_plugin_sdk::prelude::*;
 
-struct MyPlugin;
-impl Guest for MyPlugin {
+struct MyShapePlugin;
+impl Guest for MyShapePlugin {
     type Plugin = Self;
 }
-impl GuestPlugin for MyPlugin {
+impl GuestPlugin for MyShapePlugin {
     fn new(options: String) -> Result<Self, String> { Ok(Self) }
     // cursor is a host-provided interface over the matched ast tree(s); phase indicates preorder/postorder.
     async fn visit(&self, cursor: &Cursor, phase: Visit) -> Result<bool, String> {
@@ -97,10 +104,10 @@ impl GuestPlugin for MyPlugin {
         Ok(true)
     }
 }
-export_shape!(MyPlugin);
+export_shape!(MyShapePlugin);
 ```
 
-## Configuration format 2
+## Configuration format
 
 ```toml
 version = 2

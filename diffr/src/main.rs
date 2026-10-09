@@ -45,6 +45,8 @@ mod cli;
 mod exit_codes;
 mod files;
 mod git;
+mod init;
+mod install;
 mod options;
 mod plugin;
 mod pprint;

@@ -212,6 +212,42 @@ it("asks the chosen agent, streams its answer, relays a decision, and leaves the
     expect(picker()).toBeNull();
     expect(header.textContent).toBe("Codex");
 
+    // While it answers, Stop stands in for Ask until a follow-up is written,
+    // which goes at once: it joins the turn, or waits for it to end.
+    expect(buttonNamed(container, "Stop")).not.toBeNull();
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      )!.set!;
+
+      setValue.call(textarea, "Only on the primary?");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(buttonNamed(container, "Stop")).toBeNull();
+    await act(async () =>
+      textarea.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+    );
+    expect(posted("/ask/thread/prompt")).toEqual([
+      { question: { text: "Only on the primary?" } },
+    ]);
+    expect(buttonNamed(container, "Stop")).not.toBeNull();
+
+    await act(async () =>
+      push({
+        seq: 4,
+        change: {
+          type: "set",
+          queued: [{ id: "q", text: "Only on the primary?" }],
+        },
+      }),
+    );
+    expect(container.textContent).toContain(
+      "Only on the primary?Sends when Codex finishes",
+    );
+
     const allow = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Allow once",
     )!;
@@ -224,7 +260,7 @@ it("asks the chosen agent, streams its answer, relays a decision, and leaves the
 
     // Answer text arrives as appends to the entry it belongs to.
     await act(async () =>
-      push({ seq: 4, change: { type: "append", id: "a", text: " Twice." } }),
+      push({ seq: 5, change: { type: "append", id: "a", text: " Twice." } }),
     );
     expect(container.textContent).toContain(
       "Replicas replay the index build. Twice.",
@@ -232,12 +268,12 @@ it("asks the chosen agent, streams its answer, relays a decision, and leaves the
 
     // A missing change drops the stream; a new one resyncs from a snapshot.
     await act(async () =>
-      push({ seq: 6, change: { type: "append", id: "a", text: " Lost." } }),
+      push({ seq: 7, change: { type: "append", id: "a", text: " Lost." } }),
     );
     await vi.waitFor(() => expect(watches).toBe(2));
     await act(async () =>
       push({
-        seq: 6,
+        seq: 7,
         snapshot: state({
           agent: "codex",
           agentName: "Codex",

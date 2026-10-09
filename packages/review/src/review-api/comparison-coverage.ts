@@ -151,11 +151,14 @@ export async function comparisonCoverage(
 
   if (mode === "textual") return coverage;
 
-  // Keep Git's totals and file identities while structural results add folding.
-  const publishCurrent = () =>
-    publish?.({ ...coverage, files: [...coverage.files] });
+  const unsupported = new Set<string>();
 
-  publishCurrent();
+  const current = () => ({
+    ...coverage,
+    files: coverage.files.filter((file) => !unsupported.has(file.path)),
+  });
+
+  publish?.(current());
 
   const baseFiles = new Map(
     coverage.files.map((file, index) => [
@@ -195,12 +198,18 @@ export async function comparisonCoverage(
     if (!remaining.delete(path))
       throw new Error(`Unexpected structural result: ${path}`);
 
+    const baseIndex = event.file.lhs && baseFiles.get(event.file.lhs.path);
+    const headIndex = event.file.rhs && headFiles.get(event.file.rhs.path);
+
     if (event.error) {
       if (
         event.error.code !== "unsupported_file_type" &&
         event.error.code !== "not_utf8"
       )
         throw new Error(`Cannot count ${path}: ${event.error.message}`);
+
+      for (const index of [baseIndex, headIndex])
+        if (index !== undefined) unsupported.add(coverage.files[index].path);
     } else if (event.diff.type === "text") {
       const diff = event.diff;
       const folded = foldedChanges(diff);
@@ -229,8 +238,6 @@ export async function comparisonCoverage(
         };
       }
 
-      const baseIndex = event.file.lhs && baseFiles.get(event.file.lhs.path);
-      const headIndex = event.file.rhs && headFiles.get(event.file.rhs.path);
       const index = headIndex ?? baseIndex;
 
       if (index !== undefined) {
@@ -249,16 +256,16 @@ export async function comparisonCoverage(
             structuralRows(diff),
           );
       }
-
-      publishCurrent();
     }
+
+    publish?.(current());
 
     if (!remaining.size) break;
   }
 
   if (remaining.size) throw new Error("Structural coverage is incomplete.");
 
-  return coverage;
+  return current();
 }
 
 /**

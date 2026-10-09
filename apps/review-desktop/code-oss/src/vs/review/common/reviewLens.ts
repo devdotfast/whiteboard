@@ -35,7 +35,10 @@ export function lensContextGaps(diff: IDocumentDiff, originalCount: number, modi
 			if (!open[start]) { start++; continue; }
 			let end = start + 1;
 			while (end < rows.length && open[end]) end++;
-			if (seeds.slice(start, end).some(Boolean)) context.fill(true, start, end);
+			// diffr never collapses inside added code, so no band bounds a run of
+			// only added lines (as in an added file). Keep only its seeds.
+			if (rows.slice(start, end).every(row => row[0] === null)) for (let index = start; index < end; index++) context[index] ||= seeds[index];
+			else if (seeds.slice(start, end).some(Boolean)) context.fill(true, start, end);
 			start = end;
 		}
 	}

@@ -174,6 +174,9 @@ export const askUsageSchema = z.object({
 
 export type AskUsage = z.infer<typeof askUsageSchema>;
 
+/** A follow-up waiting for the turn under way to end. */
+const askQueuedSchema = z.object({ id: z.string(), text: z.string() });
+
 const statusSchema = z.enum([
   "starting",
   "running",
@@ -209,6 +212,9 @@ export const askThreadStateSchema = z.object({
   title: z.string().optional(),
   selection: z.object({ title: z.string(), quote: z.string().optional() }),
   entries: z.array(askEntrySchema),
+  /** Follow-ups asked while the agent answered, which it could not take
+   * then: each goes as its own question once the turn ends. */
+  queued: z.array(askQueuedSchema).optional(),
 });
 
 export type AskEntry = z.infer<typeof askEntrySchema>;
@@ -228,6 +234,8 @@ export const askChangeSchema = z.discriminatedUnion("type", [
     accepts: askAcceptsSchema.optional(),
     usage: askUsageSchema.optional(),
     title: z.string().optional(),
+    /** Replaces the queue; empty clears it. */
+    queued: z.array(askQueuedSchema).optional(),
     /** `null` clears the error; absent leaves it. */
     error: z.string().nullable().optional(),
     /** `null` clears it; absent leaves it. */
@@ -271,7 +279,12 @@ export function applyAskChange(
 ): AskThreadState {
   switch (change.type) {
     case "set": {
-      const { error: _error, signIn: _signIn, ...rest } = state;
+      const {
+        error: _error,
+        signIn: _signIn,
+        queued: _queued,
+        ...rest
+      } = state;
 
       const next: AskThreadState = {
         ...rest,
@@ -295,6 +308,9 @@ export function applyAskChange(
       const title = change.title ?? state.title;
 
       if (title) next.title = title;
+      const queued = change.queued ?? state.queued;
+
+      if (queued?.length) next.queued = queued;
 
       // Absent keeps the error, null clears it, a message replaces it.
       const error = change.error === undefined ? state.error : change.error;

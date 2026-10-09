@@ -5,7 +5,7 @@ use crate::options::DebugArgs;
 use crate::plugin::{Classifier, Pipeline};
 use crate::run;
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
-use gix::Repository;
+use gix::{revision::plumbing::Spec, ObjectId, Repository};
 use std::{
     ffi::OsString,
     io::{self, IsTerminal, Write},
@@ -17,6 +17,13 @@ use std::{
 /// the flag that was given rather than the whole group.
 const METADATA: [&str; 5] = ["name_only", "name_status", "stat", "numstat", "shortstat"];
 
+/// The examples after the options in `-h` and `--help`.
+macro_rules! examples {
+    () => {
+        "Examples:\n  diffr\n  diffr --cached\n  diffr main...HEAD -- src/\n  diffr --no-index -- before.rs after.rs\n  diffr main HEAD --format ndjson\n\nUnsupported Git flags are rejected; this is not a complete git diff implementation."
+    };
+}
+
 /// Structural diffs with Git-style comparison inputs
 #[derive(Parser)]
 #[command(
@@ -26,7 +33,9 @@ const METADATA: [&str; 5] = ["name_only", "name_status", "stat", "numstat", "sho
     group(ArgGroup::new("names").args(["name_only", "name_status"])),
     // A command name is a command only as the first argument.
     args_conflicts_with_subcommands = true,
-    after_help = "Examples:\n  diffr\n  diffr --cached\n  diffr main...HEAD -- src/\n  diffr --no-index -- before.rs after.rs\n  diffr main HEAD --format ndjson\n\nUnsupported Git flags are rejected; this is not a complete git diff implementation."
+    after_help = examples!(),
+    // `--help`, not `-h`, adds the agents guide.
+    after_long_help = concat!(examples!(), "\n\n", include_str!("../docs/agents.md"))
 )]
 struct Cli {
     #[command(subcommand)]
@@ -126,7 +135,13 @@ enum Command {
     /// Print saved NDJSON without a repository or terminal frontend
     Pprint(PprintArgs),
     /// Show, edit, or open the settings screen for diffr's configuration
+    // `--help`, not `-h`, adds the plugins guide.
+    #[command(after_long_help = include_str!("../docs/plugin.md"))]
     Config(ConfigArgs),
+    /// Install the newest diffr over this one, and update its agent plugins
+    Upgrade,
+    /// Remove diffr, its agent plugins and its install record; keep the config
+    Uninstall,
     #[command(
         hide = true,
         display_name = env!("CARGO_BIN_NAME"),
@@ -177,6 +192,15 @@ enum ConfigCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Choose the agents that get the diffr plugin and the summaries provider
+    Init {
+        /// Print the questions and the answers' schema, or apply ANSWERS
+        #[arg(long)]
+        json: bool,
+        /// Answers as JSON: a file, or - for stdin
+        #[arg(requires = "json")]
+        answers: Option<PathBuf>,
+    },
     /// Convert the v1 settings supported by Whiteboard to config version 2
     Migrate {
         #[arg(long)]
@@ -193,6 +217,8 @@ pub(crate) fn run(runtime: &tokio::runtime::Runtime) -> Result<i32> {
     match &args.command {
         Some(Command::Pprint(args)) => return run_pprint(args),
         Some(Command::Config(config)) => return run_config(config),
+        Some(Command::Upgrade) => return crate::install::upgrade(),
+        Some(Command::Uninstall) => return crate::install::uninstall(),
         Some(Command::Debug(debug)) => {
             crate::run_debug(debug.mode(), &Config::default().compile()?);
             return Ok(0);
@@ -273,15 +299,16 @@ fn select(
         let text = item
             .to_str()
             .ok_or("non-UTF-8 revision/path arguments are unsupported")?;
-        let is_rev = repo.rev_parse(text).is_ok();
+        let spec = repo.rev_parse(text).ok().map(|spec| spec.detach());
+        let is_rev = spec.is_some();
         let is_path = location.join(item).exists();
         if is_rev && is_path && !has_separator {
             return Err(
                 format!("ambiguous revision and path {text:?}; use -- to separate them").into(),
             );
         }
-        if is_rev && paths.is_empty() {
-            revisions.push(text.to_owned());
+        if let (Some(spec), true) = (spec, paths.is_empty()) {
+            revisions.push((text.to_owned(), spec));
         } else if is_rev {
             return Err("revisions must precede paths; use -- to separate them".into());
         } else if is_path {
@@ -301,6 +328,7 @@ fn select(
         .map(|path| normalize_path(prefix, &path))
         .collect::<Result<Vec<_>>>()?;
     let cached = args.cached;
+    // gix reads each revision as git does, ranges and parent shorthands included.
     let mut comparison = match revisions.as_slice() {
         [] if cached => Comparison {
             before: if repo.head()?.is_unborn() {
@@ -314,53 +342,62 @@ fn select(
             before: Operand::Index,
             after: Operand::WorkingTree,
         },
-        [range] if range.contains("..") => {
-            if cached {
-                return Err("--cached takes one revision, not a range".into());
-            }
-            let (a, b, merge) = if let Some((a, b)) = range.split_once("...") {
-                (a, b, true)
-            } else {
-                let (a, b) = range.split_once("..").unwrap();
-                (a, b, false)
-            };
-            let a = if a.is_empty() { "HEAD" } else { a };
-            let b = if b.is_empty() { "HEAD" } else { b };
-            Comparison {
-                before: if merge {
-                    merge_base(repo, a, b)?
-                } else {
-                    Operand::revision(a)
-                },
-                after: Operand::revision(b),
-            }
-        }
-        [rev] => Comparison {
-            before: Operand::revision(rev),
+        [(_, Spec::Include(rev))] => Comparison {
+            before: Operand::revision(rev.to_string()),
             after: if cached {
                 Operand::Index
             } else {
                 Operand::WorkingTree
             },
         },
-        [a, b] if !cached => Comparison {
-            before: Operand::revision(a),
-            after: Operand::revision(b),
+        [(text, _)] if cached => {
+            return Err(format!("--cached takes one revision, not {text:?}").into())
+        }
+        // `a..b`, and `c^-n`: the nth parent of c, then c.
+        [(_, Spec::Range { from, to })] => Comparison {
+            before: Operand::revision(from.to_string()),
+            after: Operand::revision(to.to_string()),
         },
-        _ => return Err("expected at most two revisions (--cached takes at most one)".into()),
+        [(_, Spec::Merge { theirs, ours })] => Comparison {
+            before: merge_base(repo, *theirs, *ours)?,
+            after: Operand::revision(ours.to_string()),
+        },
+        // `c^!`: the commit against its parent.
+        [(text, Spec::ExcludeParents(commit))] => Comparison {
+            before: only_parent(repo, text, *commit)?,
+            after: Operand::revision(commit.to_string()),
+        },
+        [(text, Spec::IncludeOnlyParents(commit))] => {
+            return Err(format!(
+                "{text:?} names every parent of a commit, which is not one comparison; use {commit}^! or two revisions"
+            )
+            .into())
+        }
+        [(text, Spec::Exclude(_))] => {
+            return Err(format!("{text:?} excludes a revision, which is not a comparison").into())
+        }
+        [(_, Spec::Include(a)), (_, Spec::Include(b))] if !cached => Comparison {
+            before: Operand::revision(a.to_string()),
+            after: Operand::revision(b.to_string()),
+        },
+        _ => {
+            return Err(
+                "expected one revision or range, or two revisions (--cached takes at most one)".into(),
+            )
+        }
     };
     if args.merge_base {
-        let a = revisions
-            .first()
-            .ok_or("--merge-base requires a revision")?;
-        if a.contains("..") {
-            return Err("do not combine --merge-base with a range".into());
-        }
-        comparison.before = merge_base(
-            repo,
-            a,
-            revisions.get(1).map(String::as_str).unwrap_or("HEAD"),
-        )?;
+        let a = match revisions.first() {
+            Some((_, Spec::Include(a))) => *a,
+            Some(_) => return Err("do not combine --merge-base with a range".into()),
+            None => return Err("--merge-base requires a revision".into()),
+        };
+        let b = match revisions.get(1) {
+            Some((_, Spec::Include(b))) => *b,
+            Some(_) => return Err("do not combine --merge-base with a range".into()),
+            None => repo.head_commit()?.id,
+        };
+        comparison.before = merge_base(repo, a, b)?;
     }
     if args.reverse {
         comparison.reverse();
@@ -368,10 +405,29 @@ fn select(
     Ok((comparison, paths))
 }
 
-fn merge_base(repo: &Repository, a: &str, b: &str) -> Result<Operand> {
-    let a = repo.rev_parse_single(a)?.object()?.peel_to_commit()?.id();
-    let b = repo.rev_parse_single(b)?.object()?.peel_to_commit()?.id();
+fn merge_base(repo: &Repository, a: ObjectId, b: ObjectId) -> Result<Operand> {
+    let a = repo.find_object(a)?.peel_to_commit()?.id();
+    let b = repo.find_object(b)?.peel_to_commit()?.id();
     Ok(Operand::revision(repo.merge_base(a, b)?.to_string()))
+}
+
+/// What `c^!` compares `c` with: its one parent, or the empty tree for a root commit. A merge has
+/// several, so it names no single comparison.
+fn only_parent(repo: &Repository, text: &str, commit: ObjectId) -> Result<Operand> {
+    let parents = repo
+        .find_object(commit)?
+        .peel_to_commit()?
+        .parent_ids()
+        .collect::<Vec<_>>();
+    match parents.as_slice() {
+        [] => Ok(Operand::EmptyTree),
+        [parent] => Ok(Operand::revision(parent.to_string())),
+        _ => Err(format!(
+            "{text:?} is a merge with {} parents; compare it with one, such as {commit}^1 {commit}",
+            parents.len()
+        )
+        .into()),
+    }
 }
 
 fn normalize_path(prefix: &Path, path: &std::ffi::OsStr) -> Result<String> {
@@ -662,6 +718,9 @@ fn run_config(config: &ConfigArgs) -> Result<i32> {
                 Ok(serde_json::json!({ "changed": changed }))
             })();
             return config_result(&mut stdout, result, *json);
+        }
+        Some(ConfigCommand::Init { json, answers }) => {
+            return crate::init::run(*json, answers.as_deref())
         }
         Some(ConfigCommand::Migrate { json }) => {
             let result = config::global_path()

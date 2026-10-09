@@ -276,3 +276,69 @@ fn gitlinks_have_metadata_but_no_structural_diff() {
         "3\t1\tmodule"
     );
 }
+
+#[test]
+fn commit_shorthands_compare_a_commit_with_its_parent_as_git_does() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("repo");
+    let repo = gix::init(&root).unwrap();
+    fs::write(root.join("a.txt"), "base\n").unwrap();
+    commit(&repo, "base");
+    fs::write(root.join("b.txt"), "head\n").unwrap();
+    commit(&repo, "head");
+    // A dirty working tree, so reading `HEAD^!` as `HEAD^` against the working tree would show.
+    fs::write(root.join("a.txt"), "dirty\n").unwrap();
+    for spec in ["HEAD^!", "HEAD^-", "HEAD^-1"] {
+        let expected = git(&root, &["diff", "--name-status", spec]);
+        assert_eq!(expected, "A\tb.txt", "{spec}");
+        assert_eq!(
+            text(diffr(&root, &["--name-status", spec])),
+            expected,
+            "{spec}"
+        );
+    }
+}
+
+#[test]
+fn every_parent_of_a_commit_is_not_one_comparison() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("repo");
+    let repo = gix::init(&root).unwrap();
+    commit(&repo, "base");
+    commit(&repo, "head");
+    let output = diffr(&root, &["--name-status", "HEAD^@"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("\"HEAD^@\" names every parent of a commit"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn a_merge_has_no_one_parent_to_compare_with() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("repo");
+    let repo = gix::init(&root).unwrap();
+    commit(&repo, "base");
+    git(&root, &["checkout", "-q", "-b", "side"]);
+    fs::write(root.join("side.txt"), "side\n").unwrap();
+    commit(&repo, "side");
+    git(&root, &["checkout", "-q", "-"]);
+    fs::write(root.join("main.txt"), "main\n").unwrap();
+    commit(&repo, "main");
+    git(&root, &["merge", "--no-edit", "-q", "side"]);
+    let output = diffr(&root, &["--name-status", "HEAD^!"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("\"HEAD^!\" is a merge with 2 parents"),
+        "{stderr}"
+    );
+    // Naming the parent, as the message says, is one comparison again.
+    let expected = git(&root, &["diff", "--name-status", "HEAD^2", "HEAD"]);
+    assert_eq!(
+        text(diffr(&root, &["--name-status", "HEAD^2", "HEAD"])),
+        expected
+    );
+}

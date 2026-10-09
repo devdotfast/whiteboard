@@ -74,6 +74,17 @@ const piGreetingSchema = z.object({
 
 const cursorTodosSchema = z.object({ todos: z.unknown() }).loose();
 
+/** The steering extension Claude's adapter takes: a follow-up joins the
+ * turn under way rather than waiting for it to end. */
+const STEER_METHOD = "_session/steering";
+
+/** How an agent says, in its `initialize` response, that it takes steering. */
+const steeringSchema = z.object({
+  steering: z.object({ supported: z.literal(true) }),
+});
+
+const steerOutcomeSchema = z.object({ outcome: z.string() });
+
 /** MCP servers the reviewer's own agent may bring whose tools only read,
  * so their calls run without asking, like the agent reading files. */
 const READ_ONLY_MCP_SERVERS = new Set([
@@ -203,6 +214,10 @@ export class AskThread {
   /** What Pi greets a new session with, its version and skills, which is no
    * part of the answer. */
   private greeting?: string;
+  /** The agent takes follow-ups into the turn under way. */
+  private steerable = false;
+  /** Follow-ups waiting for the turn under way to end, oldest first. */
+  private queue: { id: string; question: AskQuestion }[] = [];
 
   constructor(
     private readonly launch: AskAgentLauncher,
@@ -283,19 +298,28 @@ export class AskThread {
   askRefusal(): string | undefined {
     switch (this.state.status) {
       case "idle":
+      case "running":
+      case "waiting":
         return undefined;
       case "failed":
         return `${this.state.agentName} stopped. Try again first.`;
       default:
-        return "The agent is still answering.";
+        return `${this.state.agentName} is still starting.`;
     }
   }
 
-  /** Asks a follow-up, starting the agent again if it has stopped since. */
+  /** Asks a follow-up, starting the agent again if it has stopped since.
+   * While the agent answers, it joins that turn or waits for it to end. */
   async ask(question: AskQuestion) {
     const refusal = this.askRefusal();
 
     if (refusal) throw new Error(refusal);
+
+    if (this.state.status !== "idle") {
+      await this.steer(question);
+
+      return;
+    }
 
     this.asking = { id: this.addUser(question), question };
     await this.attempt(async () => {
@@ -340,6 +364,60 @@ export class AskThread {
     });
   }
 
+  /** Gives the turn under way a follow-up when the agent takes one, else
+   * keeps it for when the turn ends. */
+  private async steer(question: AskQuestion) {
+    const { connection, sessionId } = this;
+
+    if (this.steerable && connection && sessionId) {
+      const id = this.addUser(question);
+
+      const outcome = await connection.agent
+        .request(STEER_METHOD, {
+          sessionId,
+          prompt: [
+            { type: "text", text: question.text },
+            ...this.attachments(question),
+          ],
+          // A turn that ended meanwhile leaves the follow-up to Whiteboard,
+          // rather than the agent starting a turn Whiteboard does not see end.
+          _meta: { steering: { idleBehavior: "promptRequired" } },
+        })
+        .then(
+          (response) => steerOutcomeSchema.safeParse(response).data?.outcome,
+        )
+        .catch(() => undefined);
+
+      if (outcome === "injected") return;
+      this.emit({ type: "remove", ids: [id] });
+    }
+
+    this.queue.push({ id: randomUUID(), question });
+    this.showQueue();
+    // The turn may have ended while the agent was asked.
+    this.askQueued();
+  }
+
+  /** Asks the oldest waiting follow-up, once no turn is under way. */
+  private askQueued() {
+    if (this.closed || this.state.status !== "idle") return;
+    const next = this.queue.shift();
+
+    if (!next) return;
+    this.showQueue();
+    void this.ask(next.question);
+  }
+
+  private showQueue() {
+    this.emit({
+      type: "set",
+      queued: this.queue.map(({ id, question }) => ({
+        id,
+        text: question.text,
+      })),
+    });
+  }
+
   decide(permissionId: string, optionId: string) {
     const resolve = this.decisions.get(permissionId);
 
@@ -352,6 +430,12 @@ export class AskThread {
   /** Stops the turn, or the start, in progress. A turn the agent does not
    * end soon after is ended by stopping the agent. */
   async cancel() {
+    // Stop drops the follow-ups waiting on the turn as well.
+    if (this.queue.length) {
+      this.queue = [];
+      this.showQueue();
+    }
+
     // ACP: the Client answers every pending permission request as cancelled.
     for (const resolve of this.decisions.values())
       resolve({ outcome: { outcome: "cancelled" } });
@@ -556,6 +640,9 @@ export class AskThread {
       clientInfo: { name: "whiteboard", title: "Whiteboard", version: "1" },
     });
 
+    this.steerable =
+      askAgents[this.start.agent].steers === true &&
+      steeringSchema.safeParse(initialized._meta).success;
     this.emit({
       type: "set",
       accepts: {
@@ -936,6 +1023,7 @@ export class AskThread {
     });
     this.start.onTurn?.();
     this.start.onSave?.(this.state.entries);
+    this.askQueued();
   }
 
   private async requestPermission(
