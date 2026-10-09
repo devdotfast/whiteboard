@@ -112,12 +112,13 @@ loadCacheUsage();
 function iconButton(
   icon: string,
   tooltip: string,
-  onClick: () => void,
+  onClick?: () => void,
 ): HTMLButtonElement {
   const button = element("button", `app-icon-button codicon codicon-${icon}`);
   button.title = tooltip;
   button.setAttribute("aria-label", tooltip);
-  button.addEventListener("click", onClick);
+
+  if (onClick) button.addEventListener("click", onClick);
 
   return button;
 }
@@ -385,7 +386,8 @@ function quickMenu(icon: string, label: string) {
   const panel = element("div", "app-header-popover");
   panel.popover = "auto";
   panel.setAttribute("aria-label", label);
-  const button = iconButton(icon, label, () => panel.togglePopover());
+  const button = iconButton(icon, label);
+  button.popoverTargetElement = panel;
   button.setAttribute("aria-expanded", "false");
   button.setAttribute("aria-haspopup", "dialog");
   panel.setAttribute("role", "dialog");
@@ -393,7 +395,13 @@ function quickMenu(icon: string, label: string) {
     const open = panel.matches(":popover-open");
     button.setAttribute("aria-expanded", String(open));
 
-    if (!open && panel.isConnected) renderHeader();
+    if (!open)
+      void Promise.allSettled(
+        panel.getAnimations().map((animation) => animation.finished),
+      ).then(() => {
+        if (panel.isConnected && !panel.matches(":popover-open"))
+          renderHeader();
+      });
   });
 
   return { button, panel };
