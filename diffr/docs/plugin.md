@@ -11,7 +11,7 @@ For example, the following are all implemented as plugins:
 
 ## Architecture
 
-At it's core, diffstatic runs a structural diffing using an AST/AST matching algorithm. This is, by nature, quite CPU intensive. See [difftastic's docs](https://difftastic.wilfred.me.uk/diffing.html) for more reading.
+At its core, diffr runs a structural diff using an AST/AST matching algorithm. This is, by nature, quite CPU intensive. See [difftastic's docs](https://difftastic.wilfred.me.uk/diffing.html) for more reading.
 
 It has two extension points:
 
