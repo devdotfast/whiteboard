@@ -200,6 +200,8 @@ function route(): void {
 
 function renderHeader(): void {
   mobileFiles.update();
+  // Streaming file results must not tear down the menu the reader is using.
+  if (header.querySelector(":popover-open")) return;
 
   const focusedButton = Array.from(header.querySelectorAll("button")).findIndex(
     (button) => button === document.activeElement,
@@ -386,12 +388,11 @@ function quickMenu(icon: string, label: string) {
   button.setAttribute("aria-expanded", "false");
   button.setAttribute("aria-haspopup", "dialog");
   panel.setAttribute("role", "dialog");
-  panel.addEventListener("toggle", () =>
-    button.setAttribute(
-      "aria-expanded",
-      String(panel.matches(":popover-open")),
-    ),
-  );
+  panel.addEventListener("toggle", () => {
+    const open = panel.matches(":popover-open");
+    button.setAttribute("aria-expanded", String(open));
+    if (!open && panel.isConnected) renderHeader();
+  });
 
   return { button, panel };
 }

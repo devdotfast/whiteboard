@@ -782,7 +782,7 @@ body {
 .is-native .app-diff-viewport {
   position: sticky;
   top: 0;
-  touch-action: pan-x pan-y;
+  touch-action: pan-y;
 }
 .is-native .monaco-editor .view-lines,
 .is-native .monaco-editor .view-line,

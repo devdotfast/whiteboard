@@ -209,13 +209,15 @@ export class Engine {
 
     stats.workers++;
     module().then(
-      (module) =>
+      (module) => {
+        if (this.failure || !this.slots.includes(slot)) return;
         slot.worker.postMessage({
           module,
           config: this.config,
           overrides: this.overrides,
           plugins: this.plugins,
-        } satisfies Request),
+        } satisfies Request);
+      },
       (error: Error) => this.fail(error),
     );
     slot.worker.onmessage = ({ data }: MessageEvent<Response>) =>
@@ -228,6 +230,7 @@ export class Engine {
   }
 
   private receive(slot: Slot, data: Response): void {
+    if (this.failure || !this.slots.includes(slot)) return;
     if ("ready" in data) {
       slot.ready = true;
       stats.ready ??= data.ready;
@@ -274,12 +277,20 @@ export class Engine {
 
   /** The configuration or the engine failed: every call fails with it. */
   private fail(error: Error): void {
+    if (this.failure) return;
     this.failure = error;
     this.rejectNotices(error);
+    clearTimeout(this.idle);
+    for (const slot of this.slots.splice(0)) {
+      slot.worker.terminate();
+      stats.workers--;
+      stats.busy -= slot.busy;
+    }
 
     for (const call of this.pending.values()) call.reject(error);
     this.pending.clear();
     this.queue.length = 0;
+    changed();
   }
 
   private scheduleIdle(): void {
@@ -409,18 +420,6 @@ export class Engine {
   }
 
   dispose(): void {
-    clearTimeout(this.idle);
-
-    for (const slot of this.slots.splice(0)) {
-      slot.worker.terminate();
-      stats.workers--;
-      stats.busy -= slot.busy;
-    }
-
-    for (const call of this.pending.values())
-      call.reject(new Error("The engine was stopped."));
-    this.pending.clear();
-    this.queue.length = 0;
-    changed();
+    this.fail(new Error("The engine was stopped."));
   }
 }

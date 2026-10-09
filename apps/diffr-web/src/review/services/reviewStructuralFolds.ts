@@ -29,7 +29,10 @@ import {
 } from "vs/editor/common/model.js";
 
 import { nestedIds } from "../../folds.js";
-import { mobileViewport } from "../../nativeDiffScroll.js";
+import {
+  horizontalTouchScroll,
+  mobileViewport,
+} from "../../nativeDiffScroll.js";
 import {
   bandDetail,
   structuralFoldables,
@@ -122,6 +125,7 @@ export class StructuralFoldControls extends Disposable {
     super();
     controls.set(editor, this);
     this.installPinchFolding();
+    this._register(horizontalTouchScroll(this.editor));
     this._register({ dispose: () => controls.delete(editor) });
     this._register({
       dispose: () => {

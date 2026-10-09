@@ -1,5 +1,6 @@
 import { Dimension } from "vs/base/browser/dom.js";
 import { Disposable } from "vs/base/common/lifecycle.js";
+import type { ICodeEditor } from "vs/editor/browser/editorBrowser.js";
 import type { MultiDiffEditorWidget } from "vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidget.js";
 
 import { element } from "./ui.js";
@@ -121,4 +122,106 @@ export class NativeDiffScroll extends Disposable {
       ? `${Math.max(this.scroller.clientHeight, this.widget?.getContentHeight() ?? 0)}px`
       : "100%";
   }
+}
+
+/** Monaco owns horizontal geometry; the browser retains vertical touch inertia. */
+export function horizontalTouchScroll(editor: ICodeEditor): {
+  dispose(): void;
+} {
+  const node = editor.getContainerDomNode();
+  let gesture:
+    | {
+        x: number;
+        y: number;
+        lastX: number;
+        time: number;
+        horizontal?: boolean;
+        velocity: number;
+      }
+    | undefined;
+  let frame = 0;
+  const stop = () => {
+    cancelAnimationFrame(frame);
+    frame = 0;
+  };
+  const start = (event: TouchEvent) => {
+    stop();
+    gesture = undefined;
+    if (
+      !mobileViewport.matches ||
+      event.touches.length !== 1 ||
+      !window.getSelection()?.isCollapsed
+    )
+      return;
+    const touch = event.touches[0];
+    gesture = {
+      x: touch.clientX,
+      y: touch.clientY,
+      lastX: touch.clientX,
+      time: performance.now(),
+      velocity: 0,
+    };
+  };
+  const move = (event: TouchEvent) => {
+    if (!gesture || event.touches.length !== 1) {
+      gesture = undefined;
+      return;
+    }
+    const x = event.touches[0].clientX;
+    const y = event.touches[0].clientY;
+    if (gesture.horizontal === undefined) {
+      if (Math.max(Math.abs(x - gesture.x), Math.abs(y - gesture.y)) < 8)
+        return;
+      gesture.horizontal = Math.abs(x - gesture.x) > Math.abs(y - gesture.y);
+    }
+    if (!gesture.horizontal) return;
+    event.preventDefault();
+    const now = performance.now();
+    const delta = gesture.lastX - x;
+    gesture.velocity = delta / Math.max(1, now - gesture.time);
+    editor.setScrollLeft(editor.getScrollLeft() + delta);
+    gesture.lastX = x;
+    gesture.time = now;
+  };
+  const end = () => {
+    const finished = gesture;
+    gesture = undefined;
+    if (!finished?.horizontal || performance.now() - finished.time > 100)
+      return;
+    let velocity = finished.velocity;
+    let last = performance.now();
+    const coast = (now: number) => {
+      const elapsed = Math.min(32, now - last);
+      last = now;
+      const before = editor.getScrollLeft();
+      editor.setScrollLeft(before + velocity * elapsed);
+      velocity *= Math.exp(-elapsed / 180);
+      if (
+        Math.abs(velocity) > 0.02 &&
+        editor.getScrollLeft() !== before &&
+        mobileViewport.matches
+      )
+        frame = requestAnimationFrame(coast);
+    };
+    frame = requestAnimationFrame(coast);
+  };
+  const cancel = () => {
+    gesture = undefined;
+    stop();
+  };
+  node.addEventListener("touchstart", start, { passive: true });
+  node.addEventListener("touchmove", move, { passive: false });
+  node.addEventListener("touchend", end);
+  node.addEventListener("touchcancel", cancel);
+  const modelChange = editor.onDidChangeModel(cancel);
+  return {
+    dispose() {
+      cancel();
+      modelChange.dispose();
+      node.removeEventListener("touchstart", start);
+      node.removeEventListener("touchmove", move);
+      node.removeEventListener("touchend", end);
+      node.removeEventListener("touchcancel", cancel);
+    },
+  };
 }
