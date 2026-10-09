@@ -374,3 +374,119 @@ fn long_help_ends_with_a_guide_and_short_help_does_not() {
             .stdout(predicate::str::contains(guide).not());
     }
 }
+
+/// `config init --json` against a stand-in `claude` that logs its arguments
+/// and fails `plugin install` when `FAIL` is set.
+#[cfg(unix)]
+fn config_init(dir: &std::path::Path, answers: Option<&str>, fail: bool) -> std::process::Output {
+    use std::os::unix::fs::PermissionsExt;
+    let bin = dir.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::create_dir_all(dir.join("home/.claude")).unwrap();
+    let claude = bin.join("claude");
+    std::fs::write(
+        &claude,
+        "#!/bin/sh\necho \"$*\" >> \"$LOG\"\ncase \"$*\" in\n  \"plugin marketplace list --json\") echo '[]' ;;\n  \"plugin install\"*) if [ -n \"$FAIL\" ]; then exit 1; fi ;;\nesac\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&claude, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut command = get_base_command();
+    command
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .env("HOME", dir.join("home"))
+        .env("XDG_CONFIG_HOME", dir.join("config"))
+        .env("XDG_STATE_HOME", dir.join("state"))
+        .env("LOG", dir.join("log"))
+        .env_remove("GEMINI_API_KEY")
+        .env_remove("GOOGLE_API_KEY")
+        .env_remove("OPENAI_API_KEY")
+        .env_remove("ANTHROPIC_API_KEY")
+        .args(["config", "init", "--json"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if fail {
+        command.env("FAIL", "1");
+    }
+    if answers.is_some() {
+        command.arg("-");
+    }
+    let mut child = command.spawn().unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(answers.unwrap_or("").as_bytes())
+        .unwrap();
+    child.wait_with_output().unwrap()
+}
+
+#[cfg(unix)]
+#[test]
+fn config_init_installs_the_chosen_plugins_and_asks_again_with_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let output = config_init(
+        dir.path(),
+        Some(r#"{"agents":["claude-code"],"summaries":"openai"}"#),
+        false,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let log = std::fs::read_to_string(dir.path().join("log")).unwrap();
+    assert!(log.contains("plugin install diffr@devfast"), "{log}");
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["key"]["present"], false);
+    assert_eq!(
+        result["key"]["variables"],
+        serde_json::json!(["OPENAI_API_KEY"])
+    );
+
+    let questions: serde_json::Value =
+        serde_json::from_slice(&config_init(dir.path(), None, false).stdout).unwrap();
+    assert_eq!(
+        questions["questions"][0]["default"],
+        serde_json::json!(["claude-code"])
+    );
+    assert_eq!(questions["questions"][1]["default"], "openai");
+
+    let output = config_init(
+        dir.path(),
+        Some(r#"{"agents":[],"summaries":"off"}"#),
+        false,
+    );
+    assert!(output.status.success());
+    let log = std::fs::read_to_string(dir.path().join("log")).unwrap();
+    assert!(log.contains("plugin uninstall diffr@devfast"), "{log}");
+}
+
+#[cfg(unix)]
+#[test]
+fn config_init_stops_at_a_failed_plugin_install_and_keeps_the_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let output = config_init(
+        dir.path(),
+        Some(r#"{"agents":["claude-code"],"summaries":"openai"}"#),
+        true,
+    );
+    assert_eq!(output.status.code(), Some(2));
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(result["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("plugin install diffr@devfast"));
+    assert!(!dir.path().join("config/diffr/config.toml").exists());
+}
+
+#[test]
+fn config_init_needs_a_terminal_without_json() {
+    get_base_command()
+        .args(["config", "init"])
+        .stdin(Stdio::null())
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicate::str::contains("config init --json"));
+}
