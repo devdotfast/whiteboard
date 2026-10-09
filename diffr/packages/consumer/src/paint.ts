@@ -19,7 +19,6 @@ export class Colors {
   }
 }
 
-/** Adjacent runs in one style merge; `width` is in terminal cells. */
 export class LineBuilder {
   private readonly segments: Segment[] = [];
   private readonly hits: Target<Action>[] = [];

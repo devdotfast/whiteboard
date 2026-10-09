@@ -314,9 +314,12 @@ jobs:
         run: |
           pnpm typecheck
           pnpm test
+      - working-directory: diffr/packages/consumer
+        run: |
+          pnpm typecheck
+          pnpm test
       - working-directory: diffr/packages/claude-code
         run: |
-          pnpm exec vitest run src
           pnpm build
           git diff --exit-code -- plugin
       - working-directory: diffr/packages/tui

@@ -110,6 +110,9 @@ importers:
 
   diffr/packages/claude-code:
     devDependencies:
+      '@diffr/consumer':
+        specifier: workspace:*
+        version: link:../consumer
       '@diffr/viewer':
         specifier: workspace:*
         version: link:../viewer
@@ -122,12 +125,28 @@ importers:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
-      vitest:
-        specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
       zod:
         specifier: 4.6.5
         version: 4.6.5
+
+  diffr/packages/consumer:
+    dependencies:
+      '@diffr/viewer':
+        specifier: workspace:*
+        version: link:../viewer
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
 
   diffr/packages/tui:
     dependencies:

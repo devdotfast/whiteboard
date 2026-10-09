@@ -1,4 +1,3 @@
-/** Shell-style word splitting: quotes group words, with no escapes or expansion. */
 export function splitArgs(text: string): string[] {
   const args: string[] = [];
   let current = "", quote: string | undefined, started = false;
