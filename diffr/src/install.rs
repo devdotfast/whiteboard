@@ -47,7 +47,8 @@ impl Agent {
         })
     }
 
-    pub(crate) fn install(self) -> Result<()> {
+    /// `step` hears what each slow command is about to do.
+    pub(crate) fn install(self, step: &mut dyn FnMut(&str)) -> Result<()> {
         match self {
             Agent::ClaudeCode => {
                 let list = claude(&["plugin", "marketplace", "list", "--json"])?;
@@ -56,29 +57,35 @@ impl Agent {
                     .iter()
                     .any(|marketplace| marketplace["name"] == MARKETPLACE)
                 {
+                    step("Updating the devfast plugin marketplace in Claude Code");
                     claude(&["plugin", "marketplace", "update", MARKETPLACE])?;
                 } else {
+                    step("Adding the devfast plugin marketplace to Claude Code");
                     claude(&["plugin", "marketplace", "add", MARKETPLACE_SOURCE])?;
                 }
+                step("Installing the diffr plugin in Claude Code");
                 claude(&["plugin", "install", PLUGIN, "--scope", "user"])?;
                 Ok(())
             }
         }
     }
 
-    fn upgrade(self) -> Result<()> {
+    fn upgrade(self, step: &mut dyn FnMut(&str)) -> Result<()> {
         match self {
             Agent::ClaudeCode => {
+                step("Updating the devfast plugin marketplace in Claude Code");
                 claude(&["plugin", "marketplace", "update", MARKETPLACE])?;
+                step("Updating the diffr plugin in Claude Code");
                 claude(&["plugin", "update", PLUGIN])?;
                 Ok(())
             }
         }
     }
 
-    pub(crate) fn remove(self) -> Result<()> {
+    pub(crate) fn remove(self, step: &mut dyn FnMut(&str)) -> Result<()> {
         match self {
             Agent::ClaudeCode => {
+                step("Removing the diffr plugin from Claude Code");
                 claude(&["plugin", "uninstall", PLUGIN])?;
                 Ok(())
             }
@@ -189,8 +196,7 @@ pub(crate) fn upgrade() -> Result<i32> {
         }
     }
     for agent in Record::load()?.agents {
-        eprintln!("Updating the diffr plugin for {}", agent.title());
-        agent.upgrade()?;
+        agent.upgrade(&mut |message| eprintln!("{message}"))?;
     }
     Ok(0)
 }
@@ -202,7 +208,7 @@ pub(crate) fn uninstall() -> Result<i32> {
     let method = Method::find()?;
     let mut record = Record::load()?;
     while let Some(agent) = record.agents.first().copied() {
-        agent.remove()?;
+        agent.remove(&mut |message| eprintln!("{message}"))?;
         record.agents.remove(0);
         record.save()?;
     }

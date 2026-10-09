@@ -25,8 +25,7 @@ const SUMMARIZE: &str = "plugins.shape.bundled.summarize";
 
 const AGENTS_QUESTION: &str = "Which agents would you like to install the diffr plugin for?";
 const SUMMARIES_QUESTION: &str = "Would you like pseudocode summaries of code?";
-const PROVIDER_QUESTION: &str =
-    "What AI provider would you like to use for summarization?";
+const PROVIDER_QUESTION: &str = "What AI provider would you like to use for summarization?";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -193,7 +192,7 @@ pub(crate) fn run(json: bool, answers: Option<&Path>) -> Result<i32> {
         }
         (true, Some(path)) => {
             let result = read_answers(path).and_then(|answers| {
-                apply(&state, &answers, None)?;
+                apply(&state, &answers, None, &mut |_| {})?;
                 Ok(outcome(&state, &answers))
             });
             let mut stdout = io::stdout().lock();
@@ -212,8 +211,7 @@ pub(crate) fn run(json: bool, answers: Option<&Path>) -> Result<i32> {
                         .into(),
                 );
             }
-            prompt(&state)?;
-            Ok(0)
+            prompt(&state)
         }
     }
 }
@@ -299,7 +297,13 @@ fn read_answers(path: &Path) -> Result<Answers> {
 /// Install and remove plugins to match the chosen agents, then save the
 /// summaries choice. The first failure stops the run, before the config
 /// changes.
-fn apply(state: &State, answers: &Answers, key: Option<String>) -> Result<()> {
+/// `step` hears each slow step as it starts.
+fn apply(
+    state: &State,
+    answers: &Answers,
+    key: Option<String>,
+    step: &mut dyn FnMut(&str),
+) -> Result<()> {
     let mut summarize = Map::new();
     match &answers.summaries {
         None => {}
@@ -323,18 +327,19 @@ fn apply(state: &State, answers: &Answers, key: Option<String>) -> Result<()> {
         let chosen = answers.agents.contains(&agent);
         let installed = record.agents.contains(&agent);
         if chosen {
-            agent.install()?;
+            agent.install(step)?;
             if !installed {
                 record.agents.push(agent);
             }
         } else if installed {
-            agent.remove()?;
+            agent.remove(step)?;
             record.agents.retain(|other| *other != agent);
         }
         record.save()?;
     }
     if !summarize.is_empty() {
         let patch = json!({ "plugins": { "shape": { "bundled": { "summarize": summarize } } } });
+        step("Saving your settings");
         config::store::patch(&config::global_path()?, &patch)?;
     }
     Ok(())
@@ -357,7 +362,7 @@ fn outcome(state: &State, answers: &Answers) -> Value {
     })
 }
 
-fn prompt(state: &State) -> Result<()> {
+fn prompt(state: &State) -> Result<i32> {
     cliclack::intro("diffr")?;
     let mut agents = cliclack::multiselect(AGENTS_QUESTION)
         .initial_values(state.agents()?)
@@ -406,15 +411,26 @@ fn prompt(state: &State) -> Result<()> {
         agents,
         summaries: Some(summaries),
     };
-    let spinner = cliclack::spinner();
-    spinner.start("Saving");
-    match apply(state, &answers, key) {
-        Ok(()) => spinner.stop("Saved"),
-        Err(error) => {
-            spinner.error(&error);
-            return Err(error);
+    // Each step gets a spinner, ticked off when the next one starts.
+    let mut current: Option<(cliclack::ProgressBar, String)> = None;
+    let applied = apply(state, &answers, key, &mut |message| {
+        if let Some((spinner, done)) = current.take() {
+            spinner.stop(done);
         }
+        let spinner = cliclack::spinner();
+        spinner.start(message);
+        current = Some((spinner, message.to_owned()));
+    });
+    match (applied, current) {
+        (Ok(()), Some((spinner, done))) => spinner.stop(done),
+        (Ok(()), None) => {}
+        // The spinner shows the error, so it is not printed again.
+        (Err(error), Some((spinner, _))) => {
+            spinner.error(&error);
+            return Ok(2);
+        }
+        (Err(error), None) => return Err(error),
     }
     cliclack::outro("diffr is ready to use! Hope you enjoy some beautiful diffs")?;
-    Ok(())
+    Ok(0)
 }
