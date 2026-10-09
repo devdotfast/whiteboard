@@ -4,7 +4,7 @@ description = "Structural diffs with a streaming API and interactive terminal fr
 repository = "https://github.com/devdotfast/whiteboard"
 homepage = "https://github.com/devdotfast/whiteboard/tree/main/diffr"
 license = "MIT"
-version = "0.1.17"
+version = "0.1.18"
 authors = ["dev.fast"]
 keywords = ["diff", "syntax"]
 categories = ["development-tools", "command-line-utilities", "parser-implementations"]
@@ -28,7 +28,7 @@ include = [
 ]
 
 [dependencies]
-diffr-core = { path = "crates/diffr-core", version = "0.1.17" }
+diffr-core = { path = "crates/diffr-core", version = "0.1.18" }
 gix = { version = "0.88", default-features = false, features = ["parallel", "revision", "status", "blob-diff", "attributes", "sha1"] }
 clap = { version = "4.0.0", features = ["cargo", "derive", "env", "wrap_help", "string"] }
 typed-arena = "2.0.2"
