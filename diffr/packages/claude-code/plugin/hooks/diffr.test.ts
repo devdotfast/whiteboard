@@ -8,6 +8,12 @@ const PANE = {
   props: { title: "diffr", isFocused: true, bodyColumns: 90, placement: "dock", scroll: { offset: 0, bodyRows: 24 }, view: {} },
 } as const;
 
+/** The diffr on PATH: its version, and its config with the default theme. */
+async function diffr($: unknown, e: { argv: readonly string[] }) {
+  const stdout = e.argv[1] === "--version" ? "diffr 0.1.18\n" : JSON.stringify({ theme: { name: "default-dark", path: null } });
+  return { value: { exitCode: 0, stdout, stderr: "", isStdoutTruncated: false, isStderrTruncated: false } };
+}
+
 async function lines(ui: { drawn: (scope: { in: string }) => Promise<unknown> }, band: string) {
   const flat = (node: unknown): string =>
     typeof node === "string" ? node : (node as { children?: unknown[] }).children?.map(flat).join("") ?? "";
@@ -17,10 +23,7 @@ async function lines(ui: { drawn: (scope: { in: string }) => Promise<unknown> },
 
 test("/diffr streams diffr into a pane where a click opens a file and keys switch the layout", async ($, on) => {
   let argv: readonly string[] = [];
-  on("process.run", async () => {
-    return { value: { exitCode: 0, stdout: JSON.stringify({ theme: { name: "default-dark", path: null } }), stderr: "",
-      isStdoutTruncated: false, isStderrTruncated: false } };
-  });
+  on("process.run", diffr);
   on("ui.open", async () => ({ value: { isPlaced: true } }));
   const copied: { text: string; surface?: string }[] = [];
   on("ui.copy", async ($, e) => {
@@ -95,8 +98,7 @@ test("/diffr reports a diffr that cannot start", async ($, on) => {
 });
 
 test("the open tool shows a comparison in the pane, without the keyboard, and returns once diffr names it", async ($, on) => {
-  on("process.run", async () => ({ value: { exitCode: 0, stdout: JSON.stringify({ theme: { name: "default-dark", path: null } }),
-    stderr: "", isStdoutTruncated: false, isStderrTruncated: false } }));
+  on("process.run", diffr);
   const opened: unknown[] = [];
   on("ui.open", async ($, e) => {
     opened.push(e);
@@ -131,9 +133,23 @@ test("the open tool reports a diffr that cannot start as an error", async ($, on
   expect(called.deny).toContain("diffr: command not found");
 });
 
+test("an older diffr is the answer to /diffr and the open tool, naming diffr upgrade", async ($, on) => {
+  let spawned = false;
+  on("process.run", async () => ({ value: { exitCode: 0, stdout: "diffr 0.1.17\n", stderr: "",
+    isStdoutTruncated: false, isStderrTruncated: false } }));
+  on("process.spawn", async function* () {
+    spawned = true;
+    return { value: { code: 0, signal: null } };
+  });
+  const ran = await $.command.run({ command: "diffr", args: "" } as never) as { text: string };
+  expect(ran.text).toContain("needs diffr 0.1.18 or newer, not 0.1.17; update it with: diffr upgrade");
+  const called = await $.tool.call({ tool: "mcp__diffr__open", args: [] } as never) as { result?: string; deny?: string };
+  expect(called.deny).toContain("diffr upgrade");
+  expect(spawned).toBe(false);
+});
+
 test("the open tool comes back once diffr names the comparison, even while diffr is still streaming", async ($, on) => {
-  on("process.run", async () => ({ value: { exitCode: 0, stdout: JSON.stringify({ theme: { name: "default-dark", path: null } }),
-    stderr: "", isStdoutTruncated: false, isStderrTruncated: false } }));
+  on("process.run", diffr);
   on("ui.open", async () => ({ value: { isPlaced: true } }));
   on("process.spawn", async function* () {
     yield { stream: "stdout", text: fixture.slice(0, fixture.indexOf("\n") + 1) };
@@ -148,8 +164,7 @@ test("the open tool comes back once diffr names the comparison, even while diffr
 });
 
 test("leaving the pane, as Escape does, closes the search prompt and the picker", async ($, on) => {
-  on("process.run", async () => ({ value: { exitCode: 0, stdout: JSON.stringify({ theme: { name: "default-dark", path: null } }),
-    stderr: "", isStdoutTruncated: false, isStderrTruncated: false } }));
+  on("process.run", diffr);
   on("ui.open", async () => ({ value: { isPlaced: true } }));
   on("process.spawn", async function* () {
     yield { stream: "stdout", text: fixture };
@@ -179,8 +194,7 @@ test("leaving the pane, as Escape does, closes the search prompt and the picker"
 });
 
 test("Enter on a selection puts a chip naming it in the prompt box, hands the keyboard back, and the prompt that names it carries its code", async ($, on) => {
-  on("process.run", async () => ({ value: { exitCode: 0, stdout: JSON.stringify({ theme: { name: "default-dark", path: null } }),
-    stderr: "", isStdoutTruncated: false, isStderrTruncated: false } }));
+  on("process.run", diffr);
   const panes: string[] = [];
   on("ui.open", async ($, e) => {
     panes.push(e.focus ? "open focused" : "open");

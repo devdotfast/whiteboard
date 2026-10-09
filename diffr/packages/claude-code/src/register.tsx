@@ -9,6 +9,9 @@ import { Pane } from "./frame";
 
 const PANE = "diffr";
 const TOOL = "mcp__diffr__open";
+/** The first diffr with `config init` and `upgrade`. */
+const MINIMUM = [0, 1, 18];
+const INSTALL = "curl -fsSL https://install.dev.fast/diffr | sh";
 /** Lines per view instance. Claude Code caps each instance's element tree, and one highlighted
  * line can take over a thousand characters. */
 const BAND = 16;
@@ -20,6 +23,33 @@ async function loadTheme($: EngineInterface, binary: string): Promise<Palette> {
   return config.path
     ? paletteFromHelix(parseHelixTheme(await $.fs.read(config.path), config.path))
     : loadBundledTheme(config.name);
+}
+
+/** Rejects, naming the command that fixes it, when diffr is missing or older than MINIMUM. */
+async function checkVersion($: EngineInterface, binary: string): Promise<void> {
+  let shown;
+  try {
+    shown = await $.process.run([binary, "--version"]);
+  } catch (error) {
+    throw new Error(`${binary} could not run (${error instanceof Error ? error.message : String(error)}); install diffr with: ${INSTALL}`);
+  }
+  if (shown.exitCode !== 0) throw new Error(shown.stderr || `${binary} --version exited with status ${shown.exitCode}`);
+  const match = /^diffr (\d+)\.(\d+)\.(\d+)/.exec(shown.stdout);
+  if (!match) throw new Error(`${binary} --version printed ${JSON.stringify(shown.stdout)}, not a diffr version`);
+  const version = match.slice(1).map(Number);
+  const older = version.findIndex((part, i) => part !== MINIMUM[i]);
+  if (older >= 0 && version[older] < MINIMUM[older])
+    throw new Error(`This plugin needs diffr ${MINIMUM.join(".")} or newer, not ${version.join(".")}; update it with: diffr upgrade`);
+}
+
+type Checked = { promise?: Promise<void> };
+
+/** Checks once per session; a failed check runs again on the next use, as after `diffr upgrade`. */
+function check($: EngineInterface, binary: string, checked: Checked): Promise<void> {
+  return checked.promise ??= checkVersion($, binary).catch((error) => {
+    checked.promise = undefined;
+    throw error;
+  });
 }
 
 function toolArgs(input: Record<string, unknown>): string[] {
@@ -104,6 +134,7 @@ export function register(on: On, options: PluginOptions): void {
   /** Ranges in the draft, by chip name. */
   const chips = new Map<string, string>();
   const acks = new Map<string, number>();
+  const version: Checked = {};
 
   on("session.start", async ($, e, next) => {
     await $.command.register({
@@ -130,6 +161,7 @@ export function register(on: On, options: PluginOptions): void {
     const args = splitArgs(e.args);
     let started: Awaited<ReturnType<typeof startDiffr>>;
     try {
+      await check($, binary, version);
       started = await startDiffr($, binary, child, args);
     } catch (error) {
       return { text: `diffr could not start: ${error instanceof Error ? error.message : String(error)}` };
@@ -147,6 +179,7 @@ export function register(on: On, options: PluginOptions): void {
     let args: string[], started: Awaited<ReturnType<typeof startDiffr>>;
     try {
       args = toolArgs(e);
+      await check($, binary, version);
       started = await startDiffr($, binary, child, args);
     } catch (error) {
       return refuse(error);
