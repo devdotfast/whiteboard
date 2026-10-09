@@ -144,6 +144,9 @@ importers:
 
   diffr/packages/viewer:
     dependencies:
+      fuzzysort:
+        specifier: 4.0.2
+        version: 4.0.2
       get-east-asian-width:
         specifier: 1.4.0
         version: 1.4.0
