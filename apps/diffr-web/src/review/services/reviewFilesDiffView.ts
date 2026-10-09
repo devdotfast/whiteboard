@@ -24,7 +24,11 @@ import {
   MutableDisposable,
   toDisposable,
 } from "vs/base/common/lifecycle.js";
-import { autorun, type IObservable } from "vs/base/common/observable.js";
+import {
+  autorun,
+  observableValue,
+  type IObservable,
+} from "vs/base/common/observable.js";
 import { isEqual } from "vs/base/common/resources.js";
 import { URI } from "vs/base/common/uri.js";
 import { ElementSizeObserver } from "vs/editor/browser/config/elementSizeObserver.js";
@@ -186,6 +190,7 @@ export class ReviewFilesEditorInput extends Disposable {
       experimental: { useTrueInlineView: false },
     } satisfies IDiffEditorOptions;
     const item: IDocumentDiffItem = {
+      collapsed: observableValue("fileCollapsed", false),
       original: model(entry.original!, text("lhs")),
       modified: model(entry.modified!, text("rhs")),
       labelUris: reviewMultiDiffLabelUris(entry.file),
