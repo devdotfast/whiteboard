@@ -310,6 +310,10 @@ jobs:
         run: |
           pnpm typecheck
           pnpm test
+      - working-directory: diffr/packages/herdr
+        run: |
+          pnpm typecheck
+          pnpm test
       - working-directory: diffr/packages/opencode
         run: |
           pnpm typecheck
