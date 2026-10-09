@@ -28,6 +28,8 @@ export interface SplitLineCell {
   fold?: RowFold;
   /** A line of a collapsed fold's label, painted in the fold tint without a line number. */
   foldLabel?: boolean;
+  /** On a label line, its fold's fold-state id: a click opens that fold. */
+  labelOf?: number;
   /** A collapsed row or label line: its tint fills the rest of the line. */
   band?: FoldTint;
   /** The innermost open scope holding this line, its opener and closer included. */
@@ -44,6 +46,7 @@ export interface UnifiedLineCell {
   newLineNumber?: number;
   fold?: RowFold;
   foldLabel?: boolean;
+  labelOf?: number;
   band?: FoldTint;
   scope?: number;
   body?: number[];

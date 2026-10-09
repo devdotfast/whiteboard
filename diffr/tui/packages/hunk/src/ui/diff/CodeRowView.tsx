@@ -106,22 +106,25 @@ export const CodeRowView = memo(function CodeRowView({
     const painted = value.band && rest > 0
       ? [...spans, {text: (value.fold ? "  " + "┄".repeat(rest) : " ".repeat(rest)).slice(0, rest),
           fg: theme.guide, bg: foldBackground(theme, value.band)}] : spans;
-    // What the pointer is on. A rail or the chevron arms its scope, so a click folds it; anywhere
-    // else on the row reads the innermost scope around the line.
+    // What the pointer is on. A rail or the chevron arms its scope, so a click folds it, and a
+    // collapsed fold's chevron or label arms that fold, so a click opens it; anywhere else on the
+    // row reads the innermost scope around the line.
     const chevronColumn = numbers.length, codeColumn = numbers.length + 2;
+    const opens = fold?.collapsed ? fold.id : value.labelOf;
     const rail = (event: MouseEvent) => {
       const column = event.x - (event.currentTarget?.x ?? 0);
       return column >= codeColumn ? railAt(painted, column - codeColumn) : undefined;
     };
     const target = (event: MouseEvent): ScopeFocus | undefined => {
       const column = event.x - (event.currentTarget?.x ?? 0);
-      const id = column === chevronColumn && fold && !fold.collapsed && !visualLine ? fold.id : rail(event);
+      const id = column === chevronColumn && fold && !visualLine ? fold.id
+        : rail(event) ?? (column >= codeColumn ? opens : undefined);
       if (id !== undefined) return { id, armed: true };
       return value.scope === undefined ? undefined : { id: value.scope, armed: false };
     };
     // Open chevrons rest faint so they don't compete with the code; a collapsed one stays
-    // legible, since it is the way back in, and the focused scope's lights up.
-    const chevronFg = fold && !fold.collapsed && fold.id === focus?.id ? theme.accent
+    // legible, since it is the way back in, and the focused scope's lights up, open or not.
+    const chevronFg = fold && fold.id === focus?.id ? theme.accent
       : fold?.collapsed ? theme.muted : theme.guide;
     return (
       <box
@@ -169,9 +172,9 @@ export const CodeRowView = memo(function CodeRowView({
         <text
           width={available}
           height={1}
-          onMouseDown={event => { if (fold?.collapsed) event.stopPropagation(); }}
+          onMouseDown={event => { if (opens !== undefined) event.stopPropagation(); }}
           onMouseUp={event => {
-            if (fold?.collapsed && event.button === 0) { event.stopPropagation(); onFold(fold.id, event.modifiers.alt); }
+            if (opens !== undefined && event.button === 0) { event.stopPropagation(); onFold(opens, event.modifiers.alt); }
           }}
           content={styled(
             selectedSide === side ? painted.map((s) => ({ ...s, bg })) : painted,
