@@ -358,7 +358,7 @@ fn pprint_reads_a_file_or_stdin_without_a_frontend() {
 #[test]
 fn long_help_ends_with_a_guide_and_short_help_does_not() {
     for (args, guide) in [
-        (&["--help"][..], "# Using diffr from an agent"),
+        (&["--help"][..], "Plugins Guide (for agent readers, not humans):"),
         (&["config", "--help"][..], "# Plugin Architecture"),
     ] {
         get_base_command()
