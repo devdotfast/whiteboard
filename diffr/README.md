@@ -16,6 +16,12 @@ diffr is a Rust-based structural diffing (AST-aware) library with a WASM plugin 
 
 3. [WASM-based plugin system](docs/plugin.md)
 
+4.  Diffr is also available natively in many coding agents as a native plugin via `/diffr`. You can view and comment on diffs without switching tabs:
+
+// TODO(smenon): gif of claude code plugin
+
+Currently, we support a plugin for Claude Code.
+
 ## Usage
 
 `diffr` accepts the exact same arguments that `git diff` does.
