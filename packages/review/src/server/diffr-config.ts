@@ -51,7 +51,7 @@ function diffrArgv(args: DiffrArguments): string[] {
     case "show":
       return ["config", "show", "--json", ...(args.reveal ? ["--reveal"] : [])];
     case "set":
-      return ["config", "set", "--stdin", "--json"];
+      return ["config", "set", "-", "--json"];
     case "migrate":
       return ["config", "migrate", "--json"];
     case "diff":
