@@ -23,7 +23,8 @@ export const CodeRowView = memo(function CodeRowView({
   visualLine,
   geometry,
   theme,
-  selectedSide,
+  selectedLeft,
+  selectedRight,
   onSelect,
   onExtend,
   onFold,
@@ -35,9 +36,11 @@ export const CodeRowView = memo(function CodeRowView({
   visualLine: number;
   geometry: Geometry;
   theme: Palette;
-  selectedSide?: "left" | "right";
+  /** Which halves of the row the selection covers; a unified row is either. Booleans, so the memo holds. */
+  selectedLeft: boolean;
+  selectedRight: boolean;
   onSelect: (side: "left" | "right") => void;
-  onExtend: () => void;
+  onExtend: (side: "left" | "right") => void;
   focus?: ScopeFocus;
   onHover: (focus: ScopeFocus | undefined) => void;
   onFold: (id: number, recursive: boolean) => void;
@@ -51,7 +54,7 @@ export const CodeRowView = memo(function CodeRowView({
     side: "left" | "right",
     unified = false,
   ) {
-    const plan = planCell(value, spans, width, unified, { theme, geometry, visualLine, focus, selected: selectedSide === side, read });
+    const plan = planCell(value, spans, width, unified, { theme, geometry, visualLine, focus, selected: unified ? selectedLeft || selectedRight : side === "left" ? selectedLeft : selectedRight, read });
     const column = (event: MouseEvent) => event.x - (event.currentTarget?.x ?? 0);
     // Pressing a fold target doesn't start a selection.
     const fold = (event: MouseEvent) => targetAt(plan.hits, column(event));
@@ -72,7 +75,7 @@ export const CodeRowView = memo(function CodeRowView({
           event.stopPropagation();
           onFold(id, event.modifiers.alt);
         }}
-        onMouseMove={(event) => { onExtend(); onHover(targetAt(plan.hovers, column(event))); }}
+        onMouseMove={(event) => { onExtend(side); onHover(targetAt(plan.hovers, column(event))); }}
         onMouseOut={() => onHover(undefined)}
       >
         <text width={width} height={1} content={styled(plan.runs)} selectable={false} />
