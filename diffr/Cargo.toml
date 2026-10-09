@@ -75,6 +75,20 @@ exclude = ["plugins", "tests/fixtures/concurrent-guest"]
 [profile.release]
 lto = "thin"
 
+# Grammar generation parses and compresses large C tables at build time.
+[profile.dev.build-override]
+opt-level = 2
+
+# Speed up WASM compilation in tests without changing diffr's debug settings.
+[profile.dev.package.cranelift-codegen]
+opt-level = 2
+
+[profile.dev.package.regalloc2]
+opt-level = 2
+
+[profile.dev.package.wasmtime-internal-cranelift]
+opt-level = 2
+
 [[bin]]
 name = "diffr"
 path = "src/main.rs"
