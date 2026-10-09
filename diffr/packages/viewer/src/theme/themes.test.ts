@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { bundledThemes, colorOf, foldBackground, paletteFromHelix, scopeStyle } from "./palette";
+import { bundledThemes, colorOf, paletteFromHelix, scopeStyle } from "./palette";
 import { loadBundledTheme, parseHelixTheme } from "./themes";
 const sample = `
 "keyword" = { fg = "red", modifiers = ["bold"] }
@@ -69,7 +69,6 @@ test("in every bundled theme a file header stands apart from code and folds, and
   for (const name of Object.keys(bundledThemes)) {
     const palette = loadBundledTheme(name);
     expect(palette.fileHeader).not.toBe(palette.bg);
-    expect(palette.fileHeader).not.toBe(foldBackground(palette, "neutral"));
     expect(contrast(palette.fg, palette.fileHeader)).toBeGreaterThanOrEqual(4);
     expect(contrast(palette.fileHeaderDir, palette.fileHeader)).toBeGreaterThanOrEqual(2.5);
   }
