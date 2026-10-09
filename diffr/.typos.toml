@@ -5,6 +5,8 @@ extend-exclude = [
   "demo_files/",
   # Git index lines carry blob hashes that can spell words.
   "examples/review/real/*/change.patch",
+  # Built by build.ts; it carries zod's messages in other languages.
+  "packages/claude-code/plugin/hooks/*.js",
 ]
 
 [default.extend-identifiers]
