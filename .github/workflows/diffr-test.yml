@@ -9,6 +9,11 @@ on:
       - "diffr/**"
       - ".github/workflows/diffr-test.yml"
   workflow_dispatch:
+    inputs:
+      cpu_profile:
+        description: Record Linux CPU samples (adds diagnostic overhead)
+        type: boolean
+        default: false
 
 name: Diffr Test
 
@@ -42,6 +47,7 @@ jobs:
         working-directory: diffr
     env:
       BUILD_CMD: cargo
+      PROFILE_CPU: ${{ github.event_name == 'workflow_dispatch' && inputs.cpu_profile || false }}
 
     steps:
     - name: Checkout source code
@@ -66,9 +72,53 @@ jobs:
       shell: bash
       run: echo "BUILD_CMD=cross" >> $GITHUB_ENV
 
-    - name: Test
+    - name: Install Linux CPU profiler
+      if: matrix.job.target == 'x86_64-unknown-linux-gnu' && github.event_name == 'workflow_dispatch' && inputs.cpu_profile
+      shell: bash
+      run: |
+        echo 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends linux-tools-generic
+        PERF=$(find -L /usr/lib/linux-tools -type f -name perf | sort -V | tail -n 1)
+        test -n "$PERF" && test -x "$PERF"
+        echo "PERF=$PERF" >> "$GITHUB_ENV"
+        # Allow user-space sampling without running Cargo or tests as root.
+        sudo sysctl -w kernel.perf_event_paranoid=2
+        "$PERF" --version
+        "$PERF" record -F 49 -e cpu-clock:u --call-graph dwarf,4096 -o "$RUNNER_TEMP/perf-probe.data" -- sleep 0.1
+
+    - name: Compile tests and record Cargo timings
+      if: matrix.job.target != 'x86_64-unknown-linux-gnu'
+      shell: bash
+      run: $BUILD_CMD test --target ${{ matrix.job.target }} --no-run --timings
+
+    - name: Measure Linux compilation and record Cargo timings
+      if: matrix.job.target == 'x86_64-unknown-linux-gnu'
+      shell: bash
+      env:
+        PROFILE_PHASE: build
+      run: bash scripts/ci-profile.sh cargo test --target ${{ matrix.job.target }} --no-run --timings
+
+    - name: Measure Linux tests
+      if: matrix.job.target == 'x86_64-unknown-linux-gnu'
+      shell: bash
+      run: bash scripts/ci-profile.sh cargo test --target ${{ matrix.job.target }}
+
+    - name: Run tests
+      if: matrix.job.target != 'x86_64-unknown-linux-gnu'
       shell: bash
       run: $BUILD_CMD test --target ${{ matrix.job.target }}
+
+    - name: Upload build timings and test profile
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: diffr-profile-${{ matrix.job.target }}
+        path: |
+          diffr/target/cargo-timings
+          diffr/diagnostics
+        if-no-files-found: warn
+        retention-days: 7
 
   crate_packages:
     name: Verify crates.io packages
