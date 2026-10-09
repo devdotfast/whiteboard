@@ -283,7 +283,9 @@ try {
     );
     assert.ok(
       await summary.evaluate(
-        (n) => n.scrollLeft >= Math.min(20, n.scrollWidth - n.clientWidth),
+        (n) =>
+          n.scrollWidth > n.clientWidth &&
+          n.scrollLeft >= Math.min(20, n.scrollWidth - n.clientWidth),
       ),
       "long summary must pan without opening the fold",
     );
@@ -319,18 +321,16 @@ try {
         const x = r.x + Math.min(20, r.width / 2),
           y = r.y + r.height / 2;
 
-        return r.width === 0 || n.contains(document.elementFromPoint(x, y));
+        return (
+          r.width > 0 &&
+          r.height > 0 &&
+          n.contains(document.elementFromPoint(x, y))
+        );
       }),
       "diff must not cover the scrollbar",
     );
 
-    const copy = await page.evaluate(() => {
-      const line = [...document.querySelectorAll(".modified .view-line")].find(
-        (n) =>
-          n.textContent.replace(/\u00a0/g, " ").includes("long code content") &&
-          n.getBoundingClientRect().height,
-      );
-
+    const copy = await longLine.evaluate((line) => {
       const range = document.createRange();
       range.selectNodeContents(line);
       getSelection().removeAllRanges();

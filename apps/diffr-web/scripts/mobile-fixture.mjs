@@ -1,5 +1,5 @@
 export const summary =
-  "// pseudocode\nCollect every matching entry, normalize its path and metadata, then render the complete result while preserving the original ordering and error details for the caller.\nReturn the processed entries.";
+  "// pseudocode\nCollect every matching entry, normalize its path and metadata, then render the complete result while preserving the original ordering and error details for the caller. Keep source locations available so each result can be traced back to its input.\nReturn the processed entries.";
 
 export const plugin = {
   name: "mobile-stress-summary",
