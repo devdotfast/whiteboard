@@ -32,11 +32,7 @@ import { ReviewDocumentTitle } from "./review-document-surface";
 import { SoftwareMap } from "./software-map/SoftwareMap";
 import { tokens } from "./tokens.stylex";
 import { TraceQuote } from "./trace-quote";
-import { TutorialAuthoringConversation } from "./tutorial-authoring-conversation";
-import {
-  TutorialFeature,
-  TutorialViewButton,
-} from "./tutorial-dynamic-content";
+import { TutorialViewButton } from "./tutorial-dynamic-content";
 import { TutorialKeymapPicker } from "./tutorial-keymap-picker";
 
 /** A block the store has written: ids are assigned before any write. */
@@ -261,7 +257,7 @@ function SoftwareMapBlock({ node, data }: BlockProps<"software_map">) {
 type Components = { [K in BlockType]: BlockComponent<K> };
 
 /** Every block kind's component, keyed by type. A kind without a component is a compile error. */
-function TutorialBlock({ node, children }: BlockProps<"tutorial">) {
+function TutorialBlock({ node }: BlockProps<"tutorial">) {
   switch (node.kind) {
     case "keymap":
       return (
@@ -269,23 +265,11 @@ function TutorialBlock({ node, children }: BlockProps<"tutorial">) {
           <TutorialKeymapPicker />
         </div>
       );
-    case "conversation":
-      return (
-        <div {...stylex.props(documentStyles.column, drawStyles.blockChild)}>
-          <TutorialAuthoringConversation conversation={node.conversation} />
-        </div>
-      );
     case "view":
       return (
         <div {...stylex.props(documentStyles.column, drawStyles.blockChild)}>
           <TutorialViewButton view={node.view}>{node.label}</TutorialViewButton>
         </div>
-      );
-    case "feature":
-      return (
-        <TutorialFeature feature={node.feature}>
-          {children(node.children)}
-        </TutorialFeature>
       );
   }
 }

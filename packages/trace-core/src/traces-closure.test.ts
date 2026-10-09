@@ -35,7 +35,6 @@ const TRACE_ROOTS = ["index.ts"];
 const FORBIDDEN_MODULES = [
   "trace-cli.ts",
   "trace-storage/s3.ts",
-  "tutorial-trace.ts",
   "review-home.ts",
   "review-state-store.ts",
   "review-vcs.ts",

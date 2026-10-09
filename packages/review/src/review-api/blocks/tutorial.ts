@@ -1,35 +1,19 @@
-import {
-  type TutorialAuthoringConversation,
-  tutorialAuthoringConversationSchema,
-} from "@review/tutorial-conversation.js";
 import { z } from "zod";
 
 import { type BlockDefinition, defineBlock } from "./definition.js";
-import { type Block, blockSchema } from "./index.js";
 
 type TutorialContent =
   | { kind: "keymap" }
-  | { kind: "conversation"; conversation: TutorialAuthoringConversation }
-  | { kind: "view"; view: "review" | "commits" | "diff" | "map"; label: string }
-  | { kind: "feature"; feature: "softwareMap"; children: Block[] };
+  | { kind: "view"; view: "diff"; label: string };
 
 export type TutorialBlock = { id?: string; type: "tutorial" } & TutorialContent;
 
 export const tutorialSchema = z.discriminatedUnion("kind", [
   defineBlock("tutorial", { kind: z.literal("keymap") }),
   defineBlock("tutorial", {
-    kind: z.literal("conversation"),
-    conversation: tutorialAuthoringConversationSchema,
-  }),
-  defineBlock("tutorial", {
     kind: z.literal("view"),
-    view: z.enum(["review", "commits", "diff", "map"]),
+    view: z.literal("diff"),
     label: z.string(),
-  }),
-  defineBlock("tutorial", {
-    kind: z.literal("feature"),
-    feature: z.literal("softwareMap"),
-    children: z.array(z.lazy((): z.ZodType<Block> => blockSchema)),
   }),
 ]);
 

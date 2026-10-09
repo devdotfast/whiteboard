@@ -4,17 +4,13 @@ import {
 } from "@dev.fast/review-protocol";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewProvider } from "./review-context";
 import { testReviewSession } from "./review-session-test-utils";
 import { TutorialProvider } from "./tutorial-context";
-import {
-  TutorialFeature,
-  TutorialViewButton,
-} from "./tutorial-dynamic-content";
+import { TutorialViewButton } from "./tutorial-dynamic-content";
 
 const session = testReviewSession(
   {},
@@ -34,43 +30,12 @@ const tutorial: ReviewCanvasTutorialBridge = {
   close() {},
 };
 
-function render(input: { softwareMapEnabled: boolean }): string {
-  return renderToStaticMarkup(
-    <ReviewSessionProvider session={session}>
-      <ReviewProvider softwareMapEnabled={input.softwareMapEnabled}>
-        <TutorialProvider tutorial={tutorial}>
-          <TutorialFeature feature="softwareMap">
-            <p>Map guidance</p>
-            <TutorialViewButton view="map">Open Map</TutorialViewButton>
-          </TutorialFeature>
-          <TutorialViewButton view="commits">Open Commits</TutorialViewButton>
-        </TutorialProvider>
-      </ReviewProvider>
-    </ReviewSessionProvider>,
-  );
-}
-
 describe("tutorial dynamic content", () => {
-  it("omits software-map guidance when the feature is disabled", () => {
-    const html = render({ softwareMapEnabled: false });
-
-    expect(html).not.toContain("Map guidance");
-    expect(html).not.toContain("Open Map");
-    expect(html).toContain("Open Commits");
-  });
-
-  it("shows software-map guidance when the feature is enabled", () => {
-    const html = render({ softwareMapEnabled: true });
-
-    expect(html).toContain("Map guidance");
-    expect(html).toContain("Open Map");
-  });
-
-  it("opens the requested native Review view", () => {
+  it("opens the native Diff view", () => {
     const container = document.createElement("div");
     const nativeView = document.createElement("button");
     nativeView.className = "review-segment";
-    nativeView.setAttribute("aria-label", "Commits");
+    nativeView.setAttribute("aria-label", "Diff");
     const openView = vi.fn<() => void>();
     nativeView.addEventListener("click", openView);
     document.body.append(nativeView, container);
@@ -80,9 +45,7 @@ describe("tutorial dynamic content", () => {
         <ReviewSessionProvider session={session}>
           <ReviewProvider>
             <TutorialProvider tutorial={tutorial}>
-              <TutorialViewButton view="commits">
-                Open Commits
-              </TutorialViewButton>
+              <TutorialViewButton view="diff">Open the diff</TutorialViewButton>
             </TutorialProvider>
           </ReviewProvider>
         </ReviewSessionProvider>,

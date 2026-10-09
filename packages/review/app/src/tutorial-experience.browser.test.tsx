@@ -23,11 +23,18 @@ import { TutorialExperienceProvider } from "./tutorial-experience";
 
 const CHAPTER_TITLES = [
   "Welcome",
-  "Commits and diffs",
-  "Interactive Diagrams",
-  "Agent traces",
+  "Diffs and lenses",
+  "Interactive diagrams",
   "Get help",
 ];
+
+const THROUGH_FOLD = [
+  "chooseKeymap",
+  "showHover",
+  "openDiff",
+  "selectLens",
+  "expandFold",
+] as const;
 
 let session: ReviewSession;
 
@@ -61,11 +68,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-function Shell({
-  activeView = "review",
-}: {
-  activeView?: "review" | "commits";
-}): ReactElement {
+function Shell(): ReactElement {
   const shellRef = useRef<HTMLElement | null>(null);
   const regionRef = useRef<HTMLElement | null>(null);
 
@@ -81,29 +84,22 @@ function Shell({
         <button
           type="button"
           {...withClass("review-segment", controlStyles.segment)}
-          aria-label="Commits"
+          aria-label="Diff"
         >
-          Commits
+          Diff
         </button>
         <button
           type="button"
           className="tutorial-view-button"
-          data-tutorial-view="commits"
+          data-tutorial-view="diff"
         >
-          Explore the sample commits
+          Open the diff
         </button>
         <section
           ref={regionRef}
           {...withClass("review-view-region", shellStyles.viewRegion)}
         >
-          <div
-            {...withClass(
-              "review-document-view",
-              shellStyles.documentView,
-              activeView !== "review" && shellStyles.hidden,
-            )}
-            hidden={activeView !== "review"}
-          >
+          <div {...withClass("review-document-view", shellStyles.documentView)}>
             {CHAPTER_TITLES.map((title) => (
               <ReviewSection key={title} title={title}>
                 <h2>{title}</h2>
@@ -115,23 +111,13 @@ function Shell({
               </ReviewSection>
             ))}
           </div>
-          {activeView === "commits" ? (
-            <button
-              type="button"
-              className="review-commit-open"
-              aria-label="Open commit diff"
-            />
-          ) : null}
         </section>
       </TutorialExperienceProvider>
     </main>
   );
 }
 
-function render(
-  tutorial: ReviewCanvasTutorialBridge,
-  props: { activeView?: "review" | "commits" } = {},
-) {
+function render(tutorial: ReviewCanvasTutorialBridge) {
   root = createRoot(canvasRoot);
   act(() => {
     root?.render(
@@ -140,7 +126,7 @@ function render(
           <ReviewPanelProvider>
             <PanelStoreProbe />
             <TutorialProvider tutorial={tutorial}>
-              <Shell {...props} />
+              <Shell />
             </TutorialProvider>
           </ReviewPanelProvider>
         </ReviewProvider>
@@ -169,8 +155,8 @@ function card(): HTMLElement | null {
   return canvasRoot.querySelector('aside[aria-label="Tutorial guide"]');
 }
 
-/** Rings drawn in the shell overlay, beside the guide card. */
-function shellRings() {
+/** Rings drawn in the guide's layer, beside the guide card. */
+function layerRings() {
   return card()?.parentElement?.querySelectorAll(":scope > div") ?? [];
 }
 
@@ -192,7 +178,7 @@ describe("TutorialExperience", () => {
       "review-document-shell",
     );
     expect(section("Welcome").dataset.tutorialChapterState).toBe("active");
-    expect(section("Commits and diffs").dataset.tutorialChapterState).toBe(
+    expect(section("Diffs and lenses").dataset.tutorialChapterState).toBe(
       "upcoming",
     );
     expect(
@@ -219,16 +205,11 @@ describe("TutorialExperience", () => {
 
     expect(card()).not.toBeNull();
     expect(regionLayer()?.children).toHaveLength(1);
-    expect(shellRings()).toHaveLength(0);
+    expect(layerRings()).toHaveLength(0);
   });
 
-  it("draws a toolbar target's ring in the shell overlay", () => {
-    const tutorial = tutorialBridge([
-      "chooseKeymap",
-      "showHover",
-      "gotoDefinition",
-      "openPeek",
-    ]);
+  it("draws a toolbar target's ring in the guide's layer", () => {
+    const tutorial = tutorialBridge(["chooseKeymap", "showHover"]);
 
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
       callback(0);
@@ -243,8 +224,8 @@ describe("TutorialExperience", () => {
       vi.unstubAllGlobals();
     }
 
-    // The Commits tab sits outside the region; the prose button inside it.
-    expect(shellRings()).toHaveLength(2);
+    // The Diff tab and the prose button both sit outside the region.
+    expect(layerRings()).toHaveLength(2);
     expect(regionLayer()).toBeNull();
   });
 
@@ -255,8 +236,8 @@ describe("TutorialExperience", () => {
     const toggle = (title: string) =>
       section(title).querySelector<HTMLButtonElement>("button[aria-expanded]")!;
 
-    act(() => toggle("Interactive Diagrams").click());
-    expect(toggle("Interactive Diagrams").getAttribute("aria-expanded")).toBe(
+    act(() => toggle("Interactive diagrams").click());
+    expect(toggle("Interactive diagrams").getAttribute("aria-expanded")).toBe(
       "false",
     );
     act(() => toggle("Welcome").click());
@@ -266,16 +247,7 @@ describe("TutorialExperience", () => {
       root?.render(
         <ReviewSessionProvider session={session}>
           <ReviewProvider>
-            <TutorialProvider
-              tutorial={tutorialBridge([
-                "chooseKeymap",
-                "showHover",
-                "gotoDefinition",
-                "openPeek",
-                "openCommits",
-                "openDiff",
-              ])}
-            >
+            <TutorialProvider tutorial={tutorialBridge([...THROUGH_FOLD])}>
               <Shell />
             </TutorialProvider>
           </ReviewProvider>
@@ -283,7 +255,7 @@ describe("TutorialExperience", () => {
       );
     });
 
-    expect(toggle("Interactive Diagrams").getAttribute("aria-expanded")).toBe(
+    expect(toggle("Interactive diagrams").getAttribute("aria-expanded")).toBe(
       "true",
     );
     expect(toggle("Welcome").getAttribute("aria-expanded")).toBe("false");
@@ -292,56 +264,26 @@ describe("TutorialExperience", () => {
   });
 
   it("completes a button step from the real target click", () => {
-    const tutorial = tutorialBridge([
-      "chooseKeymap",
-      "showHover",
-      "gotoDefinition",
-      "openPeek",
-    ]);
+    const tutorial = tutorialBridge(["chooseKeymap", "showHover"]);
 
     render(tutorial);
 
-    const commits = canvasRoot.querySelector<HTMLButtonElement>(
-      '.review-segment[aria-label="Commits"]',
+    const diff = canvasRoot.querySelector<HTMLButtonElement>(
+      '.review-segment[aria-label="Diff"]',
     )!;
 
-    expect(card()?.textContent).toContain("Inspect the commits");
-    expect(commits.dataset.tutorialTarget).toBe("openCommits");
+    expect(card()?.textContent).toContain("Open the diff");
+    expect(diff.dataset.tutorialTarget).toBe("openDiff");
     expect(
       canvasRoot.querySelector<HTMLElement>(".tutorial-view-button")?.dataset
         .tutorialTarget,
-    ).toBe("openCommits");
-    act(() => commits.click());
-    expect(tutorial.setStep).toHaveBeenCalledWith("openCommits", true);
-  });
-
-  it("keeps the guide in a non-document view and marks its target", () => {
-    const tutorial = tutorialBridge([
-      "chooseKeymap",
-      "showHover",
-      "gotoDefinition",
-      "openPeek",
-      "openCommits",
-    ]);
-
-    render(tutorial, { activeView: "commits" });
-
-    expect(card()?.textContent).toContain("Open a focused diff");
-    expect(
-      canvasRoot.querySelector<HTMLElement>(".review-commit-open")?.dataset
-        .tutorialTarget,
     ).toBe("openDiff");
+    act(() => diff.click());
+    expect(tutorial.setStep).toHaveBeenCalledWith("openDiff", true);
   });
 
-  it("gets out of the way and completes the sequence step when its real tour opens", async () => {
-    const tutorial = tutorialBridge([
-      "chooseKeymap",
-      "showHover",
-      "gotoDefinition",
-      "openPeek",
-      "openCommits",
-      "openDiff",
-    ]);
+  it("completes the sequence step once its real tour moves", async () => {
+    const tutorial = tutorialBridge([...THROUGH_FOLD]);
 
     render(tutorial);
 
@@ -354,19 +296,18 @@ describe("TutorialExperience", () => {
     });
 
     expect(card()).toBeNull();
+    expect(tutorial.setStep).not.toHaveBeenCalled();
+
+    await act(async () => {
+      panelStore.getState().moveOverlayTour("b", { reveal: true });
+      await Promise.resolve();
+    });
+
     expect(tutorial.setStep).toHaveBeenCalledWith("openSequence", true);
   });
 
   it("completes the database stop from the real database Tour", async () => {
-    const tutorial = tutorialBridge([
-      "chooseKeymap",
-      "showHover",
-      "gotoDefinition",
-      "openPeek",
-      "openCommits",
-      "openDiff",
-      "openSequence",
-    ]);
+    const tutorial = tutorialBridge([...THROUGH_FOLD, "openSequence"]);
 
     render(tutorial);
 
@@ -397,12 +338,7 @@ describe("TutorialExperience", () => {
   });
 
   it("steps back to the previous chapter's last step", () => {
-    const tutorial = tutorialBridge([
-      "chooseKeymap",
-      "showHover",
-      "gotoDefinition",
-      "openPeek",
-    ]);
+    const tutorial = tutorialBridge(["chooseKeymap", "showHover"]);
 
     render(tutorial);
 
@@ -412,7 +348,7 @@ describe("TutorialExperience", () => {
 
     act(() => back?.click());
     expect(tutorial.setStep).toHaveBeenCalledTimes(1);
-    expect(tutorial.setStep).toHaveBeenCalledWith("openPeek", false);
+    expect(tutorial.setStep).toHaveBeenCalledWith("showHover", false);
   });
 
   it("scrolls an off-screen step target into view once", () => {
@@ -446,15 +382,9 @@ describe("TutorialExperience", () => {
 
   it("finishes from the final Get help stop", () => {
     const tutorial = tutorialBridge([
-      "chooseKeymap",
-      "showHover",
-      "gotoDefinition",
-      "openPeek",
-      "openCommits",
-      "openDiff",
+      ...THROUGH_FOLD,
       "openSequence",
       "openDatabase",
-      "openTraceQuote",
     ]);
 
     render(tutorial);

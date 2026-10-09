@@ -35,7 +35,6 @@ export {
 } from "./trace-sync";
 
 export {
-  TUTORIAL_TRACE_SESSION_ID,
   type ReviewTraceSessionDescriptor,
   type TraceCacheStatus,
   type LoadedReviewAgentTrace,
