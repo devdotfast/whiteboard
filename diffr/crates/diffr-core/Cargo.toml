@@ -4,7 +4,7 @@ description = "The diffr engine: parsing, structural diffing, configuration and 
 repository = "https://github.com/devdotfast/whiteboard"
 homepage = "https://github.com/devdotfast/whiteboard/tree/main/diffr"
 license = "MIT"
-version = "0.1.18"
+version = "0.1.19"
 authors = ["dev.fast"]
 keywords = ["diff", "syntax"]
 categories = ["development-tools", "parser-implementations"]
@@ -29,7 +29,7 @@ include = [
 ]
 
 [dependencies]
-diffr-grammars = { path = "../diffr-grammars", version = "0.1.18" }
+diffr-grammars = { path = "../diffr-grammars", version = "0.1.19" }
 regex = "1.10.4"
 typed-arena = "2.0.2"
 rustc-hash = "2.0.0"
