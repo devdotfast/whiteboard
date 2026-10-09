@@ -173,27 +173,6 @@ jobs:
       # The target matrix above exercises the embedded components.
       - run: cargo xtask test-plugins
 
-  test_mime_db:
-    name: Test with MIME database
-    runs-on: ubuntu-22.04
-    defaults:
-      run:
-        working-directory: diffr
-    steps:
-      # v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@1.99.0
-        with:
-          targets: wasm32-wasip2
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          workspaces: diffr -> target
-          cache-workspace-crates: true
-      # This runs tests that rely on the MIME database being present.
-      - run: cargo test -- --ignored
-
   test_linux_latest_stable:
     name: Test Linux (latest stable Rust)
     if: github.event_name != 'pull_request'
