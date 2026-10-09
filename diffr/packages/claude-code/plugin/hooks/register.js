@@ -6109,7 +6109,7 @@ function isRecursive(inst, stack, resolve) {
     return PROVEN;
   stack.add(inst);
   let result = NONE;
-  const check2 = (child) => {
+  const check3 = (child) => {
     if (result !== PROVEN && child?._zod) {
       const answer = isRecursive(child, stack, resolve);
       if (answer > result)
@@ -6138,32 +6138,32 @@ function isRecursive(inst, stack, resolve) {
     case "object": {
       const raw = rawShape(def);
       merge2(raw ? shape(raw, true) : ASSUMED);
-      check2(def.catchall);
+      check3(def.catchall);
       break;
     }
     case "array":
-      check2(def.element);
+      check3(def.element);
       break;
     case "tuple":
       for (const el of def.items)
-        check2(el);
-      check2(def.rest);
+        check3(el);
+      check3(def.rest);
       break;
     case "record":
     case "map":
-      check2(def.keyType);
-      check2(def.valueType);
+      check3(def.keyType);
+      check3(def.valueType);
       break;
     case "set":
-      check2(def.valueType);
+      check3(def.valueType);
       break;
     case "union":
       for (const el of def.options)
-        check2(el);
+        check3(el);
       break;
     case "intersection":
-      check2(def.left);
-      check2(def.right);
+      check3(def.left);
+      check3(def.right);
       break;
     case "optional":
     case "nullable":
@@ -6174,15 +6174,15 @@ function isRecursive(inst, stack, resolve) {
     case "nonoptional":
     case "promise":
     case "success":
-      check2(def.innerType);
+      check3(def.innerType);
       break;
     case "pipe":
-      check2(def.in);
-      check2(def.out);
+      check3(def.in);
+      check3(def.out);
       break;
     case "function":
-      check2(def.input);
-      check2(def.output);
+      check3(def.input);
+      check3(def.output);
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
@@ -6223,10 +6223,10 @@ function isRecursive(inst, stack, resolve) {
         if (!value || typeof value !== "object")
           continue;
         if (value._zod)
-          check2(value);
+          check3(value);
         else if (Array.isArray(value))
           for (const el of value)
-            check2(el);
+            check3(el);
       }
     }
   }
@@ -14172,8 +14172,8 @@ function generateChecks(doc, ctx, schema, accessor) {
   if (!schemaChecks || schemaChecks.length === 0)
     return accessor;
   let currentAccessor = accessor;
-  for (const check2 of schemaChecks) {
-    const def = check2._zod.def;
+  for (const check3 of schemaChecks) {
+    const def = check3._zod.def;
     if (def.when && !WHEN_DEFAULTED_CHECKS.has(def.check)) {
       throw new ZodCompileUnsupportedError(`check with a custom "when" condition`);
     }
@@ -14221,7 +14221,7 @@ function generateChecks(doc, ctx, schema, accessor) {
         currentAccessor = generateStringFormatCheck(doc, ctx, def, currentAccessor);
         break;
       case "custom":
-        currentAccessor = generateCustomRefineCheck(doc, ctx, check2, currentAccessor);
+        currentAccessor = generateCustomRefineCheck(doc, ctx, check3, currentAccessor);
         break;
       case "bigint_format":
         generateBigIntFormatCheck(doc, def, currentAccessor);
@@ -14237,7 +14237,7 @@ function generateChecks(doc, ctx, schema, accessor) {
         break;
       case "overwrite": {
         const newAccessor = newVar(ctx);
-        generateOverwriteCheck(doc, ctx, check2, currentAccessor, newAccessor);
+        generateOverwriteCheck(doc, ctx, check3, currentAccessor, newAccessor);
         currentAccessor = newAccessor;
         break;
       }
@@ -14360,8 +14360,8 @@ function generatePropertyCheck(doc, ctx, def, accessor) {
   const propAccessor = `${accessor}[${JSON.stringify(def.property)}]`;
   generateCheck(doc, ctx, def.schema, propAccessor);
 }
-function generateOverwriteCheck(doc, ctx, check2, currentAccessor, newAccessor) {
-  const tx = check2._zod.def.tx;
+function generateOverwriteCheck(doc, ctx, check3, currentAccessor, newAccessor) {
+  const tx = check3._zod.def.tx;
   if (!tx) {
     throw new ZodCompileUnsupportedError("overwrite check without a transform function");
   }
@@ -14377,8 +14377,8 @@ function throwAsync() {
 function pushIssue(issue2) {
   this.issues.push(issue2);
 }
-function generateCustomRefineCheck(doc, ctx, check2, accessor) {
-  const def = check2._zod.def;
+function generateCustomRefineCheck(doc, ctx, check3, accessor) {
+  const def = check3._zod.def;
   if (def.fn) {
     if (isAsyncFunction(def.fn)) {
       throw new ZodCompileAsyncError("z.compile: async .refine() predicates are not supported");
@@ -14391,11 +14391,11 @@ function generateCustomRefineCheck(doc, ctx, check2, accessor) {
     doc.write(`if (!${resVar}) return INVALID;`);
     return accessor;
   }
-  if (check2._zod.check) {
-    if (isAsyncFunction(check2._zod.check)) {
+  if (check3._zod.check) {
+    if (isAsyncFunction(check3._zod.check)) {
       throw new ZodCompileAsyncError("z.compile: async .superRefine() / check functions are not supported");
     }
-    const checkFn = check2._zod.check;
+    const checkFn = check3._zod.check;
     const helperFn = (value) => {
       const fakePayload = { value, issues: [], addIssue: pushIssue };
       const result = checkFn(fakePayload);
@@ -18310,8 +18310,8 @@ var ZodType = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
     reg.add(this, meta3);
     return this;
   },
-  refine(check2, params) {
-    return this.check(refine(check2, params));
+  refine(check3, params) {
+    return this.check(refine(check3, params));
   },
   superRefine(refinement, params) {
     return this.check(superRefine(refinement, params));
@@ -25209,12 +25209,35 @@ var Pane = class {
 // src/register.tsx
 var PANE = "diffr";
 var TOOL = "mcp__diffr__open";
+var MINIMUM = [0, 1, 18];
+var INSTALL = "curl -fsSL https://install.dev.fast/diffr | sh";
 var BAND = 16;
 async function loadTheme($, binary) {
   const shown = await $.process.run([binary, "config", "show", "--json"]);
   if (shown.exitCode !== 0) throw new Error(shown.stderr || `${binary} config show exited with status ${shown.exitCode}`);
   const config2 = themeConfig(JSON.parse(shown.stdout));
   return config2.path ? paletteFromHelix(parseHelixTheme(await $.fs.read(config2.path), config2.path)) : loadBundledTheme(config2.name);
+}
+async function checkVersion($, binary) {
+  let shown;
+  try {
+    shown = await $.process.run([binary, "--version"]);
+  } catch (error62) {
+    throw new Error(`${binary} could not run (${error62 instanceof Error ? error62.message : String(error62)}); install diffr with: ${INSTALL}`);
+  }
+  if (shown.exitCode !== 0) throw new Error(shown.stderr || `${binary} --version exited with status ${shown.exitCode}`);
+  const match = /^diffr (\d+)\.(\d+)\.(\d+)/.exec(shown.stdout);
+  if (!match) throw new Error(`${binary} --version printed ${JSON.stringify(shown.stdout)}, not a diffr version`);
+  const version2 = match.slice(1).map(Number);
+  const older = version2.findIndex((part, i) => part !== MINIMUM[i]);
+  if (older >= 0 && version2[older] < MINIMUM[older])
+    throw new Error(`This plugin needs diffr ${MINIMUM.join(".")} or newer, not ${version2.join(".")}; update it with: diffr upgrade`);
+}
+function check2($, binary, checked) {
+  return checked.promise ??= checkVersion($, binary).catch((error62) => {
+    checked.promise = void 0;
+    throw error62;
+  });
 }
 function toolArgs(input3) {
   const args = input3.args ?? [];
@@ -25282,6 +25305,7 @@ function register(on, options) {
   let focused = false;
   const chips = /* @__PURE__ */ new Map();
   const acks = /* @__PURE__ */ new Map();
+  const version2 = {};
   on("session.start", async ($, e, next) => {
     await $.command.register({
       name: "diffr",
@@ -25303,6 +25327,7 @@ function register(on, options) {
     const args = splitArgs(e.args);
     let started;
     try {
+      await check2($, binary, version2);
       started = await startDiffr($, binary, child, args);
     } catch (error62) {
       return { text: `diffr could not start: ${error62 instanceof Error ? error62.message : String(error62)}` };
@@ -25316,6 +25341,7 @@ function register(on, options) {
     let args, started;
     try {
       args = toolArgs(e);
+      await check2($, binary, version2);
       started = await startDiffr($, binary, child, args);
     } catch (error62) {
       return refuse(error62);
