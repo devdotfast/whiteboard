@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { createReview, sleep } from "../harness.mjs";
+import { createDiagramReview, createReview, sleep } from "../harness.mjs";
 
 export const name = "canvas-resume";
 
@@ -14,7 +14,7 @@ export const options = {};
 
 const TITLE = "Canvas resume review";
 
-const TUTORIAL = "Whiteboard Desktop: three-minute tour";
+const DIAGRAMS = "Canvas resume diagrams";
 
 const trace = (label) => ({
   label,
@@ -221,20 +221,14 @@ export async function run(ctx) {
   );
   ctx.check("a picked trace resumes after a reload");
 
-  await ctx.page.keyboard.press("F1");
-  await ctx.page
-    .locator(".quick-input-widget input")
-    .fill(">Whiteboard: Open Tutorial");
-  await ctx.page
-    .getByRole("option", { name: /Whiteboard: Open Tutorial/ })
-    .click();
-  page = await ctx.apiCanvasFor(TUTORIAL);
+  await createDiagramReview(ctx, DIAGRAMS);
+  page = await ctx.apiCanvasFor(DIAGRAMS);
   await ctx.watchPage(page);
 
   const canvas = page.locator(".review-canvas-root [data-review-api]");
 
   const lens = canvas
-    .locator('[data-review-section="Interactive Diagrams"] .database-lens')
+    .locator(".database-lens")
     .first();
 
   // The lens's actors name software-map paths, yet no tour stop offers the map.
@@ -317,9 +311,7 @@ export async function run(ctx) {
 
   await activate(ctx, page, "Whiteboard");
   await canvas
-    .locator(
-      '[data-review-section="Interactive Diagrams"] .sequence-diagram .diagram-tour-button',
-    )
+    .locator(".sequence-diagram .diagram-tour-button")
     .first()
     .click();
 

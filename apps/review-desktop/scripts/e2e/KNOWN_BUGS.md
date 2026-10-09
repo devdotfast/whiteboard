@@ -188,9 +188,9 @@ Server` cannot help — the captured workspace is never re-read. The fix
 ## Peeks and tour stops never offer to show their element in the software map
 
 - **Journey:** `canvas-resume` · **Found:** 2026-09-28 · **Status:** open
-- **Repro:** open the tutorial with the software map enabled and start the
-  database lens tour under Interactive Diagrams; its actors name
-  `softwareMapPath`s such as `orderService.application.orders`.
+- **Repro:** open a review whose database lens actors name `softwareMapPath`s
+  such as `orderService.application.orders` (`createDiagramReview` in
+  `harness.mjs`) and start the lens's tour.
 - **Expected:** a stop whose element is on the map shows its
   "Show … in software map" button, as the side peek and tour stop render it.
 - **Actual:** no `button[aria-label$=" in software map"]` renders anywhere, so

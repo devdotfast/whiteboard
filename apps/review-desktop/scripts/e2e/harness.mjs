@@ -1,7 +1,9 @@
 /** Shared launch/attach/report harness for scripts/e2e/journeys/*. */
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
+  cp,
   mkdir,
   mkdtemp,
   readFile,
@@ -665,6 +667,83 @@ export async function createReview(ctx, spec) {
     title: spec.title,
     canvas: page.locator(".review-canvas-root [data-review-api]"),
   };
+}
+
+/** A review with a sequence, a database lens, a trace quote and a software map. */
+export async function createDiagramReview(ctx, title) {
+  const repoPath = path.join(ctx.root, "diagram-service");
+  const fixtures = path.join(import.meta.dirname, "fixtures/diagram-review");
+
+  const git = async (...args) =>
+    (
+      await exec(
+        "git",
+        ["-c", "user.name=Review E2E", "-c", "user.email=e2e@example.invalid"]
+          .concat(args),
+        { cwd: repoPath },
+      )
+    ).stdout.trim();
+
+  await cp(path.join(sourcePackage, "tutorial/sample-service"), repoPath, {
+    recursive: true,
+  });
+  await git("init", "-q", "-b", "main");
+  await git("add", ".");
+  await git("commit", "-qm", "Sample service");
+  const base = await git("rev-parse", "HEAD");
+  await writeFile(path.join(repoPath, "CHANGELOG.md"), "Ship orders.\n");
+  await git("add", ".");
+  await git("commit", "-qm", "Ship orders");
+  const head = await git("rev-parse", "HEAD");
+
+  const repositoryId = (
+    await ctx.apiOk("/reviews-api/repositories", "POST", { path: repoPath })
+  ).id;
+
+  const ids = new Map([
+    ["trace", randomUUID()],
+    ["map-base", randomUUID()],
+    ["map-head", randomUUID()],
+  ]);
+
+  await ctx.apiOk("/reviews-api/resources", "POST", {
+    id: ids.get("trace"),
+    repositoryId,
+    kind: "trace",
+    trace: {
+      label: "Sample session",
+      events: [
+        { id: "0", role: "user", text: "Order one, then ship it." },
+        { id: "1", role: "assistant", text: "The order ships." },
+      ],
+    },
+  });
+
+  const model = JSON.parse(
+    await readFile(path.join(fixtures, "software-map.json"), "utf8"),
+  );
+
+  for (const side of ["base", "head"])
+    await ctx.apiOk("/reviews-api/resources", "POST", {
+      id: ids.get(`map-${side}`),
+      repositoryId,
+      kind: "map",
+      pins: { repositoryId, base, head },
+      side,
+      model,
+    });
+
+  const blocks = JSON.parse(
+    await readFile(path.join(fixtures, "blocks.json"), "utf8"),
+  ).map((block) =>
+    block.type === "trace_quote"
+      ? { ...block, traceId: ids.get(block.traceId) }
+      : block.type === "software_map"
+        ? { ...block, mapVersionId: ids.get(block.mapVersionId) }
+        : block,
+  );
+
+  return createReview(ctx, { title, repoPath, base, head, blocks });
 }
 
 /** The standard two-block order review used by several journeys. */

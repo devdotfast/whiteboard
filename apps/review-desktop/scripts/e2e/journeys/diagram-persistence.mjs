@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 
+import { createDiagramReview } from "../harness.mjs";
+
 export const name = "diagram-persistence";
 
 export const phase = 1;
 
 export const options = { seedRepo: false };
+
+const TITLE = "Diagram persistence review";
 
 export async function run(ctx) {
   const check = ctx.check;
@@ -14,14 +18,8 @@ export async function run(ctx) {
     check(...items);
   };
 
-  await ctx.page.keyboard.press("F1");
-  await ctx.page
-    .locator(".quick-input-widget input")
-    .fill(">Whiteboard: Open Tutorial");
-  await ctx.page
-    .getByRole("option", { name: /Whiteboard: Open Tutorial/ })
-    .click();
-  let page = await ctx.apiCanvasFor("Whiteboard Desktop: three-minute tour");
+  await createDiagramReview(ctx, TITLE);
+  let page = await ctx.apiCanvasFor(TITLE);
 
   const tab = (label) =>
     page.locator(`[aria-label="Session views"] button[aria-label="${label}"]`);
@@ -81,7 +79,7 @@ export async function run(ctx) {
     .locator("option")
     .evaluateAll((options) => options.map((option) => option.value));
 
-  assert.ok(values.length > 1, "tutorial needs multiple database use cases");
+  assert.ok(values.length > 1, "the review needs multiple database use cases");
   await useCase().selectOption(values.at(-1));
   await reload();
   assert.equal(await useCase().inputValue(), values.at(-1));
