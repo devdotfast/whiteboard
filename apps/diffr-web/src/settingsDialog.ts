@@ -69,6 +69,7 @@ function tokenHint(): DocumentFragment {
   const hint = rich(
     ` Create a [fine-grained token](${GITHUB_TOKEN_URL}) with read access to Contents and Pull requests for the repositories you want to review. A token also lets you review private repositories you can access.`,
   );
+
   hint.prepend(
     element(
       "strong",
