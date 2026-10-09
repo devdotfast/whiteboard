@@ -156,7 +156,7 @@ export class Viewer {
       const last = all.at(-1);
       if (last && !last.key.endsWith(":header") && last.label !== "")
         all.push({ key: `${last.fileIndex}:end`, fileIndex: last.fileIndex, label: "" });
-      all.push(...fileRows);
+      for (const row of fileRows) all.push(row);
     }
     for (const [i, error] of snapshot.errors.entries())
       all.push({ key: `error:${i}`, fileIndex: -1, label: error });
