@@ -5,7 +5,6 @@ import { sliceSpansWindow } from "../terminal/spans";
 import { measureTextWidth } from "../terminal/text";
 import { byteColumn, collapsedFolds, flatten, foldHeaders, foldTint, hiddenLines, pairedIds, sourceLines, type Fold, type FoldTint, type Leaf, type RowFold, type Side } from "./regions";
 import type { Palette } from "../theme/palette";
-export { sourceLines };
 export type Layout = "split" | "unified";
 export interface RenderSpan {
   text: string;
@@ -15,8 +14,6 @@ export interface RenderSpan {
   brace?: number;
   fg?: string;
   bg?: string;
-  /** Resolve paint-only foreground effects after cursor and copy-selection backgrounds apply. */
-  transformFg?: (sourceFg: string | undefined, renderedBg: string) => string;
 }
 
 export interface SplitLineCell {
