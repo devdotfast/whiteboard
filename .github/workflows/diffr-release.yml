@@ -193,9 +193,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.99.0
       - name: Verify crates without publishing
         run: cargo publish --locked --dry-run -p diffr-grammars -p diffr-core -p diffr-cli
+      # `cargo publish` packages into tmp-crate, unlike `cargo package`.
       - name: Record verified package checksums
         run: |
-          sha256sum target/package/diffr-{grammars,core,cli}-*.crate > "$RUNNER_TEMP/diffr-crates.sha256"
+          sha256sum target/package/tmp-crate/diffr-{grammars,core,cli}-*.crate > "$RUNNER_TEMP/diffr-crates.sha256"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: diffr-crate-checksums
