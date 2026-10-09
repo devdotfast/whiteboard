@@ -35,7 +35,7 @@ async function checkVersion($: EngineInterface, binary: string): Promise<void> {
   }
   if (shown.exitCode !== 0) throw new Error(shown.stderr || `${binary} --version exited with status ${shown.exitCode}`);
   const match = /^diffr (\d+)\.(\d+)\.(\d+)/.exec(shown.stdout);
-  if (!match) throw new Error(`${binary} --version printed ${JSON.stringify(shown.stdout)}, not a diffr version`);
+  if (!match) throw new Error(`${binary} --version printed ${JSON.stringify(shown.stdout)}, not a diffr version, which looks like "diffr ${MINIMUM.join(".")}"`);
   const version = match.slice(1).map(Number);
   const older = version.findIndex((part, i) => part !== MINIMUM[i]);
   if (older >= 0 && version[older] < MINIMUM[older])
@@ -144,10 +144,11 @@ export function register(on: On, options: PluginOptions): void {
     });
     await $.tool.register({
       name: "open",
-      description: "Open diffr's review pane for the person, showing a comparison they can read, fold, search and mark viewed. " +
+      description: "Open diffr's review pane for the user, showing a high-quality diff viewer based on 'diffr'. " +
         "Use it to show them changes you made or want them to review, rather than describing the diff. " +
-        "args are diffr's own: revisions or paths, e.g. [\"HEAD~1\"], [\"main..HEAD\", \"--\", \"src\"], or [] for uncommitted changes. " +
-        "Replaces any diffr pane already open, and leaves the person's focus where it is. Returns as soon as diffr has named the comparison, with how many files changed; the person reads on while you carry on.",
+        "The user can send you snippets of code that they're looking at via 'highlight + pressing enter'. " +
+        "Args are the same as you would pass to the 'git diff' CLI command, as a list (e.g. [\"HEAD~1\"], [\"main..HEAD\", \"--\", \"src\"]). " +
+        "For more information on using and customizing diffr, run `diffr --help` in the shell.",
       inputSchema: {
         type: "object",
         properties: { args: { type: "array", items: { type: "string" }, description: "diffr's arguments, one per item" } },
