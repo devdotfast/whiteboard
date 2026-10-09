@@ -200,6 +200,7 @@ function route(): void {
 
 function renderHeader(): void {
   mobileFiles.update();
+
   // Streaming file results must not tear down the menu the reader is using.
   if (header.querySelector(":popover-open")) return;
 
@@ -391,6 +392,7 @@ function quickMenu(icon: string, label: string) {
   panel.addEventListener("toggle", () => {
     const open = panel.matches(":popover-open");
     button.setAttribute("aria-expanded", String(open));
+
     if (!open && panel.isConnected) renderHeader();
   });
 

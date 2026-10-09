@@ -231,6 +231,7 @@ export class Engine {
 
   private receive(slot: Slot, data: Response): void {
     if (this.failure || !this.slots.includes(slot)) return;
+
     if ("ready" in data) {
       slot.ready = true;
       stats.ready ??= data.ready;
@@ -281,6 +282,7 @@ export class Engine {
     this.failure = error;
     this.rejectNotices(error);
     clearTimeout(this.idle);
+
     for (const slot of this.slots.splice(0)) {
       slot.worker.terminate();
       stats.workers--;

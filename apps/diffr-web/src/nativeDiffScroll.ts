@@ -125,10 +125,9 @@ export class NativeDiffScroll extends Disposable {
 }
 
 /** Monaco owns horizontal geometry; the browser retains vertical touch inertia. */
-export function horizontalTouchScroll(editor: ICodeEditor): {
-  dispose(): void;
-} {
+export function horizontalTouchScroll(editor: ICodeEditor) {
   const node = editor.getContainerDomNode();
+
   let gesture:
     | {
         x: number;
@@ -139,14 +138,18 @@ export function horizontalTouchScroll(editor: ICodeEditor): {
         velocity: number;
       }
     | undefined;
+
   let frame = 0;
+
   const stop = () => {
     cancelAnimationFrame(frame);
     frame = 0;
   };
+
   const start = (event: TouchEvent) => {
     stop();
     gesture = undefined;
+
     if (
       !mobileViewport.matches ||
       event.touches.length !== 1 ||
@@ -162,18 +165,23 @@ export function horizontalTouchScroll(editor: ICodeEditor): {
       velocity: 0,
     };
   };
+
   const move = (event: TouchEvent) => {
     if (!gesture || event.touches.length !== 1) {
       gesture = undefined;
+
       return;
     }
+
     const x = event.touches[0].clientX;
     const y = event.touches[0].clientY;
+
     if (gesture.horizontal === undefined) {
       if (Math.max(Math.abs(x - gesture.x), Math.abs(y - gesture.y)) < 8)
         return;
       gesture.horizontal = Math.abs(x - gesture.x) > Math.abs(y - gesture.y);
     }
+
     if (!gesture.horizontal) return;
     event.preventDefault();
     const now = performance.now();
@@ -183,19 +191,23 @@ export function horizontalTouchScroll(editor: ICodeEditor): {
     gesture.lastX = x;
     gesture.time = now;
   };
+
   const end = () => {
     const finished = gesture;
     gesture = undefined;
+
     if (!finished?.horizontal || performance.now() - finished.time > 100)
       return;
     let velocity = finished.velocity;
     let last = performance.now();
+
     const coast = (now: number) => {
       const elapsed = Math.min(32, now - last);
       last = now;
       const before = editor.getScrollLeft();
       editor.setScrollLeft(before + velocity * elapsed);
       velocity *= Math.exp(-elapsed / 180);
+
       if (
         Math.abs(velocity) > 0.02 &&
         editor.getScrollLeft() !== before &&
@@ -203,17 +215,21 @@ export function horizontalTouchScroll(editor: ICodeEditor): {
       )
         frame = requestAnimationFrame(coast);
     };
+
     frame = requestAnimationFrame(coast);
   };
+
   const cancel = () => {
     gesture = undefined;
     stop();
   };
+
   node.addEventListener("touchstart", start, { passive: true });
   node.addEventListener("touchmove", move, { passive: false });
   node.addEventListener("touchend", end);
   node.addEventListener("touchcancel", cancel);
   const modelChange = editor.onDidChangeModel(cancel);
+
   return {
     dispose() {
       cancel();
