@@ -182,7 +182,7 @@ export class StructuralFoldControls extends Disposable {
     );
     // Folding changes which lines show, and so the rail's length.
     this._register(editor.onDidContentSizeChange(() => this.render()));
-    this._register(editor.onDidScrollChange(() => this.render()));
+    this._register(editor.onDidScrollChange(() => this.render(false)));
     this._register(editor.onDidLayoutChange(() => this.render()));
     this._register(editor.onDidChangeViewZones(() => this.render()));
     this._register(editor.onDidChangeConfiguration(() => this.render()));
@@ -427,7 +427,7 @@ export class StructuralFoldControls extends Disposable {
     }
   }
 
-  private render(): void {
+  private render(updateDecorations = true): void {
     const model = this.editor.getModel();
     const path = this.path();
     const diff = path ? this.session.getTextDiff(path) : undefined;
@@ -443,46 +443,49 @@ export class StructuralFoldControls extends Disposable {
       return;
     }
     const decorations: IModelDeltaDecoration[] = [];
-    for (const range of this.viewed?.getViewedRanges(path) ?? []) {
-      if (range.side !== (this.side === "rhs" ? "head" : "base")) continue;
-      decorations.push({
-        range: new Range(
-          range.fromLine,
-          1,
-          range.toLine,
-          model.getLineMaxColumn(range.toLine),
-        ),
-        options: {
-          description: "review-scope-viewed",
-          isWholeLine: true,
-          inlineClassName: "review-scope-viewed-ink",
-          className: "review-scope-viewed-tint",
-          zIndex: 5,
-        },
-      });
-    }
-    for (const foldable of this.foldablesOf(diff)) {
-      // A function and its doc comment can share one fold state. Every
-      // member participates in hover, rather than only the first match.
-      const active = target?.foldable.foldStateId === foldable.foldStateId;
-      if (this.isFolded(foldable)) {
-        decorations.push(...this.folded(model, foldable, active));
-      } else if (active) {
-        decorations.push(
-          ...this.lit(model, {
-            ...target!,
-            foldable,
-            collapsed: this.isSummaryFolded(foldable),
-          }),
-        );
-      } else if (
-        shared?.column &&
-        foldable.chevron &&
-        (!this.isCollapsed(path, foldable) || this.isSummaryFolded(foldable))
-      ) {
-        decorations.push(
-          this.chevron(foldable, this.isSummaryFolded(foldable), false),
-        );
+    // Scrolling only moves controls; replacing model decorations also invalidates text layout.
+    if (updateDecorations) {
+      for (const range of this.viewed?.getViewedRanges(path) ?? []) {
+        if (range.side !== (this.side === "rhs" ? "head" : "base")) continue;
+        decorations.push({
+          range: new Range(
+            range.fromLine,
+            1,
+            range.toLine,
+            model.getLineMaxColumn(range.toLine),
+          ),
+          options: {
+            description: "review-scope-viewed",
+            isWholeLine: true,
+            inlineClassName: "review-scope-viewed-ink",
+            className: "review-scope-viewed-tint",
+            zIndex: 5,
+          },
+        });
+      }
+      for (const foldable of this.foldablesOf(diff)) {
+        // A function and its doc comment can share one fold state. Every
+        // member participates in hover, rather than only the first match.
+        const active = target?.foldable.foldStateId === foldable.foldStateId;
+        if (this.isFolded(foldable)) {
+          decorations.push(...this.folded(model, foldable, active));
+        } else if (active) {
+          decorations.push(
+            ...this.lit(model, {
+              ...target!,
+              foldable,
+              collapsed: this.isSummaryFolded(foldable),
+            }),
+          );
+        } else if (
+          shared?.column &&
+          foldable.chevron &&
+          (!this.isCollapsed(path, foldable) || this.isSummaryFolded(foldable))
+        ) {
+          decorations.push(
+            this.chevron(foldable, this.isSummaryFolded(foldable), false),
+          );
+        }
       }
     }
     const hidden = this.regions
@@ -492,10 +495,18 @@ export class StructuralFoldControls extends Disposable {
           ? region.getHiddenModifiedRange(undefined)
           : region.getHiddenOriginalRange(undefined),
       );
+    const visible = this.editor.getVisibleRanges();
+    const first = visible[0]?.startLineNumber ?? 1;
+    const last = visible.at(-1)?.endLineNumber ?? 0;
+    const headerVisible = (scope: StructuralFoldable) =>
+      scope.line + 1 >= first && scope.line + 1 <= last;
+    const intersectsViewport = (scope: StructuralFoldable) =>
+      scope.line + 1 <= last && !!scope.rail && scope.rail.end + 1 >= first;
     this.touchFolds.show(
       this.foldablesOf(diff).filter(
         (foldable) =>
           foldable.chevron &&
+          headerVisible(foldable) &&
           !hidden.some((range) => range.contains(foldable.line + 1)),
       ),
       (foldable) => this.isFolded(foldable) || this.isSummaryFolded(foldable),
@@ -503,11 +514,12 @@ export class StructuralFoldControls extends Disposable {
     const visibleScopes = this.foldablesOf(diff).filter(
       (foldable) =>
         foldable.rail &&
+        intersectsViewport(foldable) &&
         !this.isFolded(foldable) &&
         !hidden.some((range) => range.contains(foldable.line + 1)),
     );
     this.rails.show(model, visibleScopes, target);
-    this.decorations.set(decorations);
+    if (updateDecorations) this.decorations.set(decorations);
     // Completed scopes remain discoverable after the pointer leaves. Only
     // visible headers get widgets, so folded descendants never float over code.
     const wanted = new Map<
@@ -517,10 +529,15 @@ export class StructuralFoldControls extends Disposable {
     const completed = this.foldablesOf(diff).filter(
       (scope) =>
         scope.rail &&
+        intersectsViewport(scope) &&
         this.viewed?.get(path, scope.foldStateId).state === "viewed",
     );
     for (const scope of this.foldablesOf(diff)) {
-      if (!scope.rail || hidden.some((range) => range.contains(scope.line + 1)))
+      if (
+        !scope.rail ||
+        !headerVisible(scope) ||
+        hidden.some((range) => range.contains(scope.line + 1))
+      )
         continue;
       const active = scope.foldStateId === target?.foldable.foldStateId;
       const progress = this.viewed?.get(path, scope.foldStateId);

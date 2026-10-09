@@ -1195,7 +1195,8 @@ export class ReviewFilesDiffView extends Disposable {
     const fileTreeVisible =
       !this.fileTreeContainer &&
       !this.fileTreeHidden &&
-      width >= FILE_TREE_COLLAPSE_WIDTH;
+      !mobileViewport.matches &&
+      width > FILE_TREE_COLLAPSE_WIDTH;
     if (
       !this.fileTreeContainer &&
       !this.document &&

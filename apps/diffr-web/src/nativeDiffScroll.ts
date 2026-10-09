@@ -5,7 +5,9 @@ import type { MultiDiffEditorWidget } from "vs/editor/browser/widget/multiDiffEd
 
 import { element } from "./ui.js";
 
-export const mobileViewport = window.matchMedia("(max-width: 760px)");
+export const mobileViewport = window.matchMedia(
+  "(max-width: 760px), (pointer: coarse) and (max-height: 500px)",
+);
 
 /** Let the browser own touch inertia; Monaco still owns virtualized diffs and structural folds. */
 export class NativeDiffScroll extends Disposable {
@@ -51,7 +53,7 @@ export class NativeDiffScroll extends Disposable {
           if (!this.enabled || !(event.target instanceof Element)) return;
 
           if (
-            event.target.closest(".view-line") &&
+            event.target.closest(".view-line, pre.diff-hidden-lines-detail") &&
             !event.target.closest(
               ".review-fold-pill, .review-fold-hint, .review-fold-closer",
             )
@@ -108,13 +110,15 @@ export class NativeDiffScroll extends Disposable {
   layout(width: number, height: number): void {
     const enabled = mobileViewport.matches;
     const top = this.widget?.getScrollTop() ?? 0;
+    const enteringNative = enabled && !this.enabled;
     this.enabled = enabled;
     this.scroller.classList.toggle("is-native", enabled);
     this.viewport.style.height = `${height}px`;
     this.widget?.layout(new Dimension(width, height));
     this.updateExtent();
 
-    if (enabled) this.scroller.scrollTop = top;
+    // Height changes (including Safari's collapsing toolbar) must not restart native inertia.
+    if (enteringNative) this.scroller.scrollTop = top;
   }
 
   private updateExtent(): void {
@@ -136,10 +140,20 @@ export function horizontalTouchScroll(editor: ICodeEditor) {
         time: number;
         horizontal?: boolean;
         velocity: number;
+        surface?: HTMLElement;
       }
     | undefined;
 
   let frame = 0;
+  let suppressClickUntil = 0;
+
+  const position = (surface?: HTMLElement) =>
+    surface ? surface.scrollLeft : editor.getScrollLeft();
+
+  const scrollTo = (left: number, surface?: HTMLElement) => {
+    if (surface) surface.scrollLeft = left;
+    else editor.setScrollLeft(left);
+  };
 
   const stop = () => {
     cancelAnimationFrame(frame);
@@ -148,6 +162,7 @@ export function horizontalTouchScroll(editor: ICodeEditor) {
 
   const start = (event: TouchEvent) => {
     stop();
+    suppressClickUntil = 0;
     gesture = undefined;
 
     if (
@@ -163,6 +178,12 @@ export function horizontalTouchScroll(editor: ICodeEditor) {
       lastX: touch.clientX,
       time: performance.now(),
       velocity: 0,
+      surface:
+        event.target instanceof Element
+          ? (event.target.closest<HTMLElement>(
+              "pre.diff-hidden-lines-detail",
+            ) ?? undefined)
+          : undefined,
     };
   };
 
@@ -187,7 +208,8 @@ export function horizontalTouchScroll(editor: ICodeEditor) {
     const now = performance.now();
     const delta = gesture.lastX - x;
     gesture.velocity = delta / Math.max(1, now - gesture.time);
-    editor.setScrollLeft(editor.getScrollLeft() + delta);
+    scrollTo(position(gesture.surface) + delta, gesture.surface);
+    suppressClickUntil = now + 500;
     gesture.lastX = x;
     gesture.time = now;
   };
@@ -204,13 +226,13 @@ export function horizontalTouchScroll(editor: ICodeEditor) {
     const coast = (now: number) => {
       const elapsed = Math.min(32, now - last);
       last = now;
-      const before = editor.getScrollLeft();
-      editor.setScrollLeft(before + velocity * elapsed);
+      const before = position(finished.surface);
+      scrollTo(before + velocity * elapsed, finished.surface);
       velocity *= Math.exp(-elapsed / 180);
 
       if (
         Math.abs(velocity) > 0.02 &&
-        editor.getScrollLeft() !== before &&
+        position(finished.surface) !== before &&
         mobileViewport.matches
       )
         frame = requestAnimationFrame(coast);
@@ -224,6 +246,14 @@ export function horizontalTouchScroll(editor: ICodeEditor) {
     stop();
   };
 
+  const click = (event: MouseEvent) => {
+    if (performance.now() < suppressClickUntil) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  };
+
+  node.addEventListener("click", click, true);
   node.addEventListener("touchstart", start, { passive: true });
   node.addEventListener("touchmove", move, { passive: false });
   node.addEventListener("touchend", end);
@@ -234,6 +264,7 @@ export function horizontalTouchScroll(editor: ICodeEditor) {
     dispose() {
       cancel();
       modelChange.dispose();
+      node.removeEventListener("click", click, true);
       node.removeEventListener("touchstart", start);
       node.removeEventListener("touchmove", move);
       node.removeEventListener("touchend", end);

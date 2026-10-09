@@ -10,6 +10,7 @@ export class MobileFiles extends Disposable {
   private readonly sheet = element("dialog", "app-mobile-files");
   private readonly list = element("div", "app-mobile-file-list");
   private readonly search = element("input", "app-mobile-file-search");
+  private closing = false;
   private paths = "";
   private selectedPath = "";
   private status = "";
@@ -28,7 +29,7 @@ export class MobileFiles extends Disposable {
     const title = element("h2", undefined, "Changed files");
     title.id = "mobile-files-title";
     this.sheet.setAttribute("aria-labelledby", title.id);
-    const close = actionButton("", () => this.sheet.close());
+    const close = actionButton("", () => this.close());
     close.append(element("span", "codicon codicon-close"));
     close.classList.add("app-mobile-files-close");
     close.setAttribute("aria-label", "Close file tree");
@@ -95,11 +96,11 @@ export class MobileFiles extends Disposable {
     folds.append(
       actionButton("Fold all", () => {
         this.comparison()?.foldAll(true);
-        this.sheet.close();
+        this.close();
       }),
       actionButton("Expand all", () => {
         this.comparison()?.foldAll(false);
-        this.sheet.close();
+        this.close();
       }),
     );
 
@@ -137,7 +138,11 @@ export class MobileFiles extends Disposable {
           event.clientX < bounds.left ||
           event.clientX > bounds.right)
       )
-        this.sheet.close();
+        this.close();
+    });
+    this.sheet.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      this.close();
     });
     this.sheet.addEventListener("close", () => {
       const trigger =
@@ -148,7 +153,7 @@ export class MobileFiles extends Disposable {
     });
 
     const resize = () => {
-      if (!mobileViewport.matches) this.sheet.close();
+      if (!mobileViewport.matches) this.close();
     };
 
     mobileViewport.addEventListener("change", resize);
@@ -158,8 +163,30 @@ export class MobileFiles extends Disposable {
     this.element.append(this.sheet);
   }
 
+  private close(): void {
+    if (!this.sheet.open || this.closing) return;
+    this.closing = true;
+    this.sheet.classList.add("is-closing");
+    // Safari removes a closed dialog from the top layer before discrete CSS transitions finish.
+    // Keep it modal until its exit finishes, including when navigation dismisses the sheet.
+    const animations = this.sheet.getAnimations({ subtree: true });
+
+    const finish = () => {
+      if (!this.closing) return;
+      this.closing = false;
+      this.sheet.close();
+      this.sheet.classList.remove("is-closing");
+    };
+
+    if (animations.length)
+      void Promise.allSettled(animations.map((a) => a.finished)).then(finish);
+    else finish();
+  }
+
   toggle(): void {
-    if (this.sheet.open) this.sheet.close();
+    if (this.closing) return;
+
+    if (this.sheet.open) this.close();
     else {
       document
         .querySelector(".app-header-files")
@@ -257,7 +284,7 @@ export class MobileFiles extends Disposable {
     )) {
       const button = actionButton(file.path.split("/").at(-1)!, () => {
         this.selectedPath = file.path;
-        this.sheet.close();
+        this.close();
         this.comparison()?.openFile(file.path);
         this.refreshRows(this.comparison()?.fileList ?? []);
       });
