@@ -71,7 +71,7 @@ fn install(root: &Path, with_cli: bool) -> Result<()> {
         run(
             cargo()
                 .current_dir(root)
-                .args(["install", "--path", ".", "--locked", "--root"])
+                .args(["install", "--path", ".", "--locked", "--timings", "--root"])
                 .arg(&destination),
             "Installing diffr",
         )?;
