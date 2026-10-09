@@ -11,7 +11,7 @@ import {
   type ConfigClient,
   type Setting,
 } from "../diffr/config";
-import { dark } from "../diffr/rows";
+import { dark } from "../diffr/theme";
 import { sliceTextByWidth } from "./lib/text";
 
 const fit = (text: string, width: number) => sliceTextByWidth(text, 0, Math.max(0, width)).text;
