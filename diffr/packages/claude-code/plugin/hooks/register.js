@@ -21148,7 +21148,7 @@ function ansiRegex({ onlyFirst = false } = {}) {
   return new RegExp(pattern, onlyFirst ? void 0 : "g");
 }
 
-// ../../../node_modules/strip-ansi/index.js
+// ../viewer/node_modules/strip-ansi/index.js
 var regex = ansiRegex();
 function stripAnsi(string4) {
   if (typeof string4 !== "string") {
