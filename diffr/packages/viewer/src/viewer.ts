@@ -260,7 +260,15 @@ export class Viewer {
     this.reshape();
   }
 
-  /** The Ctrl-P picker is open: every key goes to it. */
+  cancel() {
+    if (this.prompt === null && !this.picker && !this.pendingZ && !this.pendingBracket) return;
+    this.prompt = null;
+    this.picker = null;
+    this.pendingZ = false;
+    this.pendingBracket = null;
+    this.emit();
+  }
+
   get picking(): boolean {
     return this.picker !== null;
   }
