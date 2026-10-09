@@ -29,35 +29,6 @@ function appendSpan<S extends StyledSpan>(target: S[], span: S) {
   }
 }
 
-/** Return the first or last scalar in one non-empty string. */
-function boundaryScalar(text: string, first: boolean) {
-  if (first) {
-    const codePoint = text.codePointAt(0);
-    return codePoint === undefined ? "" : String.fromCodePoint(codePoint);
-  }
-
-  let scalar = "";
-  for (const candidate of text) {
-    scalar = candidate;
-  }
-  return scalar;
-}
-
-/** Return whether a styled-span boundary may divide one grapheme cluster. */
-function spansMaySplitGrapheme(spans: StyledSpan[]) {
-  for (let index = 1; index < spans.length; index += 1) {
-    const left = boundaryScalar(spans[index - 1]?.text ?? "", false);
-    const right = boundaryScalar(spans[index]?.text ?? "", true);
-    if (
-      (left && measureSimpleSanitizedTextWidth(left) === null) ||
-      (right && measureSimpleSanitizedTextWidth(right) === null)
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
 /** Merge indivisible graphemes while preserving the style where each cluster starts. */
 function mergeCrossSpanGraphemes<S extends StyledSpan>(spans: S[]) {
   const normalized: S[] = [];
@@ -78,11 +49,6 @@ function mergeCrossSpanGraphemes<S extends StyledSpan>(spans: S[]) {
     cursor += cluster.length;
   }
   return normalized;
-}
-
-/** Merge only indivisible graphemes that may cross styled-span boundaries. */
-function preserveCrossSpanGraphemes<S extends StyledSpan>(spans: S[]) {
-  return spansMaySplitGrapheme(spans) ? mergeCrossSpanGraphemes(spans) : spans;
 }
 
 /** Slice styled spans to one visible window while preserving color runs. */
@@ -265,36 +231,3 @@ export function wrapSpans<S extends StyledSpan>(spans: S[], width: number) {
   return lines;
 }
 
-/** Count wrapped visual lines without allocating the styled line arrays used by rendering. */
-export function measureWrappedSpansLineCount(
-  spans: StyledSpan[],
-  width: number,
-) {
-  if (width <= 0) {
-    return 1;
-  }
-
-  let lineCount = 1;
-  let remaining = width;
-  let currentLineHasContent = false;
-  const safeSpans = preserveCrossSpanGraphemes(sanitizeTerminalSpans(spans));
-  for (const span of safeSpans) {
-    // Preserve zero-width span presence across styled runs so a later over-wide grapheme makes the
-    // same continuation decision as wrapSpans' concrete line arrays.
-    for (const chunk of wrapSanitizedTextByWidth(
-      span.text,
-      width,
-      remaining,
-      currentLineHasContent,
-    )) {
-      if (chunk.startsNewLine) {
-        lineCount += 1;
-        remaining = width;
-        currentLineHasContent = false;
-      }
-      remaining -= chunk.width;
-      currentLineHasContent ||= chunk.text.length > 0;
-    }
-  }
-  return lineCount;
-}
