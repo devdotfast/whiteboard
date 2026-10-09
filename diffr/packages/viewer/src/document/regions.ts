@@ -178,6 +178,19 @@ export function gapIds(diff: TextDiff): number[] {
   });
   return [...gaps];
 }
+export function hidingIds(diff: TextDiff, side: Side, line: number, collapsed: ReadonlySet<number>): number[] {
+  const { leaves, folds } = flatten(diff);
+  const ids = new Set<number>();
+  for (const fold of folds[side]) {
+    // A syntax fold with a one-line label collapses onto its opener, so it hides its closer's line too.
+    const inline = fold.syntax && !fold.label.includes("\n");
+    const last = inline ? Math.max(fold.lastHidden, fold.syntax!.end.line) : fold.lastHidden;
+    if (collapsed.has(fold.foldStateId) && fold.startLine <= line && line <= last) ids.add(fold.foldStateId);
+  }
+  for (const leaf of leaves[side])
+    if (collapsed.has(leaf.foldStateId) && leaf.startLine <= line && line < leaf.endLine) ids.add(leaf.foldStateId);
+  return [...ids];
+}
 /** Source lines hidden on one side: a collapsed fold hides every line it covers. */
 export function hiddenLines(folds: Fold[], collapsed: ReadonlySet<number>): Set<number> {
   const hidden = new Set<number>();

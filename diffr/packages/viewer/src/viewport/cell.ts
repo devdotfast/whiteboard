@@ -2,6 +2,7 @@ import type { Geometry } from "./geometry";
 import { foldBackground, type RenderSpan, type SplitLineCell, type UnifiedLineCell } from "../document/rows";
 import { measureTextWidth } from "../terminal/text";
 import type { RowFold } from "../document/regions";
+import { occurrences } from "../document/search";
 import type { Palette } from "../theme/palette";
 
 /** The scope the pointer is on. Armed when it points at the scope's rail or chevron, which fold it. */
@@ -36,6 +37,41 @@ export interface CellOptions {
   focus?: ScopeFocus;
   selected?: boolean;
   read?: boolean;
+  /** The pattern to light, and whether this cell holds the match the view is on. */
+  search?: Lit;
+}
+
+export interface Lit {
+  pattern: string;
+  current: boolean;
+}
+
+/** Splits spans so the pattern's occurrences take the search colours: a wash for every match, solid where the view is. */
+function lightMatches(spans: RenderSpan[], lit: Lit, theme: Palette): RenderSpan[] {
+  const ranges = occurrences(spans.map((span) => span.text).join(""), lit.pattern);
+  if (!ranges.length) return spans;
+  const result: RenderSpan[] = [];
+  let offset = 0;
+  for (const span of spans) {
+    const end = offset + span.text.length;
+    let cut = offset;
+    for (const [from, to] of ranges) {
+      if (to <= cut || from >= end) continue;
+      const start = Math.max(from, cut), stop = Math.min(to, end);
+      if (start > cut) result.push({ ...span, text: span.text.slice(cut - offset, start - offset) });
+      result.push({ ...span, text: span.text.slice(start - offset, stop - offset),
+        bg: lit.current ? theme.searchCurrent : theme.searchMatch, fg: lit.current ? theme.bg : span.fg });
+      cut = stop;
+    }
+    if (cut < end) result.push({ ...span, text: span.text.slice(cut - offset) });
+    offset = end;
+  }
+  return result;
+}
+
+export function litRuns(text: string, fg: string, bg: string, lit: Lit | undefined, theme: Palette): PaintRun[] {
+  const spans = lit ? lightMatches([{ text, fg, bg }], lit, theme) : [{ text, fg, bg }];
+  return spans.map((span) => ({ text: span.text, fg: span.fg ?? fg, bg: span.bg ?? bg }));
 }
 
 /** A file header's viewed box, one cell wide in every terminal. */
@@ -53,7 +89,7 @@ export function planCell(
   spans: RenderSpan[],
   width: number,
   unified: boolean,
-  { theme, geometry, visualLine, focus, selected = false, read = false }: CellOptions,
+  { theme, geometry, visualLine, focus, selected = false, read = false, search }: CellOptions,
 ): CellPlan {
   const fold = value.fold;
   const washed = focus?.armed && value.body?.includes(focus.id);
@@ -64,6 +100,7 @@ export function planCell(
         : washed ? theme.focusWash : theme.bg;
   // A viewed line keeps its shape but drops its colours: muted ink, no word emphasis.
   if (read && changed) spans = spans.map((span) => ({ ...span, fg: theme.muted, bg: undefined }));
+  if (search) spans = lightMatches(spans, search, theme);
   // Row colours carry addition and deletion, so the gutter holds numbers and the chevron only.
   const digits = geometry.gutter - 4;
   const number = (n: number | undefined) => `${visualLine ? "" : (n ?? "")}`.padStart(digits);
