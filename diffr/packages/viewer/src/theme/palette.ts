@@ -1,5 +1,3 @@
-/** The painter's palette from a parsed Helix theme, and diffr's theme config. No Node or Bun APIs. */
-import type { FoldTint } from "../document/regions";
 export interface Style {
   fg?: string;
   bg?: string;
@@ -167,9 +165,4 @@ export function themeConfig(show: unknown): { name: string; path: string | null 
   if (!theme || typeof theme.name !== "string" || (theme.path !== null && theme.path !== undefined && typeof theme.path !== "string"))
     throw new Error("diffr config show did not include a theme section");
   return { name: theme.name, path: theme.path ?? null };
-}
-/** Paired folds sit on the code's own background; only one-sided folds carry a change tint. */
-export function foldBackground(theme: Palette, tint: FoldTint) {
-  return tint === "inserted" ? theme.addition : tint === "removed" ? theme.deletion
-    : tint === "modified" ? theme.modification : theme.bg;
 }
