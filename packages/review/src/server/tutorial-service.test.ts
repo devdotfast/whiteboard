@@ -4,7 +4,6 @@ import path from "node:path";
 
 import { rangeAnchor } from "@review/lens-selection";
 import {
-  elements,
   resourceReferences,
   sourceReferences,
 } from "@review/review-api/document";
@@ -45,7 +44,7 @@ async function setup() {
   };
 }
 
-it("opens all shipped native evidence with retained maps and trace, without a legacy record", async () => {
+it("opens all shipped native evidence without a legacy record", async () => {
   const { service, store, data, home } = await setup();
   const snapshot = await service.prepare();
   expect(await service.prepare()).toEqual(snapshot);
@@ -58,9 +57,6 @@ it("opens all shipped native evidence with retained maps and trace, without a le
 
   for (const block of resourceReferences(snapshot.document))
     await data.validateResource(snapshot.pins, block);
-  expect(
-    elements(snapshot.document).some((block) => block.type === "trace_quote"),
-  ).toBe(true);
   await expect(
     readFile(path.join(home, "reviews", snapshot.reviewId, "review.json")),
   ).rejects.toThrow("ENOENT");

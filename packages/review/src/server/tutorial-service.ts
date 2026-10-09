@@ -4,10 +4,8 @@ import path from "node:path";
 
 import { resolveRevision } from "@dev.fast/local-vcs";
 import { writePrivateJsonAtomic } from "@dev.fast/trace-core";
-import {
-  documentSchema,
-  resourceReferences,
-} from "@review/review-api/document";
+import { lensSchema } from "@review/review-api/diff-lenses";
+import { documentSchema } from "@review/review-api/document";
 import type { LocalReviewData } from "@review/review-api/local-data";
 import type { ReviewStore, Snapshot } from "@review/review-api/store";
 import { devReviewHome } from "@review/review-home-paths";
@@ -17,6 +15,8 @@ const authoredSchema = z.strictObject({
   title: z.string().min(1),
   document: documentSchema,
 });
+
+const lensesSchema = z.array(lensSchema.omit({ id: true }));
 
 const pinsSchema = z.strictObject({
   base: z.string().regex(/^[a-f0-9]{40}$/),
@@ -30,12 +30,7 @@ const stampSchema = z.object({
 });
 
 export async function readTutorialAssets(assetsRoot: string) {
-  const names = [
-    "document.json",
-    "trace.json",
-    "software-map.json",
-    "pins.json",
-  ];
+  const names = ["document.json", "lenses.json", "pins.json"];
 
   const bytes = await Promise.all(
     names.map((name) => readFile(path.join(assetsRoot, name), "utf8")),
@@ -43,9 +38,8 @@ export async function readTutorialAssets(assetsRoot: string) {
 
   return {
     authored: authoredSchema.parse(JSON.parse(bytes[0]!)),
-    trace: JSON.parse(bytes[1]!),
-    model: JSON.parse(bytes[2]!),
-    pins: pinsSchema.parse(JSON.parse(bytes[3]!)),
+    lenses: lensesSchema.parse(JSON.parse(bytes[1]!)),
+    pins: pinsSchema.parse(JSON.parse(bytes[2]!)),
     contentHash: createHash("sha256")
       .update(JSON.stringify(bytes))
       .digest("hex"),
@@ -68,38 +62,6 @@ export async function createNativeTutorial(input: {
     assets.pins.head,
   );
 
-  const aliases = new Map<string, string>();
-  const traceId = randomUUID();
-  await input.data.upload({
-    id: traceId,
-    repositoryId: repository.id,
-    kind: "trace",
-    trace: assets.trace,
-  });
-  aliases.set("tutorial-trace", traceId);
-
-  for (const side of ["base", "head"] as const) {
-    const id = randomUUID();
-    await input.data.upload({
-      id,
-      repositoryId: repository.id,
-      kind: "map",
-      pins,
-      side,
-      model: assets.model,
-    });
-    aliases.set(`tutorial-map-${side}`, id);
-  }
-
-  for (const block of resourceReferences(assets.authored.document)) {
-    if (block.type === "trace_quote")
-      block.traceId = aliases.get(block.traceId) ?? block.traceId;
-
-    if (block.type === "software_map")
-      block.mapVersionId =
-        aliases.get(block.mapVersionId) ?? block.mapVersionId;
-  }
-
   const result = await input.store.execute(
     {
       operation: {
@@ -110,6 +72,15 @@ export async function createNativeTutorial(input: {
     },
     { document: assets.authored.document, origin: { tutorial: true } },
   );
+
+  for (const { title, targets } of assets.lenses)
+    await input.store.execute({
+      operation: {
+        type: "lens_edit",
+        reviewId: result.reviewId,
+        edit: { type: "insert", title, targets },
+      },
+    });
 
   return {
     snapshot: input.store.read(result.reviewId),

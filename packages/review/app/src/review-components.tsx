@@ -1132,7 +1132,11 @@ export function GuidedTourPanel({
             {showIntroPill ? (
               <button
                 type="button"
-                {...stylex.props(tourStyles.pill, tourStyles.pillIntro)}
+                {...withClass(
+                  "tour-pager-next",
+                  tourStyles.pill,
+                  tourStyles.pillIntro,
+                )}
                 onClick={() => {
                   setHasScrolled(true);
                   stepTo(1);
@@ -1164,6 +1168,7 @@ export function GuidedTourPanel({
                   {displayIndex + 1}/{tour.stops.length}
                 </span>
                 <IconButton
+                  className="tour-pager-next"
                   xstyle={tourStyles.pillButton}
                   aria-label="Next step"
                   disabled={displayIndex === lastIndex}

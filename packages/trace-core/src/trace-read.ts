@@ -54,9 +54,6 @@ const STORE_COMMIT_LOOKUP_LIMIT = 30;
 
 const REMOTE_HEAD_TTL_MS = 15_000;
 
-// Reserved sample ID: the tutorial works offline without trace capture setup.
-export const TUTORIAL_TRACE_SESSION_ID = "review-tutorial-checkout";
-
 export type ReviewTraceSessionDescriptor = ReviewAgentTraceSession;
 
 /**
@@ -226,13 +223,6 @@ export async function loadReviewAgentTrace(input: {
   storage?: TraceStorage | null;
 }): Promise<LoadedReviewAgentTrace | null> {
   const { sessionId, trace } = input;
-
-  if (sessionId === TUTORIAL_TRACE_SESSION_ID) {
-    if (trace && trace !== "main") return null;
-    const { loadTutorialTrace } = await import("./tutorial-trace");
-
-    return loadTutorialTrace();
-  }
 
   if (!sessionIdSchema.safeParse(sessionId).success) return null;
   const traceName = trace ?? "main";

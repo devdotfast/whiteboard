@@ -16,7 +16,6 @@ import {
   elements,
   isUnit,
 } from "@review/review-api/document";
-import { mapInputSchema } from "@review/review-api/map-input";
 import type { ReviewProgress } from "@review/review-api/review-progress";
 import type { Snapshot } from "@review/review-api/store";
 import { defineSoftwareMap } from "@review/software-map-model";
@@ -25,8 +24,6 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import tutorialDocument from "../../tutorial/document.json";
-import tutorialModel from "../../tutorial/software-map.json";
-import tutorialTrace from "../../tutorial/trace.json";
 import {
   BlockErrorBoundary,
   type StoredBlock,
@@ -164,8 +161,8 @@ const rendered: Record<
   section: (c) =>
     has(c, "button[aria-expanded='true']") && text(c).includes("Hello."),
   tutorial: (c) =>
-    text(c).includes("Representative authoring conversation") &&
-    text(c).includes("Explain this change."),
+    has(c, ".tutorial-keymap-picker") &&
+    has(c, '.tutorial-view-button[data-tutorial-view="diff"]'),
   callout: (c) =>
     c.querySelector("blockquote[data-tone='warning'] strong")?.textContent ===
       "Note" && text(c).includes("Careful."),
@@ -221,25 +218,8 @@ async function mountFixture(
         : {
             [FIXTURE_IMAGE_ID]: image,
             [FIXTURE_TRACE_ID]: trace,
-            "tutorial-trace": parseJsonText(JSON.stringify(tutorialTrace)),
           },
-    maps: {
-      [FIXTURE_MAP_ID]: savedMap,
-      ...Object.fromEntries(
-        (["base", "head"] as const).map((side) => [
-          `tutorial-map-${side}`,
-          parseJsonText(
-            JSON.stringify({
-              ...defineSoftwareMap(mapInputSchema.parse(tutorialModel)),
-              side,
-              commit: side,
-              countsByElementPath: {},
-              unmappedByElementPath: {},
-            }),
-          ),
-        ]),
-      ),
-    },
+    maps: { [FIXTURE_MAP_ID]: savedMap },
   });
 
   const request = vi.spyOn(bridge, "request");
@@ -415,7 +395,7 @@ describe("block components", () => {
       await settled(
         () =>
           has(container, ".tutorial-keymap-picker") &&
-          text(container).includes("Representative authoring conversation"),
+          has(container, ".tutorial-view-button"),
       ),
     ).toBe(true);
 
@@ -429,15 +409,15 @@ describe("block components", () => {
     await act(async () => vim.click());
     expect(selectKeymap).toHaveBeenCalledWith("vim");
 
-    const commits = container.querySelector<HTMLButtonElement>(
-      '[data-tutorial-view="commits"]',
+    const diff = container.querySelector<HTMLButtonElement>(
+      '[data-tutorial-view="diff"]',
     )!;
 
-    expect(commits).not.toBeNull();
-    await act(async () => commits.click());
+    expect(diff).not.toBeNull();
+    await act(async () => diff.click());
     expect(
       container
-        .querySelector('[aria-label="Commits"]')
+        .querySelector('[aria-label="Diff"]')
         ?.getAttribute("aria-pressed"),
     ).toBe("true");
   });

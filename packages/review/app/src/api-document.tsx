@@ -387,11 +387,7 @@ export const DocumentNode = memo(function DocumentNode({
     />
   );
 
-  if (
-    node.type === "software_map" &&
-    (!softwareMapEnabled || data.snapshot.origin?.tutorial)
-  )
-    return null;
+  if (node.type === "software_map" && !softwareMapEnabled) return null;
 
   const block = stored(node);
 

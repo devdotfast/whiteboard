@@ -37,7 +37,7 @@ try {
   });
   await createNativeTutorial({ assetsRoot, sampleRoot, ...local });
   console.log(
-    "Native tutorial document, source references, trace and both maps validated.",
+    "Native tutorial document, source references and lenses validated.",
   );
 } finally {
   await local.data.close();

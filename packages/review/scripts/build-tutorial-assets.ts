@@ -172,7 +172,7 @@ export async function buildTutorialAssets(
     const validationAssets = path.join(temporaryRoot, "assets");
     await mkdir(validationAssets);
 
-    for (const name of ["document.json", "trace.json", "software-map.json"])
+    for (const name of ["document.json", "lenses.json"])
       await cp(path.join(tutorialDir, name), path.join(validationAssets, name));
 
     const pins =
