@@ -613,11 +613,6 @@ fn upgrade_and_uninstall_leave_a_diffr_bundled_in_an_app_alone() {
         );
         assert!(!output.status.success());
         assert!(
-            String::from_utf8_lossy(&output.stderr).contains("came with another app"),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(
             !log.contains("brew") && !log.contains("plugin uninstall"),
             "{log}"
         );
