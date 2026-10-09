@@ -85,7 +85,8 @@ type ResizeEdges = (typeof RESIZE_EDGES)[number];
 type Scrolled = { element: HTMLElement; top: number; atEnd: boolean };
 
 // Where each conversation was scrolled when it last left a slot. A
-// detached element forgets its scrolling, so it is read before leaving.
+// detached element forgets its scrolling, and the slot it moves into mounts
+// only after the one it left has let go, so it is read before leaving.
 const scrolledOnLeave = new WeakMap<HTMLElement, Scrolled[]>();
 
 function scrolledWithin(node: HTMLElement): Scrolled[] {
@@ -120,13 +121,9 @@ export function AskSlot({ node }: { node: HTMLElement }): ReactElement {
     if (!parent) return;
     node.className = stylex.props(styles.fill).className ?? "";
 
-    const scrolled = node.isConnected
-      ? scrolledWithin(node)
-      : (scrolledOnLeave.get(node) ?? []);
-
     parent.append(node);
 
-    for (const { element, top, atEnd } of scrolled)
+    for (const { element, top, atEnd } of scrolledOnLeave.get(node) ?? [])
       element.scrollTop = atEnd ? element.scrollHeight : top;
 
     return () => {
