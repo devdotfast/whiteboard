@@ -3,9 +3,9 @@ import { paletteFromHelix, themeConfig, type Palette } from "@diffr/viewer/theme
 import { loadBundledTheme, parseHelixTheme } from "@diffr/viewer/theme/themes";
 import { DiffStore } from "@diffr/viewer/protocol/store";
 import { parseDiffEvents } from "@diffr/viewer/protocol/events";
-import { splitArgs } from "./args";
+import { splitArgs } from "@diffr/consumer/args";
 import { parsePost } from "./protocol";
-import { Pane } from "./frame";
+import { Pane } from "@diffr/consumer/frame";
 
 const PANE = "diffr";
 const TOOL = "mcp__diffr__open";

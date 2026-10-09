@@ -20936,7 +20936,7 @@ async function* parseDiffEvents(texts) {
   if (!complete) throw new Error("Incomplete diffr stream");
 }
 
-// src/args.ts
+// ../consumer/src/args.ts
 function splitArgs(text) {
   const args = [];
   let current = "", quote, started = false;
@@ -20961,24 +20961,19 @@ function splitArgs(text) {
   return args;
 }
 
-// src/protocol.ts
+// ../consumer/src/protocol.ts
 var action = external_exports.union([
   external_exports.strictObject({ fold: external_exports.number().int(), file: external_exports.number().int() }),
-  /** A file header's viewed box. */
   external_exports.strictObject({ viewedFile: external_exports.number().int() }),
   external_exports.strictObject({ file: external_exports.number().int() }),
   external_exports.strictObject({ jump: external_exports.number().int() }),
   external_exports.strictObject({ dir: external_exports.string() }),
-  /** A scrollbar row. */
   external_exports.strictObject({ scrub: external_exports.number().int() }),
   external_exports.strictObject({ layout: external_exports.literal(true) }),
   /** The status line's ? keys, or any click on the key list: show or hide the list. */
   external_exports.strictObject({ help: external_exports.literal(true) }),
-  /** A file in the Ctrl-P picker. */
   external_exports.strictObject({ pick: external_exports.number().int() }),
-  /** The title bar's files button: the tree, as a sidebar or in place of the diff. */
   external_exports.strictObject({ files: external_exports.literal(true) }),
-  /** The selection bar's Add to chat button. */
   external_exports.strictObject({ chat: external_exports.literal(true) })
 ]);
 var hover = external_exports.union([
@@ -20994,9 +20989,10 @@ var keyPress = external_exports.object({
 var input2 = external_exports.union([
   external_exports.strictObject({ act: action, alt: external_exports.literal(true).optional() }),
   external_exports.strictObject({ press: keyPress }),
-  /** A left press (or, with `extend`, a drag) at a pane cell: `y` counts from the frame's first line. */
   external_exports.strictObject({ select: external_exports.strictObject({ x: external_exports.number().int(), y: external_exports.number().int(), extend: external_exports.literal(true).optional() }) })
 ]);
+
+// src/protocol.ts
 var post = external_exports.strictObject({
   instance: external_exports.string(),
   inputs: external_exports.array(external_exports.tuple([external_exports.number().int(), input2])),
@@ -24686,7 +24682,7 @@ function copySelection(files, rows, selection) {
   }).join("\n");
 }
 
-// src/paint.ts
+// ../consumer/src/paint.ts
 var fit = (text, width) => sliceTextByWidth(text, 0, width).text;
 var Colors = class {
   list = [];
@@ -24761,7 +24757,7 @@ function paintCell(line, value, spans, width, unified, { fileIndex, ...options }
   for (const [from, to, focus] of plan.hovers) line.hover(start + from, start + to, { file: fileIndex, ...focus });
 }
 
-// src/frame.ts
+// ../consumer/src/frame.ts
 var SPINNER = "\u280B\u2819\u2839\u2838\u283C\u2834\u2826\u2827\u2807\u280F";
 var KEYS = [
   ["j k \xB7 d u \xB7 space b", "scroll a line, half a page, a page"],
@@ -24796,7 +24792,6 @@ var Pane = class {
   viewer;
   message = "";
   size;
-  /** Undefined until toggled: then the width decides. */
   showTree;
   closedDirectories = /* @__PURE__ */ new Set();
   treeScroll = 0;
@@ -24805,13 +24800,9 @@ var Pane = class {
   selection = null;
   /** A press on code started the selection, so a drag moves its end; a click on anything else stops that. */
   selecting = false;
-  /** The code row on each frame line of the last frame, and which side a column falls on. */
   cellsAt = /* @__PURE__ */ new Map();
-  /** The key list, shown in place of the diff. */
   helpView = false;
-  /** A narrow pane showing the tree in place of the diff. */
   filesView = false;
-  /** The tree row the tree that took the pane is on. */
   treeCursor = 0;
   subscribe(listener) {
     return this.viewer.subscribe(listener);
@@ -24819,7 +24810,6 @@ var Pane = class {
   hover(hover2) {
     this.viewer.setHover(hover2);
   }
-  /** What an input asks of the hooks module beyond a redraw: to close the pane, or to copy text. */
   input(input3) {
     if ("act" in input3 && "chat" in input3.act) return this.chat();
     if ("act" in input3) this.act(input3.act, input3.alt === true);
@@ -24827,25 +24817,19 @@ var Pane = class {
     else return this.press(input3.press);
     return {};
   }
-  /**
-   * The pane lost the keyboard. Escape never reaches it, only takes the focus away, so this is
-   * where Escape closes whatever was open: the search prompt, the picker, the key list, the tree.
-   */
+  /** Hosts take Escape to blur the pane, so blur closes what Escape would. */
   blur() {
     this.viewer.cancel();
     this.selection = null;
     this.helpView = false;
     this.filesView = false;
   }
-  /** Says how a copy the pane asked for went; `refusal` is the clipboard's reason when it did not. */
   copied(what, refusal) {
     this.message = refusal ? `Not copied: ${refusal}` : `Copied ${what}`;
   }
-  /** Says how putting ranges in the prompt box went; `refusal` is why the box did not take them. */
   chatted(names, refusal) {
     this.message = refusal ? `Not added to the chat: ${refusal}` : `Added ${names.join(", ")} to the chat`;
   }
-  /** A press on a code line starts a selection on its side; a drag moves the selection's end. */
   select({ x, y, extend: extend2 }) {
     const cell = this.cellsAt.get(y);
     if (!extend2) {
@@ -24853,7 +24837,6 @@ var Pane = class {
       this.selection = cell ? { anchor: cell.key, anchorSide: cell.side(x), end: cell.key, endSide: cell.side(x) } : null;
     } else if (this.selecting && this.selection && cell) this.selection = { ...this.selection, end: cell.key, endSide: cell.side(x) };
   }
-  /** `recursive`: an Alt-click. */
   act(action2, recursive2) {
     this.message = "";
     this.selecting = false;
@@ -24903,14 +24886,12 @@ var Pane = class {
     }
     return {};
   }
-  /** Too narrow for a sidebar: the tree takes the whole pane instead. */
   narrow(size) {
     return size.columns < TREE_MIN_COLUMNS;
   }
   treeRows() {
     return flattenFileTree(buildFileTree(this.store.getSnapshot().inventory), this.closedDirectories);
   }
-  /** The files key or button: in a narrow pane, swap the diff for the tree and back; otherwise show or hide the sidebar. */
   toggleFiles() {
     if (!this.size) throw new Error("The pane has not been drawn yet");
     if (!this.narrow(this.size)) {
@@ -24923,7 +24904,6 @@ var Pane = class {
       this.treeCursor = Math.max(0, this.treeRows().findIndex((row) => row.node.fileIndex === currentFile));
     }
   }
-  /** A key in the tree that took the pane: move, open a directory or go to a file. */
   pressFiles(name) {
     const rows = this.treeRows();
     if (name === "j" || name === "down") this.treeCursor = Math.min(rows.length - 1, this.treeCursor + 1);
@@ -24939,7 +24919,6 @@ var Pane = class {
     if (this.closedDirectories.has(key)) this.closedDirectories.delete(key);
     else this.closedDirectories.add(key);
   }
-  /** Goes to a file from the tree; a tree that took the pane gives it back to the diff. */
   goToFile(index) {
     this.viewer.jump(index);
     this.filesView = false;
@@ -24959,7 +24938,6 @@ var Pane = class {
     }
     return { copy: { text, what: forAgent ? "for agent" : "source lines" } };
   }
-  /** The selected ranges, for the prompt box; the selection is done with once they are on their way. */
   chat() {
     if (!this.selection) {
       this.message = "Drag across lines to select them first";
@@ -24977,7 +24955,6 @@ var Pane = class {
     this.selecting = false;
     return { chat: ranges.map((range) => ({ name: rangeName(range), context: rangeReference(snapshot3.files, comparison, range) })) };
   }
-  /** `wheelColumn` is undefined for the pane's scroll keys. */
   scroll(by, wheelColumn) {
     if (this.filesView) return this.pressFiles(by < 0 ? "up" : "down");
     if (wheelColumn === void 0) return this.viewer.move(by);
@@ -24986,15 +24963,12 @@ var Pane = class {
     const treeRows = flattenFileTree(buildFileTree(this.store.getSnapshot().inventory), this.closedDirectories);
     this.treeScroll = Math.max(0, Math.min(Math.max(0, treeRows.length - this.bodyRows(this.size)), this.treeScroll + by * 3));
   }
-  /** Includes the divider; 0 when hidden, as it always is in a narrow pane. */
   sidebar(size) {
     return !this.narrow(size) && (this.showTree ?? true) ? Math.max(16, Math.min(28, size.columns - 40)) : 0;
   }
-  /** The title bar and the status line take a row each. */
   bodyRows(size) {
     return Math.max(1, size.rows - 2);
   }
-  /** The diff column the viewer lays out: the tree and the scrollbar's last column are not in it. */
   layoutSize(size) {
     return { columns: Math.max(10, size.columns - this.sidebar(size) - 1), rows: this.bodyRows(size) };
   }
