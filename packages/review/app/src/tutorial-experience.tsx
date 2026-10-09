@@ -666,6 +666,7 @@ function TutorialTargetRing({ ring }: { ring: TutorialRing }): ReactElement {
       {ring.boxes.map((box, index) => (
         <div
           key={index}
+          data-tutorial-ring=""
           {...stylex.props(styles.ring, ring.inline && styles.ringInline)}
           style={
             ring.inline
