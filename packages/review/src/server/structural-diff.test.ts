@@ -253,14 +253,13 @@ test("cancellation terminates the subprocess", async () => {
   ).rejects.toThrow(/abort|exited/i);
 });
 
-test("renews the idle deadline when the subprocess delivers another record", async () => {
+test("lets a started comparison finish a slow plugin without an output deadline", async () => {
   const root = await executable(`
     ${emit(START)}
     const timer = setInterval(() => {
       if (require('node:fs').existsSync('continue')) {
         clearInterval(timer);
-        ${emit(BINARY)}
-        setInterval(() => {}, 1000);
+        ${emit(BINARY)} ${emit(COMPLETE)}
       }
     }, 10);
   `);
@@ -270,16 +269,29 @@ test("renews the idle deadline when the subprocess delivers another record", asy
 
   try {
     expect((await iterator.next()).value?.type).toBe("start");
-    vi.advanceTimersByTime(119_000);
-    await writeFile(path.join(root, "continue"), "");
-    expect((await iterator.next()).value).toEqual(BINARY);
     const pending = iterator.next();
     void pending.catch(() => {});
 
-    vi.advanceTimersByTime(2_000);
-    // The original deadline has passed, but the renewed one is still pending.
-    expect(vi.getTimerCount()).toBe(1);
-    vi.advanceTimersByTime(118_000);
+    vi.advanceTimersByTime(600_000);
+    await writeFile(path.join(root, "continue"), "");
+    expect((await pending).value).toEqual(BINARY);
+    expect((await iterator.next()).value).toEqual(COMPLETE);
+    expect((await iterator.next()).done).toBe(true);
+  } finally {
+    await iterator.return(undefined);
+  }
+});
+
+test("cancellation still terminates a comparison after its manifest arrives", async () => {
+  const root = await executable(`${emit(START)} setInterval(() => {}, 1000);`);
+  const abort = new AbortController();
+  const iterator = structuralDiff(request(root, { signal: abort.signal }));
+
+  try {
+    expect((await iterator.next()).value?.type).toBe("start");
+    const pending = iterator.next();
+    void pending.catch(() => {});
+    abort.abort();
     await expect(pending).rejects.toThrow(/abort|exited/i);
   } finally {
     await iterator.return(undefined);

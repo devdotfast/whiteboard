@@ -63,9 +63,11 @@ export async function* structuralDiff(
 
   args.push("--", ...(input.paths ?? []));
 
-  const idleAbort = new AbortController();
-  const idle = setTimeout(() => idleAbort.abort(), 120_000);
-  const signal = AbortSignal.any([idleAbort.signal, input.signal]);
+  // Plugins can exceed two minutes between records. Apply this timeout only
+  // until the manifest arrives; plugins enforce their own request timeouts.
+  const startupAbort = new AbortController();
+  const startup = setTimeout(() => startupAbort.abort(), 120_000);
+  const signal = AbortSignal.any([startupAbort.signal, input.signal]);
 
   // The host inherits its own environment and runs from the repository, so
   // diffr reads the user's config and keys exactly as it would from a shell.
@@ -103,9 +105,6 @@ export async function* structuralDiff(
 
   try {
     for await (const line of lines) {
-      // Large comparisons may take minutes while continuing to make progress.
-      idle.refresh();
-
       // Bound individual records, not the entire streamed comparison: a
       // directory move can legitimately contain thousands of small files.
       // Generated parsers in diffr can exceed 64 MiB after JSON encoding.
@@ -126,6 +125,7 @@ export async function* structuralDiff(
         }
 
         started = true;
+        clearTimeout(startup);
       } else if (event.type === "complete") {
         completed = true;
 
@@ -151,7 +151,7 @@ export async function* structuralDiff(
     if (code !== 0 && !(code === 2 && (failed > 0 || aborted !== undefined)))
       throw exitError(code);
   } finally {
-    clearTimeout(idle);
+    clearTimeout(startup);
     lines.close();
 
     if (child.exitCode === null) child.kill();
