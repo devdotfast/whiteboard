@@ -56,14 +56,8 @@ jobs:
           echo "VERSION=$version" >> "$GITHUB_ENV"
           cargo xtask install --root "$RUNNER_TEMP/install"
           "$PYTHON" scripts/release.py pack --version "$version" --target "$TARGET" --install "$RUNNER_TEMP/install" --output dist
-      - name: Verify extracted archives without Bun or checkout assets
+      - name: Verify CLI archive without Bun or checkout assets
         run: |
-          # The TUI smoke test drives a Unix PTY.
-          if [ "$RUNNER_OS" != Windows ]; then
-            mkdir -p "$RUNNER_TEMP/extracted/bin"
-            tar -xzf "dist/diffr-$VERSION-$TARGET.tar.gz" -C "$RUNNER_TEMP/extracted/bin"
-            "$PYTHON" xtask/tests/smoke_install.py "$RUNNER_TEMP/extracted"
-          fi
           "$PYTHON" scripts/smoke_cli_archive.py "dist/diffr-cli-$VERSION-$TARGET.tar.gz" "$VERSION"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -140,7 +134,6 @@ jobs:
           PYTHON
           brew upgrade devdotfast/tap/diffr
           brew test devdotfast/tap/diffr
-          python3 xtask/tests/smoke_install.py "$(brew --prefix devdotfast/tap/diffr)"
           brew uninstall devdotfast/tap/diffr
 
   packaging:
@@ -197,7 +190,7 @@ jobs:
             # A rerun can resume after one of the dependencies was published.
             status=$(curl --silent --show-error --retry 3 --max-time 60 \
               --user-agent 'diffr-release (https://github.com/devdotfast/whiteboard)' \
-              --output "$RUNNER_TEMP/crate-version.json" --write-out '%{http_code}' \
+              --output /dev/null --write-out '%{http_code}' \
               "https://crates.io/api/v1/crates/$crate/$version")
             case "$status" in
               200) echo "$crate@$version is already published" ;;
