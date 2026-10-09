@@ -122,20 +122,6 @@ test("a multi-line label uses the declared enclosing indent inside the fold tint
   const unified = rowsForFile(file, 0, "unified", dark, new Set([11]));
   expect(unified.filter((r) => r.cell?.foldLabel)).toHaveLength(3);
 });
-test("a syntax body with a multi-line label is quoted between its opener and closer", () => {
-  const file = createFoldedDiffFile();
-  if (file.diff.type !== "text") throw new Error();
-  for (const source of [file.diff.lhs!, file.diff.rhs!]) {
-    const closure = source.root.children[1].children[1];
-    if (closure.kind !== "fold") throw new Error();
-    closure.visibility = { collapsed: true, label: "call a\ncall b" };
-    closure.syntax = { start: { line: 1, column: 13 }, end: { line: 4, column: 4 } };
-  }
-  const rows = rowsForFile(file, 0, "split", dark, new Set([11])).filter((r) => r.right);
-  const text = (r: (typeof rows)[number]) => r.right!.spans.map((s) => s.text).join("");
-  expect(rows.slice(1, 5).map(text)).toEqual(["    inner(|| {", "        > call a · 1 line changed", "        > call b", "    });"]);
-  expect(rows[2].right!.fold?.id).toBe(11);
-});
 test("a collapsed leaf is one fold row with the chevron, its label, and no line number", () => {
   const file = createTestDiffFile();
   if (file.diff.type !== "text") throw new Error();

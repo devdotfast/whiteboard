@@ -103,6 +103,15 @@ export function rowsForFile(
   // with a one-line label instead joins its opener, label and closing suffix on the opener's
   // line, so its closer is masked too.
   const bands = folds.map(side => collapsedFolds(side, collapsed));
+  // A syntax fold with a multi-line label shows it between its opener and closer lines.
+  const quoted = bands.map((sideBands) => {
+    const result = new Map<number, SyntaxFold>();
+    for (const fold of sideBands.values())
+      if (fold.syntax && fold.label.includes("\n") && fold.syntax.start.line < fold.startLine)
+        result.set(fold.syntax.start.line, fold as SyntaxFold);
+    return result;
+  });
+  const isQuoted = (region: Leaf | Fold): region is SyntaxFold => quoted[region.side].get((region as Fold).syntax?.start.line ?? -1) === region;
   const inline = bands.map((sideBands, side) => {
     const result = new Map<number, SyntaxFold>();
     for (const fold of sideBands.values()) {
@@ -150,9 +159,16 @@ export function rowsForFile(
       body: around.filter(fold => fold.syntax.start.line < line && line < fold.syntax.end.line).map(fold => fold.foldStateId) };
   };
   // The opener is the byte before a scope's syntax range and the closer the byte at its end.
+  // Quoted folds keep their brackets on the visible opener and closer.
+  const quotedEnds = quoted.map((side) => {
+    const lines = new Map<number, SyntaxFold[]>();
+    for (const fold of side.values())
+      for (const line of [fold.syntax.start.line, fold.syntax.end.line]) lines.set(line, [...(lines.get(line) ?? []), fold]);
+    return lines;
+  });
   const withBraces = (spans: RenderSpan[], side: Side, line: number) => {
     let result = spans;
-    for (const fold of scopes[side].get(line) ?? []) {
+    for (const fold of [...(scopes[side].get(line) ?? []), ...(quotedEnds[side].get(line) ?? [])]) {
       const { start, end } = fold.syntax, text = texts[side][line]!;
       if (start.line === line && start.column > 0) result = markBrace(result, byteColumn(text, start.column - 1), fold.foldStateId);
       if (end.line === line) result = markBrace(result, byteColumn(text, end.column), fold.foldStateId);
@@ -198,6 +214,8 @@ export function rowsForFile(
     if (line === null || leaf === null) return empty;
     let spans = withBraces(spansOf(side, line, leaf), side, line);
     let fold = headers[side].get(line);
+    const opens = quoted[side].get(line);
+    if (opens) fold = { id: opens.foldStateId, label: opens.label, collapsed: true, tint: collapsedTint(opens).tint };
     const folded = inline[side].get(line);
     if (folded) {
       const { start, end } = folded.syntax;
@@ -229,27 +247,28 @@ export function rowsForFile(
   // A collapsed region is one row: chevron and label, no line number, whether the region is a
   // fold or a leaf the context plugin cut out. It starts at its parent's indent; a multi-line
   // label (pseudocode) hangs under it at that indent, one row per line. A syntax body with a
-  // multi-line label is instead quoted between its opener and closer, at the body's indent.
+  // multi-line label is instead quoted between its opener and closer, at the body's indent beside
+  // the scope's rail.
   const band = (region: Leaf | Fold) => {
     const { tint, note } = collapsedTint(region);
     const multiline = region.label.includes("\n");
-    const quoted = "syntax" in region && region.syntax !== undefined && multiline;
     const body = texts[region.side][region.startLine]!;
-    const column = quoted ? byteColumn(body, body.length - body.trimStart().length) : region.parentColumn;
-    const lead = (text: string) => withGuides([{ text: " ".repeat(column) }, placeholder(text, tint)],
-      guides[region.side].get(region.startLine) ?? [], theme);
-    if (quoted) {
-      const [first, ...rest] = region.label.split("\n");
-      const header = { kind: "context" as const, sign: " ", band: tint, spans: lead(`> ${first}${note}`),
-        fold: { id: region.foldStateId, label: region.label, collapsed: true, tint }, ...scopeOf(region.side, region.startLine) };
-      return { header, labels: rest.map(text => ({ ...header, foldLabel: true, spans: lead(`> ${text}`), fold: undefined })) };
+    const enclosing = guides[region.side].get(region.startLine) ?? [];
+    const label = { kind: "context" as const, sign: " ", band: tint, foldLabel: true, labelOf: region.foldStateId,
+      ...scopeOf(region.side, region.startLine) };
+    if (isQuoted(region)) {
+      const opener = texts[region.side][region.syntax.start.line]!;
+      const rail = { column: byteColumn(opener, opener.length - opener.trimStart().length), id: region.foldStateId };
+      const lead = (text: string) => withGuides([{ text: " ".repeat(byteColumn(body, body.length - body.trimStart().length)) },
+        placeholder(text, tint)], [...enclosing, rail], theme);
+      const [header, ...labels] = region.label.split("\n").map((text, i) => ({ ...label, spans: lead(i ? text : `${text}${note}`) }));
+      return { header: header!, labels };
     }
+    const lead = (text: string) => withGuides([{ text: " ".repeat(region.parentColumn) }, placeholder(text, tint)], enclosing, theme);
     const header = { kind: "context" as const, sign: " ", band: tint,
       spans: lead(`⋯${multiline ? "" : " " + labelOf(region)}${note}`),
       fold: { id: region.foldStateId, label: region.label, collapsed: true, tint }, ...scopeOf(region.side, region.startLine) };
-    const labels = multiline
-      ? region.label.split("\n").map(text => ({ ...header, foldLabel: true, spans: lead(text), fold: undefined }))
-      : [];
+    const labels = multiline ? region.label.split("\n").map(text => ({ ...label, spans: lead(text) })) : [];
     return { header, labels };
   };
   const collapsedRow = (kind: string, leftRegion: Leaf | Fold | null, rightRegion: Leaf | Fold | null) => {
