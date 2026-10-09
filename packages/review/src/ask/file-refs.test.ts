@@ -22,6 +22,17 @@ it("reads a file and line from the ways agents write them", () => {
   expect(parseFileRef("esbuild.mts")).toEqual({ path: "esbuild.mts" });
 });
 
+it("reads a top-level file and line, which looks like a scheme", () => {
+  expect(parseFileRef("f.ts:7")).toEqual({ path: "f.ts", line: 7 });
+  expect(parseFileRef("f.ts:7:3")).toEqual({ path: "f.ts", line: 7 });
+  expect(parseFileRef("c:/x.ts")).toEqual({ path: "c:/x.ts" });
+  // Without a directory or an extension, a name is not a path.
+  expect(parseFileRef("README:3")).toBeUndefined();
+  expect(parseFileRef("https://x/y.ts:7")).toBeUndefined();
+  expect(parseFileRef("vscode-remote://ssh/x.ts:7")).toBeUndefined();
+  expect(parseFileRef("mailto:x")).toBeUndefined();
+});
+
 it("leaves code that is not a path alone", () => {
   const codes = [
     "pnpm build",
