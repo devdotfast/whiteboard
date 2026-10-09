@@ -28,7 +28,12 @@ export class NativeDiffScroll extends Disposable {
       () => {
         if (!this.enabled || this.syncing || !this.widget) return;
         this.syncing = true;
-        this.widget.setScrollTop(this.scroller.scrollTop);
+        const requested = this.scroller.scrollTop;
+        this.widget.setScrollTop(requested);
+        // Measuring an incoming file can move the viewport during setScrollTop.
+        const measured = this.widget.getScrollTop();
+
+        if (measured !== requested) this.scroller.scrollTop = measured;
         this.syncing = false;
       },
       { passive: true },
