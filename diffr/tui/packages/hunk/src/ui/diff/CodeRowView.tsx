@@ -8,7 +8,7 @@ import type {
   UnifiedLineCell,
 } from "./diffRowModel";
 import type { Geometry, MeasuredRow } from "../../diffr/geometry";
-import { foldBackground, type Palette } from "../../diffr/theme";
+import { foldBackground, type Palette } from "../../diffr/palette";
 import type { RowFold } from "../../diffr/regions";
 import { measureTextWidth } from "../lib/text";
 const colors = new Map<string, ReturnType<typeof parseColor>>();

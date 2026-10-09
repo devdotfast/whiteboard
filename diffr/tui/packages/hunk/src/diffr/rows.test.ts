@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { createTestDiffFile, fold, leaf, line, withIdenticalLines, root } from "./fixture";
 import type { Region, Span } from "./wire";
-import { captureColor, dark, light, lineSpans, rowsForFile } from "./rows";
+import { captureColor, lineSpans, rowsForFile } from "./rows";
+import { dark, light } from "./theme";
 import { pairedIds } from "./regions";
 import { measureRows, visibleRows } from "./geometry";
 import { copySelection } from "./selection";
