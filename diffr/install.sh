@@ -3,7 +3,8 @@
 #
 # Downloads the newest diffr release (or DIFFR_VERSION) for this machine,
 # checks it against the release's SHA256SUMS, puts diffr and diffr-tui in
-# DIFFR_INSTALL_DIR (default ~/.local/bin), then runs `diffr config init`.
+# DIFFR_INSTALL_DIR (default ~/.local/bin), then runs `diffr config init`
+# unless a diffr was there already, as when `diffr upgrade` runs this.
 set -eu
 
 REPO=devdotfast/whiteboard
@@ -64,6 +65,8 @@ expected=$(sed -n "s/^\([0-9a-f]\{64\}\)  $archive\$/\1/p" "$work/SHA256SUMS")
 dir=${DIFFR_INSTALL_DIR:-$HOME/.local/bin}
 mkdir -p "$work/extract" "$dir"
 tar -xzf "$work/$archive" -C "$work/extract" diffr diffr-tui
+first=1
+[ ! -e "$dir/diffr" ] || first=
 for binary in diffr diffr-tui; do
 	# Move into place, so a running diffr keeps its old file.
 	cp "$work/extract/$binary" "$dir/.$binary.new"
@@ -76,6 +79,8 @@ case ":$PATH:" in
 *":$dir:"*) ;;
 *) echo "Add $dir to your PATH to run diffr by name" ;;
 esac
+
+[ -n "$first" ] || exit 0
 
 # The script itself arrives on stdin, so the prompts read the terminal.
 if [ -t 1 ] && { : </dev/tty; } 2>/dev/null; then
