@@ -138,6 +138,10 @@ enum Command {
     // `--help`, not `-h`, adds the plugins guide.
     #[command(after_long_help = include_str!("../docs/plugin.md"))]
     Config(ConfigArgs),
+    /// Install the newest diffr over this one, and update its agent plugins
+    Upgrade,
+    /// Remove diffr, its agent plugins and its install record; keep the config
+    Uninstall,
     #[command(
         hide = true,
         display_name = env!("CARGO_BIN_NAME"),
@@ -213,6 +217,8 @@ pub(crate) fn run(runtime: &tokio::runtime::Runtime) -> Result<i32> {
     match &args.command {
         Some(Command::Pprint(args)) => return run_pprint(args),
         Some(Command::Config(config)) => return run_config(config),
+        Some(Command::Upgrade) => return crate::install::upgrade(),
+        Some(Command::Uninstall) => return crate::install::uninstall(),
         Some(Command::Debug(debug)) => {
             crate::run_debug(debug.mode(), &Config::default().compile()?);
             return Ok(0);

@@ -490,3 +490,114 @@ fn config_init_needs_a_terminal_without_json() {
         .code(2)
         .stderr(predicate::str::contains("config init --json"));
 }
+
+#[cfg(unix)]
+#[test]
+fn uninstall_removes_plugins_binaries_and_record_and_keeps_the_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let output = config_init(
+        dir.path(),
+        Some(r#"{"agents":["claude-code"],"summaries":"openai"}"#),
+        false,
+    );
+    assert!(output.status.success());
+    let bin = dir.path().join("installed");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::copy(assert_cmd::cargo_bin!("diffr"), bin.join("diffr")).unwrap();
+    std::fs::write(bin.join("diffr-tui"), "").unwrap();
+
+    let output = Command::new(bin.join("diffr"))
+        .env(
+            "PATH",
+            format!("{}:/usr/bin:/bin", dir.path().join("bin").display()),
+        )
+        .env("HOME", dir.path().join("home"))
+        .env("XDG_STATE_HOME", dir.path().join("state"))
+        .env("LOG", dir.path().join("log"))
+        .arg("uninstall")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let log = std::fs::read_to_string(dir.path().join("log")).unwrap();
+    assert!(log.contains("plugin uninstall diffr@devfast"), "{log}");
+    assert_eq!(std::fs::read_dir(&bin).unwrap().count(), 0);
+    assert!(!dir.path().join("state/diffr").exists());
+    assert!(dir.path().join("config/diffr/config.toml").exists());
+}
+
+/// Runs a copy of diffr from `at` under `dir`, with fake `claude` and `brew`
+/// that log their arguments.
+#[cfg(unix)]
+fn installed_at(dir: &std::path::Path, at: &str, args: &[&str]) -> (std::process::Output, String) {
+    use std::os::unix::fs::PermissionsExt;
+    let output = config_init(
+        dir,
+        Some(r#"{"agents":["claude-code"],"summaries":"off"}"#),
+        false,
+    );
+    assert!(output.status.success());
+    let brew = dir.join("bin/brew");
+    std::fs::write(&brew, "#!/bin/sh\necho \"brew $*\" >> \"$LOG\"\n").unwrap();
+    std::fs::set_permissions(&brew, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let bin = dir.join(at);
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::copy(assert_cmd::cargo_bin!("diffr"), bin.join("diffr")).unwrap();
+    let output = Command::new(bin.join("diffr"))
+        .env(
+            "PATH",
+            format!("{}:/usr/bin:/bin", dir.join("bin").display()),
+        )
+        .env("HOME", dir.join("home"))
+        .env("XDG_STATE_HOME", dir.join("state"))
+        .env("LOG", dir.join("log"))
+        .args(args)
+        .output()
+        .unwrap();
+    (output, std::fs::read_to_string(dir.join("log")).unwrap())
+}
+
+#[cfg(unix)]
+#[test]
+fn upgrade_uses_homebrew_for_a_homebrew_diffr_then_updates_plugins() {
+    let dir = tempfile::tempdir().unwrap();
+    let (output, log) = installed_at(dir.path(), "Cellar/diffr/0.1.17/bin", &["upgrade"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let brew = log.find("brew upgrade devdotfast/tap/diffr").expect(&log);
+    let plugin = log.find("plugin update diffr@devfast").expect(&log);
+    assert!(brew < plugin, "{log}");
+}
+
+#[cfg(unix)]
+#[test]
+fn upgrade_and_uninstall_leave_a_diffr_bundled_in_an_app_alone() {
+    for command in ["upgrade", "uninstall"] {
+        let dir = tempfile::tempdir().unwrap();
+        let (output, log) = installed_at(
+            dir.path(),
+            "node_modules/@dev.fast/diffr-darwin-arm64/bin",
+            &[command],
+        );
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("came with another app"),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            !log.contains("brew") && !log.contains("plugin uninstall"),
+            "{log}"
+        );
+        assert!(dir
+            .path()
+            .join("node_modules/@dev.fast/diffr-darwin-arm64/bin/diffr")
+            .exists());
+    }
+}
