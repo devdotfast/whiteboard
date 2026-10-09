@@ -92,7 +92,7 @@ export function planCell(
   const fold = value.fold;
   const washed = focus?.armed && value.body?.includes(focus.id);
   const changed = value.kind === "addition" || value.kind === "deletion";
-  const bg = selected ? theme.highlight
+  const bg = selected ? theme.selection
     : value.kind === "addition" ? (read ? theme.readAddition : theme.addition)
       : value.kind === "deletion" ? (read ? theme.readDeletion : theme.deletion)
         : washed ? theme.focusWash : theme.bg;

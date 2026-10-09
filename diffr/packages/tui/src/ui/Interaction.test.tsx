@@ -1,4 +1,4 @@
-import {expect, test} from "bun:test";
+import {expect, spyOn, test} from "bun:test";
 import {act} from "react";
 import {rgbToHex} from "@opentui/core";
 import {testRender} from "@opentui/react/test-utils";
@@ -205,5 +205,29 @@ test("a kitty-protocol terminal names the base key of a shifted symbol, but the 
     await send("\x1b[27u");
     await send("\x1b[112;9u");
     await t.waitFor(() => frame().includes("changed files"));
+  } finally { await act(async () => { t.renderer.destroy(); }); }
+});
+test("while lines are selected the status line is a bright bar naming them; its button copies them for an agent, Escape clears it", async () => {
+  const store = new DiffStore(), file = createTestDiffFile();
+  store.accept(startFor([file])); store.accept(file); store.accept({type:"complete", succeeded:1, failed:0});
+  const t = await testRender(<App store={store} themes={themes} onQuit={() => {}} />, {width:150, height:20});
+  const status = () => t.captureCharFrame().split("\n").at(-2) ?? "";
+  try {
+    await act(async () => { await t.renderOnce(); });
+    await t.waitForFrame((frame) => frame.includes('send("old")'));
+    expect(status()).not.toContain("Copy for agent");
+    await act(async () => { await t.mockMouse.drag(40, 3, 40, 6); });
+    await t.waitFor(() => status().includes("Copy for agent"));
+    expect(status()).toStartWith(" demo.ts:1-3 · 3 lines  Y Copy for agent  esc clear");
+    const y = t.captureCharFrame().split("\n").length - 2;
+    const clipboard = spyOn(t.renderer, "copyToClipboardOSC52").mockReturnValue(true);
+    await act(async () => { await t.mockMouse.click(status().indexOf("Copy for agent"), y); await t.renderOnce(); });
+    expect(clipboard).toHaveBeenCalledTimes(1);
+    expect(clipboard.mock.calls[0]![0]).toStartWith("demo.ts:1-3 in the git index (staged)\n```ts\nstart();");
+    clipboard.mockRestore();
+    await t.waitFor(() => status().trim().startsWith("Copied for agent · demo.ts:1-3"));
+    // A lone escape is only recognised once the parser's escape-sequence timeout passes.
+    await act(async () => { t.mockInput.pressKey("ESCAPE"); await new Promise((resolve) => setTimeout(resolve, 100)); });
+    await t.waitFor(() => !status().includes("Copy for agent"));
   } finally { await act(async () => { t.renderer.destroy(); }); }
 });

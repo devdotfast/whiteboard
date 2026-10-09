@@ -23,6 +23,8 @@ export interface Palette {
   fileHeaderDir: string;
   /** Sidebar highlight for the active file. */
   highlight: string;
+  /** Selected lines: blue, so a selection reads apart from additions and deletions. */
+  selection: string;
   addition: string;
   deletion: string;
   modification: string;
@@ -144,6 +146,7 @@ export function paletteFromHelix(theme: HelixTheme): Palette {
     fileHeader,
     fileHeaderDir: mix(fg, fileHeader, 0.3),
     highlight: selection,
+    selection: mix(bg, ansi["light-blue"], 0.35),
     addition: mix(bg, plus, 0.12),
     deletion: mix(bg, minus, 0.12),
     modification: mix(bg, delta, 0.12),

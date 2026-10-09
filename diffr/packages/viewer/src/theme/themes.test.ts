@@ -73,3 +73,11 @@ test("in every bundled theme a file header stands apart from code and folds, and
     expect(contrast(palette.fileHeaderDir, palette.fileHeader)).toBeGreaterThanOrEqual(2.5);
   }
 });
+test("in every bundled theme selected lines read blue, unlike any change tint", () => {
+  const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  for (const name of Object.keys(bundledThemes)) {
+    const palette = loadBundledTheme(name);
+    const [r, g, b] = rgb(palette.selection);
+    expect(b - Math.max(r, g)).toBeGreaterThanOrEqual(0x10);
+  }
+});
