@@ -1,6 +1,6 @@
 /** Paint measured Hunk-style code cells; source identity and viewport geometry stay outside React. */
 import { memo } from "react";
-import { StyledText, parseColor, type MouseEvent } from "@opentui/core";
+import { StyledText, TextAttributes, parseColor, type MouseEvent } from "@opentui/core";
 import type { RenderSpan, SplitLineCell, UnifiedLineCell } from "@diffr/viewer/document/rows";
 import type { Geometry, MeasuredRow } from "@diffr/viewer/viewport/geometry";
 import { planCell, targetAt, type Lit, type PaintRun, type ScopeFocus } from "@diffr/viewer/viewport/cell";
@@ -14,8 +14,10 @@ function color(value: string) {
   }
   return c;
 }
-export const styled = (runs: PaintRun[], attributes?: number) =>
-  new StyledText(runs.map((run) => ({ __isChunk: true as const, text: run.text, fg: color(run.fg), bg: color(run.bg), attributes })));
+/** A run may ask for bold, as the picker's matched letters do; `attributes` applies to the rest. */
+export const styled = (runs: (PaintRun & { bold?: boolean })[], attributes?: number) =>
+  new StyledText(runs.map((run) => ({ __isChunk: true as const, text: run.text, fg: color(run.fg), bg: color(run.bg),
+    attributes: run.bold ? TextAttributes.BOLD : attributes })));
 export const CodeRowView = memo(function CodeRowView({
   measured,
   visualLine,
