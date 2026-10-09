@@ -3,13 +3,13 @@
 //! the questions with `--json` and sends the answers back as JSON.
 use crate::config::{self, Config};
 use crate::git::Result;
-use serde::{Deserialize, Serialize};
+use crate::install::{Agent, Record};
+use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::{
     fs,
     io::{self, IsTerminal, Read, Write},
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
+    path::Path,
 };
 
 // TODO(sid): how the person sets the summaries key without the agent.
@@ -20,103 +20,6 @@ const SUMMARIZE_SCHEMA: &str =
     "/properties/plugins/properties/shape/properties/bundled/properties/summarize/properties";
 const SUMMARIZE: &str = "plugins.shape.bundled.summarize";
 const OFF: &str = "off";
-
-/// Where the plugin comes from, for Claude Code.
-const MARKETPLACE: &str = "devfast";
-const MARKETPLACE_SOURCE: &str = "devdotfast/whiteboard";
-const PLUGIN: &str = "diffr@devfast";
-
-#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-enum Agent {
-    ClaudeCode,
-}
-
-impl Agent {
-    const ALL: [Agent; 1] = [Agent::ClaudeCode];
-
-    fn id(self) -> &'static str {
-        match self {
-            Agent::ClaudeCode => "claude-code",
-        }
-    }
-
-    fn title(self) -> &'static str {
-        match self {
-            Agent::ClaudeCode => "Claude Code",
-        }
-    }
-
-    fn detected(self) -> Result<bool> {
-        let home = home()?;
-        Ok(match self {
-            Agent::ClaudeCode => home.join(".claude").is_dir(),
-        })
-    }
-
-    fn install(self) -> Result<()> {
-        match self {
-            Agent::ClaudeCode => {
-                let list = claude(&["plugin", "marketplace", "list", "--json"])?;
-                let marketplaces: Vec<Value> = serde_json::from_slice(&list)?;
-                if marketplaces
-                    .iter()
-                    .any(|marketplace| marketplace["name"] == MARKETPLACE)
-                {
-                    claude(&["plugin", "marketplace", "update", MARKETPLACE])?;
-                } else {
-                    claude(&["plugin", "marketplace", "add", MARKETPLACE_SOURCE])?;
-                }
-                claude(&["plugin", "install", PLUGIN, "--scope", "user"])?;
-                Ok(())
-            }
-        }
-    }
-
-    fn remove(self) -> Result<()> {
-        match self {
-            Agent::ClaudeCode => {
-                claude(&["plugin", "uninstall", PLUGIN])?;
-                Ok(())
-            }
-        }
-    }
-}
-
-/// The agents `config init` installed the plugin for, kept outside the
-/// config directory so it is never synced to another machine.
-#[derive(Default, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Record {
-    agents: Vec<Agent>,
-}
-
-impl Record {
-    fn path() -> Result<PathBuf> {
-        let dir = match std::env::var_os("XDG_STATE_HOME") {
-            Some(dir) if !dir.is_empty() => PathBuf::from(dir),
-            _ => home()?.join(".local").join("state"),
-        };
-        Ok(dir.join("diffr").join("install.json"))
-    }
-
-    fn load() -> Result<Self> {
-        let path = Self::path()?;
-        match fs::read(&path) {
-            Ok(bytes) => Ok(serde_json::from_slice(&bytes)
-                .map_err(|error| format!("{}: {error}", path.display()))?),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Self::default()),
-            Err(error) => Err(format!("{}: {error}", path.display()).into()),
-        }
-    }
-
-    fn save(&self) -> Result<()> {
-        let path = Self::path()?;
-        fs::create_dir_all(path.parent().expect("the record is in a directory"))?;
-        fs::write(&path, serde_json::to_vec_pretty(self)?)?;
-        Ok(())
-    }
-}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -436,40 +339,4 @@ fn prompt(state: &State) -> Result<()> {
     }
     cliclack::outro("diffr is ready")?;
     Ok(())
-}
-
-fn home() -> Result<PathBuf> {
-    Ok(dirs::home_dir().ok_or("no home directory for this user")?)
-}
-
-fn claude(args: &[&str]) -> Result<Vec<u8>> {
-    host(Command::new("claude").args(args))
-}
-
-/// Run a host command. Its output is kept, so prompts and `--json` stay
-/// clean, and shown only when it fails.
-fn host(command: &mut Command) -> Result<Vec<u8>> {
-    let output = command
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|error| format!("could not run {}: {error}", describe(command)))?;
-    if !output.status.success() {
-        return Err(format!(
-            "{} failed ({}):\n{}{}",
-            describe(command),
-            output.status,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
-    Ok(output.stdout)
-}
-
-fn describe(command: &Command) -> String {
-    std::iter::once(command.get_program())
-        .chain(command.get_args())
-        .map(|part| part.to_string_lossy())
-        .collect::<Vec<_>>()
-        .join(" ")
 }
