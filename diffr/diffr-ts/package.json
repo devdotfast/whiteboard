@@ -36,11 +36,11 @@
     "zod": "^4.0.0"
   },
   "optionalDependencies": {
-    "@dev.fast/diffr-darwin-arm64": "0.1.16",
-    "@dev.fast/diffr-darwin-x64": "0.1.16",
-    "@dev.fast/diffr-linux-arm64": "0.1.16",
-    "@dev.fast/diffr-linux-x64": "0.1.16",
-    "@dev.fast/diffr-win32-x64": "0.1.16"
+    "@dev.fast/diffr-darwin-arm64": "0.1.17",
+    "@dev.fast/diffr-darwin-x64": "0.1.17",
+    "@dev.fast/diffr-linux-arm64": "0.1.17",
+    "@dev.fast/diffr-linux-x64": "0.1.17",
+    "@dev.fast/diffr-win32-x64": "0.1.17"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
