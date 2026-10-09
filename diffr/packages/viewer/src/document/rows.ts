@@ -3,7 +3,7 @@ import type { DiffFile, Span, SyntaxSpan } from "../protocol/wire";
 import { filePath } from "../protocol/wire";
 import { sliceSpansWindow } from "../terminal/spans";
 import { measureTextWidth } from "../terminal/text";
-import { byteColumn, collapsedFolds, flatten, foldHeaders, foldTint, hiddenLines, pairedIds, sourceLines, type Fold, type FoldTint, type Leaf, type RowFold, type Side } from "./regions";
+import { byteColumn, changedLine, collapsedFolds, flatten, foldHeaders, foldTint, hiddenLines, pairedIds, sourceLines, zipLeaves, type Fold, type FoldTint, type Leaf, type RowFold, type Side } from "./regions";
 import type { Palette } from "../theme/palette";
 export type Layout = "split" | "unified";
 export interface RenderSpan {
@@ -225,9 +225,7 @@ export function rowsForFile(
   // fold no plugin labelled still reads `{ ⋯ 3 lines }` rather than a bare `{ ⋯ }`.
   const labelOf = (region: Leaf | Fold) => region.label
     || lineCount("lastHidden" in region ? region.lastHidden - region.startLine + 1 : region.endLine - region.startLine);
-  const alignments = leaves.map(side => new Set(side.map(leaf => leaf.alignmentId)));
-  const isChanged = (leaf: Leaf, line: number) =>
-    leaf.changed.has(line) || !alignments[leaf.side ? 0 : 1].has(leaf.alignmentId);
+  const isChanged = changedLine(leaves);
   // A paired leaf is changed when its counterpart has change spans.
   const spanned = new Set(leaves.flat().filter(leaf => leaf.changed.size).map(leaf => leaf.alignmentId));
   // A collapsed paired region that hides a change is modified, and counts its side's changed lines.
@@ -382,24 +380,7 @@ export function rowsForFile(
     for (let i = 0; i < Math.max(leftLines, rightLines); i++)
       emit(i < leftLines ? left!.startLine + i : null, i < rightLines ? right!.startLine + i : null, left, right);
   };
-  // Zip: walk the left leaves; a partner ahead on the right flushes what precedes it as right-only.
-  // diffr sends paired leaves in the same order on both sides.
-  const rightIndex = new Map(leaves[1].map((leaf, index) => [leaf.alignmentId, index]));
-  let cursor = 0;
-  const flushRight = (until: number) => {
-    for (; cursor < until; cursor++) leafRows(null, leaves[1][cursor]);
-  };
-  for (const left of leaves[0]) {
-    const partner = rightIndex.get(left.alignmentId);
-    if (partner === undefined) {
-      leafRows(left, null);
-      continue;
-    }
-    flushRight(partner);
-    leafRows(left, leaves[1][partner]);
-    cursor = partner + 1;
-  }
-  flushRight(leaves[1].length);
+  zipLeaves(leaves, leafRows);
   flush();
   return markHunks(rows);
 }

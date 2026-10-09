@@ -122,6 +122,77 @@ export function flatten(diff: TextDiff) {
   const rhs = diff.rhs ? flattenSide(diff.rhs, 1) : { leaves: [], folds: [] };
   return { leaves: [lhs.leaves, rhs.leaves] as const, folds: [lhs.folds, rhs.folds] as const };
 }
+/** diffr sends paired leaves in the same order on both sides. */
+export function zipLeaves(leaves: readonly [Leaf[], Leaf[]], visit: (left: Leaf | null, right: Leaf | null) => void) {
+  const rightIndex = new Map(leaves[1].map((leaf, index) => [leaf.alignmentId, index]));
+  let cursor = 0;
+  const flushRight = (until: number) => {
+    for (; cursor < until; cursor++) visit(null, leaves[1][cursor]!);
+  };
+  for (const left of leaves[0]) {
+    const partner = rightIndex.get(left.alignmentId);
+    if (partner === undefined) {
+      visit(left, null);
+      continue;
+    }
+    flushRight(partner);
+    visit(left, leaves[1][partner]!);
+    cursor = partner + 1;
+  }
+  flushRight(leaves[1].length);
+}
+export function changedLine(leaves: readonly [Leaf[], Leaf[]]): (leaf: Leaf, line: number) => boolean {
+  const alignments = leaves.map(side => new Set(side.map(leaf => leaf.alignmentId)));
+  return (leaf, line) => leaf.changed.has(line) || !alignments[leaf.side ? 0 : 1]!.has(leaf.alignmentId);
+}
+export interface DiffLine {
+  old?: number;
+  new?: number;
+}
+export interface DiffOrder {
+  lines: DiffLine[];
+  oldAt: Map<number, number>;
+  newAt: Map<number, number>;
+  oldBefore: number[];
+  newBefore: number[];
+}
+/** Independent of folds, so a patch numbered from it is exact whatever is folded. */
+export function diffOrder(diff: TextDiff): DiffOrder {
+  const { leaves } = flatten(diff);
+  const isChanged = changedLine(leaves);
+  const order: DiffOrder = { lines: [], oldAt: new Map(), newAt: new Map(), oldBefore: [], newBefore: [] };
+  let pendingOld: DiffLine[] = [], pendingNew: DiffLine[] = [];
+  let olds = 0, news = 0;
+  const push = (line: DiffLine) => {
+    const index = order.lines.length;
+    order.lines.push(line);
+    order.oldBefore.push(olds);
+    order.newBefore.push(news);
+    if (line.old !== undefined) { order.oldAt.set(line.old, index); olds++; }
+    if (line.new !== undefined) { order.newAt.set(line.new, index); news++; }
+  };
+  const flush = () => {
+    for (const line of pendingOld) push(line);
+    for (const line of pendingNew) push(line);
+    pendingOld = [];
+    pendingNew = [];
+  };
+  zipLeaves(leaves, (left, right) => {
+    const leftLines = left ? left.endLine - left.startLine : 0, rightLines = right ? right.endLine - right.startLine : 0;
+    for (let i = 0; i < Math.max(leftLines, rightLines); i++) {
+      const l = i < leftLines ? left!.startLine + i : null, r = i < rightLines ? right!.startLine + i : null;
+      if (l !== null && r !== null && !isChanged(left!, l) && !isChanged(right!, r)) {
+        flush();
+        push({ old: l + 1, new: r + 1 });
+        continue;
+      }
+      if (l !== null) pendingOld.push({ old: l + 1 });
+      if (r !== null) pendingNew.push({ new: r + 1 });
+    }
+  });
+  flush();
+  return order;
+}
 /** Fold-state ids diffr asks to start collapsed: context gaps and folded bodies, on either side. */
 export function defaultCollapsed(diff: TextDiff): Set<number> {
   const ids = new Set<number>();

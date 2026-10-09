@@ -22,7 +22,7 @@ import {
   copySelection,
   selectedRanges,
   selectionLead,
-  selectionBounds,
+  selectionCover,
   type SourceSelection,
 } from "@diffr/viewer/document/selection";
 import { filePath } from "@diffr/viewer/protocol/wire";
@@ -134,10 +134,7 @@ export function App({
     else if (key.name === "i") setShowBreakdown((v) => !v);
     else if (press.key === "?") setMenu((m) => (m === "Help" ? null : "Help"));
   });
-  const [selectionStart, selectionEnd] = useMemo(
-    () => selectionBounds(rows, selection),
-    [rows, selection],
-  );
+  const cover = useMemo(() => selectionCover(rows, selection), [rows, selection]);
   const indices = useMemo(
     () => new Map(rows.map((row, i) => [row.key, i])),
     [rows],
@@ -251,18 +248,15 @@ export function App({
             visualLine={line}
             geometry={geometry}
             theme={theme}
-            selectedSide={
-              selection && index >= selectionStart && index <= selectionEnd
-                ? selection.side
-                : undefined
-            }
+            selectedLeft={cover(index)?.left === true}
+            selectedRight={cover(index)?.right === true}
             onSelect={(side) => {
               dragging.current = true;
-              setSelection({ anchor: row.key, end: row.key, side });
+              setSelection({ anchor: row.key, anchorSide: side, end: row.key, endSide: side });
             }}
-            onExtend={() => {
+            onExtend={(side) => {
               if (dragging.current)
-                setSelection((s) => (s ? { ...s, end: row.key } : s));
+                setSelection((s) => (s ? { ...s, end: row.key, endSide: side } : s));
             }}
             focus={hovered?.file === row.fileIndex && "id" in hovered ? hovered : undefined}
             onHover={focus => viewer.setHover(focus ? { file: row.fileIndex, ...focus } : null)}
