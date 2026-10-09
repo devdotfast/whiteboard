@@ -35,7 +35,13 @@ export interface CellOptions {
   visualLine: number;
   focus?: ScopeFocus;
   selected?: boolean;
+  read?: boolean;
 }
+
+/** A file header's viewed box, one cell wide in every terminal. */
+export const viewedBox = (viewed: boolean) => (viewed ? "[✓]" : "[ ]");
+
+export const viewedHint = (viewed: boolean) => ` ${viewed ? "Unmark viewed" : "Mark as viewed"} · V `;
 
 function chevron(fold: RowFold | undefined) {
   if (!fold) return " ";
@@ -47,14 +53,17 @@ export function planCell(
   spans: RenderSpan[],
   width: number,
   unified: boolean,
-  { theme, geometry, visualLine, focus, selected = false }: CellOptions,
+  { theme, geometry, visualLine, focus, selected = false, read = false }: CellOptions,
 ): CellPlan {
   const fold = value.fold;
   const washed = focus?.armed && value.body?.includes(focus.id);
+  const changed = value.kind === "addition" || value.kind === "deletion";
   const bg = selected ? theme.highlight
-    : value.kind === "addition" ? theme.addition
-      : value.kind === "deletion" ? theme.deletion
+    : value.kind === "addition" ? (read ? theme.readAddition : theme.addition)
+      : value.kind === "deletion" ? (read ? theme.readDeletion : theme.deletion)
         : washed ? theme.focusWash : theme.bg;
+  // A viewed line keeps its shape but drops its colours: muted ink, no word emphasis.
+  if (read && changed) spans = spans.map((span) => ({ ...span, fg: theme.muted, bg: undefined }));
   // Row colours carry addition and deletion, so the gutter holds numbers and the chevron only.
   const digits = geometry.gutter - 4;
   const number = (n: number | undefined) => `${visualLine ? "" : (n ?? "")}`.padStart(digits);

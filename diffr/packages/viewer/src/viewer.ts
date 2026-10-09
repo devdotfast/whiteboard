@@ -13,14 +13,20 @@ export interface Size {
   rows: number;
 }
 
-/** `armed`: a click would fold or open the scope. */
-export interface Hover {
+interface ScopeHover {
   file: number;
   id: number;
   armed: boolean;
 }
 
-/** A key as frontends report it; a shifted letter arrives as its capital. */
+interface HeaderHover {
+  file: number;
+  header: true;
+}
+
+export type Hover = ScopeHover | HeaderHover;
+
+/** A shifted letter arrives as its capital. */
 export interface KeyPress {
   key: string;
   ctrl?: boolean;
@@ -56,6 +62,8 @@ export class Viewer {
   private readonly closed = new Map<number, boolean>();
   private readonly collapsed = new Map<number, ReadonlySet<number>>();
   private pendingZ = false;
+  /** Files marked viewed, for the viewer's lifetime only. */
+  private readonly viewed = new Set<number>();
   private readonly rowCache = new WeakMap<DiffFile, { key: string; rows: ViewerRow[] }>();
   /** Bumped when rows change; keys the geometry cache. */
   private revision = 0;
@@ -204,11 +212,42 @@ export class Viewer {
   toggleFile(index: number) {
     const file = this.snapshot.files[index];
     if (!file) return;
+    this.setClosed(index, !this.isClosed(index, file));
+    this.reshape();
+  }
+
+  private setClosed(index: number, closed: boolean) {
     const at = this.current();
     // Toggling the file being read moves to its header; the rows above it stay put.
     const header = at.geometry.rows.find((r) => r.row.key === `${index}:header`)!;
     if (header.top < at.top) this.position = { key: header.row.key, fileIndex: index, offset: 0, side: "right" };
-    this.closed.set(index, !this.isClosed(index, file));
+    this.closed.set(index, closed);
+  }
+
+  /** Undefined when the file shows no changed lines. */
+  isViewed(index: number): boolean | undefined {
+    const diff = this.snapshot.files[index]?.diff;
+    const markable = diff?.type === "text" && diff.stats.visible.added + diff.stats.visible.removed > 0;
+    return markable ? this.viewed.has(index) : undefined;
+  }
+
+  viewedFiles(): { viewed: number; total: number } {
+    let viewed = 0, total = 0;
+    this.snapshot.files.forEach((_, index) => {
+      const state = this.isViewed(index);
+      if (state === undefined) return;
+      total++;
+      if (state) viewed++;
+    });
+    return { viewed, total };
+  }
+
+  toggleViewedFile(index: number) {
+    const state = this.isViewed(index);
+    if (state === undefined) return;
+    if (state) this.viewed.delete(index);
+    else this.viewed.add(index);
+    this.setClosed(index, !state);
     this.reshape();
   }
 
@@ -301,7 +340,7 @@ export class Viewer {
   }
 
   setHover(hover: Hover | null) {
-    if (hover?.file === this.hover?.file && hover?.id === this.hover?.id && hover?.armed === this.hover?.armed) return;
+    if (JSON.stringify(hover) === JSON.stringify(this.hover)) return;
     this.hover = hover;
     this.emit();
   }
@@ -353,6 +392,7 @@ export class Viewer {
       case "t": this.toggleTheme(); break;
       case "z": this.pendingZ = true; break;
       case "return": case "enter": this.toggleTopFile(); break;
+      case "V": if (at.currentFile >= 0) this.toggleViewedFile(at.currentFile); break;
       default: return false;
     }
     return true;
