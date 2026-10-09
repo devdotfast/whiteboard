@@ -16,7 +16,7 @@ import { createReviewApi } from "./http";
 import { openLocalReviewStore } from "./local-data";
 
 it.each([false, true])(
-  "preserves Git coverage when structural diff cannot handle files, with text changes=%s",
+  "omits unsupported files from progress, with text changes=%s",
   async (textChanged) => {
     const root = mkdtempSync(path.join(tmpdir(), "unsupported-files-"));
 
@@ -76,11 +76,11 @@ it.each([false, true])(
       expect(response.status).toBe(200);
       const progress = await response.json();
       expect(progress.files.map((file: { path: string }) => file.path)).toEqual(
-        textChanged ? ["link", "module", "value.ts"] : ["link", "module"],
+        textChanged ? ["value.ts"] : [],
       );
       expect(coverageProgress(progress.files).total).toEqual({
-        additions: textChanged ? 3 : 2,
-        deletions: textChanged ? 3 : 2,
+        additions: textChanged ? 1 : 0,
+        deletions: textChanged ? 1 : 0,
       });
     } finally {
       await local.data.close();
