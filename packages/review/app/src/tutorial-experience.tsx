@@ -14,12 +14,14 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { useReviewDebugSettings } from "./debug-settings";
 import { TutorialIcon } from "./icons";
 import {
   REVIEW_INTERACTION_EVENT,
   reviewInteractionDetail,
 } from "./review-interaction-event";
 import { useOptionalReviewPanel } from "./review-panel";
+import { useReviewContainer } from "./review-root-context";
 import {
   elevation,
   fontSize,
@@ -28,6 +30,8 @@ import {
   radius,
   tracking,
 } from "./scale.stylex";
+import { withClass } from "./stylex-props";
+import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { useTutorial } from "./tutorial-context";
 import {
@@ -48,6 +52,7 @@ interface TutorialExperienceState {
   steps: readonly TutorialStepDefinition[];
   totalSteps: number;
   hidden: boolean;
+  aboveTour: boolean;
   onBack(): void;
   onNext(): void;
   onDismiss(): void;
@@ -57,9 +62,9 @@ interface TutorialExperienceState {
 
 /**
  * Drives the tutorial for the document shell it wraps. The guide card sits in
- * the bottom right corner of the shell in every view; hidden, it shrinks to a
- * small floating button there. The step's target carries
- * `data-tutorial-target` for its highlight.
+ * the bottom right corner of the shell in every view, bottom left over a
+ * fullscreen diagram tour; hidden, it shrinks to a small floating button. The
+ * step's target carries `data-tutorial-target` for its highlight.
  */
 export function TutorialExperienceProvider({
   shellRef,
@@ -73,6 +78,8 @@ export function TutorialExperienceProvider({
   children: ReactNode;
 }): ReactElement {
   const tutorial = useTutorial();
+  const container = useReviewContainer();
+  const { theme } = useReviewDebugSettings();
   const revealedChapterRef = useRef<TutorialChapterId | null>(null);
   // The shell ref belongs to an ancestor, so it attaches after this
   // provider's layout effects. Read it once mounted and key effects on it.
@@ -88,7 +95,8 @@ export function TutorialExperienceProvider({
   const overlayTour = useOptionalReviewPanel((state) => state.overlayTour);
   const tourKind = overlayTour?.kind ?? null;
   const tourAnchor = overlayTour?.anchor ?? null;
-  const root = shell;
+  // Fullscreen tours portal outside the shell.
+  const root = container ?? shell;
 
   const checkedKey = tutorial?.content.progress.checked.join("\u0000") ?? "";
 
@@ -106,7 +114,8 @@ export function TutorialExperienceProvider({
     ? steps.findIndex((step) => step.id === activeStep.id)
     : steps.length;
 
-  const hidden = !tutorial || dismissed || tourKind !== null;
+  const hidden = !tutorial || dismissed;
+  const aboveTour = tourKind !== null;
 
   const completeStep = useCallback(
     (step: TutorialStepDefinition) => {
@@ -218,8 +227,11 @@ export function TutorialExperienceProvider({
       for (const target of next) target.dataset.tutorialTarget = activeStep.id;
       targets = next;
 
+      // Over a fullscreen tour, only its own targets show.
       const visible = targets.filter(
-        (target) => target.closest("[hidden]") === null,
+        (target) =>
+          target.closest("[hidden]") === null &&
+          (!aboveTour || target.closest(".diagram-tour-overlay") !== null),
       );
 
       setTargets((current) =>
@@ -273,7 +285,7 @@ export function TutorialExperienceProvider({
 
       for (const target of targets) delete target.dataset.tutorialTarget;
     };
-  }, [activeStep, hidden, root]);
+  }, [aboveTour, activeStep, hidden, root]);
 
   const rings = useTargetRings(targets, layer, region);
 
@@ -302,6 +314,7 @@ export function TutorialExperienceProvider({
         steps,
         totalSteps: steps.length,
         hidden,
+        aboveTour,
         onBack: goBack,
         onNext: goNext,
         onDismiss: tutorial.dismiss,
@@ -336,8 +349,18 @@ export function TutorialExperienceProvider({
     return { chapterStates };
   }, [activeChapterId, checked, completed, dismissed, tutorial]);
 
+  // Over a fullscreen tour the layer portals beside it, so it carries the theme.
   const guideLayer = tutorial ? (
-    <div ref={setLayer} {...stylex.props(styles.overlay)}>
+    <div
+      ref={setLayer}
+      {...withClass(
+        aboveTour ? `review-app--theme-${theme}` : undefined,
+        aboveTour && themeStyles.vars,
+        aboveTour && theme === "light" && themeStyles.light,
+        styles.overlay,
+        aboveTour && styles.overlayAboveTour,
+      )}
+    >
       {rings
         .filter((ring) => ring.host === "layer")
         .map((ring) => (
@@ -346,7 +369,7 @@ export function TutorialExperienceProvider({
       {dismissed ? (
         <button
           type="button"
-          {...stylex.props(styles.pill)}
+          {...stylex.props(styles.pill, aboveTour && styles.pillAboveTour)}
           aria-label="Show tutorial"
           title="Show tutorial"
           onClick={tutorial.reopen}
@@ -374,7 +397,9 @@ export function TutorialExperienceProvider({
             region,
           )
         : null}
-      {tourKind === null ? guideLayer : null}
+      {guideLayer && aboveTour && container
+        ? createPortal(guideLayer, container)
+        : guideLayer}
     </TutorialSectionProvider>
   );
 }
@@ -406,7 +431,10 @@ function TutorialGuide({
 
   return (
     <aside
-      {...stylex.props(styles.guide)}
+      {...stylex.props(
+        styles.guide,
+        experience.aboveTour && styles.guideAboveTour,
+      )}
       aria-label="Tutorial guide"
       data-tutorial-step={activeStep?.id ?? "complete"}
     >
@@ -692,6 +720,11 @@ const styles = stylex.create({
     inset: 0,
     pointerEvents: "none",
   },
+  // One layer above the tour overlay, which uses the same fallback.
+  overlayAboveTour: {
+    position: "fixed",
+    zIndex: "calc(var(--review-debug-layer, 2147483000) + 1)",
+  },
   // The workbench keeps a 10px strip under the canvas, so 8px here reads as
   // the same 18px gap from the window edge as the right side.
   guide: {
@@ -711,6 +744,12 @@ const styles = stylex.create({
     boxShadow: elevation.popover,
     pointerEvents: "auto",
     backdropFilter: "blur(16px)",
+  },
+  // Clear of the tour pane on the right.
+  guideAboveTour: {
+    right: "auto",
+    left: "18px",
+    bottom: "18px",
   },
   guideHeader: {
     display: "flex",
@@ -846,6 +885,10 @@ const styles = stylex.create({
     backgroundColor: tokens.tutorialRingGlow,
     boxShadow: "none",
     animationName: { default: linkPulse, [reducedMotion]: "none" },
+  },
+  pillAboveTour: {
+    right: "auto",
+    left: "28px",
   },
   pillIcon: {
     width: "22px",

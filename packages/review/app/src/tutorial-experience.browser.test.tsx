@@ -7,6 +7,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { controlStyles } from "./controls-styles";
+import { ReviewDebugSettingsProvider } from "./debug-settings";
 import {
   type ReviewSession,
   ReviewSessionProvider,
@@ -15,6 +16,7 @@ import { ReviewSection } from "./review-components";
 import { ReviewProvider } from "./review-context";
 import { ReviewPanelProvider, useReviewPanelStore } from "./review-panel";
 import type { ReviewPanelStore } from "./review-panel-store";
+import { ReviewContainerProvider } from "./review-root-context";
 import { testReviewSession } from "./review-session-test-utils";
 import { shellStyles } from "./shell-styles";
 import { withClass } from "./stylex-props";
@@ -122,14 +124,18 @@ function render(tutorial: ReviewCanvasTutorialBridge) {
   act(() => {
     root?.render(
       <ReviewSessionProvider session={session}>
-        <ReviewProvider>
-          <ReviewPanelProvider>
-            <PanelStoreProbe />
-            <TutorialProvider tutorial={tutorial}>
-              <Shell />
-            </TutorialProvider>
-          </ReviewPanelProvider>
-        </ReviewProvider>
+        <ReviewDebugSettingsProvider>
+          <ReviewContainerProvider container={canvasRoot}>
+            <ReviewProvider>
+              <ReviewPanelProvider>
+                <PanelStoreProbe />
+                <TutorialProvider tutorial={tutorial}>
+                  <Shell />
+                </TutorialProvider>
+              </ReviewPanelProvider>
+            </ReviewProvider>
+          </ReviewContainerProvider>
+        </ReviewDebugSettingsProvider>
       </ReviewSessionProvider>,
     );
   });
@@ -246,11 +252,15 @@ describe("TutorialExperience", () => {
     act(() => {
       root?.render(
         <ReviewSessionProvider session={session}>
-          <ReviewProvider>
-            <TutorialProvider tutorial={tutorialBridge([...THROUGH_FOLD])}>
-              <Shell />
-            </TutorialProvider>
-          </ReviewProvider>
+          <ReviewDebugSettingsProvider>
+            <ReviewContainerProvider container={canvasRoot}>
+              <ReviewProvider>
+                <TutorialProvider tutorial={tutorialBridge([...THROUGH_FOLD])}>
+                  <Shell />
+                </TutorialProvider>
+              </ReviewProvider>
+            </ReviewContainerProvider>
+          </ReviewDebugSettingsProvider>
         </ReviewSessionProvider>,
       );
     });
@@ -282,7 +292,7 @@ describe("TutorialExperience", () => {
     expect(tutorial.setStep).toHaveBeenCalledWith("openDiff", true);
   });
 
-  it("completes the sequence step once its real tour moves", async () => {
+  it("stays above the sequence tour and completes once the tour moves", async () => {
     const tutorial = tutorialBridge([...THROUGH_FOLD]);
 
     render(tutorial);
@@ -295,7 +305,9 @@ describe("TutorialExperience", () => {
       await Promise.resolve();
     });
 
-    expect(card()).toBeNull();
+    expect(card()?.textContent).toContain("Walk the sequence");
+    expect(card()?.closest(".review-document-shell")).toBeNull();
+    expect(card()?.parentElement?.parentElement).toBe(canvasRoot);
     expect(tutorial.setStep).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -319,7 +331,7 @@ describe("TutorialExperience", () => {
       await Promise.resolve();
     });
 
-    expect(card()).toBeNull();
+    expect(card()).not.toBeNull();
     expect(tutorial.setStep).toHaveBeenCalledWith("openDatabase", true);
   });
 
