@@ -27,6 +27,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { CopyDiagramButton } from "./copy-diagram-button";
 import { useReviewDebugSettings } from "./debug-settings";
 import { DiagramHeader } from "./diagram-header";
 import { diagramStyles } from "./diagram-styles";
@@ -575,20 +576,23 @@ function SequenceDiagramFigure({
           meta={`${stopCount} ${stopCount === 1 ? "stop" : "stops"}`}
           xstyle={styles.header}
           action={
-            // The tour panel's header owns the close control fullscreen.
-            onCloseTour ? null : (
-              <button
-                type="button"
-                {...withClass("diagram-tour-button", diagramStyles.control)}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  openTour();
-                }}
-              >
-                Tour
-              </button>
-            )
+            <>
+              <CopyDiagramButton />
+              {/* The tour panel's header owns the close control fullscreen. */}
+              {!onCloseTour && (
+                <button
+                  type="button"
+                  {...withClass("diagram-tour-button", diagramStyles.control)}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openTour();
+                  }}
+                >
+                  Tour
+                </button>
+              )}
+            </>
           }
         />
         <div

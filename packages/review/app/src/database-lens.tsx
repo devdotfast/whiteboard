@@ -20,6 +20,7 @@ import {
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 
+import { CopyDiagramButton } from "./copy-diagram-button";
 import { createDatabaseLensStore } from "./database-lens-store";
 import {
   type DiagramNavigationStore,
@@ -440,6 +441,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
           </span>
         </div>
         <div {...stylex.props(styles.actions)}>
+          <CopyDiagramButton />
           {activeUseCase && (
             <div {...stylex.props(styles.selectTarget)}>
               <select
@@ -1257,9 +1259,8 @@ const styles = stylex.create({
     height: { default: null, [narrow]: "auto" },
   },
   actions: {
-    display: { default: "inline-flex", [narrow]: "grid" },
+    display: "inline-flex",
     flex: { default: "0 1 min(58%, 460px)", [narrow]: "0 0 auto" },
-    gridTemplateColumns: { default: null, [narrow]: "minmax(0, 1fr) auto" },
     alignItems: "center",
     justifyContent: "flex-end",
     gap: "8px",
