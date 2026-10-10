@@ -1,2 +1,2 @@
-(argument_list "(" @fold.open . (_) @fold.indent ")" @fold.close) @fold
+(argument_list . "(" @fold.open . (_) @fold.indent ")" @fold.close .) @fold
 ((comment)+ @fold . (_))

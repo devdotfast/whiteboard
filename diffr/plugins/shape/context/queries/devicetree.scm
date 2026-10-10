@@ -1,5 +1,5 @@
 ; inherits: builtin:core/queries/devicetree/folds.scm
-((argument_list "(" @fold.open . (_) @fold.indent ")" @fold.close) @fold (#set! tag "context:body"))
+((argument_list . "(" @fold.open . (_) @fold.indent ")" @fold.close .) @fold (#set! tag "context:body"))
 ([
   (call_expression)
   (conditional_expression)
