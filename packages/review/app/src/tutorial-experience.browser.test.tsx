@@ -30,12 +30,13 @@ const CHAPTER_TITLES = [
   "Get help",
 ];
 
-const THROUGH_FOLD = [
+const THROUGH_DIFFS = [
   "chooseKeymap",
   "showHover",
   "openDiff",
   "selectLens",
   "expandFold",
+  "backToWhiteboard",
 ] as const;
 
 let session: ReviewSession;
@@ -255,7 +256,7 @@ describe("TutorialExperience", () => {
           <ReviewDebugSettingsProvider>
             <ReviewContainerProvider container={canvasRoot}>
               <ReviewProvider>
-                <TutorialProvider tutorial={tutorialBridge([...THROUGH_FOLD])}>
+                <TutorialProvider tutorial={tutorialBridge([...THROUGH_DIFFS])}>
                   <Shell />
                 </TutorialProvider>
               </ReviewProvider>
@@ -293,7 +294,7 @@ describe("TutorialExperience", () => {
   });
 
   it("stays above the sequence tour and completes once the tour moves", async () => {
-    const tutorial = tutorialBridge([...THROUGH_FOLD]);
+    const tutorial = tutorialBridge([...THROUGH_DIFFS]);
 
     render(tutorial);
 
@@ -319,7 +320,11 @@ describe("TutorialExperience", () => {
   });
 
   it("completes the database stop from the real database Tour", async () => {
-    const tutorial = tutorialBridge([...THROUGH_FOLD, "openSequence"]);
+    const tutorial = tutorialBridge([
+      ...THROUGH_DIFFS,
+      "openSequence",
+      "closeSequence",
+    ]);
 
     render(tutorial);
 
@@ -394,8 +399,9 @@ describe("TutorialExperience", () => {
 
   it("finishes from the final Get help stop", () => {
     const tutorial = tutorialBridge([
-      ...THROUGH_FOLD,
+      ...THROUGH_DIFFS,
       "openSequence",
+      "closeSequence",
       "openDatabase",
     ]);
 

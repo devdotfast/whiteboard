@@ -423,7 +423,9 @@ export const REVIEW_TUTORIAL_STEP_IDS = [
   "openDiff",
   "selectLens",
   "expandFold",
+  "backToWhiteboard",
   "openSequence",
+  "closeSequence",
   "openDatabase",
   "getHelp",
 ] as const;

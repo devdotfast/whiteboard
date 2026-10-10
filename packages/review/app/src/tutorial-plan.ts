@@ -10,6 +10,7 @@ export type TutorialStepCompletion =
   | "inline-hover"
   | "tour-open"
   | "tour-advance"
+  | "tour-close"
   | "finish";
 
 export interface TutorialChapterDefinition {
@@ -23,7 +24,7 @@ export interface TutorialStepDefinition {
   title: string;
   instruction: string;
   completion: TutorialStepCompletion;
-  /** The fullscreen tour a tour-open or tour-advance step watches. */
+  /** The fullscreen tour a tour step watches. */
   tour?: OverlayTourKind;
   targetSelector: string;
   /** What gets the ring, when not the target. */
@@ -75,7 +76,8 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     completion: "click",
     targetSelector:
       ".diff-sidebar-lenses [data-lens-id] button[aria-pressed]:not(:disabled)",
-    highlightSelector: ".diff-sidebar-lenses",
+    highlightSelector:
+      ".diff-sidebar-lenses [data-lens-id]:first-of-type button[aria-pressed]",
   },
   {
     id: "expandFold",
@@ -84,6 +86,14 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     instruction: "Select a folded region to reveal the code diffr hid.",
     completion: "click",
     targetSelector: ".review-fold-pill, .diff-fold-reveal",
+  },
+  {
+    id: "backToWhiteboard",
+    chapter: "diffs",
+    title: "Back to the whiteboard",
+    instruction: "Select Whiteboard to return to the document.",
+    completion: "click",
+    targetSelector: '.review-segment[aria-label="Whiteboard"]',
   },
   {
     id: "openSequence",
@@ -95,6 +105,16 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     tour: "sequence",
     targetSelector:
       '[data-review-section="Interactive diagrams"] .sequence-diagram .diagram-tour-button, .diagram-tour-overlay .tour-pager-next',
+  },
+  {
+    id: "closeSequence",
+    chapter: "diagrams",
+    title: "Close the tour",
+    instruction: "Close the tour to return to the document.",
+    completion: "tour-close",
+    tour: "sequence",
+    targetSelector:
+      '.diagram-tour-overlay button[aria-label="Close guided tour"]',
   },
   {
     id: "openDatabase",

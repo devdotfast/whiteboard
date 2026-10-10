@@ -1,4 +1,4 @@
-/** A reader completes every tour step, each target ringed and the guide above fullscreen tours; completion is read from storage. */
+/** A reader finishes the tour by clicking only what the guide rings (and hovering one symbol); the guide follows each step, also above fullscreen tours. */
 import assert from "node:assert/strict";
 import path from "node:path";
 
@@ -21,7 +21,9 @@ const STEPS = [
   "openDiff",
   "selectLens",
   "expandFold",
+  "backToWhiteboard",
   "openSequence",
+  "closeSequence",
   "openDatabase",
   "getHelp",
 ];
@@ -32,43 +34,55 @@ const progress = (ctx) => {
   return raw ? JSON.parse(raw) : { checked: [], dismissed: false };
 };
 
-async function waitChecked(ctx, id) {
-  await ctx.until(
-    () => progress(ctx).checked.includes(id),
-    `tutorial step ${id} checked`,
-    30000,
-  );
-  ctx.check(`tutorial: ${id}`);
-}
+/** The center of a visible, ringed target of the step, scrolled into view; a ringed group yields its first button. */
+const ringedPoint = (page, id) =>
+  page.evaluate((step) => {
+    const rings = [...document.querySelectorAll("[data-tutorial-ring]")].map(
+      (ring) => ring.getBoundingClientRect(),
+    );
 
-async function assertRinged(ctx, page, id) {
-  await ctx.until(
-    () =>
-      page.evaluate((step) => {
-        const rings = [
-          ...document.querySelectorAll("[data-tutorial-ring]"),
-        ].map((ring) => ring.getBoundingClientRect());
+    const ringed = (box) =>
+      rings.some(
+        (r) =>
+          r.left <= box.left + 8 &&
+          r.top <= box.top + 1 &&
+          r.right >= box.right - 8 &&
+          r.bottom >= box.bottom - 1,
+      );
 
-        return [
-          ...document.querySelectorAll(`[data-tutorial-target="${step}"]`),
-        ]
-          .filter((target) => target.getClientRects().length > 0)
-          .some((target) => {
-            const box = target.getBoundingClientRect();
+    const target = [
+      ...document.querySelectorAll(`[data-tutorial-target="${step}"]`),
+    ].find(
+      (element) =>
+        element.getClientRects().length > 0 &&
+        ringed(element.getBoundingClientRect()),
+    );
 
-            return rings.some(
-              (r) =>
-                r.left <= box.left + 8 &&
-                r.top <= box.top + 1 &&
-                r.right >= box.right - 8 &&
-                r.bottom >= box.bottom - 1,
-            );
-          });
-      }, id),
-    `a ring around the ${id} target`,
-    15000,
-  );
-}
+    if (!target) return null;
+
+    const clickable = target.matches(
+      "button, a, [role=button], .review-fold-pill",
+    )
+      ? target
+      : target.querySelector("button");
+
+    if (!clickable) return null;
+    const box = clickable.getBoundingClientRect();
+
+    if (box.top < 0 || box.bottom > innerHeight) {
+      clickable.scrollIntoView({ block: "center" });
+
+      return null;
+    }
+
+    return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  }, id);
+
+const guideStep = (page) =>
+  page
+    .locator('aside[aria-label="Tutorial guide"]')
+    .getAttribute("data-tutorial-step", { timeout: 1000 })
+    .catch(() => null);
 
 const guideOnTop = (page) =>
   page.evaluate(() => {
@@ -99,10 +113,7 @@ export async function run(ctx) {
   const page = await apiCanvasFor(TITLE);
 
   await ctx.watchPage(page);
-
-  const guide = page.locator('aside[aria-label="Tutorial guide"]');
-
-  await guide.waitFor();
+  await page.locator('aside[aria-label="Tutorial guide"]').waitFor();
 
   // The sticky telemetry notice covers the guide's footer.
   const clearNotice = page
@@ -111,43 +122,60 @@ export async function run(ctx) {
 
   if (await clearNotice.count()) await clearNotice.first().click();
 
-  const canvas = page.locator(".review-canvas-root [data-review-api]");
+  const overlay = page.locator(".diagram-tour-overlay");
 
-  const viewTab = (label) =>
-    page.locator(`[aria-label="Session views"] button[aria-label="${label}"]`);
+  /** Click whatever the guide rings until the guide moves past the step. */
+  async function clickThrough(id) {
+    await until(
+      async () => (await guideStep(page)) === id,
+      `the guide on ${id}`,
+    );
 
-  await assertRinged(ctx, page, "chooseKeymap");
+    for (let clicks = 0; (await guideStep(page)) === id; clicks++) {
+      assert.ok(clicks < 4, `${id} did not advance after ${clicks} clicks`);
 
-  const keybindings = page.getByRole("group", { name: "Keybindings" });
+      const point = await until(
+        () => ringedPoint(page, id),
+        `a ringed ${id} target`,
+        15000,
+      );
 
-  await keybindings.getByRole("button", { name: "VS Code default" }).click();
+      await page.mouse.click(point.x, point.y);
+      await until(
+        async () =>
+          (await guideStep(page)) !== id || (await ringedPoint(page, id)),
+        `${id} to advance or ring its next target`,
+        15000,
+      ).catch(() => {});
+      await page.waitForTimeout(300);
+    }
+
+    assert.ok(progress(ctx).checked.includes(id), `${id} is not checked`);
+    ctx.check(`tutorial: ${id}`);
+  }
+
+  await clickThrough("chooseKeymap");
+
+  // Hovering is the one step a click cannot do.
   await until(
-    async () =>
-      (await keybindings
-        .getByRole("button", { name: "VS Code default" })
-        .getAttribute("aria-pressed")) === "true",
-    "tutorial keybinding selection",
+    async () => (await guideStep(page)) === "showHover",
+    "hover step",
   );
-  await waitChecked(ctx, "chooseKeymap");
 
-  await assertRinged(ctx, page, "showHover");
-
-  const editor = canvas
-    .locator('[data-review-section="Welcome"] [data-review-inline-editor]')
-    .first();
-
-  await editor.locator(".view-line").first().waitFor();
-
-  // `totalCents` is declared and used inside the authored window, so tsserver can always resolve it.
-  const totalCents = editor
-    .locator(".view-line span")
+  const totalCents = page
+    .locator(
+      '[data-review-section="Welcome"] .modified-in-monaco-diff-editor .view-line span',
+    )
     .filter({ hasText: /^\s*totalCents\s*$/ })
     .first();
 
   await until(
     async () => {
+      await totalCents.scrollIntoViewIfNeeded();
+      const box = await totalCents.boundingBox();
+
       await page.mouse.move(0, 0);
-      await totalCents.hover();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await page.waitForTimeout(800);
 
       return progress(ctx).checked.includes("showHover");
@@ -155,81 +183,43 @@ export async function run(ctx) {
     "tsserver hover in the Welcome editor",
     90000,
   );
-  await waitChecked(ctx, "showHover");
+  ctx.check("tutorial: showHover");
   await page.keyboard.press("Escape");
   await page.screenshot({ path: path.join(root, "tutorial-hover.png") });
 
-  await assertRinged(ctx, page, "openDiff");
-  await canvas
-    .locator('.tutorial-view-button[data-tutorial-view="diff"]')
-    .click();
-  await waitChecked(ctx, "openDiff");
-
-  const lenses = page.locator(".diff-sidebar-lenses [data-lens-id]");
+  await clickThrough("openDiff");
+  await page.screenshot({ path: path.join(root, "tutorial-lenses.png") });
+  await clickThrough("selectLens");
+  await page.screenshot({ path: path.join(root, "tutorial-fold.png") });
+  await clickThrough("expandFold");
+  await clickThrough("backToWhiteboard");
 
   await until(
-    async () =>
-      (await lenses.filter({ hasText: "Inventory reservation" }).count()) +
-        (await lenses.filter({ hasText: "Payment charge" }).count()) ===
-      2,
-    "the tour's two lenses",
+    async () => (await guideStep(page)) === "openSequence",
+    "sequence step",
   );
-  await assertRinged(ctx, page, "selectLens");
-  await page.screenshot({ path: path.join(root, "tutorial-lenses.png") });
-  await lenses
-    .filter({ hasText: "Payment charge" })
-    .locator("button[aria-pressed]")
-    .click();
-  await waitChecked(ctx, "selectLens");
-
-  const fold = page
-    .locator(".review-fold-pill")
-    .filter({ visible: true })
-    .first();
-
-  await fold.waitFor();
-  await assertRinged(ctx, page, "expandFold");
-  await page.screenshot({ path: path.join(root, "tutorial-fold.png") });
-  await fold.click();
-  await waitChecked(ctx, "expandFold");
-
-  await viewTab("Whiteboard").click();
-
-  const overlay = page.locator(".diagram-tour-overlay");
-
-  await assertRinged(ctx, page, "openSequence");
-  await canvas
-    .locator(".sequence-diagram .diagram-tour-button")
-    .first()
-    .click();
-  await overlay.waitFor();
-  assert.equal(
-    progress(ctx).checked.includes("openSequence"),
-    false,
-    "opening the tour alone completed the sequence step",
-  );
+  await page.screenshot({ path: path.join(root, "tutorial-sequence.png") });
+  await clickThrough("openSequence");
   await until(() => guideOnTop(page), "the guide above the sequence tour");
-  await assertRinged(ctx, page, "openSequence");
   await page.screenshot({
     path: path.join(root, "tutorial-sequence-tour.png"),
   });
-  await overlay.locator(".tour-pager-next").first().click();
-  await waitChecked(ctx, "openSequence");
   ctx.check("the guide stays above the fullscreen sequence tour");
-  await page.keyboard.press("Escape");
+  await clickThrough("closeSequence");
   await overlay.waitFor({ state: "hidden" });
 
-  await assertRinged(ctx, page, "openDatabase");
-  await canvas.locator(".database-lens .diagram-tour-button").first().click();
-  await overlay.waitFor();
-  await waitChecked(ctx, "openDatabase");
+  await clickThrough("openDatabase");
   await until(() => guideOnTop(page), "the guide above the database tour");
-  await page.keyboard.press("Escape");
-  await overlay.waitFor({ state: "hidden" });
+  ctx.check("the guide stays above the fullscreen database tour");
 
-  await assertRinged(ctx, page, "getHelp");
-  await guide.getByRole("button", { name: "Finish tour" }).click();
-  await waitChecked(ctx, "getHelp");
+  await page
+    .locator('aside[aria-label="Tutorial guide"]')
+    .getByRole("button", { name: "Finish tour" })
+    .click();
+  await until(
+    () => progress(ctx).checked.includes("getHelp"),
+    "getHelp checked",
+  );
 
   assert.deepEqual([...progress(ctx).checked].sort(), [...STEPS].sort());
   ctx.check(

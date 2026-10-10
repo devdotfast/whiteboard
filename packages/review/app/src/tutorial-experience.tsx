@@ -21,6 +21,7 @@ import {
   reviewInteractionDetail,
 } from "./review-interaction-event";
 import { useOptionalReviewPanel } from "./review-panel";
+import type { OverlayTourKind } from "./review-panel-store";
 import { useReviewContainer } from "./review-root-context";
 import {
   elevation,
@@ -127,24 +128,26 @@ export function TutorialExperienceProvider({
 
   // The anchor a watched tour opened on; moving off it advances the tour.
   const openedAnchorRef = useRef<string | null>(null);
+  const lastTourRef = useRef<OverlayTourKind | null>(null);
 
   useEffect(() => {
-    if (!tourKind) {
-      openedAnchorRef.current = null;
+    const closedTour = tourKind ? null : lastTourRef.current;
+    lastTourRef.current = tourKind;
 
-      return;
-    }
+    if (tourKind) openedAnchorRef.current ??= tourAnchor;
+    else openedAnchorRef.current = null;
 
-    openedAnchorRef.current ??= tourAnchor;
+    if (dismissed || !activeStep?.tour) return;
 
-    if (dismissed || !activeStep || activeStep.tour !== tourKind) return;
+    const done =
+      activeStep.completion === "tour-close"
+        ? closedTour === activeStep.tour
+        : activeStep.tour === tourKind &&
+          (activeStep.completion === "tour-open" ||
+            (activeStep.completion === "tour-advance" &&
+              tourAnchor !== openedAnchorRef.current));
 
-    if (
-      activeStep.completion === "tour-open" ||
-      (activeStep.completion === "tour-advance" &&
-        tourAnchor !== openedAnchorRef.current)
-    )
-      completeStep(activeStep);
+    if (done) completeStep(activeStep);
   }, [activeStep, completeStep, dismissed, tourAnchor, tourKind]);
 
   useEffect(() => {
