@@ -58,6 +58,15 @@ impl Agent {
         }
     }
 
+    /// How to reach diffr from inside the agent, shown once its plugin is installed.
+    pub(crate) fn usage(self) -> &'static str {
+        match self {
+            Agent::ClaudeCode => {
+                "In Claude Code, run `/diffr <args>`, or ask Claude to show you a change with diffr."
+            }
+        }
+    }
+
     /// `step` hears what each slow command is about to do.
     pub(crate) fn install(self, step: &mut dyn FnMut(&str)) -> Result<()> {
         match self {
