@@ -27,7 +27,7 @@
   (list "[" @fold.open . (_) @fold.indent "]" @fold.close)
   (dictionary "{" @fold.open . (_) @fold.indent "}" @fold.close)
   (set "{" @fold.open . (_) @fold.indent "}" @fold.close)
-  (tuple "(" @fold.open . (_) @fold.indent ")" @fold.close)
+  (tuple . "(" @fold.open . (_) @fold.indent ")" @fold.close)
 ] @fold (#set! tag "context:body"))
 
 ((argument_list "(" @fold.open . (_) @fold.indent ")" @fold.close) @fold
