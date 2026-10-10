@@ -1,11 +1,24 @@
+import type { ActivitySnapshot } from "@review/review-api/activity";
+import type { Block } from "@review/review-api/document";
 import * as stylex from "@stylexjs/stylex";
 import { act, createRef } from "react";
-import { createRoot } from "react-dom/client";
+import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 
+import { ApiDocument } from "./api-document";
+import { AuthoringActivityContext } from "./authoring-activity-context";
+import type { AuthoringCursor } from "./authoring-cursor";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
+import { AuthoringCursorContext } from "./courier";
 import { documentStyles } from "./document-styles";
-import { documentMarker } from "./markers.stylex";
+import { ReviewSessionProvider } from "./host/review-session";
+import { appMarker, documentMarker } from "./markers.stylex";
 import { type ReviewRoots, ReviewRootsProvider } from "./review-root-context";
+import {
+  testApiDocumentData,
+  testReviewSession,
+} from "./review-session-test-utils";
 import { ReviewToc } from "./review-toc";
 import { shellStyles } from "./shell-styles";
 
@@ -218,4 +231,137 @@ describe("ReviewToc", () => {
 
     expect(Math.max(...labelLefts) - Math.min(...labelLefts)).toBeLessThan(1);
   });
+});
+
+const editedBlocks: Block[] = [
+  {
+    id: "failures",
+    type: "section",
+    title: "Failure modes",
+    children: [
+      {
+        id: "body",
+        type: "markdown",
+        markdown: "The broker dies.\n\n".repeat(80),
+      },
+    ],
+  },
+  {
+    id: "testing",
+    type: "section",
+    title: "Testing",
+    children: [{ id: "kill", type: "markdown", markdown: "Kill it.\n" }],
+  },
+];
+
+const editing: AuthoringCursor = {
+  targetId: "body",
+  blockId: "body",
+  source: "edit",
+  seq: 1,
+};
+
+const working: ActivitySnapshot = {
+  workingCount: 1,
+  expiresAt: null,
+  activities: [{ activityId: "a", slot: 0 }],
+};
+
+describe("ReviewToc beside a review header", () => {
+  let root: Root;
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    document.body.innerHTML = "";
+  });
+
+  // The narrowest shell that shows the rail, and one wide enough that the
+  // rail follows the page instead of the shell edge.
+  it.each([
+    { width: "standard", shellWidth: 1360 },
+    { width: "standard", shellWidth: 1600 },
+    { width: "wide", shellWidth: 1872 },
+    { width: "wide", shellWidth: 2200 },
+  ] as const)(
+    "keeps the $width rail clear of the editing section's ring on a $shellWidth px shell",
+    async ({ width, shellWidth }) => {
+      await page.viewport(shellWidth, 900);
+      const app = document.createElement("div");
+      app.className = stylex.props(appMarker).className!;
+      app.dataset.documentHeader = "true";
+      app.dataset.documentWidth = width;
+      const shell = document.createElement("main");
+      shell.className = stylex.props(shellStyles.documentShell).className!;
+      shell.style.cssText = `width: ${shellWidth}px; height: 900px`;
+      const topbar = document.createElement("header");
+      const tocMount = document.createElement("div");
+      tocMount.style.display = "contents";
+      const region = document.createElement("section");
+      region.className = stylex.props(shellStyles.reviewRegion).className!;
+      const article = document.createElement("article");
+      article.className = `review-document ${stylex.props(documentStyles.article, documentMarker).className}`;
+      region.append(article);
+      shell.append(topbar, tocMount, region);
+      app.append(shell);
+      document.body.append(app);
+
+      const roots: ReviewRoots = {
+        appRef: { current: app },
+        shellRef: { current: shell },
+        scrollRegionRef: { current: region },
+        articleRef: { current: article },
+      };
+
+      root = createRoot(tocMount);
+      const documentRoot = createRoot(article);
+
+      await act(async () => {
+        root.render(
+          <ReviewRootsProvider roots={roots}>
+            <ReviewToc
+              entries={[
+                { id: "failures", text: "Failure modes", level: "h2" },
+                { id: "testing", text: "Testing", level: "h2" },
+              ]}
+              besideHeader
+              documentWidth={width}
+            />
+          </ReviewRootsProvider>,
+        );
+        documentRoot.render(
+          <TestCanvasQuery>
+            <ReviewSessionProvider session={testReviewSession()}>
+              <ReviewRootsProvider roots={roots}>
+                <AuthoringActivityContext.Provider value={working}>
+                  <AuthoringCursorContext.Provider value={editing}>
+                    <ApiDocument data={testApiDocumentData(editedBlocks)} />
+                  </AuthoringCursorContext.Provider>
+                </AuthoringActivityContext.Provider>
+              </ReviewRootsProvider>
+            </ReviewSessionProvider>
+          </TestCanvasQuery>,
+        );
+      });
+
+      try {
+        const rail = document.querySelector("#review-toc")!;
+        const section = article.querySelector<HTMLElement>(".review-section")!;
+
+        // The ring is the section's ::before, inset past its left edge.
+        const ringLeft =
+          section.getBoundingClientRect().left +
+          parseFloat(getComputedStyle(section, "::before").left);
+
+        expect(
+          rail.querySelector<HTMLButtonElement>(
+            '[aria-controls="review-toc-body"]',
+          )!.hidden,
+        ).toBe(true);
+        expect(rail.getBoundingClientRect().right).toBeLessThan(ringLeft);
+      } finally {
+        await act(async () => documentRoot.unmount());
+        await page.viewport(1280, 900);
+      }
+    },
+  );
 });

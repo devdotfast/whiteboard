@@ -472,16 +472,21 @@ const styles = stylex.create({
     backgroundColor: tokens.transparent,
     boxShadow: "none",
   },
-  // Beside a review header the rail lines up with the left edge of a 1320px
-  // page and gives each entry a taller row and larger type.
+  // Beside a review header the rail gives each entry a taller row and larger
+  // type. The ring on the section an agent is editing hangs 40px left of the
+  // 760px prose, 420px left of center, so the rail ends 436px left of center
+  // to stay clear of it even with the scrollbar taking its share of the
+  // width; on a shell too narrow to hold its 240px there, it gives up width
+  // rather than run under the ring.
   tocRailBesideHeader: {
-    left: "max(24px, calc((100% - 1320px) / 2))",
-    width: "240px",
+    left: "max(24px, calc((100% - 1352px) / 2))",
+    width: "min(240px, calc((100% - 920px) / 2))",
     padding: "6px 0 0",
   },
-  // Beside a wide document the page is its block column plus the same gutters.
+  // Beside a wide document the ring sits 656px left of center, so the rail
+  // ends 672px left of it.
   tocRailBesideWideHeader: {
-    left: "max(24px, calc((100% - 1792px) / 2))",
+    left: "max(24px, calc((100% - 1824px) / 2))",
   },
   toggle: {
     position: "absolute",
