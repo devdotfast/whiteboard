@@ -1,16 +1,22 @@
 import { z } from "zod";
 
+import { resolvePullRequestProvider } from "./provider.js";
 import type { Snapshot } from "./store.js";
 
 export const pullRequestUrl = z
   .string()
-  .regex(
-    /^https:\/\/[a-z0-9.-]+\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*$/,
+  .refine(
+    (url) => resolvePullRequestProvider(url) !== null || /pull\/\d+$/.test(url),
     "Use a canonical GitHub PR URL: https://github.com/owner/repository/pull/123, or the same path on a GitHub Enterprise host.",
   )
+  .refine((url) => {
+    const last = url.split("/").at(-1);
+
+    return !last || !/^\d+$/.test(last) || Number.isSafeInteger(Number(last));
+  }, "PR number is too large.")
   .refine(
-    (url) => Number.isSafeInteger(Number(url.split("/").at(-1))),
-    "PR number is too large.",
+    (url) => resolvePullRequestProvider(url) !== null,
+    "Use a canonical GitHub PR URL: https://github.com/owner/repository/pull/123, or the same path on a GitHub Enterprise host.",
   );
 
 /** One key per PR: GitHub owner and repository names are case-insensitive,
@@ -35,9 +41,11 @@ export function setPullRequest(
     return;
   }
 
+  const parsed = resolvePullRequestProvider(url);
+
   snapshot.origin = {
     ...snapshot.origin,
     pullRequestUrl: url,
-    pullRequestNumber: Number(url.split("/").at(-1)),
+    pullRequestNumber: parsed?.address.number ?? Number(url.split("/").at(-1)),
   };
 }

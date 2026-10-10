@@ -3,9 +3,18 @@ import { randomUUID } from "node:crypto";
 
 import { type LocalVcsKind, parseGitRemote } from "@dev.fast/local-vcs";
 import { errorMessage } from "@dev.fast/trace-core";
-import { z } from "zod";
 
 import { ReviewInputError } from "./document.js";
+import {
+  type ParsedPullRequestAddress,
+  type PullRequestProvider,
+  type PullRequestRefMap,
+  resolvePullRequestProvider,
+} from "./provider.js";
+
+export * from "./provider.js";
+
+export { GitHubProvider } from "./github-provider.js";
 
 /** Runs one subprocess and resolves its stdout; rejects on failure or timeout. */
 export type RunCommand = (
@@ -19,20 +28,16 @@ export interface PullRequestDeps {
   fetch: typeof fetch;
 }
 
-/** What GitHub says about a PR; the commits are fetched separately. */
+/** What a forge says about a PR; the commits are fetched separately. */
 export interface PullRequestRecord {
   host: string;
   slug: string;
   number: number;
   title: string;
   baseRefName: string;
-  /** GitHub's base commit, frozen at the PR's last update. */
+  /** Forge's base commit, frozen at the PR's last update. */
   baseRefOid?: string;
 }
-
-const GH_TIMEOUT_MS = 20_000;
-
-const API_TIMEOUT_MS = 15_000;
 
 const FETCH_TIMEOUT_MS = 120_000;
 
@@ -73,117 +78,33 @@ export const defaultPullRequestDeps: PullRequestDeps = {
 
 /** Host, owner/repo and number from a canonical PR URL (validated by the command schema). */
 export function pullRequestAddress(url: string) {
+  const resolution = resolvePullRequestProvider(url);
+
+  if (resolution) {
+    return {
+      host: resolution.address.host,
+      slug: resolution.address.canonicalSlug,
+      number: resolution.address.number,
+    };
+  }
+
   const { hostname, pathname } = new URL(url);
   const [, owner, repo, , number] = pathname.split("/");
 
   return { host: hostname, slug: `${owner}/${repo}`, number: Number(number) };
 }
 
-const metadataSchema = z.object({
-  number: z.number().int().positive(),
-  title: z.string(),
-  baseRefName: z.string().min(1),
-  baseRefOid: z.string().optional(),
-});
-
-/** gh first (it carries the user's auth), then, for github.com only, GitHub's
- * public REST API: Enterprise hosts require gh. */
+/** Delegates PR metadata reading to the resolved provider. */
 export async function readPullRequest(
   url: string,
   deps: PullRequestDeps,
 ): Promise<PullRequestRecord> {
-  const { host, slug, number } = pullRequestAddress(url);
-  let ghFailure: string;
+  const resolution = resolvePullRequestProvider(url);
 
-  try {
-    const stdout = await deps.run(
-      "gh",
-      [
-        "pr",
-        "view",
-        String(number),
-        "--repo",
-        `${host}/${slug}`,
-        "--json",
-        "number,title,baseRefName,baseRefOid",
-      ],
-      { timeoutMs: GH_TIMEOUT_MS },
-    );
+  if (!resolution)
+    throw new ReviewInputError(`Unsupported pull request URL: ${url}`, 400);
 
-    return { host, slug, ...metadataSchema.parse(JSON.parse(stdout)) };
-  } catch (error) {
-    ghFailure = firstLine(errorMessage(error));
-  }
-
-  if (host !== "github.com")
-    throw new ReviewInputError(
-      `Could not read ${url}: gh failed (${ghFailure}). Run \`gh auth login --hostname ${host}\` with an account that can read the repository, then retry.`,
-      409,
-    );
-
-  let response: Response;
-
-  try {
-    response = await deps.fetch(
-      `https://api.github.com/repos/${slug}/pulls/${number}`,
-      {
-        headers: {
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-        signal: AbortSignal.timeout(API_TIMEOUT_MS),
-      },
-    );
-  } catch (error) {
-    throw unreadable(
-      url,
-      ghFailure,
-      `the GitHub API is unreachable (${firstLine(errorMessage(error))})`,
-    );
-  }
-
-  if (response.status === 404)
-    throw new ReviewInputError(
-      `${url} was not found: it does not exist, or it is private and gh is not signed in to an account that can read it (run \`gh auth status\`). gh said: ${ghFailure}`,
-      404,
-    );
-
-  if (response.status === 403 || response.status === 429)
-    throw unreadable(
-      url,
-      ghFailure,
-      response.headers.get("x-ratelimit-remaining") === "0" ||
-        response.status === 429
-        ? "the unauthenticated GitHub API rate limit is exhausted"
-        : "the GitHub API refused the request",
-    );
-
-  if (!response.ok)
-    throw unreadable(
-      url,
-      ghFailure,
-      `the GitHub API returned HTTP ${response.status}`,
-    );
-
-  const parsed = z
-    .object({
-      number: z.number(),
-      title: z.string(),
-      base: z.object({ ref: z.string().min(1), sha: z.string() }),
-    })
-    .safeParse(await response.json().catch(() => undefined));
-
-  if (!parsed.success)
-    throw unreadable(url, ghFailure, "the GitHub API response was malformed");
-
-  return {
-    host,
-    slug,
-    number: parsed.data.number,
-    title: parsed.data.title,
-    baseRefName: parsed.data.base.ref,
-    baseRefOid: parsed.data.base.sha,
-  };
+  return resolution.provider.readPullRequest(resolution.address, deps);
 }
 
 /** Remotes by the host and owner/repo their configured URL names. The
@@ -234,14 +155,14 @@ export function pullRequestRefs(pr: {
 }
 
 /**
- * Fetch the PR head (refs/pull/N/head, so fork PRs work) and its base branch
- * into Review's own namespace, and return the comparison GitHub shows: the
+ * Fetch the PR head (e.g. refs/pull/N/head for GitHub, so fork PRs work) and its base branch
+ * into Review's own namespace, and return the comparison shown: the
  * head, and the merge base of the head with the base branch.
  *
  * A PR merged with a merge commit is absorbed: merge-base(base branch, head)
- * is the head itself and the diff is empty. GitHub freezes the base commit
+ * is the head itself and the diff is empty. The provider freezes the base commit
  * (baseRefOid) at the PR's last update, so its merge base with the head is
- * the fork point GitHub diffs against, and it survives base branches that are
+ * the fork point diffed against, and it survives base branches that are
  * force-rebuilt or deleted.
  */
 export async function fetchPullRequest(
@@ -251,11 +172,20 @@ export async function fetchPullRequest(
     kind: LocalVcsKind;
     remote: string;
     pullRequest: PullRequestRecord;
+    url?: string;
   },
   deps: PullRequestDeps,
 ): Promise<{ head: string; base: string }> {
   const { pullRequest: pr } = input;
-  const refs = pullRequestRefs(pr);
+  const prUrl = input.url ?? `https://${pr.host}/${pr.slug}/pull/${pr.number}`;
+  const resolution = resolvePullRequestProvider(prUrl);
+
+  if (!resolution)
+    throw new ReviewInputError(`Unsupported pull request URL: ${prUrl}`, 400);
+
+  const { provider, address } = resolution;
+  const refMap: PullRequestRefMap = provider.pullRequestRefs(address, pr);
+  const credentials = await provider.credentialOptions(address, deps);
 
   const git = (args: string[], timeoutMs = LOCAL_TIMEOUT_MS) =>
     deps
@@ -265,6 +195,7 @@ export async function fetchPullRequest(
   const fetchRefs = (...refspecs: string[]) =>
     git(
       [
+        ...credentials.gitArgs,
         "fetch",
         "--no-tags",
         "--no-write-fetch-head",
@@ -287,7 +218,7 @@ export async function fetchPullRequest(
     if (!pr.baseRefOid) return undefined;
 
     if (!(await commit(pr.baseRefOid)))
-      await fetchRefs(`+${pr.baseRefOid}:${refs.frozenBase}`).catch(
+      await fetchRefs(`+${pr.baseRefOid}:${refMap.localFrozenBase}`).catch(
         () => undefined,
       );
 
@@ -297,15 +228,12 @@ export async function fetchPullRequest(
   let baseTip: string | undefined;
 
   try {
-    await fetchRefs(
-      `+refs/pull/${pr.number}/head:${refs.head}`,
-      `+refs/heads/${pr.baseRefName}:${refs.base}`,
-    );
-    baseTip = await commit(refs.base);
+    await fetchRefs(...refMap.fetchRefspecs);
+    baseTip = await commit(refMap.localBase);
   } catch (error) {
     // The base branch may be gone; the head and the frozen base suffice.
     try {
-      await fetchRefs(`+refs/pull/${pr.number}/head:${refs.head}`);
+      await fetchRefs(`+refs/pull/${pr.number}/head:${refMap.localHead}`);
     } catch {
       throw new ReviewInputError(
         `Could not fetch PR #${pr.number} from remote "${input.remote}" (${pr.slug}). Check \`git fetch ${input.remote}\` works with your Git credentials, then retry. Git said: ${firstLine(errorMessage(error))}`,
@@ -314,7 +242,7 @@ export async function fetchPullRequest(
     }
   }
 
-  const head = await commit(refs.head);
+  const head = await commit(refMap.localHead);
 
   baseTip ??= await frozenBase();
 
@@ -375,13 +303,6 @@ async function indexForJj(
       await git(["update-ref", "-d", tag]).catch(() => undefined);
     await jjImport().catch(() => undefined);
   }
-}
-
-function unreadable(url: string, ghFailure: string, fallback: string) {
-  return new ReviewInputError(
-    `Could not read ${url}: gh failed (${ghFailure}) and ${fallback}. Run \`gh auth status\` and sign in with an account that can read the repository, then retry.`,
-    409,
-  );
 }
 
 function firstLine(text: string) {

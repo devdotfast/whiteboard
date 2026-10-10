@@ -76,9 +76,9 @@ import {
   type PullRequestDeps,
   defaultPullRequestDeps,
   fetchPullRequest,
-  githubRemotes,
   pullRequestAddress,
   readPullRequest,
+  resolvePullRequestProvider,
 } from "./pull-request.js";
 import {
   type ResolvedPullRequest,
@@ -1074,17 +1074,12 @@ export class LocalReviewData {
     const { host, slug, number } = pullRequestAddress(url);
 
     // Only a host a registered checkout already fetches from is contacted.
-    const checkout = await this.pullRequestCheckout(
-      host,
-      slug,
-      repository,
-      deps,
-    );
+    const checkout = await this.pullRequestCheckout(url, repository, deps);
 
     const pullRequest = await readPullRequest(url, deps);
 
     const { head, base } = await fetchPullRequest(
-      { ...checkout, pullRequest },
+      { ...checkout, pullRequest, url },
       deps,
     );
 
@@ -1096,13 +1091,18 @@ export class LocalReviewData {
       title: pullRequest.title.trim() || `PR #${number}`,
     };
   }
-  /** A registered checkout with a remote for host/owner/repo, and that remote. */
+  /** A registered checkout with a remote matching the PR address, and that remote. */
   private async pullRequestCheckout(
-    host: string,
-    slug: string,
+    url: string,
     repository: { id?: string; preferred?: string },
     deps: PullRequestDeps,
   ) {
+    const resolution = resolvePullRequestProvider(url);
+
+    if (!resolution)
+      throw new ReviewInputError(`Unsupported pull request URL: ${url}`, 400);
+
+    const { provider, address } = resolution;
     const registered = this.store.repositories();
 
     const candidates = repository.id
@@ -1122,10 +1122,10 @@ export class LocalReviewData {
 
       if (!vcs || !gitDir) continue;
 
-      const remote = (await githubRemotes(gitDir, deps)).find(
-        (entry) =>
-          entry.host === host &&
-          entry.slug.toLowerCase() === slug.toLowerCase(),
+      const remoteUrls = await this.gitRemoteUrls(gitDir, deps);
+
+      const remote = remoteUrls.find((entry) =>
+        provider.matchesRemote(entry.url, address),
       );
 
       if (remote)
@@ -1138,6 +1138,8 @@ export class LocalReviewData {
         };
     }
 
+    const host = address.host;
+    const slug = address.canonicalSlug;
     const name = host === "github.com" ? slug : `${host}/${slug}`;
 
     throw new ReviewInputError(
@@ -1146,6 +1148,31 @@ export class LocalReviewData {
         : `No registered checkout has a GitHub remote for ${name}. Register a checkout of ${name} with review_register_repository first, or pass a target.`,
       404,
     );
+  }
+
+  private async gitRemoteUrls(
+    gitDir: string,
+    deps: PullRequestDeps,
+  ): Promise<{ name: string; url: string }[]> {
+    const stdout = await deps
+      .run(
+        "git",
+        [
+          "--git-dir",
+          gitDir,
+          "config",
+          "--get-regexp",
+          String.raw`^remote\..*\.url$`,
+        ],
+        { timeoutMs: 30_000 },
+      )
+      .catch(() => "");
+
+    return stdout.split("\n").flatMap((line) => {
+      const match = /^remote\.(.+)\.url\s+(\S+)/.exec(line.trim());
+
+      return match ? [{ name: match[1]!, url: match[2]! }] : [];
+    });
   }
   async resolvePins(
     repositoryId: string,
