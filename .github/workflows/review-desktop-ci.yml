@@ -7,8 +7,6 @@ on:
       - reopened
       - synchronize
       - ready_for_review
-    paths-ignore:
-      - "diffr/**"
   workflow_dispatch:
 
 permissions:
@@ -19,8 +17,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  review-desktop:
-    name: Review Desktop
+  changes:
+    name: Detect desktop changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      desktop: ${{ steps.changes.outputs.desktop }}
+    steps:
+      - name: Checkout
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes outside diffr
+        id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ "$EVENT_NAME" != pull_request ]]; then
+            echo "desktop=true" >> "$GITHUB_OUTPUT"
+          elif git diff --quiet --no-renames "$BASE_SHA...$HEAD_SHA" -- . ':(exclude)diffr/**'; then
+            echo "desktop=false" >> "$GITHUB_OUTPUT"
+          else
+            status=$?
+            # A diff exits 1 for changes; other failures must not skip CI.
+            if [[ "$status" -ne 1 ]]; then
+              exit "$status"
+            fi
+            echo "desktop=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  desktop-build:
+    name: Build and test desktop
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -172,3 +205,24 @@ jobs:
             packages/review/**/__screenshots__
             packages/review/**/__traces__
           if-no-files-found: ignore
+
+  # Keep the required check present even when diffr-only PRs skip the build.
+  review-desktop:
+    name: Review Desktop
+    needs: [changes, desktop-build]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check desktop CI result
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          DESKTOP_REQUIRED: ${{ needs.changes.outputs.desktop }}
+          BUILD_RESULT: ${{ needs.desktop-build.result }}
+        run: |
+          [[ "$CHANGES_RESULT" == success ]] || exit 1
+          if [[ "$DESKTOP_REQUIRED" == false && "$BUILD_RESULT" == skipped ]]; then
+            echo "Desktop CI is not required for diffr-only changes."
+          else
+            [[ "$DESKTOP_REQUIRED" == true && "$BUILD_RESULT" == success ]]
+          fi
