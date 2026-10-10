@@ -443,6 +443,17 @@ fn prompt(state: &State) -> Result<i32> {
         }
         (Err(error), None) => return Err(error),
     }
-    cliclack::outro("diffr is ready to use! Hope you enjoy some beautiful diffs")?;
+    let usage: String = answers
+        .agents
+        .iter()
+        .map(|agent| format!("{}\n", agent.usage()))
+        .collect();
+    cliclack::outro(format!(
+        "diffr is ready to use!
+Run `diffr <args>` with the same arguments you'd pass to `git diff`, e.g. `diffr main..HEAD`.
+To change diffr settings at any time, run `diffr config`.
+{usage}
+Hope you enjoy some beautiful diffs."
+    ))?;
     Ok(0)
 }
