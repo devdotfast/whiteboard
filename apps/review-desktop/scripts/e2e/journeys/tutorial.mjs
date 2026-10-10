@@ -45,9 +45,9 @@ const ringedPoint = (page, id) =>
       rings.some(
         (r) =>
           r.left <= box.left + 8 &&
-          r.top <= box.top + 1 &&
+          r.top <= box.top + 8 &&
           r.right >= box.right - 8 &&
-          r.bottom >= box.bottom - 1,
+          r.bottom >= box.bottom - 8,
       );
 
     const target = [
@@ -60,11 +60,11 @@ const ringedPoint = (page, id) =>
 
     if (!target) return null;
 
-    const clickable = target.matches(
-      "button, a, [role=button], .review-fold-pill",
-    )
-      ? target
-      : target.querySelector("button");
+    const clickable =
+      target.matches("button, a, [role=button], .review-fold-pill") ||
+      target.closest("button")
+        ? target
+        : target.querySelector("button");
 
     if (!clickable) return null;
     const box = clickable.getBoundingClientRect();
@@ -113,7 +113,9 @@ export async function run(ctx) {
   const page = await apiCanvasFor(TITLE);
 
   await ctx.watchPage(page);
-  await page.locator('aside[aria-label="Tutorial guide"]').waitFor();
+  const guide = page.locator('aside[aria-label="Tutorial guide"]');
+
+  await guide.waitFor();
 
   // The sticky telemetry notice covers the guide's footer.
   const clearNotice = page
@@ -134,8 +136,21 @@ export async function run(ctx) {
     for (let clicks = 0; (await guideStep(page)) === id; clicks++) {
       assert.ok(clicks < 4, `${id} did not advance after ${clicks} clicks`);
 
+      // Smooth scrolling moves the target; click once it holds still.
       const point = await until(
-        () => ringedPoint(page, id),
+        async () => {
+          const first = await ringedPoint(page, id);
+
+          await page.waitForTimeout(250);
+          const second = await ringedPoint(page, id);
+
+          return first &&
+            second &&
+            Math.abs(first.x - second.x) < 1 &&
+            Math.abs(first.y - second.y) < 1
+            ? second
+            : null;
+        },
         `a ringed ${id} target`,
         15000,
       );
@@ -178,14 +193,19 @@ export async function run(ctx) {
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await page.waitForTimeout(800);
 
-      return progress(ctx).checked.includes("showHover");
+      return (await guide.textContent()).includes("Done.");
     },
     "tsserver hover in the Welcome editor",
     90000,
   );
-  ctx.check("tutorial: showHover");
-  await page.keyboard.press("Escape");
+  assert.ok(
+    !progress(ctx).checked.includes("showHover"),
+    "a confirm step advanced on its own",
+  );
   await page.screenshot({ path: path.join(root, "tutorial-hover.png") });
+  await page.keyboard.press("Escape");
+  // The guide rings its own Next once the task is done.
+  await clickThrough("showHover");
 
   await clickThrough("openDiff");
   await page.screenshot({ path: path.join(root, "tutorial-lenses.png") });
@@ -210,12 +230,18 @@ export async function run(ctx) {
 
   await clickThrough("openDatabase");
   await until(() => guideOnTop(page), "the guide above the database tour");
+  // The tour opens on the table's schema declaration.
+  await overlay.getByText("orders schema").first().waitFor();
+  await until(
+    async () => (await overlay.textContent()).includes("pgTable"),
+    "the schema code in the database tour",
+  );
+  await page.screenshot({
+    path: path.join(root, "tutorial-database-tour.png"),
+  });
   ctx.check("the guide stays above the fullscreen database tour");
 
-  await page
-    .locator('aside[aria-label="Tutorial guide"]')
-    .getByRole("button", { name: "Finish tour" })
-    .click();
+  await guide.getByRole("button", { name: "Finish tour" }).click();
   await until(
     () => progress(ctx).checked.includes("getHelp"),
     "getHelp checked",

@@ -137,6 +137,12 @@
                 "orders": {
                   "label": "orders",
                   "fields": {
+                    "id": {
+                      "label": "id",
+                      "dataType": "text",
+                      "primaryKey": true,
+                      "example": "order-customer-42"
+                    },
                     "customerId": {
                       "label": "customerId",
                       "dataType": "text",
@@ -157,7 +163,8 @@
                       "dataType": "timestamp",
                       "example": "2026-08-10T12:00:00Z"
                     }
-                  }
+                  },
+                  "source": "head/src/database/schema.ts#L3-L9"
                 }
               }
             }
