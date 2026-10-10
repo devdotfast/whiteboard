@@ -11,11 +11,12 @@ import { Orientation, SplitView } from "../../base/browser/ui/splitview/splitvie
 import { disposableTimeout } from "../../base/common/async.js";
 import { Emitter, Event } from "../../base/common/event.js";
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from "../../base/common/lifecycle.js";
-import { autorun, observableValue } from "../../base/common/observable.js";
+import { autorun, derived, observableValue } from "../../base/common/observable.js";
 import { isEqual } from "../../base/common/resources.js";
 import { URI } from "../../base/common/uri.js";
 import { ElementSizeObserver } from "../../editor/browser/config/elementSizeObserver.js";
 import { isDiffEditor, type IDiffEditor } from "../../editor/browser/editorBrowser.js";
+import { DiffEditorViewModel } from "../../editor/browser/widget/diffEditor/diffEditorViewModel.js";
 import { MultiDiffEditorViewModel } from "../../editor/browser/widget/multiDiffEditor/multiDiffEditorViewModel.js";
 import { MultiDiffEditorWidget, type RevealOptions } from "../../editor/browser/widget/multiDiffEditor/multiDiffEditorWidget.js";
 import type { IMultiDiffEditorViewState } from "../../editor/browser/widget/multiDiffEditor/multiDiffEditorWidgetImpl.js";
@@ -37,6 +38,7 @@ import { REVIEW_COUNTS_PENDING_TOOLTIP, reviewChangesTooltip, reviewCountsToolti
 import { type ReviewDiffFileWire } from "../common/reviewProtocol.js";
 import { binarySizeLabel, isBinaryCounts, type ReviewFileCounts } from "../common/reviewStructuralDiff.js";
 import type { ReviewDiffLayoutSetting } from "./reviewDiffLayout.js";
+import { bindDocumentDiffLayout } from "./reviewDocumentDiffLayout.js";
 import { reviewMultiDiffLabelUris, ReviewMultiDiffUIElementFactory } from "./reviewMultiDiff.js";
 import type { StructuralDiffSession } from "./reviewStructuralDiffSession.js";
 
@@ -195,10 +197,10 @@ export class ReviewFilesDiffView extends Disposable {
 	private pendingViewState: IMultiDiffEditorViewState | undefined;
 	private viewModel: MultiDiffEditorViewModel | undefined;
 	private input: ReviewFilesEditorInput | undefined;
-	private readonly applyLayout: () => void;
 	private readonly readyFiles = new Set<string>();
 	private readonly fileStates = new Map<string, string>();
 	private readonly settleHold = this._register(new MutableDisposable<DisposableStore>());
+	private readonly documentLayout = this._register(new MutableDisposable());
 	/** Full structural counts for views without persisted coverage. */
 	private readonly streamStats = new Map<
 		string,
@@ -225,7 +227,7 @@ export class ReviewFilesDiffView extends Disposable {
 	constructor(
 		private readonly container: HTMLElement,
 		overflowWidgetsDomNode: HTMLElement | undefined,
-		layout: ReviewDiffLayoutSetting,
+		private readonly diffLayout: ReviewDiffLayoutSetting,
 		private readonly fileTreeContainer: HTMLElement | undefined,
 		private readonly onToggleViewed: ((path: string, sectionId?: string) => void) | undefined,
 		private readonly onToggleSection: ((id: string) => void) | undefined,
@@ -301,11 +303,9 @@ export class ReviewFilesDiffView extends Disposable {
 		);
 		// The widget's own switch, not the per-item option refresh: it pins the
 		// width heuristic off, so the chosen layout is what renders at any width.
-		// A document snippet of an unchanged file reads as plain code.
-		this.applyLayout = () => this.widget.setRenderSideBySide(layout.get() === "split"
-			&& !(this.document && this.input?.entries.every(entry => entry.file.status === "unchanged")));
-		this._register(layout.onDidChange(this.applyLayout));
-		this.applyLayout();
+		const applyLayout = () => this.widget.setRenderSideBySide(this.diffLayout.get() === "split");
+		if (!document) this._register(this.diffLayout.onDidChange(applyLayout));
+		applyLayout();
 		if (document) {
 			this._register(this.widget.onDidChangeContentHeight(() => {
 				const height = Math.max(40, this.widget.getContentHeight());
@@ -388,13 +388,22 @@ export class ReviewFilesDiffView extends Disposable {
 
 	async setInput(input: ReviewFilesEditorInput, viewState: IMultiDiffEditorViewState | undefined): Promise<void> {
 		this.settleHold.clear();
+		this.documentLayout.clear();
 		this.pendingViewState = viewState;
 		this.input = input;
-		this.applyLayout();
 		this.changedFilesTree?.setFiles(Array.from(new Map(input.entries.map(entry => [entry.file.path, entry.file])).values()));
 		const viewModel = await input.getViewModel();
 		if (this._store.isDisposed) return;
 		this.viewModel = viewModel;
+		if (this.document) {
+			const comparisons = derived(reader => viewModel.items.read(reader).map(item => {
+				// Missing sides and binaries are not identical text documents.
+				const entry = input.entries.find(entry => sameResource(item.originalUri, entry.original) && sameResource(item.modifiedUri, entry.modified));
+				return item.originalUri && item.modifiedUri && entry && !entry.file.binary && entry.file.status !== "added" && entry.file.status !== "deleted" && item.diffEditorViewModel instanceof DiffEditorViewModel
+					? item.diffEditorViewModel : undefined;
+			}));
+			this.documentLayout.value = bindDocumentDiffLayout(this.diffLayout, comparisons, split => this.widget.setRenderSideBySide(split));
+		}
 		// The canvas mounts this view without a user gesture, so the widget's
 		// first-change navigation must never take keyboard focus.
 		this.widget.setViewModel(viewModel, { preserveFocus: true, viewState, initialScrollPosition: this.document ? "top" : "firstChange" });
